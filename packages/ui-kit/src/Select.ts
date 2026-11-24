@@ -210,17 +210,34 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { type Attributed, flag, idSelector, separatorAttrs, withStyle } from "./internal/attributes.ts"
+import {
+  type Attributed,
+  flag,
+  idSelector,
+  separatorAttrs,
+  withStyle
+} from "./internal/attributes.ts"
 import { backdropBox, blockers, cutPath } from "./internal/blocker.ts"
 import { focusFinal, override } from "./internal/dom.ts"
-import { autofillMatch, filledOf, formInputs, toggled, valuesOf } from "./internal/formInputs.ts"
+import {
+  autofillMatch,
+  filledOf,
+  formInputs,
+  toggled,
+  valuesOf
+} from "./internal/formInputs.ts"
 import { methodOf } from "./internal/interaction.ts"
 import { available, grouped, stepped, valued } from "./internal/list.ts"
 import { holdScroll } from "./internal/modal.ts"
 import { listenOutside, releasedOutside } from "./internal/outside.ts"
 import { clamp, fillValue } from "./internal/range.ts"
 import { raiseAbove } from "./internal/topLayer.ts"
-import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
+import {
+  frameOf,
+  settling,
+  statusOf,
+  transitionAttrs
+} from "./internal/transition.ts"
 import { printable, typeahead } from "./internal/typeahead.ts"
 import * as Positioning from "./Positioning.ts"
 import { Toolbar } from "./Toolbar.ts"
@@ -256,7 +273,9 @@ export type SelectItem = typeof SelectItem.Type
  * @category schemas
  * @since 0.1.0
  */
-export const SelectValue = Schema.NullOr(Schema.Union([Schema.String, Schema.Array(Schema.String)]))
+export const SelectValue = Schema.NullOr(
+  Schema.Union([Schema.String, Schema.Array(Schema.String)])
+)
 
 /**
  * What a `Select` holds.
@@ -275,7 +294,12 @@ export type SelectValue = typeof SelectValue.Type
  * @category schemas
  * @since 0.1.0
  */
-export const SelectInteraction = Schema.Literals(["mouse", "touch", "pen", "keyboard"])
+export const SelectInteraction = Schema.Literals([
+  "mouse",
+  "touch",
+  "pen",
+  "keyboard"
+])
 
 /**
  * How the select was opened or closed.
@@ -497,14 +521,23 @@ const SelectModel = Schema.Struct({
 
 type SelectModel = typeof SelectModel.Type
 
-type SelectUpdate = Component.Update<SelectModel, SelectMessage, SelectEvents, SelectProps>
+type SelectUpdate = Component.Update<
+  SelectModel,
+  SelectMessage,
+  SelectEvents,
+  SelectProps
+>
 
 const Trigger = Html.ref("SelectTrigger", "button")
 
 const WaitBeforeResetTyping = Command.make(
   "WaitBeforeResetTyping",
   { args: {}, mode: "switch" },
-  () => Effect.as(Effect.sleep(Duration.millis(750)), SelectMessage.CompletedWaitBeforeResetTyping())
+  () =>
+    Effect.as(
+      Effect.sleep(Duration.millis(750)),
+      SelectMessage.CompletedWaitBeforeResetTyping()
+    )
 )
 
 const selectedIndexOf = (props: SelectProps): number => {
@@ -516,7 +549,8 @@ const indexOf = (props: SelectProps, value: string | null): number =>
   value === null ? -1 : props.items.findIndex((item) => item.value === value)
 
 const alignedOf = (model: SelectModel, props: SelectProps): boolean =>
-  props.alignItemWithTrigger !== false && !model.fellBack && model.openMethod !== "touch"
+  props.alignItemWithTrigger !== false && !model.fellBack &&
+  model.openMethod !== "touch"
 
 const typing = (model: SelectModel): boolean => model.typed !== ""
 
@@ -525,13 +559,21 @@ const startOf = (model: SelectModel, props: SelectProps): number => {
   return selected !== -1 ? selected : indexOf(props, model.active)
 }
 
-const open = ($: SelectUpdate, reason: SelectChangeReason, method: SelectInteraction, key?: string) => {
+const open = (
+  $: SelectUpdate,
+  reason: SelectChangeReason,
+  method: SelectInteraction,
+  key?: string
+) => {
   const props = $.props
   const items = props.items
   let active = selectedIndexOf(props)
   if (active === -1 && items.length > 0) {
     if (method === "keyboard") active = key === "ArrowUp" ? items.length - 1 : 0
-    else if (props.alignItemWithTrigger !== false && method !== "touch" && props.highlightItemOnHover !== false) {
+    else if (
+      props.alignItemWithTrigger !== false && method !== "touch" &&
+      props.highlightItemOnHover !== false
+    ) {
       active = 0
     }
   }
@@ -544,7 +586,8 @@ const open = ($: SelectUpdate, reason: SelectChangeReason, method: SelectInterac
     typed: "",
     spaceDown: false,
     fellBack: false,
-    pressing: reason === "trigger-press" && (method === "mouse" || method === "pen"),
+    pressing: reason === "trigger-press" &&
+      (method === "mouse" || method === "pen"),
     pressedItem: false,
     releaseSelected: false,
     releaseUnselected: false
@@ -559,7 +602,12 @@ const dismiss = (
   focusLeft = false
 ) =>
   $.props.open
-    ? $.set(model).evolve({ closeMethod: method, focusLeft, pressing: false, spaceDown: false }).emit(
+    ? $.set(model).evolve({
+      closeMethod: method,
+      focusLeft,
+      pressing: false,
+      spaceDown: false
+    }).emit(
       SelectEvents.RequestedClose({ reason })
     )
     : model
@@ -571,43 +619,79 @@ const toggle = ($: SelectUpdate, method: SelectInteraction) =>
     ? dismiss($.model, $, "trigger-press", method)
     : open($, "trigger-press", method)
 
-const pick = (model: SelectModel, $: SelectUpdate, value: string, method: SelectInteraction) => {
+const pick = (
+  model: SelectModel,
+  $: SelectUpdate,
+  value: string,
+  method: SelectInteraction
+) => {
   const props = $.props
   const item = props.items.find((candidate) => candidate.value === value)
-  if (!available(item) || props.disabled === true || props.readOnly === true) return model
+  if (!available(item) || props.disabled === true || props.readOnly === true) {
+    return model
+  }
   const next = UiStruct.evolve(model, { active: value, pressedItem: false })
   if (props.multiple === true) {
-    return $.set(next).emit(SelectEvents.Picked({ value: toggled(valuesOf(props), value), reason: "item-press" }))
+    return $.set(next).emit(
+      SelectEvents.Picked({
+        value: toggled(valuesOf(props), value),
+        reason: "item-press"
+      })
+    )
   }
-  return $.set(next).evolve({ closeMethod: method, focusLeft: false, pressing: false })
+  return $.set(next).evolve({
+    closeMethod: method,
+    focusLeft: false,
+    pressing: false
+  })
     .emit(SelectEvents.Picked({ value, reason: "item-press" }))
     .emit(SelectEvents.RequestedClose({ reason: "item-press" }))
 }
 
-const highlight = (model: SelectModel, props: SelectProps, index: number): SelectModel => {
+const highlight = (
+  model: SelectModel,
+  props: SelectProps,
+  index: number
+): SelectModel => {
   const item = props.items[index]
-  return item === undefined ? model : UiStruct.evolve(model, { active: item.value, activeByKey: true })
+  return item === undefined
+    ? model
+    : UiStruct.evolve(model, { active: item.value, activeByKey: true })
 }
 
 const hover = (model: SelectModel, active: string | null): SelectModel =>
-  model.active === active ? model : UiStruct.evolve(model, { active, activeByKey: false })
+  model.active === active
+    ? model
+    : UiStruct.evolve(model, { active, activeByKey: false })
 
 const typeKey = ($: SelectUpdate, key: string) => {
   const props = $.props
-  const { index, next } = typeahead($.model, key, props.items, startOf($.model, props))
+  const { index, next } = typeahead(
+    $.model,
+    key,
+    props.items,
+    startOf($.model, props)
+  )
   const item = props.items[index]
-  const moved = props.open && item !== undefined ? { active: item.value, activeByKey: true } : undefined
-  const typed = $.evolve({ ...next, ...moved }).run(WaitBeforeResetTyping.make({}))
-  return item === undefined || props.open || valuesOf(props).includes(item.value)
+  const moved = props.open && item !== undefined
+    ? { active: item.value, activeByKey: true }
+    : undefined
+  const typed = $.evolve({ ...next, ...moved }).run(
+    WaitBeforeResetTyping.make({})
+  )
+  return item === undefined || props.open ||
+      valuesOf(props).includes(item.value)
     ? typed
     : typed.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))
 }
 
-const focusTrigger = ($: SelectUpdate) => $.run(HtmlCommand.Focus.make({ ref: Trigger }).pipe(Command.asNoop))
+const focusTrigger = ($: SelectUpdate) =>
+  $.run(HtmlCommand.Focus.make({ ref: Trigger }).pipe(Command.asNoop))
 
 const tolerance = 1
 
-const maxScrollOf = (scroller: HTMLElement): number => Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+const maxScrollOf = (scroller: HTMLElement): number =>
+  Math.max(0, scroller.scrollHeight - scroller.clientHeight)
 
 const normalized = (value: number, max: number): number => {
   if (max <= 0) return 0
@@ -616,7 +700,9 @@ const normalized = (value: number, max: number): number => {
 }
 
 const maxHeightOf = (style: CSSStyleDeclaration): number =>
-  style.maxHeight.endsWith("px") ? parseFloat(style.maxHeight) || Infinity : Infinity
+  style.maxHeight.endsWith("px")
+    ? parseFloat(style.maxHeight) || Infinity
+    : Infinity
 
 const arrowScrollTop = (
   items: ReadonlyArray<HTMLElement>,
@@ -637,7 +723,9 @@ const arrowScrollTop = (
     }
     const target = Math.max(0, first - 1)
     const item = items[target]
-    return target < first && item !== undefined ? normalized(item.offsetTop - arrowHeight, maxScrollTop) : 0
+    return target < first && item !== undefined
+      ? normalized(item.offsetTop - arrowHeight, maxScrollTop)
+      : 0
   }
   let last = items.length - 1
   const visibleBottom = scrollTop + clientHeight - arrowHeight + tolerance
@@ -651,12 +739,19 @@ const arrowScrollTop = (
   const target = Math.min(items.length - 1, last + 1)
   const item = items[target]
   return target > last && item !== undefined
-    ? normalized(item.offsetTop + item.offsetHeight - clientHeight + arrowHeight, maxScrollTop)
+    ? normalized(
+      item.offsetTop + item.offsetHeight - clientHeight + arrowHeight,
+      maxScrollTop
+    )
     : maxScrollTop
 }
 
 const withoutTransforms = (element: HTMLElement): () => void =>
-  override(element, { transform: "none", scale: "1", translate: "0 0" }, "important")
+  override(
+    element,
+    { transform: "none", scale: "1", translate: "0 0" },
+    "important"
+  )
 
 const webkit = (): boolean =>
   typeof navigator !== "undefined" && /AppleWebKit/.test(navigator.userAgent) &&
@@ -687,7 +782,11 @@ type TrackSelectArgs = Schema.Struct<typeof TrackSelectArgs>["Type"]
 
 const blocking = blockers("data-select-blocker")
 
-const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<TrackSelectArgs>) =>
+const watch = (
+  node: HTMLElement,
+  args: TrackSelectArgs,
+  changes: Stream.Stream<TrackSelectArgs>
+) =>
   Stream.callback<SelectMessage>((queue) => {
     const document = node.ownerDocument
     const view = document.defaultView
@@ -695,11 +794,15 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
     const frame = frameOf(view)
     let current = args
     const send = (message: SelectMessage) => Queue.offerUnsafe(queue, message)
-    const trigger = (): HTMLElement | null => document.getElementById(current.triggerId)
-    const popup = (): HTMLElement => document.getElementById(current.popupId) ?? node
-    const scroller = (): HTMLElement => document.getElementById(current.listId) ?? popup()
+    const trigger = (): HTMLElement | null =>
+      document.getElementById(current.triggerId)
+    const popup = (): HTMLElement =>
+      document.getElementById(current.popupId) ?? node
+    const scroller = (): HTMLElement =>
+      document.getElementById(current.listId) ?? popup()
     const inside = (target: Node): boolean =>
-      (node.contains(target) && !blocking.is(target)) || trigger()?.contains(target) === true
+      (node.contains(target) && !blocking.is(target)) ||
+      trigger()?.contains(target) === true
 
     const saved = new Map<HTMLElement, Map<string, () => void>>()
     const write = (element: HTMLElement, name: string, value: string) => {
@@ -732,35 +835,51 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
     }
 
     const cut = () => {
-      const layer = Array.from(node.children).find(blocking.is) as HTMLElement | undefined
+      const layer = Array.from(node.children).find(blocking.is) as
+        | HTMLElement
+        | undefined
       const anchor = trigger()
       if (layer === undefined || anchor === null) return
       write(layer, "clip-path", cutPath([anchor.getBoundingClientRect()]))
     }
 
-    const gaps = (style: CSSStyleDeclaration): readonly [top: number, bottom: number] => {
+    const gaps = (
+      style: CSSStyleDeclaration
+    ): readonly [top: number, bottom: number] => {
       const top = parseFloat(style.marginTop)
       const bottom = parseFloat(style.marginBottom)
       if (top !== 0 && bottom !== 0) return [top || 10, bottom || 10]
       // An unset margin is `auto`, which reads as 0px like a margin set to 0, until
       // the box is held to both edges and its `auto` margins take the space left.
-      const restore = override(node, { top: "0px", bottom: "0px", height: "0px" })
+      const restore = override(node, {
+        top: "0px",
+        bottom: "0px",
+        height: "0px"
+      })
       const heldTop = parseFloat(style.marginTop)
       const heldBottom = parseFloat(style.marginBottom)
       restore()
-      return [top === 0 && heldTop === 0 ? 0 : top || 10, bottom === 0 && heldBottom === 0 ? 0 : bottom || 10]
+      return [
+        top === 0 && heldTop === 0 ? 0 : top || 10,
+        bottom === 0 && heldBottom === 0 ? 0 : bottom || 10
+      ]
     }
 
     const align = () => {
       const anchor = trigger()
       const list = popup()
-      if (anchor === null || view === null || !current.open || !current.aligned || placed) return
+      if (
+        anchor === null || view === null || !current.open || !current.aligned ||
+        placed
+      ) return
       placed = true
       const restore = withoutTransforms(list)
       try {
         const text = current.alignId === null
           ? null
-          : document.getElementById(current.alignId)?.querySelector<HTMLElement>("[data-select-item-text]") ?? null
+          : document.getElementById(current.alignId)?.querySelector<
+            HTMLElement
+          >("[data-select-item-text]") ?? null
         const value = anchor.querySelector<HTMLElement>("[data-select-value]")
         const positionerStyle = view.getComputedStyle(node)
         const popupStyle = view.getComputedStyle(list)
@@ -776,22 +895,32 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
         const viewportHeight = html.clientHeight - marginTop - marginBottom
         const viewportWidth = html.clientWidth
         const beneath = viewportHeight - triggerRect.bottom + triggerRect.height
-        let left = rtl ? triggerRect.right - positionerRect.width : triggerRect.left
+        let left = rtl
+          ? triggerRect.right - positionerRect.width
+          : triggerRect.left
         let offsetY = 0
         let textRect: DOMRect | undefined
         if (text !== null && value !== null) {
           const valueRect = value.getBoundingClientRect()
           textRect = text.getBoundingClientRect()
-          left = positionerRect.left + (rtl ? valueRect.right - textRect.right : valueRect.left - textRect.left)
-          const valueCenter = valueRect.top - triggerRect.top + valueRect.height / 2
-          const textCenter = textRect.top - positionerRect.top + textRect.height / 2
+          left = positionerRect.left + (rtl
+            ? valueRect.right - textRect.right
+            : valueRect.left - textRect.left)
+          const valueCenter = valueRect.top - triggerRect.top +
+            valueRect.height / 2
+          const textCenter = textRect.top - positionerRect.top +
+            textRect.height / 2
           offsetY = textCenter - valueCenter
         }
         const ideal = beneath + offsetY + marginTop + borderBottom
         let height = Math.min(viewportHeight, ideal)
         const maxHeight = viewportHeight - marginTop - marginBottom
         const scrollTop = ideal - height
-        write(node, "left", clamp(left, 5, viewportWidth - 5 - positionerRect.width) + "px")
+        write(
+          node,
+          "left",
+          clamp(left, 5, viewportWidth - 5 - positionerRect.width) + "px"
+        )
         write(node, "height", height + "px")
         write(node, "max-height", "none")
         write(node, "margin-top", marginTop + "px")
@@ -799,8 +928,12 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
         write(list, "height", "100%")
         const maxScrollTop = maxScrollOf(element)
         const fromTop = scrollTop >= maxScrollTop - tolerance
-        if (fromTop) height = Math.min(viewportHeight, positionerRect.height) - (scrollTop - maxScrollTop)
-        const fallBack = triggerRect.top < 20 || triggerRect.bottom > viewportHeight - 20 ||
+        if (fromTop) {
+          height = Math.min(viewportHeight, positionerRect.height) -
+            (scrollTop - maxScrollTop)
+        }
+        const fallBack = triggerRect.top < 20 ||
+          triggerRect.bottom > viewportHeight - 20 ||
           Math.ceil(height) + tolerance < Math.min(scrollHeight, minHeight)
         // WebKit misplaces the popup while the page is pinch-zoomed.
         const zoomed = (view.visualViewport?.scale ?? 1) !== 1 && webkit()
@@ -810,7 +943,13 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
           return
         }
         if (fromTop) {
-          write(node, "top", positionerRect.height >= maxHeight ? "0px" : Math.max(0, viewportHeight - ideal) + "px")
+          write(
+            node,
+            "top",
+            positionerRect.height >= maxHeight
+              ? "0px"
+              : Math.max(0, viewportHeight - ideal) + "px"
+          )
           write(node, "height", height + "px")
           element.scrollTop = maxScrollOf(element)
         } else {
@@ -820,11 +959,15 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
         }
         if (textRect !== undefined) {
           const y = positionerRect.height > 0
-            ? ((textRect.top + textRect.height / 2 - positionerRect.top) / positionerRect.height) * 100
+            ? ((textRect.top + textRect.height / 2 - positionerRect.top) /
+              positionerRect.height) * 100
             : 50
           write(list, "--transform-origin", "50% " + clamp(y, 0, 100) + "%")
         }
-        if (Math.max(minHeight, height) === viewportHeight || height >= maxPopupHeight) reachedMax = true
+        if (
+          Math.max(minHeight, height) === viewportHeight ||
+          height >= maxPopupHeight
+        ) reachedMax = true
       } finally {
         restore()
       }
@@ -839,7 +982,8 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       const height = node.getBoundingClientRect().height
       const positionerStyle = view.getComputedStyle(node)
       const available = Math.min(
-        html.clientHeight - parseFloat(positionerStyle.marginTop) - parseFloat(positionerStyle.marginBottom),
+        html.clientHeight - parseFloat(positionerStyle.marginTop) -
+          parseFloat(positionerStyle.marginBottom),
         maxHeightOf(view.getComputedStyle(popup()))
       )
       const scrollTop = element.scrollTop
@@ -855,21 +999,33 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       }
       let target: number | null = null
       if (available - next > tolerance) target = fromTop ? Infinity : 0
-      else if (fromBottom && scrollTop < maxScrollTop) target = scrollTop - (diff - (height + diff - available))
+      else if (fromBottom && scrollTop < maxScrollTop) {
+        target = scrollTop -
+          (diff - (height + diff - available))
+      }
       const rounded = Math.ceil(next)
       if (rounded !== 0) write(node, "height", rounded + "px")
       if (target !== null) {
         const clamped = clamp(target, 0, maxScrollOf(element))
-        if (Math.abs(element.scrollTop - clamped) > tolerance) element.scrollTop = clamped
+        if (Math.abs(element.scrollTop - clamped) > tolerance) {
+          element
+            .scrollTop = clamped
+        }
       }
       if (rounded >= available - tolerance) reachedMax = true
     }
 
     const focusActive = (scroll: boolean) => {
       if (!current.open) return
-      const item = current.active === null ? null : document.getElementById(current.active)
+      const item = current.active === null
+        ? null
+        : document.getElementById(current.active)
       if (item === null) {
-        if (document.activeElement !== popup()) popup().focus({ preventScroll: true })
+        if (document.activeElement !== popup()) {
+          popup().focus({
+            preventScroll: true
+          })
+        }
         return
       }
       if (document.activeElement !== item) item.focus({ preventScroll: true })
@@ -879,14 +1035,18 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
     const reveal = () =>
       frame(() => {
         if (current.open && current.active !== null) {
-          document.getElementById(current.active)?.scrollIntoView({ block: "nearest" })
+          document.getElementById(current.active)?.scrollIntoView({
+            block: "nearest"
+          })
         }
       })
 
     let release: (() => void) | undefined
     const hold = () => {
       release?.()
-      release = current.open && current.lock ? holdScroll(node, current.touch) : undefined
+      release = current.open && current.lock
+        ? holdScroll(node, current.touch)
+        : undefined
     }
 
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -901,16 +1061,25 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       arrows()
       focusActive(false)
       if (!current.aligned) reveal()
-      if (!current.started) frame(() => frame(() => send(SelectMessage.RenderedFirstFrame())))
+      if (!current.started) {
+        frame(() => frame(() => send(SelectMessage.RenderedFirstFrame())))
+      }
     }
 
     const closing = () => {
       clearTimeout(timer)
       stopArrow()
       const focused = document.activeElement
-      const lost = focused === null || focused === document.body || node.contains(focused)
+      const lost = focused === null || focused === document.body ||
+        node.contains(focused)
       if (current.finalFocus && (lost || !current.focusLeft)) {
-        focusFinal(document, current.popupId, trigger(), lost, current.closeMethod === "keyboard")
+        focusFinal(
+          document,
+          current.popupId,
+          trigger(),
+          lost,
+          current.closeMethod === "keyboard"
+        )
       } else if (focused instanceof HTMLElement && node.contains(focused)) {
         focused.blur()
       }
@@ -933,7 +1102,9 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
         const top = normalized(element.scrollTop, max)
         if (top !== element.scrollTop) element.scrollTop = top
         if (top === (up ? 0 : max)) return stopArrow()
-        const items = Array.from(element.querySelectorAll<HTMLElement>("[role=\"option\"]"))
+        const items = Array.from(
+          element.querySelectorAll<HTMLElement>("[role=\"option\"]")
+        )
         if (items.length > 0) {
           element.scrollTop = arrowScrollTop(
             items,
@@ -954,13 +1125,24 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
     }
     const onMouseUp = (event: MouseEvent) => {
       dragY = 0
-      if (current.pressing) send(SelectMessage.ReleasedPointer({ outside: releasedOutside(event, inside, trigger()) }))
+      if (current.pressing) {
+        send(
+          SelectMessage.ReleasedPointer({
+            outside: releasedOutside(event, inside, trigger())
+          })
+        )
+      }
     }
     let dragY = 0
     let dragged = false
     const onPointerMove = (event: PointerEvent) => {
-      if (event.pointerType !== "mouse" || event.buttons !== 1 || dragged) return
-      if (!(event.target instanceof Element) || event.target.closest("[role=\"option\"]") === null) return
+      if (
+        event.pointerType !== "mouse" || event.buttons !== 1 || dragged
+      ) return
+      if (
+        !(event.target instanceof Element) ||
+        event.target.closest("[role=\"option\"]") === null
+      ) return
       dragY += event.movementY
       if (dragY ** 2 >= 64) {
         dragged = true
@@ -968,17 +1150,29 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       }
     }
     const onMouseMove = (event: MouseEvent) => {
-      const arrow = event.target instanceof Element ? event.target.closest("[data-select-scroll-arrow]") : null
+      const arrow = event.target instanceof Element
+        ? event.target.closest("[data-select-scroll-arrow]")
+        : null
       if (arrow === null || !node.contains(arrow)) return stopArrow()
-      if ((event.movementX === 0 && event.movementY === 0) || arrowTimer !== undefined) return
+      if (
+        (event.movementX === 0 && event.movementY === 0) ||
+        arrowTimer !== undefined
+      ) return
       unhighlight()
       scrollBy(arrow, arrow.getAttribute("data-select-scroll-arrow") === "up")
     }
     const onMouseDown = (event: MouseEvent) => {
-      if (event.target instanceof Node && blocking.is(event.target)) event.preventDefault()
+      if (event.target instanceof Node && blocking.is(event.target)) {
+        event
+          .preventDefault()
+      }
     }
     const onFocusIn = (event: FocusEvent) => {
-      if (current.open && current.aligned && event.target === trigger()) send(SelectMessage.FocusedTrigger())
+      if (current.open && current.aligned && event.target === trigger()) {
+        send(
+          SelectMessage.FocusedTrigger()
+        )
+      }
     }
     const onScroll = (event: Event) => {
       if (event.target !== scroller()) return
@@ -989,12 +1183,20 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       if (current.open && current.aligned) send(SelectMessage.ResizedWindow())
     }
 
-    const transition = settling(node, popup, frame, (open) => send(SelectMessage.FinishedTransition({ open })))
+    const transition = settling(
+      node,
+      popup,
+      frame,
+      (open) => send(SelectMessage.FinishedTransition({ open }))
+    )
 
     const onChange = (next: TrackSelectArgs) => {
       const previous = current
       current = next
-      if (next.open !== previous.open || next.lock !== previous.lock || next.touch !== previous.touch) hold()
+      if (
+        next.open !== previous.open || next.lock !== previous.lock ||
+        next.touch !== previous.touch
+      ) hold()
       if (previous.aligned && !next.aligned) {
         clear()
         cut()
@@ -1004,7 +1206,11 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
       else if (!previous.open && next.open) {
         dragged = false
         opening()
-      } else if (next.open && next.active !== previous.active) focusActive(next.scroll)
+      } else if (next.open && next.active !== previous.active) {
+        focusActive(
+          next.scroll
+        )
+      }
       transition.follow(previous, next)
     }
 
@@ -1016,24 +1222,43 @@ const watch = (node: HTMLElement, args: TrackSelectArgs, changes: Stream.Stream<
         listenOutside(document, signal, {
           open: () => current.open,
           inside,
-          pressed: (pointerType) => send(SelectMessage.PressedOutside({ pointerType })),
+          pressed: (pointerType) =>
+            send(SelectMessage.PressedOutside({ pointerType })),
           focused: () => send(SelectMessage.FocusedOutside())
         })
-        document.addEventListener("pointerdown", onPointerDown, { capture: true, signal })
-        document.addEventListener("mouseup", onMouseUp, { capture: true, signal })
-        document.addEventListener("focusin", onFocusIn, { capture: true, signal })
+        document.addEventListener("pointerdown", onPointerDown, {
+          capture: true,
+          signal
+        })
+        document.addEventListener("mouseup", onMouseUp, {
+          capture: true,
+          signal
+        })
+        document.addEventListener("focusin", onFocusIn, {
+          capture: true,
+          signal
+        })
         node.addEventListener("pointermove", onPointerMove, { signal })
         node.addEventListener("mousemove", onMouseMove, { signal })
         node.addEventListener("mouseleave", stopArrow, { signal })
         node.addEventListener("mousedown", onMouseDown, { signal })
-        node.addEventListener("scroll", onScroll, { capture: true, passive: true, signal })
+        node.addEventListener("scroll", onScroll, {
+          capture: true,
+          passive: true,
+          signal
+        })
         view?.addEventListener("resize", onResize, { signal })
         hold()
         raiseAbove(node)
         if (current.open) opening()
         else node.inert = true
       }).pipe(
-        Effect.tap(() => Effect.forkScoped(Stream.runForEach(changes, (next) => Effect.sync(() => onChange(next)))))
+        Effect.tap(() =>
+          Effect.forkScoped(Stream.runForEach(changes, (next) =>
+            Effect.sync(() =>
+              onChange(next)
+            )))
+        )
       ),
       () =>
         Effect.sync(() => {
@@ -1055,7 +1280,11 @@ const TrackSelect = Mount.makeStream(
   (node: HTMLElement, args, changes) =>
     Stream.merge(
       watch(node, args, changes),
-      Positioning.trackPosition(node, args.position, Stream.map(changes, (next) => next.position)).pipe(
+      Positioning.trackPosition(
+        node,
+        args.position,
+        Stream.map(changes, (next) => next.position)
+      ).pipe(
         Stream.map((placement) => SelectMessage.ChangedPlacement({ placement }))
       )
     )
@@ -1064,7 +1293,8 @@ const TrackSelect = Mount.makeStream(
 const alignedBox =
   "position:fixed;inset:auto;margin-left:0;margin-right:0;--available-width:100vw;--available-height:100vh"
 
-const scrolling = "position:relative;max-height:100%;overflow-x:hidden;overflow-y:auto;scrollbar-width:none"
+const scrolling =
+  "position:relative;max-height:100%;overflow-x:hidden;overflow-y:auto;scrollbar-width:none"
 
 /**
  * A select: a button that opens a list of options, the selected one shown on
@@ -1172,16 +1402,23 @@ export const Select = Component.define({
       const props = $.props
       if (props.disabled === true) return $.model
       if (key === "ArrowDown" || key === "ArrowUp") {
-        return props.open ? $.model : open($, "list-navigation", "keyboard", key)
+        return props.open
+          ? $.model
+          : open($, "list-navigation", "keyboard", key)
       }
-      if (!props.open && (props.readOnly === true || props.multiple === true)) return $.model
+      if (!props.open && (props.readOnly === true || props.multiple === true)) {
+        return $.model
+      }
       return typeKey($, key)
     },
     ClickedLabel: focusTrigger,
     FocusedInput: focusTrigger,
     Autofilled: ($, { value }) => {
       const props = $.props
-      if (props.disabled === true || props.readOnly === true || props.multiple === true) return $.model
+      if (
+        props.disabled === true || props.readOnly === true ||
+        props.multiple === true
+      ) return $.model
       const item = autofillMatch(props.items, value)
       return !available(item) || valuesOf(props).includes(item.value)
         ? $.model
@@ -1202,13 +1439,17 @@ export const Select = Component.define({
         case "End":
           return highlight($.model, props, last)
         case "Enter":
-          return $.model.active === null ? $.model : pick($.model, $, $.model.active, "keyboard")
+          return $.model.active === null
+            ? $.model
+            : pick($.model, $, $.model.active, "keyboard")
         case "Escape":
           return dismiss($.model, $, "escape-key", "keyboard")
         case "Tab":
           return dismiss($.model, $, "focus-out", "keyboard")
         case " ":
-          return typing($.model) ? typeKey($, key) : $.evolve({ spaceDown: true })
+          return typing($.model)
+            ? typeKey($, key)
+            : $.evolve({ spaceDown: true })
         default:
           return typeKey($, key)
       }
@@ -1216,7 +1457,9 @@ export const Select = Component.define({
     ReleasedSpace: ($) => {
       if (!$.model.spaceDown) return $.model
       const next = UiStruct.evolve($.model, { spaceDown: false })
-      return $.props.open && $.model.active !== null ? pick(next, $, $.model.active, "keyboard") : next
+      return $.props.open && $.model.active !== null
+        ? pick(next, $, $.model.active, "keyboard")
+        : next
     },
     EnteredItem: ($, { value }) => hover($.model, value),
     LeftItem: ($) => hover($.model, null),
@@ -1224,20 +1467,28 @@ export const Select = Component.define({
     ReleasedItem: ($, { pointerType, value }) => {
       if ($.model.pressedItem || !$.props.open) return $.model
       const selected = valuesOf($.props).includes(value)
-      if (selected ? !$.model.releaseSelected : !$.model.releaseUnselected) return $.model
+      if (selected ? !$.model.releaseSelected : !$.model.releaseUnselected) {
+        return $.model
+      }
       return pick($.model, $, value, methodOf(pointerType))
     },
     ClickedItem: ($, { pointerType, value }) => {
       const next = UiStruct.evolve($.model, { pressedItem: false })
       if (!$.props.open) return next
-      return pointerType === "touch" || pointerType === "" || $.model.pressedItem
+      return pointerType === "touch" || pointerType === "" ||
+          $.model.pressedItem
         ? pick(next, $, value, methodOf(pointerType))
         : next
     },
     CompletedWaitBeforeResetTyping: ($) => $.evolve({ typed: "" }),
     ShowedPopup: ($) =>
-      $.evolve($.props.open ? { mounted: true, closeMethod: null, focusLeft: false } : { mounted: true }),
-    RenderedFirstFrame: ($) => $.props.open ? $.evolve({ started: true }) : $.model,
+      $.evolve(
+        $.props.open
+          ? { mounted: true, closeMethod: null, focusLeft: false }
+          : { mounted: true }
+      ),
+    RenderedFirstFrame: ($) =>
+      $.props.open ? $.evolve({ started: true }) : $.model,
     FinishedTransition: ($, { open }) => {
       if (open !== $.props.open) return $.model
       if (open) return $.emit(SelectEvents.Settled({ open }))
@@ -1253,19 +1504,26 @@ export const Select = Component.define({
         : $.model
     },
     ChangedPlacement: ($, { placement }) => $.evolve({ placement }),
-    PressedOutside: ($, { pointerType }) => dismiss($.model, $, "outside-press", methodOf(pointerType)),
+    PressedOutside: ($, { pointerType }) =>
+      dismiss($.model, $, "outside-press", methodOf(pointerType)),
     FocusedOutside: ($) => dismiss($.model, $, "focus-out", null, true),
-    FocusedTrigger: ($) => alignedOf($.model, $.props) ? dismiss($.model, $, "none", null) : $.model,
+    FocusedTrigger: ($) =>
+      alignedOf($.model, $.props) ? dismiss($.model, $, "none", null) : $.model,
     ReleasedPointer: ($, { outside }) => {
       if (!$.model.pressing) return $.model
       const next = UiStruct.evolve($.model, { pressing: false })
       return outside ? dismiss(next, $, "cancel-open", "mouse") : next
     },
-    ResizedWindow: ($) => alignedOf($.model, $.props) ? dismiss($.model, $, "window-resize", null) : $.model,
+    ResizedWindow: ($) =>
+      alignedOf($.model, $.props)
+        ? dismiss($.model, $, "window-resize", null)
+        : $.model,
     FellBack: ($) => $.evolve({ fellBack: true }),
-    ChangedScrollArrows: ($, { down, up }) => $.evolve({ scrollUp: up, scrollDown: down }),
+    ChangedScrollArrows: ($, { down, up }) =>
+      $.evolve({ scrollUp: up, scrollDown: down }),
     ScrolledByArrow: ($) => hover($.model, null),
-    AllowedRelease: ($) => $.evolve({ releaseSelected: true, releaseUnselected: true }),
+    AllowedRelease: ($) =>
+      $.evolve({ releaseSelected: true, releaseUnselected: true }),
     DraggedPointer: ($) => $.evolve({ releaseUnselected: true })
   },
   parts: (p, model) => {
@@ -1298,14 +1556,25 @@ export const Select = Component.define({
       arrowId,
       leaveCoordinates: aligned
     })
-    const position = aligned ? { ...tracked, disableAnchorTracking: props.disableAnchorTracking ?? true } : tracked
+    const position = aligned
+      ? {
+        ...tracked,
+        disableAnchorTracking: props.disableAnchorTracking ?? true
+      }
+      : tracked
     const side = model.placement?.side ?? tracked.options.side
     const align = model.placement?.align ?? tracked.options.align
     const shownSide = aligned ? "none" : side
-    const items = new Map(props.items.map((item) => [item.value, item] as const))
+    const items = new Map(
+      props.items.map((item) => [item.value, item] as const)
+    )
     const itemOf = (value: string): SelectItem => {
       const item = items.get(value)
-      if (item === undefined) throw new Error("Select: no item in the items prop has the value \"" + value + "\"")
+      if (item === undefined) {
+        throw new Error(
+          "Select: no item in the items prop has the value \"" + value + "\""
+        )
+      }
       return item
     }
     const text = !filled && props.placeholder !== undefined
@@ -1316,7 +1585,8 @@ export const Select = Component.define({
     let labelled = false
     let listed = false
 
-    const states = <B extends Attributed<B>>(builder: B): B => transitionAttrs(builder, open, transitionStatus)
+    const states = <B extends Attributed<B>>(builder: B): B =>
+      transitionAttrs(builder, open, transitionStatus)
     const placed = <B extends Attributed<B>>(builder: B): B =>
       states(builder).attrs({ "data-side": shownSide, "data-align": align })
 
@@ -1330,8 +1600,14 @@ export const Select = Component.define({
       multiple,
       values,
       filled
-    }, { focused: SelectMessage.FocusedInput(), autofilled: (value) => SelectMessage.Autofilled({ value }) })
-    const inputsBox = new Html.Element<SelectMessage>("span").attr("style", "display:contents")
+    }, {
+      focused: SelectMessage.FocusedInput(),
+      autofilled: (value) => SelectMessage.Autofilled({ value })
+    })
+    const inputsBox = new Html.Element<SelectMessage>("span").attr(
+      "style",
+      "display:contents"
+    )
 
     const label = p.part("div", (b) => {
       labelled = true
@@ -1359,17 +1635,22 @@ export const Select = Component.define({
         })
         .disabled(disabled)
         .on("mousedown", ({ button, pointerType }) =>
-          button === 0 && pointerType !== "touch" ? SelectMessage.PressedTrigger({ pointerType }) : undefined)
+          button === 0 && pointerType !== "touch"
+            ? SelectMessage.PressedTrigger({ pointerType })
+            : undefined)
         .on("mouseup", SelectMessage.ReleasedTrigger())
         .onClick(({ pointerType }) =>
-          pointerType === "" || pointerType === "touch" ? SelectMessage.ClickedTrigger({ pointerType }) : undefined
+          pointerType === "" || pointerType === "touch"
+            ? SelectMessage.ClickedTrigger({ pointerType })
+            : undefined
         )
         .onKeyDown(
           ({ alt, composing, ctrl, key, meta }) =>
             composing
               ? undefined
               : (arrowsOpen && (key === "ArrowDown" || key === "ArrowUp")) ||
-                  (printable(key, alt, ctrl, meta) && (key !== " " || typing(model)))
+                  (printable(key, alt, ctrl, meta) &&
+                    (key !== " " || typing(model)))
               ? SelectMessage.PressedTriggerKey({ key })
               : undefined,
           { preventDefault: true }
@@ -1378,16 +1659,25 @@ export const Select = Component.define({
           const named = node
             .attrs({
               "aria-controls": open ? (listed ? listId : popupId) : undefined,
-              "aria-labelledby": node.elementAttrs["aria-labelledby"] ?? (labelled ? labelId : undefined)
+              "aria-labelledby": node.elementAttrs["aria-labelledby"] ??
+                (labelled ? labelId : undefined)
             })
-          return inputs.length === 0 ? named : inputsBox.children(named, ...inputs)
+          return inputs.length === 0
+            ? named
+            : inputsBox.children(named, ...inputs)
         }))
 
-    const value = p.part("span", (b) =>
-      b.attrs({ "data-select-value": "", "data-placeholder": flag(!filled) })
-        .forward((node) => fillValue(node, text)))
+    const value = p.part(
+      "span",
+      (b) =>
+        b.attrs({ "data-select-value": "", "data-placeholder": flag(!filled) })
+          .forward((node) => fillValue(node, text))
+    )
 
-    const icon = p.part("span", (b) => b.attrs({ "aria-hidden": "true", "data-popup-open": flag(open) }))
+    const icon = p.part(
+      "span",
+      (b) => b.attrs({ "aria-hidden": "true", "data-popup-open": flag(open) })
+    )
 
     const backdrop = p.part("div", (b) =>
       states(b)
@@ -1396,19 +1686,37 @@ export const Select = Component.define({
         .forward((node) =>
           node.attr(
             "style",
-            withStyle(node.elementAttrs.style, open ? backdropBox : backdropBox + ";pointer-events:none")
+            withStyle(
+              node.elementAttrs.style,
+              open ? backdropBox : backdropBox + ";pointer-events:none"
+            )
           )
         ))
 
-    const positionerStyle = aligned ? alignedBox : Positioning.positionerStyle(tracked.positionMethod)
+    const positionerStyle = aligned
+      ? alignedBox
+      : Positioning.positionerStyle(tracked.positionMethod)
     const positioner = p.part("div", (b) => {
       const decorated = placed(b)
-        .attrs({ role: "presentation", "data-anchor-hidden": flag(shown && !aligned && model.placement?.anchorHidden) })
+        .attrs({
+          role: "presentation",
+          "data-anchor-hidden": flag(
+            shown && !aligned && model.placement?.anchorHidden
+          )
+        })
         .popover("manual", shown)
-        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, positionerStyle)))
-      const layered = modal ? decorated.children(open ? blocking.open : blocking.closed) : decorated
+        .forward((node) =>
+          node.attr(
+            "style",
+            withStyle(node.elementAttrs.style, positionerStyle)
+          )
+        )
+      const layered = modal
+        ? decorated.children(open ? blocking.open : blocking.closed)
+        : decorated
       if (!shown) return layered
-      const alignItem = props.items.find((item) => chosen.has(item.value)) ?? props.items[0]
+      const alignItem = props.items.find((item) => chosen.has(item.value)) ??
+        props.items[0]
       return layered.onMount(
         TrackSelect({
           position,
@@ -1419,7 +1727,9 @@ export const Select = Component.define({
           aligned,
           lock: open && (modal || aligned),
           touch,
-          active: open && highlighted !== null && items.has(highlighted) ? itemId(highlighted) : null,
+          active: open && highlighted !== null && items.has(highlighted)
+            ? itemId(highlighted)
+            : null,
           scroll: model.activeByKey,
           pressing: model.pressing,
           finalFocus: props.finalFocus !== false,
@@ -1448,22 +1758,32 @@ export const Select = Component.define({
           ({ alt, composing, ctrl, key, meta, shift }) =>
             composing
               ? undefined
-              : key === "ArrowDown" || key === "ArrowUp" || key === "Home" || key === "End" ||
-                  key === "Enter" || key === "Escape" || (key === "Tab" && shift) || printable(key, alt, ctrl, meta)
+              : key === "ArrowDown" || key === "ArrowUp" || key === "Home" ||
+                  key === "End" ||
+                  key === "Enter" || key === "Escape" ||
+                  (key === "Tab" && shift) || printable(key, alt, ctrl, meta)
               ? SelectMessage.PressedPopupKey({ key })
               : undefined,
           { preventDefault: true }
         )
-        .onKeyUp(({ key }) => key === " " ? SelectMessage.ReleasedSpace() : undefined)
+        .onKeyUp(({ key }) =>
+          key === " " ? SelectMessage.ReleasedSpace() : undefined
+        )
         .forward((node) => {
           const own = listed ? node.attr("role", "presentation") : listbox(node)
-          return aligned && !listed ? own.attr("style", withStyle(node.elementAttrs.style, scrolling)) : own
+          return aligned && !listed
+            ? own.attr("style", withStyle(node.elementAttrs.style, scrolling))
+            : own
         }))
 
     const list = p.part("div", (b) => {
       listed = true
       const own = listbox(b).attr("id", listId)
-      return aligned ? own.forward((node) => node.attr("style", withStyle(node.elementAttrs.style, scrolling))) : own
+      return aligned
+        ? own.forward((node) =>
+          node.attr("style", withStyle(node.elementAttrs.style, scrolling))
+        )
+        : own
     })
 
     const arrowStyle = Positioning.arrowStyle(side)
@@ -1474,10 +1794,14 @@ export const Select = Component.define({
           "aria-hidden": "true",
           "data-uncentered": flag(model.placement?.arrowUncentered)
         })
-        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))))
+        .forward((node) =>
+          node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))
+        ))
     const arrow = View.wrapPart(
       arrowPart,
-      <B extends View.PartTarget<"div">>(element: B): ReturnType<B["attr"]> | undefined => {
+      <B extends View.PartTarget<"div">>(
+        element: B
+      ): ReturnType<B["attr"]> | undefined => {
         const applied = arrowPart(element)
         return aligned ? undefined : applied
       }
@@ -1499,14 +1823,22 @@ export const Select = Component.define({
           "data-highlighted": flag(active),
           "data-disabled": flag(off)
         })
-        .on("mouseenter", () => hovers ? SelectMessage.EnteredItem({ value }) : undefined)
+        .on(
+          "mouseenter",
+          () => hovers ? SelectMessage.EnteredItem({ value }) : undefined
+        )
         .on("mouseleave", () => hovers ? SelectMessage.LeftItem() : undefined)
         .on("mousedown", SelectMessage.PressedItem())
         .on(
           "mouseup",
-          ({ pointerType }) => pointerType === "touch" ? undefined : SelectMessage.ReleasedItem({ value, pointerType })
+          ({ pointerType }) =>
+            pointerType === "touch"
+              ? undefined
+              : SelectMessage.ReleasedItem({ value, pointerType })
         )
-        .onClick(({ pointerType }) => SelectMessage.ClickedItem({ value, pointerType }))
+        .onClick(({ pointerType }) =>
+          SelectMessage.ClickedItem({ value, pointerType })
+        )
     })
     const item = valued(itemPart)
 
@@ -1523,20 +1855,32 @@ export const Select = Component.define({
         }
       ): ReturnType<B["attr"]> | undefined => {
         const applied = indicatorPart(element)
-        return chosen.has(itemOf(value).value) || keepMounted === true ? applied : undefined
+        return chosen.has(itemOf(value).value) || keepMounted === true
+          ? applied
+          : undefined
       }
     )
 
     const group = grouped(
-      p.part("div", (b, key: string) => b.attrs({ role: "group", "aria-labelledby": groupLabelId(key) }))
+      p.part(
+        "div",
+        (b, key: string) =>
+          b.attrs({ role: "group", "aria-labelledby": groupLabelId(key) })
+      )
     )
     const groupLabel = grouped(
-      p.part("div", (b, key: string) => b.attrs({ id: groupLabelId(key), "aria-hidden": "true" }))
+      p.part(
+        "div",
+        (b, key: string) =>
+          b.attrs({ id: groupLabelId(key), "aria-hidden": "true" })
+      )
     )
     const separator = p.part("div", (b) => separatorAttrs(b, "horizontal"))
 
     const scrollArrow = (direction: "up" | "down") => {
-      const visible = (direction === "up" ? model.scrollUp : model.scrollDown) && !touch && shown
+      const visible =
+        (direction === "up" ? model.scrollUp : model.scrollDown) && !touch &&
+        shown
       const part = p.part("div", (b) =>
         b.attrs({
           "aria-hidden": "true",
@@ -1545,11 +1889,19 @@ export const Select = Component.define({
           "data-side": shownSide,
           "data-visible": flag(visible)
         })
-          .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, "position:absolute"))))
+          .forward((node) =>
+            node.attr(
+              "style",
+              withStyle(node.elementAttrs.style, "position:absolute")
+            )
+          ))
       return View.wrapPart(
         part,
         <B extends View.PartTarget<"div">>(
-          { element, keepMounted }: { readonly element: B; readonly keepMounted?: boolean | undefined }
+          { element, keepMounted }: {
+            readonly element: B
+            readonly keepMounted?: boolean | undefined
+          }
         ): ReturnType<B["attr"]> | undefined => {
           const applied = part(element)
           return visible || keepMounted === true ? applied : undefined

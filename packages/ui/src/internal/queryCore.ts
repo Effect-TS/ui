@@ -86,7 +86,9 @@ export const load = (module: Loaded | undefined): void => {
  *
  * @internal
  */
-export const boundOf = (component: { readonly "~queries": unknown }): componentQueries.Bound | undefined =>
+export const boundOf = (
+  component: { readonly "~queries": unknown }
+): componentQueries.Bound | undefined =>
   component["~queries"] as componentQueries.Bound | undefined
 
 /** @internal */
@@ -96,11 +98,17 @@ export const markerKey = "~@effect/ui/Component/watchMarker"
 export const groupKey = "~@effect/ui/Component/watchGroup"
 
 /** @internal */
-export const markerOf = (subscription: object): componentQueries.Marker | undefined =>
-  (subscription as { readonly [markerKey]?: componentQueries.Marker })[markerKey]
+export const markerOf = (
+  subscription: object
+): componentQueries.Marker | undefined =>
+  (subscription as { readonly [markerKey]?: componentQueries.Marker })[
+    markerKey
+  ]
 
 /** @internal */
-export const groupOf = (subscription: object): componentQueries.Group | undefined =>
+export const groupOf = (
+  subscription: object
+): componentQueries.Group | undefined =>
   (subscription as { readonly [groupKey]?: componentQueries.Group })[groupKey]
 
 /** @internal */
@@ -132,10 +140,11 @@ export interface CacheCell {
  *
  * @internal
  */
-export const CacheKey: Context.Key<Query.Cache, Query.Cache["Service"]> = Context.Service<
-  Query.Cache,
-  Query.Cache["Service"]
->("@effect/ui/Query/Cache")
+export const CacheKey: Context.Key<Query.Cache, Query.Cache["Service"]> =
+  Context.Service<
+    Query.Cache,
+    Query.Cache["Service"]
+  >("@effect/ui/Query/Cache")
 
 /**
  * The cache-wide idle time in milliseconds. Throws on a negative one.
@@ -144,7 +153,9 @@ export const CacheKey: Context.Key<Query.Cache, Query.Cache["Service"]> = Contex
  */
 export const cacheIdleMs = (input: Duration.Input | undefined): number => {
   const duration = Duration.fromInputUnsafe(input ?? "5 minutes")
-  if (Duration.isNegative(duration)) throw new Error("[Query] idleTimeToLive can't be negative")
+  if (Duration.isNegative(duration)) {
+    throw new Error("[Query] idleTimeToLive can't be negative")
+  }
   return Duration.toMillis(duration)
 }
 
@@ -186,24 +197,29 @@ export const makeSignal = (initial = true): SettableSignal => {
 const alwaysTrue: Query.Signal = { get: () => true, subscribe: () => () => {} }
 
 /** @internal */
-export const Visibility: Context.Reference<Query.Signal> = Context.Reference<Query.Signal>(
+export const Visibility: Context.Reference<Query.Signal> = Context.Reference<
+  Query.Signal
+>(
   "@effect/ui/Query/Visibility",
   { defaultValue: () => alwaysTrue }
 )
 
 /** @internal */
-export const Connectivity: Context.Reference<Query.Signal> = Context.Reference<Query.Signal>(
+export const Connectivity: Context.Reference<Query.Signal> = Context.Reference<
+  Query.Signal
+>(
   "@effect/ui/Query/Connectivity",
   { defaultValue: () => alwaysTrue }
 )
 
 /** @internal */
-export const Problems: Context.Reference<(problem: Query.Problem.Any) => void> = Context.Reference<
-  (problem: Query.Problem.Any) => void
->("@effect/ui/Query/Problems", {
-  // oxlint-disable-next-line no-console
-  defaultValue: () => (problem) => console.warn(problem.message)
-})
+export const Problems: Context.Reference<(problem: Query.Problem.Any) => void> =
+  Context.Reference<
+    (problem: Query.Problem.Any) => void
+  >("@effect/ui/Query/Problems", {
+    // oxlint-disable-next-line no-console
+    defaultValue: () => (problem) => console.warn(problem.message)
+  })
 
 // -----------------------------------------------------------------------------
 // Keys
@@ -258,7 +274,9 @@ export const canonical = (u: unknown): string => {
     const o = u as Record<string, unknown>
     const parts: Array<string> = []
     for (const key of Object.keys(o).sort()) {
-      if (o[key] !== undefined) parts.push(JSON.stringify(key) + ":" + canonical(o[key]))
+      if (o[key] !== undefined) {
+        parts.push(JSON.stringify(key) + ":" + canonical(o[key]))
+      }
     }
     return "{" + parts.join(",") + "}"
   }

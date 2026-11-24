@@ -9,7 +9,9 @@ import type * as Renderer from "../Renderer.ts"
 /** @internal */
 export interface Store<Node> {
   /** The events of each node of `path`, innermost first: what a mount's lookup finds, then what `set` kept. */
-  readonly along: (path: ReadonlyArray<Node>) => ReadonlyArray<Renderer.Events | undefined>
+  readonly along: (
+    path: ReadonlyArray<Node>
+  ) => ReadonlyArray<Renderer.Events | undefined>
   readonly connect: Renderer.HostEvents<Node>["connect"]
   /** Keeps the events `setEvents` gave `node`, or with `undefined`, drops them. */
   readonly set: (node: Node, events: Renderer.Events | undefined) => void
@@ -30,7 +32,9 @@ export const make = <Node extends object>(): Store<Node> => {
         const found = lookup(path)
         for (let i = 0; i < path.length; i++) out[i] ??= found[i]
       }
-      if (anyBound) { for (let i = 0; i < path.length; i++) out[i] ??= bound.get(path[i]!) }
+      if (anyBound) {
+        for (let i = 0; i < path.length; i++) out[i] ??= bound.get(path[i]!)
+      }
       return out
     },
     connect(lookup) {

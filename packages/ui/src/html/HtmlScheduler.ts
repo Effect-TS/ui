@@ -103,7 +103,8 @@ export const make = (options?: Options): Scheduler.Scheduler =>
  * @category layers
  * @since 0.1.0
  */
-export const layer = (options?: Options): Layer.Layer<never> => Layer.succeed(Scheduler.Scheduler, make(options))
+export const layer = (options?: Options): Layer.Layer<never> =>
+  Layer.succeed(Scheduler.Scheduler, make(options))
 
 interface Task {
   readonly run: () => void
@@ -119,15 +120,24 @@ interface Bucket {
 type Lane = "user-blocking" | "user-visible" | "background"
 
 const laneOf = (priority: number): Lane =>
-  priority < 0 ? "user-blocking" : priority === 0 ? "user-visible" : "background"
+  priority < 0
+    ? "user-blocking"
+    : priority === 0
+    ? "user-visible"
+    : "background"
 
 interface TaskScheduler {
-  readonly postTask: (task: () => void, options: { readonly priority: Lane }) => Promise<unknown>
+  readonly postTask: (
+    task: () => void,
+    options: { readonly priority: Lane }
+  ) => Promise<unknown>
 }
 
 const now = (): number => performance.now()
 
-class HtmlScheduler implements Scheduler.Scheduler, Scheduler.SchedulerDispatcher {
+class HtmlScheduler
+  implements Scheduler.Scheduler, Scheduler.SchedulerDispatcher
+{
   readonly executionMode = "async"
   readonly budget: number
   private queue: Array<Bucket> = []
@@ -152,14 +162,23 @@ class HtmlScheduler implements Scheduler.Scheduler, Scheduler.SchedulerDispatche
     if (!fresh && count < this.sampledAt + this.stride) return false
     const time = now()
     if (time >= this.deadline) {
-      if (count !== 1 || this.active !== undefined || this.pending.size > 0) return this.yieldInLane(fiber)
+      if (count !== 1 || this.active !== undefined || this.pending.size > 0) {
+        return this.yieldInLane(fiber)
+      }
       this.deadline = time + this.budget
     }
     if (fresh) {
       this.stride = 1
     } else {
       const perOp = (time - this.sampledTime) / (count - this.sampledAt)
-      this.stride = Math.max(1, Math.min(this.stride * 2, 32, Math.floor((this.deadline - time) / perOp / 2)))
+      this.stride = Math.max(
+        1,
+        Math.min(
+          this.stride * 2,
+          32,
+          Math.floor((this.deadline - time) / perOp / 2)
+        )
+      )
     }
     this.sampled = fiber.id
     this.sampledAt = count
@@ -168,7 +187,9 @@ class HtmlScheduler implements Scheduler.Scheduler, Scheduler.SchedulerDispatche
   }
 
   private yieldInLane(fiber: Fiber.Fiber<unknown, unknown>): boolean {
-    this.keep = this.active?.fiber === fiber.id ? this.active.priority : undefined
+    this.keep = this.active?.fiber === fiber.id
+      ? this.active.priority
+      : undefined
     return true
   }
 
@@ -181,18 +202,26 @@ class HtmlScheduler implements Scheduler.Scheduler, Scheduler.SchedulerDispatche
       priority = this.keep
       this.keep = undefined
     }
-    bucketAt(this.queue, priority).tasks.push({ run, priority, fiber: Fiber.getCurrent()?.id })
+    bucketAt(this.queue, priority).tasks.push({
+      run,
+      priority,
+      fiber: Fiber.getCurrent()?.id
+    })
     if (this.active === undefined) this.post(laneOf(priority))
   }
 
   private post(lane: Lane): void {
-    const tasks = (globalThis as { readonly scheduler?: Partial<TaskScheduler> }).scheduler
+    const tasks =
+      (globalThis as { readonly scheduler?: Partial<TaskScheduler> }).scheduler
     if (typeof tasks?.postTask === "function") {
       if (this.pending.has(lane)) return
       this.pending.add(lane)
       tasks.postTask(() => {
         this.pending.delete(lane)
-        this.drain(now() + this.budget, lane === "user-blocking" ? -1 : lane === "user-visible" ? 0 : 1)
+        this.drain(
+          now() + this.budget,
+          lane === "user-blocking" ? -1 : lane === "user-visible" ? 0 : 1
+        )
       }, { priority: lane })
     } else if (this.pending.size === 0) {
       this.pending.add(lane)
@@ -226,7 +255,10 @@ class HtmlScheduler implements Scheduler.Scheduler, Scheduler.SchedulerDispatche
         const tasks = batch[b]!.tasks
         while (i < tasks.length) {
           const task = tasks[i]!
-          if (task.priority > 0 && this.queue.length > 0 && this.queue[0]!.priority <= 0) return
+          if (
+            task.priority > 0 && this.queue.length > 0 &&
+            this.queue[0]!.priority <= 0
+          ) return
           this.active = task
           i++
           task.run()

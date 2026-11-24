@@ -226,7 +226,9 @@ export interface BodyData {
  * @category utility types
  * @since 0.1.0
  */
-export type DataName<N extends string> = N extends "data-eui" ? never : N extends `data-${string}` ? N : never
+export type DataName<N extends string> = N extends "data-eui" ? never
+  : N extends `data-${string}` ? N
+  : never
 
 /**
  * What a JSON-LD block accepts: an object whose properties aren't functions,
@@ -239,7 +241,11 @@ export type DataName<N extends string> = N extends "data-eui" ? never : N extend
  */
 export type JsonLdValue<A extends object> =
   & A
-  & { readonly [K in keyof A]: A[K] extends Function | Date | bigint | symbol ? never : A[K] }
+  & {
+    readonly [K in keyof A]: A[K] extends Function | Date | bigint | symbol
+      ? never
+      : A[K]
+  }
 
 /**
  * The marker attribute on every head tag the framework writes.
@@ -264,8 +270,16 @@ export const marker = headAttributes.marker
  */
 export const meta = (
   options:
-    | { readonly name: string; readonly content: string; readonly key?: string | undefined }
-    | { readonly property: string; readonly content: string; readonly key?: string | undefined }
+    | {
+      readonly name: string
+      readonly content: string
+      readonly key?: string | undefined
+    }
+    | {
+      readonly property: string
+      readonly content: string
+      readonly key?: string | undefined
+    }
 ): Meta => ({
   _tag: "Meta",
   name: "name" in options ? options.name : undefined,
@@ -286,7 +300,9 @@ export const meta = (
  * @category constructors
  * @since 0.1.0
  */
-export const link = (options: LinkAttributes & { readonly key?: string | undefined }): Link => {
+export const link = (
+  options: LinkAttributes & { readonly key?: string | undefined }
+): Link => {
   const { key, ...attributes } = options
   return { _tag: "Link", attributes, key }
 }
@@ -346,15 +362,24 @@ export const jsonLd = <const A extends object>(
   options?: { readonly key?: string | undefined }
 ): JsonLd => {
   if (Array.isArray(value)) {
-    throw new Error("HtmlHead.jsonLd takes an object, not an array. Use @graph for several nodes.")
+    throw new Error(
+      "HtmlHead.jsonLd takes an object, not an array. Use @graph for several nodes."
+    )
   }
-  return { _tag: "JsonLd", value, json: canonicalJson(value), key: options?.key }
+  return {
+    _tag: "JsonLd",
+    value,
+    json: canonicalJson(value),
+    key: options?.key
+  }
 }
 
-const splitTokens = (tokens: string | ReadonlyArray<string>): ReadonlyArray<string> =>
-  (typeof tokens === "string" ? [tokens] : tokens).flatMap((token) => token.split(/[\t\n\f\r ]+/)).filter((t) =>
-    t !== ""
-  )
+const splitTokens = (
+  tokens: string | ReadonlyArray<string>
+): ReadonlyArray<string> =>
+  (typeof tokens === "string" ? [tokens] : tokens).flatMap((token) =>
+    token.split(/[\t\n\f\r ]+/)
+  ).filter((t) => t !== "")
 
 /**
  * Adds class tokens to `<html>`. Strings are split on ASCII whitespace.
@@ -369,7 +394,9 @@ const splitTokens = (tokens: string | ReadonlyArray<string>): ReadonlyArray<stri
  * @category constructors
  * @since 0.1.0
  */
-export const htmlClass = (tokens: string | ReadonlyArray<string>): HtmlClass => ({
+export const htmlClass = (
+  tokens: string | ReadonlyArray<string>
+): HtmlClass => ({
   _tag: "HtmlClass",
   tokens: splitTokens(tokens)
 })
@@ -381,13 +408,19 @@ export const htmlClass = (tokens: string | ReadonlyArray<string>): HtmlClass => 
  * @category constructors
  * @since 0.1.0
  */
-export const bodyClass = (tokens: string | ReadonlyArray<string>): BodyClass => ({
+export const bodyClass = (
+  tokens: string | ReadonlyArray<string>
+): BodyClass => ({
   _tag: "BodyClass",
   tokens: splitTokens(tokens)
 })
 
 const checkDataName = (name: string) => {
-  if (name === marker) throw new Error(`${marker} is the framework's marker and can't be set from head`)
+  if (name === marker) {
+    throw new Error(
+      `${marker} is the framework's marker and can't be set from head`
+    )
+  }
 }
 
 /**
@@ -402,7 +435,10 @@ const checkDataName = (name: string) => {
  * @category constructors
  * @since 0.1.0
  */
-export const htmlData = <const N extends string>(name: N & DataName<N>, value: string): HtmlData => {
+export const htmlData = <const N extends string>(
+  name: N & DataName<N>,
+  value: string
+): HtmlData => {
   checkDataName(name)
   return { _tag: "HtmlData", name: name as `data-${string}`, value }
 }
@@ -414,7 +450,10 @@ export const htmlData = <const N extends string>(name: N & DataName<N>, value: s
  * @category constructors
  * @since 0.1.0
  */
-export const bodyData = <const N extends string>(name: N & DataName<N>, value: string): BodyData => {
+export const bodyData = <const N extends string>(
+  name: N & DataName<N>,
+  value: string
+): BodyData => {
   checkDataName(name)
   return { _tag: "BodyData", name: name as `data-${string}`, value }
 }
@@ -431,12 +470,21 @@ const pathOf = (path: string, key: string | number): string =>
     : `${path}[${JSON.stringify(key)}]`
 
 const canonical = (value: unknown, path: string): unknown => {
-  if (value === null || typeof value === "string" || typeof value === "boolean") return value
+  if (
+    value === null || typeof value === "string" || typeof value === "boolean"
+  ) return value
   if (typeof value === "number") return value
   if (Array.isArray(value)) {
     return value.map((item, index) => {
-      if (item === undefined || (typeof item === "number" && !Number.isFinite(item))) {
-        throw new Error(`HtmlHead.jsonLd: ${pathOf(path, index)} is ${String(item)}, which JSON can't hold`)
+      if (
+        item === undefined ||
+        (typeof item === "number" && !Number.isFinite(item))
+      ) {
+        throw new Error(
+          `HtmlHead.jsonLd: ${pathOf(path, index)} is ${
+            String(item)
+          }, which JSON can't hold`
+        )
       }
       return canonical(item, pathOf(path, index))
     })
@@ -446,7 +494,9 @@ const canonical = (value: unknown, path: string): unknown => {
     if (proto !== Object.prototype && proto !== null) {
       const name = proto?.constructor?.name
       throw new Error(
-        `HtmlHead.jsonLd: ${path} is a${name === undefined ? "n object" : ` ${name}`}, not a plain object`
+        `HtmlHead.jsonLd: ${path} is a${
+          name === undefined ? "n object" : ` ${name}`
+        }, not a plain object`
       )
     }
     const out: Record<string, unknown> = {}
@@ -457,7 +507,9 @@ const canonical = (value: unknown, path: string): unknown => {
     }
     return out
   }
-  throw new Error(`HtmlHead.jsonLd: ${path} is a ${typeof value}, which JSON can't hold`)
+  throw new Error(
+    `HtmlHead.jsonLd: ${path} is a ${typeof value}, which JSON can't hold`
+  )
 }
 
 /**
@@ -468,7 +520,8 @@ const canonical = (value: unknown, path: string): unknown => {
  * @category utils
  * @since 0.1.0
  */
-export const canonicalJson = (value: object): string => JSON.stringify(canonical(value, "$")).replaceAll("<", "\\u003c")
+export const canonicalJson = (value: object): string =>
+  JSON.stringify(canonical(value, "$")).replaceAll("<", "\\u003c")
 
 // ---------------------------------------------------------------------------
 // Merge
@@ -552,7 +605,10 @@ export interface Reduce {
  * @category constructors
  * @since 0.1.0
  */
-export const reduce = (apply: (below: HtmlHead) => HtmlHead): Reduce => ({ _tag: "HtmlHeadReduce", apply })
+export const reduce = (apply: (below: HtmlHead) => HtmlHead): Reduce => ({
+  _tag: "HtmlHeadReduce",
+  apply
+})
 
 /**
  * The head with no entries.
@@ -595,7 +651,9 @@ export const identity = (entry: Meta | Link | JsonLd): string => {
         : `link ${normalized.get("rel")} ${normalized.get("href")}`
     }
     case "JsonLd":
-      return entry.key !== undefined ? `jsonld key:${entry.key}` : `jsonld ${entry.json}`
+      return entry.key !== undefined
+        ? `jsonld key:${entry.key}`
+        : `jsonld ${entry.json}`
   }
 }
 
@@ -607,10 +665,14 @@ export const identity = (entry: Meta | Link | JsonLd): string => {
  * @category utils
  * @since 0.1.0
  */
-export const attributes = (entry: Meta | Link): ReadonlyArray<readonly [string, string]> => {
+export const attributes = (
+  entry: Meta | Link
+): ReadonlyArray<readonly [string, string]> => {
   if (entry._tag === "Meta") {
     return [
-      entry.name !== undefined ? ["name", entry.name] as const : ["property", entry.property!] as const,
+      entry.name !== undefined
+        ? ["name", entry.name] as const
+        : ["property", entry.property!] as const,
       ["content", entry.content]
     ]
   }
@@ -622,9 +684,12 @@ export const attributes = (entry: Meta | Link): ReadonlyArray<readonly [string, 
 }
 
 const linkSignature = (entry: Link): string =>
-  headAttributes.normalize(attributes(entry)).map((pair) => JSON.stringify(pair)).sort().join()
+  headAttributes.normalize(attributes(entry)).map((pair) =>
+    JSON.stringify(pair)
+  ).sort().join()
 
-const dataSlot = (element: "html" | "body", name: string): string => `${element} ${name}`
+const dataSlot = (element: "html" | "body", name: string): string =>
+  `${element} ${name}`
 
 const slotsOf = (head: HtmlHead): ReadonlyMap<string, string> => {
   const out = new Map<string, string>()
@@ -632,12 +697,21 @@ const slotsOf = (head: HtmlHead): ReadonlyMap<string, string> => {
   if (head.html.lang !== undefined) out.set("lang", head.html.lang)
   if (head.html.dir !== undefined) out.set("dir", head.html.dir)
   for (const entry of head.meta) {
-    out.set(identity(entry), entry.key === undefined ? entry.content : JSON.stringify(attributes(entry)))
+    out.set(
+      identity(entry),
+      entry.key === undefined
+        ? entry.content
+        : JSON.stringify(attributes(entry))
+    )
   }
   for (const entry of head.links) out.set(identity(entry), linkSignature(entry))
   for (const entry of head.jsonLd) out.set(identity(entry), entry.json)
-  for (const name in head.html.data) out.set(dataSlot("html", name), head.html.data[name]!)
-  for (const name in head.body.data) out.set(dataSlot("body", name), head.body.data[name]!)
+  for (const name in head.html.data) {
+    out.set(dataSlot("html", name), head.html.data[name]!)
+  }
+  for (const name in head.body.data) {
+    out.set(dataSlot("body", name), head.body.data[name]!)
+  }
   return out
 }
 
@@ -700,8 +774,12 @@ const combine = (
     if (child.html.dir !== undefined) dirValue = child.html.dir
     for (const token of child.html.class) htmlClasses.add(token)
     for (const token of child.body.class) bodyClasses.add(token)
-    for (const [name, value] of Object.entries(child.html.data)) htmlDataMap.set(name, value)
-    for (const [name, value] of Object.entries(child.body.data)) bodyDataMap.set(name, value)
+    for (const [name, value] of Object.entries(child.html.data)) {
+      htmlDataMap.set(name, value)
+    }
+    for (const [name, value] of Object.entries(child.body.data)) {
+      bodyDataMap.set(name, value)
+    }
   }
   if (conflicted.has("lang")) lang = undefined
   if (conflicted.has("dir")) dirValue = undefined
@@ -710,20 +788,31 @@ const combine = (
     links.delete(slot)
     json.delete(slot)
   }
-  for (const name of htmlDataMap.keys()) if (conflicted.has(dataSlot("html", name))) htmlDataMap.delete(name)
-  for (const name of bodyDataMap.keys()) if (conflicted.has(dataSlot("body", name))) bodyDataMap.delete(name)
+  for (const name of htmlDataMap.keys()) {
+    if (conflicted.has(dataSlot("html", name))) htmlDataMap.delete(name)
+  }
+  for (const name of bodyDataMap.keys()) {
+    if (conflicted.has(dataSlot("body", name))) bodyDataMap.delete(name)
+  }
   return {
     title: conflicted.has("title") ? undefined : Head.resolveTitle(node, below),
     meta: [...meta.values()],
     links: [...links.values()],
     jsonLd: [...json.values()],
-    html: { lang, dir: dirValue, class: [...htmlClasses], data: Object.fromEntries(htmlDataMap) },
+    html: {
+      lang,
+      dir: dirValue,
+      class: [...htmlClasses],
+      data: Object.fromEntries(htmlDataMap)
+    },
     body: { class: [...bodyClasses], data: Object.fromEntries(bodyDataMap) }
   }
 }
 
 const reducer = (entry: Entry): ((below: HtmlHead) => HtmlHead) | undefined =>
-  entry._tag === "Reduce" || entry._tag === "HtmlHeadReduce" ? entry.apply : undefined
+  entry._tag === "Reduce" || entry._tag === "HtmlHeadReduce"
+    ? entry.apply
+    : undefined
 
 /**
  * Folds a tree's entries into one `HtmlHead`, applying each node's `reduce`
@@ -749,13 +838,18 @@ const reducer = (entry: Entry): ((below: HtmlHead) => HtmlHead) | undefined =>
  * @category combinators
  * @since 0.1.0
  */
-export const merge: (tree: Head.Tree<Entry>, options?: Head.MergeOptions) => HtmlHead = /* @__PURE__ */ headFold.plain(
+export const merge: (
+  tree: Head.Tree<Entry>,
+  options?: Head.MergeOptions
+) => HtmlHead = /* @__PURE__ */ headFold.plain(
   (tree: Head.Tree<Entry>, options?: Head.MergeOptions): HtmlHead => {
     const onConflict = options?.onConflict
     return headFold.fold(
       tree,
       { combine, slots: slotsOf, reducer },
-      onConflict === undefined ? undefined : (slot, paths) => onConflict(Head.conflict(slot, paths))
+      onConflict === undefined
+        ? undefined
+        : (slot, paths) => onConflict(Head.conflict(slot, paths))
     )
   }
 )

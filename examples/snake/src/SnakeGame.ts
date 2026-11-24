@@ -7,7 +7,12 @@ import { HtmlSubscription } from "@effect/ui/html"
 import { Array, Duration, Schema, Stream } from "effect"
 import { GAME, GAME_SPEED } from "./constants.ts"
 
-export const GameState = Schema.Literals(["NotStarted", "Playing", "Paused", "GameOver"])
+export const GameState = Schema.Literals([
+  "NotStarted",
+  "Playing",
+  "Paused",
+  "GameOver"
+])
 export type GameState = typeof GameState.Type
 
 export const SnakeGameModel = Schema.Struct({
@@ -35,7 +40,9 @@ export const GenerateApplePosition = Command.make(
 
 const generateApplePosition = (snake: Snake.Snake) =>
   GenerateApplePosition.make({ snake }).pipe(
-    Command.map((position) => SnakeGameMessage.CompletedGenerateApplePosition({ position }))
+    Command.map((position) =>
+      SnakeGameMessage.CompletedGenerateApplePosition({ position })
+    )
   )
 
 const NEW_GAME = {
@@ -70,7 +77,8 @@ const NEXT_ON_SPACE: Record<GameState, GameState> = {
   GameOver: "GameOver"
 }
 
-const tickInterval = (points: number): number => Math.max(GAME_SPEED.MIN_INTERVAL, GAME_SPEED.BASE_INTERVAL - points)
+const tickInterval = (points: number): number =>
+  Math.max(GAME_SPEED.MIN_INTERVAL, GAME_SPEED.BASE_INTERVAL - points)
 
 const cellClass = (x: number, y: number, model: SnakeGameModel): string => {
   const cell = { x, y }
@@ -100,7 +108,9 @@ export const SnakeGame = Component.define({
     PressedKey: ($, { key }) => {
       const direction = MOVE_DIRECTIONS.get(key)
       if (direction !== undefined) {
-        return $.model.gameState === "Playing" ? $.evolve({ nextDirection: direction }) : $.model
+        return $.model.gameState === "Playing"
+          ? $.evolve({ nextDirection: direction })
+          : $.model
       }
       if (key === " ") {
         return $.evolve({ gameState: (gameState) => NEXT_ON_SPACE[gameState] })
@@ -114,26 +124,38 @@ export const SnakeGame = Component.define({
     TickedClock: ($) => {
       if ($.model.gameState !== "Playing") return $.model
 
-      const direction = Direction.isOpposite($.model.direction, $.model.nextDirection)
-        ? $.model.direction
-        : $.model.nextDirection
-      const willEatApple = Position.equivalence(Position.move($.model.snake[0], direction), $.model.apple)
-      const snake = willEatApple ? Snake.grow($.model.snake, direction) : Snake.move($.model.snake, direction)
+      const direction =
+        Direction.isOpposite($.model.direction, $.model.nextDirection)
+          ? $.model.direction
+          : $.model.nextDirection
+      const willEatApple = Position.equivalence(
+        Position.move($.model.snake[0], direction),
+        $.model.apple
+      )
+      const snake = willEatApple
+        ? Snake.grow($.model.snake, direction)
+        : Snake.move($.model.snake, direction)
 
       if (Snake.hasCollision(snake)) {
-        return $.evolve({ gameState: "GameOver", highScore: Math.max($.model.points, $.model.highScore) })
+        return $.evolve({
+          gameState: "GameOver",
+          highScore: Math.max($.model.points, $.model.highScore)
+        })
       }
 
       const next: SnakeGameModel = {
         ...$.model,
         snake,
         direction,
-        points: willEatApple ? $.model.points + GAME.POINTS_PER_APPLE : $.model.points
+        points: willEatApple
+          ? $.model.points + GAME.POINTS_PER_APPLE
+          : $.model.points
       }
       return willEatApple ? $.set(next).run(generateApplePosition(snake)) : next
     },
 
-    CompletedGenerateApplePosition: ($, { position }) => $.evolve({ apple: position })
+    CompletedGenerateApplePosition: ($, { position }) =>
+      $.evolve({ apple: position })
   },
   subscriptions: ({ model }) => [
     model.gameState === "Playing" &&
@@ -150,7 +172,9 @@ export const SnakeGame = Component.define({
   ],
   head: ({ model }) => [Head.title(`Snake | ${model.points} pts`)],
   view: (h, model) =>
-    h.div.class("flex flex-col items-center justify-center min-h-screen bg-black text-white p-8").children(
+    h.div.class(
+      "flex flex-col items-center justify-center min-h-screen bg-black text-white p-8"
+    ).children(
       h.h1.class("text-4xl font-bold mb-4").children("Snake Game"),
       h.div.class("flex gap-8 mb-4").children(
         h.p.class("text-xl").children(`Score: ${model.points}`),
@@ -160,7 +184,10 @@ export const SnakeGame = Component.define({
       h.div.class("inline-block border-2 border-gray-600").children(
         Array.makeBy(Position.GRID_SIZE, (y) =>
           h.div.class("flex").children(
-            Array.makeBy(Position.GRID_SIZE, (x) => h.div.class("w-6 h-6", cellClass(x, y, model)))
+            Array.makeBy(
+              Position.GRID_SIZE,
+              (x) => h.div.class("w-6 h-6", cellClass(x, y, model))
+            )
           ))
       ),
       h.div.class("mt-4 text-sm text-gray-400").children(

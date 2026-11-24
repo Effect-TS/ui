@@ -8,9 +8,18 @@
 import * as SchemaAST from "effect/SchemaAST"
 
 interface Internals {
-  readonly replaceEncoding: <A extends SchemaAST.AST>(ast: A, encoding: ReadonlyArray<SchemaAST.Link> | undefined) => A
-  readonly replaceContextLastLink: <A extends SchemaAST.AST>(ast: A, context: SchemaAST.Context) => A
-  readonly mapLink: (link: SchemaAST.Link, f: (ast: SchemaAST.AST) => SchemaAST.AST) => SchemaAST.Link
+  readonly replaceEncoding: <A extends SchemaAST.AST>(
+    ast: A,
+    encoding: ReadonlyArray<SchemaAST.Link> | undefined
+  ) => A
+  readonly replaceContextLastLink: <A extends SchemaAST.AST>(
+    ast: A,
+    context: SchemaAST.Context
+  ) => A
+  readonly mapLink: (
+    link: SchemaAST.Link,
+    f: (ast: SchemaAST.AST) => SchemaAST.AST
+  ) => SchemaAST.Link
   readonly getIndexSignatureKeys: (
     input: { readonly [x: PropertyKey]: unknown },
     parameter: SchemaAST.IndexSignature["parameter"]
@@ -36,5 +45,12 @@ export const getIndexSignatureKeys = internals.getIndexSignatureKeys
  *
  * @internal
  */
-export const recur = (ast: SchemaAST.AST, f: (ast: SchemaAST.AST) => SchemaAST.AST): SchemaAST.AST =>
-  "recur" in ast ? (ast as { recur(f: (ast: SchemaAST.AST) => SchemaAST.AST): SchemaAST.AST }).recur(f) : ast
+export const recur = (
+  ast: SchemaAST.AST,
+  f: (ast: SchemaAST.AST) => SchemaAST.AST
+): SchemaAST.AST =>
+  "recur" in ast
+    ? (ast as {
+      recur(f: (ast: SchemaAST.AST) => SchemaAST.AST): SchemaAST.AST
+    }).recur(f)
+    : ast

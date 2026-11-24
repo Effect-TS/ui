@@ -111,7 +111,10 @@ import * as Html from "@effect/ui/html/Html"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
 import { flag } from "./internal/attributes.ts"
-import { CheckboxGroupItem, CheckboxGroupMessage } from "./internal/checkboxGroup.ts"
+import {
+  CheckboxGroupItem,
+  CheckboxGroupMessage
+} from "./internal/checkboxGroup.ts"
 import { toggled } from "./internal/formInputs.ts"
 
 /**
@@ -188,7 +191,10 @@ const CheckboxGroupShared = Schema.Struct({
 
 const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 
-const parentOf = (model: CheckboxGroupModel, props: CheckboxGroupProps): typeof CheckboxGroupShared.Type["parent"] => {
+const parentOf = (
+  model: CheckboxGroupModel,
+  props: CheckboxGroupProps
+): typeof CheckboxGroupShared.Type["parent"] => {
   const all = props.allValues
   if (all === undefined) return null
   const value = new Set(props.value)
@@ -196,13 +202,17 @@ const parentOf = (model: CheckboxGroupModel, props: CheckboxGroupProps): typeof 
   return {
     checked: all.length > 0 && ticked === all.length,
     indeterminate: ticked > 0 && ticked < all.length,
-    controls: all.flatMap((item) => model.items.filter((other) => other.value === item).map(({ id }) => id)).join(" ")
+    controls: all.flatMap((item) =>
+      model.items.filter((other) => other.value === item).map(({ id }) => id)
+    ).join(" ")
   }
 }
 
 const cycle = (model: CheckboxGroupModel, props: CheckboxGroupProps) => {
   const all = props.allValues ?? []
-  const locked = new Set(model.items.filter((item) => item.disabled).map((item) => item.value))
+  const locked = new Set(
+    model.items.filter((item) => item.disabled).map((item) => item.value)
+  )
   const free = all.filter((item) => !locked.has(item))
   if (free.length === 0) return undefined
   const ticked = new Set(props.value)
@@ -221,7 +231,12 @@ const cycle = (model: CheckboxGroupModel, props: CheckboxGroupProps) => {
     case "some":
       return { value: keep(all), remembered: props.value }
     case "none":
-      return { value: keep(status(model.remembered) === "some" ? model.remembered : all), remembered: model.remembered }
+      return {
+        value: keep(
+          status(model.remembered) === "some" ? model.remembered : all
+        ),
+        remembered: model.remembered
+      }
   }
 }
 
@@ -279,14 +294,18 @@ export const CheckboxGroup = Component.define({
     ToggledItem: ($, { value }) => {
       if ($.props.disabled === true) return $.model
       const next = toggled($.props.value, value)
-      return $.evolve({ remembered: next }).emit(CheckboxGroupEvents.Updated({ value: next }))
+      return $.evolve({ remembered: next }).emit(
+        CheckboxGroupEvents.Updated({ value: next })
+      )
     },
     ToggledParent: ($) => {
       if ($.props.disabled === true) return $.model
       const next = cycle($.model, $.props)
       return next === undefined
         ? $.model
-        : $.evolve({ remembered: next.remembered }).emit(CheckboxGroupEvents.Updated({ value: next.value }))
+        : $.evolve({ remembered: next.remembered }).emit(
+          CheckboxGroupEvents.Updated({ value: next.value })
+        )
     },
     ChangedItems: ($, { items }) => $.evolve({ items })
   },
@@ -295,7 +314,9 @@ export const CheckboxGroup = Component.define({
     return {
       value: p.props.value,
       disabled,
-      root: p.part((b) => b.attrs({ role: "group", "data-disabled": flag(disabled) }))
+      root: p.part((b) =>
+        b.attrs({ role: "group", "data-disabled": flag(disabled) })
+      )
     }
   }
 })

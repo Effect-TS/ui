@@ -178,7 +178,13 @@ export type TabsOrientation = typeof TabsOrientation.Type
  * @category schemas
  * @since 0.1.0
  */
-export const TabsActivationDirection = Schema.Literals(["left", "right", "up", "down", "none"])
+export const TabsActivationDirection = Schema.Literals([
+  "left",
+  "right",
+  "up",
+  "down",
+  "none"
+])
 
 /**
  * Where a newly active tab sits relative to the one before it.
@@ -271,7 +277,10 @@ export type TabsProps = typeof TabsProps.Type
  * @since 0.1.0
  */
 export const TabsEvents = UiSchema.TaggedEnum({
-  Selected: { value: Schema.String, activationDirection: TabsActivationDirection }
+  Selected: {
+    value: Schema.String,
+    activationDirection: TabsActivationDirection
+  }
 })
 
 /**
@@ -315,7 +324,12 @@ const TabsModel = Schema.Struct({
 
 type TabsModel = typeof TabsModel.Type
 
-type TabsUpdate = Component.Update<TabsModel, TabsMessage, TabsEvents, TabsProps>
+type TabsUpdate = Component.Update<
+  TabsModel,
+  TabsMessage,
+  TabsEvents,
+  TabsProps
+>
 
 const Tab = Html.ref("TabsTab", "button")
 
@@ -340,7 +354,9 @@ const directionOf = (
 // of the change, so the new panel's first frame already has its starting style.
 const phaseOf = (model: TabsModel, props: TabsProps, rtl: boolean): TabsModel =>
   props.value === model.shown ? model : UiStruct.evolve(model, {
-    highlighted: !model.focused && enabledIn(props.tabs, props.value) ? props.value : model.highlighted,
+    highlighted: !model.focused && enabledIn(props.tabs, props.value)
+      ? props.value
+      : model.highlighted,
     shown: props.value,
     leaving: [
       ...model.leaving.filter((value) => value !== props.value),
@@ -351,25 +367,46 @@ const phaseOf = (model: TabsModel, props: TabsProps, rtl: boolean): TabsModel =>
     indicator: props.value === null ? false : model.indicator
   })
 
-const enabledIn = (tabs: ReadonlyArray<TabsTab>, value: string | null): value is string => {
+const enabledIn = (
+  tabs: ReadonlyArray<TabsTab>,
+  value: string | null
+): value is string => {
   const tab = tabs[indexOf(tabs, value)]
   return tab !== undefined && tab.disabled !== true
 }
 
-const rtlOf = ($: { readonly shared: { readonly provider?: { readonly direction: string } | undefined } }) =>
-  $.shared.provider?.direction === "rtl"
+const rtlOf = (
+  $: {
+    readonly shared: {
+      readonly provider?: { readonly direction: string } | undefined
+    }
+  }
+) => $.shared.provider?.direction === "rtl"
 
 const activate = (model: TabsModel, $: TabsUpdate, value: string) => {
   if (!enabledIn($.props.tabs, value) || value === $.props.value) return model
   return $.set(model).emit(
-    TabsEvents.Selected({ value, activationDirection: directionOf($.props, rtlOf($), $.props.value, value) })
+    TabsEvents.Selected({
+      value,
+      activationDirection: directionOf($.props, rtlOf($), $.props.value, value)
+    })
   )
 }
 
-const stepOf = (key: string, orientation: TabsOrientation, rtl: boolean): Step | undefined => {
+const stepOf = (
+  key: string,
+  orientation: TabsOrientation,
+  rtl: boolean
+): Step | undefined => {
   if (key === "Home") return "first"
   if (key === "End") return "last"
-  if (orientation === "vertical") return key === "ArrowDown" ? "next" : key === "ArrowUp" ? "previous" : undefined
+  if (orientation === "vertical") {
+    return key === "ArrowDown"
+      ? "next"
+      : key === "ArrowUp"
+      ? "previous"
+      : undefined
+  }
   if (key === "ArrowRight") return rtl ? "previous" : "next"
   if (key === "ArrowLeft") return rtl ? "next" : "previous"
   return undefined
@@ -384,7 +421,12 @@ const navigate = ($: TabsUpdate, value: string, to: Step) => {
     ? 0
     : to === "last"
     ? last
-    : stepped(from, last, to === "next" ? 1 : -1, $.props.loopFocus !== false ? "wrap" : "none")
+    : stepped(
+      from,
+      last,
+      to === "next" ? 1 : -1,
+      $.props.loopFocus !== false ? "wrap" : "none"
+    )
   const tab = tabs[target]
   if (tab === undefined || target === from) return $.model
   return $.evolve({ highlighted: tab.value }).run(
@@ -394,7 +436,12 @@ const navigate = ($: TabsUpdate, value: string, to: Step) => {
 
 const TrackPanel = Mount.makeStream(
   "TrackPanel",
-  { args: { value: Schema.String, status: Schema.Literals(["starting", "ending"]) } },
+  {
+    args: {
+      value: Schema.String,
+      status: Schema.Literals(["starting", "ending"])
+    }
+  },
   (node: unknown, initial, changes) =>
     Stream.callback<TabsMessage>((queue) =>
       Effect.gen(function*() {
@@ -406,9 +453,16 @@ const TrackPanel = Mount.makeStream(
           const mine = ++generation
           const live = () => mine === generation && node.isConnected
           if (status === "starting") {
-            frame(() => frame(() => live() && send(TabsMessage.RenderedFirstFrame({ value }))))
+            frame(() =>
+              frame(() =>
+                live() && send(TabsMessage.RenderedFirstFrame({ value }))
+              )
+            )
           } else {
-            frame(() => whenFinished(() => [node], frame, live, () => send(TabsMessage.FinishedTransition({ value }))))
+            frame(() =>
+              whenFinished(() => [node], frame, live, () =>
+                send(TabsMessage.FinishedTransition({ value })))
+            )
           }
         }
         yield* Effect.addFinalizer(() =>
@@ -416,14 +470,18 @@ const TrackPanel = Mount.makeStream(
             generation++
           })
         )
-        yield* Stream.runForEach(changes, (next) => Effect.sync(() => follow(next))).pipe(Effect.forkScoped)
+        yield* Stream.runForEach(changes, (next) =>
+          Effect.sync(() =>
+            follow(next)
+          )).pipe(Effect.forkScoped)
       })
     )
 )
 
 const tabOf = (event: Event, list: unknown): HTMLElement | null => {
   const tab = event.target
-  return isHTMLElement(tab) && tab.getAttribute("role") === "tab" && tab.closest("[role=tablist]") === list
+  return isHTMLElement(tab) && tab.getAttribute("role") === "tab" &&
+      tab.closest("[role=tablist]") === list
     ? tab
     : null
 }
@@ -460,19 +518,28 @@ const ActivateFromKeys = Mount.makeStream(
             if (event.key === " ") {
               event.preventDefault()
               if (enabled) clickFrom(tab, event)
-            } else if (event.key === "Enter" && enabled && tab.localName === "a" && !tab.hasAttribute("href")) {
+            } else if (
+              event.key === "Enter" && enabled && tab.localName === "a" &&
+              !tab.hasAttribute("href")
+            ) {
               event.preventDefault()
               clickFrom(tab, event)
             }
           }
           const onKeyUp = (event: KeyboardEvent) => {
             const tab = tabOf(event, node)
-            if (tab !== null && event.key === " " && tab.localName === "button") event.preventDefault()
+            if (
+              tab !== null && event.key === " " && tab.localName === "button"
+            ) event.preventDefault()
           }
           const controller = new AbortController()
           if (isHTMLElement(node)) {
-            node.addEventListener("keydown", onKeyDown, { signal: controller.signal })
-            node.addEventListener("keyup", onKeyUp, { signal: controller.signal })
+            node.addEventListener("keydown", onKeyDown, {
+              signal: controller.signal
+            })
+            node.addEventListener("keyup", onKeyUp, {
+              signal: controller.signal
+            })
           }
           return controller
         }),
@@ -481,13 +548,27 @@ const ActivateFromKeys = Mount.makeStream(
     )
 )
 
-const linkPanels = <E extends View.Element<any, any>>(root: E, controls: ReadonlyMap<string, string>): E => {
+const linkPanels = <E extends View.Element<any, any>>(
+  root: E,
+  controls: ReadonlyMap<string, string>
+): E => {
   const panels = new Set(controls.values())
   const link = (node: View.Node<any, any>): View.Node<any, any> => {
-    if (node._tag !== "Element" || (node.attrs.id !== undefined && panels.has(node.attrs.id))) return node
-    const panel = node.attrs.id === undefined ? undefined : controls.get(node.attrs.id)
+    if (
+      node._tag !== "Element" ||
+      (node.attrs.id !== undefined && panels.has(node.attrs.id))
+    ) return node
+    const panel = node.attrs.id === undefined
+      ? undefined
+      : controls.get(node.attrs.id)
     if (panel !== undefined) {
-      return { ...node, attrs: { ...node.attrs, "aria-controls": withTokens(node.attrs["aria-controls"], panel)! } }
+      return {
+        ...node,
+        attrs: {
+          ...node.attrs,
+          "aria-controls": withTokens(node.attrs["aria-controls"], panel)!
+        }
+      }
     }
     let changed = false
     const children = node.children.map((child) => {
@@ -505,7 +586,8 @@ const MAX_LAYOUT_ROUNDING_ERROR = 2
 const cssSize = (element: HTMLElement, style: CSSStyleDeclaration) => {
   const width = parseFloat(style.width) || 0
   const height = parseFloat(style.height) || 0
-  return Math.round(width) !== element.offsetWidth || Math.round(height) !== element.offsetHeight
+  return Math.round(width) !== element.offsetWidth ||
+      Math.round(height) !== element.offsetHeight
     ? { width: element.offsetWidth, height: element.offsetHeight }
     : { width, height }
 }
@@ -529,7 +611,9 @@ const cumulativeOffset = (element: HTMLElement) => {
 
 const parentOf = (node: Node): Node | null => {
   const parent = (node as Element).assignedSlot ?? node.parentNode
-  return parent !== null && parent.nodeType === 11 ? (parent as ShadowRoot).host : parent
+  return parent !== null && parent.nodeType === 11
+    ? (parent as ShadowRoot).host
+    : parent
 }
 
 const layoutOffset = (tab: HTMLElement, list: HTMLElement) => {
@@ -538,7 +622,10 @@ const layoutOffset = (tab: HTMLElement, list: HTMLElement) => {
   let left = own.left - ancestor.left - list.clientLeft
   let top = own.top - ancestor.top - list.clientTop
   let node = parentOf(tab)
-  while (isHTMLElement(node) && node !== list && node.localName !== "body" && node.localName !== "html") {
+  while (
+    isHTMLElement(node) && node !== list && node.localName !== "body" &&
+    node.localName !== "html"
+  ) {
     left -= node.scrollLeft
     top -= node.scrollTop
     node = parentOf(node)
@@ -575,11 +662,23 @@ const translationOf = (tab: HTMLElement, style: CSSStyleDeclaration) => {
   return { x, y }
 }
 
-const activeTabVars = ["left", "right", "top", "bottom", "width", "height"] as const
+const activeTabVars = [
+  "left",
+  "right",
+  "top",
+  "bottom",
+  "width",
+  "height"
+] as const
 
 // The rect offset is exact to the subpixel but a rotation, skew or flip
 // distorts it, so it is used only when it agrees with the layout offset.
-const place = (indicator: HTMLElement, tab: HTMLElement, list: HTMLElement, view: Window): boolean => {
+const place = (
+  indicator: HTMLElement,
+  tab: HTMLElement,
+  list: HTMLElement,
+  view: Window
+): boolean => {
   const tabStyle = view.getComputedStyle(tab)
   const size = cssSize(tab, tabStyle)
   const listSize = cssSize(list, view.getComputedStyle(list))
@@ -588,8 +687,10 @@ const place = (indicator: HTMLElement, tab: HTMLElement, list: HTMLElement, view
   const scaleX = listSize.width > 0 ? listRect.width / listSize.width : 1
   const scaleY = listSize.height > 0 ? listRect.height / listSize.height : 1
   let { left, top } = layoutOffset(tab, list)
-  const rectLeft = (tabRect.left - listRect.left) / scaleX + list.scrollLeft - list.clientLeft
-  const rectTop = (tabRect.top - listRect.top) / scaleY + list.scrollTop - list.clientTop
+  const rectLeft = (tabRect.left - listRect.left) / scaleX + list.scrollLeft -
+    list.clientLeft
+  const rectTop = (tabRect.top - listRect.top) / scaleY + list.scrollTop -
+    list.clientTop
   const translation = translationOf(tab, tabStyle)
   if (
     Math.abs(rectLeft - translation.x - left) <= MAX_LAYOUT_ROUNDING_ERROR &&
@@ -606,13 +707,20 @@ const place = (indicator: HTMLElement, tab: HTMLElement, list: HTMLElement, view
     width: size.width,
     height: size.height
   }
-  for (const name of activeTabVars) indicator.style.setProperty("--active-tab-" + name, values[name] + "px")
+  for (const name of activeTabVars) {
+    indicator.style.setProperty("--active-tab-" + name, values[name] + "px")
+  }
   return size.width > 0 && size.height > 0
 }
 
 const TrackIndicator = Mount.makeStream(
   "TrackIndicator",
-  { args: { tab: Schema.NullOr(Schema.String), tabs: Schema.Array(Schema.String) } },
+  {
+    args: {
+      tab: Schema.NullOr(Schema.String),
+      tabs: Schema.Array(Schema.String)
+    }
+  },
   (node: unknown, initial, changes) =>
     Stream.callback<TabsMessage>((queue) =>
       Effect.gen(function*() {
@@ -624,15 +732,28 @@ const TrackIndicator = Mount.makeStream(
         let observed: ReadonlyArray<string> | null = null
         let sized: boolean | null = null
         const measure = () => {
-          const tab = args.tab === null ? null : document.getElementById(args.tab)
-          const next = view !== null && list !== null && isHTMLElement(tab) && place(node, tab, list, view)
-          if (!next) { for (const name of activeTabVars) node.style.removeProperty("--active-tab-" + name) }
-          if (next !== sized) Queue.offerUnsafe(queue, TabsMessage.MeasuredActiveTab({ sized: next }))
+          const tab = args.tab === null
+            ? null
+            : document.getElementById(args.tab)
+          const next = view !== null && list !== null && isHTMLElement(tab) &&
+            place(node, tab, list, view)
+          if (!next) {
+            for (const name of activeTabVars) {
+              node.style.removeProperty("--active-tab-" + name)
+            }
+          }
+          if (next !== sized) {
+            Queue.offerUnsafe(
+              queue,
+              TabsMessage.MeasuredActiveTab({ sized: next })
+            )
+          }
           sized = next
         }
-        const resizeObserver = view === null || typeof view.ResizeObserver === "undefined"
-          ? null
-          : new view.ResizeObserver(measure)
+        const resizeObserver =
+          view === null || typeof view.ResizeObserver === "undefined"
+            ? null
+            : new view.ResizeObserver(measure)
         const observe = (tabs: ReadonlyArray<string>) => {
           if (resizeObserver === null) return
           resizeObserver.disconnect()
@@ -642,12 +763,15 @@ const TrackIndicator = Mount.makeStream(
             if (tab !== null) resizeObserver.observe(tab)
           }
         }
-        yield* Effect.addFinalizer(() => Effect.sync(() => resizeObserver?.disconnect()))
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => resizeObserver?.disconnect())
+        )
         yield* Stream.runForEach(changes, (next) =>
           Effect.sync(() => {
             args = next
             if (
-              observed === null || observed.length !== next.tabs.length || observed.some((id, i) => id !== next.tabs[i])
+              observed === null || observed.length !== next.tabs.length ||
+              observed.some((id, i) => id !== next.tabs[i])
             ) {
               observed = next.tabs
               observe(next.tabs)
@@ -663,7 +787,9 @@ const releasedPointer = [
   HtmlSubscription.onDocument("pointercancel", TabsMessage.ReleasedPointer())
 ]
 
-type Keyed<Tag extends string> = View.PartTarget<Tag> & { readonly key: (key: string) => View.PartTarget<Tag> }
+type Keyed<Tag extends string> = View.PartTarget<Tag> & {
+  readonly key: (key: string) => View.PartTarget<Tag>
+}
 
 type TabOf<B extends View.PartTarget<"button" | "a">> = ReturnType<B["attr"]>
 
@@ -743,29 +869,43 @@ export const Tabs = Component.define({
   update: {
     ClickedTab: ($, { value }) => activate($.model, $, value),
     FocusedTab: ($, { value }) => {
-      const next = UiStruct.evolve($.model, { focused: true, highlighted: value })
-      return $.props.activateOnFocus === true && $.model.secondary !== value ? activate(next, $, value) : next
+      const next = UiStruct.evolve($.model, {
+        focused: true,
+        highlighted: value
+      })
+      return $.props.activateOnFocus === true && $.model.secondary !== value
+        ? activate(next, $, value)
+        : next
     },
     BlurredTab: ($) => $.evolve({ focused: false }),
-    PressedTab: ($, { button, value }) => $.evolve({ secondary: button === 0 ? null : value }),
+    PressedTab: ($, { button, value }) =>
+      $.evolve({ secondary: button === 0 ? null : value }),
     ReleasedPointer: ($) => $.evolve({ secondary: null }),
     PressedKey: ($, { to, value }) => navigate($, value, to),
     ChangedValue: ($) => phaseOf($.model, $.props, rtlOf($)),
     RenderedFirstFrame: ($, { value }) => {
       const next = phaseOf($.model, $.props, rtlOf($))
-      return value === next.shown ? UiStruct.evolve(next, { started: true }) : next
+      return value === next.shown
+        ? UiStruct.evolve(next, { started: true })
+        : next
     },
     FinishedTransition: ($, { value }) => {
       const next = phaseOf($.model, $.props, rtlOf($))
       return next.leaving.includes(value)
-        ? UiStruct.evolve(next, { leaving: (leaving) => leaving.filter((v) => v !== value) })
+        ? UiStruct.evolve(next, {
+          leaving: (leaving) => leaving.filter((v) => v !== value)
+        })
         : next
     },
     MeasuredActiveTab: ($, { sized }) => $.evolve({ indicator: sized })
   },
   subscriptions: ({ model, props }) => [
     props.value !== model.shown &&
-    Subscription.make("changedValue", [props.value], () => Stream.make(TabsMessage.ChangedValue())),
+    Subscription.make(
+      "changedValue",
+      [props.value],
+      () => Stream.make(TabsMessage.ChangedValue())
+    ),
     ...(model.secondary === null ? [] : releasedPointer)
   ],
   parts: (p, model) => {
@@ -774,27 +914,41 @@ export const Tabs = Component.define({
     const orientation = props.orientation ?? "horizontal"
     const rtl = rtlOf(p)
     const phase = phaseOf(model, props, rtl)
-    const entries = new Map<string, { readonly tab: TabsTab; readonly index: number }>()
+    const entries = new Map<
+      string,
+      { readonly tab: TabsTab; readonly index: number }
+    >()
     tabs.forEach((tab, index) => {
-      if (entries.has(tab.value)) throw new Error("Tabs: two tabs have the value " + JSON.stringify(tab.value))
+      if (entries.has(tab.value)) {
+        throw new Error(
+          "Tabs: two tabs have the value " + JSON.stringify(tab.value)
+        )
+      }
       entries.set(tab.value, { tab, index })
     })
     const entryOf = (value: string, part: string) => {
       const entry = entries.get(value)
       if (entry === undefined) {
-        throw new Error("Tabs: a " + part + " was drawn for " + JSON.stringify(value) + ", which isn't in tabs")
+        throw new Error(
+          "Tabs: a " + part + " was drawn for " + JSON.stringify(value) +
+            ", which isn't in tabs"
+        )
       }
       return entry
     }
     const tabId = (value: string) => p.id("tab", value)
     const panelId = (value: string) => p.id("panel", value)
-    const mounted = (value: string) => value === props.value || phase.leaving.includes(value)
+    const mounted = (value: string) =>
+      value === props.value || phase.leaving.includes(value)
     const drawn = new Set<string>()
     const stop = phase.highlighted !== null && entries.has(phase.highlighted)
       ? phase.highlighted
       : (tabs.find((tab) => tab.disabled !== true) ?? tabs[0])?.value ?? null
     const common = <B extends Attributed<B>>(builder: B): B =>
-      builder.attrs({ "data-orientation": orientation, "data-activation-direction": phase.direction })
+      builder.attrs({
+        "data-orientation": orientation,
+        "data-activation-direction": phase.direction
+      })
 
     const tabPart = keyed(p.part(["button", "a"], (b, value: string) => {
       const { tab } = entryOf(value, "tab")
@@ -812,16 +966,29 @@ export const Tabs = Component.define({
           "data-active": flag(active),
           "data-disabled": flag(disabled)
         })
-        .onClick(TabsMessage.ClickedTab({ value }), disabled ? { preventDefault: "always" } : undefined)
+        .onClick(
+          TabsMessage.ClickedTab({ value }),
+          disabled ? { preventDefault: "always" } : undefined
+        )
         .onKeyDown(({ alt, ctrl, key, meta }) => {
-          const to = alt || ctrl || meta ? undefined : stepOf(key, orientation, rtl)
-          return to === undefined ? undefined : TabsMessage.PressedKey({ value, to })
+          const to = alt || ctrl || meta
+            ? undefined
+            : stepOf(key, orientation, rtl)
+          return to === undefined
+            ? undefined
+            : TabsMessage.PressedKey({ value, to })
         }, { preventDefault: true })
         .onFocus(TabsMessage.FocusedTab({ value }))
         .onBlur(TabsMessage.BlurredTab())
-      const typed = b.tag === "button" ? decorated.attr("type", "button") : decorated
+      const typed = b.tag === "button"
+        ? decorated.attr("type", "button")
+        : decorated
       return props.activateOnFocus === true
-        ? typed.on("pointerdown", ({ button }: Html.PointerPayload) => TabsMessage.PressedTab({ value, button }))
+        ? typed.on(
+          "pointerdown",
+          ({ button }: Html.PointerPayload) =>
+            TabsMessage.PressedTab({ value, button })
+        )
         : typed
     }))
 
@@ -829,7 +996,10 @@ export const Tabs = Component.define({
       const { index } = entryOf(value, "panel")
       const open = value === props.value
       const shown = mounted(value)
-      const status = statusOf({ mounted: phase.leaving.includes(value), started: phase.started }, { open })
+      const status = statusOf({
+        mounted: phase.leaving.includes(value),
+        started: phase.started
+      }, { open })
       const decorated = common(b).attrs({
         role: "tabpanel",
         id: panelId(value),
@@ -842,14 +1012,18 @@ export const Tabs = Component.define({
         "data-starting-style": flag(status === "starting"),
         "data-ending-style": flag(status === "ending")
       })
-      return status === null ? decorated : decorated.onMount(TrackPanel({ value, status }))
+      return status === null
+        ? decorated
+        : decorated.onMount(TrackPanel({ value, status }))
     }))
 
     const indicatorPart = p.part((b) =>
       common(b)
         .attrs({ role: "presentation", hidden: flag(!phase.indicator) })
         .onMount(TrackIndicator({
-          tab: props.value !== null && entries.has(props.value) ? tabId(props.value) : null,
+          tab: props.value !== null && entries.has(props.value)
+            ? tabId(props.value)
+            : null,
           tabs: tabs.map((tab) => tabId(tab.value))
         }))
     )
@@ -862,12 +1036,20 @@ export const Tabs = Component.define({
         common(b).forward((node) =>
           drawn.size === 0
             ? node
-            : linkPanels(View.build(node, []), new Map([...drawn].map((value) => [tabId(value), panelId(value)])))
+            : linkPanels(
+              View.build(node, []),
+              new Map([...drawn].map((value) => [tabId(value), panelId(value)]))
+            )
         )
       ),
       list: p.part((b) =>
         common(b)
-          .attrs({ role: "tablist", "aria-orientation": orientation === "vertical" ? "vertical" : undefined })
+          .attrs({
+            role: "tablist",
+            "aria-orientation": orientation === "vertical"
+              ? "vertical"
+              : undefined
+          })
           .onMount(ActivateFromKeys({}))
       ),
       tab: View.wrapPart(
@@ -882,14 +1064,20 @@ export const Tabs = Component.define({
           { element, value }: { readonly element: B; readonly value: string }
         ): ReturnType<B["attr"]> | undefined => {
           const panel = panelPart(element, value)
-          if (!mounted(value) && !(entryOf(value, "panel").tab.keepMounted ?? props.keepMounted === true)) {
+          if (
+            !mounted(value) &&
+            !(entryOf(value, "panel").tab.keepMounted ??
+              props.keepMounted === true)
+          ) {
             return undefined
           }
           drawn.add(value)
           return panel
         }
       ),
-      indicator: <B extends View.PartTarget<string>>(element: B): ReturnType<B["attr"]> | undefined => {
+      indicator: <B extends View.PartTarget<string>>(
+        element: B
+      ): ReturnType<B["attr"]> | undefined => {
         const indicator = indicatorPart(element)
         return props.value === null ? undefined : indicator
       }

@@ -10,7 +10,9 @@ import type * as Route from "../Route.ts"
 const decodeKey = (pair: string): string | undefined => {
   const at = pair.indexOf("=")
   try {
-    return decodeURIComponent((at < 0 ? pair : pair.slice(0, at)).replaceAll("+", " "))
+    return decodeURIComponent(
+      (at < 0 ? pair : pair.slice(0, at)).replaceAll("+", " ")
+    )
   } catch {
     return undefined
   }
@@ -21,7 +23,10 @@ const decodeKey = (pair: string): string | undefined => {
  *
  * @internal
  */
-export const pairsWithout = (url: string, keys: ReadonlySet<string>): ReadonlyArray<string> => {
+export const pairsWithout = (
+  url: string,
+  keys: ReadonlySet<string>
+): ReadonlyArray<string> => {
   const at = url.indexOf("?")
   if (at < 0) return []
   return url.slice(at + 1).split("&").filter((pair) => {
@@ -36,7 +41,9 @@ export const pairsWithout = (url: string, keys: ReadonlySet<string>): ReadonlyAr
  * @internal
  */
 export const withPairs = (url: string, pairs: ReadonlyArray<string>): string =>
-  pairs.length === 0 ? url : `${url}${url.includes("?") ? "&" : "?"}${pairs.join("&")}`
+  pairs.length === 0
+    ? url
+    : `${url}${url.includes("?") ? "&" : "?"}${pairs.join("&")}`
 
 /**
  * The URL a resolved one is replaced with, on the server and in the Router: a redirect or a
@@ -53,5 +60,8 @@ export const canonical = (
   if (resolved.redirected) return routes.print(resolved.route)
   const at = url.indexOf("?")
   if (at < 0 || resolved.invalid.length === 0) return url
-  return withPairs(url.slice(0, at), pairsWithout(url, new Set(resolved.invalid)))
+  return withPairs(
+    url.slice(0, at),
+    pairsWithout(url, new Set(resolved.invalid))
+  )
 }

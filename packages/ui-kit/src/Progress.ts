@@ -89,7 +89,13 @@ import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Schema from "effect/Schema"
 import { type Attributed, flag, withStyle } from "./internal/attributes.ts"
-import { fillValue, indicatorSize, nvdaLabel, percentText, placeInRange } from "./internal/range.ts"
+import {
+  fillValue,
+  indicatorSize,
+  nvdaLabel,
+  percentText,
+  placeInRange
+} from "./internal/range.ts"
 
 /**
  * Props for the value of a `Progress`.
@@ -145,7 +151,13 @@ const resolve = (props: ProgressProps) => {
   const min = props.min ?? 0
   const max = props.max ?? 100
   if (props.value === null || !Number.isFinite(props.value)) {
-    return { min, max, value: null, percentage: null, status: "indeterminate" as ProgressStatus }
+    return {
+      min,
+      max,
+      value: null,
+      percentage: null,
+      status: "indeterminate" as ProgressStatus
+    }
   }
   const { percentage, value } = placeInRange(props.value, min, max)
   const status: ProgressStatus = value === max ? "complete" : "progressing"
@@ -198,7 +210,8 @@ export const Progress = Component.define({
   update: ($) => $.model,
   parts: (p) => {
     const { max, min, percentage, status, value } = resolve(p.props)
-    const valueText = p.props.valueText ?? (percentage === null ? undefined : percentText(percentage))
+    const valueText = p.props.valueText ??
+      (percentage === null ? undefined : percentText(percentage))
     // What the indicator adds to its inline style: nothing while indeterminate.
     const size = percentage === null ? undefined : indicatorSize(percentage)
     const labelId = p.id("label")
@@ -229,7 +242,10 @@ export const Progress = Component.define({
           })
           // After every child, including the ones chained after the part.
           .forward((node) => node.children(nvdaLabel))),
-      label: p.part("span", (b) => state(b).attrs({ id: labelId, role: "presentation" })),
+      label: p.part(
+        "span",
+        (b) => state(b).attrs({ id: labelId, role: "presentation" })
+      ),
       value: p.part("span", (b) =>
         state(b)
           .attr("aria-hidden", "true")
@@ -237,7 +253,11 @@ export const Progress = Component.define({
       track: p.part("div", state),
       indicator: p.part("div", (b) =>
         state(b)
-          .forward((node) => size === undefined ? node : node.attr("style", withStyle(node.elementAttrs.style, size))))
+          .forward((node) =>
+            size === undefined
+              ? node
+              : node.attr("style", withStyle(node.elementAttrs.style, size))
+          ))
     }
   }
 })

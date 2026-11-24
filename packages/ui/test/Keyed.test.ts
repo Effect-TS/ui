@@ -1,7 +1,24 @@
-import { Command, Component, MessageLog, Query, Route, Router, UiSchema } from "@effect/ui"
+import {
+  Command,
+  Component,
+  MessageLog,
+  Query,
+  Route,
+  Router,
+  UiSchema
+} from "@effect/ui"
 import { Locator, Scene, type Steps, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Exit, Layer, Option, Redacted, Request, RequestResolver, Schema } from "effect"
+import {
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Redacted,
+  Request,
+  RequestResolver,
+  Schema
+} from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
 
@@ -26,7 +43,11 @@ const makeApp = (options?: {
   /** A prune's `update` drops the last id, so each prune causes one more until one id is left. */
   readonly pruneDrops?: boolean
 }) => {
-  const db = { calls: 0, batches: [] as Array<number>, names: new Map([["1", "Ann"], ["2", "Bea"], ["3", "Cy"]]) }
+  const db = {
+    calls: 0,
+    batches: [] as Array<number>,
+    names: new Map([["1", "Ann"], ["2", "Bea"], ["3", "Cy"]])
+  }
   const order: Array<string> = []
   let queryRuns = 0
 
@@ -46,7 +67,9 @@ const makeApp = (options?: {
       }
     })))
   )
-  const resolver = options?.delay === undefined ? batching : RequestResolver.setDelay(batching, options.delay)
+  const resolver = options?.delay === undefined
+    ? batching
+    : RequestResolver.setDelay(batching, options.delay)
 
   class GetUser extends Query.Service<GetUser>()(
     "users/GetUser",
@@ -65,9 +88,13 @@ const makeApp = (options?: {
     {
       args: { id: Schema.String, name: Schema.String },
       invalidates: ({ id }) => [GetUser.entry({ id })],
-      optimistic: ({ id, name }) => [GetUser.patch({ id }, (user) => ({ ...user, name }))]
+      optimistic: (
+        { id, name }
+      ) => [GetUser.patch({ id }, (user) => ({ ...user, name }))]
     },
-    Effect.succeed(({ id, name }: { readonly id: string; readonly name: string }) =>
+    Effect.succeed((
+      { id, name }: { readonly id: string; readonly name: string }
+    ) =>
       Effect.gen(function*() {
         yield* Effect.sleep("10 millis")
         db.names.set(id, name)
@@ -90,7 +117,10 @@ const makeApp = (options?: {
   const Board = Component.define({
     name: "Board",
     scoped: false,
-    props: Schema.Struct({ tag: Schema.String, ids: Schema.Array(Schema.String) }),
+    props: Schema.Struct({
+      tag: Schema.String,
+      ids: Schema.Array(Schema.String)
+    }),
     model: Schema.Struct({ ids: Schema.Array(Schema.String) }),
     message: BoardMessage,
     queries: {
@@ -102,9 +132,14 @@ const makeApp = (options?: {
         },
         onChange: (results, changes) => {
           // The opened array is the collection at the query's keys.
-          assert.strictEqual(results.length, new Set(results.map((entry) => entry.args.id)).size)
+          assert.strictEqual(
+            results.length,
+            new Set(results.map((entry) => entry.args.id)).size
+          )
           return BoardMessage.UsersChanged({
-            changed: changes.map((change) => `${change.args.id}:${show(change.result)}`)
+            changed: changes.map((change) =>
+              `${change.args.id}:${show(change.result)}`
+            )
           })
         }
       }
@@ -117,20 +152,28 @@ const makeApp = (options?: {
         UsersChanged: ({ changed }) => {
           order.push(`update ${$.props.tag} [${changed.join(",")}]`)
           if (changed.length > 0) return $.model
-          if (options?.pruneTrims === true) return { ids: $.model.ids.slice(0, 1) }
-          if (options?.pruneDrops === true && $.model.ids.length > 1) return { ids: $.model.ids.slice(0, -1) }
+          if (options?.pruneTrims === true) {
+            return { ids: $.model.ids.slice(0, 1) }
+          }
+          if (options?.pruneDrops === true && $.model.ids.length > 1) {
+            return { ids: $.model.ids.slice(0, -1) }
+          }
           return $.model
         },
         Rename: ({ id, name }) => {
           order.push(`update ${$.props.tag} Rename`)
           return $.run(
-            RenameUser.make({ id, name }).pipe(Command.map(() => BoardMessage.Renamed()))
+            RenameUser.make({ id, name }).pipe(
+              Command.map(() => BoardMessage.Renamed())
+            )
           )
         },
         Renamed: () => $.model
       }),
     view: (h) => {
-      const text = h.queries.users.map(({ args, result, patched }) => `${args.id}=${show(result)}${patched ? "~" : ""}`)
+      const text = h.queries.users.map(({ args, result, patched }) =>
+        `${args.id}=${show(result)}${patched ? "~" : ""}`
+      )
         .join(" ")
       order.push(`view ${h.props.tag} ${text}`)
       return h.el("p").on(
@@ -141,7 +184,9 @@ const makeApp = (options?: {
   })
 
   /** Boards side by side: "tag:id,id" each. */
-  const ListMessage = UiSchema.TaggedEnum({ Set: { boards: Schema.Array(Schema.String) } })
+  const ListMessage = UiSchema.TaggedEnum({
+    Set: { boards: Schema.Array(Schema.String) }
+  })
   const List = Component.define({
     name: "List",
     scoped: false,
@@ -175,10 +220,17 @@ const makeApp = (options?: {
 }
 
 const run = <A, E>(layer: Layer.Layer<any>, effect: Effect.Effect<A, E, any>) =>
-  effect.pipe(Effect.provide(layer), Effect.scoped, Effect.provide(TestHost.layer())) as Effect.Effect<A, E>
+  effect.pipe(
+    Effect.provide(layer),
+    Effect.scoped,
+    Effect.provide(TestHost.layer())
+  ) as Effect.Effect<A, E>
 
 /** Starts what is due and lets the fetches finish: each batch takes 10 ms. */
-const load = TestHost.settle.pipe(Effect.andThen(TestClock.adjust("10 millis")), Effect.andThen(TestHost.settle))
+const load = TestHost.settle.pipe(
+  Effect.andThen(TestClock.adjust("10 millis")),
+  Effect.andThen(TestHost.settle)
+)
 
 /**
  * A query's result JSON codec, as the runtime writes page state, history state and the log's Wire with
@@ -186,29 +238,51 @@ const load = TestHost.settle.pipe(Effect.andThen(TestClock.adjust("10 millis")),
  */
 const resultCodec = (component: Component.Any, name: string) =>
   Schema.toCodecJson(
-    (component["~queries"] as { readonly schema: Schema.Struct<Record<string, Schema.Codec<unknown, unknown>>> })
+    (component["~queries"] as {
+      readonly schema: Schema.Struct<
+        Record<string, Schema.Codec<unknown, unknown>>
+      >
+    })
       .schema.fields[name]
   )
 
 /** A keyed result's tuples as its JSON codec writes them: the old snapshot's JSON. */
-const tuples = (component: Component.Any, name: string, result: unknown): ReadonlyArray<ReadonlyArray<unknown>> =>
-  Schema.encodeSync(resultCodec(component, name))(result) as ReadonlyArray<ReadonlyArray<unknown>>
+const tuples = (
+  component: Component.Any,
+  name: string,
+  result: unknown
+): ReadonlyArray<ReadonlyArray<unknown>> =>
+  Schema.encodeSync(resultCodec(component, name))(result) as ReadonlyArray<
+    ReadonlyArray<unknown>
+  >
 
 /** The last result the runtime wrote for a query at a path, from the log. */
-const resultOf = (log: ReadonlyArray<MessageLog.Entry>, path: string, name: string): unknown =>
+const resultOf = (
+  log: ReadonlyArray<MessageLog.Entry>,
+  path: string,
+  name: string
+): unknown =>
   [...log].reverse().find((entry): entry is MessageLog.QueryChanged =>
     entry._tag === "QueryChanged" && entry.path === path && entry.name === name
   )?.result
 
-const updates = (order: ReadonlyArray<string>) => order.filter((line) => line.startsWith("update"))
+const updates = (order: ReadonlyArray<string>) =>
+  order.filter((line) => line.startsWith("update"))
 
 /** The args ids a keyed result holds. */
-const heldIds = (component: Component.Any, result: unknown): ReadonlyArray<unknown> =>
-  tuples(component, "users", result).map((tuple) => JSON.parse(tuple[0] as string).id)
+const heldIds = (
+  component: Component.Any,
+  result: unknown
+): ReadonlyArray<unknown> =>
+  tuples(component, "users", result).map((tuple) =>
+    JSON.parse(tuple[0] as string).id
+  )
 
 /** The ids the root Board's result holds. */
-const boardIds = (app: ReturnType<typeof makeApp>, root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }) =>
-  heldIds(app.Board, resultOf(root.log(), "/Board", "users"))
+const boardIds = (
+  app: ReturnType<typeof makeApp>,
+  root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }
+) => heldIds(app.Board, resultOf(root.log(), "/Board", "users"))
 
 describe("Keyed query fields", () => {
   it.effect("N cold keys start N fetches in one batch, and its results are one message with N changes", () => {
@@ -216,23 +290,35 @@ describe("Keyed query fields", () => {
     return run(
       app.layer,
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2", "3"] })
+        const root = yield* TestHost.mount(app.Board, {
+          tag: "a",
+          ids: ["1", "2", "3"]
+        })
         assert.strictEqual(root.text(), "a: 1=… 2=… 3=…")
         yield* load
         assert.strictEqual(root.text(), "a: 1=Ann 2=Bea 3=Cy")
-        assert.deepStrictEqual(updates(app.order), ["update a [1:Ann,2:Bea,3:Cy]"])
-        assert.deepStrictEqual(root.fetches().map((fetch) => [fetch.logKey, fetch.trigger]), [
-          ["{\"id\":\"1\"}", "watch"],
-          ["{\"id\":\"2\"}", "watch"],
-          ["{\"id\":\"3\"}", "watch"]
+        assert.deepStrictEqual(updates(app.order), [
+          "update a [1:Ann,2:Bea,3:Cy]"
         ])
+        assert.deepStrictEqual(
+          root.fetches().map((fetch) => [fetch.logKey, fetch.trigger]),
+          [
+            ["{\"id\":\"1\"}", "watch"],
+            ["{\"id\":\"2\"}", "watch"],
+            ["{\"id\":\"3\"}", "watch"]
+          ]
+        )
         assert.deepStrictEqual(app.db.batches, [3])
         assert.strictEqual(root.entry(app.GetUser, { id: "2" })?.watchers, 1)
         // The result's write is logged, then the Update of its onChange message, which points at it.
         const written = root.log().filter((entry) =>
-          entry._tag === "QueryChanged" || (entry._tag === "Update" && entry.source._tag === "Query")
+          entry._tag === "QueryChanged" ||
+          (entry._tag === "Update" && entry.source._tag === "Query")
         )
-        assert.deepStrictEqual(written.map((entry) => entry._tag), ["QueryChanged", "Update"])
+        assert.deepStrictEqual(written.map((entry) => entry._tag), [
+          "QueryChanged",
+          "Update"
+        ])
         assert.deepStrictEqual((written[1] as MessageLog.Update).source, {
           _tag: "Query",
           name: "users",
@@ -247,10 +333,15 @@ describe("Keyed query fields", () => {
     return run(
       app.layer,
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "9", "3"] })
+        const root = yield* TestHost.mount(app.Board, {
+          tag: "a",
+          ids: ["1", "9", "3"]
+        })
         yield* load
         assert.strictEqual(root.text(), "a: 1=Ann 9=failed 3=Cy")
-        assert.deepStrictEqual(updates(app.order), ["update a [1:Ann,9:failed,3:Cy]"])
+        assert.deepStrictEqual(updates(app.order), [
+          "update a [1:Ann,9:failed,3:Cy]"
+        ])
       })
     )
   })
@@ -264,10 +355,14 @@ describe("Keyed query fields", () => {
         yield* load
         app.order.length = 0
         const before = root.frames().length
-        yield* Effect.sync(() => root.send(app.ListMessage.Set({ boards: ["a:1,2", "b:2,1,2"] })))
+        yield* Effect.sync(() =>
+          root.send(app.ListMessage.Set({ boards: ["a:1,2", "b:2,1,2"] }))
+        )
         yield* TestHost.settle
         assert.deepStrictEqual(updates(app.order), ["update b [2:Bea,1:Ann]"])
-        assert.deepStrictEqual(root.frames().slice(before), ["a: 1=Ann 2=Beab: 2=Bea 1=Ann"])
+        assert.deepStrictEqual(root.frames().slice(before), [
+          "a: 1=Ann 2=Beab: 2=Bea 1=Ann"
+        ])
         assert.strictEqual(app.db.calls, 2)
       })
     )
@@ -283,10 +378,13 @@ describe("Keyed query fields", () => {
         app.order.length = 0
         root.send(app.ListMessage.Set({ boards: ["a:1,2", "b:2,1"] }))
         yield* TestHost.settle
-        assert.deepStrictEqual(app.order.filter((line) => line.includes(" b")), [
-          "update b [2:Bea,1:Ann]",
-          "view b 2=Bea 1=Ann"
-        ])
+        assert.deepStrictEqual(
+          app.order.filter((line) => line.includes(" b")),
+          [
+            "update b [2:Bea,1:Ann]",
+            "view b 2=Bea 1=Ann"
+          ]
+        )
       })
     )
   })
@@ -294,7 +392,9 @@ describe("Keyed query fields", () => {
   it.effect("a kept child's new props over a warm key send its message before the child's one view", () => {
     const app = makeApp()
     const order: Array<string> = []
-    const Message = UiSchema.TaggedEnum({ UsersChanged: { changed: Schema.Array(Schema.String) } })
+    const Message = UiSchema.TaggedEnum({
+      UsersChanged: { changed: Schema.Array(Schema.String) }
+    })
     const Row = Component.define({
       name: "Row",
       scoped: false,
@@ -305,7 +405,10 @@ describe("Keyed query fields", () => {
         users: {
           queryMany: app.GetUser,
           args: ({ props }) => props.ids.map((id) => ({ id })),
-          onChange: (_loaded, changes) => Message.UsersChanged({ changed: changes.map((change) => change.args.id) })
+          onChange: (_loaded, changes) =>
+            Message.UsersChanged({
+              changed: changes.map((change) => change.args.id)
+            })
         }
       }
     }).make({
@@ -315,13 +418,17 @@ describe("Keyed query fields", () => {
         return $.model
       },
       view: (h) => {
-        const text = h.queries.users.map(({ result }) => AsyncResult.isSuccess(result) ? result.value.name : "…")
+        const text = h.queries.users.map(({ result }) =>
+          AsyncResult.isSuccess(result) ? result.value.name : "…"
+        )
           .join(" ")
         order.push(`view ${text}`)
         return h.el("p", text)
       }
     })
-    const PageMessage = UiSchema.TaggedEnum({ Show: { ids: Schema.Array(Schema.String) } })
+    const PageMessage = UiSchema.TaggedEnum({
+      Show: { ids: Schema.Array(Schema.String) }
+    })
     const Page = Component.define({
       name: "Page",
       scoped: false,
@@ -369,7 +476,9 @@ describe("Keyed query fields", () => {
           "update b [1:Ann…,2:Bea…]",
           "view b 1=Ann… 2=Bea…"
         ])
-        assert.deepStrictEqual(root.frames().slice(before), ["b: 1=Ann… 2=Bea…"])
+        assert.deepStrictEqual(root.frames().slice(before), [
+          "b: 1=Ann… 2=Bea…"
+        ])
       })
     )
   })
@@ -379,7 +488,10 @@ describe("Keyed query fields", () => {
     return run(
       app.layer,
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2", "3"] })
+        const root = yield* TestHost.mount(app.Board, {
+          tag: "a",
+          ids: ["1", "2", "3"]
+        })
         yield* load
         app.order.length = 0
         root.send(app.BoardMessage.Show({ ids: ["1", "2"] }))
@@ -396,13 +508,19 @@ describe("Keyed query fields", () => {
     return run(
       app.layer,
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2", "3"] })
+        const root = yield* TestHost.mount(app.Board, {
+          tag: "a",
+          ids: ["1", "2", "3"]
+        })
         yield* load
         app.order.length = 0
         root.send(app.BoardMessage.Show({ ids: ["1", "2"] }))
         root.send(app.BoardMessage.Rename({ id: "1", name: "Al" }))
         yield* TestHost.settle
-        assert.deepStrictEqual(updates(app.order), ["update a Rename", "update a [1:Al]"])
+        assert.deepStrictEqual(updates(app.order), [
+          "update a Rename",
+          "update a [1:Al]"
+        ])
         assert.deepStrictEqual(boardIds(app, root), ["1", "2"])
         assert.strictEqual(root.text(), "a: 1=Al~ 2=Bea")
       })
@@ -414,14 +532,21 @@ describe("Keyed query fields", () => {
     return run(
       app.layer,
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2", "3"] })
+        const root = yield* TestHost.mount(app.Board, {
+          tag: "a",
+          ids: ["1", "2", "3"]
+        })
         yield* load
         app.order.length = 0
         root.send(app.BoardMessage.Rename({ id: "1", name: "Al" }))
         root.send(app.BoardMessage.Show({ ids: ["1", "2"] }))
         root.send(app.BoardMessage.Rename({ id: "2", name: "Bo" }))
         yield* TestHost.settle
-        assert.deepStrictEqual(updates(app.order), ["update a Rename", "update a Rename", "update a [1:Al,2:Bo]"])
+        assert.deepStrictEqual(updates(app.order), [
+          "update a Rename",
+          "update a Rename",
+          "update a [1:Al,2:Bo]"
+        ])
         assert.deepStrictEqual(boardIds(app, root), ["1", "2"])
         assert.strictEqual(root.text(), "a: 1=Al~ 2=Bo~")
       })
@@ -433,12 +558,19 @@ describe("Keyed query fields", () => {
     return run(
       app.layer,
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2", "3"] })
+        const root = yield* TestHost.mount(app.Board, {
+          tag: "a",
+          ids: ["1", "2", "3"]
+        })
         yield* load
         app.order.length = 0
         root.send(app.BoardMessage.Show({ ids: ["1", "2"] }))
         yield* TestHost.settle
-        assert.deepStrictEqual(app.order, ["update a []", "update a []", "view a 1=Ann"])
+        assert.deepStrictEqual(app.order, [
+          "update a []",
+          "update a []",
+          "view a 1=Ann"
+        ])
         assert.deepStrictEqual(boardIds(app, root), ["1"])
       })
     )
@@ -449,7 +581,10 @@ describe("Keyed query fields", () => {
     return run(
       app.layer,
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2"] })
+        const root = yield* TestHost.mount(app.Board, {
+          tag: "a",
+          ids: ["1", "2"]
+        })
         // The first Model: its watch and its view share one run.
         assert.strictEqual(app.queryRuns(), 1)
         yield* load
@@ -468,7 +603,10 @@ describe("Keyed query fields", () => {
     return run(
       app.layer,
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2", "3"] })
+        const root = yield* TestHost.mount(app.Board, {
+          tag: "a",
+          ids: ["1", "2", "3"]
+        })
         yield* load
         app.order.length = 0
         root.send(app.BoardMessage.Show({ ids: ["1", "3"] }))
@@ -486,7 +624,10 @@ describe("Keyed query fields", () => {
     return run(
       app.layer,
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2", "3"] })
+        const root = yield* TestHost.mount(app.Board, {
+          tag: "a",
+          ids: ["1", "2", "3"]
+        })
         yield* load
         app.order.length = 0
         root.send(app.BoardMessage.Show({ ids: ["1", "3"] }))
@@ -500,7 +641,10 @@ describe("Keyed query fields", () => {
         assert.deepStrictEqual(updates(app.order), ["update a []"])
         root.send(app.BoardMessage.Show({ ids: ["1"] }))
         yield* TestHost.settle
-        assert.deepStrictEqual(updates(app.order), ["update a []", "update a []"])
+        assert.deepStrictEqual(updates(app.order), [
+          "update a []",
+          "update a []"
+        ])
         assert.deepStrictEqual(boardIds(app, root), ["1"])
       })
     )
@@ -511,7 +655,10 @@ describe("Keyed query fields", () => {
     return run(
       app.layer,
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2", "3"] })
+        const root = yield* TestHost.mount(app.Board, {
+          tag: "a",
+          ids: ["1", "2", "3"]
+        })
         yield* load
         app.order.length = 0
         root.send(app.BoardMessage.Show({ ids: ["3", "1", "2", "1"] }))
@@ -528,7 +675,10 @@ describe("Keyed query fields", () => {
     return run(
       app.layer,
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2", "3"] })
+        const root = yield* TestHost.mount(app.Board, {
+          tag: "a",
+          ids: ["1", "2", "3"]
+        })
         yield* load
         root.send(app.BoardMessage.Show({ ids: ["1", "2"] }))
         yield* TestHost.settle
@@ -554,7 +704,10 @@ describe("Keyed query fields", () => {
     return run(
       app.layer,
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2", "3"] })
+        const root = yield* TestHost.mount(app.Board, {
+          tag: "a",
+          ids: ["1", "2", "3"]
+        })
         yield* load
         app.order.length = 0
         app.db.names.set("1", "Ann2")
@@ -590,7 +743,10 @@ describe("Keyed query fields", () => {
     return run(
       app.layer,
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "2", "9"] })
+        const root = yield* TestHost.mount(app.Board, {
+          tag: "a",
+          ids: ["1", "2", "9"]
+        })
         yield* TestHost.settle
         yield* TestClock.adjust("10 millis")
         assert.strictEqual(root.text(), "a: 1=… 2=… 9=…")
@@ -603,7 +759,9 @@ describe("Keyed query fields", () => {
         // Three FetchStarted for one request.
         assert.strictEqual(root.fetches().length, 3)
         assert.strictEqual(root.text(), "a: 1=Ann 2=Bea 9=failed")
-        assert.deepStrictEqual(updates(app.order), ["update a [1:Ann,2:Bea,9:failed]"])
+        assert.deepStrictEqual(updates(app.order), [
+          "update a [1:Ann,2:Bea,9:failed]"
+        ])
       })
     )
   })
@@ -613,11 +771,16 @@ describe("Keyed query fields", () => {
     return run(
       app.layer,
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(app.List, { boards: ["a:1,2", "b:2,1"] })
+        const root = yield* TestHost.mount(app.List, {
+          boards: ["a:1,2", "b:2,1"]
+        })
         yield* load
         app.order.length = 0
         const before = root.frames().length
-        Locator.fire(root.get(Locator.text("a: 1=Ann 2=Bea", { exact: true })), "click")
+        Locator.fire(
+          root.get(Locator.text("a: 1=Ann 2=Bea", { exact: true })),
+          "click"
+        )
         yield* TestHost.settle
         assert.deepStrictEqual(app.order, [
           "update a Rename",
@@ -627,7 +790,9 @@ describe("Keyed query fields", () => {
           "view b 2=Bea 1=Boba~"
         ])
         // One frame, with both fields patched.
-        assert.deepStrictEqual(root.frames().slice(before), ["a: 1=Boba~ 2=Beab: 2=Bea 1=Boba~"])
+        assert.deepStrictEqual(root.frames().slice(before), [
+          "a: 1=Boba~ 2=Beab: 2=Bea 1=Boba~"
+        ])
       })
     )
   })
@@ -637,12 +802,20 @@ describe("Keyed query fields", () => {
     return run(
       app.layer,
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(app.List, { boards: ["a:1,2", "b:2,1"] })
+        const root = yield* TestHost.mount(app.List, {
+          boards: ["a:1,2", "b:2,1"]
+        })
         yield* load
         app.order.length = 0
         const before = root.frames().length
-        Locator.fire(root.get(Locator.text("a: 1=Ann 2=Bea", { exact: true })), "click")
-        Locator.fire(root.get(Locator.text("b: 2=Bea 1=Ann", { exact: true })), "click")
+        Locator.fire(
+          root.get(Locator.text("a: 1=Ann 2=Bea", { exact: true })),
+          "click"
+        )
+        Locator.fire(
+          root.get(Locator.text("b: 2=Bea 1=Ann", { exact: true })),
+          "click"
+        )
         yield* TestHost.settle
         assert.deepStrictEqual(app.order, [
           "update a Rename",
@@ -652,14 +825,18 @@ describe("Keyed query fields", () => {
           "view a 1=Bobb~ 2=Bea",
           "view b 2=Bea 1=Bobb~"
         ])
-        assert.deepStrictEqual(root.frames().slice(before), ["a: 1=Bobb~ 2=Beab: 2=Bea 1=Bobb~"])
+        assert.deepStrictEqual(root.frames().slice(before), [
+          "a: 1=Bobb~ 2=Beab: 2=Bea 1=Bobb~"
+        ])
       })
     )
   })
 
   it.effect("a single field over a key of the batch doesn't split the keyed field's message", () => {
     const app = makeApp()
-    const Message = UiSchema.TaggedEnum({ UsersChanged: { changed: Schema.Array(Schema.String) } })
+    const Message = UiSchema.TaggedEnum({
+      UsersChanged: { changed: Schema.Array(Schema.String) }
+    })
     const changed: Array<ReadonlyArray<string>> = []
     const Mixed = Component.define({
       name: "Mixed",
@@ -670,7 +847,10 @@ describe("Keyed query fields", () => {
         users: {
           queryMany: app.GetUser,
           args: () => [{ id: "1" }, { id: "2" }, { id: "3" }],
-          onChange: (_loaded, changes) => Message.UsersChanged({ changed: changes.map((change) => change.args.id) })
+          onChange: (_loaded, changes) =>
+            Message.UsersChanged({
+              changed: changes.map((change) => change.args.id)
+            })
         },
         user: { query: app.GetUser, args: () => ({ id: "1" }) }
       }
@@ -683,7 +863,9 @@ describe("Keyed query fields", () => {
       view: (h) =>
         h.el(
           "p",
-          h.queries.users.map(({ result }) => AsyncResult.isSuccess(result) ? "y" : "n").join("") +
+          h.queries.users.map(({ result }) =>
+            AsyncResult.isSuccess(result) ? "y" : "n"
+          ).join("") +
             (AsyncResult.isSuccess(h.queries.user) ? "+" : "-")
         )
     })
@@ -704,11 +886,15 @@ describe("Keyed query fields", () => {
     return run(
       app.layer,
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(app.List, { boards: ["a:1,boom", "b:1,2"] })
+        const root = yield* TestHost.mount(app.List, {
+          boards: ["a:1,boom", "b:1,2"]
+        })
         yield* load
         assert.deepStrictEqual(app.db.batches, [3])
         assert.strictEqual(root.text(), "b: 1=Ann 2=Bea")
-        const failed = root.log().find((entry): entry is MessageLog.Failed => entry._tag === "Failed")
+        const failed = root.log().find((entry): entry is MessageLog.Failed =>
+          entry._tag === "Failed"
+        )
         assert.deepStrictEqual([failed?.path, failed?.in, failed?.name], [
           "/List/Board[a]",
           "subscription",
@@ -739,7 +925,12 @@ describe("Keyed query fields", () => {
       scoped: false,
       model: Schema.Struct({}),
       message: Schema.Never,
-      queries: { users: { queryMany: app.GetUser, args: () => [{ id: "2" }, { id: "1" }] } }
+      queries: {
+        users: {
+          queryMany: app.GetUser,
+          args: () => [{ id: "2" }, { id: "1" }]
+        }
+      }
     }).make({
       init: () => ({}),
       update: ($) => $.model,
@@ -747,9 +938,13 @@ describe("Keyed query fields", () => {
         const one = h.queries.users.get({ id: "1" })
         const name = Option.match(one, {
           onNone: () => "none",
-          onSome: ({ result }) => AsyncResult.isSuccess(result) ? result.value.name : "…"
+          onSome: ({ result }) =>
+            AsyncResult.isSuccess(result) ? result.value.name : "…"
         })
-        return h.el("p", `${name} ${Option.isNone(h.queries.users.get({ id: "3" }))}`)
+        return h.el(
+          "p",
+          `${name} ${Option.isNone(h.queries.users.get({ id: "3" }))}`
+        )
       }
     })
     return run(
@@ -770,7 +965,10 @@ describe("Keyed results", () => {
     return run(
       app.layer,
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(app.Board, { tag: "a", ids: ["1", "9"] })
+        const root = yield* TestHost.mount(app.Board, {
+          tag: "a",
+          ids: ["1", "9"]
+        })
         yield* load
         const result = resultOf(root.log(), "/Board", "users")
         const encoded = tuples(app.Board, "users", result)
@@ -779,9 +977,13 @@ describe("Keyed results", () => {
           ["{\"id\":\"9\"}", 1, ["missing"], null]
         ])
         // The log's Wire writes the same tuples, each ending with [waiting, more] for a replayed update.
-        const changed = [...root.log()].reverse().find((entry) => entry._tag === "QueryChanged")!
+        const changed = [...root.log()].reverse().find((entry) =>
+          entry._tag === "QueryChanged"
+        )!
         assert.deepStrictEqual(
-          (MessageLog.makeEncoder().encode(changed) as { readonly result?: unknown }).result,
+          (MessageLog.makeEncoder().encode(changed) as {
+            readonly result?: unknown
+          }).result,
           encoded.map((tuple) => [...tuple, [false, null]])
         )
         const decode = Schema.decodeUnknownExit(resultCodec(app.Board, "users"))
@@ -807,14 +1009,18 @@ describe("Keyed results", () => {
         view: () => null as never
       } as any)
     assert.throws(
-      () => make({ query: app.GetUser, queryMany: app.GetUser, args: () => [] }),
+      () =>
+        make({ query: app.GetUser, queryMany: app.GetUser, args: () => [] }),
       /Bad: queries.users must have exactly one of query and queryMany/
     )
     assert.throws(
       () => make({ queryMany: {}, args: () => [] }),
       /Bad: queries.users has a queryMany that isn't a Query/
     )
-    assert.throws(() => make({ queryMany: app.GetUser }), /Bad: queries.users must have an args function/)
+    assert.throws(
+      () => make({ queryMany: app.GetUser }),
+      /Bad: queries.users must have an args function/
+    )
     assert.throws(
       () => make({ queryMany: app.GetUser, args: () => [], onChange: 1 }),
       /Bad: queries.users has an onChange that isn't a function/
@@ -849,7 +1055,8 @@ describe("Keyed results", () => {
     }).make({
       init: () => ({}),
       update: ($) => $.model,
-      view: (h) => h.el("div", Bad(h, { key: "bad", props: {} }), h.el("p", "host"))
+      view: (h) =>
+        h.el("div", Bad(h, { key: "bad", props: {} }), h.el("p", "host"))
     })
     return run(
       app.layer,
@@ -857,9 +1064,17 @@ describe("Keyed results", () => {
         const root = yield* TestHost.mount(Host, {})
         yield* TestHost.settle
         assert.strictEqual(root.text(), "host")
-        const failed = root.log().find((entry): entry is MessageLog.Failed => entry._tag === "Failed")
-        assert.deepStrictEqual([failed?.path, failed?.in], ["/Host/Bad[bad]", "subscription"])
-        assert.include(TestHost.formatLog(root.log()), "is a queryMany query, and its args must return an array")
+        const failed = root.log().find((entry): entry is MessageLog.Failed =>
+          entry._tag === "Failed"
+        )
+        assert.deepStrictEqual([failed?.path, failed?.in], [
+          "/Host/Bad[bad]",
+          "subscription"
+        ])
+        assert.include(
+          TestHost.formatLog(root.log()),
+          "is a queryMany query, and its args must return an array"
+        )
       })
     )
   })
@@ -876,16 +1091,25 @@ describe("Keyed redaction", () => {
         error: Schema.Never,
         staleTime: "30 seconds"
       },
-      Effect.succeed(({ token }) => Effect.succeed({ secret: Redacted.make(`secret-of-${Redacted.value(token)}`) }))
+      Effect.succeed(({ token }) =>
+        Effect.succeed({
+          secret: Redacted.make(`secret-of-${Redacted.value(token)}`)
+        })
+      )
     ) {}
     const Page = Component.define({
       name: "Page",
       scoped: false,
-      props: Schema.Struct({ tokens: Schema.Array(Schema.Redacted(Schema.String)) }),
+      props: Schema.Struct({
+        tokens: Schema.Array(Schema.Redacted(Schema.String))
+      }),
       model: Schema.Struct({}),
       message: Schema.Never,
       queries: {
-        accounts: { queryMany: GetAccount, args: ({ props }) => props.tokens.map((token) => ({ token })) }
+        accounts: {
+          queryMany: GetAccount,
+          args: ({ props }) => props.tokens.map((token) => ({ token }))
+        }
       }
     }).make({
       init: () => ({}),
@@ -894,7 +1118,9 @@ describe("Keyed redaction", () => {
         h.el(
           "p",
           h.queries.accounts.map(({ result }) =>
-            AsyncResult.isSuccess(result) ? Redacted.value(result.value.secret) : "…"
+            AsyncResult.isSuccess(result)
+              ? Redacted.value(result.value.secret)
+              : "…"
           )
             .join(" ")
         )
@@ -902,14 +1128,20 @@ describe("Keyed redaction", () => {
     return run(
       GetAccount.layer,
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(Page, { tokens: [Redacted.make("tok-1"), Redacted.make("tok-2")] })
+        const root = yield* TestHost.mount(Page, {
+          tokens: [Redacted.make("tok-1"), Redacted.make("tok-2")]
+        })
         yield* TestHost.settle
         assert.strictEqual(root.text(), "secret-of-tok-1 secret-of-tok-2")
         // The result as page state and history state hold it.
-        const state = JSON.stringify(tuples(Page, "accounts", resultOf(root.log(), "/Page", "accounts")))
+        const state = JSON.stringify(
+          tuples(Page, "accounts", resultOf(root.log(), "/Page", "accounts"))
+        )
         assert.include(state, "tok-2")
         assert.include(state, "secret-of-tok-2")
-        const wire = JSON.stringify(root.log().map((entry) => MessageLog.makeEncoder().encode(entry)))
+        const wire = JSON.stringify(
+          root.log().map((entry) => MessageLog.makeEncoder().encode(entry))
+        )
         assert.notInclude(wire, "tok-")
         assert.notInclude(wire, "secret-of")
         assert.include(wire, "FetchStarted")
@@ -926,25 +1158,38 @@ describe("Story keyed steps", () => {
       const app = makeApp()
       const scene = yield* Scene.make(app.Board, { tag: "a", ids: ["1", "2"] })
       scene
-        .loadedMany("users", [{ args: { id: "1" }, value: { id: "1", name: "Ann" } }, {
+        .loadedMany("users", [{
+          args: { id: "1" },
+          value: { id: "1", name: "Ann" }
+        }, {
           args: { id: "2" },
           error: "gone"
         }])
         .expect(Locator.tag("p")).toHaveText("a: 1=Ann 2=failed")
-        .loaded("users", { id: "2" }, { id: "2", name: "Bea" }, { patched: true })
+        .loaded("users", { id: "2" }, { id: "2", name: "Bea" }, {
+          patched: true
+        })
         .expect(Locator.tag("p")).toHaveText("a: 1=Ann 2=Bea~")
       app.order.length = 0
       const s = yield* Story.make(app.Board, { tag: "a", ids: ["1", "2"] })
       s
-        .loadedMany("users", [{ args: { id: "1" }, value: { id: "1", name: "Ann" } }, {
+        .loadedMany("users", [{
+          args: { id: "1" },
+          value: { id: "1", name: "Ann" }
+        }, {
           args: { id: "2" },
           error: "gone"
         }])
-        .loaded("users", { id: "2" }, { id: "2", name: "Bea" }, { patched: true })
+        .loaded("users", { id: "2" }, { id: "2", name: "Bea" }, {
+          patched: true
+        })
         .loadFailed("users", { id: "1" }, "gone", { waiting: true })
       const [ann] = tuples(app.Board, "users", s.results?.users)
       // The failure keeps the key's last Success.
-      assert.deepStrictEqual(ann, ["{\"id\":\"1\"}", 1, ["gone"], [{ id: "1", name: "Ann" }, 0]])
+      assert.deepStrictEqual(ann, ["{\"id\":\"1\"}", 1, ["gone"], [{
+        id: "1",
+        name: "Ann"
+      }, 0]])
       s.send(app.BoardMessage.Show({ ids: ["2"] }))
       assert.deepStrictEqual(heldIds(app.Board, s.results?.users), ["2"])
       assert.deepStrictEqual(updates(app.order), [
@@ -996,7 +1241,10 @@ const makeSelection = (app: ReturnType<typeof makeApp>) => {
   const Selection = Component.define({
     name: "Selection",
     scoped: false,
-    model: Schema.Struct({ ids: Schema.Array(Schema.String), selected: Schema.String }),
+    model: Schema.Struct({
+      ids: Schema.Array(Schema.String),
+      selected: Schema.String
+    }),
     message: Message,
     queries: {
       users: {
@@ -1017,7 +1265,9 @@ const makeSelection = (app: ReturnType<typeof makeApp>) => {
       }),
     view: (h, model) => {
       const row = h.queries.users.get({ id: model.selected })
-      if (Option.isNone(row)) throw new Error(`no row for the selection ${model.selected}`)
+      if (Option.isNone(row)) {
+        throw new Error(`no row for the selection ${model.selected}`)
+      }
       const result = row.value.result
       // A click shows the first id only, so a scene can make the change.
       return h.el("p").on("click", Message.Show({ ids: ["1"] })).children(
@@ -1080,7 +1330,11 @@ describe("Story keyed rounds", () => {
         ])
         .send(app.BoardMessage.Show({ ids: ["1", "2"] }))
       assert.deepStrictEqual(heldIds(app.Board, s.results?.users), ["1"])
-      assert.deepStrictEqual(updates(app.order), ["update a [1:Ann,2:Bea,3:Cy]", "update a []", "update a []"])
+      assert.deepStrictEqual(updates(app.order), [
+        "update a [1:Ann,2:Bea,3:Cy]",
+        "update a []",
+        "update a []"
+      ])
     }))
 
   it("throws when a step's prunes don't settle in 100 rounds", () => {
@@ -1091,7 +1345,10 @@ describe("Story keyed rounds", () => {
     assert.throws(
       () =>
         s
-          .loadedMany("users", ids.map((id) => ({ args: { id }, value: { id, name: id } })))
+          .loadedMany(
+            "users",
+            ids.map((id) => ({ args: { id }, value: { id, name: id } }))
+          )
           .send(app.BoardMessage.Show({ ids: ids.slice(0, -1) })),
       /Board's query "users" was still pruned after 100 rounds .* without limit/
     )
@@ -1102,7 +1359,10 @@ describe("Story keyed rounds", () => {
 describe("Keyed history restore", () => {
   it.effect("a membership change and a push in one update save the pruned collection in the entry left", () => {
     const app = makeApp()
-    const PageRoute = Route.union({ Home: Route.make("/"), Next: Route.make("/next") })
+    const PageRoute = Route.union({
+      Home: Route.make("/"),
+      Next: Route.make("/next")
+    })
     const Message = UiSchema.TaggedEnum({
       ShowAndGo: { ids: Schema.Array(Schema.String) },
       Navigated: {}
@@ -1112,7 +1372,12 @@ describe("Keyed history restore", () => {
       scoped: false,
       model: Schema.Struct({ ids: Schema.Array(Schema.String) }),
       message: Message,
-      queries: { users: { queryMany: app.GetUser, args: ({ model }) => model.ids.map((id) => ({ id })) } }
+      queries: {
+        users: {
+          queryMany: app.GetUser,
+          args: ({ model }) => model.ids.map((id) => ({ id }))
+        }
+      }
     }).make({
       init: () => ({ ids: ["1", "2"] }),
       update: ($, message) =>
@@ -1125,7 +1390,8 @@ describe("Keyed history restore", () => {
             ),
           Navigated: () => $.model
         }),
-      view: (h) => h.el("p", h.queries.users.map(({ args }) => args.id).join(","))
+      view: (h) =>
+        h.el("p", h.queries.users.map(({ args }) => args.id).join(","))
     })
     const base = Router.memoryHistory("/")
     const written: Array<{ readonly url: string; readonly state: unknown }> = []
@@ -1148,17 +1414,23 @@ describe("Keyed history restore", () => {
           readonly "@effect/ui": {
             readonly snapshot: Record<string, {
               readonly model: unknown
-              readonly queries: { readonly users: ReadonlyArray<ReadonlyArray<unknown>> }
+              readonly queries: {
+                readonly users: ReadonlyArray<ReadonlyArray<unknown>>
+              }
             }>
           }
         }
         | undefined
       const saved = left?.["@effect/ui"].snapshot["/Page"]
       assert.deepStrictEqual(saved?.model, { ids: ["1"] })
-      assert.deepStrictEqual(saved?.queries.users.map((tuple) => tuple[0]), ["{\"id\":\"1\"}"])
+      assert.deepStrictEqual(saved?.queries.users.map((tuple) => tuple[0]), [
+        "{\"id\":\"1\"}"
+      ])
       assert.strictEqual(root.text(), "1")
     }).pipe(
-      Effect.provide(Layer.merge(Router.make({ routes: PageRoute, history }), app.layer)),
+      Effect.provide(
+        Layer.merge(Router.make({ routes: PageRoute, history }), app.layer)
+      ),
       Effect.scoped,
       Effect.provide(TestHost.layer())
     )
@@ -1166,7 +1438,10 @@ describe("Keyed history restore", () => {
 
   it.effect("drops each tuple taken under a patch and seeds the rest, stale", () => {
     const app = makeApp()
-    const ShellRoute = Route.union({ Home: Route.make("/"), Board: Route.make("/board") })
+    const ShellRoute = Route.union({
+      Home: Route.make("/"),
+      Board: Route.make("/board")
+    })
     const ShellMessage = UiSchema.TaggedEnum({
       ChangedRoute: { route: ShellRoute },
       Go: { route: ShellRoute },
@@ -1185,12 +1460,18 @@ describe("Keyed history restore", () => {
           ChangedRoute: ({ route }) => route,
           Go: ({ route }) =>
             $.run(
-              Router.push(ShellRoute, route).pipe(Command.map(() => ShellMessage.Navigated()))
+              Router.push(ShellRoute, route).pipe(
+                Command.map(() => ShellMessage.Navigated())
+              )
             ),
           Navigated: () => $.model
         }),
       subscriptions: ({ model }) => [
-        Router.subscription(ShellRoute, model, (route) => ShellMessage.ChangedRoute({ route }))
+        Router.subscription(
+          ShellRoute,
+          model,
+          (route) => ShellMessage.ChangedRoute({ route })
+        )
       ],
       view: (h, model) =>
         h.el(
@@ -1200,14 +1481,27 @@ describe("Keyed history restore", () => {
             ShellMessage.Go({ route: ShellRoute.Home() })
           ).children("Home"),
           model._tag === "Board"
-            ? app.Board(h, { key: "board", props: { tag: "a", ids: ["1", "2"] } })
+            ? app.Board(h, {
+              key: "board",
+              props: { tag: "a", ids: ["1", "2"] }
+            })
             : h.el("p", "home")
         )
     })
     const history = Router.memoryHistory("/board")
-    const mount = Effect.flatMap(Router.currentRoute(ShellRoute), (route) => TestHost.mount(Shell, { route }))
-    const hosted = (router: Layer.Layer<Router.Services>, effect: Effect.Effect<void, unknown, any>) =>
-      effect.pipe(Effect.provide(Layer.merge(router, app.layer)), Effect.scoped, Effect.provide(TestHost.layer()))
+    const mount = Effect.flatMap(
+      Router.currentRoute(ShellRoute),
+      (route) => TestHost.mount(Shell, { route })
+    )
+    const hosted = (
+      router: Layer.Layer<Router.Services>,
+      effect: Effect.Effect<void, unknown, any>
+    ) =>
+      effect.pipe(
+        Effect.provide(Layer.merge(router, app.layer)),
+        Effect.scoped,
+        Effect.provide(TestHost.layer())
+      )
     return Effect.gen(function*() {
       yield* hosted(
         Router.make({ routes: ShellRoute, history }),
@@ -1215,7 +1509,10 @@ describe("Keyed history restore", () => {
           const root = yield* mount
           yield* load
           // The rename never finishes, so its patch on key 1 is live when the push snapshots the page.
-          Locator.fire(root.get(Locator.text("a: 1=Ann 2=Bea", { exact: true })), "click")
+          Locator.fire(
+            root.get(Locator.text("a: 1=Ann 2=Bea", { exact: true })),
+            "click"
+          )
           yield* TestHost.settle
           assert.isTrue(root.text().includes("1=Boba~"))
           Locator.fire(root.get(Locator.text("Home", { exact: true })), "click")
@@ -1231,11 +1528,15 @@ describe("Keyed history restore", () => {
           history.go(-1)
           yield* TestHost.settle
           const log = root.log()
-          const mounted = log.findIndex((entry) => entry._tag === "Mounted" && entry.path === "/Shell/Board[board]")
+          const mounted = log.findIndex((entry) =>
+            entry._tag === "Mounted" && entry.path === "/Shell/Board[board]"
+          )
           const restored = log[mounted] as MessageLog.Mounted
           assert.isTrue(restored.adopted)
           // Mounted holds the restored results.
-          assert.deepStrictEqual(heldIds(app.Board, restored.queries?.users), ["2"])
+          assert.deepStrictEqual(heldIds(app.Board, restored.queries?.users), [
+            "2"
+          ])
           // Key 2 is seeded stale and shows while it refetches; key 1 starts from loading.
           assert.isTrue(root.text().includes("a: 1=… 2=Bea…"))
           yield* load

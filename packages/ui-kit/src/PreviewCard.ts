@@ -208,7 +208,15 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { type Attributed, attrSelector, flag, idOf, idSelector, type Keyed, withStyle } from "./internal/attributes.ts"
+import {
+  type Attributed,
+  attrSelector,
+  flag,
+  idOf,
+  idSelector,
+  type Keyed,
+  withStyle
+} from "./internal/attributes.ts"
 import { detachedChannel } from "./internal/detached.ts"
 import { focusVisible } from "./internal/dom.ts"
 import { lineUnder } from "./internal/inlineRect.ts"
@@ -216,7 +224,13 @@ import { onEscape, Point, pointOf } from "./internal/interaction.ts"
 import { listenOutside } from "./internal/outside.ts"
 import { inSafeArea } from "./internal/safeArea.ts"
 import { atDocumentOrigin, portalBox, raiseAbove } from "./internal/topLayer.ts"
-import { frameOf, settling, statusOf, transitionAttrs, type TransitionStatus } from "./internal/transition.ts"
+import {
+  frameOf,
+  settling,
+  statusOf,
+  transitionAttrs,
+  type TransitionStatus
+} from "./internal/transition.ts"
 import {
   stepViewport,
   TrackViewport,
@@ -323,7 +337,10 @@ export type PreviewCardProps = typeof PreviewCardProps.Type
  * @category schemas
  * @since 0.1.0
  */
-export const PreviewCardOpenReason = Schema.Literals(["trigger-hover", "trigger-focus"])
+export const PreviewCardOpenReason = Schema.Literals([
+  "trigger-hover",
+  "trigger-focus"
+])
 
 /**
  * Why a preview card asks to open.
@@ -371,7 +388,10 @@ export type PreviewCardDismissReason = typeof PreviewCardDismissReason.Type
  * @since 0.1.0
  */
 export const PreviewCardEvents = UiSchema.TaggedEnum({
-  RequestedOpen: { triggerId: Schema.NullOr(Schema.String), reason: PreviewCardOpenReason },
+  RequestedOpen: {
+    triggerId: Schema.NullOr(Schema.String),
+    reason: PreviewCardOpenReason
+  },
   RequestedClose: { reason: PreviewCardDismissReason },
   Settled: { open: Schema.Boolean }
 })
@@ -406,18 +426,29 @@ export type PreviewCardInstant = "focus" | "dismiss"
  */
 export type PreviewCardTransitionStatus = TransitionStatus
 
-const Delays = Schema.Struct({ delay: Schema.Number, closeDelay: Schema.Number })
+const Delays = Schema.Struct({
+  delay: Schema.Number,
+  closeDelay: Schema.Number
+})
 
 type Delays = typeof Delays.Type
 
 const TriggerId = Schema.NullOr(Schema.String)
 
 const PreviewCardMessage = UiSchema.TaggedEnum({
-  EnteredTrigger: { triggerId: TriggerId, ...Delays.fields, at: Schema.NullOr(Point) },
+  EnteredTrigger: {
+    triggerId: TriggerId,
+    ...Delays.fields,
+    at: Schema.NullOr(Point)
+  },
   LeftTrigger: { triggerId: TriggerId, at: Schema.NullOr(Point) },
   MovedToLine: { triggerId: TriggerId, at: Point, line: Schema.Number },
   TouchedTrigger: {},
-  FocusedTrigger: { triggerId: TriggerId, ...Delays.fields, visible: Schema.Boolean },
+  FocusedTrigger: {
+    triggerId: TriggerId,
+    ...Delays.fields,
+    visible: Schema.Boolean
+  },
   BlurredTrigger: {},
   FocusedPopup: {},
   BlurredPopup: {},
@@ -464,28 +495,46 @@ const PreviewCardModel = Schema.Struct({
 
 type PreviewCardModel = typeof PreviewCardModel.Type
 
-type PreviewCardUpdate = Component.Update<PreviewCardModel, PreviewCardMessage, PreviewCardEvents, PreviewCardProps>
+type PreviewCardUpdate = Component.Update<
+  PreviewCardModel,
+  PreviewCardMessage,
+  PreviewCardEvents,
+  PreviewCardProps
+>
 
 const delaysOf = (options: {
   readonly delay?: number | undefined
   readonly closeDelay?: number | undefined
-}): Delays => ({ delay: options.delay ?? 600, closeDelay: options.closeDelay ?? 300 })
+}): Delays => ({
+  delay: options.delay ?? 600,
+  closeDelay: options.closeDelay ?? 300
+})
 
 const WaitBeforeOpening = Command.make(
   "WaitBeforeOpening",
   { args: { delay: Schema.Number }, mode: "switch" },
-  ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), PreviewCardMessage.CompletedWaitBeforeOpening())
+  ({ delay }) =>
+    Effect.as(
+      Effect.sleep(Duration.millis(delay)),
+      PreviewCardMessage.CompletedWaitBeforeOpening()
+    )
 )
 
 const WaitBeforeClosing = Command.make(
   "WaitBeforeClosing",
   { args: { delay: Schema.Number }, mode: "switch" },
-  ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), PreviewCardMessage.CompletedWaitBeforeClosing())
+  ({ delay }) =>
+    Effect.as(
+      Effect.sleep(Duration.millis(delay)),
+      PreviewCardMessage.CompletedWaitBeforeClosing()
+    )
 )
 
 const escape = onEscape(PreviewCardMessage.PressedEscape())
 
-const detached = detachedChannel<PreviewCardMessage>("detachedPreviewCardTriggers")
+const detached = detachedChannel<PreviewCardMessage>(
+  "detachedPreviewCardTriggers"
+)
 
 let returning = 0
 const returnFocus = (element: HTMLElement): void => {
@@ -497,11 +546,16 @@ const returnFocus = (element: HTMLElement): void => {
   }
 }
 
-const activeOf = (model: PreviewCardModel, props: PreviewCardProps): string | null => props.triggerId ?? model.trigger
+const activeOf = (
+  model: PreviewCardModel,
+  props: PreviewCardProps
+): string | null => props.triggerId ?? model.trigger
 
-const hovering = (model: PreviewCardModel): boolean => model.onTrigger || !model.away
+const hovering = (model: PreviewCardModel): boolean =>
+  model.onTrigger || !model.away
 
-const held = (model: PreviewCardModel): boolean => model.focused || model.focusInside
+const held = (model: PreviewCardModel): boolean =>
+  model.focused || model.focusInside
 
 const openFor = (
   model: PreviewCardModel,
@@ -519,20 +573,31 @@ const openFor = (
     anchorHit: reason === "trigger-hover" ? model.point : null,
     closeReason: null,
     transition: $.props.open ? model.transition : null
-  }).run(Command.interrupt(WaitBeforeOpening), Command.interrupt(WaitBeforeClosing)).emit(
+  }).run(
+    Command.interrupt(WaitBeforeOpening),
+    Command.interrupt(WaitBeforeClosing)
+  ).emit(
     PreviewCardEvents.RequestedOpen({ triggerId, reason })
   )
 
 const dismiss = ($: PreviewCardUpdate, reason: PreviewCardDismissReason) =>
   $.props.open
-    ? $.evolve({ closeReason: reason }).run(Command.interrupt(WaitBeforeClosing)).emit(
+    ? $.evolve({ closeReason: reason }).run(
+      Command.interrupt(WaitBeforeClosing)
+    ).emit(
       PreviewCardEvents.RequestedClose({ reason })
     )
     : $.model
 
-const cancelled = (model: PreviewCardModel, $: PreviewCardUpdate, reason: PreviewCardOpenReason) =>
+const cancelled = (
+  model: PreviewCardModel,
+  $: PreviewCardUpdate,
+  reason: PreviewCardOpenReason
+) =>
   !$.props.open && model.pending === reason
-    ? $.set(model).evolve({ pending: null, pendingTrigger: null }).run(Command.interrupt(WaitBeforeOpening))
+    ? $.set(model).evolve({ pending: null, pendingTrigger: null }).run(
+      Command.interrupt(WaitBeforeOpening)
+    )
     : model
 
 const watchLines = (
@@ -565,14 +630,23 @@ const TrackPreviewCardTrigger = Mount.makeStream(
       return Effect.acquireRelease(
         Effect.sync(() =>
           watchLines(node, controller.signal, (at, line) => {
-            Queue.offerUnsafe(queue, PreviewCardMessage.MovedToLine({ triggerId: current.triggerId, at, line }))
+            Queue.offerUnsafe(
+              queue,
+              PreviewCardMessage.MovedToLine({
+                triggerId: current.triggerId,
+                at,
+                line
+              })
+            )
           })
         ).pipe(
           Effect.tap(() =>
-            Effect.forkScoped(Stream.runForEach(changes, (next) =>
-              Effect.sync(() => {
-                current = next
-              })))
+            Effect.forkScoped(
+              Stream.runForEach(changes, (next) =>
+                Effect.sync(() => {
+                  current = next
+                }))
+            )
           )
         ),
         () => Effect.sync(() => controller.abort())
@@ -586,9 +660,13 @@ const TrackDetachedPreviewCardTrigger = Mount.makeStream(
   (node: HTMLElement, args, changes) =>
     Stream.callback<never>(() => {
       let current = args
-      const send = (message: PreviewCardMessage) => detached.send(node.ownerDocument, current.popupId, message)
+      const send = (message: PreviewCardMessage) =>
+        detached.send(node.ownerDocument, current.popupId, message)
       const triggerId = () => node.id === "" ? null : node.id
-      const delays = () => ({ delay: current.delay, closeDelay: current.closeDelay })
+      const delays = () => ({
+        delay: current.delay,
+        closeDelay: current.closeDelay
+      })
       const controller = new AbortController()
       const { signal } = controller
       return Effect.acquireRelease(
@@ -603,22 +681,41 @@ const TrackDetachedPreviewCardTrigger = Mount.makeStream(
             )
           }, { signal })
           node.addEventListener("mouseleave", (event) => {
-            send(PreviewCardMessage.LeftTrigger({ triggerId: triggerId(), at: { x: event.clientX, y: event.clientY } }))
+            send(
+              PreviewCardMessage.LeftTrigger({
+                triggerId: triggerId(),
+                at: { x: event.clientX, y: event.clientY }
+              })
+            )
           }, { signal })
           node.addEventListener("pointerdown", (event) => {
-            if (event.pointerType !== "mouse") send(PreviewCardMessage.TouchedTrigger())
+            if (event.pointerType !== "mouse") {
+              send(PreviewCardMessage.TouchedTrigger())
+            }
           }, { signal })
           node.addEventListener("focus", () => {
             if (returning > 0) return
             send(
-              PreviewCardMessage.FocusedTrigger({ triggerId: triggerId(), ...delays(), visible: focusVisible(node) })
+              PreviewCardMessage.FocusedTrigger({
+                triggerId: triggerId(),
+                ...delays(),
+                visible: focusVisible(node)
+              })
             )
           }, { signal })
-          node.addEventListener("blur", () => send(PreviewCardMessage.BlurredTrigger()), { signal })
+          node.addEventListener("blur", () =>
+            send(PreviewCardMessage.BlurredTrigger()), { signal })
           watchLines(
             node,
             signal,
-            (at, line) => send(PreviewCardMessage.MovedToLine({ triggerId: triggerId(), at, line }))
+            (at, line) =>
+              send(
+                PreviewCardMessage.MovedToLine({
+                  triggerId: triggerId(),
+                  at,
+                  line
+                })
+              )
           )
         }).pipe(
           Effect.tap(() =>
@@ -628,7 +725,10 @@ const TrackDetachedPreviewCardTrigger = Mount.makeStream(
               })))
           )
         ),
-        () => Effect.sync(() => controller.abort())
+        () =>
+          Effect.sync(() =>
+            controller.abort()
+          )
       )
     })
 )
@@ -647,7 +747,11 @@ const elementOf = (target: EventTarget | null): Element | null => {
   return node.nodeType === 1 ? node as Element : node.parentElement
 }
 
-const watchPointer = (node: HTMLElement, args: TrackPositionerArgs, changes: Stream.Stream<TrackPositionerArgs>) =>
+const watchPointer = (
+  node: HTMLElement,
+  args: TrackPositionerArgs,
+  changes: Stream.Stream<TrackPositionerArgs>
+) =>
   Stream.callback<PreviewCardMessage>((queue) => {
     const document = node.ownerDocument
     let current = args
@@ -657,21 +761,34 @@ const watchPointer = (node: HTMLElement, args: TrackPositionerArgs, changes: Str
     const send = (message: PreviewCardMessage) => {
       Queue.offerUnsafe(queue, message)
     }
-    const within = (target: EventTarget | null) => elementOf(target) !== null && node.contains(target as Node)
-    const onTrigger = (target: EventTarget | null) => elementOf(target)?.closest(current.triggers) != null
-    const inside = (target: EventTarget | null) => within(target) || onTrigger(target)
+    const within = (target: EventTarget | null) =>
+      elementOf(target) !== null && node.contains(target as Node)
+    const onTrigger = (target: EventTarget | null) =>
+      elementOf(target)?.closest(current.triggers) != null
+    const inside = (target: EventTarget | null) =>
+      within(target) || onTrigger(target)
     const report = (next: boolean) => {
       if (away === next) return
       away = next
-      send(next ? PreviewCardMessage.LeftHoverArea() : PreviewCardMessage.ReturnedToHoverArea())
+      send(
+        next
+          ? PreviewCardMessage.LeftHoverArea()
+          : PreviewCardMessage.ReturnedToHoverArea()
+      )
     }
     const onMouseLeave = (event: MouseEvent) => {
-      if (elementOf(event.target)?.matches(current.triggers) === true) from = { x: event.clientX, y: event.clientY }
+      if (elementOf(event.target)?.matches(current.triggers) === true) {
+        from = { x: event.clientX, y: event.clientY }
+      }
     }
     const onMouseMove = (event: MouseEvent) => {
       const point = { x: event.clientX, y: event.clientY }
-      if (inside(event.target)) return report(false)
-      if (from !== null && inSafeArea(point, from, node.getBoundingClientRect())) return report(false)
+      if (inside(event.target)) {
+        return report(false)
+      }
+      if (
+        from !== null && inSafeArea(point, from, node.getBoundingClientRect())
+      ) return report(false)
       from = null
       report(true)
     }
@@ -691,11 +808,16 @@ const watchPointer = (node: HTMLElement, args: TrackPositionerArgs, changes: Str
       if (!inside(event.target)) return
       clearTimeout(settle)
       settle = setTimeout(() => {
-        if (!inside(document.activeElement)) send(PreviewCardMessage.FocusedOutside())
+        if (!inside(document.activeElement)) {
+          send(PreviewCardMessage.FocusedOutside())
+        }
       }, 0)
     }
     const check = () => {
-      if (removed || current.active === null || document.querySelector(current.active) !== null) return
+      if (
+        removed || current.active === null ||
+        document.querySelector(current.active) !== null
+      ) return
       removed = true
       send(PreviewCardMessage.RemovedTrigger())
     }
@@ -709,13 +831,30 @@ const watchPointer = (node: HTMLElement, args: TrackPositionerArgs, changes: Str
           inside: (target) => inside(target),
           pressed: () => send(PreviewCardMessage.PressedOutside())
         })
-        document.addEventListener("focusout", onLeftFocus, { capture: true, signal })
-        document.addEventListener("mouseleave", onMouseLeave, { capture: true, passive: true, signal })
-        document.addEventListener("mousemove", onMouseMove, { capture: true, passive: true, signal })
-        document.addEventListener("mouseout", onMouseOut, { capture: true, passive: true, signal })
+        document.addEventListener("focusout", onLeftFocus, {
+          capture: true,
+          signal
+        })
+        document.addEventListener("mouseleave", onMouseLeave, {
+          capture: true,
+          passive: true,
+          signal
+        })
+        document.addEventListener("mousemove", onMouseMove, {
+          capture: true,
+          passive: true,
+          signal
+        })
+        document.addEventListener("mouseout", onMouseOut, {
+          capture: true,
+          passive: true,
+          signal
+        })
         node.addEventListener("focusin", onFocusIn, { signal })
         node.addEventListener("focusout", onFocusOut, { signal })
-        if (document.body !== null) page.observe(document.body, { subtree: true, childList: true })
+        if (document.body !== null) {
+          page.observe(document.body, { subtree: true, childList: true })
+        }
       }).pipe(
         Effect.tap(() =>
           Effect.forkScoped(Stream.runForEach(changes, (next) =>
@@ -741,8 +880,14 @@ const TrackPreviewCard = Mount.makeStream(
   (node: HTMLElement, args, changes) =>
     Stream.merge(
       watchPointer(node, args, changes),
-      Positioning.trackPosition(node, args.position, Stream.map(changes, (next) => next.position)).pipe(
-        Stream.map((placement) => PreviewCardMessage.ChangedPlacement({ placement }))
+      Positioning.trackPosition(
+        node,
+        args.position,
+        Stream.map(changes, (next) => next.position)
+      ).pipe(
+        Stream.map((placement) =>
+          PreviewCardMessage.ChangedPlacement({ placement })
+        )
       )
     )
 )
@@ -770,9 +915,16 @@ const TrackPreviewCardPresence = Mount.makeStream(
       const popup = () => document.getElementById(current.popupId) ?? node
       const opening = () =>
         frame(() => {
-          if (current.open && !current.started) frame(() => send(PreviewCardMessage.RenderedFirstFrame()))
+          if (current.open && !current.started) {
+            frame(() => send(PreviewCardMessage.RenderedFirstFrame()))
+          }
         })
-      const transition = settling(node, popup, frame, (open) => send(PreviewCardMessage.FinishedTransition({ open })))
+      const transition = settling(
+        node,
+        popup,
+        frame,
+        (open) => send(PreviewCardMessage.FinishedTransition({ open }))
+      )
       const closing = () => {
         const focused = document.activeElement
         if (focused instanceof HTMLElement && node.contains(focused)) {
@@ -801,7 +953,12 @@ const TrackPreviewCardPresence = Mount.makeStream(
           if (!current.mounted) send(PreviewCardMessage.ShowedPortal())
           if (current.open) opening()
         }).pipe(
-          Effect.tap(() => Effect.forkScoped(Stream.runForEach(changes, (next) => Effect.sync(() => onChange(next)))))
+          Effect.tap(() =>
+            Effect.forkScoped(
+              Stream.runForEach(changes, (next) =>
+                Effect.sync(() => onChange(next)))
+            )
+          )
         ),
         () =>
           Effect.sync(() => {
@@ -883,8 +1040,15 @@ export const PreviewCardTrigger = <Msg, R = never>(
   const element: PreviewCardTriggerElement<Msg, R> = options.element ?? h.a
   const { open, popupId } = options.props
   return element
-    .forward((node) => node.attrs({ "data-popup-open": flag(open), "data-preview-card-trigger": popupId }))
-    .onMount(TrackDetachedPreviewCardTrigger({ popupId, ...delaysOf(options.props) }))
+    .forward((node) =>
+      node.attrs({
+        "data-popup-open": flag(open),
+        "data-preview-card-trigger": popupId
+      })
+    )
+    .onMount(
+      TrackDetachedPreviewCardTrigger({ popupId, ...delaysOf(options.props) })
+    )
 }
 
 /**
@@ -963,7 +1127,8 @@ export const PreviewCard = Component.define({
   }),
   update: {
     EnteredTrigger: ($, { at, closeDelay, delay, triggerId }) => {
-      const uncovered = at !== null && $.model.rest !== null && $.model.rest.triggerId === triggerId &&
+      const uncovered = at !== null && $.model.rest !== null &&
+        $.model.rest.triggerId === triggerId &&
         at.x === $.model.rest.x && at.y === $.model.rest.y
       const next = UiStruct.evolve($.model, {
         onTrigger: true,
@@ -975,14 +1140,24 @@ export const PreviewCard = Component.define({
       if (!$.props.open) {
         return uncovered || $.model.touched
           ? next
-          : $.set(next).evolve({ closeDelay, pending: "trigger-hover", pendingTrigger: triggerId }).run(
+          : $.set(next).evolve({
+            closeDelay,
+            pending: "trigger-hover",
+            pendingTrigger: triggerId
+          }).run(
             WaitBeforeOpening.make({ delay })
           )
       }
       const active = activeOf($.model, $.props)
-      return uncovered || $.model.touched || active === null || active === triggerId
+      return uncovered || $.model.touched || active === null ||
+          active === triggerId
         ? $.set(next).run(Command.interrupt(WaitBeforeClosing))
-        : openFor(UiStruct.evolve(next, { closeDelay }), $, triggerId, "trigger-hover")
+        : openFor(
+          UiStruct.evolve(next, { closeDelay }),
+          $,
+          triggerId,
+          "trigger-hover"
+        )
     },
     LeftTrigger: ($, { at, triggerId }) =>
       cancelled(
@@ -996,23 +1171,46 @@ export const PreviewCard = Component.define({
         "trigger-hover"
       ),
     MovedToLine: ($, { at, line, triggerId }) =>
-      $.model.hoverTrigger === triggerId && !$.props.open ? $.evolve({ point: { ...at, line } }) : $.model,
-    TouchedTrigger: ($) => cancelled(UiStruct.evolve($.model, { touched: true }), $, "trigger-hover"),
+      $.model.hoverTrigger === triggerId && !$.props.open
+        ? $.evolve({ point: { ...at, line } })
+        : $.model,
+    TouchedTrigger: ($) =>
+      cancelled(
+        UiStruct.evolve($.model, { touched: true }),
+        $,
+        "trigger-hover"
+      ),
     FocusedTrigger: ($, { closeDelay, delay, triggerId, visible }) => {
       if (!visible) return $.model
-      const next = UiStruct.evolve($.model, { focused: true, focusTrigger: triggerId })
+      const next = UiStruct.evolve($.model, {
+        focused: true,
+        focusTrigger: triggerId
+      })
       if (!$.props.open) {
-        return $.set(next).evolve({ closeDelay, pending: "trigger-focus", pendingTrigger: triggerId }).run(
+        return $.set(next).evolve({
+          closeDelay,
+          pending: "trigger-focus",
+          pendingTrigger: triggerId
+        }).run(
           WaitBeforeOpening.make({ delay })
         )
       }
       const active = activeOf($.model, $.props)
       return active === null || active === triggerId
         ? $.set(next).run(Command.interrupt(WaitBeforeClosing))
-        : openFor(UiStruct.evolve(next, { closeDelay }), $, triggerId, "trigger-focus")
+        : openFor(
+          UiStruct.evolve(next, { closeDelay }),
+          $,
+          triggerId,
+          "trigger-focus"
+        )
     },
     BlurredTrigger: ($) =>
-      cancelled(UiStruct.evolve($.model, { focused: false, focusTrigger: null }), $, "trigger-focus"),
+      cancelled(
+        UiStruct.evolve($.model, { focused: false, focusTrigger: null }),
+        $,
+        "trigger-focus"
+      ),
     FocusedPopup: ($) => $.evolve({ focusInside: true }),
     BlurredPopup: ($) => $.evolve({ focusInside: false }),
     FocusedOutside: ($) => dismiss($, "trigger-focus"),
@@ -1023,7 +1221,8 @@ export const PreviewCard = Component.define({
         ? $.set(next).run(WaitBeforeClosing.make({ delay: $.model.closeDelay }))
         : next
     },
-    ReturnedToHoverArea: ($) => $.evolve({ away: false }).run(Command.interrupt(WaitBeforeClosing)),
+    ReturnedToHoverArea: ($) =>
+      $.evolve({ away: false }).run(Command.interrupt(WaitBeforeClosing)),
     PressedOutside: ($) => dismiss($, "outside-press"),
     PressedEscape: ($) => dismiss($, "escape-key"),
     RemovedTrigger: ($) => dismiss($, "trigger-removed"),
@@ -1036,7 +1235,10 @@ export const PreviewCard = Component.define({
         ? openFor($.model, $, $.model.pendingTrigger, $.model.pending)
         : $.evolve({ pending: null, pendingTrigger: null })
     },
-    CompletedWaitBeforeClosing: ($) => !hovering($.model) && !held($.model) ? dismiss($, "trigger-hover") : $.model,
+    CompletedWaitBeforeClosing: ($) =>
+      !hovering($.model) && !held($.model)
+        ? dismiss($, "trigger-hover")
+        : $.model,
     ShowedPortal: ($) =>
       $.props.open
         ? $.evolve({
@@ -1048,7 +1250,8 @@ export const PreviewCard = Component.define({
           closeReason: null
         })
         : $.evolve({ mounted: true }),
-    RenderedFirstFrame: ($) => $.props.open ? $.evolve({ started: true }) : $.model,
+    RenderedFirstFrame: ($) =>
+      $.props.open ? $.evolve({ started: true }) : $.model,
     FinishedTransition: ($, { open }) => {
       if (open !== $.props.open) return $.model
       if (open) return $.emit(PreviewCardEvents.Settled({ open }))
@@ -1058,7 +1261,8 @@ export const PreviewCard = Component.define({
         )
         : $.model
     },
-    ChangedViewport: ($, { change }) => stepViewport($.model, change, $.props.open),
+    ChangedViewport: ($, { change }) =>
+      stepViewport($.model, change, $.props.open),
     ChangedPlacement: ($, { placement }) => $.evolve({ placement })
   },
   subscriptions: ({ props }) => [
@@ -1085,7 +1289,9 @@ export const PreviewCard = Component.define({
       arrowId,
       offsetAsPadding: true,
       inline: true,
-      inlineHit: active !== null && model.trigger === active ? model.anchorHit : null
+      inlineHit: active !== null && model.trigger === active
+        ? model.anchorHit
+        : null
     })
     const side = placement?.side ?? tracked.options.side
     const align = placement?.align ?? tracked.options.align
@@ -1097,9 +1303,13 @@ export const PreviewCard = Component.define({
     const transition = open ? model.transition : null
     let count = 0
 
-    const placed = <B extends Attributed<B>>(builder: B): B => builder.attrs({ "data-side": side, "data-align": align })
+    const placed = <B extends Attributed<B>>(builder: B): B =>
+      builder.attrs({ "data-side": side, "data-align": align })
     const states = <B extends Attributed<B>>(builder: B): B =>
-      placed(builder).attrs({ "data-open": flag(open), "data-closed": flag(!open) })
+      placed(builder).attrs({
+        "data-open": flag(open),
+        "data-closed": flag(!open)
+      })
 
     const triggerPart = p.part(
       "a",
@@ -1113,22 +1323,35 @@ export const PreviewCard = Component.define({
           .on(
             "mouseenter",
             (payload: Partial<Html.HoverPayload>) =>
-              PreviewCardMessage.EnteredTrigger({ triggerId: key, ...delays, at: pointOf(payload) })
+              PreviewCardMessage.EnteredTrigger({
+                triggerId: key,
+                ...delays,
+                at: pointOf(payload)
+              })
           )
           .on(
             "mouseleave",
             (payload: Partial<Html.HoverPayload>) =>
-              PreviewCardMessage.LeftTrigger({ triggerId: key, at: pointOf(payload) })
+              PreviewCardMessage.LeftTrigger({
+                triggerId: key,
+                at: pointOf(payload)
+              })
           )
           .on(
             "mousedown",
             ({ pointerType }: Html.PointerPayload) =>
-              pointerType === "mouse" ? undefined : PreviewCardMessage.TouchedTrigger()
+              pointerType === "mouse"
+                ? undefined
+                : PreviewCardMessage.TouchedTrigger()
           )
           .onFocus(({ focusVisible }: Html.FocusPayload) =>
             returning > 0
               ? undefined
-              : PreviewCardMessage.FocusedTrigger({ triggerId: key, ...delays, visible: focusVisible })
+              : PreviewCardMessage.FocusedTrigger({
+                triggerId: key,
+                ...delays,
+                visible: focusVisible
+              })
           )
           .onBlur(PreviewCardMessage.BlurredTrigger())
           .onMount(TrackPreviewCardTrigger({ triggerId: key }))
@@ -1143,15 +1366,23 @@ export const PreviewCard = Component.define({
         /** Milliseconds after the pointer leaves the link and the card before the card closes, 300 by default. */
         readonly closeDelay?: number | undefined
       }): ReturnType<B["attr"]> =>
-        triggerPart(options.element, idOf(options.element) ?? p.id("trigger", count++), delaysOf(options))
+        triggerPart(
+          options.element,
+          idOf(options.element) ?? p.id("trigger", count++),
+          delaysOf(options)
+        )
     )
 
-    const portalStyle = tracked.positionMethod === "absolute" ? portalBox + ";" + atDocumentOrigin : portalBox
+    const portalStyle = tracked.positionMethod === "absolute"
+      ? portalBox + ";" + atDocumentOrigin
+      : portalBox
     const portalPart = p.part("div", (b) => {
       const portal = b
         .attr("id", cardId)
         .popover("manual", shown)
-        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, portalStyle)))
+        .forward((node) =>
+          node.attr("style", withStyle(node.elementAttrs.style, portalStyle))
+        )
       return shown
         ? portal.onMount(
           TrackPreviewCardPresence({
@@ -1167,19 +1398,30 @@ export const PreviewCard = Component.define({
     })
     const portal = View.wrapPart(
       portalPart,
-      <B extends View.PartTarget<"div">>(element: B): ReturnType<B["attr"]> | undefined => {
+      <B extends View.PartTarget<"div">>(
+        element: B
+      ): ReturnType<B["attr"]> | undefined => {
         const out = portalPart(element)
         return shown || props.keepMounted === true ? out : undefined
       }
     )
 
-    const backdropPart = p.part("div", (b) =>
-      transitionAttrs(b, open, transitionStatus)
-        .attr("role", "presentation")
-        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, "pointer-events:none"))))
+    const backdropPart = p.part(
+      "div",
+      (b) =>
+        transitionAttrs(b, open, transitionStatus)
+          .attr("role", "presentation")
+          .forward((node) =>
+            node.attr(
+              "style",
+              withStyle(node.elementAttrs.style, "pointer-events:none")
+            )
+          )
+    )
     const backdrop = View.wrapPart(
       backdropPart,
-      <B extends Keyed<"div">>(element: B): ReturnType<B["attr"]> => backdropPart(element.key(backdropKey))
+      <B extends Keyed<"div">>(element: B): ReturnType<B["attr"]> =>
+        backdropPart(element.key(backdropKey))
     )
 
     const positionerStyle = Positioning.positionerStyle(tracked.positionMethod)
@@ -1191,16 +1433,26 @@ export const PreviewCard = Component.define({
           "data-anchor-hidden": flag(open && placement?.anchorHidden),
           "data-instant": instant
         })
-        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, positionerStyle)))
+        .forward((node) =>
+          node.attr(
+            "style",
+            withStyle(node.elementAttrs.style, positionerStyle)
+          )
+        )
       return open
         ? decorated.onMount(
-          TrackPreviewCard({ position: tracked, triggers, active: active === null ? null : triggerSelector })
+          TrackPreviewCard({
+            position: tracked,
+            triggers,
+            active: active === null ? null : triggerSelector
+          })
         )
         : decorated
     })
     const positioner = View.wrapPart(
       positionerPart,
-      <B extends Keyed<"div">>(element: B): ReturnType<B["attr"]> => positionerPart(element.key(positionerId))
+      <B extends Keyed<"div">>(element: B): ReturnType<B["attr"]> =>
+        positionerPart(element.key(positionerId))
     )
 
     const popup = p.part(
@@ -1216,8 +1468,14 @@ export const PreviewCard = Component.define({
     const arrowStyle = Positioning.arrowStyle(side)
     const arrow = p.part("div", (b) =>
       states(b)
-        .attrs({ id: arrowId, "aria-hidden": "true", "data-uncentered": flag(placement?.arrowUncentered) })
-        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))))
+        .attrs({
+          id: arrowId,
+          "aria-hidden": "true",
+          "data-uncentered": flag(placement?.arrowUncentered)
+        })
+        .forward((node) =>
+          node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))
+        ))
 
     const viewport = p.part("div", (b) => {
       const decorated = b
@@ -1235,7 +1493,11 @@ export const PreviewCard = Component.define({
             side,
             positionerId,
             transitioning: transition !== null
-          }).pipe(Mount.map((change) => PreviewCardMessage.ChangedViewport({ change })))
+          }).pipe(
+            Mount.map((change) =>
+              PreviewCardMessage.ChangedViewport({ change })
+            )
+          )
         )
         : decorated
     })

@@ -1,8 +1,25 @@
-import { Command, Component, Route, Router, Subscription, UiSchema, View } from "@effect/ui"
+import {
+  Command,
+  Component,
+  Route,
+  Router,
+  Subscription,
+  UiSchema,
+  View
+} from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Data, Effect, Layer, Option, Redacted, Schema, Stream } from "effect"
+import {
+  Cause,
+  Data,
+  Effect,
+  Layer,
+  Option,
+  Redacted,
+  Schema,
+  Stream
+} from "effect"
 import { AsyncResult } from "effect/reactivity"
 import {
   Counter,
@@ -17,7 +34,12 @@ import {
   TodoListMessage,
   Upload
 } from "./fixtures/components.ts"
-import { Note, NoteEvents, NoteMessage, SaveNote as SaveNoteCommand } from "./fixtures/notes.ts"
+import {
+  Note,
+  NoteEvents,
+  NoteMessage,
+  SaveNote as SaveNoteCommand
+} from "./fixtures/notes.ts"
 import * as users from "./fixtures/users.ts"
 import { defect } from "./utils/scoped.ts"
 
@@ -26,7 +48,10 @@ const todos = [todo, { id: "t2", title: "write spec", done: false }]
 
 describe("Story", () => {
   it("delivers model-derived messages and validates subscription lifetimes", () => {
-    const Message = UiSchema.TaggedEnum({ Set: { value: Schema.Number }, Stop: {} })
+    const Message = UiSchema.TaggedEnum({
+      Set: { value: Schema.Number },
+      Stop: {}
+    })
     const Ticker = Component.define({
       name: "Ticker",
       scoped: false,
@@ -35,7 +60,8 @@ describe("Story", () => {
     }).make({
       init: () => 1,
       update: (_, message) => message._tag === "Set" ? message.value : 0,
-      subscriptions: ({ model }) => model > 0 ? [Subscription.make("tick", Stream.empty)] : [],
+      subscriptions: ({ model }) =>
+        model > 0 ? [Subscription.make("tick", Stream.empty)] : [],
       view: (h, model) => h.text(String(model))
     })
     const s = Story.start(Ticker, {})
@@ -44,19 +70,30 @@ describe("Story", () => {
     s.send((model) => ({ _tag: "Set", value: model * 3 }))
     assert.strictEqual(s.model, 6)
     assert.deepStrictEqual(s.subscriptions, ["tick"])
-    assert.throws(() => s.subscription("missing", { _tag: "Stop" }), /Story.subscription.*missing.*active keys:.*tick/)
+    assert.throws(
+      () => s.subscription("missing", { _tag: "Stop" }),
+      /Story.subscription.*missing.*active keys:.*tick/
+    )
     assert.throws(
       () => s.subscription("~query/users", { _tag: "Stop" }),
       /Story.subscription.*query watch.*active keys:.*tick/
     )
     s.subscription("tick", { _tag: "Stop" })
     assert.strictEqual(s.model, 0)
-    assert.throws(() => s.subscription("tick", { _tag: "Set", value: 10 }), /active keys: \[\]/)
+    assert.throws(
+      () => s.subscription("tick", { _tag: "Set", value: 10 }),
+      /active keys: \[\]/
+    )
     assert.strictEqual(s.model, 0)
   })
 
   it("reports two Subscriptions that share a key, as the runtime does", () => {
-    const Twice = Component.define({ name: "Twice", scoped: false, model: Schema.Null, message: Schema.Null }).make({
+    const Twice = Component.define({
+      name: "Twice",
+      scoped: false,
+      model: Schema.Null,
+      message: Schema.Null
+    }).make({
       init: () => null,
       update: () => null,
       subscriptions: () => [
@@ -66,14 +103,23 @@ describe("Story", () => {
       view: (h) => h.text("twice")
     })
     const s = Story.start(Twice, {})
-    assert.throws(() => s.subscriptions, "/Twice: two Subscriptions share the key room:\"42\"")
-    assert.throws(() => s.subscription("room:\"42\"", null), "/Twice: two Subscriptions share the key room:\"42\"")
+    assert.throws(
+      () => s.subscriptions,
+      "/Twice: two Subscriptions share the key room:\"42\""
+    )
+    assert.throws(
+      () => s.subscription("room:\"42\"", null),
+      "/Twice: two Subscriptions share the key room:\"42\""
+    )
   })
 
   it("subscription keys follow dependency keys and model changes", () => {
     const steps = Story.start(SearchBox, {})
     const tick = SearchMessage.Tick()
-    assert.throws(() => steps.subscription("tick", tick), /Story.subscription.*tick.*inactive.*active keys:.*query/)
+    assert.throws(
+      () => steps.subscription("tick", tick),
+      /Story.subscription.*tick.*inactive.*active keys:.*query/
+    )
     steps.subscription("query:\"\"", SearchMessage.Progress({ percent: 50 }))
       .subscription("tick", tick)
     assert.strictEqual(steps.model.ticks, 1)
@@ -95,7 +141,8 @@ describe("Story", () => {
 
     it.effect("given starts from any Model, and a function of the cursor is a shared setup", () =>
       Effect.gen(function*() {
-        const twice = (s: Scene.Steps<typeof Counter>) => s.click("+").click("+")
+        const twice = (s: Scene.Steps<typeof Counter>) =>
+          s.click("+").click("+")
         const s = yield* Scene.make(Counter, { initial: 1 })
         s.given({ count: 10 }).pipe(twice)
         assert.strictEqual(Locator.textOf(s.get(Locator.tag("span"))), "12")
@@ -126,7 +173,10 @@ describe("Story", () => {
   })
 
   describe("events", () => {
-    const Message = UiSchema.TaggedEnum({ Typed: { value: Schema.String }, Pressed: {} })
+    const Message = UiSchema.TaggedEnum({
+      Typed: { value: Schema.String },
+      Pressed: {}
+    })
     const Form = Component.define({
       name: "Form",
       scoped: false,
@@ -145,13 +195,20 @@ describe("Story", () => {
           h.el("input").attr("data-testid", "name").on(
             "input",
             // The payload is unknown, so this goes through the checked `make`.
-            (payload: unknown) => Message.cases.Typed.make({ value: (payload as { readonly value: string }).value })
+            (payload: unknown) =>
+              Message.cases.Typed.make({
+                value: (payload as { readonly value: string }).value
+              })
           ),
-          h.el("button").on("click", Message.Pressed()).children(h.el("span", "Save")),
+          h.el("button").on("click", Message.Pressed()).children(
+            h.el("span", "Save")
+          ),
           h.el("p", "Save draft"),
           h.el("p", "plain"),
           h.el("output").attr("data-testid", "value").children(model.value),
-          h.el("output").attr("data-testid", "presses").children(String(model.presses))
+          h.el("output").attr("data-testid", "presses").children(
+            String(model.presses)
+          )
         )
     })
 
@@ -171,8 +228,14 @@ describe("Story", () => {
       }))
 
     it("a locator that matches nothing or several elements throws", () => {
-      assert.throws(() => Scene.start(Form, {}).click("Save"), /Scene\.click: 2 elements match text "Save"/)
-      assert.throws(() => Scene.start(Form, {}).click("missing"), /Scene\.click: nothing matches text "missing"/)
+      assert.throws(
+        () => Scene.start(Form, {}).click("Save"),
+        /Scene\.click: 2 elements match text "Save"/
+      )
+      assert.throws(
+        () => Scene.start(Form, {}).click("missing"),
+        /Scene\.click: nothing matches text "missing"/
+      )
     })
 
     it("an element nothing handles the event for throws", () => {
@@ -202,12 +265,19 @@ describe("Story", () => {
               "div",
               h.el("textarea").on(
                 "keydown",
-                (payload: unknown) => (payload as { readonly key: string }).key === "Enter" ? Sent.Send() : undefined,
+                (payload: unknown) =>
+                  (payload as { readonly key: string }).key === "Enter"
+                    ? Sent.Send()
+                    : undefined,
                 { preventDefault: true }
               ),
-              h.el("form").on("submit", () => undefined).children(h.el("button", "Ignored")),
+              h.el("form").on("submit", () => undefined).children(
+                h.el("button", "Ignored")
+              ),
               h.el("form", h.el("button", "Unhandled")),
-              h.el("p").on("contextmenu", () => undefined, { preventDefault: "always" }).children("Menu"),
+              h.el("p").on("contextmenu", () => undefined, {
+                preventDefault: "always"
+              }).children("Menu"),
               h.el("output", String(sent))
             )
         })
@@ -228,7 +298,10 @@ describe("Story", () => {
         s.fire(Locator.text("Ignored"), "submit").expectIgnored()
         assert.isTrue(s.defaultPrevented)
         // A form with no submit handler is like any element nothing handles the event for.
-        assert.throws(() => s.fire(Locator.text("Unhandled"), "submit"), /Scene\.fire: nothing handles "submit"/)
+        assert.throws(
+          () => s.fire(Locator.text("Unhandled"), "submit"),
+          /Scene\.fire: nothing handles "submit"/
+        )
         s.expect(Locator.tag("output")).toHaveText("2")
         // "always" cancels whatever the handler returns.
         s.fire(Locator.text("Menu"), "contextmenu").expectIgnored()
@@ -260,7 +333,9 @@ describe("Story", () => {
           .expectExact(SaveTodo.make(todo))
           .expectHas(SaveTodo)
         assert.deepStrictEqual(
-          s.pending.map((entry) => [entry.command.name, entry.command.args, entry.status]),
+          s.pending.map((
+            entry
+          ) => [entry.command.name, entry.command.args, entry.status]),
           [["todos/SaveTodo", todo, "running"]]
         )
         s.resolve(SaveTodo, TodoItemMessage.SaveFailed({ reason: "disk full" }))
@@ -285,20 +360,30 @@ describe("Story", () => {
       assert.throws(
         () =>
           s.click("save")
-            .resolve(SaveTodo.make({ ...todo, id: "other" }), TodoItemMessage.Saved()),
+            .resolve(
+              SaveTodo.make({ ...todo, id: "other" }),
+              TodoItemMessage.Saved()
+            ),
         /no running todos\/SaveTodo/
       )
     })
   })
 
   describe("Commands that can fail", () => {
-    class SaveFailed extends Data.TaggedError("SaveFailed")<{ readonly reason: string }> {}
+    class SaveFailed
+      extends Data.TaggedError("SaveFailed")<{ readonly reason: string }>
+    {}
     class Save extends Command.Service<Save>()(
       "test/Save",
       { args: { title: Schema.String }, invalidates: () => [] },
       Effect.succeed((): Effect.Effect<void, SaveFailed> => Effect.void)
     ) {}
-    const Msg = UiSchema.TaggedEnum({ Save: {}, Saved: {}, Failed: { reason: Schema.String }, Stop: {} })
+    const Msg = UiSchema.TaggedEnum({
+      Save: {},
+      Saved: {},
+      Failed: { reason: Schema.String },
+      Stop: {}
+    })
     const Editor = Component.define({
       name: "Editor",
       scoped: false,
@@ -362,7 +447,10 @@ describe("Story", () => {
   describe("TodoList", () => {
     it("declares one keyed child per todo", () => {
       const scene = Scene.start(TodoList, { initial: todos }).current
-      assert.deepStrictEqual(Scene.children(scene.view(), TodoItem).map((child) => child.key), ["t1", "t2"])
+      assert.deepStrictEqual(
+        Scene.children(scene.view(), TodoItem).map((child) => child.key),
+        ["t1", "t2"]
+      )
     })
 
     it.effect("reacts to what a child emits", () =>
@@ -370,20 +458,26 @@ describe("Story", () => {
         const s = yield* Scene.make(TodoList, { initial: todos })
         s.childEmit(TodoItem, "t2", TodoItemEvents.Toggled({ done: true }))
         assert.deepStrictEqual(
-          Scene.children(s.view, TodoItem).map((child) => (child.props as { readonly todo: typeof todo }).todo.done),
+          Scene.children(s.view, TodoItem).map((child) =>
+            (child.props as { readonly todo: typeof todo }).todo.done
+          ),
           [false, true]
         )
       }))
 
     it.effect("hears about a child's failure and shows the child's fallback", () =>
       Effect.gen(function*() {
-        const failure = AsyncResult.failure<never, unknown>(Cause.die(new Error("boom")))
+        const failure = AsyncResult.failure<never, unknown>(
+          Cause.die(new Error("boom"))
+        )
         const s = yield* Scene.make(TodoList, { initial: todos })
         s.childFailure(TodoItem, "t1", failure.cause)
         const fallback = Scene.fallback(s.view, TodoItem, "t1", failure)
         assert.strictEqual(View.textOf(fallback!), "buy milk failed")
         s.expect(Locator.text("rows failed: t1")).toExist()
-        const story = Story.start(TodoList, { initial: todos }).layerFailed(failure)
+        const story = Story.start(TodoList, { initial: todos }).layerFailed(
+          failure
+        )
         assert.deepStrictEqual(story.model.failed, [])
       }))
 
@@ -393,7 +487,9 @@ describe("Story", () => {
         () => Layer.effect(SaveTodo, Effect.fail("offline" as const)),
         { onFailure: () => TodoListMessage.RowFailed({ id: "layer" }) }
       )
-      const s = Story.start(Provided, { initial: todos }).layerFailed(AsyncResult.failure(Cause.fail("offline")))
+      const s = Story.start(Provided, { initial: todos }).layerFailed(
+        AsyncResult.failure(Cause.fail("offline"))
+      )
       assert.deepStrictEqual(s.model.failed, ["layer"])
     })
   })
@@ -404,7 +500,9 @@ describe("Story", () => {
         const s = yield* Story.make(SearchBox, {})
         s.send(SearchMessage.Query({ text: "a" }))
           .send(SearchMessage.Query({ text: "ab" }))
-        assert.deepStrictEqual(s.interrupted.map((command) => command.args), [{ text: "a" }])
+        assert.deepStrictEqual(s.interrupted.map((command) => command.args), [{
+          text: "a"
+        }])
         s.expectExact(Search.make({ text: "ab" }))
           .resolve(Search, SearchMessage.Results({ items: ["ab"] }))
         assert.deepStrictEqual(s.model.items, ["ab"])
@@ -419,7 +517,9 @@ describe("Story", () => {
         assert.deepStrictEqual(s.subscriptions, ["tick", "query:\"\""])
         s.expectHas(Upload)
           .send(SearchMessage.Cancel())
-        assert.deepStrictEqual(s.interrupted.map((command) => command.name), ["Upload"])
+        assert.deepStrictEqual(s.interrupted.map((command) => command.name), [
+          "Upload"
+        ])
         s.expectNone()
           .send(SearchMessage.Start())
           .end(Upload)
@@ -427,7 +527,9 @@ describe("Story", () => {
       }))
 
     it("next and end reject a Command that isn't a stream", () => {
-      const s = Story.start(SearchBox, {}).send(SearchMessage.Query({ text: "a" }))
+      const s = Story.start(SearchBox, {}).send(
+        SearchMessage.Query({ text: "a" })
+      )
       assert.throws(
         () => s.next(Search as any, SearchMessage.Tick()),
         /not a stream Command/
@@ -436,7 +538,10 @@ describe("Story", () => {
   })
 
   describe("Command.map", () => {
-    const Message = UiSchema.TaggedEnum({ Upload: {}, Uploaded: { url: Schema.String } })
+    const Message = UiSchema.TaggedEnum({
+      Upload: {},
+      Uploaded: { url: Schema.String }
+    })
     const UploadFile = Command.make(
       "UploadFile",
       { args: { name: Schema.String } },
@@ -452,7 +557,11 @@ describe("Story", () => {
       update: ($, message) =>
         Message.match(message, {
           Upload: () =>
-            $.run(UploadFile.make({ name: "me.png" }).pipe(Command.map((url) => Message.Uploaded({ url })))),
+            $.run(
+              UploadFile.make({ name: "me.png" }).pipe(
+                Command.map((url) => Message.Uploaded({ url }))
+              )
+            ),
           Uploaded: ({ url }) => ({ url })
         }),
       view: (h, model) => h.el("img").attr("src", model.url)
@@ -480,7 +589,10 @@ describe("Story", () => {
   })
 
   describe("navigation", () => {
-    const AppRoute = Route.union({ Home: Route.make("/"), About: Route.make("/about") })
+    const AppRoute = Route.union({
+      Home: Route.make("/"),
+      About: Route.make("/about")
+    })
     const Message = UiSchema.TaggedEnum({
       Go: {},
       Navigated: { outcome: Schema.Literals(["navigated", "blocked"]) }
@@ -516,10 +628,16 @@ describe("Story", () => {
 
     it.effect("a search patch is named by its class, issued with the patch, and resolves with its own outcome", () =>
       Effect.gen(function*() {
-        const Routes = Route.union({ Search: Route.make("/search", { search: { q: Schema.optional(Schema.String) } }) })
+        const Routes = Route.union({
+          Search: Route.make("/search", {
+            search: { q: Schema.optional(Schema.String) }
+          })
+        })
         const BoxMessage = UiSchema.TaggedEnum({
           Typed: { value: Schema.String },
-          Patched: { outcome: Schema.Literals(["navigated", "blocked", "stale"]) }
+          Patched: {
+            outcome: Schema.Literals(["navigated", "blocked", "stale"])
+          }
         })
         const Box = Component.define({
           name: "Box",
@@ -533,7 +651,9 @@ describe("Story", () => {
             BoxMessage.match(message, {
               Typed: ({ value }) =>
                 $.run(
-                  Router.patchSearch(Routes, $.props.route, { q: value || undefined }).pipe(
+                  Router.patchSearch(Routes, $.props.route, {
+                    q: value || undefined
+                  }).pipe(
                     Command.map((outcome) => BoxMessage.Patched({ outcome }))
                   )
                 ),
@@ -597,7 +717,8 @@ describe("Story", () => {
   describe("queries", () => {
     it.effect("lists the queries on the record from make, current and check, beside their results", () =>
       Effect.gen(function*() {
-        const names = (record: Story.Story<any, any, any, any>) => record.queryInfo().map((info) => info.name)
+        const names = (record: Story.Story<any, any, any, any>) =>
+          record.queryInfo().map((info) => info.name)
         const s = yield* Story.make(Note, { author: "1" })
         assert.deepStrictEqual(names(s.current), ["author"])
         assert.deepStrictEqual(s.queryInfo, s.current.queryInfo())
@@ -609,23 +730,35 @@ describe("Story", () => {
         assert.strictEqual(s.queries.author._tag, "Success")
       }))
 
-    const text = (scene: { readonly root: Locator.Node }) => Locator.textOf(scene.root)
+    const text = (scene: { readonly root: Locator.Node }) =>
+      Locator.textOf(scene.root)
     const page = (n: number, names: ReadonlyArray<string>) => ({
       page: n,
       pages: 2,
-      users: names.map((name, i) => ({ id: `${n}-${i}`, name, email: "", likes: 0 }))
+      users: names.map((name, i) => ({
+        id: `${n}-${i}`,
+        name,
+        email: "",
+        likes: 0
+      }))
     })
 
     it.effect("loaded writes the query's result, at the query's current args", () =>
       Effect.gen(function*() {
         const s = yield* Scene.make(users.ListPage, {})
         assert.include(text(s), "Loading users…")
-        assert.deepStrictEqual(s.queryInfo, [{ name: "users", query: "users/ListUsers", args: { page: 0 } }])
+        assert.deepStrictEqual(s.queryInfo, [{
+          name: "users",
+          query: "users/ListUsers",
+          args: { page: 0 }
+        }])
         s.loaded("users", page(0, ["Ann", "Bea"]))
         assert.include(text(s), "AnnBea")
         // The next page: h.previous keeps the page the result holds until it is loaded.
         s.click("Next")
-        assert.deepStrictEqual(s.queryInfo.map((query) => query.args), [{ page: 1 }])
+        assert.deepStrictEqual(s.queryInfo.map((query) => query.args), [{
+          page: 1
+        }])
         assert.include(text(s), "AnnBea")
         assert.include(text(s), "Loading page 2…")
         s.loaded("users", page(1, ["Cy"]))
@@ -636,21 +769,31 @@ describe("Story", () => {
     it.effect("loadFailed keeps the query's Success at the current args as previousSuccess, and waiting shows", () =>
       Effect.gen(function*() {
         const scene = yield* Scene.make(users.UserCard, { id: "1" })
-        scene.loaded("user", { id: "1", name: "Ann", email: "ann@x", likes: 0 }, { waiting: true })
+        scene.loaded(
+          "user",
+          { id: "1", name: "Ann", email: "ann@x", likes: 0 },
+          { waiting: true }
+        )
         assert.include(text(scene), "Updating…")
         scene.loadFailed("user", new users.UserNotFound({ id: "1" }))
         assert.strictEqual(text(scene), "This user doesn't exist.")
         const story = yield* Story.make(users.UserCard, { id: "1" })
         story
-          .loaded("user", { id: "1", name: "Ann", email: "ann@x", likes: 0 }, { waiting: true })
+          .loaded("user", { id: "1", name: "Ann", email: "ann@x", likes: 0 }, {
+            waiting: true
+          })
           .loadFailed("user", new users.UserNotFound({ id: "1" }))
         const kept = story.queries.user
-        assert.isTrue(AsyncResult.isFailure(kept) && Option.isSome(kept.previousSuccess))
+        assert.isTrue(
+          AsyncResult.isFailure(kept) && Option.isSome(kept.previousSuccess)
+        )
         // Another user's result doesn't carry over.
         story.props({ id: "2" })
           .loadFailed("user", new users.UserNotFound({ id: "2" }))
         const other = story.queries.user
-        assert.isTrue(AsyncResult.isFailure(other) && Option.isNone(other.previousSuccess))
+        assert.isTrue(
+          AsyncResult.isFailure(other) && Option.isNone(other.previousSuccess)
+        )
       }))
 
     it.effect("given takes an updater and keeps the results, and loaded throws for a name that isn't a query", () =>
@@ -664,18 +807,30 @@ describe("Story", () => {
         assert.strictEqual(s.queries.user._tag, "Success")
         assert.deepStrictEqual(s.subscriptions, [])
         assert.throws(
-          () => Story.start(users.RenameForm, { id: "1" }).loaded("draft" as any, "x"),
+          () =>
+            Story.start(users.RenameForm, { id: "1" }).loaded(
+              "draft" as any,
+              "x"
+            ),
           /draft/
         )
       }))
 
     it("loaded and loadFailed name the Story step in their errors", () => {
       assert.throws(
-        () => Story.start(users.RenameForm, { id: "1" }).loaded("draft" as any, "x"),
+        () =>
+          Story.start(users.RenameForm, { id: "1" }).loaded(
+            "draft" as any,
+            "x"
+          ),
         /^Story\.loaded: "draft" is not a query of /
       )
       assert.throws(
-        () => Story.start(users.RenameForm, { id: "1" }).loadFailed("draft" as any, "x"),
+        () =>
+          Story.start(users.RenameForm, { id: "1" }).loadFailed(
+            "draft" as any,
+            "x"
+          ),
         /^Story\.loadFailed: "draft" is not a query of /
       )
     })
@@ -694,14 +849,19 @@ describe("Story", () => {
         friend: {
           query: users.GetUser,
           args: ({ queries: loaded }) =>
-            AsyncResult.isSuccess(loaded.user) ? { id: loaded.user.value.email } : undefined
+            AsyncResult.isSuccess(loaded.user)
+              ? { id: loaded.user.value.email }
+              : undefined
         },
         user: {
           query: users.GetUser,
           args: ({ props }) => ({ id: props.id }),
           onChange: () => TeamMessage.UserChanged()
         },
-        others: { queryMany: users.GetUser, args: () => [{ id: "8" }, { id: "9" }] },
+        others: {
+          queryMany: users.GetUser,
+          args: () => [{ id: "8" }, { id: "9" }]
+        },
         list: { query: users.ListUsers, args: () => ({ page: 0 }) }
       }
     }).make({
@@ -714,14 +874,21 @@ describe("Story", () => {
           name(h.queries.user),
           name(h.queries.friend),
           h.queries.others.map((entry) => name(entry.result)).join("+"),
-          AsyncResult.isSuccess(h.queries.list) ? String(h.queries.list.value.users.length) : "?",
+          AsyncResult.isSuccess(h.queries.list)
+            ? String(h.queries.list.value.users.length)
+            : "?",
           String(model.changes)
         ].join(" ")
         renders.push(out)
         return h.p(out)
       }
     })
-    const user = (id: string, name: string, email = "") => ({ id, name, email, likes: 0 })
+    const user = (id: string, name: string, email = "") => ({
+      id,
+      name,
+      email,
+      likes: 0
+    })
 
     it.effect("given starts from loaded results: one render, dependent and keyed queries, and no onChange message", () =>
       Effect.gen(function*() {
@@ -739,12 +906,21 @@ describe("Story", () => {
         scene.loaded("user", user("1", "Anna", "2"))
         assert.strictEqual(text(scene), "Anna Bea ?+Ivy 1 1")
         scene.keepPending("others")
-        assert.deepStrictEqual(renders, ["Ann Bea ?+Ivy 1 0", "Anna Bea ?+Ivy 1 1"])
+        assert.deepStrictEqual(renders, [
+          "Ann Bea ?+Ivy 1 0",
+          "Anna Bea ?+Ivy 1 1"
+        ])
         const final = yield* Story.make(Team, { id: "1" })
-        final.given({ changes: 0 }, loaded).loaded("user", user("1", "Anna", "2")).keepPending("others")
+        final.given({ changes: 0 }, loaded).loaded(
+          "user",
+          user("1", "Anna", "2")
+        ).keepPending("others")
         assert.strictEqual(final.queries.friend._tag, "Success")
         assert.throws(
-          () => Story.start(Team, { id: "1" }).given({ changes: 0 }, { friend: user("2", "Bea") }),
+          () =>
+            Story.start(Team, { id: "1" }).given({ changes: 0 }, {
+              friend: user("2", "Bea")
+            }),
           /friend.*disabled/
         )
         // A keyed entry at args the query doesn't return.
@@ -767,10 +943,16 @@ describe("Story", () => {
     it.effect("given replaces loaded results in any key order, against the new results, not the ones held before", () =>
       Effect.gen(function*() {
         const s = yield* Scene.make(Team, { id: "1" })
-        s.given({ changes: 0 }, { user: user("1", "Ann", "2"), friend: user("2", "Bea") })
+        s.given({ changes: 0 }, {
+          user: user("1", "Ann", "2"),
+          friend: user("2", "Bea")
+        })
         assert.strictEqual(text(s), "Ann Bea ?+? ? 0")
         // The friend is named first, while the held user still points at "2".
-        s.given({ changes: 0 }, { friend: user("3", "Cy"), user: user("1", "Ann", "3") })
+        s.given({ changes: 0 }, {
+          friend: user("3", "Cy"),
+          user: user("1", "Ann", "3")
+        })
         assert.strictEqual(text(s), "Ann Cy ?+? ? 0")
         s.keepPending("others")
           .keepPending("list")
@@ -787,11 +969,16 @@ describe("Story", () => {
           message: Message,
           elements: Html,
           queries: {
-            user: { query: users.GetUser, args: ({ props }) => ({ id: props.id }) },
+            user: {
+              query: users.GetUser,
+              args: ({ props }) => ({ id: props.id })
+            },
             friends: {
               queryMany: users.GetUser,
               args: ({ queries: loaded }) =>
-                AsyncResult.isSuccess(loaded.user) ? [{ id: loaded.user.value.email }] : [],
+                AsyncResult.isSuccess(loaded.user)
+                  ? [{ id: loaded.user.value.email }]
+                  : [],
               onChange: () => Message.FriendsChanged()
             }
           }
@@ -799,7 +986,13 @@ describe("Story", () => {
           init: () => ({ changes: 0 }),
           update: ($) => ({ changes: $.model.changes + 1 }),
           view: (h, model) =>
-            h.p(`${h.queries.friends.filter((entry) => AsyncResult.isSuccess(entry.result)).length} ${model.changes}`)
+            h.p(
+              `${
+                h.queries.friends.filter((entry) =>
+                  AsyncResult.isSuccess(entry.result)
+                ).length
+              } ${model.changes}`
+            )
         })
         const s = yield* Scene.make(Pals, { id: "1" })
         s.given({ changes: 0 }, {
@@ -833,10 +1026,15 @@ describe("Story", () => {
             friends: {
               queryMany: users.GetUser,
               args: ({ queries: loaded }) =>
-                AsyncResult.isSuccess(loaded.user) ? [{ id: loaded.user.value.email }] : [],
+                AsyncResult.isSuccess(loaded.user)
+                  ? [{ id: loaded.user.value.email }]
+                  : [],
               onChange: () => Message.FriendsChanged()
             },
-            user: { query: users.GetUser, args: ({ model }) => ({ id: model.id }) }
+            user: {
+              query: users.GetUser,
+              args: ({ model }) => ({ id: model.id })
+            }
           }
         }).make({
           init: () => ({ id: "1", changes: 0 }),
@@ -844,7 +1042,11 @@ describe("Story", () => {
           view: (h, model) =>
             h.p(
               `${
-                h.queries.friends.map((entry) => AsyncResult.isSuccess(entry.result) ? entry.result.value.name : "?")
+                h.queries.friends.map((entry) =>
+                  AsyncResult.isSuccess(entry.result)
+                    ? entry.result.value.name
+                    : "?"
+                )
                   .join(
                     "+"
                   )
@@ -882,14 +1084,19 @@ describe("Story", () => {
         name: "SecretReceiver",
         scoped: false,
         model: Schema.Null,
-        message: UiSchema.TaggedEnum({ Take: { token: Secret, at: Schema.Finite } }),
+        message: UiSchema.TaggedEnum({
+          Take: { token: Secret, at: Schema.Finite }
+        }),
         shares: { value: () => null, receives: ["Take"] }
       }).make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
       const App = Component.define({
         name: "SecretOutputs",
         scoped: false,
         model: Schema.Null,
-        message: Schema.Struct({ kind: Schema.Literals(["emit", "send"]), at: Schema.Number }),
+        message: Schema.Struct({
+          kind: Schema.Literals(["emit", "send"]),
+          at: Schema.Number
+        }),
         events: Schema.Struct({ token: Secret, at: Schema.Finite }),
         elements: Html,
         shared: { receiver: Receiver }
@@ -898,7 +1105,11 @@ describe("Story", () => {
         update: ($, { at, kind }) =>
           kind === "emit"
             ? $.emit({ token: Redacted.make("synthetic-event-secret"), at })
-            : $.send(Receiver, { _tag: "Take", token: Redacted.make("synthetic-send-secret"), at }),
+            : $.send(Receiver, {
+              _tag: "Take",
+              token: Redacted.make("synthetic-send-secret"),
+              at
+            }),
         view: (h) => h.div
       })
       const errorOf = (f: () => unknown): string => {
@@ -924,8 +1135,15 @@ describe("Story", () => {
                 errorOf(() => s.send(message)),
                 errorOf(() =>
                   kind === "emit"
-                    ? s.emitted({ token: Redacted.make("synthetic-other-secret"), at })
-                    : s.sent(Receiver, { _tag: "Take", token: Redacted.make("synthetic-other-secret"), at })
+                    ? s.emitted({
+                      token: Redacted.make("synthetic-other-secret"),
+                      at
+                    })
+                    : s.sent(Receiver, {
+                      _tag: "Take",
+                      token: Redacted.make("synthetic-other-secret"),
+                      at
+                    })
                 )
               ]
               for (const text of messages) {
@@ -975,13 +1193,20 @@ describe("Story", () => {
 
     it.effect("an enabled query with no result blocks a message step and the end, unless kept", () =>
       Effect.gen(function*() {
-        assert.throws(() => Story.start(Note, { author: "1" }).send(edit), /the query "author" has no result/)
+        assert.throws(
+          () => Story.start(Note, { author: "1" }).send(edit),
+          /the query "author" has no result/
+        )
         const message = yield* defect(Story.make(Note, { author: "1" }))
-        assert.match(message, /^Story\.make: .*\n {2}- the query "author" has no result/)
+        assert.match(
+          message,
+          /^Story\.make: .*\n {2}- the query "author" has no result/
+        )
         const kept = yield* Story.make(Note, { author: "1" })
         kept.keepPending("author").send(edit)
         const loaded = yield* Story.make(Note, { author: "1" })
-        loaded.loaded("author", { id: "1", name: "Ann", email: "", likes: 0 }).send(edit)
+        loaded.loaded("author", { id: "1", name: "Ann", email: "", likes: 0 })
+          .send(edit)
       }))
 
     it.effect("emitted takes the value it acknowledges, and an acting step waits for it", () =>
@@ -989,12 +1214,18 @@ describe("Story", () => {
         const s = Story.start(Note, {}).send(NoteMessage.Save())
           .resolve(SaveNoteCommand, NoteMessage.Saved())
         assert.throws(() => s.send(edit), /was emitted/)
-        assert.throws(() => s.emitted(NoteEvents.Saved({ text: "other" })), /^Story\.emitted: /)
+        assert.throws(
+          () => s.emitted(NoteEvents.Saved({ text: "other" })),
+          /^Story\.emitted: /
+        )
         s.emitted(saved)
         assert.lengthOf(s.current.emitted, 0)
         const message = yield* defect(Effect.gen(function*() {
           const story = yield* Story.make(Note, {})
-          story.send(NoteMessage.Save()).resolve(SaveNoteCommand, NoteMessage.Saved())
+          story.send(NoteMessage.Save()).resolve(
+            SaveNoteCommand,
+            NoteMessage.Saved()
+          )
         }))
         assert.match(message, /^Story\.make: .*\n {2}- .*Saved.* was emitted/)
       }))
@@ -1015,7 +1246,9 @@ describe("Story", () => {
         )
         // Giving it a result, or leaving it waiting, discards nothing.
         const given = yield* Story.make(Note, {})
-        given.send(author).given((model) => model, { author: { id: "1", name: "Ann", email: "", likes: 0 } })
+        given.send(author).given((model) => model, {
+          author: { id: "1", name: "Ann", email: "", likes: 0 }
+        })
         const waiting = yield* Story.make(Note, {})
         waiting.send(author).given((model) => model).keepPending("author")
       }))

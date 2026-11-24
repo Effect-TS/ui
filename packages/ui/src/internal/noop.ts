@@ -14,4 +14,5 @@ export const noop: Noop = Object.freeze({ [TypeId]: TypeId })
  *
  * @internal
  */
-export const isNoop = (u: unknown): u is Noop => Predicate.hasProperty(u, TypeId) && u[TypeId] === TypeId
+export const isNoop = (u: unknown): u is Noop =>
+  Predicate.hasProperty(u, TypeId) && u[TypeId] === TypeId

@@ -210,7 +210,15 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { type Attributed, defaults, flag, idOf, noSelect, visuallyHidden, withStyle } from "./internal/attributes.ts"
+import {
+  type Attributed,
+  defaults,
+  flag,
+  idOf,
+  noSelect,
+  visuallyHidden,
+  withStyle
+} from "./internal/attributes.ts"
 import {
   allowedIn,
   allowsKey,
@@ -245,24 +253,37 @@ import { isGecko, isIOS, isWebKit } from "./internal/platform.ts"
 export const NumberFieldFormat = Schema.Struct({
   localeMatcher: Schema.optional(Schema.Literals(["lookup", "best fit"])),
   numberingSystem: Schema.optional(Schema.String),
-  style: Schema.optional(Schema.Literals(["decimal", "percent", "currency", "unit"])),
+  style: Schema.optional(
+    Schema.Literals(["decimal", "percent", "currency", "unit"])
+  ),
   currency: Schema.optional(Schema.String),
-  currencyDisplay: Schema.optional(Schema.Literals(["code", "symbol", "narrowSymbol", "name"])),
+  currencyDisplay: Schema.optional(
+    Schema.Literals(["code", "symbol", "narrowSymbol", "name"])
+  ),
   currencySign: Schema.optional(Schema.Literals(["standard", "accounting"])),
   unit: Schema.optional(Schema.String),
   unitDisplay: Schema.optional(Schema.Literals(["short", "long", "narrow"])),
-  notation: Schema.optional(Schema.Literals(["standard", "scientific", "engineering", "compact"])),
+  notation: Schema.optional(
+    Schema.Literals(["standard", "scientific", "engineering", "compact"])
+  ),
   compactDisplay: Schema.optional(Schema.Literals(["short", "long"])),
-  signDisplay: Schema.optional(Schema.Literals(["auto", "never", "always", "exceptZero", "negative"])),
+  signDisplay: Schema.optional(
+    Schema.Literals(["auto", "never", "always", "exceptZero", "negative"])
+  ),
   useGrouping: Schema.optional(
-    Schema.Union([Schema.Boolean, Schema.Literals(["always", "auto", "min2", "true", "false"])])
+    Schema.Union([
+      Schema.Boolean,
+      Schema.Literals(["always", "auto", "min2", "true", "false"])
+    ])
   ),
   minimumIntegerDigits: Schema.optional(Schema.Number),
   minimumFractionDigits: Schema.optional(Schema.Number),
   maximumFractionDigits: Schema.optional(Schema.Number),
   minimumSignificantDigits: Schema.optional(Schema.Number),
   maximumSignificantDigits: Schema.optional(Schema.Number),
-  roundingPriority: Schema.optional(Schema.Literals(["auto", "morePrecision", "lessPrecision"])),
+  roundingPriority: Schema.optional(
+    Schema.Literals(["auto", "morePrecision", "lessPrecision"])
+  ),
   roundingIncrement: Schema.optional(Schema.Number),
   roundingMode: Schema.optional(
     Schema.Literals([
@@ -277,7 +298,9 @@ export const NumberFieldFormat = Schema.Struct({
       "halfEven"
     ])
   ),
-  trailingZeroDisplay: Schema.optional(Schema.Literals(["auto", "stripIfInteger"]))
+  trailingZeroDisplay: Schema.optional(
+    Schema.Literals(["auto", "stripIfInteger"])
+  )
 })
 
 /**
@@ -445,7 +468,10 @@ export const NumberFieldEvents = UiSchema.TaggedEnum({
     reason: NumberFieldChangeReason,
     direction: Schema.optional(Direction)
   },
-  Committed: { value: Schema.NullOr(Schema.Number), reason: NumberFieldCommitReason }
+  Committed: {
+    value: Schema.NullOr(Schema.Number),
+    reason: NumberFieldCommitReason
+  }
 })
 
 /**
@@ -496,7 +522,12 @@ const NumberFieldModel = Schema.Struct({
 
 type NumberFieldModel = typeof NumberFieldModel.Type
 
-type NumberFieldUpdate = Component.Update<NumberFieldModel, NumberFieldMessage, NumberFieldEvents, NumberFieldProps>
+type NumberFieldUpdate = Component.Update<
+  NumberFieldModel,
+  NumberFieldMessage,
+  NumberFieldEvents,
+  NumberFieldProps
+>
 
 interface Settings extends Range {
   readonly value: number | null
@@ -522,14 +553,18 @@ const settingsOf = (props: NumberFieldProps): Settings => ({
   locked: props.disabled === true || props.readOnly === true
 })
 
-const typingFor = (s: Settings) => typingOf(s.locale, s.format, lowest(s) < 0 || s.allowOutOfRange)
+const typingFor = (s: Settings) =>
+  typingOf(s.locale, s.format, lowest(s) < 0 || s.allowOutOfRange)
 
-const parse = (s: Settings, text: string): number | null => parseNumber(text, s.locale, s.format)
+const parse = (s: Settings, text: string): number | null =>
+  parseNumber(text, s.locale, s.format)
 
 const atBound = (s: Settings, direction: Direction): boolean =>
-  s.value !== null && (direction === 1 ? s.value >= highest(s) : s.value <= lowest(s))
+  s.value !== null &&
+  (direction === 1 ? s.value >= highest(s) : s.value <= lowest(s))
 
-const reasonOf = (direction: Direction) => direction === 1 ? "increment-press" : "decrement-press"
+const reasonOf = (direction: Direction) =>
+  direction === 1 ? "increment-press" : "decrement-press"
 
 interface Change {
   readonly model: NumberFieldModel
@@ -538,40 +573,64 @@ interface Change {
   readonly fired: boolean
 }
 
-const enteredBy = (reason: NumberFieldChangeReason): boolean => reason.startsWith("input-") || reason === "none"
+const enteredBy = (reason: NumberFieldChangeReason): boolean =>
+  reason.startsWith("input-") || reason === "none"
 
 const settled = (
   s: Settings,
   asked: number | null,
   entered: boolean,
-  options: { readonly step?: number | undefined; readonly small?: boolean | undefined } = {}
+  options: {
+    readonly step?: number | undefined
+    readonly small?: boolean | undefined
+  } = {}
 ): number | null =>
   asked === null
     ? null
-    : validated(asked, s, { step: options.step, small: options.small === true, clamp: !s.allowOutOfRange || !entered })
+    : validated(asked, s, {
+      step: options.step,
+      small: options.small === true,
+      clamp: !s.allowOutOfRange || !entered
+    })
 
 const setValue = (
   model: NumberFieldModel,
   s: Settings,
   asked: number | null,
   reason: NumberFieldChangeReason,
-  options: { readonly step?: number; readonly small?: boolean; readonly typed?: boolean } = {}
+  options: {
+    readonly step?: number
+    readonly small?: boolean
+    readonly typed?: boolean
+  } = {}
 ): Change => {
   const entered = enteredBy(reason)
   const value = settled(s, asked, entered, options)
-  const fired = value !== s.value || (entered && (asked !== s.value || options.typed === true))
-  const direction = options.step === undefined ? undefined : options.step < 0 ? -1 : 1
+  const fired = value !== s.value ||
+    (entered && (asked !== s.value || options.typed === true))
+  const direction = options.step === undefined
+    ? undefined
+    : options.step < 0
+    ? -1
+    : 1
   return {
     model: UiStruct.evolve(model, { pending: (pending) => pending || fired }),
     events: fired
-      ? [NumberFieldEvents.Updated(direction === undefined ? { value, reason } : { value, reason, direction })]
+      ? [
+        NumberFieldEvents.Updated(
+          direction === undefined
+            ? { value, reason }
+            : { value, reason, direction }
+        )
+      ]
       : [],
     value,
     fired
   }
 }
 
-const amountOf = (s: Settings, { alt, shift }: Modifiers): number => alt ? s.smallStep : shift ? s.largeStep : s.step
+const amountOf = (s: Settings, { alt, shift }: Modifiers): number =>
+  alt ? s.smallStep : shift ? s.largeStep : s.step
 
 const stepBy = (
   model: NumberFieldModel,
@@ -583,18 +642,25 @@ const stepBy = (
 ): Change => {
   if (from === null) return setValue(model, s, 0, reason)
   const size = amountOf(s, modifiers)
-  return setValue(model, s, from + amount * size, reason, { step: size * Math.sign(amount), small: modifiers.alt })
+  return setValue(model, s, from + amount * size, reason, {
+    step: size * Math.sign(amount),
+    small: modifiers.alt
+  })
 }
 
 const shown = (model: NumberFieldModel, s: Settings): number | null =>
   (model.text === null ? null : parse(s, model.text)) ?? s.value
 
 const apply = ($: NumberFieldUpdate, change: Change) =>
-  change.events.length === 0 ? change.model : $.set(change.model).emit(...change.events)
+  change.events.length === 0
+    ? change.model
+    : $.set(change.model).emit(...change.events)
 
 const commit = (
   $: NumberFieldUpdate,
-  change: Pick<Change, "model" | "value"> & { readonly events?: ReadonlyArray<NumberFieldEvents> },
+  change: Pick<Change, "model" | "value"> & {
+    readonly events?: ReadonlyArray<NumberFieldEvents>
+  },
   reason: NumberFieldCommitReason
 ) =>
   $.set(change.model).evolve({ pending: false }).emit(
@@ -602,8 +668,11 @@ const commit = (
     NumberFieldEvents.Committed({ value: change.value, reason })
   )
 
-const settle = ($: NumberFieldUpdate, change: Change, reason: NumberFieldCommitReason) =>
-  change.fired ? commit($, change, reason) : change.model
+const settle = (
+  $: NumberFieldUpdate,
+  change: Change,
+  reason: NumberFieldCommitReason
+) => change.fired ? commit($, change, reason) : change.model
 
 const press = (
   model: NumberFieldModel,
@@ -612,9 +681,18 @@ const press = (
   modifiers: Modifiers,
   reason: NumberFieldChangeReason,
   from: number | null = shown(model, s)
-): Change => stepBy(UiStruct.evolve(model, { text: null }), s, direction, modifiers, reason, from)
+): Change =>
+  stepBy(
+    UiStruct.evolve(model, { text: null }),
+    s,
+    direction,
+    modifiers,
+    reason,
+    from
+  )
 
-const touchLike = (pointerType: string): boolean => pointerType === "touch" || pointerType === "pen"
+const touchLike = (pointerType: string): boolean =>
+  pointerType === "touch" || pointerType === "pen"
 
 const focusAtEnd = (input: HTMLInputElement) => {
   const length = input.value.length
@@ -642,41 +720,65 @@ const TrackInput = Mount.makeStream(
         const document = node.ownerDocument
         let current = args
         let wheel: AbortController | undefined
-        if (isIOS(document.defaultView)) Queue.offerUnsafe(queue, NumberFieldMessage.DetectedIOS())
+        if (isIOS(document.defaultView)) {
+          Queue.offerUnsafe(queue, NumberFieldMessage.DetectedIOS())
+        }
         const onKeyDown = (event: KeyboardEvent) => {
-          if (event.defaultPrevented || current.locked) return
+          if (event.defaultPrevented || current.locked) {
+            return
+          }
           const stroke = {
             key: event.key,
             text: node.value,
             start: node.selectionStart,
             end: node.selectionEnd,
             // Safari doesn't set isComposing on the key that composes.
-            modified: event.isComposing || event.keyCode === 229 || event.altKey || event.ctrlKey || event.metaKey
+            modified: event.isComposing || event.keyCode === 229 ||
+              event.altKey || event.ctrlKey || event.metaKey
           }
           if (!allowsKey(stroke, current)) event.preventDefault()
         }
         const onPaste = (event: ClipboardEvent) => {
           if (event.defaultPrevented || current.locked) return
-          const pasted = allowedIn(event.clipboardData?.getData("text/plain") ?? "", current)
+          const pasted = allowedIn(
+            event.clipboardData?.getData("text/plain") ?? "",
+            current
+          )
           event.preventDefault()
           if (pasted === "") return
           const start = node.selectionStart ?? node.value.length
           const end = node.selectionEnd ?? start
-          const text = node.value.slice(0, start) + pasted + node.value.slice(end)
-          if (parseNumber(text, current.locale, current.format as Format | undefined) === null) return
+          const text = node.value.slice(0, start) + pasted +
+            node.value.slice(end)
+          if (
+            parseNumber(
+              text,
+              current.locale,
+              current.format as Format | undefined
+            ) === null
+          ) return
           node.setRangeText(pasted, start, end, "end")
-          Queue.offerUnsafe(queue, NumberFieldMessage.PastedText({ value: node.value }))
+          Queue.offerUnsafe(
+            queue,
+            NumberFieldMessage.PastedText({ value: node.value })
+          )
         }
         const onWheel = (event: WheelEvent) => {
           if (event.ctrlKey || document.activeElement !== node) return
           // Some browsers turn Shift with the wheel into a horizontal scroll.
           const horizontal = Math.abs(event.deltaX) > Math.abs(event.deltaY)
-          const delta = event.shiftKey && horizontal ? event.deltaX : event.deltaY
+          const delta = event.shiftKey && horizontal
+            ? event.deltaX
+            : event.deltaY
           if (delta === 0 || (!event.shiftKey && horizontal)) return
           event.preventDefault()
           Queue.offerUnsafe(
             queue,
-            NumberFieldMessage.TurnedWheel({ direction: delta > 0 ? -1 : 1, shift: event.shiftKey, alt: event.altKey })
+            NumberFieldMessage.TurnedWheel({
+              direction: delta > 0 ? -1 : 1,
+              shift: event.shiftKey,
+              alt: event.altKey
+            })
           )
         }
         const listening = new AbortController()
@@ -699,7 +801,10 @@ const TrackInput = Mount.makeStream(
             const listens = next.wheel && !next.locked
             if (listens && wheel === undefined) {
               wheel = new AbortController()
-              node.addEventListener("wheel", onWheel, { passive: false, signal: wheel.signal })
+              node.addEventListener("wheel", onWheel, {
+                passive: false,
+                signal: wheel.signal
+              })
             } else if (!listens && wheel !== undefined) {
               wheel.abort()
               wheel = undefined
@@ -740,31 +845,49 @@ const TrackStepper = Mount.makeStream(
           menu?.abort()
           moves = 0
         }
-        const held = () => Queue.offerUnsafe(queue, NumberFieldMessage.HeldStepper({ direction, ...modifiers }))
+        const held = () =>
+          Queue.offerUnsafe(
+            queue,
+            NumberFieldMessage.HeldStepper({ direction, ...modifiers })
+          )
         const finish = (event: PointerEvent) => {
           if (event.pointerId !== pointerId) return
           release?.abort()
           release = undefined
           pressed = false
           stop()
-          Queue.offerUnsafe(queue, NumberFieldMessage.ReleasedStepper({ direction }))
+          Queue.offerUnsafe(
+            queue,
+            NumberFieldMessage.ReleasedStepper({ direction })
+          )
         }
         const start = (first: boolean, focus: boolean) => {
           stop()
           menu = new AbortController()
           // A touch held just outside the button would open the context menu.
-          view.addEventListener("contextmenu", (event) => event.preventDefault(), { signal: menu.signal })
+          view.addEventListener("contextmenu", (event) =>
+            event.preventDefault(), { signal: menu.signal })
           release?.abort()
           release = new AbortController()
           view.addEventListener("pointerup", finish, { signal: release.signal })
-          if (first) Queue.offerUnsafe(queue, NumberFieldMessage.PressedStepper({ direction, focus, ...modifiers }))
-          else held()
+          if (first) {
+            Queue.offerUnsafe(
+              queue,
+              NumberFieldMessage.PressedStepper({
+                direction,
+                focus,
+                ...modifiers
+              })
+            )
+          } else held()
           delay = setTimeout(() => {
             repeat = setInterval(held, 60)
           }, 400)
         }
         const onPointerDown = (event: PointerEvent) => {
-          if (event.defaultPrevented || event.button !== 0 || disabled) return
+          if (event.defaultPrevented || event.button !== 0 || disabled) {
+            return
+          }
           modifiers = { shift: event.shiftKey, alt: event.altKey }
           pointerType = event.pointerType
           pointerId = event.pointerId
@@ -791,33 +914,60 @@ const TrackStepper = Mount.makeStream(
           }, 50)
         }
         const onPointerUp = (event: PointerEvent) => {
-          if (touchLike(event.pointerType)) pressed = false
+          if (touchLike(event.pointerType)) {
+            pressed = false
+          }
         }
         const onPointerCancel = (event: PointerEvent) => {
-          if (event.pointerId !== pointerId) return
-          if (release !== undefined) return finish(event)
+          if (event.pointerId !== pointerId) {
+            return
+          }
+          if (release !== undefined) {
+            return finish(event)
+          }
           pressed = false
           stop()
         }
         const onPointerMove = (event: PointerEvent) => {
-          if (disabled || !touchLike(event.pointerType) || !pressed) return
+          if (disabled || !touchLike(event.pointerType) || !pressed) {
+            return
+          }
           moves += 1
-          if ((down.x - event.clientX) ** 2 + (down.y - event.clientY) ** 2 > 64) stop()
+          if (
+            (down.x - event.clientX) ** 2 + (down.y - event.clientY) ** 2 > 64
+          ) {
+            stop()
+          }
         }
         const onMouseEnter = (event: MouseEvent) => {
-          if (event.defaultPrevented || disabled || !pressed || touching || touchLike(pointerType)) return
+          if (
+            event.defaultPrevented || disabled || !pressed || touching ||
+            touchLike(pointerType)
+          ) {
+            return
+          }
           start(false, false)
         }
         const onMouseOut = () => {
-          if (!touching) stop()
+          if (!touching) {
+            stop()
+          }
         }
         const onClick = (event: MouseEvent) => {
-          if (event.defaultPrevented || disabled) return
+          if (event.defaultPrevented || disabled) {
+            return
+          }
           // A mouse press stepped on the way down, and a held touch already did.
-          if (touchLike(pointerType) ? ignoreClick : event.detail !== 0) return
+          if (touchLike(pointerType) ? ignoreClick : event.detail !== 0) {
+            return
+          }
           Queue.offerUnsafe(
             queue,
-            NumberFieldMessage.ClickedStepper({ direction, shift: event.shiftKey, alt: event.altKey })
+            NumberFieldMessage.ClickedStepper({
+              direction,
+              shift: event.shiftKey,
+              alt: event.altKey
+            })
           )
         }
         const onTouch = (event: TouchEvent) => {
@@ -827,9 +977,18 @@ const TrackStepper = Mount.makeStream(
         yield* Effect.acquireRelease(
           Effect.sync(() => {
             const { signal } = listening
-            node.addEventListener("touchstart", onTouch, { passive: true, signal })
-            node.addEventListener("touchend", onTouch, { passive: true, signal })
-            node.addEventListener("touchcancel", onTouch, { passive: true, signal })
+            node.addEventListener("touchstart", onTouch, {
+              passive: true,
+              signal
+            })
+            node.addEventListener("touchend", onTouch, {
+              passive: true,
+              signal
+            })
+            node.addEventListener("touchcancel", onTouch, {
+              passive: true,
+              signal
+            })
             view.addEventListener("pointercancel", onPointerCancel, { signal })
             node.addEventListener("pointerdown", onPointerDown, { signal })
             node.addEventListener("pointerup", onPointerUp, { signal })
@@ -849,7 +1008,9 @@ const TrackStepper = Mount.makeStream(
         yield* Stream.runForEach(changes, (next) =>
           Effect.sync(() => {
             disabled = next.disabled
-            if (!disabled) return
+            if (!disabled) {
+              return
+            }
             pressed = false
             touching = false
             pointerType = ""
@@ -880,224 +1041,265 @@ const TrackScrub = Mount.makeStream(
     }
   },
   (element: unknown, args, changes) =>
-    Stream.callback<NumberFieldMessage>((queue) =>
-      Effect.gen(function*() {
-        const node = element as HTMLElement
-        const document = node.ownerDocument
-        const view = document.defaultView
-        if (view === null) return
-        const gecko = isGecko(view)
-        const webkit = isWebKit(view)
-        let current = args
-        let scrubbing = false
-        let moved = false
-        let clicked = false
-        let target: EventTarget | null = null
-        let travelled = 0
-        let pointerId = -1
-        let mounted = true
-        let asked = false
-        let client = { x: 0, y: 0 }
-        let pointer = { x: 0, y: 0 }
-        let dragging: AbortController | undefined
-        let exit: ReturnType<typeof setTimeout> | undefined
-        let click: ReturnType<typeof setTimeout> | undefined
-        if (args.scrubbing) Queue.offerUnsafe(queue, NumberFieldMessage.EndedScrub({ commit: false }))
-        const unlock = () => {
-          try {
-            document.exitPointerLock()
-          } catch {
-            return
+    Stream.callback<NumberFieldMessage>(Effect.fnUntraced(function*(queue) {
+      const node = element as HTMLElement
+      const document = node.ownerDocument
+      const view = document.defaultView
+      if (view === null) return
+      const gecko = isGecko(view)
+      const webkit = isWebKit(view)
+      let current = args
+      let scrubbing = false
+      let moved = false
+      let clicked = false
+      let target: EventTarget | null = null
+      let travelled = 0
+      let pointerId = -1
+      let mounted = true
+      let asked = false
+      let client = { x: 0, y: 0 }
+      let pointer = { x: 0, y: 0 }
+      let dragging: AbortController | undefined
+      let exit: ReturnType<typeof setTimeout> | undefined
+      let click: ReturnType<typeof setTimeout> | undefined
+      if (args.scrubbing) {
+        Queue.offerUnsafe(
+          queue,
+          NumberFieldMessage.EndedScrub({ commit: false })
+        )
+      }
+      const unlock = () => {
+        try {
+          document.exitPointerLock()
+        } catch {
+          return
+        }
+      }
+      const place = () => {
+        const cursor = document.getElementById(current.cursorId)
+        if (cursor === null) return
+        const x = pointer.x - cursor.offsetWidth / 2
+        const y = pointer.y - cursor.offsetHeight / 2
+        const scale = 1 / (view.visualViewport?.scale ?? 1)
+        cursor.style.transform = "translate3d(" + x + "px," + y +
+          "px,0) scale(" + scale + ")"
+      }
+      const bounds = () => {
+        if (current.teleportDistance !== undefined) {
+          const rect = node.getBoundingClientRect()
+          const half = current.teleportDistance / 2
+          return {
+            left: rect.left - half,
+            top: rect.top - half,
+            right: rect.right + half,
+            bottom: rect.bottom + half
           }
         }
-        const place = () => {
-          const cursor = document.getElementById(current.cursorId)
-          if (cursor === null) return
-          const x = pointer.x - cursor.offsetWidth / 2
-          const y = pointer.y - cursor.offsetHeight / 2
-          const scale = 1 / (view.visualViewport?.scale ?? 1)
-          cursor.style.transform = "translate3d(" + x + "px," + y + "px,0) scale(" + scale + ")"
-        }
-        const bounds = () => {
-          if (current.teleportDistance !== undefined) {
-            const rect = node.getBoundingClientRect()
-            const half = current.teleportDistance / 2
-            return {
-              left: rect.left - half,
-              top: rect.top - half,
-              right: rect.right + half,
-              bottom: rect.bottom + half
-            }
+        const visual = view.visualViewport
+        return visual == null
+          ? {
+            left: 0,
+            top: 0,
+            right: document.documentElement.clientWidth,
+            bottom: document.documentElement.clientHeight
           }
-          const visual = view.visualViewport
-          return visual == null
-            ? {
-              left: 0,
-              top: 0,
-              right: document.documentElement.clientWidth,
-              bottom: document.documentElement.clientHeight
-            }
-            : {
-              left: visual.offsetLeft,
-              top: visual.offsetTop,
-              right: visual.offsetLeft + visual.width,
-              bottom: visual.offsetTop + visual.height
-            }
-        }
-        const stop = (commit: boolean) => {
-          scrubbing = false
-          dragging?.abort()
-          Queue.offerUnsafe(queue, NumberFieldMessage.EndedScrub({ commit }))
-        }
-        const onUp = (event: PointerEvent) => {
-          if (!scrubbing || event.pointerId !== pointerId) return
-          const pressedOn = moved ? null : target
-          stop(true)
-          const release = () => {
-            exit = undefined
-            unlock()
-            // The click of a locked pointer goes to the element that holds
-            // the lock, so one that didn't move is sent on to what it pressed.
-            if (pressedOn !== null) {
-              click = setTimeout(() => {
-                if (!clicked) pressedOn.dispatchEvent(new view.MouseEvent("click", { bubbles: true, cancelable: true }))
-              }, 0)
-            }
+          : {
+            left: visual.offsetLeft,
+            top: visual.offsetTop,
+            right: visual.offsetLeft + visual.width,
+            bottom: visual.offsetTop + visual.height
           }
-          // Firefox keeps the lock of a short click unless it is given a moment.
-          if (gecko) exit = setTimeout(release, 20)
-          else release()
-        }
-        const onCancel = (event: PointerEvent) => {
-          if (!scrubbing || event.pointerId !== pointerId) return
-          stop(true)
-          unlock()
-        }
-        const onMove = (event: PointerEvent) => {
-          if (!scrubbing || event.pointerId !== pointerId) return
-          event.preventDefault()
-          // A locked pointer reports only how far it moved. Without the lock
-          // WebKit reports no movement, so the positions are compared.
-          const locked = document.pointerLockElement != null
-          const x = locked ? event.movementX : event.clientX - client.x
-          const y = locked ? event.movementY : event.clientY - client.y
-          client = { x: event.clientX, y: event.clientY }
-          if (locked) {
-            const rect = bounds()
-            pointer = {
-              x: wrap(Math.round(pointer.x + x), rect.left, rect.right),
-              y: wrap(Math.round(pointer.y + y), rect.top, rect.bottom)
-            }
-            place()
-          } else {
-            pointer = client
-          }
-          travelled += current.vertical ? y : x
-          if (Math.abs(travelled) < current.pixelSensitivity) return
-          travelled = 0
-          moved = true
-          const amount = current.vertical ? -y : x
-          if (amount !== 0) {
-            Queue.offerUnsafe(
-              queue,
-              NumberFieldMessage.MovedScrub({ amount, shift: event.shiftKey, alt: event.altKey })
-            )
-          }
-        }
-        const onDown = (event: PointerEvent) => {
-          if (event.defaultPrevented || current.locked || event.button !== 0) return
-          const mouse = event.pointerType === "mouse"
-          if (mouse) event.preventDefault()
-          scrubbing = true
-          moved = false
-          clicked = false
-          clearTimeout(click)
-          clearTimeout(exit)
+      }
+      const stop = (commit: boolean) => {
+        scrubbing = false
+        dragging?.abort()
+        Queue.offerUnsafe(queue, NumberFieldMessage.EndedScrub({ commit }))
+      }
+      const onUp = (event: PointerEvent) => {
+        if (!scrubbing || event.pointerId !== pointerId) return
+        const pressedOn = moved ? null : target
+        stop(true)
+        const release = () => {
           exit = undefined
-          target = event.composedPath()[0] ?? event.target
-          travelled = 0
-          pointerId = event.pointerId
-          client = { x: event.clientX, y: event.clientY }
-          pointer = client
-          dragging?.abort()
-          dragging = new AbortController()
-          const options = { capture: true, signal: dragging.signal }
-          view.addEventListener("pointerup", onUp, options)
-          view.addEventListener("pointercancel", onCancel, options)
-          view.addEventListener("pointermove", onMove, options)
-          Queue.offerUnsafe(queue, NumberFieldMessage.StartedScrub({ focus: mouse }))
-          // WebKit shifts the page for the notice it shows with the lock.
-          if (event.pointerType === "touch" || webkit) return
-          if (document.pointerLockElement != null) {
-            return Queue.offerUnsafe(queue, NumberFieldMessage.ChangedPointerLock({ locked: true }))
-          }
-          asked = true
-          try {
-            Promise.resolve(document.body.requestPointerLock()).then(() => {
-              if (!mounted) unlock()
-            }, onLockError)
-          } catch {
-            asked = false
+          unlock()
+          // The click of a locked pointer goes to the element that holds
+          // the lock, so one that didn't move is sent on to what it pressed.
+          if (pressedOn !== null) {
+            click = setTimeout(() => {
+              if (!clicked) {
+                pressedOn.dispatchEvent(
+                  new view.MouseEvent("click", {
+                    bubbles: true,
+                    cancelable: true
+                  })
+                )
+              }
+            }, 0)
           }
         }
-        const onLockError = () => {
+        // Firefox keeps the lock of a short click unless it is given a moment.
+        if (gecko) exit = setTimeout(release, 20)
+        else release()
+      }
+      const onCancel = (event: PointerEvent) => {
+        if (!scrubbing || event.pointerId !== pointerId) return
+        stop(true)
+        unlock()
+      }
+      const onMove = (event: PointerEvent) => {
+        if (!scrubbing || event.pointerId !== pointerId) return
+        event.preventDefault()
+        // A locked pointer reports only how far it moved. Without the lock
+        // WebKit reports no movement, so the positions are compared.
+        const locked = document.pointerLockElement != null
+        const x = locked ? event.movementX : event.clientX - client.x
+        const y = locked ? event.movementY : event.clientY - client.y
+        client = { x: event.clientX, y: event.clientY }
+        if (locked) {
+          const rect = bounds()
+          pointer = {
+            x: wrap(Math.round(pointer.x + x), rect.left, rect.right),
+            y: wrap(Math.round(pointer.y + y), rect.top, rect.bottom)
+          }
+          place()
+        } else {
+          pointer = client
+        }
+        travelled += current.vertical ? y : x
+        if (Math.abs(travelled) < current.pixelSensitivity) return
+        travelled = 0
+        moved = true
+        const amount = current.vertical ? -y : x
+        if (amount !== 0) {
+          Queue.offerUnsafe(
+            queue,
+            NumberFieldMessage.MovedScrub({
+              amount,
+              shift: event.shiftKey,
+              alt: event.altKey
+            })
+          )
+        }
+      }
+      const onDown = (event: PointerEvent) => {
+        if (
+          event.defaultPrevented || current.locked || event.button !== 0
+        ) return
+        const mouse = event.pointerType === "mouse"
+        if (mouse) event.preventDefault()
+        scrubbing = true
+        moved = false
+        clicked = false
+        clearTimeout(click)
+        clearTimeout(exit)
+        exit = undefined
+        target = event.composedPath()[0] ?? event.target
+        travelled = 0
+        pointerId = event.pointerId
+        client = { x: event.clientX, y: event.clientY }
+        pointer = client
+        dragging?.abort()
+        dragging = new AbortController()
+        const options = { capture: true, signal: dragging.signal }
+        view.addEventListener("pointerup", onUp, options)
+        view.addEventListener("pointercancel", onCancel, options)
+        view.addEventListener("pointermove", onMove, options)
+        Queue.offerUnsafe(
+          queue,
+          NumberFieldMessage.StartedScrub({ focus: mouse })
+        )
+        // WebKit shifts the page for the notice it shows with the lock.
+        if (event.pointerType === "touch" || webkit) return
+        if (document.pointerLockElement != null) {
+          return Queue.offerUnsafe(
+            queue,
+            NumberFieldMessage.ChangedPointerLock({ locked: true })
+          )
+        }
+        asked = true
+        try {
+          Promise.resolve(document.body.requestPointerLock()).then(() => {
+            if (!mounted) unlock()
+          }, onLockError)
+        } catch {
           asked = false
         }
-        const onLockChange = () => {
-          if (document.pointerLockElement == null) {
-            asked = false
-            if (scrubbing) Queue.offerUnsafe(queue, NumberFieldMessage.ChangedPointerLock({ locked: false }))
-          } else if (asked) {
-            if (scrubbing) Queue.offerUnsafe(queue, NumberFieldMessage.ChangedPointerLock({ locked: true }))
-            else unlock()
+      }
+      const onLockError = () => {
+        asked = false
+      }
+      const onLockChange = () => {
+        if (document.pointerLockElement == null) {
+          asked = false
+          if (scrubbing) {
+            Queue.offerUnsafe(
+              queue,
+              NumberFieldMessage.ChangedPointerLock({ locked: false })
+            )
           }
+        } else if (asked) {
+          if (scrubbing) {
+            Queue.offerUnsafe(
+              queue,
+              NumberFieldMessage.ChangedPointerLock({ locked: true })
+            )
+          } else unlock()
         }
-        const onTouchStart = (event: TouchEvent) => {
-          if (!current.locked && event.touches.length === 1) event.preventDefault()
+      }
+      const onTouchStart = (event: TouchEvent) => {
+        if (!current.locked && event.touches.length === 1) {
+          event.preventDefault()
         }
-        const onClick = () => {
-          clicked = true
-        }
-        const listening = new AbortController()
-        yield* Effect.acquireRelease(
+      }
+      const onClick = () => {
+        clicked = true
+      }
+      const listening = new AbortController()
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          const { signal } = listening
+          liveScrubs.add(args.cursorId)
+          node.addEventListener("pointerdown", onDown, { signal })
+          node.addEventListener("touchstart", onTouchStart, {
+            passive: false,
+            signal
+          })
+          node.addEventListener("click", onClick, { capture: true, signal })
+          document.addEventListener("pointerlockchange", onLockChange, {
+            signal
+          })
+          document.addEventListener("pointerlockerror", onLockError, {
+            signal
+          })
+        }),
+        () =>
           Effect.sync(() => {
-            const { signal } = listening
-            liveScrubs.add(args.cursorId)
-            node.addEventListener("pointerdown", onDown, { signal })
-            node.addEventListener("touchstart", onTouchStart, { passive: false, signal })
-            node.addEventListener("click", onClick, { capture: true, signal })
-            document.addEventListener("pointerlockchange", onLockChange, { signal })
-            document.addEventListener("pointerlockerror", onLockError, { signal })
-          }),
-          () =>
-            Effect.sync(() => {
-              mounted = false
-              liveScrubs.delete(args.cursorId)
-              listening.abort()
-              const pendingExit = exit !== undefined
-              clearTimeout(exit)
-              exit = undefined
-              clearTimeout(click)
-              dragging?.abort()
-              if (scrubbing || pendingExit) unlock()
-              if (scrubbing) scrubRoots.get(args.cursorId)?.()
-            })
-        )
-        yield* Stream.runForEach(changes, (next) =>
-          Effect.sync(() => {
-            current = next
-            if (!scrubbing) return
-            if (next.locked) {
-              stop(false)
-              unlock()
-            } else if (next.cursor) {
-              place()
-              // The cursor has no size until the popover shows.
-              view.requestAnimationFrame(place)
-            }
-          })).pipe(Effect.forkScoped)
-      })
-    )
+            mounted = false
+            liveScrubs.delete(args.cursorId)
+            listening.abort()
+            const pendingExit = exit !== undefined
+            clearTimeout(exit)
+            exit = undefined
+            clearTimeout(click)
+            dragging?.abort()
+            if (scrubbing || pendingExit) unlock()
+            if (scrubbing) scrubRoots.get(args.cursorId)?.()
+          })
+      )
+      yield* Stream.runForEach(changes, (next) =>
+        Effect.sync(() => {
+          current = next
+          if (!scrubbing) return
+          if (next.locked) {
+            stop(false)
+            unlock()
+          } else if (next.cursor) {
+            place()
+            // The cursor has no size until the popover shows.
+            view.requestAnimationFrame(place)
+          }
+        })).pipe(Effect.forkScoped)
+    }))
 )
 
 const WatchScrub = Mount.makeStream(
@@ -1107,7 +1309,11 @@ const WatchScrub = Mount.makeStream(
     Stream.callback<NumberFieldMessage>((queue) =>
       Effect.acquireRelease(
         Effect.sync(() => {
-          const end = () => Queue.offerUnsafe(queue, NumberFieldMessage.EndedScrub({ commit: false }))
+          const end = () =>
+            Queue.offerUnsafe(
+              queue,
+              NumberFieldMessage.EndedScrub({ commit: false })
+            )
           scrubRoots.set(args.cursorId, end)
           if (!liveScrubs.has(args.cursorId)) end()
         }),
@@ -1119,7 +1325,8 @@ const WatchScrub = Mount.makeStream(
     )
 )
 
-const cursorBox = "position:fixed;inset:0 auto auto 0;margin:0;pointer-events:none"
+const cursorBox =
+  "position:fixed;inset:0 auto auto 0;margin:0;pointer-events:none"
 
 const inputDefaults = {
   autocomplete: "off",
@@ -1128,7 +1335,10 @@ const inputDefaults = {
   "aria-roledescription": "Number field"
 }
 
-const stepperDefaults = { [1]: { "aria-label": "Increase" }, [-1]: { "aria-label": "Decrease" } }
+const stepperDefaults = {
+  [1]: { "aria-label": "Increase" },
+  [-1]: { "aria-label": "Decrease" }
+}
 
 /**
  * A headless number field. Call it with the consumer's `h`, the `props`, and
@@ -1178,25 +1388,52 @@ export const NumberField = Component.define({
   restore: false,
   elements: Html
 }).make({
-  init: () => ({ text: null, pending: false, scrubbing: false, cursor: false, focus: 0, ios: false }),
+  init: () => ({
+    text: null,
+    pending: false,
+    scrubbing: false,
+    cursor: false,
+    focus: 0,
+    ios: false
+  }),
   update: {
     UpdatedInput: ($, { value }) => {
       const s = settingsOf($.props)
       if (s.locked) return $.model
       if (value.trim() === "") {
-        return apply($, setValue(UiStruct.evolve($.model, { text: value }), s, null, "input-clear", { typed: true }))
+        return apply(
+          $,
+          setValue(
+            UiStruct.evolve($.model, { text: value }),
+            s,
+            null,
+            "input-clear",
+            { typed: true }
+          )
+        )
       }
       if (!allowsText(value, typingFor(s))) return $.model
       const typed = UiStruct.evolve($.model, { text: value })
       const parsed = parse(s, value)
-      return parsed === null ? typed : apply($, setValue(typed, s, parsed, "input-change", { typed: true }))
+      return parsed === null
+        ? typed
+        : apply($, setValue(typed, s, parsed, "input-change", { typed: true }))
     },
     PastedText: ($, { value }) => {
       const s = settingsOf($.props)
       const parsed = s.locked ? null : parse(s, value)
       return parsed === null
         ? $.model
-        : apply($, setValue(UiStruct.evolve($.model, { text: value }), s, parsed, "input-paste", { typed: true }))
+        : apply(
+          $,
+          setValue(
+            UiStruct.evolve($.model, { text: value }),
+            s,
+            parsed,
+            "input-paste",
+            { typed: true }
+          )
+        )
     },
     BlurredInput: ($, { disabled }) => {
       const s = settingsOf($.props)
@@ -1215,9 +1452,17 @@ export const NumberField = Component.define({
       // The parent was asked for the typed value as it was typed. One that
       // didn't store it is asked once more, with no commit of a value it may
       // decline again.
-      const declined = typed && change.fired && s.value !== settled(s, read, true)
-      if (declined) return apply($, { ...change, model: UiStruct.evolve(change.model, { pending: false }) })
-      return typed || $.model.pending || change.fired ? commit($, change, reason) : apply($, change)
+      const declined = typed && change.fired &&
+        s.value !== settled(s, read, true)
+      if (declined) {
+        return apply($, {
+          ...change,
+          model: UiStruct.evolve(change.model, { pending: false })
+        })
+      }
+      return typed || $.model.pending || change.fired
+        ? commit($, change, reason)
+        : apply($, change)
     },
     PressedKey: ($, { key, ...modifiers }) => {
       const s = settingsOf($.props)
@@ -1234,20 +1479,47 @@ export const NumberField = Component.define({
     TurnedWheel: ($, { direction, ...modifiers }) => {
       const s = settingsOf($.props)
       if (s.locked || $.props.allowWheelScrub !== true) return $.model
-      return settle($, stepBy(UiStruct.evolve($.model, { text: null }), s, direction, modifiers, "wheel"), "wheel")
+      return settle(
+        $,
+        stepBy(
+          UiStruct.evolve($.model, { text: null }),
+          s,
+          direction,
+          modifiers,
+          "wheel"
+        ),
+        "wheel"
+      )
     },
     DetectedIOS: ($) => $.evolve({ ios: true }),
     PressedStepper: ($, { direction, focus, ...modifiers }) => {
       const s = settingsOf($.props)
       if (s.locked || atBound(s, direction)) return $.model
-      const change = press($.model, s, direction, modifiers, reasonOf(direction))
-      return apply($, focus ? { ...change, model: UiStruct.evolve(change.model, { focus: (n) => n + 1 }) } : change)
+      const change = press(
+        $.model,
+        s,
+        direction,
+        modifiers,
+        reasonOf(direction)
+      )
+      return apply(
+        $,
+        focus
+          ? {
+            ...change,
+            model: UiStruct.evolve(change.model, { focus: (n) => n + 1 })
+          }
+          : change
+      )
     },
     HeldStepper: ($, { direction, ...modifiers }) => {
       const s = settingsOf($.props)
       return s.locked || atBound(s, direction)
         ? $.model
-        : apply($, stepBy($.model, s, direction, modifiers, reasonOf(direction)))
+        : apply(
+          $,
+          stepBy($.model, s, direction, modifiers, reasonOf(direction))
+        )
     },
     ReleasedStepper: ($, { direction }) => {
       const s = settingsOf($.props)
@@ -1259,32 +1531,61 @@ export const NumberField = Component.define({
       const s = settingsOf($.props)
       if (s.locked || atBound(s, direction)) return $.model
       const from = shown($.model, s)
-      const change = press($.model, s, direction, modifiers, reasonOf(direction), from)
-      return change.value === from ? apply($, change) : commit($, change, reasonOf(direction))
+      const change = press(
+        $.model,
+        s,
+        direction,
+        modifiers,
+        reasonOf(direction),
+        from
+      )
+      return change.value === from
+        ? apply($, change)
+        : commit($, change, reasonOf(direction))
     },
     StartedScrub: ($, { focus }) =>
       settingsOf($.props).locked
         ? $.model
-        : $.evolve({ scrubbing: true, cursor: false, focus: focus ? $.model.focus + 1 : $.model.focus }),
-    ChangedPointerLock: ($, { locked }) => $.model.scrubbing ? $.evolve({ cursor: locked }) : $.model,
+        : $.evolve({
+          scrubbing: true,
+          cursor: false,
+          focus: focus ? $.model.focus + 1 : $.model.focus
+        }),
+    ChangedPointerLock: ($, { locked }) =>
+      $.model.scrubbing ? $.evolve({ cursor: locked }) : $.model,
     MovedScrub: ($, { amount, ...modifiers }) => {
       const s = settingsOf($.props)
-      return !$.model.scrubbing || s.locked || amount * amountOf(s, modifiers) === 0
+      return !$.model.scrubbing || s.locked ||
+          amount * amountOf(s, modifiers) === 0
         ? $.model
-        : apply($, stepBy(UiStruct.evolve($.model, { text: null }), s, amount, modifiers, "scrub"))
+        : apply(
+          $,
+          stepBy(
+            UiStruct.evolve($.model, { text: null }),
+            s,
+            amount,
+            modifiers,
+            "scrub"
+          )
+        )
     },
     EndedScrub: ($, { commit: done }) => {
       if (!$.model.scrubbing) return $.model
       const s = settingsOf($.props)
       const next = UiStruct.evolve($.model, { scrubbing: false, cursor: false })
-      return done && !s.locked ? commit($, { model: next, value: s.value }, "scrub") : next
+      return done && !s.locked
+        ? commit($, { model: next, value: s.value }, "scrub")
+        : next
     },
     FocusedFormInput: ($) => $.evolve({ focus: (n) => n + 1 }),
     Autofilled: ($, { value }) => {
       const s = settingsOf($.props)
       if (s.locked) return $.model
       const filled = value.trim() === "" ? Number.NaN : Number(value)
-      return apply($, setValue($.model, s, Number.isNaN(filled) ? null : filled, "none"))
+      return apply(
+        $,
+        setValue($.model, s, Number.isNaN(filled) ? null : filled, "none")
+      )
     }
   },
   parts: (p, model) => {
@@ -1297,7 +1598,10 @@ export const NumberField = Component.define({
     const typing = typingFor(s)
     const cursorId = p.id("cursor")
     let inputId: string | undefined
-    const state = <B extends Attributed<B>>(builder: B, off: boolean = disabled): B =>
+    const state = <B extends Attributed<B>>(
+      builder: B,
+      off: boolean = disabled
+    ): B =>
       builder
         .attrs({
           "data-disabled": flag(off),
@@ -1328,7 +1632,15 @@ export const NumberField = Component.define({
         .on("change", ({ value }) => NumberFieldMessage.Autofilled({ value }))
     })
     const form = View.toNode(
-      formInput(new Html.VoidElement<never, never, Html.EventsOf<"input">, HTMLInputElement, "input">("input"))
+      formInput(
+        new Html.VoidElement<
+          never,
+          never,
+          Html.EventsOf<"input">,
+          HTMLInputElement,
+          "input"
+        >("input")
+      )
     )
     const inputPart = p.part("input", (b, id: string) =>
       state(b)
@@ -1337,7 +1649,11 @@ export const NumberField = Component.define({
           type: "text",
           // The numeric keypad of iOS has no minus key, and no decimal key
           // either unless it is asked for.
-          inputmode: !model.ios ? "numeric" : lowest(s) >= 0 ? "decimal" : "text",
+          inputmode: !model.ios
+            ? "numeric"
+            : lowest(s) >= 0
+            ? "decimal"
+            : "text",
           form: props.form,
           required: flag(required),
           readonly: flag(readOnly),
@@ -1346,13 +1662,21 @@ export const NumberField = Component.define({
         .disabled(disabled)
         .value(text)
         .onInput(({ value }) => NumberFieldMessage.UpdatedInput({ value }))
-        .onBlur((payload) => NumberFieldMessage.BlurredInput({ disabled: payload.disabled === true }))
+        .onBlur((payload) =>
+          NumberFieldMessage.BlurredInput({
+            disabled: payload.disabled === true
+          })
+        )
         .onKeyDown(
           ({ alt, composing, ctrl, key, meta, shift }) => {
             if (s.locked || composing || ctrl || meta) return undefined
             const steps = key === "ArrowUp" || key === "ArrowDown"
-            const bounds = !alt && ((key === "Home" && s.min !== undefined) || (key === "End" && s.max !== undefined))
-            return steps || bounds ? NumberFieldMessage.PressedKey({ key, shift, alt }) : undefined
+            const bounds = !alt &&
+              ((key === "Home" && s.min !== undefined) ||
+                (key === "End" && s.max !== undefined))
+            return steps || bounds
+              ? NumberFieldMessage.PressedKey({ key, shift, alt })
+              : undefined
           },
           { preventDefault: true }
         )
@@ -1368,29 +1692,44 @@ export const NumberField = Component.define({
           })
         )
         .forward((node) => defaults(node, inputDefaults)))
-    const stepperPart = p.part("button", (b, direction: Direction, own: boolean) => {
-      const off = own || disabled || atBound(s, direction)
-      return state(b, off)
-        .attrs({
-          type: "button",
-          tabindex: "-1",
-          "aria-disabled": off || readOnly ? "true" : undefined
-        })
-        .disabled(false)
-        .onMount(TrackStepper({ direction, disabled: off || readOnly }))
-        .forward((node) =>
-          defaults(node, stepperDefaults[direction])
-            .attrs({ "aria-controls": inputId ?? p.id("input"), style: withStyle(node.elementAttrs.style, noSelect) })
-        )
-    })
+    const stepperPart = p.part(
+      "button",
+      (b, direction: Direction, own: boolean) => {
+        const off = own || disabled || atBound(s, direction)
+        return state(b, off)
+          .attrs({
+            type: "button",
+            tabindex: "-1",
+            "aria-disabled": off || readOnly ? "true" : undefined
+          })
+          .disabled(false)
+          .onMount(TrackStepper({ direction, disabled: off || readOnly }))
+          .forward((node) =>
+            defaults(node, stepperDefaults[direction])
+              .attrs({
+                "aria-controls": inputId ?? p.id("input"),
+                style: withStyle(node.elementAttrs.style, noSelect)
+              })
+          )
+      }
+    )
     const stepper = (direction: Direction) =>
       View.wrapPart(
         stepperPart,
         <B extends View.PartTarget<"button">>(
-          { disabled: own, element }: { readonly element: B; readonly disabled?: boolean | undefined }
-        ): ReturnType<B["attr"]> => stepperPart(element, direction, own === true)
+          { disabled: own, element }: {
+            readonly element: B
+            readonly disabled?: boolean | undefined
+          }
+        ): ReturnType<B["attr"]> =>
+          stepperPart(element, direction, own === true)
       )
-    const scrubPart = p.part((b, vertical: boolean, pixelSensitivity: number, teleportDistance: number | undefined) =>
+    const scrubPart = p.part((
+      b,
+      vertical: boolean,
+      pixelSensitivity: number,
+      teleportDistance: number | undefined
+    ) =>
       state(b)
         .attr("role", "presentation")
         .onMount(
@@ -1404,7 +1743,12 @@ export const NumberField = Component.define({
             cursorId
           })
         )
-        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, "touch-action:none;" + noSelect)))
+        .forward((node) =>
+          node.attr(
+            "style",
+            withStyle(node.elementAttrs.style, "touch-action:none;" + noSelect)
+          )
+        )
     )
     const cursorPart = p.part((b) =>
       state(b)
@@ -1414,7 +1758,9 @@ export const NumberField = Component.define({
           popover: "manual"
         })
         .prop("popoverOpen", true)
-        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, cursorBox)))
+        .forward((node) =>
+          node.attr("style", withStyle(node.elementAttrs.style, cursorBox))
+        )
     )
     return {
       value: s.value,
@@ -1430,7 +1776,9 @@ export const NumberField = Component.define({
       group: p.part((b) => state(b).attr("role", "group")),
       input: View.wrapPart(
         inputPart,
-        <B extends View.PartTarget<"input">>(element: B): ReturnType<B["attr"]> => {
+        <B extends View.PartTarget<"input">>(
+          element: B
+        ): ReturnType<B["attr"]> => {
           inputId = idOf(element) ?? p.id("input")
           return inputPart(element, inputId)
         }
@@ -1447,11 +1795,18 @@ export const NumberField = Component.define({
             readonly teleportDistance?: number | undefined
           }
         ): ReturnType<B["attr"]> =>
-          scrubPart(element, direction === "vertical", pixelSensitivity ?? 2, teleportDistance)
+          scrubPart(
+            element,
+            direction === "vertical",
+            pixelSensitivity ?? 2,
+            teleportDistance
+          )
       ),
       scrubAreaCursor: View.wrapPart(
         cursorPart,
-        <B extends View.PartTarget<string>>(element: B): ReturnType<B["attr"]> | undefined => {
+        <B extends View.PartTarget<string>>(
+          element: B
+        ): ReturnType<B["attr"]> | undefined => {
           const cursor = cursorPart(element)
           return model.cursor ? cursor : undefined
         }

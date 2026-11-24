@@ -22,11 +22,13 @@ const stubMetrics = (
   }
 }
 
-const wait = (ms: number) => Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+const wait = (ms: number) =>
+  Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, ms)))
 
 const mountArea = Effect.fnUntraced(function*(
   props: ScrollAreaProps = {},
-  options: { readonly keepMounted?: boolean; readonly horizontal?: boolean } = {}
+  options: { readonly keepMounted?: boolean; readonly horizontal?: boolean } =
+    {}
 ) {
   const Demo = Component.define({
     name: "Demo",
@@ -58,7 +60,9 @@ const mountArea = Effect.fnUntraced(function*(
                 keepMounted: options.keepMounted
               })
               : undefined,
-            options.horizontal ? scrollArea.corner(h.div.class("corner")) : undefined
+            options.horizontal
+              ? scrollArea.corner(h.div.class("corner"))
+              : undefined
           )
       })
   })
@@ -104,11 +108,26 @@ describe("ScrollArea in a document", { concurrent: false }, () => {
       viewport.dispatchEvent(new Event("scroll"))
       yield* tick
 
-      assert.strictEqual(root.style.getPropertyValue("--scroll-area-corner-width"), "12px")
-      assert.strictEqual(root.style.getPropertyValue("--scroll-area-corner-height"), "10px")
-      assert.strictEqual(barY()!.style.getPropertyValue("--scroll-area-thumb-height"), "22.5px")
-      assert.strictEqual(viewport.style.getPropertyValue("--scroll-area-overflow-y-start"), "150px")
-      assert.strictEqual(viewport.style.getPropertyValue("--scroll-area-overflow-y-end"), "150px")
+      assert.strictEqual(
+        root.style.getPropertyValue("--scroll-area-corner-width"),
+        "12px"
+      )
+      assert.strictEqual(
+        root.style.getPropertyValue("--scroll-area-corner-height"),
+        "10px"
+      )
+      assert.strictEqual(
+        barY()!.style.getPropertyValue("--scroll-area-thumb-height"),
+        "22.5px"
+      )
+      assert.strictEqual(
+        viewport.style.getPropertyValue("--scroll-area-overflow-y-start"),
+        "150px"
+      )
+      assert.strictEqual(
+        viewport.style.getPropertyValue("--scroll-area-overflow-y-end"),
+        "150px"
+      )
       assert.isTrue(root.hasAttribute("data-overflow-y-start"))
       assert.isTrue(root.hasAttribute("data-overflow-y-end"))
       assert.notStrictEqual(thumbY()!.style.transform, "")
@@ -122,13 +141,21 @@ describe("ScrollArea in a document", { concurrent: false }, () => {
       viewport.scrollTop = 1
       viewport.dispatchEvent(new Event("scroll"))
       yield* tick
-      assert.strictEqual(viewport.style.getPropertyValue("--scroll-area-overflow-y-start"), "0px")
+      assert.strictEqual(
+        viewport.style.getPropertyValue("--scroll-area-overflow-y-start"),
+        "0px"
+      )
     }))
 
   it.effect("handles track press, thumb drag, missed-release fallback, scroll-snap restore, and wheel chaining", () =>
     Effect.gen(function*() {
       const { barY, thumbY, viewport } = yield* mountArea()
-      stubMetrics(viewport, { clientHeight: 100, scrollHeight: 500, clientWidth: 100, scrollWidth: 100 })
+      stubMetrics(viewport, {
+        clientHeight: 100,
+        scrollHeight: 500,
+        clientWidth: 100,
+        scrollWidth: 100
+      })
       viewport.dispatchEvent(new Event("scroll"))
       yield* tick
       stubMetrics(barY()!, { offsetHeight: 100, offsetWidth: 12 })
@@ -146,41 +173,78 @@ describe("ScrollArea in a document", { concurrent: false }, () => {
       })
       viewport.style.scrollSnapType = "y mandatory"
 
-      const mouseDown = new MouseEvent("mousedown", { bubbles: true, cancelable: true })
+      const mouseDown = new MouseEvent("mousedown", {
+        bubbles: true,
+        cancelable: true
+      })
       barY()!.dispatchEvent(mouseDown)
       assert.isTrue(mouseDown.defaultPrevented)
 
-      barY()!.dispatchEvent(new PointerEvent("pointerdown", { button: 0, pointerId: 1, clientY: 50, bubbles: true }))
+      barY()!.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          button: 0,
+          pointerId: 1,
+          clientY: 50,
+          bubbles: true
+        })
+      )
       yield* tick
       assert.strictEqual(viewport.scrollTop, 200)
       assert.strictEqual(viewport.style.scrollSnapType, "none")
 
       thumbY()!.dispatchEvent(
-        new PointerEvent("pointermove", { pointerId: 1, clientY: 70, buttons: 1, bubbles: true, cancelable: true })
+        new PointerEvent("pointermove", {
+          pointerId: 1,
+          clientY: 70,
+          buttons: 1,
+          bubbles: true,
+          cancelable: true
+        })
       )
       yield* tick
       assert.strictEqual(viewport.scrollTop, 300)
       assert.isTrue(barY()!.hasAttribute("data-scrolling"))
 
       thumbY()!.dispatchEvent(
-        new PointerEvent("pointermove", { pointerId: 1, clientY: 80, buttons: 0, bubbles: true, cancelable: true })
+        new PointerEvent("pointermove", {
+          pointerId: 1,
+          clientY: 80,
+          buttons: 0,
+          bubbles: true,
+          cancelable: true
+        })
       )
       yield* tick
       assert.strictEqual(viewport.scrollTop, 300)
       assert.strictEqual(viewport.style.scrollSnapType, "y mandatory")
       assert.isFalse(barY()!.hasAttribute("data-scrolling"))
 
-      const wheelMid = new WheelEvent("wheel", { deltaY: 50, bubbles: true, cancelable: true })
+      const wheelMid = new WheelEvent("wheel", {
+        deltaY: 50,
+        bubbles: true,
+        cancelable: true
+      })
       barY()!.dispatchEvent(wheelMid)
       assert.isTrue(wheelMid.defaultPrevented)
       assert.strictEqual(viewport.scrollTop, 350)
 
       viewport.scrollTop = 400
-      const wheelEdge = new WheelEvent("wheel", { deltaY: 50, bubbles: true, cancelable: true })
+      const wheelEdge = new WheelEvent("wheel", {
+        deltaY: 50,
+        bubbles: true,
+        cancelable: true
+      })
       barY()!.dispatchEvent(wheelEdge)
       assert.isFalse(wheelEdge.defaultPrevented)
 
-      thumbY()!.dispatchEvent(new PointerEvent("pointerdown", { button: 0, pointerId: 2, clientY: 50, bubbles: true }))
+      thumbY()!.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          button: 0,
+          pointerId: 2,
+          clientY: 50,
+          bubbles: true
+        })
+      )
       yield* tick
       assert.strictEqual(viewport.style.scrollSnapType, "none")
 
@@ -193,8 +257,16 @@ describe("ScrollArea in a document", { concurrent: false }, () => {
 
   it.effect("tracks user scroll timer and ignores programmatic scrolls", () =>
     Effect.gen(function*() {
-      const { barX, barY, root, viewport } = yield* mountArea({}, { keepMounted: true, horizontal: true })
-      stubMetrics(viewport, { clientHeight: 100, scrollHeight: 400, clientWidth: 100, scrollWidth: 400 })
+      const { barX, barY, root, viewport } = yield* mountArea({}, {
+        keepMounted: true,
+        horizontal: true
+      })
+      stubMetrics(viewport, {
+        clientHeight: 100,
+        scrollHeight: 400,
+        clientWidth: 100,
+        scrollWidth: 400
+      })
 
       viewport.scrollLeft = 30
       viewport.dispatchEvent(new Event("scroll"))
@@ -202,7 +274,9 @@ describe("ScrollArea in a document", { concurrent: false }, () => {
       assert.isFalse(root.hasAttribute("data-scrolling"))
       assert.isFalse(barX()!.hasAttribute("data-scrolling"))
 
-      viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }))
+      viewport.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })
+      )
       viewport.scrollTop = 80
       viewport.dispatchEvent(new Event("scroll"))
       yield* tick

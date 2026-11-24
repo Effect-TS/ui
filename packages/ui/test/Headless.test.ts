@@ -1,19 +1,38 @@
-import { Component, Feature, type MessageLog, UiSchema, type View } from "@effect/ui"
+import {
+  Component,
+  Feature,
+  type MessageLog,
+  UiSchema,
+  type View
+} from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer, Schema } from "effect"
 import { Dialog, type Item, Menu } from "./html/fixtures/headless.ts"
 
-const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
-const click = (root: { readonly get: (locator: Locator.Locator) => TestHost.TestNode }, text: string) =>
-  Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
-const updates = (root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }) =>
+const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(Effect.provide(TestHost.layer()))
+const click = (
+  root: { readonly get: (locator: Locator.Locator) => TestHost.TestNode },
+  text: string
+) => Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
+const updates = (
+  root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }
+) =>
   root.log().flatMap((entry) =>
-    entry._tag === "Update" ? [entry.path + " " + entry.source._tag + " " + (entry.message as any)._tag] : []
+    entry._tag === "Update"
+      ? [
+        entry.path + " " + entry.source._tag + " " + (entry.message as any)._tag
+      ]
+      : []
   )
-const failures = (root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }) =>
-  root.log().flatMap((entry) => entry._tag === "Failed" ? [entry.path + " " + entry.in] : [])
+const failures = (
+  root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }
+) =>
+  root.log().flatMap((entry) =>
+    entry._tag === "Failed" ? [entry.path + " " + entry.in] : []
+  )
 
 const items: ReadonlyArray<Item> = [
   { id: "a", label: "Archive" },
@@ -139,14 +158,26 @@ const Board = Component.define({
 // A feature child in a closure, under a Layer that never finishes building
 // ---------------------------------------------------------------------------
 
-class Badge extends Feature.Service<Badge>()("Badge", { props: Schema.Struct({}) }) {}
-const BadgeImpl = Component.define({ name: "BadgeImpl", scoped: false, model: Schema.Null, message: Schema.Never })
+class Badge
+  extends Feature.Service<Badge>()("Badge", { props: Schema.Struct({}) })
+{}
+const BadgeImpl = Component.define({
+  name: "BadgeImpl",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never
+})
   .make({
     init: () => null,
     update: ($) => $.model,
     view: (h) => h.el("span", "badge")
   })
-const Bare = Component.define({ name: "Bare", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+const Bare = Component.define({
+  name: "Bare",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never
+}).make({
   init: () => null,
   update: ($) => $.model,
   parts: () => ({})
@@ -216,7 +247,9 @@ const Field = Component.define({
   parts: (p) => ({
     input: p.part(
       "input",
-      (b) => b.class(undefined).class("field").attr("aria-describedby", undefined).attr("aria-describedby", "hint")
+      (b) =>
+        b.class(undefined).class("field").attr("aria-describedby", undefined)
+          .attr("aria-describedby", "hint")
     )
   })
 })
@@ -234,7 +267,14 @@ const Form = Component.define({
   view: (h) =>
     Field(
       h,
-      { key: "f", view: (field) => field.input(h.input.class("wide field")).attr("aria-describedby", "note") }
+      {
+        key: "f",
+        view: (field) =>
+          field.input(h.input.class("wide field")).attr(
+            "aria-describedby",
+            "note"
+          )
+      }
     )
 })
 
@@ -248,7 +288,12 @@ const Shell = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => Board(h, { key: "board", props: h.props, fallback: () => h.p("board down") })
+  view: (h) =>
+    Board(h, {
+      key: "board",
+      props: h.props,
+      fallback: () => h.p("board down")
+    })
 })
 
 describe("headless components", () => {
@@ -267,9 +312,18 @@ describe("headless components", () => {
       ])
       assert.deepStrictEqual(root.model(), ["picked c", "closed", "clicked c"])
       assert.include(root.text(), "picked c, closed, clicked c")
-      assert.deepStrictEqual((root.get(Locator.text("Copy", { exact: true })) as TestHost.TestElement).owners, {
-        click: ["/Picker/Dialog[confirm]/Menu[actions]", "/Picker/Dialog[confirm]", "/Picker"]
-      })
+      assert.deepStrictEqual(
+        (root.get(
+          Locator.text("Copy", { exact: true })
+        ) as TestHost.TestElement).owners,
+        {
+          click: [
+            "/Picker/Dialog[confirm]/Menu[actions]",
+            "/Picker/Dialog[confirm]",
+            "/Picker"
+          ]
+        }
+      )
     })))
 
   it.effect("a normal child inside the closure reports to whoever wrote the closure, never to the headless one", () =>
@@ -289,7 +343,9 @@ describe("headless components", () => {
         "/Shell/Board[board] Emit Rang",
         "/Shell/Board[board] Failure Failed"
       ])
-      assert.deepStrictEqual(failures(root), ["/Shell/Board[board]/Menu[actions]/Bell[bell] update"])
+      assert.deepStrictEqual(failures(root), [
+        "/Shell/Board[board]/Menu[actions]/Bell[bell] update"
+      ])
       assert.include(root.text(), "bell down")
       assert.include(root.text(), "Rang, Rang, Failed")
     })))
@@ -353,12 +409,24 @@ describe("headless components", () => {
           )
       })
       const root = yield* TestHost.mount(Consumer, {})
-      const attrs = () => (root.get(Locator.text("control", { exact: true })) as TestHost.TestElement).attrs
-      const kept = { title: "part", "aria-label": "Keep me", class: "consumer part" }
+      const attrs = () =>
+        (root.get(
+          Locator.text("control", { exact: true })
+        ) as TestHost.TestElement).attrs
+      const kept = {
+        title: "part",
+        "aria-label": "Keep me",
+        class: "consumer part"
+      }
       assert.deepStrictEqual(attrs(), kept)
       click(root, "toggle")
       yield* TestHost.settle
-      assert.deepStrictEqual(attrs(), { ...kept, disabled: "", "aria-readonly": "true", "data-checked": "" })
+      assert.deepStrictEqual(attrs(), {
+        ...kept,
+        disabled: "",
+        "aria-readonly": "true",
+        "data-checked": ""
+      })
       click(root, "toggle")
       yield* TestHost.settle
       assert.deepStrictEqual(attrs(), kept)
@@ -415,7 +483,9 @@ describe("headless components", () => {
           click(root, "break")
           yield* TestHost.settle
         }
-        assert.deepStrictEqual(failures(root), ["/Waiting/Consumer[c] fallback"])
+        assert.deepStrictEqual(failures(root), [
+          "/Waiting/Consumer[c] fallback"
+        ])
         assert.strictEqual(root.text(), "consumer down")
       })))
   }

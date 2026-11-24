@@ -14,7 +14,10 @@ const toLowerCase = (char: string): string => char.toLowerCase()
  *
  * @internal
  */
-export const attributeName = (name: string, svg: boolean): string | undefined => {
+export const attributeName = (
+  name: string,
+  svg: boolean
+): string | undefined => {
   const known = (svg ? svgNames : htmlNames).get(name)
   if (known !== undefined) return known === null ? undefined : known
   const out = name.length === 0 || unsafeName.test(name)
@@ -32,7 +35,11 @@ const htmlNames = new Map<string, string | null>()
 const svgNames = new Map<string, string | null>()
 const maxNames = 1024
 
-const remember = (names: Map<string, string | null>, name: string, out: string | undefined): void => {
+const remember = (
+  names: Map<string, string | null>,
+  name: string,
+  out: string | undefined
+): void => {
   if (names.size >= maxNames) names.clear()
   names.set(name, out ?? null)
 }

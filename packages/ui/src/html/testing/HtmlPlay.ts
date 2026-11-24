@@ -101,7 +101,9 @@ type KeyDetails = Partial<Omit<Html.KeyPayload, "key">>
  * @category models
  * @since 0.1.0
  */
-export interface HtmlPlay<Model, Msg, Events> extends Play.Play<Model, Msg, Events> {
+export interface HtmlPlay<Model, Msg, Events>
+  extends Play.Play<Model, Msg, Events>
+{
   /**
    * Clicks the one element `target` matches, as a browser does: the `click`
    * goes to the innermost element that handles it, then the defaults run,
@@ -114,20 +116,30 @@ export interface HtmlPlay<Model, Msg, Events> extends Play.Play<Model, Msg, Even
    * Sets a field's value as typing does: writes `value` to the field, then
    * sends `input` with it. An `input` also sends its current `checked`.
    */
-  type(locator: Locator.Locator, value: string): Effect.Effect<void, Play.StepError>
+  type(
+    locator: Locator.Locator,
+    value: string
+  ): Effect.Effect<void, Play.StepError>
   /**
    * Sends `change`, as a field does once its edit is committed. A string is
    * the new value; an object also sets `checked` on an `input`, and `files`
    * on a file input. `change(locator, { files })` chooses files in a file
    * input.
    */
-  change(locator: Locator.Locator, value: string | Partial<Html.InputPayload>): Effect.Effect<void, Play.StepError>
+  change(
+    locator: Locator.Locator,
+    value: string | Partial<Html.InputPayload>
+  ): Effect.Effect<void, Play.StepError>
   /**
    * Presses `key`: sends `keydown` with the modifier keys, `composing`,
    * `repeat` and selection given, each `false` or `null` otherwise. `editable`
    * defaults from the matched element unless given.
    */
-  keydown(locator: Locator.Locator, key: string, details?: KeyDetails): Effect.Effect<void, Play.StepError>
+  keydown(
+    locator: Locator.Locator,
+    key: string,
+    details?: KeyDetails
+  ): Effect.Effect<void, Play.StepError>
   /**
    * Submits the form `locator` matches, or the one the matched element is
    * in, as pressing Enter in it would: `submit` goes to the form with the
@@ -143,7 +155,10 @@ export interface HtmlPlay<Model, Msg, Events> extends Play.Play<Model, Msg, Even
    * does: to the innermost element, the matched one or an ancestor, whose
    * `onDrop` accepts one of the drag's types. Throws when none does.
    */
-  drop(locator: Locator.Locator, payload?: Partial<Html.DropPayload>): Effect.Effect<void, Play.StepError>
+  drop(
+    locator: Locator.Locator,
+    payload?: Partial<Html.DropPayload>
+  ): Effect.Effect<void, Play.StepError>
 
   /** Asserts on the elements `locator` matches, once the tree has settled. */
   expect(locator: Locator.Locator): Expect
@@ -153,12 +168,20 @@ class HtmlPlayCursor extends internal.PlayCursor {
   protected override bubbles(event: string): boolean {
     return !ownEvents.has(event)
   }
-  override click(target: string | Locator.Locator): Effect.Effect<void, Play.StepError> {
+  override click(
+    target: string | Locator.Locator
+  ): Effect.Effect<void, Play.StepError> {
     const locator = typeof target === "string" ? Locator.text(target) : target
     return this.interact("click", () => {
       const node = this.findOne(locator, "click")
       const container = this.root.container
-      return defaults.planClick(container, node, internal.ancestors(node), locator.description, this.name("click"))
+      return defaults.planClick(
+        container,
+        node,
+        internal.ancestors(node),
+        locator.description,
+        this.name("click")
+      )
         .map(({ checks, description, event, isDefault, node, payload }) => ({
           node: node as TestHost.TestElement,
           description,
@@ -175,25 +198,48 @@ class HtmlPlayCursor extends internal.PlayCursor {
             : event === "toggle"
             ? () => {
               const element = node as TestHost.TestElement
-              element.props.popoverOpen = (payload(container, (node) => node) as Html.PopoverTogglePayload).open
+              element.props.popoverOpen = (payload(container, (node) =>
+                node) as Html.PopoverTogglePayload).open
               return [element]
             }
             : undefined
         }))
     })
   }
-  type(locator: Locator.Locator, value: string): Effect.Effect<void, Play.StepError> {
-    return this.one("type", locator, "input", (node) => defaults.inputPayload(node, value), (node) => {
-      node.props.value = value
-    })
+  type(
+    locator: Locator.Locator,
+    value: string
+  ): Effect.Effect<void, Play.StepError> {
+    return this.one(
+      "type",
+      locator,
+      "input",
+      (node) => defaults.inputPayload(node, value),
+      (node) => {
+        node.props.value = value
+      }
+    )
   }
-  change(locator: Locator.Locator, value: string | Partial<Html.InputPayload>): Effect.Effect<void, Play.StepError> {
-    return this.one("change", locator, "change", (node) => defaults.changePayload(node, value), (node, payload) => {
-      node.props.value = payload.value
-      if ("checked" in payload) node.props.checked = payload.checked
-    })
+  change(
+    locator: Locator.Locator,
+    value: string | Partial<Html.InputPayload>
+  ): Effect.Effect<void, Play.StepError> {
+    return this.one(
+      "change",
+      locator,
+      "change",
+      (node) => defaults.changePayload(node, value),
+      (node, payload) => {
+        node.props.value = payload.value
+        if ("checked" in payload) node.props.checked = payload.checked
+      }
+    )
   }
-  keydown(locator: Locator.Locator, key: string, details?: KeyDetails): Effect.Effect<void, Play.StepError> {
+  keydown(
+    locator: Locator.Locator,
+    key: string,
+    details?: KeyDetails
+  ): Effect.Effect<void, Play.StepError> {
     return this.one(
       "keydown",
       locator,
@@ -205,8 +251,14 @@ class HtmlPlayCursor extends internal.PlayCursor {
     return this.interact("submit", () => {
       const node = this.findOne(locator, "submit")
       const container = this.root.container
-      const form = defaults.formOf(internal.ancestors(node), container) as TestHost.TestElement | undefined
-      if (form === undefined) throw new Error(`${this.name("submit")}: ${locator.description} isn't in a form`)
+      const form = defaults.formOf(internal.ancestors(node), container) as
+        | TestHost.TestElement
+        | undefined
+      if (form === undefined) {
+        throw new Error(
+          `${this.name("submit")}: ${locator.description} isn't in a form`
+        )
+      }
       return [{
         node: form,
         description: `the form of ${locator.description}`,
@@ -221,13 +273,20 @@ class HtmlPlayCursor extends internal.PlayCursor {
   blur(locator: Locator.Locator): Effect.Effect<void, Play.StepError> {
     return this.one("blur", locator, "blur", () => ({}))
   }
-  drop(locator: Locator.Locator, payload?: Partial<Html.DropPayload>): Effect.Effect<void, Play.StepError> {
+  drop(
+    locator: Locator.Locator,
+    payload?: Partial<Html.DropPayload>
+  ): Effect.Effect<void, Play.StepError> {
     const drop = defaults.drop(payload)
     return this.interact("drop", () => {
-      const target = internal.ancestors(this.findOne(locator, "drop")).find((at) =>
+      const target = internal.ancestors(this.findOne(locator, "drop")).find((
+        at
+      ) =>
         Object.hasOwn(at.handlers, "drop") && drop.accepts(at.eventOptions.drop)
       )
-      if (target === undefined) throw drop.noTarget(this.name("drop"), locator.description)
+      if (target === undefined) {
+        throw drop.noTarget(this.name("drop"), locator.description)
+      }
       return [{
         node: target,
         description: `the drop target at ${locator.description}`,
@@ -262,5 +321,8 @@ export const make = <
 >(
   component: Component.Members<Name, Props, Model, Msg, Events, R, V, any>,
   props: Props | Effect.Effect<Props, never, RP>
-): Effect.Effect<HtmlPlay<Model, Msg, Events>, Play.StepError, R | RP | TestHost.TestHost | Scope.Scope> =>
-  internal.begin(HtmlPlayCursor, "HtmlPlay", make, component, props) as any
+): Effect.Effect<
+  HtmlPlay<Model, Msg, Events>,
+  Play.StepError,
+  R | RP | TestHost.TestHost | Scope.Scope
+> => internal.begin(HtmlPlayCursor, "HtmlPlay", make, component, props) as any

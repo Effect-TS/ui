@@ -31,7 +31,19 @@ const adjectives = [
   "expensive",
   "fancy"
 ]
-const colours = ["red", "yellow", "blue", "green", "pink", "brown", "purple", "brown", "white", "black", "orange"]
+const colours = [
+  "red",
+  "yellow",
+  "blue",
+  "green",
+  "pink",
+  "brown",
+  "purple",
+  "brown",
+  "white",
+  "black",
+  "orange"
+]
 const nouns = [
   "table",
   "chair",
@@ -55,13 +67,18 @@ const random = (max: number) => Math.round(Math.random() * 1000) % max
 const Row = Schema.Struct({ id: Schema.Number, label: Schema.String })
 type Row = typeof Row.Type
 
-const Model = Schema.Struct({ rows: Schema.Array(Row), selected: Schema.Number, nextId: Schema.Number })
+const Model = Schema.Struct({
+  rows: Schema.Array(Row),
+  selected: Schema.Number,
+  nextId: Schema.Number
+})
 type Model = typeof Model.Type
 
 const buildRows = (nextId: number, count: number): Array<Row> =>
   Array.from({ length: count }, (_, index) => ({
     id: nextId + index,
-    label: adjectives[random(adjectives.length)] + " " + colours[random(colours.length)] + " " +
+    label: adjectives[random(adjectives.length)] + " " +
+      colours[random(colours.length)] + " " +
       nouns[random(nouns.length)]
   }))
 
@@ -87,16 +104,28 @@ const replaceRows = (model: Model, count: number): Model => ({
   nextId: model.nextId + count
 })
 
-const update = ({ model }: { readonly model: Model }, message: Message): Model => {
+const update = (
+  { model }: { readonly model: Model },
+  message: Message
+): Model => {
   switch (message._tag) {
     case "Run":
       return replaceRows(model, 1000)
     case "RunLots":
       return replaceRows(model, 10000)
     case "Add":
-      return { ...model, rows: [...model.rows, ...buildRows(model.nextId, 1000)], nextId: model.nextId + 1000 }
+      return {
+        ...model,
+        rows: [...model.rows, ...buildRows(model.nextId, 1000)],
+        nextId: model.nextId + 1000
+      }
     case "Update":
-      return { ...model, rows: model.rows.map((row, i) => i % 10 === 0 ? { ...row, label: row.label + " !!!" } : row) }
+      return {
+        ...model,
+        rows: model.rows.map((row, i) =>
+          i % 10 === 0 ? { ...row, label: row.label + " !!!" } : row
+        )
+      }
     case "Clear":
       return { ...model, rows: [], selected: 0 }
     case "SwapRows": {
@@ -110,18 +139,31 @@ const update = ({ model }: { readonly model: Model }, message: Message): Model =
     case "Select":
       return { ...model, selected: message.id }
     case "Remove":
-      return { ...model, rows: model.rows.filter((row) => row.id !== message.id) }
+      return {
+        ...model,
+        rows: model.rows.filter((row) => row.id !== message.id)
+      }
   }
 }
 
 // VIEW
 
-const MainDef = Component.define({ name: "Main", scoped: false, model: Model, message: Message, elements: Html })
+const MainDef = Component.define({
+  name: "Main",
+  scoped: false,
+  model: Model,
+  message: Message,
+  elements: Html
+})
 type H = Component.Helper<typeof MainDef>
 
 const button = (h: H, id: string, title: string, message: Message) =>
   h.div.class("col-sm-6", "smallpad").children(
-    h.button.attr("id", id).attr("type", "button").class("btn", "btn-primary", "btn-block").onClick(message)
+    h.button.attr("id", id).attr("type", "button").class(
+      "btn",
+      "btn-primary",
+      "btn-block"
+    ).onClick(message)
       .children(title)
   )
 
@@ -146,10 +188,15 @@ const jumbotron = (h: H) =>
 const row = (h: H, row: Row, selected: boolean) =>
   h.tr.key(String(row.id)).class(selected && "danger").children(
     h.td.class("col-md-1").children(String(row.id)),
-    h.td.class("col-md-4").children(h.a.onClick(Message.Select({ id: row.id })).children(row.label)),
+    h.td.class("col-md-4").children(
+      h.a.onClick(Message.Select({ id: row.id })).children(row.label)
+    ),
     h.td.class("col-md-1").children(
       h.a.onClick(Message.Remove({ id: row.id })).children(
-        h.span.class("glyphicon", "glyphicon-remove").attr("aria-hidden", "true")
+        h.span.class("glyphicon", "glyphicon-remove").attr(
+          "aria-hidden",
+          "true"
+        )
       )
     ),
     h.td.class("col-md-6")
@@ -161,13 +208,20 @@ const Main = MainDef.make({
   view: (h, model) =>
     h.div.class("container").children(
       jumbotron(h),
-      h.table.class("table", "table-hover", "table-striped", "test-data").children(
-        h.tbody.children(model.rows.map((item) => h.lazy(row, item, item.id === model.selected)))
-      ),
-      h.span.class("preloadicon", "glyphicon", "glyphicon-remove").attr("aria-hidden", "true")
+      h.table.class("table", "table-hover", "table-striped", "test-data")
+        .children(
+          h.tbody.children(model.rows.map((item) =>
+            h.lazy(row, item, item.id === model.selected)
+          ))
+        ),
+      h.span.class("preloadicon", "glyphicon", "glyphicon-remove").attr(
+        "aria-hidden",
+        "true"
+      )
     )
 })
 
 // RUN
 
-Layer.launch(BrowserHost.mount(Main, {}, document.getElementById("main")!)).pipe(Effect.runFork)
+Layer.launch(BrowserHost.mount(Main, {}, document.getElementById("main")!))
+  .pipe(Effect.runFork)

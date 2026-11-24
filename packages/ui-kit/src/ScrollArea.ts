@@ -122,7 +122,13 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { type Attributed, attrSelector, flag, noSelect, ownStyle } from "./internal/attributes.ts"
+import {
+  type Attributed,
+  attrSelector,
+  flag,
+  noSelect,
+  ownStyle
+} from "./internal/attributes.ts"
 import { override } from "./internal/dom.ts"
 import { isWebKit } from "./internal/platform.ts"
 import { clamp } from "./internal/range.ts"
@@ -171,10 +177,14 @@ const otherAxis = (orientation: ScrollAreaOrientation): ScrollAreaOrientation =>
   orientation === "vertical" ? "horizontal" : "vertical"
 
 const scrollbarAttr = (orientation: ScrollAreaOrientation): string =>
-  orientation === "vertical" ? "data-scroll-area-scrollbar-y" : "data-scroll-area-scrollbar-x"
+  orientation === "vertical"
+    ? "data-scroll-area-scrollbar-y"
+    : "data-scroll-area-scrollbar-x"
 
 const thumbAttr = (orientation: ScrollAreaOrientation): string =>
-  orientation === "vertical" ? "data-scroll-area-thumb-y" : "data-scroll-area-thumb-x"
+  orientation === "vertical"
+    ? "data-scroll-area-thumb-y"
+    : "data-scroll-area-thumb-x"
 
 /**
  * The threshold in pixels that must be passed before the overflow edge
@@ -203,7 +213,8 @@ export const ScrollAreaOverflowEdgeThreshold = Schema.Union([
  * @category models
  * @since 0.1.0
  */
-export type ScrollAreaOverflowEdgeThreshold = typeof ScrollAreaOverflowEdgeThreshold.Type
+export type ScrollAreaOverflowEdgeThreshold =
+  typeof ScrollAreaOverflowEdgeThreshold.Type
 
 /**
  * Schema for {@link ScrollAreaProps}.
@@ -267,7 +278,9 @@ const ScrollAreaMessage = UiSchema.TaggedEnum({
 
 type ScrollAreaMessage = typeof ScrollAreaMessage.Type
 
-const thresholdsOf = (threshold: ScrollAreaOverflowEdgeThreshold | undefined) => {
+const thresholdsOf = (
+  threshold: ScrollAreaOverflowEdgeThreshold | undefined
+) => {
   const t = typeof threshold === "number"
     ? { xStart: threshold, xEnd: threshold, yStart: threshold, yEnd: threshold }
     : threshold
@@ -301,14 +314,21 @@ const applyOverscrollThumb = (
 ): number => {
   const clamped = clamp(scrollFromStart, 0, maxScroll)
   const overscroll = scrollFromStart - clamped
-  const nextSize = Math.max(MIN_THUMB_SIZE, (size * content) / (content + Math.abs(overscroll)))
+  const nextSize = Math.max(
+    MIN_THUMB_SIZE,
+    (size * content) / (content + Math.abs(overscroll))
+  )
   if (overscroll !== 0) thumb.style.setProperty(sizeVar, `${nextSize}px`)
   else thumb.style.removeProperty(sizeVar)
   const offset = maxScroll > 0 ? (clamped / maxScroll) * maxThumbOffset : 0
   return offset + (overscroll > 0 ? size - nextSize : 0)
 }
 
-const getOffset = (element: HTMLElement | null, prop: "margin" | "padding", vertical: boolean): number => {
+const getOffset = (
+  element: HTMLElement | null,
+  prop: "margin" | "padding",
+  vertical: boolean
+): number => {
   if (element === null) return 0
   const styles = element.ownerDocument.defaultView?.getComputedStyle(element)
   if (styles === undefined) return 0
@@ -320,7 +340,8 @@ const getOffset = (element: HTMLElement | null, prop: "margin" | "padding", vert
 }
 
 const isRtl = (viewport: HTMLElement): boolean =>
-  viewport.ownerDocument.defaultView?.getComputedStyle(viewport).direction === "rtl"
+  viewport.ownerDocument.defaultView?.getComputedStyle(viewport).direction ===
+    "rtl"
 
 const registeredWindows = new WeakSet<Window>()
 
@@ -332,7 +353,12 @@ const registerOverflowVars = (view: Window | null): void => {
   if (css !== undefined && "registerProperty" in css) {
     for (const name of overflowVars) {
       try {
-        css.registerProperty({ name, syntax: "<length>", inherits: false, initialValue: "0px" })
+        css.registerProperty({
+          name,
+          syntax: "<length>",
+          inherits: false,
+          initialValue: "0px"
+        })
       } catch {}
     }
   }
@@ -370,7 +396,8 @@ const axisOf = (orientation: ScrollAreaOrientation): Axis => ({
   listening: undefined
 })
 
-const scrollOf = (axis: Axis, viewport: HTMLElement): number => axis.vertical ? viewport.scrollTop : viewport.scrollLeft
+const scrollOf = (axis: Axis, viewport: HTMLElement): number =>
+  axis.vertical ? viewport.scrollTop : viewport.scrollLeft
 
 const setScroll = (axis: Axis, viewport: HTMLElement, value: number): void => {
   if (axis.vertical) viewport.scrollTop = value
@@ -378,9 +405,12 @@ const setScroll = (axis: Axis, viewport: HTMLElement, value: number): void => {
 }
 
 const maxScrollOf = (axis: Axis, viewport: HTMLElement): number =>
-  axis.vertical ? viewport.scrollHeight - viewport.clientHeight : viewport.scrollWidth - viewport.clientWidth
+  axis.vertical
+    ? viewport.scrollHeight - viewport.clientHeight
+    : viewport.scrollWidth - viewport.clientWidth
 
-const along = (axis: Axis, event: PointerEvent): number => axis.vertical ? event.clientY : event.clientX
+const along = (axis: Axis, event: PointerEvent): number =>
+  axis.vertical ? event.clientY : event.clientX
 
 const insetsOf = (axis: Axis, scrollbar: HTMLElement) => {
   const scrollbarOffset = getOffset(scrollbar, "padding", axis.vertical)
@@ -412,8 +442,10 @@ const TrackScrollArea = Mount.makeStream(
         registerOverflowVars(root.ownerDocument.defaultView)
 
         let args: TrackScrollAreaArgs = initial
-        const send = (message: ScrollAreaMessage) => Queue.offerUnsafe(queue, message)
-        const find = (attr: string) => root.querySelector<HTMLElement>(attrSelector(attr, args.id))
+        const send = (message: ScrollAreaMessage) =>
+          Queue.offerUnsafe(queue, message)
+        const find = (attr: string) =>
+          root.querySelector<HTMLElement>(attrSelector(attr, args.id))
 
         const y = axisOf("vertical")
         const x = axisOf("horizontal")
@@ -446,7 +478,11 @@ const TrackScrollArea = Mount.makeStream(
         const setHovering = (next: boolean) => {
           if (next === hovering) return
           hovering = next
-          send(next ? ScrollAreaMessage.EnteredPointer() : ScrollAreaMessage.LeftPointer())
+          send(
+            next
+              ? ScrollAreaMessage.EnteredPointer()
+              : ScrollAreaMessage.LeftPointer()
+          )
         }
 
         const stopScrolling = (axis: Axis) => {
@@ -454,13 +490,21 @@ const TrackScrollArea = Mount.makeStream(
           axis.timer = undefined
           if (!axis.scrolling) return
           axis.scrolling = false
-          send(ScrollAreaMessage.StoppedScrolling({ orientation: axis.orientation }))
+          send(
+            ScrollAreaMessage.StoppedScrolling({
+              orientation: axis.orientation
+            })
+          )
         }
 
         const startScrolling = (axis: Axis) => {
           if (!axis.scrolling) {
             axis.scrolling = true
-            send(ScrollAreaMessage.StartedScrolling({ orientation: axis.orientation }))
+            send(
+              ScrollAreaMessage.StartedScrolling({
+                orientation: axis.orientation
+              })
+            )
           }
           clearTimeout(axis.timer)
           axis.timer = setTimeout(() => stopScrolling(axis), SCROLL_TIMEOUT)
@@ -477,7 +521,9 @@ const TrackScrollArea = Mount.makeStream(
 
         // Scroll snap would quantize the drag's scroll positions back to snap points.
         const disableViewportSnap = () => {
-          if (viewport !== null) restoreSnap ??= override(viewport, { "scroll-snap-type": "none" })
+          if (viewport !== null) {
+            restoreSnap ??= override(viewport, { "scroll-snap-type": "none" })
+          }
         }
 
         const restoreViewportSnap = () => {
@@ -495,7 +541,14 @@ const TrackScrollArea = Mount.makeStream(
           if (disposed) return
           sync()
           if (viewport === null) return
-          const { clientHeight, clientWidth, scrollHeight, scrollLeft, scrollTop, scrollWidth } = viewport
+          const {
+            clientHeight,
+            clientWidth,
+            scrollHeight,
+            scrollLeft,
+            scrollTop,
+            scrollWidth
+          } = viewport
           if (scrollHeight === 0 || scrollWidth === 0) return report(noOverflow)
 
           const rtl = isRtl(viewport)
@@ -510,14 +563,28 @@ const TrackScrollArea = Mount.makeStream(
             const size = vertical ? scrollHeight : scrollWidth
             const overflow = client < size
             const maxScroll = Math.max(0, size - client)
-            const fromStart = vertical ? scrollTop : rtl ? -scrollLeft : scrollLeft
-            const start = overflow ? normalizeScrollOffset(fromStart, maxScroll) : 0
+            const fromStart = vertical
+              ? scrollTop
+              : rtl
+              ? -scrollLeft
+              : scrollLeft
+            const start = overflow
+              ? normalizeScrollOffset(fromStart, maxScroll)
+              : 0
             const { scrollbar, thumb } = axis
             if (scrollbar !== null) {
               const { inset, track } = insetsOf(axis, scrollbar)
-              const cornerOffset = cornerUnsized ? (vertical ? nextCornerHeight : nextCornerWidth) : 0
-              const length = Math.min(track - cornerOffset, (overflow ? client : 0) - inset)
-              const thumbSize = Math.max(MIN_THUMB_SIZE, (length * client) / size)
+              const cornerOffset = cornerUnsized
+                ? (vertical ? nextCornerHeight : nextCornerWidth)
+                : 0
+              const length = Math.min(
+                track - cornerOffset,
+                (overflow ? client : 0) - inset
+              )
+              const thumbSize = Math.max(
+                MIN_THUMB_SIZE,
+                (length * client) / size
+              )
               const sizeVar = vertical ? thumbHeightVar : thumbWidthVar
               scrollbar.style.setProperty(sizeVar, `${thumbSize}px`)
               if (thumb !== null) {
@@ -542,9 +609,15 @@ const TrackScrollArea = Mount.makeStream(
           const edgesX = edges(x)
           const edgesY = edges(y)
           const metrics = [edgesX.start, edgesX.end, edgesY.start, edgesY.end]
-          overflowVars.forEach((name, i) => viewport!.style.setProperty(name, `${metrics[i]}px`))
+          overflowVars.forEach((name, i) =>
+            viewport!.style.setProperty(name, `${metrics[i]}px`)
+          )
 
-          if ((corner !== null || !both) && (nextCornerWidth !== cornerWidth || nextCornerHeight !== cornerHeight)) {
+          if (
+            (corner !== null || !both) &&
+            (nextCornerWidth !== cornerWidth ||
+              nextCornerHeight !== cornerHeight)
+          ) {
             cornerWidth = nextCornerWidth
             cornerHeight = nextCornerHeight
             root.style.setProperty(cornerWidthVar, `${cornerWidth}px`)
@@ -563,7 +636,10 @@ const TrackScrollArea = Mount.makeStream(
 
         const startDrag = (axis: Axis, event: PointerEvent) => {
           // A live drag holds capture; without it, the release went missing and a new press takes over.
-          if (drag !== null && drag.axis.thumb?.hasPointerCapture?.(drag.pointerId) === true) return
+          if (
+            drag !== null &&
+            drag.axis.thumb?.hasPointerCapture?.(drag.pointerId) === true
+          ) return
           drag = {
             pointerId: event.pointerId,
             axis,
@@ -594,9 +670,16 @@ const TrackScrollArea = Mount.makeStream(
 
         const trackOf = (axis: Axis): Track | null => {
           const { scrollbar, thumb } = axis
-          if (viewport === null || scrollbar === null || thumb === null) return null
-          const { inset, scrollbarOffset, thumbOffset, track } = insetsOf(axis, scrollbar)
-          const thumbSize = axis.vertical ? thumb.offsetHeight : thumb.offsetWidth
+          if (
+            viewport === null || scrollbar === null || thumb === null
+          ) return null
+          const { inset, scrollbarOffset, thumbOffset, track } = insetsOf(
+            axis,
+            scrollbar
+          )
+          const thumbSize = axis.vertical
+            ? thumb.offsetHeight
+            : thumb.offsetWidth
           return {
             viewport,
             scrollbar,
@@ -614,14 +697,17 @@ const TrackScrollArea = Mount.makeStream(
             const track = trackOf(axis)
             if (track === null || track.maxThumbOffset <= 0) return
             const rect = track.scrollbar.getBoundingClientRect()
-            const at = along(axis, event) - (axis.vertical ? rect.top : rect.left) - track.thumbSize / 2 -
+            const at = along(axis, event) -
+              (axis.vertical ? rect.top : rect.left) - track.thumbSize / 2 -
               track.scrollbarOffset + track.thumbOffset / 2
             const ratio = at / track.maxThumbOffset
             disableViewportSnap()
             setScroll(
               axis,
               track.viewport,
-              !axis.vertical && isRtl(track.viewport) ? -(1 - ratio) * track.maxScroll : ratio * track.maxScroll
+              !axis.vertical && isRtl(track.viewport)
+                ? -(1 - ratio) * track.maxScroll
+                : ratio * track.maxScroll
             )
             reportScroll()
           }
@@ -634,8 +720,14 @@ const TrackScrollArea = Mount.makeStream(
           if (event.buttons % 2 === 0) return endDrag(event)
           const { track } = drag
           if (track === null) return
-          const ratio = track.maxThumbOffset <= 0 ? 0 : (along(drag.axis, event) - drag.start) / track.maxThumbOffset
-          setScroll(drag.axis, track.viewport, drag.startScroll + ratio * track.maxScroll)
+          const ratio = track.maxThumbOffset <= 0
+            ? 0
+            : (along(drag.axis, event) - drag.start) / track.maxThumbOffset
+          setScroll(
+            drag.axis,
+            track.viewport,
+            drag.startScroll + ratio * track.maxScroll
+          )
           event.preventDefault()
           startScrolling(drag.axis)
         }
@@ -672,9 +764,14 @@ const TrackScrollArea = Mount.makeStream(
           }, SCROLL_END_DEBOUNCE)
         }
 
-        const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure)
+        const resizeObserver = typeof ResizeObserver === "undefined"
+          ? null
+          : new ResizeObserver(measure)
 
-        const observe = (current: HTMLElement | null, next: HTMLElement | null) => {
+        const observe = (
+          current: HTMLElement | null,
+          next: HTMLElement | null
+        ) => {
           if (current !== null) resizeObserver?.unobserve(current)
           if (next !== null) resizeObserver?.observe(next)
           return next
@@ -687,9 +784,19 @@ const TrackScrollArea = Mount.makeStream(
             viewport = observe(viewport, nextViewport)
             if (viewport !== null) {
               viewportListening = new AbortController()
-              const options = { signal: viewportListening.signal, passive: true }
+              const options = {
+                signal: viewportListening.signal,
+                passive: true
+              }
               viewport.addEventListener("scroll", onViewportScroll, options)
-              for (const name of ["wheel", "pointermove", "pointerenter", "keydown"]) {
+              for (
+                const name of [
+                  "wheel",
+                  "pointermove",
+                  "pointerenter",
+                  "keydown"
+                ]
+              ) {
                 viewport.addEventListener(name, onUserInteraction, options)
               }
             }
@@ -700,7 +807,10 @@ const TrackScrollArea = Mount.makeStream(
           for (const axis of [y, x]) {
             const thumb = find(thumbAttr(axis.orientation))
             const scrollbar = find(scrollbarAttr(axis.orientation))
-            if (drag !== null && drag.axis === axis && (scrollbar !== axis.scrollbar || thumb !== axis.thumb)) {
+            if (
+              drag !== null && drag.axis === axis &&
+              (scrollbar !== axis.scrollbar || thumb !== axis.thumb)
+            ) {
               clearDrag()
             }
             axis.thumb = thumb
@@ -710,26 +820,41 @@ const TrackScrollArea = Mount.makeStream(
             if (scrollbar === null) continue
             axis.listening = new AbortController()
             const { signal } = axis.listening
-            scrollbar.addEventListener("wheel", onWheel(axis), { signal, passive: false })
-            scrollbar.addEventListener("pointerdown", onPointerDown(axis), { signal })
+            scrollbar.addEventListener("wheel", onWheel(axis), {
+              signal,
+              passive: false
+            })
+            scrollbar.addEventListener("pointerdown", onPointerDown(axis), {
+              signal
+            })
             scrollbar.addEventListener("pointermove", onPointerMove, { signal })
             scrollbar.addEventListener("pointerup", endDrag, { signal })
             scrollbar.addEventListener("pointercancel", endDrag, { signal })
             // A native scrollbar doesn't take focus when pressed.
-            scrollbar.addEventListener("mousedown", (event) => event.preventDefault(), { signal })
+            scrollbar.addEventListener(
+              "mousedown",
+              (event) => event.preventDefault(),
+              { signal }
+            )
           }
         }
 
         const onRootPointer = (event: PointerEvent) => {
           touchModality = event.pointerType === "touch"
-          if (event.type !== "pointerdown" && !touchModality) setHovering(root.contains(event.target as Node | null))
+          if (event.type !== "pointerdown" && !touchModality) {
+            setHovering(root.contains(event.target as Node | null))
+          }
         }
 
         const { signal } = rootListening
-        for (const name of ["pointerdown", "pointerenter", "pointermove"] as const) {
+        for (
+          const name of ["pointerdown", "pointerenter", "pointermove"] as const
+        ) {
           root.addEventListener(name, onRootPointer, { signal })
         }
-        root.addEventListener("pointerleave", () => setHovering(false), { signal })
+        root.addEventListener("pointerleave", () => setHovering(false), {
+          signal
+        })
         root.style.setProperty(cornerWidthVar, "0px")
         root.style.setProperty(cornerHeightVar, "0px")
 
@@ -741,10 +866,17 @@ const TrackScrollArea = Mount.makeStream(
             if (initialViewport.matches(":hover")) setHovering(true)
           } catch {}
           animationTimer = setTimeout(() => {
-            if (disposed || typeof initialViewport.getAnimations !== "function") return
-            const animations = initialViewport.getAnimations({ subtree: true }).filter(finite)
+            if (
+              disposed || typeof initialViewport.getAnimations !== "function"
+            ) return
+            const animations = initialViewport.getAnimations({ subtree: true })
+              .filter(finite)
             if (animations.length === 0) return
-            Promise.allSettled(animations.map((animation) => animation.finished.then(() => undefined)))
+            Promise.allSettled(
+              animations.map((animation) =>
+                animation.finished.then(() => undefined)
+              )
+            )
               .then(measure)
               .catch(() => {})
           }, 0)
@@ -754,9 +886,18 @@ const TrackScrollArea = Mount.makeStream(
           Effect.sync(() => {
             disposed = true
             resizeObserver?.disconnect()
-            for (const timer of [x.timer, y.timer, scrollEndTimer, animationTimer]) clearTimeout(timer)
+            for (
+              const timer of [x.timer, y.timer, scrollEndTimer, animationTimer]
+            ) clearTimeout(timer)
             restoreViewportSnap()
-            for (const listening of [rootListening, viewportListening, x.listening, y.listening]) listening?.abort()
+            for (
+              const listening of [
+                rootListening,
+                viewportListening,
+                x.listening,
+                y.listening
+              ]
+            ) listening?.abort()
           })
         )
 
@@ -769,12 +910,18 @@ const TrackScrollArea = Mount.makeStream(
     )
 )
 
-type ScrollbarOf<B extends View.PartTarget<"div">, T extends View.PartTarget<"div">> = WithRequirements<
+type ScrollbarOf<
+  B extends View.PartTarget<"div">,
+  T extends View.PartTarget<"div">
+> = WithRequirements<
   ReturnType<B["attr"]>,
   View.Requirements<T>
 >
 
-const overflowData = <B extends Attributed<B>>(builder: B, model: ScrollAreaModel): B =>
+const overflowData = <B extends Attributed<B>>(
+  builder: B,
+  model: ScrollAreaModel
+): B =>
   builder
     .attrs({
       "data-has-overflow-x": flag(model.hasOverflowX),
@@ -826,7 +973,13 @@ export const ScrollArea = Component.define({
   restore: false,
   elements: Html
 }).make({
-  init: () => ({ measured: false, hovering: false, scrollingX: false, scrollingY: false, ...noOverflow }),
+  init: () => ({
+    measured: false,
+    hovering: false,
+    scrollingX: false,
+    scrollingY: false,
+    ...noOverflow
+  }),
   update: {
     MeasuredOverflow: ($, overflow) =>
       $.evolve({
@@ -839,9 +992,15 @@ export const ScrollArea = Component.define({
         overflowYEnd: overflow.overflowYEnd
       }),
     StartedScrolling: ($, { orientation }) =>
-      $.evolve(orientation === "vertical" ? { scrollingY: true } : { scrollingX: true }),
+      $.evolve(
+        orientation === "vertical" ? { scrollingY: true } : { scrollingX: true }
+      ),
     StoppedScrolling: ($, { orientation }) =>
-      $.evolve(orientation === "vertical" ? { scrollingY: false } : { scrollingX: false }),
+      $.evolve(
+        orientation === "vertical"
+          ? { scrollingY: false }
+          : { scrollingX: false }
+      ),
     EnteredPointer: ($) => $.evolve({ hovering: true }),
     LeftPointer: ($) => $.evolve({ hovering: false })
   },
@@ -863,13 +1022,19 @@ export const ScrollArea = Component.define({
           [thumbAttr(otherAxis(orientation))]: undefined
         })
         .forward(ownStyle(
-          (orientation === "vertical" ? `height:var(${thumbHeightVar})` : `width:var(${thumbWidthVar})`) +
+          (orientation === "vertical"
+            ? `height:var(${thumbHeightVar})`
+            : `width:var(${thumbWidthVar})`) +
             (model.measured ? "" : ";visibility:hidden")
         )))
 
     const scrollbarPart = p.part(
       "div",
-      (b, orientation: ScrollAreaOrientation, thumb: View.Content<unknown, any>) =>
+      (
+        b,
+        orientation: ScrollAreaOrientation,
+        thumb: View.Content<unknown, any>
+      ) =>
         overflowData(b, model)
           .attrs({
             "aria-hidden": "true",
@@ -880,9 +1045,10 @@ export const ScrollArea = Component.define({
             [scrollbarAttr(otherAxis(orientation))]: undefined
           })
           .forward(ownStyle(
-            `position:absolute;touch-action:none;${noSelect};` + (orientation === "vertical"
-              ? `top:0;bottom:var(${cornerHeightVar},0px);inset-inline-end:0`
-              : `inset-inline-start:0;inset-inline-end:var(${cornerWidthVar},0px);bottom:0`)
+            `position:absolute;touch-action:none;${noSelect};` +
+              (orientation === "vertical"
+                ? `top:0;bottom:var(${cornerHeightVar},0px);inset-inline-end:0`
+                : `inset-inline-start:0;inset-inline-end:var(${cornerWidthVar},0px);bottom:0`)
           ))
           .children(thumb as never)
     )
@@ -918,7 +1084,10 @@ export const ScrollArea = Component.define({
           .forward(ownStyle("position:relative"))),
       viewport: p.part("div", (b) =>
         areaState(b)
-          .attrs({ tabindex: model.hasOverflowX || model.hasOverflowY ? "0" : "-1", [viewportAttr]: id })
+          .attrs({
+            tabindex: model.hasOverflowX || model.hasOverflowY ? "0" : "-1",
+            [viewportAttr]: id
+          })
           .forward(ownStyle("overflow:scroll;scrollbar-width:none"))),
       content: p.part("div", (b) =>
         areaState(b)
@@ -934,15 +1103,24 @@ export const ScrollArea = Component.define({
             readonly keepMounted?: boolean | undefined
           }
         ): ScrollbarOf<B, T> | undefined => {
-          const built = scrollbarPart(element, orientation, thumbPart(thumb, orientation)) as ScrollbarOf<B, T>
-          return keepMounted || (orientation === "vertical" ? model.hasOverflowY : model.hasOverflowX)
+          const built = scrollbarPart(
+            element,
+            orientation,
+            thumbPart(thumb, orientation)
+          ) as ScrollbarOf<B, T>
+          return keepMounted ||
+              (orientation === "vertical"
+                ? model.hasOverflowY
+                : model.hasOverflowX)
             ? built
             : undefined
         }
       ),
       corner: View.wrapPart(
         cornerPart,
-        <B extends View.PartTarget<"div">>(element: B): ReturnType<B["attr"]> | undefined => {
+        <B extends View.PartTarget<"div">>(
+          element: B
+        ): ReturnType<B["attr"]> | undefined => {
           const built = cornerPart(element) as ReturnType<B["attr"]>
           return cornerHidden ? undefined : built
         }

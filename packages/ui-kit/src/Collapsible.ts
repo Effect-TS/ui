@@ -118,9 +118,20 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { type Attributed, flag, idOf, ownStyle, withTokens } from "./internal/attributes.ts"
+import {
+  type Attributed,
+  flag,
+  idOf,
+  ownStyle,
+  withTokens
+} from "./internal/attributes.ts"
 import { override } from "./internal/dom.ts"
-import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
+import {
+  frameOf,
+  settling,
+  statusOf,
+  transitionAttrs
+} from "./internal/transition.ts"
 import { layerOf, rewrite, withAttr } from "./internal/tree.ts"
 
 /**
@@ -170,7 +181,10 @@ export type CollapsibleProps = typeof CollapsibleProps.Type
  * @category schemas
  * @since 0.1.0
  */
-export const CollapsibleToggleReason = Schema.Literals(["trigger-press", "find-in-page"])
+export const CollapsibleToggleReason = Schema.Literals([
+  "trigger-press",
+  "find-in-page"
+])
 
 /**
  * Why a collapsible asks to open or close.
@@ -241,14 +255,19 @@ const CollapsibleModel = Schema.Struct({
 
 type CollapsibleModel = typeof CollapsibleModel.Type
 
-const px = (value: number | undefined): string => value === undefined ? "auto" : value + "px"
+const px = (value: number | undefined): string =>
+  value === undefined ? "auto" : value + "px"
 
 const panelStyle = (model: CollapsibleModel, open: boolean): string =>
   [
     "--collapsible-panel-height:" + px(model.size?.height),
     "--collapsible-panel-width:" + px(model.size?.width),
-    ...(model.openOnLoad || (open && !model.started && model.size === null) ? ["animation-name:none"] : []),
-    ...(model.instant ? ["transition-duration:0s", "animation-duration:0s"] : [])
+    ...(model.openOnLoad || (open && !model.started && model.size === null)
+      ? ["animation-name:none"]
+      : []),
+    ...(model.instant
+      ? ["transition-duration:0s", "animation-duration:0s"]
+      : [])
   ].join(";")
 
 const layoutReset = {
@@ -293,12 +312,15 @@ const TrackPanel = Mount.makeStream(
         )
       }
       let current: TrackPanelArgs = args
-      const send = (message: CollapsibleMessage) => Queue.offerUnsafe(queue, message)
+      const send = (message: CollapsibleMessage) =>
+        Queue.offerUnsafe(queue, message)
 
       const opened = () => {
         send(CollapsibleMessage.MeasuredPanel({ size: measure(node) }))
         twoFrames(() => {
-          if (current.open && !current.started) send(CollapsibleMessage.RenderedFirstFrame())
+          if (current.open && !current.started) {
+            send(CollapsibleMessage.RenderedFirstFrame())
+          }
         })
       }
       const closed = () => {
@@ -353,10 +375,17 @@ const TrackPanel = Mount.makeStream(
 
       return Effect.acquireRelease(
         Effect.sync(() => {
-          node.addEventListener("beforematch", onBeforeMatch, { signal: controller.signal })
+          node.addEventListener("beforematch", onBeforeMatch, {
+            signal: controller.signal
+          })
           if (current.open && !current.started) opened()
         }).pipe(
-          Effect.tap(() => Effect.forkScoped(Stream.runForEach(changes, (next) => Effect.sync(() => onChange(next)))))
+          Effect.tap(() =>
+            Effect.forkScoped(
+              Stream.runForEach(changes, (next) =>
+                Effect.sync(() => onChange(next)))
+            )
+          )
         ),
         () =>
           Effect.sync(() => {
@@ -427,20 +456,42 @@ export const Collapsible = Component.define({
     ClickedTrigger: ($) =>
       $.props.disabled === true
         ? $.model
-        : $.emit(CollapsibleEvents.Toggled({ open: !$.props.open, reason: "trigger-press" })),
+        : $.emit(
+          CollapsibleEvents.Toggled({
+            open: !$.props.open,
+            reason: "trigger-press"
+          })
+        ),
     MeasuredPanel: ($, { size }) =>
       $.evolve(
         $.props.open
           ? { size, mounted: true, ending: false }
-          : { size, mounted: true, ending: false, instant: false, openOnLoad: false }
+          : {
+            size,
+            mounted: true,
+            ending: false,
+            instant: false,
+            openOnLoad: false
+          }
       ),
-    RenderedFirstFrame: ($) => $.props.open ? $.evolve({ started: true }) : $.model,
-    RenderedSize: ($) => !$.props.open && $.model.mounted ? $.evolve({ ending: true }) : $.model,
+    RenderedFirstFrame: ($) =>
+      $.props.open ? $.evolve({ started: true }) : $.model,
+    RenderedSize: ($) =>
+      !$.props.open && $.model.mounted ? $.evolve({ ending: true }) : $.model,
     FinishedTransition: ($, { open }) => {
       if (open !== $.props.open) return $.model
-      if (open) return $.evolve({ size: null, instant: false }).emit(CollapsibleEvents.Settled({ open }))
+      if (open) {
+        return $.evolve({ size: null, instant: false }).emit(
+          CollapsibleEvents.Settled({ open })
+        )
+      }
       return $.model.ending && $.props.holdExit !== true
-        ? $.evolve({ mounted: false, started: false, ending: false, size: null }).emit(
+        ? $.evolve({
+          mounted: false,
+          started: false,
+          ending: false,
+          size: null
+        }).emit(
           CollapsibleEvents.Settled({ open })
         )
         : $.model
@@ -451,7 +502,8 @@ export const Collapsible = Component.define({
         : $.evolve({ started: true, instant: true }).emit(
           CollapsibleEvents.Toggled({ open: true, reason: "find-in-page" })
         ),
-    StayedHidden: ($) => $.props.open ? $.model : $.evolve({ started: false, instant: false })
+    StayedHidden: ($) =>
+      $.props.open ? $.model : $.evolve({ started: false, instant: false })
   },
   parts: (p, model) => {
     const props = p.props
@@ -465,22 +517,34 @@ export const Collapsible = Component.define({
     )
     let panelId = p.id("panel")
     const states = <B extends Attributed<B>>(builder: B): B =>
-      transitionAttrs(builder, open, transitionStatus).attr("data-disabled", flag(disabled))
+      transitionAttrs(builder, open, transitionStatus).attr(
+        "data-disabled",
+        flag(disabled)
+      )
 
     const triggers = new Map<
       View.Owned,
-      { readonly controls: string | undefined; readonly consumer: string | undefined }
+      {
+        readonly controls: string | undefined
+        readonly consumer: string | undefined
+      }
     >()
     const root = p.part("div", (b) =>
       states(b).forward((node) => {
         const target = open ? panelId : undefined
-        if (![...triggers.values()].some(({ controls }) => controls !== target)) return node
+        if (
+          ![...triggers.values()].some(({ controls }) => controls !== target)
+        ) return node
         return rewrite(View.build(node, []), (element) => {
           if (element._tag !== "Element") return undefined
           const layer = element.owned?.find((l) => triggers.has(l))
           return layer === undefined
             ? undefined
-            : withAttr(element, "aria-controls", withTokens(triggers.get(layer)!.consumer, target))
+            : withAttr(
+              element,
+              "aria-controls",
+              withTokens(triggers.get(layer)!.consumer, target)
+            )
         })
       }))
 
@@ -509,7 +573,9 @@ export const Collapsible = Component.define({
         .attrs({
           id,
           hidden: mounted ? undefined : hiddenUntilFound ? "until-found" : "",
-          "data-starting-style": flag(transitionStatus === "starting" || (!mounted && hiddenUntilFound))
+          "data-starting-style": flag(
+            transitionStatus === "starting" || (!mounted && hiddenUntilFound)
+          )
         })
         .forward((node) => {
           panelId = node.elementAttrs.id ?? id
@@ -526,10 +592,14 @@ export const Collapsible = Component.define({
         ))
     const panel = View.wrapPart(
       panelPart,
-      <B extends View.PartTarget<"div">>(element: B): ReturnType<B["attr"]> | undefined => {
+      <B extends View.PartTarget<"div">>(
+        element: B
+      ): ReturnType<B["attr"]> | undefined => {
         panelId = idOf(element) ?? panelId
         const out = panelPart(element, panelId)
-        return mounted || hiddenUntilFound || props.keepMounted === true ? out : undefined
+        return mounted || hiddenUntilFound || props.keepMounted === true
+          ? out
+          : undefined
       }
     )
 

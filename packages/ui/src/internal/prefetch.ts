@@ -45,7 +45,9 @@ export interface Instance {
  */
 export interface Runtime {
   readonly now: () => number
-  readonly report: (problem: { readonly _tag: string; readonly message: string }) => void
+  readonly report: (
+    problem: { readonly _tag: string; readonly message: string }
+  ) => void
   readonly cache: () => queryCore.Cache
   /** The key `watched` holds for an entry. */
   readonly entryKey: (query: string, argsKey: string) => string
@@ -100,11 +102,20 @@ export const declare = (
     run: (route, intent) => {
       if (inst.closed || inst.failure !== undefined) return undefined
       const now = runtime.now()
-      for (const [key, at] of ran) if (now - at >= intentGuardMillis) ran.delete(key)
+      for (const [key, at] of ran) {
+        if (now - at >= intentGuardMillis) ran.delete(key)
+      }
       const printed = declared.declaration.routes.print(route)
       if (intent && ran.has(printed)) return undefined
       ran.set(printed, now)
-      return runDeclaration(problems, runtime, inst, declared.declaration, route, intent)
+      return runDeclaration(
+        problems,
+        runtime,
+        inst,
+        declared.declaration,
+        route,
+        intent
+      )
     }
   })
 }
@@ -112,7 +123,10 @@ export const declare = (
 interface WalkedPage {
   readonly name: string
   /** The entries the walk prefetched, by entry key. */
-  readonly entries: Map<string, { readonly query: string; readonly logKey: string }>
+  readonly entries: Map<
+    string,
+    { readonly query: string; readonly logKey: string }
+  >
 }
 
 /**
@@ -136,7 +150,9 @@ const runDeclaration = (
   try {
     pages = handler(route)
   } catch (error) {
-    runtime.report(prefetchThrew(problems, inst, `Router.prefetch ${route._tag}`, error))
+    runtime.report(
+      prefetchThrew(problems, inst, `Router.prefetch ${route._tag}`, error)
+    )
     return undefined
   }
   if (intent) {
@@ -144,7 +160,9 @@ const runDeclaration = (
     return undefined
   }
   const since = runtime.since()
-  const walked = pages.map((page) => walkPage(problems, runtime, inst, envCtx, page))
+  const walked = pages.map((page) =>
+    walkPage(problems, runtime, inst, envCtx, page)
+  )
   // Records the watches of the instances created from here until the check ends.
   const end = runtime.record()
   return {
@@ -159,9 +177,15 @@ const runDeclaration = (
   }
 }
 
-const prefetchThrew = (problems: Problems, inst: Instance, page: string, error: unknown) =>
+const prefetchThrew = (
+  problems: Problems,
+  inst: Instance,
+  page: string,
+  error: unknown
+) =>
   new problems.PrefetchThrew({
-    message: `${inst.path}: ${page} threw while Router.prefetch walked it, so the rest of its walk was skipped`,
+    message:
+      `${inst.path}: ${page} threw while Router.prefetch walked it, so the rest of its walk was skipped`,
     path: inst.path,
     page,
     error
@@ -180,8 +204,15 @@ const walkPage = (
   page: services.Page
 ): WalkedPage => {
   const component = page.component as Component.Any
-  const walked: WalkedPage = { name: component.definition.name, entries: new Map() }
-  const visit = (component: Component.Any, props: unknown, provided: boolean) => {
+  const walked: WalkedPage = {
+    name: component.definition.name,
+    entries: new Map()
+  }
+  const visit = (
+    component: Component.Any,
+    props: unknown,
+    provided: boolean
+  ) => {
     // Behind a `provide`, a query the declarer can't see may be given below it: the skip is silent.
     const behind = provided || component.layer !== undefined
     const model = component.init(props).model
@@ -190,8 +221,11 @@ const walkPage = (
       const context = bound.context(model, props, undefined)
       for (const field of bound.entries) {
         const current = context.argsOf(field.name)
-        const entries: ReadonlyArray<componentQueries.Keyed> = current.entries ??
-          (current.argsKey === undefined ? [] : [{ args: current.args, argsKey: current.argsKey }])
+        const entries: ReadonlyArray<componentQueries.Keyed> =
+          current.entries ??
+            (current.argsKey === undefined
+              ? []
+              : [{ args: current.args, argsKey: current.argsKey }])
         if (entries.length === 0) continue
         const def = queryCore.loaded!.defOf(field.query)
         const fetcher = Context.getOption(envCtx, field.query as any)
@@ -211,7 +245,11 @@ const walkPage = (
           continue
         }
         for (const entry of entries) {
-          runtime.cache().prefetch(def, entry.args, fetcher.value as (args: any) => Effect.Effect<any, any>)
+          runtime.cache().prefetch(
+            def,
+            entry.args,
+            fetcher.value as (args: any) => Effect.Effect<any, any>
+          )
           walked.entries.set(runtime.entryKey(def.name, entry.argsKey), {
             query: def.name,
             logKey: def.logKey(entry.args, entry.argsKey)
@@ -236,25 +274,37 @@ const walkPage = (
           if (node.view !== undefined) return
           if (lazy.isLazy(node.component)) {
             const state = lazy.stateOf(node.component)
-            return state._tag === "Loaded" ? visit(state.component, node.props, behind) : undefined
+            return state._tag === "Loaded"
+              ? visit(state.component, node.props, behind)
+              : undefined
           }
           return visit(node.component, node.props, behind)
       }
     }
-    visitNode(component.view(model, props, undefined, undefined, undefined, shared))
+    visitNode(
+      component.view(model, props, undefined, undefined, undefined, shared)
+    )
   }
   // A page that reads shared state reads the owners above the declarer: the walk doesn't run the
   // closures of the headless components in the page, owners among them.
   const shared: Component.SharedLookup = (owner) => {
-    for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) {
+    for (
+      let at: Instance | undefined = inst;
+      at !== undefined;
+      at = at.parent
+    ) {
       if (at.component.definition === owner.definition) return at.shares
     }
-    throw new Error(`${owner.definition.name} isn't above ${inst.path}, so its shared state can't be read`)
+    throw new Error(
+      `${owner.definition.name} isn't above ${inst.path}, so its shared state can't be read`
+    )
   }
   try {
     visit(component, page.props, false)
   } catch (error) {
-    runtime.report(prefetchThrew(problems, inst, component.definition.name, error))
+    runtime.report(
+      prefetchThrew(problems, inst, component.definition.name, error)
+    )
   }
   return walked
 }
@@ -300,7 +350,8 @@ const checkPrefetch = (
       if (mountedNames().has(page.name)) continue
       runtime.report(
         new problems.PrefetchPageNotMounted({
-          message: `${inst.path}: Router.prefetch declared the page ${page.name}, and none was mounted`,
+          message:
+            `${inst.path}: Router.prefetch declared the page ${page.name}, and none was mounted`,
           path: inst.path,
           page: page.name
         })
@@ -310,7 +361,9 @@ const checkPrefetch = (
     // Every instance below a fresh one is fresh too, so its watches were recorded.
     const watched = new Set<string>()
     const gather = (at: Instance) => {
-      if (at.watched !== undefined) { for (const key of at.watched) watched.add(key) }
+      if (at.watched !== undefined) {
+        for (const key of at.watched) watched.add(key)
+      }
       for (const child of at.children) gather(child)
     }
     for (const at of found) gather(at)

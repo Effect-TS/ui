@@ -308,7 +308,8 @@ export const AutocompleteHighlightReason = Engine.HighlightReason
  * @category models
  * @since 0.1.0
  */
-export type AutocompleteHighlightReason = typeof AutocompleteHighlightReason.Type
+export type AutocompleteHighlightReason =
+  typeof AutocompleteHighlightReason.Type
 
 /**
  * How an `Autocomplete` matches its items against the text.
@@ -354,7 +355,12 @@ export type AutocompleteFilterMode = typeof AutocompleteFilterMode.Type
  * @category schemas
  * @since 0.1.0
  */
-export const AutocompleteMode = Schema.Literals(["list", "both", "inline", "none"])
+export const AutocompleteMode = Schema.Literals([
+  "list",
+  "both",
+  "inline",
+  "none"
+])
 
 /**
  * How an `Autocomplete`'s text relates to its list.
@@ -436,7 +442,9 @@ export const AutocompleteProps = Schema.Struct({
   filteredItems: Schema.optional(Schema.Array(AutocompleteItem)),
   locale: Schema.optional(Schema.String),
   limit: Schema.optional(Schema.Number),
-  autoHighlight: Schema.optional(Schema.Union([Schema.Boolean, Schema.Literal("always")])),
+  autoHighlight: Schema.optional(
+    Schema.Union([Schema.Boolean, Schema.Literal("always")])
+  ),
   keepHighlight: Schema.optional(Schema.Boolean),
   highlightItemOnHover: Schema.optional(Schema.Boolean),
   loopFocus: Schema.optional(Schema.Boolean),
@@ -561,20 +569,31 @@ export interface AutocompleteFilter extends TextFilter {}
  * @category constructors
  * @since 0.1.0
  */
-export const makeAutocompleteFilter = (locale?: string | undefined): AutocompleteFilter => textFilter(locale)
+export const makeAutocompleteFilter = (
+  locale?: string | undefined
+): AutocompleteFilter => textFilter(locale)
 
 const emits: Engine.Emits<AutocompleteEvents> = {
   requestedOpen: (reason) => AutocompleteEvents.RequestedOpen({ reason }),
   requestedClose: (reason) => AutocompleteEvents.RequestedClose({ reason }),
   edited: (value, reason) => AutocompleteEvents.Updated({ value, reason }),
-  highlighted: (value, index, reason) => AutocompleteEvents.Highlighted({ value, index, reason }),
+  highlighted: (value, index, reason) =>
+    AutocompleteEvents.Highlighted({ value, index, reason }),
   settled: (open) => AutocompleteEvents.Settled({ open })
 }
 
-const engine = Engine.make("Autocomplete", (props: AutocompleteProps): Engine.Settings<AutocompleteEvents> => {
-  const { value, ...rest } = props
-  return { ...rest, inputValue: value, openOnInputClick: props.openOnInputClick ?? false, emits }
-})
+const engine = Engine.make(
+  "Autocomplete",
+  (props: AutocompleteProps): Engine.Settings<AutocompleteEvents> => {
+    const { value, ...rest } = props
+    return {
+      ...rest,
+      inputValue: value,
+      openOnInputClick: props.openOnInputClick ?? false,
+      emits
+    }
+  }
+)
 
 /**
  * An autocomplete: an input that suggests completions from a list as the

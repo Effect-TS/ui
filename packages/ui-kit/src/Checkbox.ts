@@ -214,14 +214,20 @@ export type CheckboxEvents = typeof CheckboxEvents.Type
 
 // A click on the root, which Space on the native button arrives as. Enter
 // is its own message so the root can cancel the button's click on Enter.
-const CheckboxMessage = UiSchema.TaggedEnum({ ClickedRoot: {}, PressedEnter: {} })
+const CheckboxMessage = UiSchema.TaggedEnum({
+  ClickedRoot: {},
+  PressedEnter: {}
+})
 
 type GroupShared = Component.Shared.Value<typeof CheckboxGroup>
 
-const isMember = (props: CheckboxProps): props is CheckboxProps & { readonly value: string } =>
+const isMember = (
+  props: CheckboxProps
+): props is CheckboxProps & { readonly value: string } =>
   props.parent !== true && props.value !== undefined
 
-const memberId = (props: CheckboxProps, id: (name: string) => string): string => props.id ?? id("root")
+const memberId = (props: CheckboxProps, id: (name: string) => string): string =>
+  props.id ?? id("root")
 
 const resolve = (props: CheckboxProps, group: GroupShared | undefined) => {
   const disabled = props.disabled === true || group?.disabled === true
@@ -250,7 +256,12 @@ const resolve = (props: CheckboxProps, group: GroupShared | undefined) => {
       value: props.value,
       checked,
       controls: undefined,
-      field: { checked, disabled, name: props.name ?? group.name ?? undefined, value: props.value }
+      field: {
+        checked,
+        disabled,
+        name: props.name ?? group.name ?? undefined,
+        value: props.value
+      }
     }
   }
   const checked = props.checked === true
@@ -271,7 +282,8 @@ const resolve = (props: CheckboxProps, group: GroupShared | undefined) => {
 
 type Resolved = ReturnType<typeof resolve>
 
-const interactive = (resolved: Resolved): boolean => !resolved.disabled && !resolved.readOnly
+const interactive = (resolved: Resolved): boolean =>
+  !resolved.disabled && !resolved.readOnly
 
 // The state attributes, the same on the root and the indicator so either
 // one can be styled on its own. An indeterminate checkbox is neither
@@ -337,7 +349,13 @@ export const Checkbox = Component.define({
       owner: CheckboxGroup,
       optional: true,
       report: (_model, props, id) =>
-        isMember(props) ? { value: props.value, disabled: props.disabled === true, id: memberId(props, id) } : null
+        isMember(props)
+          ? {
+            value: props.value,
+            disabled: props.disabled === true,
+            id: memberId(props, id)
+          }
+          : null
     }
   },
   elements: Html
@@ -347,12 +365,20 @@ export const Checkbox = Component.define({
     ClickedRoot: ($) => {
       const resolved = resolve($.props, $.shared.group)
       if (!interactive(resolved)) return $.model
-      const toggled = $.emit(CheckboxEvents.Toggled({ checked: !resolved.checked }))
+      const toggled = $.emit(
+        CheckboxEvents.Toggled({ checked: !resolved.checked })
+      )
       switch (resolved.role) {
         case "member":
-          return toggled.send(CheckboxGroup, CheckboxGroupMessage.ToggledItem({ value: resolved.value }))
+          return toggled.send(
+            CheckboxGroup,
+            CheckboxGroupMessage.ToggledItem({ value: resolved.value })
+          )
         case "parent":
-          return toggled.send(CheckboxGroup, CheckboxGroupMessage.ToggledParent())
+          return toggled.send(
+            CheckboxGroup,
+            CheckboxGroupMessage.ToggledParent()
+          )
         default:
           return toggled
       }
@@ -370,31 +396,37 @@ export const Checkbox = Component.define({
       disabled: resolved.disabled,
       readOnly: resolved.readOnly,
       required: resolved.required,
-      root: p.part("button", (b) =>
-        state(id === undefined ? b : b.attr("id", id), resolved)
-          .attrs({
-            // Inside a form a button submits by default.
-            type: "button",
-            role: "checkbox",
-            "aria-checked": resolved.indeterminate ? "mixed" : String(resolved.checked),
-            "aria-readonly": resolved.readOnly ? "true" : undefined,
-            "aria-required": resolved.required ? "true" : undefined,
-            // Never set: the native `disabled` reports it. Removed, so the
-            // consumer's can't report a state the props don't have.
-            "aria-disabled": undefined,
-            "data-parent": flag(p.props.parent),
-            "aria-controls": resolved.controls
-          })
-          .disabled(resolved.disabled)
-          .onClick(CheckboxMessage.ClickedRoot())
-          .onKeyDown(
-            ({ key }) => key === "Enter" ? CheckboxMessage.PressedEnter() : undefined,
-            // Cancels Enter's click on the button, and leaves every other key alone.
-            { preventDefault: true }
-          )
-          // The form field goes after the children already on the button, and
-          // before the ones the consumer chains afterward.
-          .children(hidden)),
+      root: p.part(
+        "button",
+        (b) =>
+          state(id === undefined ? b : b.attr("id", id), resolved)
+            .attrs({
+              // Inside a form a button submits by default.
+              type: "button",
+              role: "checkbox",
+              "aria-checked": resolved.indeterminate
+                ? "mixed"
+                : String(resolved.checked),
+              "aria-readonly": resolved.readOnly ? "true" : undefined,
+              "aria-required": resolved.required ? "true" : undefined,
+              // Never set: the native `disabled` reports it. Removed, so the
+              // consumer's can't report a state the props don't have.
+              "aria-disabled": undefined,
+              "data-parent": flag(p.props.parent),
+              "aria-controls": resolved.controls
+            })
+            .disabled(resolved.disabled)
+            .onClick(CheckboxMessage.ClickedRoot())
+            .onKeyDown(
+              ({ key }) =>
+                key === "Enter" ? CheckboxMessage.PressedEnter() : undefined,
+              // Cancels Enter's click on the button, and leaves every other key alone.
+              { preventDefault: true }
+            )
+            // The form field goes after the children already on the button, and
+            // before the ones the consumer chains afterward.
+            .children(hidden)
+      ),
       indicator: p.part("span", (b) => state(b, resolved))
     }
   }

@@ -1,5 +1,11 @@
 import { Note, NotesTag } from "#domain/Note"
-import { Command, Component, Subscription, UiSchema, UiStruct } from "@effect/ui"
+import {
+  Command,
+  Component,
+  Subscription,
+  UiSchema,
+  UiStruct
+} from "@effect/ui"
 import { Effect, Layer, Schema, Stream } from "effect"
 import { Notes } from "../services/Notes.ts"
 
@@ -51,7 +57,8 @@ export class SaveNote extends Command.Service<SaveNote>()(
       notes.save(note).pipe(
         Effect.match({
           onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
-          onFailure: (error) => NoteEditorMessage.FailedSaveNote({ reason: error.reason })
+          onFailure: (error) =>
+            NoteEditorMessage.FailedSaveNote({ reason: error.reason })
         })
       )
   })
@@ -84,7 +91,9 @@ const NoteEditorDef = Component.define({
 // An update function without a tag takes every message, so `$.combine` in
 // any slice can run it. `$.combine` in a slice also runs slices for the
 // same tag and functions written inline, each with the slice's message.
-const closeActions = NoteEditorDef.update(($) => $.evolve({ actionsOpen: false }))
+const closeActions = NoteEditorDef.update(($) =>
+  $.evolve({ actionsOpen: false })
+)
 const clearError = NoteEditorDef.update(($) => $.evolve({ error: null }))
 
 // A slice for one tag: `$` comes first and holds the Model and props, typed
@@ -93,15 +102,20 @@ const clearError = NoteEditorDef.update(($) => $.evolve({ error: null }))
 // `view` are pure.
 // They read props from `$.props` and `h.props`. A props change re-renders,
 // but never reaches `update`.
-const save = NoteEditorDef.update("RequestedSave", ($) =>
-  $.model.draft === $.model.saved
-    // With nothing to run or emit, return the next Model.
-    ? $.model
-    // `$.combine` runs the functions in order, each from the Model the one
-    // before returned, and returns a step, so `.run` follows it. Ctrl+S can
-    // save while the menu is open, so a save closes it. `$.run` only takes
-    // Commands whose result is one of this component's messages.
-    : $.combine(closeActions, clearError).run(SaveNote.make({ note: { ...$.props.note, body: $.model.draft } })))
+const save = NoteEditorDef.update(
+  "RequestedSave",
+  ($) =>
+    $.model.draft === $.model.saved
+      // With nothing to run or emit, return the next Model.
+      ? $.model
+      // `$.combine` runs the functions in order, each from the Model the one
+      // before returned, and returns a step, so `.run` follows it. Ctrl+S can
+      // save while the menu is open, so a save closes it. `$.run` only takes
+      // Commands whose result is one of this component's messages.
+      : $.combine(closeActions, clearError).run(
+        SaveNote.make({ note: { ...$.props.note, body: $.model.draft } })
+      )
+)
 
 // Choosing a menu item closes the menu, and the confirm dialog's state is in
 // the Model, like any other.
@@ -131,7 +145,9 @@ const discardDialog = NoteEditorDef.fragment((h, open: boolean) =>
           choice: entries.find(([name]) => name === "choice")?.[1] ?? ""
         })
       ).children(
-        h.button.attrs({ name: "choice", value: "keep" }).children("Keep editing"),
+        h.button.attrs({ name: "choice", value: "keep" }).children(
+          "Keep editing"
+        ),
         h.button.attrs({ name: "choice", value: "discard" }).children("Discard")
       )
     )
@@ -152,7 +168,9 @@ const discardDialog = NoteEditorDef.fragment((h, open: boolean) =>
 // the same string anywhere else.
 const noteEditorView = NoteEditorDef.view((h, model) =>
   h.div(
-    h.form.attr("aria-label", "Edit note").onSubmit(NoteEditorMessage.RequestedSave()).children(
+    h.form.attr("aria-label", "Edit note").onSubmit(
+      NoteEditorMessage.RequestedSave()
+    ).children(
       h.h2(h.props.note.title),
       h.textarea.attr("aria-label", "Body").value(model.draft)
         .class("note-body", model.draft !== model.saved && "unsaved")
@@ -163,12 +181,17 @@ const noteEditorView = NoteEditorDef.view((h, model) =>
         // as usual. Nothing stops the event's propagation, and a form's
         // `submit` is always cancelled, so `onSubmit` takes no options.
         .onKeyDown(
-          ({ ctrl, key, meta }) => (ctrl || meta) && key === "s" ? NoteEditorMessage.RequestedSave() : undefined,
+          ({ ctrl, key, meta }) =>
+            (ctrl || meta) && key === "s"
+              ? NoteEditorMessage.RequestedSave()
+              : undefined,
           { preventDefault: true }
         ),
       // `h.isRunning` is true while this instance has a save queued or running.
       h.button.attr("type", "submit")
-        .disabled(model.draft === model.saved).children(h.isRunning(SaveNote) ? "Saving…" : "Save"),
+        .disabled(model.draft === model.saved).children(
+          h.isRunning(SaveNote) ? "Saving…" : "Save"
+        ),
       // A menu is an auto popover in the top layer, so no ancestor's
       // `overflow` clips it. Its button is a `popovertarget` invoker: the
       // browser opens and closes it with no handler, and `onToggle` keeps
@@ -184,12 +207,16 @@ const noteEditorView = NoteEditorDef.view((h, model) =>
         id: `actions-${h.props.note.id}`,
         role: "menu",
         "aria-label": "Note actions",
-        style: `position-anchor: --actions-${h.props.note.id}; position-area: bottom span-left; margin: 0`
+        style:
+          `position-anchor: --actions-${h.props.note.id}; position-area: bottom span-left; margin: 0`
       })
         .popover("auto", model.actionsOpen)
-        .onToggle(({ open }) => NoteEditorMessage.ToggledActions({ open })).children(
+        .onToggle(({ open }) => NoteEditorMessage.ToggledActions({ open }))
+        .children(
           h.button.attr("type", "button").disabled(model.draft === model.saved)
-            .onClick(NoteEditorMessage.ClickedDiscard()).children("Discard changes")
+            .onClick(NoteEditorMessage.ClickedDiscard()).children(
+              "Discard changes"
+            )
         ),
       model.error !== null && h.p.attr("role", "alert").children(model.error)
     ),
@@ -217,13 +244,16 @@ export const NoteEditorNoDeps = NoteEditorDef.make({
     // takes its new value, or a function of its old value. It returns a step,
     // so `.run`, `.emit` and another `.evolve` chain after it. `$.set`
     // replaces the whole Model instead.
-    UpdatedBody: ($, { body }) => $.evolve({ draft: body, edits: (edits) => edits + 1 }),
+    UpdatedBody: ($, { body }) =>
+      $.evolve({ draft: body, edits: (edits) => edits + 1 }),
     RequestedSave: save,
     // `$.emit` reports to the parent.
-    SucceededSaveNote: ($, { note }) => $.evolve({ saved: note.body }).emit(NoteEditorEvents.Saved({ note })),
+    SucceededSaveNote: ($, { note }) =>
+      $.evolve({ saved: note.body }).emit(NoteEditorEvents.Saved({ note })),
     // A handler that returns a bare Model can use `UiStruct.evolve`, which
     // takes the same fields.
-    FailedSaveNote: ($, { reason }) => UiStruct.evolve($.model, { error: reason }),
+    FailedSaveNote: ($, { reason }) =>
+      UiStruct.evolve($.model, { error: reason }),
     ClickedDiscard: clickedDiscard,
     // An auto popover is followed: the browser opens it from its button and
     // closes it on Escape or a click outside, and the Model keeps up.
@@ -248,7 +278,13 @@ export const NoteEditorNoDeps = NoteEditorDef.make({
     Subscription.make(
       "autosave",
       model.edits,
-      () => Stream.fromEffect(Effect.as(Effect.sleep("2 seconds"), NoteEditorMessage.RequestedSave()))
+      () =>
+        Stream.fromEffect(
+          Effect.as(
+            Effect.sleep("2 seconds"),
+            NoteEditorMessage.RequestedSave()
+          )
+        )
     )
   ],
   view: noteEditorView

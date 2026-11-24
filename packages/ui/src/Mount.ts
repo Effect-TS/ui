@@ -158,7 +158,12 @@ export declare namespace Definition {
  * @category models
  * @since 0.1.0
  */
-export interface Factory<in out Args, in out A, in Node = unknown, out R = never> extends Definition<Args, A, Node, R> {
+export interface Factory<
+  in out Args,
+  in out A,
+  in Node = unknown,
+  out R = never
+> extends Definition<Args, A, Node, R> {
   (...args: Command.MakeArgs<Args>): Issued<A, R, Node, A>
 }
 
@@ -178,7 +183,12 @@ export interface Factory<in out Args, in out A, in Node = unknown, out R = never
  * @category models
  * @since 0.1.0
  */
-export interface Issued<out Msg, out R = never, in Node = unknown, in Source = Msg> extends Pipeable.Pipeable {
+export interface Issued<
+  out Msg,
+  out R = never,
+  in Node = unknown,
+  in Source = Msg
+> extends Pipeable.Pipeable {
   readonly [TypeId]: Variance<Msg, R, Node, Source>
   /** The definition's name, shown in the log and in test failures. */
   readonly name: string
@@ -262,7 +272,8 @@ export type Any = Issued<any, any, never, never>
  * @category utility types
  * @since 0.1.0
  */
-export type Result<M> = M extends Definition<infer _Args, infer A, infer _Node, infer _R> ? A
+export type Result<M> = M extends
+  Definition<infer _Args, infer A, infer _Node, infer _R> ? A
   : M extends Issued<infer _Msg, infer _R, infer _Node, infer Source> ? Source
   : never
 
@@ -273,12 +284,18 @@ export type Result<M> = M extends Definition<infer _Args, infer A, infer _Node, 
  * @category utility types
  * @since 0.1.0
  */
-export type Args<D> = D extends Definition<infer Args, infer _A, infer _Node, infer _R> ? Args : never
+export type Args<D> = D extends
+  Definition<infer Args, infer _A, infer _Node, infer _R> ? Args : never
 
 const identity = (result: any) => result
 
 const Proto = {
-  [TypeId]: { _Msg: identity, _R: identity, _Node: identity, _Source: identity },
+  [TypeId]: {
+    _Msg: identity,
+    _R: identity,
+    _Node: identity,
+    _Source: identity
+  },
   "~args": {
     make: mountArgs.make,
     publish: mountArgs.publish,
@@ -302,7 +319,8 @@ interface Fields {
   readonly resolve: (result: any) => any
 }
 
-const makeIssued = (fields: Fields): any => Object.assign(Object.create(Proto), fields)
+const makeIssued = (fields: Fields): any =>
+  Object.assign(Object.create(Proto), fields)
 
 /**
  * Returns `true` if `u` is an issued mount.
@@ -311,7 +329,8 @@ const makeIssued = (fields: Fields): any => Object.assign(Object.create(Proto), 
  * @category guards
  * @since 0.1.0
  */
-export const isMount = (u: unknown): u is Any => Predicate.hasProperty(u, TypeId)
+export const isMount = (u: unknown): u is Any =>
+  Predicate.hasProperty(u, TypeId)
 
 /**
  * Returns `true` if `u` is a mount definition.
@@ -320,7 +339,8 @@ export const isMount = (u: unknown): u is Any => Predicate.hasProperty(u, TypeId
  * @category guards
  * @since 0.1.0
  */
-export const isDefinition = (u: unknown): u is Definition.Any => Predicate.hasProperty(u, DefinitionTypeId)
+export const isDefinition = (u: unknown): u is Definition.Any =>
+  Predicate.hasProperty(u, DefinitionTypeId)
 
 /**
  * Defines a mount.
@@ -375,7 +395,13 @@ export const isDefinition = (u: unknown): u is Definition.Any => Predicate.hasPr
  * @category constructors
  * @since 0.1.0
  */
-export const make = <const Name extends string, const In extends Command.ArgsInput, A, Node = unknown, R = never>(
+export const make = <
+  const Name extends string,
+  const In extends Command.ArgsInput,
+  A,
+  Node = unknown,
+  R = never
+>(
   name: Name,
   options: Options<In>,
   run: (
@@ -384,7 +410,13 @@ export const make = <const Name extends string, const In extends Command.ArgsInp
     changes: Stream.Stream<Command.ArgsOf<In>>
   ) => Effect.Effect<A, never, R>
 ): Factory<Command.ArgsOf<In>, A, Node, R> =>
-  define(name, options, false, (node, args, changes, send) => Effect.flatMap(run(node, args, changes), send))
+  define(
+    name,
+    options,
+    false,
+    (node, args, changes, send) =>
+      Effect.flatMap(run(node, args, changes), send)
+  )
 
 /**
  * Defines a mount that sends a result for each value of a Stream, for as long
@@ -453,15 +485,30 @@ export const makeStream = <
     changes: Stream.Stream<Command.ArgsOf<In>>
   ) => Stream.Stream<A, never, R>
 ): Factory<Command.ArgsOf<In>, A, Node, R> =>
-  define(name, options, true, (node, args, changes, send) => Stream.runForEach(run(node, args, changes), send))
+  define(
+    name,
+    options,
+    true,
+    (node, args, changes, send) =>
+      Stream.runForEach(run(node, args, changes), send)
+  )
 
-const define = (name: string, options: Options<Command.ArgsInput>, stream: boolean, run: Fields["run"]): any => {
+const define = (
+  name: string,
+  options: Options<Command.ArgsInput>,
+  stream: boolean,
+  run: Fields["run"]
+): any => {
   const argsSchema = Schema.isSchema(options.args)
     ? options.args as Schema.Top
     : Schema.Struct(options.args as Schema.Struct.Fields)
-  const factory = (args: unknown = {}) => makeIssued({ name, args, argsSchema, stream, run, resolve: identity })
+  const factory = (args: unknown = {}) =>
+    makeIssued({ name, args, argsSchema, stream, run, resolve: identity })
   Object.defineProperty(factory, "name", { value: name })
-  return Object.assign(factory, { [DefinitionTypeId]: DefinitionTypeId, args: argsSchema })
+  return Object.assign(factory, {
+    [DefinitionTypeId]: DefinitionTypeId,
+    args: argsSchema
+  })
 }
 
 /**
@@ -483,11 +530,21 @@ const define = (name: string, options: Options<Command.ArgsInput>, stream: boole
  * @since 0.1.0
  */
 export const map: {
-  <A, B>(f: (a: A) => B): <R, Node, Source>(self: Issued<A, R, Node, Source>) => Issued<B, R, Node, Source>
-  <A, R, Node, Source, B>(self: Issued<A, R, Node, Source>, f: (a: A) => B): Issued<B, R, Node, Source>
+  <A, B>(
+    f: (a: A) => B
+  ): <R, Node, Source>(
+    self: Issued<A, R, Node, Source>
+  ) => Issued<B, R, Node, Source>
+  <A, R, Node, Source, B>(
+    self: Issued<A, R, Node, Source>,
+    f: (a: A) => B
+  ): Issued<B, R, Node, Source>
 } = dual(
   2,
-  <A, R, Node, Source, B>(self: Issued<A, R, Node, Source>, f: (a: A) => B): Issued<B, R, Node, Source> => {
+  <A, R, Node, Source, B>(
+    self: Issued<A, R, Node, Source>,
+    f: (a: A) => B
+  ): Issued<B, R, Node, Source> => {
     const resolve = self.resolve
     return makeIssued({
       name: self.name,
@@ -511,5 +568,8 @@ export const sameArgs = (self: Any, that: Any): boolean => {
   if (self.name !== that.name) return false
   if (self.args === that.args) return true
   // `Schema.toEquivalence` keeps the equivalence it derives for a schema.
-  return Schema.toEquivalence(self.argsSchema as Schema.Schema<unknown>)(self.args, that.args)
+  return Schema.toEquivalence(self.argsSchema as Schema.Schema<unknown>)(
+    self.args,
+    that.args
+  )
 }

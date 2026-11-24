@@ -44,7 +44,9 @@ export interface Glob {
  * @category services
  * @since 4.0.0
  */
-export const Glob: Context.Service<Glob, Glob> = Context.Service("@effect/utils/Glob")
+export const Glob: Context.Service<Glob, Glob> = Context.Service(
+  "@effect/utils/Glob"
+)
 
 /**
  * Layer that provides the `Glob` service using the `glob` package and maps matching failures to `GlobError`.
@@ -55,7 +57,11 @@ export const Glob: Context.Service<Glob, Glob> = Context.Service("@effect/utils/
 export const layer: Layer.Layer<Glob> = Layer.succeed(Glob, {
   glob: (pattern, options) =>
     Effect.tryPromise({
-      try: () => GlobLib.glob(pattern as string | Array<string>, options ?? {}) as Promise<Array<string>>,
+      try: () =>
+        GlobLib.glob(
+          pattern as string | Array<string>,
+          options ?? {}
+        ) as Promise<Array<string>>,
       catch: (cause) => new GlobError({ pattern, cause })
     })
 })

@@ -7,6 +7,8 @@ const Message = Schema.TaggedUnion({ Increment: {}, Decrement: {} })
 Layer.launch(Layer.effectDiscard(Effect.sync(() => {
   const app = document.getElementById("app")!
   const model = Schema.decodeUnknownSync(Model)(JSON.parse(app.dataset.model!))
-  const message = Schema.decodeUnknownSync(Message)(JSON.parse(app.dataset.message!))
+  const message = Schema.decodeUnknownSync(Message)(
+    JSON.parse(app.dataset.message!)
+  )
   app.textContent = String(message._tag === "Increment" ? model + 1 : model - 1)
 }))).pipe(Effect.runFork)

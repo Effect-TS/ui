@@ -7,7 +7,12 @@ import { Effect, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { byId, container, holdExits, popovers, tick } from "./utils/document.ts"
 
-type Rect = { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
+type Rect = {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
 
 const rects = new Map<string, Rect>()
 
@@ -15,19 +20,38 @@ const geometry = Effect.acquireRelease(
   Effect.sync(() => {
     const element = window.Element.prototype as any
     const root = document.documentElement as any
-    const saved = { rect: element.getBoundingClientRect, ResizeObserver: (window as any).ResizeObserver }
+    const saved = {
+      rect: element.getBoundingClientRect,
+      ResizeObserver: (window as any).ResizeObserver
+    }
     ;(window as any).ResizeObserver = class {
       observe() {}
       unobserve() {}
       disconnect() {}
     }
     element.getBoundingClientRect = function(this: Element) {
-      const { height, width, x, y } = rects.get(this.id) ?? rects.get(this.getAttribute("data-testid") ?? "") ??
+      const { height, width, x, y } = rects.get(this.id) ??
+        rects.get(this.getAttribute("data-testid") ?? "") ??
         { x: 0, y: 0, width: 0, height: 0 }
-      return { x, y, width, height, left: x, top: y, right: x + width, bottom: y + height }
+      return {
+        x,
+        y,
+        width,
+        height,
+        left: x,
+        top: y,
+        right: x + width,
+        bottom: y + height
+      }
     }
-    Object.defineProperty(root, "clientWidth", { configurable: true, value: 1000 })
-    Object.defineProperty(root, "clientHeight", { configurable: true, value: 800 })
+    Object.defineProperty(root, "clientWidth", {
+      configurable: true,
+      value: 1000
+    })
+    Object.defineProperty(root, "clientHeight", {
+      configurable: true,
+      value: 800
+    })
     return () => {
       element.getBoundingClientRect = saved.rect
       ;(window as any).ResizeObserver = saved.ResizeObserver
@@ -60,7 +84,11 @@ const Config = Schema.Struct({
 type Config = typeof Config.Type
 
 const Message = UiSchema.TaggedEnum({
-  RequestedOpen: { menu: Schema.String, reason: Schema.String, triggerId: Schema.NullOr(Schema.String) },
+  RequestedOpen: {
+    menu: Schema.String,
+    reason: Schema.String,
+    triggerId: Schema.NullOr(Schema.String)
+  },
   RequestedClose: { menu: Schema.String, reason: Schema.String },
   Picked: { menu: Schema.String, value: Schema.String },
   RequestedQuery: { query: Schema.String },
@@ -82,7 +110,14 @@ const Page = Component.define({
   message: Message,
   elements: Html
 }).make({
-  init: () => ({ open: false, modal: true, triggerId: null, share: false, query: "", log: [] }),
+  init: () => ({
+    open: false,
+    modal: true,
+    triggerId: null,
+    share: false,
+    query: "",
+    log: []
+  }),
   update: {
     RequestedOpen: ($, { menu, reason, triggerId }) => ({
       ...$.model,
@@ -90,12 +125,16 @@ const Page = Component.define({
       triggerId: menu === "root" ? triggerId : $.model.triggerId,
       log: [
         ...$.model.log,
-        menu + " RequestedOpen " + reason + (triggerId !== null && triggerId !== "trigger" ? " from " + triggerId : "")
+        menu + " RequestedOpen " + reason +
+        (triggerId !== null && triggerId !== "trigger"
+          ? " from " + triggerId
+          : "")
       ]
     }),
     RequestedClose: ($, { menu, reason }) => ({
       ...$.model,
-      [menu === "root" ? "open" : "share"]: menu === "root" && $.props.refuseClose && $.model.open,
+      [menu === "root" ? "open" : "share"]: menu === "root" &&
+        $.props.refuseClose && $.model.open,
       log: [...$.model.log, menu + " RequestedClose " + reason]
     }),
     Picked: ($, { menu, value }) => ({
@@ -116,8 +155,10 @@ const Page = Component.define({
         ...(h.props.filter ? { query: model.query } : {})
       },
       onEmit: {
-        RequestedOpen: ({ reason, triggerId }) => Message.RequestedOpen({ menu: "root", reason, triggerId }),
-        RequestedClose: ({ reason }) => Message.RequestedClose({ menu: "root", reason }),
+        RequestedOpen: ({ reason, triggerId }) =>
+          Message.RequestedOpen({ menu: "root", reason, triggerId }),
+        RequestedClose: ({ reason }) =>
+          Message.RequestedClose({ menu: "root", reason }),
         Picked: ({ value }) => Message.Picked({ menu: "root", value }),
         Highlighted: () => undefined,
         RequestedQuery: ({ query }) => Message.RequestedQuery({ query }),
@@ -126,23 +167,46 @@ const Page = Component.define({
       view: (menu) =>
         h.div(
           h.button.attrs({ id: "before", type: "button" }).children("Before"),
-          menu.trigger({ element: h.button.attr("id", "trigger") }).children("Edit"),
+          menu.trigger({ element: h.button.attr("id", "trigger") }).children(
+            "Edit"
+          ),
           h.props.viewport
-            ? menu.trigger({ element: h.button.attr("id", "trigger-2"), openOnHover: true, delay: 0, closeDelay: 300 })
+            ? menu.trigger({
+              element: h.button.attr("id", "trigger-2"),
+              openOnHover: true,
+              delay: 0,
+              closeDelay: 300
+            })
               .children("View")
             : null,
           h.props.viewport
-            ? menu.trigger({ element: h.button.attr("id", "trigger-3"), disabled: true }).children("Off")
+            ? menu.trigger({
+              element: h.button.attr("id", "trigger-3"),
+              disabled: true
+            }).children("Off")
             : null,
           menu.positioner(h.div.attr("id", "positioner")).children(
             menu.popup(h.div).children(
               h.props.viewport
-                ? menu.viewport(h.div.attr("id", "viewport")).children(h.span.children("Content"))
+                ? menu.viewport(h.div.attr("id", "viewport")).children(
+                  h.span.children("Content")
+                )
                 : null,
-              h.props.filter ? menu.input(h.input.attr("data-testid", "input")) : null,
-              menu.item({ element: h.div.attr("data-testid", "copy"), value: "copy" }).children("Copy"),
-              menu.item({ element: h.div.attr("data-testid", "cut"), value: "cut" }).children("Cut"),
-              menu.item({ element: h.div.attr("data-testid", "paste"), value: "paste" }).children("Paste"),
+              h.props.filter
+                ? menu.input(h.input.attr("data-testid", "input"))
+                : null,
+              menu.item({
+                element: h.div.attr("data-testid", "copy"),
+                value: "copy"
+              }).children("Copy"),
+              menu.item({
+                element: h.div.attr("data-testid", "cut"),
+                value: "cut"
+              }).children("Cut"),
+              menu.item({
+                element: h.div.attr("data-testid", "paste"),
+                value: "paste"
+              }).children("Paste"),
               Menu(h, {
                 props: {
                   open: model.share,
@@ -152,26 +216,49 @@ const Page = Component.define({
                   closeParentOnEsc: h.props.closeParentOnEsc
                 },
                 onEmit: {
-                  RequestedOpen: ({ reason }) => Message.RequestedOpen({ menu: "share", reason, triggerId: null }),
-                  RequestedClose: ({ reason }) => Message.RequestedClose({ menu: "share", reason }),
-                  Picked: ({ value }) => Message.Picked({ menu: "share", value }),
+                  RequestedOpen: ({ reason }) =>
+                    Message.RequestedOpen({
+                      menu: "share",
+                      reason,
+                      triggerId: null
+                    }),
+                  RequestedClose: ({ reason }) =>
+                    Message.RequestedClose({ menu: "share", reason }),
+                  Picked: ({ value }) =>
+                    Message.Picked({ menu: "share", value }),
                   Highlighted: () => undefined,
                   RequestedQuery: () => undefined,
                   Settled: () => undefined
                 },
                 view: (share) =>
                   h.div(
-                    menu.item({ element: share.submenuTrigger(h.div.attr("data-testid", "share")), value: "share" })
+                    menu.item({
+                      element: share.submenuTrigger(
+                        h.div.attr("data-testid", "share")
+                      ),
+                      value: "share"
+                    })
                       .children("Share"),
-                    share.positioner(h.div.attr("id", "share-positioner")).children(
-                      share.popup(h.div).children(
-                        share.item({ element: h.div.attr("data-testid", "email"), value: "email" }).children("Email"),
-                        share.item({ element: h.div.attr("data-testid", "link"), value: "link" }).children("Copy link")
+                    share.positioner(h.div.attr("id", "share-positioner"))
+                      .children(
+                        share.popup(h.div).children(
+                          share.item({
+                            element: h.div.attr("data-testid", "email"),
+                            value: "email"
+                          }).children("Email"),
+                          share.item({
+                            element: h.div.attr("data-testid", "link"),
+                            value: "link"
+                          }).children("Copy link")
+                        )
                       )
-                    )
                   )
               }),
-              h.props.filter ? menu.empty(h.div.attr("data-testid", "empty"))?.children("No matches") : null
+              h.props.filter
+                ? menu.empty(h.div.attr("data-testid", "empty"))?.children(
+                  "No matches"
+                )
+                : null
             )
           ),
           h.button.attrs({ id: "after", type: "button" }).children("After")
@@ -195,20 +282,38 @@ const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
   return { root, log: () => root.model()?.log ?? [] }
 })
 
-const item = (value: string) => document.querySelector<HTMLElement>("[data-testid=" + value + "]")!
-const keydown = (target: Element, key: string, init: KeyboardEventInit = {}) => {
-  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init })
+const item = (value: string) =>
+  document.querySelector<HTMLElement>("[data-testid=" + value + "]")!
+const keydown = (
+  target: Element,
+  key: string,
+  init: KeyboardEventInit = {}
+) => {
+  const event = new KeyboardEvent("keydown", {
+    key,
+    bubbles: true,
+    cancelable: true,
+    ...init
+  })
   target.dispatchEvent(event)
   return event
 }
 const mousedown = (target: Element) => {
   target.dispatchEvent(
-    new PointerEvent("pointerdown", { bubbles: true, isPrimary: true, pointerType: "mouse", button: 0 })
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      isPrimary: true,
+      pointerType: "mouse",
+      button: 0
+    })
   )
-  target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }))
+  target.dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 })
+  )
 }
 const shown = (id: string) => byId(id).matches(":popover-open")
-const popupOf = (positioner: string) => byId(positioner).querySelector<HTMLElement>("[data-menu-popup]")!
+const popupOf = (positioner: string) =>
+  byId(positioner).querySelector<HTMLElement>("[data-menu-popup]")!
 
 describe("Menu in a document", { concurrent: false }, () => {
   it.effect("opens from the keyboard onto the first enabled item, moves focus across disabled items, and returns focus on Enter", () =>
@@ -317,8 +422,16 @@ describe("Menu in a document", { concurrent: false }, () => {
       yield* tick
       assert.isTrue(shown("positioner"))
       assert.strictEqual(document.activeElement, document.body)
-      const handled = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
-      document.body.addEventListener("keydown", (event) => event.preventDefault(), { once: true })
+      const handled = new KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+        cancelable: true
+      })
+      document.body.addEventListener(
+        "keydown",
+        (event) => event.preventDefault(),
+        { once: true }
+      )
       document.body.dispatchEvent(handled)
       yield* tick
       assert.isTrue(shown("positioner"))
@@ -347,7 +460,10 @@ describe("Menu in a document", { concurrent: false }, () => {
       assert.isTrue(shown("share-positioner"))
       assert.strictEqual(share.getAttribute("aria-expanded"), "true")
       assert.strictEqual(document.activeElement, item("email"))
-      assert.strictEqual(popupOf("share-positioner").getAttribute("aria-labelledby"), share.id)
+      assert.strictEqual(
+        popupOf("share-positioner").getAttribute("aria-labelledby"),
+        share.id
+      )
       keydown(item("email"), "ArrowLeft")
       yield* tick
       assert.isFalse(shown("share-positioner"))
@@ -400,7 +516,10 @@ describe("Menu in a document", { concurrent: false }, () => {
       assert.isFalse(shown("share-positioner"))
       assert.isFalse(shown("positioner"))
       assert.strictEqual(document.activeElement, byId("trigger"))
-      assert.deepStrictEqual(log().slice(-2), ["root RequestedClose escape-key", "share RequestedClose escape-key"])
+      assert.deepStrictEqual(log().slice(-2), [
+        "root RequestedClose escape-key",
+        "share RequestedClose escape-key"
+      ])
     }))
 
   it.effect("filtering keeps focus in the input, hides what doesn't match, and Enter picks the highlighted item", () =>
@@ -410,7 +529,10 @@ describe("Menu in a document", { concurrent: false }, () => {
       yield* tick
       const input = item("input") as HTMLInputElement
       assert.strictEqual(document.activeElement, input)
-      assert.strictEqual(popupOf("positioner").getAttribute("role"), "presentation")
+      assert.strictEqual(
+        popupOf("positioner").getAttribute("role"),
+        "presentation"
+      )
       input.value = "pa"
       input.dispatchEvent(new Event("input", { bubbles: true }))
       yield* tick
@@ -419,7 +541,10 @@ describe("Menu in a document", { concurrent: false }, () => {
       assert.isTrue(keydown(input, "ArrowDown").defaultPrevented)
       yield* tick
       assert.strictEqual(document.activeElement, input)
-      assert.strictEqual(input.getAttribute("aria-activedescendant"), item("paste").id)
+      assert.strictEqual(
+        input.getAttribute("aria-activedescendant"),
+        item("paste").id
+      )
       input.value = "zz"
       input.dispatchEvent(new Event("input", { bubbles: true }))
       yield* tick
@@ -443,19 +568,32 @@ describe("Menu in a document", { concurrent: false }, () => {
       const { log } = yield* mountPage()
       mousedown(byId("trigger"))
       yield* tick
-      byId("after").dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, clientX: 900, clientY: 700 }))
+      byId("after").dispatchEvent(
+        new MouseEvent("mouseup", {
+          bubbles: true,
+          button: 0,
+          clientX: 900,
+          clientY: 700
+        })
+      )
       yield* tick
       assert.isFalse(shown("positioner"))
       mousedown(byId("trigger"))
       yield* tick
-      item("copy").dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }))
+      item("copy").dispatchEvent(
+        new MouseEvent("mouseup", { bubbles: true, button: 0 })
+      )
       yield* tick
       assert.isTrue(shown("positioner"))
       mousedown(byId("trigger"))
       yield* tick
       mousedown(byId("trigger"))
-      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 250)))
-      item("paste").dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0 }))
+      yield* Effect.promise(() =>
+        new Promise((resolve) => setTimeout(resolve, 250))
+      )
+      item("paste").dispatchEvent(
+        new MouseEvent("mouseup", { bubbles: true, button: 0 })
+      )
       yield* tick
       assert.isFalse(shown("positioner"))
       assert.deepStrictEqual(log(), [
@@ -474,7 +612,9 @@ describe("Menu in a document", { concurrent: false }, () => {
       yield* mountPage()
       mousedown(byId("trigger"))
       yield* tick
-      const blocker = byId("positioner").querySelector<HTMLElement>("[data-menu-blocker]")!
+      const blocker = byId("positioner").querySelector<HTMLElement>(
+        "[data-menu-blocker]"
+      )!
       assert.isNotNull(blocker)
       assert.include(blocker.style.getPropertyValue("clip-path"), "100px 100px")
       assert.isFalse(blocker.inert)
@@ -489,8 +629,13 @@ describe("Menu in a document", { concurrent: false }, () => {
     Effect.gen(function*() {
       yield* mountPage()
       const styles: Array<string> = []
-      const observer = new MutationObserver(() => styles.push(byId("positioner").style.pointerEvents))
-      observer.observe(byId("positioner"), { attributes: true, attributeFilter: ["style"] })
+      const observer = new MutationObserver(() =>
+        styles.push(byId("positioner").style.pointerEvents)
+      )
+      observer.observe(byId("positioner"), {
+        attributes: true,
+        attributeFilter: ["style"]
+      })
       mousedown(byId("trigger"))
       yield* tick
       observer.disconnect()
@@ -507,7 +652,9 @@ describe("Menu in a document", { concurrent: false }, () => {
       assert.isNull(byId("positioner").querySelector("[data-menu-blocker]"))
       root.send(Message.ChangedModal({ modal: true }))
       yield* tick
-      const blocker = byId("positioner").querySelector<HTMLElement>("[data-menu-blocker]")!
+      const blocker = byId("positioner").querySelector<HTMLElement>(
+        "[data-menu-blocker]"
+      )!
       assert.isFalse(blocker.inert)
       assert.include(blocker.style.getPropertyValue("clip-path"), "100px 100px")
     }))
@@ -527,10 +674,19 @@ describe("Menu in a document", { concurrent: false }, () => {
         "root RequestedOpen trigger-press",
         "root RequestedOpen trigger-press from trigger-2"
       ])
-      assert.strictEqual(byId("trigger-2").getAttribute("aria-expanded"), "true")
+      assert.strictEqual(
+        byId("trigger-2").getAttribute("aria-expanded"),
+        "true"
+      )
       assert.strictEqual(byId("trigger").getAttribute("aria-expanded"), "false")
-      assert.strictEqual(viewport.getAttribute("data-activation-direction"), "right ")
-      assert.strictEqual(byId("positioner").getAttribute("data-instant"), "trigger-change")
+      assert.strictEqual(
+        viewport.getAttribute("data-activation-direction"),
+        "right "
+      )
+      assert.strictEqual(
+        byId("positioner").getAttribute("data-instant"),
+        "trigger-change"
+      )
       assert.isNull(viewport.querySelector("[data-previous]"))
       assert.isFalse(viewport.hasAttribute("data-transitioning"))
       assert.strictEqual(viewport.querySelectorAll("[data-current]").length, 1)
@@ -554,8 +710,17 @@ describe("Menu in a document", { concurrent: false }, () => {
       yield* tick
       byId("trigger-2").dispatchEvent(new MouseEvent("mouseenter"))
       yield* tick
-      assert.strictEqual(byId("trigger-2").getAttribute("aria-expanded"), "true")
-      document.body.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 900, clientY: 700 }))
+      assert.strictEqual(
+        byId("trigger-2").getAttribute("aria-expanded"),
+        "true"
+      )
+      document.body.dispatchEvent(
+        new MouseEvent("mousemove", {
+          bubbles: true,
+          clientX: 900,
+          clientY: 700
+        })
+      )
       yield* TestClock.adjust("200 millis")
       yield* tick
       assert.isTrue(shown("positioner"))
@@ -582,20 +747,46 @@ describe("Menu in a document", { concurrent: false }, () => {
       yield* tick
       assert.isTrue(shown("share-positioner"))
       assert.strictEqual(document.activeElement, share)
-      share.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, clientX: 180, clientY: 115 }))
-      document.body.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 250, clientY: 120 }))
+      share.dispatchEvent(
+        new MouseEvent("mouseout", {
+          bubbles: true,
+          clientX: 180,
+          clientY: 115
+        })
+      )
+      document.body.dispatchEvent(
+        new MouseEvent("mousemove", {
+          bubbles: true,
+          clientX: 250,
+          clientY: 120
+        })
+      )
       yield* TestClock.adjust("10 millis")
       yield* tick
       assert.isTrue(shown("share-positioner"))
       assert.strictEqual(popupOf("positioner").style.pointerEvents, "none")
-      item("paste").dispatchEvent(new MouseEvent("mouseenter", { clientX: 250, clientY: 120 }))
+      item("paste").dispatchEvent(
+        new MouseEvent("mouseenter", { clientX: 250, clientY: 120 })
+      )
       yield* tick
       assert.isFalse(item("paste").hasAttribute("data-highlighted"))
       assert.isTrue(shown("share-positioner"))
-      item("email").dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 320, clientY: 100 }))
+      item("email").dispatchEvent(
+        new MouseEvent("mousemove", {
+          bubbles: true,
+          clientX: 320,
+          clientY: 100
+        })
+      )
       yield* tick
       assert.strictEqual(popupOf("positioner").style.pointerEvents, "")
-      document.body.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 900, clientY: 700 }))
+      document.body.dispatchEvent(
+        new MouseEvent("mousemove", {
+          bubbles: true,
+          clientX: 900,
+          clientY: 700
+        })
+      )
       yield* TestClock.adjust("10 millis")
       yield* tick
       assert.isFalse(shown("share-positioner"))

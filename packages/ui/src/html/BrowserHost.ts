@@ -149,48 +149,84 @@ const HTML = "http://www.w3.org/1999/xhtml"
 const SVG = "http://www.w3.org/2000/svg"
 
 /** Events after which a controlled property may differ from what the Model says. */
-const changeEvents: ReadonlyArray<string> = ["input", "change", "compositionend", "toggle", "close", "reset"]
+const changeEvents: ReadonlyArray<string> = [
+  "input",
+  "change",
+  "compositionend",
+  "toggle",
+  "close",
+  "reset"
+]
 
 const isDialog = (node: globalThis.Node): node is HTMLDialogElement =>
   node.nodeType === 1 && (node as globalThis.Element).localName === "dialog"
 
 /** The drop target's events, which go to the active drop target and never bubble to a handler. */
-const dropTargetEvents: ReadonlySet<string> = new Set(["dragenter", "dragleave", "dragover", "drop"])
+const dropTargetEvents: ReadonlySet<string> = new Set([
+  "dragenter",
+  "dragleave",
+  "dragover",
+  "drop"
+])
 
 /** The events a drag source needs whether or not it has handlers for them. */
 const dragSourceEvents: ReadonlyArray<string> = ["dragstart", "dragend"]
 
 /** Events the host listens to whether or not a handler wants them. */
-const alwaysEvents: ReadonlyArray<string> = [...changeEvents, "submit", "compositionstart", "beforeinput"]
+const alwaysEvents: ReadonlyArray<string> = [
+  ...changeEvents,
+  "submit",
+  "compositionstart",
+  "beforeinput"
+]
 
 /** The Model's value of each controlled property, by node. One map for every host, so `htmlHost` reads it too. */
 const wanted = new WeakMap<globalThis.Node, Map<string, unknown>>()
 
-const controlled: ReadonlySet<string> = new Set(["value", "checked", "selected", "open", "popoverOpen"])
+const controlled: ReadonlySet<string> = new Set([
+  "value",
+  "checked",
+  "selected",
+  "open",
+  "popoverOpen"
+])
 
 const emptyValue = (name: string): unknown => name === "value" ? "" : false
 
 /** Input types whose `change` the browser fires when the field loses focus, not when the value changes. */
-const changeOnBlur: ReadonlySet<string> = new Set(["text", "search", "url", "tel", "email", "password", "number"])
+const changeOnBlur: ReadonlySet<string> = new Set([
+  "text",
+  "search",
+  "url",
+  "tel",
+  "email",
+  "password",
+  "number"
+])
 
 const isRadio = (node: globalThis.Node): node is HTMLInputElement =>
-  (node as globalThis.Element).localName === "input" && (node as HTMLInputElement).type === "radio"
+  (node as globalThis.Element).localName === "input" &&
+  (node as HTMLInputElement).type === "radio"
 
 /**
  * The radio buttons `radio` unchecks when it's checked, itself included: those in its tree with its name
  * and its form owner, which may be a form they're outside of, named by their `form` attribute.
  */
-const radioGroup = (radio: HTMLInputElement): ReadonlyArray<HTMLInputElement> => {
+const radioGroup = (
+  radio: HTMLInputElement
+): ReadonlyArray<HTMLInputElement> => {
   if (radio.name === "") return [radio]
   const root = radio.getRootNode() as Document | DocumentFragment
-  return Array.from(root.querySelectorAll<HTMLInputElement>(`input[type="radio"]`)).filter((other) =>
-    other.name === radio.name && other.form === radio.form
-  )
+  return Array.from(
+    root.querySelectorAll<HTMLInputElement>(`input[type="radio"]`)
+  ).filter((other) => other.name === radio.name && other.form === radio.form)
 }
 
 /** Whether `option` is disabled, by its own attribute or by its `optgroup`'s. */
 const optionDisabled = (option: HTMLOptionElement): boolean =>
-  option.disabled || (option.parentElement?.localName === "optgroup" && option.parentElement.hasAttribute("disabled"))
+  option.disabled ||
+  (option.parentElement?.localName === "optgroup" &&
+    option.parentElement.hasAttribute("disabled"))
 
 /** The property the user changes on `node`, if it's a control. */
 const userProp = (node: globalThis.Node): string | undefined => {
@@ -217,9 +253,15 @@ const userProp = (node: globalThis.Node): string | undefined => {
 const selectionChanged = (select: HTMLSelectElement): boolean => {
   const options = Array.from(select.options)
   const marked = options.map((option) => option.hasAttribute("selected"))
-  if (select.multiple) return options.some((option, i) => option.selected !== marked[i])
+  if (select.multiple) {
+    return options.some((option, i) => option.selected !== marked[i])
+  }
   const last = marked.lastIndexOf(true)
-  const index = last !== -1 ? last : select.size > 1 ? -1 : options.findIndex((option) => !optionDisabled(option))
+  const index = last !== -1
+    ? last
+    : select.size > 1
+    ? -1
+    : options.findIndex((option) => !optionDisabled(option))
   return options.some((option, i) => option.selected !== (i === index))
 }
 
@@ -229,7 +271,9 @@ const changedFromDefault = (control: globalThis.Element): boolean => {
     case "input":
     case "textarea": {
       const field = control as HTMLInputElement
-      return userProp(field) === "checked" ? field.checked !== field.defaultChecked : field.value !== field.defaultValue
+      return userProp(field) === "checked"
+        ? field.checked !== field.defaultChecked
+        : field.value !== field.defaultValue
     }
     case "select":
       return selectionChanged(control as HTMLSelectElement)
@@ -241,17 +285,22 @@ const changedFromDefault = (control: globalThis.Element): boolean => {
 /** The control an option's change is reported on and held for: its `select`, if it has one. */
 const controlOf = (node: globalThis.Node): globalThis.Element => {
   const element = node as globalThis.Element
-  return element.localName === "option" ? element.closest("select") ?? element : element
+  return element.localName === "option"
+    ? element.closest("select") ?? element
+    : element
 }
 
 /** The node above `node` on an event's path: its parent, or a shadow root's host. */
 const upFrom = (node: globalThis.Node): globalThis.Node | null =>
-  node.parentNode ?? (node.nodeType === 11 ? (node as ShadowRoot).host ?? null : null)
+  node.parentNode ??
+    (node.nodeType === 11 ? (node as ShadowRoot).host ?? null : null)
 
 /** `node` and the nodes above it, as an event at `node` would go. */
 const pathFrom = (node: globalThis.Node): Array<globalThis.Node> => {
   const path: Array<globalThis.Node> = []
-  for (let at: globalThis.Node | null = node; at !== null; at = upFrom(at)) path.push(at)
+  for (let at: globalThis.Node | null = node; at !== null; at = upFrom(at)) {
+    path.push(at)
+  }
   return path
 }
 
@@ -263,7 +312,9 @@ const isEmpty = (record: object): boolean => {
 }
 
 /** An HTML element's attributes under the names `setAttr` gives them, the later of two aliases winning. */
-const canonicalAttrs = (attrs: Readonly<Record<string, string>>): Readonly<Record<string, string>> => {
+const canonicalAttrs = (
+  attrs: Readonly<Record<string, string>>
+): Readonly<Record<string, string>> => {
   // No prototype, so `__PROTO__` folds to a name that is kept like any other.
   const out: Record<string, string> = Object.create(null)
   for (const name in attrs) {
@@ -280,9 +331,15 @@ const canonicalAttrs = (attrs: Readonly<Record<string, string>>): Readonly<Recor
  * pointer it was, since a browser may report a tap's `click` as a mouse's,
  * as WebKit does. Without one, the event's own type, and `"mouse"` last.
  */
-const pressedWith = (name: string, event: Event, last: Html.PointerType | undefined): Html.PointerType => {
+const pressedWith = (
+  name: string,
+  event: Event,
+  last: Html.PointerType | undefined
+): Html.PointerType => {
   const own = pointerTypeOf(event)
-  if (own === "" || (name === "click" && (event as MouseEvent).detail === 0)) return ""
+  if (own === "" || (name === "click" && (event as MouseEvent).detail === 0)) {
+    return ""
+  }
   return last ?? own ?? "mouse"
 }
 
@@ -305,7 +362,10 @@ const fieldsOf = (form: HTMLFormElement, submitter: HTMLElement | null) => {
 }
 
 /** The payload of `input` and `change` from `source`, the control that changed. */
-const controlPayload = (source: globalThis.Element, event: Event | undefined): unknown => {
+const controlPayload = (
+  source: globalThis.Element,
+  event: Event | undefined
+): unknown => {
   const control = source as HTMLInputElement
   const e = event as Partial<InputEvent> | undefined
   const composing = e?.isComposing === true
@@ -324,7 +384,8 @@ const controlPayload = (source: globalThis.Element, event: Event | undefined): u
 const noFiles: ReadonlyArray<File> = []
 
 const isFileInput = (node: globalThis.Node): boolean =>
-  (node as globalThis.Element).localName === "input" && (node as HTMLInputElement).type === "file"
+  (node as globalThis.Element).localName === "input" &&
+  (node as HTMLInputElement).type === "file"
 
 const noSelection = { selectionStart: null, selectionEnd: null }
 
@@ -333,7 +394,9 @@ const isEditable = (target: EventTarget | null): boolean => {
   if (element?.namespaceURI === HTML) {
     const tag = element.localName
     if (tag === "textarea" || tag === "select") return true
-    if (tag === "input") return !nonTextInputTypes.has((element as HTMLInputElement).type)
+    if (tag === "input") {
+      return !nonTextInputTypes.has((element as HTMLInputElement).type)
+    }
   }
   return element?.isContentEditable === true
 }
@@ -365,21 +428,31 @@ const fieldStateOf = (target: EventTarget | null): FieldState | undefined => {
   const { selectionEnd, selectionStart } = selectionOf(target)
   if (selectionStart === null || selectionEnd === null) return undefined
   const field = target as HTMLInputElement
-  return { value: field.value, start: selectionStart, end: selectionEnd, direction: field.selectionDirection ?? "none" }
+  return {
+    value: field.value,
+    start: selectionStart,
+    end: selectionEnd,
+    direction: field.selectionDirection ?? "none"
+  }
 }
 
 const offsetIn = (current: string, next: string, offset: number): number => {
   const max = Math.min(current.length, next.length)
   let prefix = 0
-  while (prefix < max && current.charCodeAt(prefix) === next.charCodeAt(prefix)) prefix++
+  while (
+    prefix < max && current.charCodeAt(prefix) === next.charCodeAt(prefix)
+  ) prefix++
   if (offset <= prefix) return offset
   let suffix = 0
   while (
     suffix < max - prefix &&
-    current.charCodeAt(current.length - 1 - suffix) === next.charCodeAt(next.length - 1 - suffix)
+    current.charCodeAt(current.length - 1 - suffix) ===
+      next.charCodeAt(next.length - 1 - suffix)
   ) suffix++
   const fromEnd = current.length - offset
-  return fromEnd <= suffix ? next.length - fromEnd : Math.min(offset, next.length - suffix)
+  return fromEnd <= suffix
+    ? next.length - fromEnd
+    : Math.min(offset, next.length - suffix)
 }
 
 /** The clipboard's plain text. A browser may refuse the read, which counts as no text. */
@@ -399,7 +472,10 @@ const pastedText = (event: Event): string => {
  * an iframe's adopted into this document, fails `instanceof Node`, and an
  * object can fake `nodeType`.
  */
-const containsTarget = (element: globalThis.Element, target: EventTarget | null): boolean => {
+const containsTarget = (
+  element: globalThis.Element,
+  target: EventTarget | null
+): boolean => {
   try {
     return element.contains(target as globalThis.Node | null)
   } catch {
@@ -412,7 +488,9 @@ const isDisabled = (target: EventTarget | null): boolean =>
   (target as globalThis.Element).matches(":disabled")
 
 const isFocusVisible = (target: EventTarget | null): boolean => {
-  if (typeof (target as globalThis.Element | null)?.matches !== "function") return true
+  if (typeof (target as globalThis.Element | null)?.matches !== "function") {
+    return true
+  }
   try {
     return (target as globalThis.Element).matches(":focus-visible")
   } catch {
@@ -421,7 +499,9 @@ const isFocusVisible = (target: EventTarget | null): boolean => {
 }
 
 const fieldOf = (target: EventTarget | null, element: globalThis.Element) =>
-  (target !== null && "value" in (target as object) ? target : element) as HTMLInputElement
+  (target !== null && "value" in (target as object)
+    ? target
+    : element) as HTMLInputElement
 
 /**
  * Builds the payload a handler gets: plain data, read from the event and the
@@ -461,7 +541,8 @@ const payloadOf = (
     case "keyup": {
       const e = event as KeyboardEvent
       // Safari reports the key that ends a composition with `isComposing` false and `keyCode` 229.
-      const composing = e.isComposing === true || (e as { readonly keyCode?: number }).keyCode === 229
+      const composing = e.isComposing === true ||
+        (e as { readonly keyCode?: number }).keyCode === 229
       return {
         key: e.key ?? "",
         ...modifiers(event),
@@ -479,7 +560,8 @@ const payloadOf = (
     case "paste":
       return { text: pastedText(event) }
     case "submit": {
-      const form = (element.localName === "form" ? element : target) as HTMLFormElement
+      const form =
+        (element.localName === "form" ? element : target) as HTMLFormElement
       return fieldsOf(form, (event as SubmitEvent).submitter ?? null)
     }
     case "toggle": {
@@ -489,7 +571,11 @@ const payloadOf = (
       const open = element.hasAttribute("popover")
         ? e.newState === "open"
         : (element as HTMLDetailsElement).open === true
-      const newState = e.newState === "open" || e.newState === "closed" ? e.newState : open ? "open" : "closed"
+      const newState = e.newState === "open" || e.newState === "closed"
+        ? e.newState
+        : open
+        ? "open"
+        : "closed"
       const oldState = e.oldState === "open" || e.oldState === "closed"
         ? e.oldState
         : newState === "open"
@@ -509,7 +595,9 @@ const payloadOf = (
       // A window listener's `blur` has no element that lost focus.
       return target === element ? { disabled: isDisabled(target) } : {}
     case "focusin":
-      return { within: containsTarget(element, (event as FocusEvent).relatedTarget) }
+      return {
+        within: containsTarget(element, (event as FocusEvent).relatedTarget)
+      }
     case "focusout":
       return {
         within: containsTarget(element, (event as FocusEvent).relatedTarget),
@@ -562,15 +650,22 @@ export const makeHost = (
   const stored = hostEvents.make<globalThis.Node>()
   const eventsAlong = stored.along
   /** The events of `node` itself. */
-  const eventsOf = (node: globalThis.Node): Renderer.Events | undefined => eventsAlong(pathFrom(node))[0]
+  const eventsOf = (node: globalThis.Node): Renderer.Events | undefined =>
+    eventsAlong(pathFrom(node))[0]
   const composing = new WeakSet<globalThis.Node>()
   const beforeEdits = new WeakMap<globalThis.Node, Map<string, FieldState>>()
   let pendingEdit:
-    | { readonly node: globalThis.Node; readonly state: FieldState; readonly event: Partial<InputEvent> }
+    | {
+      readonly node: globalThis.Node
+      readonly state: FieldState
+      readonly event: Partial<InputEvent>
+    }
     | undefined
   const expectEdit = (node: globalThis.Node, event: Partial<InputEvent>) => {
     const state = fieldStateOf(node)
-    const edit = pendingEdit = state === undefined ? undefined : { node, state, event }
+    const edit = pendingEdit = state === undefined
+      ? undefined
+      : { node, state, event }
     // An edit's `input` comes in the same task as its `beforeinput`, and a cancelled edit has none.
     if (edit !== undefined) {
       setTimeout(() => {
@@ -587,7 +682,10 @@ export const makeHost = (
   const settleEdit = (node: globalThis.Node, event: Partial<InputEvent>) => {
     const edit = pendingEdit
     pendingEdit = undefined
-    if (edit?.node === node && edit.event.defaultPrevented !== true && edit.event.inputType === event.inputType) {
+    if (
+      edit?.node === node && edit.event.defaultPrevented !== true &&
+      edit.event.inputType === event.inputType
+    ) {
       recordEdit(node, edit.state)
     }
   }
@@ -596,9 +694,10 @@ export const makeHost = (
   }
   const writeControlled = (element: any, name: string, value: unknown) => {
     if (name === "value" && value !== "" && isFileInput(element)) return
-    const state = name === "value" && element.getRootNode().activeElement === element
-      ? fieldStateOf(element)
-      : undefined
+    const state =
+      name === "value" && element.getRootNode().activeElement === element
+        ? fieldStateOf(element)
+        : undefined
     if (state === undefined) {
       element[name] = value
       return
@@ -607,10 +706,13 @@ export const makeHost = (
     element.value = value
     const shown: string = element.value
     const before = beforeEdits.get(element)?.get(shown)
-    if (before !== undefined) element.setSelectionRange(before.start, before.end, before.direction)
-    else if (state.start !== state.end || state.end !== state.value.length) {
+    if (before !== undefined) {
+      element.setSelectionRange(before.start, before.end, before.direction)
+    } else if (state.start !== state.end || state.end !== state.value.length) {
       const start = offsetIn(state.value, shown, state.start)
-      const end = state.end === state.start ? start : offsetIn(state.value, shown, state.end)
+      const end = state.end === state.start
+        ? start
+        : offsetIn(state.value, shown, state.end)
       element.setSelectionRange(start, end, state.direction)
     } else return
     element.scrollLeft = scrollLeft
@@ -624,13 +726,14 @@ export const makeHost = (
   }
   document.addEventListener("pointerdown", onPointerDown, { capture: true })
   const view = document.defaultView
-  const later: (f: () => void) => void = view !== null && typeof view.requestAnimationFrame === "function"
-    ? (f) => {
-      view.requestAnimationFrame(f)
-    }
-    : (f) => {
-      setTimeout(f, 0)
-    }
+  const later: (f: () => void) => void =
+    view !== null && typeof view.requestAnimationFrame === "function"
+      ? (f) => {
+        view.requestAnimationFrame(f)
+      }
+      : (f) => {
+        setTimeout(f, 0)
+      }
 
   // A browser focuses inside a dialog as it shows it and scrolls there. Scrolling back to where the page
   // was, even when it hasn't moved yet, also cancels a smooth scroll the focus started.
@@ -641,7 +744,9 @@ export const makeHost = (
     const left = view.scrollX
     const top = view.scrollY
     show()
-    if (document.activeElement !== focused) view.scrollTo({ left, top, behavior: "instant" })
+    if (document.activeElement !== focused) {
+      view.scrollTo({ left, top, behavior: "instant" })
+    }
   }
 
   // -- dialogs -----------------------------------------------------------------
@@ -655,7 +760,10 @@ export const makeHost = (
    * close in a later task, so several can be queued: each event ends the oldest showing, and only the
    * close of the latest showing, not made by the host to change mode or before a removal, is the app's.
    */
-  const showings = new WeakMap<globalThis.Element, Array<{ byHost: boolean; closed: boolean }>>()
+  const showings = new WeakMap<
+    globalThis.Element,
+    Array<{ byHost: boolean; closed: boolean }>
+  >()
   const showingsOf = (dialog: globalThis.Element) => {
     let list = showings.get(dialog)
     if (list === undefined) {
@@ -701,7 +809,9 @@ export const makeHost = (
     if (!dialog.open) return
     const list = showingsOf(dialog)
     const latest = list.at(-1)
-    if (latest === undefined || latest.closed) list.push({ byHost: false, closed: false })
+    if (latest === undefined || latest.closed) {
+      list.push({ byHost: false, closed: false })
+    }
     shown.add(dialog)
   }
 
@@ -788,7 +898,10 @@ export const makeHost = (
   const applyPopover = (element: HTMLElement, want: boolean, now = false) => {
     if (want) {
       if (!now) popoversToShow.add(element)
-      else if (element.isConnected && element.hasAttribute("popover") && !popoverShowing(element)) {
+      else if (
+        element.isConnected && element.hasAttribute("popover") &&
+        !popoverShowing(element)
+      ) {
         keepingScroll(() => element.showPopover())
       }
       return
@@ -804,8 +917,9 @@ export const makeHost = (
   const showPopovers = () => {
     for (const element of manualPopovers) {
       if (!element.isConnected) manualPopovers.delete(element)
-      else if (wanted.get(element)?.get("popoverOpen") === true) popoversToShow.add(element)
-      else if (popoverShowing(element)) element.hidePopover()
+      else if (wanted.get(element)?.get("popoverOpen") === true) {
+        popoversToShow.add(element)
+      } else if (popoverShowing(element)) element.hidePopover()
     }
     if (popoversToShow.size === 0) return
     const popovers = [...popoversToShow]
@@ -818,7 +932,10 @@ export const makeHost = (
         popoversToShow.add(element)
         continue
       }
-      if (wanted.get(element)?.get("popoverOpen") !== true || popoverShowing(element)) continue
+      if (
+        wanted.get(element)?.get("popoverOpen") !== true ||
+        popoverShowing(element)
+      ) continue
       keepingScroll(() => element.showPopover())
     }
   }
@@ -828,7 +945,9 @@ export const makeHost = (
   const reported = new WeakMap<globalThis.Node, { state: string | undefined }>()
   const holdNode = (nodes: Set<globalThis.Node>, node: globalThis.Node) => {
     nodes.add(node)
-    if (listening.has("toggle") && !reported.has(node)) reported.set(node, { state: undefined })
+    if (listening.has("toggle") && !reported.has(node)) {
+      reported.set(node, { state: undefined })
+    }
   }
   const releaseNode = (nodes: Set<globalThis.Node>, node: globalThis.Node) => {
     if (!nodes.delete(node)) return
@@ -836,11 +955,15 @@ export const makeHost = (
     if (entry !== undefined) entry.state = "closed"
   }
   const isAuto = (element: globalThis.Element) =>
-    element.hasAttribute("popover") && element.getAttribute("popover") !== "manual"
+    element.hasAttribute("popover") &&
+    element.getAttribute("popover") !== "manual"
   const hold = (container: globalThis.Element) => {
     held = true
-    const popovers = Array.from(container.querySelectorAll<HTMLElement>("[popover]")).filter((element) =>
-      wanted.get(element)?.has("popoverOpen") === true && isAuto(element) && popoverShowing(element)
+    const popovers = Array.from(
+      container.querySelectorAll<HTMLElement>("[popover]")
+    ).filter((element) =>
+      wanted.get(element)?.has("popoverOpen") === true && isAuto(element) &&
+      popoverShowing(element)
     )
     for (const dialog of Array.from(shown).reverse()) {
       if (!modals.has(dialog)) continue
@@ -857,7 +980,9 @@ export const makeHost = (
     showModals()
     heldDialogs.clear()
     for (const element of heldPopovers) {
-      if (wanted.get(element)?.get("popoverOpen") === true) popoversToShow.add(element as HTMLElement)
+      if (wanted.get(element)?.get("popoverOpen") === true) {
+        popoversToShow.add(element as HTMLElement)
+      }
     }
     showPopovers()
     heldPopovers.clear()
@@ -871,7 +996,9 @@ export const makeHost = (
       if (name === "value" && composing.has(node)) continue
       if (name === "open" && isDialog(node)) {
         // A dialog that left the document can't be shown; a later commit shows it if it comes back.
-        if (node.isConnected && !(held && value === "modal")) showDialog(node, value as boolean | "modal")
+        if (node.isConnected && !(held && value === "modal")) {
+          showDialog(node, value as boolean | "modal")
+        }
       } else if (name === "popoverOpen") {
         // Only a manual popover is put back. An auto popover's changes are the browser's, for the Model
         // to follow.
@@ -888,16 +1015,22 @@ export const makeHost = (
     switch (element.localName) {
       case "input": {
         // A radio button unchecks the others in its group.
-        if (isRadio(element)) { for (const other of radioGroup(element)) restoreNode(other) }
+        if (isRadio(element)) {
+          for (const other of radioGroup(element)) restoreNode(other)
+        }
         return
       }
       case "select": {
-        for (const option of (node as HTMLSelectElement).options) restoreNode(option)
+        for (const option of (node as HTMLSelectElement).options) {
+          restoreNode(option)
+        }
         return
       }
       case "form": {
         // A reset puts every control back to its default without firing input or change.
-        for (const control of (node as HTMLFormElement).elements) restoreAffected(control)
+        for (const control of (node as HTMLFormElement).elements) {
+          restoreAffected(control)
+        }
         return
       }
     }
@@ -970,11 +1103,15 @@ export const makeHost = (
     edited.clear()
     for (const node of controls) {
       const control = node as HTMLInputElement
-      if (!control.isConnected || (isRadio(control) && !control.checked)) continue
+      if (!control.isConnected || (isRadio(control) && !control.checked)) {
+        continue
+      }
       report(control, "input")
       const typing = control.localName === "textarea" ||
         (control.localName === "input" && changeOnBlur.has(control.type))
-      if (!typing || control.ownerDocument.activeElement !== control) report(control, "change")
+      if (!typing || control.ownerDocument.activeElement !== control) {
+        report(control, "change")
+      }
       // A radio button restores its whole group.
       restoreSoon(control)
     }
@@ -999,45 +1136,72 @@ export const makeHost = (
       ? view.requestAnimationFrame(f)
       : setTimeout(f, 0) as unknown as number
   const cancelFrame = (id: number) => {
-    if (view !== null && typeof view.cancelAnimationFrame === "function") view.cancelAnimationFrame(id)
-    else clearTimeout(id)
+    if (view !== null && typeof view.cancelAnimationFrame === "function") {
+      view.cancelAnimationFrame(id)
+    } else clearTimeout(id)
   }
 
   const typesOf = (event: Event): ReadonlyArray<string> =>
-    Array.from((event as DragEvent).dataTransfer?.types ?? [], (type) => type.toLowerCase())
+    Array.from(
+      (event as DragEvent).dataTransfer?.types ?? [],
+      (type) => type.toLowerCase()
+    )
 
   /** Whether an element with the events `entry` is a drop target that accepts a drag of `types`. */
-  const accepts = (entry: Renderer.Events | undefined, types: ReadonlyArray<string>): boolean => {
+  const accepts = (
+    entry: Renderer.Events | undefined,
+    types: ReadonlyArray<string>
+  ): boolean => {
     if (entry === undefined || entry.handlers.drop === undefined) return false
-    const accepted = (entry.options.drop as Html.DropTargetOptions | undefined)?.accepts
+    const accepted = (entry.options.drop as Html.DropTargetOptions | undefined)
+      ?.accepts
     return accepted?.some((type) => types.includes(type.toLowerCase())) === true
   }
 
   /** The innermost element on the event's path that accepts its drag, with its events. */
   const dropTargetOf = (
     event: Event
-  ): { readonly element: globalThis.Element; readonly events: Renderer.Events } | undefined => {
+  ):
+    | { readonly element: globalThis.Element; readonly events: Renderer.Events }
+    | undefined =>
+  {
     const types = typesOf(event)
     if (types.length === 0) return undefined
     const path = event.composedPath() as Array<globalThis.Node>
     const entries = eventsAlong(path)
     for (let i = 0; i < path.length; i++) {
-      if (accepts(entries[i], types)) return { element: path[i] as globalThis.Element, events: entries[i]! }
+      if (accepts(entries[i], types)) {
+        return { element: path[i] as globalThis.Element, events: entries[i]! }
+      }
     }
     return undefined
   }
 
-  const boxOf = (event: Event, element: globalThis.Element): Html.DragOverPayload => {
+  const boxOf = (
+    event: Event,
+    element: globalThis.Element
+  ): Html.DragOverPayload => {
     const rect = element.getBoundingClientRect()
     const e = event as MouseEvent
-    return { x: (e.clientX ?? 0) - rect.left, y: (e.clientY ?? 0) - rect.top, width: rect.width, height: rect.height }
+    return {
+      x: (e.clientX ?? 0) - rect.left,
+      y: (e.clientY ?? 0) - rect.top,
+      width: rect.width,
+      height: rect.height
+    }
   }
 
   /** Sends `name` to `element`'s own handler, if it has one. */
-  const sendTo = (element: globalThis.Element, name: string, payload: unknown) => {
+  const sendTo = (
+    element: globalThis.Element,
+    name: string,
+    payload: unknown
+  ) => {
     const entry = eventsOf(element)
     const handler = entry?.handlers[name]
-    if (entry !== undefined && handler !== undefined) entry.dispatch(name, handler, payload)
+    if (entry !== undefined && handler !== undefined) {
+      entry.dispatch(name, handler, payload)
+    }
   }
 
   const cancelOver = () => {
@@ -1071,7 +1235,11 @@ export const makeHost = (
   }
 
   /** Queues the active target's `dragover` for the next frame, unless its position is what it last got. */
-  const queueOver = (element: globalThis.Element, payload: Html.DragOverPayload, types: ReadonlyArray<string>) => {
+  const queueOver = (
+    element: globalThis.Element,
+    payload: Html.DragOverPayload,
+    types: ReadonlyArray<string>
+  ) => {
     if (eventsOf(element)?.handlers.dragover === undefined) return
     overQueued = payload
     if (overFrame !== undefined) return
@@ -1080,9 +1248,13 @@ export const makeHost = (
       const next = overQueued
       overQueued = undefined
       // A render since the event may have taken the element's `onDrop` away or changed what it accepts.
-      if (next === undefined || active !== element || !element.isConnected || !accepts(eventsOf(element), types)) return
       if (
-        overSent !== undefined && overSent.x === next.x && overSent.y === next.y && overSent.width === next.width &&
+        next === undefined || active !== element || !element.isConnected ||
+        !accepts(eventsOf(element), types)
+      ) return
+      if (
+        overSent !== undefined && overSent.x === next.x &&
+        overSent.y === next.y && overSent.width === next.width &&
         overSent.height === next.height
       ) return
       overSent = next
@@ -1101,11 +1273,16 @@ export const makeHost = (
         const target = found?.element
         if (found !== undefined) {
           event.preventDefault()
-          const dropEffect = (found.events.options.drop as Html.DropTargetOptions).dropEffect
-          if (dropEffect !== undefined && event.dataTransfer !== null) event.dataTransfer.dropEffect = dropEffect
+          const dropEffect =
+            (found.events.options.drop as Html.DropTargetOptions).dropEffect
+          if (dropEffect !== undefined && event.dataTransfer !== null) {
+            event.dataTransfer.dropEffect = dropEffect
+          }
         }
         activate(target)
-        if (name === "dragover" && target !== undefined) queueOver(target, boxOf(event, target), typesOf(event))
+        if (name === "dragover" && target !== undefined) {
+          queueOver(target, boxOf(event, target), typesOf(event))
+        }
         return
       }
       case "dragleave": {
@@ -1135,7 +1312,11 @@ export const makeHost = (
           if (type !== "Files") data[type] = transfer!.getData(type)
         }
         const files = Array.from(transfer?.files ?? [])
-        const payload: Html.DropPayload = { data, files, ...boxOf(event, target) }
+        const payload: Html.DropPayload = {
+          data,
+          files,
+          ...boxOf(event, target)
+        }
         sendTo(target, "drop", payload)
         endTargets()
         return
@@ -1144,21 +1325,30 @@ export const makeHost = (
   }
 
   /** Puts the innermost drag source's data on the drag: `entries` are the events along its path. */
-  const startDrag = (event: DragEvent, entries: ReadonlyArray<Renderer.Events | undefined>) => {
+  const startDrag = (
+    event: DragEvent,
+    entries: ReadonlyArray<Renderer.Events | undefined>
+  ) => {
     droppedHere = false
     const transfer = event.dataTransfer
     if (transfer === null) return
     for (const entry of entries) {
-      const source = entry?.options.dragstart as Html.DragSourceOptions | undefined
+      const source = entry?.options.dragstart as
+        | Html.DragSourceOptions
+        | undefined
       if (source?.data === undefined) continue
       for (const type in source.data) transfer.setData(type, source.data[type]!)
-      if (source.effectAllowed !== undefined) transfer.effectAllowed = source.effectAllowed
+      if (source.effectAllowed !== undefined) {
+        transfer.effectAllowed = source.effectAllowed
+      }
       return
     }
   }
 
   const listener = (name: string) => (event: Event) => {
-    const entry = name === "toggle" && event.target !== null ? reported.get(event.target as globalThis.Node) : undefined
+    const entry = name === "toggle" && event.target !== null
+      ? reported.get(event.target as globalThis.Node)
+      : undefined
     if (entry !== undefined) {
       const target = event.target as globalThis.Node
       entry.state ??= (event as ToggleEvent).oldState
@@ -1166,8 +1356,13 @@ export const makeHost = (
       reported.delete(target)
       if ((event as ToggleEvent).newState === entry.state) return
     }
-    if (dropTargetEvents.has(name)) return onDropTarget(name, event as DragEvent)
-    if ((name === "cancel" || name === "close") && event.target !== null && isDialog(event.target as globalThis.Node)) {
+    if (dropTargetEvents.has(name)) {
+      return onDropTarget(name, event as DragEvent)
+    }
+    if (
+      (name === "cancel" || name === "close") && event.target !== null &&
+      isDialog(event.target as globalThis.Node)
+    ) {
       const dialog = event.target as HTMLDialogElement
       if (name === "cancel") {
         // A modal's close request is the Model's to answer, through `onCancel`. A browser can make the
@@ -1184,17 +1379,23 @@ export const makeHost = (
     }
     const path = event.composedPath() as Array<globalThis.Node>
     const target = path[0] ?? event.target
-    if (name === "compositionstart" || name === "compositionend" || name === "input" || name === "beforeinput") {
+    if (
+      name === "compositionstart" || name === "compositionend" ||
+      name === "input" || name === "beforeinput"
+    ) {
       if (target !== null && target !== undefined && "nodeType" in target) {
         const node = target as globalThis.Node
         const e = event as Partial<InputEvent>
         if (name === "beforeinput") {
-          if (e.isComposing !== true && !composing.has(node)) expectEdit(node, e)
+          if (e.isComposing !== true && !composing.has(node)) {
+            expectEdit(node, e)
+          }
         } else {
           if (name === "compositionstart") recordEdit(node, fieldStateOf(node))
           else if (name === "input") settleEdit(node, e)
-          if (name === "compositionstart" || e.isComposing === true) composing.add(node)
-          else composing.delete(node)
+          if (name === "compositionstart" || e.isComposing === true) {
+            composing.add(node)
+          } else composing.delete(node)
         }
       }
     }
@@ -1203,7 +1404,8 @@ export const makeHost = (
     // The app owns its forms' submissions, handled or not. Other forms in the document are left alone.
     // An unhandled one is marked, so the browser Router can still route a GET form.
     if (
-      name === "submit" && event.target !== null && entries[path.indexOf(event.target as globalThis.Node)] !== undefined
+      name === "submit" && event.target !== null &&
+      entries[path.indexOf(event.target as globalThis.Node)] !== undefined
     ) {
       event.preventDefault()
       submit.ownedUnhandled.add(event)
@@ -1225,7 +1427,13 @@ export const makeHost = (
           handler,
           name === "dragend"
             ? dragEndPayload(event as DragEvent)
-            : payloadOf(name, event, target, node as globalThis.Element, lastPointer),
+            : payloadOf(
+              name,
+              event,
+              target,
+              node as globalThis.Element,
+              lastPointer
+            ),
           preventDefault === true ? () => event.preventDefault() : undefined
         )
         break
@@ -1239,7 +1447,8 @@ export const makeHost = (
   const dragEndPayload = (event: DragEvent): Html.DragEndPayload => ({
     // The app saw its own drops. Elsewhere, browsers report a drop with the effect it had, though not
     // every browser does so reliably.
-    dropped: droppedHere || (event.dataTransfer !== null && event.dataTransfer.dropEffect !== "none")
+    dropped: droppedHere ||
+      (event.dataTransfer !== null && event.dataTransfer.dropEffect !== "none")
   })
 
   const listen = (name: string) => {
@@ -1250,14 +1459,25 @@ export const makeHost = (
   }
   for (const name of alwaysEvents) listen(name)
   /** Listens for what an element's handlers and options need. */
-  const listenFor = (handlers: Renderer.Events["handlers"], options: Renderer.Events["options"]) => {
+  const listenFor = (
+    handlers: Renderer.Events["handlers"],
+    options: Renderer.Events["options"]
+  ) => {
     for (const name in handlers) listen(name)
     // A drag source needs its `dragstart` without a handler, and a drop target all of its events.
-    if (options.dragstart !== undefined) { for (const name of dragSourceEvents) listen(name) }
+    if (options.dragstart !== undefined) {
+      for (const name of dragSourceEvents) listen(name)
+    }
     // `dragend` ends an in-app drag for the targets too. Whoever reads `dropped` needs `dragstart`, which
     // resets it, even for a native drag source such as a link with only `onDragEnd`.
-    if (handlers.drop !== undefined) { for (const name of [...dropTargetEvents, ...dragSourceEvents]) listen(name) }
-    if (handlers.dragend !== undefined) { for (const name of dragSourceEvents) listen(name) }
+    if (handlers.drop !== undefined) {
+      for (const name of [...dropTargetEvents, ...dragSourceEvents]) {
+        listen(name)
+      }
+    }
+    if (handlers.dragend !== undefined) {
+      for (const name of dragSourceEvents) listen(name)
+    }
   }
 
   /**
@@ -1265,10 +1485,17 @@ export const makeHost = (
    * other than the Model's value, is held: it keeps what it shows, and the commit reports it. In a changed
    * radio group that holds the user's button, and the one the Model checks, which would uncheck it.
    */
-  const adoptProp = (node: globalThis.Node, name: string, value: unknown): void => {
+  const adoptProp = (
+    node: globalThis.Node,
+    name: string,
+    value: unknown
+  ): void => {
     if (name === userProp(node)) {
       const control = controlOf(node)
-      if (wasChanged(control) && (node as any)[name] !== (value === undefined ? emptyValue(name) : value)) {
+      if (
+        wasChanged(control) &&
+        (node as any)[name] !== (value === undefined ? emptyValue(name) : value)
+      ) {
         edited.add(control)
       }
     }
@@ -1277,8 +1504,13 @@ export const makeHost = (
 
   const scratch = document.createElement("div").style
 
-  const outsideStyle = (element: globalThis.Element, previous: string | undefined): Array<string> | undefined => {
-    if ((element.getAttribute("style") ?? undefined) === previous) return undefined
+  const outsideStyle = (
+    element: globalThis.Element,
+    previous: string | undefined
+  ): Array<string> | undefined => {
+    if ((element.getAttribute("style") ?? undefined) === previous) {
+      return undefined
+    }
     const style = (element as HTMLElement).style
     if (style === undefined) return undefined
     scratch.cssText = previous ?? ""
@@ -1288,7 +1520,10 @@ export const makeHost = (
       const value = style.getPropertyValue(name)
       if (value === "") continue
       const priority = style.getPropertyPriority(name)
-      if (value !== scratch.getPropertyValue(name) || priority !== scratch.getPropertyPriority(name)) {
+      if (
+        value !== scratch.getPropertyValue(name) ||
+        priority !== scratch.getPropertyPriority(name)
+      ) {
         kept.push(name, value, priority)
       }
     }
@@ -1296,12 +1531,17 @@ export const makeHost = (
   }
 
   let transition: ViewTransition | undefined
-  const typedTransitions = view !== null && typeof view.ViewTransition === "function" &&
+  const typedTransitions = view !== null &&
+    typeof view.ViewTransition === "function" &&
     "types" in view.ViewTransition.prototype
 
-  const host: Renderer.Host<globalThis.Node> & { readonly dispose: () => void } = {
+  const host: Renderer.Host<globalThis.Node> & {
+    readonly dispose: () => void
+  } = {
     createElement: (tag) =>
-      elements.svgTags.has(tag) ? document.createElementNS(SVG, tag) : document.createElement(tag),
+      elements.svgTags.has(tag)
+        ? document.createElementNS(SVG, tag)
+        : document.createElement(tag),
     createText: (text) => document.createTextNode(text),
     createContainer: () => document.createDocumentFragment(),
     setText(node, text) {
@@ -1313,22 +1553,31 @@ export const makeHost = (
       for (const name in attrs) {
         if (elements.attributeName(name, false) !== name) {
           // SVG names are case-sensitive, so they have no aliases; `setAttr` drops the unsafe ones.
-          return (node as globalThis.Element).namespaceURI === SVG ? attrs : canonicalAttrs(attrs)
+          return (node as globalThis.Element).namespaceURI === SVG
+            ? attrs
+            : canonicalAttrs(attrs)
         }
       }
       return attrs
     },
     setAttr(node, name, value, previous) {
       const element = node as globalThis.Element
-      const normalized = elements.attributeName(name, element.namespaceURI === SVG)
+      const normalized = elements.attributeName(
+        name,
+        element.namespaceURI === SVG
+      )
       if (normalized === undefined) return
       name = normalized
-      const kept = name === "style" ? outsideStyle(element, previous) : undefined
+      const kept = name === "style"
+        ? outsideStyle(element, previous)
+        : undefined
       if (value === undefined) element.removeAttribute(name)
       else element.setAttribute(name, value)
       if (kept !== undefined) {
         const style = (element as HTMLElement).style
-        for (let i = 0; i < kept.length; i += 3) style.setProperty(kept[i]!, kept[i + 1]!, kept[i + 2])
+        for (let i = 0; i < kept.length; i += 3) {
+          style.setProperty(kept[i]!, kept[i + 1]!, kept[i + 2])
+        }
       }
     },
     setProp(node, name, value) {
@@ -1385,7 +1634,10 @@ export const makeHost = (
           values.set(name, value)
         }
         // A control changed before it adopted shows the change until the commit reports it.
-        if (edited.size > 0 && edited.has(controlOf(node)) && name === userProp(node)) return
+        if (
+          edited.size > 0 && edited.has(controlOf(node)) &&
+          name === userProp(node)
+        ) return
         if (name === "value" && composing.has(node)) return
         // Skip a no-op, so a caret in the middle of the text stays where it is.
         if (element[name] !== value) writeControlled(element, name, value)
@@ -1394,7 +1646,11 @@ export const makeHost = (
       }
       if (value === undefined) {
         const current = element[name]
-        element[name] = typeof current === "string" ? "" : typeof current === "boolean" ? false : null
+        element[name] = typeof current === "string"
+          ? ""
+          : typeof current === "boolean"
+          ? false
+          : null
       } else {
         element[name] = value
       }
@@ -1410,7 +1666,10 @@ export const makeHost = (
       if (shown.size > 0) { for (const node of nodes) closeShownIn(node) }
       // A parent that holds these nodes and nothing else, as a list's element usually does, is cleared
       // in one step.
-      if ((parent.nodeType === 1 || parent.nodeType === 11) && parent.childNodes.length === nodes.length) {
+      if (
+        (parent.nodeType === 1 || parent.nodeType === 11) &&
+        parent.childNodes.length === nodes.length
+      ) {
         parent.textContent = ""
         return
       }
@@ -1420,7 +1679,9 @@ export const makeHost = (
     nextOf: (node) => node.nextSibling ?? undefined,
     setEvents(node, handlers, dispatch, options) {
       // An element with no events needs no entry, except a form: an entry marks it as the app's.
-      if (isEmpty(handlers) && isEmpty(options) && node.nodeName !== "FORM") return stored.set(node, undefined)
+      if (isEmpty(handlers) && isEmpty(options) && node.nodeName !== "FORM") {
+        return stored.set(node, undefined)
+      }
       stored.set(node, { handlers, dispatch, options })
       listenFor(handlers, options)
     },
@@ -1435,18 +1696,29 @@ export const makeHost = (
         switch (node.nodeType) {
           case 1: {
             const tag = (node as globalThis.Element).localName
-            if (tag === "textarea") changedBefore.set(node, changedFromDefault(node as globalThis.Element))
-            return { _tag: "Element", tag, textOnly: server.textOnlyTags.has(tag) }
+            if (tag === "textarea") {
+              changedBefore.set(
+                node,
+                changedFromDefault(node as globalThis.Element)
+              )
+            }
+            return {
+              _tag: "Element",
+              tag,
+              textOnly: server.textOnlyTags.has(tag)
+            }
           }
           case 3:
             return { _tag: "Text", text: (node as globalThis.Text).data }
           case 8:
-            return markers.parse((node as globalThis.Comment).data) ?? { _tag: "Other" }
+            return markers.parse((node as globalThis.Comment).data) ??
+              { _tag: "Other" }
           default:
             return { _tag: "Other" }
         }
       },
-      getAttr: (node, name) => (node as globalThis.Element).getAttribute(name) ?? undefined,
+      getAttr: (node, name) =>
+        (node as globalThis.Element).getAttribute(name) ?? undefined,
       adoptProp
     },
     commit() {
@@ -1470,7 +1742,9 @@ export const makeHost = (
       }
       try {
         transition = document.startViewTransition(
-          typedTransitions && types.length > 0 ? { update: run, types: [...types] } : run
+          typedTransitions && types.length > 0
+            ? { update: run, types: [...types] }
+            : run
         )
       } catch (error) {
         if (ran) throw error
@@ -1485,9 +1759,13 @@ export const makeHost = (
       transition?.skipTransition()
       transition = undefined
       syncHead.release()
-      for (const [name, f] of listening) document.removeEventListener(name, f, { capture: true })
+      for (const [name, f] of listening) {
+        document.removeEventListener(name, f, { capture: true })
+      }
       listening.clear()
-      document.removeEventListener("pointerdown", onPointerDown, { capture: true })
+      document.removeEventListener("pointerdown", onPointerDown, {
+        capture: true
+      })
       cancelExitCheck()
       cancelOver()
       active = undefined
@@ -1515,9 +1793,11 @@ const holds = new WeakMap<Renderer.Host<globalThis.Node>, Holding>()
  * @since 0.1.0
  */
 export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
-  focus: (element, options) => (element as HTMLElement).focus(options as FocusOptions),
+  focus: (element, options) =>
+    (element as HTMLElement).focus(options as FocusOptions),
   blur: (element) => (element as HTMLElement).blur(),
-  scrollIntoView: (element, options) => element.scrollIntoView(options as ScrollIntoViewOptions),
+  scrollIntoView: (element, options) =>
+    element.scrollIntoView(options as ScrollIntoViewOptions),
   measure: (element) => {
     const box = element.getBoundingClientRect()
     return {
@@ -1551,8 +1831,9 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
     const field = element as HTMLInputElement
     try {
       if (typeof field.showPicker === "function") field.showPicker()
-      else if (field.type === "file" && !field.matches(":disabled")) field.click()
-      else return false
+      else if (field.type === "file" && !field.matches(":disabled")) {
+        field.click()
+      } else return false
       return true
     } catch {
       return false
@@ -1566,7 +1847,8 @@ const signals = (document: Document) => {
   const visibility = queryCore.makeSignal(document.visibilityState !== "hidden")
   const connectivity = queryCore.makeSignal(true)
   const view = document.defaultView
-  const onVisibility = () => visibility.set(document.visibilityState !== "hidden")
+  const onVisibility = () =>
+    visibility.set(document.visibilityState !== "hidden")
   const onOnline = () => connectivity.set(true)
   const onOffline = () => connectivity.set(false)
   document.addEventListener("visibilitychange", onVisibility)
@@ -1585,7 +1867,10 @@ const signals = (document: Document) => {
 
 // `HtmlSubscription.onDocument`, `onCustomEvent` and `onWindow` listen here. Each Subscription
 // removes its own listener as it stops. A pointer payload's `pointerType` comes from the event alone.
-const globalEventsOf = (document: Document, held: () => boolean): HtmlSubscription.GlobalEvents => ({
+const globalEventsOf = (
+  document: Document,
+  held: () => boolean
+): HtmlSubscription.GlobalEvents => ({
   listen: (target, name, { capture, custom }, listener) => {
     const on = target === "document" ? document : document.defaultView
     if (on === null) return () => {}
@@ -1595,7 +1880,13 @@ const globalEventsOf = (document: Document, held: () => boolean): HtmlSubscripti
         {
           ...(custom === true
             ? { detail: (event as CustomEvent).detail ?? null }
-            : payloadOf(name, event, event.target, document.documentElement, undefined) as object),
+            : payloadOf(
+              name,
+              event,
+              event.target,
+              document.documentElement,
+              undefined
+            ) as object),
           defaultPrevented: event.defaultPrevented
         },
         () => event.preventDefault()
@@ -1615,7 +1906,9 @@ const framesOf = (document: Document): HtmlSubscription.AnimationFrames => {
   return {
     now: () => view?.performance.now() ?? 0,
     listen: (listener) => {
-      if (view === null || typeof view.requestAnimationFrame !== "function") return () => {}
+      if (view === null || typeof view.requestAnimationFrame !== "function") {
+        return () => {}
+      }
       const frame = (time: number) => {
         id = view.requestAnimationFrame(frame)
         listener(time)
@@ -1631,13 +1924,20 @@ const imagesOf = (document: Document): HtmlImages.Images => ({
   load: (source) =>
     Effect.callback((resume) => {
       const image = document.createElement("img")
-      const settle = (status: "loaded" | "error") => resume(Effect.succeed(status))
-      if (source.referrerPolicy !== undefined) image.referrerPolicy = source.referrerPolicy
+      const settle = (status: "loaded" | "error") =>
+        resume(Effect.succeed(status))
+      if (source.referrerPolicy !== undefined) {
+        image.referrerPolicy = source.referrerPolicy
+      }
       image.crossOrigin = source.crossOrigin ?? null
       if (source.sizes !== undefined) image.sizes = source.sizes
       if (source.srcSet !== undefined) image.srcset = source.srcSet
       if (source.src !== undefined) image.src = source.src
-      if (image.complete) return settle(image.naturalWidth > 0 ? "loaded" : "error")
+      if (image.complete) {
+        return settle(
+          image.naturalWidth > 0 ? "loaded" : "error"
+        )
+      }
       image.onload = () => settle("loaded")
       image.onerror = () => settle("error")
       return Effect.sync(() => {
@@ -1654,11 +1954,16 @@ const filesOf = (document: Document): HtmlFiles.Files => ({
       input.type = "file"
       input.multiple = options.multiple === true
       if (options.accept !== undefined) input.accept = options.accept.join(",")
-      if (options.capture !== undefined) input.setAttribute("capture", options.capture)
-      const settle = (files: ReadonlyArray<File>) => resume(Effect.succeed({ opened: true, files }))
+      if (options.capture !== undefined) {
+        input.setAttribute("capture", options.capture)
+      }
+      const settle = (files: ReadonlyArray<File>) =>
+        resume(Effect.succeed({ opened: true, files }))
       input.onchange = () => settle(Array.from(input.files ?? []))
       input.oncancel = () => settle([])
-      if (!htmlHost.showPicker(input)) return resume(Effect.succeed({ opened: false, files: [] }))
+      if (!htmlHost.showPicker(input)) {
+        return resume(Effect.succeed({ opened: false, files: [] }))
+      }
       return Effect.sync(() => {
         input.onchange = null
         input.oncancel = null
@@ -1697,7 +2002,10 @@ export const layer = (options?: {
       Context.add(Html.Host, htmlHost),
       Context.add(queryCore.Visibility, signal.visibility),
       Context.add(queryCore.Connectivity, signal.connectivity),
-      Context.add(HtmlSubscription.GlobalEvents, globalEventsOf(document, holds.get(host)!.held)),
+      Context.add(
+        HtmlSubscription.GlobalEvents,
+        globalEventsOf(document, holds.get(host)!.held)
+      ),
       Context.add(HtmlSubscription.AnimationFrames, framesOf(document)),
       Context.add(HtmlImages.Images, imagesOf(document)),
       Context.add(HtmlFiles.Files, filesOf(document))
@@ -1713,7 +2021,10 @@ export const layer = (options?: {
  * @since 0.1.0
  */
 export type HtmlRoot<V> = [Renderer.HostOf<V>] extends [Html.Host] ? unknown
-  : { readonly "BrowserHost.mount shows HTML elements. This root's vocabulary needs": Renderer.HostOf<V> }
+  : {
+    readonly "BrowserHost.mount shows HTML elements. This root's vocabulary needs":
+      Renderer.HostOf<V>
+  }
 
 /**
  * The options of `mount` and `mountEffect`.
@@ -1835,7 +2146,9 @@ export const mount = <
   RF = never,
   RP = never
 >(
-  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any> & HtmlRoot<V>,
+  component:
+    & Component.Members<Name, Props, Model, Msg, Events, R, V, any>
+    & HtmlRoot<V>,
   props: Props | Effect.Effect<Props, never, RP>,
   container: globalThis.Element,
   options?: MountOptions<V, RF>
@@ -1873,24 +2186,44 @@ export const mountEffect = <
   RF = never,
   RP = never
 >(
-  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any> & HtmlRoot<V>,
+  component:
+    & Component.Members<Name, Props, Model, Msg, Events, R, V, any>
+    & HtmlRoot<V>,
   props: Props | Effect.Effect<Props, never, RP>,
   container: globalThis.Element,
   options?: MountOptions<V, RF>
-): Effect.Effect<Renderer.Root<Model, Msg>, never, Exclude<R | RF | RP, Html.Host> | Scope.Scope> =>
+): Effect.Effect<
+  Renderer.Root<Model, Msg>,
+  never,
+  Exclude<R | RF | RP, Html.Host> | Scope.Scope
+> =>
   Effect.gen(function*() {
-    const context = yield* Layer.build(layer({ document: container.ownerDocument }))
+    const context = yield* Layer.build(
+      layer({ document: container.ownerDocument })
+    )
     const outer = yield* Effect.context<Scope.Scope>()
-    const scheduled = Context.getOrUndefined(outer, Scheduler.Scheduler) === undefined
-      ? Context.add(context, Scheduler.Scheduler, defaultScheduler ??= HtmlScheduler.make())
-      : context
+    const scheduled =
+      Context.getOrUndefined(outer, Scheduler.Scheduler) === undefined
+        ? Context.add(
+          context,
+          Scheduler.Scheduler,
+          defaultScheduler ??= HtmlScheduler.make()
+        )
+        : context
     const root = (yield* Effect.provideContext(
       Renderer.mount(component, props, container, options),
       scheduled
     )) as unknown as runtime.Root
-    const paused = pausable(component as any, root, container, Context.merge(outer, scheduled))
+    const paused = pausable(
+      component as any,
+      root,
+      container,
+      Context.merge(outer, scheduled)
+    )
     const unregister = Context.get(outer, Pausables).register(paused)
-    yield* Effect.addFinalizer(() => Effect.andThen(Effect.sync(unregister), paused.resume))
+    yield* Effect.addFinalizer(() =>
+      Effect.andThen(Effect.sync(unregister), paused.resume)
+    )
     return root
   }) as any
 
@@ -1970,7 +2303,9 @@ export interface Pausable {
   readonly session: string
   /** The root instance's path, `/<name>`. */
   readonly path: string
-  readonly pause: (state: (path: string) => Recorded | undefined) => Effect.Effect<Painted>
+  readonly pause: (
+    state: (path: string) => Recorded | undefined
+  ) => Effect.Effect<Painted>
   readonly resume: Effect.Effect<void>
 }
 
@@ -2020,7 +2355,9 @@ const unregistered = () => {}
  * @category services
  * @since 0.1.0
  */
-export const Pausables: Context.Reference<Pausables> = Context.Reference<Pausables>(
+export const Pausables: Context.Reference<Pausables> = Context.Reference<
+  Pausables
+>(
   "@effect/ui/html/BrowserHost/Pausables",
   { defaultValue: () => ({ register: () => unregistered }) }
 )
@@ -2028,13 +2365,22 @@ export const Pausables: Context.Reference<Pausables> = Context.Reference<Pausabl
 // `showModal()` makes everything outside the dialog inert, DevTools included, while the copy's own `inert`
 // leaves the dialog unusable, and an auto popover shown in the copy would close the live page's. Both are
 // shown as manual popovers: in the top layer, with no effect on the rest of the page.
-const paintHost = (host: Renderer.Host<globalThis.Node>): Renderer.Host<globalThis.Node> => ({
+const paintHost = (
+  host: Renderer.Host<globalThis.Node>
+): Renderer.Host<globalThis.Node> => ({
   ...host,
   runsMounts: false,
   setAttr: (node, name, value, previous) =>
-    host.setAttr(node, name, name === "popover" && value !== undefined ? "manual" : value, previous),
+    host.setAttr(
+      node,
+      name,
+      name === "popover" && value !== undefined ? "manual" : value,
+      previous
+    ),
   setProp: (node, name, value) => {
-    if (name !== "open" || value !== "modal") return host.setProp(node, name, value)
+    if (name !== "open" || value !== "modal") {
+      return host.setProp(node, name, value)
+    }
     host.setAttr(node, "popover", "manual")
     host.setProp(node, "popoverOpen", true)
   }
@@ -2047,22 +2393,35 @@ const pausable = (
   context: Context.Context<Scope.Scope | Renderer.Renderer>
 ): Pausable => {
   const owner = Context.get(context, Scope.Scope)
-  const host = Context.get(context, Renderer.Renderer).host as Renderer.Host<globalThis.Node>
+  const host = Context.get(context, Renderer.Renderer).host as Renderer.Host<
+    globalThis.Node
+  >
   const holding = holds.get(host)!
   const style = (container as HTMLElement).style
-  let painted: { readonly scope: Scope.Closeable; readonly copy: HTMLElement } | undefined
+  let painted:
+    | { readonly scope: Scope.Closeable; readonly copy: HTMLElement }
+    | undefined
   let shown: readonly [value: string, priority: string] | undefined
   const unpaint = (was: typeof painted): Effect.Effect<void> =>
     was === undefined
       ? Effect.void
-      : Effect.andThen(Scope.close(was.scope, Exit.void), Effect.sync(() => was.copy.remove()))
-  const show = (target: CSSStyleDeclaration, [value, priority]: readonly [string, string]) => {
+      : Effect.andThen(
+        Scope.close(was.scope, Exit.void),
+        Effect.sync(() => was.copy.remove())
+      )
+  const show = (
+    target: CSSStyleDeclaration,
+    [value, priority]: readonly [string, string]
+  ) => {
     if (value === "") target.removeProperty("display")
     else target.setProperty("display", value, priority)
   }
   const hide = (): readonly [string, string] => {
     if (shown !== undefined) return shown
-    shown = [style.getPropertyValue("display"), style.getPropertyPriority("display")]
+    shown = [
+      style.getPropertyValue("display"),
+      style.getPropertyPriority("display")
+    ]
     holding.hold(container)
     style.setProperty("display", "none", "important")
     return shown
@@ -2088,12 +2447,22 @@ const pausable = (
         show(copy.style, hide())
         copy.setAttribute("inert", "")
         ;(painted?.copy ?? container).after(copy)
-        const result = yield* runtime.paint(component, root.instance.props, copy, state).pipe(
+        const result = yield* runtime.paint(
+          component,
+          root.instance.props,
+          copy,
+          state
+        ).pipe(
           Effect.provideContext(context.pipe(
             Context.add(Renderer.Renderer, { host: paintHost(host) }),
             Context.add(Scope.Scope, scope)
           )),
-          Effect.onError(() => Effect.andThen(unpaint({ scope, copy }), painted === undefined ? reveal : Effect.void))
+          Effect.onError(() =>
+            Effect.andThen(
+              unpaint({ scope, copy }),
+              painted === undefined ? reveal : Effect.void
+            )
+          )
         )
         const was = painted
         painted = { scope, copy }

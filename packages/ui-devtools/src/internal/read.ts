@@ -9,14 +9,26 @@ export type Source = UpdateEntry["source"]
 type IssuingEntry = Extract<Entry, { readonly _tag: "Update" | "Mounted" }>
 type RunEntry = Extract<
   Entry,
-  { readonly _tag: "CommandStarted" | "CommandEnded" | "CommandInterrupted" | "CommandAwaiting" | "CommandDropped" }
+  {
+    readonly _tag:
+      | "CommandStarted"
+      | "CommandEnded"
+      | "CommandInterrupted"
+      | "CommandAwaiting"
+      | "CommandDropped"
+  }
 >
 
 export type Tone = "bad" | "open"
 
 export type Filter = "messages" | "commands" | "all"
 
-const updateTags: ReadonlySet<string> = new Set(["Update", "Failed", "PropsChanged", "QueryChanged"])
+const updateTags: ReadonlySet<string> = new Set([
+  "Update",
+  "Failed",
+  "PropsChanged",
+  "QueryChanged"
+])
 const commandTags: ReadonlySet<string> = new Set([
   "CommandStarted",
   "CommandAwaiting",
@@ -25,36 +37,54 @@ const commandTags: ReadonlySet<string> = new Set([
   "CommandDropped",
   "SendDropped"
 ])
-const instanceTags: ReadonlySet<string> = new Set(["Mounted", "Unmounted", "Waiting"])
+const instanceTags: ReadonlySet<string> = new Set([
+  "Mounted",
+  "Unmounted",
+  "Waiting"
+])
 
 export const matches = (entry: Entry, filter: Filter): boolean => {
   switch (filter) {
     case "all":
       return true
     case "messages":
-      return updateTags.has(entry._tag) || commandTags.has(entry._tag) || instanceTags.has(entry._tag)
+      return updateTags.has(entry._tag) || commandTags.has(entry._tag) ||
+        instanceTags.has(entry._tag)
     case "commands":
-      return commandTags.has(entry._tag) || isIssuing(entry) && entry.commands.length > 0 ||
+      return commandTags.has(entry._tag) ||
+        isIssuing(entry) && entry.commands.length > 0 ||
         issuedOf(entry) !== undefined
   }
 }
 
-export const isIssuing = (entry: Entry | Inspector.Outside): entry is IssuingEntry =>
-  entry._tag === "Update" || entry._tag === "Mounted"
+export const isIssuing = (
+  entry: Entry | Inspector.Outside
+): entry is IssuingEntry => entry._tag === "Update" || entry._tag === "Mounted"
 
 export const isRun = (entry: Entry | Inspector.Outside): entry is RunEntry =>
-  entry._tag === "CommandStarted" || entry._tag === "CommandEnded" || entry._tag === "CommandInterrupted" ||
+  entry._tag === "CommandStarted" || entry._tag === "CommandEnded" ||
+  entry._tag === "CommandInterrupted" ||
   entry._tag === "CommandAwaiting" || entry._tag === "CommandDropped"
 
-export const issuedOf = (entry: Entry | Inspector.Outside): MessageLog.Issued | undefined =>
-  isRun(entry) ? entry.issued : entry._tag === "Failed" ? entry.issued : undefined
+export const issuedOf = (
+  entry: Entry | Inspector.Outside
+): MessageLog.Issued | undefined =>
+  isRun(entry)
+    ? entry.issued
+    : entry._tag === "Failed"
+    ? entry.issued
+    : undefined
 
 export const tagOf = (value: unknown): string | undefined =>
-  Predicate.hasProperty(value, "_tag") && typeof value._tag === "string" ? value._tag : undefined
+  Predicate.hasProperty(value, "_tag") && typeof value._tag === "string"
+    ? value._tag
+    : undefined
 
-export const nameOf = (path: string): string => path.slice(path.lastIndexOf("/") + 1) || path
+export const nameOf = (path: string): string =>
+  path.slice(path.lastIndexOf("/") + 1) || path
 
-export const depthOf = (path: string): number => Math.max(0, path.split("/").length - 2)
+export const depthOf = (path: string): number =>
+  Math.max(0, path.split("/").length - 2)
 
 export interface Label {
   readonly text: string
@@ -73,7 +103,13 @@ export const labelOf = (entry: Entry): Label => {
     case "QueryChanged":
       return { text: "QueryChanged", detail: entry.name }
     case "Failed":
-      return { text: "Failed", detail: entry.name === undefined ? entry.in : entry.in + " " + entry.name, tone: "bad" }
+      return {
+        text: "Failed",
+        detail: entry.name === undefined
+          ? entry.in
+          : entry.in + " " + entry.name,
+        tone: "bad"
+      }
     case "LayerFailed":
       return { text: "LayerFailed", tone: "bad" }
     case "SubscriptionStarted":
@@ -82,7 +118,11 @@ export const labelOf = (entry: Entry): Label => {
     case "MountStarted":
       return { text: "MountStarted", detail: entry.name }
     case "MountEnded":
-      return { text: "MountEnded", detail: entry.name, tone: entry.reason === "failed" ? "bad" : undefined }
+      return {
+        text: "MountEnded",
+        detail: entry.name,
+        tone: entry.reason === "failed" ? "bad" : undefined
+      }
     case "CommandStarted":
       return { text: entry.name, detail: "started" }
     case "CommandAwaiting":
@@ -104,23 +144,34 @@ export const rowOf = (session: Inspector.Session, entry: Entry): Label => {
   const label = labelOf(entry)
   if (entry._tag !== "CommandStarted") return label
   const run = session.run(entry.issued)
-  return run !== undefined && run.end === undefined ? { ...label, detail: "running", tone: "open" } : label
+  return run !== undefined && run.end === undefined
+    ? { ...label, detail: "running", tone: "open" }
+    : label
 }
 
 export const subscriptionText = (
-  subscription: { readonly name: string; readonly deps: ReadonlyArray<Schema.Json> | null }
+  subscription: {
+    readonly name: string
+    readonly deps: ReadonlyArray<Schema.Json> | null
+  }
 ): string =>
-  subscription.deps === null ? subscription.name : subscription.name + " " + JSON.stringify(subscription.deps)
+  subscription.deps === null
+    ? subscription.name
+    : subscription.name + " " + JSON.stringify(subscription.deps)
 
-export const instanceOf = (entry: Entry | Inspector.Outside): number | undefined =>
-  "instance" in entry ? entry.instance : undefined
+export const instanceOf = (
+  entry: Entry | Inspector.Outside
+): number | undefined => "instance" in entry ? entry.instance : undefined
 
 export interface Status {
   readonly text: string
   readonly tone?: Tone | undefined
 }
 
-export const statusesOf = (session: Inspector.Session, instance: Inspector.Instance): ReadonlyArray<Status> => {
+export const statusesOf = (
+  session: Inspector.Session,
+  instance: Inspector.Instance
+): ReadonlyArray<Status> => {
   const ended = new Map<Inspector.Reason, number>()
   let running = 0
   let waiting = 0
@@ -136,11 +187,16 @@ export const statusesOf = (session: Inspector.Session, instance: Inspector.Insta
   }
   const statuses: Array<Status> = []
   for (const [reason, count] of ended) {
-    statuses.push({ text: count + " " + reasonText[reason], tone: reasonTone[reason] === "bad" ? "bad" : undefined })
+    statuses.push({
+      text: count + " " + reasonText[reason],
+      tone: reasonTone[reason] === "bad" ? "bad" : undefined
+    })
   }
   if (running > 0) statuses.push({ text: running + " running", tone: "open" })
   if (waiting > 0) statuses.push({ text: waiting + " waiting", tone: "open" })
-  if (instance.unmounted !== undefined) statuses.push({ text: "unmounted", tone: "bad" })
+  if (instance.unmounted !== undefined) {
+    statuses.push({ text: "unmounted", tone: "bad" })
+  }
   return statuses
 }
 
@@ -149,17 +205,30 @@ export interface Ref {
   readonly entry: Entry | Inspector.Outside
 }
 
-export const refOf = (session: Inspector.Session, seq: number): Ref => ({ seq, entry: session.resolve(seq) })
+export const refOf = (session: Inspector.Session, seq: number): Ref => ({
+  seq,
+  entry: session.resolve(seq)
+})
 
 export const summaryOf = (entry: Entry | Inspector.Outside): string => {
   if (entry._tag === "Outside") return "outside the buffer"
   const label = labelOf(entry)
-  return entry._tag === "Update" ? "Update " + label.text : [label.text, label.detail].filter(Boolean).join(" ")
+  return entry._tag === "Update"
+    ? "Update " + label.text
+    : [label.text, label.detail].filter(Boolean).join(" ")
 }
 
 export type Step =
-  | { readonly _tag: "Source"; readonly source: Source; readonly link: Ref | undefined }
-  | { readonly _tag: "Link"; readonly rel: Inspector.Link["rel"]; readonly ref: Ref }
+  | {
+    readonly _tag: "Source"
+    readonly source: Source
+    readonly link: Ref | undefined
+  }
+  | {
+    readonly _tag: "Link"
+    readonly rel: Inspector.Link["rel"]
+    readonly ref: Ref
+  }
   | {
     readonly _tag: "Entry"
     readonly ref: Ref
@@ -174,16 +243,26 @@ export type Step =
   }
   | { readonly _tag: "Started"; readonly ref: Ref; readonly selected: boolean }
   | { readonly _tag: "NotStarted"; readonly ended: boolean }
-  | { readonly _tag: "End"; readonly ref: Ref; readonly selected: boolean; readonly after: number | undefined }
+  | {
+    readonly _tag: "End"
+    readonly ref: Ref
+    readonly selected: boolean
+    readonly after: number | undefined
+  }
   | { readonly _tag: "Running"; readonly since: Ref | undefined }
   | { readonly _tag: "Result"; readonly ref: Ref }
   | { readonly _tag: "CausedBy"; readonly ref: Ref }
   | {
     readonly _tag: "Names"
-    readonly links: ReadonlyArray<Inspector.Link & { readonly entry: Entry | Inspector.Outside }>
+    readonly links: ReadonlyArray<
+      Inspector.Link & { readonly entry: Entry | Inspector.Outside }
+    >
   }
 
-const sourceLink = (session: Inspector.Session, seq: number): Ref | undefined => {
+const sourceLink = (
+  session: Inspector.Session,
+  seq: number
+): Ref | undefined => {
   const link = session.back(seq).find((link) => link.rel === "source")
   return link === undefined ? undefined : refOf(session, link.seq)
 }
@@ -198,13 +277,22 @@ const runSteps = (
   const run = session.run({ seq: issuing.seq, index })
   if (run === undefined) return steps
   if (run.start !== undefined) {
-    steps.push({ _tag: "Started", ref: refOf(session, run.start), selected: run.start === selected })
+    steps.push({
+      _tag: "Started",
+      ref: refOf(session, run.start),
+      selected: run.start === selected
+    })
   } else steps.push({ _tag: "NotStarted", ended: run.end !== undefined })
   for (const link of session.forward(issuing.seq)) {
-    if (link.rel === "source" && link.index === index) steps.push({ _tag: "Result", ref: refOf(session, link.seq) })
+    if (link.rel === "source" && link.index === index) {
+      steps.push({ _tag: "Result", ref: refOf(session, link.seq) })
+    }
   }
   if (run.end === undefined) {
-    steps.push({ _tag: "Running", since: run.start === undefined ? undefined : refOf(session, run.start) })
+    steps.push({
+      _tag: "Running",
+      since: run.start === undefined ? undefined : refOf(session, run.start)
+    })
     return steps
   }
   const end = refOf(session, run.end)
@@ -214,13 +302,18 @@ const runSteps = (
     selected: run.end === selected,
     after: end.entry._tag === "Outside" ? undefined : end.entry.at - issuing.at
   })
-  if (end.entry._tag === "CommandInterrupted" && end.entry.causedBy !== undefined) {
+  if (
+    end.entry._tag === "CommandInterrupted" && end.entry.causedBy !== undefined
+  ) {
     steps.push({ _tag: "CausedBy", ref: refOf(session, end.entry.causedBy) })
   }
   return steps
 }
 
-const groupOf = (session: Inspector.Session, issued: MessageLog.Issued): string | null | undefined => {
+const groupOf = (
+  session: Inspector.Session,
+  issued: MessageLog.Issued
+): string | null | undefined => {
   const issuing = session.resolve(issued.seq)
   return isIssuing(issuing) ? issuing.commands[issued.index]?.group : undefined
 }
@@ -238,7 +331,8 @@ const stoppedBy = (session: Inspector.Session, issuing: IssuingEntry) => {
       [] :
       issuing.commands.flatMap((command, index) =>
         command._tag === "Interrupt" && command.name === end.name &&
-          (group === undefined || command.group === null || command.group === group)
+          (group === undefined || command.group === null ||
+            command.group === group)
           ? [index]
           : []
       )
@@ -251,12 +345,25 @@ const stoppedBy = (session: Inspector.Session, issuing: IssuingEntry) => {
   return { byCommand, unattributed }
 }
 
-const issuingSteps = (session: Inspector.Session, issuing: IssuingEntry, selected: number, only?: number) => {
+const issuingSteps = (
+  session: Inspector.Session,
+  issuing: IssuingEntry,
+  selected: number,
+  only?: number
+) => {
   const steps: Array<Step> = []
   if (issuing._tag === "Update") {
-    steps.push({ _tag: "Source", source: issuing.source, link: sourceLink(session, issuing.seq) })
+    steps.push({
+      _tag: "Source",
+      source: issuing.source,
+      link: sourceLink(session, issuing.seq)
+    })
   } else if (issuing.causedBy !== undefined) {
-    steps.push({ _tag: "Link", rel: "causedBy", ref: refOf(session, issuing.causedBy) })
+    steps.push({
+      _tag: "Link",
+      rel: "causedBy",
+      ref: refOf(session, issuing.causedBy)
+    })
   }
   const { byCommand, unattributed } = stoppedBy(session, issuing)
   steps.push({
@@ -268,7 +375,12 @@ const issuingSteps = (session: Inspector.Session, issuing: IssuingEntry, selecte
   issuing.commands.forEach((command, index) => {
     if (only !== undefined && index !== only) return
     if (command._tag === "Interrupt") {
-      steps.push({ _tag: "Command", index, command, stopped: byCommand.get(index) ?? [] })
+      steps.push({
+        _tag: "Command",
+        index,
+        command,
+        stopped: byCommand.get(index) ?? []
+      })
       return
     }
     steps.push({ _tag: "Command", index, command, stopped: [] })
@@ -277,7 +389,10 @@ const issuingSteps = (session: Inspector.Session, issuing: IssuingEntry, selecte
   return steps
 }
 
-export const chainOf = (session: Inspector.Session, entry: Entry): ReadonlyArray<Step> => {
+export const chainOf = (
+  session: Inspector.Session,
+  entry: Entry
+): ReadonlyArray<Step> => {
   if (isIssuing(entry)) return issuingSteps(session, entry, entry.seq)
   const issued = issuedOf(entry)
   if (issued !== undefined) {
@@ -285,7 +400,11 @@ export const chainOf = (session: Inspector.Session, entry: Entry): ReadonlyArray
     if (isIssuing(issuing)) {
       const steps = issuingSteps(session, issuing, entry.seq, issued.index)
       if (entry._tag === "CommandAwaiting" || entry._tag === "CommandDropped") {
-        steps.push({ _tag: "Entry", ref: { seq: entry.seq, entry }, selected: true })
+        steps.push({
+          _tag: "Entry",
+          ref: { seq: entry.seq, entry },
+          selected: true
+        })
       }
       return steps
     }
@@ -295,7 +414,10 @@ export const chainOf = (session: Inspector.Session, entry: Entry): ReadonlyArray
     steps.push({ _tag: "Link", rel: link.rel, ref: refOf(session, link.seq) })
   }
   steps.push({ _tag: "Entry", ref: { seq: entry.seq, entry }, selected: true })
-  const named = session.forward(entry.seq).map((link) => ({ ...link, entry: session.resolve(link.seq) }))
+  const named = session.forward(entry.seq).map((link) => ({
+    ...link,
+    entry: session.resolve(link.seq)
+  }))
   if (named.length > 0) steps.push({ _tag: "Names", links: named })
   return steps
 }
@@ -346,18 +468,26 @@ export interface Branch {
 
 const pathKey = (path: ReadonlyArray<string | number>) => JSON.stringify(path)
 
-const isBranch = (value: Schema.Json): value is Schema.JsonObject | ReadonlyArray<Schema.Json> =>
-  typeof value === "object" && value !== null && !MessageLog.isPlaceholder(value)
+const isBranch = (
+  value: Schema.Json
+): value is Schema.JsonObject | ReadonlyArray<Schema.Json> =>
+  typeof value === "object" && value !== null &&
+  !MessageLog.isPlaceholder(value)
 
 const previewKeys = 3
 
-const previewOf = (value: Schema.JsonObject | ReadonlyArray<Schema.Json>): string => {
-  if (Array.isArray(value)) return "[ " + value.length + (value.length === 1 ? " item ]" : " items ]")
+const previewOf = (
+  value: Schema.JsonObject | ReadonlyArray<Schema.Json>
+): string => {
+  if (Array.isArray(value)) {
+    return "[ " + value.length + (value.length === 1 ? " item ]" : " items ]")
+  }
   const tag = tagOf(value)
   const prefix = tag === undefined ? "" : tag + " "
   const keys = Object.keys(value).filter((key) => key !== "_tag")
   if (keys.length === 0) return prefix + "{}"
-  return prefix + "{ " + keys.slice(0, previewKeys).join(", ") + (keys.length > previewKeys ? ", … }" : " }")
+  return prefix + "{ " + keys.slice(0, previewKeys).join(", ") +
+    (keys.length > previewKeys ? ", … }" : " }")
 }
 
 export const treeOf = (
@@ -384,7 +514,12 @@ export const treeOf = (
     }
   }
   const rows: Array<Row> = []
-  const visit = (value: Schema.Json, key: string | number | undefined, path: Array<string | number>, depth: number) => {
+  const visit = (
+    value: Schema.Json,
+    key: string | number | undefined,
+    path: Array<string | number>,
+    depth: number
+  ) => {
     const id = pathKey(path)
     const found = byPath.get(id)
     const change = found?.kind === "unknown" ? undefined : found
@@ -392,8 +527,10 @@ export const treeOf = (
     const hidden = changesUnder.get(id) ?? 0
     if (
       !isBranch(value) ||
-      change !== undefined && (expanded === undefined || change.kind === "changed") ||
-      expanded !== undefined && nested && hidden === 0 && Object.keys(value).length === 0
+      change !== undefined &&
+        (expanded === undefined || change.kind === "changed") ||
+      expanded !== undefined && nested && hidden === 0 &&
+        Object.keys(value).length === 0
     ) {
       rows.push({ id, depth, key, value, change })
       return
@@ -408,28 +545,48 @@ export const treeOf = (
         value: undefined,
         open: array ? "[" : "{",
         change,
-        branch: expanded && { path: id, expanded: open, preview: previewOf(value), changes: hidden }
+        branch: expanded &&
+          {
+            path: id,
+            expanded: open,
+            preview: previewOf(value),
+            changes: hidden
+          }
       })
       if (!open) return
     }
     const inner = nested ? depth + 1 : depth
     if (array) {
-      value.forEach((item, index) => visit(item, index, [...path, index], inner))
+      value.forEach((item, index) =>
+        visit(item, index, [...path, index], inner)
+      )
     } else {
-      for (const [name, item] of Object.entries(value)) visit(item, name, [...path, name], inner)
+      for (const [name, item] of Object.entries(value)) {
+        visit(item, name, [...path, name], inner)
+      }
     }
     for (const removed of removedUnder.get(id) ?? []) {
-      visit(removed.before!, removed.path[removed.path.length - 1], [...removed.path], inner)
+      visit(removed.before!, removed.path[removed.path.length - 1], [
+        ...removed.path
+      ], inner)
     }
     if (nested) {
-      rows.push({ id: id + "}", depth, key: undefined, value: undefined, close: array ? "]" : "}" })
+      rows.push({
+        id: id + "}",
+        depth,
+        key: undefined,
+        value: undefined,
+        close: array ? "]" : "}"
+      })
     }
   }
   visit(value, undefined, [], 0)
   return rows
 }
 
-export const statusOf = (changes: ReadonlyArray<Inspector.Change>): "same" | "changed" | "unknown" =>
+export const statusOf = (
+  changes: ReadonlyArray<Inspector.Change>
+): "same" | "changed" | "unknown" =>
   changes.length === 0
     ? "same"
     : changes.some((change) => change.kind !== "unknown")

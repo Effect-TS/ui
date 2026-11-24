@@ -38,7 +38,9 @@ interface FileInfo {
 const cache = new Map<string, Analysis>()
 const sourceExtensions = new Set([".ts"])
 
-function getCwd(context: { readonly cwd?: string; getCwd?: () => string }): string {
+function getCwd(
+  context: { readonly cwd?: string; getCwd?: () => string }
+): string {
   return context.cwd ?? context.getCwd?.() ?? process.cwd()
 }
 
@@ -51,7 +53,8 @@ function rangeNode(range: readonly [number, number]): ESTree.Node {
 }
 
 function isSourceFile(fileName: string): boolean {
-  return sourceExtensions.has(path.extname(fileName)) && !fileName.endsWith(".d.ts")
+  return sourceExtensions.has(path.extname(fileName)) &&
+    !fileName.endsWith(".d.ts")
 }
 
 function findSourceFiles(cwd: string): Array<string> {
@@ -63,10 +66,16 @@ function findSourceFiles(cwd: string): Array<string> {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
       const entryPath = path.join(directory, entry.name)
       if (entry.isDirectory()) {
-        if (entry.name !== "dist" && entry.name !== "build" && entry.name !== "node_modules") {
+        if (
+          entry.name !== "dist" && entry.name !== "build" &&
+          entry.name !== "node_modules"
+        ) {
           visit(entryPath)
         }
-      } else if (entry.isFile() && isSourceFile(entryPath) && normalizePathName(entryPath).includes("/src/")) {
+      } else if (
+        entry.isFile() && isSourceFile(entryPath) &&
+        normalizePathName(entryPath).includes("/src/")
+      ) {
         files.push(entryPath)
       }
     }
@@ -85,7 +94,9 @@ function findWorkspacePackages(cwd: string): Map<string, string> {
     const packageJson = path.join(directory, "package.json")
     if (fs.existsSync(packageJson)) {
       try {
-        const json = JSON.parse(fs.readFileSync(packageJson, "utf8")) as { readonly name?: unknown }
+        const json = JSON.parse(fs.readFileSync(packageJson, "utf8")) as {
+          readonly name?: unknown
+        }
         if (typeof json.name === "string") {
           packages.set(json.name, directory)
         }
@@ -96,7 +107,10 @@ function findWorkspacePackages(cwd: string): Map<string, string> {
     }
 
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      if (entry.isDirectory() && entry.name !== "node_modules" && entry.name !== "dist" && entry.name !== "build") {
+      if (
+        entry.isDirectory() && entry.name !== "node_modules" &&
+        entry.name !== "dist" && entry.name !== "build"
+      ) {
         visit(path.join(directory, entry.name))
       }
     }
@@ -150,7 +164,8 @@ function resolveModule(
 }
 
 function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
-  return ts.canHaveModifiers(node) && (ts.getModifiers(node) ?? []).some((modifier) => modifier.kind === kind)
+  return ts.canHaveModifiers(node) &&
+    (ts.getModifiers(node) ?? []).some((modifier) => modifier.kind === kind)
 }
 
 function hasExportModifier(node: ts.Node): boolean {
@@ -158,11 +173,14 @@ function hasExportModifier(node: ts.Node): boolean {
 }
 
 function hasPrivateOrProtectedModifier(node: ts.Node): boolean {
-  return hasModifier(node, ts.SyntaxKind.PrivateKeyword) || hasModifier(node, ts.SyntaxKind.ProtectedKeyword)
+  return hasModifier(node, ts.SyntaxKind.PrivateKeyword) ||
+    hasModifier(node, ts.SyntaxKind.ProtectedKeyword)
 }
 
 function hasInternalJSDoc(node: ts.Node): boolean {
-  return ts.getJSDocTags(node).some((tag) => tag.tagName.getText() === "internal")
+  return ts.getJSDocTags(node).some((tag) =>
+    tag.tagName.getText() === "internal"
+  )
 }
 
 function hasInternalApiJSDoc(node: ts.Node): boolean {
@@ -170,7 +188,9 @@ function hasInternalApiJSDoc(node: ts.Node): boolean {
   if (ts.isVariableDeclaration(node)) {
     return hasInternalJSDoc(node.parent.parent)
   }
-  if (ts.isBindingElement(node) && ts.isVariableDeclaration(node.parent.parent)) {
+  if (
+    ts.isBindingElement(node) && ts.isVariableDeclaration(node.parent.parent)
+  ) {
     return hasInternalJSDoc(node.parent.parent.parent)
   }
   return false
@@ -238,10 +258,12 @@ function getDeclarationForName(node: ts.Node, name: ts.Identifier): ts.Node {
 
 function isImportOrExportBinding(identifier: ts.Identifier): boolean {
   const parent = identifier.parent
-  return (ts.isImportSpecifier(parent) && (parent.name === identifier || parent.propertyName === identifier)) ||
+  return (ts.isImportSpecifier(parent) &&
+    (parent.name === identifier || parent.propertyName === identifier)) ||
     (ts.isImportClause(parent) && parent.name === identifier) ||
     (ts.isNamespaceImport(parent) && parent.name === identifier) ||
-    (ts.isExportSpecifier(parent) && (parent.name === identifier || parent.propertyName === identifier))
+    (ts.isExportSpecifier(parent) &&
+      (parent.name === identifier || parent.propertyName === identifier))
 }
 
 function isDeclarationName(identifier: ts.Identifier): boolean {
@@ -274,7 +296,8 @@ function isNonReferenceName(identifier: ts.Identifier): boolean {
 
 function isInside(node: ts.Node, container: ts.Node): boolean {
   if (node.getSourceFile() !== container.getSourceFile()) return false
-  return node.getStart() >= container.getStart() && node.getEnd() <= container.getEnd()
+  return node.getStart() >= container.getStart() &&
+    node.getEnd() <= container.getEnd()
 }
 
 function getExports(
@@ -353,13 +376,23 @@ function collectFileInfo(
   const isInternalFile = isInternalPath(sourceFile.fileName)
 
   for (const statement of sourceFile.statements) {
-    if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
-      const importedFile = resolveModule(statement.moduleSpecifier.text, sourceFile.fileName, workspacePackages)
+    if (
+      ts.isImportDeclaration(statement) &&
+      ts.isStringLiteral(statement.moduleSpecifier)
+    ) {
+      const importedFile = resolveModule(
+        statement.moduleSpecifier.text,
+        sourceFile.fileName,
+        workspacePackages
+      )
       const importClause = statement.importClause
       if (importedFile === undefined || importClause === undefined) continue
 
       if (importClause.name !== undefined) {
-        fileInfo.imports.set(importClause.name.text, { fileName: importedFile, importedName: "default" })
+        fileInfo.imports.set(importClause.name.text, {
+          fileName: importedFile,
+          importedName: "default"
+        })
       }
 
       const namedBindings = importClause.namedBindings
@@ -369,7 +402,10 @@ function collectFileInfo(
       } else {
         for (const specifier of namedBindings.elements) {
           const importedName = (specifier.propertyName ?? specifier.name).text
-          fileInfo.imports.set(specifier.name.text, { fileName: importedFile, importedName })
+          fileInfo.imports.set(specifier.name.text, {
+            fileName: importedFile,
+            importedName
+          })
         }
       }
       continue
@@ -394,7 +430,8 @@ function collectFileInfo(
     const statementIsInternal = hasInternalApiJSDoc(statement)
     for (const name of names) {
       const declaration = getDeclarationForName(statement, name)
-      const declarationIsInternal = statementIsInternal || hasInternalApiJSDoc(declaration)
+      const declarationIsInternal = statementIsInternal ||
+        hasInternalApiJSDoc(declaration)
       if (declarationIsInternal) {
         addInternalExport(fileInfo, {
           fileName: sourceFile.fileName,
@@ -431,9 +468,15 @@ function markDynamicImport(
 ) {
   const specifier = importCall.arguments[0]
   if (specifier === undefined || !ts.isStringLiteralLike(specifier)) return
-  const importedFile = resolveModule(specifier.text, fileInfo.sourceFile.fileName, workspacePackages)
+  const importedFile = resolveModule(
+    specifier.text,
+    fileInfo.sourceFile.fileName,
+    workspacePackages
+  )
   if (importedFile === undefined) return
-  for (const exports of fileInfos.get(importedFile)?.internalExports.values() ?? []) {
+  for (
+    const exports of fileInfos.get(importedFile)?.internalExports.values() ?? []
+  ) {
     markUsed(exports, importCall)
   }
 }
@@ -445,17 +488,29 @@ function scanUsage(
 ) {
   const visit = (node: ts.Node) => {
     if (ts.isExportSpecifier(node)) {
-      markUsed(getReExportedInternals(fileInfos, fileInfo, workspacePackages, node), node)
-    } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      markUsed(
+        getReExportedInternals(fileInfos, fileInfo, workspacePackages, node),
+        node
+      )
+    } else if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword
+    ) {
       markDynamicImport(fileInfos, fileInfo, workspacePackages, node)
-    } else if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) && ts.isIdentifier(node.name)) {
+    } else if (
+      ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) &&
+      ts.isIdentifier(node.name)
+    ) {
       markNamespaceReference(fileInfos, fileInfo, node.expression, node.name)
     } else if (ts.isQualifiedName(node) && ts.isIdentifier(node.left)) {
       markNamespaceReference(fileInfos, fileInfo, node.left, node.right)
     } else if (ts.isIdentifier(node) && !isNonReferenceName(node)) {
       markUsed(fileInfo.internalExports.get(node.text) ?? [], node)
       const imported = fileInfo.imports.get(node.text)
-      markUsed(getExports(fileInfos, imported?.fileName, imported?.importedName ?? ""), node)
+      markUsed(
+        getExports(fileInfos, imported?.fileName, imported?.importedName ?? ""),
+        node
+      )
     }
     ts.forEachChild(node, visit)
   }
@@ -469,34 +524,54 @@ function findInternalReferences(
   node: ts.Node
 ) {
   const visit = (current: ts.Node) => {
-    if (ts.isPropertyAccessExpression(current) && ts.isIdentifier(current.expression)) {
-      const importedFile = fileInfo.namespaceImports.get(current.expression.text)
-      for (const internal of getExports(fileInfos, importedFile, current.name.text)) {
+    if (
+      ts.isPropertyAccessExpression(current) &&
+      ts.isIdentifier(current.expression)
+    ) {
+      const importedFile = fileInfo.namespaceImports.get(
+        current.expression.text
+      )
+      for (
+        const internal of getExports(fileInfos, importedFile, current.name.text)
+      ) {
         diagnostics.push({
           fileName: fileInfo.fileName,
           range: [current.name.getStart(), current.name.getEnd()],
-          message: `Do not reference @internal export "${internal.name}" in a public exported type signature`
+          message:
+            `Do not reference @internal export "${internal.name}" in a public exported type signature`
         })
       }
     } else if (ts.isQualifiedName(current) && ts.isIdentifier(current.left)) {
       const importedFile = fileInfo.namespaceImports.get(current.left.text)
-      for (const internal of getExports(fileInfos, importedFile, current.right.text)) {
+      for (
+        const internal of getExports(
+          fileInfos,
+          importedFile,
+          current.right.text
+        )
+      ) {
         diagnostics.push({
           fileName: fileInfo.fileName,
           range: [current.right.getStart(), current.right.getEnd()],
-          message: `Do not reference @internal export "${internal.name}" in a public exported type signature`
+          message:
+            `Do not reference @internal export "${internal.name}" in a public exported type signature`
         })
       }
     } else if (ts.isIdentifier(current) && !isNonReferenceName(current)) {
       const localExports = fileInfo.internalExports.get(current.text) ?? []
       const imported = fileInfo.imports.get(current.text)
-      const importedExports = getExports(fileInfos, imported?.fileName, imported?.importedName ?? "")
+      const importedExports = getExports(
+        fileInfos,
+        imported?.fileName,
+        imported?.importedName ?? ""
+      )
 
       for (const internal of [...localExports, ...importedExports]) {
         diagnostics.push({
           fileName: fileInfo.fileName,
           range: [current.getStart(), current.getEnd()],
-          message: `Do not reference @internal export "${internal.name}" in a public exported type signature`
+          message:
+            `Do not reference @internal export "${internal.name}" in a public exported type signature`
         })
       }
     }
@@ -514,10 +589,20 @@ function scanTypeParameters(
   if (typeParameters === undefined) return
   for (const typeParameter of typeParameters) {
     if (typeParameter.constraint !== undefined) {
-      findInternalReferences(fileInfos, fileInfo, diagnostics, typeParameter.constraint)
+      findInternalReferences(
+        fileInfos,
+        fileInfo,
+        diagnostics,
+        typeParameter.constraint
+      )
     }
     if (typeParameter.default !== undefined) {
-      findInternalReferences(fileInfos, fileInfo, diagnostics, typeParameter.default)
+      findInternalReferences(
+        fileInfos,
+        fileInfo,
+        diagnostics,
+        typeParameter.default
+      )
     }
   }
 }
@@ -576,7 +661,8 @@ function scanInterfaceMemberSignature(
 ) {
   if (hasInternalJSDoc(member)) return
   if (
-    ts.isMethodSignature(member) || ts.isCallSignatureDeclaration(member) || ts.isConstructSignatureDeclaration(member)
+    ts.isMethodSignature(member) || ts.isCallSignatureDeclaration(member) ||
+    ts.isConstructSignatureDeclaration(member)
   ) {
     scanFunctionLikeSignature(fileInfos, fileInfo, diagnostics, member)
   } else if (ts.isPropertySignature(member) && member.type !== undefined) {
@@ -598,7 +684,12 @@ function scanPublicSignature(
   } else if (ts.isVariableStatement(node)) {
     for (const declaration of node.declarationList.declarations) {
       if (declaration.type !== undefined) {
-        findInternalReferences(fileInfos, fileInfo, diagnostics, declaration.type)
+        findInternalReferences(
+          fileInfos,
+          fileInfo,
+          diagnostics,
+          declaration.type
+        )
       }
     }
   } else if (ts.isTypeAliasDeclaration(node)) {
@@ -630,12 +721,20 @@ function scanPublicSignature(
     ts.isNamedExports(node.exportClause)
   ) {
     for (const specifier of node.exportClause.elements) {
-      for (const internal of getReExportedInternals(fileInfos, fileInfo, workspacePackages, specifier)) {
+      for (
+        const internal of getReExportedInternals(
+          fileInfos,
+          fileInfo,
+          workspacePackages,
+          specifier
+        )
+      ) {
         const name = specifier.propertyName ?? specifier.name
         diagnostics.push({
           fileName: fileInfo.fileName,
           range: [name.getStart(), name.getEnd()],
-          message: `Do not re-export @internal export "${internal.name}" from a public module`
+          message:
+            `Do not re-export @internal export "${internal.name}" from a public module`
         })
       }
     }
@@ -650,7 +749,12 @@ function analyze(cwd: string): Analysis {
   const workspacePackages = findWorkspacePackages(cwd)
   const fileInfos = new Map<string, FileInfo>()
   for (const fileName of findSourceFiles(cwd)) {
-    const sourceFile = ts.createSourceFile(fileName, fs.readFileSync(fileName, "utf8"), ts.ScriptTarget.Latest, true)
+    const sourceFile = ts.createSourceFile(
+      fileName,
+      fs.readFileSync(fileName, "utf8"),
+      ts.ScriptTarget.Latest,
+      true
+    )
     const fileInfo = collectFileInfo(sourceFile, workspacePackages)
     fileInfos.set(fileInfo.fileName, fileInfo)
   }
@@ -664,7 +768,13 @@ function analyze(cwd: string): Analysis {
   for (const fileInfo of fileInfos.values()) {
     const diagnostics: Array<Diagnostic> = []
     for (const declaration of fileInfo.publicDeclarations) {
-      scanPublicSignature(fileInfos, fileInfo, diagnostics, declaration, workspacePackages)
+      scanPublicSignature(
+        fileInfos,
+        fileInfo,
+        diagnostics,
+        declaration,
+        workspacePackages
+      )
     }
     for (const diagnostic of diagnostics) {
       addFileDiagnostic(diagnosticsByFile, diagnostic)
@@ -676,7 +786,8 @@ function analyze(cwd: string): Analysis {
           addFileDiagnostic(diagnosticsByFile, {
             fileName: internal.fileName,
             range: internal.range,
-            message: `@internal export "${internal.name}" is not used by production sources`
+            message:
+              `@internal export "${internal.name}" is not used by production sources`
           })
         }
       }
@@ -696,12 +807,14 @@ const rule: CreateRule = {
   meta: {
     type: "problem",
     docs: {
-      description: "Disallow unused @internal exports, public re-exports, and references from public type signatures"
+      description:
+        "Disallow unused @internal exports, public re-exports, and references from public type signatures"
     }
   },
   create(context) {
     const analysis = analyze(getCwd(context))
-    const diagnostics = analysis.diagnosticsByFile.get(normalizePathName(context.filename)) ?? []
+    const diagnostics =
+      analysis.diagnosticsByFile.get(normalizePathName(context.filename)) ?? []
 
     return {
       Program() {

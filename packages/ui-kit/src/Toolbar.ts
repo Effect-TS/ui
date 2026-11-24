@@ -254,7 +254,11 @@ export type ToolbarProps = typeof ToolbarProps.Type
 const ToolbarMessage = UiSchema.TaggedEnum({
   FocusedItem: { value: Schema.String },
   PressedItemKey: { value: Schema.String, key: Schema.String },
-  PressedInputKey: { value: Schema.String, key: Schema.String, caret: Schema.NullOr(Schema.Number) }
+  PressedInputKey: {
+    value: Schema.String,
+    key: Schema.String,
+    caret: Schema.NullOr(Schema.Number)
+  }
 })
 
 const ToolbarModel = Schema.Struct({ active: Schema.NullOr(Schema.String) })
@@ -265,14 +269,17 @@ const Item = Html.ref("ToolbarItem", "button")
 
 const textField = (element: globalThis.Element): boolean =>
   element.localName === "textarea" ||
-  (element.localName === "input" && (element as HTMLInputElement).selectionStart != null)
+  (element.localName === "input" &&
+    (element as HTMLInputElement).selectionStart != null)
 
 const FocusItem = Command.make(
   "FocusItem",
   {
     args: {
       ref: Renderer.Ref,
-      leaving: Schema.optional(Schema.Struct({ ref: Renderer.Ref, caret: Schema.Number }))
+      leaving: Schema.optional(
+        Schema.Struct({ ref: Renderer.Ref, caret: Schema.Number })
+      )
     }
   },
   ({ leaving, ref }) =>
@@ -280,7 +287,10 @@ const FocusItem = Command.make(
       Effect.gen(function*() {
         if (leaving !== undefined) {
           const from = yield* refs.lookup(leaving.ref)
-          if (Option.isSome(from) && (from.value as HTMLInputElement).value.length !== leaving.caret) return
+          if (
+            Option.isSome(from) &&
+            (from.value as HTMLInputElement).value.length !== leaving.caret
+          ) return
         }
         const to = yield* refs.lookup(ref)
         if (Option.isNone(to)) return
@@ -293,11 +303,21 @@ const FocusItem = Command.make(
     ).pipe(Effect.as(Component.noop))
 )
 
-const cancelClick = <N extends { readonly onClick: (handler: () => undefined, options: View.EventOptions) => N }>(
+const cancelClick = <
+  N extends {
+    readonly onClick: (
+      handler: () => undefined,
+      options: View.EventOptions
+    ) => N
+  }
+>(
   node: N
 ): N => node.onClick(() => undefined, { preventDefault: "always" })
 
-const groupOf = (props: ToolbarProps, value: string): ToolbarGroup | undefined =>
+const groupOf = (
+  props: ToolbarProps,
+  value: string
+): ToolbarGroup | undefined =>
   props.groups?.find((group) => group.value === value)
 
 const disabledOf = (props: ToolbarProps, item: ToolbarItem): boolean =>
@@ -309,15 +329,28 @@ const reachable = (props: ToolbarProps, item: ToolbarItem): boolean =>
 
 const tabStopOf = (model: ToolbarModel, props: ToolbarProps): string | null => {
   const items = props.items.filter((item) => reachable(props, item))
-  return (items.find((item) => item.value === model.active) ?? items[0])?.value ?? null
+  return (items.find((item) => item.value === model.active) ?? items[0])
+    ?.value ?? null
 }
 
-type ToolbarUpdate = Component.Update<ToolbarModel, typeof ToolbarMessage.Type, never, ToolbarProps> & {
-  readonly shared: { readonly provider?: { readonly direction: "ltr" | "rtl" } | undefined }
-}
+type ToolbarUpdate =
+  & Component.Update<
+    ToolbarModel,
+    typeof ToolbarMessage.Type,
+    never,
+    ToolbarProps
+  >
+  & {
+    readonly shared: {
+      readonly provider?: { readonly direction: "ltr" | "rtl" } | undefined
+    }
+  }
 
 const keysOf = ($: ToolbarUpdate) =>
-  arrowKeys($.props.orientation ?? "horizontal", $.shared.provider?.direction === "rtl")
+  arrowKeys(
+    $.props.orientation ?? "horizontal",
+    $.shared.provider?.direction === "rtl"
+  )
 
 const targetOf = (
   value: string,
@@ -327,7 +360,9 @@ const targetOf = (
 ): ToolbarItem | undefined => {
   const items = $.props.items.filter((item) => reachable($.props, item))
   const last = items.length - 1
-  if (key !== next && key !== previous && key !== "Home" && key !== "End") return undefined
+  if (key !== next && key !== previous && key !== "Home" && key !== "End") {
+    return undefined
+  }
   const target = items[
     key === "Home"
       ? 0
@@ -344,7 +379,9 @@ const targetOf = (
 }
 
 const moveTo = ($: ToolbarUpdate, target: ToolbarItem) =>
-  $.set({ ...$.model, active: target.value }).run(FocusItem.make({ ref: Item.at(target.value) }))
+  $.set({ ...$.model, active: target.value }).run(
+    FocusItem.make({ ref: Item.at(target.value) })
+  )
 
 /**
  * A headless toolbar. Call it with the consumer's `h`, the `props`, and a `view`
@@ -402,7 +439,9 @@ export const Toolbar = Component.define({
     value: (_model, props) => ({
       disabled: props.disabled === true,
       orientation: props.orientation ?? "horizontal",
-      disabledItems: props.items.filter((item) => disabledOf(props, item)).map((item) => item.value)
+      disabledItems: props.items.filter((item) => disabledOf(props, item)).map((
+        item
+      ) => item.value)
     }),
     schema: Schema.Struct({
       disabled: Schema.Boolean,
@@ -417,7 +456,8 @@ export const Toolbar = Component.define({
 }).make({
   init: () => ({ active: null }),
   update: {
-    FocusedItem: ($, { value }) => $.model.active === value ? $.model : { ...$.model, active: value },
+    FocusedItem: ($, { value }) =>
+      $.model.active === value ? $.model : { ...$.model, active: value },
     PressedItemKey: ($, { key, value }) => {
       const target = targetOf(value, key, keysOf($), $)
       return target === undefined ? $.model : moveTo($, target)
@@ -428,7 +468,12 @@ export const Toolbar = Component.define({
       if (target === undefined) return $.model
       if (caret === null) return moveTo($, target)
       if (key === keys.next) {
-        return $.run(FocusItem.make({ ref: Item.at(target.value), leaving: { ref: Item.at(value), caret } }))
+        return $.run(
+          FocusItem.make({
+            ref: Item.at(target.value),
+            leaving: { ref: Item.at(value), caret }
+          })
+        )
       }
       return caret > 0 ? $.model : moveTo($, target)
     }
@@ -441,10 +486,17 @@ export const Toolbar = Component.define({
     const axis = arrowKeys(orientation, false)
     const entries = new Map<string, ToolbarItem>()
     for (const item of props.items) {
-      if (entries.has(item.value)) throw new Error("Toolbar: two items have the value " + JSON.stringify(item.value))
-      if (item.group !== undefined && groupOf(props, item.group) === undefined) {
+      if (entries.has(item.value)) {
         throw new Error(
-          "Toolbar: the item " + JSON.stringify(item.value) + " names the group " + JSON.stringify(item.group) +
+          "Toolbar: two items have the value " + JSON.stringify(item.value)
+        )
+      }
+      if (
+        item.group !== undefined && groupOf(props, item.group) === undefined
+      ) {
+        throw new Error(
+          "Toolbar: the item " + JSON.stringify(item.value) +
+            " names the group " + JSON.stringify(item.group) +
             ", which isn't in groups"
         )
       }
@@ -452,37 +504,58 @@ export const Toolbar = Component.define({
     }
     const entryOf = (value: string): ToolbarItem => {
       const entry = entries.get(value)
-      if (entry === undefined) throw new Error("Toolbar: no item with value " + JSON.stringify(value) + " in items")
+      if (entry === undefined) {
+        throw new Error(
+          "Toolbar: no item with value " + JSON.stringify(value) + " in items"
+        )
+      }
       return entry
     }
-    const isDisabled = (value: string): boolean => disabledOf(props, entryOf(value))
+    const isDisabled = (value: string): boolean =>
+      disabledOf(props, entryOf(value))
 
-    const roving = <N extends Html.VoidElement<typeof ToolbarMessage.Type, any, any, any, any>>(
+    const roving = <
+      N extends Html.VoidElement<typeof ToolbarMessage.Type, any, any, any, any>
+    >(
       node: N,
       value: string
     ): N =>
-      node.attrs({ "data-orientation": orientation, tabindex: value === tabStop ? "0" : "-1" })
+      node.attrs({
+        "data-orientation": orientation,
+        tabindex: value === tabStop ? "0" : "-1"
+      })
         .ref(Item.at(value) as never)
         .onFocus(ToolbarMessage.FocusedItem({ value }))
 
-    const disabledAttrs = <N extends Attributed<N> & { readonly disabled: (disabled: boolean) => N }>(
+    const disabledAttrs = <
+      N extends Attributed<N> & { readonly disabled: (disabled: boolean) => N }
+    >(
       node: N,
       off: boolean,
       focusable: boolean
     ): N =>
-      node.attrs({ "aria-disabled": off && focusable ? "true" : undefined, "data-disabled": flag(off) })
+      node.attrs({
+        "aria-disabled": off && focusable ? "true" : undefined,
+        "data-disabled": flag(off)
+      })
         .disabled(off && !focusable)
 
     const moves = ({ alt, ctrl, key, meta, shift }: Html.KeyPayload): boolean =>
       !alt && !ctrl && !meta && !shift &&
-      (key === axis.next || key === axis.previous || key === "Home" || key === "End")
+      (key === axis.next || key === axis.previous || key === "Home" ||
+        key === "End")
 
-    const movesFocus = <N extends Html.VoidElement<typeof ToolbarMessage.Type, any, any, any, any>>(
+    const movesFocus = <
+      N extends Html.VoidElement<typeof ToolbarMessage.Type, any, any, any, any>
+    >(
       node: N,
       value: string
     ): N =>
       roving(node, value).onKeyDown(
-        (key) => moves(key) ? ToolbarMessage.PressedItemKey({ value, key: key.key }) : undefined,
+        (key) =>
+          moves(key)
+            ? ToolbarMessage.PressedItemKey({ value, key: key.key })
+            : undefined,
         { preventDefault: true }
       )
 
@@ -494,7 +567,13 @@ export const Toolbar = Component.define({
       const own = disabledAttrs(movesFocus(b, value), off, focusable)
         .attrs({ type: "button", "data-focusable": flag(focusable) })
       return (silent ? cancelClick(own) : own).forward((node) =>
-        disabledAttrs(silent && node.handlers.click !== undefined ? cancelClick(node) : node, off, focusable)
+        disabledAttrs(
+          silent && node.handlers.click !== undefined
+            ? cancelClick(node)
+            : node,
+          off,
+          focusable
+        )
       )
     })
 
@@ -509,19 +588,42 @@ export const Toolbar = Component.define({
       const focusable = entry.focusableWhenDisabled !== false
       const own = disabledAttrs(roving(b, value), off, focusable)
         .attr("data-focusable", flag(focusable))
-        .onKeyDown(({ alt, composing, ctrl, key, meta, selectionEnd, selectionStart, shift }) =>
-          alt || ctrl || meta || shift || composing || (key !== axis.next && key !== axis.previous) ||
+        .onKeyDown((
+          {
+            alt,
+            composing,
+            ctrl,
+            key,
+            meta,
+            selectionEnd,
+            selectionStart,
+            shift
+          }
+        ) =>
+          alt || ctrl || meta || shift || composing ||
+            (key !== axis.next && key !== axis.previous) ||
             selectionStart !== selectionEnd
             ? undefined
-            : ToolbarMessage.PressedInputKey({ value, key, caret: selectionEnd })
+            : ToolbarMessage.PressedInputKey({
+              value,
+              key,
+              caret: selectionEnd
+            })
         )
-      const readOnly = <N extends Attributed<N>>(node: N): N => off && focusable ? node.attr("readonly", "") : node
-      return readOnly(own).forward((node) => readOnly(disabledAttrs(node, off, focusable)))
+      const readOnly = <N extends Attributed<N>>(node: N): N =>
+        off && focusable ? node.attr("readonly", "") : node
+      return readOnly(own).forward((node) =>
+        readOnly(disabledAttrs(node, off, focusable))
+      )
     })
 
     const groupPart = p.part("div", (b, value: string) => {
       const group = groupOf(props, value)
-      if (group === undefined) throw new Error("Toolbar: no group with value " + JSON.stringify(value) + " in groups")
+      if (group === undefined) {
+        throw new Error(
+          "Toolbar: no group with value " + JSON.stringify(value) + " in groups"
+        )
+      }
       return b.attrs({
         role: "group",
         "data-orientation": orientation,
@@ -549,7 +651,14 @@ export const Toolbar = Component.define({
       button: valued(buttonPart),
       link: valued(linkPart),
       input: valued(inputPart),
-      separator: p.part("div", (b) => separatorAttrs(b, orientation === "vertical" ? "horizontal" : "vertical"))
+      separator: p.part(
+        "div",
+        (b) =>
+          separatorAttrs(
+            b,
+            orientation === "vertical" ? "horizontal" : "vertical"
+          )
+      )
     }
   }
 })

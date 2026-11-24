@@ -29,7 +29,11 @@ import { NotePage } from "./fixtures/pages/notes/NotePage.ts"
 // The plain name is always the component with its Layers provided, and
 // `NotePageNoDeps` is the one without. Only the HTTP client is left for the
 // entry module.
-const Main = BrowserHost.mount(NotePage, { id: "welcome" }, document.getElementById("app")!).pipe(
+const Main = BrowserHost.mount(
+  NotePage,
+  { id: "welcome" },
+  document.getElementById("app")!
+).pipe(
   Layer.provide(FetchHttpClient.layer)
 )
 

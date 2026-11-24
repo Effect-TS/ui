@@ -20,9 +20,14 @@ const Page = Component.define({
   view: (h) => h.text(`page:${h.props.title}`)
 })
 
-const AppMessage = UiSchema.TaggedEnum({ Toggled: {}, Saved: { title: Schema.String } })
+const AppMessage = UiSchema.TaggedEnum({
+  Toggled: {},
+  Saved: { title: Schema.String }
+})
 
-const makeApp = (LazyPage: Component.Lazy<{ readonly title: string }, typeof PageEvents.Type>) =>
+const makeApp = (
+  LazyPage: Component.Lazy<{ readonly title: string }, typeof PageEvents.Type>
+) =>
   Component.define({
     name: "App",
     scoped: false,
@@ -43,13 +48,15 @@ const makeApp = (LazyPage: Component.Lazy<{ readonly title: string }, typeof Pag
           ? LazyPage(h, {
             props: { title: "a" },
             onEmit: { Saved: ({ title }) => AppMessage.Saved({ title }) },
-            fallback: (result) => h.text(AsyncResult.isFailure(result) ? "failed" : "loading")
+            fallback: (result) =>
+              h.text(AsyncResult.isFailure(result) ? "failed" : "loading")
           })
           : ""
       )
   })
 
-const later = <A>(value: A) => new Promise<A>((resolve) => setTimeout(() => resolve(value), 10))
+const later = <A>(value: A) =>
+  new Promise<A>((resolve) => setTimeout(() => resolve(value), 10))
 
 const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.scoped, Effect.provide(TestHost.layer()))
@@ -64,13 +71,22 @@ describe("Component.lazy", () => {
       })
       const App = makeApp(LazyPage)
       const root = yield* TestHost.mount(App, {})
-      assert.deepStrictEqual(root.pending(), [{ _tag: "Load", path: "/App/LazyPage[]", name: "LazyPage" }])
+      assert.deepStrictEqual(root.pending(), [{
+        _tag: "Load",
+        path: "/App/LazyPage[]",
+        name: "LazyPage"
+      }])
       yield* TestHost.settle
       root.send(AppMessage.Toggled())
       yield* TestHost.settle
       root.send(AppMessage.Toggled())
       yield* TestHost.settle
-      assert.deepStrictEqual(root.frames(), ["app:loading", "app:page:a", "app:", "app:page:a"])
+      assert.deepStrictEqual(root.frames(), [
+        "app:loading",
+        "app:page:a",
+        "app:",
+        "app:page:a"
+      ])
       const again = yield* TestHost.mount(App, {})
       assert.strictEqual(again.text(), "app:page:a")
       assert.strictEqual(loads, 1)
@@ -104,7 +120,9 @@ describe("Component.lazy", () => {
   it.effect("stops waiting for a load once its slot is removed", () =>
     provideHost(Effect.gen(function*() {
       const root = yield* TestHost.mount(
-        makeApp(Component.lazy("LazyPage", () => new Promise<typeof Page>(() => {}))),
+        makeApp(
+          Component.lazy("LazyPage", () => new Promise<typeof Page>(() => {}))
+        ),
         {}
       )
       root.send(AppMessage.Toggled())
@@ -116,14 +134,26 @@ describe("Component.lazy", () => {
     provideHost(Effect.gen(function*() {
       let closed = 0
       const DraftMessage = UiSchema.TaggedEnum({ Typed: {} })
-      const Draft = Component.define({ name: "Draft", scoped: true, model: Schema.Number, message: DraftMessage }).make(
+      const Draft = Component.define({
+        name: "Draft",
+        scoped: true,
+        model: Schema.Number,
+        message: DraftMessage
+      }).make(
         {
           init: () => 0,
           update: ($) => $.model + 1,
-          view: (h, count) => h.el("button").on("click", DraftMessage.Typed()).children(`draft:${count}`)
+          view: (h, count) =>
+            h.el("button").on("click", DraftMessage.Typed()).children(
+              `draft:${count}`
+            )
         }
       ).pipe(
-        Component.provide(Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(() => closed++))))
+        Component.provide(
+          Layer.effectDiscard(
+            Effect.addFinalizer(() => Effect.sync(() => closed++))
+          )
+        )
       )
       const LazyDraft = Component.lazy("LazyDraft", () => later(Draft))
       const HostMessage = UiSchema.TaggedEnum({ Toggled: {}, Ended: {} })
@@ -143,7 +173,12 @@ describe("Component.lazy", () => {
           h.el(
             "main",
             h.scoped(({ model }) => model.alive, (s) =>
-              model.open ? LazyDraft(s, { key: "d", fallback: () => h.text("loading") }) : null)
+              model.open
+                ? LazyDraft(s, {
+                  key: "d",
+                  fallback: () => h.text("loading")
+                })
+                : null)
           )
       })
       const root = yield* TestHost.mount(Host, {})
@@ -182,6 +217,8 @@ describe("Component.lazy", () => {
     const LazyPage = Component.lazy("LazyPage", () => later(Page))
     const s = Scene.start(makeApp(LazyPage), {})
     s.childPending(LazyPage).expect(Locator.tag("p")).toHaveText("app:loading")
-      .childEmit(LazyPage, PageEvents.Saved({ title: "!" })).expect(Locator.tag("p")).toHaveText("app!:loading")
+      .childEmit(LazyPage, PageEvents.Saved({ title: "!" })).expect(
+        Locator.tag("p")
+      ).toHaveText("app!:loading")
   })
 })

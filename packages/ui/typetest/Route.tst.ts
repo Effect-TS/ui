@@ -1,4 +1,14 @@
-import { Command, Component, Feature, Head, Query, Route, Router, type Subscription, UiSchema } from "@effect/ui"
+import {
+  Command,
+  Component,
+  Feature,
+  Head,
+  Query,
+  Route,
+  Router,
+  type Subscription,
+  UiSchema
+} from "@effect/ui"
 import { TestHost } from "@effect/ui/testing"
 import { Effect, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -6,7 +16,10 @@ import { describe, expect, it } from "tstyche"
 
 const AppRoute = Route.union({
   Home: Route.make("/"),
-  Person: Route.make("/people/:id", { params: { id: Schema.Number }, search: { tab: Schema.optional(Schema.String) } }),
+  Person: Route.make("/people/:id", {
+    params: { id: Schema.Number },
+    search: { tab: Schema.optional(Schema.String) }
+  }),
   Files: Route.make("/files/*"),
   NotFound: Route.make("/*")
 })
@@ -25,9 +38,15 @@ describe("Route", () => {
   it("requires a Schema for every :param", () => {
     expect(Route.make).type.not.toBeCallableWith("/people/:id")
     expect(Route.make).type.not.toBeCallableWith("/people/:id", { params: {} })
-    expect(Route.make).type.not.toBeCallableWith("/people/:id/:tab", { params: { id: Schema.Number } })
-    expect(Route.make).type.toBeCallableWith("/people/:id", { params: { id: Schema.Number } })
-    expect(Route.make).type.toBeCallableWith("/people", { search: { q: Schema.String } })
+    expect(Route.make).type.not.toBeCallableWith("/people/:id/:tab", {
+      params: { id: Schema.Number }
+    })
+    expect(Route.make).type.toBeCallableWith("/people/:id", {
+      params: { id: Schema.Number }
+    })
+    expect(Route.make).type.toBeCallableWith("/people", {
+      search: { q: Schema.String }
+    })
   })
 
   it("types each route value, with a rest param for a trailing *", () => {
@@ -39,20 +58,35 @@ describe("Route", () => {
       readonly params: { readonly id: number }
       readonly search: { readonly tab?: string | undefined }
     }>()
-    expect<Extract<AppRoute, { _tag: "Files" }>["params"]>().type.toBe<{ readonly "*": string }>()
+    expect<Extract<AppRoute, { _tag: "Files" }>["params"]>().type.toBe<
+      { readonly "*": string }
+    >()
   })
 
   it("types a defaulted search field as required, and lets make leave it out", () => {
-    expect<typeof Search.Type["search"]>().type.toBe<{ readonly q?: string | undefined; readonly page: number }>()
+    expect<typeof Search.Type["search"]>().type.toBe<
+      { readonly q?: string | undefined; readonly page: number }
+    >()
     expect(Search.make).type.toBeCallableWith({ _tag: "Search" })
-    expect(Search.make).type.toBeCallableWith({ _tag: "Search", search: { q: "a" } })
-    expect(Search.make).type.toBeCallableWith({ _tag: "Search", search: { page: 2 } })
-    expect(Search.make).type.not.toBeCallableWith({ _tag: "Search", search: { page: "2" } })
+    expect(Search.make).type.toBeCallableWith({
+      _tag: "Search",
+      search: { q: "a" }
+    })
+    expect(Search.make).type.toBeCallableWith({
+      _tag: "Search",
+      search: { page: 2 }
+    })
+    expect(Search.make).type.not.toBeCallableWith({
+      _tag: "Search",
+      search: { page: "2" }
+    })
   })
 
   it("has a constructor per route, whose argument is optional when make needs only the tag", () => {
     expect(AppRoute.Home()).type.toBe<Extract<AppRoute, { _tag: "Home" }>>()
-    expect(AppRoute.Person({ params: { id: 1 } })).type.toBe<Extract<AppRoute, { _tag: "Person" }>>()
+    expect(AppRoute.Person({ params: { id: 1 } })).type.toBe<
+      Extract<AppRoute, { _tag: "Person" }>
+    >()
     expect(AppRoute.Person).type.not.toBeCallableWith()
     expect(AppRoute.Person).type.not.toBeCallableWith({ params: { id: "1" } })
     expect(Search.Search).type.toBeCallableWith()
@@ -72,7 +106,11 @@ describe("Route", () => {
 
   it("prints only the union's own route values", () => {
     expect(AppRoute.print).type.toBeCallableWith(AppRoute.Home())
-    expect(AppRoute.print).type.not.toBeCallableWith({ _tag: "Elsewhere", params: {}, search: {} })
+    expect(AppRoute.print).type.not.toBeCallableWith({
+      _tag: "Elsewhere",
+      params: {},
+      search: {}
+    })
   })
 })
 
@@ -94,20 +132,35 @@ describe("Router", () => {
             )
           )
           : $.model,
-      subscriptions: () => [Router.subscription(AppRoute, AppRoute.Home(), () => Message.Done())],
-      view: (h) => h.text("")
+      subscriptions: () => [Router.subscription(AppRoute, AppRoute.Home(), () =>
+        Message.Done())],
+      view: (h) =>
+        h.text("")
     })
-    expect<Component.Requirements<typeof Nav>>().type.toBe<Router.Push | Router.Router>()
+    expect<Component.Requirements<typeof Nav>>().type.toBe<
+      Router.Push | Router.Router
+    >()
   })
 
   it("takes only complete route values of the given union", () => {
     const person = AppRoute.Person({ params: { id: 1 } })
     expect(Router.push).type.toBeCallableWith(AppRoute, person)
     const People = AppRoute.subset(["Person"])
-    expect(Router.replace).type.toBeCallableWith(People, People.Person({ params: { id: 1 } }))
+    expect(Router.replace).type.toBeCallableWith(
+      People,
+      People.Person({ params: { id: 1 } })
+    )
     expect(Router.push).type.not.toBeCallableWith(AppRoute, { _tag: "Person" })
-    expect(Router.push).type.not.toBeCallableWith(AppRoute, { _tag: "Person", params: {}, search: {} })
-    expect(Router.replace).type.not.toBeCallableWith(AppRoute, { _tag: "Elsewhere", params: {}, search: {} })
+    expect(Router.push).type.not.toBeCallableWith(AppRoute, {
+      _tag: "Person",
+      params: {},
+      search: {}
+    })
+    expect(Router.replace).type.not.toBeCallableWith(AppRoute, {
+      _tag: "Elsewhere",
+      params: {},
+      search: {}
+    })
     expect(Router.push).type.not.toBeCallableWith(AppRoute.subset(["Home"]), {
       _tag: "Person",
       params: { id: 1 },
@@ -120,20 +173,28 @@ describe("Router", () => {
 
   it("subscribes only to a route union", () => {
     const Tagged = Schema.TaggedUnion({ Home: {} })
-    expect(Router.subscription).type.not.toBeCallableWith(Tagged, { _tag: "Home" }, () => 1)
-    expect(Router.subscription).type.not.toBeCallableWith(AppRoute, { _tag: "Person" }, () => 1)
+    expect(Router.subscription).type.not.toBeCallableWith(Tagged, {
+      _tag: "Home"
+    }, () => 1)
+    expect(Router.subscription).type.not.toBeCallableWith(AppRoute, {
+      _tag: "Person"
+    }, () => 1)
     expect(Router.subscription).type.not.toBeCallableWith(
       AppRoute.subset(["Home"]),
       AppRoute.Person({ params: { id: 1 } }),
       () => 1
     )
-    expect(Router.subscription(AppRoute, AppRoute.Home(), (route) => route._tag)).type.toBe<
+    expect(
+      Router.subscription(AppRoute, AppRoute.Home(), (route) => route._tag)
+    ).type.toBe<
       Subscription.Subscription<AppRoute["_tag"], Router.Router>
     >()
   })
 
   it("blocked is a Subscription a component returns while the Model says so", () => {
-    expect(Router.blocked("form")).type.toBe<Subscription.Subscription<never, Router.Router>>()
+    expect(Router.blocked("form")).type.toBe<
+      Subscription.Subscription<never, Router.Router>
+    >()
     const Form = Component.define({
       name: "Form",
       scoped: false,
@@ -173,7 +234,12 @@ describe("Router", () => {
 
 class GetPerson extends Query.Service<GetPerson>()(
   "typetest/GetPerson",
-  { args: { id: Schema.Number }, success: Schema.String, error: Schema.Never, staleTime: "1 minute" },
+  {
+    args: { id: Schema.Number },
+    success: Schema.String,
+    error: Schema.Never,
+    staleTime: "1 minute"
+  },
   Effect.succeed(({ id }) => Effect.succeed(`Person ${id}`))
 ) {}
 
@@ -183,11 +249,18 @@ const PersonPage = Component.define({
   props: Schema.Struct({ id: Schema.Number }),
   model: Schema.Struct({}),
   message: Schema.Never,
-  queries: { person: { query: GetPerson, args: ({ props }) => ({ id: props.id }) } }
+  queries: {
+    person: { query: GetPerson, args: ({ props }) => ({ id: props.id }) }
+  }
 }).make({
   init: () => ({}),
   update: ($) => $.model,
-  view: (h) => h.text(AsyncResult.isSuccess(h.queries.person) ? h.queries.person.value : "person")
+  view: (h) =>
+    h.text(
+      AsyncResult.isSuccess(h.queries.person)
+        ? h.queries.person.value
+        : "person"
+    )
 })
 
 const HomePage = Component.define({
@@ -213,7 +286,13 @@ const Declarer = Component.define({
   subscriptions: () => [
     Router.prefetch(AppRoute, {
       Home: () => [Router.page(HomePage)],
-      Person: ({ params }) => [Router.page(PersonPage.pipe(Component.provide(GetPerson.layer)), { id: params.id })],
+      Person: (
+        { params }
+      ) => [
+        Router.page(PersonPage.pipe(Component.provide(GetPerson.layer)), {
+          id: params.id
+        })
+      ],
       Files: () => [],
       NotFound: () => []
     })
@@ -223,7 +302,9 @@ const Declarer = Component.define({
 
 describe("Router.prefetch", () => {
   it("adds a page's own reads to the declarer's requirements, even when the page provides them", () => {
-    expect<Component.Requirements<typeof Declarer>>().type.toBe<Router.Router | GetPerson>()
+    expect<Component.Requirements<typeof Declarer>>().type.toBe<
+      Router.Router | GetPerson
+    >()
     const mounted = TestHost.mount(Declarer, {}).pipe(
       Effect.provide(Router.memory({ routes: AppRoute })),
       Effect.provide(TestHost.layer()),
@@ -231,19 +312,29 @@ describe("Router.prefetch", () => {
     )
     // The page's provide can't satisfy the declarer: a compile error at mount.
     expect(Effect.runPromise).type.not.toBeCallableWith(mounted)
-    expect(Effect.runPromise).type.toBeCallableWith(mounted.pipe(Effect.provide(GetPerson.layer)))
+    expect(Effect.runPromise).type.toBeCallableWith(
+      mounted.pipe(Effect.provide(GetPerson.layer))
+    )
     // Hoisted to the declarer, it does.
     const Hoisted = Declarer.pipe(Component.provide(GetPerson.layer))
     expect<Component.Requirements<typeof Hoisted>>().type.toBe<Router.Router>()
-    expect(Router.page(PersonPage, { id: 1 })).type.toBe<Router.Page<GetPerson>>()
+    expect(Router.page(PersonPage, { id: 1 })).type.toBe<
+      Router.Page<GetPerson>
+    >()
     // Provided, it is still a component, and still names its queries.
-    expect(Router.page(PersonPage.pipe(Component.provide(GetPerson.layer)), { id: 1 })).type.toBe<
+    expect(
+      Router.page(PersonPage.pipe(Component.provide(GetPerson.layer)), {
+        id: 1
+      })
+    ).type.toBe<
       Router.Page<GetPerson>
     >()
     // For a union of components, each member's reads are kept.
     const Selected = Math.random() > 0.5 ? PersonPage : HomePage
     expect(Router.page(Selected, { id: 1 })).type.toBe<Router.Page<GetPerson>>()
-    const Provided = Math.random() > 0.5 ? PersonPage.pipe(Component.provide(GetPerson.layer)) : HomePage
+    const Provided = Math.random() > 0.5
+      ? PersonPage.pipe(Component.provide(GetPerson.layer))
+      : HomePage
     expect(Router.page(Provided, { id: 1 })).type.toBe<Router.Page<GetPerson>>()
     // Declared, the union's reads join the declarer's requirements.
     const UnionDeclarer = Component.define({
@@ -264,22 +355,38 @@ describe("Router.prefetch", () => {
       ],
       view: (h) => h.text("app")
     })
-    expect<Component.Requirements<typeof UnionDeclarer>>().type.toBe<Router.Router | GetPerson>()
+    expect<Component.Requirements<typeof UnionDeclarer>>().type.toBe<
+      Router.Router | GetPerson
+    >()
   })
 
   it("rejects a Mountable, whose erased Model hides the page's reads", () => {
-    const Erased: Component.Mountable<{ readonly id: number }, never, GetPerson> = PersonPage
+    const Erased: Component.Mountable<
+      { readonly id: number },
+      never,
+      GetPerson
+    > = PersonPage
     expect(Router.page).type.not.toBeCallableWith(Erased, { id: 1 })
-    class Badge extends Feature.Service<Badge>()("Badge", { props: Schema.Struct({}), events: Schema.Never }) {}
+    class Badge extends Feature.Service<Badge>()("Badge", {
+      props: Schema.Struct({}),
+      events: Schema.Never
+    }) {}
     expect(Router.page).type.not.toBeCallableWith(Badge)
     expect(Router.page).type.toBeCallableWith(PersonPage, { id: 1 })
-    expect(Router.page).type.toBeCallableWith(PersonPage.pipe(Component.provide(GetPerson.layer)), { id: 1 })
+    expect(Router.page).type.toBeCallableWith(
+      PersonPage.pipe(Component.provide(GetPerson.layer)),
+      { id: 1 }
+    )
   })
 
   it("rejects an erased member of a union of components", () => {
     const Selected = Math.random() > 0.5 ? PersonPage : HomePage
     expect(Router.page).type.toBeCallableWith(Selected, { id: 1 })
-    const Erased: Component.Mountable<{ readonly id: number }, never, GetPerson> = PersonPage
+    const Erased: Component.Mountable<
+      { readonly id: number },
+      never,
+      GetPerson
+    > = PersonPage
     const Mixed = Math.random() > 0.5 ? Erased : HomePage
     expect(Router.page).type.not.toBeCallableWith(Mixed, { id: 1 })
   })
@@ -288,7 +395,11 @@ describe("Router.prefetch", () => {
     expect(Router.page).type.toBeCallableWith(HomePage)
     expect(Router.page).type.not.toBeCallableWith(PersonPage)
     expect(Router.page).type.not.toBeCallableWith(PersonPage, { id: "1" })
-    expect(Router.prefetch).type.not.toBeCallableWith(AppRoute, { Home: () => [] })
-    expect(Router.prefetch).type.toBeCallableWith(AppRoute.subset(["Home"]), { Home: () => [] })
+    expect(Router.prefetch).type.not.toBeCallableWith(AppRoute, {
+      Home: () => []
+    })
+    expect(Router.prefetch).type.toBeCallableWith(AppRoute.subset(["Home"]), {
+      Home: () => []
+    })
   })
 })

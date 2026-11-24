@@ -9,20 +9,28 @@ export const blockers = (attribute: string) => {
       [attribute]: "",
       style: "position:fixed;inset:0;z-index:-1;" + noSelect
     })
-  const is = (target: Node): boolean => target instanceof Element && target.hasAttribute(attribute)
+  const is = (target: Node): boolean =>
+    target instanceof Element && target.hasAttribute(attribute)
   return {
     open: View.toNode(blocker),
     closed: View.toNode(blocker.attr("inert", "")),
     is,
-    owns: (layer: Node, target: Node): boolean => is(target) && target.parentNode === layer
+    owns: (layer: Node, target: Node): boolean =>
+      is(target) && target.parentNode === layer
   }
 }
 
-export const backdropBox = "position:fixed;inset:0;width:auto;height:auto;max-width:none;max-height:none;margin:0;" +
+export const backdropBox =
+  "position:fixed;inset:0;width:auto;height:auto;max-width:none;max-height:none;margin:0;" +
   noSelect
 
 export const cutPath = (holes: ReadonlyArray<DOMRect>): string =>
   "polygon(0% 0%,100% 0%,100% 100%,0% 100%,0% 0%," +
-  holes.flatMap((r) => [[r.left, r.top], [r.left, r.bottom], [r.right, r.bottom], [r.right, r.top], [r.left, r.top]])
+  holes.flatMap((
+    r
+  ) => [[r.left, r.top], [r.left, r.bottom], [r.right, r.bottom], [
+    r.right,
+    r.top
+  ], [r.left, r.top]])
     .map(([x, y]) => x + "px " + y + "px").join(",") +
   ")"

@@ -29,7 +29,11 @@ const hide = ({ also, inside }: Layer): () => void => {
   const stops = new Set<Node>([inside, ...also, ...live])
   const keep = new Set<Node>()
   for (const element of stops) {
-    for (let node: Node | null = element; node !== null && !keep.has(node); node = node.parentNode) keep.add(node)
+    for (
+      let node: Node | null = element;
+      node !== null && !keep.has(node);
+      node = node.parentNode
+    ) keep.add(node)
   }
   const hidden: Array<readonly [Element, string | null]> = []
   const walk = (parent: Element) => {
@@ -74,7 +78,11 @@ let lastOrder = 0
 
 export const nextLayerOrder = (): number => ++lastOrder
 
-export const hideOthers = (inside: Element, order: number, also: ReadonlyArray<Element> = []): () => void => {
+export const hideOthers = (
+  inside: Element,
+  order: number,
+  also: ReadonlyArray<Element> = []
+): () => void => {
   const stack = stackOf(inside.ownerDocument)
   const entry = { inside, also, order }
   stack.layers.push(entry)
@@ -86,11 +94,15 @@ export const hideOthers = (inside: Element, order: number, also: ReadonlyArray<E
 }
 
 const overflows = (style: CSSStyleDeclaration): boolean =>
-  /auto|scroll|overlay|hidden|clip/.test(style.overflow + style.overflowY + style.overflowX) &&
+  /auto|scroll|overlay|hidden|clip/.test(
+    style.overflow + style.overflowY + style.overflowX
+  ) &&
   style.display !== "inline" && style.display !== "contents"
 
 const gutterHolds = (html: HTMLElement, scroller: HTMLElement): boolean => {
-  if (typeof CSS === "undefined" || !CSS.supports("scrollbar-gutter", "stable")) return false
+  if (
+    typeof CSS === "undefined" || !CSS.supports("scrollbar-gutter", "stable")
+  ) return false
   const gutter = html.style.scrollbarGutter
   const overflowY = scroller.style.overflowY
   html.style.scrollbarGutter = "stable"
@@ -110,11 +122,18 @@ const lock = (document: Document): (() => void) | undefined => {
   if (view === null || body === null) return undefined
   const htmlStyle = view.getComputedStyle(html)
   const scroller = overflows(htmlStyle) ? html : body
-  if (/hidden|clip/.test(view.getComputedStyle(scroller).overflowY)) return undefined
-  const gutter = htmlStyle.scrollbarGutter.includes("both-edges") ? "stable both-edges" : "stable"
+  if (/hidden|clip/.test(view.getComputedStyle(scroller).overflowY)) {
+    return undefined
+  }
+  const gutter = htmlStyle.scrollbarGutter.includes("both-edges")
+    ? "stable both-edges"
+    : "stable"
   const scrollbar = view.innerWidth - html.clientWidth > 0
   if (!scrollbar || gutterHolds(html, scroller)) {
-    const restore = [saved(html, ["scrollbarGutter"]), saved(scroller, ["overflowX", "overflowY"])]
+    const restore = [
+      saved(html, ["scrollbarGutter"]),
+      saved(scroller, ["overflowX", "overflowY"])
+    ]
     if (scrollbar) html.style.scrollbarGutter = gutter
     scroller.style.overflowX = "hidden"
     scroller.style.overflowY = "hidden"
@@ -128,13 +147,24 @@ const lock = (document: Document): (() => void) | undefined => {
   const left = html.scrollLeft
   const scrollbarWidth = Math.max(0, view.innerWidth - body.clientWidth)
   const scrollbarHeight = Math.max(0, view.innerHeight - body.clientHeight)
-  const marginY = parseFloat(bodyStyle.marginTop) + parseFloat(bodyStyle.marginBottom)
-  const marginX = parseFloat(bodyStyle.marginLeft) + parseFloat(bodyStyle.marginRight)
-  const scrollsY = html.scrollHeight > html.clientHeight || /scroll/.test(htmlStyle.overflowY + bodyStyle.overflowY)
-  const scrollsX = html.scrollWidth > html.clientWidth || /scroll/.test(htmlStyle.overflowX + bodyStyle.overflowX)
+  const marginY = parseFloat(bodyStyle.marginTop) +
+    parseFloat(bodyStyle.marginBottom)
+  const marginX = parseFloat(bodyStyle.marginLeft) +
+    parseFloat(bodyStyle.marginRight)
+  const scrollsY = html.scrollHeight > html.clientHeight ||
+    /scroll/.test(htmlStyle.overflowY + bodyStyle.overflowY)
+  const scrollsX = html.scrollWidth > html.clientWidth ||
+    /scroll/.test(htmlStyle.overflowX + bodyStyle.overflowX)
   const restore = [
     saved(html, ["overflowX", "overflowY", "scrollbarGutter"]),
-    saved(body, ["position", "height", "width", "boxSizing", "overflowX", "overflowY"])
+    saved(body, [
+      "position",
+      "height",
+      "width",
+      "boxSizing",
+      "overflowX",
+      "overflowY"
+    ])
   ]
   html.style.scrollbarGutter = gutter
   html.style.overflowY = scrollsY ? "scroll" : "hidden"
@@ -156,7 +186,8 @@ const lock = (document: Document): (() => void) | undefined => {
 
 export const holdScroll = (node: HTMLElement, touch: boolean): () => void => {
   const html = node.ownerDocument.documentElement
-  const wide = !touch || (html.clientWidth > 0 && node.offsetWidth >= html.clientWidth - 20)
+  const wide = !touch ||
+    (html.clientWidth > 0 && node.offsetWidth >= html.clientWidth - 20)
   return wide ? lockScroll(node.ownerDocument) : () => {}
 }
 

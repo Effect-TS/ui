@@ -150,7 +150,9 @@ export const Input = <Msg, R = never>(
     readonly element?: InputElement<Msg, R> | undefined
     readonly props: InputProps
     /** The message an edit sends, from the value the user left in the field. */
-    readonly onUpdate?: ((event: { readonly value: string }) => NoInfer<Msg> | undefined) | undefined
+    readonly onUpdate?:
+      | ((event: { readonly value: string }) => NoInfer<Msg> | undefined)
+      | undefined
   }
 ): InputElement<Msg, R> => {
   const element: InputElement<Msg, R> = options.element ?? h.input

@@ -28,16 +28,22 @@ const rule: CreateRule = {
     }
 
     // Validate the outer `Opaque` call, allowing either `Opaque` or `<SchemaNamespace>.Opaque`.
-    function isOpaqueCallee(node: ESTree.Expression | null | undefined): boolean {
+    function isOpaqueCallee(
+      node: ESTree.Expression | null | undefined
+    ): boolean {
       if (!node) return false
       if (node.type === "Identifier") return opaqueIdentifiers.has(node.name)
       if (node.type !== "MemberExpression") return false
-      if (node.property?.type !== "Identifier" || node.property.name !== "Opaque") return false
+      if (
+        node.property?.type !== "Identifier" || node.property.name !== "Opaque"
+      ) return false
       return isSchemaObject(node.object)
     }
 
     // Ensure `<SchemaNamespace>.Opaque` is actually Schema (imported from Schema module).
-    function isSchemaObject(node: ESTree.Expression | null | undefined): boolean {
+    function isSchemaObject(
+      node: ESTree.Expression | null | undefined
+    ): boolean {
       if (!node) return false
       if (node.type === "Identifier") return schemaIdentifiers.has(node.name)
       return false
@@ -49,12 +55,14 @@ const rule: CreateRule = {
         if (element.type === "PropertyDefinition" && !element.static) {
           context.report({
             node: element,
-            message: "Classes extending Schema.Opaque must not have instance members"
+            message:
+              "Classes extending Schema.Opaque must not have instance members"
           })
         } else if (element.type === "MethodDefinition" && !element.static) {
           context.report({
             node: element,
-            message: "Classes extending Schema.Opaque must not have instance members"
+            message:
+              "Classes extending Schema.Opaque must not have instance members"
           })
         }
       }
@@ -72,7 +80,10 @@ const rule: CreateRule = {
             if (SCHEMA_NAMESPACE_SOURCES.has(source)) {
               schemaIdentifiers.add(specifier.local.name)
             }
-          } else if (specifier.type === "ImportSpecifier" && specifier.importKind !== "type") {
+          } else if (
+            specifier.type === "ImportSpecifier" &&
+            specifier.importKind !== "type"
+          ) {
             if (specifier.imported.type !== "Identifier") continue
             const importedName = specifier.imported.name
             if (importedName === "Schema") {

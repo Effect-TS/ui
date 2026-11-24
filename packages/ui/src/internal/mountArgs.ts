@@ -84,7 +84,10 @@ export const close = (self: MountArgs): void => {
 }
 
 /** Takes what `reader` hasn't read, after `first`: one of the two isn't empty. */
-const read = (reader: Reader, first: Array<unknown>): Arr.NonEmptyReadonlyArray<unknown> => {
+const read = (
+  reader: Reader,
+  first: Array<unknown>
+): Arr.NonEmptyReadonlyArray<unknown> => {
   const out = first.concat(reader.unread)
   reader.unread = []
   reader.behind = false
@@ -94,7 +97,12 @@ const read = (reader: Reader, first: Array<unknown>): Arr.NonEmptyReadonlyArray<
 /** @internal */
 export const changes = (self: MountArgs): Stream.Stream<any> =>
   Stream.fromChannel(Channel.fromTransform((_, scope) => {
-    const reader: Reader = { unread: [self.latest], behind: false, resume: undefined, since: 0 }
+    const reader: Reader = {
+      unread: [self.latest],
+      behind: false,
+      resume: undefined,
+      since: 0
+    }
     if (!self.closed) self.readers.add(reader)
     const pull = Effect.suspend(() => {
       if (self.closed) return done

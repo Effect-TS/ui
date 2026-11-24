@@ -39,15 +39,23 @@ export const App = Component.define({
       // navigation sends nothing. `Command.asNoop` ends it with no message,
       // and with no no-op variant in `AppMessage`. It also hides a
       // navigation a guard blocked, which this one has no use for.
-      ClickedBackToNotes: () => $.run(Router.push(AppRoute, indexRoute).pipe(Command.asNoop))
+      ClickedBackToNotes: () =>
+        $.run(Router.push(AppRoute, indexRoute).pipe(Command.asNoop))
     }),
   subscriptions: ({ model }) => [
-    Router.subscription(AppRoute, model.route, (route) => AppMessage.ChangedRoute({ route }))
+    Router.subscription(
+      AppRoute,
+      model.route,
+      (route) => AppMessage.ChangedRoute({ route })
+    )
   ],
   // App-wide head defaults go in the root's `head`, not in the HTML shell.
   // The template wraps the title a page below sets, giving
   // "All notes · Notes".
-  head: () => [Head.titleTemplate((title) => `${title} · Notes`), HtmlHead.lang("en")],
+  head: () => [
+    Head.titleTemplate((title) => `${title} · Notes`),
+    HtmlHead.lang("en")
+  ],
   view: (h, { route }) =>
     h.div(
       h.header(
@@ -67,13 +75,20 @@ export const App = Component.define({
         AppRoute.match(route, {
           Index: (route) => NotesIndex(h, { key: AppRoute.printPath(route) }),
           // A page that uses its search takes the whole route as props.
-          Search: (route) => SearchPage(h, { key: AppRoute.printPath(route), props: { route } }),
+          Search: (route) =>
+            SearchPage(h, { key: AppRoute.printPath(route), props: { route } }),
           // A page that doesn't can keep taking picked fields.
-          Note: (route) => NotePage(h, { key: AppRoute.printPath(route), props: { id: route.params.id } }),
+          Note: (route) =>
+            NotePage(h, {
+              key: AppRoute.printPath(route),
+              props: { id: route.params.id }
+            }),
           NotFound: () =>
             h.section(
               h.h1("Page not found"),
-              h.button.onClick(AppMessage.ClickedBackToNotes()).children("Back to all notes")
+              h.button.onClick(AppMessage.ClickedBackToNotes()).children(
+                "Back to all notes"
+              )
             )
         })
       )

@@ -26,8 +26,14 @@ const Sender = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: { Clicked: ($) => $.send(CheckboxGroup, { _tag: "ToggledItem", value: "pear" }) },
-  view: (h) => h.button.class("sender").attr("type", "button").onClick(SenderMessage.Clicked())
+  update: {
+    Clicked: ($) =>
+      $.send(CheckboxGroup, { _tag: "ToggledItem", value: "pear" })
+  },
+  view: (h) =>
+    h.button.class("sender").attr("type", "button").onClick(
+      SenderMessage.Clicked()
+    )
 })
 
 const Basket = Component.define({
@@ -42,7 +48,12 @@ const Basket = Component.define({
   message: BasketMessage,
   elements: Html
 }).make({
-  init: () => ({ fruits: ["apple", "fig"], pearToggled: null, locked: false, frozen: false }),
+  init: () => ({
+    fruits: ["apple", "fig"],
+    pearToggled: null,
+    locked: false,
+    frozen: false
+  }),
   update: {
     ChangedFruits: ($, { value }) => ({ ...$.model, fruits: value }),
     ToggledPear: ($, { checked }) => ({ ...$.model, pearToggled: checked }),
@@ -50,24 +61,46 @@ const Basket = Component.define({
     ToggledFreeze: ($) => ({ ...$.model, frozen: !$.model.frozen })
   },
   view: (h, model) =>
-    h.form.attr("data-pear-toggled", model.pearToggled === null ? undefined : String(model.pearToggled)).children(
+    h.form.attr(
+      "data-pear-toggled",
+      model.pearToggled === null ? undefined : String(model.pearToggled)
+    ).children(
       Field(h, {
         props: { disabled: model.locked },
         view: (field) =>
           field.root(h.div).children(
             field.legend(h.div.class("legend")).children("Fruit"),
             CheckboxGroup(h, {
-              props: { value: model.fruits, allValues: fruits, name: "fruit", disabled: field.disabled },
-              onEmit: { Updated: ({ value }) => BasketMessage.ChangedFruits({ value }) },
+              props: {
+                value: model.fruits,
+                allValues: fruits,
+                name: "fruit",
+                disabled: field.disabled
+              },
+              onEmit: {
+                Updated: ({ value }) => BasketMessage.ChangedFruits({ value })
+              },
               view: (checkboxGroup) =>
-                checkboxGroup.root(field.group(h.div.class("group").attrs({ role: "list", "data-disabled": "" })))
+                checkboxGroup.root(
+                  field.group(
+                    h.div.class("group").attrs({
+                      role: "list",
+                      "data-disabled": ""
+                    })
+                  )
+                )
                   .children(
                     h.label.children(
                       Checkbox(h, {
                         props: { parent: true, name: "all" },
                         view: (checkbox) =>
                           checkbox.root(
-                            field.member(h.button.class("parent").attrs({ id: "all-fruit", "aria-controls": "panel" }))
+                            field.member(
+                              h.button.class("parent").attrs({
+                                id: "all-fruit",
+                                "aria-controls": "panel"
+                              })
+                            )
                           )
                       }),
                       "All"
@@ -76,7 +109,8 @@ const Basket = Component.define({
                       Checkbox(h, {
                         key: "extra",
                         props: { name: "extra", uncheckedValue: "no" },
-                        view: (checkbox) => checkbox.root(h.button.class("extra"))
+                        view: (checkbox) =>
+                          checkbox.root(h.button.class("extra"))
                       }),
                       "Extra"
                     ),
@@ -88,15 +122,21 @@ const Basket = Component.define({
                           props: {
                             value: fruit,
                             id: fruit === "apple" ? "apple-id" : undefined,
-                            disabled: fruit === "fig" || (fruit === "plum" && model.frozen),
+                            disabled: fruit === "fig" ||
+                              (fruit === "plum" && model.frozen),
                             uncheckedValue: fruit === "pear" ? "no" : undefined
                           },
                           onEmit: fruit === "pear"
-                            ? { Toggled: ({ checked }) => BasketMessage.ToggledPear({ checked }) }
+                            ? {
+                              Toggled: ({ checked }) =>
+                                BasketMessage.ToggledPear({ checked })
+                            }
                             : undefined,
                           view: (checkbox) =>
                             checkbox.root(field.member(
-                              fruit === "pear" ? h.button.class(fruit).attr("data-parent", "") : h.button.class(fruit)
+                              fruit === "pear"
+                                ? h.button.class(fruit).attr("data-parent", "")
+                                : h.button.class(fruit)
                             ))
                         }),
                         fruit
@@ -106,8 +146,12 @@ const Basket = Component.define({
             })
           )
       }),
-      h.button.class("lock").attr("type", "button").onClick(BasketMessage.ToggledLock()).children("Lock"),
-      h.button.class("freeze").attr("type", "button").onClick(BasketMessage.ToggledFreeze()).children("Freeze plum")
+      h.button.class("lock").attr("type", "button").onClick(
+        BasketMessage.ToggledLock()
+      ).children("Lock"),
+      h.button.class("freeze").attr("type", "button").onClick(
+        BasketMessage.ToggledFreeze()
+      ).children("Freeze plum")
     )
 })
 
@@ -115,13 +159,19 @@ const mount = Effect.gen(function*() {
   const app = yield* container
   yield* BrowserHost.mountEffect(Basket, {}, app)
   yield* tick
-  const button = (name: string) => app.querySelector<HTMLButtonElement>(`.${name}`)!
+  const button = (name: string) =>
+    app.querySelector<HTMLButtonElement>(`.${name}`)!
   return {
     app,
     button,
-    click: (name: string) => Effect.sync(() => button(name).click()).pipe(Effect.andThen(tick)),
-    ticked: () => fruits.filter((fruit) => button(fruit).getAttribute("aria-checked") === "true"),
-    submitted: (name = "fruit") => new FormData(app.querySelector("form")!).getAll(name)
+    click: (name: string) =>
+      Effect.sync(() => button(name).click()).pipe(Effect.andThen(tick)),
+    ticked: () =>
+      fruits.filter((fruit) =>
+        button(fruit).getAttribute("aria-checked") === "true"
+      ),
+    submitted: (name = "fruit") =>
+      new FormData(app.querySelector("form")!).getAll(name)
   }
 })
 
@@ -133,21 +183,33 @@ describe("CheckboxGroup", { concurrent: false }, () => {
       const group = app.querySelector(".group")!
       assert.strictEqual(group.getAttribute("role"), "group")
       assert.isFalse(group.hasAttribute("data-disabled"))
-      assert.strictEqual(group.getAttribute("aria-labelledby"), app.querySelector(".legend")!.id)
+      assert.strictEqual(
+        group.getAttribute("aria-labelledby"),
+        app.querySelector(".legend")!.id
+      )
       assert.strictEqual(parent.id, "all-fruit")
       assert.strictEqual(parent.getAttribute("aria-checked"), "mixed")
       assert.isTrue(parent.hasAttribute("data-parent"))
       assert.isFalse(button("pear").hasAttribute("data-parent"))
       const ids = fruits.map((fruit) => button(fruit).id)
       assert.strictEqual(ids[0], "apple-id")
-      assert.strictEqual(new Set(ids.filter((id) => id !== "")).size, fruits.length)
-      assert.strictEqual(parent.getAttribute("aria-controls"), `panel ${ids.join(" ")}`)
+      assert.strictEqual(
+        new Set(ids.filter((id) => id !== "")).size,
+        fruits.length
+      )
+      assert.strictEqual(
+        parent.getAttribute("aria-controls"),
+        `panel ${ids.join(" ")}`
+      )
       assert.deepStrictEqual(submitted(), ["apple"])
       assert.deepStrictEqual(submitted("extra"), [])
 
       yield* click("pear")
       assert.deepStrictEqual(ticked(), ["apple", "pear", "fig"])
-      assert.strictEqual(app.querySelector("form")!.getAttribute("data-pear-toggled"), "true")
+      assert.strictEqual(
+        app.querySelector("form")!.getAttribute("data-pear-toggled"),
+        "true"
+      )
       yield* click("parent")
       assert.deepStrictEqual(ticked(), fruits)
       assert.strictEqual(parent.getAttribute("aria-checked"), "true")
@@ -175,10 +237,14 @@ describe("CheckboxGroup", { concurrent: false }, () => {
       const { app, button, click, submitted, ticked } = yield* mount
       yield* click("lock")
       assert.isTrue(app.querySelector(".group")!.hasAttribute("data-disabled"))
-      for (const name of ["parent", ...fruits]) assert.isTrue(button(name).disabled)
+      for (const name of ["parent", ...fruits]) {
+        assert.isTrue(button(name).disabled)
+      }
       assert.deepStrictEqual(submitted(), [])
       yield* Effect.sync(() => {
-        button("parent").dispatchEvent(new MouseEvent("click", { bubbles: true }))
+        button("parent").dispatchEvent(
+          new MouseEvent("click", { bubbles: true })
+        )
         button("pear").dispatchEvent(new MouseEvent("click", { bubbles: true }))
       })
       yield* tick

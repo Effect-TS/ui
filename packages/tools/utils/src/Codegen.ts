@@ -31,7 +31,9 @@ export class BarrelCodegenError extends Data.TaggedError("BarrelCodegenError")<{
   readonly reason: string
 }> {}
 
-const findAnnotation = (content: string): { pattern: string; offset: number } | undefined => {
+const findAnnotation = (
+  content: string
+): { pattern: string; offset: number } | undefined => {
   const lines = content.split("\n")
 
   // Find the line containing the annotation
@@ -51,7 +53,10 @@ const findAnnotation = (content: string): { pattern: string; offset: number } | 
 
   // Walk forwards to find the end of the comment block
   let commentEnd = annotationLine
-  while (commentEnd < lines.length - 1 && lines[commentEnd + 1].trimStart().startsWith("//")) {
+  while (
+    commentEnd < lines.length - 1 &&
+    lines[commentEnd + 1].trimStart().startsWith("//")
+  ) {
     commentEnd++
   }
 
@@ -71,9 +76,13 @@ interface ModuleMetadata {
   readonly stability: "stable" | "unstable" | "experimental" | undefined
 }
 
-const extractModuleMetadata = (file: string, content: string): Effect.Effect<ModuleMetadata, BarrelCodegenError> => {
+const extractModuleMetadata = (
+  file: string,
+  content: string
+): Effect.Effect<ModuleMetadata, BarrelCodegenError> => {
   // allow triple-slash directives before the module JSDoc
-  const block = content.match(/^(?:\s*\/\/\/[^\n]*\n)*\s*(\/\*\*[\s\S]*?\*\/)/)?.[1]
+  const block = content.match(/^(?:\s*\/\/\/[^\n]*\n)*\s*(\/\*\*[\s\S]*?\*\/)/)
+    ?.[1]
   if (block === undefined) {
     return Effect.fail(
       new BarrelCodegenError({
@@ -106,16 +115,18 @@ const extractModuleMetadata = (file: string, content: string): Effect.Effect<Mod
     since,
     stability: isInternalModule(file, block) ?
       undefined :
-      /^\s*\*\s*@stability\s+(stable|unstable|experimental)\s*$/m.exec(block)?.[1] as
-        | "stable"
-        | "unstable"
-        | "experimental"
-        | undefined
+      /^\s*\*\s*@stability\s+(stable|unstable|experimental)\s*$/m.exec(block)
+        ?.[1] as
+          | "stable"
+          | "unstable"
+          | "experimental"
+          | undefined
   })
 }
 
 const isInternalModule = (file: string, block: string): boolean =>
-  file.split(/[/\\]/).includes("internal") || /^\s*\*\s*@internal\s*$/m.test(block)
+  file.split(/[/\\]/).includes("internal") ||
+  /^\s*\*\s*@internal\s*$/m.test(block)
 
 const renderExportJSDoc = ({ since, stability }: ModuleMetadata): string =>
   `/**
@@ -145,7 +156,9 @@ export interface BarrelGenerator {
     pattern: string,
     cwd: string
   ) => Effect.Effect<Array<BarrelFile>, PlatformError | Glob.GlobError>
-  readonly processFile: (file: BarrelFile) => Effect.Effect<void, PlatformError | Glob.GlobError | BarrelCodegenError>
+  readonly processFile: (
+    file: BarrelFile
+  ) => Effect.Effect<void, PlatformError | Glob.GlobError | BarrelCodegenError>
 }
 
 /**
@@ -154,7 +167,10 @@ export interface BarrelGenerator {
  * @category services
  * @since 4.0.0
  */
-export const BarrelGenerator: Context.Service<BarrelGenerator, BarrelGenerator> = Context.Service(
+export const BarrelGenerator: Context.Service<
+  BarrelGenerator,
+  BarrelGenerator
+> = Context.Service(
   "@effect/utils/BarrelGenerator"
 )
 
@@ -164,28 +180,38 @@ export const BarrelGenerator: Context.Service<BarrelGenerator, BarrelGenerator> 
  * @category layers
  * @since 4.0.0
  */
-export const layer: Layer.Layer<BarrelGenerator, never, FileSystem.FileSystem | Path.Path | Glob.Glob> = Effect.gen(
+export const layer: Layer.Layer<
+  BarrelGenerator,
+  never,
+  FileSystem.FileSystem | Path.Path | Glob.Glob
+> = Effect.gen(
   function*() {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     const glob = yield* Glob.Glob
 
     // Convert native path separators to POSIX (forward slashes) for import/export statements
-    const toPosix = path.sep === "/" ? (file: string) => file : (file: string) => file.split(path.sep).join("/")
+    const toPosix = path.sep === "/"
+      ? (file: string) => file
+      : (file: string) => file.split(path.sep).join("/")
 
     const fileToModuleName = (posix: string): string => {
       const withoutExt = posix.slice(0, -path.extname(posix).length)
       return withoutExt.replace(/\//g, "_")
     }
 
-    const processModule = Effect.fn("processModule")(function*(directory: string, file: string) {
-      const fullPath = path.join(directory, file)
-      const posixPath = toPosix(file)
-      const content = yield* fs.readFileString(fullPath)
-      const metadata = yield* extractModuleMetadata(fullPath, content)
-      const moduleName = fileToModuleName(posixPath)
-      return `${renderExportJSDoc(metadata)}\nexport * as ${moduleName} from "./${posixPath}"`
-    })
+    const processModule = Effect.fn("processModule")(
+      function*(directory: string, file: string) {
+        const fullPath = path.join(directory, file)
+        const posixPath = toPosix(file)
+        const content = yield* fs.readFileString(fullPath)
+        const metadata = yield* extractModuleMetadata(fullPath, content)
+        const moduleName = fileToModuleName(posixPath)
+        return `${
+          renderExportJSDoc(metadata)
+        }\nexport * as ${moduleName} from "./${posixPath}"`
+      }
+    )
 
     const discoverFile = Effect.fn("discoverFile")(function*(file: string) {
       const content = yield* fs.readFileString(file)
@@ -193,20 +219,23 @@ export const layer: Layer.Layer<BarrelGenerator, never, FileSystem.FileSystem | 
       return parsed ? { path: file, ...parsed } : undefined
     })
 
-    const discoverFiles = Effect.fn("discoverFiles")(function*(pattern: string, cwd: string) {
-      const indexFiles = yield* glob.glob(pattern, {
-        cwd,
-        dot: false,
-        follow: false,
-        nodir: true
-      })
+    const discoverFiles = Effect.fn("discoverFiles")(
+      function*(pattern: string, cwd: string) {
+        const indexFiles = yield* glob.glob(pattern, {
+          cwd,
+          dot: false,
+          follow: false,
+          nodir: true
+        })
 
-      const results = yield* Effect.forEach(
-        indexFiles,
-        (file) => discoverFile(path.isAbsolute(file) ? file : path.join(cwd, file))
-      )
-      return results.filter((file) => file !== undefined)
-    })
+        const results = yield* Effect.forEach(
+          indexFiles,
+          (file) =>
+            discoverFile(path.isAbsolute(file) ? file : path.join(cwd, file))
+        )
+        return results.filter((file) => file !== undefined)
+      }
+    )
 
     const processFile = Effect.fn("processFile")(function*(file: BarrelFile) {
       const { offset, pattern } = file
@@ -222,14 +251,20 @@ export const layer: Layer.Layer<BarrelGenerator, never, FileSystem.FileSystem | 
         ignore: [self]
       }).pipe(Effect.map((files) => files.sort((a, b) => a.localeCompare(b))))
 
-      const moduleContents = yield* Effect.forEach(matchedFiles, (file) => processModule(directory, file))
+      const moduleContents = yield* Effect.forEach(
+        matchedFiles,
+        (file) => processModule(directory, file)
+      )
       const content = yield* fs.readFileString(file.path)
       const lines = content.split("\n")
       const header = lines.slice(0, offset).join("\n")
       const generated = moduleContents.join("\n\n")
 
       // A barrel with no modules yet keeps just its header
-      yield* fs.writeFileString(file.path, generated === "" ? `${header}\n` : `${header}\n\n${generated}\n`)
+      yield* fs.writeFileString(
+        file.path,
+        generated === "" ? `${header}\n` : `${header}\n\n${generated}\n`
+      )
     })
 
     return { discoverFiles, processFile }

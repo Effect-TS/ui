@@ -1,5 +1,10 @@
 import { Component, UiSchema } from "@effect/ui"
-import { Autocomplete, type AutocompleteEvents, type AutocompleteMode, Field } from "@effect/ui-kit"
+import {
+  Autocomplete,
+  type AutocompleteEvents,
+  type AutocompleteMode,
+  Field
+} from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 import { describe, expect, it } from "tstyche"
@@ -7,31 +12,60 @@ import { describe, expect, it } from "tstyche"
 const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 type Msg = typeof Msg.Type
 
-type Button = Html.Element<Msg, never, Html.EventsOf<"button">, HTMLButtonElement, "button">
+type Button = Html.Element<
+  Msg,
+  never,
+  Html.EventsOf<"button">,
+  HTMLButtonElement,
+  "button"
+>
 type Div = Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
-type Span = Html.Element<Msg, never, Html.EventsOf<"span">, HTMLSpanElement, "span">
-type Input = Html.VoidElement<Msg, never, Html.EventsOf<"input">, HTMLInputElement, "input">
+type Span = Html.Element<
+  Msg,
+  never,
+  Html.EventsOf<"span">,
+  HTMLSpanElement,
+  "span"
+>
+type Input = Html.VoidElement<
+  Msg,
+  never,
+  Html.EventsOf<"input">,
+  HTMLInputElement,
+  "input"
+>
 
 const items = [{ value: "apple", label: "Apple" }]
 
 describe("Autocomplete", () => {
   it("needs no service", () => {
-    expect<Component.Headless.Requirements<typeof Autocomplete>>().type.toBe<never>()
+    expect<Component.Headless.Requirements<typeof Autocomplete>>().type.toBe<
+      never
+    >()
   })
 
   it("reports the text and never a selection", () => {
-    expect<Extract<AutocompleteEvents, { readonly _tag: "Updated" }>["value"]>().type.toBe<string>()
+    expect<Extract<AutocompleteEvents, { readonly _tag: "Updated" }>["value"]>()
+      .type.toBe<string>()
     expect<AutocompleteEvents["_tag"]>().type.toBe<
       "RequestedOpen" | "RequestedClose" | "Updated" | "Highlighted" | "Settled"
     >()
-    expect<Extract<AutocompleteEvents, { readonly _tag: "Updated" }>["reason"]>().type.not.toBeAssignableFrom<
+    expect<
+      Extract<AutocompleteEvents, { readonly _tag: "Updated" }>["reason"]
+    >().type.not.toBeAssignableFrom<
       "chip-remove-press"
     >()
     expect<AutocompleteMode>().type.toBe<"list" | "both" | "inline" | "none">()
   })
 
   it("each part returns the builder it was given, and clear can return undefined", () => {
-    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({
+      name: "App",
+      scoped: false,
+      model: Schema.Null,
+      message: Msg,
+      elements: Html
+    }).make({
       init: () => null,
       update: ($) => $.model,
       view: (h) =>
@@ -40,14 +74,19 @@ describe("Autocomplete", () => {
           props: { open: false, value: "", items },
           view: (autocomplete) => {
             expect(autocomplete.input(h.input)).type.toBe<Input>()
-            expect(autocomplete.trigger(h.button.onClick(Msg.Clicked()))).type.toBe<Button>()
+            expect(autocomplete.trigger(h.button.onClick(Msg.Clicked()))).type
+              .toBe<Button>()
             expect(autocomplete.inputGroup(h.div)).type.toBe<Div>()
             expect(autocomplete.value(h.span)).type.toBe<Span>()
             expect(autocomplete.positioner(h.div)).type.toBe<Div>()
             expect(autocomplete.list(h.div)).type.toBe<Div>()
-            expect(autocomplete.item({ element: h.div, value: "apple" })).type.toBe<Div>()
-            expect(autocomplete.group({ element: h.div, group: "fruit" })).type.toBe<Div>()
-            expect(autocomplete.clear({ element: h.button })).type.toBe<Button | undefined>()
+            expect(autocomplete.item({ element: h.div, value: "apple" })).type
+              .toBe<Div>()
+            expect(autocomplete.group({ element: h.div, group: "fruit" })).type
+              .toBe<Div>()
+            expect(autocomplete.clear({ element: h.button })).type.toBe<
+              Button | undefined
+            >()
             expect(autocomplete).type.not.toHaveProperty("chips")
             expect(autocomplete).type.not.toHaveProperty("itemIndicator")
             expect(autocomplete).type.not.toHaveProperty("selected")
@@ -58,7 +97,13 @@ describe("Autocomplete", () => {
   })
 
   it("draws its input with a field's control", () => {
-    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({
+      name: "App",
+      scoped: false,
+      model: Schema.Null,
+      message: Msg,
+      elements: Html
+    }).make({
       init: () => null,
       update: ($) => $.model,
       view: (h) =>
@@ -75,7 +120,13 @@ describe("Autocomplete", () => {
   })
 
   it("requires open, value and items, and has no selection props", () => {
-    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({
+      name: "App",
+      scoped: false,
+      model: Schema.Null,
+      message: Msg,
+      elements: Html
+    }).make({
       init: () => null,
       update: ($) => $.model,
       view: (h) => {

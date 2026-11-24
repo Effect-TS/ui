@@ -8,8 +8,14 @@ import { AppRoute, LoggedOutRoute } from "../../routes.ts"
 const Rule = Validation.Rule
 
 export const LoginValidation = Validation.make({
-  email: { required: "Email is required", rules: [Rule.email("Please enter a valid email")] },
-  password: { value: Schema.Redacted(Schema.String), required: "Password is required" }
+  email: {
+    required: "Email is required",
+    rules: [Rule.email("Please enter a valid email")]
+  },
+  password: {
+    value: Schema.Redacted(Schema.String),
+    required: "Password is required"
+  }
 }, { mode: "onChange" })
 
 export const LoginPageMessage = UiSchema.TaggedEnum({
@@ -21,15 +27,22 @@ export const LoginPageMessage = UiSchema.TaggedEnum({
 })
 export type LoginPageMessage = typeof LoginPageMessage.Type
 
-export const LoginPageEvents = UiSchema.TaggedEnum({ SignedIn: { session: Session } })
+export const LoginPageEvents = UiSchema.TaggedEnum({
+  SignedIn: { session: Session }
+})
 
 const runSimulateAuthRequest = Effect.fn("auth/SimulateAuthRequest")(
   function*(
-    { email, password }: { readonly email: string; readonly password: Redacted.Redacted<string> }
+    { email, password }: {
+      readonly email: string
+      readonly password: Redacted.Redacted<string>
+    }
   ): Effect.fn.Return<LoginPageMessage> {
     yield* Effect.sleep(Duration.seconds(1))
     if (Redacted.value(password) !== "password") {
-      return LoginPageMessage.FailedSimulateAuthRequest({ error: "Invalid credentials" })
+      return LoginPageMessage.FailedSimulateAuthRequest({
+        error: "Invalid credentials"
+      })
     }
     const [name] = email.split("@")
     return LoginPageMessage.SucceededSimulateAuthRequest({
@@ -61,8 +74,10 @@ const FormField = <M>(h: View.H<M>, options: {
     view: (field) =>
       field.root(h.div).children(
         h.div.class("flex items-center gap-2 mb-1").children(
-          field.label(h.label).class("block text-sm font-medium text-gray-700").children(options.label),
-          state._tag === "Valid" && h.span.class("text-green-600 text-sm").children("✓")
+          field.label(h.label).class("block text-sm font-medium text-gray-700")
+            .children(options.label),
+          state._tag === "Valid" &&
+            h.span.class("text-green-600 text-sm").children("✓")
         ),
         Input(h, {
           element: field.control(h.input),
@@ -76,7 +91,9 @@ const FormField = <M>(h: View.H<M>, options: {
             "disabled:bg-gray-100 data-valid:border-green-500 data-invalid:border-red-500"
           ),
         state._tag === "Invalid" &&
-          field.error(h.div)?.class("text-red-600 text-sm mt-1").children(state.errors[0])
+          field.error(h.div)?.class("text-red-600 text-sm mt-1").children(
+            state.errors[0]
+          )
       )
   })
 }
@@ -84,7 +101,10 @@ const FormField = <M>(h: View.H<M>, options: {
 export const LoginPageNoDeps = Component.define({
   name: "LoginPage",
   scoped: false,
-  model: Schema.Struct({ form: LoginValidation.State, submitting: Schema.Boolean }),
+  model: Schema.Struct({
+    form: LoginValidation.State,
+    submitting: Schema.Boolean
+  }),
   message: LoginPageMessage,
   events: LoginPageEvents,
   restore: false,
@@ -96,9 +116,15 @@ export const LoginPageNoDeps = Component.define({
   }),
 
   update: {
-    ChangedEmail: ($, { value }) => $.evolve({ form: (form) => LoginValidation.change(form, "email", value) }),
+    ChangedEmail: ($, { value }) =>
+      $.evolve({
+        form: (form) => LoginValidation.change(form, "email", value)
+      }),
 
-    ChangedPassword: ($, { value }) => $.evolve({ form: (form) => LoginValidation.change(form, "password", value) }),
+    ChangedPassword: ($, { value }) =>
+      $.evolve({
+        form: (form) => LoginValidation.change(form, "password", value)
+      }),
 
     SubmittedForm: ($) => {
       if ($.model.submitting) return $.model
@@ -106,14 +132,20 @@ export const LoginPageNoDeps = Component.define({
       return Option.match(LoginValidation.validate(form).value, {
         onNone: () => $.evolve({ form }),
         onSome: ({ email, password }) =>
-          $.evolve({ form, submitting: true }).run(SimulateAuthRequest.make({ email, password }))
+          $.evolve({ form, submitting: true }).run(
+            SimulateAuthRequest.make({ email, password })
+          )
       })
     },
 
-    SucceededSimulateAuthRequest: ($, { session }) => $.emit(LoginPageEvents.SignedIn({ session })),
+    SucceededSimulateAuthRequest: ($, { session }) =>
+      $.emit(LoginPageEvents.SignedIn({ session })),
 
     FailedSimulateAuthRequest: ($, { error }) =>
-      $.evolve({ submitting: false, form: (form) => LoginValidation.reject(form, { password: [error] }) })
+      $.evolve({
+        submitting: false,
+        form: (form) => LoginValidation.reject(form, { password: [error] })
+      })
   },
 
   view: (h, model) => {
@@ -121,11 +153,17 @@ export const LoginPageNoDeps = Component.define({
     const canSubmit = Option.isSome(validated.value) && !model.submitting
     return h.div.class("max-w-md mx-auto px-4").children(
       h.div.class("bg-white rounded-xl shadow-lg p-8").children(
-        h.h1.class("text-3xl font-bold text-gray-800 text-center mb-8").children("Sign In"),
-        h.div.class("mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg").children(
-          h.p.class("text-sm text-blue-700").children("Hint: Use any email with password \"password\"")
-        ),
-        h.form.attr("aria-label", "Sign in").attr("novalidate", "").class("space-y-6")
+        h.h1.class("text-3xl font-bold text-gray-800 text-center mb-8")
+          .children("Sign In"),
+        h.div.class("mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg")
+          .children(
+            h.p.class("text-sm text-blue-700").children(
+              "Hint: Use any email with password \"password\""
+            )
+          ),
+        h.form.attr("aria-label", "Sign in").attr("novalidate", "").class(
+          "space-y-6"
+        )
           .onSubmit(LoginPageMessage.SubmittedForm()).children(
             FormField(h, {
               key: "email",
@@ -145,7 +183,10 @@ export const LoginPageNoDeps = Component.define({
               state: validated.fields.password,
               value: Redacted.value(validated.fields.password.value),
               disabled: model.submitting,
-              onUpdate: (value) => LoginPageMessage.ChangedPassword({ value: Redacted.make(value) })
+              onUpdate: (value) =>
+                LoginPageMessage.ChangedPassword({
+                  value: Redacted.make(value)
+                })
             }),
             Button(h, { props: { type: "submit", disabled: !canSubmit } })
               .class(
@@ -156,7 +197,9 @@ export const LoginPageNoDeps = Component.define({
           ),
         h.div.class("mt-6 text-center").children(
           h.span.class("text-gray-600").children("Back to "),
-          h.a.attr("href", AppRoute.print(LoggedOutRoute.Home())).class("text-blue-500 hover:underline").children(
+          h.a.attr("href", AppRoute.print(LoggedOutRoute.Home())).class(
+            "text-blue-500 hover:underline"
+          ).children(
             "Home"
           )
         )
@@ -165,4 +208,6 @@ export const LoginPageNoDeps = Component.define({
   }
 })
 
-export const LoginPage = LoginPageNoDeps.pipe(Component.provide(SimulateAuthRequest.layer))
+export const LoginPage = LoginPageNoDeps.pipe(
+  Component.provide(SimulateAuthRequest.layer)
+)

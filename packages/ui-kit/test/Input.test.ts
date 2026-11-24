@@ -5,7 +5,9 @@ import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
-const ProfileMessage = UiSchema.TaggedEnum({ UpdatedName: { value: Schema.String } })
+const ProfileMessage = UiSchema.TaggedEnum({
+  UpdatedName: { value: Schema.String }
+})
 
 // A consumer that keeps the value in its Model.
 const Profile = Component.define({
@@ -40,7 +42,10 @@ describe("Input", () => {
       assert.strictEqual(s.get(input).props?.value, "Grace")
 
       s.props({ disabled: true })
-      assert.throws(() => s.fire(input, "input", { value: "Linus", checked: false }), /nothing handles/i)
+      assert.throws(
+        () => s.fire(input, "input", { value: "Linus", checked: false }),
+        /nothing handles/i
+      )
     }))
 
   it("the caller's attributes stay, but the input's own win, present or absent, before the call or after it", () => {
@@ -51,7 +56,9 @@ describe("Input", () => {
         "data-disabled": "x"
       })
       .value("caller")
-    const enabled = build(Input(h, { props: { value: "Ada" }, element: element.disabled(true) }))
+    const enabled = build(
+      Input(h, { props: { value: "Ada" }, element: element.disabled(true) })
+    )
     assert.deepStrictEqual(enabled.attrs, { type: "email" })
     assert.strictEqual(enabled.props.value, "Ada")
 
@@ -62,7 +69,12 @@ describe("Input", () => {
         .attr("data-disabled", undefined)
         .value("after")
     )
-    assert.deepStrictEqual(disabled.attrs, { "aria-label": "Name", type: "email", "data-disabled": "", disabled: "" })
+    assert.deepStrictEqual(disabled.attrs, {
+      "aria-label": "Name",
+      type: "email",
+      "data-disabled": "",
+      disabled: ""
+    })
     assert.strictEqual(disabled.props.value, "Ada")
   })
 
@@ -72,10 +84,22 @@ describe("Input", () => {
     const clash = /Input: the element already handles input/
     for (const disabled of [false, true]) {
       const props = { value: "", disabled }
-      assert.strictEqual(build(Input(h, { props, element: own })).handlers.input, handler)
-      assert.strictEqual(build(Input(h, { props }).onInput(handler)).handlers.input, handler)
-      assert.throws(() => build(Input(h, { props, element: own, onUpdate: handler })), clash)
-      assert.throws(() => build(Input(h, { props, onUpdate: handler }).onInput(handler)), clash)
+      assert.strictEqual(
+        build(Input(h, { props, element: own })).handlers.input,
+        handler
+      )
+      assert.strictEqual(
+        build(Input(h, { props }).onInput(handler)).handlers.input,
+        handler
+      )
+      assert.throws(
+        () => build(Input(h, { props, element: own, onUpdate: handler })),
+        clash
+      )
+      assert.throws(
+        () => build(Input(h, { props, onUpdate: handler }).onInput(handler)),
+        clash
+      )
     }
   })
 })

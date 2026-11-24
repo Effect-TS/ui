@@ -92,7 +92,8 @@ const all = [
 const names = process.env.VARIANTS ? process.env.VARIANTS.split(",") : all
 const which = () => {
   try {
-    return execSync("which chromium", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim() || undefined
+    return execSync("which chromium", { stdio: ["ignore", "pipe", "ignore"] })
+      .toString().trim() || undefined
   } catch {
     return undefined
   }
@@ -100,7 +101,10 @@ const which = () => {
 // undefined falls back to the browser playwright installed.
 const executablePath = process.argv[4] ?? process.env.CHROMIUM ?? which()
 const browser = await chromium.launch({ executablePath, headless: true })
-console.log("chromium " + browser.version() + " (" + (executablePath ?? "playwright") + "), node " + process.version)
+console.log(
+  "chromium " + browser.version() + " (" + (executablePath ?? "playwright") +
+    "), node " + process.version
+)
 const results = Object.fromEntries(names.map((name) => [name, []]))
 for (let round = 0; round < rounds; round++) {
   // Each variant gets a fresh page, and the order rotates so no variant always runs first.
@@ -110,7 +114,9 @@ for (let round = 0; round < rounds; round++) {
     page.on("pageerror", (error) => console.error("page error:", error.message))
     await page.setContent("<!doctype html><html><body></body></html>")
     await page.addScriptTag({ path: out })
-    results[name].push(await page.evaluate(([n, c]) => window.bench(n, c), [name, count]))
+    results[name].push(
+      await page.evaluate(([n, c]) => window.bench(n, c), [name, count])
+    )
     await page.close()
   }
 }
@@ -118,7 +124,8 @@ await browser.close()
 
 const stat = (values) => {
   const sorted = [...values].sort((a, b) => a - b)
-  return sorted[Math.floor(sorted.length / 2)].toFixed(1) + " (" + sorted[0].toFixed(1) + "-" +
+  return sorted[Math.floor(sorted.length / 2)].toFixed(1) + " (" +
+    sorted[0].toFixed(1) + "-" +
     sorted[sorted.length - 1].toFixed(1) + ")"
 }
 console.log(count + " rows, " + rounds + " rounds, median (min-max) ms")

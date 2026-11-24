@@ -1,29 +1,64 @@
-import { Command, Component, Feature, type MessageLog, Renderer, Route, Router, UiSchema } from "@effect/ui"
+import {
+  Command,
+  Component,
+  Feature,
+  type MessageLog,
+  Renderer,
+  Route,
+  Router,
+  UiSchema
+} from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Option, Schema } from "effect"
 import { Tiny } from "./fixtures/vocabulary.ts"
 
-const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
+const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(Effect.provide(TestHost.layer()))
 type Root = {
   readonly get: (locator: Locator.Locator) => TestHost.TestNode
   readonly log: () => ReadonlyArray<MessageLog.Entry>
 }
-const click = (root: Root, text: string) => Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
+const click = (root: Root, text: string) =>
+  Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
 const updates = (root: Root) =>
   root.log().flatMap((entry) =>
-    entry._tag === "Update" ? [entry.path + " " + entry.source._tag + " " + (entry.message as any)._tag] : []
+    entry._tag === "Update"
+      ? [
+        entry.path + " " + entry.source._tag + " " + (entry.message as any)._tag
+      ]
+      : []
   )
-const unmounted = (root: Root) => root.log().flatMap((entry) => entry._tag === "Unmounted" ? [entry.path] : [])
+const unmounted = (root: Root) =>
+  root.log().flatMap((entry) => entry._tag === "Unmounted" ? [entry.path] : [])
 const failures = (root: Root) =>
-  root.log().flatMap((entry) => entry._tag === "Failed" ? [entry.path + " " + entry.in] : [])
+  root.log().flatMap((entry) =>
+    entry._tag === "Failed" ? [entry.path + " " + entry.in] : []
+  )
 
 const define = <const Name extends string>(name: Name) =>
-  Component.define({ name, scoped: false, model: Schema.Null, message: Schema.Never, elements: Html })
+  Component.define({
+    name,
+    scoped: false,
+    model: Schema.Null,
+    message: Schema.Never,
+    elements: Html
+  })
 const slotted = <const Name extends string>(name: Name) =>
-  Component.define({ name, scoped: false, model: Schema.Null, message: Schema.Never, elements: Html, slots: ["body"] })
-const Leaf = define("Leaf").make({ init: () => null, update: ($) => $.model, view: (h) => h.p("leaf") })
+  Component.define({
+    name,
+    scoped: false,
+    model: Schema.Null,
+    message: Schema.Never,
+    elements: Html,
+    slots: ["body"]
+  })
+const Leaf = define("Leaf").make({
+  init: () => null,
+  update: ($) => $.model,
+  view: (h) => h.p("leaf")
+})
 
 // Places its slot until "toggle" hides it.
 let frameViews = 0
@@ -40,7 +75,10 @@ const Frame = Component.define({
   update: ($) => !$.model,
   view: (h, shown) => {
     frameViews++
-    return h.div(h.button.onClick(Toggle.Toggle()).children("toggle"), shown && h.slots.body)
+    return h.div(
+      h.button.onClick(Toggle.Toggle()).children("toggle"),
+      shown && h.slots.body
+    )
   }
 })
 
@@ -65,11 +103,21 @@ const Editor = Component.define({
     )
 })
 
-const PageMsg = UiSchema.TaggedEnum({ Changed: { count: Schema.Number }, Failed: {} })
-const Page = Component.define({ name: "Page", scoped: false, model: Schema.String, message: PageMsg, elements: Html })
+const PageMsg = UiSchema.TaggedEnum({
+  Changed: { count: Schema.Number },
+  Failed: {}
+})
+const Page = Component.define({
+  name: "Page",
+  scoped: false,
+  model: Schema.String,
+  message: PageMsg,
+  elements: Html
+})
   .make({
     init: () => "",
-    update: ($, msg) => $.model + (msg._tag === "Changed" ? "changed " + msg.count : "failed"),
+    update: ($, msg) =>
+      $.model + (msg._tag === "Changed" ? "changed " + msg.count : "failed"),
     view: (h, log) =>
       Frame(h, {
         key: "f",
@@ -88,9 +136,17 @@ const Page = Component.define({ name: "Page", scoped: false, model: Schema.Strin
   })
 const editorPath = "/Page/Frame[f]/[body]/Editor[Draft]"
 
-class Badge extends Feature.Service<Badge>()("Badge", { props: Schema.Struct({}) }) {}
+class Badge
+  extends Feature.Service<Badge>()("Badge", { props: Schema.Struct({}) })
+{}
 const badge = (text: string) =>
-  Badge.toLayer(define("Badge").make({ init: () => null, update: ($) => $.model, view: (h) => h.span(text) }))
+  Badge.toLayer(
+    define("Badge").make({
+      init: () => null,
+      update: ($) => $.model,
+      view: (h) => h.span(text)
+    })
+  )
 
 describe("slots", () => {
   it.effect("content's handlers, emits and failures reach the parent that wrote it", () =>
@@ -141,7 +197,12 @@ describe("slots", () => {
           view: (h) =>
             Component.provide(Frame, badge("frame's"))(h, {
               key: "f",
-              slots: { body: Badge.render(h, { key: "b", fallback: () => h.span("no badge") }) }
+              slots: {
+                body: Badge.render(h, {
+                  key: "b",
+                  fallback: () => h.span("no badge")
+                })
+              }
             })
         }),
         badge("parent's")
@@ -156,7 +217,13 @@ describe("slots", () => {
     provideHost(Effect.gen(function*() {
       const LateMsg = UiSchema.TaggedEnum({ Fill: {}, Hit: {} })
       const Late = Component.provide(
-        Component.define({ name: "Late", scoped: false, model: Schema.Boolean, message: LateMsg, elements: Html }).make(
+        Component.define({
+          name: "Late",
+          scoped: false,
+          model: Schema.Boolean,
+          message: LateMsg,
+          elements: Html
+        }).make(
           {
             init: () => false,
             update: () => true,
@@ -170,7 +237,10 @@ describe("slots", () => {
                     slots: {
                       body: [
                         h.button.onClick(LateMsg.Hit()).children("hit"),
-                        Badge.render(h, { key: "b", fallback: () => h.span("no badge") })
+                        Badge.render(h, {
+                          key: "b",
+                          fallback: () => h.span("no badge")
+                        })
                       ]
                     }
                   })
@@ -186,17 +256,24 @@ describe("slots", () => {
       click(root, "hit")
       yield* TestHost.settle
       assert.include(root.text(), "late's")
-      assert.deepStrictEqual(updates(root), ["/Late DomEvent Fill", "/Late DomEvent Hit"])
+      assert.deepStrictEqual(updates(root), [
+        "/Late DomEvent Fill",
+        "/Late DomEvent Hit"
+      ])
     })))
 
   it.effect("a DOM ref in content resolves for the parent that wrote it", () =>
     provideHost(Effect.gen(function*() {
       const Field = Renderer.ref<HTMLInputElement>("Field")
-      const Look = Command.make("Look", { args: {} }, () =>
-        Effect.gen(function*() {
-          const refs = yield* Renderer.Refs
-          return Option.isSome(yield* refs.lookup(Field))
-        }))
+      const Look = Command.make(
+        "Look",
+        { args: {} },
+        () =>
+          Effect.gen(function*() {
+            const refs = yield* Renderer.Refs
+            return Option.isSome(yield* refs.lookup(Field))
+          })
+      )
       const Form = Component.define({
         name: "Form",
         scoped: false,
@@ -220,20 +297,34 @@ describe("slots", () => {
         update: ($) => $.model,
         view: (h) => Frame(h, { key: "f", slots: { body: h.slots.body } })
       })
-      const Top = Component.define({ name: "Top", scoped: false, model: Schema.Null, message: PageMsg, elements: Html })
+      const Top = Component.define({
+        name: "Top",
+        scoped: false,
+        model: Schema.Null,
+        message: PageMsg,
+        elements: Html
+      })
         .make({
           init: () => null,
           update: ($) => $.model,
           view: (h) =>
             Outer(h, {
               key: "o",
-              slots: { body: Editor(h, { key: "e", onEmit: (count) => PageMsg.Changed({ count }) }) }
+              slots: {
+                body: Editor(h, {
+                  key: "e",
+                  onEmit: (count) => PageMsg.Changed({ count })
+                })
+              }
             })
         })
       const root = yield* TestHost.mount(Top, {})
       click(root, "type 0")
       yield* TestHost.settle
-      assert.deepStrictEqual(updates(root), ["/Top/Outer[o]/[body]/Editor[e] DomEvent Typed", "/Top Emit Changed"])
+      assert.deepStrictEqual(updates(root), [
+        "/Top/Outer[o]/[body]/Editor[e] DomEvent Typed",
+        "/Top Emit Changed"
+      ])
       click(root, "toggle")
       yield* TestHost.settle
       assert.include(unmounted(root), "/Top/Outer[o]/[body]/Editor[e]")
@@ -246,13 +337,24 @@ describe("slots", () => {
       const router = yield* Router.Router
       assert.strictEqual(yield* router.navigate("/next"), "navigated")
     }).pipe(
-      Effect.provide(Router.memory({ routes: Route.union({ Home: Route.make("/"), Next: Route.make("/next") }) })),
+      Effect.provide(
+        Router.memory({
+          routes: Route.union({
+            Home: Route.make("/"),
+            Next: Route.make("/next")
+          })
+        })
+      ),
       provideHost
     ))
 })
 
 describe("placing a slot twice fails the receiver", () => {
-  const Headless = define("Headless").make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
+  const Headless = define("Headless").make({
+    init: () => null,
+    update: ($) => $.model,
+    parts: () => ({})
+  })
   const cases = {
     "in its view": slotted("Twice").make({
       init: () => null,
@@ -262,12 +364,17 @@ describe("placing a slot twice fails the receiver", () => {
     "once forwarded to a child": slotted("Twice").make({
       init: () => null,
       update: ($) => $.model,
-      view: (h) => h.div(h.slots.body, Frame(h, { key: "f", slots: { body: h.slots.body } }))
+      view: (h) =>
+        h.div(
+          h.slots.body,
+          Frame(h, { key: "f", slots: { body: h.slots.body } })
+        )
     }),
     "once in a headless child's closure": slotted("Twice").make({
       init: () => null,
       update: ($) => $.model,
-      view: (h) => h.div(h.slots.body, Headless(h, { key: "h", view: () => h.slots.body }))
+      view: (h) =>
+        h.div(h.slots.body, Headless(h, { key: "h", view: () => h.slots.body }))
     })
   }
   for (const [where, Twice] of Object.entries(cases)) {
@@ -276,7 +383,12 @@ describe("placing a slot twice fails the receiver", () => {
         const Holder = define("Holder").make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => Twice(h, { key: "c", slots: { body: "x" }, fallback: () => h.p("child down") })
+          view: (h) =>
+            Twice(h, {
+              key: "c",
+              slots: { body: "x" },
+              fallback: () => h.p("child down")
+            })
         })
         const root = yield* TestHost.mount(Holder, {})
         yield* TestHost.settle
@@ -290,7 +402,11 @@ describe("placing a slot twice fails the receiver", () => {
       const Forward = slotted("Forward").make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => Frame(h, { key: "f", slots: { body: Headless(h, { key: "h", view: () => h.slots.body }) } })
+        view: (h) =>
+          Frame(h, {
+            key: "f",
+            slots: { body: Headless(h, { key: "h", view: () => h.slots.body }) }
+          })
       })
       const Holder = define("Holder").make({
         init: () => null,
@@ -316,7 +432,8 @@ describe("a mistake in content fails the parent that wrote it", () => {
     "two elements with one key": define("Writer").make({
       init: () => null,
       update: ($) => $.model,
-      view: (h) => Frame(h, { key: "f", slots: { body: [h.li.key("a"), h.li.key("a")] } })
+      view: (h) =>
+        Frame(h, { key: "f", slots: { body: [h.li.key("a"), h.li.key("a")] } })
     }),
     "a fallback at a sibling's path": define("Writer").make({
       init: () => null,
@@ -324,7 +441,12 @@ describe("a mistake in content fails the parent that wrote it", () => {
       view: (h) =>
         Frame(h, {
           key: "f",
-          slots: { body: [Leaf(h, { key: "a" }), Broken(h, { key: "b", fallback: () => Leaf(h, { key: "a" }) })] }
+          slots: {
+            body: [
+              Leaf(h, { key: "a" }),
+              Broken(h, { key: "b", fallback: () => Leaf(h, { key: "a" }) })
+            ]
+          }
         })
     })
   }
@@ -334,7 +456,8 @@ describe("a mistake in content fails the parent that wrote it", () => {
         const Top = define("Top").make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => Writer(h, { key: "w", fallback: () => h.p("writer down") })
+          view: (h) =>
+            Writer(h, { key: "w", fallback: () => h.p("writer down") })
         })
         const root = yield* TestHost.mount(Top, {})
         yield* TestHost.settle
@@ -385,7 +508,8 @@ describe("a mistake in content fails the parent that wrote it", () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => Writer(h, { key: "w", fallback: () => h.label("writer down") })
+        view: (h) =>
+          Writer(h, { key: "w", fallback: () => h.label("writer down") })
       })
       const root = yield* TestHost.mount(Top, {})
       yield* TestHost.settle

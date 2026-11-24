@@ -20,9 +20,12 @@ const cornerLoc = Locator.attr("class", "corner")
 type Track = Mount.Issued<unknown, never, never, unknown>
 type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
 const tracked = (s: Rendered): Track =>
-  (s.get(rootLoc) as unknown as View.Element<unknown>).owned?.find((layer) => layer.mount !== undefined)
+  (s.get(rootLoc) as unknown as View.Element<unknown>).owned?.find((layer) =>
+    layer.mount !== undefined
+  )
     ?.mount as unknown as Track
-const sent = (tag: string, fields: object = {}) => ({ _tag: tag, ...fields }) as never
+const sent = (tag: string, fields: object = {}) =>
+  ({ _tag: tag, ...fields }) as never
 
 const makeStandIn = (snapshot: (parts: Parts) => void) => ({
   elements: Html,
@@ -69,7 +72,10 @@ const makeStandIn = (snapshot: (parts: Parts) => void) => ({
           })
       }),
       scrollArea.scrollbar({
-        element: h.div.class("bar-x").attr("data-scroll-area-scrollbar-y", "stale"),
+        element: h.div.class("bar-x").attr(
+          "data-scroll-area-scrollbar-y",
+          "stale"
+        ),
         thumb: h.div.class("thumb-x").attr("data-scroll-area-thumb-y", "stale"),
         orientation: "horizontal",
         keepMounted: true
@@ -86,22 +92,41 @@ describe("ScrollArea", () => {
   it.effect("manages overflow, scrolling, hover, tabindex, visibility, and attribute precedence", () =>
     Effect.gen(function*() {
       let latest!: Parts
-      const s = yield* Scene.make(ScrollArea, {}, makeStandIn((p) => (latest = p)))
+      const s = yield* Scene.make(
+        ScrollArea,
+        {},
+        makeStandIn((p) => (latest = p))
+      )
       s.expectMount(tracked(s))
 
       assert.strictEqual(s.get(rootLoc).attrs?.role, "presentation")
       assert.strictEqual(s.get(rootLoc).attrs?.["data-custom"], "kept")
       assert.strictEqual(s.get(rootLoc).attrs?.["data-scrolling"], undefined)
-      assert.strictEqual(s.get(rootLoc).attrs?.["data-has-overflow-y"], undefined)
-      assert.strictEqual(s.get(rootLoc).attrs?.style, "color:red;position:relative")
+      assert.strictEqual(
+        s.get(rootLoc).attrs?.["data-has-overflow-y"],
+        undefined
+      )
+      assert.strictEqual(
+        s.get(rootLoc).attrs?.style,
+        "color:red;position:relative"
+      )
 
       assert.strictEqual(s.get(viewportLoc).attrs?.tabindex, "-1")
-      assert.strictEqual(s.get(viewportLoc).attrs?.["data-overflow-y-end"], undefined)
-      assert.include(s.get(viewportLoc).attrs?.style ?? "", "height:100px;overflow:scroll;scrollbar-width:none")
+      assert.strictEqual(
+        s.get(viewportLoc).attrs?.["data-overflow-y-end"],
+        undefined
+      )
+      assert.include(
+        s.get(viewportLoc).attrs?.style ?? "",
+        "height:100px;overflow:scroll;scrollbar-width:none"
+      )
 
       assert.strictEqual(s.get(contentLoc).attrs?.role, "presentation")
       assert.strictEqual(s.get(contentLoc).attrs?.["data-scrolling"], undefined)
-      assert.strictEqual(s.get(contentLoc).attrs?.style, "min-width:fit-content")
+      assert.strictEqual(
+        s.get(contentLoc).attrs?.style,
+        "min-width:fit-content"
+      )
 
       assert.strictEqual(s.query(barYLoc), undefined)
       assert.strictEqual(s.query(cornerLoc), undefined)
@@ -121,7 +146,10 @@ describe("ScrollArea", () => {
         })
       )
 
-      assert.notInclude(s.get(thumbXLoc).attrs?.style ?? "", "visibility:hidden")
+      assert.notInclude(
+        s.get(thumbXLoc).attrs?.style ?? "",
+        "visibility:hidden"
+      )
       assert.strictEqual(s.get(viewportLoc).attrs?.tabindex, "-1")
       assert.strictEqual(s.query(barYLoc), undefined)
       assert.strictEqual(s.query(cornerLoc), undefined)
@@ -141,25 +169,49 @@ describe("ScrollArea", () => {
       assert.strictEqual(s.get(viewportLoc).attrs?.tabindex, "0")
       assert.strictEqual(s.get(rootLoc).attrs?.["data-has-overflow-x"], "")
       assert.strictEqual(s.get(rootLoc).attrs?.["data-has-overflow-y"], "")
-      assert.strictEqual(s.get(rootLoc).attrs?.["data-overflow-x-start"], undefined)
+      assert.strictEqual(
+        s.get(rootLoc).attrs?.["data-overflow-x-start"],
+        undefined
+      )
       assert.strictEqual(s.get(rootLoc).attrs?.["data-overflow-x-end"], "")
       assert.strictEqual(s.get(rootLoc).attrs?.["data-overflow-y-start"], "")
-      assert.strictEqual(s.get(rootLoc).attrs?.["data-overflow-y-end"], undefined)
+      assert.strictEqual(
+        s.get(rootLoc).attrs?.["data-overflow-y-end"],
+        undefined
+      )
       assert.strictEqual(s.get(contentLoc).attrs?.["data-has-overflow-y"], "")
 
       assert.strictEqual(s.get(barYLoc).attrs?.["aria-hidden"], "true")
       assert.strictEqual(s.get(barYLoc).attrs?.["data-orientation"], "vertical")
       assert.strictEqual(s.get(barYLoc).attrs?.["data-hovering"], undefined)
       assert.strictEqual(s.get(barYLoc).attrs?.["data-scrolling"], undefined)
-      assert.include(s.get(barYLoc).attrs?.style ?? "", "width:8px;position:absolute")
+      assert.include(
+        s.get(barYLoc).attrs?.style ?? "",
+        "width:8px;position:absolute"
+      )
 
-      assert.strictEqual(s.get(thumbYLoc).attrs?.["data-orientation"], "vertical")
+      assert.strictEqual(
+        s.get(thumbYLoc).attrs?.["data-orientation"],
+        "vertical"
+      )
       assert.strictEqual(s.get(thumbYLoc).attrs?.["data-scrolling"], undefined)
-      assert.notInclude(s.get(thumbYLoc).attrs?.style ?? "", "visibility:hidden")
-      assert.notInclude(s.get(thumbXLoc).attrs?.style ?? "", "visibility:hidden")
+      assert.notInclude(
+        s.get(thumbYLoc).attrs?.style ?? "",
+        "visibility:hidden"
+      )
+      assert.notInclude(
+        s.get(thumbXLoc).attrs?.style ?? "",
+        "visibility:hidden"
+      )
 
-      assert.strictEqual(s.get(barXLoc).attrs?.["data-orientation"], "horizontal")
-      assert.strictEqual(s.get(thumbXLoc).attrs?.["data-orientation"], "horizontal")
+      assert.strictEqual(
+        s.get(barXLoc).attrs?.["data-orientation"],
+        "horizontal"
+      )
+      assert.strictEqual(
+        s.get(thumbXLoc).attrs?.["data-orientation"],
+        "horizontal"
+      )
       assert.isString(s.get(barYLoc).attrs?.["data-scroll-area-scrollbar-y"])
       assert.isUndefined(s.get(barYLoc).attrs?.["data-scroll-area-scrollbar-x"])
       assert.isString(s.get(thumbYLoc).attrs?.["data-scroll-area-thumb-y"])
@@ -169,7 +221,10 @@ describe("ScrollArea", () => {
       assert.isString(s.get(thumbXLoc).attrs?.["data-scroll-area-thumb-x"])
       assert.isUndefined(s.get(thumbXLoc).attrs?.["data-scroll-area-thumb-y"])
       assert.strictEqual(s.get(cornerLoc).attrs?.["aria-hidden"], "true")
-      assert.include(s.get(cornerLoc).attrs?.style ?? "", "background:gray;position:absolute")
+      assert.include(
+        s.get(cornerLoc).attrs?.style ?? "",
+        "background:gray;position:absolute"
+      )
       assert.strictEqual(latest.cornerHidden, false)
 
       s.mounted(tracked(s), sent("EnteredPointer"))
@@ -177,7 +232,10 @@ describe("ScrollArea", () => {
       assert.strictEqual(s.get(barXLoc).attrs?.["data-hovering"], "")
       assert.strictEqual(latest.hovering, true)
 
-      s.mounted(tracked(s), sent("StartedScrolling", { orientation: "vertical" }))
+      s.mounted(
+        tracked(s),
+        sent("StartedScrolling", { orientation: "vertical" })
+      )
       assert.strictEqual(s.get(rootLoc).attrs?.["data-scrolling"], "")
       assert.strictEqual(s.get(viewportLoc).attrs?.["data-scrolling"], "")
       assert.strictEqual(s.get(contentLoc).attrs?.["data-scrolling"], "")
@@ -189,7 +247,10 @@ describe("ScrollArea", () => {
       assert.strictEqual(latest.scrollingY, true)
       assert.strictEqual(latest.scrollingX, false)
 
-      s.mounted(tracked(s), sent("StoppedScrolling", { orientation: "vertical" }))
+      s.mounted(
+        tracked(s),
+        sent("StoppedScrolling", { orientation: "vertical" })
+      )
       s.mounted(tracked(s), sent("LeftPointer"))
       assert.strictEqual(s.get(rootLoc).attrs?.["data-scrolling"], undefined)
       assert.strictEqual(s.get(barYLoc).attrs?.["data-hovering"], undefined)
@@ -199,18 +260,29 @@ describe("ScrollArea", () => {
 
   it.effect("rejects non-div tags on every part even when hidden", () =>
     Effect.gen(function*() {
-      const cases: ReadonlyArray<(scrollArea: Parts, h: H) => View.Content<never>> = [
+      const cases: ReadonlyArray<
+        (scrollArea: Parts, h: H) => View.Content<never>
+      > = [
         (scrollArea, h) => scrollArea.root(h.span as never),
-        (scrollArea, h) => scrollArea.root(h.div).children(scrollArea.viewport(h.span as never)),
-        (scrollArea, h) => scrollArea.root(h.div).children(scrollArea.content(h.span as never)),
         (scrollArea, h) =>
-          scrollArea.root(h.div).children(scrollArea.scrollbar({ element: h.span as never, thumb: h.div })),
+          scrollArea.root(h.div).children(scrollArea.viewport(h.span as never)),
         (scrollArea, h) =>
-          scrollArea.root(h.div).children(scrollArea.scrollbar({ element: h.div, thumb: h.span as never })),
-        (scrollArea, h) => scrollArea.root(h.div).children(scrollArea.corner(h.span as never))
+          scrollArea.root(h.div).children(scrollArea.content(h.span as never)),
+        (scrollArea, h) =>
+          scrollArea.root(h.div).children(
+            scrollArea.scrollbar({ element: h.span as never, thumb: h.div })
+          ),
+        (scrollArea, h) =>
+          scrollArea.root(h.div).children(
+            scrollArea.scrollbar({ element: h.div, thumb: h.span as never })
+          ),
+        (scrollArea, h) =>
+          scrollArea.root(h.div).children(scrollArea.corner(h.span as never))
       ]
       for (const render of cases) {
-        const exit = yield* Effect.exit(Scene.make(ScrollArea, {}, { elements: Html, view: render }))
+        const exit = yield* Effect.exit(
+          Scene.make(ScrollArea, {}, { elements: Html, view: render })
+        )
         assert.strictEqual(exit._tag, "Failure")
       }
     }))

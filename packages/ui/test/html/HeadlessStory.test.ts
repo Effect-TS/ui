@@ -12,7 +12,10 @@ const items: ReadonlyArray<Item> = [
   { id: "c", label: "Copy" }
 ]
 
-const ToolbarMessage = UiSchema.TaggedEnum({ Picked: { id: Schema.String }, Clicked: { id: Schema.String } })
+const ToolbarMessage = UiSchema.TaggedEnum({
+  Picked: { id: Schema.String },
+  Clicked: { id: Schema.String }
+})
 
 const Toolbar = Component.define({
   name: "Toolbar",
@@ -48,8 +51,11 @@ const Toolbar = Component.define({
 })
 
 const filter = Locator.attr("aria-label", "Filter actions")
-const labels = (story: { readonly all: (locator: Locator.Locator) => ReadonlyArray<Locator.Node> }) =>
-  story.all(Locator.tag("li")).map(Locator.textOf)
+const labels = (
+  story: {
+    readonly all: (locator: Locator.Locator) => ReadonlyArray<Locator.Node>
+  }
+) => story.all(Locator.tag("li")).map(Locator.textOf)
 
 const trigger = Locator.text("Actions")
 
@@ -58,18 +64,28 @@ const standIn = {
   elements: Html,
   view: (
     menu: Component.Headless.Parts<typeof Menu>,
-    h: View.Helper<never, { readonly items: ReadonlyArray<Item> }> & View.Tags<Html.Elements, never>
+    h:
+      & View.Helper<never, { readonly items: ReadonlyArray<Item> }>
+      & View.Tags<Html.Elements, never>
   ) =>
     h.div(
       menu.trigger(h.button).children("Actions"),
       menu.popup(h.div).children(
         menu.input(h.input.attr("aria-label", "Filter actions")),
-        h.ul.children(menu.visible.map((item) => menu.item(h.li.key(item.id), item).children(item.label)))
+        h.ul.children(menu.visible.map((item) =>
+          menu.item(h.li.key(item.id), item).children(item.label)
+        ))
       )
     )
 }
 
-const Ids = Component.define({ name: "Ids", scoped: false, model: Schema.Null, message: Schema.Never, elements: Html })
+const Ids = Component.define({
+  name: "Ids",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never,
+  elements: Html
+})
   .make({
     init: () => null,
     update: ($) => $.model,
@@ -91,7 +107,9 @@ describe("headless components in a story", () => {
         // Block is disabled, so typing its first letter moves nowhere.
         s.fire(trigger, "keydown", { key: "b" })
         assert.isNull(active())
-        s.fire(trigger, "keydown", { key: "c" }).fire(trigger, "keydown", { key: "o" })
+        s.fire(trigger, "keydown", { key: "c" }).fire(trigger, "keydown", {
+          key: "o"
+        })
         assert.strictEqual(active(), "c")
         // No label starts with "coa", so typing starts over from "a".
         s.fire(trigger, "keydown", { key: "a" })
@@ -128,7 +146,10 @@ describe("headless components in a story", () => {
 
   it("parts need no runtime, and an id outside a mount is under the component's own name", () => {
     // No story and no host: the Model from init, the props, and nothing else.
-    const menu = Story.parts(Menu, { model: Menu.init({ items }).model, props: { items } })
+    const menu = Story.parts(Menu, {
+      model: Menu.init({ items }).model,
+      props: { items }
+    })
     assert.deepStrictEqual(menu.visible, items)
     const Bare = Component.define({
       name: "Bare",
@@ -139,7 +160,11 @@ describe("headless components in a story", () => {
     }).make({
       init: () => null,
       update: ($) => $.model,
-      view: (h) => h.div(menu.trigger(h.button).children("Actions"), h.span.id(h.id("label")).children("label"))
+      view: (h) =>
+        h.div(
+          menu.trigger(h.button).children("Actions"),
+          h.span.id(h.id("label")).children("label")
+        )
     })
     const view = Bare.view(null, {}) as View.Element<never>
     const [button, span] = view.children as ReadonlyArray<View.Element<never>>
@@ -148,11 +173,17 @@ describe("headless components in a story", () => {
   })
 
   it("a part checks the tag name it's given, as its type does", () => {
-    const dialog = Story.parts(Dialog, { model: { open: false }, props: { label: "Confirm" } })
+    const dialog = Story.parts(Dialog, {
+      model: { open: false },
+      props: { label: "Confirm" }
+    })
     const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
     assert.strictEqual(dialog.title(h.h2).tag, "h2")
     // Both are HTMLHeadingElement, but the part was declared for <h2>.
-    assert.throws(() => dialog.title(h.h3 as any), /a part for <h2> was given <h3>/)
+    assert.throws(
+      () => dialog.title(h.h3 as any),
+      /a part for <h2> was given <h3>/
+    )
   })
 
   it.effect("ids of one instance differ whenever the name or the key does", () =>
@@ -172,12 +203,17 @@ describe("headless components in a story", () => {
             menu.trigger(h.button).children("Actions"),
             menu.popup(h.div).children(
               menu.input(h.input.attr("aria-label", "Filter actions")),
-              h.ul.children(menu.visible.map((item) => menu.item(h.li.key(item.id), item).children(item.label)))
+              h.ul.children(menu.visible.map((item) =>
+                menu.item(h.li.key(item.id), item).children(item.label)
+              ))
             )
           )
       })
       s.click("Actions")
-      assert.strictEqual(s.get(Locator.text("Actions")).attrs?.["aria-expanded"], "true")
+      assert.strictEqual(
+        s.get(Locator.text("Actions")).attrs?.["aria-expanded"],
+        "true"
+      )
       s.fire(filter, "input", { value: "co", checked: false })
       const menu = Story.parts(Menu, s.current)
       assert.deepStrictEqual(menu.visible.map((item) => item.label), ["Copy"])
@@ -193,22 +229,42 @@ describe("headless components in a story", () => {
     Effect.gen(function*() {
       const s = yield* Scene.make(Toolbar, {})
       // Expanded from the Menu's init Model.
-      assert.strictEqual(s.get(Locator.text("Actions")).attrs?.["aria-expanded"], "false")
+      assert.strictEqual(
+        s.get(Locator.text("Actions")).attrs?.["aria-expanded"],
+        "false"
+      )
       assert.deepStrictEqual(labels(s), ["Archive", "Block", "Copy"])
-      s.givenChild(Menu, "actions", { open: true, query: "co", active: "c", typed: "", focused: [] })
-      assert.strictEqual(s.get(Locator.text("Actions")).attrs?.["aria-expanded"], "true")
+      s.givenChild(Menu, "actions", {
+        open: true,
+        query: "co",
+        active: "c",
+        typed: "",
+        focused: []
+      })
+      assert.strictEqual(
+        s.get(Locator.text("Actions")).attrs?.["aria-expanded"],
+        "true"
+      )
       assert.deepStrictEqual(labels(s), ["Copy"])
       // The row has the Menu's layer and the Toolbar's: the story runs the Toolbar's.
       s.click("Copy")
         .childEmit(Menu, "actions", { _tag: "Picked", id: "c" })
         .expect(Locator.tag("output")).toHaveText("Clicked c, Picked c")
       // Only the Menu handles a click on its trigger, and a story doesn't run the Menu's update.
-      assert.throws(() => s.click("Actions"), /only \/Toolbar\/Menu\[actions\] handles "click"/)
+      assert.throws(
+        () => s.click("Actions"),
+        /only \/Toolbar\/Menu\[actions\] handles "click"/
+      )
     }))
 
   it.effect("an author's story renders with the vocabulary it's given", () =>
     Effect.gen(function*() {
-      const Neutral = Component.define({ name: "Neutral", scoped: false, model: Schema.Null, message: Schema.Never })
+      const Neutral = Component.define({
+        name: "Neutral",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never
+      })
         .make({
           init: () => null,
           update: ($) => $.model,
@@ -234,14 +290,19 @@ describe("headless components in a story", () => {
         update: ($, message) => $.model + (message === "one" ? 1 : 10),
         parts: (p, count) => ({
           count,
-          one: p.part("button", (b) => b.onClick("one", { preventDefault: true })),
+          one: p.part(
+            "button",
+            (b) => b.onClick("one", { preventDefault: true })
+          ),
           ten: p.part("button", (b) => b.onClick("ten"))
         })
       })
       const s = yield* Scene.make(Dual, {}, {
         elements: Html,
         view: (dual, h) =>
-          dual.ten(dual.one(h.button)).onClick(() => undefined, { preventDefault: false }).children("both")
+          dual.ten(dual.one(h.button)).onClick(() => undefined, {
+            preventDefault: false
+          }).children("both")
       })
       s.click("both").parts((dual) => assert.strictEqual(dual.count, 11))
       assert.isTrue(s.defaultPrevented)
@@ -259,7 +320,12 @@ describe("headless components in a story", () => {
         {
           init: () => null,
           update: ($) => $.model,
-          parts: (p) => ({ link: p.part("a", (b) => b.onClick(() => undefined, { preventDefault: "always" })) })
+          parts: (p) => ({
+            link: p.part(
+              "a",
+              (b) => b.onClick(() => undefined, { preventDefault: "always" })
+            )
+          })
         }
       )
       const Clicked = UiSchema.TaggedEnum({ Clicked: {} })
@@ -275,7 +341,11 @@ describe("headless components in a story", () => {
         view: (h) =>
           Guard(
             h,
-            { key: "g", view: (guard) => guard.link(h.a).onClick(Clicked.Clicked()).children("go") }
+            {
+              key: "g",
+              view: (guard) =>
+                guard.link(h.a).onClick(Clicked.Clicked()).children("go")
+            }
           )
       })
       const s = yield* Scene.make(Page, {})
@@ -286,7 +356,12 @@ describe("headless components in a story", () => {
 
   it.effect("an author's story runs its own layers around and inside a headless child's closure", () =>
     Effect.gen(function*() {
-      const Inner = Component.define({ name: "Inner", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+      const Inner = Component.define({
+        name: "Inner",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
         init: () => null,
         update: ($) => $.model,
         parts: () => ({})
@@ -299,7 +374,8 @@ describe("headless components in a story", () => {
         elements: Html
       }).make({
         init: () => 0,
-        update: ($, message) => $.model + (message === "one" ? 1 : message === "ten" ? 10 : 100),
+        update: ($, message) =>
+          $.model + (message === "one" ? 1 : message === "ten" ? 10 : 100),
         parts: (p, count) => ({
           count,
           one: p.part("div", (b) => b.onClick("one", { preventDefault: true })),
@@ -312,7 +388,10 @@ describe("headless components in a story", () => {
         view: (outer, h) =>
           outer.ten(outer.one(h.div)).children(
             h.button("hit"),
-            Inner(h, { key: "inner", view: () => outer.hundred(h.button).children("inside") })
+            Inner(h, {
+              key: "inner",
+              view: () => outer.hundred(h.button).children("inside")
+            })
           )
       })
       s.click("hit")
@@ -336,7 +415,13 @@ describe("headless components in a story", () => {
           update: (_, message) => message,
           parts: (p, dropped) => ({
             dropped,
-            zone: p.part("div", (b) => b.onDrop((payload) => payload.data["text/plain"], { accepts: ["text/plain"] }))
+            zone: p.part(
+              "div",
+              (b) =>
+                b.onDrop((payload) => payload.data["text/plain"], {
+                  accepts: ["text/plain"]
+                })
+            )
           })
         })
       const s = yield* HtmlScene.make(Zone, {}, {

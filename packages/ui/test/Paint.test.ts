@@ -1,4 +1,11 @@
-import { Command, Component, type MessageLog, Query, Subscription, UiSchema } from "@effect/ui"
+import {
+  Command,
+  Component,
+  type MessageLog,
+  Query,
+  Subscription,
+  UiSchema
+} from "@effect/ui"
 import * as runtime from "@effect/ui/internal/runtime"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -11,7 +18,12 @@ const makeApp = () => {
 
   class GetName extends Query.Service<GetName>()(
     "GetName",
-    { args: { id: Schema.String }, success: Schema.String, error: Schema.Never, staleTime: 0 },
+    {
+      args: { id: Schema.String },
+      success: Schema.String,
+      error: Schema.Never,
+      staleTime: 0
+    },
     Effect.succeed(({ id }) =>
       Effect.sync(() => {
         ran.fetches++
@@ -33,16 +45,24 @@ const makeApp = () => {
     props: Schema.Struct({ id: Schema.String }),
     model: Schema.Number,
     message: RowMessage,
-    queries: { name: { query: GetName, args: ({ props }) => ({ id: props.id }) } }
+    queries: {
+      name: { query: GetName, args: ({ props }) => ({ id: props.id }) }
+    }
   }).make({
     init: ($) => {
       ran.inits++
       return $.set(0).run(Ping.make({}))
     },
-    update: ($, message) => RowMessage.match(message, { Clicked: () => $.model + 1, Ticked: () => $.model }),
+    update: ($, message) =>
+      RowMessage.match(message, {
+        Clicked: () => $.model + 1,
+        Ticked: () => $.model
+      }),
     view: (h, count) =>
       h.el("button").on("click", RowMessage.Clicked()).children(
-        `${h.props.id}:${AsyncResult.isSuccess(h.queries.name) ? h.queries.name.value : "?"}=${count};`
+        `${h.props.id}:${
+          AsyncResult.isSuccess(h.queries.name) ? h.queries.name.value : "?"
+        }=${count};`
       ),
     subscriptions: () => [
       Subscription.make(
@@ -67,7 +87,8 @@ const makeApp = () => {
       return ["a"]
     },
     update: ($, message) => [...$.model, message.id],
-    view: (h, ids) => h.el("div", ids.map((id) => Row(h, { key: id, props: { id } })))
+    view: (h, ids) =>
+      h.el("div", ids.map((id) => Row(h, { key: id, props: { id } })))
   })
 
   return { ran, List, ListMessage, layer: GetName.layer }
@@ -80,19 +101,32 @@ const fold = (entries: ReadonlyArray<MessageLog.Entry>) => {
       state.set(entry.path, { model: entry.model, queries: entry.queries })
     } else if (entry._tag === "QueryChanged") {
       const at = state.get(entry.path)!
-      state.set(entry.path, { ...at, queries: { ...at.queries, [entry.name]: entry.result } })
+      state.set(entry.path, {
+        ...at,
+        queries: { ...at.queries, [entry.name]: entry.result }
+      })
     } else if (entry._tag === "Unmounted") state.delete(entry.path)
   }
   return state
 }
 
-const load = TestHost.settle.pipe(Effect.andThen(TestClock.adjust("10 millis")), Effect.andThen(TestHost.settle))
+const load = TestHost.settle.pipe(
+  Effect.andThen(TestClock.adjust("10 millis")),
+  Effect.andThen(TestHost.settle)
+)
 
 const run = <A, E>(layer: Layer.Layer<any>, effect: Effect.Effect<A, E, any>) =>
-  effect.pipe(Effect.provide(layer), Effect.scoped, Effect.provide(TestHost.layer())) as Effect.Effect<A, E>
+  effect.pipe(
+    Effect.provide(layer),
+    Effect.scoped,
+    Effect.provide(TestHost.layer())
+  ) as Effect.Effect<A, E>
 
 const click = (container: Locator.Node, text: string) =>
-  Locator.fire(Locator.get(container, Locator.text(text)) as Locator.Firable, "click")
+  Locator.fire(
+    Locator.get(container, Locator.text(text)) as Locator.Firable,
+    "click"
+  )
 
 describe("paint", () => {
   it.effect("each instance adopts its state by path, and the painted tree runs, logs and dispatches nothing", () => {
@@ -115,11 +149,19 @@ describe("paint", () => {
         const before = { ...ran }
         const logged = testHost.log.entries().length
         const container = testHost.host.createElement("div")
-        const painted = yield* runtime.paint(List, {}, container, (path) => then.get(path))
+        const painted = yield* runtime.paint(
+          List,
+          {},
+          container,
+          (path) => then.get(path)
+        )
         assert.deepStrictEqual(painted.fellBack, [])
         assert.strictEqual(Locator.textOf(container), "a:A=1;b:B=0;")
 
-        assert.throws(() => click(container, "a:A=1;"), /nothing handles "click"/)
+        assert.throws(
+          () => click(container, "a:A=1;"),
+          /nothing handles "click"/
+        )
         yield* load
         assert.strictEqual(Locator.textOf(container), "a:A=1;b:B=0;")
         assert.strictEqual(root.text(), "a:A=2;b:B=0;c:C=0;")
@@ -143,9 +185,17 @@ describe("paint", () => {
           (path) => path === "/List" ? { model: ["a", "b"] } : undefined
         )
         yield* load
-        assert.deepStrictEqual(painted.fellBack, ["/List/Row[a]", "/List/Row[b]"])
+        assert.deepStrictEqual(painted.fellBack, [
+          "/List/Row[a]",
+          "/List/Row[b]"
+        ])
         assert.strictEqual(Locator.textOf(container), "a:?=0;b:?=0;")
-        assert.deepStrictEqual(ran, { inits: 2, commands: 0, subscriptions: 0, fetches: 0 })
+        assert.deepStrictEqual(ran, {
+          inits: 2,
+          commands: 0,
+          subscriptions: 0,
+          fetches: 0
+        })
       })
     )
   })
@@ -171,17 +221,35 @@ describe("paint", () => {
   it.effect("a lazy component that hasn't loaded shows its fallback, without loading it", () =>
     Effect.gen(function*() {
       let loads = 0
-      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never })
-        .make({ init: () => null, update: ($) => $.model, view: (h) => h.text("page") })
+      const Page = Component.define({
+        name: "Page",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never
+      })
+        .make({
+          init: () => null,
+          update: ($) => $.model,
+          view: (h) => h.text("page")
+        })
       const LazyPage = Component.lazy("LazyPage", () => {
         loads++
         return Promise.resolve(Page)
       })
-      const App = Component.define({ name: "App", scoped: false, model: Schema.Null, message: Schema.Never })
+      const App = Component.define({
+        name: "App",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never
+      })
         .make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.el("p", LazyPage(h, { props: {}, fallback: () => h.text("loading") }))
+          view: (h) =>
+            h.el(
+              "p",
+              LazyPage(h, { props: {}, fallback: () => h.text("loading") })
+            )
         })
       const testHost = yield* TestHost.TestHost
       const container = testHost.host.createElement("div")

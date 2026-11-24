@@ -14,7 +14,13 @@ const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 type Msg = typeof Msg.Type
 
 type Div = Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
-type DialogElement = Html.Element<Msg, never, Html.EventsOf<"dialog">, HTMLDialogElement, "dialog">
+type DialogElement = Html.Element<
+  Msg,
+  never,
+  Html.EventsOf<"dialog">,
+  HTMLDialogElement,
+  "dialog"
+>
 
 declare const h: View.Helper<Msg, unknown> & View.Tags<Html.Elements, Msg>
 
@@ -60,9 +66,18 @@ describe("Drawer", () => {
   it("rejects a bad prop", () => {
     const view = () => h.div
     expect(Drawer).type.not.toBeCallableWith(h, { props: {}, view })
-    expect(Drawer).type.not.toBeCallableWith(h, { props: { open: true, swipeDirection: "sideways" }, view })
-    expect(Drawer).type.not.toBeCallableWith(h, { props: { open: true, snapPoints: [true] }, view })
-    expect(Drawer).type.not.toBeCallableWith(h, { props: { open: true, snapToSequentialPoints: "yes" }, view })
+    expect(Drawer).type.not.toBeCallableWith(h, {
+      props: { open: true, swipeDirection: "sideways" },
+      view
+    })
+    expect(Drawer).type.not.toBeCallableWith(h, {
+      props: { open: true, snapPoints: [true] },
+      view
+    })
+    expect(Drawer).type.not.toBeCallableWith(h, {
+      props: { open: true, snapToSequentialPoints: "yes" },
+      view
+    })
   })
 
   it("each part returns the builder it was given, and the portal and backdrop may draw nothing", () => {
@@ -74,20 +89,31 @@ describe("Drawer", () => {
         expect(drawer.viewport(h.div)).type.toBe<Div>()
         expect(drawer.content(h.div)).type.toBe<Div>()
         expect(drawer.portal(h.dialog)).type.toBe<DialogElement | undefined>()
-        expect(drawer.swipeArea({ element: h.div, swipeDirection: "up", disabled: true })).type.toBe<Div>()
+        expect(
+          drawer.swipeArea({
+            element: h.div,
+            swipeDirection: "up",
+            disabled: true
+          })
+        ).type.toBe<Div>()
         expect(drawer.swipeArea({ element: h.div })).type.toBe<Div>()
         expect(drawer.swiping).type.toBe<boolean>()
         expect(drawer.swipeDirection).type.toBe<DrawerSwipeDirection>()
         expect(drawer.expanded).type.toBe<boolean>()
         expect(drawer.nestedDrawers).type.toBe<number>()
         expect(drawer.nestedDrawerSwiping).type.toBe<boolean>()
-        expect(drawer.transitionStatus).type.toBe<"starting" | "ending" | null>()
+        expect(drawer.transitionStatus).type.toBe<
+          "starting" | "ending" | null
+        >()
 
         expect(drawer.popup).type.not.toBeCallableWith(h.span)
         expect(drawer.backdrop).type.not.toBeCallableWith(h.span)
         expect(drawer.content).type.not.toBeCallableWith(h.span)
         expect(drawer.swipeArea).type.not.toBeCallableWith({ element: h.span })
-        expect(drawer.swipeArea).type.not.toBeCallableWith({ element: h.div, swipeDirection: "sideways" })
+        expect(drawer.swipeArea).type.not.toBeCallableWith({
+          element: h.div,
+          swipeDirection: "sideways"
+        })
         return h.div(drawer.portal(h.dialog)?.children(drawer.popup(h.div)))
       }
     })
@@ -102,8 +128,13 @@ describe("DrawerProvider", () => {
         expect(drawerProvider.indent(h.div.attr("id", "page"))).type.toBe<Div>()
         expect(drawerProvider.indentBackground(h.div)).type.toBe<Div>()
         expect(drawerProvider.indent).type.not.toBeCallableWith(h.span)
-        expect(drawerProvider.indentBackground).type.not.toBeCallableWith(h.span)
-        return h.div(drawerProvider.indentBackground(h.div), drawerProvider.indent(h.div))
+        expect(drawerProvider.indentBackground).type.not.toBeCallableWith(
+          h.span
+        )
+        return h.div(
+          drawerProvider.indentBackground(h.div),
+          drawerProvider.indent(h.div)
+        )
       }
     })
   })

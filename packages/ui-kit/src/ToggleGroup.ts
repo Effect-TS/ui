@@ -126,7 +126,10 @@ import { Toolbar } from "./Toolbar.ts"
  * @category schemas
  * @since 0.1.0
  */
-export const ToggleGroupOrientation = Schema.Literals(["horizontal", "vertical"])
+export const ToggleGroupOrientation = Schema.Literals([
+  "horizontal",
+  "vertical"
+])
 
 /**
  * The direction a toggle group's items run in.
@@ -243,27 +246,50 @@ interface InToolbar {
   readonly disabledItems: ReadonlyArray<string>
 }
 
-const disabledOf = (props: ToggleGroupProps, toolbar: InToolbar | undefined): boolean =>
-  props.disabled === true || toolbar?.disabled === true
+const disabledOf = (
+  props: ToggleGroupProps,
+  toolbar: InToolbar | undefined
+): boolean => props.disabled === true || toolbar?.disabled === true
 
-const itemDisabled = (props: ToggleGroupProps, toolbar: InToolbar | undefined, item: ToggleGroupItem): boolean =>
-  disabledOf(props, toolbar) || !available(item) || toolbar?.disabledItems.includes(item.value) === true
+const itemDisabled = (
+  props: ToggleGroupProps,
+  toolbar: InToolbar | undefined,
+  item: ToggleGroupItem
+): boolean =>
+  disabledOf(props, toolbar) || !available(item) ||
+  toolbar?.disabledItems.includes(item.value) === true
 
-const enabledOf = (props: ToggleGroupProps, toolbar: InToolbar | undefined): ReadonlyArray<ToggleGroupItem> =>
+const enabledOf = (
+  props: ToggleGroupProps,
+  toolbar: InToolbar | undefined
+): ReadonlyArray<ToggleGroupItem> =>
   props.items.filter((item) => !itemDisabled(props, toolbar, item))
 
-const enabled = (props: ToggleGroupProps, toolbar: InToolbar | undefined, value: string): boolean =>
-  enabledOf(props, toolbar).some((item) => item.value === value)
+const enabled = (
+  props: ToggleGroupProps,
+  toolbar: InToolbar | undefined,
+  value: string
+): boolean => enabledOf(props, toolbar).some((item) => item.value === value)
 
-const toggled = (props: ToggleGroupProps, value: string): ReadonlyArray<string> => {
+const toggled = (
+  props: ToggleGroupProps,
+  value: string
+): ReadonlyArray<string> => {
   const pressed = props.value.includes(value)
   if (props.multiple !== true) return pressed ? [] : [value]
-  return pressed ? props.value.filter((other) => other !== value) : [...props.value, value]
+  return pressed
+    ? props.value.filter((other) => other !== value)
+    : [...props.value, value]
 }
 
-const tabStopOf = (model: ToggleGroupModel, props: ToggleGroupProps, toolbar: InToolbar | undefined): string | null => {
+const tabStopOf = (
+  model: ToggleGroupModel,
+  props: ToggleGroupProps,
+  toolbar: InToolbar | undefined
+): string | null => {
   const items = enabledOf(props, toolbar)
-  return (items.find((item) => item.value === model.active) ?? items[0])?.value ?? null
+  return (items.find((item) => item.value === model.active) ?? items[0])
+    ?.value ?? null
 }
 
 /**
@@ -326,7 +352,10 @@ export const ToggleGroup = Component.define({
     PressedKey: ($, { key, value }) => {
       const items = enabledOf($.props, $.shared.toolbar)
       const last = items.length - 1
-      const { next } = arrowKeys($.props.orientation ?? "horizontal", $.shared.provider?.direction === "rtl")
+      const { next } = arrowKeys(
+        $.props.orientation ?? "horizontal",
+        $.shared.provider?.direction === "rtl"
+      )
       const target = items[
         key === "Home"
           ? 0
@@ -341,7 +370,9 @@ export const ToggleGroup = Component.define({
       ]
       if (target === undefined || target.value === value) return $.model
       return $.evolve({ active: target.value }).run(
-        HtmlCommand.Focus.make({ ref: Item.at(target.value) }).pipe(Command.asNoop)
+        HtmlCommand.Focus.make({ ref: Item.at(target.value) }).pipe(
+          Command.asNoop
+        )
       )
     }
   },
@@ -355,8 +386,16 @@ export const ToggleGroup = Component.define({
     const axis = arrowKeys(orientation, false)
     const item = p.part("button", (b, value: string) => {
       const entry = props.items.find((item) => item.value === value)
-      if (entry === undefined) throw new Error("ToggleGroup: no item with value \"" + value + "\" in items")
-      const pressed = pressedAttrs(b, props.value.includes(value), itemDisabled(props, toolbar, entry))
+      if (entry === undefined) {
+        throw new Error(
+          "ToggleGroup: no item with value \"" + value + "\" in items"
+        )
+      }
+      const pressed = pressedAttrs(
+        b,
+        props.value.includes(value),
+        itemDisabled(props, toolbar, entry)
+      )
         .onClick(ToggleGroupMessage.ClickedItem({ value }))
       if (toolbar !== undefined) return pressed
       return pressed
@@ -366,7 +405,8 @@ export const ToggleGroup = Component.define({
         .onKeyDown(
           ({ alt, ctrl, key, meta, shift }) =>
             alt || ctrl || meta || shift ||
-              !(key === axis.next || key === axis.previous || key === "Home" || key === "End")
+              !(key === axis.next || key === axis.previous || key === "Home" ||
+                key === "End")
               ? undefined
               : ToggleGroupMessage.PressedKey({ value, key }),
           { preventDefault: true }

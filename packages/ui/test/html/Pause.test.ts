@@ -4,7 +4,9 @@ import { BrowserHost, Html } from "@effect/ui/html"
 import { expect, it } from "@effect/vitest"
 import { Effect, Exit, Schema } from "effect"
 
-const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+const tick = Effect.promise(() =>
+  new Promise<void>((resolve) => setTimeout(resolve, 30))
+)
 
 const place = Effect.fnUntraced(function*(tag: string = "div") {
   const page = document.body.appendChild(document.createElement("section"))
@@ -25,7 +27,9 @@ const Counter = Component.define({
   init: () => 0,
   update: ($) => $.model + 1,
   view: (h, count) =>
-    h.button.onClick(CounterMessage.Clicked()).onMount(Seen().pipe(Mount.map(() => Component.noop)))
+    h.button.onClick(CounterMessage.Clicked()).onMount(
+      Seen().pipe(Mount.map(() => Component.noop))
+    )
       .children(`clicked ${count}`)
 })
 
@@ -43,12 +47,16 @@ it.effect("pause paints a frozen copy beside the hidden container, and resume sh
     app.className = "app"
     app.style.display = "grid"
     const roots: Array<BrowserHost.Pausable> = []
-    const root = yield* BrowserHost.mountEffect(Counter, {}, app).pipe(register(roots))
+    const root = yield* BrowserHost.mountEffect(Counter, {}, app).pipe(
+      register(roots)
+    )
     expect(roots.map((root) => root.path)).toEqual(["/Counter"])
     const [pausable] = roots
     const mounted = mounts
 
-    const painted = yield* pausable.pause((path) => path === "/Counter" ? { model: 7 } : undefined)
+    const painted = yield* pausable.pause((path) =>
+      path === "/Counter" ? { model: 7 } : undefined
+    )
     expect(painted).toEqual({ fellBack: [], fallbacks: [] })
     const copy = app.nextElementSibling as HTMLElement
     expect(copy.outerHTML).toBe(
@@ -75,14 +83,20 @@ it.effect("pause paints a frozen copy beside the hidden container, and resume sh
     expect(app.textContent).toBe("clicked 1")
   }).pipe(Effect.scoped))
 
-class Editor extends Feature.Service<Editor>()("Pause/Editor", { props: Schema.Struct({}) }) {}
+class Editor extends Feature.Service<Editor>()("Pause/Editor", {
+  props: Schema.Struct({})
+}) {}
 const EditorView = Component.define({
   name: "EditorView",
   scoped: false,
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
-}).make({ init: () => null, update: ($) => $.model, view: (h) => h.span("editor") })
+}).make({
+  init: () => null,
+  update: ($) => $.model,
+  view: (h) => h.span("editor")
+})
 
 const Note = Component.define({
   name: "Note",
@@ -91,7 +105,11 @@ const Note = Component.define({
   message: Schema.Never,
   elements: Html
 })
-  .make({ init: () => null, update: ($) => $.model, view: (h) => h.span("note") })
+  .make({
+    init: () => null,
+    update: ($) => $.model,
+    view: (h) => h.span("note")
+  })
 
 const Pane = Component.define({
   name: "Pane",
@@ -105,7 +123,11 @@ const Pane = Component.define({
     update: ($) => $.model,
     view: (h) =>
       h.div(
-        Editor.render(h, { key: "e", props: {}, fallback: () => h.span("loading") }),
+        Editor.render(h, {
+          key: "e",
+          props: {},
+          fallback: () => h.span("loading")
+        }),
         Note(h, { key: "n" })
       )
   })
@@ -154,7 +176,9 @@ it.effect("a paint that fails removes its copy and leaves the page as it was", (
 
     yield* roots[0].pause(() => ({ model: 3 }))
     expect(Exit.isFailure(yield* Effect.exit(roots[0].pause(boom)))).toBe(true)
-    expect(Array.from(page.querySelectorAll("[inert]"), (copy) => copy.textContent)).toEqual(["clicked 3"])
+    expect(
+      Array.from(page.querySelectorAll("[inert]"), (copy) => copy.textContent)
+    ).toEqual(["clicked 3"])
     expect(app.style.getPropertyValue("display")).toBe("none")
     yield* roots[0].resume
     expect(app.style.getPropertyValue("display")).toBe("grid")
@@ -170,14 +194,17 @@ const Settings = Component.define({
 }).make({
   init: () => false,
   update: (_, message) => message._tag === "Opened",
-  view: (h, open) => h.dialog.modal(open).onCancel(DialogMessage.Closed()).children("settings")
+  view: (h, open) =>
+    h.dialog.modal(open).onCancel(DialogMessage.Closed()).children("settings")
 })
 
 it.effect("the live root's modal dialogs are closed while it's paused and shown again on resume", () =>
   Effect.gen(function*() {
     const { app } = yield* place()
     const roots: Array<BrowserHost.Pausable> = []
-    const root = yield* BrowserHost.mountEffect(Settings, {}, app).pipe(register(roots))
+    const root = yield* BrowserHost.mountEffect(Settings, {}, app).pipe(
+      register(roots)
+    )
     const dialog = app.querySelector("dialog")!
     root.send(DialogMessage.Opened())
     yield* tick

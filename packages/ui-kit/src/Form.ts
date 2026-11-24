@@ -167,13 +167,20 @@ const takeFocus = (element: HTMLElement): boolean => {
 }
 
 const takeTabStop = (element: HTMLElement): boolean =>
-  radioGroup(element).some((radio) => radio.checked && takeFocus(radio)) || takeFocus(element)
+  radioGroup(element).some((radio) => radio.checked && takeFocus(radio)) ||
+  takeFocus(element)
 
 const focusInvalid = (form: HTMLFormElement): boolean =>
-  Array.from(form.querySelectorAll<HTMLElement>("[aria-invalid=\"true\"]")).some((invalid) =>
-    [invalid, ...Array.from(invalid.querySelectorAll<HTMLElement>("*")).filter((inner) => inner.tabIndex >= 0)]
-      .some(takeTabStop)
-  )
+  Array.from(form.querySelectorAll<HTMLElement>("[aria-invalid=\"true\"]"))
+    .some((invalid) =>
+      [
+        invalid,
+        ...Array.from(invalid.querySelectorAll<HTMLElement>("*")).filter((
+          inner
+        ) => inner.tabIndex >= 0)
+      ]
+        .some(takeTabStop)
+    )
 
 const FocusInvalid = Command.make(
   "FocusInvalid",
@@ -218,11 +225,14 @@ export const Form = Component.define({
   elements: Html
 }).make({
   init: () => ({}),
-  update: ($, { entries, fields }) => $.run(FocusInvalid.make()).emit(FormEvents.Submitted({ fields, entries })),
+  update: ($, { entries, fields }) =>
+    $.run(FocusInvalid.make()).emit(FormEvents.Submitted({ fields, entries })),
   parts: (p) => ({
     root: p.part("form", (b) =>
       b.ref(Root)
         .attr("novalidate", "")
-        .onSubmit(({ entries, fields }) => FormMessage.SubmittedRoot({ fields, entries })))
+        .onSubmit(({ entries, fields }) =>
+          FormMessage.SubmittedRoot({ fields, entries })
+        ))
   })
 })

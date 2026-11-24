@@ -35,7 +35,9 @@ const makeApp = (options?: {
         yield* Effect.sleep("10 millis")
         const name = db.names.get(id)
         return name === undefined ? yield* Effect.fail("missing") : { id, name }
-      }).pipe(Effect.onInterrupt(() => Effect.sync(() => db.interrupted.push(id))))
+      }).pipe(
+        Effect.onInterrupt(() => Effect.sync(() => db.interrupted.push(id)))
+      )
     )
   ) {}
 
@@ -44,9 +46,13 @@ const makeApp = (options?: {
     {
       args: { id: Schema.String, name: Schema.String },
       invalidates: ({ id }) => [GetUser.entry({ id })],
-      optimistic: ({ id, name }) => [GetUser.patch({ id }, (user) => ({ ...user, name }))]
+      optimistic: (
+        { id, name }
+      ) => [GetUser.patch({ id }, (user) => ({ ...user, name }))]
     },
-    Effect.succeed(({ id, name }: { readonly id: string; readonly name: string }) =>
+    Effect.succeed((
+      { id, name }: { readonly id: string; readonly name: string }
+    ) =>
       Effect.gen(function*() {
         yield* Effect.sleep("10 millis")
         if (name === "") return yield* Effect.fail("empty")
@@ -107,16 +113,21 @@ const makeApp = (options?: {
             ? "loading"
             : "idle",
         // "~": the value includes an unconfirmed patch. "…": a fetch is in flight.
-        onSuccess: (success) => success.value.name + (h.patched.user ? "~" : "") + (success.waiting ? "…" : ""),
+        onSuccess: (success) =>
+          success.value.name + (h.patched.user ? "~" : "") +
+          (success.waiting ? "…" : ""),
         onFailure: () => "failed"
       })
       order.push(`view ${h.props.tag} ${text}${model.saving ? " saving" : ""}`)
-      return h.el("p").on("click", CardMessage.Rename({ name: "Bob" })).children(`${h.props.tag}=${text}`)
+      return h.el("p").on("click", CardMessage.Rename({ name: "Bob" }))
+        .children(`${h.props.tag}=${text}`)
     }
   })
 
   /** A parent whose Model says which cards are mounted: "tag:id" each. */
-  const ListMessage = UiSchema.TaggedEnum({ Set: { cards: Schema.Array(Schema.String) } })
+  const ListMessage = UiSchema.TaggedEnum({
+    Set: { cards: Schema.Array(Schema.String) }
+  })
   const List = Component.define({
     name: "List",
     scoped: false,
@@ -148,7 +159,10 @@ const makeApp = (options?: {
     Effect.map(
       Effect.context<GetUser>(),
       (context) => ({ id }: { readonly id: string }) =>
-        GetUser.get({ id }).pipe(Effect.map((user) => user.name), Effect.provide(context))
+        GetUser.get({ id }).pipe(
+          Effect.map((user) => user.name),
+          Effect.provide(context)
+        )
     )
   ) {}
   class Warm extends Command.Service<Warm>()(
@@ -156,7 +170,8 @@ const makeApp = (options?: {
     { args: { id: Schema.String }, invalidates: () => [] },
     Effect.map(
       Effect.context<GetUser>(),
-      (context) => ({ id }: { readonly id: string }) => GetUser.prefetch({ id }).pipe(Effect.provide(context))
+      (context) => ({ id }: { readonly id: string }) =>
+        GetUser.prefetch({ id }).pipe(Effect.provide(context))
     )
   ) {}
   const got = (name: string) => ToolsMessage.Got({ name })
@@ -170,8 +185,13 @@ const makeApp = (options?: {
     update: ($, message) =>
       ToolsMessage.match(message, {
         Get: ({ id }) =>
-          $.run(Load.make({ id }).pipe(Command.match({ onSuccess: got, onFailure: () => got("failed") }))),
-        Prefetch: ({ id }) => $.run(Warm.make({ id }).pipe(Command.map(() => got("prefetched")))),
+          $.run(
+            Load.make({ id }).pipe(
+              Command.match({ onSuccess: got, onFailure: () => got("failed") })
+            )
+          ),
+        Prefetch: ({ id }) =>
+          $.run(Warm.make({ id }).pipe(Command.map(() => got("prefetched")))),
         Got: ({ name }) => name
       }),
     view: (h, model) => h.el("p", model)
@@ -188,16 +208,29 @@ const makeApp = (options?: {
     ListMessage,
     Tools,
     ToolsMessage,
-    layer: Layer.mergeAll(RenameUser.layer, Load.layer, Warm.layer).pipe(Layer.provideMerge(GetUser.layer))
+    layer: Layer.mergeAll(RenameUser.layer, Load.layer, Warm.layer).pipe(
+      Layer.provideMerge(GetUser.layer)
+    )
   }
 }
 
 /** Runs a test on a fresh TestHost, with the app's reads and Commands built for the whole test. */
-const run = <A, E>(layer: Layer.Layer<any>, effect: Effect.Effect<A, E, any>, flush?: TestHost.Flush) =>
-  effect.pipe(Effect.provide(layer), Effect.scoped, Effect.provide(TestHost.layer({ flush }))) as Effect.Effect<A, E>
+const run = <A, E>(
+  layer: Layer.Layer<any>,
+  effect: Effect.Effect<A, E, any>,
+  flush?: TestHost.Flush
+) =>
+  effect.pipe(
+    Effect.provide(layer),
+    Effect.scoped,
+    Effect.provide(TestHost.layer({ flush }))
+  ) as Effect.Effect<A, E>
 
 /** Starts what is due and lets the fetches finish: each fetcher sleeps 10 ms. */
-const load = TestHost.settle.pipe(Effect.andThen(TestClock.adjust("10 millis")), Effect.andThen(TestHost.settle))
+const load = TestHost.settle.pipe(
+  Effect.andThen(TestClock.adjust("10 millis")),
+  Effect.andThen(TestHost.settle)
+)
 
 type Root = Pick<TestHost.TestRoot<any, any, any>, "fetches">
 const triggers = (root: Root) => root.fetches().map((fetch) => fetch.trigger)
@@ -214,11 +247,14 @@ describe("Query results", () => {
         yield* TestClock.adjust("10 millis")
         // The clock wake drained the scheduler: no settle needed.
         assert.strictEqual(root.text(), "a=Ann")
-        assert.deepStrictEqual(root.fetches().map((f) => [f.query, f.logKey, f.trigger]), [[
-          "users/GetUser",
-          "{\"id\":\"1\"}",
-          "watch"
-        ]])
+        assert.deepStrictEqual(
+          root.fetches().map((f) => [f.query, f.logKey, f.trigger]),
+          [[
+            "users/GetUser",
+            "{\"id\":\"1\"}",
+            "watch"
+          ]]
+        )
         assert.deepStrictEqual(root.frames(), ["a=loading", "a=Ann"])
         const entry = root.entry(app.GetUser, { id: "1" })!
         assert.strictEqual(entry.watchers, 1)
@@ -249,7 +285,10 @@ describe("Query results", () => {
         yield* TestClock.adjust("200 millis")
         yield* load
         assert.strictEqual(root.text(), "a=Bea")
-        assert.deepStrictEqual(root.fetches().map((fetch) => fetch.logKey), ["{\"id\":\"1\"}", "{\"id\":\"2\"}"])
+        assert.deepStrictEqual(root.fetches().map((fetch) => fetch.logKey), [
+          "{\"id\":\"1\"}",
+          "{\"id\":\"2\"}"
+        ])
       })
     )
   })
@@ -377,8 +416,18 @@ describe("Query results", () => {
       view: (h, swapped) =>
         h.el(
           "div",
-          h.el("section", swapped ? [app.Card(h, { key: "new", props: { id: "1", tag: "n" } })] : []),
-          h.el("section", swapped ? [] : [app.Card(h, { key: "old", props: { id: "1", tag: "o" } })])
+          h.el(
+            "section",
+            swapped
+              ? [app.Card(h, { key: "new", props: { id: "1", tag: "n" } })]
+              : []
+          ),
+          h.el(
+            "section",
+            swapped
+              ? []
+              : [app.Card(h, { key: "old", props: { id: "1", tag: "o" } })]
+          )
         )
     })
     return run(
@@ -409,11 +458,14 @@ describe("Query results", () => {
         // b is created first in document order, and a, kept, moves from 1 to 2 after it.
         root.send(app.ListMessage.Set({ cards: ["b:1", "a:2"] }))
         yield* TestHost.settle
-        assert.deepStrictEqual(root.fetches().map((fetch) => [fetch.logKey, fetch.trigger]), [
-          ["{\"id\":\"1\"}", "watch"],
-          ["{\"id\":\"1\"}", "watch"],
-          ["{\"id\":\"2\"}", "watch"]
-        ])
+        assert.deepStrictEqual(
+          root.fetches().map((fetch) => [fetch.logKey, fetch.trigger]),
+          [
+            ["{\"id\":\"1\"}", "watch"],
+            ["{\"id\":\"1\"}", "watch"],
+            ["{\"id\":\"2\"}", "watch"]
+          ]
+        )
         assert.strictEqual(root.entry(app.GetUser, { id: "1" })?.watchers, 1)
         yield* load
         assert.strictEqual(root.text(), "b=Anna=Bea")
@@ -433,7 +485,13 @@ describe("Query results", () => {
     }).make({
       init: () => null,
       update: ($) => $.model,
-      view: (h) => h.el("div", h.props.show ? [app.Card(h, { key: "old", props: { id: "1", tag: "o" } })] : [])
+      view: (h) =>
+        h.el(
+          "div",
+          h.props.show
+            ? [app.Card(h, { key: "old", props: { id: "1", tag: "o" } })]
+            : []
+        )
     })
     const Page = Component.define({
       name: "Page",
@@ -446,7 +504,12 @@ describe("Query results", () => {
       view: (h, swapped) =>
         h.el(
           "div",
-          h.el("section", swapped ? [app.Card(h, { key: "new", props: { id: "1", tag: "n" } })] : []),
+          h.el(
+            "section",
+            swapped
+              ? [app.Card(h, { key: "new", props: { id: "1", tag: "n" } })]
+              : []
+          ),
           Shell(h, { key: "shell", props: { show: !swapped } })
         )
     })
@@ -480,7 +543,10 @@ describe("Query results", () => {
         // a, kept and first, re-keys to 1 before b, which watched 1, is removed.
         root.send(app.ListMessage.Set({ cards: ["a:1"] }))
         yield* TestHost.settle
-        assert.deepStrictEqual(root.fetches().map((fetch) => fetch.logKey).slice(2), ["{\"id\":\"1\"}"])
+        assert.deepStrictEqual(
+          root.fetches().map((fetch) => fetch.logKey).slice(2),
+          ["{\"id\":\"1\"}"]
+        )
         assert.strictEqual(root.entry(app.GetUser, { id: "1" })?.watchers, 1)
         assert.strictEqual(root.text(), "a=Ann…")
         yield* load
@@ -490,8 +556,13 @@ describe("Query results", () => {
   })
 
   /** Watches user `id`, and records each message's result as "tag Tag:waiting". */
-  const makeWatcher = (app: ReturnType<typeof makeApp>, messages: Array<string>) => {
-    const WatchMessage = UiSchema.TaggedEnum({ Changed: { state: Schema.String } })
+  const makeWatcher = (
+    app: ReturnType<typeof makeApp>,
+    messages: Array<string>
+  ) => {
+    const WatchMessage = UiSchema.TaggedEnum({
+      Changed: { state: Schema.String }
+    })
     return Component.define({
       name: "Watcher",
       scoped: false,
@@ -502,7 +573,8 @@ describe("Query results", () => {
         user: {
           query: app.GetUser,
           args: ({ props }) => ({ id: props.id }),
-          onChange: (result) => WatchMessage.Changed({ state: `${result._tag}:${result.waiting}` })
+          onChange: (result) =>
+            WatchMessage.Changed({ state: `${result._tag}:${result.waiting}` })
         }
       }
     }).make({
@@ -511,7 +583,11 @@ describe("Query results", () => {
         messages.push(`${$.props.tag} ${message.state}`)
         return $.model
       },
-      view: (h) => h.el("p", `${h.props.tag}=${h.queries.user._tag}:${h.queries.user.waiting}`)
+      view: (h) =>
+        h.el(
+          "p",
+          `${h.props.tag}=${h.queries.user._tag}:${h.queries.user.waiting}`
+        )
     })
   }
 
@@ -529,7 +605,13 @@ describe("Query results", () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => h.el("div", h.props.show ? [Watcher(h, { key: "old", props: { id: "9", tag: "o" } })] : [])
+        view: (h) =>
+          h.el(
+            "div",
+            h.props.show
+              ? [Watcher(h, { key: "old", props: { id: "9", tag: "o" } })]
+              : []
+          )
       })
       const Page = Component.define({
         name: "Page",
@@ -542,10 +624,20 @@ describe("Query results", () => {
         view: (h, swapped) =>
           h.el(
             "div",
-            h.el("section", swapped ? [Watcher(h, { key: "new", props: { id: "9", tag: "n" } })] : []),
+            h.el(
+              "section",
+              swapped
+                ? [Watcher(h, { key: "new", props: { id: "9", tag: "n" } })]
+                : []
+            ),
             extracted
               ? Shell(h, { key: "shell", props: { show: !swapped } })
-              : h.el("div", swapped ? [] : [Watcher(h, { key: "old", props: { id: "9", tag: "o" } })])
+              : h.el(
+                "div",
+                swapped
+                  ? []
+                  : [Watcher(h, { key: "old", props: { id: "9", tag: "o" } })]
+              )
           )
       })
       return run(
@@ -578,7 +670,12 @@ describe("Query results", () => {
           triggers: ["watch", "watch"] as Array<Query.Trigger>
         },
         settled: ["n Failure:false"],
-        frames: ["o=Initial:true", "o=Failure:false", "n=Initial:true", "n=Failure:false"]
+        frames: [
+          "o=Initial:true",
+          "o=Failure:false",
+          "n=Initial:true",
+          "n=Failure:false"
+        ]
       }
       assert.deepStrictEqual(yield* swap(false), expected)
       assert.deepStrictEqual(yield* swap(true), expected)
@@ -586,14 +683,29 @@ describe("Query results", () => {
   })
 
   it.effect("watch: a bare Failure stored while a pass is open, or in an earlier one, is withheld in either layout", () => {
-    const swap = (timing: "this pass" | "an earlier pass", extracted: boolean) => {
+    const swap = (
+      timing: "this pass" | "an earlier pass",
+      extracted: boolean
+    ) => {
       // The fetcher waits for the test to finish it.
-      const finish = new Map<string, (effect: Effect.Effect<string, string>) => void>()
+      const finish = new Map<
+        string,
+        (effect: Effect.Effect<string, string>) => void
+      >()
       const messages: Array<string> = []
       class Read extends Query.Service<Read>()(
         "test/Read",
-        { args: { id: Schema.String }, success: Schema.String, error: Schema.String, staleTime: "1 second" },
-        Effect.succeed(({ id }) => Effect.callback<string, string>((resume) => void finish.set(id, resume)))
+        {
+          args: { id: Schema.String },
+          success: Schema.String,
+          error: Schema.String,
+          staleTime: "1 second"
+        },
+        Effect.succeed(({ id }) =>
+          Effect.callback<string, string>((resume) =>
+            void finish.set(id, resume)
+          )
+        )
       ) {}
       const Message = UiSchema.TaggedEnum({ Changed: { state: Schema.String } })
       const Watcher = Component.define({
@@ -606,7 +718,8 @@ describe("Query results", () => {
           data: {
             query: Read,
             args: () => ({ id: "fail" }),
-            onChange: (result) => Message.Changed({ state: `${result._tag}:${result.waiting}` })
+            onChange: (result) =>
+              Message.Changed({ state: `${result._tag}:${result.waiting}` })
           }
         }
       }).make({
@@ -615,7 +728,11 @@ describe("Query results", () => {
           messages.push(`${$.props.tag} ${message.state}`)
           return $.model
         },
-        view: (h) => h.el("p", `${h.props.tag}=${h.queries.data._tag}:${h.queries.data.waiting}`)
+        view: (h) =>
+          h.el(
+            "p",
+            `${h.props.tag}=${h.queries.data._tag}:${h.queries.data.waiting}`
+          )
       })
       const Shell = Component.define({
         name: "Shell",
@@ -626,7 +743,13 @@ describe("Query results", () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => h.el("div", h.props.show ? [Watcher(h, { key: "old", props: { tag: "o" } })] : [])
+        view: (h) =>
+          h.el(
+            "div",
+            h.props.show
+              ? [Watcher(h, { key: "old", props: { tag: "o" } })]
+              : []
+          )
       })
       const PageMessage = UiSchema.TaggedEnum({
         Enable: {},
@@ -635,9 +758,17 @@ describe("Query results", () => {
       const Page = Component.define({
         name: "Page",
         scoped: false,
-        model: Schema.Struct({ enabled: Schema.Boolean, swapped: Schema.Boolean }),
+        model: Schema.Struct({
+          enabled: Schema.Boolean,
+          swapped: Schema.Boolean
+        }),
         message: PageMessage,
-        queries: { other: { query: Read, args: ({ model }) => model.enabled ? { id: "other" } : undefined } }
+        queries: {
+          other: {
+            query: Read,
+            args: ({ model }) => model.enabled ? { id: "other" } : undefined
+          }
+        }
       }).make({
         init: () => ({ enabled: false, swapped: false }),
         update: ($, message) =>
@@ -648,10 +779,20 @@ describe("Query results", () => {
         view: (h, model) =>
           h.el(
             "div",
-            h.el("section", model.swapped ? [Watcher(h, { key: "new", props: { tag: "n" } })] : []),
+            h.el(
+              "section",
+              model.swapped
+                ? [Watcher(h, { key: "new", props: { tag: "n" } })]
+                : []
+            ),
             extracted
               ? Shell(h, { key: "shell", props: { show: !model.swapped } })
-              : h.el("div", model.swapped ? [] : [Watcher(h, { key: "old", props: { tag: "o" } })])
+              : h.el(
+                "div",
+                model.swapped
+                  ? []
+                  : [Watcher(h, { key: "old", props: { tag: "o" } })]
+              )
           )
       })
       return run(
@@ -671,7 +812,9 @@ describe("Query results", () => {
             text: root.text(),
             frames: root.frames(),
             stored: root.entry(Read, { id: "fail" })?.stored._tag,
-            fetches: root.fetches().map((fetch) => `${fetch.trigger} ${fetch.logKey}`)
+            fetches: root.fetches().map((fetch) =>
+              `${fetch.trigger} ${fetch.logKey}`
+            )
           }
         })
       )
@@ -686,10 +829,22 @@ describe("Query results", () => {
             ? ["o=Initial:true", "n=Initial:true"]
             : ["o=Initial:true", "o=Failure:false", "n=Initial:true"],
           stored: "Initial" as const,
-          fetches: ["watch {\"id\":\"fail\"}", "watch {\"id\":\"other\"}", "watch {\"id\":\"fail\"}"]
+          fetches: [
+            "watch {\"id\":\"fail\"}",
+            "watch {\"id\":\"other\"}",
+            "watch {\"id\":\"fail\"}"
+          ]
         }
-        assert.deepStrictEqual(yield* swap(timing, false), expected, `${timing}, inlined`)
-        assert.deepStrictEqual(yield* swap(timing, true), expected, `${timing}, extracted`)
+        assert.deepStrictEqual(
+          yield* swap(timing, false),
+          expected,
+          `${timing}, inlined`
+        )
+        assert.deepStrictEqual(
+          yield* swap(timing, true),
+          expected,
+          `${timing}, extracted`
+        )
       }
     })
   })
@@ -757,11 +912,17 @@ describe("Query results", () => {
       update: ($) => $.emit($.props.id),
       view: (h) => h.el("p", "emitter")
     })
-    const ParentMessage = UiSchema.TaggedEnum({ Switch: {}, Noted: { label: Schema.String } })
+    const ParentMessage = UiSchema.TaggedEnum({
+      Switch: {},
+      Noted: { label: Schema.String }
+    })
     const Parent = Component.define({
       name: "Parent",
       scoped: false,
-      model: Schema.Struct({ switched: Schema.Boolean, labels: Schema.Array(Schema.String) }),
+      model: Schema.Struct({
+        switched: Schema.Boolean,
+        labels: Schema.Array(Schema.String)
+      }),
       message: ParentMessage
     }).make({
       init: () => ({ switched: false, labels: [] }),
@@ -776,7 +937,10 @@ describe("Query results", () => {
           Emitter(h, {
             key: "emitter",
             props: { id: model.switched ? "2" : "1" },
-            onEmit: (id) => ParentMessage.Noted({ label: (model.switched ? "new " : "old ") + id })
+            onEmit: (id) =>
+              ParentMessage.Noted({
+                label: (model.switched ? "new " : "old ") + id
+              })
           })
         )
     })
@@ -796,9 +960,11 @@ describe("Query results", () => {
     const app = makeApp()
     // Stopping it takes 10 seconds of uninterruptible cleanup.
     let cleaned = false
-    const cleanup = Effect.sleep("10 seconds").pipe(Effect.andThen(Effect.sync(() => {
-      cleaned = true
-    })))
+    const cleanup = Effect.sleep("10 seconds").pipe(
+      Effect.andThen(Effect.sync(() => {
+        cleaned = true
+      }))
+    )
     const Hold = Command.make(
       "Hold",
       { args: {} },
@@ -829,7 +995,8 @@ describe("Query results", () => {
       view: (h) =>
         Bad(h, {
           key: "bad",
-          fallback: () => app.Card(h, { key: "fallback", props: { id: "1", tag: "f" } })
+          fallback: () =>
+            app.Card(h, { key: "fallback", props: { id: "1", tag: "f" } })
         })
     })
     return run(
@@ -849,7 +1016,12 @@ describe("Query results", () => {
           text: root.text()
         }
         yield* TestClock.adjust("10 seconds")
-        assert.deepStrictEqual(during, { cleaned: false, watchers: 1, triggers: ["watch", "watch"], text: "f=Ann…" })
+        assert.deepStrictEqual(during, {
+          cleaned: false,
+          watchers: 1,
+          triggers: ["watch", "watch"],
+          text: "f=Ann…"
+        })
         assert.isTrue(cleaned)
         assert.strictEqual(root.text(), "f=Ann")
         assert.strictEqual(root.entry(app.GetUser, { id: "1" })?.watchers, 1)
@@ -908,7 +1080,12 @@ describe("Query results", () => {
         root.send(app.ListMessage.Set({ cards: ["a:1", "c:1", "b:1"] }))
         yield* TestHost.settle
         // Each folds the cache's value through update before its first render.
-        assert.deepStrictEqual(app.order, ["update c UserChanged", "view c Ann", "update b UserChanged", "view b Ann"])
+        assert.deepStrictEqual(app.order, [
+          "update c UserChanged",
+          "view c Ann",
+          "update b UserChanged",
+          "view b Ann"
+        ])
         assert.strictEqual(root.text(), "a=Annc=Annb=Ann")
         assert.strictEqual(app.db.calls, 2)
       })
@@ -919,11 +1096,15 @@ describe("Query results", () => {
     const app = makeApp()
     const seen: Array<string> = []
     const Message = UiSchema.TaggedEnum({ UserChanged: {}, Noted: {} })
-    const Note = Command.make("Note", { args: { text: Schema.String } }, ({ text }) =>
-      Effect.sync(() => {
-        seen.push(`command ${text}`)
-        return Message.Noted()
-      }))
+    const Note = Command.make(
+      "Note",
+      { args: { text: Schema.String } },
+      ({ text }) =>
+        Effect.sync(() => {
+          seen.push(`command ${text}`)
+          return Message.Noted()
+        })
+    )
     const Noter = Component.define({
       name: "Noter",
       scoped: false,
@@ -960,7 +1141,11 @@ describe("Query results", () => {
       init: () => false,
       update: (_, message) => message,
       view: (h, show) =>
-        h.el("div", app.Card(h, { key: "a", props: { id: "1", tag: "a" } }), show && Noter(h, { key: "n" }))
+        h.el(
+          "div",
+          app.Card(h, { key: "a", props: { id: "1", tag: "a" } }),
+          show && Noter(h, { key: "n" })
+        )
     })
     return run(
       app.layer,
@@ -988,7 +1173,9 @@ describe("Query results", () => {
       app.layer,
       Effect.gen(function*() {
         const root = yield* Effect.scoped(Effect.gen(function*() {
-          const root = yield* TestHost.mount(app.List, { cards: ["a:1", "b:2"] })
+          const root = yield* TestHost.mount(app.List, {
+            cards: ["a:1", "b:2"]
+          })
           yield* load
           root.send(app.ListMessage.Set({ cards: ["a:1"] }))
           yield* TestHost.settle
@@ -996,7 +1183,10 @@ describe("Query results", () => {
           assert.strictEqual(root.entry(app.GetUser, { id: "2" })?.watchers, 0)
           return root
         }))
-        assert.strictEqual(root.entry(app.GetUser, { id: "1" })?.watchers ?? 0, 0)
+        assert.strictEqual(
+          root.entry(app.GetUser, { id: "1" })?.watchers ?? 0,
+          0
+        )
       })
     )
   })
@@ -1027,7 +1217,10 @@ describe("Query results", () => {
         yield* load
         assert.strictEqual(root.text(), "a=Bobb=Bob")
         assert.deepStrictEqual(triggers(root), ["watch", "invalidation"])
-        assert.deepStrictEqual(root.entry(app.GetUser, { id: "1" })?.patches, { live: 0, held: 0 })
+        assert.deepStrictEqual(root.entry(app.GetUser, { id: "1" })?.patches, {
+          live: 0,
+          held: 0
+        })
       })
     )
   })
@@ -1044,7 +1237,10 @@ describe("Query results", () => {
         assert.strictEqual(root.text(), "a=~")
         yield* TestClock.adjust("10 millis")
         // The patch is gone, and the refetch a failure also asks for is in flight.
-        assert.deepStrictEqual(root.entry(app.GetUser, { id: "1" })?.patches, { live: 0, held: 0 })
+        assert.deepStrictEqual(root.entry(app.GetUser, { id: "1" })?.patches, {
+          live: 0,
+          held: 0
+        })
         assert.strictEqual(root.text(), "a=Ann…")
         yield* load
         assert.strictEqual(root.text(), "a=Ann")
@@ -1116,7 +1312,9 @@ describe("Query results", () => {
         yield* load
         assert.strictEqual(root.text(), "Bea")
         assert.deepStrictEqual(triggers(root), ["get"])
-        assert.isTrue(AsyncResult.isSuccess(root.entry(app.GetUser, { id: "2" })!.stored))
+        assert.isTrue(
+          AsyncResult.isSuccess(root.entry(app.GetUser, { id: "2" })!.stored)
+        )
       })
     )
   })
@@ -1131,7 +1329,9 @@ describe("Query results", () => {
         yield* load
         assert.strictEqual(root.text(), "prefetched")
         assert.deepStrictEqual(triggers(root), ["prefetch"])
-        assert.isTrue(AsyncResult.isSuccess(root.entry(app.GetUser, { id: "2" })!.stored))
+        assert.isTrue(
+          AsyncResult.isSuccess(root.entry(app.GetUser, { id: "2" })!.stored)
+        )
         // A prefetch of a fresh entry starts nothing.
         root.send(app.ToolsMessage.Prefetch({ id: "2" }))
         yield* load
@@ -1170,22 +1370,44 @@ describe("Query results", () => {
       } as any)
     const args = () => ({ id: "1" })
     assert.throws(() => make(42), /Bad: queries must be a record/)
-    assert.throws(() => make({ user: args }), /Bad: queries\.user must be \{ query, args \} or \{ queryMany, args \}/)
-    assert.throws(() => make({ user: { args } }), /queries\.user must have exactly one of query and queryMany/)
     assert.throws(
-      () => make({ user: { query: app.GetUser, queryMany: app.GetUser, args } }),
+      () => make({ user: args }),
+      /Bad: queries\.user must be \{ query, args \} or \{ queryMany, args \}/
+    )
+    assert.throws(
+      () => make({ user: { args } }),
+      /queries\.user must have exactly one of query and queryMany/
+    )
+    assert.throws(
+      () =>
+        make({ user: { query: app.GetUser, queryMany: app.GetUser, args } }),
       /must have exactly one of query and queryMany/
     )
-    assert.throws(() => make({ user: { query: "users/GetUser", args } }), /has a query that isn't a Query/)
-    assert.throws(() => make({ user: { queryMany: {}, args } }), /has a queryMany that isn't a Query/)
-    assert.throws(() => make({ user: { query: app.GetUser } }), /must have an args function/)
+    assert.throws(
+      () => make({ user: { query: "users/GetUser", args } }),
+      /has a query that isn't a Query/
+    )
+    assert.throws(
+      () => make({ user: { queryMany: {}, args } }),
+      /has a queryMany that isn't a Query/
+    )
+    assert.throws(
+      () => make({ user: { query: app.GetUser } }),
+      /must have an args function/
+    )
     assert.throws(
       () => make({ user: { query: app.GetUser, args, onChange: 1 } }),
       /has an onChange that isn't a function/
     )
-    assert.throws(() => make({ users: { queryMany: ListUsers, args: () => [{}] } }), /An infinite query takes query/)
+    assert.throws(
+      () => make({ users: { queryMany: ListUsers, args: () => [{}] } }),
+      /An infinite query takes query/
+    )
     // The well-formed entries pass.
-    make({ user: { query: app.GetUser, args }, users: { query: ListUsers, args: () => ({}) } })
+    make({
+      user: { query: app.GetUser, args },
+      users: { query: ListUsers, args: () => ({}) }
+    })
     make({ users: { queryMany: app.GetUser, args: () => [{ id: "1" }] } })
   })
 
@@ -1197,8 +1419,14 @@ describe("Query results", () => {
       model: Schema.Struct({}),
       message: Schema.Never,
       queries: {
-        a: { query: app.GetUser, args: ({ queries }: any) => (queries.b, { id: "1" }) },
-        b: { query: app.GetUser, args: ({ queries }: any) => (queries.a, { id: "2" }) }
+        a: {
+          query: app.GetUser,
+          args: ({ queries }: any) => (queries.b, { id: "1" })
+        },
+        b: {
+          query: app.GetUser,
+          args: ({ queries }: any) => (queries.a, { id: "2" })
+        }
       }
     } as any).make({
       init: () => ({}),
@@ -1217,7 +1445,10 @@ describe("Query results", () => {
   })
 
   it.effect("Schema.Redacted in a query's args and success: the log is redacted, the Model and the cache are not", () => {
-    const Account = Schema.Struct({ id: Schema.String, secret: Schema.Redacted(Schema.String) })
+    const Account = Schema.Struct({
+      id: Schema.String,
+      secret: Schema.Redacted(Schema.String)
+    })
     class GetAccount extends Query.Service<GetAccount>()(
       "accounts/GetAccount",
       {
@@ -1227,7 +1458,10 @@ describe("Query results", () => {
         staleTime: "30 seconds"
       },
       Effect.succeed(({ token }) =>
-        Effect.succeed({ id: "acc", secret: Redacted.make(`secret-of-${Redacted.value(token)}`) })
+        Effect.succeed({
+          id: "acc",
+          secret: Redacted.make(`secret-of-${Redacted.value(token)}`)
+        })
       )
     ) {}
     const Page = Component.define({
@@ -1236,27 +1470,48 @@ describe("Query results", () => {
       props: Schema.Struct({ token: Schema.Redacted(Schema.String) }),
       model: Schema.Struct({}),
       message: Schema.Never,
-      queries: { account: { query: GetAccount, args: ({ props }) => ({ token: props.token }) } }
+      queries: {
+        account: {
+          query: GetAccount,
+          args: ({ props }) => ({ token: props.token })
+        }
+      }
     }).make({
       init: () => ({}),
       update: ($) => $.model,
       view: (h) =>
-        h.el("p", AsyncResult.isSuccess(h.queries.account) ? Redacted.value(h.queries.account.value.secret) : "…")
+        h.el(
+          "p",
+          AsyncResult.isSuccess(h.queries.account)
+            ? Redacted.value(h.queries.account.value.secret)
+            : "…"
+        )
     })
     return run(
       GetAccount.layer,
       Effect.gen(function*() {
-        const root = yield* TestHost.mount(Page, { token: Redacted.make("tok-123") })
+        const root = yield* TestHost.mount(Page, {
+          token: Redacted.make("tok-123")
+        })
         yield* TestHost.settle
         // Page state keeps the real values: the result's key and value as the state's JSON codec writes them.
         assert.strictEqual(root.text(), "secret-of-tok-123")
-        const changed = root.log().filter((entry) => entry._tag === "QueryChanged")
+        const changed = root.log().filter((entry) =>
+          entry._tag === "QueryChanged"
+        )
         assert.deepStrictEqual(changed.map((entry) => entry.name), ["account"])
         // Page state is { model, queries }, with the results encoded by the queries' Schemas.
-        const queries = (Page["~queries"] as { readonly schema: Schema.Codec<unknown, unknown> }).schema
-        const codec = Schema.toCodecJson(Schema.Struct({ model: Page.model, queries }))
+        const queries = (Page["~queries"] as {
+          readonly schema: Schema.Codec<unknown, unknown>
+        }).schema
+        const codec = Schema.toCodecJson(
+          Schema.Struct({ model: Page.model, queries })
+        )
         const state = JSON.stringify(
-          Schema.encodeUnknownSync(codec)({ model: root.model(), queries: { account: changed[0].result } })
+          Schema.encodeUnknownSync(codec)({
+            model: root.model(),
+            queries: { account: changed[0].result }
+          })
         )
         assert.include(state, "tok-123")
         assert.include(state, "secret-of-tok-123")
@@ -1264,7 +1519,9 @@ describe("Query results", () => {
         const fetch = root.fetches()[0]
         assert.notInclude(fetch.logKey, "tok-123")
         const encoder = MessageLog.makeEncoder()
-        const wire = JSON.stringify(root.log().map((entry) => encoder.encode(entry)))
+        const wire = JSON.stringify(
+          root.log().map((entry) => encoder.encode(entry))
+        )
         assert.notInclude(wire, "tok-123")
         assert.notInclude(wire, "secret-of")
         assert.include(wire, "FetchStarted")
@@ -1281,7 +1538,14 @@ describe("Query results", () => {
         args: { id: Schema.String },
         invalidates: () => [],
         // The patched value fails the query's success Schema.
-        optimistic: ({ id }) => [app.GetUser.patch({ id }, (user) => ({ ...user, name: 42 as unknown as string }))]
+        optimistic: (
+          { id }
+        ) => [
+          app.GetUser.patch(
+            { id },
+            (user) => ({ ...user, name: 42 as unknown as string })
+          )
+        ]
       },
       Effect.succeed(() => Effect.never)
     ) {}
@@ -1294,7 +1558,10 @@ describe("Query results", () => {
       queries: { user: { query: app.GetUser, args: () => ({ id: "1" }) } }
     }).make({
       init: () => ({}),
-      update: ($) => $.run(BadRename.make({ id: "1" }).pipe(Command.map(() => Message.Break()))),
+      update: ($) =>
+        $.run(
+          BadRename.make({ id: "1" }).pipe(Command.map(() => Message.Break()))
+        ),
       view: (h) => h.el("p", "breaker")
     })
     return run(
@@ -1306,11 +1573,14 @@ describe("Query results", () => {
         const error = yield* Effect.flip(TestHost.settle)
         assert.strictEqual(error._tag, "ProblemsError")
         const [problem] = yield* TestHost.expectProblem("PatchInvalid")
-        assert.deepStrictEqual([problem.query, problem.logKey, problem.command], [
-          "users/GetUser",
-          `{"id":"1"}`,
-          "users/BadRename"
-        ])
+        assert.deepStrictEqual(
+          [problem.query, problem.logKey, problem.command],
+          [
+            "users/GetUser",
+            `{"id":"1"}`,
+            "users/BadRename"
+          ]
+        )
         assert.deepStrictEqual(yield* TestHost.problems, [])
         // Taken: settle passes, and the patched value is shown as it is.
         yield* TestHost.settle
@@ -1326,7 +1596,11 @@ describe("Query results", () => {
       { args: {} },
       () => Effect.sleep("1 millis").pipe(Effect.as(Message.Tick()))
     )
-    const Spin = Command.make("Spin", { args: {} }, () => Effect.succeed(Message.Tick()))
+    const Spin = Command.make(
+      "Spin",
+      { args: {} },
+      () => Effect.succeed(Message.Tick())
+    )
     const Spinner = Component.define({
       name: "Spinner",
       scoped: false,

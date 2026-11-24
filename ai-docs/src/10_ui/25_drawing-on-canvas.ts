@@ -13,7 +13,11 @@ import { Effect, Layer, Schema } from "effect"
 const WIDTH = 400
 const HEIGHT = 300
 
-const Comet = Schema.Struct({ x: Schema.Number, y: Schema.Number, speed: Schema.Number })
+const Comet = Schema.Struct({
+  x: Schema.Number,
+  y: Schema.Number,
+  speed: Schema.Number
+})
 
 const SkyMessage = UiSchema.TaggedEnum({
   TickedFrame: { delta: Schema.Number },
@@ -29,14 +33,19 @@ const SkyMessage = UiSchema.TaggedEnum({
 // nestable `Group` that translates, rotates, scales and fades what it holds.
 // The constructors skip validation, so building a scene every frame is cheap.
 // Each shape is a Schema too, so a Model can hold shapes.
-export const sceneOf = (comets: ReadonlyArray<typeof Comet.Type>): ReadonlyArray<Canvas.Shape> => [
+export const sceneOf = (
+  comets: ReadonlyArray<typeof Comet.Type>
+): ReadonlyArray<Canvas.Shape> => [
   Canvas.Rect({ x: 0, y: 0, width: WIDTH, height: HEIGHT, fill: "#000814" }),
   ...comets.map(({ x, y }) =>
     Canvas.Group({
       translate: { x, y },
       shapes: [
         Canvas.Path({
-          commands: [Canvas.PathCommand.MoveTo({ x: 0, y: 0 }), Canvas.PathCommand.LineTo({ x: -30, y: 0 })],
+          commands: [
+            Canvas.PathCommand.MoveTo({ x: 0, y: 0 }),
+            Canvas.PathCommand.LineTo({ x: -30, y: 0 })
+          ],
           stroke: "#ffd60a",
           lineWidth: 2,
           lineCap: "round"
@@ -45,7 +54,13 @@ export const sceneOf = (comets: ReadonlyArray<typeof Comet.Type>): ReadonlyArray
       ]
     })
   ),
-  Canvas.Text({ x: 8, y: 20, content: `${comets.length} comets`, font: "14px sans-serif", fill: "#fff" })
+  Canvas.Text({
+    x: 8,
+    y: 20,
+    content: `${comets.length} comets`,
+    font: "14px sans-serif",
+    fill: "#fff"
+  })
 ]
 
 // ---------------------------------------------------------------------------
@@ -75,7 +90,10 @@ export const sceneOf = (comets: ReadonlyArray<typeof Comet.Type>): ReadonlyArray
 export const Sky = Component.define({
   name: "Sky",
   scoped: false,
-  model: Schema.Struct({ running: Schema.Boolean, comets: Schema.Array(Comet) }),
+  model: Schema.Struct({
+    running: Schema.Boolean,
+    comets: Schema.Array(Comet)
+  }),
   message: SkyMessage,
   elements: Html
 }).make({
@@ -84,13 +102,20 @@ export const Sky = Component.define({
     TickedFrame: ($, { delta }) =>
       $.evolve({
         comets: (comets) =>
-          comets.map((comet) => ({ ...comet, x: (comet.x + comet.speed * Math.min(delta, 50) / 1000) % WIDTH }))
+          comets.map((comet) => ({
+            ...comet,
+            x: (comet.x + comet.speed * Math.min(delta, 50) / 1000) % WIDTH
+          }))
       }),
-    PressedSky: ($, { x, y }) => $.evolve({ comets: [...$.model.comets, { x, y, speed: 120 }] }),
+    PressedSky: ($, { x, y }) =>
+      $.evolve({ comets: [...$.model.comets, { x, y, speed: 120 }] }),
     ClickedPause: ($) => $.evolve({ running: !$.model.running })
   },
   subscriptions: ({ model }) => [
-    model.running && HtmlSubscription.onAnimationFrame((delta) => SkyMessage.TickedFrame({ delta }))
+    model.running &&
+    HtmlSubscription.onAnimationFrame((delta) =>
+      SkyMessage.TickedFrame({ delta })
+    )
   ],
   view: (h, model) =>
     h.div(
@@ -101,7 +126,9 @@ export const Sky = Component.define({
         shapes: sceneOf(model.comets),
         onPointerDown: ({ x, y }) => SkyMessage.PressedSky({ x, y })
       }).style({ width: "100%" }).children("A night sky with comets"),
-      h.button.onClick(SkyMessage.ClickedPause()).children(model.running ? "Pause" : "Play")
+      h.button.onClick(SkyMessage.ClickedPause()).children(
+        model.running ? "Pause" : "Play"
+      )
     )
 })
 
@@ -113,9 +140,22 @@ export const Sky = Component.define({
 // asserts on it. `mounted` sends what a press would, in scene units, and
 // `frame(delta)` fires an animation frame.
 const paint = (comets: ReadonlyArray<typeof Comet.Type>) =>
-  Canvas.Paint({ width: WIDTH, height: HEIGHT, pixelRatio: "auto", listen: ["pointerdown"], shapes: sceneOf(comets) })
+  Canvas.Paint({
+    width: WIDTH,
+    height: HEIGHT,
+    pixelRatio: "auto",
+    listen: ["pointerdown"],
+    shapes: sceneOf(comets)
+  })
 
-const press = { button: 0, shift: false, ctrl: false, alt: false, meta: false, pointerType: "mouse" as const }
+const press = {
+  button: 0,
+  shift: false,
+  ctrl: false,
+  alt: false,
+  meta: false,
+  pointerType: "mouse" as const
+}
 
 export const pressedAndMoved = Effect.gen(function*() {
   const s = yield* HtmlScene.make(Sky, {})
@@ -140,4 +180,6 @@ export const moved = Effect.gen(function*() {
   yield* TestAnimationFrames.fire(500)
   yield* TestHost.settle
   return root.model()?.comets[0]?.x
-}).pipe(Effect.provide(Layer.merge(TestHost.layer(), TestAnimationFrames.layer)))
+}).pipe(
+  Effect.provide(Layer.merge(TestHost.layer(), TestAnimationFrames.layer))
+)

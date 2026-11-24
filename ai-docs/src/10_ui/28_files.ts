@@ -53,7 +53,10 @@ export const ReadCsv = Command.make(
     HtmlFiles.readAsText(file).pipe(
       Effect.match({
         onSuccess: (text) =>
-          ImportMessage.CompletedReadCsv({ name: file.name, rows: text.split("\n").filter(Boolean).length }),
+          ImportMessage.CompletedReadCsv({
+            name: file.name,
+            rows: text.split("\n").filter(Boolean).length
+          }),
         onFailure: () => ImportMessage.FailedReadCsv({ name: file.name })
       })
     )
@@ -86,35 +89,58 @@ export const CsvImport = Component.define({
   init: () => ImportModel.Idle(),
   update: {
     ChoseFiles: ($, { files: [file] }) =>
-      file === undefined ? $.model : $.set(ImportModel.Reading({ name: file.name })).run(ReadCsv.make({ file })),
+      file === undefined
+        ? $.model
+        : $.set(ImportModel.Reading({ name: file.name })).run(
+          ReadCsv.make({ file })
+        ),
     PressedOpen: ($) =>
-      $.run(HtmlFiles.pick(({ files }) => ImportMessage.ChoseFiles({ files }), { accept: [".csv", "text/csv"] })),
+      $.run(
+        HtmlFiles.pick(({ files }) => ImportMessage.ChoseFiles({ files }), {
+          accept: [".csv", "text/csv"]
+        })
+      ),
     ClickedCancel: ($) =>
       $.model._tag === "Reading"
-        ? $.set(ImportModel.Cancelled({ name: $.model.name })).run(Command.interrupt(ReadCsv))
+        ? $.set(ImportModel.Cancelled({ name: $.model.name })).run(
+          Command.interrupt(ReadCsv)
+        )
         : $.model,
-    CompletedReadCsv: (_, { name, rows }) => ImportModel.Imported({ name, rows }),
+    CompletedReadCsv: (_, { name, rows }) =>
+      ImportModel.Imported({ name, rows }),
     FailedReadCsv: (_, { name }) => ImportModel.Failed({ name })
   },
   view: (h, model) =>
     h.section(
       h.label.children(
         "Import a CSV file",
-        h.input.attrs({ type: "file", accept: ".csv,text/csv" }).class("visually-hidden").value("")
+        h.input.attrs({ type: "file", accept: ".csv,text/csv" }).class(
+          "visually-hidden"
+        ).value("")
           .onChange(({ files }) => ImportMessage.ChoseFiles({ files }))
       ),
       ImportModel.match(model, {
         Idle: () => null,
         Reading: ({ name }) =>
-          h.p(`Reading ${name}…`, h.button.onClick(ImportMessage.ClickedCancel()).children("Cancel")),
-        Imported: ({ name, rows }) => h.p(`Imported ${rows} rows from ${name}.`),
+          h.p(
+            `Reading ${name}…`,
+            h.button.onClick(ImportMessage.ClickedCancel()).children("Cancel")
+          ),
+        Imported: ({ name, rows }) =>
+          h.p(`Imported ${rows} rows from ${name}.`),
         Cancelled: ({ name }) => h.p(`Cancelled importing ${name}.`),
-        Failed: ({ name }) => h.p.attr("role", "alert").children(`Couldn't read ${name}.`)
+        Failed: ({ name }) =>
+          h.p.attr("role", "alert").children(`Couldn't read ${name}.`)
       })
     ),
   subscriptions: () => [
     HtmlSubscription.shortcuts([
-      { key: "o", mod: true, message: ImportMessage.PressedOpen(), whileTyping: true }
+      {
+        key: "o",
+        mod: true,
+        message: ImportMessage.PressedOpen(),
+        whileTyping: true
+      }
     ])
   ]
 })
@@ -126,7 +152,9 @@ export const CsvImport = Component.define({
 // `HtmlFiles.Pick` is the picker's Command, so a story resolves it with what
 // the user chose, as it resolves `ReadCsv` with what the read sent.
 export const pickedAndCancelled = Effect.gen(function*() {
-  const file = new File(["id,name\n1,Ada\n"], "people.csv", { type: "text/csv" })
+  const file = new File(["id,name\n1,Ada\n"], "people.csv", {
+    type: "text/csv"
+  })
   const s = yield* Story.make(CsvImport, {})
   s.send(ImportMessage.PressedOpen())
     .resolve(HtmlFiles.Pick, { opened: true, files: [file] })
@@ -141,10 +169,15 @@ export const pickedAndCancelled = Effect.gen(function*() {
 
 // `change` with `files` is the user choosing them in the file input.
 export const choseInInput = Effect.gen(function*() {
-  const file = new File(["id,name\n1,Ada\n2,Grace\n"], "people.csv", { type: "text/csv" })
+  const file = new File(["id,name\n1,Ada\n2,Grace\n"], "people.csv", {
+    type: "text/csv"
+  })
   const s = yield* HtmlScene.make(CsvImport, {})
   s.change(HtmlLocator.label("Import a CSV file"), { files: [file] })
     .expect(Locator.text("Reading people.csv…")).toExist()
-    .resolve(ReadCsv, ImportMessage.CompletedReadCsv({ name: "people.csv", rows: 3 }))
+    .resolve(
+      ReadCsv,
+      ImportMessage.CompletedReadCsv({ name: "people.csv", rows: 3 })
+    )
     .expect(Locator.text("Imported 3 rows from people.csv.")).toExist()
 })

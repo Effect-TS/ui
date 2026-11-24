@@ -10,21 +10,37 @@ export type Point = typeof Point.Type
 export const pointOf = ({ x, y }: Partial<Html.HoverPayload>): Point | null =>
   x === undefined || y === undefined ? null : { x, y }
 
-export const methodOf = (pointerType: string): "mouse" | "touch" | "pen" | "keyboard" =>
-  pointerType === "touch" || pointerType === "pen" ? pointerType : pointerType === "" ? "keyboard" : "mouse"
+export const methodOf = (
+  pointerType: string
+): "mouse" | "touch" | "pen" | "keyboard" =>
+  pointerType === "touch" || pointerType === "pen"
+    ? pointerType
+    : pointerType === ""
+    ? "keyboard"
+    : "mouse"
 
 export const onEscape = <M>(message: M): Subscription.Subscription<M> =>
-  HtmlSubscription.shortcuts([{ key: "Escape", message, whileTyping: true, repeat: true }])
+  HtmlSubscription.shortcuts([{
+    key: "Escape",
+    message,
+    whileTyping: true,
+    repeat: true
+  }])
 
-export const onScrollbar = (target: EventTarget | null, event: MouseEvent): boolean => {
+export const onScrollbar = (
+  target: EventTarget | null,
+  event: MouseEvent
+): boolean => {
   if (!(target instanceof HTMLElement)) return false
   const document = target.ownerDocument
   const style = document.defaultView?.getComputedStyle(target)
   if (style === undefined) return false
   const page = target === document.documentElement || target === document.body
-  const scrollsX = (page || /auto|scroll/.test(style.overflowX)) && target.clientWidth > 0 &&
+  const scrollsX = (page || /auto|scroll/.test(style.overflowX)) &&
+    target.clientWidth > 0 &&
     target.scrollWidth > target.clientWidth
-  const scrollsY = (page || /auto|scroll/.test(style.overflowY)) && target.clientHeight > 0 &&
+  const scrollsY = (page || /auto|scroll/.test(style.overflowY)) &&
+    target.clientHeight > 0 &&
     target.scrollHeight > target.clientHeight
   const onY = scrollsY && (style.direction === "rtl"
     ? event.offsetX <= target.offsetWidth - target.clientWidth

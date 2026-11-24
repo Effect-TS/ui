@@ -4,7 +4,8 @@ import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 
-const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
+const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(Effect.provide(TestHost.layer()))
 
 const Row = Component.define({
   name: "Row",
@@ -18,7 +19,9 @@ const Row = Component.define({
   view: (h) => h.el("li", h.props.label)
 })
 
-const ListMessage = UiSchema.TaggedEnum({ Set: { keys: Schema.Array(Schema.String) } })
+const ListMessage = UiSchema.TaggedEnum({
+  Set: { keys: Schema.Array(Schema.String) }
+})
 
 /** Renders a `Row` per key, either as siblings or each under its own element. */
 const makeList = (layout: "siblings" | "nested") =>
@@ -34,7 +37,10 @@ const makeList = (layout: "siblings" | "nested") =>
     view: (h, keys) =>
       layout === "siblings"
         ? h.el("ul", keys.map((key) => Row(h, { key, props: { label: key } })))
-        : h.el("div", keys.map((key) => h.el("ul", Row(h, { key, props: { label: key } }))))
+        : h.el(
+          "div",
+          keys.map((key) => h.el("ul", Row(h, { key, props: { label: key } })))
+        )
   })
 
 /** Holds the list as a child with a fallback, so the list's failure shows instead of crashing the root. */
@@ -65,7 +71,9 @@ const makePage = (layout: "siblings" | "nested") => {
 }
 
 const failure = (log: ReadonlyArray<MessageLog.Entry>) => {
-  const failed = log.filter((entry): entry is MessageLog.Failed => entry._tag === "Failed")
+  const failed = log.filter((entry): entry is MessageLog.Failed =>
+    entry._tag === "Failed"
+  )
   assert.strictEqual(failed.length, 1)
   return failed[0]
 }
@@ -74,23 +82,32 @@ describe("duplicate child paths", () => {
   for (const layout of ["siblings", "nested"] as const) {
     it.effect(`fail the parent on its first render, for ${layout}`, () =>
       provideHost(Effect.gen(function*() {
-        const root = yield* TestHost.mount(makePage(layout), { keys: ["a", "b", "a"] })
+        const root = yield* TestHost.mount(makePage(layout), {
+          keys: ["a", "b", "a"]
+        })
         yield* TestHost.settle
         assert.strictEqual(root.text(), "failed")
         const failed = failure(root.log())
         assert.strictEqual(failed.path, "/Page/List[l]")
         assert.strictEqual(failed.in, "view")
-        assert.include(Cause.pretty(failed.cause), "/Page/List[l] renders two children at Row[a]")
+        assert.include(
+          Cause.pretty(failed.cause),
+          "/Page/List[l] renders two children at Row[a]"
+        )
         // No row of the failed list stays mounted.
         assert.deepStrictEqual(
-          root.log().filter((entry) => entry._tag === "Mounted").map((entry) => entry.path),
+          root.log().filter((entry) => entry._tag === "Mounted").map((entry) =>
+            entry.path
+          ),
           ["/Page", "/Page/List[l]"]
         )
       })))
 
     it.effect(`fail the parent on a re-render, for ${layout}`, () =>
       provideHost(Effect.gen(function*() {
-        const root = yield* TestHost.mount(makeList(layout), { keys: ["a", "b"] }, {
+        const root = yield* TestHost.mount(makeList(layout), {
+          keys: ["a", "b"]
+        }, {
           fallback: (_, h) => h.text("crashed")
         })
         yield* TestHost.settle
@@ -101,14 +118,21 @@ describe("duplicate child paths", () => {
         assert.strictEqual(root.text(), "crashed")
         const failed = failure(root.log())
         assert.strictEqual(failed.in, "view")
-        assert.include(Cause.pretty(failed.cause), "/List renders two children at Row[b]")
+        assert.include(
+          Cause.pretty(failed.cause),
+          "/List renders two children at Row[b]"
+        )
       })))
   }
 
   // A row `h.lazy` gives again is the same node as last time: the one that holds a child still takes its path.
   for (
     const [what, row, keys] of [
-      ["holds a child", (h: any) => h.el("li", Row(h, { key: "a", props: { label: "a" } })), ["a"]],
+      [
+        "holds a child",
+        (h: any) => h.el("li", Row(h, { key: "a", props: { label: "a" } })),
+        ["a"]
+      ],
       ["holds none", (h: any) => h.el("li", "x"), ["a", "a"]]
     ] as const
   ) {
@@ -122,21 +146,36 @@ describe("duplicate child paths", () => {
         }).make({
           init: () => [],
           update: (_, message) => message.keys,
-          view: (h, keys) => h.el("ul", h.lazy(row), keys.map((key) => Row(h, { key, props: { label: key } })))
+          view: (h, keys) =>
+            h.el(
+              "ul",
+              h.lazy(row),
+              keys.map((key) => Row(h, { key, props: { label: key } }))
+            )
         })
-        const root = yield* TestHost.mount(List, {}, { fallback: (_, h) => h.text("crashed") })
+        const root = yield* TestHost.mount(List, {}, {
+          fallback: (_, h) => h.text("crashed")
+        })
         yield* TestHost.settle
         root.send(ListMessage.Set({ keys }))
         const crashed = yield* Effect.flip(TestHost.settle)
         assert.strictEqual(crashed._tag, "RootCrashed")
-        assert.include(Cause.pretty(failure(root.log()).cause), "/List renders two children at Row[a]")
+        assert.include(
+          Cause.pretty(failure(root.log()).cause),
+          "/List renders two children at Row[a]"
+        )
       })))
   }
 
   it.effect("never give a key holding ]/ the path of a grandchild", () =>
     provideHost(Effect.gen(function*() {
       const Group = makeList("siblings")
-      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+      const Page = Component.define({
+        name: "Page",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
@@ -149,8 +188,15 @@ describe("duplicate child paths", () => {
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
       assert.deepStrictEqual(
-        root.log().filter((entry) => entry._tag === "Mounted").map((entry) => entry.path),
-        ["/Page", "/Page/List[a]", "/Page/List[a]/Row[b]", "/Page/List[a]%2FRow[b]"]
+        root.log().filter((entry) => entry._tag === "Mounted").map((entry) =>
+          entry.path
+        ),
+        [
+          "/Page",
+          "/Page/List[a]",
+          "/Page/List[a]/Row[b]",
+          "/Page/List[a]%2FRow[b]"
+        ]
       )
     })))
 
@@ -169,7 +215,12 @@ describe("duplicate child paths", () => {
   })
 
   describe("in a child's fallback", () => {
-    const Broken = Component.define({ name: "Broken", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+    const Broken = Component.define({
+      name: "Broken",
+      scoped: false,
+      model: Schema.Null,
+      message: Schema.Never
+    }).make({
       init: () => {
         throw new Error("broken")
       },
@@ -202,10 +253,17 @@ describe("duplicate child paths", () => {
         update: ($) => $.model + 1,
         view: (h) => {
           const rows = (keys: ReadonlyArray<string>) =>
-            h.el("div", keys.map((key) => h.el("p", Row(h, { key, props: { label: key } }))))
+            h.el(
+              "div",
+              keys.map((key) =>
+                h.el("p", Row(h, { key, props: { label: key } }))
+              )
+            )
           return h.el(
             "div",
-            h.props.siblings.map((key) => Row(h, { key, props: { label: key } })),
+            h.props.siblings.map((key) =>
+              Row(h, { key, props: { label: key } })
+            ),
             Broken(h, { key: "b", fallback: () => rows(h.props.first) }),
             Broken(h, { key: "c", fallback: () => rows(h.props.second) })
           )
@@ -221,10 +279,17 @@ describe("duplicate child paths", () => {
     }).make({
       init: () => null,
       update: ($) => $.model,
-      view: (h) => Parent(h, { key: "p", props: h.props, fallback: () => h.text("parent-failed") })
+      view: (h) =>
+        Parent(h, {
+          key: "p",
+          props: h.props,
+          fallback: () => h.text("parent-failed")
+        })
     })
 
-    const cases: ReadonlyArray<Props & { readonly name: string; readonly error: string }> = [
+    const cases: ReadonlyArray<
+      Props & { readonly name: string; readonly error: string }
+    > = [
       {
         name: "two children at one path",
         siblings: [],
@@ -253,29 +318,47 @@ describe("duplicate child paths", () => {
           const root = yield* TestHost.mount(Root, props)
           yield* TestHost.settle
           assert.strictEqual(root.text(), "parent-failed")
-          const failed = root.log().filter((entry): entry is MessageLog.Failed =>
+          const failed = root.log().filter((
+            entry
+          ): entry is MessageLog.Failed =>
             entry._tag === "Failed" && entry.path === "/Root/Parent[p]"
           )
           assert.lengthOf(failed, 1)
           assert.strictEqual(failed[0].in, "view")
-          assert.include(Cause.pretty(failed[0].cause), `/Root/Parent[p] ${error}`)
+          assert.include(
+            Cause.pretty(failed[0].cause),
+            `/Root/Parent[p] ${error}`
+          )
         })))
     }
 
     it.effect("mount the fallbacks' children when their paths are free, render after render", () =>
       provideHost(Effect.gen(function*() {
-        const root = yield* TestHost.mount(Parent, { siblings: ["a"], first: ["b"], second: ["c", "d"] })
+        const root = yield* TestHost.mount(Parent, {
+          siblings: ["a"],
+          first: ["b"],
+          second: ["c", "d"]
+        })
         yield* TestHost.settle
         assert.strictEqual(root.text(), "abcd")
         root.send(ParentMessage.Bump())
         yield* TestHost.settle
         assert.strictEqual(root.text(), "abcd")
-        assert.isFalse(root.log().some((entry) => entry._tag === "Failed" && entry.path === "/Parent"))
+        assert.isFalse(
+          root.log().some((entry) =>
+            entry._tag === "Failed" && entry.path === "/Parent"
+          )
+        )
       })))
 
     it.effect("fail the parent when a child that fails after it rendered shows a fallback at a sibling's path", () =>
       provideHost(Effect.gen(function*() {
-        const Faulty = Component.define({ name: "Faulty", scoped: false, model: Schema.Null, message: Schema.Null })
+        const Faulty = Component.define({
+          name: "Faulty",
+          scoped: false,
+          model: Schema.Null,
+          message: Schema.Null
+        })
           .make({
             init: () => null,
             update: () => {
@@ -283,37 +366,64 @@ describe("duplicate child paths", () => {
             },
             view: (h) => h.el("button").on("click", null).children("faulty")
           })
-        const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+        const Page = Component.define({
+          name: "Page",
+          scoped: false,
+          model: Schema.Null,
+          message: Schema.Never
+        }).make({
           init: () => null,
           update: ($) => $.model,
           view: (h) =>
             h.el(
               "div",
               Row(h, { key: "a", props: { label: "a" } }),
-              Faulty(h, { key: "f", fallback: () => Row(h, { key: "a", props: { label: "a" } }) })
+              Faulty(h, {
+                key: "f",
+                fallback: () => Row(h, { key: "a", props: { label: "a" } })
+              })
             )
         })
-        const root = yield* TestHost.mount(Page, {}, { fallback: (_, h) => h.text("page-failed") })
+        const root = yield* TestHost.mount(Page, {}, {
+          fallback: (_, h) => h.text("page-failed")
+        })
         yield* TestHost.settle
         Locator.fire(root.get(Locator.text("faulty", { exact: true })), "click")
-        assert.strictEqual((yield* Effect.flip(TestHost.settle))._tag, "RootCrashed")
+        assert.strictEqual(
+          (yield* Effect.flip(TestHost.settle))._tag,
+          "RootCrashed"
+        )
         assert.strictEqual(root.text(), "page-failed")
         const failed = root.log().filter((entry): entry is MessageLog.Failed =>
           entry._tag === "Failed" && entry.path === "/Page"
         )
         assert.lengthOf(failed, 1)
-        assert.include(Cause.pretty(failed[0].cause), "renders two children at Row[a], in the fallback of Faulty[f]")
+        assert.include(
+          Cause.pretty(failed[0].cause),
+          "renders two children at Row[a], in the fallback of Faulty[f]"
+        )
       })))
 
     it("fail Scene.fallback the same way", () => {
-      const view = Scene.start(Parent, { siblings: ["a"], first: ["a"], second: [] }).current.view()
+      const view = Scene.start(Parent, {
+        siblings: ["a"],
+        first: ["a"],
+        second: []
+      }).current.view()
       assert.throws(
-        () => Scene.fallback(view, Broken, "b", AsyncResult.failure(Cause.fail("broken"))),
+        () =>
+          Scene.fallback(
+            view,
+            Broken,
+            "b",
+            AsyncResult.failure(Cause.fail("broken"))
+          ),
         /Scene\.fallback renders two children at Row\[a\], in the fallback of Broken\[b\]/
       )
       assert.isDefined(
         Scene.fallback(
-          Scene.start(Parent, { siblings: ["a"], first: ["b"], second: [] }).current.view(),
+          Scene.start(Parent, { siblings: ["a"], first: ["b"], second: [] })
+            .current.view(),
           Broken,
           "b",
           AsyncResult.failure(Cause.fail("broken"))
@@ -323,7 +433,12 @@ describe("duplicate child paths", () => {
   })
 
   describe("in a nested fallback", () => {
-    const Broken = Component.define({ name: "Broken", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+    const Broken = Component.define({
+      name: "Broken",
+      scoped: false,
+      model: Schema.Null,
+      message: Schema.Never
+    }).make({
       init: () => {
         throw new Error("broken")
       },
@@ -333,7 +448,12 @@ describe("duplicate child paths", () => {
 
     const Go = UiSchema.TaggedEnum({ Go: {} })
     /** Named `Row`, so its fallback can show a `Row` at its own path. Fails on a click. */
-    const Faulty = Component.define({ name: "Row", scoped: false, model: Schema.Null, message: Go }).make({
+    const Faulty = Component.define({
+      name: "Row",
+      scoped: false,
+      model: Schema.Null,
+      message: Go
+    }).make({
       init: () => null,
       update: () => {
         throw new Error("faulty")
@@ -361,7 +481,13 @@ describe("duplicate child paths", () => {
           Broken(h, {
             key: "b",
             fallback: () => {
-              const rows = () => h.el("ul", h.props.nested.map((key) => Row(h, { key, props: { label: key } })))
+              const rows = () =>
+                h.el(
+                  "ul",
+                  h.props.nested.map((key) =>
+                    Row(h, { key, props: { label: key } })
+                  )
+                )
               return Faulty(h, { key: "a", fallback: rows })
             }
           })
@@ -376,7 +502,12 @@ describe("duplicate child paths", () => {
     }).make({
       init: () => null,
       update: ($) => $.model,
-      view: (h) => Parent(h, { key: "p", props: h.props, fallback: () => h.text("parent-failed") })
+      view: (h) =>
+        Parent(h, {
+          key: "p",
+          props: h.props,
+          fallback: () => h.text("parent-failed")
+        })
     })
 
     const parentFailures = (root: TestHost.TestRoot<null, never, never>) =>
@@ -395,7 +526,11 @@ describe("duplicate child paths", () => {
         root.send(ParentMessage.Bump())
         yield* TestHost.settle
         assert.strictEqual(root.text(), "a")
-        assert.isFalse(root.log().some((entry) => entry._tag === "Failed" && entry.path === "/Parent"))
+        assert.isFalse(
+          root.log().some((entry) =>
+            entry._tag === "Failed" && entry.path === "/Parent"
+          )
+        )
       })))
 
     it.effect("fail the parent when a nested fallback renders two children with one key", () =>
@@ -419,21 +554,34 @@ describe("duplicate child paths", () => {
 describe("a child without a key", () => {
   it.effect("mounts at Name[], one per component", () =>
     provideHost(Effect.gen(function*() {
-      const Label = Component.define({ name: "Label", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+      const Label = Component.define({
+        name: "Label",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
         init: () => null,
         update: ($) => $.model,
         view: (h) => h.el("span", "label")
       })
-      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+      const Page = Component.define({
+        name: "Page",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => h.el("main", Row(h, { props: { label: "row" } }), Label(h, {}))
+        view: (h) =>
+          h.el("main", Row(h, { props: { label: "row" } }), Label(h, {}))
       })
       const root = yield* TestHost.mount(Page, {})
       yield* TestHost.settle
       assert.strictEqual(root.text(), "rowlabel")
       assert.deepStrictEqual(
-        root.log().filter((entry) => entry._tag === "Mounted").map((entry) => entry.path),
+        root.log().filter((entry) => entry._tag === "Mounted").map((entry) =>
+          entry.path
+        ),
         ["/Page", "/Page/Row[]", "/Page/Label[]"]
       )
     })))
@@ -449,9 +597,12 @@ describe("a child without a key", () => {
       }).make({
         init: ($) => $.props.keys,
         update: (_, message) => message.keys,
-        view: (h, keys) => h.el("ul", keys.map((key) => Row(h, { props: { label: key } })))
+        view: (h, keys) =>
+          h.el("ul", keys.map((key) => Row(h, { props: { label: key } })))
       })
-      const root = yield* TestHost.mount(List, { keys: ["a"] }, { fallback: (_, h) => h.text("crashed") })
+      const root = yield* TestHost.mount(List, { keys: ["a"] }, {
+        fallback: (_, h) => h.text("crashed")
+      })
       yield* TestHost.settle
       assert.strictEqual(root.text(), "a")
       root.send(ListMessage.Set({ keys: ["a", "b"] }))

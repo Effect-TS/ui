@@ -67,7 +67,10 @@ export interface TestImages {
    * same fields are the same. Throws, listing the pending sources, when
    * none is of `source`.
    */
-  readonly settle: (source: HtmlImages.ImageSource, status: "loaded" | "error") => void
+  readonly settle: (
+    source: HtmlImages.ImageSource,
+    status: "loaded" | "error"
+  ) => void
 }
 
 /**
@@ -77,17 +80,19 @@ export interface TestImages {
  * @category services
  * @since 0.1.0
  */
-export const TestImages: Context.Service<TestImages, TestImages> = Context.Service<TestImages>(
-  "@effect/ui/html/testing/TestImages"
-)
+export const TestImages: Context.Service<TestImages, TestImages> = Context
+  .Service<TestImages>(
+    "@effect/ui/html/testing/TestImages"
+  )
 
 interface Pending {
   readonly source: string
   readonly settle: (status: "loaded" | "error") => void
 }
 
-const encode = ({ crossOrigin, referrerPolicy, sizes, src, srcSet }: HtmlImages.ImageSource): string =>
-  JSON.stringify({ src, srcSet, sizes, crossOrigin, referrerPolicy })
+const encode = (
+  { crossOrigin, referrerPolicy, sizes, src, srcSet }: HtmlImages.ImageSource
+): string => JSON.stringify({ src, srcSet, sizes, crossOrigin, referrerPolicy })
 
 /**
  * Makes a fake loader and its control. `layer` provides a new one per
@@ -102,7 +107,10 @@ export const make = (): HtmlImages.Images & TestImages => {
   return {
     load: (source) =>
       Effect.callback((resume) => {
-        const entry: Pending = { source: encode(source), settle: (status) => resume(Effect.succeed(status)) }
+        const entry: Pending = {
+          source: encode(source),
+          settle: (status) => resume(Effect.succeed(status))
+        }
         pending.add(entry)
         return Effect.sync(() => {
           pending.delete(entry)
@@ -110,10 +118,16 @@ export const make = (): HtmlImages.Images & TestImages => {
       }),
     settle: (source, status) => {
       const key = encode(source)
-      const matching = Array.from(pending).filter((entry) => entry.source === key)
+      const matching = Array.from(pending).filter((entry) =>
+        entry.source === key
+      )
       if (matching.length === 0) {
-        const sources = [...new Set(Array.from(pending, (entry) => entry.source))].join(", ")
-        throw new Error(`TestImages: no load of ${key} is pending; pending: [${sources}]`)
+        const sources = [
+          ...new Set(Array.from(pending, (entry) => entry.source))
+        ].join(", ")
+        throw new Error(
+          `TestImages: no load of ${key} is pending; pending: [${sources}]`
+        )
       }
       for (const entry of matching) {
         pending.delete(entry)
@@ -133,7 +147,9 @@ export const make = (): HtmlImages.Images & TestImages => {
 export const layer: Layer.Layer<TestImages> = Layer.effectContext(
   Effect.sync(() => {
     const images = make()
-    return Context.make(TestImages, images).pipe(Context.add(HtmlImages.Images, images))
+    return Context.make(TestImages, images).pipe(
+      Context.add(HtmlImages.Images, images)
+    )
   })
 )
 
@@ -144,7 +160,9 @@ export const layer: Layer.Layer<TestImages> = Layer.effectContext(
  * @category testing
  * @since 0.1.0
  */
-export const load = (source: HtmlImages.ImageSource): Effect.Effect<void, never, TestImages> =>
+export const load = (
+  source: HtmlImages.ImageSource
+): Effect.Effect<void, never, TestImages> =>
   TestImages.useSync((images) => images.settle(source, "loaded"))
 
 /**
@@ -154,5 +172,7 @@ export const load = (source: HtmlImages.ImageSource): Effect.Effect<void, never,
  * @category testing
  * @since 0.1.0
  */
-export const fail = (source: HtmlImages.ImageSource): Effect.Effect<void, never, TestImages> =>
+export const fail = (
+  source: HtmlImages.ImageSource
+): Effect.Effect<void, never, TestImages> =>
   TestImages.useSync((images) => images.settle(source, "error"))

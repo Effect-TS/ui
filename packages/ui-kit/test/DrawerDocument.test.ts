@@ -4,7 +4,13 @@ import { Drawer, DrawerProvider } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { container, holdExits, popovers, tick, visualViewport } from "./utils/document.ts"
+import {
+  container,
+  holdExits,
+  popovers,
+  tick,
+  visualViewport
+} from "./utils/document.ts"
 
 const Config = Schema.Struct({
   open: Schema.Boolean,
@@ -51,7 +57,12 @@ const Page = Component.define({
   message: Message,
   elements: Html
 }).make({
-  init: ({ props }) => ({ open: props.open, snapPoint: null, events: [], config: props }),
+  init: ({ props }) => ({
+    open: props.open,
+    snapPoint: null,
+    events: [],
+    config: props
+  }),
   update: {
     RequestedOpen: ($, { reason }) => ({
       ...$.model,
@@ -63,8 +74,15 @@ const Page = Component.define({
       open: $.model.config.refuse,
       events: [...$.model.events, "RequestedClose:" + reason]
     }),
-    Snapped: ($, { snapPoint }) => ({ ...$.model, snapPoint, events: [...$.model.events, "Snapped:" + snapPoint] }),
-    Settled: ($, { open }) => ({ ...$.model, events: [...$.model.events, "Settled:" + open] })
+    Snapped: ($, { snapPoint }) => ({
+      ...$.model,
+      snapPoint,
+      events: [...$.model.events, "Snapped:" + snapPoint]
+    }),
+    Settled: ($, { open }) => ({
+      ...$.model,
+      events: [...$.model.events, "Settled:" + open]
+    })
   },
   view: (h, model) => {
     const props = model.config
@@ -85,7 +103,9 @@ const Page = Component.define({
       },
       view: (drawer) =>
         h.div(
-          props.area ? drawer.swipeArea({ element: h.div.attr("id", "area") }) : undefined,
+          props.area
+            ? drawer.swipeArea({ element: h.div.attr("id", "area") })
+            : undefined,
           drawer.portal(h.dialog)?.children(
             drawer.backdrop(h.div.attr("id", "backdrop")),
             drawer.viewport(h.div.attr("id", "viewport")).children(
@@ -95,7 +115,8 @@ const Page = Component.define({
                 h.button.attr("id", "button").children("Go"),
                 h.input.attr("id", "field"),
                 props.scroll
-                  ? h.div.attrs({ id: "scroller", style: "overflow-y:auto" }).children("Long")
+                  ? h.div.attrs({ id: "scroller", style: "overflow-y:auto" })
+                    .children("Long")
                   : undefined
               )
             )
@@ -104,14 +125,25 @@ const Page = Component.define({
     })
     return props.provider
       ? DrawerProvider(h, {
-        view: (provider) => h.div(provider.indentBackground(h.div), provider.indent(h.div.attr("id", "indent")), drawer)
+        view: (provider) =>
+          h.div(
+            provider.indentBackground(h.div),
+            provider.indent(h.div.attr("id", "indent")),
+            drawer
+          )
       })
       : drawer
   }
 })
 
 let time = 100
-const pointer = (target: EventTarget, type: string, x: number, y: number, buttons = 1) => {
+const pointer = (
+  target: EventTarget,
+  type: string,
+  x: number,
+  y: number,
+  buttons = 1
+) => {
   time += 16
   const event = new PointerEvent(type, {
     clientX: x,
@@ -129,7 +161,12 @@ const pointer = (target: EventTarget, type: string, x: number, y: number, button
   target.dispatchEvent(event)
 }
 
-const drag = (target: Element, from: [number, number], to: [number, number], steps = 4) => {
+const drag = (
+  target: Element,
+  from: [number, number],
+  to: [number, number],
+  steps = 4
+) => {
   pointer(target, "pointerdown", from[0], from[1])
   for (let i = 1; i <= steps; i++) {
     pointer(
@@ -142,13 +179,23 @@ const drag = (target: Element, from: [number, number], to: [number, number], ste
 }
 
 const sized = (element: Element, width: number, height: number) => {
-  Object.defineProperty(element, "offsetWidth", { configurable: true, value: width })
-  Object.defineProperty(element, "offsetHeight", { configurable: true, value: height })
+  Object.defineProperty(element, "offsetWidth", {
+    configurable: true,
+    value: width
+  })
+  Object.defineProperty(element, "offsetHeight", {
+    configurable: true,
+    value: height
+  })
 }
 
 const touch = (target: Element, type: string, x: number, y: number) => {
   time += 16
-  const event = new Event(type, { bubbles: true, cancelable: true, composed: true })
+  const event = new Event(type, {
+    bubbles: true,
+    cancelable: true,
+    composed: true
+  })
   const points = type === "touchend" || type === "touchcancel"
     ? []
     : [{ clientX: x, clientY: y, identifier: 1, target }]
@@ -158,18 +205,29 @@ const touch = (target: Element, type: string, x: number, y: number) => {
   return event
 }
 
-const swipeTouch = (target: Element, from: [number, number], to: [number, number], steps = 4) => {
+const swipeTouch = (
+  target: Element,
+  from: [number, number],
+  to: [number, number],
+  steps = 4
+) => {
   touch(target, "touchstart", from[0], from[1])
   const moves: Array<Event> = []
   for (let i = 1; i <= steps; i++) {
     moves.push(
-      touch(target, "touchmove", from[0] + (to[0] - from[0]) * i / steps, from[1] + (to[1] - from[1]) * i / steps)
+      touch(
+        target,
+        "touchmove",
+        from[0] + (to[0] - from[0]) * i / steps,
+        from[1] + (to[1] - from[1]) * i / steps
+      )
     )
   }
   return moves
 }
 
-const movement = () => popup().style.getPropertyValue("--drawer-swipe-movement-y")
+const movement = () =>
+  popup().style.getPropertyValue("--drawer-swipe-movement-y")
 
 const mount = Effect.fnUntraced(function*(overrides: Partial<Config>) {
   yield* popovers
@@ -204,7 +262,10 @@ describe("Drawer in a document", { concurrent: false }, () => {
       assert.isTrue(root.model()!.open)
 
       drag(handle, [10, 10], [10, 150])
-      assert.strictEqual(popup().style.getPropertyValue("--drawer-swipe-movement-y"), "140px")
+      assert.strictEqual(
+        popup().style.getPropertyValue("--drawer-swipe-movement-y"),
+        "140px"
+      )
       assert.strictEqual(popup().style.getPropertyValue("transition"), "none")
       yield* tick
       assert.strictEqual(popup().getAttribute("data-swiping"), "")
@@ -224,7 +285,13 @@ describe("Drawer in a document", { concurrent: false }, () => {
       drag(document.getElementById("handle")!, [10, 10], [10, 40])
       yield* tick
       assert.strictEqual(popup().getAttribute("data-swiping"), "")
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Escape",
+          bubbles: true,
+          cancelable: true
+        })
+      )
       yield* tick
       assert.include(root.model()!.events, "RequestedClose:escape-key")
       assert.notInclude(root.model()!.events, "Settled:false")
@@ -270,8 +337,14 @@ describe("Drawer in a document", { concurrent: false }, () => {
       const root = yield* mount({ scroll: true })
       sized(popup(), 300, 400)
       const scroller = document.getElementById("scroller")!
-      Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 1000 })
-      Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 200 })
+      Object.defineProperty(scroller, "scrollHeight", {
+        configurable: true,
+        value: 1000
+      })
+      Object.defineProperty(scroller, "clientHeight", {
+        configurable: true,
+        value: 200
+      })
       scroller.scrollTop = 100
       const scrolling = swipeTouch(scroller, [10, 10], [10, 150])
       assert.isFalse(scrolling.some((event) => event.defaultPrevented))
@@ -314,7 +387,9 @@ describe("Drawer in a document", { concurrent: false }, () => {
       pointer(area, "pointerdown", 10, 500)
       pointer(document, "pointermove", 10, 495)
       yield* tick
-      assert.deepStrictEqual(root.model()!.events.slice(0, 1), ["RequestedOpen:swipe"])
+      assert.deepStrictEqual(root.model()!.events.slice(0, 1), [
+        "RequestedOpen:swipe"
+      ])
       sized(popup(), 300, 200)
       pointer(document, "pointermove", 10, 400)
       assert.strictEqual(movement(), "100px")
@@ -339,36 +414,71 @@ describe("Drawer in a document", { concurrent: false }, () => {
       yield* mount({ provider: true })
       const indent = document.getElementById("indent")!
       assert.strictEqual(indent.getAttribute("data-active"), "")
-      assert.strictEqual(indent.style.getPropertyValue("--drawer-swipe-progress"), "0")
+      assert.strictEqual(
+        indent.style.getPropertyValue("--drawer-swipe-progress"),
+        "0"
+      )
       sized(popup(), 300, 200)
       drag(document.getElementById("handle")!, [10, 10], [10, 60])
-      assert.strictEqual(indent.style.getPropertyValue("--drawer-swipe-progress"), "0.25")
-      assert.strictEqual(indent.style.getPropertyValue("--drawer-height"), "200px")
-      const backdrop = document.querySelector<HTMLElement>("[data-drawer-backdrop]")!
-      assert.strictEqual(backdrop.style.getPropertyValue("--drawer-swipe-progress"), "0.25")
+      assert.strictEqual(
+        indent.style.getPropertyValue("--drawer-swipe-progress"),
+        "0.25"
+      )
+      assert.strictEqual(
+        indent.style.getPropertyValue("--drawer-height"),
+        "200px"
+      )
+      const backdrop = document.querySelector<HTMLElement>(
+        "[data-drawer-backdrop]"
+      )!
+      assert.strictEqual(
+        backdrop.style.getPropertyValue("--drawer-swipe-progress"),
+        "0.25"
+      )
       pointer(document, "pointerup", 10, 60, 0)
       yield* tick
-      assert.strictEqual(indent.style.getPropertyValue("--drawer-swipe-progress"), "0")
+      assert.strictEqual(
+        indent.style.getPropertyValue("--drawer-swipe-progress"),
+        "0"
+      )
       assert.strictEqual(indent.style.getPropertyValue("--drawer-height"), "")
-      assert.strictEqual(backdrop.style.getPropertyValue("--drawer-swipe-progress"), "0")
+      assert.strictEqual(
+        backdrop.style.getPropertyValue("--drawer-swipe-progress"),
+        "0"
+      )
     }))
 
   it.effect("rests the indent at the backdrop's progress at a lower snap point, and at 0 once closed", () =>
     Effect.gen(function*() {
       const root = yield* mount({ provider: true, snapPoints: [0.5, 1] })
       const indent = document.getElementById("indent")!
-      const backdrop = document.querySelector<HTMLElement>("[data-drawer-backdrop]")!
+      const backdrop = document.querySelector<HTMLElement>(
+        "[data-drawer-backdrop]"
+      )!
       sized(popup(), 300, 800)
-      document.querySelectorAll("[role=presentation]").forEach((element) => sized(element, 300, 800))
+      document.querySelectorAll("[role=presentation]").forEach((element) =>
+        sized(element, 300, 800)
+      )
       drag(document.getElementById("handle")!, [10, 10], [10, 12])
       pointer(document, "pointerup", 10, 12, 0)
       yield* tick
-      assert.strictEqual(backdrop.style.getPropertyValue("--drawer-swipe-progress"), "1")
-      assert.strictEqual(indent.style.getPropertyValue("--drawer-swipe-progress"), "1")
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+      assert.strictEqual(
+        backdrop.style.getPropertyValue("--drawer-swipe-progress"),
+        "1"
+      )
+      assert.strictEqual(
+        indent.style.getPropertyValue("--drawer-swipe-progress"),
+        "1"
+      )
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+      )
       yield* tick
       assert.isFalse(root.model()!.open)
-      assert.strictEqual(indent.style.getPropertyValue("--drawer-swipe-progress"), "0")
+      assert.strictEqual(
+        indent.style.getPropertyValue("--drawer-swipe-progress"),
+        "0"
+      )
     }))
 
   it.effect("writes the keyboard inset on the viewport while a field has the keyboard up", () =>
@@ -376,7 +486,8 @@ describe("Drawer in a document", { concurrent: false }, () => {
       const { visual } = yield* visualViewport
       yield* mount({ keyboard: true })
       const viewport = document.getElementById("viewport")!
-      const inset = () => viewport.style.getPropertyValue("--drawer-keyboard-inset")
+      const inset = () =>
+        viewport.style.getPropertyValue("--drawer-keyboard-inset")
       assert.strictEqual(inset(), "")
       document.getElementById("field")!.focus()
       visual.move({ height: 500 })

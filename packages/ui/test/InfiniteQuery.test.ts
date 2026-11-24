@@ -1,20 +1,35 @@
 import { Query } from "@effect/ui"
 import { TestQuery } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Effect, Exit, Fiber, Layer, Option, Schema, Scope, Stream } from "effect"
+import {
+  Cause,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Option,
+  Schema,
+  Scope,
+  Stream
+} from "effect"
 import type { Context, Duration } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
 
 // A few macrotasks: lets every fiber the cache forked run, and whatever those fork in turn.
 const flush = Effect.promise(async () => {
-  for (let i = 0; i < 4; i++) await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  for (let i = 0; i < 4; i++) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  }
 })
 const advance = (duration: Duration.Input) =>
   flush.pipe(Effect.andThen(TestClock.adjust(duration)), Effect.andThen(flush))
 
 const Message = Schema.Struct({ id: Schema.String, text: Schema.String })
-const Page = Schema.Struct({ messages: Schema.Array(Message), next: Schema.NullOr(Schema.Number) })
+const Page = Schema.Struct({
+  messages: Schema.Array(Message),
+  next: Schema.NullOr(Schema.Number)
+})
 type Page = typeof Page.Type
 
 // A list of `db.length` pages whose fetcher takes `db.delay` ms a page. A message's text carries `db.version` at
@@ -22,14 +37,19 @@ type Page = typeof Page.Type
 const makeList = (options: {
   readonly staleTime?: Duration.Input
   readonly refetchInterval?: Duration.Input
-  readonly next?: (lastPage: Page, allPages: ReadonlyArray<Page>) => Option.Option<number>
+  readonly next?: (
+    lastPage: Page,
+    allPages: ReadonlyArray<Page>
+  ) => Option.Option<number>
 } = {}) => {
   const db = {
     length: 3,
     delay: 10,
     version: "a",
     fail: new Set<number>(),
-    page: (index: number): Page["messages"] => [{ id: "m" + index, text: db.version + index }]
+    page: (
+      index: number
+    ): Page["messages"] => [{ id: "m" + index, text: db.version + index }]
   }
   class ListMessages extends Query.InfiniteService<ListMessages>()(
     "chat/ListMessages",
@@ -47,32 +67,54 @@ const makeList = (options: {
     Effect.sync(() => (_args, cursor) =>
       Effect.gen(function*() {
         const index = Option.getOrElse(cursor, () => 0)
-        const page = { messages: db.page(index), next: index + 1 < db.length ? index + 1 : null }
+        const page = {
+          messages: db.page(index),
+          next: index + 1 < db.length ? index + 1 : null
+        }
         if (db.delay > 0) yield* Effect.sleep(db.delay)
         if (db.fail.has(index)) return yield* Effect.fail("nope" + index)
         return page
       })
     )
   ) {}
-  return { db, ListMessages, provide: Effect.provide(Layer.merge(ListMessages.layer, TestQuery.layer())) }
+  return {
+    db,
+    ListMessages,
+    provide: Effect.provide(Layer.merge(ListMessages.layer, TestQuery.layer()))
+  }
 }
 
 const room = { room: "r" }
 
-const show = (result: AsyncResult.AsyncResult<ReadonlyArray<Page>, string>): string =>
+const show = (
+  result: AsyncResult.AsyncResult<ReadonlyArray<Page>, string>
+): string =>
   (AsyncResult.isSuccess(result)
-    ? result.value.map((page) => page.messages.map((message) => message.text).join("+")).join(",")
+    ? result.value.map((page) =>
+      page.messages.map((message) => message.text).join("+")
+    ).join(",")
     : AsyncResult.isFailure(result)
-    ? "Failure(" + Option.getOrElse(Cause.findErrorOption(result.cause), () => "?") + ")" +
-      (Option.isSome(result.previousSuccess) ? " over " + show(result.previousSuccess.value) : "")
+    ? "Failure(" + Option.getOrElse(Cause.findErrorOption(result.cause), () =>
+      "?") +
+      ")" +
+      (Option.isSome(result.previousSuccess)
+        ? " over " + show(result.previousSuccess.value)
+        : "")
     : "Initial") + (result.waiting ? " waiting" : "")
 
 const watch = Effect.fnUntraced(function*<R>(
-  changes: Stream.Stream<AsyncResult.AsyncResult<ReadonlyArray<Page>, string>, never, R>
+  changes: Stream.Stream<
+    AsyncResult.AsyncResult<ReadonlyArray<Page>, string>,
+    never,
+    R
+  >
 ) {
   const seen: Array<string> = []
   const fiber = yield* Effect.forkScoped(
-    Stream.runForEach(changes, (result) => Effect.sync(() => seen.push(show(result))))
+    Stream.runForEach(
+      changes,
+      (result) => Effect.sync(() => seen.push(show(result)))
+    )
   )
   yield* flush
   return { seen, fiber }
@@ -83,11 +125,15 @@ const pagesLog = Effect.map(
   TestQuery.fetches,
   (fetches) =>
     fetches.map((fetch) =>
-      fetch.trigger + "@" + fetch.page + (fetch.restart ? " restart" : "") + (fetch.stored ? "" : " unstored")
+      fetch.trigger + "@" + fetch.page + (fetch.restart ? " restart" : "") +
+      (fetch.stored ? "" : " unstored")
     )
 )
 
-const moreOf = <R extends Query.Query.Any>(read: R, args: Query.Query.Args<R>) =>
+const moreOf = <R extends Query.Query.Any>(
+  read: R,
+  args: Query.Query.Args<R>
+) =>
   Effect.map(TestQuery.entry(read, args), (entry) => {
     const more = entry?.more
     return more?._tag === "Failed" ? "Failed(" + more.error + ")" : more?._tag
@@ -109,12 +155,16 @@ describe("Query lists", () => {
       assert.strictEqual(yield* moreOf(ListMessages, room), "Loading")
       yield* advance(10)
       const appended = yield* Fiber.join(append)
-      assert.deepStrictEqual([appended.pages.length, appended.hasMore], [2, true])
+      assert.deepStrictEqual([appended.pages.length, appended.hasMore], [
+        2,
+        true
+      ])
       assert.deepStrictEqual(w.seen, ["a0", "a0,a1"])
       // An append changes no timestamp.
       const after = yield* ListMessages.peek(room)
       assert.isTrue(
-        AsyncResult.isSuccess(before) && AsyncResult.isSuccess(after) && before.timestamp === after.timestamp
+        AsyncResult.isSuccess(before) && AsyncResult.isSuccess(after) &&
+          before.timestamp === after.timestamp
       )
 
       // A refetch walks from the first page, and swaps the pages in at the end.
@@ -126,13 +176,21 @@ describe("Query lists", () => {
       yield* flush
       assert.strictEqual(yield* moreOf(ListMessages, room), "Loading")
       yield* advance(30)
-      assert.deepStrictEqual(w.seen, ["a0", "a0,a1", "a0,a1 waiting", "b0,b1,b2"])
+      assert.deepStrictEqual(w.seen, [
+        "a0",
+        "a0,a1",
+        "a0,a1 waiting",
+        "b0,b1,b2"
+      ])
       assert.deepStrictEqual((yield* Fiber.join(get)).length, 3)
       assert.deepStrictEqual((yield* Fiber.join(more)).hasMore, false)
       assert.strictEqual(yield* moreOf(ListMessages, room), "End")
 
       // At the end, a load more loads nothing.
-      assert.deepStrictEqual((yield* ListMessages.loadMore(room)).pages.length, 3)
+      assert.deepStrictEqual(
+        (yield* ListMessages.loadMore(room)).pages.length,
+        3
+      )
       assert.deepStrictEqual(yield* pagesLog, [
         "watch@0",
         "loadMore@1",
@@ -140,12 +198,18 @@ describe("Query lists", () => {
         "invalidation@1",
         "invalidation@2"
       ])
-      assert.deepStrictEqual((yield* TestQuery.fetches).map((fetch) => fetch.cursor), [undefined, 1, undefined, 1, 2])
+      assert.deepStrictEqual(
+        (yield* TestQuery.fetches).map((fetch) => fetch.cursor),
+        [undefined, 1, undefined, 1, 2]
+      )
     }).pipe(provide)
   })
 
   it.effect("get, prefetch, connectivity and interval walk the held pages, and a patch issued mid-walk restarts it", () => {
-    const { ListMessages, db, provide } = makeList({ staleTime: 0, refetchInterval: "1 minute" })
+    const { ListMessages, db, provide } = makeList({
+      staleTime: 0,
+      refetchInterval: "1 minute"
+    })
     return Effect.gen(function*() {
       yield* ListMessages.prefetch({ room: "p" })
       yield* advance(10)
@@ -173,7 +237,10 @@ describe("Query lists", () => {
       })
       yield* advance(30)
       // Held while the patch is live.
-      assert.strictEqual((yield* TestQuery.entry(ListMessages, room))?.fetch, "held")
+      assert.strictEqual(
+        (yield* TestQuery.entry(ListMessages, room))?.fetch,
+        "held"
+      )
       yield* Effect.forkScoped(handle.run(Effect.void, undefined))
       yield* advance(30)
       assert.deepStrictEqual((yield* pagesLog).slice(0, before), [
@@ -213,7 +280,12 @@ describe("Query lists", () => {
       yield* TestQuery.setVisible(true)
       yield* advance(20)
       assert.deepStrictEqual(w.seen, ["a0", "a0,a1 waiting", "b0,b1"])
-      assert.deepStrictEqual(yield* pagesLog, ["watch@0", "loadMore@1", "visibility@0", "visibility@1"])
+      assert.deepStrictEqual(yield* pagesLog, [
+        "watch@0",
+        "loadMore@1",
+        "visibility@0",
+        "visibility@1"
+      ])
     }).pipe(provide)
   })
 
@@ -222,18 +294,31 @@ describe("Query lists", () => {
     return Effect.gen(function*() {
       const scopeA = yield* Scope.make()
       const scopeB = yield* Scope.make()
-      const buildA = yield* Layer.buildWithScope(Layer.fresh(ListMessages.layer), scopeA)
-      const buildB = yield* Layer.buildWithScope(Layer.fresh(ListMessages.layer), scopeB)
-      const w = yield* watch(ListMessages.changes(room).pipe(Stream.provideContext(buildA)))
+      const buildA = yield* Layer.buildWithScope(
+        Layer.fresh(ListMessages.layer),
+        scopeA
+      )
+      const buildB = yield* Layer.buildWithScope(
+        Layer.fresh(ListMessages.layer),
+        scopeB
+      )
+      const w = yield* watch(
+        ListMessages.changes(room).pipe(Stream.provideContext(buildA))
+      )
       yield* advance(10)
-      yield* ListMessages.loadMore(room).pipe(Effect.provideContext(buildA), Effect.forkScoped)
+      yield* ListMessages.loadMore(room).pipe(
+        Effect.provideContext(buildA),
+        Effect.forkScoped
+      )
       yield* advance(10)
 
       db.version = "b"
       yield* ListMessages.invalidate(room)
       yield* advance(15)
       yield* ListMessages.invalidate(room)
-      const get = yield* Effect.forkScoped(ListMessages.get(room).pipe(Effect.provideContext(buildB)))
+      const get = yield* Effect.forkScoped(
+        ListMessages.get(room).pipe(Effect.provideContext(buildB))
+      )
       yield* advance(15)
       // The watcher's build closes: the walk moves to the get caller's.
       yield* Scope.close(scopeA, Exit.void)
@@ -303,7 +388,11 @@ describe("Query lists", () => {
       yield* ListMessages.reset(room)
       yield* advance(10)
       assert.deepStrictEqual(w.seen, ["a0", "a0,a1", "a0 waiting", "b0"])
-      assert.deepStrictEqual(yield* pagesLog, ["watch@0", "loadMore@1", "reset@0"])
+      assert.deepStrictEqual(yield* pagesLog, [
+        "watch@0",
+        "loadMore@1",
+        "reset@0"
+      ])
     }).pipe(provide)
   })
 
@@ -319,22 +408,35 @@ describe("Query lists", () => {
         optimistic: [
           ListMessages.patch(room, (page, index) => ({
             ...page,
-            messages: page.messages.map((message) => ({ ...message, text: message.text + "!" + index }))
+            messages: page.messages.map((message) => ({
+              ...message,
+              text: message.text + "!" + index
+            }))
           }))
         ]
       })
-      assert.strictEqual(show((yield* TestQuery.entry(ListMessages, room))!.view), "a0!0")
+      assert.strictEqual(
+        show((yield* TestQuery.entry(ListMessages, room))!.view),
+        "a0!0"
+      )
 
       const more = yield* Effect.forkScoped(ListMessages.loadMore(room))
       yield* advance(10)
       const held = yield* TestQuery.entry(ListMessages, room)
-      assert.deepStrictEqual([held?.fetch, held?.more?._tag], ["held", "Loading"])
+      assert.deepStrictEqual([held?.fetch, held?.more?._tag], [
+        "held",
+        "Loading"
+      ])
 
       db.version = "b"
       yield* Effect.forkScoped(handle.run(Effect.void, undefined))
       yield* advance(20)
       assert.deepStrictEqual((yield* Fiber.join(more)).pages.length, 2)
-      assert.deepStrictEqual(yield* pagesLog, ["watch@0", "loadMore@0", "loadMore@1"])
+      assert.deepStrictEqual(yield* pagesLog, [
+        "watch@0",
+        "loadMore@0",
+        "loadMore@1"
+      ])
     }).pipe(provide)
   })
 
@@ -353,17 +455,32 @@ describe("Query lists", () => {
     db.delay = 0
     return Effect.gen(function*() {
       db.length = 2
-      db.page = (index) => [{ id: "m0", text: "x" + index }, { id: "m" + (index + 1), text: "y" + index }]
+      db.page = (
+        index
+      ) => [{ id: "m0", text: "x" + index }, {
+        id: "m" + (index + 1),
+        text: "y" + index
+      }]
       yield* ListMessages.get(room)
       // Across two pages: left out silently.
       const pages = (yield* ListMessages.loadMore(room)).pages
-      assert.deepStrictEqual(ListMessages.items(pages).map((message) => message.text), ["x0", "y0", "y1"])
+      assert.deepStrictEqual(
+        ListMessages.items(pages).map((message) => message.text),
+        ["x0", "y0", "y1"]
+      )
 
-      db.page = () => [{ id: "m9", text: "first" }, { id: "m9", text: "second" }]
+      db.page =
+        () => [{ id: "m9", text: "first" }, { id: "m9", text: "second" }]
       yield* ListMessages.reset(room)
       const reset = yield* ListMessages.get(room)
-      assert.deepStrictEqual(ListMessages.items(reset).map((message) => message.text), ["first"])
-      assert.strictEqual((yield* TestQuery.expectProblem("DuplicateKeyInPage")).length, 1)
+      assert.deepStrictEqual(
+        ListMessages.items(reset).map((message) => message.text),
+        ["first"]
+      )
+      assert.strictEqual(
+        (yield* TestQuery.expectProblem("DuplicateKeyInPage")).length,
+        1
+      )
     }).pipe(provide)
   })
 
@@ -384,7 +501,10 @@ describe("Query lists", () => {
       assert.deepStrictEqual(yield* TestQuery.problems, [])
       yield* ListMessages.invalidate(room)
       assert.strictEqual((yield* ListMessages.get(room)).length, 3)
-      assert.strictEqual((yield* TestQuery.expectProblem("PageRepeated")).length, 1)
+      assert.strictEqual(
+        (yield* TestQuery.expectProblem("PageRepeated")).length,
+        1
+      )
 
       throws = true
       yield* ListMessages.invalidate(room)
@@ -400,7 +520,10 @@ describe("Query lists", () => {
     return Effect.gen(function*() {
       const cache = yield* Query.Cache
       const def = Query.defOf(ListMessages)
-      const pages = [{ messages: db.page(0), next: 1 }, { messages: db.page(1), next: 2 }]
+      const pages = [{ messages: db.page(0), next: 1 }, {
+        messages: db.page(1),
+        next: 2
+      }]
       const snapshot = (patched: boolean) =>
         Query.makeSnapshot(
           def,
@@ -443,10 +566,16 @@ describe("Query lists", () => {
       const problem = yield* TestQuery.expectProblem("FetchRestarted")
       assert.strictEqual(problem.length, 1)
       const log = (yield* pagesLog).slice(1)
-      assert.deepStrictEqual(log, ["invalidation@0", ...Array.from({ length: 10 }, () => "invalidation@0 restart")])
+      assert.deepStrictEqual(log, [
+        "invalidation@0",
+        ...Array.from({ length: 10 }, () => "invalidation@0 restart")
+      ])
       yield* advance(10)
       // The settle ends the streak.
-      assert.deepStrictEqual((yield* TestQuery.entry(ListMessages, room))?.fetch, "none")
+      assert.deepStrictEqual(
+        (yield* TestQuery.entry(ListMessages, room))?.fetch,
+        "none"
+      )
     }).pipe(provide)
   })
 
@@ -459,24 +588,43 @@ describe("Query lists", () => {
       yield* advance(10)
       db.fail.add(1)
       const cache = Query.internals(yield* Query.Cache)
-      const handle = cache.beginRun({ command: "Edit", invalidates: [ListMessages.entry(room)] })
-      const fiber = yield* Effect.forkScoped(Effect.exit(handle.run(ListMessages.get(room), undefined)))
+      const handle = cache.beginRun({
+        command: "Edit",
+        invalidates: [ListMessages.entry(room)]
+      })
+      const fiber = yield* Effect.forkScoped(
+        Effect.exit(handle.run(ListMessages.get(room), undefined))
+      )
       yield* advance(30)
       const exit = yield* Fiber.join(fiber)
       assert.isTrue(Exit.isFailure(exit))
-      if (Exit.isFailure(exit)) assert.deepStrictEqual(Cause.findErrorOption(exit.cause), Option.some("nope1"))
-      assert.deepStrictEqual((yield* pagesLog).slice(2, 4), ["get@0 unstored", "get@1 unstored"])
+      if (Exit.isFailure(exit)) {
+        assert.deepStrictEqual(
+          Cause.findErrorOption(exit.cause),
+          Option.some("nope1")
+        )
+      }
+      assert.deepStrictEqual((yield* pagesLog).slice(2, 4), [
+        "get@0 unstored",
+        "get@1 unstored"
+      ])
     }).pipe(provide)
   })
 
   it.effect("prefetch of a stale ordinary read loads it again, whatever its value", () => {
     let calls = 0
-    class GetTags extends Query.Service<GetTags>()("chat/GetTags", {
-      args: { id: Schema.String },
-      success: Schema.NullOr(Schema.Array(Schema.String)),
-      error: Schema.Never,
-      staleTime: 0
-    }, Effect.succeed(({ id }) => Effect.sync(() => (calls++, id === "none" ? null : ["a"])))) {}
+    class GetTags extends Query.Service<GetTags>()(
+      "chat/GetTags",
+      {
+        args: { id: Schema.String },
+        success: Schema.NullOr(Schema.Array(Schema.String)),
+        error: Schema.Never,
+        staleTime: 0
+      },
+      Effect.succeed(({ id }) =>
+        Effect.sync(() => (calls++, id === "none" ? null : ["a"]))
+      )
+    ) {}
     return Effect.gen(function*() {
       for (const id of ["some", "none"]) {
         yield* GetTags.get({ id })
@@ -484,12 +632,15 @@ describe("Query lists", () => {
         yield* flush
       }
       assert.strictEqual(calls, 4)
-      assert.deepStrictEqual((yield* TestQuery.fetches).map((fetch) => fetch.trigger), [
-        "get",
-        "prefetch",
-        "get",
-        "prefetch"
-      ])
+      assert.deepStrictEqual(
+        (yield* TestQuery.fetches).map((fetch) => fetch.trigger),
+        [
+          "get",
+          "prefetch",
+          "get",
+          "prefetch"
+        ]
+      )
     }).pipe(Effect.provide(Layer.merge(GetTags.layer, TestQuery.layer())))
   })
 })

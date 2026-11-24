@@ -6,8 +6,17 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import { type Capture, record } from "./fixtures/TwoEditors.ts"
 
-const file = path.join(import.meta.dirname, "fixtures", "two-editor-traces.wire-v1.json")
-const captures: ReadonlyArray<Capture> = ["interrupted", "open", "closed", "switched"]
+const file = path.join(
+  import.meta.dirname,
+  "fixtures",
+  "two-editor-traces.wire-v1.json"
+)
+const captures: ReadonlyArray<Capture> = [
+  "interrupted",
+  "open",
+  "closed",
+  "switched"
+]
 
 const shape = (frames: ReadonlyArray<MessageLog.Wire>) => {
   const paths: { [path: string]: Array<string> } = {}
@@ -29,9 +38,14 @@ describe("TwoEditors", { concurrent: false }, () => {
       const recorded: { [capture: string]: ReadonlyArray<MessageLog.Wire> } = {}
       for (const capture of captures) recorded[capture] = yield* record(capture)
       if (process.env.TRACE_OUT !== undefined) {
-        return fs.writeFileSync(process.env.TRACE_OUT, JSON.stringify(recorded, null, 2) + "\n")
+        return fs.writeFileSync(
+          process.env.TRACE_OUT,
+          JSON.stringify(recorded, null, 2) + "\n"
+        )
       }
       const traces = JSON.parse(fs.readFileSync(file, "utf8"))
-      for (const capture of captures) assert.deepStrictEqual(shape(recorded[capture]), shape(traces[capture]))
+      for (const capture of captures) {
+        assert.deepStrictEqual(shape(recorded[capture]), shape(traces[capture]))
+      }
     }))
 })

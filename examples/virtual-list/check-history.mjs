@@ -18,7 +18,9 @@ const transitions = Array.from({ length: (total - page) / page }, (_, i) => ({
 }))
 
 const landingOf = (samples, { from, to }) =>
-  samples.findIndex((sample, i) => i > 0 && sample.start === to && samples[i - 1].start === from)
+  samples.findIndex((sample, i) =>
+    i > 0 && sample.start === to && samples[i - 1].start === from
+  )
 
 const measure = (samples, { from, to }) => {
   const landing = landingOf(samples, { from, to })
@@ -26,25 +28,34 @@ const measure = (samples, { from, to }) => {
   const quiet = samples.slice(landing - settledFrames, landing)
   if (
     quiet.length < settledFrames ||
-    quiet.some((sample) => sample.start !== from || sample.scrollTop !== quiet[0].scrollTop)
+    quiet.some((sample) =>
+      sample.start !== from || sample.scrollTop !== quiet[0].scrollTop
+    )
   ) return { from, to, problem: "landed before the scroll settled" }
   const before = samples[landing - 1].under
-  if (before === null) return { from, to, problem: "no message under the pointer" }
+  if (before === null) {
+    return { from, to, problem: "no message under the pointer" }
+  }
   const shift = (sample) => {
     const top = sample?.tops[before.key]
     return top === undefined ? null : top - before.top
   }
   const nextFrame = shift(samples[landing])
   const settled = shift(samples[landing + 3])
-  if (nextFrame === null || settled === null) return { from, to, key: before.key, problem: "message not rendered" }
+  if (nextFrame === null || settled === null) {
+    return { from, to, key: before.key, problem: "message not rendered" }
+  }
   return { from, to, key: before.key, nextFrame, settled }
 }
 
 const judge = (measured) => {
   const complete = measured.length === transitions.length &&
-    measured.every((m, i) => m.from === transitions[i].from && m.to === transitions[i].to)
+    measured.every((m, i) =>
+      m.from === transitions[i].from && m.to === transitions[i].to
+    )
   const failures = measured.filter((m) =>
-    m.problem !== undefined || !(Math.abs(m.nextFrame) <= limit && Math.abs(m.settled) <= limit)
+    m.problem !== undefined ||
+    !(Math.abs(m.nextFrame) <= limit && Math.abs(m.settled) <= limit)
   )
   return complete && failures.length === 0
 }
@@ -80,14 +91,21 @@ try {
     channel.port1.onmessage = () => {
       const tops = {}
       let under = null
-      for (const item of document.querySelectorAll("[data-virtual-list-item]")) {
+      for (
+        const item of document.querySelectorAll("[data-virtual-list-item]")
+      ) {
         const rect = item.getBoundingClientRect()
         tops[item.dataset.key] = rect.top
         if (rect.bottom > y && (under === null || rect.top < under.top)) {
           under = { key: item.dataset.key, top: rect.top }
         }
       }
-      window.samples.push({ start: Number(status.dataset.start), scrollTop: scroller.scrollTop, under, tops })
+      window.samples.push({
+        start: Number(status.dataset.start),
+        scrollTop: scroller.scrollTop,
+        under,
+        tops
+      })
       requestAnimationFrame(next)
     }
     const next = () => channel.port2.postMessage(null)
@@ -98,7 +116,10 @@ try {
   const status = () =>
     tab.evaluate(() => {
       const element = document.getElementById("status")
-      return { start: Number(element.dataset.start), loading: element.dataset.loading === "true" }
+      return {
+        start: Number(element.dataset.start),
+        loading: element.dataset.loading === "true"
+      }
     })
   const recorded = []
   for (const transition of transitions) {
@@ -111,38 +132,62 @@ try {
       await tab.waitForTimeout(16)
       now = await status()
     }
-    await tab.waitForFunction((to) => Number(document.getElementById("status").dataset.start) === to, transition.to, {
-      timeout: 5_000
-    }).catch(() => {})
+    await tab.waitForFunction(
+      (to) => Number(document.getElementById("status").dataset.start) === to,
+      transition.to,
+      {
+        timeout: 5_000
+      }
+    ).catch(() => {})
     await tab.waitForTimeout(200)
-    recorded.push({ transition, samples: await tab.evaluate(() => window.samples) })
+    recorded.push({
+      transition,
+      samples: await tab.evaluate(() => window.samples)
+    })
   }
 
-  const measured = recorded.map(({ samples, transition }) => measure(samples, transition))
+  const measured = recorded.map(({ samples, transition }) =>
+    measure(samples, transition)
+  )
   const pass = judge(measured)
   failed ||= !pass
-  console.log(engine + " " + browser.version() + ": " + (pass ? "PASS" : "FAIL"))
+  console.log(
+    engine + " " + browser.version() + ": " + (pass ? "PASS" : "FAIL")
+  )
   for (const m of measured) {
     console.log(
       "  " + m.from + " -> " + m.to + "  " + (m.key ?? "") + "  " +
-        (m.problem ?? "next frame " + m.nextFrame.toFixed(3) + "px, settled " + m.settled.toFixed(3) + "px")
+        (m.problem ??
+          "next frame " + m.nextFrame.toFixed(3) + "px, settled " +
+            m.settled.toFixed(3) + "px")
     )
   }
   if (measured.length < transitions.length) {
-    console.log("  measured " + measured.length + " of " + transitions.length + " landings")
+    console.log(
+      "  measured " + measured.length + " of " + transitions.length +
+        " landings"
+    )
   }
 
   if (pass) {
     const replay = (label, change) => {
       const copy = structuredClone(recorded)
       change(copy)
-      const result = judge(copy.map(({ samples, transition }) => measure(samples, transition)))
+      const result = judge(
+        copy.map(({ samples, transition }) => measure(samples, transition))
+      )
       failed ||= result
-      console.log("  replay, " + label + ": " + (result ? "PASS, so the check is broken" : "FAIL, as it should"))
+      console.log(
+        "  replay, " + label + ": " +
+          (result ? "PASS, so the check is broken" : "FAIL, as it should")
+      )
     }
     replay("the landing to 0 missing", (copy) => {
       const last = copy[copy.length - 1]
-      last.samples = last.samples.slice(0, landingOf(last.samples, last.transition))
+      last.samples = last.samples.slice(
+        0,
+        landingOf(last.samples, last.transition)
+      )
     })
     replay("the landing to 200 still scrolling", (copy) => {
       const one = copy.find(({ transition }) => transition.to === 200)

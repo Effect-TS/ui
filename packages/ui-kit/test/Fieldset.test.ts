@@ -9,8 +9,10 @@ import { container, fieldsetDisabled, tick } from "./utils/document.ts"
 
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
-const parts = (props: FieldsetProps) => Story.parts(Fieldset, { model: {}, props })
-const attrsOf = (builder: View.ElementBuilder<never, never, any, any>) => View.build(builder, []).attrs
+const parts = (props: FieldsetProps) =>
+  Story.parts(Fieldset, { model: {}, props })
+const attrsOf = (builder: View.ElementBuilder<never, never, any, any>) =>
+  View.build(builder, []).attrs
 
 const Message = UiSchema.TaggedEnum({ ToggledLock: {} })
 
@@ -48,19 +50,24 @@ const Billing = Component.define({
               props: { disabled: outerFieldset.disabled },
               view: (innerFieldset) =>
                 innerFieldset.root(h.fieldset.class("address")).children(
-                  innerFieldset.legend(h.div.class("address-legend")).children("Address"),
+                  innerFieldset.legend(h.div.class("address-legend")).children(
+                    "Address"
+                  ),
                   formField("city")
                 )
             })
           )
       }),
-      h.button.class("lock").attr("type", "button").onClick(Message.ToggledLock()).children("Lock")
+      h.button.class("lock").attr("type", "button").onClick(
+        Message.ToggledLock()
+      ).children("Lock")
     )
   }
 })
 
 const toggleLock = (app: Element) =>
-  Effect.sync(() => app.querySelector<HTMLButtonElement>(".lock")!.click()).pipe(Effect.andThen(tick))
+  Effect.sync(() => app.querySelector<HTMLButtonElement>(".lock")!.click())
+    .pipe(Effect.andThen(tick))
 
 // Chromium blurs the focused control as a fieldset around it is disabled, before the render that disables
 // it has finished. happy-dom doesn't.
@@ -69,14 +76,18 @@ const blurOnDisable = (fieldset: HTMLFieldSetElement) => {
   fieldset.setAttribute = function(name, value) {
     setAttribute.call(this, name, value)
     const focused = document.activeElement as HTMLElement | null
-    if (name === "disabled" && focused !== null && fieldset.contains(focused)) focused.blur()
+    if (name === "disabled" && focused !== null && fieldset.contains(focused)) {
+      focused.blur()
+    }
   }
 }
 
 describe("Fieldset", { concurrent: false }, () => {
   it("the root is a fieldset named by the legend, and both parts follow disabled over the consumer's values", () => {
     const enabled = parts({})
-    const legendAttrs = attrsOf(enabled.legend(h.div.attrs({ id: "mine", "data-disabled": "stale" })))
+    const legendAttrs = attrsOf(
+      enabled.legend(h.div.attrs({ id: "mine", "data-disabled": "stale" }))
+    )
     const legendId = legendAttrs.id
     assert.isString(legendId)
     assert.notStrictEqual(legendId, "mine")
@@ -101,10 +112,16 @@ describe("Fieldset", { concurrent: false }, () => {
       "data-disabled": "",
       disabled: ""
     })
-    assert.deepStrictEqual(attrsOf(disabled.legend(h.div)), { id: legendId, "data-disabled": "" })
+    assert.deepStrictEqual(attrsOf(disabled.legend(h.div)), {
+      id: legendId,
+      "data-disabled": ""
+    })
     assert.isTrue(disabled.disabled)
 
-    assert.throws(() => enabled.root(h.div as any), /a part for <fieldset> was given <div>/)
+    assert.throws(
+      () => enabled.root(h.div as any),
+      /a part for <fieldset> was given <div>/
+    )
   })
 
   it.effect("a disabled fieldset disables the fields inside it, drops their focus and leaves them untouched", () =>
@@ -113,7 +130,9 @@ describe("Fieldset", { concurrent: false }, () => {
       yield* BrowserHost.mountEffect(Billing, {}, app)
       yield* tick
       const form = app.querySelector("form")!
-      const company = app.querySelector<HTMLInputElement>("input[name=company]")!
+      const company = app.querySelector<HTMLInputElement>(
+        "input[name=company]"
+      )!
       const state = (name: string) =>
         ["data-disabled", "data-focused", "data-touched"].filter((attr) =>
           app.querySelector(`.${name}`)!.hasAttribute(attr)
@@ -127,9 +146,15 @@ describe("Fieldset", { concurrent: false }, () => {
       assert.strictEqual(app.querySelectorAll("span").length, 2)
 
       yield* toggleLock(app)
-      assert.isTrue(app.querySelector<HTMLFieldSetElement>(".billing")!.disabled)
-      assert.isTrue(app.querySelector<HTMLFieldSetElement>(".address")!.disabled)
-      assert.isTrue(app.querySelector(".address-legend")!.hasAttribute("data-disabled"))
+      assert.isTrue(
+        app.querySelector<HTMLFieldSetElement>(".billing")!.disabled
+      )
+      assert.isTrue(
+        app.querySelector<HTMLFieldSetElement>(".address")!.disabled
+      )
+      assert.isTrue(
+        app.querySelector(".address-legend")!.hasAttribute("data-disabled")
+      )
       assert.deepStrictEqual(state("company"), ["data-disabled"])
       assert.deepStrictEqual(state("city"), ["data-disabled"])
       for (const input of app.querySelectorAll("input")) {

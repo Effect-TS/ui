@@ -33,13 +33,22 @@ export const TableDemo = Component.define({
               ),
               virtualList.list(h.tbody).children(
                 virtualList.items.map((index) =>
-                  virtualList.item({ element: h.tr.key(String(index)), index }).children(
-                    h.td.children(String(index)),
-                    h.td.children("Customer " + ((index * 37) % 1000)),
-                    h.td.children(textOf(index).slice(0, 18 + (index % 5) * 6)),
-                    h.td.children(h.button.class("cell-button").children(statuses[index % 3]!)),
-                    h.td.class("amount").children("$" + ((index * 7919) % 100_000 / 100).toFixed(2))
-                  )
+                  virtualList.item({ element: h.tr.key(String(index)), index })
+                    .children(
+                      h.td.children(String(index)),
+                      h.td.children("Customer " + ((index * 37) % 1000)),
+                      h.td.children(
+                        textOf(index).slice(0, 18 + (index % 5) * 6)
+                      ),
+                      h.td.children(
+                        h.button.class("cell-button").children(
+                          statuses[index % 3]!
+                        )
+                      ),
+                      h.td.class("amount").children(
+                        "$" + ((index * 7919) % 100_000 / 100).toFixed(2)
+                      )
+                    )
                 )
               )
             )

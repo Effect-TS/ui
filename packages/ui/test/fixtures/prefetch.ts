@@ -11,7 +11,10 @@ import { GetPerson } from "./router.ts"
 export const Routes = Route.union({
   Home: Route.make("/"),
   // A declared search: a key it doesn't declare is dropped, so it doesn't change the printed route.
-  Person: Route.make("/people/:id", { params: { id: Schema.Number }, search: { tab: Schema.optional(Schema.String) } }),
+  Person: Route.make("/people/:id", {
+    params: { id: Schema.Number },
+    search: { tab: Schema.optional(Schema.String) }
+  }),
   Walk: Route.make("/walk"),
   Broken: Route.make("/broken"),
   Empty: Route.make("/empty"),
@@ -34,7 +37,9 @@ const reader = <const Name extends string>(name: Name) =>
     props: Schema.Struct({ id: Schema.Number }),
     model: Schema.Struct({}),
     message: Schema.Never,
-    queries: { person: { query: GetPerson, args: ({ props }) => ({ id: props.id }) } }
+    queries: {
+      person: { query: GetPerson, args: ({ props }) => ({ id: props.id }) }
+    }
   }).make({
     init: () => ({}),
     update: ($) => $.model,
@@ -67,9 +72,15 @@ export const Frame = Component.define({
   message: Schema.Never,
   slots: ["body"]
 })
-  .make({ init: () => null, update: ($) => $.model, view: (h) => h.el("section", h.slots.body) })
+  .make({
+    init: () => null,
+    update: ($) => $.model,
+    view: (h) => h.el("section", h.slots.body)
+  })
 
-export class Badge extends Feature.Service<Badge>()("test/Badge", { props: Schema.Struct({}) }) {}
+export class Badge
+  extends Feature.Service<Badge>()("test/Badge", { props: Schema.Struct({}) })
+{}
 
 /** Reads person 1, and shows a card for person 2 in a frame's slot, a feature, and a note with and without a `provide`. */
 export const Walked = Component.define({
@@ -84,9 +95,15 @@ export const Walked = Component.define({
   view: (h) =>
     h.el(
       "div",
-      Frame(h, { key: "frame", slots: { body: Card(h, { key: "card", props: { id: 2 } }) } }),
+      Frame(h, {
+        key: "frame",
+        slots: { body: Card(h, { key: "card", props: { id: 2 } }) }
+      }),
       Badge.render(h, { key: "badge", fallback: () => h.text("") }),
-      Note.pipe(Component.provide(GetNote.layer))(h, { key: "provided", props: { id: 1 } }),
+      Note.pipe(Component.provide(GetNote.layer))(h, {
+        key: "provided",
+        props: { id: 1 }
+      }),
       Note(h, { key: "bare", props: { id: 2 } })
     )
 })
@@ -135,7 +152,11 @@ export const App = Component.define({
   init: ($) => ({ route: $.props.route }),
   update: (_, message) => ({ route: message.route }),
   subscriptions: ({ model }) => [
-    Router.subscription(Routes, model.route, (route) => AppMessage.ChangedRoute({ route })),
+    Router.subscription(
+      Routes,
+      model.route,
+      (route) => AppMessage.ChangedRoute({ route })
+    ),
     Router.prefetch(Routes, {
       // The sidebar is mounted already: the check after a push skips it.
       Home: () => [Router.page(Sidebar, { id: 9 })],
@@ -157,7 +178,11 @@ export const App = Component.define({
       Sidebar(h, { key: "sidebar", props: { id: 0 } }),
       Routes.match(model.route, {
         Home: () => h.el("h1", "Home"),
-        Person: (route) => Detail(h, { key: Routes.print(route), props: { id: route.params.id } }),
+        Person: (route) =>
+          Detail(h, {
+            key: Routes.print(route),
+            props: { id: route.params.id }
+          }),
         Walk: () => h.el("h1", "Walk"),
         Broken: () => h.el("h1", "Broken"),
         Empty: () => h.el("h1", "Empty"),

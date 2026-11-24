@@ -4,11 +4,16 @@ import { assert, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { Counters } from "./Counters.ts"
 
-const counter = (id: number) => HtmlLocator.role("group", { name: `Counter ${id}` })
-const countOf = (id: number) => Locator.inside(counter(id), HtmlLocator.role("status"))
-const increment = (id: number) => Locator.inside(counter(id), HtmlLocator.role("button", { name: "Increment" }))
-const decrement = (id: number) => Locator.inside(counter(id), HtmlLocator.role("button", { name: "Decrement" }))
-const remove = (id: number) => Locator.inside(counter(id), HtmlLocator.role("button", { name: "Remove" }))
+const counter = (id: number) =>
+  HtmlLocator.role("group", { name: `Counter ${id}` })
+const countOf = (id: number) =>
+  Locator.inside(counter(id), HtmlLocator.role("status"))
+const increment = (id: number) =>
+  Locator.inside(counter(id), HtmlLocator.role("button", { name: "Increment" }))
+const decrement = (id: number) =>
+  Locator.inside(counter(id), HtmlLocator.role("button", { name: "Decrement" }))
+const remove = (id: number) =>
+  Locator.inside(counter(id), HtmlLocator.role("button", { name: "Remove" }))
 const addCounter = HtmlLocator.role("button", { name: "+ Add Counter" })
 
 it.layer(TestHost.layer())("Counters", (it) => {

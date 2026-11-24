@@ -21,9 +21,15 @@ export interface PlannedEvent {
 }
 
 /** @internal */
-export const ancestors = (node: TestHost.TestNode): ReadonlyArray<TestHost.TestElement> => {
+export const ancestors = (
+  node: TestHost.TestNode
+): ReadonlyArray<TestHost.TestElement> => {
   const out: Array<TestHost.TestElement> = []
-  for (let at = node._tag === "Element" ? node : node.parent; at !== undefined; at = at.parent) out.push(at)
+  for (
+    let at = node._tag === "Element" ? node : node.parent;
+    at !== undefined;
+    at = at.parent
+  ) out.push(at)
   return out
 }
 
@@ -35,19 +41,32 @@ export class PlayCursor {
   readonly root: TestHost.TestRoot<any, any, any>
   readonly settle: Effect.Effect<void, StepError>
 
-  constructor(module: string, root: TestHost.TestRoot<any, any, any>, testHost: TestHost.TestHost) {
+  constructor(
+    module: string,
+    root: TestHost.TestRoot<any, any, any>,
+    testHost: TestHost.TestHost
+  ) {
     this.module = module
     this.root = root
-    this.settle = Effect.provideService(TestHost.settle, TestHost.TestHost, testHost)
+    this.settle = Effect.provideService(
+      TestHost.settle,
+      TestHost.TestHost,
+      testHost
+    )
   }
 
   protected bubbles(_event: string): boolean {
     return true
   }
 
-  private handlerOn(node: TestHost.TestNode, event: string): TestHost.TestElement | undefined {
+  private handlerOn(
+    node: TestHost.TestNode,
+    event: string
+  ): TestHost.TestElement | undefined {
     const path = ancestors(node)
-    return (this.bubbles(event) ? path : path.slice(0, 1)).find((at) => Object.hasOwn(at.handlers, event))
+    return (this.bubbles(event) ? path : path.slice(0, 1)).find((at) =>
+      Object.hasOwn(at.handlers, event)
+    )
   }
 
   protected name(step: string): string {
@@ -58,7 +77,10 @@ export class PlayCursor {
     return { children: this.root.container.children }
   }
 
-  protected findOne(locator: Locator.Locator, step: string): TestHost.TestElement {
+  protected findOne(
+    locator: Locator.Locator,
+    step: string
+  ): TestHost.TestElement {
     return engine.findOne(
       { all: this.root.all, root: this.listed() },
       locator,
@@ -66,22 +88,34 @@ export class PlayCursor {
     ) as TestHost.TestElement
   }
 
-  protected interact(step: string, plan: () => ReadonlyArray<PlannedEvent>): Effect.Effect<void, StepError> {
+  protected interact(
+    step: string,
+    plan: () => ReadonlyArray<PlannedEvent>
+  ): Effect.Effect<void, StepError> {
     const site = callSite(this[step as keyof this] as Function)
     return Effect.gen({ self: this }, function*() {
       yield* this.settle
-      const edited = yield* Effect.sync(() => atSite(site, () => this.run(step, plan)))
+      const edited = yield* Effect.sync(() =>
+        atSite(site, () => this.run(step, plan))
+      )
       yield* this.settle
       for (const node of edited) {
-        for (const [name, value] of controlled.wantedOf(node) ?? []) node.props[name] = value
+        for (const [name, value] of controlled.wantedOf(node) ?? []) {
+          node.props[name] = value
+        }
       }
     })
   }
 
-  private run(step: string, plan: () => ReadonlyArray<PlannedEvent>): ReadonlyArray<TestHost.TestElement> {
+  private run(
+    step: string,
+    plan: () => ReadonlyArray<PlannedEvent>
+  ): ReadonlyArray<TestHost.TestElement> {
     const name = this.name(step)
     if (this.ignored !== undefined) {
-      throw new Error(`${name}: the ${this.ignored} before it produced no message: acknowledge it with expectIgnored()`)
+      throw new Error(
+        `${name}: the ${this.ignored} before it produced no message: acknowledge it with expectIgnored()`
+      )
     }
     let reached = false
     let handled = false
@@ -109,7 +143,13 @@ export class PlayCursor {
       handled ||= sent
       if (isDefault !== true) cancelled ||= prevented
     }
-    if (!reached) throw new Error(`${name}: nothing handles "${events[0]?.event}" at ${events[0]?.description}`)
+    if (!reached) {
+      throw new Error(
+        `${name}: nothing handles "${events[0]?.event}" at ${
+          events[0]?.description
+        }`
+      )
+    }
     this.interaction = handled ? "handled" : "ignored"
     this.ignored = handled ? undefined : step
     return edited
@@ -139,9 +179,18 @@ export class PlayCursor {
   }
 
   click(target: string | Locator.Locator): Effect.Effect<void, StepError> {
-    return this.one("click", typeof target === "string" ? Locator.text(target) : target, "click", () => scene.pointer)
+    return this.one(
+      "click",
+      typeof target === "string" ? Locator.text(target) : target,
+      "click",
+      () => scene.pointer
+    )
   }
-  fire(locator: Locator.Locator, event: string, payload: unknown = {}): Effect.Effect<void, StepError> {
+  fire(
+    locator: Locator.Locator,
+    event: string,
+    payload: unknown = {}
+  ): Effect.Effect<void, StepError> {
     return this.one("fire", locator, event, () => payload)
   }
 
@@ -150,15 +199,32 @@ export class PlayCursor {
   }
   protected expectation(
     locator: Locator.Locator,
-    matchers: { readonly [name: string]: (...args: Array<any>) => scene.Matcher }
+    matchers: {
+      readonly [name: string]: (...args: Array<any>) => scene.Matcher
+    }
   ): object {
-    return scene.makeExpectation(this.name("expect"), locator, matchers, (check, method) => {
-      const site = callSite(method)
-      return Effect.andThen(
-        this.settle,
-        Effect.sync(() => atSite(site, () => check(this.root.all(locator), this.root.container, this.listed())))
-      )
-    })
+    return scene.makeExpectation(
+      this.name("expect"),
+      locator,
+      matchers,
+      (check, method) => {
+        const site = callSite(method)
+        return Effect.andThen(
+          this.settle,
+          Effect.sync(() =>
+            atSite(
+              site,
+              () =>
+                check(
+                  this.root.all(locator),
+                  this.root.container,
+                  this.listed()
+                )
+            )
+          )
+        )
+      }
+    )
   }
 
   expectIgnored(): Effect.Effect<void> {
@@ -186,7 +252,9 @@ export class PlayCursor {
         atSite(site, () => {
           if (this.ignored !== undefined) {
             throw new Error(
-              `${this.name("make")}: the last ${this.ignored} produced no message: acknowledge it with expectIgnored()`
+              `${
+                this.name("make")
+              }: the last ${this.ignored} produced no message: acknowledge it with expectIgnored()`
             )
           }
         })
@@ -197,7 +265,11 @@ export class PlayCursor {
 
 /** @internal */
 export const begin = <S extends PlayCursor>(
-  Ctor: new(module: string, root: TestHost.TestRoot<any, any, any>, testHost: TestHost.TestHost) => S,
+  Ctor: new(
+    module: string,
+    root: TestHost.TestRoot<any, any, any>,
+    testHost: TestHost.TestHost
+  ) => S,
   module: string,
   make: Function,
   component: any,
@@ -209,7 +281,9 @@ export const begin = <S extends PlayCursor>(
     const root = yield* TestHost.mount(component, props as any)
     const play = new Ctor(module, root, testHost)
     yield* play.settle
-    yield* Effect.addFinalizer((exit) => Exit.isSuccess(exit) ? play.finish(site) : Effect.void)
+    yield* Effect.addFinalizer((exit) =>
+      Exit.isSuccess(exit) ? play.finish(site) : Effect.void
+    )
     return play
   }) as any
 }

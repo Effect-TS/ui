@@ -9,7 +9,12 @@
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node"
 import { HtmlServer } from "@effect/ui/html"
 import { Effect, Layer } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpRouter } from "effect/http"
+import {
+  FetchHttpClient,
+  HttpClient,
+  HttpClientRequest,
+  HttpRouter
+} from "effect/http"
 // `layerHttp` has its own entry point, outside `@effect/ui/html`, so a
 // browser bundle never takes in the HTTP server modules.
 import { layerHttp } from "@effect/ui/html/HtmlServerHttp"
@@ -32,7 +37,9 @@ const ApiClient = Layer.effect(
   HttpClient.HttpClient,
   Effect.map(
     HttpClient.HttpClient,
-    HttpClient.mapRequest(HttpClientRequest.prependUrl(`http://localhost:${port}`))
+    HttpClient.mapRequest(
+      HttpClientRequest.prependUrl(`http://localhost:${port}`)
+    )
   )
 ).pipe(Layer.provide(FetchHttpClient.layer))
 
@@ -62,7 +69,9 @@ const Pages = layerHttp(App, {
   <head><meta charset="utf-8">${page.head}</head>
   <body ${page.bodyAttributes}>
     <div id="app">${page.html}</div>
-    <script type="application/json" id="state">${HtmlServer.serializeState(page.state)}</script>
+    <script type="application/json" id="state">${
+      HtmlServer.serializeState(page.state)
+    }</script>
     <script type="module" src="/client.js"></script>
   </body>
 </html>`

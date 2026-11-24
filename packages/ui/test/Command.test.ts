@@ -3,31 +3,64 @@ import * as schedule from "@effect/ui/internal/schedule"
 import { assert, describe, it } from "@effect/vitest"
 import { Data, Effect, Exit, Layer, Schema, Stream } from "effect"
 import { KeyValueStore } from "effect/persistence"
-import { SaveTodo, Search, TodoItemMessage, Upload } from "./fixtures/components.ts"
+import {
+  SaveTodo,
+  Search,
+  TodoItemMessage,
+  Upload
+} from "./fixtures/components.ts"
 
 const todo = { id: "t1", title: "buy milk", done: false }
 
 class Ticks extends Command.Service<Ticks>()(
   "Ticks",
   { args: { n: Schema.Number }, stream: true, invalidates: () => [] },
-  Effect.succeed(({ n }) => Stream.fromIterable(Array.from({ length: n }, (_, i) => i)))
+  Effect.succeed(({ n }) =>
+    Stream.fromIterable(Array.from({ length: n }, (_, i) => i))
+  )
 ) {}
 
-class SaveFailed extends Data.TaggedError("SaveFailed")<{ readonly reason: string }> {}
+class SaveFailed
+  extends Data.TaggedError("SaveFailed")<{ readonly reason: string }>
+{}
 
 class Save extends Command.Service<Save>()(
   "Save",
   { args: { title: Schema.String }, invalidates: () => [] },
-  Effect.succeed(({ title }) => title === "" ? Effect.fail(new SaveFailed({ reason: "empty" })) : Effect.succeed(title))
+  Effect.succeed(({ title }) =>
+    title === ""
+      ? Effect.fail(new SaveFailed({ reason: "empty" }))
+      : Effect.succeed(title)
+  )
 ) {}
 
 const failingKv = Layer.succeed(
   KeyValueStore.KeyValueStore,
   KeyValueStore.makeStringOnly({
-    get: () => Effect.fail(new KeyValueStore.KeyValueStoreError({ message: "disk full", method: "get", key: "" })),
-    set: () => Effect.fail(new KeyValueStore.KeyValueStoreError({ message: "disk full", method: "set", key: "" })),
+    get: () =>
+      Effect.fail(
+        new KeyValueStore.KeyValueStoreError({
+          message: "disk full",
+          method: "get",
+          key: ""
+        })
+      ),
+    set: () =>
+      Effect.fail(
+        new KeyValueStore.KeyValueStoreError({
+          message: "disk full",
+          method: "set",
+          key: ""
+        })
+      ),
     remove: () =>
-      Effect.fail(new KeyValueStore.KeyValueStoreError({ message: "disk full", method: "remove", key: "" })),
+      Effect.fail(
+        new KeyValueStore.KeyValueStoreError({
+          message: "disk full",
+          method: "remove",
+          key: ""
+        })
+      ),
     clear: Effect.void,
     size: Effect.succeed(0),
     keys: Effect.succeed([])
@@ -71,12 +104,20 @@ describe("Command", () => {
           optimistic: ({ id, name }) => [{ id, name }] as any,
           writes: (success: string, { id }) => [{ id, success }] as any
         },
-        Effect.succeed(({ name }: { readonly name: string }) => Effect.succeed(name.toUpperCase()))
+        Effect.succeed(({ name }: { readonly name: string }) =>
+          Effect.succeed(name.toUpperCase())
+        )
       ) {}
       const command = Rename.make({ id: "u1", name: "ada" })
       assert.deepStrictEqual(command.invalidates, [Query.Tag("user:u1")])
-      assert.deepStrictEqual(command.optimistic as unknown, [{ id: "u1", name: "ada" }])
-      assert.deepStrictEqual(command.writes?.("ADA") as unknown, [{ id: "u1", success: "ADA" }])
+      assert.deepStrictEqual(command.optimistic as unknown, [{
+        id: "u1",
+        name: "ada"
+      }])
+      assert.deepStrictEqual(command.writes?.("ADA") as unknown, [{
+        id: "u1",
+        success: "ADA"
+      }])
     })
 
     it.effect("the implementation is tested against a fake of what it uses", () =>
@@ -85,19 +126,27 @@ describe("Command", () => {
         const message = yield* SaveTodo.make(todo).effect
         assert.deepStrictEqual(message, TodoItemMessage.Saved())
         assert.strictEqual(yield* kv.get("todo/t1"), JSON.stringify(todo))
-      }).pipe(Effect.provide(SaveTodo.layer.pipe(Layer.provideMerge(KeyValueStore.layerMemory)))))
+      }).pipe(
+        Effect.provide(
+          SaveTodo.layer.pipe(Layer.provideMerge(KeyValueStore.layerMemory))
+        )
+      ))
 
     it.effect("the implementation owns the error policy", () =>
       Effect.gen(function*() {
         const message = yield* SaveTodo.make(todo).effect
-        assert.deepStrictEqual(message, TodoItemMessage.SaveFailed({ reason: "disk full" }))
+        assert.deepStrictEqual(
+          message,
+          TodoItemMessage.SaveFailed({ reason: "disk full" })
+        )
       }).pipe(Effect.provide(SaveTodo.layer.pipe(Layer.provide(failingKv)))))
 
     it.effect("a fake is a plain Layer.succeed", () =>
       Effect.gen(function*() {
         const message = yield* SaveTodo.make(todo).effect
         assert.deepStrictEqual(message, TodoItemMessage.Saved())
-      }).pipe(Effect.provide(Layer.succeed(SaveTodo, () => Effect.succeed(TodoItemMessage.Saved())))))
+      }).pipe(Effect.provide(Layer.succeed(SaveTodo, () =>
+        Effect.succeed(TodoItemMessage.Saved())))))
 
     it.effect("a stream service runs its Stream", () =>
       Effect.gen(function*() {
@@ -124,13 +173,18 @@ describe("Command", () => {
         assert.isFalse(Command.isUnmatched(matched("milk")))
         assert.strictEqual(yield* matched("milk").effect, "saved milk")
         assert.strictEqual(yield* matched("").effect, "failed empty")
-        assert.strictEqual(matched("").reject?.(new SaveFailed({ reason: "x" })), "failed x")
+        assert.strictEqual(
+          matched("").reject?.(new SaveFailed({ reason: "x" })),
+          "failed x"
+        )
       }).pipe(Effect.provide(Save.layer)))
 
     it.effect("a defect isn't mapped", () =>
       Effect.gen(function*() {
         const exit = yield* Effect.exit(
-          Save.make({ title: "milk" }).pipe(Command.match({ onSuccess: () => "ok", onFailure: () => "failed" })).effect
+          Save.make({ title: "milk" }).pipe(
+            Command.match({ onSuccess: () => "ok", onFailure: () => "failed" })
+          ).effect
         )
         assert.isTrue(Exit.hasDies(exit))
       }).pipe(Effect.provide(Layer.succeed(Save, () => Effect.die("boom")))))
@@ -138,7 +192,10 @@ describe("Command", () => {
     it.effect("map after match maps both channels", () =>
       Effect.gen(function*() {
         const command = Save.make({ title: "" }).pipe(
-          Command.match({ onSuccess: () => "ok", onFailure: (error) => error.reason }),
+          Command.match({
+            onSuccess: () => "ok",
+            onFailure: (error) => error.reason
+          }),
           Command.map((message) => message.length)
         )
         assert.strictEqual(yield* command.effect, 5)
@@ -151,13 +208,21 @@ describe("Command", () => {
       assert.strictEqual(Search.mode, "switch")
       const command = Search.make({ text: "x" })
       assert.strictEqual(command._tag, "Effect")
-      assert.deepStrictEqual([command.name, command.args, command.mode, command.groupKey], [
+      assert.deepStrictEqual([
+        command.name,
+        command.args,
+        command.mode,
+        command.groupKey
+      ], [
         "Search",
         { text: "x" },
         "switch",
         undefined
       ])
-      assert.deepStrictEqual(Effect.runSync(command.effect), { _tag: "Results", items: ["x"] })
+      assert.deepStrictEqual(Effect.runSync(command.effect), {
+        _tag: "Results",
+        items: ["x"]
+      })
     })
 
     it("make issues when detached from the definition", () => {
@@ -166,7 +231,11 @@ describe("Command", () => {
     })
 
     it("a Command with no args takes none", () => {
-      const Ping = Command.make("Ping", { args: {} }, () => Effect.succeed("pong"))
+      const Ping = Command.make(
+        "Ping",
+        { args: {} },
+        () => Effect.succeed("pong")
+      )
       assert.deepStrictEqual(Ping.make().args, {})
       assert.strictEqual(Effect.runSync(Ping.make().effect), "pong")
     })
@@ -181,30 +250,50 @@ describe("Command", () => {
     it("the group key is the canonical JSON of the encoded group fields", () => {
       const Page = Command.make(
         "Page",
-        { args: { tab: Schema.String, page: Schema.NumberFromString, note: Schema.String }, group: ["tab", "page"] },
+        {
+          args: {
+            tab: Schema.String,
+            page: Schema.NumberFromString,
+            note: Schema.String
+          },
+          group: ["tab", "page"]
+        },
         () => Effect.void
       )
       const a = Page.make({ page: 2, tab: "all", note: "a" })
       const b = Page.make({ note: "b", tab: "all", page: 2 })
       assert.strictEqual(a.groupKey, `{"page":"2","tab":"all"}`)
       assert.strictEqual(a.groupKey, b.groupKey)
-      assert.notStrictEqual(Page.make({ page: 3, tab: "all", note: "a" }).groupKey, a.groupKey)
+      assert.notStrictEqual(
+        Page.make({ page: 3, tab: "all", note: "a" }).groupKey,
+        a.groupKey
+      )
     })
 
     it("a File outside the group doesn't take part in the group key", () => {
       const UploadFile = Command.make(
         "UploadFile",
-        { args: { folder: Schema.String, file: Schema.instanceOf(File) }, group: ["folder"] },
+        {
+          args: { folder: Schema.String, file: Schema.instanceOf(File) },
+          group: ["folder"]
+        },
         ({ file }) => Effect.succeed(file.name)
       )
-      const command = UploadFile.make({ folder: "photos", file: new File(["x"], "me.png") })
+      const command = UploadFile.make({
+        folder: "photos",
+        file: new File(["x"], "me.png")
+      })
       assert.strictEqual(command.groupKey, `{"folder":"photos"}`)
       assert.strictEqual(Effect.runSync(command.effect), "me.png")
     })
 
     it("a group field must be one of the args", () => {
       assert.throws(
-        () => Command.make("Bad", { args: { a: Schema.String }, group: ["b" as any] }, () => Effect.void),
+        () =>
+          Command.make("Bad", {
+            args: { a: Schema.String },
+            group: ["b" as any]
+          }, () => Effect.void),
         /group field "b"/
       )
     })
@@ -212,7 +301,10 @@ describe("Command", () => {
     it("the work field of the other kind is undefined", () => {
       assert.strictEqual(Upload.make({ name: "photo.png" }).effect, undefined)
       assert.strictEqual(Search.make({ text: "x" }).stream, undefined)
-      assert.strictEqual(Command.map(Upload.make({ name: "photo.png" }), () => 1).effect, undefined)
+      assert.strictEqual(
+        Command.map(Upload.make({ name: "photo.png" }), () => 1).effect,
+        undefined
+      )
     })
   })
 
@@ -223,14 +315,25 @@ describe("Command", () => {
       )
       assert.strictEqual(mapped._tag, "Effect")
       if (mapped._tag !== "Effect") return
-      assert.deepStrictEqual([mapped.name, mapped.args, mapped.mode], ["Search", { text: "x" }, "switch"])
+      assert.deepStrictEqual([mapped.name, mapped.args, mapped.mode], [
+        "Search",
+        { text: "x" },
+        "switch"
+      ])
       assert.strictEqual(Effect.runSync(mapped.effect), "Results")
-      assert.strictEqual(mapped.resolve({ _tag: "Results", items: [] }), "Results")
+      assert.strictEqual(
+        mapped.resolve({ _tag: "Results", items: [] }),
+        "Results"
+      )
     })
 
     it("leaves an Interrupt unchanged", () => {
       const interrupt = Command.interrupt(Upload, { name: "photo.png" })
-      assert.deepStrictEqual([interrupt._tag, interrupt.name, interrupt.groupKey], [
+      assert.deepStrictEqual([
+        interrupt._tag,
+        interrupt.name,
+        interrupt.groupKey
+      ], [
         "Interrupt",
         "Upload",
         `{"name":"photo.png"}`
@@ -247,16 +350,29 @@ describe("Command", () => {
         const original = Search.make({ text: "x" })
         const mapped = original.pipe(Command.as(message))
         assert.strictEqual(yield* mapped.effect, message)
-        assert.strictEqual(mapped.resolve({ _tag: "Results", items: [] }), message)
-        assert.deepStrictEqual([mapped.name, mapped.args, mapped.mode], ["Search", { text: "x" }, "switch"])
+        assert.strictEqual(
+          mapped.resolve({ _tag: "Results", items: [] }),
+          message
+        )
+        assert.deepStrictEqual([mapped.name, mapped.args, mapped.mode], [
+          "Search",
+          { text: "x" },
+          "switch"
+        ])
         const stream = Command.as(Ticks.make({ n: 2 }), message)
-        assert.deepStrictEqual(yield* Stream.runCollect(stream.stream), [message, message])
+        assert.deepStrictEqual(yield* Stream.runCollect(stream.stream), [
+          message,
+          message
+        ])
         const matched = Save.make({ title: "" }).pipe(
           Command.match({ onSuccess: () => "ok", onFailure: () => "failed" }),
           Command.as(message)
         )
         assert.strictEqual(yield* matched.effect, message)
-        assert.strictEqual(matched.reject?.(new SaveFailed({ reason: "empty" })), message)
+        assert.strictEqual(
+          matched.reject?.(new SaveFailed({ reason: "empty" })),
+          message
+        )
         const interrupt = Command.interrupt(Ticks)
         assert.strictEqual(Command.as(interrupt, message), interrupt)
       }).pipe(Effect.provide(Ticks.layer), Effect.provide(Save.layer)))
@@ -266,16 +382,29 @@ describe("Command", () => {
     it.effect("replaces every result with Component.noop, keeping the issued Command", () =>
       Effect.gen(function*() {
         const silent = Search.make({ text: "x" }).pipe(Command.asNoop)
-        assert.deepStrictEqual([silent.name, silent.args, silent.mode], ["Search", { text: "x" }, "switch"])
+        assert.deepStrictEqual([silent.name, silent.args, silent.mode], [
+          "Search",
+          { text: "x" },
+          "switch"
+        ])
         assert.strictEqual(yield* silent.effect, Component.noop)
-        assert.strictEqual(silent.resolve({ _tag: "Results", items: [] }), Component.noop)
+        assert.strictEqual(
+          silent.resolve({ _tag: "Results", items: [] }),
+          Component.noop
+        )
         const stream = Command.asNoop(Ticks.make({ n: 2 }))
-        assert.deepStrictEqual(yield* Stream.runCollect(stream.stream), [Component.noop, Component.noop])
+        assert.deepStrictEqual(yield* Stream.runCollect(stream.stream), [
+          Component.noop,
+          Component.noop
+        ])
         const matched = Save.make({ title: "" }).pipe(
           Command.match({ onSuccess: () => "ok", onFailure: () => "failed" }),
           Command.asNoop
         )
-        assert.strictEqual(matched.reject?.(new SaveFailed({ reason: "empty" })), Component.noop)
+        assert.strictEqual(
+          matched.reject?.(new SaveFailed({ reason: "empty" })),
+          Component.noop
+        )
         const interrupt = Command.interrupt(Ticks)
         assert.strictEqual(Command.asNoop(interrupt), interrupt)
       }).pipe(Effect.provide(Ticks.layer), Effect.provide(Save.layer)))
@@ -288,7 +417,11 @@ describe("Command", () => {
       assert.isTrue(Object.isFrozen(Component.noop))
       assert.isTrue(Component.isNoop(Component.noop))
       // A copy from another copy of effect is a different object with the same type id.
-      assert.isTrue(Component.isNoop({ "~@effect/ui/Component/Noop": "~@effect/ui/Component/Noop" }))
+      assert.isTrue(
+        Component.isNoop({
+          "~@effect/ui/Component/Noop": "~@effect/ui/Component/Noop"
+        })
+      )
       assert.isFalse(Component.isNoop({ "~@effect/ui/Component/Noop": true }))
       assert.isFalse(Component.isNoop(Symbol.for("~@effect/ui/Component/Noop")))
       assert.isFalse(Component.isNoop(undefined))
@@ -301,7 +434,11 @@ describe("Command", () => {
     const done = () => Effect.succeed(Message.Done())
     const concurrent = Command.make("C", { args: {} }, done)
     const switching = Command.make("S", { args: {}, mode: "switch" }, done)
-    const queueing = Command.make("Q", { args: { key: Schema.String }, mode: "queue", group: ["key"] }, done)
+    const queueing = Command.make("Q", {
+      args: { key: Schema.String },
+      mode: "queue",
+      group: ["key"]
+    }, done)
     const q = (key: string) => queueing.make({ key })
     const entry = (
       command: Command.Issued<any, any, any, "Effect">,
@@ -315,10 +452,13 @@ describe("Command", () => {
     })
 
     it("concurrent starts alongside the group", () => {
-      assert.deepStrictEqual(schedule.schedule([entry(concurrent.make())], concurrent.make()), {
-        action: "start",
-        interrupt: []
-      })
+      assert.deepStrictEqual(
+        schedule.schedule([entry(concurrent.make())], concurrent.make()),
+        {
+          action: "start",
+          interrupt: []
+        }
+      )
     })
 
     it("switch interrupts the group, not other Commands, and waits for the fibers it cut", () => {
@@ -328,18 +468,33 @@ describe("Command", () => {
         switching.make()
       )
       assert.strictEqual(decision.action, "queue")
-      assert.deepStrictEqual(decision.interrupt.map((e) => e.value), ["S::running", "S::queued"])
-      assert.deepStrictEqual(schedule.schedule([other], switching.make()), { action: "start", interrupt: [] })
+      assert.deepStrictEqual(decision.interrupt.map((e) => e.value), [
+        "S::running",
+        "S::queued"
+      ])
+      assert.deepStrictEqual(schedule.schedule([other], switching.make()), {
+        action: "start",
+        interrupt: []
+      })
     })
 
     it("a stopping run holds its group until its fiber exits, and isn't interrupted again", () => {
       const stopping = entry(q("a"), "stopping")
       assert.strictEqual(schedule.schedule([stopping], q("a")).action, "queue")
-      assert.deepStrictEqual(schedule.schedule([entry(switching.make(), "stopping")], switching.make()), {
-        action: "queue",
-        interrupt: []
-      })
-      assert.deepStrictEqual(schedule.schedule([stopping], Command.interrupt(queueing)).interrupt, [])
+      assert.deepStrictEqual(
+        schedule.schedule(
+          [entry(switching.make(), "stopping")],
+          switching.make()
+        ),
+        {
+          action: "queue",
+          interrupt: []
+        }
+      )
+      assert.deepStrictEqual(
+        schedule.schedule([stopping], Command.interrupt(queueing)).interrupt,
+        []
+      )
       const queued = entry(q("a"), "queued")
       assert.strictEqual(schedule.next([stopping, queued], queued), undefined)
       assert.strictEqual(schedule.next([queued], queued), queued)
@@ -352,17 +507,26 @@ describe("Command", () => {
       const queued1 = entry(q("a"), "queued")
       const queued2 = { ...entry(q("a"), "queued"), value: "second" }
       assert.strictEqual(schedule.next([queued1, queued2], a), queued1)
-      assert.strictEqual(schedule.next([a, queued1], { ...a, value: "another" }), undefined)
+      assert.strictEqual(
+        schedule.next([a, queued1], { ...a, value: "another" }),
+        undefined
+      )
     })
 
     it("an interrupt stops nothing new and interrupts by name, or by name and group", () => {
       const a = entry(q("a"))
       const b = entry(q("b"))
-      assert.deepStrictEqual(schedule.schedule([a, b], Command.interrupt(queueing)).interrupt, [a, b])
-      assert.deepStrictEqual(schedule.schedule([a, b], Command.interrupt(queueing, { key: "b" })), {
-        action: "none",
-        interrupt: [b]
-      })
+      assert.deepStrictEqual(
+        schedule.schedule([a, b], Command.interrupt(queueing)).interrupt,
+        [a, b]
+      )
+      assert.deepStrictEqual(
+        schedule.schedule([a, b], Command.interrupt(queueing, { key: "b" })),
+        {
+          action: "none",
+          interrupt: [b]
+        }
+      )
     })
   })
 })

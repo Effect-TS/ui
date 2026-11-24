@@ -23,15 +23,30 @@ export const MenuEvents = UiSchema.TaggedEnum({ Picked: { id: Schema.String } })
 const Trigger = Html.ref("Menu.trigger", "button")
 const Input = Html.ref("Menu.input", "input")
 
-const filter = (items: ReadonlyArray<Item>, query: string): ReadonlyArray<Item> =>
-  query === "" ? items : items.filter((item) => item.label.toLowerCase().includes(query.toLowerCase()))
+const filter = (
+  items: ReadonlyArray<Item>,
+  query: string
+): ReadonlyArray<Item> =>
+  query === ""
+    ? items
+    : items.filter((item) =>
+      item.label.toLowerCase().includes(query.toLowerCase())
+    )
 
 /** The next enabled item after "from" in "direction", wrapping, or the first enabled one. */
-const step = (items: ReadonlyArray<Item>, from: string | null, direction: 1 | -1): string | null => {
+const step = (
+  items: ReadonlyArray<Item>,
+  from: string | null,
+  direction: 1 | -1
+): string | null => {
   const enabled = items.filter((item) => item.disabled !== true)
   if (enabled.length === 0) return null
   const index = enabled.findIndex((item) => item.id === from)
-  if (index < 0) return direction === 1 ? enabled[0]!.id : enabled[enabled.length - 1]!.id
+  if (index < 0) {
+    return direction === 1
+      ? enabled[0]!.id
+      : enabled[enabled.length - 1]!.id
+  }
   return enabled[(index + direction + enabled.length) % enabled.length]!.id
 }
 
@@ -39,8 +54,13 @@ const step = (items: ReadonlyArray<Item>, from: string | null, direction: 1 | -1
  * The active item, if the rows shown still have it and it can be picked. The Model keeps an id
  * into the props' items, which the parent can replace at any time, so every reader goes through this.
  */
-const activeIn = (visible: ReadonlyArray<Item>, active: string | null): string | null =>
-  visible.some((item) => item.id === active && item.disabled !== true) ? active : null
+const activeIn = (
+  visible: ReadonlyArray<Item>,
+  active: string | null
+): string | null =>
+  visible.some((item) => item.id === active && item.disabled !== true)
+    ? active
+    : null
 
 const MenuDef = Component.define({
   name: "Menu",
@@ -63,18 +83,34 @@ const MenuDef = Component.define({
  * Arrow keys, Enter and Escape are handled on the input, and typeahead on the trigger.
  */
 export const Menu = MenuDef.make({
-  init: ($) => $.set({ open: false, query: "", active: null, typed: "", focused: [] }),
+  init: ($) =>
+    $.set({ open: false, query: "", active: null, typed: "", focused: [] }),
   update: ($, message) =>
     MenuMessage.match(message, {
       Toggle: () => ({ ...$.model, open: !$.model.open }),
       // The browser's report of an auto popover: the Model follows, and focus moves with it.
       Toggled: ({ open }) =>
-        $.set({ ...$.model, open, query: open ? $.model.query : "", active: open ? $.model.active : null }).run(
+        $.set({
+          ...$.model,
+          open,
+          query: open ? $.model.query : "",
+          active: open ? $.model.active : null
+        }).run(
           open
-            ? HtmlCommand.focus(Input, ({ found }) => MenuMessage.Focused({ found }))
-            : HtmlCommand.focus(Trigger, ({ found }) => MenuMessage.Focused({ found }))
+            ? HtmlCommand.focus(
+              Input,
+              ({ found }) => MenuMessage.Focused({ found })
+            )
+            : HtmlCommand.focus(
+              Trigger,
+              ({ found }) => MenuMessage.Focused({ found })
+            )
         ),
-      Query: ({ value }) => ({ ...$.model, query: value, active: step(filter($.props.items, value), null, 1) }),
+      Query: ({ value }) => ({
+        ...$.model,
+        query: value,
+        active: step(filter($.props.items, value), null, 1)
+      }),
       Key: ({ key }) => {
         const visible = filter($.props.items, $.model.query)
         const active = activeIn(visible, $.model.active)
@@ -88,23 +124,36 @@ export const Menu = MenuDef.make({
           case "Enter":
             return active === null
               ? $.model
-              : $.set({ ...$.model, open: false }).emit(MenuEvents.Picked({ id: active }))
+              : $.set({ ...$.model, open: false }).emit(
+                MenuEvents.Picked({ id: active })
+              )
           default: {
             // Typeahead: a printable key on the trigger moves to the first label that starts with what was typed.
             // A key that no label continues with starts over from that key, so the buffer is never longer than a label.
             const find = (prefix: string) =>
-              $.props.items.find((item) => item.disabled !== true && item.label.toLowerCase().startsWith(prefix))
+              $.props.items.find((item) =>
+                item.disabled !== true &&
+                item.label.toLowerCase().startsWith(prefix)
+              )
             const next = $.model.typed + key.toLowerCase()
             const typed = find(next) !== undefined ? next : key.toLowerCase()
             const hit = find(typed)
-            return { ...$.model, typed: hit === undefined ? "" : typed, active: hit === undefined ? active : hit.id }
+            return {
+              ...$.model,
+              typed: hit === undefined ? "" : typed,
+              active: hit === undefined ? active : hit.id
+            }
           }
         }
       },
-      Pick: ({ id }) => $.set({ ...$.model, open: false }).emit(MenuEvents.Picked({ id })),
+      Pick: ({ id }) =>
+        $.set({ ...$.model, open: false }).emit(MenuEvents.Picked({ id })),
       Focused: ({ found }) => ({
         ...$.model,
-        focused: [...$.model.focused, ($.model.open ? "input" : "trigger") + ":" + String(found)]
+        focused: [
+          ...$.model.focused,
+          ($.model.open ? "input" : "trigger") + ":" + String(found)
+        ]
       })
     }),
   parts: (p, model) => {
@@ -124,7 +173,10 @@ export const Menu = MenuDef.make({
           })
           .onClick(MenuMessage.Toggle())
           .onKeyDown(
-            ({ key }) => key.length === 1 || key === "ArrowDown" ? MenuMessage.Key({ key }) : undefined,
+            ({ key }) =>
+              key.length === 1 || key === "ArrowDown"
+                ? MenuMessage.Key({ key })
+                : undefined,
             {
               preventDefault: true
             }
@@ -139,13 +191,16 @@ export const Menu = MenuDef.make({
           .attrs({
             role: "combobox",
             "aria-controls": p.id("popup"),
-            "aria-activedescendant": active === null ? undefined : p.id("item", active)
+            "aria-activedescendant": active === null
+              ? undefined
+              : p.id("item", active)
           })
           .value(model.query)
           .onInput(({ value }) => MenuMessage.Query({ value }))
           .onKeyDown(
             ({ key }) =>
-              key === "ArrowDown" || key === "ArrowUp" || key === "Enter" || key === "Escape"
+              key === "ArrowDown" || key === "ArrowUp" || key === "Enter" ||
+                key === "Escape"
                 ? MenuMessage.Key({ key })
                 : undefined,
             { preventDefault: true }
@@ -157,7 +212,11 @@ export const Menu = MenuDef.make({
             "aria-disabled": item.disabled === true ? "true" : undefined,
             "data-active": active === item.id ? "" : undefined
           })
-          .onClick(item.disabled === true ? () => undefined : MenuMessage.Pick({ id: item.id })))
+          .onClick(
+            item.disabled === true
+              ? () => undefined
+              : MenuMessage.Pick({ id: item.id })
+          ))
     }
   }
 })
@@ -191,6 +250,8 @@ export const Dialog = Component.define({
         .onCancel(DialogMessage.Close())),
     title: p.part("h2", (b) => b.id(p.id("title"))),
     // Any element can close the dialog, so the part is declared over the host-neutral builder.
-    close: p.part((b) => b.on("click", DialogMessage.Close(), { preventDefault: true }))
+    close: p.part((b) =>
+      b.on("click", DialogMessage.Close(), { preventDefault: true })
+    )
   })
 })

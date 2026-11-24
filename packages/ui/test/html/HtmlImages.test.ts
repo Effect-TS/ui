@@ -9,15 +9,22 @@ describe("HtmlImages.Images", () => {
     Effect.gen(function*() {
       const context = yield* Layer.build(BrowserHost.layer())
       const load = (src: string) =>
-        HtmlImages.Images.use((images) => images.load({ src })).pipe(Effect.provide(context))
-      assert.strictEqual(yield* load("data:image/gif;base64,R0lGODlhAQABAAAAACw="), "loaded")
+        HtmlImages.Images.use((images) => images.load({ src })).pipe(
+          Effect.provide(context)
+        )
+      assert.strictEqual(
+        yield* load("data:image/gif;base64,R0lGODlhAQABAAAAACw="),
+        "loaded"
+      )
       assert.strictEqual(yield* load("/missing.png"), "error")
     }).pipe(Effect.scoped))
 
   it.effect("TestImages settles the loads of a source, and throws for one with none pending", () =>
     Effect.gen(function*() {
       const images = TestImages.make()
-      const fiber = yield* Effect.forkChild(images.load({ src: "/ada.png", sizes: undefined }))
+      const fiber = yield* Effect.forkChild(
+        images.load({ src: "/ada.png", sizes: undefined })
+      )
       yield* Effect.yieldNow
       assert.throws(
         () => images.settle({ src: "/grace.png" }, "loaded"),

@@ -90,7 +90,16 @@ export interface AwaitedQuery {
  * @since 0.1.0
  */
 export interface Record<Props, Model, Msg, Events> {
-  readonly component: Component.Component<any, Props, Model, Msg, Events, any, any, any>
+  readonly component: Component.Component<
+    any,
+    Props,
+    Model,
+    Msg,
+    Events,
+    any,
+    any,
+    any
+  >
   readonly props: Props
   /** Commands issued but not yet resolved, oldest first. */
   readonly pending: ReadonlyArray<Pending<Msg>>
@@ -156,13 +165,15 @@ type SendMessage<Rcv> = unknown extends Rcv ? never : Rcv
  * @since 0.1.0
  */
 export type Given<C> = {
-  readonly [K in keyof Component.Queries<C>]?: Component.Queries<C>[K] extends Component.QueryMany<infer R>
-    ? ReadonlyArray<KeyedLoad<R>>
+  readonly [K in keyof Component.Queries<C>]?: Component.Queries<C>[K] extends
+    Component.QueryMany<infer R> ? ReadonlyArray<KeyedLoad<R>>
     : Query.Query.Success<QueryOf<Component.Queries<C>[K]>>
 }
 
 // The `Query` a `queries` entry shows, for the steps that name a query.
-type QueryOf<D> = D extends Component.QueryOne<infer R> ? R : D extends Component.QueryMany<infer R> ? R : never
+type QueryOf<D> = D extends Component.QueryOne<infer R> ? R
+  : D extends Component.QueryMany<infer R> ? R
+  : never
 
 /**
  * One key of a `queryMany` query for `loadedMany`: its args and a Success
@@ -206,7 +217,9 @@ export type Target =
  * @category models
  * @since 0.1.0
  */
-export type StreamTarget = Command.Definition<any, any, true, any, any> | Command.Issued<any, any, never, "Stream">
+export type StreamTarget =
+  | Command.Definition<any, any, true, any, any>
+  | Command.Issued<any, any, never, "Stream">
 
 // A component with no messages has `Msg = never`, and its `update` can't take `any`, so it needs its own member.
 type AnyComponent =
@@ -327,9 +340,16 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * value]]`. Values given before and not listed are kept.
    */
   given<const O extends ReadonlyArray<Component.Headless.Any> = []>(
-    model: Component.Model<C> | ((model: Component.Model<C>) => Component.Model<C>),
+    model:
+      | Component.Model<C>
+      | ((model: Component.Model<C>) => Component.Model<C>),
     queries?: Given<C>,
-    shared?: { readonly [K in keyof O]: readonly [owner: O[K], value: Component.Shared.Value<O[K]>] }
+    shared?: {
+      readonly [K in keyof O]: readonly [
+        owner: O[K],
+        value: Component.Shared.Value<O[K]>
+      ]
+    }
   ): this
   /**
    * Sets the value `owner` shares with the component, in place of the one it
@@ -359,12 +379,19 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * acknowledged with `sent`, and a send to an optional owner with no value
    * given is dropped.
    */
-  shared<O extends Component.Headless.Any>(owner: O, value: Component.Shared.Value<O>): this
+  shared<O extends Component.Headless.Any>(
+    owner: O,
+    value: Component.Shared.Value<O>
+  ): this
   /**
    * Changes the props. A props change never reaches `update`: it changes the
    * view, the queries' args and the Subscription keys.
    */
-  props(next: Component.Props<C> | ((props: Component.Props<C>) => Component.Props<C>)): this
+  props(
+    next:
+      | Component.Props<C>
+      | ((props: Component.Props<C>) => Component.Props<C>)
+  ): this
 
   /**
    * Resolves the oldest running Command matching `target` with the result it
@@ -420,7 +447,10 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
   loaded<N extends Component.SingleNames<Component.Queries<C>>>(
     name: N,
     value: Query.Query.Success<QueryOf<Component.Queries<C>[N]>>,
-    options?: { readonly waiting?: boolean | undefined; readonly patched?: boolean | undefined }
+    options?: {
+      readonly waiting?: boolean | undefined
+      readonly patched?: boolean | undefined
+    }
   ): this
   /**
    * Loads one key of a `queryMany` query with a Success, as `loadedMany`
@@ -430,7 +460,10 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
     name: N,
     args: Query.Query.Args<QueryOf<Component.Queries<C>[N]>>,
     value: Query.Query.Success<QueryOf<Component.Queries<C>[N]>>,
-    options?: { readonly waiting?: boolean | undefined; readonly patched?: boolean | undefined }
+    options?: {
+      readonly waiting?: boolean | undefined
+      readonly patched?: boolean | undefined
+    }
   ): this
   /**
    * Loads a query with a typed failure, as `loaded` does. The failure keeps
@@ -484,13 +517,18 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * they are `events`, in order. Events compare with the component's
    * `events` Schema.
    */
-  emitted(...events: readonly [Component.Events<C>, ...Array<Component.Events<C>>]): this
+  emitted(
+    ...events: readonly [Component.Events<C>, ...Array<Component.Events<C>>]
+  ): this
   /**
    * Acknowledges the oldest `$.send` no step acknowledged yet, after
    * asserting it went to the nearest `owner` above with `message`,
    * compared with the owner's `receives` Schema.
    */
-  sent<O extends Component.Headless.Any>(owner: O, message: NoInfer<SendMessage<Component.Shared.Receives<O>>>): this
+  sent<O extends Component.Headless.Any>(
+    owner: O,
+    message: NoInfer<SendMessage<Component.Shared.Receives<O>>>
+  ): this
   /**
    * Marks pending work as intended to stay pending, so it stops blocking
    * message steps until it settles: every pending Command `target` matches,

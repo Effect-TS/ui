@@ -24,16 +24,24 @@ import { AppRoute } from "./fixtures/routes.ts"
 // server then renders that child's fallback and the client builds it fresh.
 const hydrate = Effect.gen(function*() {
   const state = JSON.parse(document.getElementById("state")!.textContent!)
-  const root = yield* BrowserHost.mountEffect(App, Router.props(AppRoute), document.getElementById("app")!, {
-    state
-  })
+  const root = yield* BrowserHost.mountEffect(
+    App,
+    Router.props(AppRoute),
+    document.getElementById("app")!,
+    {
+      state
+    }
+  )
   // `mountEffect` is `mount` as an Effect that returns the root. `adopted`
   // completes once every instance is live. Until then a waiting one is inert.
   yield* root.adopted
   return yield* Effect.never
 }).pipe(
   Effect.scoped,
-  Effect.provide([BrowserRouter.layer({ routes: AppRoute }), FetchHttpClient.layer])
+  Effect.provide([
+    BrowserRouter.layer({ routes: AppRoute }),
+    FetchHttpClient.layer
+  ])
 )
 
 Effect.runFork(hydrate)

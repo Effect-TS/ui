@@ -75,7 +75,9 @@ export interface TestFiles {
  * @category services
  * @since 0.1.0
  */
-export const TestFiles: Context.Service<TestFiles, TestFiles> = Context.Service<TestFiles>(
+export const TestFiles: Context.Service<TestFiles, TestFiles> = Context.Service<
+  TestFiles
+>(
   "@effect/ui/html/testing/TestFiles"
 )
 
@@ -96,7 +98,10 @@ export const make = (): HtmlFiles.Files & TestFiles => {
   return {
     pick: (options) =>
       Effect.callback((resume) => {
-        const entry: Pending = { options, settle: (picked) => resume(Effect.succeed(picked)) }
+        const entry: Pending = {
+          options,
+          settle: (picked) => resume(Effect.succeed(picked))
+        }
         pending.add(entry)
         return Effect.sync(() => {
           pending.delete(entry)
@@ -122,7 +127,9 @@ export const make = (): HtmlFiles.Files & TestFiles => {
 export const layer: Layer.Layer<TestFiles> = Layer.effectContext(
   Effect.sync(() => {
     const files = make()
-    return Context.make(TestFiles, files).pipe(Context.add(HtmlFiles.Files, files))
+    return Context.make(TestFiles, files).pipe(
+      Context.add(HtmlFiles.Files, files)
+    )
   })
 )
 
@@ -133,7 +140,9 @@ export const layer: Layer.Layer<TestFiles> = Layer.effectContext(
  * @category testing
  * @since 0.1.0
  */
-export const choose = (files: ReadonlyArray<File>): Effect.Effect<void, never, TestFiles> =>
+export const choose = (
+  files: ReadonlyArray<File>
+): Effect.Effect<void, never, TestFiles> =>
   TestFiles.useSync((control) => control.settle({ opened: true, files }))
 
 /**
@@ -143,6 +152,6 @@ export const choose = (files: ReadonlyArray<File>): Effect.Effect<void, never, T
  * @category testing
  * @since 0.1.0
  */
-export const dismiss: Effect.Effect<void, never, TestFiles> = TestFiles.useSync((control) =>
-  control.settle({ opened: true, files: [] })
+export const dismiss: Effect.Effect<void, never, TestFiles> = TestFiles.useSync(
+  (control) => control.settle({ opened: true, files: [] })
 )

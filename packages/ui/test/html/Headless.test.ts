@@ -9,7 +9,9 @@ import { Dialog, type Item, Menu } from "./fixtures/headless.ts"
 import { popoverStub } from "./fixtures/popover.ts"
 
 /** Lets the render flush and Commands run. */
-const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+const tick = Effect.promise(() =>
+  new Promise<void>((resolve) => setTimeout(resolve, 30))
+)
 
 const container = Effect.acquireRelease(
   Effect.sync(() => document.body.appendChild(document.createElement("div"))),
@@ -98,7 +100,9 @@ const Toolbar = Component.define({
   update: ($, message) =>
     ToolbarMessage.match(message, {
       Picked: ({ id }) => [...$.model, "picked " + id],
-      Focus: () => $.run(HtmlCommand.focus(Mine, ({ found }) => ToolbarMessage.Focused({ found }))),
+      Focus: () =>
+        $.run(HtmlCommand.focus(Mine, ({ found }) =>
+          ToolbarMessage.Focused({ found }))),
       Focused: ({ found }) => [...$.model, "focused " + String(found)]
     }),
   view: (h, log) =>
@@ -113,7 +117,11 @@ const Toolbar = Component.define({
             // The Menu's part puts its ref on this input, and so does the Toolbar.
             menu.input(h.input.ref(Mine).attr("aria-label", "Filter actions")),
             menu.visible.length === 0 && h.p("No actions found."),
-            h.ul.children(menu.visible.map((item) => menu.item(h.li.key(item.id), item).children(item.label)))
+            h.ul.children(
+              menu.visible.map((item) =>
+                menu.item(h.li.key(item.id), item).children(item.label)
+              )
+            )
           ),
           h.output(log.join(", "))
         )
@@ -126,14 +134,18 @@ const Toolbar = Component.define({
 
 const mounts: Array<string> = []
 
-const PlaceAnchor = Mount.make("PlaceAnchor", { args: {} }, (node: HTMLElement) =>
-  Effect.as(
-    Effect.acquireRelease(
-      Effect.sync(() => mounts.push("start " + node.textContent)),
-      () => Effect.sync(() => mounts.push("stop"))
-    ),
-    "placed" as const
-  ))
+const PlaceAnchor = Mount.make(
+  "PlaceAnchor",
+  { args: {} },
+  (node: HTMLElement) =>
+    Effect.as(
+      Effect.acquireRelease(
+        Effect.sync(() => mounts.push("start " + node.textContent)),
+        () => Effect.sync(() => mounts.push("stop"))
+      ),
+      "placed" as const
+    )
+)
 
 const Anchor = Component.define({
   name: "Anchor",
@@ -146,7 +158,10 @@ const Anchor = Component.define({
   update: ($) => $.model + 1,
   parts: (p, count) => ({
     count,
-    anchor: p.part("button", (b) => b.attr("data-anchored", "").onMount(PlaceAnchor()))
+    anchor: p.part(
+      "button",
+      (b) => b.attr("data-anchored", "").onMount(PlaceAnchor())
+    )
   })
 })
 
@@ -164,7 +179,10 @@ const Tip = Component.define({
       key: "anchor",
       view: (anchor) => {
         const button = h.button.attr("aria-label", "Target")
-        return h.div((on ? anchor.anchor(button) : button).children("target"), h.output(String(anchor.count)))
+        return h.div(
+          (on ? anchor.anchor(button) : button).children("target"),
+          h.output(String(anchor.count))
+        )
       }
     })
 })
@@ -193,7 +211,11 @@ const Page = Component.define({
           h.div(
             menu.trigger(h.button).children("Actions"),
             menu.popup(h.div).children(
-              h.ul.children(menu.visible.map((item) => menu.item(h.li.key(item.id), item).children(item.label)))
+              h.ul.children(
+                menu.visible.map((item) =>
+                  menu.item(h.li.key(item.id), item).children(item.label)
+                )
+              )
             )
           )
       }),
@@ -224,7 +246,10 @@ const Keys = Component.define({
   update: ($, message) => [...$.model, message],
   parts: (p, seen) => ({
     seen,
-    container: p.part("div", (b) => b.onKeyDown(({ key }) => "container " + key)),
+    container: p.part(
+      "div",
+      (b) => b.onKeyDown(({ key }) => "container " + key)
+    ),
     focused: p.part("input", (b) => b.onKeyDown(({ key }) => "focused " + key))
   })
 })
@@ -246,7 +271,9 @@ const KeysApp = Component.define({
           h.input.attr("aria-label", "Bare"),
           // A handler of the consumer's that sends nothing still takes the event from the container.
           h.input.attr("aria-label", "Shadowing").onKeyDown(() => undefined),
-          keys.focused(h.input.attr("aria-label", "Composed")).onKeyDown(({ key }) => "consumer " + key),
+          keys.focused(h.input.attr("aria-label", "Composed")).onKeyDown((
+            { key }
+          ) => "consumer " + key),
           h.output(keys.seen.join(", ") + " | " + seen.join(", "))
         )
     })
@@ -288,9 +315,14 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       const press = (label: string, key: string) =>
         Effect.andThen(
           Effect.sync(() =>
-            HtmlLocator.getByRole(app, "textbox", { name: label }).dispatchEvent(
-              new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })
-            )
+            HtmlLocator.getByRole(app, "textbox", { name: label })
+              .dispatchEvent(
+                new KeyboardEvent("keydown", {
+                  key,
+                  bubbles: true,
+                  cancelable: true
+                })
+              )
           ),
           tick
         )
@@ -309,7 +341,10 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       const root = yield* BrowserHost.mountEffect(Confirm, {}, app)
       yield* tick
       const dialog = app.querySelector("dialog")!
-      assert.strictEqual(dialog.getAttribute("aria-labelledby"), app.querySelector("h2")!.id)
+      assert.strictEqual(
+        dialog.getAttribute("aria-labelledby"),
+        app.querySelector("h2")!.id
+      )
       HtmlLocator.click(app.querySelector("button")!)
       yield* tick
       assert.isTrue(dialog.open)
@@ -342,7 +377,13 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
                   h.div(
                     menu.trigger(h.button).children("Actions"),
                     menu.popup(h.div).children(
-                      h.ul.children(menu.visible.map((item) => menu.item(h.li.key(item.id), item).children(item.label)))
+                      h.ul.children(
+                        menu.visible.map((item) =>
+                          menu.item(h.li.key(item.id), item).children(
+                            item.label
+                          )
+                        )
+                      )
                     )
                   )
               }),
@@ -370,7 +411,10 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       const popup = result.container.querySelector("[role=menu]")!
       assert.strictEqual(trigger.getAttribute("aria-controls"), popup.id)
       assert.include(result.html, `id="${popup.id}"`)
-      assert.strictEqual(result.container.querySelectorAll("button")[1]!.textContent, "More")
+      assert.strictEqual(
+        result.container.querySelectorAll("button")[1]!.textContent,
+        "More"
+      )
     }).pipe(Effect.provide(TestHost.layer())))
 
   it.effect("three owners on one element each get a real click, and one layer's preventDefault holds", () =>
@@ -378,14 +422,20 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       const app = yield* container
       const root = yield* BrowserHost.mountEffect(Picker, {}, app)
       yield* tick
-      const copy = HtmlLocator.getByRole(app, "menuitem", { name: "Copy", hidden: true })
+      const copy = HtmlLocator.getByRole(app, "menuitem", {
+        name: "Copy",
+        hidden: true
+      })
       const event = new MouseEvent("click", { bubbles: true, cancelable: true })
       copy.dispatchEvent(event)
       yield* tick
       assert.deepStrictEqual(root.model(), ["picked c", "closed", "clicked c"])
       // Only the Dialog's layer asked for it, and its handler returned a message.
       assert.isTrue(event.defaultPrevented)
-      assert.strictEqual(app.querySelector("output")!.textContent, "picked c, closed, clicked c")
+      assert.strictEqual(
+        app.querySelector("output")!.textContent,
+        "picked c, closed, clicked c"
+      )
     }).pipe(Effect.scoped))
 
   it.effect("the Menu focuses its own refs, and the Toolbar a ref it put on the same element", () =>
@@ -406,7 +456,13 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       assert.strictEqual(trigger.getAttribute("aria-expanded"), "true")
       assert.strictEqual(document.activeElement, input)
 
-      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Escape",
+          bubbles: true,
+          cancelable: true
+        })
+      )
       yield* tick
       yield* settle
       assert.strictEqual(trigger.getAttribute("aria-expanded"), "false")
@@ -456,11 +512,17 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       const trigger = app.querySelector("button")!
       const popup = app.querySelector("[role=menu]")!
       const rows = Array.from(app.querySelectorAll("li"))
-      const serverIds = [trigger.getAttribute("aria-controls"), popup.id, ...rows.map((row) => row.id)]
+      const serverIds = [
+        trigger.getAttribute("aria-controls"),
+        popup.id,
+        ...rows.map((row) => row.id)
+      ]
       assert.strictEqual(serverIds[0], serverIds[1])
 
       const stub = yield* popoverStub
-      const root = yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state })
+      const root = yield* BrowserHost.mountEffect(Page, {}, app, {
+        state: rendered.state
+      })
       yield* root.adopted
       yield* tick
       // Adopted: the same nodes, with the ids the server wrote.
@@ -468,7 +530,11 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       assert.strictEqual(app.querySelector("[role=menu]"), popup)
       assert.deepStrictEqual(Array.from(app.querySelectorAll("li")), rows)
       assert.deepStrictEqual(
-        [trigger.getAttribute("aria-controls"), popup.id, ...rows.map((row) => row.id)],
+        [
+          trigger.getAttribute("aria-controls"),
+          popup.id,
+          ...rows.map((row) => row.id)
+        ],
         serverIds
       )
       // And live: the part's handler reaches the Menu.
@@ -493,7 +559,12 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
         .make({
           init: () => 0,
           update: ($) => $.model + 1,
-          parts: (p) => ({ button: p.part("button", (b) => b.onClick("hit", { preventDefault: true })) })
+          parts: (p) => ({
+            button: p.part(
+              "button",
+              (b) => b.onClick("hit", { preventDefault: true })
+            )
+          })
         })
       const App = Component.define({
         name: "App",
@@ -507,7 +578,10 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
         view: (h) =>
           Hit(h, {
             key: "h",
-            view: (hit) => hit.button(h.button).onClick(() => undefined, { preventDefault: false }).children("hit")
+            view: (hit) =>
+              hit.button(h.button).onClick(() => undefined, {
+                preventDefault: false
+              }).children("hit")
           })
       })
       const app = yield* container
@@ -543,7 +617,9 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
           view: (h) =>
             Plain(h, {
               key: "p",
-              view: (plain) => plain.button(h.button).onClick("own", { preventDefault: true }).children("hit")
+              view: (plain) =>
+                plain.button(h.button).onClick("own", { preventDefault: true })
+                  .children("hit")
             })
         })
       const app = yield* container
@@ -583,13 +659,20 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
         init: () => true,
         update: () => false,
         view: (h, shown) =>
-          h.main(shown ? Frame(h, { view: (frame) => frame.root(h.div).children(h.button) }) : h.p("gone"))
+          h.main(
+            shown
+              ? Frame(h, {
+                view: (frame) => frame.root(h.div).children(h.button)
+              })
+              : h.p("gone")
+          )
       })
       const app = yield* container
       const root = yield* BrowserHost.mountEffect(Page, {}, app)
       const main = app.querySelector("main")!
       const button = main.querySelector("button")!
-      const focusout = () => button.dispatchEvent(new FocusEvent("focusout", { bubbles: true }))
+      const focusout = () =>
+        button.dispatchEvent(new FocusEvent("focusout", { bubbles: true }))
       focusout()
       assert.strictEqual(calls, 1)
       let thrown: unknown

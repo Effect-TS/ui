@@ -42,7 +42,11 @@ const scratchpad: Note = { id: "scratchpad", title: "Scratchpad", body: "" }
 //
 // A module that others import wraps the mount in `Layer.suspend`, so that
 // `document` is read when the Layer is built and not on import.
-const Main = BrowserHost.mount(NoteEditor, { note: scratchpad }, document.getElementById("app")!).pipe(
+const Main = BrowserHost.mount(
+  NoteEditor,
+  { note: scratchpad },
+  document.getElementById("app")!
+).pipe(
   Layer.provide(FetchHttpClient.layer)
 )
 

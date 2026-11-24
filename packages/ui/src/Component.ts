@@ -318,7 +318,10 @@ export declare namespace Shared {
    * @category utility types
    * @since 0.1.0
    */
-  export type Of<C> = C extends Headless<infer _P, infer _E, infer _Parts, infer _R, infer _Rcv, infer Sh> ? Sh : never
+  export type Of<C> = C extends
+    Headless<infer _P, infer _E, infer _Parts, infer _R, infer _Rcv, infer Sh>
+    ? Sh
+    : never
 
   /**
    * Any shared-state requirement.
@@ -336,8 +339,16 @@ export declare namespace Shared {
    * @category utility types
    * @since 0.1.0
    */
-  export type Value<C> = C extends
-    Headless<infer _P, infer _E, infer _Parts, infer _R, infer _Rcv, infer _Sh, infer V, infer _Rp> ? V
+  export type Value<C> = C extends Headless<
+    infer _P,
+    infer _E,
+    infer _Parts,
+    infer _R,
+    infer _Rcv,
+    infer _Sh,
+    infer V,
+    infer _Rp
+  > ? V
     : never
 
   /**
@@ -347,7 +358,8 @@ export declare namespace Shared {
    * @category utility types
    * @since 0.1.0
    */
-  export type Receives<C> = C extends Headless<infer _P, infer _E, infer _Parts, infer _R, infer Rcv> ? Rcv
+  export type Receives<C> = C extends
+    Headless<infer _P, infer _E, infer _Parts, infer _R, infer Rcv> ? Rcv
     : never
 
   /**
@@ -359,8 +371,16 @@ export declare namespace Shared {
    * @category utility types
    * @since 0.1.0
    */
-  export type Report<C> = C extends
-    Headless<infer _P, infer _E, infer _Parts, infer _R, infer _Rcv, infer _Sh, infer _V, infer Rp> ? Rp
+  export type Report<C> = C extends Headless<
+    infer _P,
+    infer _E,
+    infer _Parts,
+    infer _R,
+    infer _Rcv,
+    infer _Sh,
+    infer _V,
+    infer Rp
+  > ? Rp
     : never
 }
 
@@ -441,7 +461,8 @@ type IsOptional<E> = E extends { readonly optional: true } ? true : false
  * @since 0.1.0
  */
 export type SharedValues<SR> = {
-  readonly [K in keyof SR]: IsOptional<SR[K]> extends true ? Shared.Value<SharedOwner<SR[K]>> | undefined
+  readonly [K in keyof SR]: IsOptional<SR[K]> extends true ?
+    Shared.Value<SharedOwner<SR[K]>> | undefined
     : Shared.Value<SharedOwner<SR[K]>>
 }
 
@@ -454,7 +475,8 @@ export type SharedValues<SR> = {
  * @category utility types
  * @since 0.1.0
  */
-export type SharedHelpers<SR> = [keyof SR] extends [never] ? {} : { readonly shared: SharedValues<SR> }
+export type SharedHelpers<SR> = [keyof SR] extends [never] ? {}
+  : { readonly shared: SharedValues<SR> }
 
 /**
  * The requirements a component's `shared` option adds: one
@@ -465,21 +487,28 @@ export type SharedHelpers<SR> = [keyof SR] extends [never] ? {} : { readonly sha
  * @since 0.1.0
  */
 export type SharedRequirements<SR> = {
-  readonly [K in keyof SR]: IsOptional<SR[K]> extends true ? never : Shared.Of<SharedOwner<SR[K]>>
+  readonly [K in keyof SR]: IsOptional<SR[K]> extends true ? never
+    : Shared.Of<SharedOwner<SR[K]>>
 }[keyof SR]
 
 // A send keeps its target in the step's `R` until `make` has dropped the sends to optional owners.
-type SendTarget<O> = { readonly "~@effect/ui/Component/SendTarget": Types.Invariant<O> }
+type SendTarget<O> = {
+  readonly "~@effect/ui/Component/SendTarget": Types.Invariant<O>
+}
 
 type OptionalTargets<SR> = {
-  readonly [K in keyof SR]: IsOptional<SR[K]> extends true ? SendTarget<SharedOwner<SR[K]>> : never
+  readonly [K in keyof SR]: IsOptional<SR[K]> extends true
+    ? SendTarget<SharedOwner<SR[K]>>
+    : never
 }[keyof SR]
 
 type NamedRequirement<R> = R extends SendTarget<infer O> ? Shared.Of<O> : R
 
 // What a component's own steps require. A send to an optional owner needs none above, and only these steps
 // drop it. A step annotated with just `Shared<Name>` has lost its target, so it stays required.
-type OwnStepRequirements<U, SR> = NamedRequirement<Exclude<RawStepRequirements<U>, OptionalTargets<SR>>>
+type OwnStepRequirements<U, SR> = NamedRequirement<
+  Exclude<RawStepRequirements<U>, OptionalTargets<SR>>
+>
 
 /**
  * A `$.loadMore(name)` or `$.reset(name)` an `update` issued, by query
@@ -502,7 +531,12 @@ export interface ListIssue {
  * @category models
  * @since 0.1.0
  */
-export interface InitStep<in out Model, in out Msg, in out Events, out R = never> extends Pipeable.Pipeable {
+export interface InitStep<
+  in out Model,
+  in out Msg,
+  in out Events,
+  out R = never
+> extends Pipeable.Pipeable {
   readonly [StepTypeId]: StepTypeId
   readonly model: Model
   readonly commands: ReadonlyArray<Command.Command<Msg | Noop, R>>
@@ -534,9 +568,13 @@ export interface InitStep<in out Model, in out Msg, in out Events, out R = never
  * @category models
  * @since 0.1.0
  */
-export interface Step<in out Model, in out Msg, in out Events, out R = never, L = {}>
-  extends InitStep<Model, Msg, Events, R>
-{
+export interface Step<
+  in out Model,
+  in out Msg,
+  in out Events,
+  out R = never,
+  L = {}
+> extends InitStep<Model, Msg, Events, R> {
   /** The load mores and resets issued, in order. */
   readonly lists: ReadonlyArray<ListIssue>
   /** The messages sent to owners above, in order. */
@@ -732,7 +770,10 @@ export interface Update<
    * Only `$` has it, and not the steps its other methods return, so send
    * first: `$.send("self", message).set(next)`.
    */
-  send(owner: "self", message: SendMessage<SelfReceives<SR>>): Step<Model, Msg, Events, never, L>
+  send(
+    owner: "self",
+    message: SendMessage<SelfReceives<SR>>
+  ): Step<Model, Msg, Events, never, L>
   /**
    * Runs update functions one after another, each with the message this
    * `update` received.
@@ -758,7 +799,9 @@ export interface Update<
         msg: Cur
       ) => Model | Step<Model, Msg, Events, any, L>
     >
-  >(...updates: F): Step<Model, Msg, Events, RawStepRequirements<ReturnType<F[number]>>, L>
+  >(
+    ...updates: F
+  ): Step<Model, Msg, Events, RawStepRequirements<ReturnType<F[number]>>, L>
 }
 
 /**
@@ -783,7 +826,8 @@ export interface Init<in out Model, in out Msg, in out Events, out Props> {
  */
 export type StepRequirements<U> = NamedRequirement<RawStepRequirements<U>>
 
-type RawStepRequirements<U> = U extends InitStep<infer _Model, infer _Msg, infer _Events, infer R> ? R : never
+type RawStepRequirements<U> = U extends
+  InitStep<infer _Model, infer _Msg, infer _Events, infer R> ? R : never
 
 const StepProto = {
   [StepTypeId]: StepTypeId,
@@ -794,9 +838,14 @@ const StepProto = {
     return stepWith(this, { model })
   },
   evolve(this: Step<any, any, any, any>, fields: Record<PropertyKey, unknown>) {
-    return stepWith(this, { model: UiStruct.evolve<any>(this.model, fields as never) })
+    return stepWith(this, {
+      model: UiStruct.evolve<any>(this.model, fields as never)
+    })
   },
-  run(this: Step<any, any, any, any>, ...commands: ReadonlyArray<Command.Command<any, any>>) {
+  run(
+    this: Step<any, any, any, any>,
+    ...commands: ReadonlyArray<Command.Command<any, any>>
+  ) {
     return stepWith(this, { commands: [...this.commands, ...commands] })
   },
   emit(this: Step<any, any, any, any>, ...emitted: ReadonlyArray<unknown>) {
@@ -811,15 +860,21 @@ const StepProto = {
   send(this: Step<any, any, any, any>, owner: Headless.Any, message: unknown) {
     return stepWith(this, { sends: [...this.sends, { owner, message }] })
   },
-  viewTransition(this: Step<any, any, any, any>, types: ReadonlyArray<string> = []) {
-    return stepWith(this, { viewTransitionTypes: mergeTypes(this.viewTransitionTypes, types) })
+  viewTransition(
+    this: Step<any, any, any, any>,
+    types: ReadonlyArray<string> = []
+  ) {
+    return stepWith(this, {
+      viewTransitionTypes: mergeTypes(this.viewTransitionTypes, types)
+    })
   }
 }
 
 const mergeTypes = (
   a: ReadonlyArray<string> | undefined,
   b: ReadonlyArray<string> | undefined
-): ReadonlyArray<string> | undefined => a === undefined ? b : b === undefined ? a : [...new Set([...a, ...b])]
+): ReadonlyArray<string> | undefined =>
+  a === undefined ? b : b === undefined ? a : [...new Set([...a, ...b])]
 
 const makeStep = (
   model: unknown,
@@ -829,25 +884,46 @@ const makeStep = (
   sends: ReadonlyArray<Send>,
   viewTransitionTypes: ReadonlyArray<string> | undefined
 ): Step<any, any, any, any> =>
-  Object.assign(Object.create(StepProto), { model, commands, emitted, lists, sends, viewTransitionTypes })
+  Object.assign(Object.create(StepProto), {
+    model,
+    commands,
+    emitted,
+    lists,
+    sends,
+    viewTransitionTypes
+  })
 
 const stepWith = (
   step: Step<any, any, any, any>,
   change: Partial<Step<any, any, any, any>>
 ): Step<any, any, any, any> =>
   Object.assign(
-    makeStep(step.model, step.commands, step.emitted, step.lists, step.sends, step.viewTransitionTypes),
+    makeStep(
+      step.model,
+      step.commands,
+      step.emitted,
+      step.lists,
+      step.sends,
+      step.viewTransitionTypes
+    ),
     change
   )
 
 type AnyUpdate = ($: Update<any, any, any, any>, msg: unknown) => unknown
 
-type AnyUpdate$ = Update<any, any, any, any> & { readonly "~message": unknown; readonly "~self": Any }
+type AnyUpdate$ = Update<any, any, any, any> & {
+  readonly "~message": unknown
+  readonly "~self": Any
+}
 
 const UpdateProto = {
   ...StepProto,
   send(this: AnyUpdate$, target: Headless.Any | "self", message: unknown) {
-    return StepProto.send.call(this, target === "self" ? this["~self"] as unknown as Headless.Any : target, message)
+    return StepProto.send.call(
+      this,
+      target === "self" ? this["~self"] as unknown as Headless.Any : target,
+      message
+    )
   },
   combine(this: AnyUpdate$, ...updates: ReadonlyArray<AnyUpdate>) {
     const msg = this["~message"]
@@ -859,7 +935,17 @@ const UpdateProto = {
     let viewTransitionTypes = this.viewTransitionTypes
     for (const update of updates) {
       const next = toNext(
-        update(makeUpdate(model, this.props, this.queries, this.shared, msg, this["~self"]), msg)
+        update(
+          makeUpdate(
+            model,
+            this.props,
+            this.queries,
+            this.shared,
+            msg,
+            this["~self"]
+          ),
+          msg
+        )
       )
       model = next.model
       commands.push(...next.commands)
@@ -895,8 +981,12 @@ const makeUpdate = (
     "~self": self
   })
 
-const initSet = (model: unknown) => makeStep(model, [], [], [], [], undefined) as Step<any, any, any, never>
-const makeInit = (props: unknown): Init<any, any, any, any> => ({ props, set: initSet })
+const initSet = (model: unknown) =>
+  makeStep(model, [], [], [], [], undefined) as Step<any, any, any, never>
+const makeInit = (props: unknown): Init<any, any, any, any> => ({
+  props,
+  set: initSet
+})
 
 // The effects of an `init` or `update` that returned a bare Model: shared, and frozen, since `init` hands
 // them to its caller.
@@ -909,7 +999,9 @@ const noEffects: ReadonlyArray<never> = Object.freeze([])
  * @category guards
  * @since 0.1.0
  */
-export const isStep = (u: unknown): u is InitStep<unknown, unknown, unknown, unknown> =>
+export const isStep = (
+  u: unknown
+): u is InitStep<unknown, unknown, unknown, unknown> =>
   Predicate.hasProperty(u, StepTypeId)
 
 const toNext = (result: unknown): Next<any, any, any, any> =>
@@ -937,8 +1029,14 @@ const toNext = (result: unknown): Next<any, any, any, any> =>
  * @category models
  * @since 0.1.0
  */
-export interface Mountable<in out Props, out Events, out R = never, in Sl extends string = never>
-  extends Mountable.Members<Props, Events, R, Sl>, Mountable.Call<Props, Events, R, Sl>
+export interface Mountable<
+  in out Props,
+  out Events,
+  out R = never,
+  in Sl extends string = never
+> extends
+  Mountable.Members<Props, Events, R, Sl>,
+  Mountable.Call<Props, Events, R, Sl>
 {}
 
 /**
@@ -965,9 +1063,12 @@ export declare namespace Mountable {
    * @category models
    * @since 0.1.0
    */
-  export interface Members<in out Props, out Events, out R = never, in Sl extends string = never>
-    extends Pipeable.Pipeable
-  {
+  export interface Members<
+    in out Props,
+    out Events,
+    out R = never,
+    in Sl extends string = never
+  > extends Pipeable.Pipeable {
     readonly [TypeId]: Mountable.Variance<Props, Events, R, Sl>
     /** What `define` returned. `provide` keeps it, so `definition.name` is the name the component was defined with. */
     readonly definition: Definition.Any
@@ -991,7 +1092,9 @@ export declare namespace Mountable {
     readonly view: (
       model: any,
       props: Props,
-      running?: ((name: string, groupKey: string | undefined) => boolean) | undefined,
+      running?:
+        | ((name: string, groupKey: string | undefined) => boolean)
+        | undefined,
       queries?: Results | undefined,
       /** The instance's path, which `h.id` derives ids from. Without it, the root path `/<name>`. */
       path?: string | undefined,
@@ -1001,24 +1104,43 @@ export declare namespace Mountable {
       lazy?: View.LazyStore | undefined
     ) => View.Node<any, R>
     readonly subscriptions:
-      | ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<Subscription.Subscription<any, R>>)
+      | ((
+        model: any,
+        props: Props,
+        queries?: Results | undefined
+      ) => ReadonlyArray<Subscription.Subscription<any, R>>)
       | undefined
     /** The instance's head entries, a pure function of its Model, props and queries. */
-    readonly head: ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<unknown>) | undefined
+    readonly head:
+      | ((
+        model: any,
+        props: Props,
+        queries?: Results | undefined
+      ) => ReadonlyArray<unknown>)
+      | undefined
     /** The component's vocabulary: its `elements` override, else the registered one. Read lazily. */
     readonly elements: () => View.Vocabulary<any> | undefined
     /**
      * Set by `provide`: the Layer built for each instance, in its Scope. Descendants inherit its services.
      * `keys` is what `layerKeys` read, one value per keyed provide, and empty without one.
      */
-    readonly layer: ((props: Props, keys: ReadonlyArray<unknown>) => Layer.Layer<any, any, any>) | undefined
+    readonly layer:
+      | ((
+        props: Props,
+        keys: ReadonlyArray<unknown>
+      ) => Layer.Layer<any, any, any>)
+      | undefined
     /**
      * Set by a keyed `provide`: the key of each, innermost first. The instance's Layer is built again
      * when any of them changes by `Equal.equals`.
      */
-    readonly layerKeys: ReadonlyArray<(props: Props, model: any) => unknown> | undefined
+    readonly layerKeys:
+      | ReadonlyArray<(props: Props, model: any) => unknown>
+      | undefined
     /** Set by `provide`: maps a provided Layer's failure to one of this component's messages. */
-    readonly layerFailure: ((failure: AsyncResult.Failure<never, any>) => any) | undefined
+    readonly layerFailure:
+      | ((failure: AsyncResult.Failure<never, any>) => any)
+      | undefined
     /** Set by `provide` when every provided Layer is a value: shared by every instance resolving from one Env. */
     readonly sharedLayer: Layer.Layer<any, any, any> | undefined
     /** `false` when a `provide` opted out of the server: the server never builds the Layer and defers the instance. */
@@ -1063,7 +1185,9 @@ export declare namespace Mountable {
            * Shown if the child fails, until its key changes, and while a lazy
            * component's module loads. Without it, the child is blank.
            */
-          readonly fallback?: ((result: Result) => View.Content<NoInfer<Msg>, RF>) | undefined
+          readonly fallback?:
+            | ((result: Result) => View.Content<NoInfer<Msg>, RF>)
+            | undefined
         }
         & SlotOptions<Sl, SC, NoInfer<Msg>>
         // Erased props are required, so every component is a `Component.Any`:
@@ -1080,7 +1204,12 @@ export declare namespace Mountable {
    * @category models
    * @since 0.1.0
    */
-  export interface Variance<in out Props, out Events, out R, in Sl extends string = never> {
+  export interface Variance<
+    in out Props,
+    out Events,
+    out R,
+    in Sl extends string = never
+  > {
     readonly _Props: Types.Invariant<Props>
     readonly _Events: Types.Covariant<Events>
     readonly _R: Types.Covariant<R>
@@ -1105,7 +1234,10 @@ export interface Component<
   out V extends View.Elements = never,
   out L = {},
   in Sl extends string = never
-> extends Members<Name, Props, Model, Msg, Events, R, V, L, Sl>, Mountable.Call<Props, Events, R, Sl> {}
+> extends
+  Members<Name, Props, Model, Msg, Events, R, V, L, Sl>,
+  Mountable.Call<Props, Events, R, Sl>
+{}
 
 /**
  * A component defined with `scoped: true`: the same as a `Component`, but
@@ -1125,7 +1257,10 @@ export interface ScopedComponent<
   out V extends View.Elements = never,
   out L = {},
   in Sl extends string = never
-> extends Members<Name, Props, Model, Msg, Events, R, V, L, Sl>, Scoped.Call<Props, Events, R, Sl> {}
+> extends
+  Members<Name, Props, Model, Msg, Events, R, V, L, Sl>,
+  Scoped.Call<Props, Events, R, Sl>
+{}
 
 /**
  * What a component has, scoped or not: a `Component` or a `ScopedComponent`
@@ -1161,7 +1296,9 @@ export interface Members<
   readonly view: (
     model: Model,
     props: Props,
-    running?: ((name: string, groupKey: string | undefined) => boolean) | undefined,
+    running?:
+      | ((name: string, groupKey: string | undefined) => boolean)
+      | undefined,
     queries?: Results | undefined,
     path?: string | undefined,
     shared?: SharedLookup | undefined,
@@ -1175,9 +1312,15 @@ export interface Members<
     ) => ReadonlyArray<Subscription.Subscription<Msg, R>>)
     | undefined
   readonly head:
-    | ((model: Model, props: Props, queries?: Results | undefined) => ReadonlyArray<View.HeadEntry<V>>)
+    | ((
+      model: Model,
+      props: Props,
+      queries?: Results | undefined
+    ) => ReadonlyArray<View.HeadEntry<V>>)
     | undefined
-  readonly layerFailure: ((failure: AsyncResult.Failure<never, any>) => Msg) | undefined
+  readonly layerFailure:
+    | ((failure: AsyncResult.Failure<never, any>) => Msg)
+    | undefined
   readonly "~V"?: V
   readonly "~L"?: L
 }
@@ -1276,7 +1419,9 @@ export interface Headless<
       & {
         /** Shown if the child fails, until its key changes. Without it, the child is blank. */
         readonly fallback?:
-          | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
+          | ((
+            result: AsyncResult.Failure<never, unknown>
+          ) => View.Content<NoInfer<Msg>, RF>)
           | undefined
         /**
          * The child's whole view, from its parts. It's the parent view's code:
@@ -1311,17 +1456,36 @@ export interface Headless<
    */
   readonly receives: Schema.Codec<Rcv, any>
   readonly init: (props: Props) => Next<any, any, Events, R>
-  readonly update: (model: any, msg: never, props: Props, queries?: Results | undefined) => Next<any, any, Events, R>
+  readonly update: (
+    model: any,
+    msg: never,
+    props: Props,
+    queries?: Results | undefined
+  ) => Next<any, any, Events, R>
   /**
    * The parts for one render: plain values and decorators stamped with
    * `owner`, or, for a component that builds on another with `p.child`, the
    * child it declares, which a host expands into the parts.
    */
-  readonly parts: (model: any, props: Props, context: PartsContext) => Parts | Composed<Parts, any, any>
+  readonly parts: (
+    model: any,
+    props: Props,
+    context: PartsContext
+  ) => Parts | Composed<Parts, any, any>
   readonly subscriptions:
-    | ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<Subscription.Subscription<any, R>>)
+    | ((
+      model: any,
+      props: Props,
+      queries?: Results | undefined
+    ) => ReadonlyArray<Subscription.Subscription<any, R>>)
     | undefined
-  readonly head: ((model: any, props: Props, queries?: Results | undefined) => ReadonlyArray<unknown>) | undefined
+  readonly head:
+    | ((
+      model: any,
+      props: Props,
+      queries?: Results | undefined
+    ) => ReadonlyArray<unknown>)
+    | undefined
   readonly elements: () => View.Vocabulary<any> | undefined
   readonly "~queries": unknown
 }
@@ -1337,7 +1501,9 @@ export interface Headless<
  */
 export interface PartsContext {
   readonly owner: View.Owner
-  readonly running?: ((name: string, groupKey: string | undefined) => boolean) | undefined
+  readonly running?:
+    | ((name: string, groupKey: string | undefined) => boolean)
+    | undefined
   readonly queries?: Results | undefined
   /** Answers `p.shared`: an owner's current value. Without it, a component that reads shared state throws. */
   readonly shared?: SharedLookup | undefined
@@ -1380,14 +1546,17 @@ export declare namespace Headless {
    */
   // `any` doesn't stand in for `never` in an invariant parameter, so one that receives nothing is listed apart.
   // What an owner shares is contravariant: `never` takes every owner, and every component that isn't one.
-  export type Any = Headless<any, any, any, any, any, never> | Headless<any, any, any, any, never, never>
+  export type Any =
+    | Headless<any, any, any, any, any, never>
+    | Headless<any, any, any, any, never, never>
   /**
    * The requirements of a headless component.
    *
    * @category utility types
    * @since 0.1.0
    */
-  export type Requirements<C> = C extends Headless<infer _P, infer _E, infer _Parts, infer R, infer _Rcv> ? R
+  export type Requirements<C> = C extends
+    Headless<infer _P, infer _E, infer _Parts, infer R, infer _Rcv> ? R
     : never
   /**
    * The parts of a headless component.
@@ -1395,7 +1564,8 @@ export declare namespace Headless {
    * @category utility types
    * @since 0.1.0
    */
-  export type Parts<C> = C extends Headless<infer _P, infer _E, infer Parts, infer _R, infer _Rcv> ? Parts
+  export type Parts<C> = C extends
+    Headless<infer _P, infer _E, infer Parts, infer _R, infer _Rcv> ? Parts
     : never
 }
 
@@ -1432,7 +1602,11 @@ export interface PartsHelper<Msg, Props, V extends View.Elements> {
    * with `forward` runs when the element is built, on the builder as the
    * consumer finished it.
    */
-  part<K extends keyof View.Tags<V, Msg> & string, Args extends ReadonlyArray<any>, R2 = never>(
+  part<
+    K extends keyof View.Tags<V, Msg> & string,
+    Args extends ReadonlyArray<any>,
+    R2 = never
+  >(
     tag: K | readonly [K, ...ReadonlyArray<K>],
     decorate: (
       builder: PartBuilder<View.Tags<V, Msg>[K]>,
@@ -1441,7 +1615,10 @@ export interface PartsHelper<Msg, Props, V extends View.Elements> {
   ): View.Part<PartTag<View.Tags<V, Msg>[K]>, Args, R2>
   /** A part for any element, over the host-neutral builder. */
   part<Args extends ReadonlyArray<any>, R2 = never>(
-    decorate: (builder: View.ContainerBuilder<Msg>, ...args: Args) => View.ElementBuilder<Msg, R2, any, any, any>
+    decorate: (
+      builder: View.ContainerBuilder<Msg>,
+      ...args: Args
+    ) => View.ElementBuilder<Msg, R2, any, any, any>
   ): View.Part<string, Args, R2>
   /**
    * Declares a headless child that this component owns, and turns the
@@ -1521,7 +1698,11 @@ export interface PartsHelper<Msg, Props, V extends View.Elements> {
         readonly slots?: never
         readonly fallback?: never
       }
-  ): Composed<Composed.Parts<Out>, R2 | Composed.Requirements<Out>, Sh2 | Composed.Shares<Out>>
+  ): Composed<
+    Composed.Parts<Out>,
+    R2 | Composed.Requirements<Out>,
+    Sh2 | Composed.Shares<Out>
+  >
 }
 
 /**
@@ -1531,7 +1712,8 @@ export interface PartsHelper<Msg, Props, V extends View.Elements> {
  * @category type ids
  * @since 0.1.0
  */
-export const ComposedTypeId: "~@effect/ui/Component/Composed" = child.ComposedTypeId
+export const ComposedTypeId: "~@effect/ui/Component/Composed" =
+  child.ComposedTypeId
 
 /**
  * The type id of what `p.child` returns.
@@ -1572,14 +1754,17 @@ export declare namespace Composed {
    * @category utility types
    * @since 0.1.0
    */
-  export type Parts<P> = P extends Composed<infer Parts, infer _R, infer _Sh> ? Parts : P
+  export type Parts<P> = P extends Composed<infer Parts, infer _R, infer _Sh>
+    ? Parts
+    : P
   /**
    * The requirements of the children declared with `p.child`.
    *
    * @category utility types
    * @since 0.1.0
    */
-  export type Requirements<P> = P extends Composed<infer _Parts, infer R, infer _Sh> ? R : never
+  export type Requirements<P> = P extends
+    Composed<infer _Parts, infer R, infer _Sh> ? R : never
   /**
    * The shared state of the owners declared with `p.child`, which every
    * reader in the consumer's `view` has above it.
@@ -1587,7 +1772,9 @@ export declare namespace Composed {
    * @category utility types
    * @since 0.1.0
    */
-  export type Shares<P> = P extends Composed<infer _Parts, infer _R, infer Sh> ? Sh : never
+  export type Shares<P> = P extends Composed<infer _Parts, infer _R, infer Sh>
+    ? Sh
+    : never
 }
 
 /**
@@ -1597,7 +1784,8 @@ export declare namespace Composed {
  * @category utility types
  * @since 0.1.0
  */
-export type PartBuilder<T> = T extends { readonly attr: (...args: any) => infer B } ? B : never
+export type PartBuilder<T> = T extends
+  { readonly attr: (...args: any) => infer B } ? B : never
 
 /**
  * The tag a tag's builder declares, which a part checks: `string` for a
@@ -1607,7 +1795,9 @@ export type PartBuilder<T> = T extends { readonly attr: (...args: any) => infer 
  * @category utility types
  * @since 0.1.0
  */
-export type PartTag<T> = T extends { readonly "~Tag"?: infer Tag extends string | undefined } ? Exclude<Tag, undefined>
+export type PartTag<T> = T extends
+  { readonly "~Tag"?: infer Tag extends string | undefined } ?
+  Exclude<Tag, undefined>
   : never
 
 /**
@@ -1636,7 +1826,8 @@ export type QueryHelpers<L> = [keyof L] extends [never] ? {} : {
   readonly queries: QueryResults<L>
   readonly previous: {
     readonly [K in SingleNames<L>]: L[K] extends QueryOne<infer R> ?
-      R extends Query.InfiniteQuery.Any ? Option.Option<Omit<InfiniteData<R>, "more">>
+      R extends Query.InfiniteQuery.Any ?
+        Option.Option<Omit<InfiniteData<R>, "more">>
       : Option.Option<Query.Query.Success<R>>
       : never
   }
@@ -1661,7 +1852,8 @@ export type SlotHelpers<Sl extends string> = [Sl] extends [never] ? {}
 
 // The `slots` a call takes: none for a component without slots, and otherwise only the declared names,
 // each with content for the parent's messages.
-type SlotOptions<Sl extends string, SC, Msg> = [Sl] extends [never] ? { readonly slots?: never }
+type SlotOptions<Sl extends string, SC, Msg> = [Sl] extends [never] ?
+  { readonly slots?: never }
   : { readonly slots?: SC & CheckedSlots<Sl, SC, Msg> }
 
 // One shape over the names of every branch of a conditional map, whose `keyof` holds only the names
@@ -1672,7 +1864,8 @@ type CheckedSlots<Sl extends string, SC, Msg> = {
   readonly [K in SlotNames<SC>]?: K extends Sl ? View.Input<Msg, any> : never
 }
 type SlotNames<SC> = SC extends unknown ? keyof SC : never
-type SlotRequirements<SC> = SC extends unknown ? View.Requirements<SC[keyof SC]> : never
+type SlotRequirements<SC> = SC extends unknown ? View.Requirements<SC[keyof SC]>
+  : never
 
 /**
  * Any component.
@@ -1691,8 +1884,14 @@ export type Any = Mountable<any, any, any>
  * @category models
  * @since 0.1.0
  */
-export interface Scoped<in out Props, out Events, out R = never, in Sl extends string = never>
-  extends Mountable.Members<Props, Events, R, Sl>, Scoped.Call<Props, Events, R, Sl>
+export interface Scoped<
+  in out Props,
+  out Events,
+  out R = never,
+  in Sl extends string = never
+> extends
+  Mountable.Members<Props, Events, R, Sl>,
+  Scoped.Call<Props, Events, R, Sl>
 {}
 
 /**
@@ -1723,7 +1922,13 @@ export declare namespace Scoped {
      * parent's `h.scoped`. It lives until the scope's predicate is false
      * for its key, or the parent ends.
      */
-    <Msg, Ends extends boolean, const K extends string = never, RF = never, const SC extends object = never>(
+    <
+      Msg,
+      Ends extends boolean,
+      const K extends string = never,
+      RF = never,
+      const SC extends object = never
+    >(
       s: View.Scope<Msg, Ends>,
       options:
         & View.Child.ScopedOptions<Props, Events, NoInfer<Msg>, K, Ends>
@@ -1732,7 +1937,9 @@ export declare namespace Scoped {
            * Shown if the child fails, until its key changes, and while a lazy
            * component's module loads. Without it, the child is blank.
            */
-          readonly fallback?: ((result: Result) => View.Content<NoInfer<Msg>, RF>) | undefined
+          readonly fallback?:
+            | ((result: Result) => View.Content<NoInfer<Msg>, RF>)
+            | undefined
         }
         & SlotOptions<Sl, SC, NoInfer<Msg>>
         & (0 extends 1 & Props ? { readonly props: Props } : {})
@@ -1765,7 +1972,8 @@ export type AnyRoot = Any | Scoped.Any
  * @category utility types
  * @since 0.1.0
  */
-export type Props<C> = C extends Mountable.Members<infer P, infer _Events, infer _R> ? P : never
+export type Props<C> = C extends
+  Mountable.Members<infer P, infer _Events, infer _R> ? P : never
 
 /**
  * The events of a component.
@@ -1774,7 +1982,8 @@ export type Props<C> = C extends Mountable.Members<infer P, infer _Events, infer
  * @category utility types
  * @since 0.1.0
  */
-export type Events<C> = C extends Mountable.Members<infer _Props, infer E, infer _R> ? E : never
+export type Events<C> = C extends
+  Mountable.Members<infer _Props, infer E, infer _R> ? E : never
 
 /**
  * The requirements of a component: the Commands and feature services it uses.
@@ -1783,7 +1992,8 @@ export type Events<C> = C extends Mountable.Members<infer _Props, infer E, infer
  * @category utility types
  * @since 0.1.0
  */
-export type Requirements<C> = C extends Mountable.Members<infer _Props, infer _Events, infer R> ? R : never
+export type Requirements<C> = C extends
+  Mountable.Members<infer _Props, infer _Events, infer R> ? R : never
 
 /**
  * The Model of a component.
@@ -1792,8 +2002,16 @@ export type Requirements<C> = C extends Mountable.Members<infer _Props, infer _E
  * @category utility types
  * @since 0.1.0
  */
-export type Model<C> = C extends
-  Members<infer _N, infer _P, infer M, infer _Msg, infer _E, infer _R, infer _V, infer _L> ? M
+export type Model<C> = C extends Members<
+  infer _N,
+  infer _P,
+  infer M,
+  infer _Msg,
+  infer _E,
+  infer _R,
+  infer _V,
+  infer _L
+> ? M
   : never
 
 /**
@@ -1803,8 +2021,16 @@ export type Model<C> = C extends
  * @category utility types
  * @since 0.1.0
  */
-export type Message<C> = C extends
-  Members<infer _N, infer _P, infer _M, infer Msg, infer _E, infer _R, infer _V, infer _L> ? Msg
+export type Message<C> = C extends Members<
+  infer _N,
+  infer _P,
+  infer _M,
+  infer Msg,
+  infer _E,
+  infer _R,
+  infer _V,
+  infer _L
+> ? Msg
   : never
 
 /**
@@ -1814,7 +2040,8 @@ export type Message<C> = C extends
  * @category utility types
  * @since 0.1.0
  */
-export type Slots<C> = C extends Mountable.Members<infer _Props, infer _Events, infer _R, infer Sl> ? Sl
+export type Slots<C> = C extends
+  Mountable.Members<infer _Props, infer _Events, infer _R, infer Sl> ? Sl
   : never
 
 /**
@@ -1851,10 +2078,13 @@ export interface QueryMany<out R extends Query.Query.Any> {
  * @category models
  * @since 0.1.0
  */
-export type QuerySpec = { readonly [name: string]: QueryOne<any> | QueryMany<any> }
+export type QuerySpec = {
+  readonly [name: string]: QueryOne<any> | QueryMany<any>
+}
 
 // A `query` beside a `queryMany` in one entry, or an infinite query under `queryMany`, is rejected.
-type OneQuery<M> = [M] extends [Query.Query.Any] ? { readonly "~error": "an entry takes one of query and queryMany" }
+type OneQuery<M> = [M] extends [Query.Query.Any] ?
+  { readonly "~error": "an entry takes one of query and queryMany" }
   : unknown
 type ManyQuery<R> = [R] extends [Query.InfiniteQuery.Any] ?
   { readonly "~error": "an infinite query takes query, not queryMany" }
@@ -1867,7 +2097,9 @@ type ManyQuery<R> = [R] extends [Query.InfiniteQuery.Any] ?
  * @category utility types
  * @since 0.1.0
  */
-export type Queries<C> = C extends { readonly "~L"?: infer L } ? [L] extends [QuerySpec] ? L : {} : {}
+export type Queries<C> = C extends { readonly "~L"?: infer L }
+  ? [L] extends [QuerySpec] ? L : {}
+  : {}
 
 /**
  * The names of the single and infinite queries: those `h.previous` and
@@ -1877,7 +2109,9 @@ export type Queries<C> = C extends { readonly "~L"?: infer L } ? [L] extends [Qu
  * @category utility types
  * @since 0.1.0
  */
-export type SingleNames<L> = { readonly [K in keyof L]: L[K] extends QueryOne<any> ? K : never }[keyof L] & string
+export type SingleNames<L> =
+  & { readonly [K in keyof L]: L[K] extends QueryOne<any> ? K : never }[keyof L]
+  & string
 
 /**
  * The names of the infinite queries: `$.loadMore` and `$.reset` take one.
@@ -1888,7 +2122,9 @@ export type SingleNames<L> = { readonly [K in keyof L]: L[K] extends QueryOne<an
  */
 export type InfiniteNames<L> =
   & {
-    readonly [K in keyof L]: L[K] extends QueryOne<infer R> ? R extends Query.InfiniteQuery.Any ? K : never : never
+    readonly [K in keyof L]: L[K] extends QueryOne<infer R>
+      ? R extends Query.InfiniteQuery.Any ? K : never
+      : never
   }[keyof L]
   & string
 
@@ -1899,7 +2135,11 @@ export type InfiniteNames<L> =
  * @category utility types
  * @since 0.1.0
  */
-export type KeyedNames<L> = { readonly [K in keyof L]: L[K] extends QueryMany<any> ? K : never }[keyof L] & string
+export type KeyedNames<L> =
+  & {
+    readonly [K in keyof L]: L[K] extends QueryMany<any> ? K : never
+  }[keyof L]
+  & string
 
 /**
  * The services a component's queries add to its requirements: the queries
@@ -1911,7 +2151,8 @@ export type KeyedNames<L> = { readonly [K in keyof L]: L[K] extends QueryMany<an
  */
 export type QueryServices<L> = ServiceOf<L[keyof L]>
 
-type ServiceOf<D> = D extends { readonly query: { readonly Identifier: infer Self } } ? Self : never
+type ServiceOf<D> = D extends
+  { readonly query: { readonly Identifier: infer Self } } ? Self : never
 
 /**
  * One query as `h.queries`, `$.queries`, and `queries` in `head`,
@@ -1931,7 +2172,8 @@ type ServiceOf<D> = D extends { readonly query: { readonly Identifier: infer Sel
  */
 export type QueryResultOf<D> = D extends QueryMany<infer R> ? KeyedResults<R>
   : D extends QueryOne<infer R> ?
-    R extends Query.InfiniteQuery.Any ? AsyncResult.AsyncResult<InfiniteData<R>, Query.Query.Error<R>>
+    R extends Query.InfiniteQuery.Any ?
+      AsyncResult.AsyncResult<InfiniteData<R>, Query.Query.Error<R>>
     : AsyncResult.AsyncResult<Query.Query.Success<R>, Query.Query.Error<R>>
   : never
 
@@ -1965,7 +2207,10 @@ export interface InfiniteData<R extends Query.InfiniteQuery.Any> {
  */
 export interface KeyedEntry<R extends Query.Query.Any> {
   readonly args: Query.Query.Args<R>
-  readonly result: AsyncResult.AsyncResult<Query.Query.Success<R>, Query.Query.Error<R>>
+  readonly result: AsyncResult.AsyncResult<
+    Query.Query.Success<R>,
+    Query.Query.Error<R>
+  >
   readonly patched: boolean
 }
 
@@ -1983,7 +2228,9 @@ export interface KeyedEntry<R extends Query.Query.Any> {
  * @category models
  * @since 0.1.0
  */
-export interface KeyedResults<R extends Query.Query.Any> extends ReadonlyArray<KeyedEntry<R>> {
+export interface KeyedResults<R extends Query.Query.Any>
+  extends ReadonlyArray<KeyedEntry<R>>
+{
   readonly get: (args: Query.Query.Args<R>) => Option.Option<KeyedEntry<R>>
 }
 
@@ -1997,7 +2244,10 @@ export interface KeyedResults<R extends Query.Query.Any> extends ReadonlyArray<K
  */
 export interface KeyedChange<R extends Query.Query.Any> {
   readonly args: Query.Query.Args<R>
-  readonly result: AsyncResult.AsyncResult<Query.Query.Success<R>, Query.Query.Error<R>>
+  readonly result: AsyncResult.AsyncResult<
+    Query.Query.Success<R>,
+    Query.Query.Error<R>
+  >
 }
 
 /**
@@ -2009,7 +2259,8 @@ export interface KeyedChange<R extends Query.Query.Any> {
  * @category utility types
  * @since 0.1.0
  */
-export type ArgsFor<S, M> = M extends Query.Query.Any ? ReadonlyArray<Query.Query.Args<M>>
+export type ArgsFor<S, M> = M extends Query.Query.Any ?
+  ReadonlyArray<Query.Query.Args<M>>
   : Query.Query.Args<S> | undefined
 
 /**
@@ -2034,7 +2285,8 @@ export type OnChange<S, M, Msg> = M extends Query.Query.Any
  * @category guards
  * @since 0.1.0
  */
-export const isComponent = (u: unknown): u is AnyRoot => Predicate.hasProperty(u, TypeId)
+export const isComponent = (u: unknown): u is AnyRoot =>
+  Predicate.hasProperty(u, TypeId)
 
 // A component is a function, so the prototypes keep `call`, `apply` and `bind`.
 const Proto = Object.assign(Object.create(Function.prototype), {
@@ -2072,10 +2324,19 @@ const makeComponent = (
   fields: { readonly [key: string]: unknown }
 ): any => {
   const component = (h: any, options: child.Options) =>
-    child.make(component as any, options, (component as any).definition.scoped ? h["~alive"] : undefined)
+    child.make(
+      component as any,
+      options,
+      (component as any).definition.scoped ? h["~alive"] : undefined
+    )
   Object.setPrototypeOf(component, proto)
   for (const key of Object.keys(fields)) {
-    Object.defineProperty(component, key, { value: fields[key], enumerable: true, writable: true, configurable: true })
+    Object.defineProperty(component, key, {
+      value: fields[key],
+      enumerable: true,
+      writable: true,
+      configurable: true
+    })
   }
   return component
 }
@@ -2087,28 +2348,33 @@ const makeComponent = (
  * @category guards
  * @since 0.1.0
  */
-export const isHeadless = (u: unknown): u is Headless.Any => Predicate.hasProperty(u, HeadlessTypeId)
+export const isHeadless = (u: unknown): u is Headless.Any =>
+  Predicate.hasProperty(u, HeadlessTypeId)
 
 // Only a headless component can own shared state: it wraps its readers with its `view` closure.
 type OwnersAreHeadless<SV> = [SV] extends [never] ? unknown : {
-  readonly "Only a headless component can share state: finish it with parts in place of view": never
+  readonly "Only a headless component can share state: finish it with parts in place of view":
+    never
 }
 
 // The owners `shared` lists: none when it's left out, and `SR` is still exactly its constraint. A map with
 // a string index of its own is kept.
-type Listed<SR> = (<T>() => T extends SR ? 1 : 2) extends (<T>() => T extends SharedReads ? 1 : 2) ? {} : SR
+type Listed<SR> = (<T>() => T extends SR ? 1 : 2) extends
+  (<T>() => T extends SharedReads ? 1 : 2) ? {} : SR
 
 type ReportId = PartsHelper<never, unknown, any>["id"]
 
 // One entry of `shared`, for the owner inferred for it: `report` and `onChange` take their parameter types from
 // here. `SR` holds what's written, and `optional` with it, and this checks it against the owner. An entry for
 // `"self"` reads the component's own `shares`, `SV` and `Rp`, and is optional.
-type SharedEntry<E, O, Model, Props, Msg, SV, Rp> = [E] extends [Headless.Any] ? O
+type SharedEntry<E, O, Model, Props, Msg, SV, Rp> = [E] extends [Headless.Any] ?
+  O
   : [O] extends ["self"] ? {
       readonly owner: O
       readonly optional: true
       readonly report?:
-        | ([Rp] extends [never] ? "This component collects no reports: its shares has no collects"
+        | ([Rp] extends [never] ?
+          "This component collects no reports: its shares has no collects"
           : (model: Model, props: Props, id: ReportId) => Rp)
         | undefined
       readonly onChange?: ((value: SV) => Msg) | undefined
@@ -2117,7 +2383,8 @@ type SharedEntry<E, O, Model, Props, Msg, SV, Rp> = [E] extends [Headless.Any] ?
     readonly owner: O
     readonly optional?: boolean | undefined
     readonly report?:
-      | ([Shared.Report<O>] extends [never] ? "This owner collects no reports: its shares has no collects"
+      | ([Shared.Report<O>] extends [never] ?
+        "This owner collects no reports: its shares has no collects"
         : (model: Model, props: Props, id: ReportId) => Shared.Report<O>)
       | undefined
     readonly onChange?: ((value: Shared.Value<O>) => Msg) | undefined
@@ -2128,14 +2395,17 @@ type SharedEntry<E, O, Model, Props, Msg, SV, Rp> = [E] extends [Headless.Any] ?
 type OwnersOnly<SO> = {
   readonly [K in keyof SO]: [SO[K]] extends ["self"] ? unknown
     : [Shared.Of<SO[K]>] extends [never] ? {
-        readonly owner: "A component in shared must be a headless component with shares"
+        readonly owner:
+          "A component in shared must be a headless component with shares"
       }
     : unknown
 }
 
 // Whether `shared`, as `define` keeps it, has an entry for `"self"`.
 type ReadsSelf<SR> = {
-  readonly [K in keyof SR]: SR[K] extends { readonly owner: infer O } ? "self" extends O ? true : never : never
+  readonly [K in keyof SR]: SR[K] extends { readonly owner: infer O }
+    ? "self" extends O ? true : never
+    : never
 }[keyof SR]
 
 type SelfReceives<SR> = {
@@ -2146,7 +2416,10 @@ type SelfReceives<SR> = {
 
 // A component that reads its own kind must be an owner itself.
 type SelfShares<SR, SV> = [ReadsSelf<SR>] extends [never] ? unknown
-  : [SV] extends [never] ? { readonly "A component that reads its own kind must share state: add shares": never }
+  : [SV] extends [never] ? {
+      readonly "A component that reads its own kind must share state: add shares":
+        never
+    }
   : unknown
 
 // The component being defined, as a `"self"` entry of `shared` names it: an owner with its own props, events,
@@ -2157,7 +2430,8 @@ type SelfOwner<Name extends string, Props, Events, Rcv, SV, Rp> =
 
 // `shared` as `define` keeps it, each `"self"` entry naming the component.
 type ResolveSelf<SR, S> = {
-  readonly [K in keyof SR]: SR[K] extends { readonly owner: "self" } ? Omit<SR[K], "owner"> & { readonly owner: S }
+  readonly [K in keyof SR]: SR[K] extends { readonly owner: "self" } ?
+    Omit<SR[K], "owner"> & { readonly owner: S }
     : SR[K]
 }
 
@@ -2176,11 +2450,14 @@ export interface SharesCollects<out Msg, in out Rp> {
 }
 
 // The tags of a message union, and the member with one tag.
-type TagOf<Msg> = Msg extends { readonly _tag: infer T extends string } ? T : never
+type TagOf<Msg> = Msg extends { readonly _tag: infer T extends string } ? T
+  : never
 type Tagged<Msg, T> = Extract<Msg, { readonly _tag: T }>
-type UnknownTag<T> = `'${T & string}' is not a tag of this component's message` & {
-  readonly _UnknownTag: unique symbol
-}
+type UnknownTag<T> =
+  & `'${T & string}' is not a tag of this component's message`
+  & {
+    readonly _UnknownTag: unique symbol
+  }
 
 // A record `update`: a function for each tag, returning what `UR` holds for it. `UR` is inferred from the
 // record, so a key that is no tag is in it too, and its value is the error.
@@ -2256,13 +2533,19 @@ export interface Definition<
    * an update function can call it by hand, and `$` is bound to the
    * message it's given.
    */
-  update<const Tag extends TagOf<Msg>, U extends Model | Step<Model, Msg, Events, any, L>>(
+  update<
+    const Tag extends TagOf<Msg>,
+    U extends Model | Step<Model, Msg, Events, any, L>
+  >(
     tag: Tag,
     update: (
       $: Update<Model, Msg, Events, Props, L, Tagged<Msg, Tag>, SR>,
       msg: Tagged<Msg, Tag>
     ) => U
-  ): ($: Update<Model, Msg, Events, Props, L, Msg, SR>, msg: Tagged<Msg, Tag>) => U
+  ): (
+    $: Update<Model, Msg, Events, Props, L, Msg, SR>,
+    msg: Tagged<Msg, Tag>
+  ) => U
   /** An update function over the whole message type. */
   update<U extends Model | Step<Model, Msg, Events, any, L>>(
     update: ($: Update<Model, Msg, Events, Props, L, Msg, SR>, msg: Msg) => U
@@ -2299,7 +2582,9 @@ export interface Definition<
     Parts,
     UI extends Model | InitStep<Model, Msg, Events, any> = Model,
     U extends Model | Step<Model, Msg, Events, any, L> = Model,
-    UR extends { readonly [T in TagOf<Msg>]: Model | Step<Model, Msg, Events, any, L> } = {
+    UR extends {
+      readonly [T in TagOf<Msg>]: Model | Step<Model, Msg, Events, any, L>
+    } = {
       readonly [T in TagOf<Msg>]: Model
     },
     Sub extends Subscription.Subscription<Msg, any> = never
@@ -2314,16 +2599,24 @@ export interface Definition<
          * A headless component has no view to place slots in, so a definition with slots can't take `parts`.
          * Nor can a scoped one: a headless child lives where its declarer's view writes it.
          */
-        readonly parts: [Sl] extends [never] ?
-          [Sc] extends [false] ?
-            (p: PartsHelper<Msg, Props, V> & QueryHelpers<L> & SharedHelpers<SR>, model: Model) => Parts
+        readonly parts: [Sl] extends [never] ? [Sc] extends [false] ? (
+              p:
+                & PartsHelper<Msg, Props, V>
+                & QueryHelpers<L>
+                & SharedHelpers<SR>,
+              model: Model
+            ) => Parts
           : never
           : never
         readonly subscriptions?:
-          | (($: Current<Model, Props, QueryResults<L>>) => ReadonlyArray<Sub | false | null | undefined>)
+          | ((
+            $: Current<Model, Props, QueryResults<L>>
+          ) => ReadonlyArray<Sub | false | null | undefined>)
           | undefined
         readonly head?:
-          | (($: Current<Model, Props, QueryResults<L>>) => ReadonlyArray<View.HeadEntry<V>>)
+          | ((
+            $: Current<Model, Props, QueryResults<L>>
+          ) => ReadonlyArray<View.HeadEntry<V>>)
           | undefined
       }
       & SelfShares<SR, SV>
@@ -2333,7 +2626,9 @@ export interface Definition<
     Composed.Parts<Parts>,
     Exclude<
       | OwnStepRequirements<UI | U | UR[keyof UR], SR>
-      | View.PartRequirements<Composed.Parts<Parts>[keyof Composed.Parts<Parts>]>
+      | View.PartRequirements<
+        Composed.Parts<Parts>[keyof Composed.Parts<Parts>]
+      >
       | Composed.Requirements<Parts>
       | Subscription.Requirements<Sub>
       | QueryServices<L>
@@ -2350,7 +2645,9 @@ export interface Definition<
     UI extends Model | InitStep<Model, Msg, Events, any> = Model,
     U extends Model | Step<Model, Msg, Events, any, L> = Model,
     // What each function of a record `update` returns, by tag.
-    UR extends { readonly [T in TagOf<Msg>]: Model | Step<Model, Msg, Events, any, L> } = {
+    UR extends {
+      readonly [T in TagOf<Msg>]: Model | Step<Model, Msg, Events, any, L>
+    } = {
       readonly [T in TagOf<Msg>]: Model
     },
     UV extends View.Content<Msg, any> = View.Node<Msg>,
@@ -2367,10 +2664,14 @@ export interface Definition<
           model: Model
         ) => UV
         readonly subscriptions?:
-          | (($: Current<Model, Props, QueryResults<L>>) => ReadonlyArray<Sub | false | null | undefined>)
+          | ((
+            $: Current<Model, Props, QueryResults<L>>
+          ) => ReadonlyArray<Sub | false | null | undefined>)
           | undefined
         readonly head?:
-          | (($: Current<Model, Props, QueryResults<L>>) => ReadonlyArray<View.HeadEntry<V>>)
+          | ((
+            $: Current<Model, Props, QueryResults<L>>
+          ) => ReadonlyArray<View.HeadEntry<V>>)
           | undefined
       }
       & OwnersAreHeadless<SV>
@@ -2407,7 +2708,8 @@ type ComponentOf<
   V extends View.Elements,
   L,
   Sl extends string
-> = [Sc] extends [false] ? Component<Name, Props, Model, Msg, Events, R, V, L, Sl>
+> = [Sc] extends [false] ?
+  Component<Name, Props, Model, Msg, Events, R, V, L, Sl>
   : ScopedComponent<Name, Props, Model, Msg, Events, R, V, L, Sl>
 
 /**
@@ -2450,7 +2752,10 @@ export declare namespace Definition {
     readonly sharesSchema: Schema.Codec<any, any> | undefined
     /** What the component collects from the readers that report to it, or `undefined` when it collects nothing. */
     readonly collects:
-      | { readonly schema: Schema.Codec<any, any>; readonly onChange: (collected: ReadonlyArray<never>) => unknown }
+      | {
+        readonly schema: Schema.Codec<any, any>
+        readonly onChange: (collected: ReadonlyArray<never>) => unknown
+      }
       | undefined
     /** What history restore saves of an instance: `false` for nothing, or the Model to save. */
     readonly restore: false | ((model: any, props: any) => unknown) | undefined
@@ -2526,15 +2831,29 @@ export type Helper<D> = D extends Definition<
  * @category utility types
  * @since 0.1.0
  */
-export type ViewHelper<Model, Props, Msg, V extends View.Elements, L, Sl extends string, SR> = WithScoped<
+export type ViewHelper<
+  Model,
+  Props,
+  Msg,
+  V extends View.Elements,
+  L,
+  Sl extends string,
+  SR
+> = WithScoped<
   Model,
   Props,
   Msg,
   L,
-  View.Helper<Msg, Props> & View.Tags<V, Msg> & QueryHelpers<L> & SlotHelpers<Sl> & SharedHelpers<SR>
+  & View.Helper<Msg, Props>
+  & View.Tags<V, Msg>
+  & QueryHelpers<L>
+  & SlotHelpers<Sl>
+  & SharedHelpers<SR>
 >
 
-type WithScoped<Model, Props, Msg, L, H> = H & ScopedHelpers<Model, Props, Msg, L, H>
+type WithScoped<Model, Props, Msg, L, H> =
+  & H
+  & ScopedHelpers<Model, Props, Msg, L, H>
 
 /**
  * `h.scoped`, which writes scoped children. `H` is the rest of `h`,
@@ -2588,7 +2907,9 @@ export interface Current<out Model, out Props, out Queries> {
  * @category models
  * @since 0.1.0
  */
-export interface Alive<out Model, out Props, out Queries> extends Current<Model, Props, Queries> {
+export interface Alive<out Model, out Props, out Queries>
+  extends Current<Model, Props, Queries>
+{
   readonly key: string
 }
 
@@ -2864,7 +3185,8 @@ export const define = <
   M = {},
   // The queries as `QueryOne` and `QueryMany` entries, by name. Nothing infers it, so it's always this default.
   L = {
-    readonly [K in keyof S]: M[K & keyof M] extends Query.Query.Any ? QueryMany<M[K & keyof M]>
+    readonly [K in keyof S]: M[K & keyof M] extends Query.Query.Any ?
+      QueryMany<M[K & keyof M]>
       : S[K] extends Query.Query.Any ? QueryOne<S[K]>
       : never
   },
@@ -2904,14 +3226,24 @@ export const define = <
               $: Current<
                 Model,
                 Props,
-                { readonly [P in Exclude<keyof NoInfer<L>, K>]: QueryResultOf<NoInfer<L>[P]> }
+                {
+                  readonly [P in Exclude<keyof NoInfer<L>, K>]: QueryResultOf<
+                    NoInfer<L>[P]
+                  >
+                }
               >
             ) => ArgsFor<S[K], M[K & keyof M]>
             readonly debounce?: Duration.Input | undefined
-            readonly onChange?: OnChange<S[K], M[K & keyof M], NoInfer<Msg>> | undefined
+            readonly onChange?:
+              | OnChange<S[K], M[K & keyof M], NoInfer<Msg>>
+              | undefined
           }
         }
-        & { readonly [K in keyof M]: { readonly queryMany?: M[K] & ManyQuery<M[K]> } }
+        & {
+          readonly [K in keyof M]: {
+            readonly queryMany?: M[K] & ManyQuery<M[K]>
+          }
+        }
       )
       | undefined
     readonly elements?: View.Vocabulary<V> | undefined
@@ -2977,7 +3309,9 @@ export const define = <
            * dispatched once a render pass has nothing left to render, when it differs from the last
            * one, which starts as `onChange([])`.
            */
-          readonly onChange: (collected: ReadonlyArray<NoInfer<Rp>>) => NoInfer<Msg>
+          readonly onChange: (
+            collected: ReadonlyArray<NoInfer<Rp>>
+          ) => NoInfer<Msg>
         }
       }
       | undefined
@@ -2994,7 +3328,10 @@ export const define = <
      * what only the DOM knew, such as hover, focus or a measurement: restore replays `init`'s
      * Commands only. Hydration doesn't read it: the server sends the whole Model.
      */
-    readonly restore?: false | ((model: Model, props: Props) => NoInfer<Model>) | undefined
+    readonly restore?:
+      | false
+      | ((model: Model, props: Props) => NoInfer<Model>)
+      | undefined
   }
 ): Definition<
   Name,
@@ -3006,7 +3343,10 @@ export const define = <
   L,
   Tagged<Msg, Tags>,
   Sl,
-  ResolveSelf<Listed<SR>, SelfOwner<Name, Props, Events, Tagged<Msg, Tags>, SV, Rp>>,
+  ResolveSelf<
+    Listed<SR>,
+    SelfOwner<Name, Props, Events, Tagged<Msg, Tags>, SV, Rp>
+  >,
   SV,
   Rp,
   Sc
@@ -3022,7 +3362,10 @@ export const define = <
     L,
     Tagged<Msg, Tags>,
     Sl,
-    ResolveSelf<Listed<SR>, SelfOwner<Name, Props, Events, Tagged<Msg, Tags>, SV, Rp>>,
+    ResolveSelf<
+      Listed<SR>,
+      SelfOwner<Name, Props, Events, Tagged<Msg, Tags>, SV, Rp>
+    >,
     SV,
     Rp,
     Sc
@@ -3033,14 +3376,18 @@ export const define = <
     model: options.model,
     message: options.message,
     events: options.events ?? (Schema.Never as any),
-    receives: receivesOf(options.message, typeof shares === "object" ? shares.receives ?? [] : []),
+    receives: receivesOf(
+      options.message,
+      typeof shares === "object" ? shares.receives ?? [] : []
+    ),
     queries: options.queries,
     elements: options.elements,
     slots: options.slots ?? [],
     shared: options.shared as any,
     shares: typeof shares === "function" ? shares : shares?.value,
     sharesSchema: typeof shares === "function" ? undefined : shares?.schema,
-    collects: shares !== undefined && typeof shares !== "function" && "collects" in shares
+    collects: shares !== undefined && typeof shares !== "function" &&
+        "collects" in shares
       ? shares.collects
       : undefined,
     restore: options.restore,
@@ -3048,7 +3395,17 @@ export const define = <
     update: ((...args: ReadonlyArray<any>) => {
       const update: AnyUpdate = args[args.length - 1]
       return ($: Update<any, any, any, any>, msg: unknown) =>
-        update(makeUpdate($.model, $.props, $.queries, $.shared, msg, ($ as AnyUpdate$)["~self"]), msg)
+        update(
+          makeUpdate(
+            $.model,
+            $.props,
+            $.queries,
+            $.shared,
+            msg,
+            ($ as AnyUpdate$)["~self"]
+          ),
+          msg
+        )
     }) as any,
     view: (view) => view,
     fragment: (fragment) => fragment,
@@ -3061,9 +3418,13 @@ export const define = <
 }
 
 // The cases of `message` with one of `tags`, or `Schema.Never` without any.
-const receivesOf = (message: Schema.Codec<any, any>, tags: ReadonlyArray<string>): Schema.Codec<any, any> =>
+const receivesOf = (
+  message: Schema.Codec<any, any>,
+  tags: ReadonlyArray<string>
+): Schema.Codec<any, any> =>
   tags.length === 0 ? Schema.Never : message.check(
-    Schema.makeFilter((msg: unknown) => Predicate.hasProperty(msg, "_tag") && tags.includes(msg._tag as string), {
+    Schema.makeFilter((msg: unknown) =>
+      Predicate.hasProperty(msg, "_tag") && tags.includes(msg._tag as string), {
       expected: `a message with one of the tags ${tags.join(", ")}`
     })
   )
@@ -3072,11 +3433,21 @@ const receivesOf = (message: Schema.Codec<any, any>, tags: ReadonlyArray<string>
  * Binds `queries` through `Query`, which an app with a query has loaded. Without it nothing in the
  * record can be a query: an empty record binds nothing, and any other fails `Query`'s first check.
  */
-const bindQueries = (component: string, queries: unknown): ReturnType<queryCore.Loaded["bind"]> => {
+const bindQueries = (
+  component: string,
+  queries: unknown
+): ReturnType<queryCore.Loaded["bind"]> => {
   if (queries === undefined) return undefined
-  if (queryCore.loaded !== undefined) return queryCore.loaded.bind(component, queries)
-  if (typeof queries === "object" && queries !== null && Object.keys(queries).length === 0) return undefined
-  throw new Error(`${component}: queries must be a record of { query, args } or { queryMany, args } entries.`)
+  if (queryCore.loaded !== undefined) {
+    return queryCore.loaded.bind(component, queries)
+  }
+  if (
+    typeof queries === "object" && queries !== null &&
+    Object.keys(queries).length === 0
+  ) return undefined
+  throw new Error(
+    `${component}: queries must be a record of { query, args } or { queryMany, args } entries.`
+  )
 }
 
 const finish = (
@@ -3087,13 +3458,23 @@ const finish = (
     readonly view?: ((h: any, model: any) => View.Content<any, any>) | undefined
     readonly parts?: ((p: any, model: any) => unknown) | undefined
     readonly subscriptions?:
-      | (($: Current<any, any, any>) => ReadonlyArray<Subscription.Subscription<any, any> | false | null | undefined>)
+      | ((
+        $: Current<any, any, any>
+      ) => ReadonlyArray<
+        Subscription.Subscription<any, any> | false | null | undefined
+      >)
       | undefined
-    readonly head?: (($: Current<any, any, any>) => ReadonlyArray<unknown>) | undefined
+    readonly head?:
+      | (($: Current<any, any, any>) => ReadonlyArray<unknown>)
+      | undefined
   }
 ): Any => {
   const bound = bindQueries(definition.name, definition.queries)
-  const open = (model: unknown, props: unknown, results: Results | undefined): any =>
+  const open = (
+    model: unknown,
+    props: unknown,
+    results: Results | undefined
+  ): any =>
     bound === undefined ? {} : bound.context(model, props, results).queries
   const update = options.update
   // A record dispatches on the message's `_tag`.
@@ -3106,7 +3487,9 @@ const finish = (
   const view = options.view
   const parts = options.parts
   if (parts !== undefined && definition.slots.length > 0) {
-    throw new Error(`${definition.name} declares slots, so it needs a view to place them and can't take parts`)
+    throw new Error(
+      `${definition.name} declares slots, so it needs a view to place them and can't take parts`
+    )
   }
   // Made once, so a slot forwarded as another's content is the same value on every render.
   const outlets: Record<string, View.Outlet> = {}
@@ -3119,98 +3502,140 @@ const finish = (
   // Read once the component exists, since an entry for `"self"` names it.
   let reads: ReadonlyArray<sharedReads.Read> = []
   let unsupplied: SharedRecord = {}
-  const component: Any = makeComponent(view === undefined ? HeadlessProto : Proto, {
-    definition,
-    props: definition.props,
-    model: definition.model,
-    message: definition.message,
-    events: definition.events,
-    receives: definition.receives,
-    init: (props: unknown) => toNext(options.init(makeInit(props))),
-    update: (model: unknown, msg: unknown, props: unknown, results?: Results, shared?: SharedRecord) =>
-      toNext(
-        updateFn(makeUpdate(model, props, open(model, props, results), shared ?? unsupplied, msg, component), msg)
-      ),
-    view: view === undefined
-      ? undefined
-      : View.readsPathLazily((
+  const component: Any = makeComponent(
+    view === undefined ? HeadlessProto : Proto,
+    {
+      definition,
+      props: definition.props,
+      model: definition.model,
+      message: definition.message,
+      events: definition.events,
+      receives: definition.receives,
+      init: (props: unknown) => toNext(options.init(makeInit(props))),
+      update: (
         model: unknown,
+        msg: unknown,
         props: unknown,
-        running?: View.Running,
         results?: Results,
-        path?: string | View.PathSource,
-        shared?: SharedLookup,
-        lazy?: View.LazyStore
-      ) => {
-        const h: any = View.makeHelper(
-          props,
-          elements ?? View.registeredElements(),
-          running,
-          path ?? ("/" + definition.name),
-          lazy
-        )
-        if (definition.slots.length > 0) h.slots = outlets
-        if (bound !== undefined) {
-          const context = bound.context(model, props, results)
-          h.queries = context.queries
-          h.previous = context.previous
-          h.patched = context.patched
-        }
-        if (reads.length > 0) h.shared = sharedReads.values(definition.name, reads, shared)
-        const lazies = lazy?.lazy as View.Lazies | undefined
-        lazies?.begin()
-        try {
-          const node = View.toNode(view(h, model))
-          lazies?.end()
-          return node
-        } catch (error) {
-          // What a render that threw built isn't given again.
-          if (lazy !== undefined) lazy.lazy = undefined
-          throw error
-        }
-      }),
-    parts: parts === undefined
-      ? undefined
-      : (model: unknown, props: unknown, context: PartsContext) => {
-        const owner = context.owner
-        const p: any = {
-          props,
-          isRunning: (command: Command.Definition.Any, group?: unknown): boolean =>
-            context.running === undefined
-              ? false
-              : context.running(Command.nameOf(command), Command.groupKeyOf(command, group)),
-          id: (name: string, key?: string | number) => View.idOf(owner.path, name, key),
-          part: (...args: ReadonlyArray<any>) =>
-            typeof args[0] === "function"
-              ? View.makePart(owner, undefined, args[0])
-              : View.makePart(owner, typeof args[0] === "string" ? [args[0]] : args[0], args[1]),
-          child: (component: Headless.Any, options: child.ComposeOptions) => child.compose(owner, component, options)
-        }
-        if (bound !== undefined) {
-          const opened = bound.context(model, props, context.queries)
-          p.queries = opened.queries
-          p.previous = opened.previous
-          p.patched = opened.patched
-        }
-        if (reads.length > 0) p.shared = sharedReads.values(definition.name, reads, context.shared)
-        return parts(p, model)
-      },
-    subscriptions: subscriptions === undefined
-      ? undefined
-      : (model: unknown, props: unknown, results?: Results) =>
-        subscriptions({ model, props, queries: open(model, props, results) }).filter((entry) => !!entry),
-    head: head === undefined
-      ? undefined
-      : (model: unknown, props: unknown, results?: Results) =>
-        head({ model, props, queries: open(model, props, results) }),
-    elements: () => elements ?? View.registeredElements(),
-    layer: undefined,
-    layerKeys: undefined,
-    layerFailure: undefined,
-    sharedLayer: undefined,
-    layerOnServer: true,
-    "~queries": bound
-  })
+        shared?: SharedRecord
+      ) =>
+        toNext(
+          updateFn(
+            makeUpdate(
+              model,
+              props,
+              open(model, props, results),
+              shared ?? unsupplied,
+              msg,
+              component
+            ),
+            msg
+          )
+        ),
+      view: view === undefined
+        ? undefined
+        : View.readsPathLazily((
+          model: unknown,
+          props: unknown,
+          running?: View.Running,
+          results?: Results,
+          path?: string | View.PathSource,
+          shared?: SharedLookup,
+          lazy?: View.LazyStore
+        ) => {
+          const h: any = View.makeHelper(
+            props,
+            elements ?? View.registeredElements(),
+            running,
+            path ?? ("/" + definition.name),
+            lazy
+          )
+          if (definition.slots.length > 0) h.slots = outlets
+          if (bound !== undefined) {
+            const context = bound.context(model, props, results)
+            h.queries = context.queries
+            h.previous = context.previous
+            h.patched = context.patched
+          }
+          if (reads.length > 0) {
+            h.shared = sharedReads.values(definition.name, reads, shared)
+          }
+          const lazies = lazy?.lazy as View.Lazies | undefined
+          lazies?.begin()
+          try {
+            const node = View.toNode(view(h, model))
+            lazies?.end()
+            return node
+          } catch (error) {
+            // What a render that threw built isn't given again.
+            if (lazy !== undefined) {
+              lazy.lazy = undefined
+            }
+            throw error
+          }
+        }),
+      parts: parts === undefined
+        ? undefined
+        : (model: unknown, props: unknown, context: PartsContext) => {
+          const owner = context.owner
+          const p: any = {
+            props,
+            isRunning: (
+              command: Command.Definition.Any,
+              group?: unknown
+            ): boolean =>
+              context.running === undefined
+                ? false
+                : context.running(
+                  Command.nameOf(command),
+                  Command.groupKeyOf(command, group)
+                ),
+            id: (name: string, key?: string | number) =>
+              View.idOf(owner.path, name, key),
+            part: (...args: ReadonlyArray<any>) =>
+              typeof args[0] === "function"
+                ? View.makePart(owner, undefined, args[0])
+                : View.makePart(
+                  owner,
+                  typeof args[0] === "string" ? [args[0]] : args[0],
+                  args[1]
+                ),
+            child: (component: Headless.Any, options: child.ComposeOptions) =>
+              child.compose(owner, component, options)
+          }
+          if (bound !== undefined) {
+            const opened = bound.context(model, props, context.queries)
+            p.queries = opened.queries
+            p.previous = opened.previous
+            p.patched = opened.patched
+          }
+          if (reads.length > 0) {
+            p.shared = sharedReads.values(
+              definition.name,
+              reads,
+              context.shared
+            )
+          }
+          return parts(p, model)
+        },
+      subscriptions: subscriptions === undefined
+        ? undefined
+        : (model: unknown, props: unknown, results?: Results) =>
+          subscriptions({ model, props, queries: open(model, props, results) })
+            .filter((entry) => !!entry),
+      head: head === undefined
+        ? undefined
+        : (model: unknown, props: unknown, results?: Results) =>
+          head({ model, props, queries: open(model, props, results) }),
+      elements: () => elements ?? View.registeredElements(),
+      layer: undefined,
+      layerKeys: undefined,
+      layerFailure: undefined,
+      sharedLayer: undefined,
+      layerOnServer: true,
+      "~queries": bound
+    }
+  )
   reads = sharedReads.readsOf(definition, component)
   unsupplied = sharedReads.unsupplied(definition.name, reads)
   return component
@@ -3266,18 +3691,60 @@ export interface LocalOption {
  * @category utility types
  * @since 0.1.0
  */
-export type Provided<C, ROut, RIn> = C extends
-  Component<infer N, infer P, infer M, infer Msg, infer E, infer _R, infer V, infer L, infer Sl>
-  ? Component<N, P, M, Msg, E, Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn, V, L, Sl>
-  : C extends ScopedComponent<infer N, infer P, infer M, infer Msg, infer E, infer _R, infer V, infer L, infer Sl>
-    ? ScopedComponent<N, P, M, Msg, E, Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn, V, L, Sl>
+export type Provided<C, ROut, RIn> = C extends Component<
+  infer N,
+  infer P,
+  infer M,
+  infer Msg,
+  infer E,
+  infer _R,
+  infer V,
+  infer L,
+  infer Sl
+> ? Component<
+    N,
+    P,
+    M,
+    Msg,
+    E,
+    Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn,
+    V,
+    L,
+    Sl
+  >
+  : C extends ScopedComponent<
+    infer N,
+    infer P,
+    infer M,
+    infer Msg,
+    infer E,
+    infer _R,
+    infer V,
+    infer L,
+    infer Sl
+  > ? ScopedComponent<
+      N,
+      P,
+      M,
+      Msg,
+      E,
+      Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn,
+      V,
+      L,
+      Sl
+    >
   : C extends Mountable.Call<any, any, any, never> ? Mountable<
       Props<C>,
       Events<C>,
       Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn,
       Slots<C>
     >
-  : Scoped<Props<C>, Events<C>, Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn, Slots<C>>
+  : Scoped<
+    Props<C>,
+    Events<C>,
+    Exclude<Requirements<C>, Exclude<ROut, RuntimeService>> | RIn,
+    Slots<C>
+  >
 
 /**
  * Services the runtime owns or reads once at mount: the framework services,
@@ -3373,7 +3840,9 @@ export declare namespace ProvideInput {
    * @category utility types
    * @since 0.1.0
    */
-  export type Success<L> = LayerOf<L> extends infer X ? X extends Layer.Layer<infer A, any, any> ? A : never : never
+  export type Success<L> = LayerOf<L> extends infer X
+    ? X extends Layer.Layer<infer A, any, any> ? A : never
+    : never
 
   /**
    * The error an input can fail with.
@@ -3381,7 +3850,9 @@ export declare namespace ProvideInput {
    * @category utility types
    * @since 0.1.0
    */
-  export type Error<L> = LayerOf<L> extends infer X ? X extends Layer.Layer<any, infer E, any> ? E : never : never
+  export type Error<L> = LayerOf<L> extends infer X
+    ? X extends Layer.Layer<any, infer E, any> ? E : never
+    : never
 
   /**
    * The services an input requires.
@@ -3389,7 +3860,9 @@ export declare namespace ProvideInput {
    * @category utility types
    * @since 0.1.0
    */
-  export type Services<L> = LayerOf<L> extends infer X ? X extends Layer.Layer<any, any, infer R> ? R : never : never
+  export type Services<L> = LayerOf<L> extends infer X
+    ? X extends Layer.Layer<any, any, infer R> ? R : never
+    : never
 }
 
 /**
@@ -3400,8 +3873,11 @@ export declare namespace ProvideInput {
  * @category utility types
  * @since 0.1.0
  */
-export type ProvideRest<L, Msg> = [ProvideInput.Error<L>] extends [never] ?
-  [options?: LocalOption & { readonly onFailure?: ProvideOptions<never, Msg>["onFailure"] | undefined }]
+export type ProvideRest<L, Msg> = [ProvideInput.Error<L>] extends [never] ? [
+    options?: LocalOption & {
+      readonly onFailure?: ProvideOptions<never, Msg>["onFailure"] | undefined
+    }
+  ]
   : [options_with_onFailure: ProvideOptions<ProvideInput.Error<L>, Msg>]
 
 /**
@@ -3412,8 +3888,12 @@ export type ProvideRest<L, Msg> = [ProvideInput.Error<L>] extends [never] ?
  * @category utility types
  * @since 0.1.0
  */
-export type RequiresOnFailure<L, O> = [ProvideInput.Error<L>] extends [never] ? unknown
-  : [O] extends [never] ? { readonly "This Layer can fail. Pass { onFailure } to handle": ProvideInput.Error<L> }
+export type RequiresOnFailure<L, O> = [ProvideInput.Error<L>] extends [never] ?
+  unknown
+  : [O] extends [never] ? {
+      readonly "This Layer can fail. Pass { onFailure } to handle":
+        ProvideInput.Error<L>
+    }
   : unknown
 
 /**
@@ -3424,7 +3904,8 @@ export type RequiresOnFailure<L, O> = [ProvideInput.Error<L>] extends [never] ? 
  * @category utility types
  * @since 0.1.0
  */
-export type CurriedCantFail<L> = [ProvideInput.Error<L>] extends [never] ? unknown
+export type CurriedCantFail<L> = [ProvideInput.Error<L>] extends [never] ?
+  unknown
   : {
     readonly "This Layer can fail, and the curried form has no onFailure. Use Component.provide(component, layer, { onFailure }) to handle":
       ProvideInput.Error<L>
@@ -3433,33 +3914,49 @@ export type CurriedCantFail<L> = [ProvideInput.Error<L>] extends [never] ? unkno
 // What a factory's Layer provides: the services every branch provides, so a branch that provides
 // less never has a service removed for it. The check is non-distributive, so a union of Layers
 // matches only with an `ROut` all of them provide; with none in common it removes nothing.
-type CommonSuccess<L> = [L] extends [Layer.Layer<infer ROut, any, any>] ? ROut : never
+type CommonSuccess<L> = [L] extends [Layer.Layer<infer ROut, any, any>] ? ROut
+  : never
 // What any branch needs, and what any can fail with: distributive, so the union of them.
 type AnyServices<L> = L extends Layer.Layer<any, any, infer RIn> ? RIn : never
 type AnyError<L> = L extends Layer.Layer<any, infer E, any> ? E : never
 
 // The keyed form's options when its Layer can't fail: `onFailure` still hears about a defect.
 interface KeyedOptionsInfallible<Msg> {
-  readonly onFailure?: ((failure: AsyncResult.Failure<never, never>) => Msg) | undefined
+  readonly onFailure?:
+    | ((failure: AsyncResult.Failure<never, never>) => Msg)
+    | undefined
   readonly server?: false | undefined
   readonly local?: never
 }
 
 // The keyed form's options: `onFailure` is required when the Layer can fail.
-type KeyedRest<E, Msg> = [E] extends [never] ? [options?: KeyedOptionsInfallible<Msg>]
+type KeyedRest<E, Msg> = [E] extends [never] ?
+  [options?: KeyedOptionsInfallible<Msg>]
   : [options: ProvideKeyedOptions<E, Msg>]
 
 // The curried keyed form: `key`'s Model parameter, annotated by hand, must take the component's Model.
 type KeyTakes<C, M> = [Model<C>] extends [M] ? unknown
-  : { readonly "The key's model parameter doesn't take this component's Model": Model<C> }
+  : {
+    readonly "The key's model parameter doesn't take this component's Model":
+      Model<C>
+  }
 
-const isKeyed = (u: unknown): u is ProvideKeyed<unknown, unknown, unknown, Layer.Layer<any, any, any>> =>
-  typeof u === "object" && u !== null && !Array.isArray(u) && !Layer.isLayer(u) && "key" in u
+const isKeyed = (
+  u: unknown
+): u is ProvideKeyed<unknown, unknown, unknown, Layer.Layer<any, any, any>> =>
+  typeof u === "object" && u !== null && !Array.isArray(u) &&
+  !Layer.isLayer(u) && "key" in u
 
-const mergeAll = Layer.mergeAll as (...layers: ReadonlyArray<Layer.Any>) => Layer.Layer<any, any, any>
+const mergeAll = Layer.mergeAll as (
+  ...layers: ReadonlyArray<Layer.Any>
+) => Layer.Layer<any, any, any>
 
-const toLayer = (layers: Layer.Any | ReadonlyArray<Layer.Any>): Layer.Layer<any, any, any> =>
-  Array.isArray(layers) ? mergeAll(...layers) : (layers as Layer.Layer<any, any, any>)
+const toLayer = (
+  layers: Layer.Any | ReadonlyArray<Layer.Any>
+): Layer.Layer<any, any, any> =>
+  Array.isArray(layers)
+    ? mergeAll(...layers)
+    : (layers as Layer.Layer<any, any, any>)
 
 // What `onFailure` returns: the component's message. A generic call that
 // returns a component, such as an inline `define(...).make(...)`, is skipped in
@@ -3469,27 +3966,34 @@ const toLayer = (layers: Layer.Any | ReadonlyArray<Layer.Any>): Layer.Layer<any,
 // checks it on the component argument, which that pass skips too: a
 // component that is still `Any` once inferred takes no message, as
 // `Message<Any>` says.
-type Erased<C> = [Any] extends [C] ? true : [Scoped.Any] extends [C] ? true : false
+type Erased<C> = [Any] extends [C] ? true
+  : [Scoped.Any] extends [C] ? true
+  : false
 
 type ProvideMessage<C, M> = Erased<C> extends true ? M : Message<C>
 
-type ErasedHint = "An erased component takes no message, so onFailure can't return one"
+type ErasedHint =
+  "An erased component takes no message, so onFailure can't return one"
 
 // `M` is what the handler returns, inferred from the call.
-type ErasedMessage<C, M> = Erased<C> extends true ? [M] extends [never] ? unknown : { readonly [K in ErasedHint]: M }
+type ErasedMessage<C, M> = Erased<C> extends true ?
+  [M] extends [never] ? unknown : { readonly [K in ErasedHint]: M }
   : unknown
 
 // The handler in `O`, if any, checked against the call it gets: one that
 // returns no message. An overloaded handler passes only if the overload for
 // that call does. A Layer that can't fail still calls it on a defect.
 type ErasedHandler<C, O, E> = Erased<C> extends true ?
-  [HandlerOf<O>] extends [((failure: AsyncResult.Failure<never, E>) => never) | undefined] ? unknown
+  [HandlerOf<O>] extends
+    [((failure: AsyncResult.Failure<never, E>) => never) | undefined] ? unknown
   : { readonly [K in ErasedHint]: HandlerOf<O> }
   : unknown
 
 // The `onFailure` of each member of `O` that has the key, required or
 // optional, and `never` for options without it.
-type HandlerOf<O> = O extends { readonly onFailure?: infer F } ? "onFailure" extends keyof O ? F : never : never
+type HandlerOf<O> = O extends { readonly onFailure?: infer F }
+  ? "onFailure" extends keyof O ? F : never
+  : never
 
 /**
  * Provides services to a component and everything below it, like
@@ -3664,7 +4168,9 @@ export const provide: {
   <const L extends Layer.Any | ReadonlyArray<Layer.Any>>(
     layer: L & CurriedCantFail<L>,
     options?: LocalOption
-  ): <C extends AnyRoot>(component: C) => Provided<C, ProvideInput.Success<L>, ProvideInput.Services<L>>
+  ): <C extends AnyRoot>(
+    component: C
+  ) => Provided<C, ProvideInput.Success<L>, ProvideInput.Services<L>>
   <C extends AnyRoot, L extends Layer.Layer<never, never, any>>(
     component: C,
     layer: (props: Props<C>) => L
@@ -3732,15 +4238,18 @@ export const provide: {
     // Nested: the handler closest to the component is kept.
     const layerFailure = component.layerFailure ?? options?.onFailure
     // A Layer value is shared by every instance resolving from one Env, if everything inside is too.
-    const sharedLayer =
-      layer !== undefined && options?.local !== true && (inner === undefined || component.sharedLayer !== undefined)
-        ? (component.sharedLayer === undefined ? layer : Layer.provideMerge(component.sharedLayer, layer))
-        : undefined
+    const sharedLayer = layer !== undefined && options?.local !== true &&
+        (inner === undefined || component.sharedLayer !== undefined)
+      ? (component.sharedLayer === undefined
+        ? layer
+        : Layer.provideMerge(component.sharedLayer, layer))
+      : undefined
     return makeComponent(Proto, {
       ...component,
       layer: inner === undefined
         ? outer
-        : (props: unknown, keys: ReadonlyArray<unknown>) => Layer.provideMerge(inner(props, keys), outer(props, keys)),
+        : (props: unknown, keys: ReadonlyArray<unknown>) =>
+          Layer.provideMerge(inner(props, keys), outer(props, keys)),
       layerKeys,
       layerFailure,
       sharedLayer,
@@ -3750,7 +4259,9 @@ export const provide: {
   }
   // A component is an object with the type id; a Layer, an array, a function or a keyed selection means the curried form.
   const curried = !isComponent(args[0])
-  return curried ? (component: Any) => go(component, args[0], args[1]) : go(args[0], args[1], args[2])
+  return curried
+    ? (component: Any) => go(component, args[0], args[1])
+    : go(args[0], args[1], args[2])
 }) as any
 
 /**
@@ -3782,8 +4293,14 @@ export type LazyTypeId = typeof LazyTypeId
  * @category models
  * @since 0.1.0
  */
-export interface Lazy<in out Props, out Events, out R = never, in Sl extends string = never>
-  extends Lazy.Members<Props, Events, R, Sl>, Mountable.Call<Props, Events, R, Sl, Lazy.Result>
+export interface Lazy<
+  in out Props,
+  out Events,
+  out R = never,
+  in Sl extends string = never
+> extends
+  Lazy.Members<Props, Events, R, Sl>,
+  Mountable.Call<Props, Events, R, Sl, Lazy.Result>
 {}
 
 /**
@@ -3799,7 +4316,12 @@ export declare namespace Lazy {
    * @category models
    * @since 0.1.0
    */
-  export interface Members<in out Props, out Events, out R = never, in Sl extends string = never> {
+  export interface Members<
+    in out Props,
+    out Events,
+    out R = never,
+    in Sl extends string = never
+  > {
     readonly [LazyTypeId]: Info<Props, Events, R, Sl>
     /**
      * Starts loading the module without rendering anything, such as when the
@@ -3816,7 +4338,9 @@ export declare namespace Lazy {
    * @category models
    * @since 0.1.0
    */
-  export type Result = AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
+  export type Result =
+    | AsyncResult.Initial<never, unknown>
+    | AsyncResult.Failure<never, unknown>
 
   /**
    * A lazy scoped component: it's written inside `h.scoped`, with the `s`
@@ -3827,8 +4351,14 @@ export declare namespace Lazy {
    * @category models
    * @since 0.1.0
    */
-  export interface Scoped<in out Props, out Events, out R = never, in Sl extends string = never>
-    extends Members<Props, Events, R, Sl>, Scoped.Call<Props, Events, R, Sl, Result>
+  export interface Scoped<
+    in out Props,
+    out Events,
+    out R = never,
+    in Sl extends string = never
+  > extends
+    Members<Props, Events, R, Sl>,
+    Scoped.Call<Props, Events, R, Sl, Result>
   {}
 
   /**
@@ -3838,9 +4368,12 @@ export declare namespace Lazy {
    * @category models
    * @since 0.1.0
    */
-  export interface Info<in out Props, out Events, out R, in Sl extends string = never>
-    extends Mountable.Variance<Props, Events, R, Sl>
-  {
+  export interface Info<
+    in out Props,
+    out Events,
+    out R,
+    in Sl extends string = never
+  > extends Mountable.Variance<Props, Events, R, Sl> {
     readonly name: string
   }
 
@@ -3939,5 +4472,7 @@ export const isLazy: (u: unknown) => u is Lazy.Any = internalLazy.isLazy
 export const lazy: <C extends AnyRoot>(
   name: string,
   load: () => Promise<C>
-) => C extends Mountable.Call<any, any, any, never> ? Lazy<Props<C>, Events<C>, Requirements<C>, Slots<C>>
-  : Lazy.Scoped<Props<C>, Events<C>, Requirements<C>, Slots<C>> = internalLazy.make as any
+) => C extends Mountable.Call<any, any, any, never> ?
+  Lazy<Props<C>, Events<C>, Requirements<C>, Slots<C>>
+  : Lazy.Scoped<Props<C>, Events<C>, Requirements<C>, Slots<C>> = internalLazy
+    .make as any

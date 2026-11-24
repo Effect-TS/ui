@@ -14,4 +14,6 @@ export const want = (node: object, name: string, value: unknown): void => {
 }
 
 /** @internal */
-export const wantedOf = (node: object): ReadonlyMap<string, unknown> | undefined => wanted.get(node)
+export const wantedOf = (
+  node: object
+): ReadonlyMap<string, unknown> | undefined => wanted.get(node)

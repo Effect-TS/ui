@@ -6,16 +6,23 @@
 import type * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
 import type * as Effect from "effect/Effect"
-import type { Refs as RefsShape, Renderer as RendererShape } from "../Renderer.ts"
+import type {
+  Refs as RefsShape,
+  Renderer as RendererShape
+} from "../Renderer.ts"
 import type * as Route from "../Route.ts"
 import type * as Subscription from "../Subscription.ts"
 import type * as prefetchWalk from "./prefetch.ts"
 
 /** @internal */
-export const Renderer = Context.Service<RendererShape, RendererShape>("@effect/ui/Renderer")
+export const Renderer = Context.Service<RendererShape, RendererShape>(
+  "@effect/ui/Renderer"
+)
 
 /** @internal */
-export const Refs = Context.Service<RefsShape, RefsShape>("@effect/ui/Renderer/Refs")
+export const Refs = Context.Service<RefsShape, RefsShape>(
+  "@effect/ui/Renderer/Refs"
+)
 
 /**
  * What a mounted root offers the router: its flush counter and its instances' state.
@@ -41,7 +48,9 @@ export interface RootHandle {
   readonly navigated: () => void
   readonly restored: () => void
   /** The runtime's problems sink. */
-  readonly report: (problem: { readonly _tag: string; readonly message: string }) => void
+  readonly report: (
+    problem: { readonly _tag: string; readonly message: string }
+  ) => void
 }
 
 /**
@@ -101,7 +110,10 @@ export interface Declarer {
    * the declaration ran for the same printed route less than 30 seconds ago.
    * A navigation returns the check to run once it settles.
    */
-  readonly run: (route: { readonly _tag: string }, intent: boolean) => PrefetchCheck | undefined
+  readonly run: (
+    route: { readonly _tag: string },
+    intent: boolean
+  ) => PrefetchCheck | undefined
 }
 
 /**
@@ -123,7 +135,9 @@ export interface PrefetchCheck {
  *
  * @internal
  */
-export const prefetch: unique symbol = Symbol.for("@effect/ui/Router/prefetch") as any
+export const prefetch: unique symbol = Symbol.for(
+  "@effect/ui/Router/prefetch"
+) as any
 
 /** @internal */
 export interface Prefetch {
@@ -142,7 +156,9 @@ export interface Page {
 }
 
 /** @internal */
-export const RootHooks = Context.Service<RootHooks, RootHooks>("@effect/ui/internal/RootHooks")
+export const RootHooks = Context.Service<RootHooks, RootHooks>(
+  "@effect/ui/internal/RootHooks"
+)
 
 /**
  * What a server render writes its frozen tree to, in document order: an
@@ -165,9 +181,12 @@ export interface ServerSink {
 }
 
 /** @internal */
-export const CurrentRoot = Context.Reference<() => RootHandle | undefined>("@effect/ui/internal/CurrentRoot", {
-  defaultValue: () => () => undefined
-})
+export const CurrentRoot = Context.Reference<() => RootHandle | undefined>(
+  "@effect/ui/internal/CurrentRoot",
+  {
+    defaultValue: () => () => undefined
+  }
+)
 
 /**
  * A Subscription may carry a function under this key. No Stream runs on the
@@ -176,11 +195,16 @@ export const CurrentRoot = Context.Reference<() => RootHandle | undefined>("@eff
  *
  * @internal
  */
-export const onServer: unique symbol = Symbol.for("@effect/ui/Subscription/onServer") as any
+export const onServer: unique symbol = Symbol.for(
+  "@effect/ui/Subscription/onServer"
+) as any
 
 /** @internal */
 export interface OnServer {
-  readonly [onServer]?: (context: Context.Context<never>, report: RootHandle["report"]) => void
+  readonly [onServer]?: (
+    context: Context.Context<never>,
+    report: RootHandle["report"]
+  ) => void
 }
 
 /**
@@ -205,7 +229,9 @@ export interface OnServer {
  *
  * @internal
  */
-export const direct: unique symbol = Symbol.for("@effect/ui/Subscription/direct") as any
+export const direct: unique symbol = Symbol.for(
+  "@effect/ui/Subscription/direct"
+) as any
 
 /** @internal */
 export interface Direct {
@@ -213,8 +239,12 @@ export interface Direct {
     context: Context.Context<never>,
     emit: (message: unknown, accepted: () => void) => void,
     fail: (cause: Cause.Cause<unknown>) => void,
-    enter: (f: (latest: Subscription.Subscription<unknown, unknown>) => void) => void
-  ) => { readonly initial: Effect.Effect<void>; readonly close: () => void } | undefined
+    enter: (
+      f: (latest: Subscription.Subscription<unknown, unknown>) => void
+    ) => void
+  ) =>
+    | { readonly initial: Effect.Effect<void>; readonly close: () => void }
+    | undefined
 }
 
 /**
@@ -225,5 +255,7 @@ export interface Direct {
  *
  * @internal
  */
-export const isNavigation = (command: { readonly name: string; readonly service?: unknown }): boolean =>
+export const isNavigation = (
+  command: { readonly name: string; readonly service?: unknown }
+): boolean =>
   command.service !== undefined && command.name.startsWith("@effect/ui/Router/")

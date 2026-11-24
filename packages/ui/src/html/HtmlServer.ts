@@ -108,7 +108,16 @@ const serverHtmlHost: Context.Service.Shape<typeof Html.Host> = {
   focus: () => {},
   blur: () => {},
   scrollIntoView: () => {},
-  measure: () => ({ x: 0, y: 0, width: 0, height: 0, top: 0, right: 0, bottom: 0, left: 0 }),
+  measure: () => ({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0
+  }),
   select: () => {},
   requestSubmit: () => false,
   showPicker: () => false
@@ -175,7 +184,9 @@ export const renderToHtml = <
   V extends View.Elements,
   RP = never
 >(
-  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any> & BrowserHost.HtmlRoot<V>,
+  component:
+    & Component.Members<Name, Props, Model, Msg, Events, R, V, any>
+    & BrowserHost.HtmlRoot<V>,
   props: Props | Effect.Effect<Props, never, RP>,
   options?: {
     readonly budget?: Duration.Input | undefined
@@ -216,4 +227,7 @@ export const renderToHtml = <
  * @since 0.1.0
  */
 export const serializeState = (state: Renderer.State): string =>
-  JSON.stringify(state).replace(/[<\u2028\u2029]/g, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`)
+  JSON.stringify(state).replace(
+    /[<\u2028\u2029]/g,
+    (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`
+  )

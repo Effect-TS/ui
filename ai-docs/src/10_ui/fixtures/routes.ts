@@ -27,7 +27,9 @@ export const AppRoute = Route.union({
       page: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).pipe(
         Schema.withDecodingDefaultKey(Effect.succeed(1))
       ),
-      sort: NoteSort.pipe(Schema.withDecodingDefaultKey(Effect.succeed("asc" as const)))
+      sort: NoteSort.pipe(
+        Schema.withDecodingDefaultKey(Effect.succeed("asc" as const))
+      )
     }
   }),
   Note: Route.make("/notes/:id", { params: { id: Schema.String } }),

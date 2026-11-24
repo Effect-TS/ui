@@ -13,7 +13,9 @@ import type * as View from "../../View.ts"
  *
  * @internal
  */
-export const listener: unique symbol = Symbol.for("@effect/ui/html/HtmlSubscription/listener") as any
+export const listener: unique symbol = Symbol.for(
+  "@effect/ui/html/HtmlSubscription/listener"
+) as any
 
 /** @internal */
 export interface Listener {
@@ -48,7 +50,9 @@ export const run = (
 ): void => {
   if (declared.preventDefault === "always") preventDefault()
   const message = handle(declared.handler, payload)
-  if (message !== undefined) onMessage(message, declared.preventDefault === true ? preventDefault : noop)
+  if (message !== undefined) {
+    onMessage(message, declared.preventDefault === true ? preventDefault : noop)
+  }
 }
 
 const noop = () => {}

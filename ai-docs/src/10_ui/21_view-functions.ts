@@ -20,11 +20,18 @@ const Card = <M>(h: View.H<M>) => h.section.class("card")
 const Field = <M, C extends View.Children<M>>(h: View.H<M>, options: {
   readonly label: string
   readonly children: C
-}) => h.label.children(options.label, h.div.class("control").children(options.children))
+}) =>
+  h.label.children(
+    options.label,
+    h.div.class("control").children(options.children)
+  )
 
 // A nested hole can stay a builder: `forward` says what goes around it when
 // it is built, so the caller's chain and children land on the control.
-const Framed = <M>(h: View.H<M>) => h.div.class("control").forward((control) => h.div.class("frame").children(control))
+const Framed = <M>(h: View.H<M>) =>
+  h.div.class("control").forward((control) =>
+    h.div.class("frame").children(control)
+  )
 
 // Arrays are accepted directly. Do not spread options.children. The result
 // retains the union of the children's requirements for the enclosing component.

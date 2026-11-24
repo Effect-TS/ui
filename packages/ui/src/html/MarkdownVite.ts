@@ -45,7 +45,10 @@ import * as MarkdownParser from "./MarkdownParser.ts"
  */
 export interface Plugin {
   readonly name: string
-  readonly transform: (source: string, id: string) => TransformResult | undefined
+  readonly transform: (
+    source: string,
+    id: string
+  ) => TransformResult | undefined
 }
 
 /**
@@ -76,7 +79,8 @@ export const markdown = (options: MarkdownParser.Options = {}): Plugin => {
       if (!id.endsWith(".md")) {
         return undefined
       }
-      const { document, frontmatter } = MarkdownParser.parseMarkdownWithFrontmatter(source, options)
+      const { document, frontmatter } = MarkdownParser
+        .parseMarkdownWithFrontmatter(source, options)
       const fields = Option.match(frontmatter, {
         onNone: () => "undefined",
         onSome: (fields) => JSON.stringify(fields)

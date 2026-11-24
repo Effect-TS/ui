@@ -216,7 +216,9 @@ export const SliderProps = Schema.Struct({
   largeStep: Schema.optional(Schema.Number),
   minStepsBetweenValues: Schema.optional(Schema.Number),
   orientation: Schema.optional(Schema.Literals(["horizontal", "vertical"])),
-  thumbCollisionBehavior: Schema.optional(Schema.Literals(["push", "swap", "none"])),
+  thumbCollisionBehavior: Schema.optional(
+    Schema.Literals(["push", "swap", "none"])
+  ),
   disabled: Schema.optional(Schema.Boolean)
 })
 
@@ -255,10 +257,18 @@ export type SliderEvents = typeof SliderEvents.Type
 // The pointer facts come from the control's mount, the rest from a thumb's
 // range input.
 const SliderMessage = UiSchema.TaggedEnum({
-  PressedPointer: { index: Schema.Number, fraction: Schema.Number, onThumb: Schema.Boolean },
+  PressedPointer: {
+    index: Schema.Number,
+    fraction: Schema.Number,
+    onThumb: Schema.Boolean
+  },
   MovedPointer: { fraction: Schema.Number },
   ReleasedPointer: {},
-  PressedKey: { index: Schema.Number, key: Schema.String, shift: Schema.Boolean },
+  PressedKey: {
+    index: Schema.Number,
+    key: Schema.String,
+    shift: Schema.Boolean
+  },
   UpdatedThumb: { index: Schema.Number, value: Schema.String },
   FocusedThumb: { index: Schema.Number },
   BlurredThumb: { index: Schema.Number }
@@ -279,7 +289,12 @@ const SliderModel = Schema.Struct({
 
 type SliderModel = typeof SliderModel.Type
 
-type SliderUpdate = Component.Update<SliderModel, SliderMessage, SliderEvents, SliderProps>
+type SliderUpdate = Component.Update<
+  SliderModel,
+  SliderMessage,
+  SliderEvents,
+  SliderProps
+>
 
 // -- the value arithmetic ----------------------------------------------------
 
@@ -295,7 +310,11 @@ const decimals = (value: number): number => {
 
 // The nearest value a step from `min` lands on, without floating-point dust.
 const roundToStep = (value: number, step: number, min: number): number =>
-  Number((Math.round((value - min) / step) * step + min).toFixed(Math.max(decimals(step), decimals(min))))
+  Number(
+    (Math.round((value - min) / step) * step + min).toFixed(
+      Math.max(decimals(step), decimals(min))
+    )
+  )
 
 // The step nearest `value`, between min and the top of the grid.
 const snap = (value: number, step: number, min: number, top: number): number =>
@@ -305,8 +324,10 @@ const snap = (value: number, step: number, min: number, top: number): number =>
 // gives `0.19999999999999998`.
 const exact = (value: number): number => Number(value.toFixed(12))
 
-const sameValues = (a: ReadonlyArray<number>, b: ReadonlyArray<number>): boolean =>
-  a.length === b.length && a.every((value, i) => value === b[i])
+const sameValues = (
+  a: ReadonlyArray<number>,
+  b: ReadonlyArray<number>
+): boolean => a.length === b.length && a.every((value, i) => value === b[i])
 
 interface Settings {
   readonly min: number
@@ -331,8 +352,12 @@ const settingsOf = (props: SliderProps): Settings => {
   const max = props.max ?? 100
   const step = props.step ?? 1
   const array = typeof props.value !== "number"
-  const raw: ReadonlyArray<number> = typeof props.value === "number" ? [props.value] : props.value
-  const top = max <= min ? min : roundToStep(min + Math.floor(exact((max - min) / step)) * step, step, min)
+  const raw: ReadonlyArray<number> = typeof props.value === "number"
+    ? [props.value]
+    : props.value
+  const top = max <= min
+    ? min
+    : roundToStep(min + Math.floor(exact((max - min) / step)) * step, step, min)
   return {
     min,
     max,
@@ -345,7 +370,9 @@ const settingsOf = (props: SliderProps): Settings => {
     array,
     // At the step the native input shows, so the input, its ARIA value
     // and what a key starts from agree.
-    values: raw.map((value) => snap(value, step, min, top)).sort((a, b) => a - b),
+    values: raw.map((value) => snap(value, step, min, top)).sort((a, b) =>
+      a - b
+    ),
     disabled: props.disabled === true
   }
 }
@@ -370,7 +397,11 @@ const pushed = (
 ): Array<number> => {
   const out = values.slice()
   const last = out.length - 1
-  out[index] = clamp(next, s.min + index * s.gap, s.top - (last - index) * s.gap)
+  out[index] = clamp(
+    next,
+    s.min + index * s.gap,
+    s.top - (last - index) * s.gap
+  )
   for (let i = index + 1; i <= last; i++) {
     const low = out[i - 1]! + s.gap
     const high = s.top - (last - i) * s.gap
@@ -398,34 +429,50 @@ const collide = (
   next: number
 ): { readonly values: ReadonlyArray<number>; readonly index: number } => {
   const values = s.values
-  if (s.collision === "push") return { values: pushed(s, values, index, next), index }
+  if (s.collision === "push") {
+    return { values: pushed(s, values, index, next), index }
+  }
   const candidate = values.slice()
   const previous = values[index - 1]
   const following = values[index + 1]
   const kept = exact(
-    clamp(next, previous === undefined ? s.min : previous + s.gap, following === undefined ? s.top : following - s.gap)
+    clamp(
+      next,
+      previous === undefined ? s.min : previous + s.gap,
+      following === undefined ? s.top : following - s.gap
+    )
   )
   candidate[index] = kept
   if (s.collision === "none") return { values: candidate, index }
   const epsilon = 1e-7
-  const forward = next > values[index]! && following !== undefined && next >= following - epsilon
-  const backward = next < values[index]! && previous !== undefined && next <= previous + epsilon
+  const forward = next > values[index]! && following !== undefined &&
+    next >= following - epsilon
+  const backward = next < values[index]! && previous !== undefined &&
+    next <= previous + epsilon
   if (!forward && !backward) return { values: candidate, index }
   // The dragged thumb takes its neighbour's place, and the neighbour goes
   // back to where the dragged one stopped.
   const target = forward ? index + 1 : index - 1
-  const baseline = candidate.map((value, i) => (i === index ? kept : initial[i] ?? value))
+  const baseline = candidate.map((
+    value,
+    i
+  ) => (i === index ? kept : initial[i] ?? value))
   const adjusted = pushed(
     s,
     candidate,
     target,
-    forward ? Math.max(next, candidate[target]!) : Math.min(next, candidate[target]!),
+    forward
+      ? Math.max(next, candidate[target]!)
+      : Math.min(next, candidate[target]!),
     baseline
   )
   const neighbour = forward ? target - 1 : target + 1
   const before = adjusted[neighbour - 1]
   const after = adjusted[neighbour + 1]
-  const low = Math.max(before === undefined ? s.min : before + s.gap, s.min + neighbour * s.gap)
+  const low = Math.max(
+    before === undefined ? s.min : before + s.gap,
+    s.min + neighbour * s.gap
+  )
   const high = Math.min(
     after === undefined ? s.top : after - s.gap,
     s.top - (adjusted.length - 1 - neighbour) * s.gap
@@ -441,26 +488,49 @@ const valueAt = (s: Settings, fraction: number): number =>
 
 // The values with one thumb's input set to `next`, kept between its
 // neighbours.
-const withThumb = (s: Settings, index: number, next: number): ReadonlyArray<number> => {
+const withThumb = (
+  s: Settings,
+  index: number,
+  next: number
+): ReadonlyArray<number> => {
   const values = s.values.slice()
-  values[index] = clamp(next, values[index - 1] ?? s.min, values[index + 1] ?? s.top)
+  values[index] = clamp(
+    next,
+    values[index - 1] ?? s.min,
+    values[index + 1] ?? s.top
+  )
   return values
 }
 
-const valueOf = (s: Settings, values: ReadonlyArray<number>): Value => s.array ? values : values[0]!
+const valueOf = (s: Settings, values: ReadonlyArray<number>): Value =>
+  s.array ? values : values[0]!
 
 // The value to report for `values`, or nothing when they break the gap or
 // change nothing.
-const changed = (s: Settings, values: ReadonlyArray<number>): Value | undefined =>
-  keepsGap(s, values) && !sameValues(values, s.values) ? valueOf(s, values) : undefined
+const changed = (
+  s: Settings,
+  values: ReadonlyArray<number>
+): Value | undefined =>
+  keepsGap(s, values) && !sameValues(values, s.values)
+    ? valueOf(s, values)
+    : undefined
 
 // -- update ------------------------------------------------------------------
 
 // A key or the input set a thumb: report the new value and commit it at once.
-const setThumb = ($: SliderUpdate, s: Settings, index: number, next: number) => {
-  if (s.disabled || index < 0 || index >= s.values.length || Number.isNaN(next)) return $.model
+const setThumb = (
+  $: SliderUpdate,
+  s: Settings,
+  index: number,
+  next: number
+) => {
+  if (
+    s.disabled || index < 0 || index >= s.values.length || Number.isNaN(next)
+  ) return $.model
   const value = changed(s, withThumb(s, index, next))
-  return value === undefined ? $.model : $.emit(SliderEvents.Moved({ value }), SliderEvents.Committed({ value }))
+  return value === undefined
+    ? $.model
+    : $.emit(SliderEvents.Moved({ value }), SliderEvents.Committed({ value }))
 }
 
 const sliderKeys = new Set([
@@ -475,37 +545,74 @@ const sliderKeys = new Set([
 ])
 
 // Where an arrow, Page or Home and End key puts a thumb.
-const keyed = (s: Settings, index: number, key: string, shift: boolean): number | undefined => {
+const keyed = (
+  s: Settings,
+  index: number,
+  key: string,
+  shift: boolean
+): number | undefined => {
   const current = s.values[index]
   if (current === undefined) return undefined
   const range = s.values.length > 1
-  if (key === "Home") return range && index > 0 ? exact(s.values[index - 1]! + s.gap) : s.min
-  if (key === "End") return range && index < s.values.length - 1 ? exact(s.values[index + 1]! - s.gap) : s.top
-  const direction = key === "ArrowUp" || key === "ArrowRight" || key === "PageUp"
-    ? 1
-    : key === "ArrowDown" || key === "ArrowLeft" || key === "PageDown"
-    ? -1
-    : 0
+  if (key === "Home") {
+    return range && index > 0
+      ? exact(s.values[index - 1]! + s.gap)
+      : s.min
+  }
+  if (key === "End") {
+    return range && index < s.values.length - 1
+      ? exact(s.values[index + 1]! - s.gap)
+      : s.top
+  }
+  const direction =
+    key === "ArrowUp" || key === "ArrowRight" || key === "PageUp"
+      ? 1
+      : key === "ArrowDown" || key === "ArrowLeft" || key === "PageDown"
+      ? -1
+      : 0
   if (direction === 0) return undefined
-  const increment = shift || key === "PageUp" || key === "PageDown" ? s.largeStep : s.step
+  const increment = shift || key === "PageUp" || key === "PageDown"
+    ? s.largeStep
+    : s.step
   // On the step grid, where the native input would put it, and at least a
   // step on when `largeStep` rounds to none.
   const next = roundToStep(current + increment * direction, s.step, s.min)
-  return next * direction > current * direction ? next : roundToStep(current + s.step * direction, s.step, s.min)
+  return next * direction > current * direction
+    ? next
+    : roundToStep(current + s.step * direction, s.step, s.min)
 }
 
 // The pointer put the thumb the Model drags at `fraction` of the control.
-const drag = (model: SliderModel, $: SliderUpdate, s: Settings, fraction: number) => {
+const drag = (
+  model: SliderModel,
+  $: SliderUpdate,
+  s: Settings,
+  fraction: number
+) => {
   const target = valueAt(s, fraction)
   const moved = s.values.length > 1
-    ? collide(s, model.pressedValues.length === s.values.length ? model.pressedValues : s.values, model.pressed, target)
+    ? collide(
+      s,
+      model.pressedValues.length === s.values.length
+        ? model.pressedValues
+        : s.values,
+      model.pressed,
+      target
+    )
     : { values: [target], index: 0 }
   const next = UiStruct.evolve(model, { pressed: moved.index })
   const value = changed(s, moved.values)
-  return value === undefined ? $.set(next) : $.set(next).evolve({ moved: value }).emit(SliderEvents.Moved({ value }))
+  return value === undefined
+    ? $.set(next)
+    : $.set(next).evolve({ moved: value }).emit(SliderEvents.Moved({ value }))
 }
 
-const released: SliderModel = { active: -1, pressed: -1, pressedValues: [], moved: null }
+const released: SliderModel = {
+  active: -1,
+  pressed: -1,
+  pressedValues: [],
+  moved: null
+}
 
 // -- the pointer -------------------------------------------------------------
 
@@ -520,7 +627,9 @@ const thumbsIn = (node: HTMLElement): Array<Thumb> =>
   Array.from(node.querySelectorAll<HTMLElement>("[data-index]"))
     .flatMap((element) => {
       const input = element.querySelector<HTMLInputElement>("input[type=range]")
-      return input === null ? [] : [{ element, input, index: Number(element.dataset.index) }]
+      return input === null
+        ? []
+        : [{ element, input, index: Number(element.dataset.index) }]
     })
     .sort((a, b) => a.index - b.index)
 
@@ -538,7 +647,13 @@ const midpointOf = (element: Element, vertical: boolean): number => {
 // focus. `vertical`: measure along the height, from the bottom.
 const TrackPointer = Mount.makeStream(
   "TrackPointer",
-  { args: { pressed: Schema.Number, disabled: Schema.Boolean, vertical: Schema.Boolean } },
+  {
+    args: {
+      pressed: Schema.Number,
+      disabled: Schema.Boolean,
+      vertical: Schema.Boolean
+    }
+  },
   (node: HTMLElement, args, changes) =>
     Stream.callback<SliderMessage>((queue) =>
       Effect.gen(function*() {
@@ -547,11 +662,14 @@ const TrackPointer = Mount.makeStream(
         let pointer: number | null = null
         // Where the pointer grabbed the thumb, from its middle.
         let offset = 0
-        const along = (event: PointerEvent): number => vertical ? event.clientY : event.clientX
+        const along = (event: PointerEvent): number =>
+          vertical ? event.clientY : event.clientX
         // A live declaration, so it's read once.
         const style = getComputedStyle(node)
         const inset = (side: string): number =>
-          (Number.parseFloat(style.getPropertyValue("border-" + side + "-width")) || 0) +
+          (Number.parseFloat(
+            style.getPropertyValue("border-" + side + "-width")
+          ) || 0) +
           (Number.parseFloat(style.getPropertyValue("padding-" + side)) || 0)
         // Along the control's content box, so its padding and border are
         // outside the track.
@@ -561,13 +679,18 @@ const TrackPointer = Mount.makeStream(
           const end = inset(vertical ? "bottom" : "right")
           const length = (vertical ? rect.height : rect.width) - start - end
           const at = along(event) - offset
-          return length <= 0 ? 0 : (vertical ? rect.bottom - at - end : at - rect.left - start) / length
+          return length <= 0
+            ? 0
+            : (vertical ? rect.bottom - at - end : at - rect.left - start) /
+              length
         }
         // The document's listeners for the press under way.
         let listening: AbortController | undefined
         const release = () => {
           if (pointer === null) return
-          if (node.hasPointerCapture?.(pointer)) node.releasePointerCapture(pointer)
+          if (node.hasPointerCapture?.(pointer)) {
+            node.releasePointerCapture(pointer)
+          }
           pointer = null
           listening?.abort()
           Queue.offerUnsafe(queue, SliderMessage.ReleasedPointer())
@@ -576,15 +699,23 @@ const TrackPointer = Mount.makeStream(
           if (event.pointerId !== pointer) return
           // Another element took the pointer's release.
           if (event.buttons === 0) return release()
-          Queue.offerUnsafe(queue, SliderMessage.MovedPointer({ fraction: fractionAt(event) }))
+          Queue.offerUnsafe(
+            queue,
+            SliderMessage.MovedPointer({ fraction: fractionAt(event) })
+          )
         }
         const onUp = (event: PointerEvent) => {
           if (event.pointerId === pointer) release()
         }
         const onDown = (event: PointerEvent) => {
-          if (disabled || pointer !== null || event.button !== 0 || event.defaultPrevented) return
+          if (
+            disabled || pointer !== null || event.button !== 0 ||
+            event.defaultPrevented
+          ) return
           const thumbs = thumbsIn(node)
-          const hit = thumbs.find((thumb) => thumb.element.contains(event.target as Node | null))
+          const hit = thumbs.find((thumb) =>
+            thumb.element.contains(event.target as Node | null)
+          )
           if (hit?.input.disabled === true) return
           let index = -1
           offset = 0
@@ -595,7 +726,9 @@ const TrackPointer = Mount.makeStream(
             let nearest = Infinity
             for (const thumb of thumbs) {
               if (thumb.input.disabled) continue
-              const distance = Math.abs(along(event) - midpointOf(thumb.element, vertical))
+              const distance = Math.abs(
+                along(event) - midpointOf(thumb.element, vertical)
+              )
               // On a tie the later thumb wins, so thumbs stacked at the start
               // can be pulled apart.
               if (distance <= nearest) {
@@ -617,7 +750,11 @@ const TrackPointer = Mount.makeStream(
           document.addEventListener("pointercancel", onUp, { signal })
           Queue.offerUnsafe(
             queue,
-            SliderMessage.PressedPointer({ index, fraction: fractionAt(event), onThumb: hit !== undefined })
+            SliderMessage.PressedPointer({
+              index,
+              fraction: fractionAt(event),
+              onThumb: hit !== undefined
+            })
           )
         }
         // A key on a thumb a press focused shows the focus ring, as Tab
@@ -627,18 +764,26 @@ const TrackPointer = Mount.makeStream(
         const onKey = (event: KeyboardEvent) => {
           const input = event.target as HTMLInputElement
           const view = document.defaultView
-          if (view === null || !sliderKeys.has(event.key) || input.disabled) return
+          if (
+            view === null || !sliderKeys.has(event.key) || input.disabled
+          ) return
           if (!input.matches(":focus") || focusVisible(input)) return
           if (!thumbsIn(node).some((thumb) => thumb.input === input)) return
           const hush = (focus: Event) => {
             if (focus.target === input) focus.stopImmediatePropagation()
           }
-          for (const name of focusEvents) view.addEventListener(name, hush, { capture: true })
+          for (const name of focusEvents) {
+            view.addEventListener(name, hush, { capture: true })
+          }
           try {
             input.blur()
-            input.focus({ preventScroll: true, focusVisible: true } as FocusOptions)
+            input.focus(
+              { preventScroll: true, focusVisible: true } as FocusOptions
+            )
           } finally {
-            for (const name of focusEvents) view.removeEventListener(name, hush, { capture: true })
+            for (const name of focusEvents) {
+              view.removeEventListener(name, hush, { capture: true })
+            }
           }
         }
         yield* Effect.acquireRelease(
@@ -658,11 +803,17 @@ const TrackPointer = Mount.makeStream(
             disabled = next.disabled
             vertical = next.vertical
             // A slider disabled mid-drag lets go.
-            if (disabled) release()
+            if (disabled) {
+              release()
+            }
             if (next.pressed < 0) return
-            const input = thumbsIn(node).find((thumb) => thumb.index === next.pressed)?.input
+            const input = thumbsIn(node).find((thumb) =>
+              thumb.index === next.pressed
+            )?.input
             if (input !== undefined && document.activeElement !== input) {
-              input.focus({ preventScroll: true, focusVisible: false } as FocusOptions)
+              input.focus(
+                { preventScroll: true, focusVisible: false } as FocusOptions
+              )
             }
           })).pipe(Effect.forkScoped)
       })
@@ -673,7 +824,10 @@ const TrackPointer = Mount.makeStream(
 
 // The thumb's element with its input as a child, so it needs what the input
 // needs too.
-type ThumbOf<B extends View.PartTarget<string>, I extends View.PartTarget<"input">> = WithRequirements<
+type ThumbOf<
+  B extends View.PartTarget<string>,
+  I extends View.PartTarget<"input">
+> = WithRequirements<
   ReturnType<B["attr"]>,
   View.Requirements<I>
 >
@@ -733,13 +887,24 @@ export const Slider = Component.define({
       // Thumbs stacked at the end are dragged from the first of them, so
       // they can be pulled apart.
       let thumb = index
-      if (onThumb) { while (thumb > 0 && s.values[thumb]! >= s.top && s.values[thumb - 1]! >= s.top) thumb-- }
-      const next = UiStruct.evolve($.model, { pressed: thumb, pressedValues: s.values, moved: null })
+      if (onThumb) {
+        while (
+          thumb > 0 && s.values[thumb]! >= s.top &&
+          s.values[thumb - 1]! >= s.top
+        ) thumb--
+      }
+      const next = UiStruct.evolve($.model, {
+        pressed: thumb,
+        pressedValues: s.values,
+        moved: null
+      })
       // A thumb grabbed where it is doesn't move until the pointer does.
       return onThumb ? next : drag(next, $, s, fraction)
     },
     MovedPointer: ($, { fraction }) =>
-      $.model.pressed < 0 || $.props.disabled === true ? $.model : drag($.model, $, settingsOf($.props), fraction),
+      $.model.pressed < 0 || $.props.disabled === true
+        ? $.model
+        : drag($.model, $, settingsOf($.props), fraction),
     ReleasedPointer: ($) => {
       if ($.model.pressed < 0) return $.model
       const next = UiStruct.evolve(released, { active: $.model.active })
@@ -753,9 +918,12 @@ export const Slider = Component.define({
       return next === undefined ? $.model : setThumb($, s, index, next)
     },
     UpdatedThumb: ($, { index, value }) =>
-      value.trim() === "" ? $.model : setThumb($, settingsOf($.props), index, Number(value)),
+      value.trim() === ""
+        ? $.model
+        : setThumb($, settingsOf($.props), index, Number(value)),
     FocusedThumb: ($, { index }) => $.evolve({ active: index }),
-    BlurredThumb: ($, { index }) => $.model.active === index ? $.evolve({ active: -1 }) : $.model
+    BlurredThumb: ($, { index }) =>
+      $.model.active === index ? $.evolve({ active: -1 }) : $.model
   },
   parts: (p, model) => {
     const s = settingsOf(p.props)
@@ -769,7 +937,9 @@ export const Slider = Component.define({
           "data-disabled": flag(s.disabled)
         })
     const start = s.values.length > 1 ? percentOf(s, s.values[0]!) : 0
-    const end = s.values.length === 0 ? 0 : percentOf(s, s.values[s.values.length - 1]!)
+    const end = s.values.length === 0
+      ? 0
+      : percentOf(s, s.values[s.values.length - 1]!)
     const inputPart = p.part("input", (b, index: number) => {
       const value = s.values[index]!
       return b.attrs({
@@ -785,7 +955,10 @@ export const Slider = Component.define({
         .disabled(s.disabled)
         .value(String(value))
         .onKeyDown(
-          ({ key, shift }) => sliderKeys.has(key) ? SliderMessage.PressedKey({ index, key, shift }) : undefined,
+          ({ key, shift }) =>
+            sliderKeys.has(key)
+              ? SliderMessage.PressedKey({ index, key, shift })
+              : undefined,
           // Only for the keys the slider handles: a key it doesn't keeps its
           // default, such as Tab.
           { preventDefault: true }
@@ -795,22 +968,36 @@ export const Slider = Component.define({
         .onBlur(SliderMessage.BlurredThumb({ index }))
         .forward((node) => {
           // The consumer's text wins. Two thumbs say which end each one is.
-          const text = node.elementAttrs["aria-valuetext"] === undefined && s.values.length === 2
-            ? node.attr("aria-valuetext", value + " " + (index === 0 ? "start" : "end") + " range")
+          const text = node.elementAttrs["aria-valuetext"] === undefined &&
+              s.values.length === 2
+            ? node.attr(
+              "aria-valuetext",
+              value + " " + (index === 0 ? "start" : "end") + " range"
+            )
             : node
           return text.attr(
             "style",
-            withStyle(node.elementAttrs.style, hidden + (s.vertical ? ";writing-mode:vertical-lr" : ""))
+            withStyle(
+              node.elementAttrs.style,
+              hidden + (s.vertical ? ";writing-mode:vertical-lr" : "")
+            )
           )
         })
     })
-    const thumbPart = p.part((b, index: number, input: View.Content<unknown, any>) =>
+    const thumbPart = p.part((
+      b,
+      index: number,
+      input: View.Content<unknown, any>
+    ) =>
       state(b)
         .attr("data-index", String(index))
         .forward((node) =>
           node.attr(
             "style",
-            withStyle(node.elementAttrs.style, "--slider-thumb-position:" + percentOf(s, s.values[index]!) + "%")
+            withStyle(
+              node.elementAttrs.style,
+              "--slider-thumb-position:" + percentOf(s, s.values[index]!) + "%"
+            )
           )
         )
         .children(input as never)
@@ -825,7 +1012,11 @@ export const Slider = Component.define({
       value: p.part("output", (b) => state(b).attr("aria-live", "off")),
       control: p.part("div", (b) =>
         state(b).onMount(
-          TrackPointer({ pressed: dragging ? model.pressed : -1, disabled: s.disabled, vertical: s.vertical })
+          TrackPointer({
+            pressed: dragging ? model.pressed : -1,
+            disabled: s.disabled,
+            vertical: s.vertical
+          })
         )),
       track: p.part(state),
       indicator: p.part((b) =>
@@ -834,7 +1025,8 @@ export const Slider = Component.define({
             "style",
             withStyle(
               node.elementAttrs.style,
-              "--slider-indicator-start:" + start + "%;--slider-indicator-size:" + (end - start) + "%"
+              "--slider-indicator-start:" + start +
+                "%;--slider-indicator-size:" + (end - start) + "%"
             )
           )
         )
@@ -842,10 +1034,16 @@ export const Slider = Component.define({
       thumb: View.wrapPart(
         thumbPart,
         <B extends View.PartTarget<string>, I extends View.PartTarget<"input">>(
-          { element, index, input }: { readonly element: B; readonly input: I; readonly index?: number | undefined }
+          { element, index, input }: {
+            readonly element: B
+            readonly input: I
+            readonly index?: number | undefined
+          }
         ): ThumbOf<B, I> => {
           if (index === undefined && Array.isArray(p.props.value)) {
-            throw new Error("Slider: a thumb of a slider whose value is an array needs its index")
+            throw new Error(
+              "Slider: a thumb of a slider whose value is an array needs its index"
+            )
           }
           const at = index ?? 0
           if (!Number.isInteger(at) || at < 0 || at >= s.values.length) {

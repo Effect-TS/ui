@@ -340,13 +340,21 @@ const TooltipModel = Schema.Struct({
 const WaitBeforeOpening = Command.make(
   "WaitBeforeOpening",
   { args: { delay: Schema.Number }, mode: "switch" },
-  ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), TooltipMessage.CompletedWaitBeforeOpening())
+  ({ delay }) =>
+    Effect.as(
+      Effect.sleep(Duration.millis(delay)),
+      TooltipMessage.CompletedWaitBeforeOpening()
+    )
 )
 
 const WaitBeforeClosing = Command.make(
   "WaitBeforeClosing",
   { args: { delay: Schema.Number }, mode: "switch" },
-  ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), TooltipMessage.CompletedWaitBeforeClosing())
+  ({ delay }) =>
+    Effect.as(
+      Effect.sleep(Duration.millis(delay)),
+      TooltipMessage.CompletedWaitBeforeClosing()
+    )
 )
 
 // The two dismissals no part hears, listened for on the document while the
@@ -358,7 +366,9 @@ const WaitBeforeClosing = Command.make(
 // whether the press was outside the tooltip.
 const dismissals = [
   onEscape(TooltipMessage.PressedEscape()),
-  HtmlSubscription.onDocument("mousedown", TooltipMessage.PressedDocument(), { capture: true })
+  HtmlSubscription.onDocument("mousedown", TooltipMessage.PressedDocument(), {
+    capture: true
+  })
 ]
 
 const requestedOpen = TooltipEvents.RequestedOpen()
@@ -372,25 +382,37 @@ const newestOf = (turns: ReadonlyArray<number>): number | null => {
 }
 
 // A disabled tooltip never shows, whatever `open` says.
-const shownBy = (props: TooltipProps): boolean => props.open && props.disabled !== true
+const shownBy = (props: TooltipProps): boolean =>
+  props.open && props.disabled !== true
 
 // `$` in any handler of the Tooltip's `update`: a tag's `$` fits the one
 // over the whole message type.
-type TooltipUpdate = Component.Update<typeof TooltipModel.Type, typeof TooltipMessage.Type, TooltipEvents, TooltipProps>
+type TooltipUpdate = Component.Update<
+  typeof TooltipModel.Type,
+  typeof TooltipMessage.Type,
+  TooltipEvents,
+  TooltipProps
+>
 
 // The user closed the tooltip, if it shows. Any wait for `closeDelay` is over.
 const dismiss = ($: TooltipUpdate, instant = $.model.instant) =>
   shownBy($.props)
-    ? $.evolve({ instant }).run(Command.interrupt(WaitBeforeClosing)).emit(requestedClose)
+    ? $.evolve({ instant }).run(Command.interrupt(WaitBeforeClosing)).emit(
+      requestedClose
+    )
     : $.model
 
 // The pointer left the trigger or the positioner: a pending open stops, and
 // an open tooltip closes after `closeDelay` unless keyboard focus holds it.
 const left = ($: TooltipUpdate) => {
   const released = $.evolve({ hovered: false, pressed: false })
-  if (!shownBy($.props)) return released.run(Command.interrupt(WaitBeforeOpening))
+  if (!shownBy($.props)) {
+    return released.run(Command.interrupt(WaitBeforeOpening))
+  }
   if ($.model.focused) return released
-  return released.run(WaitBeforeClosing.make({ delay: $.props.closeDelay ?? 0 }))
+  return released.run(
+    WaitBeforeClosing.make({ delay: $.props.closeDelay ?? 0 })
+  )
 }
 
 /**
@@ -441,7 +463,10 @@ const WaitBeforeCooling = Command.make(
   "WaitBeforeCooling",
   { args: { timeout: Schema.Number }, mode: "switch" },
   ({ timeout }) =>
-    Effect.as(Effect.sleep(Duration.millis(timeout)), TooltipProviderMessage.CompletedWaitBeforeCooling())
+    Effect.as(
+      Effect.sleep(Duration.millis(timeout)),
+      TooltipProviderMessage.CompletedWaitBeforeCooling()
+    )
 )
 
 /**
@@ -501,13 +526,20 @@ export const TooltipProvider = Component.define({
   model: TooltipProviderModel,
   message: TooltipProviderMessage,
   shares: {
-    value: (model) => ({ open: model.open, instant: model.instant, turns: model.turns, next: model.next }),
+    value: (model) => ({
+      open: model.open,
+      instant: model.instant,
+      turns: model.turns,
+      next: model.next
+    }),
     collects: {
       // Each tooltip's turn while it shows, `null` while it doesn't.
       schema: Schema.NullOr(Schema.Number),
       onChange: (collected) =>
         TooltipProviderMessage.ChangedShown({
-          turns: collected.filter((turn): turn is number => turn !== null).sort((a, b) => a - b)
+          turns: collected.filter((turn): turn is number => turn !== null).sort(
+            (a, b) => a - b
+          )
         })
     }
   },
@@ -518,15 +550,27 @@ export const TooltipProvider = Component.define({
   update: {
     ChangedShown: ($, { turns }) => {
       const open = turns.length > 0
-      const shown = $.evolve({ open, turns, next: Math.max($.model.next, ...turns.map((turn) => turn + 1)) })
-      if (open) return shown.evolve({ instant: true }).run(Command.interrupt(WaitBeforeCooling))
+      const shown = $.evolve({
+        open,
+        turns,
+        next: Math.max($.model.next, ...turns.map((turn) => turn + 1))
+      })
+      if (open) {
+        return shown.evolve({ instant: true }).run(
+          Command.interrupt(WaitBeforeCooling)
+        )
+      }
       // The last one closed: the window starts.
       if ($.model.open) {
-        return shown.evolve({ instant: true }).run(WaitBeforeCooling.make({ timeout: $.props.timeout ?? 400 }))
+        return shown.evolve({ instant: true }).run(
+          WaitBeforeCooling.make({ timeout: $.props.timeout ?? 400 })
+        )
       }
       return shown
     },
-    CompletedWaitBeforeCooling: ($) => ($.model.open ? $.model : $.evolve({ instant: false }))
+    CompletedWaitBeforeCooling: (
+      $
+    ) => ($.model.open ? $.model : $.evolve({ instant: false }))
   },
   parts: () => ({})
 })
@@ -578,7 +622,11 @@ export const Tooltip = Component.define({
       owner: TooltipProvider,
       optional: true,
       report: (model, props) => (shownBy(props) ? model.turn : null),
-      onChange: (value) => TooltipMessage.ChangedGroup({ newest: newestOf(value.turns), next: value.next })
+      onChange: (value) =>
+        TooltipMessage.ChangedGroup({
+          newest: newestOf(value.turns),
+          next: value.next
+        })
     }
   },
   restore: false,
@@ -597,33 +645,49 @@ export const Tooltip = Component.define({
     EnteredTrigger: ($) => {
       const entered = $.evolve({ hovered: true })
       if ($.props.disabled === true) return entered
-      if (shownBy($.props)) return entered.run(Command.interrupt(WaitBeforeClosing))
+      if (shownBy($.props)) {
+        return entered.run(Command.interrupt(WaitBeforeClosing))
+      }
       // A provider's group is open, or closed less than `timeout` ago.
       if ($.shared.provider?.instant === true) {
-        return entered.evolve({ instant: "delay" }).run(Command.interrupt(WaitBeforeOpening)).emit(requestedOpen)
+        return entered.evolve({ instant: "delay" }).run(
+          Command.interrupt(WaitBeforeOpening)
+        ).emit(requestedOpen)
       }
-      return entered.run(WaitBeforeOpening.make({ delay: $.props.delay ?? 600 }))
+      return entered.run(
+        WaitBeforeOpening.make({ delay: $.props.delay ?? 600 })
+      )
     },
     LeftTrigger: left,
-    EnteredPositioner: ($) => $.evolve({ hovered: true }).run(Command.interrupt(WaitBeforeClosing)),
+    EnteredPositioner: ($) =>
+      $.evolve({ hovered: true }).run(Command.interrupt(WaitBeforeClosing)),
     LeftPositioner: left,
     FocusedTrigger: ($) => {
       const focused = $.evolve({ focused: !$.model.pressed, pressed: false })
-      if ($.model.pressed || $.props.disabled === true || shownBy($.props)) return focused
-      return focused.evolve({ instant: "focus" }).run(Command.interrupt(WaitBeforeOpening)).emit(requestedOpen)
+      if ($.model.pressed || $.props.disabled === true || shownBy($.props)) {
+        return focused
+      }
+      return focused.evolve({ instant: "focus" }).run(
+        Command.interrupt(WaitBeforeOpening)
+      ).emit(requestedOpen)
     },
     BlurredTrigger: ($) => {
       const blurred = $.evolve({ focused: false, pressed: false })
-      return shownBy($.props) && !$.model.hovered ? blurred.emit(requestedClose) : blurred
+      return shownBy($.props) && !$.model.hovered
+        ? blurred.emit(requestedClose)
+        : blurred
     },
     // A mouse press only marks the focus that follows it, and stops a
     // pending open. The click that follows, or Enter or Space on the
     // native button, closes an open tooltip.
     PressedTrigger: ($) => {
       const pressed = $.evolve({ pressed: true })
-      return $.props.closeOnClick !== false ? pressed.run(Command.interrupt(WaitBeforeOpening)) : pressed
+      return $.props.closeOnClick !== false
+        ? pressed.run(Command.interrupt(WaitBeforeOpening))
+        : pressed
     },
-    ClickedTrigger: ($) => $.props.closeOnClick !== false ? dismiss($, "dismiss") : $.model,
+    ClickedTrigger: ($) =>
+      $.props.closeOnClick !== false ? dismiss($, "dismiss") : $.model,
     PressedEscape: ($) => dismiss($, "dismiss"),
     // A press is outside the tooltip when the pointer is on neither the
     // trigger nor the positioner.
@@ -644,8 +708,11 @@ export const Tooltip = Component.define({
     ChangedGroup: ($, { newest, next }) => {
       if (!shownBy($.props)) return $.evolve({ turn: 0, yieldedTo: null })
       if ($.model.turn === 0) return $.evolve({ turn: next, yieldedTo: null })
-      return newest !== null && newest !== $.model.turn && newest !== $.model.yieldedTo
-        ? $.evolve({ yieldedTo: newest }).run(Command.interrupt(WaitBeforeClosing)).emit(requestedClose)
+      return newest !== null && newest !== $.model.turn &&
+          newest !== $.model.yieldedTo
+        ? $.evolve({ yieldedTo: newest }).run(
+          Command.interrupt(WaitBeforeClosing)
+        ).emit(requestedClose)
         : $.model
     },
     ChangedPlacement: ($, { placement }) => $.evolve({ placement })
@@ -684,7 +751,10 @@ export const Tooltip = Component.define({
     const trigger = p.part(
       "button",
       (b) =>
-        b.attrs({ "data-popup-open": flag(shown), "data-trigger-disabled": flag(p.props.disabled) })
+        b.attrs({
+          "data-popup-open": flag(shown),
+          "data-trigger-disabled": flag(p.props.disabled)
+        })
           .on("mouseenter", TooltipMessage.EnteredTrigger())
           .on("mouseleave", TooltipMessage.LeftTrigger())
           .on("mousedown", TooltipMessage.PressedTrigger())
@@ -697,9 +767,14 @@ export const Tooltip = Component.define({
       (p.props.disableHoverablePopup === true ? ";pointer-events:none" : "")
     const positioner = p.part("div", (b) => {
       const decorated = placed(b)
-        .attrs({ role: "presentation", "data-anchor-hidden": flag(shown && placement?.anchorHidden) })
+        .attrs({
+          role: "presentation",
+          "data-anchor-hidden": flag(shown && placement?.anchorHidden)
+        })
         .popover("manual", shown)
-        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, style)))
+        .forward((node) =>
+          node.attr("style", withStyle(node.elementAttrs.style, style))
+        )
       const hoverable = p.props.disableHoverablePopup === true
         ? decorated
         : decorated.on("mouseenter", TooltipMessage.EnteredPositioner()).on(
@@ -709,7 +784,9 @@ export const Tooltip = Component.define({
       return shown
         ? hoverable.onMount(
           Positioning.TrackPosition(tracked).pipe(
-            Mount.map((placement) => TooltipMessage.ChangedPlacement({ placement }))
+            Mount.map((placement) =>
+              TooltipMessage.ChangedPlacement({ placement })
+            )
           )
         )
         : hoverable
@@ -723,7 +800,9 @@ export const Tooltip = Component.define({
           "aria-hidden": "true",
           "data-uncentered": flag(placement?.arrowUncentered)
         })
-        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))))
+        .forward((node) =>
+          node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))
+        ))
     return {
       open: shown,
       side,

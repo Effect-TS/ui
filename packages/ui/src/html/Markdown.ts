@@ -53,7 +53,8 @@ import type * as Html from "./Html.ts"
 export const isAllowedUrl = (url: string): boolean => {
   // oxlint-disable-next-line no-control-regex
   const compact = url.replace(/[\u0000-\u0020]/g, "")
-  return !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(compact) || /^(?:https?|mailto|tel):/i.test(compact)
+  return !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(compact) ||
+    /^(?:https?|mailto|tel):/i.test(compact)
 }
 
 /** @internal */
@@ -182,7 +183,15 @@ export interface Image {
  * @category models
  * @since 0.1.0
  */
-export type Inline = Text | InlineCode | HardBreak | Emphasis | Strong | Strikethrough | Link | Image
+export type Inline =
+  | Text
+  | InlineCode
+  | HardBreak
+  | Emphasis
+  | Strong
+  | Strikethrough
+  | Link
+  | Image
 
 type Encoded<A> = A extends Option.Option<infer B> ? B | null
   : A extends object ? { readonly [K in keyof A]: Encoded<A[K]> }
@@ -366,7 +375,15 @@ export interface Island {
  * @category models
  * @since 0.1.0
  */
-export type Block = Heading | Paragraph | CodeBlock | List | Blockquote | ThematicBreak | Table | Island
+export type Block =
+  | Heading
+  | Paragraph
+  | CodeBlock
+  | List
+  | Blockquote
+  | ThematicBreak
+  | Table
+  | Island
 
 /**
  * The JSON form of a block node: each `Option` is its value or `null`.
@@ -412,13 +429,23 @@ export const Inline: Schema.Codec<Inline, InlineEncoded> = Schema.suspend(() =>
     Schema.TaggedStruct("Emphasis", { content: Schema.Array(Inline) }),
     Schema.TaggedStruct("Strong", { content: Schema.Array(Inline) }),
     Schema.TaggedStruct("Strikethrough", { content: Schema.Array(Inline) }),
-    Schema.TaggedStruct("Link", { url: Url, title: OptionalString, content: Schema.Array(Inline) }),
-    Schema.TaggedStruct("Image", { url: Url, alt: Schema.String, title: OptionalString })
+    Schema.TaggedStruct("Link", {
+      url: Url,
+      title: OptionalString,
+      content: Schema.Array(Inline)
+    }),
+    Schema.TaggedStruct("Image", {
+      url: Url,
+      alt: Schema.String,
+      title: OptionalString
+    })
   ])
 )
 
 const TableRowSchema = Schema.TaggedStruct("TableRow", {
-  cells: Schema.Array(Schema.TaggedStruct("TableCell", { content: Schema.Array(Inline) }))
+  cells: Schema.Array(
+    Schema.TaggedStruct("TableCell", { content: Schema.Array(Inline) })
+  )
 })
 
 /**
@@ -430,18 +457,29 @@ const TableRowSchema = Schema.TaggedStruct("TableRow", {
  */
 export const Block: Schema.Codec<Block, BlockEncoded> = Schema.suspend(() =>
   Schema.Union([
-    Schema.TaggedStruct("Heading", { level: Schema.Literals([1, 2, 3, 4, 5, 6]), content: Schema.Array(Inline) }),
+    Schema.TaggedStruct("Heading", {
+      level: Schema.Literals([1, 2, 3, 4, 5, 6]),
+      content: Schema.Array(Inline)
+    }),
     Schema.TaggedStruct("Paragraph", { content: Schema.Array(Inline) }),
-    Schema.TaggedStruct("CodeBlock", { language: OptionalString, meta: OptionalString, value: Schema.String }),
+    Schema.TaggedStruct("CodeBlock", {
+      language: OptionalString,
+      meta: OptionalString,
+      value: Schema.String
+    }),
     Schema.TaggedStruct("List", {
       isOrdered: Schema.Boolean,
       startNumber: Schema.OptionFromNullOr(Schema.Number),
-      items: Schema.NonEmptyArray(Schema.TaggedStruct("ListItem", { blocks: Schema.Array(Block) }))
+      items: Schema.NonEmptyArray(
+        Schema.TaggedStruct("ListItem", { blocks: Schema.Array(Block) })
+      )
     }),
     Schema.TaggedStruct("Blockquote", { blocks: Schema.Array(Block) }),
     Schema.TaggedStruct("ThematicBreak", {}),
     Schema.TaggedStruct("Table", {
-      alignments: Schema.Array(Schema.Literals(["None", "Left", "Center", "Right"])),
+      alignments: Schema.Array(
+        Schema.Literals(["None", "Left", "Center", "Right"])
+      ),
       headerRow: TableRowSchema,
       bodyRows: Schema.Array(TableRowSchema)
     }),
@@ -460,7 +498,9 @@ export const Block: Schema.Codec<Block, BlockEncoded> = Schema.suspend(() =>
  * @category schemas
  * @since 0.1.0
  */
-export const Document: Schema.Codec<Document, DocumentEncoded> = Schema.Struct({ blocks: Schema.Array(Block) })
+export const Document: Schema.Codec<Document, DocumentEncoded> = Schema.Struct({
+  blocks: Schema.Array(Block)
+})
 
 const decodeUncached = Schema.decodeUnknownSync(Document)
 const decoded = new WeakMap<object, Document>()
@@ -480,7 +520,10 @@ const decoded = new WeakMap<object, Document>()
  * @category decoding
  * @since 0.1.0
  */
-export const decodeDocument = (input: unknown, options?: SchemaAST.ParseOptions): Document => {
+export const decodeDocument = (
+  input: unknown,
+  options?: SchemaAST.ParseOptions
+): Document => {
   if (options !== undefined || !Predicate.isObject(input)) {
     return decodeUncached(input, options)
   }
@@ -500,7 +543,8 @@ export const decodeDocument = (input: unknown, options?: SchemaAST.ParseOptions)
  * @category encoding
  * @since 0.1.0
  */
-export const encodeDocument: (document: Document) => DocumentEncoded = Schema.encodeSync(Document)
+export const encodeDocument: (document: Document) => DocumentEncoded = Schema
+  .encodeSync(Document)
 
 /**
  * The attribute schema of one island: a struct over the directive's string
@@ -544,7 +588,9 @@ export type H<Msg> = View.Helper<Msg, unknown> & Html.Tags<Msg>
  * @category views
  * @since 0.1.0
  */
-export type InlineContent<Msg, R = never> = ReadonlyArray<View.Content<Msg, R> | string>
+export type InlineContent<Msg, R = never> = ReadonlyArray<
+  View.Content<Msg, R> | string
+>
 
 /**
  * One view per node. A container's view receives its rendered content
@@ -557,21 +603,52 @@ export type InlineContent<Msg, R = never> = ReadonlyArray<View.Content<Msg, R> |
  */
 export interface Views<Msg, R = never> {
   readonly Text: (h: H<Msg>, text: Text) => View.Content<Msg, R> | string
-  readonly InlineCode: (h: H<Msg>, inlineCode: InlineCode) => View.Content<Msg, R>
+  readonly InlineCode: (
+    h: H<Msg>,
+    inlineCode: InlineCode
+  ) => View.Content<Msg, R>
   readonly HardBreak: (h: H<Msg>, hardBreak: HardBreak) => View.Content<Msg, R>
-  readonly Emphasis: (h: H<Msg>, emphasis: Emphasis, content: InlineContent<Msg, R>) => View.Content<Msg, R>
-  readonly Strong: (h: H<Msg>, strong: Strong, content: InlineContent<Msg, R>) => View.Content<Msg, R>
+  readonly Emphasis: (
+    h: H<Msg>,
+    emphasis: Emphasis,
+    content: InlineContent<Msg, R>
+  ) => View.Content<Msg, R>
+  readonly Strong: (
+    h: H<Msg>,
+    strong: Strong,
+    content: InlineContent<Msg, R>
+  ) => View.Content<Msg, R>
   readonly Strikethrough: (
     h: H<Msg>,
     strikethrough: Strikethrough,
     content: InlineContent<Msg, R>
   ) => View.Content<Msg, R>
-  readonly Link: (h: H<Msg>, link: Link, content: InlineContent<Msg, R>) => View.Content<Msg, R>
+  readonly Link: (
+    h: H<Msg>,
+    link: Link,
+    content: InlineContent<Msg, R>
+  ) => View.Content<Msg, R>
   readonly Image: (h: H<Msg>, image: Image) => View.Content<Msg, R>
-  readonly Heading: (h: H<Msg>, heading: Heading, content: InlineContent<Msg, R>) => View.Content<Msg, R>
-  readonly Paragraph: (h: H<Msg>, paragraph: Paragraph, content: InlineContent<Msg, R>) => View.Content<Msg, R>
-  readonly CodeBlock: (h: H<Msg>, codeBlock: CodeBlock, occurrenceIndex: number) => View.Content<Msg, R>
-  readonly List: (h: H<Msg>, list: List, items: ReadonlyArray<View.Content<Msg, R>>) => View.Content<Msg, R>
+  readonly Heading: (
+    h: H<Msg>,
+    heading: Heading,
+    content: InlineContent<Msg, R>
+  ) => View.Content<Msg, R>
+  readonly Paragraph: (
+    h: H<Msg>,
+    paragraph: Paragraph,
+    content: InlineContent<Msg, R>
+  ) => View.Content<Msg, R>
+  readonly CodeBlock: (
+    h: H<Msg>,
+    codeBlock: CodeBlock,
+    occurrenceIndex: number
+  ) => View.Content<Msg, R>
+  readonly List: (
+    h: H<Msg>,
+    list: List,
+    items: ReadonlyArray<View.Content<Msg, R>>
+  ) => View.Content<Msg, R>
   readonly ListItem: (
     h: H<Msg>,
     listItem: ListItem,
@@ -582,14 +659,21 @@ export interface Views<Msg, R = never> {
     blockquote: Blockquote,
     blocks: ReadonlyArray<View.Content<Msg, R>>
   ) => View.Content<Msg, R>
-  readonly ThematicBreak: (h: H<Msg>, thematicBreak: ThematicBreak) => View.Content<Msg, R>
+  readonly ThematicBreak: (
+    h: H<Msg>,
+    thematicBreak: ThematicBreak
+  ) => View.Content<Msg, R>
   readonly Table: (
     h: H<Msg>,
     table: Table,
     headerRow: View.Content<Msg, R>,
     bodyRows: ReadonlyArray<View.Content<Msg, R>>
   ) => View.Content<Msg, R>
-  readonly TableRow: (h: H<Msg>, tableRow: TableRow, cells: ReadonlyArray<View.Content<Msg, R>>) => View.Content<Msg, R>
+  readonly TableRow: (
+    h: H<Msg>,
+    tableRow: TableRow,
+    cells: ReadonlyArray<View.Content<Msg, R>>
+  ) => View.Content<Msg, R>
   readonly TableCell: (
     h: H<Msg>,
     tableCell: TableCell,
@@ -637,7 +721,9 @@ export type IslandView<Msg, R = never> = (
  * @category islands
  * @since 0.1.0
  */
-export type Islands<Msg, R = never> = Readonly<Record<string, IslandView<Msg, R>>>
+export type Islands<Msg, R = never> = Readonly<
+  Record<string, IslandView<Msg, R>>
+>
 
 /**
  * Overrides for `view` and `viewBlocks`. A node without an override
@@ -655,7 +741,12 @@ export interface ViewConfig<Msg, R = never> {
 
 const headingTags = ["h1", "h2", "h3", "h4", "h5", "h6"] as const
 
-const textAlign = { None: undefined, Left: "left", Center: "center", Right: "right" } as const
+const textAlign = {
+  None: undefined,
+  Left: "left",
+  Center: "center",
+  Right: "right"
+} as const
 
 /**
  * Unstyled semantic elements for every node. Call one from an override to
@@ -673,23 +764,34 @@ export const defaultViews: DefaultViews = {
   Strong: (h, _strong, content) => h.strong.children(content),
   Strikethrough: (h, _strikethrough, content) => h.del.children(content),
   Link: (h, { title, url }, content) =>
-    h.a.attr("href", url).attr("title", Option.getOrUndefined(title)).children(content),
+    h.a.attr("href", url).attr("title", Option.getOrUndefined(title)).children(
+      content
+    ),
   Image: (h, { alt, title, url }) =>
-    h.img.attr("src", url).attr("alt", alt).attr("title", Option.getOrUndefined(title)),
-  Heading: (h, { level }, content) => h[headingTags[level - 1]].children(content),
+    h.img.attr("src", url).attr("alt", alt).attr(
+      "title",
+      Option.getOrUndefined(title)
+    ),
+  Heading: (h, { level }, content) =>
+    h[headingTags[level - 1]].children(content),
   Paragraph: (h, _paragraph, content) => h.p.children(content),
   CodeBlock: (h, { value }) => h.pre.children(h.code.children(value)),
   List: (h, { isOrdered, startNumber }, items) =>
     isOrdered
-      ? h.ol.attr("start", Option.getOrUndefined(Option.map(startNumber, String))).children(items)
+      ? h.ol.attr(
+        "start",
+        Option.getOrUndefined(Option.map(startNumber, String))
+      ).children(items)
       : h.ul.children(items),
   ListItem: (h, _listItem, blocks) => h.li.children(blocks),
   Blockquote: (h, _blockquote, blocks) => h.blockquote.children(blocks),
   ThematicBreak: (h) => h.hr,
-  Table: (h, _table, headerRow, bodyRows) => h.table.children(h.thead.children(headerRow), h.tbody.children(bodyRows)),
+  Table: (h, _table, headerRow, bodyRows) =>
+    h.table.children(h.thead.children(headerRow), h.tbody.children(bodyRows)),
   TableRow: (h, _tableRow, cells) => h.tr.children(cells),
   TableCell: (h, _tableCell, content, alignment, isHeader) =>
-    (isHeader ? h.th : h.td).style({ textAlign: textAlign[alignment] }).children(content)
+    (isHeader ? h.th : h.td).style({ textAlign: textAlign[alignment] })
+      .children(content)
 }
 
 const warned = new Set<string>()
@@ -710,7 +812,8 @@ const warnOnce = (key: string, message: () => string): void => {
  * @since 0.1.0
  */
 export type IslandRequirements<ViewsByName> = {
-  readonly [Name in keyof ViewsByName]: ViewsByName[Name] extends (...args: ReadonlyArray<any>) => infer Content
+  readonly [Name in keyof ViewsByName]: ViewsByName[Name] extends
+    (...args: ReadonlyArray<any>) => infer Content
     ? Content extends View.Content<any, infer R> ? R : never
     : never
 }[keyof ViewsByName]
@@ -791,7 +894,8 @@ export const viewBlocks = <Msg, R = never>(
     occurrences.set(key, index + 1)
     return index
   }
-  const inlines = (nodes: ReadonlyArray<Inline>): InlineContent<Msg, R> => nodes.map(inline)
+  const inlines = (nodes: ReadonlyArray<Inline>): InlineContent<Msg, R> =>
+    nodes.map(inline)
   const inline = (node: Inline): View.Content<Msg, R> | string => {
     switch (node._tag) {
       case "Text":
@@ -817,7 +921,13 @@ export const viewBlocks = <Msg, R = never>(
       h,
       tableRow,
       tableRow.cells.map((cell, column) =>
-        views.TableCell(h, cell, inlines(cell.content), table.alignments[column] ?? "None", isHeader)
+        views.TableCell(
+          h,
+          cell,
+          inlines(cell.content),
+          table.alignments[column] ?? "None",
+          isHeader
+        )
       )
     )
   const blocks = (nodes: ReadonlyArray<Block>): Array<View.Content<Msg, R>> =>
@@ -831,7 +941,11 @@ export const viewBlocks = <Msg, R = never>(
       case "CodeBlock":
         return views.CodeBlock(h, node, nextOccurrence("CodeBlock"))
       case "List":
-        return views.List(h, node, node.items.map((item) => views.ListItem(h, item, blocks(item.blocks))))
+        return views.List(
+          h,
+          node,
+          node.items.map((item) => views.ListItem(h, item, blocks(item.blocks)))
+        )
       case "Blockquote":
         return views.Blockquote(h, node, blocks(node.blocks))
       case "ThematicBreak":
@@ -845,7 +959,9 @@ export const viewBlocks = <Msg, R = never>(
         )
       case "Island": {
         const occurrenceIndex = nextOccurrence(`Island:${node.name}`)
-        const island = Object.hasOwn(islands, node.name) ? islands[node.name] : undefined
+        const island = Object.hasOwn(islands, node.name)
+          ? islands[node.name]
+          : undefined
         if (island === undefined) {
           warnOnce(
             `missing:${node.name}`,
@@ -874,4 +990,5 @@ export const view = <Msg, R = never>(
   h: H<Msg>,
   document: Document,
   config?: ViewConfig<Msg, R>
-): Html.Element<Msg, R, Html.EventsOf<"div">, HTMLDivElement, "div"> => h.div.children(viewBlocks(h, document, config))
+): Html.Element<Msg, R, Html.EventsOf<"div">, HTMLDivElement, "div"> =>
+  h.div.children(viewBlocks(h, document, config))

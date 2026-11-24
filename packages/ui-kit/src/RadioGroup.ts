@@ -247,10 +247,15 @@ type RadioGroupModel = typeof RadioGroupModel.Type
 
 const Radio = Html.ref("RadioGroupRadio", "button")
 
-const focusRadio = (value: string) => HtmlCommand.Focus.make({ ref: Radio.at(value) }).pipe(Command.asNoop)
+const focusRadio = (value: string) =>
+  HtmlCommand.Focus.make({ ref: Radio.at(value) }).pipe(Command.asNoop)
 
 const synced = (value: string | null) =>
-  Subscription.make("synced", [value], () => Stream.make(RadioGroupMessage.SyncedValue({ value })))
+  Subscription.make(
+    "synced",
+    [value],
+    () => Stream.make(RadioGroupMessage.SyncedValue({ value }))
+  )
 
 const TrackIndicatorArgs = Schema.Struct({
   value: Schema.String,
@@ -259,7 +264,10 @@ const TrackIndicatorArgs = Schema.Struct({
   ending: Schema.Boolean
 })
 
-const groupSend = new WeakMap<HTMLElement, (message: RadioGroupMessage) => void>()
+const groupSend = new WeakMap<
+  HTMLElement,
+  (message: RadioGroupMessage) => void
+>()
 
 const TrackGroup = Mount.makeStream(
   "TrackGroup",
@@ -284,14 +292,18 @@ const TrackIndicator = Mount.makeStream(
   (node: HTMLSpanElement, args, changes) =>
     Stream.callback<RadioGroupMessage>((queue) => {
       const frame = frameOf(node.ownerDocument.defaultView)
-      const send = (message: RadioGroupMessage) => Queue.offerUnsafe(queue, message)
+      const send = (message: RadioGroupMessage) =>
+        Queue.offerUnsafe(queue, message)
       const group = node.closest<HTMLElement>("[role=radiogroup]")
       let current = args
       let generation = 0
       const start = () => {
         const mine = ++generation
         frame(() => {
-          if (mine === generation && node.isConnected && current.checked && current.starting) {
+          if (
+            mine === generation && node.isConnected && current.checked &&
+            current.starting
+          ) {
             send(RadioGroupMessage.StartedIndicator({ value: current.value }))
           }
         })
@@ -303,15 +315,22 @@ const TrackIndicator = Mount.makeStream(
             () => [node],
             frame,
             () => mine === generation && node.isConnected,
-            () => send(RadioGroupMessage.EndedIndicator({ value: current.value }))
+            () =>
+              send(RadioGroupMessage.EndedIndicator({ value: current.value }))
           )
         )
       }
       const onChange = (next: typeof TrackIndicatorArgs.Type) => {
         const previous = current
         current = next
-        if (next.checked && next.starting && (!previous.checked || !previous.starting)) start()
-        else if (!next.checked && (previous.checked || (next.ending && !previous.ending))) leave()
+        if (
+          next.checked && next.starting &&
+          (!previous.checked || !previous.starting)
+        ) start()
+        else if (
+          !next.checked &&
+          (previous.checked || (next.ending && !previous.ending))
+        ) leave()
         else if (next.checked && !previous.checked) generation++
       }
       return Effect.acquireRelease(
@@ -320,12 +339,21 @@ const TrackIndicator = Mount.makeStream(
           if (current.checked && current.starting) start()
           else if (!current.checked && current.ending) leave()
         }).pipe(
-          Effect.tap(() => Effect.forkScoped(Stream.runForEach(changes, (next) => Effect.sync(() => onChange(next)))))
+          Effect.tap(() =>
+            Effect.forkScoped(
+              Stream.runForEach(changes, (next) =>
+                Effect.sync(() => onChange(next)))
+            )
+          )
         ),
         () =>
           Effect.sync(() => {
             generation++
-            if (group !== null) groupSend.get(group)?.(RadioGroupMessage.UnmountedIndicator({ value: current.value }))
+            if (group !== null) {
+              groupSend.get(group)?.(
+                RadioGroupMessage.UnmountedIndicator({ value: current.value })
+              )
+            }
           })
       )
     })
@@ -337,7 +365,11 @@ interface ItemState {
   readonly readOnly: boolean
 }
 
-const itemState = <B extends Attributed<B>>(builder: B, state: ItemState, required: boolean): B =>
+const itemState = <B extends Attributed<B>>(
+  builder: B,
+  state: ItemState,
+  required: boolean
+): B =>
   builder.attrs({
     "data-checked": flag(state.checked),
     "data-unchecked": flag(!state.checked),
@@ -346,19 +378,29 @@ const itemState = <B extends Attributed<B>>(builder: B, state: ItemState, requir
     "data-required": flag(required)
   })
 
-const itemOf = (items: ReadonlyArray<RadioGroupItem>, value: string): RadioGroupItem | undefined =>
-  items.find((item) => item.value === value)
+const itemOf = (
+  items: ReadonlyArray<RadioGroupItem>,
+  value: string
+): RadioGroupItem | undefined => items.find((item) => item.value === value)
 
 const picks = (props: RadioGroupProps, item: RadioGroupItem): boolean =>
-  props.readOnly !== true && item.readOnly !== true && props.value !== item.value
+  props.readOnly !== true && item.readOnly !== true &&
+  props.value !== item.value
 
-const without = (values: ReadonlyArray<string>, value: string): ReadonlyArray<string> =>
+const without = (
+  values: ReadonlyArray<string>,
+  value: string
+): ReadonlyArray<string> =>
   values.includes(value) ? values.filter((other) => other !== value) : values
 
-const withValue = (values: ReadonlyArray<string>, value: string): ReadonlyArray<string> =>
-  values.includes(value) ? values : [...values, value]
+const withValue = (
+  values: ReadonlyArray<string>,
+  value: string
+): ReadonlyArray<string> => values.includes(value) ? values : [...values, value]
 
-type KeyedButton = View.PartTarget<"button"> & { readonly key: (key: string) => View.PartTarget<"button"> }
+type KeyedButton = View.PartTarget<"button"> & {
+  readonly key: (key: string) => View.PartTarget<"button">
+}
 
 /**
  * A headless radio group. Call it with the consumer's `h`, the `props`,
@@ -415,7 +457,9 @@ export const RadioGroup = Component.define({
       const item = itemOf($.props.items, value)
       if ($.props.disabled === true || !available(item)) return $.model
       const highlighted = $.evolve({ highlighted: value })
-      return picks($.props, item) ? highlighted.emit(RadioGroupEvents.Picked({ value })) : highlighted
+      return picks($.props, item)
+        ? highlighted.emit(RadioGroupEvents.Picked({ value }))
+        : highlighted
     },
     FocusedRadio: ($, { value }) =>
       $.props.disabled === true || !available(itemOf($.props.items, value))
@@ -428,7 +472,9 @@ export const RadioGroup = Component.define({
       const at = enabled.indexOf(source)
       const target = enabled[stepped(at, enabled.length - 1, direction, "wrap")]
       if (target === undefined) return $.model
-      const moved = $.evolve({ highlighted: target.value }).run(focusRadio(target.value))
+      const moved = $.evolve({ highlighted: target.value }).run(
+        focusRadio(target.value)
+      )
       return source.readOnly !== true && picks($.props, target)
         ? moved.emit(RadioGroupEvents.Picked({ value: target.value }))
         : moved
@@ -437,12 +483,15 @@ export const RadioGroup = Component.define({
     SyncedValue: ($, { value }) => {
       if ($.model.current === value) return $.evolve({ highlighted: null })
       const prev = $.model.current
-      let leaving = prev !== null && $.model.mounted.includes(prev) ? withValue($.model.leaving, prev) : $.model.leaving
+      let leaving = prev !== null && $.model.mounted.includes(prev)
+        ? withValue($.model.leaving, prev)
+        : $.model.leaving
       if (value !== null) leaving = without(leaving, value)
       const settled = $.model.settled === value ? value : null
       return $.evolve({ highlighted: null, current: value, settled, leaving })
     },
-    MountedIndicator: ($, { value }) => $.evolve({ mounted: (mounted) => withValue(mounted, value) }),
+    MountedIndicator: ($, { value }) =>
+      $.evolve({ mounted: (mounted) => withValue(mounted, value) }),
     UnmountedIndicator: ($, { value }) =>
       $.evolve({
         settled: $.model.settled === value ? null : $.model.settled,
@@ -450,7 +499,12 @@ export const RadioGroup = Component.define({
         leaving: (leaving) => without(leaving, value)
       }),
     StartedIndicator: ($, { value }) =>
-      $.props.value !== value ? $.model : $.evolve({ settled: value, leaving: (leaving) => without(leaving, value) }),
+      $.props.value !== value
+        ? $.model
+        : $.evolve({
+          settled: value,
+          leaving: (leaving) => without(leaving, value)
+        }),
     EndedIndicator: ($, { value }) =>
       $.props.value === value
         ? $.model
@@ -470,7 +524,11 @@ export const RadioGroup = Component.define({
     const byValue = new Map(props.items.map((item) => [item.value, item]))
     const stateOf = (value: string) => {
       const item = byValue.get(value)
-      if (item === undefined) throw new Error("RadioGroup: no item with value " + JSON.stringify(value))
+      if (item === undefined) {
+        throw new Error(
+          "RadioGroup: no item with value " + JSON.stringify(value)
+        )
+      }
       const checked = props.value === value
       return {
         checked,
@@ -479,16 +537,21 @@ export const RadioGroup = Component.define({
         starting: checked && model.settled !== value,
         ending: !checked && (
           model.leaving.includes(value) ||
-          (model.mounted.includes(value) && (model.current === value || model.settled === value))
+          (model.mounted.includes(value) &&
+            (model.current === value || model.settled === value))
         )
       }
     }
     const tabStop = disabled
       ? null
-      : [model.highlighted, props.value].find((value) => value !== null && available(byValue.get(value))) ??
+      : [model.highlighted, props.value].find((value) =>
+        value !== null && available(byValue.get(value))
+      ) ??
         props.items.find(available)?.value ??
         null
-    const checkedItem = props.value === null ? undefined : byValue.get(props.value)
+    const checkedItem = props.value === null
+      ? undefined
+      : byValue.get(props.value)
     const hidden = field({
       checked: checkedItem !== undefined,
       disabled: disabled || checkedItem?.disabled === true,
@@ -516,10 +579,24 @@ export const RadioGroup = Component.define({
           ({ alt, ctrl, key, meta }) => {
             if (key === "Enter") return RadioGroupMessage.PressedEnter()
             if (ctrl || alt || meta) return undefined
-            if (key === "ArrowDown") return RadioGroupMessage.PressedArrow({ value, direction: 1 })
-            if (key === "ArrowUp") return RadioGroupMessage.PressedArrow({ value, direction: -1 })
-            if (key === "ArrowRight") return RadioGroupMessage.PressedArrow({ value, direction: rtl ? -1 : 1 })
-            if (key === "ArrowLeft") return RadioGroupMessage.PressedArrow({ value, direction: rtl ? 1 : -1 })
+            if (key === "ArrowDown") {
+              return RadioGroupMessage.PressedArrow({ value, direction: 1 })
+            }
+            if (key === "ArrowUp") {
+              return RadioGroupMessage.PressedArrow({ value, direction: -1 })
+            }
+            if (key === "ArrowRight") {
+              return RadioGroupMessage.PressedArrow({
+                value,
+                direction: rtl ? -1 : 1
+              })
+            }
+            if (key === "ArrowLeft") {
+              return RadioGroupMessage.PressedArrow({
+                value,
+                direction: rtl ? 1 : -1
+              })
+            }
             return undefined
           },
           { preventDefault: true }
@@ -558,8 +635,9 @@ export const RadioGroup = Component.define({
           .onMount(TrackGroup())),
       radio: View.wrapPart(
         radioPart,
-        <B extends KeyedButton>({ element, value }: { readonly element: B; readonly value: string }) =>
-          radioPart(element, value)
+        <B extends KeyedButton>(
+          { element, value }: { readonly element: B; readonly value: string }
+        ) => radioPart(element, value)
       ),
       indicator: View.wrapPart(
         indicatorPart,

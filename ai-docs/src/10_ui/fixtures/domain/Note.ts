@@ -19,13 +19,17 @@ export const NoteResults = Schema.Struct({
 })
 export type NoteResults = typeof NoteResults.Type
 
-export class NoteNotFound extends Schema.TaggedError<NoteNotFound>()("NoteNotFound", {
-  id: Schema.String
-}) {}
+export class NoteNotFound
+  extends Schema.TaggedError<NoteNotFound>()("NoteNotFound", {
+    id: Schema.String
+  })
+{}
 
-export class NoteSaveError extends Schema.TaggedError<NoteSaveError>()("NoteSaveError", {
-  reason: Schema.String
-}) {}
+export class NoteSaveError
+  extends Schema.TaggedError<NoteSaveError>()("NoteSaveError", {
+    reason: Schema.String
+  })
+{}
 
 // The invalidation tag every query of notes belongs to. A Command that changes
 // a note invalidates the tag, and every query carrying it refetches.

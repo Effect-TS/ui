@@ -154,7 +154,13 @@ import * as Stream from "effect/Stream"
 import { flag } from "./internal/attributes.ts"
 import { isHTMLElement } from "./internal/dom.ts"
 import { arrowKeys, Orientation, stepped } from "./internal/list.ts"
-import { barTriggers, MenubarMenu, MenubarMessage, MenubarShared, triggerAttribute } from "./internal/menubar.ts"
+import {
+  barTriggers,
+  MenubarMenu,
+  MenubarMessage,
+  MenubarShared,
+  triggerAttribute
+} from "./internal/menubar.ts"
 
 /**
  * The props of a `Menubar`.
@@ -217,7 +223,8 @@ const tabStopOf = (model: MenubarModel): string | null =>
     ? model.highlighted
     : model.triggers[0] ?? null
 
-const openOf = (model: MenubarModel): boolean => model.menus.some((menu) => menu.open && menu.trigger !== null)
+const openOf = (model: MenubarModel): boolean =>
+  model.menus.some((menu) => menu.open && menu.trigger !== null)
 
 const TrackMenubar = Mount.makeStream(
   "TrackMenubar",
@@ -231,26 +238,36 @@ const TrackMenubar = Mount.makeStream(
         let found = ""
         const scan = () => {
           const triggers = barTriggers(node)
-            .filter((trigger) => trigger.id !== "" && !trigger.hasAttribute("disabled"))
+            .filter((trigger) =>
+              trigger.id !== "" && !trigger.hasAttribute("disabled")
+            )
             .map((trigger) => trigger.id)
           const rtl = view?.getComputedStyle(node).direction === "rtl"
           const next = JSON.stringify([triggers, rtl])
           if (next === found) return
           found = next
-          Queue.offerUnsafe(queue, MenubarMessage.FoundTriggers({ triggers, rtl }))
+          Queue.offerUnsafe(
+            queue,
+            MenubarMessage.FoundTriggers({ triggers, rtl })
+          )
         }
         const selector = `[${triggerAttribute}]`
         const holdsTrigger = (changed: Node) =>
-          isHTMLElement(changed) && (changed.matches(selector) || changed.querySelector(selector) !== null)
+          isHTMLElement(changed) &&
+          (changed.matches(selector) ||
+            changed.querySelector(selector) !== null)
         const Observer = view?.MutationObserver
-        const observer = Observer === undefined ? undefined : new Observer((records) => {
-          if (
-            records.some((record) =>
-              record.type === "attributes" || Array.from(record.addedNodes).some(holdsTrigger) ||
-              Array.from(record.removedNodes).some(holdsTrigger)
-            )
-          ) scan()
-        })
+        const observer = Observer === undefined ?
+          undefined :
+          new Observer((records) => {
+            if (
+              records.some((record) =>
+                record.type === "attributes" ||
+                Array.from(record.addedNodes).some(holdsTrigger) ||
+                Array.from(record.removedNodes).some(holdsTrigger)
+              )
+            ) scan()
+          })
         observer?.observe(node, {
           subtree: true,
           childList: true,
@@ -258,13 +275,17 @@ const TrackMenubar = Mount.makeStream(
           attributeFilter: ["id", "disabled", triggerAttribute]
         })
         scan()
-        yield* Effect.addFinalizer(() => Effect.sync(() => observer?.disconnect()))
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => observer?.disconnect())
+        )
         let moves = initial.moves
         yield* Stream.runForEach(changes, (next) =>
           Effect.sync(() => {
             if (next.moves === moves) return
             moves = next.moves
-            const target = next.highlighted === null ? null : document.getElementById(next.highlighted)
+            const target = next.highlighted === null
+              ? null
+              : document.getElementById(next.highlighted)
             target?.focus({ focusVisible: true } as FocusOptions)
           })).pipe(Effect.forkScoped)
       })
@@ -335,10 +356,17 @@ export const Menubar = Component.define({
     ChangedMenus: ($, { menus }) => {
       const opened = menus.find((menu) =>
         menu.open && menu.trigger !== null &&
-        !$.model.menus.some((before) => before.open && before.trigger === menu.trigger)
+        !$.model.menus.some((before) =>
+          before.open && before.trigger === menu.trigger
+        )
       )
       return opened?.trigger != null
-        ? { ...$.model, menus, current: opened.trigger, highlighted: opened.trigger }
+        ? {
+          ...$.model,
+          menus,
+          current: opened.trigger,
+          highlighted: opened.trigger
+        }
         : { ...$.model, menus }
     },
     FoundTriggers: ($, { rtl, triggers }) => ({ ...$.model, triggers, rtl }),
@@ -355,13 +383,27 @@ export const Menubar = Component.define({
         : key === "End"
         ? last
         : key === nav.next || key === nav.previous
-        ? stepped(at, last, key === nav.next ? 1 : -1, props.loopFocus !== false ? "wrap" : "none")
+        ? stepped(
+          at,
+          last,
+          key === nav.next ? 1 : -1,
+          props.loopFocus !== false ? "wrap" : "none"
+        )
         : -1
       const target = triggers[index]
       if (target === undefined || target === start) return $.model
-      return { ...$.model, highlighted: target, opening: open ? target : null, moves: $.model.moves + 1 }
+      return {
+        ...$.model,
+        highlighted: target,
+        opening: open ? target : null,
+        moves: $.model.moves + 1
+      }
     },
-    FocusedTrigger: ($, { trigger }) => ({ ...$.model, highlighted: trigger, opening: null })
+    FocusedTrigger: ($, { trigger }) => ({
+      ...$.model,
+      highlighted: trigger,
+      opening: null
+    })
   },
   parts: (p, model) => {
     const state = stateOf(model, p.props)
@@ -377,7 +419,9 @@ export const Menubar = Component.define({
             "data-modal": flag(modal),
             "data-has-submenu-open": flag(hasSubmenuOpen)
           })
-          .onMount(TrackMenubar({ highlighted: model.highlighted, moves: model.moves })))
+          .onMount(
+            TrackMenubar({ highlighted: model.highlighted, moves: model.moves })
+          ))
     }
   }
 })

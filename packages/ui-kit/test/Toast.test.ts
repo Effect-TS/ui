@@ -10,7 +10,11 @@ import { TestClock } from "effect/testing"
 import { popovers } from "./utils/document.ts"
 
 // The first post is a loading toast; Complete turns it into a timed success.
-const PosterMessage = UiSchema.TaggedEnum({ ClickedPost: {}, ClickedDrop: {}, CompletedUpload: {} })
+const PosterMessage = UiSchema.TaggedEnum({
+  ClickedPost: {},
+  ClickedDrop: {},
+  CompletedUpload: {}
+})
 
 const Poster = Component.define({
   name: "Poster",
@@ -32,14 +36,23 @@ const Poster = Component.define({
             type: $.model === 0 ? "loading" : "success"
           }
         }),
-      CompletedUpload: ($) => $.send(ToastProvider, { _tag: "RequestedUpdate", id: "t1", type: "success" }),
-      ClickedDrop: ($) => $.send(ToastProvider, { _tag: "RequestedClose", id: "t" + $.model })
+      CompletedUpload: ($) =>
+        $.send(ToastProvider, {
+          _tag: "RequestedUpdate",
+          id: "t1",
+          type: "success"
+        }),
+      ClickedDrop: ($) =>
+        $.send(ToastProvider, { _tag: "RequestedClose", id: "t" + $.model })
     },
     view: (h) =>
       h.div(
-        h.button.attr("id", "post").onClick(PosterMessage.ClickedPost()).children("Post"),
-        h.button.attr("id", "complete").onClick(PosterMessage.CompletedUpload()).children("Complete"),
-        h.button.attr("id", "drop").onClick(PosterMessage.ClickedDrop()).children("Drop")
+        h.button.attr("id", "post").onClick(PosterMessage.ClickedPost())
+          .children("Post"),
+        h.button.attr("id", "complete").onClick(PosterMessage.CompletedUpload())
+          .children("Complete"),
+        h.button.attr("id", "drop").onClick(PosterMessage.ClickedDrop())
+          .children("Drop")
       )
   })
 
@@ -67,10 +80,14 @@ const Page = Component.define({
           h.output(dismissed),
           toastProvider.viewport(h.div).children(
             ...toastProvider.toasts.map((toast) =>
-              toastProvider.root({ element: h.div.attr("id", toast.id), toast }).children(
-                toast.title,
-                toastProvider.close({ element: h.button.attr("id", "close-" + toast.id), toast }).children("Close")
-              )
+              toastProvider.root({ element: h.div.attr("id", toast.id), toast })
+                .children(
+                  toast.title,
+                  toastProvider.close({
+                    element: h.button.attr("id", "close-" + toast.id),
+                    toast
+                  }).children("Close")
+                )
             )
           )
         )
@@ -78,7 +95,9 @@ const Page = Component.define({
 })
 
 /** Lets the render flush and the mounts run. */
-const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+const tick = Effect.promise(() =>
+  new Promise<void>((resolve) => setTimeout(resolve, 30))
+)
 
 const mountPage = Effect.fnUntraced(function*(timeout: number) {
   yield* popovers
@@ -95,7 +114,11 @@ const mountPage = Effect.fnUntraced(function*(timeout: number) {
 })
 
 const press = (target: EventTarget, key: string) => {
-  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })
+  const event = new KeyboardEvent("keydown", {
+    key,
+    bubbles: true,
+    cancelable: true
+  })
   target.dispatchEvent(event)
   return event.defaultPrevented
 }
@@ -104,14 +127,21 @@ describe("ToastProvider", { concurrent: false }, () => {
   it.effect("a loading toast stays until completed, and hovering restarts the full dismissal timeout", () =>
     Effect.gen(function*() {
       const root = yield* TestHost.mount(Page, { timeout: 1000 })
-      const fire = (id: string) => Locator.fire(root.get(Locator.attr("id", id)), "click")
+      const fire = (id: string) =>
+        Locator.fire(root.get(Locator.attr("id", id)), "click")
       const dismissed = () => Locator.textOf(root.get(Locator.tag("output")))
       const wait = (millis: number) =>
-        TestHost.settle.pipe(Effect.andThen(TestClock.adjust(`${millis} millis`)), Effect.andThen(TestHost.settle))
+        TestHost.settle.pipe(
+          Effect.andThen(TestClock.adjust(`${millis} millis`)),
+          Effect.andThen(TestHost.settle)
+        )
 
       fire("post")
       yield* wait(2000)
-      assert.strictEqual(Locator.textOf(root.get(Locator.attr("role", "alert"))), "Toast")
+      assert.strictEqual(
+        Locator.textOf(root.get(Locator.attr("role", "alert"))),
+        "Toast"
+      )
       assert.strictEqual(dismissed(), "")
       fire("complete")
       yield* wait(999)
@@ -129,10 +159,14 @@ describe("ToastProvider", { concurrent: false }, () => {
   it.effect("the timers pause while the window doesn't have focus, and restart in full when it's back", () =>
     Effect.gen(function*() {
       const root = yield* TestHost.mount(Page, { timeout: 1000 })
-      const fire = (id: string) => Locator.fire(root.get(Locator.attr("id", id)), "click")
+      const fire = (id: string) =>
+        Locator.fire(root.get(Locator.attr("id", id)), "click")
       const dismissed = () => Locator.textOf(root.get(Locator.tag("output")))
       const wait = (millis: number) =>
-        TestHost.settle.pipe(Effect.andThen(TestClock.adjust(`${millis} millis`)), Effect.andThen(TestHost.settle))
+        TestHost.settle.pipe(
+          Effect.andThen(TestClock.adjust(`${millis} millis`)),
+          Effect.andThen(TestHost.settle)
+        )
 
       fire("post")
       fire("complete")
@@ -145,7 +179,9 @@ describe("ToastProvider", { concurrent: false }, () => {
       assert.strictEqual(dismissed(), "")
       yield* wait(1)
       assert.strictEqual(dismissed(), "t1")
-    }).pipe(Effect.provide(Layer.merge(TestHost.layer(), TestGlobalEvents.layer))))
+    }).pipe(
+      Effect.provide(Layer.merge(TestHost.layer(), TestGlobalEvents.layer))
+    ))
 
   it.effect("a collapsed stack exposes a focused Close and reports only user dismissals", () =>
     Effect.gen(function*() {
@@ -259,11 +295,14 @@ const Above = Component.define({
     ToastProvider(h, {
       view: (toastProvider) =>
         h.div(
-          h.button.attr("id", "open").onClick(AboveMessage.Opened()).children("Open"),
+          h.button.attr("id", "open").onClick(AboveMessage.Opened()).children(
+            "Open"
+          ),
           toastProvider.viewport(h.div.attr("id", "toasts")),
           Dialog(h, {
             props: { open },
-            view: (dialog) => h.div(dialog.portal(h.dialog)?.children(dialog.popup(h.div)))
+            view: (dialog) =>
+              h.div(dialog.portal(h.dialog)?.children(dialog.popup(h.div)))
           })
         )
     })
@@ -281,7 +320,9 @@ describe("ToastProvider above a dialog", { concurrent: false }, () => {
         return show.call(this)
       }
       const container = yield* Effect.acquireRelease(
-        Effect.sync(() => document.body.appendChild(document.createElement("div"))),
+        Effect.sync(() =>
+          document.body.appendChild(document.createElement("div"))
+        ),
         (element) => Effect.sync(() => element.remove())
       )
       yield* BrowserHost.mountEffect(Above, {}, container)

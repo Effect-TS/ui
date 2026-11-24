@@ -17,7 +17,8 @@ export const popoverStub = Effect.acquireRelease(
     const calls: Array<string> = []
     const tasks: Array<() => void> = []
     const queued = new Map<Element, { oldState: string; newState: string }>()
-    const label = (element: Element) => element.getAttribute("aria-label") ?? element.localName
+    const label = (element: Element) =>
+      element.getAttribute("aria-label") ?? element.localName
     const toggle = (element: Element, oldState: string, newState: string) => {
       const pending = queued.get(element)
       if (pending !== undefined) {
@@ -49,7 +50,11 @@ export const popoverStub = Effect.acquireRelease(
       showModal: dialogProto.showModal,
       insertBefore: elementProto.insertBefore
     }
-    elementProto.insertBefore = function(this: Node, node: Node, ref: Node | null) {
+    elementProto.insertBefore = function(
+      this: Node,
+      node: Node,
+      ref: Node | null
+    ) {
       if (node.isConnected) {
         for (const element of Array.from(showing)) {
           if (node.contains(element)) showing.delete(element)
@@ -58,8 +63,15 @@ export const popoverStub = Effect.acquireRelease(
       return original.insertBefore.call(this, node, ref)
     }
     proto.showPopover = function(this: HTMLElement) {
-      if (!this.isConnected) throw new DOMException("The popover isn't connected", "InvalidStateError")
-      if (!this.hasAttribute("popover")) throw new DOMException("Not a popover", "NotSupportedError")
+      if (!this.isConnected) {
+        throw new DOMException(
+          "The popover isn't connected",
+          "InvalidStateError"
+        )
+      }
+      if (!this.hasAttribute("popover")) {
+        throw new DOMException("Not a popover", "NotSupportedError")
+      }
       if (showing.has(this)) return
       showing.add(this)
       calls.push(`showPopover ${label(this)}`)
@@ -71,10 +83,19 @@ export const popoverStub = Effect.acquireRelease(
       hide(this)
     }
     elementProto.matches = function(this: Element, selector: string) {
-      return selector === ":popover-open" ? showing.has(this) : original.matches.call(this, selector)
+      return selector === ":popover-open"
+        ? showing.has(this)
+        : original.matches.call(this, selector)
     }
-    elementProto.setAttribute = function(this: Element, name: string, value: string) {
-      if (name === "popover" && showing.has(this) && this.getAttribute("popover") !== value) hide(this)
+    elementProto.setAttribute = function(
+      this: Element,
+      name: string,
+      value: string
+    ) {
+      if (
+        name === "popover" && showing.has(this) &&
+        this.getAttribute("popover") !== value
+      ) hide(this)
       return original.setAttribute.call(this, name, value)
     }
     dialogProto.showModal = function(this: HTMLDialogElement) {
@@ -87,7 +108,10 @@ export const popoverStub = Effect.acquireRelease(
     const restore = () => {
       delete proto.showPopover
       delete proto.hidePopover
-      Object.assign(elementProto, { matches: original.matches, setAttribute: original.setAttribute })
+      Object.assign(elementProto, {
+        matches: original.matches,
+        setAttribute: original.setAttribute
+      })
       dialogProto.showModal = original.showModal
       elementProto.insertBefore = original.insertBefore
     }
@@ -108,7 +132,11 @@ const Mode = Schema.Literals(["manual", "auto"])
 
 export const MenuMessage = UiSchema.TaggedEnum({
   Set: { open: Schema.Boolean },
-  Toggled: { open: Schema.Boolean, newState: Schema.String, oldState: Schema.String },
+  Toggled: {
+    open: Schema.Boolean,
+    newState: Schema.String,
+    oldState: Schema.String
+  },
   Mode: { mode: Mode },
   Remove: {}
 })
@@ -117,7 +145,11 @@ export const MenuMessage = UiSchema.TaggedEnum({
 export const Menu = Component.define({
   name: "Menu",
   scoped: false,
-  props: Schema.Struct({ mode: Mode, open: Schema.Boolean, follow: Schema.Boolean }),
+  props: Schema.Struct({
+    mode: Mode,
+    open: Schema.Boolean,
+    follow: Schema.Boolean
+  }),
   model: Schema.Struct({
     mode: Mode,
     open: Schema.Boolean,
@@ -144,7 +176,9 @@ export const Menu = Component.define({
     h.div(
       model.shown && h.div.attrs({ "aria-label": "Menu", role: "menu" })
         .popover(model.mode, model.open)
-        .onToggle(({ newState, oldState, open }) => MenuMessage.Toggled({ open, newState, oldState }))
+        .onToggle(({ newState, oldState, open }) =>
+          MenuMessage.Toggled({ open, newState, oldState })
+        )
         .children(h.button("Rename"))
     )
 })
@@ -162,7 +196,9 @@ export const ModalMenu = Component.define({
   view: (h) =>
     h.dialog
       .attr("aria-label", "Settings").modal(true).children(
-        h.div.attr("aria-label", "Menu").popover("auto", true).children(h.button("Rename"))
+        h.div.attr("aria-label", "Menu").popover("auto", true).children(
+          h.button("Rename")
+        )
       )
 })
 
@@ -176,7 +212,9 @@ const Popup = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.div.attr("aria-label", h.props.label).popover(h.props.mode, true).children(h.button(h.props.label))
+  view: (h) =>
+    h.div.attr("aria-label", h.props.label).popover(h.props.mode, true)
+      .children(h.button(h.props.label))
 })
 
 /**
@@ -195,7 +233,9 @@ export const Rows = Component.define({
   update: (_, reversed) => reversed,
   view: (h, reversed) => {
     const rows = ["A", "B"].map((label) =>
-      h.div.key(label).children(Popup(h, { key: label, props: { label, mode: h.props.mode } }))
+      h.div.key(label).children(
+        Popup(h, { key: label, props: { label, mode: h.props.mode } })
+      )
     )
     return h.div(reversed ? rows.reverse() : rows)
   }

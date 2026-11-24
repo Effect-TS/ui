@@ -39,7 +39,11 @@ export const NotePageNoDeps = Component.define({
   // results, and picks out what it reads. The title comes from the loaded note, and the note's id from the
   // route stands in while it loads, with no copy of the prop in the Model.
   head: ({ props, queries }) => [
-    Head.title(AsyncResult.isSuccess(queries.note) ? queries.note.value.title : `Note ${props.id}`)
+    Head.title(
+      AsyncResult.isSuccess(queries.note)
+        ? queries.note.value.title
+        : `Note ${props.id}`
+    )
   ],
   view: (h, model) =>
     // `h.queries.note` is the query's result as an `AsyncResult`.
@@ -75,12 +79,18 @@ export const NotePageNoDeps = Component.define({
                 NoteActivity.render(h, {
                   key: "activity",
                   props: { noteId: note.id },
-                  fallback: (result) => h.p(AsyncResult.isInitial(result) ? "Loading activity…" : "No activity.")
+                  fallback: (result) =>
+                    h.p(
+                      AsyncResult.isInitial(result)
+                        ? "Loading activity…"
+                        : "No activity."
+                    )
                 })
               ]
             }
           }),
-          model.notice !== "" && h.p.attr("role", "status").children(model.notice)
+          model.notice !== "" &&
+            h.p.attr("role", "status").children(model.notice)
         )
     })
 })

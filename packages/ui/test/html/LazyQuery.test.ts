@@ -5,7 +5,9 @@ import { AsyncResult } from "effect/reactivity"
 import { describe, vi } from "vitest"
 
 /** Lets the render flush and the fetch settle. */
-const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+const tick = Effect.promise(() =>
+  new Promise<void>((resolve) => setTimeout(resolve, 30))
+)
 
 const container = Effect.acquireRelease(
   Effect.sync(() => document.body.appendChild(document.createElement("div"))),
@@ -19,16 +21,17 @@ const container = Effect.acquireRelease(
  */
 const lateSave = Effect.gen(function*() {
   vi.resetModules()
-  const [Command, Component, UiSchema, BrowserHost, Html, queryCore] = yield* Effect.promise(() =>
-    Promise.all([
-      import("@effect/ui/Command"),
-      import("@effect/ui/Component"),
-      import("@effect/ui/UiSchema"),
-      import("@effect/ui/html/BrowserHost"),
-      import("@effect/ui/html/Html"),
-      import("@effect/ui/internal/queryCore")
-    ])
-  )
+  const [Command, Component, UiSchema, BrowserHost, Html, queryCore] =
+    yield* Effect.promise(() =>
+      Promise.all([
+        import("@effect/ui/Command"),
+        import("@effect/ui/Component"),
+        import("@effect/ui/UiSchema"),
+        import("@effect/ui/html/BrowserHost"),
+        import("@effect/ui/html/Html"),
+        import("@effect/ui/internal/queryCore")
+      ])
+    )
   let release!: () => void
   const released = new Promise<void>((resolve) => {
     release = resolve
@@ -44,7 +47,12 @@ const lateSave = Effect.gen(function*() {
         const Query = await import("@effect/ui/Query")
         class GetNote extends Query.Service<GetNote>()(
           "lazy/LateNote",
-          { args: { id: Schema.String }, success: Schema.String, error: Schema.Never, staleTime: "30 seconds" },
+          {
+            args: { id: Schema.String },
+            success: Schema.String,
+            error: Schema.Never,
+            staleTime: "30 seconds"
+          },
           Effect.succeed(() => Effect.never)
         ) {}
         const Note = Component.define({
@@ -76,14 +84,26 @@ const lateSave = Effect.gen(function*() {
     { args: {}, writes: (saved: string) => [write!(saved)] },
     Effect.succeed(() => Effect.succeed("new"))
   ) {}
-  const Message = UiSchema.TaggedEnum({ Save: {}, Replace: {}, Show: {}, Saved: {} })
-  const App = Component.define({ name: "App", scoped: false, model: Schema.Boolean, message: Message, elements: Html })
+  const Message = UiSchema.TaggedEnum({
+    Save: {},
+    Replace: {},
+    Show: {},
+    Saved: {}
+  })
+  const App = Component.define({
+    name: "App",
+    scoped: false,
+    model: Schema.Boolean,
+    message: Message,
+    elements: Html
+  })
     .make({
       init: () => false,
       update: ($, message) =>
         Message.match(message, {
           Save: () => $.run(Save.make({}).pipe(Command.as(Message.Saved()))),
-          Replace: () => $.run(Replace.make({}).pipe(Command.as(Message.Show()))),
+          Replace: () =>
+            $.run(Replace.make({}).pipe(Command.as(Message.Show()))),
           Show: () => true,
           Saved: () => $.model
         }),
@@ -104,64 +124,74 @@ const lateSave = Effect.gen(function*() {
   )
   const click = (label: string) =>
     Effect.sync(() =>
-      Array.from(app.querySelectorAll("button")).find((button) => button.textContent === label)!.click()
+      Array.from(app.querySelectorAll("button")).find((button) =>
+        button.textContent === label
+      )!.click()
     )
-  return { click, release, problems, note: () => app.querySelector("p")?.textContent }
+  return {
+    click,
+    release,
+    problems,
+    note: () => app.querySelector("p")?.textContent
+  }
 })
 
 /**
  * Mounts an app whose child runs a Save Command with these `writes` at a click, and shows `saved` when
  * it succeeds. Nothing imports Query. Returns the app's text after the run.
  */
-const savedWith = Effect.fnUntraced(function*(writes: (saved: string) => ReadonlyArray<never>) {
-  vi.resetModules()
-  const [Command, Component, UiSchema, BrowserHost, Html] = yield* Effect.promise(() =>
-    Promise.all([
-      import("@effect/ui/Command"),
-      import("@effect/ui/Component"),
-      import("@effect/ui/UiSchema"),
-      import("@effect/ui/html/BrowserHost"),
-      import("@effect/ui/html/Html")
-    ])
-  )
-  class Save extends Command.Service<Save>()(
-    "lazy/PlainSave",
-    { args: {}, writes },
-    Effect.succeed(() => Effect.succeed("saved"))
-  ) {}
-  const Message = UiSchema.TaggedEnum({ Clicked: {}, Saved: {} })
-  const Saver = Component.define({
-    name: "Saver",
-    scoped: false,
-    model: Schema.String,
-    message: Message,
-    elements: Html
-  }).make({
-    init: () => "idle",
-    update: ($, message) =>
-      Message.match(message, {
-        Clicked: () => $.run(Save.make({}).pipe(Command.as(Message.Saved()))),
-        Saved: () => "saved"
-      }),
-    view: (h, model) => h.button.onClick(Message.Clicked()).children(model)
-  }).pipe(Component.provide(Save.layer))
-  const App = Component.define({
-    name: "App",
-    scoped: false,
-    model: Schema.Null,
-    message: Schema.Never,
-    elements: Html
-  }).make({
-    init: () => null,
-    update: ($) => $.model,
-    view: (h) => h.div.children(Saver(h, {}), h.p.children(" in app"))
-  })
-  const app = yield* container
-  yield* BrowserHost.mountEffect(App, {}, app)
-  app.querySelector("button")!.click()
-  yield* tick
-  return app.textContent
-})
+const savedWith = Effect.fnUntraced(
+  function*(writes: (saved: string) => ReadonlyArray<never>) {
+    vi.resetModules()
+    const [Command, Component, UiSchema, BrowserHost, Html] = yield* Effect
+      .promise(() =>
+        Promise.all([
+          import("@effect/ui/Command"),
+          import("@effect/ui/Component"),
+          import("@effect/ui/UiSchema"),
+          import("@effect/ui/html/BrowserHost"),
+          import("@effect/ui/html/Html")
+        ])
+      )
+    class Save extends Command.Service<Save>()(
+      "lazy/PlainSave",
+      { args: {}, writes },
+      Effect.succeed(() => Effect.succeed("saved"))
+    ) {}
+    const Message = UiSchema.TaggedEnum({ Clicked: {}, Saved: {} })
+    const Saver = Component.define({
+      name: "Saver",
+      scoped: false,
+      model: Schema.String,
+      message: Message,
+      elements: Html
+    }).make({
+      init: () => "idle",
+      update: ($, message) =>
+        Message.match(message, {
+          Clicked: () => $.run(Save.make({}).pipe(Command.as(Message.Saved()))),
+          Saved: () => "saved"
+        }),
+      view: (h, model) => h.button.onClick(Message.Clicked()).children(model)
+    }).pipe(Component.provide(Save.layer))
+    const App = Component.define({
+      name: "App",
+      scoped: false,
+      model: Schema.Null,
+      message: Schema.Never,
+      elements: Html
+    }).make({
+      init: () => null,
+      update: ($) => $.model,
+      view: (h) => h.div.children(Saver(h, {}), h.p.children(" in app"))
+    })
+    const app = yield* container
+    yield* BrowserHost.mountEffect(App, {}, app)
+    app.querySelector("button")!.click()
+    yield* tick
+    return app.textContent
+  }
+)
 
 // Each test starts a module graph of its own, so they run one at a time.
 describe("Query loaded after the mount", { concurrent: false }, () => {
@@ -169,13 +199,14 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
     Effect.gen(function*() {
       // A module graph of its own, as in an app whose entry chunk has no query: nothing has imported Query.
       vi.resetModules()
-      const [Component, UiSchema, BrowserHost, Html] = yield* Effect.promise(() =>
-        Promise.all([
-          import("@effect/ui/Component"),
-          import("@effect/ui/UiSchema"),
-          import("@effect/ui/html/BrowserHost"),
-          import("@effect/ui/html/Html")
-        ])
+      const [Component, UiSchema, BrowserHost, Html] = yield* Effect.promise(
+        () =>
+          Promise.all([
+            import("@effect/ui/Component"),
+            import("@effect/ui/UiSchema"),
+            import("@effect/ui/html/BrowserHost"),
+            import("@effect/ui/html/Html")
+          ])
       )
       let child: ((h: any) => any) | undefined
       const Message = UiSchema.TaggedEnum({ Opened: {} })
@@ -202,7 +233,12 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
       const Query = yield* Effect.promise(() => import("@effect/ui/Query"))
       class GetNote extends Query.Service<GetNote>()(
         "lazy/GetNote",
-        { args: { id: Schema.String }, success: Schema.String, error: Schema.Never, staleTime: "30 seconds" },
+        {
+          args: { id: Schema.String },
+          success: Schema.String,
+          error: Schema.Never,
+          staleTime: "30 seconds"
+        },
         Effect.succeed(({ id }) => Effect.succeed(`Note ${id}`))
       ) {}
       const Note = Component.define({
@@ -232,15 +268,16 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
   it.effect("a Command that imports Query while it runs still writes its result to the cache", () =>
     Effect.gen(function*() {
       vi.resetModules()
-      const [Command, Component, UiSchema, BrowserHost, Html] = yield* Effect.promise(() =>
-        Promise.all([
-          import("@effect/ui/Command"),
-          import("@effect/ui/Component"),
-          import("@effect/ui/UiSchema"),
-          import("@effect/ui/html/BrowserHost"),
-          import("@effect/ui/html/Html")
-        ])
-      )
+      const [Command, Component, UiSchema, BrowserHost, Html] = yield* Effect
+        .promise(() =>
+          Promise.all([
+            import("@effect/ui/Command"),
+            import("@effect/ui/Component"),
+            import("@effect/ui/UiSchema"),
+            import("@effect/ui/html/BrowserHost"),
+            import("@effect/ui/html/Html")
+          ])
+        )
       const calls = { writes: 0, fetches: 0 }
       // Both are set by the Command's work, which is what loads Query.
       let child: ((h: any) => any) | undefined
@@ -259,7 +296,12 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
             const Query = await import("@effect/ui/Query")
             class GetNote extends Query.Service<GetNote>()(
               "lazy/SavedNote",
-              { args: { id: Schema.String }, success: Schema.String, error: Schema.Never, staleTime: "30 seconds" },
+              {
+                args: { id: Schema.String },
+                success: Schema.String,
+                error: Schema.Never,
+                staleTime: "30 seconds"
+              },
               Effect.succeed(() =>
                 Effect.sync(() => {
                   calls.fetches++
@@ -301,7 +343,8 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
         init: () => false,
         update: ($, message) =>
           Message.match(message, {
-            Clicked: () => $.run(Save.make({}).pipe(Command.as(Message.Saved()))),
+            Clicked: () =>
+              $.run(Save.make({}).pipe(Command.as(Message.Saved()))),
             Saved: () => true
           }),
         view: (h, saved) =>
@@ -340,7 +383,10 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
       yield* tick
       release()
       yield* tick
-      assert.deepStrictEqual({ note: note(), problems }, { note: "old", problems: [] })
+      assert.deepStrictEqual({ note: note(), problems }, {
+        note: "old",
+        problems: []
+      })
     }))
 
   it.effect("a Command's writes run when nothing has loaded Query", () =>
@@ -350,7 +396,10 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
         calls++
         return []
       })
-      assert.deepStrictEqual({ calls, text }, { calls: 1, text: "saved in app" })
+      assert.deepStrictEqual({ calls, text }, {
+        calls: 1,
+        text: "saved in app"
+      })
     }))
 
   it.effect("a Command whose writes throw fails its instance when nothing has loaded Query", () =>

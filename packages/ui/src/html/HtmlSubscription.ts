@@ -139,7 +139,10 @@ export interface GlobalEvents {
   readonly listen: (
     target: "document" | "window",
     event: string,
-    options: { readonly capture: boolean; readonly custom?: boolean | undefined },
+    options: {
+      readonly capture: boolean
+      readonly custom?: boolean | undefined
+    },
     listener: (payload: unknown, preventDefault: () => void) => void
   ) => () => void
 }
@@ -152,7 +155,9 @@ export interface GlobalEvents {
  * @category references
  * @since 0.1.0
  */
-export const GlobalEvents: Context.Reference<GlobalEvents> = Context.Reference<GlobalEvents>(
+export const GlobalEvents: Context.Reference<GlobalEvents> = Context.Reference<
+  GlobalEvents
+>(
   "@effect/ui/html/HtmlSubscription/GlobalEvents",
   { defaultValue: () => silent }
 )
@@ -177,7 +182,12 @@ const listenFor = (
   // The runtime attaches the listener here and runs no Stream, as for `Router.prefetch`. `enter`
   // renders the pending ancestors first, so an event goes to the latest declaration, or nowhere if
   // they removed it.
-  const direct: NonNullable<services.Direct[typeof services.direct]> = (context, emit, fail, enter) => ({
+  const direct: NonNullable<services.Direct[typeof services.direct]> = (
+    context,
+    emit,
+    fail,
+    enter
+  ) => ({
     initial: Effect.void,
     close: Context.get(context, GlobalEvents).listen(
       target,
@@ -186,7 +196,12 @@ const listenFor = (
       (payload, preventDefault) =>
         enter((latest) => {
           try {
-            globalEvents.run(globalEvents.listenerOf(latest) ?? declared, payload, preventDefault, emit)
+            globalEvents.run(
+              globalEvents.listenerOf(latest) ?? declared,
+              payload,
+              preventDefault,
+              emit
+            )
           } catch (error) {
             fail(Cause.die(error))
           }
@@ -194,7 +209,11 @@ const listenFor = (
     )
   })
   return Object.assign(
-    Subscription.make(`@effect/ui/html/${target}`, capture ? [event, "capture"] : [event], () => Stream.never),
+    Subscription.make(
+      `@effect/ui/html/${target}`,
+      capture ? [event, "capture"] : [event],
+      () => Stream.never
+    ),
     { [globalEvents.listener]: declared, [services.direct]: direct }
   )
 }
@@ -276,7 +295,8 @@ export const onDocument = <K extends keyof DocumentEvents, Msg>(
   event: K,
   handler: View.Handler<Msg, GlobalPayload<DocumentEvents[K]>>,
   options?: GlobalEventOptions | undefined
-): Subscription.Subscription<Msg> => listenFor("document", event, handler, options)
+): Subscription.Subscription<Msg> =>
+  listenFor("document", event, handler, options)
 
 /**
  * A Subscription that listens for a table of single-key shortcuts on the
@@ -338,7 +358,9 @@ export const onDocument = <K extends keyof DocumentEvents, Msg>(
  * @category subscriptions
  * @since 0.1.0
  */
-export const shortcuts = <const Rows extends ReadonlyArray<HtmlKeyboard.Shortcut<unknown>>>(
+export const shortcuts = <
+  const Rows extends ReadonlyArray<HtmlKeyboard.Shortcut<unknown>>
+>(
   table: Rows,
   options?: GlobalEventOptions | undefined
 ): Subscription.Subscription<Rows[number]["message"]> =>
@@ -380,7 +402,8 @@ export const onWindow = <K extends keyof WindowEvents, Msg>(
   event: K,
   handler: View.Handler<Msg, GlobalPayload<WindowEvents[K]>>,
   options?: GlobalEventOptions | undefined
-): Subscription.Subscription<Msg> => listenFor("window", event, handler, options)
+): Subscription.Subscription<Msg> =>
+  listenFor("window", event, handler, options)
 
 /**
  * A Subscription that listens for a `CustomEvent` on the host's document.
@@ -435,7 +458,8 @@ export const onCustomEvent = <Msg>(
   event: string,
   handler: View.Handler<Msg, GlobalPayload<CustomEventPayload>>,
   options?: GlobalEventOptions | undefined
-): Subscription.Subscription<Msg> => listenFor("document", event, handler, options, true)
+): Subscription.Subscription<Msg> =>
+  listenFor("document", event, handler, options, true)
 
 /**
  * The source of animation frames, which `onAnimationFrame` listens to.
@@ -468,10 +492,11 @@ export interface AnimationFrames {
  * @category references
  * @since 0.1.0
  */
-export const AnimationFrames: Context.Reference<AnimationFrames> = Context.Reference<AnimationFrames>(
-  "@effect/ui/html/HtmlSubscription/AnimationFrames",
-  { defaultValue: () => still }
-)
+export const AnimationFrames: Context.Reference<AnimationFrames> = Context
+  .Reference<AnimationFrames>(
+    "@effect/ui/html/HtmlSubscription/AnimationFrames",
+    { defaultValue: () => still }
+  )
 
 const still: AnimationFrames = { now: () => 0, listen: () => () => {} }
 
@@ -539,13 +564,20 @@ const still: AnimationFrames = { now: () => 0, listen: () => () => {} }
  * @category subscriptions
  * @since 0.1.0
  */
-export const onAnimationFrame = <Msg>(handler: View.Handler<Msg, number>): Subscription.Subscription<Msg> =>
+export const onAnimationFrame = <Msg>(
+  handler: View.Handler<Msg, number>
+): Subscription.Subscription<Msg> =>
   Object.assign(
     Subscription.make("@effect/ui/html/animationFrame", Stream.never),
     { [frames.frame]: handler, [services.direct]: attachFrames }
   )
 
-const attachFrames: NonNullable<services.Direct[typeof services.direct]> = (context, emit, fail, enter) => {
+const attachFrames: NonNullable<services.Direct[typeof services.direct]> = (
+  context,
+  emit,
+  fail,
+  enter
+) => {
   const source = Context.get(context, AnimationFrames)
   let last = source.now()
   return {

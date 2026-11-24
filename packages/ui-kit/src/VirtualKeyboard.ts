@@ -194,7 +194,9 @@ export interface Step {
  * @category constructors
  * @since 0.1.0
  */
-export const initialState = (layout: { readonly layoutWidth: number; readonly layoutHeight: number }): State => ({
+export const initialState = (
+  layout: { readonly layoutWidth: number; readonly layoutHeight: number }
+): State => ({
   layoutWidth: layout.layoutWidth,
   tallestLayoutHeight: layout.layoutHeight,
   keyboardHeight: null
@@ -226,17 +228,26 @@ export const step = (state: State, sample: Sample): Step => {
     tallest = Math.max(tallest, layoutHeight)
     shrunk = tallest - layoutHeight > threshold
   }
-  const next = (keyboardHeight: number | null): State => ({ layoutWidth, tallestLayoutHeight: tallest, keyboardHeight })
+  const next = (keyboardHeight: number | null): State => ({
+    layoutWidth,
+    tallestLayoutHeight: tallest,
+    keyboardHeight
+  })
   if (!sample.focused) return { state: next(null), band: null }
   let keyboardHeight = state.keyboardHeight
   if (layoutHeight - visualHeight > threshold || shrunk) {
     keyboardHeight = visualHeight
-  } else if (keyboardHeight === null || Math.abs(visualHeight - keyboardHeight) > threshold) {
+  } else if (
+    keyboardHeight === null ||
+    Math.abs(visualHeight - keyboardHeight) > threshold
+  ) {
     return { state: next(null), band: null }
   }
   const follows = sample.smallViewportHeight - visualHeight <= threshold
   const top = Math.max(0, sample.visualTop)
-  const bottom = follows ? layoutHeight : Math.min(layoutHeight, top + visualHeight)
+  const bottom = follows
+    ? layoutHeight
+    : Math.min(layoutHeight, top + visualHeight)
   return {
     state: next(keyboardHeight),
     band: {
@@ -248,7 +259,15 @@ export const step = (state: State, sample: Sample): Step => {
   }
 }
 
-const textTypes = new Set(["email", "number", "password", "search", "tel", "text", "url"])
+const textTypes = new Set([
+  "email",
+  "number",
+  "password",
+  "search",
+  "tel",
+  "text",
+  "url"
+])
 
 const opensKeyboard = (element: HTMLElement): boolean => {
   if (element.isContentEditable) return true
@@ -283,7 +302,11 @@ const editingHost = (element: HTMLElement): HTMLElement => {
  */
 export const textFieldOf = (target: EventTarget | null): HTMLElement | null => {
   if (!isHTMLElement(target)) return null
-  if (opensKeyboard(target)) return target.isContentEditable ? editingHost(target) : target
+  if (opensKeyboard(target)) {
+    return target.isContentEditable
+      ? editingHost(target)
+      : target
+  }
   const control = target.closest("label")?.control ?? null
   return isHTMLElement(control) && opensKeyboard(control) ? control : null
 }
@@ -316,14 +339,18 @@ export const watch = (node: Node): Stream.Stream<Band | null> =>
     if (view === null || viewport === null) return Stream.succeed(null)
     return Stream.callback<Band | null>((queue) => {
       const android = isAndroid(view)
-      let state = initialState({ layoutWidth: view.innerWidth, layoutHeight: view.innerHeight })
+      let state = initialState({
+        layoutWidth: view.innerWidth,
+        layoutHeight: view.innerHeight
+      })
       let probe: HTMLElement | null = null
       let frame = -1
 
       const smallViewportHeight = (): number => {
         if (probe === null && document.body !== null) {
           probe = document.createElement("div")
-          probe.style.cssText = "position:fixed;top:0;height:100svh;visibility:hidden;pointer-events:none"
+          probe.style.cssText =
+            "position:fixed;top:0;height:100svh;visibility:hidden;pointer-events:none"
           document.body.appendChild(probe)
         }
         return probe?.offsetHeight ?? view.innerHeight
@@ -337,7 +364,9 @@ export const watch = (node: Node): Stream.Stream<Band | null> =>
           visualHeight: viewport.height,
           visualTop: viewport.offsetTop,
           scale: viewport.scale,
-          smallViewportHeight: focused ? smallViewportHeight() : view.innerHeight,
+          smallViewportHeight: focused
+            ? smallViewportHeight()
+            : view.innerHeight,
           android,
           focused
         })
@@ -358,7 +387,10 @@ export const watch = (node: Node): Stream.Stream<Band | null> =>
           viewport.addEventListener("scroll", sample, { signal })
           view.addEventListener("resize", sample, { signal })
           document.addEventListener("focusin", later, { capture: true, signal })
-          document.addEventListener("focusout", later, { capture: true, signal })
+          document.addEventListener("focusout", later, {
+            capture: true,
+            signal
+          })
           sample()
         }),
         () =>
@@ -401,6 +433,8 @@ export const TrackKeyboard = Mount.makeStream(
           else node.style.setProperty(insetProperty, band.inset + "px")
         })
       ),
-      Stream.ensuring(Effect.sync(() => node.style.removeProperty(insetProperty)))
+      Stream.ensuring(
+        Effect.sync(() => node.style.removeProperty(insetProperty))
+      )
     )
 )

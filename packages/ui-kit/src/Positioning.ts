@@ -117,7 +117,12 @@ import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { idSelector } from "./internal/attributes.ts"
-import { inlineEdges, lineAt, type Lines, linesOf } from "./internal/inlineRect.ts"
+import {
+  inlineEdges,
+  lineAt,
+  type Lines,
+  linesOf
+} from "./internal/inlineRect.ts"
 
 /**
  * The side of the anchor a popup shows on. `"inline-start"` and
@@ -127,7 +132,14 @@ import { inlineEdges, lineAt, type Lines, linesOf } from "./internal/inlineRect.
  * @category schemas
  * @since 0.1.0
  */
-export const Side = Schema.Literals(["top", "bottom", "left", "right", "inline-start", "inline-end"])
+export const Side = Schema.Literals([
+  "top",
+  "bottom",
+  "left",
+  "right",
+  "inline-start",
+  "inline-end"
+])
 
 /**
  * The side of the anchor a popup shows on.
@@ -201,7 +213,12 @@ export type CollisionAvoidance = typeof CollisionAvoidance.Type
  * @category schemas
  * @since 0.1.0
  */
-export const Rect = Schema.Struct({ x: Schema.Number, y: Schema.Number, width: Schema.Number, height: Schema.Number })
+export const Rect = Schema.Struct({
+  x: Schema.Number,
+  y: Schema.Number,
+  width: Schema.Number,
+  height: Schema.Number
+})
 
 /**
  * A rectangle in viewport coordinates, in pixels.
@@ -373,7 +390,9 @@ export type PositionerOptions = Schema.Struct.Type<typeof PositionerFields>
  * @category constants
  * @since 0.1.0
  */
-export const dropdownCollisionAvoidance: CollisionAvoidance = { fallbackAxisSide: "none" }
+export const dropdownCollisionAvoidance: CollisionAvoidance = {
+  fallbackAxisSide: "none"
+}
 
 /**
  * The default `collisionAvoidance` of other popups, such as a tooltip or a
@@ -383,7 +402,9 @@ export const dropdownCollisionAvoidance: CollisionAvoidance = { fallbackAxisSide
  * @category constants
  * @since 0.1.0
  */
-export const popupCollisionAvoidance: CollisionAvoidance = { fallbackAxisSide: "end" }
+export const popupCollisionAvoidance: CollisionAvoidance = {
+  fallbackAxisSide: "end"
+}
 
 /**
  * A width and a height, in pixels.
@@ -414,7 +435,11 @@ export const PlaceOptions = Schema.Struct({
   align: Align,
   sideOffset: Schema.Number,
   alignOffset: Schema.Number,
-  collisionAvoidance: Schema.Struct({ side: Avoidance, align: Avoidance, fallbackAxisSide: FallbackAxisSide }),
+  collisionAvoidance: Schema.Struct({
+    side: Avoidance,
+    align: Avoidance,
+    fallbackAxisSide: FallbackAxisSide
+  }),
   collisionPadding: Schema.Struct({
     top: Schema.Number,
     right: Schema.Number,
@@ -460,8 +485,10 @@ export const resolveOptions = (
     readonly shiftCrossAxis?: boolean | undefined
   }
 ): PlaceOptions => {
-  const avoidance = options.collisionAvoidance ?? defaults.collisionAvoidance ?? popupCollisionAvoidance
-  const shiftCrossAxis = defaults.shiftCrossAxis === true && avoidance.side !== "flip"
+  const avoidance = options.collisionAvoidance ?? defaults.collisionAvoidance ??
+    popupCollisionAvoidance
+  const shiftCrossAxis = defaults.shiftCrossAxis === true &&
+    avoidance.side !== "flip"
   const padding = options.collisionPadding ?? 5
   return {
     side: options.side ?? defaults.side,
@@ -475,7 +502,12 @@ export const resolveOptions = (
     },
     collisionPadding: typeof padding === "number"
       ? { top: padding, right: padding, bottom: padding, left: padding }
-      : { top: padding.top ?? 0, right: padding.right ?? 0, bottom: padding.bottom ?? 0, left: padding.left ?? 0 },
+      : {
+        top: padding.top ?? 0,
+        right: padding.right ?? 0,
+        bottom: padding.bottom ?? 0,
+        left: padding.left ?? 0
+      },
     sticky: options.sticky === true || shiftCrossAxis,
     arrowPadding: options.arrowPadding ?? 5,
     shiftCrossAxis
@@ -541,19 +573,34 @@ export interface PlaceResult {
   readonly availableWidth: number
   readonly availableHeight: number
   readonly anchorHidden: boolean
-  readonly arrow: { readonly x: number | null; readonly y: number | null; readonly uncentered: boolean } | null
+  readonly arrow: {
+    readonly x: number | null
+    readonly y: number | null
+    readonly uncentered: boolean
+  } | null
   readonly transformOrigin: string
 }
 
-const opposite: Record<Physical, Physical> = { top: "bottom", bottom: "top", left: "right", right: "left" }
+const opposite: Record<Physical, Physical> = {
+  top: "bottom",
+  bottom: "top",
+  left: "right",
+  right: "left"
+}
 const isBefore = (side: Physical): boolean => side === "top" || side === "left"
-const sideOf = (placement: FloatingPlacement): Physical => placement.split("-")[0] as Physical
-const alignmentOf = (placement: FloatingPlacement): "start" | "end" | undefined =>
+const sideOf = (placement: FloatingPlacement): Physical =>
+  placement.split("-")[0] as Physical
+const alignmentOf = (
+  placement: FloatingPlacement
+): "start" | "end" | undefined =>
   placement.split("-")[1] as "start" | "end" | undefined
-const sideAxisOf = (placement: FloatingPlacement): Axis => placement[0] === "t" || placement[0] === "b" ? "y" : "x"
+const sideAxisOf = (placement: FloatingPlacement): Axis =>
+  placement[0] === "t" || placement[0] === "b" ? "y" : "x"
 const otherAxis = (axis: Axis): Axis => axis === "x" ? "y" : "x"
-const lengthOf = (axis: Axis): "width" | "height" => axis === "y" ? "height" : "width"
-const clamp = (start: number, value: number, end: number): number => Math.max(start, Math.min(value, end))
+const lengthOf = (axis: Axis): "width" | "height" =>
+  axis === "y" ? "height" : "width"
+const clamp = (start: number, value: number, end: number): number =>
+  Math.max(start, Math.min(value, end))
 const oppositePlacement = (placement: FloatingPlacement): FloatingPlacement => {
   const side = sideOf(placement)
   return (opposite[side] + placement.slice(side.length)) as FloatingPlacement
@@ -600,7 +647,12 @@ const oppositeAxisPlacements = (
   return list
 }
 
-const coordsFor = (anchor: Rect, popup: Size, placement: FloatingPlacement, rtl: boolean) => {
+const coordsFor = (
+  anchor: Rect,
+  popup: Size,
+  placement: FloatingPlacement,
+  rtl: boolean
+) => {
   const sideAxis = sideAxisOf(placement)
   const alignAxis = otherAxis(sideAxis)
   const sideLength = lengthOf(sideAxis)
@@ -613,7 +665,10 @@ const coordsFor = (anchor: Rect, popup: Size, placement: FloatingPlacement, rtl:
     ? anchor[sideAxis] - popup[sideLength]
     : anchor[sideAxis] + anchor[sideLength]
   coords[alignAxis] = anchor[alignAxis] + common +
-    (alignment === undefined ? 0 : common * (alignment === "end" ? 1 : -1) * (rtl && sideAxis === "y" ? -1 : 1))
+    (alignment === undefined
+      ? 0
+      : common * (alignment === "end" ? 1 : -1) *
+        (rtl && sideAxis === "y" ? -1 : 1))
   return coords
 }
 
@@ -628,10 +683,17 @@ interface Data {
   offset?: { x: number; y: number; placement: FloatingPlacement }
   flip?: {
     index?: number
-    overflows?: ReadonlyArray<{ placement: FloatingPlacement; overflows: ReadonlyArray<number> }>
+    overflows?: ReadonlyArray<
+      { placement: FloatingPlacement; overflows: ReadonlyArray<number> }
+    >
   }
   shift?: { x: number; y: number; enabled: { x: boolean; y: boolean } }
-  arrow?: { x?: number; y?: number; centerOffset: number; alignmentOffset?: number }
+  arrow?: {
+    x?: number
+    y?: number
+    centerOffset: number
+    alignmentOffset?: number
+  }
 }
 
 interface State {
@@ -654,10 +716,20 @@ interface Middleware {
 }
 
 const physicalSide = (side: Side, rtl: boolean): Physical =>
-  side === "inline-start" ? (rtl ? "right" : "left") : side === "inline-end" ? (rtl ? "left" : "right") : side
+  side === "inline-start"
+    ? (rtl ? "right" : "left")
+    : side === "inline-end"
+    ? (rtl ? "left" : "right")
+    : side
 
-const logicalSide = (requested: Side, rendered: Physical, rtl: boolean): Side => {
-  if (requested !== "inline-start" && requested !== "inline-end") return rendered
+const logicalSide = (
+  requested: Side,
+  rendered: Physical,
+  rtl: boolean
+): Side => {
+  if (requested !== "inline-start" && requested !== "inline-end") {
+    return rendered
+  }
   if (rendered === "right") return rtl ? "inline-start" : "inline-end"
   if (rendered === "left") return rtl ? "inline-end" : "inline-start"
   return rendered
@@ -681,32 +753,50 @@ const requestedSideBiasPx = 1
 export const place = (input: PlaceInput): PlaceResult => {
   const { anchor, arrow, boundary, anchorClip, options, popup, rtl } = input
   const padding = options.collisionPadding
-  const { side: avoidSide, align: avoidAlign, fallbackAxisSide } = options.collisionAvoidance
+  const { side: avoidSide, align: avoidAlign, fallbackAxisSide } =
+    options.collisionAvoidance
   const physical = physicalSide(options.side, rtl)
-  const initialPlacement: FloatingPlacement = options.align === "center" ? physical : `${physical}-${options.align}`
-  const overflowAt = (at: { readonly x: number; readonly y: number }, within: Sides): Sides =>
-    overflowOf({ x: at.x, y: at.y, width: popup.width, height: popup.height }, boundary, within)
+  const initialPlacement: FloatingPlacement = options.align === "center"
+    ? physical
+    : `${physical}-${options.align}`
+  const overflowAt = (
+    at: { readonly x: number; readonly y: number },
+    within: Sides
+  ): Sides =>
+    overflowOf(
+      { x: at.x, y: at.y, width: popup.width, height: popup.height },
+      boundary,
+      within
+    )
 
   const shiftDisabled = avoidAlign === "none" && avoidSide !== "shift"
-  const crossAxisShift = !shiftDisabled && (options.sticky || avoidSide === "shift")
+  const crossAxisShift = !shiftDisabled &&
+    (options.sticky || avoidSide === "shift")
 
   const offset: Middleware = {
     name: "offset",
     fn: ({ data, placement, x, y }) => {
-      if (placement === data.offset?.placement && data.arrow?.alignmentOffset) return {}
+      if (placement === data.offset?.placement && data.arrow?.alignmentOffset) {
+        return {}
+      }
       const side = sideOf(placement)
       const alignment = alignmentOf(placement)
       const vertical = sideAxisOf(placement) === "y"
       const main = options.sideOffset * (isBefore(side) ? -1 : 1)
       const crossMulti = rtl && vertical ? -1 : 1
-      const cross = alignment === "end" ? -options.alignOffset : options.alignOffset
-      const diff = vertical ? { x: cross * crossMulti, y: main } : { x: main, y: cross * crossMulti }
+      const cross = alignment === "end"
+        ? -options.alignOffset
+        : options.alignOffset
+      const diff = vertical
+        ? { x: cross * crossMulti, y: main }
+        : { x: main, y: cross * crossMulti }
       return { x: x + diff.x, y: y + diff.y, data: { ...diff, placement } }
     }
   }
 
   const biased = (side: Physical): number =>
-    padding[side] + requestedSideBiasPx + (options.side === opposite[side] ? requestedSideBiasPx : 0)
+    padding[side] + requestedSideBiasPx +
+    (options.side === opposite[side] ? requestedSideBiasPx : 0)
   const flipPadding: Sides = {
     top: biased("top"),
     right: biased("right"),
@@ -725,7 +815,9 @@ export const place = (input: PlaceInput): PlaceResult => {
         oppositePlacement(initialPlacement),
         oppositeAlignment(oppositePlacement(initialPlacement))
       ]),
-    ...(fallbackAxisSide === "none" ? [] : oppositeAxisPlacements(initialPlacement, fallbackAxisSide, rtl))
+    ...(fallbackAxisSide === "none"
+      ? []
+      : oppositeAxisPlacements(initialPlacement, fallbackAxisSide, rtl))
   ]
 
   const flip: Middleware = {
@@ -741,16 +833,27 @@ export const place = (input: PlaceInput): PlaceResult => {
         overflows.push(overflow[a], overflow[b])
       }
       if (overflows.every((value) => value <= 0)) return {}
-      const history = [...(data.flip?.overflows ?? []), { placement, overflows }]
+      const history = [...(data.flip?.overflows ?? []), {
+        placement,
+        overflows
+      }]
       const nextIndex = (data.flip?.index ?? 0) + 1
       const next = placements[nextIndex]
       if (next !== undefined) {
-        const ignoreCross = flipCrossAxis && initialSideAxis !== sideAxisOf(next)
+        const ignoreCross = flipCrossAxis &&
+          initialSideAxis !== sideAxisOf(next)
         if (
           !ignoreCross ||
-          history.every((entry) => sideAxisOf(entry.placement) === initialSideAxis ? entry.overflows[0]! > 0 : true)
+          history.every((entry) =>
+            sideAxisOf(entry.placement) === initialSideAxis
+              ? entry.overflows[0]! > 0
+              : true
+          )
         ) {
-          return { data: { index: nextIndex, overflows: history }, reset: { placement: next } }
+          return {
+            data: { index: nextIndex, overflows: history },
+            reset: { placement: next }
+          }
         }
       }
       let reset = history.filter((entry) => entry.overflows[0]! <= 0)
@@ -758,15 +861,24 @@ export const place = (input: PlaceInput): PlaceResult => {
       if (reset === undefined) {
         reset = history
           .filter((entry) =>
-            fallbackAxisSide === "none" || sideAxisOf(entry.placement) === initialSideAxis ||
+            fallbackAxisSide === "none" ||
+            sideAxisOf(entry.placement) === initialSideAxis ||
             sideAxisOf(entry.placement) === "y"
           )
           .map((entry) =>
-            [entry.placement, entry.overflows.reduce((sum, value) => sum + Math.max(value, 0), 0)] as const
+            [
+              entry.placement,
+              entry.overflows.reduce(
+                (sum, value) => sum + Math.max(value, 0),
+                0
+              )
+            ] as const
           )
           .sort((a, b) => a[1] - b[1])[0]?.[0]
       }
-      return reset !== undefined && placement !== reset ? { reset: { placement: reset } } : {}
+      return reset !== undefined && placement !== reset
+        ? { reset: { placement: reset } }
+        : {}
     }
   }
 
@@ -790,7 +902,9 @@ export const place = (input: PlaceInput): PlaceResult => {
         )
       const checkMain = avoidAlign !== "none"
       if (checkMain) coords[mainAxis] = clampAxis(mainAxis, coords[mainAxis])
-      if (crossAxisShift) coords[crossAxis] = clampAxis(crossAxis, coords[crossAxis])
+      if (crossAxisShift) {
+        coords[crossAxis] = clampAxis(crossAxis, coords[crossAxis])
+      }
       if (!options.sticky) {
         const mainLength = lengthOf(mainAxis)
         const mainMin = anchor[mainAxis] - popup[mainLength] + limit(mainAxis)
@@ -800,8 +914,10 @@ export const place = (input: PlaceInput): PlaceResult => {
         const crossLength = lengthOf(crossAxis)
         const originSide = isBefore(sideOf(placement))
         const offsetData = state.data.offset?.[crossAxis] ?? 0
-        const crossMin = anchor[crossAxis] - popup[crossLength] + (originSide ? offsetData : 0)
-        const crossMax = anchor[crossAxis] + anchor[crossLength] + (originSide ? 0 : offsetData)
+        const crossMin = anchor[crossAxis] - popup[crossLength] +
+          (originSide ? offsetData : 0)
+        const crossMax = anchor[crossAxis] + anchor[crossLength] +
+          (originSide ? 0 : offsetData)
         if (coords[crossAxis] < crossMin) coords[crossAxis] = crossMin
         else if (coords[crossAxis] > crossMax) coords[crossAxis] = crossMax
       }
@@ -820,16 +936,24 @@ export const place = (input: PlaceInput): PlaceResult => {
       const coords = { x, y }
       const axis = otherAxis(sideAxisOf(placement))
       const length = lengthOf(axis)
-      const endDiff = anchor[length] + anchor[axis] - coords[axis] - popup[length]
+      const endDiff = anchor[length] + anchor[axis] - coords[axis] -
+        popup[length]
       const startDiff = coords[axis] - anchor[axis]
       const centerToReference = endDiff / 2 - startDiff / 2
-      const min = Math.min(arrowPadding, popup[length] / 2 - arrowSize[length] / 2 - 1)
+      const min = Math.min(
+        arrowPadding,
+        popup[length] / 2 - arrowSize[length] / 2 - 1
+      )
       const max = popup[length] - arrowSize[length] - min
-      const center = popup[length] / 2 - arrowSize[length] / 2 + centerToReference
+      const center = popup[length] / 2 - arrowSize[length] / 2 +
+        centerToReference
       const at = clamp(min, center, max)
-      const addOffset = data.arrow === undefined && alignmentOf(placement) !== undefined && center !== at &&
+      const addOffset = data.arrow === undefined &&
+        alignmentOf(placement) !== undefined && center !== at &&
         anchor[length] / 2 - min - arrowSize[length] / 2 < 0
-      const alignmentOffset = addOffset ? (center < min ? center - min : center - max) : 0
+      const alignmentOffset = addOffset
+        ? (center < min ? center - min : center - max)
+        : 0
       coords[axis] += alignmentOffset
       return {
         ...coords,
@@ -846,7 +970,10 @@ export const place = (input: PlaceInput): PlaceResult => {
   const middleware: Array<Middleware> = [offset]
   const flipStep = avoidSide === "none" ? [] : [flip]
   const shiftStep = shiftDisabled ? [] : [shift]
-  if (avoidSide === "shift" || avoidAlign === "shift" || options.align === "center") {
+  if (
+    avoidSide === "shift" || avoidAlign === "shift" ||
+    options.align === "center"
+  ) {
     middleware.push(...shiftStep, ...flipStep)
   } else {
     middleware.push(...flipStep, ...shiftStep)
@@ -883,33 +1010,61 @@ export const place = (input: PlaceInput): PlaceResult => {
   const overflow = overflowAt({ x, y }, padding)
   const clipHeight = popup.height - overflow.top - overflow.bottom
   const clipWidth = popup.width - overflow.left - overflow.right
-  const heightSide: Physical = vertical ? side : alignment === "end" ? "top" : "bottom"
-  const widthSide: Physical = vertical ? alignment === (rtl ? "start" : "end") ? "left" : "right" : side
-  let availableHeight = Math.min(popup.height - overflow[heightSide], clipHeight)
+  const heightSide: Physical = vertical
+    ? side
+    : alignment === "end"
+    ? "top"
+    : "bottom"
+  const widthSide: Physical = vertical
+    ? alignment === (rtl ? "start" : "end") ? "left" : "right"
+    : side
+  let availableHeight = Math.min(
+    popup.height - overflow[heightSide],
+    clipHeight
+  )
   let availableWidth = Math.min(popup.width - overflow[widthSide], clipWidth)
   if (shifted?.enabled.x) availableWidth = clipWidth
   if (shifted?.enabled.y) availableHeight = clipHeight
   if (shifted === undefined && alignment === undefined) {
-    if (vertical) availableWidth = popup.width - 2 * Math.max(overflow.left, overflow.right)
-    else availableHeight = popup.height - 2 * Math.max(overflow.top, overflow.bottom)
+    if (vertical) {
+      availableWidth = popup.width - 2 * Math.max(overflow.left, overflow.right)
+    } else {availableHeight = popup.height -
+        2 * Math.max(overflow.top, overflow.bottom)}
   }
 
   let crossOrigin: string
-  if (arrow === null && alignment !== undefined && Math.abs((vertical ? shifted?.x : shifted?.y) ?? 0) <= 1) {
+  if (
+    arrow === null && alignment !== undefined &&
+    Math.abs((vertical ? shifted?.x : shifted?.y) ?? 0) <= 1
+  ) {
     crossOrigin = (alignment === "start") === (vertical && rtl) ? "100%" : "0%"
   } else {
     const at = (vertical ? arrowData?.x : arrowData?.y) ?? 0
-    crossOrigin = `${at + (vertical ? arrowSize.width : arrowSize.height) / 2}px`
+    crossOrigin = `${
+      at + (vertical ? arrowSize.width : arrowSize.height) / 2
+    }px`
   }
-  let sideOrigin = isBefore(side) ? `calc(100% + ${options.sideOffset}px)` : `${-options.sideOffset}px`
-  if (crossAxisShift && vertical && Math.abs(shifted?.y ?? 0) > options.sideOffset) {
+  let sideOrigin = isBefore(side)
+    ? `calc(100% + ${options.sideOffset}px)`
+    : `${-options.sideOffset}px`
+  if (
+    crossAxisShift && vertical && Math.abs(shifted?.y ?? 0) > options.sideOffset
+  ) {
     sideOrigin = `${anchor.y + anchor.height / 2 - y}px`
   }
 
-  const anchorOverflow = overflowOf(anchor, anchorClip, { top: 0, right: 0, bottom: 0, left: 0 })
-  const outside = (overflow: number, length: number) => length === 0 ? overflow > 0 : overflow - length >= 0
-  const anchorClipped = outside(anchorOverflow.top, anchor.height) || outside(anchorOverflow.right, anchor.width) ||
-    outside(anchorOverflow.bottom, anchor.height) || outside(anchorOverflow.left, anchor.width)
+  const anchorOverflow = overflowOf(anchor, anchorClip, {
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0
+  })
+  const outside = (overflow: number, length: number) =>
+    length === 0 ? overflow > 0 : overflow - length >= 0
+  const anchorClipped = outside(anchorOverflow.top, anchor.height) ||
+    outside(anchorOverflow.right, anchor.width) ||
+    outside(anchorOverflow.bottom, anchor.height) ||
+    outside(anchorOverflow.left, anchor.width)
 
   return {
     x,
@@ -924,7 +1079,9 @@ export const place = (input: PlaceInput): PlaceResult => {
       y: arrowData.y ?? null,
       uncentered: arrowData.centerOffset !== 0
     },
-    transformOrigin: vertical ? `${crossOrigin} ${sideOrigin}` : `${sideOrigin} ${crossOrigin}`
+    transformOrigin: vertical
+      ? `${crossOrigin} ${sideOrigin}`
+      : `${sideOrigin} ${crossOrigin}`
   }
 }
 
@@ -1070,7 +1227,9 @@ export const trackArgs = (
   positionMethod: props.positionMethod ?? "absolute",
   collisionBoundary: props.collisionBoundary ?? "clipping-ancestors",
   disableAnchorTracking: props.disableAnchorTracking === true,
-  anchorSelector: typeof props.anchor === "string" ? idSelector(props.anchor) : popup.anchorSelector,
+  anchorSelector: typeof props.anchor === "string"
+    ? idSelector(props.anchor)
+    : popup.anchorSelector,
   anchorRect: typeof props.anchor === "object"
     ? props.anchor
     : props.anchor === undefined
@@ -1134,7 +1293,10 @@ const clientRect = (element: Element): Rect => {
   return { x: left, y: top, width, height }
 }
 
-const scaleOf = (element: Element, rect: DOMRect): { readonly x: number; readonly y: number } => {
+const scaleOf = (
+  element: Element,
+  rect: DOMRect
+): { readonly x: number; readonly y: number } => {
   const html = element as HTMLElement
   const x = html.offsetWidth ? rect.width / html.offsetWidth : 1
   const y = html.offsetHeight ? rect.height / html.offsetHeight : 1
@@ -1165,9 +1327,16 @@ const fixedProperties = [
   "backdrop-filter",
   "offset-path"
 ]
-const fixedChanges = new Set([...fixedProperties, "offset", "offset-position", "contain", "transform-style"])
+const fixedChanges = new Set([
+  ...fixedProperties,
+  "offset",
+  "offset-position",
+  "contain",
+  "transform-style"
+])
 
-const set = (value: string | undefined, none = "none"): boolean => value !== undefined && value !== "" && value !== none
+const set = (value: string | undefined, none = "none"): boolean =>
+  value !== undefined && value !== "" && value !== none
 
 const paintContained = (style: CSSStyleDeclaration): boolean =>
   painting.test(style.contain) || set(style.contentVisibility, "visible")
@@ -1175,7 +1344,9 @@ const paintContained = (style: CSSStyleDeclaration): boolean =>
 const containsFixed = (style: CSSStyleDeclaration): boolean =>
   fixedProperties.some((name) => set(style.getPropertyValue(name))) ||
   style.transformStyle === "preserve-3d" ||
-  style.willChange.toLowerCase().split(",").some((name) => fixedChanges.has(name.trim())) ||
+  style.willChange.toLowerCase().split(",").some((name) =>
+    fixedChanges.has(name.trim())
+  ) ||
   containing.test(style.contain) || paintContained(style)
 
 const contains = (style: CSSStyleDeclaration, position: string): boolean =>
@@ -1201,12 +1372,16 @@ const clipOf = (element: Element, viewport: Rect): Rect => {
   let position = view.getComputedStyle(element).position
   for (
     let current = inTopLayer(element) ? null : element.parentElement;
-    current !== null && current !== root && current !== element.ownerDocument.body;
+    current !== null && current !== root &&
+    current !== element.ownerDocument.body;
     current = current.parentElement
   ) {
     const style = view.getComputedStyle(current)
     if (contains(style, position)) {
-      if (clipping.test(style.overflow + style.overflowX + style.overflowY) || paintContained(style)) {
+      if (
+        clipping.test(style.overflow + style.overflowX + style.overflowY) ||
+        paintContained(style)
+      ) {
         clip = intersect(clip, innerRect(current))
       }
       position = style.position
@@ -1221,7 +1396,9 @@ const sameRect = (a: Rect, b: Rect): boolean =>
 
 const observeMove = (element: Element, onMove: () => void): () => void => {
   const view = element.ownerDocument.defaultView
-  if (view === null || typeof view.IntersectionObserver !== "function") return () => {}
+  if (view === null || typeof view.IntersectionObserver !== "function") {
+    return () => {}
+  }
   const root = element.ownerDocument.documentElement
   let observer: IntersectionObserver | null = null
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -1244,7 +1421,9 @@ const observeMove = (element: Element, onMove: () => void): () => void => {
     let first = true
     const onIntersect = (entries: Array<IntersectionObserverEntry>) => {
       const ratio = entries[0]!.intersectionRatio
-      if (!sameRect(before, element.getBoundingClientRect())) return refresh(false)
+      if (!sameRect(before, element.getBoundingClientRect())) {
+        return refresh(false)
+      }
       if (ratio !== threshold) {
         if (!first) return refresh(false)
         // Clipped in place: retry slowly so it doesn't loop.
@@ -1255,7 +1434,10 @@ const observeMove = (element: Element, onMove: () => void): () => void => {
     }
     const init = { rootMargin, threshold: clamp(0, threshold, 1) || 1 }
     try {
-      observer = new view.IntersectionObserver(onIntersect, { ...init, root: element.ownerDocument })
+      observer = new view.IntersectionObserver(onIntersect, {
+        ...init,
+        root: element.ownerDocument
+      })
     } catch {
       observer = new view.IntersectionObserver(onIntersect, init)
     }
@@ -1314,7 +1496,9 @@ export const trackPosition = (
       if (boundary === "clipping-ancestors") return viewport
       if ("id" in boundary) {
         const element = document.getElementById(boundary.id)
-        return element === null ? viewport : intersect(innerRect(element), viewport)
+        return element === null
+          ? viewport
+          : intersect(innerRect(element), viewport)
       }
       return intersect(boundary, viewport)
     }
@@ -1326,7 +1510,10 @@ export const trackPosition = (
 
     const popupSize = (): Size => ({
       width: Math.max(0, node.offsetWidth - bridged("left") - bridged("right")),
-      height: Math.max(0, node.offsetHeight - bridged("top") - bridged("bottom"))
+      height: Math.max(
+        0,
+        node.offsetHeight - bridged("top") - bridged("bottom")
+      )
     })
 
     const inlineLines = (anchor: Element): Lines | null => {
@@ -1342,20 +1529,31 @@ export const trackPosition = (
         : hit.line !== null && hit.line < lines.lines.length
         ? hit.line
         : lineAt(lines.lines, hit)
-      const { bottom, left, right, top } = inlineEdges(lines, side, line, hit !== null)
+      const { bottom, left, right, top } = inlineEdges(
+        lines,
+        side,
+        line,
+        hit !== null
+      )
       return { x: left, y: top, width: right - left, height: bottom - top }
     }
 
     const pass = (popup: Size): void => {
       const virtual = current.anchorRect ?? null
-      const anchor = virtual === null ? document.querySelector(current.anchorSelector) : null
-      const arrow = current.arrowId === null ? null : document.getElementById(current.arrowId)
+      const anchor = virtual === null
+        ? document.querySelector(current.anchorSelector)
+        : null
+      const arrow = current.arrowId === null
+        ? null
+        : document.getElementById(current.arrowId)
       const viewport = viewportOf()
       const rtl = view.getComputedStyle(node).direction === "rtl"
       const lines = anchor === null ? null : inlineLines(anchor)
       const input = {
         popup,
-        arrow: arrow === null ? null : { width: arrow.offsetWidth, height: arrow.offsetHeight },
+        arrow: arrow === null
+          ? null
+          : { width: arrow.offsetWidth, height: arrow.offsetHeight },
         boundary: boundaryOf(viewport),
         anchorClip: anchor === null ? viewport : clipOf(anchor, viewport),
         rtl,
@@ -1363,7 +1561,11 @@ export const trackPosition = (
       }
       const requested = physicalSide(current.options.side, rtl)
       let anchorRect = virtual ??
-        (anchor === null ? zero : lines === null ? clientRect(anchor) : lineRect(lines, requested))
+        (anchor === null
+          ? zero
+          : lines === null
+          ? clientRect(anchor)
+          : lineRect(lines, requested))
       let placed = place({ ...input, anchor: anchorRect })
       const flipped = physicalSide(placed.side, rtl)
       if (lines !== null && flipped !== requested) {
@@ -1371,14 +1573,24 @@ export const trackPosition = (
         placed = place({ ...input, anchor: anchorRect })
       }
       const side = physicalSide(placed.side, rtl)
-      const bridge = current.offsetAsPadding ? Math.max(0, current.options.sideOffset) : 0
+      const bridge = current.offsetAsPadding
+        ? Math.max(0, current.options.sideOffset)
+        : 0
       const scrolled = current.positionMethod === "absolute"
       const dpr = view.devicePixelRatio || 1
       const snap = (start: number, length: number) =>
         (Math.round((start + length) * dpr) - Math.round(start * dpr)) / dpr
       const next = new Map<string, string>([
-        ["left", (placed.x + (scrolled ? view.scrollX : 0) - (side === "right" ? bridge : 0)) + "px"],
-        ["top", (placed.y + (scrolled ? view.scrollY : 0) - (side === "bottom" ? bridge : 0)) + "px"],
+        [
+          "left",
+          (placed.x + (scrolled ? view.scrollX : 0) -
+            (side === "right" ? bridge : 0)) + "px"
+        ],
+        [
+          "top",
+          (placed.y + (scrolled ? view.scrollY : 0) -
+            (side === "bottom" ? bridge : 0)) + "px"
+        ],
         ["--anchor-width", snap(anchorRect.x, anchorRect.width) + "px"],
         ["--anchor-height", snap(anchorRect.y, anchorRect.height) + "px"],
         ["--available-width", placed.availableWidth + "px"],
@@ -1396,12 +1608,15 @@ export const trackPosition = (
       const leave = current.leaveCoordinates === true
       for (const [name, value] of owned) {
         if (leave && (name === "left" || name === "top")) continue
-        if (node.style.getPropertyValue(name) !== value) node.style.setProperty(name, value)
+        if (node.style.getPropertyValue(name) !== value) {
+          node.style.setProperty(name, value)
+        }
       }
       const report: Placement = {
         side: placed.side,
         align: placed.align,
-        anchorHidden: placed.anchorHidden || (virtual === null && sameRect(anchorRect, zero)),
+        anchorHidden: placed.anchorHidden ||
+          (virtual === null && sameRect(anchorRect, zero)),
         arrowUncentered: placed.arrow?.uncentered ?? false
       }
       if (reported === null || !sameReport(reported, report)) {
@@ -1414,11 +1629,15 @@ export const trackPosition = (
       const before = popupSize()
       pass(before)
       const after = popupSize()
-      if (before.width !== after.width || before.height !== after.height) pass(after)
+      if (before.width !== after.width || before.height !== after.height) {
+        pass(after)
+      }
     }
 
     const onScroll = (event: Event): void => {
-      if (!(event.target instanceof Node && node.contains(event.target))) update()
+      if (
+        !(event.target instanceof Node && node.contains(event.target))
+      ) update()
     }
 
     const observe = (): () => void => {
@@ -1427,7 +1646,10 @@ export const trackPosition = (
         : document.querySelector(current.anchorSelector)
       view.addEventListener("resize", update)
       if (!current.disableAnchorTracking && current.anchorRect == null) {
-        document.addEventListener("scroll", onScroll, { capture: true, passive: true })
+        document.addEventListener("scroll", onScroll, {
+          capture: true,
+          passive: true
+        })
       }
       let frame = -1
       const watch = () => sizes?.observe(node, { box: "border-box" })
@@ -1471,7 +1693,8 @@ export const trackPosition = (
             })))
         )
       ),
-      () => Effect.sync(() => stop())
+      () =>
+        Effect.sync(() => stop())
     )
   })
 
@@ -1547,4 +1770,6 @@ export const trackPosition = (
  * @category mounts
  * @since 0.1.0
  */
-export const TrackPosition = Mount.makeStream("TrackPosition", { args: TrackPositionArgs }, trackPosition)
+export const TrackPosition = Mount.makeStream("TrackPosition", {
+  args: TrackPositionArgs
+}, trackPosition)

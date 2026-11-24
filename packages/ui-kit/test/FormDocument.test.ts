@@ -8,8 +8,13 @@ import { container, focusability, tick } from "./utils/document.ts"
 
 const SignupValidation = Validation.make({
   plan: { required: "Pick a plan" },
-  billing: { rules: [Validation.Rule.equals("monthly", "Yearly billing isn't open yet")] },
-  email: { required: "Enter your email", rules: [Validation.Rule.email("Enter a valid email")] },
+  billing: {
+    rules: [Validation.Rule.equals("monthly", "Yearly billing isn't open yet")]
+  },
+  email: {
+    required: "Enter your email",
+    rules: [Validation.Rule.email("Enter a valid email")]
+  },
   name: { required: "Enter your name" }
 })
 
@@ -25,26 +30,42 @@ const Save = Command.make(
   "Save",
   { args: { email: Schema.String } },
   () =>
-    Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 5))).pipe(
-      Effect.as(Message.SucceededSave())
-    )
+    Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 5)))
+      .pipe(
+        Effect.as(Message.SucceededSave())
+      )
 )
 
 const Signup = Component.define({
   name: "Signup",
   scoped: false,
-  model: Schema.Struct({ form: SignupValidation.State, saving: Schema.Boolean }),
+  model: Schema.Struct({
+    form: SignupValidation.State,
+    saving: Schema.Boolean
+  }),
   message: Message,
   elements: Html
 }).make({
-  init: () => ({ form: SignupValidation.init({ plan: "", billing: "yearly", email: "", name: "" }), saving: false }),
+  init: () => ({
+    form: SignupValidation.init({
+      plan: "",
+      billing: "yearly",
+      email: "",
+      name: ""
+    }),
+    saving: false
+  }),
   update: {
-    UpdatedField: ($, { name, value }) => ({ ...$.model, form: SignupValidation.change($.model.form, name, value) }),
+    UpdatedField: ($, { name, value }) => ({
+      ...$.model,
+      form: SignupValidation.change($.model.form, name, value)
+    }),
     SubmittedForm: ($) => {
       const form = SignupValidation.submit($.model.form)
       return Option.match(SignupValidation.validate(form).value, {
         onNone: () => ({ ...$.model, form }),
-        onSome: ({ email }) => $.set({ form, saving: true }).run(Save.make({ email }))
+        onSome: ({ email }) =>
+          $.set({ form, saving: true }).run(Save.make({ email }))
       })
     },
     SucceededSave: ($) => ({ ...$.model, saving: false })
@@ -57,7 +78,9 @@ const Signup = Component.define({
         props: { invalid: fields[name]._tag === "Invalid" },
         view: (field) =>
           field.root(h.div).children(
-            field.control(h.input).attrs({ name, "aria-label": name }).value(fields[name].value)
+            field.control(h.input).attrs({ name, "aria-label": name }).value(
+              fields[name].value
+            )
               .disabled(model.saving)
               .onInput(({ value }) => Message.UpdatedField({ name, value })),
             field.error(h.span)?.children("Invalid")
@@ -74,10 +97,18 @@ const Signup = Component.define({
               items: plans,
               invalid: fields.plan._tag === "Invalid"
             },
-            onEmit: { Picked: ({ value }) => Message.UpdatedField({ name: "plan", value }) },
+            onEmit: {
+              Picked: ({ value }) =>
+                Message.UpdatedField({ name: "plan", value })
+            },
             view: (radioGroup) =>
               radioGroup.root(h.div).children(
-                ...plans.map(({ value }) => radioGroup.radio({ element: h.button.attr("data-plan", value), value }))
+                ...plans.map(({ value }) =>
+                  radioGroup.radio({
+                    element: h.button.attr("data-plan", value),
+                    value
+                  })
+                )
               )
           }),
           Field(h, {
@@ -87,7 +118,11 @@ const Signup = Component.define({
               field.group(h.div).children(
                 field.legend(h.span).children("Billing"),
                 ...["monthly", "yearly"].map((value) =>
-                  field.member(h.input).attrs({ type: "radio", name: "billing", value })
+                  field.member(h.input).attrs({
+                    type: "radio",
+                    name: "billing",
+                    value
+                  })
                     .checked(fields.billing.value === value)
                     .onClick(Message.UpdatedField({ name: "billing", value }))
                 )
@@ -113,7 +148,9 @@ describe("Form in a document", { concurrent: false }, () => {
       const app = yield* container
       yield* BrowserHost.mountEffect(Signup, {}, app)
       yield* tick
-      const submit = app.querySelector<HTMLButtonElement>("button[type=submit]")!
+      const submit = app.querySelector<HTMLButtonElement>(
+        "button[type=submit]"
+      )!
       const email = app.querySelector<HTMLInputElement>("input[name=email]")!
       const name = app.querySelector<HTMLInputElement>("input[name=name]")!
       const team = app.querySelector<HTMLButtonElement>("[data-plan=team]")!
@@ -128,7 +165,10 @@ describe("Form in a document", { concurrent: false }, () => {
 
       team.click()
       yield* submitForm
-      assert.strictEqual(document.activeElement, app.querySelector("input[value=yearly]"))
+      assert.strictEqual(
+        document.activeElement,
+        app.querySelector("input[value=yearly]")
+      )
 
       app.querySelector<HTMLInputElement>("input[value=monthly]")!.click()
       yield* submitForm

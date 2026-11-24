@@ -125,7 +125,11 @@ import * as Html from "@effect/ui/html/Html"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
 import * as Schema from "effect/Schema"
-import { Collapsible, CollapsibleToggleReason, type CollapsibleTransitionStatus } from "./Collapsible.ts"
+import {
+  Collapsible,
+  CollapsibleToggleReason,
+  type CollapsibleTransitionStatus
+} from "./Collapsible.ts"
 import { type Attributed, flag, idOf, ownStyle } from "./internal/attributes.ts"
 import { carries, find, layerOf, rewrite, setOn } from "./internal/tree.ts"
 
@@ -202,7 +206,10 @@ export type AccordionProps = typeof AccordionProps.Type
  * @since 0.1.0
  */
 export const AccordionEvents = UiSchema.TaggedEnum({
-  Toggled: { value: Schema.Array(Schema.String), reason: CollapsibleToggleReason }
+  Toggled: {
+    value: Schema.Array(Schema.String),
+    reason: CollapsibleToggleReason
+  }
 })
 
 /**
@@ -215,7 +222,11 @@ export const AccordionEvents = UiSchema.TaggedEnum({
 export type AccordionEvents = typeof AccordionEvents.Type
 
 const AccordionMessage = UiSchema.TaggedEnum({
-  ToggledItem: { item: Schema.String, open: Schema.Boolean, reason: CollapsibleToggleReason }
+  ToggledItem: {
+    item: Schema.String,
+    open: Schema.Boolean,
+    reason: CollapsibleToggleReason
+  }
 })
 
 const AccordionShared = Schema.Struct({
@@ -226,7 +237,11 @@ const AccordionShared = Schema.Struct({
   orientation: AccordionOrientation
 })
 
-const toggled = (props: AccordionProps, item: string, open: boolean): ReadonlyArray<string> => {
+const toggled = (
+  props: AccordionProps,
+  item: string,
+  open: boolean
+): ReadonlyArray<string> => {
   if (!open) return props.value.filter((other) => other !== item)
   if (props.multiple !== true) return [item]
   return props.value.includes(item) ? props.value : [...props.value, item]
@@ -243,10 +258,14 @@ const resolved = (props: AccordionProps): typeof AccordionShared.Type => ({
 const numbered = <N extends View.Node<any, any>>(node: N): N => {
   let index = 0
   return rewrite(node, (child) => {
-    if (child._tag !== "Child" || (child.component as unknown) !== AccordionItem) return undefined
+    if (
+      child._tag !== "Child" || (child.component as unknown) !== AccordionItem
+    ) return undefined
     const at = index++
     const props = child.props as AccordionItemProps
-    return props.index === undefined ? { ...child, props: { ...props, index: at } } : child
+    return props.index === undefined
+      ? { ...child, props: { ...props, index: at } }
+      : child
   })
 }
 
@@ -298,7 +317,12 @@ export const Accordion = Component.define({
     ToggledItem: ($, { item, open, reason }) =>
       $.props.disabled === true
         ? $.model
-        : $.emit(AccordionEvents.Toggled({ value: toggled($.props, item, open), reason }))
+        : $.emit(
+          AccordionEvents.Toggled({
+            value: toggled($.props, item, open),
+            reason
+          })
+        )
   },
   parts: (p) => {
     const { disabled, orientation, value } = resolved(p.props)
@@ -310,9 +334,10 @@ export const Accordion = Component.define({
       root: p.part(
         "div",
         (b) =>
-          b.attrs({ "data-orientation": orientation, "data-disabled": flag(disabled) }).forward((node) =>
-            numbered(View.build(node, []))
-          )
+          b.attrs({
+            "data-orientation": orientation,
+            "data-disabled": flag(disabled)
+          }).forward((node) => numbered(View.build(node, [])))
       )
     }
   }
@@ -444,10 +469,16 @@ export const AccordionItem = Component.define({
     ToggledCollapsible: ($, { open, reason }) =>
       $.props.disabled === true || $.shared.accordion.disabled
         ? $.model
-        : $.send(Accordion, { _tag: "ToggledItem", item: $.props.value, open, reason }).emit(
+        : $.send(Accordion, {
+          _tag: "ToggledItem",
+          item: $.props.value,
+          open,
+          reason
+        }).emit(
           AccordionItemEvents.Toggled({ open, reason })
         ),
-    SettledCollapsible: ($, { open }) => $.emit(AccordionItemEvents.Settled({ open }))
+    SettledCollapsible: ($, { open }) =>
+      $.emit(AccordionItemEvents.Settled({ open }))
   },
   parts: (p) => {
     const props = p.props
@@ -469,7 +500,12 @@ export const AccordionItem = Component.define({
       states(b).forward((node) => {
         if (panels.size === 0) return node
         const root = View.build(node, [])
-        return setOn(root, panels, "aria-labelledby", find(root, (element) => carries(element, triggers))?.attrs.id)
+        return setOn(
+          root,
+          panels,
+          "aria-labelledby",
+          find(root, (element) => carries(element, triggers))?.attrs.id
+        )
       }))
     const header = p.part(headings, (b) =>
       states(b).attrs({
@@ -504,7 +540,8 @@ export const AccordionItem = Component.define({
         holdExit: props.holdExit
       },
       onEmit: {
-        Toggled: ({ open, reason }) => AccordionItemMessage.ToggledCollapsible({ open, reason }),
+        Toggled: ({ open, reason }) =>
+          AccordionItemMessage.ToggledCollapsible({ open, reason }),
         Settled: ({ open }) => AccordionItemMessage.SettledCollapsible({ open })
       },
       parts: (collapsible) => ({
@@ -514,20 +551,30 @@ export const AccordionItem = Component.define({
         disabled,
         orientation,
         mounted: collapsible.mounted,
-        transitionStatus: collapsible.transitionStatus as CollapsibleTransitionStatus,
+        transitionStatus: collapsible
+          .transitionStatus as CollapsibleTransitionStatus,
         root: View.wrapPart(
           rootPart,
-          <B extends View.PartTarget<"div">>(element: B): ReturnType<B["attr"]> => rootPart(collapsible.root(element))
+          <B extends View.PartTarget<"div">>(
+            element: B
+          ): ReturnType<B["attr"]> => rootPart(collapsible.root(element))
         ),
         header,
         trigger: View.wrapPart(
           triggerPart,
-          <B extends View.PartTarget<"button">>(element: B): ReturnType<B["attr"]> =>
-            triggerPart(collapsible.trigger(element), idOf(element) ?? p.id("trigger"))
+          <B extends View.PartTarget<"button">>(
+            element: B
+          ): ReturnType<B["attr"]> =>
+            triggerPart(
+              collapsible.trigger(element),
+              idOf(element) ?? p.id("trigger")
+            )
         ),
         panel: View.wrapPart(
           panelPart,
-          <B extends View.PartTarget<"div">>(element: B): ReturnType<B["attr"]> | undefined => {
+          <B extends View.PartTarget<"div">>(
+            element: B
+          ): ReturnType<B["attr"]> | undefined => {
             const out = collapsible.panel(element)
             return out === undefined ? undefined : panelPart(out)
           }

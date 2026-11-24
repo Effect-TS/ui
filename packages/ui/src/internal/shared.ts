@@ -13,7 +13,11 @@ export interface Read {
   readonly owner: Component.Headless.Any
   readonly optional: boolean
   readonly report:
-    | ((model: unknown, props: unknown, id: Component.PartsHelper<never, unknown, any>["id"]) => unknown)
+    | ((
+      model: unknown,
+      props: unknown,
+      id: Component.PartsHelper<never, unknown, any>["id"]
+    ) => unknown)
     | undefined
   readonly onChange: ((value: unknown) => unknown) | undefined
 }
@@ -27,7 +31,10 @@ const cache = new WeakMap<object, ReadonlyArray<Read>>()
  *
  * @internal
  */
-export const readsOf = (definition: Component.Definition.Any, self?: Component.Any): ReadonlyArray<Read> => {
+export const readsOf = (
+  definition: Component.Definition.Any,
+  self?: Component.Any
+): ReadonlyArray<Read> => {
   const shared = definition.shared
   if (shared === undefined) return none
   let reads = cache.get(shared)
@@ -35,10 +42,18 @@ export const readsOf = (definition: Component.Definition.Any, self?: Component.A
     reads = Object.entries(shared).map(([name, entry]): Read =>
       // A component is a function, and the long form a plain object.
       typeof entry === "function"
-        ? { name, owner: entry, optional: false, report: undefined, onChange: undefined }
+        ? {
+          name,
+          owner: entry,
+          optional: false,
+          report: undefined,
+          onChange: undefined
+        }
         : {
           name,
-          owner: entry.owner === "self" ? self as unknown as Component.Headless.Any : entry.owner,
+          owner: entry.owner === "self"
+            ? self as unknown as Component.Headless.Any
+            : entry.owner,
           optional: entry.optional === true,
           report: entry.report as Read["report"],
           onChange: entry.onChange as Read["onChange"]
@@ -78,15 +93,23 @@ export const record = (
   lookup: Component.SharedLookup | undefined
 ): Component.SharedRecord | undefined => {
   const reads = readsOf(component.definition)
-  return reads.length === 0 ? undefined : values(component.definition.name, reads, lookup)
+  return reads.length === 0
+    ? undefined
+    : values(component.definition.name, reads, lookup)
 }
 
 /** @internal */
-export const unsupplied = (name: string, reads: ReadonlyArray<Read>): Component.SharedRecord => {
+export const unsupplied = (
+  name: string,
+  reads: ReadonlyArray<Read>
+): Component.SharedRecord => {
   const out: { [name: string]: unknown } = {}
   for (const read of reads) {
     if (read.optional) out[read.name] = undefined
-    else Object.defineProperty(out, read.name, { enumerable: true, get: () => missing(name, read) })
+    else {Object.defineProperty(out, read.name, {
+        enumerable: true,
+        get: () => missing(name, read)
+      })}
   }
   return Object.freeze(out)
 }
@@ -106,7 +129,9 @@ export const check = (definition: Component.Definition.Any): void => {
     if (typeof entry === "function") continue
     if (entry.owner === "self") {
       if (definition.shares === undefined) {
-        throw new Error(`${name} reads its own kind under ${key}, so it must share state: add shares`)
+        throw new Error(
+          `${name} reads its own kind under ${key}, so it must share state: add shares`
+        )
       }
       if (entry.optional !== true) {
         throw new Error(

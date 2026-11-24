@@ -56,21 +56,30 @@ describe("HtmlHead", () => {
         ),
         { onConflict: (conflict) => conflicts.push(conflict) }
       )
-      return { head, conflicts: conflicts.map((conflict) => [conflict.slot, conflict.paths]) }
+      return {
+        head,
+        conflicts: conflicts.map((conflict) => [conflict.slot, conflict.paths])
+      }
     }
     const folded = fold([a, b])
     assert.deepStrictEqual(fold([b, a]), folded)
     assert.strictEqual(folded.head.title, "App")
     assert.strictEqual(folded.head.html.lang, undefined)
     assert.deepStrictEqual(folded.head.html.data, {})
-    assert.deepStrictEqual(folded.head.meta.map((meta) => meta.content), ["Ada", "Site"])
-    assert.deepStrictEqual(folded.head.links.map((link) => link.attributes.href), [
-      "/reset.css",
-      "/app.css",
-      "/a.css",
-      "/font.woff2",
-      "/b.css"
+    assert.deepStrictEqual(folded.head.meta.map((meta) => meta.content), [
+      "Ada",
+      "Site"
     ])
+    assert.deepStrictEqual(
+      folded.head.links.map((link) => link.attributes.href),
+      [
+        "/reset.css",
+        "/app.css",
+        "/a.css",
+        "/font.woff2",
+        "/b.css"
+      ]
+    )
     assert.deepStrictEqual(folded.head.jsonLd, [])
     assert.deepStrictEqual(folded.head.html.class, ["app", "a", "b"])
     const both = ["/App/A[a]", "/App/B[b]"]
@@ -85,7 +94,11 @@ describe("HtmlHead", () => {
 
   it("unions class tokens in order of first contribution and keeps one data attribute per name", () => {
     const head = HtmlHead.merge(node(
-      [HtmlHead.htmlClass("h-full  dark"), HtmlHead.bodyClass(["a b"]), HtmlHead.htmlData("data-theme", "light")],
+      [
+        HtmlHead.htmlClass("h-full  dark"),
+        HtmlHead.bodyClass(["a b"]),
+        HtmlHead.htmlData("data-theme", "light")
+      ],
       node([
         HtmlHead.htmlClass(["dark", "x"]),
         HtmlHead.htmlData("data-theme", "dark"),
@@ -118,29 +131,52 @@ describe("HtmlHead", () => {
   })
 
   it("serialises JSON-LD canonically and escapes <", () => {
-    const a = HtmlHead.jsonLd({ b: 1, a: { d: [1, "x"], c: "</script>" }, z: undefined })
+    const a = HtmlHead.jsonLd({
+      b: 1,
+      a: { d: [1, "x"], c: "</script>" },
+      z: undefined
+    })
     const b = HtmlHead.jsonLd({ a: { c: "</script>", d: [1, "x"] }, b: 1 })
-    assert.strictEqual(a.json, "{\"a\":{\"c\":\"\\u003c/script>\",\"d\":[1,\"x\"]},\"b\":1}")
+    assert.strictEqual(
+      a.json,
+      "{\"a\":{\"c\":\"\\u003c/script>\",\"d\":[1,\"x\"]},\"b\":1}"
+    )
     assert.strictEqual(a.json, b.json)
     const head = HtmlHead.merge(
       node(
         [a],
         at("/b", [b]),
-        at("/k", [HtmlHead.jsonLd({ b: 2 }, { key: "k" }), HtmlHead.jsonLd({ b: 3 }, { key: "k" })])
+        at("/k", [
+          HtmlHead.jsonLd({ b: 2 }, { key: "k" }),
+          HtmlHead.jsonLd({ b: 3 }, { key: "k" })
+        ])
       )
     )
-    assert.deepStrictEqual(head.jsonLd.map((entry) => entry.json), [a.json, "{\"b\":3}"])
+    assert.deepStrictEqual(head.jsonLd.map((entry) => entry.json), [
+      a.json,
+      "{\"b\":3}"
+    ])
   })
 
   it("reports what JSON can't hold, with its path", () => {
-    assert.throws(() => HtmlHead.jsonLd({ a: { when: new Map() } } as any), /\$\.a\.when is a Map/)
-    assert.throws(() => HtmlHead.jsonLd({ list: [1, Number.NaN] }), /\$\.list\[1\] is NaN/)
+    assert.throws(
+      () => HtmlHead.jsonLd({ a: { when: new Map() } } as any),
+      /\$\.a\.when is a Map/
+    )
+    assert.throws(
+      () => HtmlHead.jsonLd({ list: [1, Number.NaN] }),
+      /\$\.list\[1\] is NaN/
+    )
     assert.throws(() => HtmlHead.jsonLd([1] as any), /not an array/)
   })
 
   it.effect("folds nested layouts: templates chain, a page overrides, a layout reduces, JSON-LD adds up", () =>
     Effect.gen(function*() {
-      const Post = Schema.Struct({ slug: Schema.String, title: Schema.String, description: Schema.String })
+      const Post = Schema.Struct({
+        slug: Schema.String,
+        title: Schema.String,
+        description: Schema.String
+      })
       const BlogPost = Component.define({
         name: "BlogPost",
         scoped: false,
@@ -175,10 +211,17 @@ describe("HtmlHead", () => {
         ],
         view: (h) => {
           const post = h.props.post
-          return h.section(post === undefined ? h.p("All posts") : BlogPost(h, { key: post.slug, props: { post } }))
+          return h.section(
+            post === undefined
+              ? h.p("All posts")
+              : BlogPost(h, { key: post.slug, props: { post } })
+          )
         }
       })
-      const Message = UiSchema.TaggedEnum({ Opened: { post: Post }, Closed: {} })
+      const Message = UiSchema.TaggedEnum({
+        Opened: { post: Post },
+        Closed: {}
+      })
       const Site = Component.define({
         name: "Site",
         scoped: false,
@@ -187,44 +230,68 @@ describe("HtmlHead", () => {
         elements: Html
       }).make({
         init: () => ({}),
-        update: (_, message) => message._tag === "Opened" ? { post: message.post } : {},
+        update: (_, message) =>
+          message._tag === "Opened" ? { post: message.post } : {},
         head: () => [
           Head.titleTemplate((title) => `${title} | Foldkit`),
           HtmlHead.meta({ name: "description", content: "A framework" }),
           HtmlHead.jsonLd({ "@type": "WebSite", name: "Foldkit" }),
           HtmlHead.reduce((below) => ({
             ...below,
-            meta: [...below.meta, HtmlHead.meta({ property: "og:title", content: below.title ?? "Foldkit" })]
+            meta: [
+              ...below.meta,
+              HtmlHead.meta({
+                property: "og:title",
+                content: below.title ?? "Foldkit"
+              })
+            ]
           }))
         ],
-        view: (h, model) => h.main(Blog(h, { key: "blog", props: { post: model.post } }))
+        view: (h, model) =>
+          h.main(Blog(h, { key: "blog", props: { post: model.post } }))
       })
 
       const root = yield* TestHost.mount(Site, {})
       yield* TestHost.settle
       const index = root.head<HtmlHead.HtmlHead>()
       assert.strictEqual(index.title, "Blog | Foldkit")
-      assert.deepStrictEqual(index.meta.map((meta) => [meta.name ?? meta.property, meta.content]), [
-        ["description", "Posts about Foldkit"],
-        ["og:title", "Blog | Foldkit"]
-      ])
+      assert.deepStrictEqual(
+        index.meta.map((meta) => [meta.name ?? meta.property, meta.content]),
+        [
+          ["description", "Posts about Foldkit"],
+          ["og:title", "Blog | Foldkit"]
+        ]
+      )
 
-      root.send(Message.Opened({ post: { slug: "hello", title: "Hello", description: "Saying hello" } }))
+      root.send(
+        Message.Opened({
+          post: { slug: "hello", title: "Hello", description: "Saying hello" }
+        })
+      )
       yield* TestHost.settle
       const post = root.head<HtmlHead.HtmlHead>()
       assert.strictEqual(post.title, "Hello | Blog | Foldkit")
-      assert.deepStrictEqual(post.meta.map((meta) => [meta.name ?? meta.property, meta.content]), [
-        ["description", "Saying hello"],
-        ["og:title", "Hello | Blog | Foldkit"]
-      ])
-      assert.deepStrictEqual(post.jsonLd.map((entry) => JSON.parse(entry.json)["@type"]), ["WebSite", "BlogPosting"])
+      assert.deepStrictEqual(
+        post.meta.map((meta) => [meta.name ?? meta.property, meta.content]),
+        [
+          ["description", "Saying hello"],
+          ["og:title", "Hello | Blog | Foldkit"]
+        ]
+      )
+      assert.deepStrictEqual(
+        post.jsonLd.map((entry) => JSON.parse(entry.json)["@type"]),
+        ["WebSite", "BlogPosting"]
+      )
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 
   it("runs a node's reduce entries in written order, skipping one that throws", () => {
     const errors: Array<unknown> = []
     const head = HtmlHead.merge({
       entries: [
-        Head.reduce((below) => ({ ...HtmlHead.empty, title: `${below.title}!` })),
+        Head.reduce((below) => ({
+          ...HtmlHead.empty,
+          title: `${below.title}!`
+        })),
         HtmlHead.lang("en"),
         HtmlHead.reduce(() => {
           throw new Error("boom")
@@ -241,11 +308,21 @@ describe("HtmlHead", () => {
   })
 
   it("Head.merge ignores HtmlHead.reduce", () => {
-    const head = Head.merge(node([Head.title("Own"), HtmlHead.reduce((below) => ({ ...below, title: "Html" }))]))
+    const head = Head.merge(
+      node([
+        Head.title("Own"),
+        HtmlHead.reduce((below) => ({ ...below, title: "Html" }))
+      ])
+    )
     assert.deepStrictEqual(head, { title: "Own" })
   })
 
-  const Neutral = Component.define({ name: "Neutral", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+  const Neutral = Component.define({
+    name: "Neutral",
+    scoped: false,
+    model: Schema.Null,
+    message: Schema.Never
+  }).make({
     init: () => null,
     update: ($) => $.model,
     head: () => [Head.reduce(() => ({ title: "Neutral" }))],
@@ -260,10 +337,18 @@ describe("HtmlHead", () => {
   }).make({
     init: () => null,
     update: ($) => $.model,
-    head: () => [HtmlHead.lang("en"), HtmlHead.meta({ name: "description", content: "Page" })],
+    head: () => [
+      HtmlHead.lang("en"),
+      HtmlHead.meta({ name: "description", content: "Page" })
+    ],
     view: (h) => h.main(Neutral(h, { key: "n", props: {} }))
   })
-  const Shell = Component.define({ name: "Shell", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+  const Shell = Component.define({
+    name: "Shell",
+    scoped: false,
+    model: Schema.Null,
+    message: Schema.Never
+  }).make({
     init: () => null,
     update: ($) => $.model,
     head: () => [Head.title("Shell")],

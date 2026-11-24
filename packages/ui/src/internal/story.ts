@@ -19,7 +19,14 @@ import * as MessageLog from "../MessageLog.ts"
 import * as Query from "../Query.ts"
 import type * as Subscription from "../Subscription.ts"
 import * as Locator from "../testing/Locator.ts"
-import type { AwaitedQuery, KeyedLoad, Pending, QueryInfo, StreamTarget, Target } from "../testing/Steps.ts"
+import type {
+  AwaitedQuery,
+  KeyedLoad,
+  Pending,
+  QueryInfo,
+  StreamTarget,
+  Target
+} from "../testing/Steps.ts"
 import * as View from "../View.ts"
 import * as childOf from "./child.ts"
 import { sharedEqual } from "./equal.ts"
@@ -49,7 +56,17 @@ import * as subscriptionKeys from "./subscriptions.ts"
  * @internal
  */
 export interface State<Props, Model, Msg, Events> {
-  readonly component: Component.Component<any, Props, Model, Msg, Events, any, any, any, never>
+  readonly component: Component.Component<
+    any,
+    Props,
+    Model,
+    Msg,
+    Events,
+    any,
+    any,
+    any,
+    never
+  >
   readonly props: Props
   readonly model: Model
   readonly results: Component.Results | undefined
@@ -83,7 +100,9 @@ export interface Ack<Msg> {
   /** Pending Commands a `keepPending` step marked. A mark ends when the run settles. */
   readonly kept: ReadonlyArray<Pending<Msg>>
   /** Query entries with no result a `keepPending` step marked, by query name and args key. */
-  readonly keptQueries: ReadonlyArray<{ readonly name: string; readonly argsKey: string }>
+  readonly keptQueries: ReadonlyArray<
+    { readonly name: string; readonly argsKey: string }
+  >
   /** List queries whose pending load more a `keepPending` step marked. */
   readonly keptMore: ReadonlyArray<string>
   /** How the interaction that made this record went: a message, or none. Every other step resets it. */
@@ -153,7 +172,9 @@ export type Fields<Props, Model, Msg, Events> =
      */
     readonly slotStatus?: SlotResult | undefined
     /** `h.isRunning` when it isn't derived from `pending`: a replay's open runs. */
-    readonly running?: ((name: string, groupKey: string | undefined) => boolean) | undefined
+    readonly running?:
+      | ((name: string, groupKey: string | undefined) => boolean)
+      | undefined
     readonly shared?: ReadonlyMap<Component.Definition.Any, unknown> | undefined
     readonly collected?: Collected | undefined
   }
@@ -177,7 +198,10 @@ export const childModels = new WeakMap<object, ReadonlyMap<string, unknown>>()
  *
  * @internal
  */
-export const childStatuses = new WeakMap<object, ReadonlyMap<string, SlotResult>>()
+export const childStatuses = new WeakMap<
+  object,
+  ReadonlyMap<string, SlotResult>
+>()
 
 /**
  * The path a story gives `found`: the expansion's, or, in a view it left as it was, where every child is
@@ -185,8 +209,12 @@ export const childStatuses = new WeakMap<object, ReadonlyMap<string, SlotResult>
  *
  * @internal
  */
-export const pathOf = (story: State<any, any, any, any>, found: Occurrence): string =>
-  found.path ?? "/" + story.component.definition.name + "/" + segment(found.child)
+export const pathOf = (
+  story: State<any, any, any, any>,
+  found: Occurrence
+): string =>
+  found.path ??
+    "/" + story.component.definition.name + "/" + segment(found.child)
 
 /**
  * One place a view shows a child: the child as declared, and, in a view a story expanded, the path the
@@ -204,7 +232,10 @@ export interface Occurrence {
 // Every child an expansion placed, by the expanded root, in the order it placed them.
 const occurrences = new WeakMap<object, ReadonlyArray<Occurrence>>()
 // The children an expansion replaced, by the expanded root: `childEmit` and `childFailure` still find them.
-const expandedChildren = new WeakMap<object, ReadonlyArray<View.Child<any, any>>>()
+const expandedChildren = new WeakMap<
+  object,
+  ReadonlyArray<View.Child<any, any>>
+>()
 
 /**
  * The headless children an expanded closure stands for, by the closure's root, outermost first: one per
@@ -213,7 +244,10 @@ const expandedChildren = new WeakMap<object, ReadonlyArray<View.Child<any, any>>
  *
  * @internal
  */
-export const expansionOf = new WeakMap<object, ReadonlyArray<View.Child<any, any>>>()
+export const expansionOf = new WeakMap<
+  object,
+  ReadonlyArray<View.Child<any, any>>
+>()
 
 /**
  * Each slot a slotted child's `children` shows, with how many nodes it placed, in order: the runtime
@@ -221,14 +255,23 @@ export const expansionOf = new WeakMap<object, ReadonlyArray<View.Child<any, any
  *
  * @internal
  */
-export const slotLengths = new WeakMap<object, ReadonlyArray<readonly [string, number]>>()
+export const slotLengths = new WeakMap<
+  object,
+  ReadonlyArray<readonly [string, number]>
+>()
 
 // What a story of a slotted component passed for its slots, by the component `withSlots` made.
-const storySlots = new WeakMap<object, Readonly<Record<string, View.Input<never, any>>>>()
+const storySlots = new WeakMap<
+  object,
+  Readonly<Record<string, View.Input<never, any>>>
+>()
 
 // The values `shared` gave, by owner definition: definitions, since `withView` copies components.
 /** @internal */
-export const sharedGiven = new WeakMap<object, ReadonlyMap<Component.Definition.Any, unknown>>()
+export const sharedGiven = new WeakMap<
+  object,
+  ReadonlyMap<Component.Definition.Any, unknown>
+>()
 
 // -- shared state -----------------------------------------------------------
 // The owners above a point in the story's view, nearest last: their values as the readers there see them.
@@ -243,7 +286,9 @@ const ownersBelow = (
   props: unknown
 ): Owners => {
   const shares = component.definition.shares
-  return shares === undefined ? owners : new Map(owners).set(component.definition, shares(model, props))
+  return shares === undefined
+    ? owners
+    : new Map(owners).set(component.definition, shares(model, props))
 }
 
 /**
@@ -252,7 +297,8 @@ const ownersBelow = (
  *
  * @internal
  */
-export const rootShared = (given: Owners | undefined): Component.SharedLookup => sharedLookup(given, noOwners)
+export const rootShared = (given: Owners | undefined): Component.SharedLookup =>
+  sharedLookup(given, noOwners)
 
 // A reader's owner has no value in the story: a render that a `shared` step could still fix may miss it.
 class MissingShared extends Error {}
@@ -287,7 +333,9 @@ export const withShared = (
   const given = new Map(before)
   for (const [owner, value] of entries) {
     if (owner.definition.shares === undefined) {
-      throw new Error(`${step}: ${owner.definition.name} shares nothing: it has no shares`)
+      throw new Error(
+        `${step}: ${owner.definition.name} shares nothing: it has no shares`
+      )
     }
     given.set(owner.definition, value)
   }
@@ -313,7 +361,8 @@ const sharedDefault = (owner: Component.Headless.Any): unknown => {
  * @internal
  */
 export const sharedLookup =
-  (given: Owners | undefined, owners: Owners): Component.SharedLookup => (owner, optional) => {
+  (given: Owners | undefined, owners: Owners): Component.SharedLookup =>
+  (owner, optional) => {
     const definition = owner.definition
     if (given?.has(definition)) return given.get(definition)
     if (owners.has(definition)) return owners.get(definition)
@@ -326,7 +375,9 @@ const sharedBefore = (
   read: sharedReads.Read
 ): { readonly value: unknown } | undefined => {
   const given = sharedGiven.get(story)
-  if (given?.has(read.owner.definition)) return { value: given.get(read.owner.definition) }
+  if (given?.has(read.owner.definition)) {
+    return { value: given.get(read.owner.definition) }
+  }
   if (read.optional) return undefined
   try {
     return { value: sharedDefault(read.owner) }
@@ -350,9 +401,13 @@ export const sharedMessages = (
 ): ReadonlyArray<unknown> => {
   const messages: Array<unknown> = []
   for (const read of sharedReads.readsOf(story.component.definition)) {
-    if (read.onChange === undefined || read.owner.definition !== owner.definition) continue
+    if (
+      read.onChange === undefined || read.owner.definition !== owner.definition
+    ) continue
     const before = sharedBefore(story, read)
-    if (before !== undefined && !sharedEqual(before.value, value)) messages.push(read.onChange(value))
+    if (before !== undefined && !sharedEqual(before.value, value)) {
+      messages.push(read.onChange(value))
+    }
   }
   return messages
 }
@@ -376,9 +431,13 @@ export const withReports = (
 ): State<any, any, any, any> => {
   const definition = story.component.definition
   if (definition.collects === undefined) {
-    throw new Error(`${step}: ${definition.name} collects no reports: its shares has no collects`)
+    throw new Error(
+      `${step}: ${definition.name} collects no reports: its shares has no collects`
+    )
   }
-  const onChange = definition.collects.onChange as (collected: ReadonlyArray<unknown>) => unknown
+  const onChange = definition.collects.onChange as (
+    collected: ReadonlyArray<unknown>
+  ) => unknown
   const last = collectedLast.get(story) ?? { message: onChange([]) }
   const message = onChange(reports)
   if (sharedEqual(last.message, message)) return story
@@ -391,19 +450,31 @@ export const withReports = (
  *
  * @internal
  */
-export const reportsOf = (story: State<any, any, any, any>): { readonly [name: string]: unknown } => {
+export const reportsOf = (
+  story: State<any, any, any, any>
+): { readonly [name: string]: unknown } => {
   const out: { [name: string]: unknown } = {}
   const given = sharedGiven.get(story)
   const own = "/" + story.component.definition.name
   for (const read of sharedReads.readsOf(story.component.definition)) {
-    if (read.report === undefined || (read.optional && !given?.has(read.owner.definition))) continue
-    out[read.name] = read.report(story.model, story.props, (name, key) => View.idOf(own, name, key))
+    if (
+      read.report === undefined ||
+      (read.optional && !given?.has(read.owner.definition))
+    ) continue
+    out[read.name] = read.report(
+      story.model,
+      story.props,
+      (name, key) => View.idOf(own, name, key)
+    )
   }
   return out
 }
 
 /** A send to an owner the component reads as optional, with no value given for it, is dropped, as with no owner above. */
-const delivered = (story: State<any, any, any, any>, send: Component.Send): boolean => {
+const delivered = (
+  story: State<any, any, any, any>,
+  send: Component.Send
+): boolean => {
   if (send.owner === undefined) return true
   const definition = send.owner.definition
   if (sharedGiven.get(story)?.has(definition)) return true
@@ -444,7 +515,9 @@ const expandRoot = <Msg>(
     const paths = checkContentPaths(path, nodes)
     if (own) written.push(paths)
     const scope = (label: string) => checkContentPaths(label, nodes)
-    return nodes.map((child) => expand(child, path, depth, own, owners, scope, reads))
+    return nodes.map((child) =>
+      expand(child, path, depth, own, owners, scope, reads)
+    )
   }
   const expand = (
     node: View.Node<any, any>,
@@ -464,7 +537,14 @@ const expandRoot = <Msg>(
         if (input === undefined) return node
         return {
           ...node,
-          children: content(input, "/" + name + "/" + slotSegment(node.name), 1, false, owners, undefined)
+          children: content(
+            input,
+            "/" + name + "/" + slotSegment(node.name),
+            1,
+            false,
+            owners,
+            undefined
+          )
         } as View.Node<
           any,
           any
@@ -484,16 +564,25 @@ const expandRoot = <Msg>(
         const childPath = path + "/" + segment(node)
         if (
           own && typeof node.alive === "function" &&
-          !node.alive({ key: node.key, model: author.model, props: author.props, queries: author.results })
+          !node.alive({
+            key: node.key,
+            model: author.model,
+            props: author.props,
+            queries: author.results
+          })
         ) return emptyText
         placed.push({ child: node, path: childPath, scope })
         const result = status?.get(childPath) ??
-          (reads !== undefined && Feature.isService(node.component) ? reads : undefined)
+          (reads !== undefined && Feature.isService(node.component)
+            ? reads
+            : undefined)
         if (result !== undefined) {
           // The slot shows its `fallback`, whose children share the paths of the content that declared it.
           // It renders against settled services, so the feature slots in it show.
           replaced.push(node)
-          const shown = node.fallback === undefined ? emptyText : View.toNode(node.fallback(result))
+          const shown = node.fallback === undefined
+            ? emptyText
+            : View.toNode(node.fallback(result))
           return expand(shown, path, depth, own, owners, scope, undefined)
         }
         if (node.slots !== undefined) {
@@ -516,9 +605,13 @@ const expandRoot = <Msg>(
           slotLengths.set(out, lengths)
           return out
         }
-        if (node.view === undefined || component.parts === undefined) return node
+        if (node.view === undefined || component.parts === undefined) {
+          return node
+        }
         replaced.push(node)
-        const model = given?.has(childPath) ? given.get(childPath) : component.init(node.props).model
+        const model = given?.has(childPath)
+          ? given.get(childPath)
+          : component.init(node.props).model
         const parts = component.parts(model, node.props, {
           owner: { path: childPath, depth: depth + 1 },
           shared: sharedLookup(shared, owners)
@@ -545,7 +638,15 @@ const expandRoot = <Msg>(
       }
     }
   }
-  const expanded = expand(view, "/" + name, 0, true, root, (label) => checkChildPaths(label, view), slotStatus)
+  const expanded = expand(
+    view,
+    "/" + name,
+    0,
+    true,
+    root,
+    (label) => checkChildPaths(label, view),
+    slotStatus
+  )
   checkAuthorPlacements("/" + name, written)
   checkAuthorWrites("/" + name, written)
   if (replaced.length > 0) expandedChildren.set(expanded, replaced)
@@ -570,14 +671,28 @@ export const record = <Props, Model, Msg, Events>(
   const view = () => rendered ??= render()
   // A view value is a `Locator.Node` tree; a child is a node with no tag or text.
   const root = () => view() as Locator.Node
-  const context = () => boundOf(fields.component)?.context(fields.model, fields.props, fields.results)
+  const context = () =>
+    boundOf(fields.component)?.context(
+      fields.model,
+      fields.props,
+      fields.results
+    )
   const declared = () => {
     const keys = new Set<string>()
     const out: Array<Subscription.Subscription<any, any>> = []
-    for (const sub of fields.component.subscriptions?.(fields.model, fields.props, fields.results) ?? []) {
+    for (
+      const sub of fields.component.subscriptions?.(
+        fields.model,
+        fields.props,
+        fields.results
+      ) ?? []
+    ) {
       // The runtime fails the instance for it, so a test that reads the keys fails too.
       if (keys.has(sub.key)) {
-        throw subscriptionKeys.duplicateKey("/" + fields.component.definition.name, sub.key)
+        throw subscriptionKeys.duplicateKey(
+          "/" + fields.component.definition.name,
+          sub.key
+        )
       }
       keys.add(sub.key)
       out.push(sub)
@@ -617,8 +732,12 @@ export const record = <Props, Model, Msg, Events>(
     query: (locator) => Locator.query(root(), locator),
     all: (locator) => Locator.all(root(), locator)
   }
-  if (fields.childModels !== undefined) childModels.set(story, fields.childModels)
-  if (fields.childStatus !== undefined) childStatuses.set(story, fields.childStatus)
+  if (fields.childModels !== undefined) {
+    childModels.set(story, fields.childModels)
+  }
+  if (fields.childStatus !== undefined) {
+    childStatuses.set(story, fields.childStatus)
+  }
   if (fields.shared !== undefined) sharedGiven.set(story, fields.shared)
   if (fields.collected !== undefined) collectedLast.set(story, fields.collected)
   return story
@@ -651,12 +770,16 @@ export const update = <Props, Model, Msg, Events>(
   // A defect in `view` fails the step that changed the Model, the query results, the props or what's pending.
   // An unchanged view is kept as expanded: expanding it again would rebuild slot content without the
   // owners whose nodes the first expansion replaced.
-  const view = fields.model === story.model && fields.results === story.results && fields.props === story.props &&
-      fields.pending === story.pending && fields.loadingMore === story.loadingMore &&
-      fields.childModels === childModels.get(story) && fields.childStatus === childStatuses.get(story) &&
+  const view =
+    fields.model === story.model && fields.results === story.results &&
+      fields.props === story.props &&
+      fields.pending === story.pending &&
+      fields.loadingMore === story.loadingMore &&
+      fields.childModels === childModels.get(story) &&
+      fields.childStatus === childStatuses.get(story) &&
       fields.shared === sharedGiven.get(story)
-    ? story.view
-    : () => expandedView(fields)
+      ? story.view
+      : () => expandedView(fields)
   return record(fields, view)
 }
 
@@ -665,7 +788,9 @@ export const update = <Props, Model, Msg, Events>(
  *
  * @internal
  */
-export const expandedView = (fields: Fields<any, any, any, any>): View.Node<any, any> =>
+export const expandedView = (
+  fields: Fields<any, any, any, any>
+): View.Node<any, any> =>
   expandRoot(
     viewOfFields(fields),
     fields.component.definition.name,
@@ -679,7 +804,9 @@ export const expandedView = (fields: Fields<any, any, any, any>): View.Node<any,
   )
 
 /** The story's component's own view, before its headless children are expanded. */
-const viewOfFields = (fields: Fields<any, any, any, any>): View.Node<any, any> =>
+const viewOfFields = (
+  fields: Fields<any, any, any, any>
+): View.Node<any, any> =>
   fields.component.view(
     fields.model,
     fields.props,
@@ -692,21 +819,30 @@ const viewOfFields = (fields: Fields<any, any, any, any>): View.Node<any, any> =
 const boundOf = componentQueries.boundOf
 
 /** @internal */
-export const isKeyed = (story: State<any, any, any, any>, name: string): boolean =>
-  boundOf(story.component)?.byName.get(name)?.keyed === true
+export const isKeyed = (
+  story: State<any, any, any, any>,
+  name: string
+): boolean => boundOf(story.component)?.byName.get(name)?.keyed === true
 
 /** The query called `name`, or a throw naming the step. */
-const queryOf = (story: State<any, any, any, any>, step: string, name: string): componentQueries.Entry => {
+const queryOf = (
+  story: State<any, any, any, any>,
+  step: string,
+  name: string
+): componentQueries.Entry => {
   const entry = boundOf(story.component)?.byName.get(name)
   if (entry === undefined) {
-    throw new Error(`${step}: "${name}" is not a query of ${story.component.definition.name}`)
+    throw new Error(
+      `${step}: "${name}" is not a query of ${story.component.definition.name}`
+    )
   }
   return entry
 }
 
 /** A query's args for the story's Model, props and results. */
 const argsAt = (story: State<any, any, any, any>, name: string) =>
-  boundOf(story.component)!.context(story.model, story.props, story.results).argsOf(name)
+  boundOf(story.component)!.context(story.model, story.props, story.results)
+    .argsOf(name)
 
 /**
  * Writes a query's result, then sends the message of its `onChange`, if any, as the runtime does.
@@ -720,9 +856,16 @@ const writeResult = (
 ): State<any, any, any, any> => {
   const bound = boundOf(story.component)!
   // As in the runtime, the same snapshot writes nothing.
-  if (Equal.equals((story.results ?? bound.empty)[entry.name], result)) return story
-  const out = update(story, { results: { ...(story.results ?? bound.empty), [entry.name]: result } })
-  const message = bound.context(out.model, out.props, out.results).changed(entry.name, changes)
+  if (Equal.equals((story.results ?? bound.empty)[entry.name], result)) {
+    return story
+  }
+  const out = update(story, {
+    results: { ...(story.results ?? bound.empty), [entry.name]: result }
+  })
+  const message = bound.context(out.model, out.props, out.results).changed(
+    entry.name,
+    changes
+  )
   return message === undefined ? out : dispatch(out, message.value)
 }
 
@@ -743,7 +886,9 @@ const loadStep = (
   const entry = queryOf(story, step, name)
   const current = argsAt(story, name)
   if (current.argsKey === undefined) {
-    throw new Error(`${step}: the query "${name}" is disabled for the current Model and props`)
+    throw new Error(
+      `${step}: the query "${name}" is disabled for the current Model and props`
+    )
   }
   const result = build(storedAt(story, name, current.argsKey))
   const def = Query.defOf(entry.query)
@@ -752,7 +897,10 @@ const loadStep = (
     { args: current.args, argsKey: current.argsKey },
     result,
     patched,
-    more ?? (def.list !== undefined && result._tag === "Success" ? moreOfPages(def, result.value) : undefined)
+    more ??
+      (def.list !== undefined && result._tag === "Success"
+        ? moreOfPages(def, result.value)
+        : undefined)
   )
   return writeResult(story, entry, snapshot, [])
 }
@@ -794,7 +942,8 @@ export const givenResults = (
   // The result a query should hold for the current results, or undefined while a named query is
   // disabled or doesn't return the given args.
   const target = (entry: componentQueries.Entry): unknown => {
-    const current = bound.context(story.model, story.props, { ...results }).argsOf(entry.name)
+    const current = bound.context(story.model, story.props, { ...results })
+      .argsOf(entry.name)
     if (!Object.hasOwn(given, entry.name)) {
       // From the results held before: a key an earlier round dropped can come back once the args settle.
       const held = Query.snapshotMapData(before[entry.name])?.entries
@@ -814,9 +963,16 @@ export const givenResults = (
         const key = keys.find((key) => key.argsKey === def.argsKey(load.args))
         if (key === undefined) return undefined
         const result = "value" in load
-          ? AsyncResult.success(load.value, { waiting: load.waiting, timestamp: 0 })
-          : AsyncResult.failure(Cause.fail(load.error), { waiting: load.waiting })
-        snapshots.push(bound.snapshot(entry, key, result as any, false, undefined))
+          ? AsyncResult.success(load.value, {
+            waiting: load.waiting,
+            timestamp: 0
+          })
+          : AsyncResult.failure(Cause.fail(load.error), {
+            waiting: load.waiting
+          })
+        snapshots.push(
+          bound.snapshot(entry, key, result as any, false, undefined)
+        )
       }
       return bound.snapshotMany(entry, snapshots)
     }
@@ -827,17 +983,23 @@ export const givenResults = (
       { args: current.args, argsKey: current.argsKey },
       AsyncResult.success(value, { timestamp: 0 }),
       false,
-      def.list !== undefined ? moreOfPages(def, value as ReadonlyArray<unknown>) : undefined
+      def.list !== undefined
+        ? moreOfPages(def, value as ReadonlyArray<unknown>)
+        : undefined
     )
   }
-  const written = bound.entries.filter((entry) => entry.keyed || Object.hasOwn(given, entry.name))
+  const written = bound.entries.filter((entry) =>
+    entry.keyed || Object.hasOwn(given, entry.name)
+  )
   // Each round settles at least one more level of queries whose args read another's result, so a
   // write still due after a round per query never settles.
   for (let round = 0, changed = true; changed; round++) {
     changed = false
     for (const entry of written) {
       const next = target(entry)
-      if (next === undefined || Equal.equals(results[entry.name], next)) continue
+      if (next === undefined || Equal.equals(results[entry.name], next)) {
+        continue
+      }
       if (round > written.length) {
         throw new Error(
           `${step}: the query "${entry.name}" doesn't settle: its args keep changing with the given results`
@@ -857,14 +1019,24 @@ export const givenResults = (
 }
 
 /** Whether a page array has a next page, by the definition's `next`. */
-const moreOfPages = (def: ReturnType<typeof Query.defOf>, pages: ReadonlyArray<unknown>): Query.More<never> =>
-  pages.length > 0 && Option.isSome(def.list!.next(pages[pages.length - 1], pages))
+const moreOfPages = (
+  def: ReturnType<typeof Query.defOf>,
+  pages: ReadonlyArray<unknown>
+): Query.More<never> =>
+  pages.length > 0 &&
+    Option.isSome(def.list!.next(pages[pages.length - 1], pages))
     ? { _tag: "Available" }
     : { _tag: "End" }
 
-const listQuery = (story: State<any, any, any, any>, step: string, name: string): void => {
+const listQuery = (
+  story: State<any, any, any, any>,
+  step: string,
+  name: string
+): void => {
   if (boundOf(story.component)?.byName.get(name)?.list !== true) {
-    throw new Error(`${step}: "${name}" is not an infinite query of ${story.component.definition.name}`)
+    throw new Error(
+      `${step}: "${name}" is not an infinite query of ${story.component.definition.name}`
+    )
   }
 }
 
@@ -891,8 +1063,12 @@ export const settleMore = (
     step,
     name,
     (previous) => {
-      if (Option.isNone(previous)) throw new Error(`${step}: "${name}" holds no pages at its args`)
-      return AsyncResult.success(pagesOf(previous.value.value), { timestamp: previous.value.timestamp })
+      if (Option.isNone(previous)) {
+        throw new Error(`${step}: "${name}" holds no pages at its args`)
+      }
+      return AsyncResult.success(pagesOf(previous.value.value), {
+        timestamp: previous.value.timestamp
+      })
     },
     false,
     more
@@ -904,7 +1080,10 @@ export const settleMore = (
  * current args: a load more is pending, and writes `Loading`; a reset writes the
  * first page, waiting, and ends a pending load more.
  */
-const applyList = (story: State<any, any, any, any>, list: Component.ListIssue): State<any, any, any, any> => {
+const applyList = (
+  story: State<any, any, any, any>,
+  list: Component.ListIssue
+): State<any, any, any, any> => {
   const entry = boundOf(story.component)?.byName.get(list.name)
   if (entry === undefined || !entry.list) return story
   const argsKey = argsAt(story, list.name).argsKey
@@ -915,8 +1094,13 @@ const applyList = (story: State<any, any, any, any>, list: Component.ListIssue):
   if (list.op === "loadMore") {
     if (story.loadingMore.includes(list.name)) return story
     // At the end, or with nothing held at these args, nothing is written and nothing waits.
-    if (Option.isNone(previous) || moreOfPages(def, previous.value.value)._tag === "End") return story
-    const loading = update(story, { loadingMore: [...story.loadingMore, list.name] })
+    if (
+      Option.isNone(previous) ||
+      moreOfPages(def, previous.value.value)._tag === "End"
+    ) return story
+    const loading = update(story, {
+      loadingMore: [...story.loadingMore, list.name]
+    })
     if (data?.result?._tag !== "Success") return loading
     return loadStep(
       loading,
@@ -929,7 +1113,9 @@ const applyList = (story: State<any, any, any, any>, list: Component.ListIssue):
   }
   const reset = settlePending(story, list.name)
   if (Option.isNone(previous)) return reset
-  const first = AsyncResult.success(previous.value.value.slice(0, 1), { timestamp: previous.value.timestamp })
+  const first = AsyncResult.success(previous.value.value.slice(0, 1), {
+    timestamp: previous.value.timestamp
+  })
   return loadStep(
     reset,
     "$.reset",
@@ -937,18 +1123,30 @@ const applyList = (story: State<any, any, any, any>, list: Component.ListIssue):
     // A Failure stays one, over the first page only, while the walk runs.
     () =>
       data?.result?._tag === "Failure"
-        ? AsyncResult.failure(data.result.cause, { previousSuccess: Option.some(first), waiting: true })
-        : AsyncResult.success(first.value, { timestamp: first.timestamp, waiting: true }),
+        ? AsyncResult.failure(data.result.cause, {
+          previousSuccess: Option.some(first),
+          waiting: true
+        })
+        : AsyncResult.success(first.value, {
+          timestamp: first.timestamp,
+          waiting: true
+        }),
     false
   )
 }
 
 /** Ends an infinite query's pending load more: a settle, Success or Failure, ends the walk it waits on. */
-const settlePending = (story: State<any, any, any, any>, name: string): State<any, any, any, any> =>
+const settlePending = (
+  story: State<any, any, any, any>,
+  name: string
+): State<any, any, any, any> =>
   story.loadingMore.includes(name)
     ? update(story, {
       loadingMore: story.loadingMore.filter((other) => other !== name),
-      ack: { ...story.ack, keptMore: story.ack.keptMore.filter((other) => other !== name) }
+      ack: {
+        ...story.ack,
+        keptMore: story.ack.keptMore.filter((other) => other !== name)
+      }
     })
     : story
 
@@ -957,10 +1155,15 @@ const keyedQuery = (
   story: State<any, any, any, any>,
   step: string,
   name: string
-): { readonly entry: componentQueries.Entry; readonly keys: ReadonlyArray<componentQueries.Keyed> } => {
+): {
+  readonly entry: componentQueries.Entry
+  readonly keys: ReadonlyArray<componentQueries.Keyed>
+} => {
   const entry = boundOf(story.component)?.byName.get(name)
   if (entry === undefined || !entry.keyed) {
-    throw new Error(`${step}: "${name}" is not a queryMany query of ${story.component.definition.name}`)
+    throw new Error(
+      `${step}: "${name}" is not a queryMany query of ${story.component.definition.name}`
+    )
   }
   return { entry, keys: argsAt(story, name).entries! }
 }
@@ -975,7 +1178,11 @@ const writeKeyed = (
   entry: componentQueries.Entry,
   keys: ReadonlyArray<componentQueries.Keyed>,
   loads: ReadonlyArray<
-    { readonly argsKey: string; readonly result: AsyncResult.AsyncResult<any, any>; readonly patched: boolean }
+    {
+      readonly argsKey: string
+      readonly result: AsyncResult.AsyncResult<any, any>
+      readonly patched: boolean
+    }
   >
 ): State<any, any, any, any> => {
   const bound = boundOf(story.component)!
@@ -985,7 +1192,17 @@ const writeKeyed = (
     entry,
     keys.flatMap((key) => {
       const load = byKey.get(key.argsKey)
-      if (load !== undefined) return [bound.snapshot(entry, key, load.result as any, load.patched, undefined)]
+      if (load !== undefined) {
+        return [
+          bound.snapshot(
+            entry,
+            key,
+            load.result as any,
+            load.patched,
+            undefined
+          )
+        ]
+      }
       const stored = held?.get(key.argsKey)
       return stored === undefined ? [] : [stored]
     })
@@ -1020,7 +1237,9 @@ export const loadKeyedStep = (
       const argsKey = def.argsKey(load.args)
       if (!keys.some((key) => key.argsKey === argsKey)) {
         throw new Error(
-          `${step}: the query "${name}" doesn't return the args ${def.logKey(load.args, argsKey)}`
+          `${step}: the query "${name}" doesn't return the args ${
+            def.logKey(load.args, argsKey)
+          }`
         )
       }
       const patched = "value" in load && load.patched === true
@@ -1029,9 +1248,14 @@ export const loadKeyedStep = (
       return {
         argsKey,
         result: "value" in load
-          ? AsyncResult.success(load.value, { waiting: load.waiting, timestamp: 0 })
+          ? AsyncResult.success(load.value, {
+            waiting: load.waiting,
+            timestamp: 0
+          })
           : AsyncResult.failWithPrevious(load.error, {
-            previous: Option.fromUndefinedOr(Query.snapshotData(held?.get(argsKey))?.result),
+            previous: Option.fromUndefinedOr(
+              Query.snapshotData(held?.get(argsKey))?.result
+            ),
             waiting: load.waiting
           }),
         patched
@@ -1039,7 +1263,10 @@ export const loadKeyedStep = (
     })
   )
   // After the result's write: the wait's own message comes second.
-  return settleWaits(written, (awaited) => awaited.name === name && settled.has(def.argsKey(awaited.args)))
+  return settleWaits(
+    written,
+    (awaited) => awaited.name === name && settled.has(def.argsKey(awaited.args))
+  )
 }
 
 /** How many rounds of prunes one step may write before it throws. */
@@ -1054,7 +1281,10 @@ const pruneRounds = 100
  *
  * @internal
  */
-export const pruneKeyed = (story: State<any, any, any, any>, module: string): State<any, any, any, any> => {
+export const pruneKeyed = (
+  story: State<any, any, any, any>,
+  module: string
+): State<any, any, any, any> => {
   const bound = boundOf(story.component)
   if (bound === undefined) return story
   let out = story
@@ -1066,7 +1296,9 @@ export const pruneKeyed = (story: State<any, any, any, any>, module: string): St
       if (held === undefined || held.entries.size === 0) continue
       const keys = argsAt(out, entry.name).entries!
       const declared = new Set(keys.map((key) => key.argsKey))
-      if (Array.from(held.entries.keys()).every((key) => declared.has(key))) continue
+      if (Array.from(held.entries.keys()).every((key) => declared.has(key))) {
+        continue
+      }
       if (round === pruneRounds) {
         throw new Error(
           `${module}: ${story.component.definition.name}'s query "${entry.name}" was still pruned after ${pruneRounds} rounds in one step. Each prune's onChange changes its key set again, and the runtime would prune without limit.`
@@ -1085,12 +1317,16 @@ export const pruneKeyed = (story: State<any, any, any, any>, module: string): St
  * @internal
  */
 export const runningOf =
-  (pending: ReadonlyArray<Pending<any>>) => (name: string, groupKey: string | undefined): boolean =>
+  (pending: ReadonlyArray<Pending<any>>) =>
+  (name: string, groupKey: string | undefined): boolean =>
     pending.some((entry) =>
-      entry.command.name === name && (groupKey === undefined || entry.command.groupKey === groupKey)
+      entry.command.name === name &&
+      (groupKey === undefined || entry.command.groupKey === groupKey)
     )
 
-const toEntries = <Msg>(pending: ReadonlyArray<Pending<Msg>>): Array<schedule.Entry<Pending<Msg>>> =>
+const toEntries = <Msg>(
+  pending: ReadonlyArray<Pending<Msg>>
+): Array<schedule.Entry<Pending<Msg>>> =>
   pending.map((entry) => ({
     name: entry.command.name,
     key: entry.command.groupKey,
@@ -1120,18 +1356,25 @@ export const apply = <Props, Model, Msg, Events>(
         pending: out.pending.filter((entry) => !gone.has(entry)),
         interrupted: [
           ...out.interrupted,
-          ...decision.interrupt.flatMap((entry) => entry.value.status === "awaiting" ? [] : [entry.value.command])
+          ...decision.interrupt.flatMap((entry) =>
+            entry.value.status === "awaiting" ? [] : [entry.value.command]
+          )
         ]
       })
       for (const entry of decision.interrupt) {
-        if (entry.value.status === "awaiting") out = dispatch(out, entry.value.message)
+        if (entry.value.status === "awaiting") {
+          out = dispatch(out, entry.value.message)
+        }
       }
     }
     if (command._tag === "Interrupt") continue
     switch (decision.action) {
       case "start":
       case "queue": {
-        const entry: Pending<Msg> = { command, status: decision.action === "start" ? "running" : "queued" }
+        const entry: Pending<Msg> = {
+          command,
+          status: decision.action === "start" ? "running" : "queued"
+        }
         livePatches.set(entry, registeredPatches(out, command))
         out = update(out, { pending: [...out.pending, entry] })
         if (entry.status === "queued") out = startNext(out, entry)
@@ -1149,7 +1392,10 @@ export const apply = <Props, Model, Msg, Events>(
 }
 
 /** A run that one entry replaces, such as a queued run that starts, keeps its `keepPending` mark. */
-const carryKept = <Msg>(ack: Ack<Msg>, replaced: ReadonlyMap<Pending<Msg>, Pending<Msg>>): Ack<Msg> =>
+const carryKept = <Msg>(
+  ack: Ack<Msg>,
+  replaced: ReadonlyMap<Pending<Msg>, Pending<Msg>>
+): Ack<Msg> =>
   replaced.size === 0 || !ack.kept.some((entry) => replaced.has(entry))
     ? ack
     : { ...ack, kept: ack.kept.map((entry) => replaced.get(entry) ?? entry) }
@@ -1159,7 +1405,8 @@ const startNext = <Props, Model, Msg, Events>(
   story: State<Props, Model, Msg, Events>,
   entry: Pending<Msg>
 ): State<Props, Model, Msg, Events> => {
-  const next = schedule.next(toEntries(story.pending), toEntries([entry])[0])?.value
+  const next = schedule.next(toEntries(story.pending), toEntries([entry])[0])
+    ?.value
   if (next === undefined) return story
   const running: Pending<Msg> = { command: next.command, status: "running" }
   livePatches.set(running, livePatches.get(next) ?? [])
@@ -1178,12 +1425,22 @@ const startNext = <Props, Model, Msg, Events>(
 export const exited = <Props, Model, Msg, Events>(
   story: State<Props, Model, Msg, Events>,
   entry: Pending<Msg>,
-  held: { readonly message: Msg; readonly awaiting: ReadonlyArray<AwaitedQuery> } | undefined
+  held: {
+    readonly message: Msg
+    readonly awaiting: ReadonlyArray<AwaitedQuery>
+  } | undefined
 ): State<Props, Model, Msg, Events> => {
   const awaiting: Pending<Msg> | undefined = held === undefined
     ? undefined
-    : { command: entry.command, status: "awaiting", message: held.message, awaiting: held.awaiting }
-  const pending = story.pending.flatMap((other) => other !== entry ? [other] : awaiting === undefined ? [] : [awaiting])
+    : {
+      command: entry.command,
+      status: "awaiting",
+      message: held.message,
+      awaiting: held.awaiting
+    }
+  const pending = story.pending.flatMap((other) =>
+    other !== entry ? [other] : awaiting === undefined ? [] : [awaiting]
+  )
   const out = startNext(update(story, { pending }), entry)
   return awaiting === undefined ? out : release(out, awaiting)
 }
@@ -1201,7 +1458,12 @@ const release = <Props, Model, Msg, Events>(
       (other) => other.awaiting === undefined || other.awaiting.length === 0
     )
     if (next === undefined) return out
-    out = dispatch(update(out, { pending: out.pending.filter((other) => other !== next.value) }), next.value.message)
+    out = dispatch(
+      update(out, {
+        pending: out.pending.filter((other) => other !== next.value)
+      }),
+      next.value.message
+    )
   }
 }
 
@@ -1216,8 +1478,14 @@ export const settleWaits = <Props, Model, Msg, Events>(
 ): State<Props, Model, Msg, Events> => {
   let out = story
   for (const entry of story.pending) {
-    if (entry.awaiting === undefined || !entry.awaiting.some(settled) || !out.pending.includes(entry)) continue
-    const rest: Pending<Msg> = { ...entry, awaiting: entry.awaiting.filter((awaited) => !settled(awaited)) }
+    if (
+      entry.awaiting === undefined || !entry.awaiting.some(settled) ||
+      !out.pending.includes(entry)
+    ) continue
+    const rest: Pending<Msg> = {
+      ...entry,
+      awaiting: entry.awaiting.filter((awaited) => !settled(awaited))
+    }
     out = update(out, {
       pending: out.pending.map((other) => other === entry ? rest : other),
       ack: carryKept(out.ack, new Map([[entry, rest]]))
@@ -1243,19 +1511,34 @@ export const settleStep = (
 ): State<any, any, any, any> => {
   const entry = queryOf(story, step, name)
   const argsKey = argsAt(story, name).argsKey
-  if (!patched && argsKey !== undefined) checkUnpatched(story, step, name, argsKey)
+  if (!patched && argsKey !== undefined) {
+    checkUnpatched(story, step, name, argsKey)
+  }
   // A settle ends the walk a list's pending load more waits on, unless a walk is still running.
-  const loaded = loadStep(waiting ? story : settlePending(story, name), step, name, build, patched)
+  const loaded = loadStep(
+    waiting ? story : settlePending(story, name),
+    step,
+    name,
+    build,
+    patched
+  )
   return patched || waiting ? loaded : settleWaits(
     loaded,
-    (awaited) => awaited.name === name && Query.defOf(entry.query).argsKey(awaited.args) === argsKey
+    (awaited) =>
+      awaited.name === name &&
+      Query.defOf(entry.query).argsKey(awaited.args) === argsKey
   )
 }
 
 /** The component's own queries, each with the entries it is at: one per args it returns now. */
 function* currentEntries(
   story: State<any, any, any, any>
-): Generator<{ readonly query: componentQueries.Entry; readonly entries: ReadonlyArray<componentQueries.Keyed> }> {
+): Generator<
+  {
+    readonly query: componentQueries.Entry
+    readonly entries: ReadonlyArray<componentQueries.Keyed>
+  }
+> {
   const bound = boundOf(story.component)
   if (bound === undefined) return
   const context = bound.context(story.model, story.props, story.results)
@@ -1264,7 +1547,9 @@ function* currentEntries(
     yield {
       query,
       entries: current.entries ??
-        (current.argsKey === undefined ? [] : [{ args: current.args, argsKey: current.argsKey }])
+        (current.argsKey === undefined
+          ? []
+          : [{ args: current.args, argsKey: current.argsKey }])
     }
   }
 }
@@ -1277,11 +1562,15 @@ function* currentEntries(
  */
 export const awaitedLoaders = (
   story: State<any, any, any, any>,
-  command: Command.Issued<any, any, never, "Effect"> | Command.Issued<any, any, never, "Stream">,
+  command:
+    | Command.Issued<any, any, never, "Effect">
+    | Command.Issued<any, any, never, "Stream">,
   result: unknown
 ): ReadonlyArray<AwaitedQuery> => {
   const budget = command.afterRefetch
-  if (command._tag !== "Effect" || budget === undefined || Duration.isZero(budget)) return []
+  if (
+    command._tag !== "Effect" || budget === undefined || Duration.isZero(budget)
+  ) return []
   if (boundOf(story.component) === undefined) return []
   const written = (command.writes?.(result) ?? []).map((write) => ({
     name: Query.defOf(write.query).name,
@@ -1292,7 +1581,11 @@ export const awaitedLoaders = (
     const queryName = Query.defOf(query.query).name
     for (const { args, argsKey } of entries) {
       if (!Query.invalidatesEntry(command, query.query, args)) continue
-      if (written.some((write) => write.name === queryName && write.argsKey === argsKey)) continue
+      if (
+        written.some((write) =>
+          write.name === queryName && write.argsKey === argsKey
+        )
+      ) continue
       out.push({ name: query.name, args })
     }
   }
@@ -1303,22 +1596,37 @@ export const awaitedLoaders = (
  * Patches registered at issue, by query name and args key. As in the cache, only entries that
  * held a Success then register a patch; cold or failed entries don't delay settling.
  */
-const livePatches = new WeakMap<Pending<any>, ReadonlyArray<{ readonly name: string; readonly argsKey: string }>>()
+const livePatches = new WeakMap<
+  Pending<any>,
+  ReadonlyArray<{ readonly name: string; readonly argsKey: string }>
+>()
 
 /** The component's own queries, at their current args, that `command`'s patches register on. */
 const registeredPatches = (
   story: State<any, any, any, any>,
-  command: Command.Issued<any, any, never, "Effect"> | Command.Issued<any, any, never, "Stream">
+  command:
+    | Command.Issued<any, any, never, "Effect">
+    | Command.Issued<any, any, never, "Stream">
 ): ReadonlyArray<{ readonly name: string; readonly argsKey: string }> => {
   if (command.optimistic.length === 0) return []
   const out: Array<{ readonly name: string; readonly argsKey: string }> = []
   for (const { entries, query } of currentEntries(story)) {
     const result = story.results?.[query.name]
-    const held = query.keyed ? Query.snapshotMapData(result)?.entries : undefined
+    const held = query.keyed
+      ? Query.snapshotMapData(result)?.entries
+      : undefined
     for (const { args, argsKey } of entries) {
-      const data = Query.snapshotData(held !== undefined ? held.get(argsKey) : result)
+      const data = Query.snapshotData(
+        held !== undefined ? held.get(argsKey) : result
+      )
       if (data?.argsKey !== argsKey || data.result?._tag !== "Success") continue
-      if (!Query.invalidatesEntry({ invalidates: [], optimistic: command.optimistic }, query.query, args)) continue
+      if (
+        !Query.invalidatesEntry(
+          { invalidates: [], optimistic: command.optimistic },
+          query.query,
+          args
+        )
+      ) continue
       out.push({ name: query.name, argsKey })
     }
   }
@@ -1329,10 +1637,17 @@ const registeredPatches = (
  * Throws when a running or queued Command's optimistic patch is live on the entry of query `name`
  * at `argsKey`: the runtime settles no fetch there, so only a patched value can be written.
  */
-const checkUnpatched = (story: State<any, any, any, any>, step: string, name: string, argsKey: string): void => {
+const checkUnpatched = (
+  story: State<any, any, any, any>,
+  step: string,
+  name: string,
+  argsKey: string
+): void => {
   const patcher = story.pending.find((entry) =>
     entry.status !== "awaiting" &&
-    livePatches.get(entry)?.some((patch) => patch.name === name && patch.argsKey === argsKey) === true
+    livePatches.get(entry)?.some((patch) =>
+        patch.name === name && patch.argsKey === argsKey
+      ) === true
   )
   if (patcher !== undefined) {
     throw new Error(
@@ -1345,8 +1660,13 @@ const checkUnpatched = (story: State<any, any, any, any>, step: string, name: st
 
 /** @internal */
 export const describe = (
-  command: Command.Issued<any, any, never, "Effect"> | Command.Issued<any, any, never, "Stream">
-): string => `${command.name}(${JSON.stringify(MessageLog.encodeArgs(command.argsSchema, command.args))})`
+  command:
+    | Command.Issued<any, any, never, "Effect">
+    | Command.Issued<any, any, never, "Stream">
+): string =>
+  `${command.name}(${
+    JSON.stringify(MessageLog.encodeArgs(command.argsSchema, command.args))
+  })`
 
 /** @internal */
 export const describePending = (pending: ReadonlyArray<Pending<any>>): string =>
@@ -1362,8 +1682,11 @@ export const describePending = (pending: ReadonlyArray<Pending<any>>): string =>
 
 /** @internal */
 export const matches = (target: Target, entry: Pending<any>): boolean => {
-  if (Command.isDefinition(target)) return entry.command.name === Command.nameOf(target)
-  return entry.command.name === target.name && Equal.equals(entry.command.args, target.args)
+  if (Command.isDefinition(target)) {
+    return entry.command.name === Command.nameOf(target)
+  }
+  return entry.command.name === target.name &&
+    Equal.equals(entry.command.args, target.args)
 }
 
 /** @internal */
@@ -1371,10 +1694,20 @@ export const describeTarget = (target: Target): string =>
   Command.isDefinition(target) ? Command.nameOf(target) : describe(target)
 
 /** @internal */
-export const findRunning = (story: State<any, any, any, any>, target: Target, step: string): Pending<any> => {
-  const entry = story.pending.find((entry) => entry.status === "running" && matches(target, entry))
+export const findRunning = (
+  story: State<any, any, any, any>,
+  target: Target,
+  step: string
+): Pending<any> => {
+  const entry = story.pending.find((entry) =>
+    entry.status === "running" && matches(target, entry)
+  )
   if (entry === undefined) {
-    throw new Error(`${step}: no running ${describeTarget(target)}; pending: ${describePending(story.pending)}`)
+    throw new Error(
+      `${step}: no running ${describeTarget(target)}; pending: ${
+        describePending(story.pending)
+      }`
+    )
   }
   return entry
 }
@@ -1399,10 +1732,15 @@ export const dispatch = <Props, Model, Msg, Events>(
     )
 
 /** `node` and its ancestors in `root`, innermost first, or `undefined` when `node` isn't in `root`. */
-const pathTo = (root: View.Node<any, any>, node: Locator.Node): Array<View.Node<any, any>> | undefined => {
+const pathTo = (
+  root: View.Node<any, any>,
+  node: Locator.Node
+): Array<View.Node<any, any>> | undefined => {
   if (root === node) return [root]
   // An element's children, or the content a story shows under a child or an outlet.
-  const children = (root as { readonly children?: ReadonlyArray<View.Node<any, any>> }).children
+  const children =
+    (root as { readonly children?: ReadonlyArray<View.Node<any, any>> })
+      .children
   if (children === undefined) return undefined
   for (const child of children) {
     const path = pathTo(child, node)
@@ -1420,14 +1758,21 @@ const pathTo = (root: View.Node<any, any>, node: Locator.Node): Array<View.Node<
  * @internal
  */
 export const findOne = <N extends Locator.Node>(
-  story: { readonly all: (locator: Locator.Locator) => ReadonlyArray<N>; readonly root: Locator.Node },
+  story: {
+    readonly all: (locator: Locator.Locator) => ReadonlyArray<N>
+    readonly root: Locator.Node
+  },
   locator: Locator.Locator,
   step: string
 ): N => {
   const found = story.all(locator)
   if (found.length !== 1) {
     throw new Error(
-      `${step}: ${found.length === 0 ? "nothing matches" : `${found.length} elements match`} ${locator.description}${
+      `${step}: ${
+        found.length === 0
+          ? "nothing matches"
+          : `${found.length} elements match`
+      } ${locator.description}${
         found.length === 0 ? "; " + describeCandidates(story.root) : ""
       }`
     )
@@ -1446,11 +1791,15 @@ export const describeCandidates = (root: Locator.Node): string => {
       value === undefined ? [] : [` ${name}=${JSON.stringify(value)}`]
     ).join("")
     const text = Locator.textOf(node).replace(/\s+/g, " ").trim()
-    return `<${node.tag}${attrs}>${text.length > 40 ? text.slice(0, 40) + "…" : text}`
+    return `<${node.tag}${attrs}>${
+      text.length > 40 ? text.slice(0, 40) + "…" : text
+    }`
   })
   return lines.length === 0 ?
     "the view has no elements" :
-    `elements:\n  ${lines.slice(0, 30).join("\n  ")}${lines.length > 30 ? `\n  … and ${lines.length - 30} more` : ""}`
+    `elements:\n  ${lines.slice(0, 30).join("\n  ")}${
+      lines.length > 30 ? `\n  … and ${lines.length - 30} more` : ""
+    }`
 }
 
 /**
@@ -1458,14 +1807,20 @@ export const describeCandidates = (root: Locator.Node): string => {
  *
  * @internal
  */
-export const ancestry = (story: State<any, any, any, any>, node: Locator.Node): ReadonlyArray<View.Node<any, any>> =>
-  pathTo(story.view(), node) ?? []
+export const ancestry = (
+  story: State<any, any, any, any>,
+  node: Locator.Node
+): ReadonlyArray<View.Node<any, any>> => pathTo(story.view(), node) ?? []
 
 /** The innermost element on `path` with any layer for `event`, as on a host. */
-const handlerOn = (path: ReadonlyArray<View.Node<any, any>>, event: string): View.Element<any, any> | undefined =>
+const handlerOn = (
+  path: ReadonlyArray<View.Node<any, any>>,
+  event: string
+): View.Element<any, any> | undefined =>
   path.find((node): node is View.Element<any, any> =>
     node._tag === "Element" &&
-    (Object.hasOwn(node.handlers, event) || (node.owned ?? []).some((layer) => Object.hasOwn(layer.handlers, event)))
+    (Object.hasOwn(node.handlers, event) ||
+      (node.owned ?? []).some((layer) => Object.hasOwn(layer.handlers, event)))
   )
 
 /**
@@ -1473,8 +1828,11 @@ const handlerOn = (path: ReadonlyArray<View.Node<any, any>>, event: string): Vie
  *
  * @internal
  */
-export const handles = (story: State<any, any, any, any>, node: Locator.Node, event: string): boolean =>
-  handlerOn(ancestry(story, node), event) !== undefined
+export const handles = (
+  story: State<any, any, any, any>,
+  node: Locator.Node,
+  event: string
+): boolean => handlerOn(ancestry(story, node), event) !== undefined
 
 /** What one event did: the record after it, whether its default was cancelled, and whether a layer sent a message. */
 export interface Fired<Props, Model, Msg, Events> {
@@ -1506,20 +1864,24 @@ export const fireNode = <Props, Model, Msg, Events>(
   // parts' layers it owns, wherever its view applied them. A headless child's layer needs the child's `update`.
   const own = "/" + story.component.definition.name
   const owned = handler.owned ?? []
-  const layers = [...owned.filter((layer) => layer.owner.path === own), handler].filter((layer) =>
-    Object.hasOwn(layer.handlers, event)
-  )
+  const layers = [...owned.filter((layer) => layer.owner.path === own), handler]
+    .filter((layer) => Object.hasOwn(layer.handlers, event))
   if (layers.length === 0) {
-    const owners = owned.filter((layer) => Object.hasOwn(layer.handlers, event)).map((layer) => layer.owner.path)
+    const owners = owned.filter((layer) => Object.hasOwn(layer.handlers, event))
+      .map((layer) => layer.owner.path)
     throw new Error(
-      `${step}: only ${owners.join(" and ")} handles "${event}" at ${description}. ` +
+      `${step}: only ${
+        owners.join(" and ")
+      } handles "${event}" at ${description}. ` +
         "A scene doesn't run a child's update: use givenChild for its Model, or a Play."
     )
   }
   // `"always"` from any layer cancels, a child's included. Then each layer runs once, in the runtime's
   // order: its message decides whether its own `preventDefault: true` cancels, then it's sent.
   let prevented = event === "submit" ||
-    [...owned, handler].some((layer) => layer.eventOptions[event]?.preventDefault === "always")
+    [...owned, handler].some((layer) =>
+      layer.eventOptions[event]?.preventDefault === "always"
+    )
   let handled = false
   let out = story
   for (const layer of layers) {
@@ -1543,16 +1905,26 @@ export const fireNode = <Props, Model, Msg, Events>(
  * the message.
  */
 const show = (schema: Schema.Top | undefined, value: unknown): string =>
-  JSON.stringify(schema === undefined ? MessageLog.structural(value) : MessageLog.encodeArgs(schema, value))
+  JSON.stringify(
+    schema === undefined
+      ? MessageLog.structural(value)
+      : MessageLog.encodeArgs(schema, value)
+  )
 
-const describeEvent = (story: State<any, any, any, any>, event: unknown): string => show(story.component.events, event)
+const describeEvent = (
+  story: State<any, any, any, any>,
+  event: unknown
+): string => show(story.component.events, event)
 
 const describeSend = (send: Component.Send): string =>
-  `${show(send.owner.receives, send.message)} to the owner ${send.owner.definition.name}`
+  `${
+    show(send.owner.receives, send.message)
+  } to the owner ${send.owner.definition.name}`
 
 /** Whether a Command's mode lets a message arrive while it runs: what such a mode is for. */
 const exempt = (entry: Pending<any>): boolean =>
-  entry.command._tag === "Stream" || entry.command.mode === "switch" || entry.command.mode === "queue"
+  entry.command._tag === "Stream" || entry.command.mode === "switch" ||
+  entry.command.mode === "queue"
 
 const settleHint = (entry: Pending<any>): string =>
   entry.status === "awaiting"
@@ -1571,16 +1943,26 @@ const settleHint = (entry: Pending<any>): string =>
  */
 export const unloaded = (
   story: State<any, any, any, any>
-): ReadonlyArray<{ readonly name: string; readonly argsKey: string; readonly label: string }> => {
-  const out: Array<{ readonly name: string; readonly argsKey: string; readonly label: string }> = []
+): ReadonlyArray<
+  { readonly name: string; readonly argsKey: string; readonly label: string }
+> => {
+  const out: Array<
+    { readonly name: string; readonly argsKey: string; readonly label: string }
+  > = []
   for (const { entries, query } of currentEntries(story)) {
     const result = story.results?.[query.name]
-    const held = query.keyed ? Query.snapshotMapData(result)?.entries : undefined
+    const held = query.keyed
+      ? Query.snapshotMapData(result)?.entries
+      : undefined
     const def = Query.defOf(query.query)
     for (const { args, argsKey } of entries) {
       const data = Query.snapshotData(query.keyed ? held?.get(argsKey) : result)
       if (data?.argsKey === argsKey && data.result !== undefined) continue
-      out.push({ name: query.name, argsKey, label: query.keyed ? ` at ${def.logKey(args, argsKey)}` : "" })
+      out.push({
+        name: query.name,
+        argsKey,
+        label: query.keyed ? ` at ${def.logKey(args, argsKey)}` : ""
+      })
     }
   }
   return out
@@ -1593,10 +1975,14 @@ export const unloaded = (
  * @internal
  */
 export const describeMount = (mount: View.Mount<any>): string =>
-  `${mount.name}(${JSON.stringify(MessageLog.encodeArgs(mount.argsSchema, mount.args))})`
+  `${mount.name}(${
+    JSON.stringify(MessageLog.encodeArgs(mount.argsSchema, mount.args))
+  })`
 
 /** Mounts that started and that nothing acknowledged. */
-const unacknowledgedMounts = (story: State<any, any, any, any>): Array<string> =>
+const unacknowledgedMounts = (
+  story: State<any, any, any, any>
+): Array<string> =>
   story.ack.mounts.flatMap((live) =>
     live.acknowledged
       ? []
@@ -1611,7 +1997,10 @@ const unacknowledgedMounts = (story: State<any, any, any, any>): Array<string> =
 const isKept = (
   story: State<any, any, any, any>,
   entry: { readonly name: string; readonly argsKey: string }
-): boolean => story.ack.keptQueries.some((kept) => kept.name === entry.name && kept.argsKey === entry.argsKey)
+): boolean =>
+  story.ack.keptQueries.some((kept) =>
+    kept.name === entry.name && kept.argsKey === entry.argsKey
+  )
 
 /** Enabled queries with no result that no `keepPending` marked. */
 const missingQueries = (story: State<any, any, any, any>): Array<string> =>
@@ -1628,7 +2017,11 @@ const inFlight = (story: State<any, any, any, any>): Array<string> => [
   ...story.pending.flatMap((entry) =>
     exempt(entry) || story.ack.kept.includes(entry)
       ? []
-      : [`${describe(entry.command)} [${entry.status}] is pending: ${settleHint(entry)}, or keep it with keepPending`]
+      : [
+        `${describe(entry.command)} [${entry.status}] is pending: ${
+          settleHint(entry)
+        }, or keep it with keepPending`
+      ]
   ),
   ...story.loadingMore.flatMap((name) =>
     story.ack.keptMore.includes(name)
@@ -1643,19 +2036,39 @@ const inFlight = (story: State<any, any, any, any>): Array<string> => [
 
 /** Every pending Command and load more, kept or exempt included: what the end of a test and `given` can't leave. */
 const allPending = (story: State<any, any, any, any>): Array<string> => [
-  ...story.pending.map((entry) => `${describe(entry.command)} [${entry.status}] is pending: ${settleHint(entry)}`),
-  ...story.loadingMore.map((name) => `a load more of "${name}" is pending: settle it with loadedMore or loadMoreFailed`)
+  ...story.pending.map((entry) =>
+    `${describe(entry.command)} [${entry.status}] is pending: ${
+      settleHint(entry)
+    }`
+  ),
+  ...story.loadingMore.map((name) =>
+    `a load more of "${name}" is pending: settle it with loadedMore or loadMoreFailed`
+  )
 ]
 
 /** Outputs no step acknowledged yet. */
 const outputs = (story: State<any, any, any, any>): Array<string> => [
-  ...story.emitted.map((event) => `${describeEvent(story, event)} was emitted: acknowledge it with emitted`),
-  ...story.sent.map((send) => `${describeSend(send)} was sent: acknowledge it with sent`),
-  ...(story.ack.ignored ? ["the last interaction produced no message: acknowledge it with expectIgnored"] : [])
+  ...story.emitted.map((event) =>
+    `${describeEvent(story, event)} was emitted: acknowledge it with emitted`
+  ),
+  ...story.sent.map((send) =>
+    `${describeSend(send)} was sent: acknowledge it with sent`
+  ),
+  ...(story.ack.ignored
+    ? [
+      "the last interaction produced no message: acknowledge it with expectIgnored"
+    ]
+    : [])
 ]
 
-const report = (step: string, what: string, problems: ReadonlyArray<string>): void => {
-  if (problems.length > 0) throw new Error(`${step}: ${what}:\n  - ${problems.join("\n  - ")}`)
+const report = (
+  step: string,
+  what: string,
+  problems: ReadonlyArray<string>
+): void => {
+  if (problems.length > 0) {
+    throw new Error(`${step}: ${what}:\n  - ${problems.join("\n  - ")}`)
+  }
 }
 
 /**
@@ -1664,11 +2077,17 @@ const report = (step: string, what: string, problems: ReadonlyArray<string>): vo
  *
  * @internal
  */
-export const checkBefore = (story: State<any, any, any, any>, step: string, kind: "message" | "acting"): void =>
+export const checkBefore = (
+  story: State<any, any, any, any>,
+  step: string,
+  kind: "message" | "acting"
+): void =>
   report(
     step,
     "earlier work isn't settled or acknowledged",
-    kind === "message" ? [...inFlight(story), ...outputs(story)] : outputs(story)
+    kind === "message"
+      ? [...inFlight(story), ...outputs(story)]
+      : outputs(story)
   )
 
 /**
@@ -1677,7 +2096,10 @@ export const checkBefore = (story: State<any, any, any, any>, step: string, kind
  *
  * @internal
  */
-export const checkEnd = (story: State<any, any, any, any>, step: string): void =>
+export const checkEnd = (
+  story: State<any, any, any, any>,
+  step: string
+): void =>
   report(step, "the test ends with work not settled or acknowledged", [
     ...allPending(story),
     ...missingQueries(story),
@@ -1691,7 +2113,10 @@ export const checkEnd = (story: State<any, any, any, any>, step: string): void =
  *
  * @internal
  */
-export const checkGiven = (story: State<any, any, any, any>, step: string): void =>
+export const checkGiven = (
+  story: State<any, any, any, any>,
+  step: string
+): void =>
   report(step, "given would discard work not settled or acknowledged", [
     ...allPending(story),
     ...unacknowledgedMounts(story),
@@ -1742,10 +2167,15 @@ export const keep = <Props, Model, Msg, Events>(
 ): State<Props, Model, Msg, Events> => {
   if (typeof target === "string") {
     queryOf(story, step, target)
-    const more = story.loadingMore.includes(target) && !story.ack.keptMore.includes(target)
-    const missing = unloaded(story).filter((entry) => entry.name === target && !isKept(story, entry))
+    const more = story.loadingMore.includes(target) &&
+      !story.ack.keptMore.includes(target)
+    const missing = unloaded(story).filter((entry) =>
+      entry.name === target && !isKept(story, entry)
+    )
     if (!more && missing.length === 0) {
-      throw new Error(`${step}: the query "${target}" has a result at its args and no load more pending`)
+      throw new Error(
+        `${step}: the query "${target}" has a result at its args and no load more pending`
+      )
     }
     return update(story, {
       ack: {
@@ -1760,10 +2190,20 @@ export const keep = <Props, Model, Msg, Events>(
   }
   const matched = story.pending.filter((entry) => matches(target, entry))
   if (matched.length === 0) {
-    throw new Error(`${step}: no ${describeTarget(target)} is pending; pending: ${describePending(story.pending)}`)
+    throw new Error(
+      `${step}: no ${describeTarget(target)} is pending; pending: ${
+        describePending(story.pending)
+      }`
+    )
   }
   return update(story, {
-    ack: { ...story.ack, kept: [...story.ack.kept, ...matched.filter((entry) => !story.ack.kept.includes(entry))] }
+    ack: {
+      ...story.ack,
+      kept: [
+        ...story.ack.kept,
+        ...matched.filter((entry) => !story.ack.kept.includes(entry))
+      ]
+    }
   })
 }
 
@@ -1778,14 +2218,23 @@ export const acknowledgeEmitted = <Props, Model, Msg, Events>(
   events: ReadonlyArray<unknown>,
   step: string
 ): State<Props, Model, Msg, Events> => {
-  const same = Schema.toEquivalence(story.component.events as Schema.Codec<unknown, unknown>)
+  const same = Schema.toEquivalence(
+    story.component.events as Schema.Codec<unknown, unknown>
+  )
   const oldest = story.emitted.slice(0, events.length)
-  if (events.length === 0 || oldest.length < events.length || !oldest.every((event, i) => same(event, events[i]))) {
+  if (
+    events.length === 0 || oldest.length < events.length ||
+    !oldest.every((event, i) => same(event, events[i]))
+  ) {
     throw new Error(
       `${step}: expected ${
-        events.length === 0 ? "at least one event" : events.map((event) => describeEvent(story, event)).join(", ")
+        events.length === 0
+          ? "at least one event"
+          : events.map((event) => describeEvent(story, event)).join(", ")
       }; unacknowledged: ${
-        story.emitted.length === 0 ? "nothing" : story.emitted.map((event) => describeEvent(story, event)).join(", ")
+        story.emitted.length === 0
+          ? "nothing"
+          : story.emitted.map((event) => describeEvent(story, event)).join(", ")
       }`
     )
   }
@@ -1806,12 +2255,15 @@ export const acknowledgeSent = <Props, Model, Msg, Events>(
 ): State<Props, Model, Msg, Events> => {
   const oldest = story.sent[0]
   const receives: Schema.Codec<unknown, unknown> = owner.receives
-  const matched = oldest !== undefined && oldest.owner.definition === owner.definition &&
+  const matched = oldest !== undefined &&
+    oldest.owner.definition === owner.definition &&
     Schema.toEquivalence(receives)(oldest.message, message)
   if (!matched) {
     throw new Error(
       `${step}: expected ${describeSend({ owner, message })}; unacknowledged: ${
-        story.sent.length === 0 ? "nothing" : story.sent.map(describeSend).join(", ")
+        story.sent.length === 0
+          ? "nothing"
+          : story.sent.map(describeSend).join(", ")
       }`
     )
   }
@@ -1825,17 +2277,26 @@ export const resolveWith = (entry: Pending<any>, result: unknown): any =>
   (entry.command.resolve as (result: unknown) => unknown)(result)
 
 /** @internal */
-export const findStream = (story: State<any, any, any, any>, target: StreamTarget, step: string): Pending<any> => {
+export const findStream = (
+  story: State<any, any, any, any>,
+  target: StreamTarget,
+  step: string
+): Pending<any> => {
   const entry = findRunning(story, target, step)
   if (entry.command._tag !== "Stream") {
-    throw new Error(`${step}: ${describe(entry.command)} is not a stream Command`)
+    throw new Error(
+      `${step}: ${describe(entry.command)} is not a stream Command`
+    )
   }
   return entry
 }
 
 /** @internal */
 export const rootParts = <Props, Parts>(
-  component: Pick<Component.Headless<Props, any, Parts, any, any>, "definition" | "parts">,
+  component: Pick<
+    Component.Headless<Props, any, Parts, any, any>,
+    "definition" | "parts"
+  >,
   model: unknown,
   props: Props,
   lookup: object
@@ -1850,10 +2311,18 @@ export const rootParts = <Props, Parts>(
     while (childOf.isComposed(value)) {
       const child = value.child
       const owned = child.component as unknown as Component.Headless.Any
-      const at: View.Owner = { path: owner.path + "/" + segment(child), depth: owner.depth + 1 }
-      const ownedModel = given?.has(at.path) ? given.get(at.path) : owned.init(child.props).model
+      const at: View.Owner = {
+        path: owner.path + "/" + segment(child),
+        depth: owner.depth + 1
+      }
+      const ownedModel = given?.has(at.path)
+        ? given.get(at.path)
+        : owned.init(child.props).model
       const [parts, inner, below] = resolve(
-        owned.parts(ownedModel, child.props, { owner: at, shared: sharedLookup(shared, owners) }),
+        owned.parts(ownedModel, child.props, {
+          owner: at,
+          shared: sharedLookup(shared, owners)
+        }),
         at,
         ownersBelow(owners, owned, ownedModel, child.props)
       )
@@ -1894,9 +2363,17 @@ export const withView = (
       _path?: string,
       shared?: Component.SharedLookup
     ) => {
-      const h = View.makeHelper(props, elements ?? component.elements(), running, owner.path)
+      const h = View.makeHelper(
+        props,
+        elements ?? component.elements(),
+        running,
+        owner.path
+      )
       return View.toNode(
-        childOf.expand(component.parts(model, props, { owner, running, queries, shared }), (parts) => view(parts, h))
+        childOf.expand(
+          component.parts(model, props, { owner, running, queries, shared }),
+          (parts) => view(parts, h)
+        )
       )
     }
   })
@@ -1915,7 +2392,14 @@ export const withSlots = (
   const made = Object.create(component)
   storySlots.set(
     made,
-    slots(View.makeHelper({}, elements ?? component.elements(), undefined, "/" + component.definition.name))
+    slots(
+      View.makeHelper(
+        {},
+        elements ?? component.elements(),
+        undefined,
+        "/" + component.definition.name
+      )
+    )
   )
   return made
 }
@@ -1929,17 +2413,24 @@ export const children = <Msg>(
   view: View.Node<Msg, any>,
   component?: Component.Any | { readonly key: string }
 ): ReadonlyArray<View.Child<Msg, any>> =>
-  [...(expandedChildren.get(view) ?? []), ...shownNodes(view)].filter((node): node is View.Child<Msg, any> =>
-    node._tag === "Child" && (component === undefined || node.component === component)
+  [...(expandedChildren.get(view) ?? []), ...shownNodes(view)].filter((
+    node
+  ): node is View.Child<Msg, any> =>
+    node._tag === "Child" &&
+    (component === undefined || node.component === component)
   )
 
 /**
  * `node` and the nodes below it, as a story shows them: the content it expanded under a child or an
  * outlet, or, in a view it didn't expand, what a child's slots were passed.
  */
-const shownNodes = function*(node: View.Node<any, any>): Generator<View.Node<any, any>> {
+const shownNodes = function*(
+  node: View.Node<any, any>
+): Generator<View.Node<any, any>> {
   yield node
-  const shown = (node as { readonly children?: ReadonlyArray<View.Node<any, any>> }).children
+  const shown =
+    (node as { readonly children?: ReadonlyArray<View.Node<any, any>> })
+      .children
   if (shown !== undefined) {
     for (const child of shown) yield* shownNodes(child)
   } else if (node._tag === "Child") {
@@ -1953,8 +2444,10 @@ const shownNodes = function*(node: View.Node<any, any>): Generator<View.Node<any
  */
 const isChildOf = (child: View.Child<any, any>, component: object): boolean => {
   if (child.component === component) return true
-  const definition = (child.component as { readonly definition?: unknown }).definition
-  return definition !== undefined && definition === (component as { readonly definition?: unknown }).definition
+  const definition =
+    (child.component as { readonly definition?: unknown }).definition
+  return definition !== undefined &&
+    definition === (component as { readonly definition?: unknown }).definition
 }
 
 /**
@@ -1965,22 +2458,36 @@ const isChildOf = (child: View.Child<any, any>, component: object): boolean => {
  */
 export const findChild = (
   view: View.Node<any, any>,
-  component: Component.AnyRoot | Component.Headless.Any | Component.Lazy.Any | Feature.Any,
+  component:
+    | Component.AnyRoot
+    | Component.Headless.Any
+    | Component.Lazy.Any
+    | Feature.Any,
   key: string | undefined,
   step: string
 ): Occurrence => {
   const all = occurrences.get(view) ??
-    children(view).map((child): Occurrence => ({ child, path: undefined, scope: undefined }))
-  const found = all.filter(({ child }) => isChildOf(child, component) && child.key === (key ?? ""))
+    children(view).map((child): Occurrence => ({
+      child,
+      path: undefined,
+      scope: undefined
+    }))
+  const found = all.filter(({ child }) =>
+    isChildOf(child, component) && child.key === (key ?? "")
+  )
   if (found.length === 1) return found[0]!
   const name = childName(component as Component.Any)
   const which = key === undefined ? "without a key" : `with key "${key}"`
   if (found.length === 0) {
     throw new Error(
-      `${step}: no child ${name} ${which}; children: ${all.map(({ child }) => segment(child)).join(", ")}`
+      `${step}: no child ${name} ${which}; children: ${
+        all.map(({ child }) => segment(child)).join(", ")
+      }`
     )
   }
-  const owners = found.flatMap(({ child }) => child.owner === undefined ? [] : [child.owner.path])
+  const owners = found.flatMap(({ child }) =>
+    child.owner === undefined ? [] : [child.owner.path]
+  )
   throw new Error(
     owners.length === 0
       ? `${step}: ${found.length} children ${name} ${which}: give each one its own key`

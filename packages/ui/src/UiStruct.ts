@@ -44,11 +44,14 @@ import type * as Types from "effect/Types"
  * @category utility types
  * @since 0.1.0
  */
-export type EvolveFields<S> = unknown extends S ? "evolve needs the struct's type: write evolve<Model>(...)"
-  : Types.IsUnion<S> extends true ? "evolve takes one struct: match the union first"
+export type EvolveFields<S> = unknown extends S ?
+  "evolve needs the struct's type: write evolve<Model>(...)"
+  : Types.IsUnion<S> extends true ?
+    "evolve takes one struct: match the union first"
   : S extends ReadonlyArray<unknown> ? "evolve takes a struct, not an array"
   : S extends (...args: any) => any ? "evolve takes a struct"
-  : S extends object ? [keyof S] extends [never] ? "evolve takes a struct with fields"
+  : S extends object ?
+    [keyof S] extends [never] ? "evolve takes a struct with fields"
     : { readonly [K in keyof S]?: EvolveField<S[K]> }
   : "evolve takes a struct"
 

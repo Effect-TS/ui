@@ -55,7 +55,19 @@ const adjectives = [
   "expensive",
   "fancy"
 ]
-const colours = ["red", "yellow", "blue", "green", "pink", "brown", "purple", "brown", "white", "black", "orange"]
+const colours = [
+  "red",
+  "yellow",
+  "blue",
+  "green",
+  "pink",
+  "brown",
+  "purple",
+  "brown",
+  "white",
+  "black",
+  "orange"
+]
 const nouns = [
   "table",
   "chair",
@@ -80,7 +92,8 @@ const random = (max: number) => {
 export const buildRows = (from: number, count: number): Array<Row> =>
   Array.from({ length: count }, (_, i) => ({
     id: from + i,
-    label: adjectives[random(adjectives.length)] + " " + colours[random(colours.length)] + " " +
+    label: adjectives[random(adjectives.length)] + " " +
+      colours[random(colours.length)] + " " +
       nouns[random(nouns.length)]
   }))
 
@@ -102,7 +115,12 @@ export const update = (model: Model, message: Message): Model => {
         nextId: model.nextId + message.count
       }
     case "Update":
-      return { ...model, rows: model.rows.map((row, i) => i % 10 === 0 ? { ...row, label: row.label + " !!!" } : row) }
+      return {
+        ...model,
+        rows: model.rows.map((row, i) =>
+          i % 10 === 0 ? { ...row, label: row.label + " !!!" } : row
+        )
+      }
     case "Clear":
       return { ...model, rows: [], selected: 0 }
     case "Swap": {
@@ -116,7 +134,10 @@ export const update = (model: Model, message: Message): Model => {
     case "Select":
       return { ...model, selected: message.id }
     case "Remove":
-      return { ...model, rows: model.rows.filter((row) => row.id !== message.id) }
+      return {
+        ...model,
+        rows: model.rows.filter((row) => row.id !== message.id)
+      }
   }
 }
 
@@ -165,7 +186,11 @@ const mountApp = async (variant: Variant) => {
     mounted.send(message)
     return (await settle(done, label)) - start
   }
-  const click = async (element: HTMLElement, done: () => boolean, label: string) => {
+  const click = async (
+    element: HTMLElement,
+    done: () => boolean,
+    label: string
+  ) => {
     const start = performance.now()
     element.click()
     return (await settle(done, label)) - start
@@ -178,11 +203,14 @@ const mountApp = async (variant: Variant) => {
 }
 type App = Awaited<ReturnType<typeof mountApp>>
 
-const firstLabel = (rows: HTMLCollection) => rows[0]?.children[1]?.textContent ?? ""
+const firstLabel = (rows: HTMLCollection) =>
+  rows[0]?.children[1]?.textContent ?? ""
 
 type Op = (app: App) => Promise<number>
-const run = (count: number) => (app: App) => app.send({ _tag: "Run", count }, () => app.rows().length === count, "run")
-const clear = (app: App) => app.send({ _tag: "Clear" }, () => app.rows().length === 0, "clear")
+const run = (count: number) => (app: App) =>
+  app.send({ _tag: "Run", count }, () => app.rows().length === count, "run")
+const clear = (app: App) =>
+  app.send({ _tag: "Clear" }, () => app.rows().length === 0, "clear")
 
 /** Each op: a setup outside the figure, then the measured step. */
 const ops: Record<string, { readonly setup: Op; readonly step: Op }> = {
@@ -191,38 +219,64 @@ const ops: Record<string, { readonly setup: Op; readonly step: Op }> = {
     setup: run(1000),
     step: (app) => {
       const before = app.rows()[0]
-      return app.send({ _tag: "Run", count: 1000 }, () => app.rows()[0] !== before, "replace")
+      return app.send(
+        { _tag: "Run", count: 1000 },
+        () => app.rows()[0] !== before,
+        "replace"
+      )
     }
   },
   update10th: {
     setup: run(1000),
-    step: (app) => app.send({ _tag: "Update" }, () => firstLabel(app.rows()).endsWith("!!!"), "update")
+    step: (app) =>
+      app.send(
+        { _tag: "Update" },
+        () => firstLabel(app.rows()).endsWith("!!!"),
+        "update"
+      )
   },
   select: {
     setup: run(1000),
     step: (app) => {
       const row = app.rows()[500] as HTMLElement
-      return app.click(row.children[1].firstElementChild as HTMLElement, () => row.className === "danger", "select")
+      return app.click(
+        row.children[1].firstElementChild as HTMLElement,
+        () => row.className === "danger",
+        "select"
+      )
     }
   },
   swap: {
     setup: run(1000),
     step: (app) => {
       const second = app.rows()[1]
-      return app.send({ _tag: "Swap" }, () => app.rows()[998] === second, "swap")
+      return app.send(
+        { _tag: "Swap" },
+        () => app.rows()[998] === second,
+        "swap"
+      )
     }
   },
   remove: {
     setup: run(1000),
     step: (app) => {
       const row = app.rows()[500] as HTMLElement
-      return app.click(row.children[2].firstElementChild as HTMLElement, () => row.parentNode === null, "remove")
+      return app.click(
+        row.children[2].firstElementChild as HTMLElement,
+        () => row.parentNode === null,
+        "remove"
+      )
     }
   },
   create10k: { setup: clear, step: run(10000) },
   append1k: {
     setup: run(1000),
-    step: (app) => app.send({ _tag: "Add", count: 1000 }, () => app.rows().length === 2000, "append")
+    step: (app) =>
+      app.send(
+        { _tag: "Add", count: 1000 },
+        () => app.rows().length === 2000,
+        "append"
+      )
   },
   clear1k: { setup: run(1000), step: clear }
 }
@@ -230,13 +284,21 @@ const ops: Record<string, { readonly setup: Op; readonly step: Op }> = {
 export const install = (variants: Record<string, Variant>) => {
   const variant = (name: string) => {
     const found = variants[name]
-    if (found === undefined) throw new Error("bench: this bundle has no variant " + name)
+    if (found === undefined) {
+      throw new Error("bench: this bundle has no variant " + name)
+    }
     return found
   }
   ;(window as any).opNames = Object.keys(
     ops
   ) /** The median of `repeats` measured steps, after `warmup` unmeasured ones. */
-  ;(window as any).bench = async (name: string, op: string, warmup: number, repeats: number, profile = false) => {
+  ;(window as any).bench = async (
+    name: string,
+    op: string,
+    warmup: number,
+    repeats: number,
+    profile = false
+  ) => {
     hops = 0
     const app = await mountApp(variant(name))
     const { setup, step } = ops[op]
@@ -249,7 +311,10 @@ export const install = (variants: Record<string, Variant>) => {
       if (profile) console.profile("step")
       const time = await step(app)
       if (profile) console.profileEnd("step")
-      check(hops === 0, name + " " + op + ": the change rendered later than the first microtask")
+      check(
+        hops === 0,
+        name + " " + op + ": the change rendered later than the first microtask"
+      )
       if (i >= warmup) times.push(time)
       await task()
     }

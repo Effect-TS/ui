@@ -82,7 +82,13 @@ export interface SeparatorProps {
  * @category models
  * @since 0.1.0
  */
-export type SeparatorElement<Msg, R = never> = Html.Element<Msg, R, Html.EventsOf<"div">, HTMLDivElement, "div">
+export type SeparatorElement<Msg, R = never> = Html.Element<
+  Msg,
+  R,
+  Html.EventsOf<"div">,
+  HTMLDivElement,
+  "div"
+>
 
 /**
  * A static divider between sections of content. Call it with the caller's

@@ -68,15 +68,20 @@ import type * as View from "../View.ts"
 import type * as Html from "./Html.ts"
 import { modifiers, pointerTypeOf } from "./internal/pointer.ts"
 
-const callable = <S extends Schema.Top, F extends Function>(schema: S, construct: F): S & F =>
-  Object.setPrototypeOf(construct, schema)
+const callable = <S extends Schema.Top, F extends Function>(
+  schema: S,
+  construct: F
+): S & F => Object.setPrototypeOf(construct, schema)
 
-const tagged = <A extends { readonly _tag: string }>(tag: A["_tag"]) => (fields: Omit<A, "_tag">): A =>
-  ({ ...fields, _tag: tag }) as A
+const tagged =
+  <A extends { readonly _tag: string }>(tag: A["_tag"]) =>
+  (fields: Omit<A, "_tag">): A => ({ ...fields, _tag: tag }) as A
 
 // The equivalence derived for a union validates both values against a member before it compares them,
 // which costs many times the comparison. The `_tag` already says which member's equivalence applies.
-const sameByTag = <S extends Schema.Top & { readonly Type: { readonly _tag: string } }>(
+const sameByTag = <
+  S extends Schema.Top & { readonly Type: { readonly _tag: string } }
+>(
   cases: Record<string, Schema.Top>
 ) =>
   Schema.overrideToEquivalence<S>(() => {
@@ -127,7 +132,13 @@ export const LineJoin = Schema.Literals(["miter", "round", "bevel"])
  * @category shapes
  * @since 0.1.0
  */
-export const TextAlign = Schema.Literals(["left", "center", "right", "start", "end"])
+export const TextAlign = Schema.Literals([
+  "left",
+  "center",
+  "right",
+  "start",
+  "end"
+])
 
 /**
  * Where a `Text` sits across its `y`.
@@ -136,7 +147,14 @@ export const TextAlign = Schema.Literals(["left", "center", "right", "start", "e
  * @category shapes
  * @since 0.1.0
  */
-export const TextBaseline = Schema.Literals(["top", "middle", "bottom", "alphabetic", "hanging", "ideographic"])
+export const TextBaseline = Schema.Literals([
+  "top",
+  "middle",
+  "bottom",
+  "alphabetic",
+  "hanging",
+  "ideographic"
+])
 
 const RectSchema = Schema.TaggedStruct("Rect", {
   x: Schema.Number,
@@ -165,10 +183,11 @@ export interface Rect extends Schema.Schema.Type<typeof RectSchema> {}
  * @category shapes
  * @since 0.1.0
  */
-export const Rect: typeof RectSchema & ((fields: Omit<Rect, "_tag">) => Rect) = callable(
-  RectSchema,
-  tagged<Rect>("Rect")
-)
+export const Rect: typeof RectSchema & ((fields: Omit<Rect, "_tag">) => Rect) =
+  callable(
+    RectSchema,
+    tagged<Rect>("Rect")
+  )
 
 const CircleSchema = Schema.TaggedStruct("Circle", {
   x: Schema.Number,
@@ -195,10 +214,12 @@ export interface Circle extends Schema.Schema.Type<typeof CircleSchema> {}
  * @category shapes
  * @since 0.1.0
  */
-export const Circle: typeof CircleSchema & ((fields: Omit<Circle, "_tag">) => Circle) = callable(
-  CircleSchema,
-  tagged<Circle>("Circle")
-)
+export const Circle:
+  & typeof CircleSchema
+  & ((fields: Omit<Circle, "_tag">) => Circle) = callable(
+    CircleSchema,
+    tagged<Circle>("Circle")
+  )
 
 /**
  * The steps of a `Path`, with a constructor per step that doesn't
@@ -213,7 +234,12 @@ export const Circle: typeof CircleSchema & ((fields: Omit<Circle, "_tag">) => Ci
 export const PathCommand = UiSchema.TaggedEnum({
   MoveTo: { x: Schema.Number, y: Schema.Number },
   LineTo: { x: Schema.Number, y: Schema.Number },
-  QuadTo: { cpx: Schema.Number, cpy: Schema.Number, x: Schema.Number, y: Schema.Number },
+  QuadTo: {
+    cpx: Schema.Number,
+    cpy: Schema.Number,
+    x: Schema.Number,
+    y: Schema.Number
+  },
   BezierTo: {
     cp1x: Schema.Number,
     cp1y: Schema.Number,
@@ -259,10 +285,11 @@ export interface Path extends Schema.Schema.Type<typeof PathSchema> {}
  * @category shapes
  * @since 0.1.0
  */
-export const Path: typeof PathSchema & ((fields: Omit<Path, "_tag">) => Path) = callable(
-  PathSchema,
-  tagged<Path>("Path")
-)
+export const Path: typeof PathSchema & ((fields: Omit<Path, "_tag">) => Path) =
+  callable(
+    PathSchema,
+    tagged<Path>("Path")
+  )
 
 const TextSchema = Schema.TaggedStruct("Text", {
   x: Schema.Number,
@@ -293,10 +320,11 @@ export interface Text extends Schema.Schema.Type<typeof TextSchema> {}
  * @category shapes
  * @since 0.1.0
  */
-export const Text: typeof TextSchema & ((fields: Omit<Text, "_tag">) => Text) = callable(
-  TextSchema,
-  tagged<Text>("Text")
-)
+export const Text: typeof TextSchema & ((fields: Omit<Text, "_tag">) => Text) =
+  callable(
+    TextSchema,
+    tagged<Text>("Text")
+  )
 
 /**
  * Shapes drawn together, moved by `translate`, then turned by `rotate` in
@@ -331,10 +359,12 @@ const GroupSchema = Schema.TaggedStruct("Group", {
  * @category shapes
  * @since 0.1.0
  */
-export const Group: typeof GroupSchema & ((fields: Omit<Group, "_tag">) => Group) = callable(
-  GroupSchema,
-  tagged<Group>("Group")
-)
+export const Group:
+  & typeof GroupSchema
+  & ((fields: Omit<Group, "_tag">) => Group) = callable(
+    GroupSchema,
+    tagged<Group>("Group")
+  )
 
 /**
  * Anything a scene holds.
@@ -352,7 +382,13 @@ export type Shape = Rect | Circle | Path | Text | Group
  * @category shapes
  * @since 0.1.0
  */
-export const Shape: Schema.Codec<Shape> = Schema.Union([Rect, Circle, Path, Text, Group]).pipe(
+export const Shape: Schema.Codec<Shape> = Schema.Union([
+  Rect,
+  Circle,
+  Path,
+  Text,
+  Group
+]).pipe(
   sameByTag({ Rect, Circle, Path, Text, Group })
 )
 
@@ -363,9 +399,15 @@ export const Shape: Schema.Codec<Shape> = Schema.Union([Rect, Circle, Path, Text
  * @category painting
  * @since 0.1.0
  */
-export type Context2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
+export type Context2D =
+  | CanvasRenderingContext2D
+  | OffscreenCanvasRenderingContext2D
 
-const strokeWith = (context: Context2D, stroke: string, lineWidth: number | undefined) => {
+const strokeWith = (
+  context: Context2D,
+  stroke: string,
+  lineWidth: number | undefined
+) => {
   context.strokeStyle = stroke
   if (lineWidth !== undefined) context.lineWidth = lineWidth
 }
@@ -401,10 +443,22 @@ const paintShape = (context: Context2D, shape: Shape): void => {
             context.lineTo(command.x, command.y)
             break
           case "QuadTo":
-            context.quadraticCurveTo(command.cpx, command.cpy, command.x, command.y)
+            context.quadraticCurveTo(
+              command.cpx,
+              command.cpy,
+              command.x,
+              command.y
+            )
             break
           case "BezierTo":
-            context.bezierCurveTo(command.cp1x, command.cp1y, command.cp2x, command.cp2y, command.x, command.y)
+            context.bezierCurveTo(
+              command.cp1x,
+              command.cp1y,
+              command.cp2x,
+              command.cp2y,
+              command.x,
+              command.y
+            )
             break
           case "Close":
             context.closePath()
@@ -431,7 +485,9 @@ const paintShape = (context: Context2D, shape: Shape): void => {
     }
     case "Group": {
       if (shape.opacity !== undefined) context.globalAlpha *= shape.opacity
-      if (shape.translate !== undefined) context.translate(shape.translate.x, shape.translate.y)
+      if (shape.translate !== undefined) {
+        context.translate(shape.translate.x, shape.translate.y)
+      }
       if (shape.rotate !== undefined) context.rotate(shape.rotate)
       if (shape.scale !== undefined) context.scale(shape.scale.x, shape.scale.y)
       for (const child of shape.shapes) paintShape(context, child)
@@ -485,7 +541,11 @@ const fillAndStroke = (context: Context2D, shape: Circle | Path) => {
  */
 export const paint = (
   context: Context2D,
-  scene: { readonly width: number; readonly height: number; readonly shapes: ReadonlyArray<Shape> }
+  scene: {
+    readonly width: number
+    readonly height: number
+    readonly shapes: ReadonlyArray<Shape>
+  }
 ): void => {
   context.clearRect(0, 0, scene.width, scene.height)
   for (const shape of scene.shapes) paintShape(context, shape)
@@ -498,7 +558,11 @@ export const paint = (
  * @category mounts
  * @since 0.1.0
  */
-export const PointerEvent = Schema.Literals(["pointerdown", "pointermove", "pointerup"])
+export const PointerEvent = Schema.Literals([
+  "pointerdown",
+  "pointermove",
+  "pointerup"
+])
 
 /**
  * A pointer event a canvas reports.
@@ -584,29 +648,41 @@ export const Paint = Mount.makeStream(
         const listening = new AbortController()
         const { signal } = listening
         yield* Effect.addFinalizer(() => Effect.sync(() => listening.abort()))
-        const report = (event: PointerEvent) => (from: globalThis.PointerEvent) => {
-          if (!args.listen.includes(event)) return
-          const box = canvas.getBoundingClientRect()
-          Queue.offerUnsafe(queue, {
-            event,
-            button: from.button,
-            x: (from.clientX - box.left) * (box.width === 0 ? 1 : args.width / box.width),
-            y: (from.clientY - box.top) * (box.height === 0 ? 1 : args.height / box.height),
-            ...modifiers(from),
-            pointerType: pointerTypeOf(from) ?? "mouse"
-          })
-        }
+        const report =
+          (event: PointerEvent) => (from: globalThis.PointerEvent) => {
+            if (!args.listen.includes(event)) return
+            const box = canvas.getBoundingClientRect()
+            Queue.offerUnsafe(queue, {
+              event,
+              button: from.button,
+              x: (from.clientX - box.left) *
+                (box.width === 0 ? 1 : args.width / box.width),
+              y: (from.clientY - box.top) *
+                (box.height === 0 ? 1 : args.height / box.height),
+              ...modifiers(from),
+              pointerType: pointerTypeOf(from) ?? "mouse"
+            })
+          }
         canvas.addEventListener("pointerdown", (event) => {
-          if (!args.listen.includes("pointermove") && !args.listen.includes("pointerup")) return
+          if (
+            !args.listen.includes("pointermove") &&
+            !args.listen.includes("pointerup")
+          ) return
           // A pointer the browser doesn't know as active, such as a synthetic event's, can't be captured.
           try {
             canvas.setPointerCapture(event.pointerId)
           } catch {}
         }, { signal })
-        canvas.addEventListener("pointerdown", report("pointerdown"), { signal })
-        canvas.addEventListener("pointermove", report("pointermove"), { signal })
+        canvas.addEventListener("pointerdown", report("pointerdown"), {
+          signal
+        })
+        canvas.addEventListener("pointermove", report("pointermove"), {
+          signal
+        })
         canvas.addEventListener("pointerup", report("pointerup"), { signal })
-        canvas.addEventListener("pointercancel", report("pointerup"), { signal })
+        canvas.addEventListener("pointercancel", report("pointerup"), {
+          signal
+        })
         const context = canvas.getContext("2d")
         yield* Stream.runForEach(changes, (next) =>
           Effect.sync(() => {
@@ -721,10 +797,17 @@ export const view = <Msg>(
     pointerup: options.onPointerUp
   }
   const listen = pointerEvents.filter((event) => handlers[event] !== undefined)
-  const canvas = h.canvas.attrs({ width: String(width), height: String(height) })
-  return (pixelRatio === 1 ? canvas : canvas.style({ width: width + "px", height: height + "px" })).onMount(
-    Paint({ width, height, shapes, pixelRatio, listen }).pipe(
-      Mount.map(({ event, ...payload }) => handle(handlers[event], payload) ?? Component.noop)
+  const canvas = h.canvas.attrs({
+    width: String(width),
+    height: String(height)
+  })
+  return (pixelRatio === 1
+    ? canvas
+    : canvas.style({ width: width + "px", height: height + "px" })).onMount(
+      Paint({ width, height, shapes, pixelRatio, listen }).pipe(
+        Mount.map(({ event, ...payload }) =>
+          handle(handlers[event], payload) ?? Component.noop
+        )
+      )
     )
-  )
 }

@@ -3,7 +3,8 @@ const effectMark =
 
 const logo = "url(\"data:image/svg+xml," +
   encodeURIComponent(
-    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 996 1000'><path d='" + effectMark + "'/></svg>"
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 996 1000'><path d='" +
+      effectMark + "'/></svg>"
   ) + "\")"
 
 export const styles = `

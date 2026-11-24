@@ -2,7 +2,14 @@ import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import * as VirtualKeyboard from "../VirtualKeyboard.ts"
-import { activeOf, byAttribute, isElement, isHTMLElement, onRange, saved } from "./dom.ts"
+import {
+  activeOf,
+  byAttribute,
+  isElement,
+  isHTMLElement,
+  onRange,
+  saved
+} from "./dom.ts"
 import { isAndroid } from "./platform.ts"
 import { clamp } from "./range.ts"
 
@@ -26,7 +33,8 @@ const stallFrames = 3
 const maxReissues = 3
 const tapMove = 10
 const hitSlop = 16
-const interactive = "button,a[href],[role=\"button\"],select,[tabindex]:not([tabindex=\"-1\"])," +
+const interactive =
+  "button,a[href],[role=\"button\"],select,[tabindex]:not([tabindex=\"-1\"])," +
   "input:not([type='hidden']):not([disabled]),[contenteditable]:not([contenteditable='false']),textarea:not([disabled])"
 
 const blocked = Symbol("blocked")
@@ -54,7 +62,9 @@ const parentOf = (node: Node): Node | null => {
   const slot = isElement(node) ? node.assignedSlot : null
   if (slot != null) return slot
   const parent = node.parentNode
-  return parent !== null && parent.nodeType === 11 && "host" in parent ? (parent as ShadowRoot).host : parent
+  return parent !== null && parent.nodeType === 11 && "host" in parent
+    ? (parent as ShadowRoot).host
+    : parent
 }
 
 const contains = (parent: Node, child: Node | null): boolean => {
@@ -65,36 +75,58 @@ const contains = (parent: Node, child: Node | null): boolean => {
 }
 
 const dialogOf = (node: Node): Node | null => {
-  for (let current = parentOf(node); current !== null; current = parentOf(current)) {
+  for (
+    let current = parentOf(node);
+    current !== null;
+    current = parentOf(current)
+  ) {
     if (isElement(current) && current.localName === "dialog") return current
   }
   return null
 }
 
-const targetOf = (event: Event): EventTarget | null => event.composedPath()[0] ?? event.target
+const targetOf = (event: Event): EventTarget | null =>
+  event.composedPath()[0] ?? event.target
 
 const elementAt = (root: Node, x: number, y: number): Element | null => {
-  const from = (root as Partial<Pick<Document, "elementFromPoint">>).elementFromPoint
+  const from =
+    (root as Partial<Pick<Document, "elementFromPoint">>).elementFromPoint
   return typeof from === "function" ? from.call(root, x, y) : null
 }
 
 const lastTraversable = (node: Node): boolean =>
-  node.nodeType === 9 || (isElement(node) && (node.localName === "html" || node.localName === "body"))
+  node.nodeType === 9 ||
+  (isElement(node) && (node.localName === "html" || node.localName === "body"))
 
 const scrollable = (element: HTMLElement, intent: boolean): boolean => {
-  const { overflowY } = element.ownerDocument.defaultView!.getComputedStyle(element)
+  const { overflowY } = element.ownerDocument.defaultView!.getComputedStyle(
+    element
+  )
   if (overflowY !== "auto" && overflowY !== "scroll") return false
-  return intent ? element.clientHeight > 0 : element.scrollHeight > element.clientHeight
+  return intent
+    ? element.clientHeight > 0
+    : element.scrollHeight > element.clientHeight
 }
 
-const scrollerOf = (start: Node | null, root: HTMLElement, intent: boolean): HTMLElement | null => {
-  for (let node = start; isElement(node) && node !== root && !lastTraversable(node); node = parentOf(node)) {
+const scrollerOf = (
+  start: Node | null,
+  root: HTMLElement,
+  intent: boolean
+): HTMLElement | null => {
+  for (
+    let node = start;
+    isElement(node) && node !== root && !lastTraversable(node);
+    node = parentOf(node)
+  ) {
     if (isHTMLElement(node) && scrollable(node, intent)) return node
   }
   return scrollable(root, intent) ? root : null
 }
 
-const keyboardScroller = (target: HTMLElement, root: HTMLElement): HTMLElement | null => {
+const keyboardScroller = (
+  target: HTMLElement,
+  root: HTMLElement
+): HTMLElement | null => {
   const start = parentOf(target)
   return scrollerOf(start, root, false) ?? scrollerOf(start, root, true)
 }
@@ -105,19 +137,34 @@ const touchTargetOf = (target: EventTarget | null): TouchTarget | null => {
   return focus === null ? null : { focus, click: target }
 }
 
-const touchTargetAt = (root: Node, x: number, y: number): TouchTarget | typeof blocked | null => {
+const touchTargetAt = (
+  root: Node,
+  x: number,
+  y: number
+): TouchTarget | typeof blocked | null => {
   const exact = elementAt(root, x, y)
   const hit = touchTargetOf(exact)
   if (hit !== null) return hit
-  if (exact !== null && (exact.closest(interactive) !== null || exact.closest("label") !== null)) return blocked
-  for (const [dx, dy] of [[0, hitSlop], [0, -hitSlop], [hitSlop, 0], [-hitSlop, 0]] as const) {
+  if (
+    exact !== null &&
+    (exact.closest(interactive) !== null || exact.closest("label") !== null)
+  ) return blocked
+  for (
+    const [dx, dy] of [[0, hitSlop], [0, -hitSlop], [hitSlop, 0], [
+      -hitSlop,
+      0
+    ]] as const
+  ) {
     const focus = VirtualKeyboard.textFieldOf(elementAt(root, x + dx, y + dy))
     if (focus !== null) return { focus, click: focus }
   }
   return null
 }
 
-const dispatchClick = (target: HTMLElement, touch: Pick<Touch, "clientX" | "clientY">): void => {
+const dispatchClick = (
+  target: HTMLElement,
+  touch: Pick<Touch, "clientX" | "clientY">
+): void => {
   const view = target.ownerDocument.defaultView!
   const Click = view.PointerEvent ?? view.MouseEvent
   target.dispatchEvent(
@@ -135,7 +182,10 @@ const dispatchClick = (target: HTMLElement, touch: Pick<Touch, "clientX" | "clie
 
 // WebKit samples the painted rect of an element as it gains focus to decide its reveal
 // scroll, so the rect is moved for the synchronous focus and put back before paint.
-const overrideGeometry = (target: HTMLElement, translateY: number): () => void => {
+const overrideGeometry = (
+  target: HTMLElement,
+  translateY: number
+): () => void => {
   const restore = saved(target, ["opacity", "transform", "transition"])
   target.style.transition = "none"
   target.style.opacity = "0"
@@ -196,8 +246,10 @@ export const trackKeyboard = (
       timer = view.setTimeout(f, realignInterval)
     }
 
-    const popup = (): HTMLElement => byAttribute(document, popupAttribute, current.popupId) ?? node
-    const owns = (element: HTMLElement): boolean => contains(popup(), element) && dialogOf(element) === dialogOf(node)
+    const popup = (): HTMLElement =>
+      byAttribute(document, popupAttribute, current.popupId) ?? node
+    const owns = (element: HTMLElement): boolean =>
+      contains(popup(), element) && dialogOf(element) === dialogOf(node)
 
     const setInset = (inset: number | null): void => {
       if (inset === null) node.style.removeProperty(insetProperty)
@@ -211,25 +263,39 @@ export const trackKeyboard = (
 
     const setSlack = (element: HTMLElement, slack: number): void => {
       const rounded = Math.max(0, Math.ceil(slack))
-      if (adjustment !== null && !adjustment.element.isConnected) restoreAdjustment()
+      if (
+        adjustment !== null && !adjustment.element.isConnected
+      ) restoreAdjustment()
       if (rounded === 0) return restoreAdjustment()
-      if (adjustment !== null && adjustment.element !== element) restoreAdjustment()
+      if (
+        adjustment !== null && adjustment.element !== element
+      ) restoreAdjustment()
       if (adjustment === null) {
         const style = view.getComputedStyle(element)
         adjustment = {
           element,
-          restore: saved(element, ["overflowAnchor", "paddingBottom", "scrollPaddingBottom"]),
+          restore: saved(element, [
+            "overflowAnchor",
+            "paddingBottom",
+            "scrollPaddingBottom"
+          ]),
           computedPaddingBottom: Number.parseFloat(style.paddingBottom) || 0,
-          computedScrollPaddingBottom: Number.parseFloat(style.scrollPaddingBottom) || 0
+          computedScrollPaddingBottom:
+            Number.parseFloat(style.scrollPaddingBottom) || 0
         }
       }
       element.style.overflowAnchor = "none"
-      element.style.paddingBottom = `${rounded + Math.max(adjustment.computedPaddingBottom, margin)}px`
-      element.style.scrollPaddingBottom = `${adjustment.computedScrollPaddingBottom + margin}px`
+      element.style.paddingBottom = `${
+        rounded + Math.max(adjustment.computedPaddingBottom, margin)
+      }px`
+      element.style.scrollPaddingBottom = `${
+        adjustment.computedScrollPaddingBottom + margin
+      }px`
     }
 
     const scrollTo = (element: HTMLElement, top: number): void => {
-      const reduce = view.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true
+      const reduce =
+        view.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true
       element.scrollTo({ top, behavior: reduce ? "auto" : "smooth" })
     }
 
@@ -243,12 +309,18 @@ export const trackKeyboard = (
     // WebKit's reveal scroll moves a locked page, such as when the keyboard's arrows move
     // focus, and the scroll lock may hold the page's scroll on <body> instead of the window.
     const restoreScroll = (): boolean => {
-      if (current.modal !== true || pin === null || target === null || band === null) return false
+      if (
+        current.modal !== true || pin === null || target === null ||
+        band === null
+      ) return false
       const body = document.body
       const page = view.scrollX !== pin.x || view.scrollY !== pin.y
-      const held = body !== null && (body.scrollLeft !== pin.left || body.scrollTop !== pin.top)
+      const held = body !== null &&
+        (body.scrollLeft !== pin.left || body.scrollTop !== pin.top)
       if (page) view.scrollTo({ left: pin.x, top: pin.y, behavior: "instant" })
-      if (held) body.scrollTo({ left: pin.left, top: pin.top, behavior: "instant" })
+      if (held) {
+        body.scrollTo({ left: pin.left, top: pin.top, behavior: "instant" })
+      }
       return page || held
     }
 
@@ -257,10 +329,16 @@ export const trackKeyboard = (
       restorePreempted = null
     }
 
-    const preempt = (field: HTMLElement, visible: VirtualKeyboard.Band): void => {
+    const preempt = (
+      field: HTMLElement,
+      visible: VirtualKeyboard.Band
+    ): void => {
       consumePreempted()
       const rect = field.getBoundingClientRect()
-      restorePreempted = overrideGeometry(field, (visible.top + visible.bottom - rect.top - rect.bottom) / 2)
+      restorePreempted = overrideGeometry(
+        field,
+        (visible.top + visible.bottom - rect.top - rect.bottom) / 2
+      )
     }
 
     const align = (): void => {
@@ -275,12 +353,17 @@ export const trackKeyboard = (
       restoreScroll()
       setInset(visible.inset)
       const scroller = keyboardScroller(field, node)
-      if (scroller === null) return restoreAdjustment()
+      if (scroller === null) {
+        return restoreAdjustment()
+      }
       const scrollerRect = scroller.getBoundingClientRect()
       const clippedBottom = Math.min(scrollerRect.bottom, visible.bottom)
       const overlap = scrollerRect.bottom - visible.bottom
       setSlack(scroller, overlap > 1 ? overlap : 0)
-      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+      const maxScrollTop = Math.max(
+        0,
+        scroller.scrollHeight - scroller.clientHeight
+      )
       if (maxScrollTop <= 0) return
       const clippedTop = Math.max(scrollerRect.top, visible.top)
       const visibleTop = clippedTop + margin
@@ -289,20 +372,30 @@ export const trackKeyboard = (
       const rect = field.getBoundingClientRect()
       let offset = (rect.top + rect.bottom - visibleTop - visibleBottom) / 2
       if (android) {
-        const space = clamp((clippedBottom - clippedTop - rect.height) / 2, 0, margin)
+        const space = clamp(
+          (clippedBottom - clippedTop - rect.height) / 2,
+          0,
+          margin
+        )
         offset = 0
         if (rect.top < clippedTop) offset = rect.top - clippedTop - space
         else if (rect.bottom > clippedBottom) {
-          offset = Math.min(rect.bottom - clippedBottom + space, rect.top - clippedTop - space)
+          offset = Math.min(
+            rect.bottom - clippedBottom + space,
+            rect.top - clippedTop - space
+          )
         }
       }
-      const next = Math.round(clamp(scroller.scrollTop + offset, 0, maxScrollTop))
+      const next = Math.round(
+        clamp(scroller.scrollTop + offset, 0, maxScrollTop)
+      )
       if (android && Math.abs(scroller.scrollTop - next) <= 1) {
         scrollElement = null
         return
       }
       // WebKit restarts a smooth scroll issued again while the layout viewport resizes.
-      const settled = scrollElement === scroller && !visible.resizing && Math.abs(destination - next) <= 1
+      const settled = scrollElement === scroller && !visible.resizing &&
+        Math.abs(destination - next) <= 1
       if (!settled) {
         const count = scrollElement === scroller ? checks + 1 : 1
         scrollElement = scroller
@@ -367,7 +460,10 @@ export const trackKeyboard = (
 
     // Some iOS versions dispatch `focus` before recording the focus options, losing `preventScroll`.
     const onFocus = (event: FocusEvent): void => {
-      if (restorePreempted !== null && target !== null && target === targetOf(event)) {
+      if (
+        restorePreempted !== null && target !== null &&
+        target === targetOf(event)
+      ) {
         target.focus({ preventScroll: true })
       }
     }
@@ -423,14 +519,20 @@ export const trackKeyboard = (
       const touch = event.touches[0]
       if (touch === undefined) return
       const eventTarget = targetOf(event)
-      if (onRange(event) || !isElement(eventTarget) || !contains(node, eventTarget)) return resetTouch()
+      if (
+        onRange(event) || !isElement(eventTarget) ||
+        !contains(node, eventTarget)
+      ) return resetTouch()
       touchStart = { x: touch.clientX, y: touch.clientY }
     }
 
     const onTouchMove = (event: TouchEvent): void => {
       const touch = event.touches[0]
       if (touch === undefined || touchStart === null) return
-      if (Math.abs(touch.clientX - touchStart.x) > tapMove || Math.abs(touch.clientY - touchStart.y) > tapMove) {
+      if (
+        Math.abs(touch.clientX - touchStart.x) > tapMove ||
+        Math.abs(touch.clientY - touchStart.y) > tapMove
+      ) {
         resetTouch()
       }
     }
@@ -440,13 +542,23 @@ export const trackKeyboard = (
       if (!current.open || touchStart === null) return resetTouch()
       const touch = event.changedTouches[0] ?? event.touches[0]
       if (touch === undefined) return resetTouch()
-      const atPoint = touchTargetAt(node.getRootNode(), touch.clientX, touch.clientY)
+      const atPoint = touchTargetAt(
+        node.getRootNode(),
+        touch.clientX,
+        touch.clientY
+      )
       if (atPoint === blocked) return resetTouch()
       const tapped = atPoint ?? touchTargetOf(targetOf(event))
-      if (tapped === null || !owns(tapped.focus) || !contains(popup(), tapped.click)) return resetTouch()
+      if (
+        tapped === null || !owns(tapped.focus) ||
+        !contains(popup(), tapped.click)
+      ) return resetTouch()
       const viewport = view.visualViewport
       if (viewport != null && viewport.scale !== 1) return resetTouch()
-      if (activeOf(document) === tapped.focus && (android || viewport == null || band !== null)) {
+      if (
+        activeOf(document) === tapped.focus &&
+        (android || viewport == null || band !== null)
+      ) {
         return resetTouch()
       }
       // iOS opens the keyboard only for a focus inside the touch's own handler.
@@ -460,7 +572,9 @@ export const trackKeyboard = (
       dispatchClick(tapped.click, touch)
       // Refocusing restores the focus options WebKit drops while the keyboard opens, and
       // brings back a keyboard dismissed from the browser's own UI.
-      if (activeOf(document) === tapped.focus) tapped.focus.focus({ preventScroll: true })
+      if (activeOf(document) === tapped.focus) {
+        tapped.focus.focus({ preventScroll: true })
+      }
       resetTouch()
     }
 
@@ -493,14 +607,42 @@ export const trackKeyboard = (
       }
       document.addEventListener("focus", onFocus, { capture: true, signal })
       document.addEventListener("focusin", onFocusIn, { capture: true, signal })
-      document.addEventListener("focusout", onFocusOut, { capture: true, signal })
-      document.addEventListener("scroll", onScroll, { capture: true, passive: true, signal })
-      document.addEventListener("pointerdown", onPointerDown, { capture: true, signal })
-      node.addEventListener("pointerdown", onNodePointerDown, { capture: true, signal })
-      node.addEventListener("touchstart", onTouchStart, { capture: true, passive: true, signal })
-      node.addEventListener("touchmove", onTouchMove, { capture: true, passive: true, signal })
-      node.addEventListener("touchend", onTouchEnd, { capture: true, passive: false, signal })
-      node.addEventListener("touchcancel", resetTouch, { capture: true, signal })
+      document.addEventListener("focusout", onFocusOut, {
+        capture: true,
+        signal
+      })
+      document.addEventListener("scroll", onScroll, {
+        capture: true,
+        passive: true,
+        signal
+      })
+      document.addEventListener("pointerdown", onPointerDown, {
+        capture: true,
+        signal
+      })
+      node.addEventListener("pointerdown", onNodePointerDown, {
+        capture: true,
+        signal
+      })
+      node.addEventListener("touchstart", onTouchStart, {
+        capture: true,
+        passive: true,
+        signal
+      })
+      node.addEventListener("touchmove", onTouchMove, {
+        capture: true,
+        passive: true,
+        signal
+      })
+      node.addEventListener("touchend", onTouchEnd, {
+        capture: true,
+        passive: false,
+        signal
+      })
+      node.addEventListener("touchcancel", resetTouch, {
+        capture: true,
+        signal
+      })
       pinFrame = view.requestAnimationFrame(() => {
         pin = snapshot()
       })
@@ -515,15 +657,30 @@ export const trackKeyboard = (
     const onChange = (next: TrackKeyboardArgs): void => {
       const previous = current
       current = next
-      if (next.open !== previous.open || next.modal !== previous.modal || next.popupId !== previous.popupId) start()
+      if (
+        next.open !== previous.open || next.modal !== previous.modal ||
+        next.popupId !== previous.popupId
+      ) start()
     }
 
     return Effect.acquireRelease(
       Effect.sync(start).pipe(
         Effect.tap(() =>
-          Effect.forkScoped(Stream.runForEach(VirtualKeyboard.watch(node), (next) => Effect.sync(() => onBand(next))))
+          Effect.forkScoped(
+            Stream.runForEach(
+              VirtualKeyboard.watch(node),
+              (next) => Effect.sync(() => onBand(next))
+            )
+          )
         ),
-        Effect.tap(() => Effect.forkScoped(Stream.runForEach(changes, (next) => Effect.sync(() => onChange(next)))))
+        Effect.tap(() =>
+          Effect.forkScoped(
+            Stream.runForEach(
+              changes,
+              (next) => Effect.sync(() => onChange(next))
+            )
+          )
+        )
       ),
       () => Effect.sync(stop)
     )

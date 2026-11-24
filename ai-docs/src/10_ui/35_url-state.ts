@@ -34,8 +34,15 @@ import { AppRoute } from "./fixtures/routes.ts"
 //
 // A URL with a search value that doesn't decode, such as `/search?page=abc`,
 // mounts with the default and the Router replaces the URL with `/search`.
-const Main = BrowserHost.mount(App, Router.props(AppRoute), document.getElementById("app")!).pipe(
-  Layer.provide([BrowserRouter.layer({ routes: AppRoute }), FetchHttpClient.layer])
+const Main = BrowserHost.mount(
+  App,
+  Router.props(AppRoute),
+  document.getElementById("app")!
+).pipe(
+  Layer.provide([
+    BrowserRouter.layer({ routes: AppRoute }),
+    FetchHttpClient.layer
+  ])
 )
 
 Layer.launch(Main).pipe(Effect.runFork)

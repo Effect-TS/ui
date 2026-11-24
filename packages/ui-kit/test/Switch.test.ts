@@ -1,11 +1,19 @@
 import { Component, UiSchema, View } from "@effect/ui"
-import { Switch, type SwitchButton, type SwitchProps, type SwitchSpan } from "@effect/ui-kit"
+import {
+  Switch,
+  type SwitchButton,
+  type SwitchProps,
+  type SwitchSpan
+} from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Locator, Scene } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
-const SettingsMessage = UiSchema.TaggedEnum({ ToggledNotify: { checked: Schema.Boolean }, ClickedRow: {} })
+const SettingsMessage = UiSchema.TaggedEnum({
+  ToggledNotify: { checked: Schema.Boolean },
+  ClickedRow: {}
+})
 
 // A consumer that keeps the value in its Model and draws the least markup
 // the parts need: a labelled root with a thumb. The form field comes with
@@ -32,7 +40,11 @@ const Settings = Component.define({
       Switch(h, {
         props: { checked: model.notify, ...h.props },
         onToggle: ({ checked }) => SettingsMessage.ToggledNotify({ checked }),
-        view: (parts) => h.label(parts.root(h.button).children(parts.thumb(h.span.class("thumb"))), "Notifications")
+        view: (parts) =>
+          h.label(
+            parts.root(h.button).children(parts.thumb(h.span.class("thumb"))),
+            "Notifications"
+          )
       }),
       h.output(String(model.rowClicks))
     )
@@ -40,8 +52,9 @@ const Settings = Component.define({
 
 const root = Locator.attr("role", "switch")
 const thumb = Locator.tag("span")
-const rowClicks = (s: { readonly get: (locator: Locator.Locator) => Locator.Node }) =>
-  s.get(Locator.tag("output")).children?.[0]?.text
+const rowClicks = (
+  s: { readonly get: (locator: Locator.Locator) => Locator.Node }
+) => s.get(Locator.tag("output")).children?.[0]?.text
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
 // The root a consumer gets for these props and this button: the element the
@@ -50,7 +63,14 @@ const rootOf = (
   props: SwitchProps,
   element: SwitchButton<never> = h.button,
   chain: (root: SwitchButton<never>) => SwitchButton<never> = (root) => root
-) => View.build(Switch(h, { props, view: (parts) => chain(parts.root(element)).children("label") }), [])
+) =>
+  View.build(
+    Switch(h, {
+      props,
+      view: (parts) => chain(parts.root(element)).children("label")
+    }),
+    []
+  )
 
 describe("Switch", () => {
   it.effect("a click asks for the other value, and the root and thumb show the value they were given", () =>
@@ -116,14 +136,17 @@ describe("Switch", () => {
 
     // An enabled, optional, unchecked switch removes every state attribute
     // the consumer set, as it doesn't report those states.
-    assert.deepStrictEqual(rootOf({ checked: false }, element.disabled(true)).attrs, {
-      class: "switch",
-      "aria-label": "Mute",
-      type: "button",
-      role: "switch",
-      "aria-checked": "false",
-      "data-unchecked": ""
-    })
+    assert.deepStrictEqual(
+      rootOf({ checked: false }, element.disabled(true)).attrs,
+      {
+        class: "switch",
+        "aria-label": "Mute",
+        type: "button",
+        role: "switch",
+        "aria-checked": "false",
+        "data-unchecked": ""
+      }
+    )
     // A disabled, checked switch keeps its own `disabled` over the
     // consumer's removal, and removes the consumer's `data-unchecked`,
     // chained after the part as well as set before it.
@@ -153,13 +176,25 @@ describe("Switch", () => {
         "data-required": ""
       })
     const thumbOf = (checked: boolean, span: SwitchSpan<never>) =>
-      View.build(Switch(h, { props: { checked }, view: (parts) => parts.thumb(span).children("on") }), [])
+      View.build(
+        Switch(h, {
+          props: { checked },
+          view: (parts) => parts.thumb(span).children("on")
+        }),
+        []
+      )
     const finished = thumbOf(false, element)
-    assert.deepStrictEqual(finished.attrs, { class: "thumb", "data-unchecked": "" })
+    assert.deepStrictEqual(finished.attrs, {
+      class: "thumb",
+      "data-unchecked": ""
+    })
     assert.strictEqual(finished.children.length, 1)
     // The part returns the builder, so a second call takes it as its
     // element. Both write when the span is built, the inner call last.
-    const builder = Switch(h, { props: { checked: false, required: true }, view: (parts) => parts.thumb(element) })
+    const builder = Switch(h, {
+      props: { checked: false, required: true },
+      view: (parts) => parts.thumb(element)
+    })
     assert.deepStrictEqual(thumbOf(true, builder).attrs, {
       class: "thumb",
       "data-unchecked": "",
@@ -169,22 +204,36 @@ describe("Switch", () => {
 
   it("the root keeps a consumer's click handler without onToggle, and refuses it with one in every state", () => {
     const handler = () => undefined
-    assert.strictEqual(rootOf({ checked: false }, h.button.onClick(handler)).handlers.click, handler)
+    assert.strictEqual(
+      rootOf({ checked: false }, h.button.onClick(handler)).handlers.click,
+      handler
+    )
     const toggling = (props: SwitchProps, when: "before" | "after") => () =>
       View.build(
         Switch(h, {
           props,
           onToggle: () => undefined,
           view: (parts) =>
-            when === "before" ? parts.root(h.button.onClick(handler)) : parts.root(h.button).onClick(handler)
+            when === "before"
+              ? parts.root(h.button.onClick(handler))
+              : parts.root(h.button).onClick(handler)
         }),
         []
       )
     // Set on the builder before the part, or chained after it.
-    assert.throws(toggling({ checked: false }, "before"), /Switch: the root already handles click/)
-    assert.throws(toggling({ checked: false }, "after"), /Switch: the root already handles click/)
+    assert.throws(
+      toggling({ checked: false }, "before"),
+      /Switch: the root already handles click/
+    )
+    assert.throws(
+      toggling({ checked: false }, "after"),
+      /Switch: the root already handles click/
+    )
     // A read-only switch sets no handler, but it would once it's editable.
-    assert.throws(toggling({ checked: false, readOnly: true }, "after"), /Switch: the root already handles click/)
+    assert.throws(
+      toggling({ checked: false, readOnly: true }, "after"),
+      /Switch: the root already handles click/
+    )
   })
 
   it("the root draws the form field before its children: value when on, and uncheckedValue or nothing when off", () => {
@@ -197,9 +246,15 @@ describe("Switch", () => {
       return first.attrs.value
     }
     assert.strictEqual(field({ checked: true, name: "notify" }), "on")
-    assert.strictEqual(field({ checked: true, name: "notify", value: "yes" }), "yes")
+    assert.strictEqual(
+      field({ checked: true, name: "notify", value: "yes" }),
+      "yes"
+    )
     assert.isNull(field({ checked: false, name: "notify" }))
-    assert.strictEqual(field({ checked: false, name: "notify", uncheckedValue: "no" }), "no")
+    assert.strictEqual(
+      field({ checked: false, name: "notify", uncheckedValue: "no" }),
+      "no"
+    )
     // A disabled field submits nothing, as a disabled checkbox doesn't, and
     // a switch without a name has no field.
     assert.isNull(field({ checked: true, name: "notify", disabled: true }))

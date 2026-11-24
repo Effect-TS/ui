@@ -34,7 +34,11 @@ const Host = Component.define({
   message: RadioGroupHostMessage,
   elements: Html
 }).make({
-  init: ({ props }) => ({ value: "ssd", readOnly: false, showIndicators: props.showIndicators ?? true }),
+  init: ({ props }) => ({
+    value: "ssd",
+    readOnly: false,
+    showIndicators: props.showIndicators ?? true
+  }),
   update: {
     SetValue: ($, { value }) => ({ ...$.model, value }),
     SetReadOnly: ($, { readOnly }) => ({ ...$.model, readOnly }),
@@ -44,11 +48,16 @@ const Host = Component.define({
     h.div(
       RadioGroup(h, {
         props: { value: model.value, items, readOnly: model.readOnly },
-        onEmit: { Picked: ({ value }) => RadioGroupHostMessage.SetValue({ value }) },
+        onEmit: {
+          Picked: ({ value }) => RadioGroupHostMessage.SetValue({ value })
+        },
         view: (radioGroup) =>
           radioGroup.root(h.div).children(
             ...items.map(({ value }) =>
-              radioGroup.radio({ element: h.button.attr("data-value", value), value }).children(
+              radioGroup.radio({
+                element: h.button.attr("data-value", value),
+                value
+              }).children(
                 model.showIndicators
                   ? radioGroup.indicator({
                     element: h.span.attr("data-dot", value),
@@ -61,7 +70,9 @@ const Host = Component.define({
           )
       }),
       ...items.map(({ value }) =>
-        h.button.attrs({ type: "button", "data-set": value }).onClick(RadioGroupHostMessage.SetValue({ value }))
+        h.button.attrs({ type: "button", "data-set": value }).onClick(
+          RadioGroupHostMessage.SetValue({ value })
+        )
       ),
       h.button.attrs({ type: "button", "data-readonly-toggle": "" }).onClick(
         RadioGroupHostMessage.SetReadOnly({ readOnly: !model.readOnly })
@@ -93,7 +104,8 @@ const holdExits = Effect.acquireRelease(
       }
     }
   }),
-  ({ original }) => Effect.sync(() => (Element.prototype.getAnimations = original))
+  ({ original }) =>
+    Effect.sync(() => (Element.prototype.getAnimations = original))
 )
 
 const holdFrames = Effect.acquireRelease(
@@ -124,7 +136,8 @@ describe("RadioGroup in a document", { concurrent: false }, () => {
       yield* tick
 
       const dot = (value: string) => app.querySelector(`[data-dot="${value}"]`)
-      const set = (value: string) => app.querySelector<HTMLButtonElement>(`[data-set="${value}"]`)!.click()
+      const set = (value: string) =>
+        app.querySelector<HTMLButtonElement>(`[data-set="${value}"]`)!.click()
 
       assert.isNotNull(dot("ssd"))
       assert.isNull(dot("ssd")!.getAttribute("data-starting-style"))
@@ -160,11 +173,18 @@ describe("RadioGroup in a document", { concurrent: false }, () => {
       yield* BrowserHost.mountEffect(Host, {}, app)
       yield* tick
 
-      const btn = (value: string) => app.querySelector<HTMLButtonElement>(`[data-value="${value}"]`)!
+      const btn = (value: string) =>
+        app.querySelector<HTMLButtonElement>(`[data-value="${value}"]`)!
       app.querySelector<HTMLButtonElement>("[data-readonly-toggle]")!.click()
       yield* tick
 
-      btn("ssd").dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }))
+      btn("ssd").dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "ArrowDown",
+          bubbles: true,
+          cancelable: true
+        })
+      )
       yield* tick
       assert.strictEqual(btn("nvme").getAttribute("tabindex"), "0")
       assert.strictEqual(btn("ssd").getAttribute("tabindex"), "-1")
@@ -183,7 +203,9 @@ describe("RadioGroup in a document", { concurrent: false }, () => {
       yield* tick
 
       const dot = (value: string) => app.querySelector(`[data-dot="${value}"]`)
-      const toggle = () => app.querySelector<HTMLButtonElement>("[data-indicators-toggle]")!.click()
+      const toggle = () =>
+        app.querySelector<HTMLButtonElement>("[data-indicators-toggle]")!
+          .click()
       assert.isNull(dot("ssd"))
 
       app.querySelector<HTMLButtonElement>("[data-set=\"nvme\"]")!.click()
@@ -217,7 +239,8 @@ describe("RadioGroup in a document", { concurrent: false }, () => {
       yield* tick
 
       const dot = (value: string) => app.querySelector(`[data-dot="${value}"]`)!
-      const set = (value: string) => app.querySelector<HTMLButtonElement>(`[data-set="${value}"]`)!.click()
+      const set = (value: string) =>
+        app.querySelector<HTMLButtonElement>(`[data-set="${value}"]`)!.click()
 
       set("nvme")
       yield* tick

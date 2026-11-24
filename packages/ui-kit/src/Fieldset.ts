@@ -190,7 +190,9 @@ export const Fieldset = Component.define({
           "data-disabled": flag(disabled)
         })
           .disabled(disabled)),
-      legend: p.part((b) => b.attrs({ id: legendId, "data-disabled": flag(disabled) }))
+      legend: p.part((b) =>
+        b.attrs({ id: legendId, "data-disabled": flag(disabled) })
+      )
     }
   }
 })

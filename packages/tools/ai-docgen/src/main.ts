@@ -30,29 +30,33 @@ const watch = Flag.Boolean("watch").pipe(
 )
 
 Command.make("effect-ai-docgen", { directory, output, watch }).pipe(
-  Command.withHandler(Effect.fnUntraced(function*({ directory, output, watch }) {
-    const fs = yield* FileSystem.FileSystem
-    const markdown = yield* directoryToMarkdown(directory)
-    yield* fs.writeFileString(output, markdown)
+  Command.withHandler(
+    Effect.fnUntraced(function*({ directory, output, watch }) {
+      const fs = yield* FileSystem.FileSystem
+      const markdown = yield* directoryToMarkdown(directory)
+      yield* fs.writeFileString(output, markdown)
 
-    if (!watch) return
+      if (!watch) return
 
-    yield* Effect.logInfo("Watching for changes...")
+      yield* Effect.logInfo("Watching for changes...")
 
-    yield* fs.watch(directory).pipe(
-      Stream.debounce(1000),
-      Stream.tap(() => Effect.logInfo("Changes detected, regenerating documentation...")),
-      Stream.switchMap(() =>
-        directoryToMarkdown(directory).pipe(
-          Stream.fromEffect
-        )
-      ),
-      Stream.runForEach(Effect.fn(function*(markdown) {
-        yield* fs.writeFileString(output, markdown)
-        yield* Effect.logInfo("Documentation updated.")
-      }))
-    )
-  })),
+      yield* fs.watch(directory).pipe(
+        Stream.debounce(1000),
+        Stream.tap(() =>
+          Effect.logInfo("Changes detected, regenerating documentation...")
+        ),
+        Stream.switchMap(() =>
+          directoryToMarkdown(directory).pipe(
+            Stream.fromEffect
+          )
+        ),
+        Stream.runForEach(Effect.fn(function*(markdown) {
+          yield* fs.writeFileString(output, markdown)
+          yield* Effect.logInfo("Documentation updated.")
+        }))
+      )
+    })
+  ),
   Command.run({
     version: "0.0.0"
   }),
@@ -63,17 +67,25 @@ Command.make("effect-ai-docgen", { directory, output, watch }).pipe(
 const directoryToMarkdown = Effect.fn("directoryToMarkdown")(
   function*(
     directory: string
-  ): Effect.fn.Return<string, PlatformError.PlatformError, FileSystem.FileSystem | Path.Path> {
+  ): Effect.fn.Return<
+    string,
+    PlatformError.PlatformError,
+    FileSystem.FileSystem | Path.Path
+  > {
     const pathService = yield* Path.Path
     const fs = yield* FileSystem.FileSystem
 
-    const indexMd = yield* fs.readFileString(pathService.join(directory, "index.md")).pipe(
+    const indexMd = yield* fs.readFileString(
+      pathService.join(directory, "index.md")
+    ).pipe(
       Effect.map(String.trim),
       Effect.orElseSucceed(() => null)
     )
 
     const allFiles = yield* fs.readDirectory(directory)
-    const hasInlineFiles = allFiles.some((file) => pathService.basename(file).startsWith("0") && /\.tsx?$/.test(file))
+    const hasInlineFiles = allFiles.some((file) =>
+      pathService.basename(file).startsWith("0") && /\.tsx?$/.test(file)
+    )
 
     const tsFileContent = yield* Effect.forEach(
       allFiles,
@@ -127,7 +139,9 @@ ${metadata.content}
       }),
       { concurrency: 5 }
     ).pipe(
-      Effect.map(Array.filter((s): s is string => s !== null && s.trim() !== "")),
+      Effect.map(
+        Array.filter((s): s is string => s !== null && s.trim() !== "")
+      ),
       Effect.map(Array.join("\n")),
       Effect.map(String.trim)
     )
@@ -141,7 +155,10 @@ const tsFileMetadata = Effect.fn("tsFileMetadata")(function*(filePath: string) {
   const fs = yield* FileSystem.FileSystem
 
   let content = yield* fs.readFileString(filePath)
-  const fileNameWithoutExt = pathService.basename(filePath, pathService.extname(filePath))
+  const fileNameWithoutExt = pathService.basename(
+    filePath,
+    pathService.extname(filePath)
+  )
 
   let title: string = pipe(
     fileNameWithoutExt,

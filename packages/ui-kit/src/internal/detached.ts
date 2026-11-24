@@ -12,12 +12,15 @@ export const detachedChannel = <M>(name: string): DetachedChannel<M> => {
   const typeOf = (popupId: string) => `effect-ui-kit:${name}:${popupId}`
   return {
     send: (document, popupId, message) => {
-      document.dispatchEvent(new CustomEvent(typeOf(popupId), { detail: { [tag]: message } }))
+      document.dispatchEvent(
+        new CustomEvent(typeOf(popupId), { detail: { [tag]: message } })
+      )
     },
     subscription: (popupId) =>
       HtmlSubscription.onCustomEvent(
         typeOf(popupId),
-        ({ detail }) => Predicate.hasProperty(detail, tag) ? detail[tag] as M : undefined
+        ({ detail }) =>
+          Predicate.hasProperty(detail, tag) ? detail[tag] as M : undefined
       )
   }
 }

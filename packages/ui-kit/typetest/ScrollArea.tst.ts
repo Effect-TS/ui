@@ -6,7 +6,11 @@ import { describe, expect, it } from "tstyche"
 
 class Clock extends Context.Service<Clock, {}>()("Clock") {}
 
-const NeedsClock = Mount.make("NeedsClock", { args: {} }, () => Clock.use(() => Effect.succeed(Component.noop)))
+const NeedsClock = Mount.make(
+  "NeedsClock",
+  { args: {} },
+  () => Clock.use(() => Effect.succeed(Component.noop))
+)
 
 const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 type Msg = typeof Msg.Type
@@ -19,7 +23,9 @@ const h = View.makeHelper<Msg, {}, Html.Elements>({}, Html)
 
 describe("ScrollArea", () => {
   it("preserves builders, state values, and thumb requirements", () => {
-    expect<Component.Headless.Requirements<typeof ScrollArea>>().type.toBe<never>()
+    expect<Component.Headless.Requirements<typeof ScrollArea>>().type.toBe<
+      never
+    >()
     const child = ScrollArea(h, {
       props: { overflowEdgeThreshold: { yStart: 8, yEnd: 8 } },
       view: (scrollArea) => {
@@ -36,10 +42,13 @@ describe("ScrollArea", () => {
         expect(scrollArea.cornerHidden).type.toBe<boolean>()
 
         expect(scrollArea.root(h.div)).type.toBe<Div<never>>()
-        expect(scrollArea.viewport(h.div).children(needsClock)).type.toBe<Div<Clock>>()
+        expect(scrollArea.viewport(h.div).children(needsClock)).type.toBe<
+          Div<Clock>
+        >()
         expect(scrollArea.content(h.div)).type.toBe<Div<never>>()
         expect(scrollArea.corner(h.div)).type.toBe<Div<never> | undefined>()
-        expect(scrollArea.scrollbar({ element: h.div, thumb: h.div })).type.toBe<Div<never> | undefined>()
+        expect(scrollArea.scrollbar({ element: h.div, thumb: h.div })).type
+          .toBe<Div<never> | undefined>()
 
         const bar = scrollArea.scrollbar({
           element: h.div.onClick(Msg.Clicked()),
@@ -60,16 +69,27 @@ describe("ScrollArea", () => {
   })
 
   it("rejects wrong tags and invalid options", () => {
-    expect(ScrollArea).type.not.toBeCallableWith(h, { props: { overflowEdgeThreshold: "8px" }, view: () => h.div })
+    expect(ScrollArea).type.not.toBeCallableWith(h, {
+      props: { overflowEdgeThreshold: "8px" },
+      view: () => h.div
+    })
     ScrollArea(h, {
       view: (scrollArea) => {
         expect(scrollArea.root).type.not.toBeCallableWith(h.span)
         expect(scrollArea.viewport).type.not.toBeCallableWith(h.span)
         expect(scrollArea.content).type.not.toBeCallableWith(h.span)
         expect(scrollArea.corner).type.not.toBeCallableWith(h.span)
-        expect(scrollArea.scrollbar).type.not.toBeCallableWith({ element: h.span, thumb: h.div })
-        expect(scrollArea.scrollbar).type.not.toBeCallableWith({ element: h.div, thumb: h.span })
-        expect(scrollArea.scrollbar).type.not.toBeCallableWith({ element: h.div })
+        expect(scrollArea.scrollbar).type.not.toBeCallableWith({
+          element: h.span,
+          thumb: h.div
+        })
+        expect(scrollArea.scrollbar).type.not.toBeCallableWith({
+          element: h.div,
+          thumb: h.span
+        })
+        expect(scrollArea.scrollbar).type.not.toBeCallableWith({
+          element: h.div
+        })
         expect(scrollArea.scrollbar).type.not.toBeCallableWith({
           element: h.div,
           thumb: h.div,

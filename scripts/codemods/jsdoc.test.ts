@@ -6,9 +6,12 @@ import transformer from "./jsdoc.ts"
 const doc = "/** Repeats a value. */"
 
 const transform = (source: string): string =>
-  applyTransform(transformer, {}, { path: "Module.ts", source }, { parser: "ts" })
+  applyTransform(transformer, {}, { path: "Module.ts", source }, {
+    parser: "ts"
+  })
 
-const countDocs = (output: string): number => output.split("Repeats a value.").length - 1
+const countDocs = (output: string): number =>
+  output.split("Repeats a value.").length - 1
 
 describe("jsdoc codemod", () => {
   it("leaves generic calls inside an annotated dual implementation unchanged", () => {

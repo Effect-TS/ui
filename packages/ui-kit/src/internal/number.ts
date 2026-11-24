@@ -25,13 +25,21 @@ const formatterOf = (locale: Locale, format?: Format): Intl.NumberFormat =>
   cached(
     formatters,
     { locale, format },
-    () => new Intl.NumberFormat(locale as string | Array<string> | undefined, format)
+    () =>
+      new Intl.NumberFormat(
+        locale as string | Array<string> | undefined,
+        format
+      )
   )
 
-export const formatNumber = (value: number | null, locale: Locale, format?: Format): string =>
-  value === null ? "" : formatterOf(locale, format).format(value)
+export const formatNumber = (
+  value: number | null,
+  locale: Locale,
+  format?: Format
+): string => value === null ? "" : formatterOf(locale, format).format(value)
 
-const charClass = (characters: string, flags?: string): RegExp => new RegExp("[" + characters + "]", flags)
+const charClass = (characters: string, flags?: string): RegExp =>
+  new RegExp("[" + characters + "]", flags)
 
 const hanNumerals = "零〇一二三四五六七八九"
 const minusSigns = "-−－‒–—﹣"
@@ -46,7 +54,10 @@ const han = charClass(hanNumerals)
 const anyDigit = charClass("\\p{Nd}" + hanNumerals, "gu")
 const percent = charClass(percentSigns)
 const permille = charClass(permilleSigns)
-const strayDot = new RegExp("\\.(?!" + charClass(strayMarks).source + "*\\d)", "g")
+const strayDot = new RegExp(
+  "\\.(?!" + charClass(strayMarks).source + "*\\d)",
+  "g"
+)
 const strayMark = charClass(strayMarks, "g")
 const baseSymbols = [".", ",", "．", "，", "٫", "٬"]
 const spaceSeparator = /\p{Zs}/u
@@ -64,15 +75,35 @@ const isNumeral = (character: string): boolean => anyNumeral.test(character)
 // so both sizes are needed to see every separator.
 const sampleNumbers = [1111111.1, 11111.1]
 
-const pluralNumbers = [0, 1, 2, 3, 5, 6, 7, 11, 21, 100, 0.02, 1.01, 1.5, 1.49, 1e6]
+const pluralNumbers = [
+  0,
+  1,
+  2,
+  3,
+  5,
+  6,
+  7,
+  11,
+  21,
+  100,
+  0.02,
+  1.01,
+  1.5,
+  1.49,
+  1e6
+]
 
 const partsCache = new Map<string, ReadonlyArray<Intl.NumberFormatPart>>()
 
-const partsOf = (all: boolean, locale: Locale, format?: Format): ReadonlyArray<Intl.NumberFormatPart> =>
+const partsOf = (
+  all: boolean,
+  locale: Locale,
+  format?: Format
+): ReadonlyArray<Intl.NumberFormatPart> =>
   cached(partsCache, { all, locale, format }, () => {
     const formatter = formatterOf(locale, format)
-    return (all ? [...sampleNumbers, ...pluralNumbers] : sampleNumbers).flatMap((value) =>
-      formatter.formatToParts(value)
+    return (all ? [...sampleNumbers, ...pluralNumbers] : sampleNumbers).flatMap(
+      (value) => formatter.formatToParts(value)
     )
   })
 
@@ -91,13 +122,18 @@ interface LocaleDetails {
 
 const localeDetails = (locale: Locale, format?: Format): LocaleDetails => {
   const details: Record<string, string> = {}
-  for (const part of partsOf(false, locale, format)) details[part.type] = part.value
+  for (const part of partsOf(false, locale, format)) {
+    details[part.type] = part.value
+  }
   return { ...details, decimal: decimalOf(locale, format?.numberingSystem) }
 }
 
 const digitsOf = (locale: Locale, format?: Format): ReadonlyArray<string> =>
   Array.from(
-    formatterOf(locale, { numberingSystem: format?.numberingSystem, useGrouping: false }).format(9876543210)
+    formatterOf(locale, {
+      numberingSystem: format?.numberingSystem,
+      useGrouping: false
+    }).format(9876543210)
   ).reverse()
 
 const toAscii = (value: string, digits: ReadonlyArray<string>): string =>
@@ -108,7 +144,9 @@ const toAscii = (value: string, digits: ReadonlyArray<string>): string =>
     // Both zeros come first, so the digit is one less than the index.
     if (hanDigit !== -1) return String(Math.max(hanDigit - 1, 0))
     // The bases of these digit ranges are multiples of 16.
-    return nonAsciiDigit.test(character) ? String(character.charCodeAt(0) % 16) : character
+    return nonAsciiDigit.test(character)
+      ? String(character.charCodeAt(0) % 16)
+      : character
   })
 
 interface Reader {
@@ -148,14 +186,21 @@ const shiftDecimal = (value: number, by: number): number => {
   return Number(coefficient + "e" + (Number(exponent) + by))
 }
 
-export const parseNumber = (text: string, locale: Locale, format?: Format): number | null => {
+export const parseNumber = (
+  text: string,
+  locale: Locale,
+  format?: Format
+): number | null => {
   let input = text.replace(formatControls, "").trim()
   let from = locale
   if (from === undefined) {
     if (arabicOrPersian.test(input)) from = "ar"
     else if (han.test(input)) from = "zh"
   }
-  const { decimal, digits, exponent, group, labels, localeDecimal } = readerOf(from, format)
+  const { decimal, digits, exponent, group, labels, localeDecimal } = readerOf(
+    from,
+    format
+  )
   input = input.replace(minuses, "-").replace(pluses, "+")
   let negative = false
   const takeSign = (_match: string, sign: string): string => {
@@ -167,9 +212,18 @@ export const parseNumber = (text: string, locale: Locale, format?: Format): numb
   input = toAscii(input, digits)
   if (exponent !== undefined) input = input.replaceAll(exponent, "e")
   input = input.replace(/(?<![\p{L}\p{M}])([+-])\s*$/u, takeSign)
-  if (format?.currencySign === "accounting") input = input.replace(/^\s*(\()/, takeSign)
+  if (format?.currencySign === "accounting") {
+    input = input.replace(/^\s*(\()/, takeSign)
+  }
   if (group !== undefined) {
-    input = input.replaceAll(spaceSeparator.test(group) ? /\p{Zs}/gu : /['’]/.test(group) ? /['’]/g : group, "")
+    input = input.replaceAll(
+      spaceSeparator.test(group)
+        ? /\p{Zs}/gu
+        : /['’]/.test(group)
+        ? /['’]/g
+        : group,
+      ""
+    )
   }
   input = input.replace(strayDot, "")
   const plain = input
@@ -183,7 +237,8 @@ export const parseNumber = (text: string, locale: Locale, format?: Format): numb
   let parsed = parseFloat((negative ? "-" : "") + plain)
   if (permille.test(input)) parsed = shiftDecimal(parsed, -3)
   else if (
-    !(format?.style === "unit" && format.unit === "percent") && (percent.test(input) || format?.style === "percent")
+    !(format?.style === "unit" && format.unit === "percent") &&
+    (percent.test(input) || format?.style === "percent")
   ) {
     parsed = shiftDecimal(parsed, -2)
   }
@@ -197,7 +252,11 @@ export interface Typing {
 
 const typingCache = new Map<string, Typing>()
 
-export const typingOf = (locale: Locale, format: Format | undefined, negative: boolean): Typing =>
+export const typingOf = (
+  locale: Locale,
+  format: Format | undefined,
+  negative: boolean
+): Typing =>
   cached(typingCache, { locale, format, negative }, () => {
     const parts = partsOf(true, locale, format)
     const details = localeDetails(locale, format)
@@ -205,16 +264,26 @@ export const typingOf = (locale: Locale, format: Format | undefined, negative: b
     const add = (characters: Iterable<string>) => {
       for (const character of characters) allowed.add(character)
     }
-    allowed.add(parts.find((part) => part.type === "decimal")?.value ?? details.decimal)
+    allowed.add(
+      parts.find((part) => part.type === "decimal")?.value ?? details.decimal
+    )
     for (const part of parts) {
-      if (["integer", "fraction", "exponentInteger", "compact"].includes(part.type)) continue
+      if (
+        ["integer", "fraction", "exponentInteger", "compact"].includes(
+          part.type
+        )
+      ) continue
       add(Array.from(part.value))
       if (spaceSeparator.test(part.value)) allowed.add(" ")
     }
     add(digitsOf(locale, format))
     const style = format?.style
-    if (style === "percent" || (style === "unit" && format?.unit === "percent")) add(percentSigns)
-    if (style === "percent" || (style === "unit" && format?.unit === "permille")) add(permilleSigns)
+    if (
+      style === "percent" || (style === "unit" && format?.unit === "percent")
+    ) add(percentSigns)
+    if (
+      style === "percent" || (style === "unit" && format?.unit === "permille")
+    ) add(permilleSigns)
     add(plusSigns)
     if (negative) {
       add(minusSigns)
@@ -222,21 +291,42 @@ export const typingOf = (locale: Locale, format: Format | undefined, negative: b
     }
     return {
       allowed: Array.from(allowed).join(""),
-      single: [details.decimal, details.currency, details.percentSign].filter((symbol) => symbol !== undefined)
+      single: [details.decimal, details.currency, details.percentSign].filter((
+        symbol
+      ) => symbol !== undefined)
     }
   })
 
-const allowsCharacter = (character: string, typing: Pick<Typing, "allowed">): boolean =>
-  isNumeral(character) || anyMinus.test(character) || typing.allowed.includes(character) ||
+const allowsCharacter = (
+  character: string,
+  typing: Pick<Typing, "allowed">
+): boolean =>
+  isNumeral(character) || anyMinus.test(character) ||
+  typing.allowed.includes(character) ||
   formatControl.test(character)
 
-export const allowsText = (text: string, typing: Pick<Typing, "allowed">): boolean =>
+export const allowsText = (
+  text: string,
+  typing: Pick<Typing, "allowed">
+): boolean =>
   Array.from(text).every((character) => allowsCharacter(character, typing))
 
-export const allowedIn = (text: string, typing: Pick<Typing, "allowed">): string =>
-  Array.from(text).filter((character) => allowsCharacter(character, typing)).join("")
+export const allowedIn = (
+  text: string,
+  typing: Pick<Typing, "allowed">
+): string =>
+  Array.from(text).filter((character) => allowsCharacter(character, typing))
+    .join("")
 
-const navigationKeys = new Set(["Backspace", "Delete", "ArrowLeft", "ArrowRight", "Tab", "Enter", "Escape"])
+const navigationKeys = new Set([
+  "Backspace",
+  "Delete",
+  "ArrowLeft",
+  "ArrowRight",
+  "Tab",
+  "Enter",
+  "Escape"
+])
 
 export interface Keystroke {
   readonly key: string
@@ -246,10 +336,14 @@ export interface Keystroke {
   readonly modified: boolean
 }
 
-export const allowsKey = ({ end, key, modified, start, text }: Keystroke, typing: Typing): boolean => {
+export const allowsKey = (
+  { end, key, modified, start, text }: Keystroke,
+  typing: Typing
+): boolean => {
   if (modified || navigationKeys.has(key) || isNumeral(key)) return true
   const all = start === 0 && end === text.length
-  const selects = (index: number): boolean => start !== null && end !== null && index >= start && index < end
+  const selects = (index: number): boolean =>
+    start !== null && end !== null && index >= start && index < end
   let allowed = typing.allowed.includes(key)
   for (const detect of [anyMinus, anyPlus]) {
     if (detect.test(key) && detect.test(typing.allowed)) {
@@ -279,7 +373,8 @@ const withoutFloatNoise = (value: number): number => {
   if (!Number.isFinite(value)) return value
   const precise = parseFloat(value.toPrecision(15))
   // Capped, so large values keep their real fraction digits.
-  return Math.abs(precise - value) <= Math.min(Number.EPSILON * Math.max(1, Math.abs(value)), 1e-10)
+  return Math.abs(precise - value) <=
+      Math.min(Number.EPSILON * Math.max(1, Math.abs(value)), 1e-10)
     ? precise
     : value
 }
@@ -301,12 +396,18 @@ const roundedTo = (value: number, format: Format): number => {
 export const rounded = (value: number, format?: Format): number =>
   hasRounding(format) ? roundedTo(value, format) : value
 
-const snapped = (value: number, base: number, step: number, nearest: boolean): number => {
+const snapped = (
+  value: number,
+  base: number,
+  step: number,
+  nearest: boolean
+): number => {
   const size = Math.abs(step)
   const direction = Math.sign(step)
   const steps = value - base + size * 1e-10 * direction
   if (nearest) return base + Math.round(steps / step) * step
-  return base + (direction > 0 ? Math.floor(steps / size) : Math.ceil(steps / size)) * size
+  return base +
+    (direction > 0 ? Math.floor(steps / size) : Math.ceil(steps / size)) * size
 }
 
 export interface Range {
@@ -316,13 +417,19 @@ export interface Range {
   readonly snapOnStep: boolean
 }
 
-export const lowest = (range: Range): number => range.min ?? Number.MIN_SAFE_INTEGER
-export const highest = (range: Range): number => range.max ?? Number.MAX_SAFE_INTEGER
+export const lowest = (range: Range): number =>
+  range.min ?? Number.MIN_SAFE_INTEGER
+export const highest = (range: Range): number =>
+  range.max ?? Number.MAX_SAFE_INTEGER
 
 export const validated = (
   value: number,
   range: Range,
-  options: { readonly step?: number | undefined; readonly small?: boolean; readonly clamp: boolean }
+  options: {
+    readonly step?: number | undefined
+    readonly small?: boolean
+    readonly clamp: boolean
+  }
 ): number => {
   const { step } = options
   const min = lowest(range)
@@ -336,6 +443,8 @@ export const validated = (
   if (options.clamp) next = clamp(next, min, max)
   const rounds = hasRounding(range.format)
   if (step === undefined && !rounds) return next
-  const clean = rounds ? roundedTo(next, range.format as Format) : withoutFloatNoise(next)
+  const clean = rounds
+    ? roundedTo(next, range.format as Format)
+    : withoutFloatNoise(next)
   return options.clamp ? clamp(clean, min, max) : clean
 }

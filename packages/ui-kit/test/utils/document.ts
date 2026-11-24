@@ -1,7 +1,9 @@
 import { Effect } from "effect"
 
 /** Long enough for a mount, its first frame and the messages they send. */
-export const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 60)))
+export const tick = Effect.promise(() =>
+  new Promise<void>((resolve) => setTimeout(resolve, 60))
+)
 
 /** An element in the document to mount in, removed as the scope closes. */
 export const container = Effect.acquireRelease(
@@ -24,7 +26,8 @@ export const holdExits = Effect.acquireRelease(
     }
     return { original, finish: () => finish() }
   }),
-  ({ original }) => Effect.sync(() => (Element.prototype.getAnimations = original))
+  ({ original }) =>
+    Effect.sync(() => (Element.prototype.getAnimations = original))
 )
 
 export const focusVisibility = Effect.acquireRelease(
@@ -33,7 +36,11 @@ export const focusVisibility = Effect.acquireRelease(
     const focus = proto.focus
     const calls: Array<readonly [string, boolean]> = []
     proto.focus = function(this: HTMLElement, options?: FocusOptions) {
-      calls.push([this.id, (options as { readonly focusVisible?: boolean } | undefined)?.focusVisible === true])
+      calls.push([
+        this.id,
+        (options as { readonly focusVisible?: boolean } | undefined)
+          ?.focusVisible === true
+      ])
       focus.call(this, options)
     }
     return { calls, focus }
@@ -44,12 +51,25 @@ export const focusVisibility = Effect.acquireRelease(
 /** A primary-button `pointerdown`, which is what an outside press listens for. */
 export const press = (target: Element, pointerType = "mouse") =>
   target.dispatchEvent(
-    new PointerEvent("pointerdown", { bubbles: true, composed: true, isPrimary: true, pointerType, button: 0 })
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      composed: true,
+      isPrimary: true,
+      pointerType,
+      button: 0
+    })
   )
 
 export const click = (target: Element, pointerType = "mouse") => {
   press(target, pointerType)
-  target.dispatchEvent(new PointerEvent("click", { bubbles: true, composed: true, detail: 1, pointerType }))
+  target.dispatchEvent(
+    new PointerEvent("click", {
+      bubbles: true,
+      composed: true,
+      detail: 1,
+      pointerType
+    })
+  )
 }
 
 /** happy-dom's `:disabled` misses a control in a disabled fieldset. */
@@ -59,7 +79,8 @@ export const fieldsetDisabled = Effect.acquireRelease(
     const matches = proto.matches
     proto.matches = function(this: Element, selector: string) {
       return matches.call(this, selector) || (selector === ":disabled" &&
-        matches.call(this, "button,input,select,textarea") && this.closest("fieldset[disabled]") !== null)
+        matches.call(this, "button,input,select,textarea") &&
+        this.closest("fieldset[disabled]") !== null)
     }
     return () => {
       proto.matches = matches
@@ -74,7 +95,9 @@ export const focusability = Effect.acquireRelease(
     const proto = window.HTMLElement.prototype
     const focus = proto.focus
     proto.focus = function(this: HTMLElement, options) {
-      if (this.tabIndex >= 0 || this.hasAttribute("tabindex")) focus.call(this, options)
+      if (this.tabIndex >= 0 || this.hasAttribute("tabindex")) {
+        focus.call(this, options)
+      }
     }
     return () => {
       proto.focus = focus
@@ -95,7 +118,9 @@ export const popovers = Effect.acquireRelease(
     const elementProto = window.Element.prototype as any
     const matches = elementProto.matches
     proto.showPopover = function(this: HTMLElement) {
-      this.dispatchEvent(Object.assign(new Event("beforetoggle"), { newState: "open" }))
+      this.dispatchEvent(
+        Object.assign(new Event("beforetoggle"), { newState: "open" })
+      )
       showing.add(this)
       const field = this.localName === "dialog"
         ? ",input,button,select,textarea,a[href],[tabindex]:not([tabindex^='-'])"
@@ -106,7 +131,9 @@ export const popovers = Effect.acquireRelease(
       showing.delete(this)
     }
     elementProto.matches = function(this: Element, selector: string) {
-      return selector === ":popover-open" ? showing.has(this) : matches.call(this, selector)
+      return selector === ":popover-open"
+        ? showing.has(this)
+        : matches.call(this, selector)
     }
     return () => {
       delete proto.showPopover
@@ -121,7 +148,10 @@ class FakeVisualViewport extends EventTarget {
   height = 800
   offsetTop = 0
   scale = 1
-  move(changes: Partial<Pick<FakeVisualViewport, "height" | "offsetTop">>, type: "resize" | "scroll" = "resize") {
+  move(
+    changes: Partial<Pick<FakeVisualViewport, "height" | "offsetTop">>,
+    type: "resize" | "scroll" = "resize"
+  ) {
     Object.assign(this, changes)
     this.dispatchEvent(new Event(type))
   }
@@ -129,7 +159,8 @@ class FakeVisualViewport extends EventTarget {
 
 // happy-dom drops `100svh`, so the hidden element that measures it is stubbed.
 export const isViewportProbe = (element: Element) =>
-  element.parentElement === document.body && (element as HTMLElement).style.visibility === "hidden" &&
+  element.parentElement === document.body &&
+  (element as HTMLElement).style.visibility === "hidden" &&
   (element as HTMLElement).style.position === "fixed"
 
 export const visualViewport = Effect.acquireRelease(
@@ -137,8 +168,14 @@ export const visualViewport = Effect.acquireRelease(
     const html = window.HTMLElement.prototype
     const offsetHeight = Object.getOwnPropertyDescriptor(html, "offsetHeight")!
     const visual = new FakeVisualViewport()
-    Object.defineProperty(window, "visualViewport", { configurable: true, value: visual })
-    Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 })
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      value: visual
+    })
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      value: 800
+    })
     Object.defineProperty(html, "offsetHeight", {
       configurable: true,
       get(this: HTMLElement) {
@@ -149,7 +186,11 @@ export const visualViewport = Effect.acquireRelease(
   }),
   ({ offsetHeight }) =>
     Effect.sync(() => {
-      Object.defineProperty(window.HTMLElement.prototype, "offsetHeight", offsetHeight)
+      Object.defineProperty(
+        window.HTMLElement.prototype,
+        "offsetHeight",
+        offsetHeight
+      )
       delete (window as { visualViewport?: unknown }).visualViewport
       delete (window as { innerHeight?: unknown }).innerHeight
     })

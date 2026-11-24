@@ -6,15 +6,29 @@ import { describe, expect, it } from "tstyche"
 const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 type Msg = typeof Msg.Type
 
-type Button = Html.Element<Msg, never, Html.EventsOf<"button">, HTMLButtonElement, "button">
+type Button = Html.Element<
+  Msg,
+  never,
+  Html.EventsOf<"button">,
+  HTMLButtonElement,
+  "button"
+>
 type Div = Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
-type H2 = Html.Element<Msg, never, Html.EventsOf<"h2">, HTMLHeadingElement, "h2">
+type H2 = Html.Element<
+  Msg,
+  never,
+  Html.EventsOf<"h2">,
+  HTMLHeadingElement,
+  "h2"
+>
 
 declare const h: View.Helper<Msg, unknown> & View.Tags<Html.Elements, Msg>
 
 describe("Accordion", () => {
   it("the accordion needs nothing, and an item needs an accordion above it", () => {
-    expect<Component.Headless.Requirements<typeof Accordion>>().type.toBe<never>()
+    expect<Component.Headless.Requirements<typeof Accordion>>().type.toBe<
+      never
+    >()
     expect<Component.Headless.Requirements<typeof AccordionItem>>().type.toBe<
       Component.Shared.Of<typeof Accordion>
     >()
@@ -40,13 +54,18 @@ describe("Accordion", () => {
               expect(item.panel(h.div)).type.toBe<Div | undefined>()
               expect(item.open).type.toBe<boolean>()
               expect(item.index).type.toBe<number | undefined>()
-              expect(item.transitionStatus).type.toBe<"starting" | "ending" | null>()
+              expect(item.transitionStatus).type.toBe<
+                "starting" | "ending" | null
+              >()
 
               expect(item.root).type.not.toBeCallableWith(h.span)
               expect(item.header).type.not.toBeCallableWith(h.div)
               expect(item.trigger).type.not.toBeCallableWith(h.div)
               expect(item.panel).type.not.toBeCallableWith(h.section)
-              return item.root(h.div).children(item.header(h.h3).children(trigger), item.panel(h.div))
+              return item.root(h.div).children(
+                item.header(h.h3).children(trigger),
+                item.panel(h.div)
+              )
             }
           })
         )
@@ -58,7 +77,10 @@ describe("Accordion", () => {
     const view = () => h.div
     expect(Accordion).type.not.toBeCallableWith(h, { props: {}, view })
     expect(AccordionItem).type.not.toBeCallableWith(h, { props: {}, view })
-    expect(Accordion).type.not.toBeCallableWith(h, { props: { value: [], orientation: "diagonal" }, view })
+    expect(Accordion).type.not.toBeCallableWith(h, {
+      props: { value: [], orientation: "diagonal" },
+      view
+    })
     Accordion(h, {
       props: {
         value: ["a"],
@@ -78,7 +100,14 @@ describe("Accordion", () => {
       view
     })
     AccordionItem(h, {
-      props: { value: "a", index: 0, disabled: true, keepMounted: true, hiddenUntilFound: false, holdExit: false },
+      props: {
+        value: "a",
+        index: 0,
+        disabled: true,
+        keepMounted: true,
+        hiddenUntilFound: false,
+        holdExit: false
+      },
       onEmit: {
         Toggled: ({ open, reason }) => {
           expect(open).type.toBe<boolean>()

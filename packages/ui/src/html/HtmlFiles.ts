@@ -78,7 +78,10 @@ export class FileReadError extends Data.TaggedError("FileReadError")<{
  * @category reading
  * @since 0.1.0
  */
-export const readAsBytes = (blob: Blob): Effect.Effect<Uint8Array, FileReadError> => Stream.mkUint8Array(bytesOf(blob))
+export const readAsBytes = (
+  blob: Blob
+): Effect.Effect<Uint8Array, FileReadError> =>
+  Stream.mkUint8Array(bytesOf(blob))
 
 const bytesOf = (blob: Blob): Stream.Stream<Uint8Array, FileReadError> =>
   Stream.fromReadableStream({
@@ -94,7 +97,10 @@ const bytesOf = (blob: Blob): Stream.Stream<Uint8Array, FileReadError> =>
  * @category reading
  * @since 0.1.0
  */
-export const readAsText = (blob: Blob, encoding?: string): Effect.Effect<string, FileReadError> =>
+export const readAsText = (
+  blob: Blob,
+  encoding?: string
+): Effect.Effect<string, FileReadError> =>
   bytesOf(blob).pipe(Stream.decodeText({ encoding }), Stream.mkString)
 
 /**
@@ -111,10 +117,15 @@ export const readAsText = (blob: Blob, encoding?: string): Effect.Effect<string,
  * @category reading
  * @since 0.1.0
  */
-export const readAsDataUrl = (blob: Blob): Effect.Effect<string, FileReadError> =>
+export const readAsDataUrl = (
+  blob: Blob
+): Effect.Effect<string, FileReadError> =>
   Effect.map(
     readAsBytes(blob),
-    (bytes) => `data:${blob.type === "" ? "application/octet-stream" : blob.type};base64,${Base64.encode(bytes)}`
+    (bytes) =>
+      `data:${
+        blob.type === "" ? "application/octet-stream" : blob.type
+      };base64,${Base64.encode(bytes)}`
   )
 
 /**
@@ -245,4 +256,5 @@ export const Pick: Command.Factory<PickOptions, Picked> = Command.make(
 export const pick = <Msg>(
   f: (picked: Picked) => Msg,
   options: PickOptions = {}
-): Command.Mapped<Command.Issued<Picked, never, Picked, "Effect">, Msg> => Command.map(Pick.make(options), f)
+): Command.Mapped<Command.Issued<Picked, never, Picked, "Effect">, Msg> =>
+  Command.map(Pick.make(options), f)

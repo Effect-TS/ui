@@ -11,7 +11,9 @@ import { Locator, TestHost } from "@effect/ui/testing"
 import { Effect, Layer, Schema } from "effect"
 
 const Direction = Schema.Literals(["up", "down", "left", "right"])
-const arrows: ReadonlyArray<readonly [key: string, direction: typeof Direction.Type]> = [
+const arrows: ReadonlyArray<
+  readonly [key: string, direction: typeof Direction.Type]
+> = [
   ["ArrowUp", "up"],
   ["ArrowDown", "down"],
   ["ArrowLeft", "left"],
@@ -58,16 +60,27 @@ export const Snake = Component.define({
       : h.button.onClick(SnakeMessage.ClickedStart()).children("Start"),
   subscriptions: ({ model }) => [
     model.running && HtmlSubscription.shortcuts([
-      { key: "Escape", message: SnakeMessage.PressedEscape(), whileTyping: true },
+      {
+        key: "Escape",
+        message: SnakeMessage.PressedEscape(),
+        whileTyping: true
+      },
       // Reversing into itself isn't a turn.
       ...arrows.flatMap(([key, direction]) =>
-        direction === opposite[model.heading] ? [] : [{ key, message: SnakeMessage.PressedArrow({ direction }) }]
+        direction === opposite[model.heading]
+          ? []
+          : [{ key, message: SnakeMessage.PressedArrow({ direction }) }]
       )
     ])
   ]
 })
 
-const opposite = { up: "down", down: "up", left: "right", right: "left" } as const
+const opposite = {
+  up: "down",
+  down: "up",
+  left: "right",
+  right: "left"
+} as const
 
 // ---------------------------------------------------------------------------
 // A scene fires document events
@@ -100,7 +113,9 @@ export const pressed = Effect.gen(function*() {
   const root = yield* TestHost.mount(Snake, {})
   root.send(SnakeMessage.ClickedStart())
   yield* TestHost.settle
-  const cancelled = yield* TestGlobalEvents.fire("document", "keydown", { key: "ArrowUp" })
+  const cancelled = yield* TestGlobalEvents.fire("document", "keydown", {
+    key: "ArrowUp"
+  })
   yield* TestHost.settle
   return { cancelled, heading: root.model()?.heading }
 }).pipe(Effect.provide(Layer.merge(TestHost.layer(), TestGlobalEvents.layer)))

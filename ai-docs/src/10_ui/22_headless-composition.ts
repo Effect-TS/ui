@@ -25,12 +25,17 @@ const TagPickerMessage = UiSchema.TaggedEnum({
 
 // The consumer owns the tags, as it owns a Listbox's `selected`, so the
 // picker asks for every change as the whole new list.
-export const TagPickerEvents = UiSchema.TaggedEnum({ Updated: { tags: Schema.Array(Schema.String) } })
+export const TagPickerEvents = UiSchema.TaggedEnum({
+  Updated: { tags: Schema.Array(Schema.String) }
+})
 
 export const TagPicker = Component.define({
   name: "TagPicker",
   scoped: false,
-  props: Schema.Struct({ options: Schema.Array(ListboxOption), tags: Schema.Array(Schema.String) }),
+  props: Schema.Struct({
+    options: Schema.Array(ListboxOption),
+    tags: Schema.Array(Schema.String)
+  }),
   // What the status region last announced, so a screen reader hears what a
   // pick or a removal did.
   model: Schema.Struct({ announced: Schema.String }),
@@ -40,14 +45,17 @@ export const TagPicker = Component.define({
 }).make({
   init: () => ({ announced: "" }),
   update: ($, message) => {
-    const label = (id: string) => $.props.options.find((option) => option.id === id)?.label ?? id
+    const label = (id: string) =>
+      $.props.options.find((option) => option.id === id)?.label ?? id
     return TagPickerMessage.match(message, {
       PickedTag: ({ id }) =>
         $.set({ announced: `Added ${label(id)}` })
           .emit(TagPickerEvents.Updated({ tags: [...$.props.tags, id] })),
       ClickedRemove: ({ id }) =>
         $.set({ announced: `Removed ${label(id)}` })
-          .emit(TagPickerEvents.Updated({ tags: $.props.tags.filter((tag) => tag !== id) }))
+          .emit(TagPickerEvents.Updated({
+            tags: $.props.tags.filter((tag) => tag !== id)
+          }))
     })
   },
   // `p.child(Listbox, ...)` declares a Listbox that this component owns. It
@@ -68,7 +76,10 @@ export const TagPicker = Component.define({
     const picked = new Set(p.props.tags)
     return p.child(Listbox, {
       // Only the tags not picked yet are offered.
-      props: { options: p.props.options.filter((option) => !picked.has(option.id)), selected: null },
+      props: {
+        options: p.props.options.filter((option) => !picked.has(option.id)),
+        selected: null
+      },
       onEmit: { Picked: ({ id }) => TagPickerMessage.PickedTag({ id }) },
       parts: (listbox) => ({
         // Every Listbox part goes through as it is, beside this component's own.
@@ -91,7 +102,9 @@ export const TagPicker = Component.define({
 // A consumer: one closure draws the picker's parts and the Listbox's
 // ---------------------------------------------------------------------------
 
-const NoteTagsMessage = UiSchema.TaggedEnum({ UpdatedTags: { tags: Schema.Array(Schema.String) } })
+const NoteTagsMessage = UiSchema.TaggedEnum({
+  UpdatedTags: { tags: Schema.Array(Schema.String) }
+})
 
 const options: ReadonlyArray<ListboxOption> = [
   { id: "work", label: "Work" },
@@ -119,7 +132,10 @@ export const NoteTags = Component.define({
         h.div.class("note-tags").children(
           h.ul.attr("aria-label", "Tags").children(
             tagPicker.tags.map((tag) =>
-              h.li.key(tag.id).children(tag.label, tagPicker.remove(h.button, tag).children("×"))
+              h.li.key(tag.id).children(
+                tag.label,
+                tagPicker.remove(h.button, tag).children("×")
+              )
             )
           ),
           tagPicker.trigger(h.button).children("Add a tag"),
@@ -127,7 +143,12 @@ export const NoteTags = Component.define({
             tagPicker.input(h.input.attr("aria-label", "Filter tags")),
             tagPicker.list(h.ul.attr("aria-label", "Tags to add")).children(
               tagPicker.shown.map((option) =>
-                tagPicker.option(h.li.key(option.id).class(tagPicker.active === option.id && "active"), option)
+                tagPicker.option(
+                  h.li.key(option.id).class(
+                    tagPicker.active === option.id && "active"
+                  ),
+                  option
+                )
                   .children(option.label)
               )
             )
@@ -153,7 +174,9 @@ export const pickedAndRemoved = Effect.gen(function*() {
     // The stand-in view draws only what the steps look at.
     view: (tagPicker, h) =>
       h.div(
-        tagPicker.tags.map((tag) => tagPicker.remove(h.button.key(tag.id), tag).children("×")),
+        tagPicker.tags.map((tag) =>
+          tagPicker.remove(h.button.key(tag.id), tag).children("×")
+        ),
         tagPicker.status(h.div).children(tagPicker.announced)
       )
   })

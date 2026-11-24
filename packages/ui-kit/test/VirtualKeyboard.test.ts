@@ -4,7 +4,13 @@ import * as VirtualKeyboard from "@effect/ui-kit/VirtualKeyboard"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { byId, container, isViewportProbe, tick, visualViewport } from "./utils/document.ts"
+import {
+  byId,
+  container,
+  isViewportProbe,
+  tick,
+  visualViewport
+} from "./utils/document.ts"
 
 const closed: VirtualKeyboard.Sample = {
   layoutWidth: 400,
@@ -17,10 +23,14 @@ const closed: VirtualKeyboard.Sample = {
   focused: true
 }
 
-const bandAfter = (samples: ReadonlyArray<Partial<VirtualKeyboard.Sample>>): VirtualKeyboard.Band | null => {
+const bandAfter = (
+  samples: ReadonlyArray<Partial<VirtualKeyboard.Sample>>
+): VirtualKeyboard.Band | null => {
   let state = VirtualKeyboard.initialState(closed)
   let band: VirtualKeyboard.Band | null = null
-  for (const sample of samples) ({ state, band } = VirtualKeyboard.step(state, { ...closed, ...sample }))
+  for (const sample of samples) {
+    ;({ state, band } = VirtualKeyboard.step(state, { ...closed, ...sample }))
+  }
   return band
 }
 
@@ -33,32 +43,55 @@ describe("VirtualKeyboard.step", () => {
     readonly samples: ReadonlyArray<Partial<VirtualKeyboard.Sample>>
     readonly band: VirtualKeyboard.Band | null
   }>([
-    { name: "no keyboard while the viewports match", samples: [{}], band: null },
     {
-      name: "a visual viewport over 60px shorter is a keyboard, its inset rounded up",
+      name: "no keyboard while the viewports match",
+      samples: [{}],
+      band: null
+    },
+    {
+      name:
+        "a visual viewport over 60px shorter is a keyboard, its inset rounded up",
       samples: [{ visualHeight: 499.5 }],
       band: { top: 0, bottom: 499.5, inset: 301, resizing: false }
     },
-    { name: "60px or less is a browser's toolbar", samples: [{ visualHeight: 740 }], band: null },
-    { name: "no keyboard without a focused text field", samples: [{ ...over, focused: false }], band: null },
-    { name: "no band while pinch-zoomed", samples: [{ ...over, scale: 2 }], band: null },
+    {
+      name: "60px or less is a browser's toolbar",
+      samples: [{ visualHeight: 740 }],
+      band: null
+    },
+    {
+      name: "no keyboard without a focused text field",
+      samples: [{ ...over, focused: false }],
+      band: null
+    },
+    {
+      name: "no band while pinch-zoomed",
+      samples: [{ ...over, scale: 2 }],
+      band: null
+    },
     {
       name: "the band moves with a panned visual viewport",
       samples: [{ ...over, visualTop: 120 }],
       band: { top: 120, bottom: 620, inset: 180, resizing: false }
     },
     {
-      name: "a layout viewport that follows the keyboard gets no inset, and is resizing until it reaches it",
+      name:
+        "a layout viewport that follows the keyboard gets no inset, and is resizing until it reaches it",
       samples: [{ ...over, smallViewportHeight: 500 }],
       band: { top: 0, bottom: 800, inset: 0, resizing: true }
     },
     {
-      name: "a layout viewport that has reached the keyboard is no longer resizing",
-      samples: [{ ...over, smallViewportHeight: 500 }, { ...shrunk, smallViewportHeight: 500 }],
+      name:
+        "a layout viewport that has reached the keyboard is no longer resizing",
+      samples: [{ ...over, smallViewportHeight: 500 }, {
+        ...shrunk,
+        smallViewportHeight: 500
+      }],
       band: { top: 0, bottom: 500, inset: 0, resizing: false }
     },
     {
-      name: "a keyboard stays seen once the layout viewport shrinks to the visual one",
+      name:
+        "a keyboard stays seen once the layout viewport shrinks to the visual one",
       samples: [over, shrunk],
       band: { top: 0, bottom: 500, inset: 0, resizing: false }
     },
@@ -72,9 +105,14 @@ describe("VirtualKeyboard.step", () => {
       samples: [over, { ...shrunk, focused: false }, shrunk],
       band: null
     },
-    { name: "both viewports shrinking together is a resize elsewhere", samples: [shrunk], band: null },
     {
-      name: "on Android, a layout viewport over 60px below its tallest is a keyboard that resizes the page",
+      name: "both viewports shrinking together is a resize elsewhere",
+      samples: [shrunk],
+      band: null
+    },
+    {
+      name:
+        "on Android, a layout viewport over 60px below its tallest is a keyboard that resizes the page",
       samples: [{ ...shrunk, android: true }],
       band: { top: 0, bottom: 500, inset: 0, resizing: false }
     },
@@ -88,12 +126,16 @@ describe("VirtualKeyboard.step", () => {
   })
 })
 
-const Message = UiSchema.TaggedEnum({ ChangedBand: { band: Schema.NullOr(VirtualKeyboard.Band) } })
+const Message = UiSchema.TaggedEnum({
+  ChangedBand: { band: Schema.NullOr(VirtualKeyboard.Band) }
+})
 
 const Sheet = Component.define({
   name: "Sheet",
   scoped: false,
-  model: Schema.Struct({ bands: Schema.Array(Schema.NullOr(VirtualKeyboard.Band)) }),
+  model: Schema.Struct({
+    bands: Schema.Array(Schema.NullOr(VirtualKeyboard.Band))
+  }),
   message: Message,
   elements: Html
 }).make({
@@ -105,11 +147,16 @@ const Sheet = Component.define({
     h.div
       .id("sheet")
       .attr("style", "color:red")
-      .onMount(VirtualKeyboard.TrackKeyboard().pipe(Mount.map((band) => Message.ChangedBand({ band }))))
+      .onMount(
+        VirtualKeyboard.TrackKeyboard().pipe(
+          Mount.map((band) => Message.ChangedBand({ band }))
+        )
+      )
       .children(h.input.id("field"), h.button.id("done").children("Done"))
 })
 
-const probes = () => Array.from(document.body.children).filter(isViewportProbe).length
+const probes = () =>
+  Array.from(document.body.children).filter(isViewportProbe).length
 
 describe("VirtualKeyboard.TrackKeyboard", { concurrent: false }, () => {
   it.effect("writes the inset while a focused field has the keyboard up, and removes it when it goes", () =>

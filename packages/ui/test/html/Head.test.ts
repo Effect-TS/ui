@@ -5,7 +5,8 @@ import type * as runtime from "@effect/ui/internal/runtime"
 import { Effect, Schema } from "effect"
 import { afterEach, describe, expect, it } from "vitest"
 
-const head = (...entries: ReadonlyArray<HtmlHead.Entry>) => HtmlHead.merge({ entries, children: [] })
+const head = (...entries: ReadonlyArray<HtmlHead.Entry>) =>
+  HtmlHead.merge({ entries, children: [] })
 
 const render = (entries: ReadonlyArray<HtmlHead.Entry>) =>
   Effect.runPromise(
@@ -29,7 +30,9 @@ const render = (entries: ReadonlyArray<HtmlHead.Entry>) =>
 
 const sync = () => {
   const warnings: Array<string> = []
-  const host = BrowserHost.makeHost(document, { warn: (message) => warnings.push(message) })
+  const host = BrowserHost.makeHost(document, {
+    warn: (message) => warnings.push(message)
+  })
   hosts.push(host)
   return { apply: host.head!, warnings }
 }
@@ -40,20 +43,41 @@ afterEach(() => {
   document.head.innerHTML = ""
   document.title = ""
   for (const element of [document.documentElement, document.body]) {
-    for (const name of element.getAttributeNames()) element.removeAttribute(name)
+    for (const name of element.getAttributeNames()) {
+      element.removeAttribute(name)
+    }
   }
 })
 
 // Every test syncs the one global document, and hosts on a document share its sync until each is disposed.
 describe("BrowserHost head", { concurrent: false }, () => {
   it("validates head tag and document data names before serialization, adoption and updates", async () => {
-    const unsafe = ["x onclick", "x\"><script>alert(1)</script", "x'", "x=", "x/", "x<", "x>", "x\t", "x\n", "x\u0000"]
-    const injected = Object.fromEntries(unsafe.map((name) => [`data-${name}`, "alert(1)"]))
+    const unsafe = [
+      "x onclick",
+      "x\"><script>alert(1)</script",
+      "x'",
+      "x=",
+      "x/",
+      "x<",
+      "x>",
+      "x\t",
+      "x\n",
+      "x\u0000"
+    ]
+    const injected = Object.fromEntries(
+      unsafe.map((name) => [`data-${name}`, "alert(1)"])
+    )
     const unsafeData = unsafe.flatMap((name) => [
       HtmlHead.htmlData(`data-${name}`, "alert(1)"),
       HtmlHead.bodyData(`data-${name}`, "alert(1)")
     ])
-    const linkAttributes = { rel: "alternate", href: "/first", ...injected, HREF: "/last", "data-EUI": "fake" }
+    const linkAttributes = {
+      rel: "alternate",
+      href: "/first",
+      ...injected,
+      HREF: "/last",
+      "data-EUI": "fake"
+    }
     const entries = [
       HtmlHead.link(linkAttributes),
       ...unsafeData,
@@ -70,8 +94,12 @@ describe("BrowserHost head", { concurrent: false }, () => {
     const invalidOnly = await render(unsafeData)
     expect(invalidOnly.htmlAttributes).toBe("")
     expect(invalidOnly.bodyAttributes).toBe("")
-    expect(rendered.head).toBe("<link rel=\"alternate\" href=\"/last\" data-eui>")
-    expect(rendered.htmlAttributes).toBe("data-theme=\"a&quot;&lt;&amp;\" data-eui=\"data-theme\"")
+    expect(rendered.head).toBe(
+      "<link rel=\"alternate\" href=\"/last\" data-eui>"
+    )
+    expect(rendered.htmlAttributes).toBe(
+      "data-theme=\"a&quot;&lt;&amp;\" data-eui=\"data-theme\""
+    )
     expect(rendered.bodyAttributes).toBe(rendered.htmlAttributes)
     for (const hydrate of [false, true]) {
       const target = new DOMParser().parseFromString(
@@ -82,7 +110,9 @@ describe("BrowserHost head", { concurrent: false }, () => {
       )
       const before = target.head.firstElementChild
       const warnings: Array<string> = []
-      const host = BrowserHost.makeHost(target, { warn: (message) => warnings.push(message) })
+      const host = BrowserHost.makeHost(target, {
+        warn: (message) => warnings.push(message)
+      })
       hosts.push(host)
       host.head!(head(...entries))
       const link = target.head.querySelector("link")!
@@ -95,7 +125,12 @@ describe("BrowserHost head", { concurrent: false }, () => {
         expect(element.getAttribute("data-theme")).toBe("a\"<&")
         expect(element.getAttribute("data-eui")).toBe("data-theme")
       }
-      host.head!(head(HtmlHead.htmlData("data-THEME", "updated"), HtmlHead.bodyData("data-THEME", "updated")))
+      host.head!(
+        head(
+          HtmlHead.htmlData("data-THEME", "updated"),
+          HtmlHead.bodyData("data-THEME", "updated")
+        )
+      )
       for (const element of [target.documentElement, target.body]) {
         expect(element.getAttribute("data-theme")).toBe("updated")
         expect(element.getAttribute("data-eui")).toBe("data-theme")
@@ -103,7 +138,9 @@ describe("BrowserHost head", { concurrent: false }, () => {
       host.head!(HtmlHead.empty)
       expect(target.head.children.length).toBe(0)
       for (const element of [target.documentElement, target.body]) {
-        expect(element.getAttribute("data-theme")).toBe(hydrate ? null : "shell")
+        expect(element.getAttribute("data-theme")).toBe(
+          hydrate ? null : "shell"
+        )
         expect(element.hasAttribute("data-eui")).toBe(false)
       }
       host.head!(head(...unsafeData))
@@ -115,7 +152,12 @@ describe("BrowserHost head", { concurrent: false }, () => {
 
   it("merges links by their normalized rel and href before rendering", async () => {
     const canonical = { rel: "alternate", href: "/first", REL: "canonical" }
-    const alternate = { rel: "alternate", href: "/other", HREF: "/same", hreflang: "en" }
+    const alternate = {
+      rel: "alternate",
+      href: "/other",
+      HREF: "/same",
+      hreflang: "en"
+    }
     const entries = [
       HtmlHead.link(canonical),
       HtmlHead.link({ rel: "canonical", href: "/last" }),
@@ -136,9 +178,14 @@ describe("BrowserHost head", { concurrent: false }, () => {
   })
 
   it("escapes data names in the serialized ownership marker", async () => {
-    const entries = [HtmlHead.htmlData("data-a&copy;", "amp"), HtmlHead.bodyData("data-a&copy;", "amp")]
+    const entries = [
+      HtmlHead.htmlData("data-a&copy;", "amp"),
+      HtmlHead.bodyData("data-a&copy;", "amp")
+    ]
     const rendered = await render(entries)
-    expect(rendered.htmlAttributes).toBe("data-a&copy;=\"amp\" data-eui=\"data-a&amp;copy;\"")
+    expect(rendered.htmlAttributes).toBe(
+      "data-a&copy;=\"amp\" data-eui=\"data-a&amp;copy;\""
+    )
     expect(rendered.bodyAttributes).toBe(rendered.htmlAttributes)
     const { apply } = sync()
     apply(head(...entries))
@@ -152,7 +199,8 @@ describe("BrowserHost head", { concurrent: false }, () => {
   })
 
   it("adopts the server's marked tags, so the first sync changes nothing", () => {
-    document.head.innerHTML = `<title>Ada</title><meta name="description" content="About Ada" data-eui>` +
+    document.head.innerHTML =
+      `<title>Ada</title><meta name="description" content="About Ada" data-eui>` +
       `<script type="application/ld+json" data-eui>{"name":"Ada"}</script>`
     const meta = document.head.querySelector("meta")!
     const script = document.head.querySelector("script")!
@@ -168,9 +216,13 @@ describe("BrowserHost head", { concurrent: false }, () => {
     expect(document.head.children.length).toBe(3)
 
     // A JSON-LD block is rewritten only when its canonical form changes.
-    apply(head(...entries.slice(0, 2), HtmlHead.jsonLd({ name: "Ada", born: 1815 })))
+    apply(
+      head(...entries.slice(0, 2), HtmlHead.jsonLd({ name: "Ada", born: 1815 }))
+    )
     expect(document.head.querySelector("script")).not.toBe(script)
-    expect(document.head.querySelector("script")!.textContent).toBe("{\"born\":1815,\"name\":\"Ada\"}")
+    expect(document.head.querySelector("script")!.textContent).toBe(
+      "{\"born\":1815,\"name\":\"Ada\"}"
+    )
     expect(document.head.querySelector("meta")).toBe(meta)
   })
 
@@ -210,7 +262,11 @@ describe("BrowserHost head", { concurrent: false }, () => {
     document.documentElement.setAttribute("lang", "fr")
     const first = BrowserHost.makeHost(document)
     first.head!(
-      head(Head.title("First"), HtmlHead.lang("en"), HtmlHead.meta({ name: "description", content: "First" }))
+      head(
+        Head.title("First"),
+        HtmlHead.lang("en"),
+        HtmlHead.meta({ name: "description", content: "First" })
+      )
     )
     first.dispose()
     expect(document.title).toBe("Shell")
@@ -224,14 +280,16 @@ describe("BrowserHost head", { concurrent: false }, () => {
   })
 
   it("leaves the server's head in place when a host that never synced is disposed", () => {
-    document.head.innerHTML = `<title data-eui>Ada</title><meta name="description" content="About Ada" data-eui>`
+    document.head.innerHTML =
+      `<title data-eui>Ada</title><meta name="description" content="About Ada" data-eui>`
     BrowserHost.makeHost(document).dispose()
     expect(document.title).toBe("Ada")
     expect(document.head.querySelector("meta")).not.toBeNull()
   })
 
   it("keeps unmarked shell tags and warns when an entry duplicates one", () => {
-    document.head.innerHTML = `<meta name="description" content="Shell"><link rel="canonical" href="/shell">` +
+    document.head.innerHTML =
+      `<meta name="description" content="Shell"><link rel="canonical" href="/shell">` +
       `<script type="application/ld+json">{}</script>`
     document.documentElement.setAttribute("lang", "fr")
     const { apply, warnings } = sync()
@@ -244,7 +302,9 @@ describe("BrowserHost head", { concurrent: false }, () => {
     expect(warnings.length).toBe(4)
     expect(document.head.querySelectorAll("meta").length).toBe(2)
     apply(HtmlHead.empty)
-    expect(document.head.querySelector("meta")!.getAttribute("content")).toBe("Shell")
+    expect(document.head.querySelector("meta")!.getAttribute("content")).toBe(
+      "Shell"
+    )
     expect(document.head.querySelectorAll("[data-eui]").length).toBe(0)
   })
 
@@ -254,7 +314,9 @@ describe("BrowserHost head", { concurrent: false }, () => {
     document.documentElement.setAttribute("data-eui", "class")
     const { apply, warnings } = sync()
     apply(head(HtmlHead.htmlClass("dark")))
-    expect(warnings).toEqual(["Head: <html> is missing the class tokens dark the marker lists"])
+    expect(warnings).toEqual([
+      "Head: <html> is missing the class tokens dark the marker lists"
+    ])
     expect(document.documentElement.className).toBe("h-full dark")
   })
 
@@ -262,7 +324,10 @@ describe("BrowserHost head", { concurrent: false }, () => {
     const { apply } = sync()
     // Stylesheets are where the order matters; happy-dom would try to load one, so these are alternates.
     const sheet = (href: string) => HtmlHead.link({ rel: "alternate", href })
-    const hrefs = () => [...document.head.querySelectorAll("link[data-eui]")].map((link) => link.getAttribute("href"))
+    const hrefs = () =>
+      [...document.head.querySelectorAll("link[data-eui]")].map((link) =>
+        link.getAttribute("href")
+      )
     apply(head(sheet("a.css"), sheet("b.css")))
     expect(hrefs()).toEqual(["a.css", "b.css"])
     const b = document.head.querySelector("link[href='b.css']")
@@ -278,11 +343,15 @@ describe("BrowserHost head", { concurrent: false }, () => {
     document.head.innerHTML = `<meta name='say "hi"' content="Shell">`
     const { apply, warnings } = sync()
     apply(head(HtmlHead.meta({ name: "say \"hi\"", content: "App" })))
-    expect(warnings).toEqual([`Head: the shell has its own meta[name="say \\"hi\\""], which a head entry also sets`])
+    expect(warnings).toEqual([
+      `Head: the shell has its own meta[name="say \\"hi\\""], which a head entry also sets`
+    ])
   })
 })
 
-const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+const tick = Effect.promise(() =>
+  new Promise<void>((resolve) => setTimeout(resolve, 30))
+)
 
 const Rename = UiSchema.TaggedEnum({ Rename: { title: Schema.String } })
 
@@ -296,18 +365,32 @@ const Titled = Component.define({
 }).make({
   init: ($) => $.props.title,
   update: (_, message) => message.title,
-  head: ({ model: title }) => [Head.title(title), HtmlHead.meta({ name: "description", content: title })],
+  head: (
+    { model: title }
+  ) => [
+    Head.title(title),
+    HtmlHead.meta({ name: "description", content: title })
+  ],
   view: (h, title) => h.p(title)
 })
 
-const mountIn = Effect.fnUntraced(function*(title: string, options?: { readonly head?: boolean }) {
-  const element = yield* Effect.acquireRelease(
-    Effect.sync(() => document.body.appendChild(document.createElement("div"))),
-    (element) => Effect.sync(() => element.remove())
-  )
-  const root = yield* BrowserHost.mountEffect(Titled, { title }, element, options)
-  return root as typeof root & runtime.Root
-})
+const mountIn = Effect.fnUntraced(
+  function*(title: string, options?: { readonly head?: boolean }) {
+    const element = yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        document.body.appendChild(document.createElement("div"))
+      ),
+      (element) => Effect.sync(() => element.remove())
+    )
+    const root = yield* BrowserHost.mountEffect(
+      Titled,
+      { title },
+      element,
+      options
+    )
+    return root as typeof root & runtime.Root
+  }
+)
 
 describe("BrowserHost head ownership", { concurrent: false }, () => {
   it("with two mounts on one document, only the one that owns the head writes it", () =>
@@ -317,7 +400,9 @@ describe("BrowserHost head ownership", { concurrent: false }, () => {
       const widget = yield* mountIn("Widget", { head: false })
       yield* tick
       expect(document.title).toBe("App")
-      expect([...document.head.querySelectorAll("meta")].map((meta) => meta.content)).toEqual(["App"])
+      expect(
+        [...document.head.querySelectorAll("meta")].map((meta) => meta.content)
+      ).toEqual(["App"])
       const ownedHead = document.head.innerHTML
       widget.send(Rename.Rename({ title: "Renamed" }))
       yield* tick
@@ -326,6 +411,8 @@ describe("BrowserHost head ownership", { concurrent: false }, () => {
       app.send(Rename.Rename({ title: "Home" }))
       yield* tick
       expect(document.title).toBe("Home")
-      expect([...document.head.querySelectorAll("meta")].map((meta) => meta.content)).toEqual(["Home"])
+      expect(
+        [...document.head.querySelectorAll("meta")].map((meta) => meta.content)
+      ).toEqual(["Home"])
     }))))
 })

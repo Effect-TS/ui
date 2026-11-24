@@ -23,7 +23,9 @@ const detach = (node: Node) => {
 const node = (): Node => ({ parent: undefined, children: [] })
 
 /** @internal */
-export const make = (elements: ReadonlyArray<string> | "any"): Renderer.Host<Node> => ({
+export const make = (
+  elements: ReadonlyArray<string> | "any"
+): Renderer.Host<Node> => ({
   createElement: node,
   createText: node,
   createContainer: node,
@@ -41,7 +43,9 @@ export const make = (elements: ReadonlyArray<string> | "any"): Renderer.Host<Nod
   parentOf: (child) => child.parent,
   nextOf(child) {
     const siblings = child.parent?.children
-    return siblings === undefined ? undefined : siblings[siblings.indexOf(child) + 1]
+    return siblings === undefined
+      ? undefined
+      : siblings[siblings.indexOf(child) + 1]
   },
   setEvents() {},
   elements,

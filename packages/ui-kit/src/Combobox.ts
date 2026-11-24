@@ -290,7 +290,9 @@ export type ComboboxItem = typeof ComboboxItem.Type
  * @category schemas
  * @since 0.1.0
  */
-export const ComboboxValue = Schema.NullOr(Schema.Union([Schema.String, Schema.Array(Schema.String)]))
+export const ComboboxValue = Schema.NullOr(
+  Schema.Union([Schema.String, Schema.Array(Schema.String)])
+)
 
 /**
  * What a `Combobox` holds.
@@ -537,8 +539,15 @@ export const ComboboxEvents = UiSchema.TaggedEnum({
   RequestedOpen: { reason: ComboboxChangeReason },
   RequestedClose: { reason: ComboboxChangeReason },
   Picked: { value: ComboboxValue, reason: ComboboxChangeReason },
-  RequestedInputValue: { inputValue: Schema.String, reason: ComboboxChangeReason },
-  Highlighted: { value: Schema.NullOr(Schema.String), index: Schema.Number, reason: ComboboxHighlightReason },
+  RequestedInputValue: {
+    inputValue: Schema.String,
+    reason: ComboboxChangeReason
+  },
+  Highlighted: {
+    value: Schema.NullOr(Schema.String),
+    index: Schema.Number,
+    reason: ComboboxHighlightReason
+  },
   Settled: { open: Schema.Boolean }
 })
 
@@ -604,18 +613,28 @@ export interface ComboboxFilter extends TextFilter {}
  * @category constructors
  * @since 0.1.0
  */
-export const makeComboboxFilter = (locale?: string | undefined): ComboboxFilter => textFilter(locale)
+export const makeComboboxFilter = (
+  locale?: string | undefined
+): ComboboxFilter => textFilter(locale)
 
 const emits: Engine.Emits<ComboboxEvents> = {
   requestedOpen: (reason) => ComboboxEvents.RequestedOpen({ reason }),
   requestedClose: (reason) => ComboboxEvents.RequestedClose({ reason }),
   picked: (value, reason) => ComboboxEvents.Picked({ value, reason }),
-  edited: (inputValue, reason) => ComboboxEvents.RequestedInputValue({ inputValue, reason }),
-  highlighted: (value, index, reason) => ComboboxEvents.Highlighted({ value, index, reason }),
+  edited: (inputValue, reason) =>
+    ComboboxEvents.RequestedInputValue({ inputValue, reason }),
+  highlighted: (value, index, reason) =>
+    ComboboxEvents.Highlighted({ value, index, reason }),
   settled: (open) => ComboboxEvents.Settled({ open })
 }
 
-const engine = Engine.make("Combobox", (props: ComboboxProps): Engine.Settings<ComboboxEvents> => ({ ...props, emits }))
+const engine = Engine.make(
+  "Combobox",
+  (props: ComboboxProps): Engine.Settings<ComboboxEvents> => ({
+    ...props,
+    emits
+  })
+)
 
 /**
  * A combobox: an input that filters a list of options as the user types.

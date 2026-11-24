@@ -7,11 +7,22 @@ import { HttpRouter } from "effect/http"
 import { App, AppRoute, People } from "./fixtures/routed.ts"
 
 describe("HtmlServerHttp.layerHttp", () => {
-  const request = async (pages: Layer.Layer<never, never, HttpRouter.HttpRouter>, path: string) => {
-    const { dispose, handler } = HttpRouter.toWebHandler(pages, { disableLogger: true })
+  const request = async (
+    pages: Layer.Layer<never, never, HttpRouter.HttpRouter>,
+    path: string
+  ) => {
+    const { dispose, handler } = HttpRouter.toWebHandler(pages, {
+      disableLogger: true
+    })
     try {
-      const response = await handler(new Request(`http://localhost${path}`, { redirect: "manual" }))
-      return { status: response.status, headers: response.headers, body: await response.text() }
+      const response = await handler(
+        new Request(`http://localhost${path}`, { redirect: "manual" })
+      )
+      return {
+        status: response.status,
+        headers: response.headers,
+        body: await response.text()
+      }
     } finally {
       await dispose()
     }
@@ -20,7 +31,9 @@ describe("HtmlServerHttp.layerHttp", () => {
   const document = (page: HtmlServer.Rendered<unknown>) =>
     `<html ${page.htmlAttributes}><head>${page.head}</head><body>${page.html}</body></html>`
 
-  const pages = layerHttp(App, { routes: AppRoute, document }).pipe(Layer.provide(People.layer))
+  const pages = layerHttp(App, { routes: AppRoute, document }).pipe(
+    Layer.provide(People.layer)
+  )
 
   it("renders the route at the URL into the document, with the props the client mounts with", async () => {
     const response = await request(pages, "/people/1")
@@ -55,10 +68,17 @@ describe("HtmlServerHttp.layerHttp", () => {
       update: ($) => $.model,
       view: (h) => h.h1("Home")
     })
-    const response = await request(layerHttp(Root, { routes: HomeRoute, document }), "/missing")
+    const response = await request(
+      layerHttp(Root, { routes: HomeRoute, document }),
+      "/missing"
+    )
     assert.strictEqual(response.status, 404)
     assert.strictEqual(rendered, 0)
-    assert.strictEqual((await request(layerHttp(Root, { routes: HomeRoute, document }), "/")).status, 200)
+    assert.strictEqual(
+      (await request(layerHttp(Root, { routes: HomeRoute, document }), "/"))
+        .status,
+      200
+    )
   })
 
   it("redirects a normalised URL to the printed route", async () => {
@@ -69,7 +89,13 @@ describe("HtmlServerHttp.layerHttp", () => {
 
   it("redirects a URL with search params dropped as invalid temporarily, keeping the others", async () => {
     const ListRoute = Route.union({
-      List: Route.make("/list", { search: { page: Schema.Int.pipe(Schema.withDecodingDefaultKey(Effect.succeed(1))) } })
+      List: Route.make("/list", {
+        search: {
+          page: Schema.Int.pipe(
+            Schema.withDecodingDefaultKey(Effect.succeed(1))
+          )
+        }
+      })
     })
     const List = Component.define({
       name: "List",
@@ -86,7 +112,10 @@ describe("HtmlServerHttp.layerHttp", () => {
     const lists = layerHttp(List, { routes: ListRoute, document })
     const response = await request(lists, "/list?page=x&utm_source=mail")
     assert.strictEqual(response.status, 302)
-    assert.strictEqual(response.headers.get("location"), "/list?utm_source=mail")
+    assert.strictEqual(
+      response.headers.get("location"),
+      "/list?utm_source=mail"
+    )
     const valid = await request(lists, "/list?page=2&utm_source=mail")
     assert.strictEqual(valid.status, 200)
     assert.include(valid.body, "Page 2")

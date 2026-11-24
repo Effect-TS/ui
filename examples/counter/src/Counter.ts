@@ -12,7 +12,8 @@ export const CounterMessage = UiSchema.TaggedEnum({
   ClickedReset: {}
 })
 
-const BUTTON_CLASS = "bg-black text-white hover:bg-gray-700 px-4 py-2 transition"
+const BUTTON_CLASS =
+  "bg-black text-white hover:bg-gray-700 px-4 py-2 transition"
 
 export const Counter = Component.define({
   name: "Counter",
@@ -28,12 +29,22 @@ export const Counter = Component.define({
   },
   head: ({ model }) => [Head.title(`Counter: ${model.count}`)],
   view: (h, model) =>
-    h.div.class("min-h-screen bg-white flex flex-col items-center justify-center gap-6 p-6").children(
-      h.p.class("text-6xl font-bold text-gray-800").children(String(model.count)),
+    h.div.class(
+      "min-h-screen bg-white flex flex-col items-center justify-center gap-6 p-6"
+    ).children(
+      h.p.class("text-6xl font-bold text-gray-800").children(
+        String(model.count)
+      ),
       h.div.class("flex flex-wrap justify-center gap-4").children(
-        Button(h, { onPress: CounterMessage.ClickedDecrement() }).class(BUTTON_CLASS).children("-"),
-        Button(h, { onPress: CounterMessage.ClickedReset() }).class(BUTTON_CLASS).children("Reset"),
-        Button(h, { onPress: CounterMessage.ClickedIncrement() }).class(BUTTON_CLASS).children("+")
+        Button(h, { onPress: CounterMessage.ClickedDecrement() }).class(
+          BUTTON_CLASS
+        ).children("-"),
+        Button(h, { onPress: CounterMessage.ClickedReset() }).class(
+          BUTTON_CLASS
+        ).children("Reset"),
+        Button(h, { onPress: CounterMessage.ClickedIncrement() }).class(
+          BUTTON_CLASS
+        ).children("+")
       )
     )
 })

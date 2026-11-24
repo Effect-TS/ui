@@ -17,7 +17,15 @@ if (dirs.length === 0) {
   process.exit(1)
 }
 
-const order = ["vanillajs", "effect-ui", "foldkit", "react-hooks", "vue", "svelte", "solid"]
+const order = [
+  "vanillajs",
+  "effect-ui",
+  "foldkit",
+  "react-hooks",
+  "vue",
+  "svelte",
+  "solid"
+]
 const cpuLabels = {
   "01_run1k": "create 1,000 rows",
   "02_replace1k": "replace 1,000 rows",
@@ -50,9 +58,13 @@ const add = (map, key, benchmark, framework, data) => {
   byFramework.set(framework, [...(byFramework.get(framework) ?? []), ...data])
 }
 dirs.forEach((dir, i) => {
-  for (const file of fs.readdirSync(dir).filter((file) => file.endsWith(".json"))) {
+  for (
+    const file of fs.readdirSync(dir).filter((file) => file.endsWith(".json"))
+  ) {
     const result = JSON.parse(fs.readFileSync(path.join(dir, file), "utf8"))
-    const framework = order.find((f) => result.framework === f + "-keyed" || result.framework.startsWith(f + "-v"))
+    const framework = order.find((f) =>
+      result.framework === f + "-keyed" || result.framework.startsWith(f + "-v")
+    )
     if (framework === undefined) continue
     versions.set(framework, result.framework)
     for (const [key, { values }] of Object.entries(result.values)) {
@@ -72,16 +84,30 @@ const cell = (map, key, benchmark, framework) => {
   const xs = map.get(key)?.get(benchmark)?.get(framework)
   return xs === undefined ? undefined : median(xs)
 }
-const format = (x) => x === undefined || Number.isNaN(x) ? "" : x >= 100 ? x.toFixed(0) : x.toFixed(1)
+const format = (x) =>
+  x === undefined || Number.isNaN(x)
+    ? ""
+    : x >= 100
+    ? x.toFixed(0)
+    : x.toFixed(1)
 const vsVanilla = (map, key) =>
   frameworks.map((f) => {
-    const ratios = Object.keys(cpuLabels).map((b) => cell(map, key, b, f) / cell(map, key, b, "vanillajs"))
+    const ratios = Object.keys(cpuLabels).map((b) =>
+      cell(map, key, b, f) / cell(map, key, b, "vanillajs")
+    )
     return ratios.some((r) => Number.isNaN(r))
       ? ""
-      : Math.exp(ratios.reduce((sum, r) => sum + Math.log(r), 0) / ratios.length).toFixed(2)
+      : Math.exp(
+        ratios.reduce((sum, r) => sum + Math.log(r), 0) / ratios.length
+      ).toFixed(2)
   })
 const row = (cells) => "| " + cells.join(" | ") + " |"
-const header = (title) => [row([title, ...frameworks]), row(["---", ...frameworks.map(() => "---:")])]
+const header = (
+  title
+) => [
+  row([title, ...frameworks]),
+  row(["---", ...frameworks.map(() => "---:")])
+]
 
 for (const key of ["total", "script"]) {
   console.log(
@@ -90,7 +116,14 @@ for (const key of ["total", "script"]) {
       ...Object.entries(cpuLabels).map(([b, label]) =>
         row([label, ...frameworks.map((f) => format(cell(pooled, key, b, f)))])
       ),
-      ...(key === "total" ? [row(["**vs vanilla**", ...vsVanilla(pooled, key).map((x) => x && `**${x}**`)])] : [])
+      ...(key === "total"
+        ? [
+          row([
+            "**vs vanilla**",
+            ...vsVanilla(pooled, key).map((x) => x && `**${x}**`)
+          ])
+        ]
+        : [])
     ].join("\n") + "\n"
   )
 }
@@ -98,7 +131,10 @@ console.log(
   [
     ...header("Memory and size"),
     ...Object.entries(otherLabels).map(([b, label]) =>
-      row([label, ...frameworks.map((f) => format(cell(pooled, "DEFAULT", b, f)))])
+      row([
+        label,
+        ...frameworks.map((f) => format(cell(pooled, "DEFAULT", b, f)))
+      ])
     )
   ].join("\n") + "\n"
 )

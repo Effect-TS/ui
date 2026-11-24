@@ -1,6 +1,13 @@
 // @vitest-environment happy-dom
 import { Component, View } from "@effect/ui"
-import { Checkbox, Field, type FieldProps, fieldValidationProps, Input, Switch } from "@effect/ui-kit"
+import {
+  Checkbox,
+  Field,
+  type FieldProps,
+  fieldValidationProps,
+  Input,
+  Switch
+} from "@effect/ui-kit"
 import { Html, HtmlServer } from "@effect/ui/html"
 import { Locator, Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -28,35 +35,51 @@ const description = Locator.tag("p")
 const error = Locator.tag("span")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
-const parts = (props: FieldProps) => Story.parts(Field, { model: { focused: false, touched: false }, props })
-const attrsOf = (builder: View.ElementBuilder<never, never, any, any>) => View.build(builder, []).attrs
+const parts = (props: FieldProps) =>
+  Story.parts(Field, { model: { focused: false, touched: false }, props })
+const attrsOf = (builder: View.ElementBuilder<never, never, any, any>) =>
+  View.build(builder, []).attrs
 
 describe("Field", () => {
   it.effect("the label names the control, which points at the description and at the error while it shows", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Field, { described: true, invalid: true }, standIn)
+      const s = yield* Scene.make(
+        Field,
+        { described: true, invalid: true },
+        standIn
+      )
       const id = s.get(control).attrs?.id
       assert.isString(id)
       assert.strictEqual(s.get(label).attrs?.for, id)
       const ids = [s.get(description).attrs?.id, s.get(error).attrs?.id]
       assert.strictEqual(new Set([id, ...ids]).size, 3)
       // Next to the consumer's own hint, which stays.
-      assert.strictEqual(s.get(control).attrs?.["aria-describedby"], `hint ${ids[0]} ${ids[1]}`)
+      assert.strictEqual(
+        s.get(control).attrs?.["aria-describedby"],
+        `hint ${ids[0]} ${ids[1]}`
+      )
       assert.strictEqual(s.get(control).attrs?.["aria-invalid"], "true")
 
       s.props({ described: true, invalid: false })
         .expect(error).toBeAbsent()
-      assert.strictEqual(s.get(control).attrs?.["aria-describedby"], `hint ${ids[0]}`)
+      assert.strictEqual(
+        s.get(control).attrs?.["aria-describedby"],
+        `hint ${ids[0]}`
+      )
       assert.isUndefined(s.get(control).attrs?.["aria-invalid"])
     }))
 
   it.effect("re-enabling a field restores neither focus nor a visit until the user focuses and leaves it", () =>
     Effect.gen(function*() {
       const s = yield* Scene.make(Field, { described: true }, standIn)
-      const state = () => [s.get(control).attrs?.["data-focused"], s.get(control).attrs?.["data-touched"]]
+      const state = () => [
+        s.get(control).attrs?.["data-focused"],
+        s.get(control).attrs?.["data-touched"]
+      ]
       s.fire(control, "focus").props({ described: true, disabled: true })
       assert.deepStrictEqual(state(), [undefined, undefined])
-      s.subscription("lostFocus", { _tag: "BlurredControl", disabled: true }).props({ described: true })
+      s.subscription("lostFocus", { _tag: "BlurredControl", disabled: true })
+        .props({ described: true })
       assert.deepStrictEqual(state(), [undefined, undefined])
       s.fire(control, "focus")
       assert.deepStrictEqual(state(), ["", undefined])
@@ -67,16 +90,26 @@ describe("Field", () => {
   it("a group is a group unless its element says otherwise, and a disabled field disables its members", () => {
     const field = parts({})
     assert.strictEqual(attrsOf(field.group(h.div)).role, "group")
-    assert.strictEqual(attrsOf(field.group(h.div).attr("role", "radiogroup")).role, "radiogroup")
+    assert.strictEqual(
+      attrsOf(field.group(h.div).attr("role", "radiogroup")).role,
+      "radiogroup"
+    )
     assert.isUndefined(attrsOf(field.group(h.fieldset)).role)
-    const member = attrsOf(parts({ disabled: true }).member(h.input).disabled(false))
+    const member = attrsOf(
+      parts({ disabled: true }).member(h.input).disabled(false)
+    )
     assert.strictEqual(member.disabled, "")
     assert.strictEqual(member["data-disabled"], "")
 
     const scope = attrsOf(field.focusWithin(h.div))
     assert.isUndefined(scope.role)
     assert.isUndefined(scope["aria-labelledby"])
-    assert.strictEqual(attrsOf(field.focusWithin(h.div.attr("aria-labelledby", "own")))["aria-labelledby"], "own")
+    assert.strictEqual(
+      attrsOf(
+        field.focusWithin(h.div.attr("aria-labelledby", "own"))
+      )["aria-labelledby"],
+      "own"
+    )
   })
 
   it.effect("focusWithin keeps focus while it moves inside, touches when it leaves, and ignores disabled blur", () =>
@@ -89,7 +122,10 @@ describe("Field", () => {
             field.focusWithin(h.section).children(field.member(h.button))
           )
       })
-      const state = () => [s.get(wrapper).attrs?.["data-focused"], s.get(wrapper).attrs?.["data-touched"]]
+      const state = () => [
+        s.get(wrapper).attrs?.["data-focused"],
+        s.get(wrapper).attrs?.["data-touched"]
+      ]
       s.fire(wrapper, "focusin")
       assert.deepStrictEqual(state(), [undefined, undefined])
       s.fire(wrapper, "focusout", { within: false })
@@ -108,18 +144,25 @@ describe("Field", () => {
 
   it("field state overrides stale attributes without replacing consumer attributes", () => {
     const field = parts({ invalid: false, dirty: true, filled: true })
-    assert.deepStrictEqual(attrsOf(field.root(h.div.class("mine").attr("data-invalid", "stale"))), {
-      class: "mine",
-      "data-valid": "",
-      "data-dirty": "",
-      "data-filled": ""
-    })
-    const own = attrsOf(field.control(h.input.disabled(true).attr("data-disabled", "")))
+    assert.deepStrictEqual(
+      attrsOf(field.root(h.div.class("mine").attr("data-invalid", "stale"))),
+      {
+        class: "mine",
+        "data-valid": "",
+        "data-dirty": "",
+        "data-filled": ""
+      }
+    )
+    const own = attrsOf(
+      field.control(h.input.disabled(true).attr("data-disabled", ""))
+    )
     assert.strictEqual(own.disabled, "")
     assert.strictEqual(own["data-disabled"], "")
     const disabled = parts({ disabled: true, invalid: true })
     assert.isUndefined(disabled.error(h.span))
-    const forced = attrsOf(disabled.control(h.input).disabled(false).attr("data-disabled", undefined))
+    const forced = attrsOf(
+      disabled.control(h.input).disabled(false).attr("data-disabled", undefined)
+    )
     assert.strictEqual(forced.disabled, "")
     assert.strictEqual(forced["data-disabled"], "")
     assert.isUndefined(forced["aria-invalid"])
@@ -138,14 +181,21 @@ describe("Field", () => {
         init: () => ({}),
         update: ($) => $.model,
         view: (h) => {
-          const formField = (key: string, draw: (field: Parts) => View.Content<never>) =>
+          const formField = (
+            key: string,
+            draw: (field: Parts) => View.Content<never>
+          ) =>
             Field(h, { key, props: { disabled: h.props.disabled }, view: draw })
           const props = { checked: true, name: "terms" }
           return h.form(
             formField(
               "name",
               (field) =>
-                Input(h, { element: field.control(h.input), props: { value: "Ada" }, onUpdate: () => undefined })
+                Input(h, {
+                  element: field.control(h.input),
+                  props: { value: "Ada" },
+                  onUpdate: () => undefined
+                })
                   .attr("name", "name")
             ),
             formField(
@@ -155,7 +205,11 @@ describe("Field", () => {
                   props,
                   view: (checkbox) =>
                     checkbox.root(field.control(h.button)).children(
-                      h.input.attrs({ type: "hidden", name: "extra", value: "kept" })
+                      h.input.attrs({
+                        type: "hidden",
+                        name: "extra",
+                        value: "kept"
+                      })
                     )
                 })
             ),
@@ -166,7 +220,11 @@ describe("Field", () => {
                   props: { ...props, name: "news" },
                   view: (parts) =>
                     parts.root(field.control(h.button)).children(
-                      h.input.attrs({ type: "hidden", name: "other", value: "also-kept" })
+                      h.input.attrs({
+                        type: "hidden",
+                        name: "other",
+                        value: "also-kept"
+                      })
                     )
                 })
             )
@@ -174,11 +232,13 @@ describe("Field", () => {
         }
       })
       const submitted = (disabled: boolean) =>
-        HtmlServer.renderToHtml(Form, { disabled }).pipe(Effect.map(({ html }) => {
-          const form = document.createElement("div")
-          form.innerHTML = html
-          return [...new FormData(form.querySelector("form")!).entries()]
-        }))
+        HtmlServer.renderToHtml(Form, { disabled }).pipe(
+          Effect.map(({ html }) => {
+            const form = document.createElement("div")
+            form.innerHTML = html
+            return [...new FormData(form.querySelector("form")!).entries()]
+          })
+        )
       assert.deepStrictEqual(yield* submitted(false), [
         ["name", "Ada"],
         ["terms", "on"],
@@ -186,12 +246,18 @@ describe("Field", () => {
         ["news", "on"],
         ["other", "also-kept"]
       ])
-      assert.deepStrictEqual(yield* submitted(true), [["extra", "kept"], ["other", "also-kept"]])
+      assert.deepStrictEqual(yield* submitted(true), [["extra", "kept"], [
+        "other",
+        "also-kept"
+      ]])
     }))
 
   it("the label and the control take only their own tags, and a description needs the described prop", () => {
     const field = parts({})
-    assert.throws(() => field.label(h.span as any), /a part for <label> was given <span>/)
+    assert.throws(
+      () => field.label(h.span as any),
+      /a part for <label> was given <span>/
+    )
     assert.throws(
       () => field.control(h.div as any),
       /a part for <input> or <textarea> or <select> or <button> was given <div>/
@@ -200,24 +266,45 @@ describe("Field", () => {
       () => field.member(h.div as any),
       /a part for <input> or <textarea> or <select> or <button> was given <div>/
     )
-    assert.throws(() => field.description(h.p), /Field: the description was drawn without the described prop/)
+    assert.throws(
+      () => field.description(h.p),
+      /Field: the description was drawn without the described prop/
+    )
     assert.isUndefined(attrsOf(field.control(h.select))["aria-describedby"])
   })
 
   it("fieldValidationProps maps each Validation.Field state to invalid and filled", () => {
     const filled = { value: "ada", empty: false, required: true }
     assert.deepStrictEqual(
-      fieldValidationProps({ _tag: "NotValidated", value: " ", empty: true, required: true }),
+      fieldValidationProps({
+        _tag: "NotValidated",
+        value: " ",
+        empty: true,
+        required: true
+      }),
       { invalid: undefined, filled: false }
     )
-    assert.deepStrictEqual(fieldValidationProps({ _tag: "Validating", ...filled }), {
-      invalid: undefined,
+    assert.deepStrictEqual(
+      fieldValidationProps({ _tag: "Validating", ...filled }),
+      {
+        invalid: undefined,
+        filled: true
+      }
+    )
+    assert.deepStrictEqual(fieldValidationProps({ _tag: "Valid", ...filled }), {
+      invalid: false,
       filled: true
     })
-    assert.deepStrictEqual(fieldValidationProps({ _tag: "Valid", ...filled }), { invalid: false, filled: true })
-    assert.deepStrictEqual(fieldValidationProps({ _tag: "Invalid", ...filled, errors: ["Too short"] }), {
-      invalid: true,
-      filled: true
-    })
+    assert.deepStrictEqual(
+      fieldValidationProps({
+        _tag: "Invalid",
+        ...filled,
+        errors: ["Too short"]
+      }),
+      {
+        invalid: true,
+        filled: true
+      }
+    )
   })
 })

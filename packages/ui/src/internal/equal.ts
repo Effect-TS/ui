@@ -13,7 +13,9 @@ import * as Equal from "effect/Equal"
  */
 export const propsEqual = (a: unknown, b: unknown): boolean => {
   if (a === b) return true
-  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return Equal.equals(a, b)
+  if (
+    typeof a !== "object" || typeof b !== "object" || a === null || b === null
+  ) return Equal.equals(a, b)
   const keys = Object.keys(a)
   if (keys.length !== Object.keys(b).length) return false
   for (const key of keys) {
@@ -24,7 +26,8 @@ export const propsEqual = (a: unknown, b: unknown): boolean => {
   return true
 }
 
-const isPrimitive = (u: unknown): boolean => u === null || (typeof u !== "object" && typeof u !== "function")
+const isPrimitive = (u: unknown): boolean =>
+  u === null || (typeof u !== "object" && typeof u !== "function")
 
 /**
  * An object literal, or one with no prototype.
@@ -43,8 +46,13 @@ export const isPlainRecord = (value: unknown): value is object => {
  * takes of both. `false` leaves the answer to `Equal.equals`.
  */
 const differsPlainly = (a: unknown, b: unknown): boolean => {
-  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false
-  if (Object.getPrototypeOf(a) !== Object.prototype || Object.getPrototypeOf(b) !== Object.prototype) return false
+  if (
+    typeof a !== "object" || typeof b !== "object" || a === null || b === null
+  ) return false
+  if (
+    Object.getPrototypeOf(a) !== Object.prototype ||
+    Object.getPrototypeOf(b) !== Object.prototype
+  ) return false
   // An object with its own equality decides for itself.
   if (Equal.symbol in a || Equal.symbol in b) return false
   for (const key in a) {
@@ -52,7 +60,9 @@ const differsPlainly = (a: unknown, b: unknown): boolean => {
     const x = (a as any)[key]
     const y = (b as any)[key]
     // `NaN` is equal to itself for `Equal.equals`.
-    if (x !== y && isPrimitive(x) && isPrimitive(y) && (x === x || y === y)) return true
+    if (x !== y && isPrimitive(x) && isPrimitive(y) && (x === x || y === y)) {
+      return true
+    }
   }
   return false
 }

@@ -2,7 +2,12 @@ import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { describe, it } from "@effect/vitest"
 import { Effect, Redacted } from "effect"
-import { LoginPage, LoginPageEvents, LoginPageMessage, SimulateAuthRequest } from "./LoginPage.ts"
+import {
+  LoginPage,
+  LoginPageEvents,
+  LoginPageMessage,
+  SimulateAuthRequest
+} from "./LoginPage.ts"
 
 const alice = { userId: "1", email: "alice@example.com", name: "alice" }
 
@@ -40,8 +45,16 @@ describe("LoginPage", () => {
         .expect(submittingButton).toBeDisabled()
         .expect(emailField).toBeDisabled()
         .expect(passwordField).toBeDisabled()
-        .expectExact(SimulateAuthRequest.make({ email: alice.email, password: Redacted.make("password") }))
-        .resolve(SimulateAuthRequest, LoginPageMessage.SucceededSimulateAuthRequest({ session: alice }))
+        .expectExact(
+          SimulateAuthRequest.make({
+            email: alice.email,
+            password: Redacted.make("password")
+          })
+        )
+        .resolve(
+          SimulateAuthRequest,
+          LoginPageMessage.SucceededSimulateAuthRequest({ session: alice })
+        )
         .emitted(LoginPageEvents.SignedIn({ session: alice }))
     }))
 
@@ -51,8 +64,14 @@ describe("LoginPage", () => {
       s.type(emailField, alice.email)
         .type(passwordField, "wrong")
         .submit(form)
-        .resolve(SimulateAuthRequest, LoginPageMessage.FailedSimulateAuthRequest({ error: "Invalid credentials" }))
-        .expect(Locator.inside(form, Locator.text("Invalid credentials"))).toExist()
+        .resolve(
+          SimulateAuthRequest,
+          LoginPageMessage.FailedSimulateAuthRequest({
+            error: "Invalid credentials"
+          })
+        )
+        .expect(Locator.inside(form, Locator.text("Invalid credentials")))
+        .toExist()
         .expect(submitButton).toBeDisabled()
         .type(passwordField, "correcthorse")
         .expect(submitButton).toBeDisabled(false)

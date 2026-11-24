@@ -9,12 +9,18 @@ const pickers = Effect.acquireRelease(
     const state = { opened: [] as Array<HTMLInputElement>, refuse: false }
     const proto = window.HTMLInputElement.prototype as HTMLInputElement
     proto.showPicker = function(this: HTMLInputElement) {
-      if (state.refuse) throw new DOMException("No user activation", "NotAllowedError")
+      if (state.refuse) {
+        throw new DOMException("No user activation", "NotAllowedError")
+      }
       state.opened.push(this)
     }
     return state
   }),
-  () => Effect.sync(() => delete (window.HTMLInputElement.prototype as Partial<HTMLInputElement>).showPicker)
+  () =>
+    Effect.sync(() =>
+      delete (window.HTMLInputElement.prototype as Partial<HTMLInputElement>)
+        .showPicker
+    )
 )
 
 const choose = (input: HTMLInputElement, files: ReadonlyArray<File>) => {
@@ -38,28 +44,49 @@ class Chunked extends Blob {
   }
 }
 
-const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+const tick = Effect.promise(() =>
+  new Promise<void>((resolve) => setTimeout(resolve, 30))
+)
 
 describe("HtmlFiles", { concurrent: false }, () => {
   it.effect("reads a Blob's bytes, text and data URL, and a failed read is a FileReadError with its cause", () =>
     Effect.gen(function*() {
-      const chunks = [new Uint8Array([0x68, 0xc3]), new Uint8Array([0xa9, 0x21])]
+      const chunks = [
+        new Uint8Array([0x68, 0xc3]),
+        new Uint8Array([0xa9, 0x21])
+      ]
       assert.deepStrictEqual(
         yield* HtmlFiles.readAsBytes(new Chunked(chunks)),
         new Uint8Array([0x68, 0xc3, 0xa9, 0x21])
       )
-      assert.strictEqual(yield* HtmlFiles.readAsText(new Chunked(chunks)), "hé!")
-      assert.strictEqual(yield* HtmlFiles.readAsText(new Blob([new Uint8Array([0xe9])]), "latin1"), "é")
-      assert.strictEqual(yield* HtmlFiles.readAsDataUrl(new Blob(["hi"])), "data:application/octet-stream;base64,aGk=")
       assert.strictEqual(
-        yield* HtmlFiles.readAsDataUrl(new Blob(["hi"], { type: "text/plain" })),
+        yield* HtmlFiles.readAsText(new Chunked(chunks)),
+        "hé!"
+      )
+      assert.strictEqual(
+        yield* HtmlFiles.readAsText(
+          new Blob([new Uint8Array([0xe9])]),
+          "latin1"
+        ),
+        "é"
+      )
+      assert.strictEqual(
+        yield* HtmlFiles.readAsDataUrl(new Blob(["hi"])),
+        "data:application/octet-stream;base64,aGk="
+      )
+      assert.strictEqual(
+        yield* HtmlFiles.readAsDataUrl(
+          new Blob(["hi"], { type: "text/plain" })
+        ),
         "data:text/plain;base64,aGk="
       )
 
       const cause = new DOMException("The file changed", "NotReadableError")
       class Changed extends Blob {
         override stream() {
-          return new ReadableStream<Uint8Array<ArrayBuffer>>({ start: (controller) => controller.error(cause) })
+          return new ReadableStream<Uint8Array<ArrayBuffer>>({
+            start: (controller) => controller.error(cause)
+          })
         }
       }
       const error = yield* Effect.flip(HtmlFiles.readAsText(new Changed()))
@@ -72,24 +99,46 @@ describe("HtmlFiles", { concurrent: false }, () => {
       const picker = yield* pickers
       const context = yield* Layer.build(BrowserHost.layer())
       const pick = (options: HtmlFiles.PickOptions) =>
-        HtmlFiles.Files.use((files) => files.pick(options)).pipe(Effect.provide(context), Effect.forkChild)
+        HtmlFiles.Files.use((files) => files.pick(options)).pipe(
+          Effect.provide(context),
+          Effect.forkChild
+        )
       const file = new File(["hi"], "notes.txt")
 
-      const chosen = yield* pick({ accept: ["image/*", ".pdf"], multiple: true, capture: "environment" })
+      const chosen = yield* pick({
+        accept: ["image/*", ".pdf"],
+        multiple: true,
+        capture: "environment"
+      })
       yield* tick
       const [input] = picker.opened
-      expect([input.type, input.accept, input.multiple, input.getAttribute("capture"), input.isConnected])
+      expect([
+        input.type,
+        input.accept,
+        input.multiple,
+        input.getAttribute("capture"),
+        input.isConnected
+      ])
         .toEqual(["file", "image/*,.pdf", true, "environment", false])
       choose(input, [file])
-      assert.deepStrictEqual(yield* Fiber.join(chosen), { opened: true, files: [file] })
+      assert.deepStrictEqual(yield* Fiber.join(chosen), {
+        opened: true,
+        files: [file]
+      })
 
       const dismissed = yield* pick({})
       yield* tick
       picker.opened[1].dispatchEvent(new Event("cancel"))
-      assert.deepStrictEqual(yield* Fiber.join(dismissed), { opened: true, files: [] })
+      assert.deepStrictEqual(yield* Fiber.join(dismissed), {
+        opened: true,
+        files: []
+      })
 
       picker.refuse = true
-      assert.deepStrictEqual(yield* Fiber.join(yield* pick({})), { opened: false, files: [] })
+      assert.deepStrictEqual(yield* Fiber.join(yield* pick({})), {
+        opened: false,
+        files: []
+      })
     }).pipe(Effect.scoped))
 
   it.effect("HtmlCommand.showPicker opens a rendered input's picker, whose files arrive in its change", () =>
@@ -111,12 +160,20 @@ describe("HtmlFiles", { concurrent: false }, () => {
         init: (): ReadonlyArray<string> => [],
         update: ($, message) =>
           Message.match(message, {
-            PressedOpen: () => $.run(HtmlCommand.showPicker(Attachment, Message.ShowedPicker)),
-            ShowedPicker: ({ found, opened }) => [...$.model, `found ${found}, opened ${opened}`],
-            Chose: ({ files }) => [...$.model, `chose ${files.map((file) => file.name).join(", ")}`]
+            PressedOpen: () =>
+              $.run(HtmlCommand.showPicker(Attachment, Message.ShowedPicker)),
+            ShowedPicker: (
+              { found, opened }
+            ) => [...$.model, `found ${found}, opened ${opened}`],
+            Chose: ({ files }) => [
+              ...$.model,
+              `chose ${files.map((file) => file.name).join(", ")}`
+            ]
           }),
         view: (h) =>
-          h.input.attrs({ type: "file", "aria-label": "Attachment" }).ref(Attachment).value("")
+          h.input.attrs({ type: "file", "aria-label": "Attachment" }).ref(
+            Attachment
+          ).value("")
             .onChange(({ files }) => Message.Chose({ files }))
       })
       const app = document.body.appendChild(document.createElement("div"))
@@ -130,7 +187,11 @@ describe("HtmlFiles", { concurrent: false }, () => {
       picker.refuse = true
       root.send(Message.PressedOpen())
       yield* tick
-      expect(root.model()).toEqual(["found true, opened true", "chose notes.txt", "found true, opened false"])
+      expect(root.model()).toEqual([
+        "found true, opened true",
+        "chose notes.txt",
+        "found true, opened false"
+      ])
       expect(input.files!.length).toBe(0)
     }).pipe(Effect.scoped))
 
@@ -156,10 +217,15 @@ describe("HtmlFiles", { concurrent: false }, () => {
         init: (): ReadonlyArray<string> => [],
         update: ($, message) =>
           Message.match(message, {
-            OpenSubmit: () => $.run(HtmlCommand.showPicker(Submit, Message.ShowedPicker)),
-            OpenFile: () => $.run(HtmlCommand.showPicker(Attachment, Message.ShowedPicker)),
-            OpenLocked: () => $.run(HtmlCommand.showPicker(Locked, Message.ShowedPicker)),
-            ShowedPicker: ({ found, opened }) => [...$.model, `found ${found}, opened ${opened}`],
+            OpenSubmit: () =>
+              $.run(HtmlCommand.showPicker(Submit, Message.ShowedPicker)),
+            OpenFile: () =>
+              $.run(HtmlCommand.showPicker(Attachment, Message.ShowedPicker)),
+            OpenLocked: () =>
+              $.run(HtmlCommand.showPicker(Locked, Message.ShowedPicker)),
+            ShowedPicker: (
+              { found, opened }
+            ) => [...$.model, `found ${found}, opened ${opened}`],
             Submitted: () => [...$.model, "submitted"]
           }),
         view: (h) =>
@@ -182,7 +248,11 @@ describe("HtmlFiles", { concurrent: false }, () => {
       root.send(Message.OpenFile())
       root.send(Message.OpenLocked())
       yield* tick
-      expect(root.model()).toEqual(["found true, opened false", "found true, opened true", "found true, opened false"])
+      expect(root.model()).toEqual([
+        "found true, opened false",
+        "found true, opened true",
+        "found true, opened false"
+      ])
       expect(fileClicks).toBe(1)
     }).pipe(Effect.scoped))
 })

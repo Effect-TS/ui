@@ -6,10 +6,18 @@ import type { Scope } from "effect"
  * body's, or the end check's, which runs as the scope closes. Dies when it succeeded or ended with
  * several.
  */
-export const defect = <A>(body: Effect.Effect<A, never, Scope.Scope>): Effect.Effect<string> =>
+export const defect = <A>(
+  body: Effect.Effect<A, never, Scope.Scope>
+): Effect.Effect<string> =>
   Effect.flatMap(Effect.exit(Effect.scoped(body)), (exit) => {
-    const messages = Exit.isSuccess(exit) ? [] : Cause.prettyErrors(exit.cause).map((error) => error.message)
+    const messages = Exit.isSuccess(exit)
+      ? []
+      : Cause.prettyErrors(exit.cause).map((error) => error.message)
     return messages.length === 1
       ? Effect.succeed(messages[0]!)
-      : Effect.die(new Error(`expected one defect, got ${messages.length}: ${messages.join(" | ")}`))
+      : Effect.die(
+        new Error(
+          `expected one defect, got ${messages.length}: ${messages.join(" | ")}`
+        )
+      )
   })

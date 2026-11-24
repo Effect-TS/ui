@@ -20,7 +20,9 @@ for (const packageJsonPath of Glob.globSync("packages/{*,*/*}/package.json")) {
   const packageDirectory = Path.dirname(packageJsonPath)
   for (const file of packageFiles) {
     if (!packageJson.files?.includes(file)) {
-      throw new Error(`${packageJsonPath} must include ${file} in its files list`)
+      throw new Error(
+        `${packageJsonPath} must include ${file} in its files list`
+      )
     }
   }
 
@@ -29,5 +31,8 @@ for (const packageJsonPath of Glob.globSync("packages/{*,*/*}/package.json")) {
 
   const aiDocsTarget = Path.join(packageDirectory, aiDocsSource)
   Fs.rmSync(aiDocsTarget, { recursive: true, force: true })
-  Fs.cpSync(aiDocsSource, aiDocsTarget, { recursive: true, filter: includeAiDocs })
+  Fs.cpSync(aiDocsSource, aiDocsTarget, {
+    recursive: true,
+    filter: includeAiDocs
+  })
 }

@@ -1,11 +1,27 @@
-import { Component, type Head, Mount, Renderer, Route, Router, UiSchema, type View } from "@effect/ui"
+import {
+  Component,
+  type Head,
+  Mount,
+  Renderer,
+  Route,
+  Router,
+  UiSchema,
+  type View
+} from "@effect/ui"
 import { TestHost } from "@effect/ui/testing"
 import { Effect, Schema, type Scope } from "effect"
 import { describe, expect, it } from "tstyche"
 import { Counter } from "../test/fixtures/components.ts"
-import { Tiny, type TinyField, type TinyHost } from "../test/fixtures/vocabulary.ts"
+import {
+  Tiny,
+  type TinyField,
+  type TinyHost
+} from "../test/fixtures/vocabulary.ts"
 
-const Msg = UiSchema.TaggedEnum({ Typed: { value: Schema.String }, Mounted: {} })
+const Msg = UiSchema.TaggedEnum({
+  Typed: { value: Schema.String },
+  Mounted: {}
+})
 const Field = Renderer.ref<TinyField>("Field")
 
 describe("Renderer", () => {
@@ -22,7 +38,11 @@ describe("Renderer", () => {
       view: (h) => h.box(h.field)
     })
     expect(Renderer.mount(Form, {}, null)).type.toBe<
-      Effect.Effect<Renderer.Root<string, typeof Msg.Type>, never, TinyHost | Renderer.Renderer | Scope.Scope>
+      Effect.Effect<
+        Renderer.Root<string, typeof Msg.Type>,
+        never,
+        TinyHost | Renderer.Renderer | Scope.Scope
+      >
     >()
   })
 
@@ -49,13 +69,20 @@ describe("Renderer", () => {
       view: (h) => h.box(h.field)
     })
     expect(TestHost.mount(Form, {})).type.toBe<
-      Effect.Effect<TestHost.TestRoot<string, typeof Msg.Type, never>, never, TestHost.TestHost | Scope.Scope>
+      Effect.Effect<
+        TestHost.TestRoot<string, typeof Msg.Type, never>,
+        never,
+        TestHost.TestHost | Scope.Scope
+      >
     >()
   })
 })
 
 describe("Effect props", () => {
-  const AppRoute = Route.union({ Home: Route.make("/"), NotFound: Route.make("/*") })
+  const AppRoute = Route.union({
+    Home: Route.make("/"),
+    NotFound: Route.make("/*")
+  })
   type AppRoute = typeof AppRoute.Type
   const App = Component.define({
     name: "App",
@@ -70,33 +97,58 @@ describe("Effect props", () => {
   })
 
   it("Router.props reads the route props from the Router", () => {
-    expect(Router.props(AppRoute)).type.toBe<Effect.Effect<{ readonly route: AppRoute }, never, Router.Router>>()
+    expect(Router.props(AppRoute)).type.toBe<
+      Effect.Effect<{ readonly route: AppRoute }, never, Router.Router>
+    >()
   })
 
   it("mount and prerender add the props' requirements", () => {
     expect(Renderer.mount(App, Router.props(AppRoute), null)).type.toBe<
-      Effect.Effect<Renderer.Root<AppRoute, never>, never, Router.Router | Renderer.Renderer | Scope.Scope>
+      Effect.Effect<
+        Renderer.Root<AppRoute, never>,
+        never,
+        Router.Router | Renderer.Renderer | Scope.Scope
+      >
     >()
     expect(Renderer.prerender(App, Router.props(AppRoute))).type.toBe<
-      Effect.Effect<Renderer.Prerendered<AppRoute, Head.Head>, never, Router.Router>
+      Effect.Effect<
+        Renderer.Prerendered<AppRoute, Head.Head>,
+        never,
+        Router.Router
+      >
     >()
     expect(TestHost.mount(App, Router.props(AppRoute))).type.toBe<
-      Effect.Effect<TestHost.TestRoot<AppRoute, never, never>, never, Router.Router | TestHost.TestHost | Scope.Scope>
+      Effect.Effect<
+        TestHost.TestRoot<AppRoute, never, never>,
+        never,
+        Router.Router | TestHost.TestHost | Scope.Scope
+      >
     >()
   })
 
   it("plain props still infer and add nothing", () => {
     expect(Renderer.mount(App, { route: AppRoute.Home() }, null)).type.toBe<
-      Effect.Effect<Renderer.Root<AppRoute, never>, never, Renderer.Renderer | Scope.Scope>
+      Effect.Effect<
+        Renderer.Root<AppRoute, never>,
+        never,
+        Renderer.Renderer | Scope.Scope
+      >
     >()
     expect(TestHost.mount(App, { route: AppRoute.Home() })).type.toBe<
-      Effect.Effect<TestHost.TestRoot<AppRoute, never, never>, never, TestHost.TestHost | Scope.Scope>
+      Effect.Effect<
+        TestHost.TestRoot<AppRoute, never, never>,
+        never,
+        TestHost.TestHost | Scope.Scope
+      >
     >()
   })
 
   it("rejects props, plain or as an Effect, of the wrong shape", () => {
     expect(TestHost.mount).type.not.toBeCallableWith(App, { route: "/" })
-    expect(TestHost.mount).type.not.toBeCallableWith(App, Effect.succeed({ route: "/" }))
+    expect(TestHost.mount).type.not.toBeCallableWith(
+      App,
+      Effect.succeed({ route: "/" })
+    )
   })
 })
 
@@ -183,12 +235,17 @@ describe("View elements", () => {
       init: () => "",
       update: ($) => $.model,
       view: (h) => {
-        expect(h.el("x-foo")).type.toBe<View.ContainerBuilder<typeof Msg.Type>>()
-        // The shorthand and `children` return the builder, so the chain goes on.
-        expect(h.el("x-foo", "a")).type.toBe<View.ContainerBuilder<typeof Msg.Type>>()
-        expect(h.el("x-foo").attr("a", "b").children("c").attr("d", "e")).type.toBe<
+        expect(h.el("x-foo")).type.toBe<
           View.ContainerBuilder<typeof Msg.Type>
         >()
+        // The shorthand and `children` return the builder, so the chain goes on.
+        expect(h.el("x-foo", "a")).type.toBe<
+          View.ContainerBuilder<typeof Msg.Type>
+        >()
+        expect(h.el("x-foo").attr("a", "b").children("c").attr("d", "e")).type
+          .toBe<
+            View.ContainerBuilder<typeof Msg.Type>
+          >()
         // The shorthand takes at least one child, so a spread of an array goes through children.
         const items: Array<string> = []
         expect(h.el).type.not.toBeCallableWith("x-foo", ...items)
@@ -211,7 +268,9 @@ describe("View elements", () => {
       view: (h) => {
         expect(h.field).type.not.toHaveProperty("children")
         expect(h.field.value("a")).type.not.toHaveProperty("children")
-        expect(h.box.on("click", Msg.Mounted()).children).type.toBeCallableWith(h.field)
+        expect(h.box.on("click", Msg.Mounted()).children).type.toBeCallableWith(
+          h.field
+        )
         return h.box(h.field)
       }
     })

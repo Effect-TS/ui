@@ -263,11 +263,18 @@ export type FieldProps = typeof FieldProps.Type
 export const fieldValidationProps = (
   field: Validation.Field<unknown>
 ): { readonly invalid: boolean | undefined; readonly filled: boolean } => ({
-  invalid: field._tag === "Invalid" ? true : field._tag === "Valid" ? false : undefined,
+  invalid: field._tag === "Invalid"
+    ? true
+    : field._tag === "Valid"
+    ? false
+    : undefined,
   filled: !field.empty
 })
 
-const FieldModel = Schema.Struct({ focused: Schema.Boolean, touched: Schema.Boolean })
+const FieldModel = Schema.Struct({
+  focused: Schema.Boolean,
+  touched: Schema.Boolean
+})
 
 const FieldMessage = UiSchema.TaggedEnum({
   FocusedControl: {},
@@ -275,13 +282,18 @@ const FieldMessage = UiSchema.TaggedEnum({
   ChangedFieldset: { disabled: Schema.Boolean }
 })
 
-const disabledBy = (props: FieldProps, fieldset: { readonly disabled: boolean } | undefined): boolean =>
-  props.disabled === true || fieldset?.disabled === true
+const disabledBy = (
+  props: FieldProps,
+  fieldset: { readonly disabled: boolean } | undefined
+): boolean => props.disabled === true || fieldset?.disabled === true
 
 // A browser may send no blur event for a control disabled while it has
 // focus, so the field reports the blur itself. Otherwise the focus would
 // show again once the field is enabled.
-const lostFocus = Subscription.make("lostFocus", Stream.make(FieldMessage.BlurredControl({ disabled: true })))
+const lostFocus = Subscription.make(
+  "lostFocus",
+  Stream.make(FieldMessage.BlurredControl({ disabled: true }))
+)
 
 // A host other than the browser may leave `disabled` out of the payload.
 const blurred = ({ disabled }: Partial<Html.BlurPayload>) =>
@@ -358,7 +370,8 @@ export const Field = Component.define({
     fieldset: {
       owner: Fieldset,
       optional: true,
-      onChange: (value) => FieldMessage.ChangedFieldset({ disabled: value.disabled })
+      onChange: (value) =>
+        FieldMessage.ChangedFieldset({ disabled: value.disabled })
     }
   },
   restore: (model) => UiStruct.evolve(model, { focused: false }),
@@ -376,9 +389,14 @@ export const Field = Component.define({
         : { focused: false, touched: true },
     // `subscriptions` gets no shared value, so `lostFocus` can't report the
     // blur of a control its fieldset disabled.
-    ChangedFieldset: ($, { disabled }) => (disabled ? $.evolve({ focused: false }) : $.model)
+    ChangedFieldset: (
+      $,
+      { disabled }
+    ) => (disabled ? $.evolve({ focused: false }) : $.model)
   },
-  subscriptions: ({ model, props }) => [model.focused && props.disabled === true && lostFocus],
+  subscriptions: (
+    { model, props }
+  ) => [model.focused && props.disabled === true && lostFocus],
   parts: (p, model) => {
     const disabled = disabledBy(p.props, p.shared.fieldset)
     const invalid = p.props.invalid === true
@@ -409,8 +427,10 @@ export const Field = Component.define({
         })
     // With `data-disabled`, for every part but the control, which keeps
     // its own unless the field is disabled.
-    const state = <B extends Attributed<B>>(builder: B): B => flags(builder).attr("data-disabled", flag(disabled))
-    const describedBy = [described && descriptionId, showsError && errorId].filter((id) => id !== false).join(" ")
+    const state = <B extends Attributed<B>>(builder: B): B =>
+      flags(builder).attr("data-disabled", flag(disabled))
+    const describedBy = [described && descriptionId, showsError && errorId]
+      .filter((id) => id !== false).join(" ")
     const error = p.part((b) => state(b).attr("id", errorId))
     // The parts that use it take any element, so the payload isn't typed.
     const trackFocus = (b: View.ContainerBuilder<typeof FieldMessage.Type>) =>
@@ -425,7 +445,9 @@ export const Field = Component.define({
     const formControl = (own: boolean) =>
       p.part(["input", "textarea", "select", "button"], (b) => {
         const control = (own
-          ? flags(b).attr("id", controlId).onFocus(FieldMessage.FocusedControl()).onBlur(blurred)
+          ? flags(b).attr("id", controlId).onFocus(
+            FieldMessage.FocusedControl()
+          ).onBlur(blurred)
           : flags(b))
           .attrs({
             "aria-invalid": showsError ? "true" : undefined,
@@ -436,7 +458,11 @@ export const Field = Component.define({
         // same element wrote its own and added its children. An enabled
         // field leaves all of it alone.
         return disabled
-          ? control.forward((node) => withoutField(View.build(node.attr("data-disabled", "").disabled(true), [])))
+          ? control.forward((node) =>
+            withoutField(
+              View.build(node.attr("data-disabled", "").disabled(true), [])
+            )
+          )
           : control
       })
     return {
@@ -458,7 +484,9 @@ export const Field = Component.define({
           // Read when the element is built, so a role chained after the
           // part, or another kit call's, is kept.
           .forward((node) =>
-            node.elementAttrs.role === undefined && node.tag !== "fieldset" ? node.attr("role", "group") : node
+            node.elementAttrs.role === undefined && node.tag !== "fieldset"
+              ? node.attr("role", "group")
+              : node
           )
       ),
       member: formControl(false),
@@ -471,7 +499,9 @@ export const Field = Component.define({
         return state(b).attr("id", descriptionId)
       }),
       // Applied before it's dropped, so a wrong builder throws in every state.
-      error: <B extends View.PartTarget<string>>(element: B): ReturnType<B["attr"]> | undefined => {
+      error: <B extends View.PartTarget<string>>(
+        element: B
+      ): ReturnType<B["attr"]> | undefined => {
         const shown = error(element)
         return showsError ? shown : undefined
       }

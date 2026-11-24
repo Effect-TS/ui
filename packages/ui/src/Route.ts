@@ -89,8 +89,10 @@ export const TypeId = "~@effect/ui/Route" as const
  * @category utility types
  * @since 0.1.0
  */
-export type PathParams<Path extends string> = Path extends `${string}:${infer Rest}`
-  ? Rest extends `${infer Name}/${infer Tail}` ? Name | PathParams<`/${Tail}`> : Rest
+export type PathParams<Path extends string> = Path extends
+  `${string}:${infer Rest}`
+  ? Rest extends `${infer Name}/${infer Tail}` ? Name | PathParams<`/${Tail}`>
+  : Rest
   : never
 
 /**
@@ -129,8 +131,10 @@ export type Any = Route<string, Schema.Struct.Fields, Schema.Struct.Fields>
  * @category utility types
  * @since 0.1.0
  */
-export type ParamFields<R> = R extends Route<infer Path, infer Params, infer _Search>
-  ? Path extends `${string}*` ? Params & { readonly "*": Schema.String } : Params
+export type ParamFields<R> = R extends
+  Route<infer Path, infer Params, infer _Search>
+  ? Path extends `${string}*` ? Params & { readonly "*": Schema.String }
+  : Params
   : never
 
 /**
@@ -140,7 +144,8 @@ export type ParamFields<R> = R extends Route<infer Path, infer Params, infer _Se
  * @category utility types
  * @since 0.1.0
  */
-export type SearchFields<R> = R extends Route<infer _Path, infer _Params, infer Search> ? Search : never
+export type SearchFields<R> = R extends
+  Route<infer _Path, infer _Params, infer Search> ? Search : never
 
 /**
  * A field as a route value holds it: a field with a decoding default, such
@@ -166,8 +171,11 @@ export type MakeField<S extends Schema.Constraint> = S extends {
  * @since 0.1.0
  */
 export type FieldsSchema<Fields extends Schema.Struct.Fields> = {} extends
-  Schema.Struct<{ readonly [K in keyof Fields]: MakeField<Fields[K]> }>["~type.make.in"]
-  ? Schema.withConstructorDefault<Schema.Struct<{ readonly [K in keyof Fields]: MakeField<Fields[K]> }>>
+  Schema.Struct<
+    { readonly [K in keyof Fields]: MakeField<Fields[K]> }
+  >["~type.make.in"] ? Schema.withConstructorDefault<
+    Schema.Struct<{ readonly [K in keyof Fields]: MakeField<Fields[K]> }>
+  >
   : Schema.Struct<{ readonly [K in keyof Fields]: MakeField<Fields[K]> }>
 
 /**
@@ -226,7 +234,9 @@ export interface Resolved<A> {
  * @category models
  * @since 0.1.0
  */
-export type Union<Routes extends Record<string, Any>> = Union.Base<Routes> & Union.Constructors<Routes>
+export type Union<Routes extends Record<string, Any>> =
+  & Union.Base<Routes>
+  & Union.Constructors<Routes>
 
 /**
  * Types that make up a {@link Union}.
@@ -262,7 +272,9 @@ export declare namespace Union {
    * @category models
    * @since 0.1.0
    */
-  export interface Base<Routes extends Record<string, Any>> extends Schema.TaggedUnion<Cases<Routes>> {
+  export interface Base<Routes extends Record<string, Any>>
+    extends Schema.TaggedUnion<Cases<Routes>>
+  {
     /** The route definitions, by tag. */
     readonly routes: Routes
     /** Parses a URL path, with its search, into a route value, resolving redirects. */
@@ -334,7 +346,9 @@ export declare namespace Union {
     | "then"
 }
 
-type WithoutTag<Input> = { readonly [K in keyof Input as K extends "_tag" ? never : K]: Input[K] }
+type WithoutTag<Input> = {
+  readonly [K in keyof Input as K extends "_tag" ? never : K]: Input[K]
+}
 
 /**
  * Any route union.
@@ -345,7 +359,9 @@ type WithoutTag<Input> = { readonly [K in keyof Input as K extends "_tag" ? neve
  */
 export interface AnyUnion {
   readonly parse: (url: string) => Option.Option<{ readonly _tag: string }>
-  readonly resolve: (url: string) => Option.Option<Resolved<{ readonly _tag: string }>>
+  readonly resolve: (
+    url: string
+  ) => Option.Option<Resolved<{ readonly _tag: string }>>
   readonly print: (route: any) => string
   readonly printPath: (route: any) => string
   readonly base: () => string
@@ -364,15 +380,23 @@ type Segment =
   }
 
 const parseTemplate = (path: string): ReadonlyArray<Segment> => {
-  if (!path.startsWith("/")) throw new Error(`Route template "${path}" must start with "/"`)
+  if (!path.startsWith("/")) {
+    throw new Error(`Route template "${path}" must start with "/"`)
+  }
   const parts = path === "/" ? [] : path.replace(/\/$/, "").slice(1).split("/")
   return parts.map((part, index): Segment => {
     if (part === "*") {
-      if (index !== parts.length - 1) throw new Error(`Route template "${path}": "*" must be the last segment`)
+      if (index !== parts.length - 1) {
+        throw new Error(
+          `Route template "${path}": "*" must be the last segment`
+        )
+      }
       return { _tag: "Rest" }
     }
     if (part.startsWith(":")) {
-      if (part.length === 1) throw new Error(`Route template "${path}": a param needs a name`)
+      if (part.length === 1) {
+        throw new Error(`Route template "${path}": a param needs a name`)
+      }
       return { _tag: "Param", name: part.slice(1) }
     }
     return { _tag: "Static", value: part }
@@ -380,7 +404,9 @@ const parseTemplate = (path: string): ReadonlyArray<Segment> => {
 }
 
 /** Fields that weren't given infer as their constraint, which means none. */
-type Declared<Fields extends Schema.Struct.Fields> = string extends keyof Fields ? {} : Fields
+type Declared<Fields extends Schema.Struct.Fields> = string extends keyof Fields
+  ? {}
+  : Fields
 
 /**
  * Defines a route from a path template and the Schemas of its params and
@@ -411,11 +437,15 @@ export const make = <
   const Search extends Schema.Struct.Fields = {}
 >(
   path: Path,
-  ...[options]: [PathParams<Path>] extends [never] ?
-    [options?: { readonly params?: Params | undefined; readonly search?: Search | undefined }]
+  ...[options]: [PathParams<Path>] extends [never] ? [options?: {
+      readonly params?: Params | undefined
+      readonly search?: Search | undefined
+    }]
     : [
       options: {
-        readonly params: Params & { readonly [K in PathParams<Path>]: Schema.Constraint }
+        readonly params:
+          & Params
+          & { readonly [K in PathParams<Path>]: Schema.Constraint }
         readonly search?: Search | undefined
       }
     ]
@@ -423,10 +453,17 @@ export const make = <
   const params = (options?.params ?? {}) as Declared<Params>
   for (const segment of parseTemplate(path)) {
     if (segment._tag === "Param" && !(segment.name in params)) {
-      throw new Error(`Route "${path}" has no Schema for its :${segment.name} param`)
+      throw new Error(
+        `Route "${path}" has no Schema for its :${segment.name} param`
+      )
     }
   }
-  return { [TypeId]: TypeId, path, params, search: (options?.search ?? {}) as Declared<Search> }
+  return {
+    [TypeId]: TypeId,
+    path,
+    params,
+    search: (options?.search ?? {}) as Declared<Search>
+  }
 }
 
 /**
@@ -475,11 +512,19 @@ const parseSearch = (input: string): RawSearch | undefined => {
   for (const pair of input.split("&")) {
     if (pair === "") continue
     const at = pair.indexOf("=")
-    const key = decodeComponent((at < 0 ? pair : pair.slice(0, at)).replaceAll("+", " "))
-    const value = decodeComponent((at < 0 ? "" : pair.slice(at + 1)).replaceAll("+", " "))
+    const key = decodeComponent(
+      (at < 0 ? pair : pair.slice(0, at)).replaceAll("+", " ")
+    )
+    const value = decodeComponent(
+      (at < 0 ? "" : pair.slice(at + 1)).replaceAll("+", " ")
+    )
     if (key === undefined || value === undefined) return undefined
     const found = Object.hasOwn(search, key) ? search[key] : undefined
-    search[key] = found === undefined ? value : typeof found === "string" ? [found, value] : [...found, value]
+    search[key] = found === undefined
+      ? value
+      : typeof found === "string"
+      ? [found, value]
+      : [...found, value]
   }
   return search
 }
@@ -489,7 +534,9 @@ const printSearch = (search: unknown): string => {
   const parts: Array<string> = []
   for (const [key, value] of Object.entries(search)) {
     for (const item of Array.isArray(value) ? value : [value]) {
-      if (typeof item === "string") parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(item)}`)
+      if (typeof item === "string") {
+        parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(item)}`)
+      }
     }
   }
   return parts.length === 0 ? "" : `?${parts.join("&")}`
@@ -516,14 +563,18 @@ interface Entry {
       readonly decodeParams: (raw: unknown) => Option.Option<unknown>
       readonly decodeSearch: (
         raw: RawSearch
-      ) => Option.Option<{ readonly value: unknown; readonly invalid: ReadonlyArray<string> }>
+      ) => Option.Option<
+        { readonly value: unknown; readonly invalid: ReadonlyArray<string> }
+      >
     }
     | undefined
   readonly redirect: Redirect | undefined
 }
 
 const rankOf = (segments: ReadonlyArray<Segment>): ReadonlyArray<number> =>
-  segments.map((segment) => segment._tag === "Static" ? 0 : segment._tag === "Param" ? 1 : 2)
+  segments.map((segment) =>
+    segment._tag === "Static" ? 0 : segment._tag === "Param" ? 1 : 2
+  )
 
 const compareRank = (a: Entry, b: Entry): number => {
   const length = Math.max(a.rank.length, b.rank.length)
@@ -559,31 +610,46 @@ const matchShape = (
 }
 
 /** Whether the codec decodes `{}`, and what to. */
-const decodeAbsent = <A>(codec: Schema.Codec<A, unknown>): Option.Option<A> => Schema.decodeUnknownOption(codec)({})
+const decodeAbsent = <A>(codec: Schema.Codec<A, unknown>): Option.Option<A> =>
+  Schema.decodeUnknownOption(codec)({})
 
 /** Gives a field with a decoding default that default as its constructor default too, so `make` fills it in. */
-const makeField = (key: string, field: Schema.Constraint): Schema.Constraint => {
+const makeField = (
+  key: string,
+  field: Schema.Constraint
+): Schema.Constraint => {
   if (field.ast.context?.constructorDefault !== undefined) return field
   const absent = decodeAbsent(
-    Schema.Struct({ [key]: field }) as unknown as Schema.Codec<Record<string, unknown>, unknown>
+    Schema.Struct({ [key]: field }) as unknown as Schema.Codec<
+      Record<string, unknown>,
+      unknown
+    >
   )
   if (Option.isNone(absent) || !Object.hasOwn(absent.value, key)) return field
   const value = absent.value[key]
-  return (field as any).pipe(Schema.withConstructorDefault(Effect.succeed(value) as any))
+  return (field as any).pipe(
+    Schema.withConstructorDefault(Effect.succeed(value) as any)
+  )
 }
 
 const fieldsSchema = (fields: Schema.Struct.Fields): Schema.Top => {
   const struct = Schema.Struct(
-    Object.fromEntries(Object.entries(fields).map(([key, field]) => [key, makeField(key, field)]))
+    Object.fromEntries(
+      Object.entries(fields).map(([key, field]) => [key, makeField(key, field)])
+    )
   )
   const empty = struct.makeOption({})
   return Option.isSome(empty)
-    ? struct.pipe(Schema.withConstructorDefault(Effect.succeed(empty.value) as any)) as any
+    ? struct.pipe(
+      Schema.withConstructorDefault(Effect.succeed(empty.value) as any)
+    ) as any
     : struct as any
 }
 
 const paramFieldsOf = (route: Any): Schema.Struct.Fields =>
-  route.path.endsWith("*") ? { ...route.params, "*": Schema.String } : route.params
+  route.path.endsWith("*")
+    ? { ...route.params, "*": Schema.String }
+    : route.params
 
 /** A search field as the parser and the printer see it. */
 interface SearchField {
@@ -598,13 +664,18 @@ interface SearchField {
 }
 
 const searchFieldOf = (key: string, field: Schema.Constraint): SearchField => {
-  const codec = Schema.toCodecStringTree(Schema.Struct({ [key]: field })) as unknown as Schema.Codec<object, unknown>
+  const codec = Schema.toCodecStringTree(
+    Schema.Struct({ [key]: field })
+  ) as unknown as Schema.Codec<object, unknown>
   // The default as it is now, once: `print` leaves out a param equal to this one.
   const absent = decodeAbsent(codec)
   let omit: unknown = undefined
   if (Option.isSome(absent) && Object.hasOwn(absent.value, key)) {
     try {
-      omit = (Schema.encodeUnknownSync(codec)(absent.value) as Record<string, unknown>)[key]
+      omit = (Schema.encodeUnknownSync(codec)(absent.value) as Record<
+        string,
+        unknown
+      >)[key]
     } catch {
       // A default that doesn't encode is always printed.
     }
@@ -614,7 +685,8 @@ const searchFieldOf = (key: string, field: Schema.Constraint): SearchField => {
 
 const sameEncoded = (a: unknown, b: unknown): boolean =>
   a === b ||
-  (Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, index) => item === b[index]))
+  (Array.isArray(a) && Array.isArray(b) && a.length === b.length &&
+    a.every((item, index) => item === b[index]))
 
 /**
  * Decodes the declared fields one by one: each from its raw value, or from a lone value wrapped
@@ -625,13 +697,17 @@ const sameEncoded = (a: unknown, b: unknown): boolean =>
 const decodeSearch = (
   fields: ReadonlyArray<SearchField>,
   search: RawSearch
-): Option.Option<{ readonly value: unknown; readonly invalid: ReadonlyArray<string> }> => {
+): Option.Option<
+  { readonly value: unknown; readonly invalid: ReadonlyArray<string> }
+> => {
   const entries: Array<[string, unknown]> = []
   const invalid: Array<string> = []
   for (const field of fields) {
     const raw = Object.hasOwn(search, field.key) ? search[field.key] : undefined
     let decoded = field.decode(raw === undefined ? {} : { [field.key]: raw })
-    if (Option.isNone(decoded) && typeof raw === "string") decoded = field.decode({ [field.key]: [raw] })
+    if (Option.isNone(decoded) && typeof raw === "string") {
+      decoded = field.decode({ [field.key]: [raw] })
+    }
     if (Option.isNone(decoded) && raw !== undefined) {
       decoded = field.decode({})
       invalid.push(field.key)
@@ -664,18 +740,27 @@ const build = (
   let order = 0
   for (const [tag, route] of Object.entries(routes)) {
     const paramFields = paramFieldsOf(route)
-    cases[tag] = { params: fieldsSchema(paramFields), search: fieldsSchema(route.search) }
+    cases[tag] = {
+      params: fieldsSchema(paramFields),
+      search: fieldsSchema(route.search)
+    }
     const segments = parseTemplate(route.path)
     if (route.path === "/*" && notFound === undefined) notFound = tag
-    const paramsCodec = Schema.toCodecStringTree(Schema.Struct(paramFields)) as unknown as Schema.Codec<
+    const paramsCodec = Schema.toCodecStringTree(
+      Schema.Struct(paramFields)
+    ) as unknown as Schema.Codec<
       unknown,
       unknown
     >
-    const searchCodec = Schema.toCodecStringTree(Schema.Struct(route.search)) as unknown as Schema.Codec<
+    const searchCodec = Schema.toCodecStringTree(
+      Schema.Struct(route.search)
+    ) as unknown as Schema.Codec<
       unknown,
       unknown
     >
-    const searchFields = Object.entries(route.search).map(([key, field]) => searchFieldOf(key, field))
+    const searchFields = Object.entries(route.search).map(([key, field]) =>
+      searchFieldOf(key, field)
+    )
     entries.push({
       segments,
       rank: rankOf(segments),
@@ -697,20 +782,36 @@ const build = (
           : segment._tag === "Param"
           ? encodeURIComponent(params[segment.name]!)
           : (params["*"] ?? "").split("/").map(encodeURIComponent).join("/")
-      ).filter((part, index, all) => !(part === "" && index === all.length - 1 && index > 0)).join("/")
-      return baseRef.value === "#" ? `#/${path}` : `${baseRef.value}/${path}`.replace(/(.)\/$/, "$1")
+      ).filter((part, index, all) =>
+        !(part === "" && index === all.length - 1 && index > 0)
+      ).join("/")
+      return baseRef.value === "#"
+        ? `#/${path}`
+        : `${baseRef.value}/${path}`.replace(/(.)\/$/, "$1")
     }
     searchPrinters[tag] = (value) => {
-      const encoded = encodeSearch(value.search ?? {}) as Record<string, unknown>
+      const encoded = encodeSearch(value.search ?? {}) as Record<
+        string,
+        unknown
+      >
       for (const field of searchFields) {
-        if (field.omit !== undefined && sameEncoded(encoded[field.key], field.omit)) delete encoded[field.key]
+        if (
+          field.omit !== undefined &&
+          sameEncoded(encoded[field.key], field.omit)
+        ) delete encoded[field.key]
       }
       return printSearch(encoded)
     }
   }
   for (const redirect of redirects) {
     const segments = parseTemplate(redirect.path)
-    entries.push({ segments, rank: rankOf(segments), order: order++, route: undefined, redirect })
+    entries.push({
+      segments,
+      rank: rankOf(segments),
+      order: order++,
+      route: undefined,
+      redirect
+    })
   }
   entries.sort(compareRank)
 
@@ -732,7 +833,9 @@ const build = (
       path = path.slice(base.length)
     }
     if (!path.startsWith("/")) path = `/${path}`
-    const trimmed = path.length > 1 && path.endsWith("/") ? path.replace(/\/+$/, "") || "/" : path
+    const trimmed = path.length > 1 && path.endsWith("/")
+      ? path.replace(/\/+$/, "") || "/"
+      : path
     const input: Array<string> = []
     if (trimmed !== "/") {
       for (const part of trimmed.slice(1).split("/")) {
@@ -744,7 +847,13 @@ const build = (
     const search = parseSearch(searchString)
     const fallback = (): Option.Option<Resolved<any>> =>
       notFound === undefined ? Option.none() : Option.some({
-        route: union.make({ _tag: notFound, params: { "*": input.join("/") }, search: {} } as any),
+        route: union.make(
+          {
+            _tag: notFound,
+            params: { "*": input.join("/") },
+            search: {}
+          } as any
+        ),
         redirected: false,
         notFound: true,
         invalid: []
@@ -755,7 +864,12 @@ const build = (
       if (raw === undefined) continue
       if (entry.redirect !== undefined) {
         const route = entry.redirect.to(raw, search)
-        return Option.some({ route, redirected: true, notFound: route._tag === notFound, invalid: [] })
+        return Option.some({
+          route,
+          redirected: true,
+          notFound: route._tag === notFound,
+          invalid: []
+        })
       }
       const route = entry.route!
       const params = route.decodeParams(raw)
@@ -763,7 +877,11 @@ const build = (
       const decodedSearch = route.decodeSearch(search)
       if (Option.isNone(decodedSearch)) return fallback()
       return Option.some({
-        route: { _tag: route.tag, params: params.value, search: decodedSearch.value.value },
+        route: {
+          _tag: route.tag,
+          params: params.value,
+          search: decodedSearch.value.value
+        },
         redirected: trimmed !== path,
         notFound: route.tag === notFound,
         invalid: decodedSearch.value.invalid
@@ -775,19 +893,28 @@ const build = (
   const result: Record<string, any> = Object.assign(union, {
     routes,
     resolve,
-    parse: (url: string) => Option.map(resolve(url), (resolved) => resolved.route),
+    parse: (url: string) =>
+      Option.map(resolve(url), (resolved) => resolved.route),
     print: (route: { readonly _tag: string }) =>
-      printerOf(pathPrinters, route)(route) + searchPrinters[route._tag]!(route),
-    printPath: (route: { readonly _tag: string }) => printerOf(pathPrinters, route)(route),
+      printerOf(pathPrinters, route)(route) +
+      searchPrinters[route._tag]!(route),
+    printPath: (route: { readonly _tag: string }) =>
+      printerOf(pathPrinters, route)(route),
     subset: (tags: ReadonlyArray<string>) =>
-      build(Object.fromEntries(tags.map((tag) => [tag, routes[tag]!])), [], baseRef),
+      build(
+        Object.fromEntries(tags.map((tag) => [tag, routes[tag]!])),
+        [],
+        baseRef
+      ),
     base: () => baseRef.value,
     setBase: (base: string) => {
       baseRef.value = normaliseBase(base)
     }
   })
   for (const tag of Object.keys(routes)) {
-    if (tag in result || tag === "then") throw new Error(`Route tag "${tag}" is reserved`)
+    if (tag in result || tag === "then") {
+      throw new Error(`Route tag "${tag}" is reserved`)
+    }
     const make = union.cases[tag]!.make
     result[tag] = (args?: object) => make((args ?? {}) as any)
   }
@@ -824,6 +951,10 @@ const build = (
  * @since 0.1.0
  */
 export const union = <const Routes extends Record<string, Any>>(
-  routes: Routes & { readonly [K in keyof Routes]: K extends Union.ReservedTag ? never : Any },
+  routes:
+    & Routes
+    & {
+      readonly [K in keyof Routes]: K extends Union.ReservedTag ? never : Any
+    },
   ...redirects: ReadonlyArray<Redirect>
 ): Union<Routes> => build(routes, redirects, { value: "" })

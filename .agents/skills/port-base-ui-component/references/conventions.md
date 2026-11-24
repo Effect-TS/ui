@@ -19,7 +19,11 @@ the components that already follow it.
   Switch(h, {
     props: { checked: model.notify },
     onToggle: ({ checked }) => SettingsMessage.ToggledNotify({ checked }),
-    view: (parts) => h.label(parts.root(h.button).children(parts.thumb(h.span.class("thumb"))), "Notify")
+    view: (parts) =>
+      h.label(
+        parts.root(h.button).children(parts.thumb(h.span.class("thumb"))),
+        "Notify"
+      )
   })
   ```
 
@@ -173,14 +177,16 @@ Button(h, {
 Switch(h, {
   props: { checked: model.notify },
   onToggle: ({ checked }) => SettingsMessage.ToggledNotify({ checked }),
-  view: (parts) => parts.root(h.button).children(parts.thumb(h.span.class("thumb")))
+  view: (parts) =>
+    parts.root(h.button).children(parts.thumb(h.span.class("thumb")))
 })
 
 // A component: core's `onEmit`, and a `key` when it needs one.
 Checkbox(h, {
   props: { checked: model.terms },
   onEmit: ({ checked }) => SettingsMessage.ToggledTerms({ checked }),
-  view: (checkbox) => checkbox.root(h.button).children(checkbox.indicator(h.span))
+  view: (checkbox) =>
+    checkbox.root(h.button).children(checkbox.indicator(h.span))
 })
 ```
 
@@ -232,7 +238,9 @@ times. A component call has a key, and core lets it leave the key out
 Checkbox(h, { props: { checked: model.terms }, onEmit, view })
 
 // Rows: a stable key from the row's data, never its index.
-todos.map((todo) => Checkbox(h, { key: todo.id, props: { checked: todo.done }, onEmit, view }))
+todos.map((todo) =>
+  Checkbox(h, { key: todo.id, props: { checked: todo.done }, onEmit, view })
+)
 
 // Branches: a key each when the state shouldn't carry over.
 model.advanced
@@ -282,7 +290,9 @@ model.advanced
   and adds children with `.children(...)`:
 
   ```ts
-  checkbox.root(h.button.class("checkbox")).children(checkbox.indicator(h.span.class("tick")))
+  checkbox.root(h.button.class("checkbox")).children(
+    checkbox.indicator(h.span.class("tick"))
+  )
   ```
 
   A part takes an options object only when it has more than one argument,

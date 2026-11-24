@@ -16,7 +16,12 @@ export const scopeAddFinalizerUnsafe = (
   finalizer: (exit: Exit.Exit<any, any>) => Effect.Effect<unknown>
 ): void => {
   if (scope.state._tag === "Empty") {
-    scope.state = { _tag: "Open", finalizerKey: key, finalizer, finalizers: undefined }
+    scope.state = {
+      _tag: "Open",
+      finalizerKey: key,
+      finalizer,
+      finalizers: undefined
+    }
   } else if (scope.state._tag === "Open") {
     const state = scope.state
     if (state.finalizer !== undefined) {
@@ -36,7 +41,10 @@ export const scopeAddFinalizerUnsafe = (
  *
  * @internal
  */
-export const scopeRemoveFinalizerUnsafe = (scope: Scope.Scope, key: {}): void => {
+export const scopeRemoveFinalizerUnsafe = (
+  scope: Scope.Scope,
+  key: {}
+): void => {
   if (scope.state._tag !== "Open") return
   const state = scope.state
   if (state.finalizerKey === key) {

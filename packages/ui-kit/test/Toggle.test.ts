@@ -5,7 +5,10 @@ import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
-const ToolbarMessage = UiSchema.TaggedEnum({ ToggledBold: { pressed: Schema.Boolean }, RequestedCloseTip: {} })
+const ToolbarMessage = UiSchema.TaggedEnum({
+  ToggledBold: { pressed: Schema.Boolean },
+  RequestedCloseTip: {}
+})
 
 // The toggle stacked on a tooltip trigger: the tooltip's part has its own
 // handler layer, so both hear the click.
@@ -25,7 +28,10 @@ const Toolbar = Component.define({
     Tooltip(h, {
       key: "bold",
       props: { open: model.open },
-      onEmit: (event) => event._tag === "RequestedClose" ? ToolbarMessage.RequestedCloseTip() : undefined,
+      onEmit: (event) =>
+        event._tag === "RequestedClose"
+          ? ToolbarMessage.RequestedCloseTip()
+          : undefined,
       view: (tooltip) =>
         Toggle(h, {
           element: tooltip.trigger(h.button),
@@ -36,7 +42,10 @@ const Toolbar = Component.define({
 })
 
 const toggle = Locator.tag("button")
-const h = View.makeHelper<typeof ToolbarMessage.Type, {}, Html.Elements>({}, Html)
+const h = View.makeHelper<typeof ToolbarMessage.Type, {}, Html.Elements>(
+  {},
+  Html
+)
 
 describe("Toggle", () => {
   it.effect("stacked on a tooltip trigger, a click toggles and dismisses the tooltip", () =>
@@ -72,10 +81,20 @@ describe("Toggle", () => {
         })
         .disabled(true)
     // Set on the element before the call, the state leaves each one absent.
-    const before = View.build(Toggle(h, { element: own(h.button), props: { pressed: false } }), [])
-    assert.deepStrictEqual(before.attrs, { class: "tool", type: "button", "aria-pressed": "false" })
-    const onToggle = ({ pressed }: { readonly pressed: boolean }) => ToolbarMessage.ToggledBold({ pressed })
-    const { click } = View.build(Toggle(h, { props: { pressed: false }, onToggle }), []).handlers
+    const before = View.build(
+      Toggle(h, { element: own(h.button), props: { pressed: false } }),
+      []
+    )
+    assert.deepStrictEqual(before.attrs, {
+      class: "tool",
+      type: "button",
+      "aria-pressed": "false"
+    })
+    const onToggle = ({ pressed }: { readonly pressed: boolean }) =>
+      ToolbarMessage.ToggledBold({ pressed })
+    const { click } =
+      View.build(Toggle(h, { props: { pressed: false }, onToggle }), [])
+        .handlers
     assert.deepStrictEqual(
       typeof click === "function" ? click({}) : click,
       ToolbarMessage.ToggledBold({ pressed: true })
@@ -96,13 +115,23 @@ describe("Toggle", () => {
 
     const clicked = ToolbarMessage.RequestedCloseTip()
     assert.deepStrictEqual(
-      View.build(Toggle(h, { element: h.button.onClick(clicked), props: { pressed: false } }), []).handlers,
+      View.build(
+        Toggle(h, {
+          element: h.button.onClick(clicked),
+          props: { pressed: false }
+        }),
+        []
+      ).handlers,
       { click: clicked }
     )
     for (const disabled of [false, true]) {
       const props = { pressed: false, disabled }
       assert.throws(
-        () => View.build(Toggle(h, { element: h.button.onClick(clicked), props, onToggle }), []),
+        () =>
+          View.build(
+            Toggle(h, { element: h.button.onClick(clicked), props, onToggle }),
+            []
+          ),
         /Toggle: the element already handles click/
       )
       assert.throws(

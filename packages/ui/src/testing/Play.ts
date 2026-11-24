@@ -80,7 +80,10 @@ import type * as TestQuery from "./TestQuery.ts"
  * @category errors
  * @since 0.1.0
  */
-export type StepError = TestHost.SettleError | TestHost.RootCrashed | TestQuery.ProblemsError
+export type StepError =
+  | TestHost.SettleError
+  | TestHost.RootCrashed
+  | TestQuery.ProblemsError
 
 /**
  * The assertions `expect(locator)` offers: the Scene's, each an Effect that
@@ -125,7 +128,11 @@ export interface Play<Model, Msg, Events> {
    * `locator` matches: the innermost element with a handler for it, that
    * element or an ancestor, gets it.
    */
-  fire(locator: Locator.Locator, event: string, payload?: unknown): Effect.Effect<void, StepError>
+  fire(
+    locator: Locator.Locator,
+    event: string,
+    payload?: unknown
+  ): Effect.Effect<void, StepError>
   /** Asserts on the elements `locator` matches, once the tree has settled. */
   expect(locator: Locator.Locator): Expect
   /**
@@ -168,5 +175,8 @@ export const make = <
 >(
   component: Component.Members<Name, Props, Model, Msg, Events, R, V, any>,
   props: Props | Effect.Effect<Props, never, RP>
-): Effect.Effect<Play<Model, Msg, Events>, StepError, R | RP | TestHost.TestHost | Scope.Scope> =>
-  internal.begin(internal.PlayCursor, "Play", make, component, props) as any
+): Effect.Effect<
+  Play<Model, Msg, Events>,
+  StepError,
+  R | RP | TestHost.TestHost | Scope.Scope
+> => internal.begin(internal.PlayCursor, "Play", make, component, props) as any

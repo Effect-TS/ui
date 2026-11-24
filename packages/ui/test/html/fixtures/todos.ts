@@ -9,14 +9,21 @@ import { Schema } from "effect"
 
 export const maxTitle = 20
 
-export const Todo = Schema.Struct({ id: Schema.String, title: Schema.String, done: Schema.Boolean })
+export const Todo = Schema.Struct({
+  id: Schema.String,
+  title: Schema.String,
+  done: Schema.Boolean
+})
 export type Todo = typeof Todo.Type
 
 // ---------------------------------------------------------------------------
 // TodoItem
 // ---------------------------------------------------------------------------
 
-export const TodoItemMessage = UiSchema.TaggedEnum({ Toggle: { done: Schema.Boolean }, Delete: {} })
+export const TodoItemMessage = UiSchema.TaggedEnum({
+  Toggle: { done: Schema.Boolean },
+  Delete: {}
+})
 
 export const TodoItemEvents = UiSchema.TaggedEnum({
   Toggled: { id: Schema.String, done: Schema.Boolean },
@@ -35,7 +42,8 @@ export const TodoItem = Component.define({
   init: () => ({}),
   update: ($, message) =>
     TodoItemMessage.match(message, {
-      Toggle: ({ done }) => $.emit(TodoItemEvents.Toggled({ id: $.props.todo.id, done })),
+      Toggle: ({ done }) =>
+        $.emit(TodoItemEvents.Toggled({ id: $.props.todo.id, done })),
       Delete: () => $.emit(TodoItemEvents.Deleted({ id: $.props.todo.id }))
     }),
   view: (h) =>
@@ -81,29 +89,45 @@ export const TodoApp = Component.define({
   update: ($, message): TodoAppModel =>
     TodoAppMessage.match(message, {
       // Rejected: the field keeps showing the Model's draft.
-      Draft: ({ value }) => value.length > maxTitle ? $.model : { ...$.model, draft: value },
+      Draft: ({ value }) =>
+        value.length > maxTitle ? $.model : { ...$.model, draft: value },
       Add: () => {
         const title = $.model.draft.trim()
         if (title === "") return $.model
         return {
           draft: "",
           nextId: $.model.nextId + 1,
-          todos: [...$.model.todos, { id: `t${$.model.nextId}`, title, done: false }]
+          todos: [...$.model.todos, {
+            id: `t${$.model.nextId}`,
+            title,
+            done: false
+          }]
         }
       },
       Toggled: ({ done, id }) => ({
         ...$.model,
-        todos: $.model.todos.map((todo) => todo.id === id ? { ...todo, done } : todo)
+        todos: $.model.todos.map((todo) =>
+          todo.id === id ? { ...todo, done } : todo
+        )
       }),
-      Deleted: ({ id }) => ({ ...$.model, todos: $.model.todos.filter((todo) => todo.id !== id) }),
-      ClearDone: () => ({ ...$.model, todos: $.model.todos.filter((todo) => !todo.done) })
+      Deleted: ({ id }) => ({
+        ...$.model,
+        todos: $.model.todos.filter((todo) => todo.id !== id)
+      }),
+      ClearDone: () => ({
+        ...$.model,
+        todos: $.model.todos.filter((todo) => !todo.done)
+      })
     }),
   view: (h, model) => {
     const left = model.todos.filter((todo) => !todo.done).length
     return h.main(
       h.h1("Todos"),
       h.form.onSubmit(TodoAppMessage.Add()).children(
-        h.input.attrs({ "aria-label": "New todo", placeholder: "What needs doing?" }).value(model.draft)
+        h.input.attrs({
+          "aria-label": "New todo",
+          placeholder: "What needs doing?"
+        }).value(model.draft)
           .onInput(({ value }) => TodoAppMessage.Draft({ value })),
         h.button.attr("type", "submit").children("Add")
       ),

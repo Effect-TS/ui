@@ -3,8 +3,16 @@ import { Html, Markdown } from "@effect/ui/html"
 import { Context, type Effect, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
 
-class Clock extends Context.Service<Clock, { readonly now: Effect.Effect<number> }>()("Clock") {}
-class Tracker extends Context.Service<Tracker, { readonly seen: Effect.Effect<void> }>()("Tracker") {}
+class Clock
+  extends Context.Service<Clock, { readonly now: Effect.Effect<number> }>()(
+    "Clock"
+  )
+{}
+class Tracker
+  extends Context.Service<Tracker, { readonly seen: Effect.Effect<void> }>()(
+    "Tracker"
+  )
+{}
 
 declare const clockChild: View.Child<never, Clock>
 declare const trackerChild: View.Child<never, Tracker>
@@ -15,7 +23,8 @@ const definitions = {
   Note: Schema.Struct({})
 }
 
-type IslandsRequirements<I> = I extends Markdown.Islands<any, infer R> ? R : never
+type IslandsRequirements<I> = I extends Markdown.Islands<any, infer R> ? R
+  : never
 
 describe("Markdown.islandsFor", () => {
   it("decodes each view's attributes through its schema", () => {
@@ -47,7 +56,9 @@ describe("Markdown.islandsFor", () => {
   })
 
   it("requires a view for every definition", () => {
-    expect(Markdown.islandsFor).type.not.toBeCallableWith(definitions, { Note: (h: Markdown.H<never>) => h.hr })
+    expect(Markdown.islandsFor).type.not.toBeCallableWith(definitions, {
+      Note: (h: Markdown.H<never>) => h.hr
+    })
   })
 
   it("passes the services on to the component that renders the document", () => {
@@ -62,7 +73,10 @@ describe("Markdown.islandsFor", () => {
       update: ($) => $.model,
       view: (h) =>
         Markdown.view(h, document, {
-          islands: Markdown.islandsFor(definitions, { Clock: () => clockChild, Note: (h) => h.hr })
+          islands: Markdown.islandsFor(definitions, {
+            Clock: () => clockChild,
+            Note: (h) => h.hr
+          })
         })
     })
 

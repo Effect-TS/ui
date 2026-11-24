@@ -14,28 +14,38 @@ export interface TinyHost {
   readonly TinyHost: unique symbol
 }
 
-export class TinyVoid<out Msg, out R = never, in out Handlers = Record<string, unknown>, in out Node = unknown>
-  extends View.ElementBuilder<Msg, R, Handlers, Node>
-{
+export class TinyVoid<
+  out Msg,
+  out R = never,
+  in out Handlers = Record<string, unknown>,
+  in out Node = unknown
+> extends View.ElementBuilder<Msg, R, Handlers, Node> {
   value(value: string): this {
     return this.prop("value", value)
   }
   override onMount<R2>(
     mount: Mount.Issued<Msg | Component.Noop, R2, Node, never>
   ): TinyVoid<Msg, R | R2, Handlers, Node>
-  override onMount(mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>): never
+  override onMount(
+    mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>
+  ): never
   override onMount(mount: View.Mount<Msg>): any {
     return (super.onMount as any)(mount)
   }
 }
 
-export class TinyElement<out Msg, out R = never, in out Handlers = Record<string, unknown>, in out Node = unknown>
-  extends TinyVoid<Msg, R, Handlers, Node>
-{
+export class TinyElement<
+  out Msg,
+  out R = never,
+  in out Handlers = Record<string, unknown>,
+  in out Node = unknown
+> extends TinyVoid<Msg, R, Handlers, Node> {
   override onMount<R2>(
     mount: Mount.Issued<Msg | Component.Noop, R2, Node, never>
   ): TinyElement<Msg, R | R2, Handlers, Node>
-  override onMount(mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>): never
+  override onMount(
+    mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>
+  ): never
   override onMount(mount: View.Mount<Msg>): any {
     return (super.onMount as any)(mount)
   }
@@ -48,8 +58,15 @@ export class TinyElement<out Msg, out R = never, in out Handlers = Record<string
 
 export interface TinyTags<Msg> {
   readonly box: View.Shorthand<TinyElement<Msg, never, { readonly click: {} }>>
-  readonly label: View.Shorthand<TinyElement<Msg, never, { readonly click: {} }>>
-  readonly field: TinyVoid<Msg, never, { readonly input: { readonly value: string } }, TinyField>
+  readonly label: View.Shorthand<
+    TinyElement<Msg, never, { readonly click: {} }>
+  >
+  readonly field: TinyVoid<
+    Msg,
+    never,
+    { readonly input: { readonly value: string } },
+    TinyField
+  >
 }
 
 export interface Tiny extends View.Elements {

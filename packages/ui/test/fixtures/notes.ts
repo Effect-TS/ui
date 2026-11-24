@@ -8,7 +8,9 @@ import { Html } from "@effect/ui/html"
 import { Effect, Schema, Stream } from "effect"
 import * as users from "./users.ts"
 
-export const BadgeEvents = UiSchema.TaggedEnum({ Opened: { count: Schema.Number } })
+export const BadgeEvents = UiSchema.TaggedEnum({
+  Opened: { count: Schema.Number }
+})
 
 export const Badge = Component.define({
   name: "Badge",
@@ -38,7 +40,9 @@ export const NoteMessage = UiSchema.TaggedEnum({
 })
 export type NoteMessage = typeof NoteMessage.Type
 
-export const NoteEvents = UiSchema.TaggedEnum({ Saved: { text: Schema.String } })
+export const NoteEvents = UiSchema.TaggedEnum({
+  Saved: { text: Schema.String }
+})
 
 export const SaveNote = Command.make(
   "notes/SaveNote",
@@ -90,7 +94,10 @@ export const Note = Component.define({
     NoteMessage.match(message, {
       Edit: ({ text }) => ({ ...$.model, text, saved: false }),
       Save: () => $.run(SaveNote.make({ text: $.model.text })),
-      Saved: () => $.set({ ...$.model, saved: true }).emit(NoteEvents.Saved({ text: $.model.text })),
+      Saved: () =>
+        $.set({ ...$.model, saved: true }).emit(
+          NoteEvents.Saved({ text: $.model.text })
+        ),
       Find: ({ text }) => $.run(FindNotes.make({ text })),
       Found: ({ items }) => ({ ...$.model, items }),
       Follow: () => $.run(FollowNotes.make({})),
@@ -102,12 +109,22 @@ export const Note = Component.define({
     }),
   view: (h, model) =>
     h.div(
-      h.input.attr("aria-label", "Text").value(model.text).onInput(({ value }) =>
+      h.input.attr("aria-label", "Text").value(model.text).onInput((
+        { value }
+      ) =>
         value === model.text ? undefined : NoteMessage.Edit({ text: value })
       ),
-      h.button.onClick(() => NoteMessage.Save()).children(h.isRunning(SaveNote) ? "saving" : "save"),
-      h.button.onClick(() => model.saved ? undefined : NoteMessage.Save()).children("save again"),
-      h.p.attr("role", "status").children(model.saved ? `saved ${model.text}` : model.text),
-      Badge(h, { key: "Badge", onEmit: (event) => NoteMessage.Opened({ count: event.count }) })
+      h.button.onClick(() => NoteMessage.Save()).children(
+        h.isRunning(SaveNote) ? "saving" : "save"
+      ),
+      h.button.onClick(() => model.saved ? undefined : NoteMessage.Save())
+        .children("save again"),
+      h.p.attr("role", "status").children(
+        model.saved ? `saved ${model.text}` : model.text
+      ),
+      Badge(h, {
+        key: "Badge",
+        onEmit: (event) => NoteMessage.Opened({ count: event.count })
+      })
     )
 })

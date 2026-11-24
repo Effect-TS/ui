@@ -1,7 +1,20 @@
 import { Query } from "@effect/ui"
 import { TestQuery } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Deferred, Effect, Equal, Exit, Fiber, Hash, Latch, Layer, Option, Schema, Scope } from "effect"
+import {
+  Cause,
+  Deferred,
+  Effect,
+  Equal,
+  Exit,
+  Fiber,
+  Hash,
+  Latch,
+  Layer,
+  Option,
+  Schema,
+  Scope
+} from "effect"
 import type { Duration } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
@@ -11,17 +24,27 @@ type User = typeof User.Type
 
 // A few macrotasks: lets every fiber the cache forked run, and whatever those fork in turn.
 const flush = Effect.promise(async () => {
-  for (let i = 0; i < 4; i++) await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  for (let i = 0; i < 4; i++) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  }
 })
 const advance = (duration: Duration.Input) =>
   flush.pipe(Effect.andThen(TestClock.adjust(duration)), Effect.andThen(flush))
 
-const show = (result: AsyncResult.AsyncResult<unknown, unknown>, patched = false): string =>
+const show = (
+  result: AsyncResult.AsyncResult<unknown, unknown>,
+  patched = false
+): string =>
   (AsyncResult.isSuccess(result)
-    ? typeof result.value === "object" && result.value !== null ? (result.value as User).name : String(result.value)
+    ? typeof result.value === "object" && result.value !== null
+      ? (result.value as User).name
+      : String(result.value)
     : AsyncResult.isFailure(result)
-    ? "Failure(" + Option.getOrElse(Cause.findErrorOption(result.cause), () => "?") + ")"
-    : "Initial") + (result.waiting ? " waiting" : "") + (patched ? " patched" : "")
+    ? "Failure(" +
+      Option.getOrElse(Cause.findErrorOption(result.cause), () => "?") +
+      ")"
+    : "Initial") +
+  (result.waiting ? " waiting" : "") + (patched ? " patched" : "")
 
 // A query whose fetcher takes 10 ms and returns what the server holds.
 const makeUsers = (staleTime: Duration.Input = "30 seconds") => {
@@ -43,7 +66,11 @@ const makeUsers = (staleTime: Duration.Input = "30 seconds") => {
       })
     )
   ) {}
-  return { db, GetUser, provide: Effect.provide(Layer.merge(GetUser.layer, TestQuery.layer())) }
+  return {
+    db,
+    GetUser,
+    provide: Effect.provide(Layer.merge(GetUser.layer, TestQuery.layer()))
+  }
 }
 
 const makeCount = (staleTime: Duration.Input = "30 seconds") => {
@@ -64,28 +91,38 @@ const makeCount = (staleTime: Duration.Input = "30 seconds") => {
       })
     )
   ) {}
-  return { db, GetCount, provide: Effect.provide(Layer.merge(GetCount.layer, TestQuery.layer())) }
+  return {
+    db,
+    GetCount,
+    provide: Effect.provide(Layer.merge(GetCount.layer, TestQuery.layer()))
+  }
 }
 
 // Watches the patched view, as a query field does, and records what it emits.
-const watchPatched = Effect.fnUntraced(function*<R extends Query.Query.Any>(read: R, args: Query.Query.Args<R>) {
-  const cache = Query.internals(yield* Query.Cache)
-  const fetcher = yield* (read as any) as Effect.Effect<(args: any) => Effect.Effect<any, any>>
-  const seen: Array<string> = []
-  const handle = cache.watch(
-    Query.defOf(read),
-    args,
-    fetcher,
-    (result, patched) => seen.push(show(result, patched)),
-    undefined,
-    { patched: true }
-  )
-  const current = handle.patchedView()
-  if (current.result._tag !== "Initial") seen.push(show(current.result, current.patched))
-  yield* Effect.addFinalizer(() => Effect.sync(handle.unregister))
-  yield* flush
-  return { seen, stop: Effect.sync(handle.unregister) }
-})
+const watchPatched = Effect.fnUntraced(
+  function*<R extends Query.Query.Any>(read: R, args: Query.Query.Args<R>) {
+    const cache = Query.internals(yield* Query.Cache)
+    const fetcher = yield* (read as any) as Effect.Effect<
+      (args: any) => Effect.Effect<any, any>
+    >
+    const seen: Array<string> = []
+    const handle = cache.watch(
+      Query.defOf(read),
+      args,
+      fetcher,
+      (result, patched) => seen.push(show(result, patched)),
+      undefined,
+      { patched: true }
+    )
+    const current = handle.patchedView()
+    if (current.result._tag !== "Initial") {
+      seen.push(show(current.result, current.patched))
+    }
+    yield* Effect.addFinalizer(() => Effect.sync(handle.unregister))
+    yield* flush
+    return { seen, stop: Effect.sync(handle.unregister) }
+  }
+)
 
 interface RunOptions {
   readonly command?: string
@@ -103,8 +140,16 @@ const issue = Effect.fnUntraced(function*(options: RunOptions) {
   })
   return {
     handle,
-    start: <A, E, R>(body: Effect.Effect<A, E, R>, writes?: (success: A) => ReadonlyArray<Query.Write>) =>
-      Effect.forkScoped(handle.run(body, writes as ((success: A) => ReadonlyArray<Query.Write>) | undefined))
+    start: <A, E, R>(
+      body: Effect.Effect<A, E, R>,
+      writes?: (success: A) => ReadonlyArray<Query.Write>
+    ) =>
+      Effect.forkScoped(
+        handle.run(
+          body,
+          writes as ((success: A) => ReadonlyArray<Query.Write>) | undefined
+        )
+      )
   }
 })
 
@@ -117,7 +162,10 @@ const run = <A, E, R>(
 const fetchLog = Effect.map(
   TestQuery.fetches,
   (fetches) =>
-    fetches.map((fetch) => fetch.trigger + (fetch.restart ? " restart" : "") + (fetch.stored ? "" : " unstored"))
+    fetches.map((fetch) =>
+      fetch.trigger + (fetch.restart ? " restart" : "") +
+      (fetch.stored ? "" : " unstored")
+    )
 )
 
 describe("Query runs", () => {
@@ -140,20 +188,38 @@ describe("Query runs", () => {
         GetCount.patch({ id: "b" }, () => -1),
         GetUser.patch({ id: "a" }, (user) => ({ ...user, name: "Bob" }))
       ]
-      assert.strictEqual(Query.applyPatches(patches, GetCount, { id: "a" }, 1), 20)
-      assert.strictEqual(Query.applyPatches(patches, GetCount, { id: "b" }, 1), -1)
-      assert.strictEqual(Query.applyPatches(patches, GetCount, { id: "c" }, 1), 1)
+      assert.strictEqual(
+        Query.applyPatches(patches, GetCount, { id: "a" }, 1),
+        20
+      )
+      assert.strictEqual(
+        Query.applyPatches(patches, GetCount, { id: "b" }, 1),
+        -1
+      )
+      assert.strictEqual(
+        Query.applyPatches(patches, GetCount, { id: "c" }, 1),
+        1
+      )
     })
 
     it("invalidatesEntry counts declared targets and those implied by patches", () => {
       const one = { invalidates: [GetUser.entry({ id: "1" })] }
       assert.isTrue(Query.invalidatesEntry(one, GetUser, { id: "1" }))
       assert.isFalse(Query.invalidatesEntry(one, GetUser, { id: "2" }))
-      assert.isTrue(Query.invalidatesEntry({ invalidates: [GetUser] }, GetUser, { id: "2" }))
-      assert.isTrue(Query.invalidatesEntry({ invalidates: [Tagged] }, GetTagged, {}))
-      assert.isFalse(Query.invalidatesEntry({ invalidates: [Tagged] }, GetUser, { id: "1" }))
+      assert.isTrue(
+        Query.invalidatesEntry({ invalidates: [GetUser] }, GetUser, { id: "2" })
+      )
+      assert.isTrue(
+        Query.invalidatesEntry({ invalidates: [Tagged] }, GetTagged, {})
+      )
+      assert.isFalse(
+        Query.invalidatesEntry({ invalidates: [Tagged] }, GetUser, { id: "1" })
+      )
       // A patch implies its entry; a patchAll the whole query.
-      const patched = { invalidates: [], optimistic: [GetCount.patch({ id: "a" }, (n) => n)] }
+      const patched = {
+        invalidates: [],
+        optimistic: [GetCount.patch({ id: "a" }, (n) => n)]
+      }
       assert.isTrue(Query.invalidatesEntry(patched, GetCount, { id: "a" }))
       assert.isFalse(Query.invalidatesEntry(patched, GetCount, { id: "b" }))
       const all = { invalidates: [], optimistic: [GetCount.patchAll((n) => n)] }
@@ -163,7 +229,9 @@ describe("Query runs", () => {
     it("a target's args that don't encode throw where the target is made", () => {
       assert.throws(() => GetUser.entry({ id: 1 } as any))
       assert.throws(() => GetUser.patch({ id: 1 } as any, (user) => user))
-      assert.throws(() => GetUser.set({ id: 1 } as any, { id: "1", name: "Ann" }))
+      assert.throws(() =>
+        GetUser.set({ id: 1 } as any, { id: "1", name: "Ann" })
+      )
     })
   })
 
@@ -171,7 +239,8 @@ describe("Query runs", () => {
     // Never only at staleTime 0: the entry is fresh, so a plain get would serve the old name.
     for (const optimistic of [true, false]) {
       it.effect(
-        "a run reading back its own target gets the server's answer" + (optimistic ? ", with a patch" : ""),
+        "a run reading back its own target gets the server's answer" +
+          (optimistic ? ", with a patch" : ""),
         () => {
           const { GetUser, db, provide } = makeUsers("30 seconds")
           return Effect.gen(function*() {
@@ -182,7 +251,14 @@ describe("Query runs", () => {
             const fiber = yield* run(
               {
                 invalidates: [GetUser.entry({ id: "1" })],
-                optimistic: optimistic ? [GetUser.patch({ id: "1" }, (user) => ({ ...user, name: "Bob" }))] : []
+                optimistic: optimistic
+                  ? [
+                    GetUser.patch(
+                      { id: "1" },
+                      (user) => ({ ...user, name: "Bob" })
+                    )
+                  ]
+                  : []
               },
               Effect.gen(function*() {
                 yield* Effect.sleep(5)
@@ -192,7 +268,10 @@ describe("Query runs", () => {
               (user) => [GetUser.set({ id: "1" }, user)]
             )
             yield* advance(20)
-            assert.deepStrictEqual(yield* Fiber.join(fiber), { id: "1", name: "Bob" })
+            assert.deepStrictEqual(yield* Fiber.join(fiber), {
+              id: "1",
+              name: "Bob"
+            })
             // The read-back is a plain fetcher call, never stored. The fresh write skips the run's own refetch.
             assert.deepStrictEqual(yield* fetchLog, ["watch", "get unstored"])
             assert.deepStrictEqual(
@@ -215,12 +294,18 @@ describe("Query runs", () => {
         yield* GetUser.get({ id: "1" }).pipe(Effect.forkScoped)
         yield* advance(10)
         db.fail = true
-        const fiber = yield* run({ invalidates: [GetUser] }, Effect.flip(GetUser.get({ id: "1" })))
+        const fiber = yield* run(
+          { invalidates: [GetUser] },
+          Effect.flip(GetUser.get({ id: "1" }))
+        )
         // Not the run's target: served from the store.
         const other = yield* run({ invalidates: [] }, GetUser.get({ id: "1" }))
         yield* advance(10)
         assert.strictEqual(yield* Fiber.join(fiber), "nope")
-        assert.deepStrictEqual(yield* Fiber.join(other), { id: "1", name: "Ann" })
+        assert.deepStrictEqual(yield* Fiber.join(other), {
+          id: "1",
+          name: "Ann"
+        })
         assert.deepStrictEqual(yield* fetchLog, ["get", "get unstored"])
         // The failed run invalidated the query: the unwatched entry is stale, and nothing fetched it.
         assert.isTrue((yield* TestQuery.entry(GetUser, { id: "1" }))?.stale)
@@ -234,8 +319,11 @@ describe("Query runs", () => {
       return Effect.gen(function*() {
         const watcher = yield* watchPatched(GetCount, { id: "a" })
         yield* advance(10)
-        const like = (n: number) => GetCount.patch({ id: "a" }, (count) => count + n)
-        const save = Effect.sleep(10).pipe(Effect.andThen(Effect.sync(() => db.count++)))
+        const like = (n: number) =>
+          GetCount.patch({ id: "a" }, (count) => count + n)
+        const save = Effect.sleep(10).pipe(
+          Effect.andThen(Effect.sync(() => db.count++))
+        )
         const first = yield* issue({ optimistic: [like(1)] })
         // Queued: its patch is live before it starts.
         const second = yield* issue({ optimistic: [like(1)] })
@@ -245,7 +333,11 @@ describe("Query runs", () => {
         yield* Fiber.join(firstFiber)
         // The first is held, the second still live: its refetch waits.
         assert.deepStrictEqual(
-          { ...(yield* TestQuery.entry(GetCount, { id: "a" })), stored: undefined, view: undefined },
+          {
+            ...(yield* TestQuery.entry(GetCount, { id: "a" })),
+            stored: undefined,
+            view: undefined
+          },
           {
             stored: undefined,
             view: undefined,
@@ -261,7 +353,13 @@ describe("Query runs", () => {
         yield* advance(10)
         yield* Fiber.join(secondFiber)
         yield* advance(10)
-        assert.deepStrictEqual(watcher.seen, ["0", "1 patched", "2 patched", "2 waiting patched", "2"])
+        assert.deepStrictEqual(watcher.seen, [
+          "0",
+          "1 patched",
+          "2 patched",
+          "2 waiting patched",
+          "2"
+        ])
         assert.deepStrictEqual(yield* fetchLog, ["watch", "invalidation"])
       }).pipe(provide)
     })
@@ -280,11 +378,19 @@ describe("Query runs", () => {
         yield* TestQuery.setVisible(true)
         yield* advance(5)
         // Deferred, not fetched: a refetch landing now would show 2.
-        assert.strictEqual((yield* TestQuery.entry(GetCount, { id: "a" }))?.fetch, "held")
+        assert.strictEqual(
+          (yield* TestQuery.entry(GetCount, { id: "a" }))?.fetch,
+          "held"
+        )
         yield* advance(30)
         yield* Fiber.join(fiber)
         yield* advance(10)
-        assert.deepStrictEqual(watcher.seen, ["0", "1 patched", "1 waiting patched", "1"])
+        assert.deepStrictEqual(watcher.seen, [
+          "0",
+          "1 patched",
+          "1 waiting patched",
+          "1"
+        ])
         // The deferred refetch keeps the first trigger.
         assert.deepStrictEqual(yield* fetchLog, ["watch", "visibility"])
       }).pipe(provide)
@@ -297,7 +403,9 @@ describe("Query runs", () => {
           run(
             {
               invalidates: [GetUser.entry({ id: "1" })],
-              optimistic: optimistic ? [GetUser.patch({ id: "1" }, (user) => ({ ...user, name }))] : []
+              optimistic: optimistic
+                ? [GetUser.patch({ id: "1" }, (user) => ({ ...user, name }))]
+                : []
             },
             Effect.gen(function*() {
               yield* Effect.sleep(serverAt)
@@ -331,7 +439,12 @@ describe("Query runs", () => {
 
     it.effect("a newer run that fails still keeps an older answer from being stored", () => {
       const { GetUser, db, provide } = makeUsers()
-      const rename = (name: string, serverAt: number, answerAt: number, fails: boolean) =>
+      const rename = (
+        name: string,
+        serverAt: number,
+        answerAt: number,
+        fails: boolean
+      ) =>
         run(
           { invalidates: [GetUser.entry({ id: "1" })] },
           Effect.gen(function*() {
@@ -355,8 +468,18 @@ describe("Query runs", () => {
         yield* advance(20)
         yield* Fiber.join(first)
         yield* advance(10)
-        assert.deepStrictEqual(watcher.seen, ["Ann", "Ann waiting", "B2", "B2 waiting", "B2"])
-        assert.deepStrictEqual(yield* fetchLog, ["watch", "invalidation", "invalidation"])
+        assert.deepStrictEqual(watcher.seen, [
+          "Ann",
+          "Ann waiting",
+          "B2",
+          "B2 waiting",
+          "B2"
+        ])
+        assert.deepStrictEqual(yield* fetchLog, [
+          "watch",
+          "invalidation",
+          "invalidation"
+        ])
       }).pipe(provide)
     })
 
@@ -365,19 +488,40 @@ describe("Query runs", () => {
       return Effect.gen(function*() {
         const watcher = yield* watchPatched(GetUser, { id: "1" })
         yield* advance(10)
-        const bob = GetUser.patch({ id: "1" }, (user) => ({ ...user, name: "Bob" }))
-        const failed = yield* run({ optimistic: [bob] }, Effect.sleep(5).pipe(Effect.andThen(Effect.fail("no"))))
+        const bob = GetUser.patch(
+          { id: "1" },
+          (user) => ({ ...user, name: "Bob" })
+        )
+        const failed = yield* run(
+          { optimistic: [bob] },
+          Effect.sleep(5).pipe(Effect.andThen(Effect.fail("no")))
+        )
         yield* advance(5)
         assert.isTrue(Exit.isFailure(yield* Fiber.await(failed)))
         yield* advance(10)
         // The failure drops the patch and invalidates its entry in one step.
-        assert.deepStrictEqual(watcher.seen, ["Ann", "Bob patched", "Ann waiting", "Ann"])
+        assert.deepStrictEqual(watcher.seen, [
+          "Ann",
+          "Bob patched",
+          "Ann waiting",
+          "Ann"
+        ])
 
         yield* Fiber.join(yield* run({ optimistic: [bob] }, Effect.void))
-        assert.deepStrictEqual((yield* TestQuery.entry(GetUser, { id: "1" }))?.patches, { live: 0, held: 1 })
+        assert.deepStrictEqual(
+          (yield* TestQuery.entry(GetUser, { id: "1" }))?.patches,
+          { live: 0, held: 1 }
+        )
         yield* advance(10)
-        assert.deepStrictEqual((yield* TestQuery.entry(GetUser, { id: "1" }))?.patches, { live: 0, held: 0 })
-        assert.deepStrictEqual(watcher.seen.slice(4), ["Bob patched", "Bob waiting patched", "Ann"])
+        assert.deepStrictEqual(
+          (yield* TestQuery.entry(GetUser, { id: "1" }))?.patches,
+          { live: 0, held: 0 }
+        )
+        assert.deepStrictEqual(watcher.seen.slice(4), [
+          "Bob patched",
+          "Bob waiting patched",
+          "Ann"
+        ])
       }).pipe(provide)
     })
 
@@ -387,7 +531,9 @@ describe("Query runs", () => {
         const watcher = yield* watchPatched(GetUser, { id: "1" })
         yield* advance(10)
         const { handle } = yield* issue({
-          optimistic: [GetUser.patch({ id: "1" }, (user) => ({ ...user, name: "Bob" }))]
+          optimistic: [
+            GetUser.patch({ id: "1" }, (user) => ({ ...user, name: "Bob" }))
+          ]
         })
         handle.finish({ _tag: "Stopped" })
         yield* advance(10)
@@ -402,10 +548,17 @@ describe("Query runs", () => {
         yield* GetUser.get({ id: "1" }).pipe(Effect.forkScoped)
         yield* advance(10)
         yield* Fiber.join(
-          yield* run({ optimistic: [GetUser.patch({ id: "1" }, (user) => ({ ...user, name: "Bob" }))] }, Effect.void)
+          yield* run({
+            optimistic: [
+              GetUser.patch({ id: "1" }, (user) => ({ ...user, name: "Bob" }))
+            ]
+          }, Effect.void)
         )
         const entry = yield* TestQuery.entry(GetUser, { id: "1" })
-        assert.deepStrictEqual([entry?.view._tag === "Success" && entry.view.value.name, entry?.patched], ["Bob", true])
+        assert.deepStrictEqual([
+          entry?.view._tag === "Success" && entry.view.value.name,
+          entry?.patched
+        ], ["Bob", true])
         yield* advance("5 minutes")
         assert.isUndefined(yield* TestQuery.entry(GetUser, { id: "1" }))
       }).pipe(provide)
@@ -426,15 +579,29 @@ describe("Query runs", () => {
           ]
         }))
         assert.isTrue(Exit.hasDies(exit))
-        assert.deepStrictEqual((yield* TestQuery.entry(GetCount, { id: "a" }))?.patches, { live: 0, held: 0 })
+        assert.deepStrictEqual(
+          (yield* TestQuery.entry(GetCount, { id: "a" }))?.patches,
+          { live: 0, held: 0 }
+        )
         // A cold entry, and an entry created after a patchAll was issued, hold no patch.
-        yield* issue({ optimistic: [GetCount.patch({ id: "c" }, (n) => n + 1), GetCount.patchAll((n) => n + 1)] })
+        yield* issue({
+          optimistic: [
+            GetCount.patch({ id: "c" }, (n) => n + 1),
+            GetCount.patchAll((n) => n + 1)
+          ]
+        })
         assert.isUndefined(yield* TestQuery.entry(GetCount, { id: "c" }))
-        assert.deepStrictEqual((yield* TestQuery.entry(GetCount, { id: "b" }))?.patches, { live: 1, held: 0 })
+        assert.deepStrictEqual(
+          (yield* TestQuery.entry(GetCount, { id: "b" }))?.patches,
+          { live: 1, held: 0 }
+        )
         const d = yield* GetCount.get({ id: "d" }).pipe(Effect.forkScoped)
         yield* advance(10)
         assert.strictEqual(yield* Fiber.join(d), 0)
-        assert.deepStrictEqual((yield* TestQuery.entry(GetCount, { id: "d" }))?.patched, false)
+        assert.deepStrictEqual(
+          (yield* TestQuery.entry(GetCount, { id: "d" }))?.patched,
+          false
+        )
       }).pipe(provide)
     })
 
@@ -447,7 +614,10 @@ describe("Query runs", () => {
         yield* issue({
           command: "Rename",
           optimistic: [
-            GetUser.patch({ id: "1" }, (user) => ({ ...user, name: 42 as unknown as string })),
+            GetUser.patch(
+              { id: "1" },
+              (user) => ({ ...user, name: 42 as unknown as string })
+            ),
             GetUser.patch({ id: "2" }, (user) => {
               ;(user as { name: string }).name = "Mutated"
               return user
@@ -455,15 +625,21 @@ describe("Query runs", () => {
           ]
         })
         const [invalid] = yield* TestQuery.expectProblem("PatchInvalid")
-        assert.deepStrictEqual([invalid.query, invalid.logKey, invalid.command], [
-          "users/GetUser",
-          `{"id":"1"}`,
-          "Rename"
-        ])
+        assert.deepStrictEqual(
+          [invalid.query, invalid.logKey, invalid.command],
+          [
+            "users/GetUser",
+            `{"id":"1"}`,
+            "Rename"
+          ]
+        )
         const [mutated] = yield* TestQuery.expectProblem("PatchMutated")
         assert.strictEqual(mutated.logKey, `{"id":"2"}`)
         const entry = yield* TestQuery.entry(GetUser, { id: "1" })
-        assert.strictEqual(entry?.view._tag === "Success" && entry.view.value.name, 42 as unknown as string)
+        assert.strictEqual(
+          entry?.view._tag === "Success" && entry.view.value.name,
+          42 as unknown as string
+        )
       }).pipe(provide)
     })
     it.effect("PatchMutated compares snapshots of the encodings with Equal.equals, through a value the codec passes through as is", () => {
@@ -481,9 +657,14 @@ describe("Query runs", () => {
           error: Schema.Never,
           staleTime: "30 seconds"
         },
-        Effect.sync(() => ({ id }) => Effect.sync(() => ({ payload: payloads[id] })))
+        Effect.sync(() => ({ id }) =>
+          Effect.sync(() => ({ payload: payloads[id] }))
+        )
       ) {}
-      const inPlace = (id: string, mutate: (payload: Record<string, unknown>) => void) =>
+      const inPlace = (
+        id: string,
+        mutate: (payload: Record<string, unknown>) => void
+      ) =>
         GetDoc.patch({ id }, (doc) => {
           mutate(doc.payload as Record<string, unknown>)
           return { ...doc }
@@ -575,11 +756,19 @@ describe("Query runs", () => {
         besideEqual: { box: new Box(0), n: 0 },
         insideEqual: { box: new Box(0), n: 0 },
         stored: new Stored(0),
-        external: Object.defineProperty({}, "payload", { get: () => external, enumerable: true })
+        external: Object.defineProperty({}, "payload", {
+          get: () => external,
+          enumerable: true
+        })
       }
       class GetAny extends Query.Service<GetAny>()(
         "any/GetAny",
-        { args: { id: Schema.String }, success: Schema.Any, error: Schema.Never, staleTime: "30 seconds" },
+        {
+          args: { id: Schema.String },
+          success: Schema.Any,
+          error: Schema.Never,
+          staleTime: "30 seconds"
+        },
         Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
       ) {}
       const inPlace = (id: string, mutate: (value: any) => void) =>
@@ -601,9 +790,15 @@ describe("Query runs", () => {
         inPlace("stored", (value) => store.set(value, store.get(value)! + 1)),
         inPlace("external", (value) => value.payload.count++)
       ]
-      const reported = ["plain", "counter", "hashed", "ownHash", "hidden", "hiddenInArray", "besideEqual"].map((id) =>
-        `{"id":"${id}"}`
-      )
+      const reported = [
+        "plain",
+        "counter",
+        "hashed",
+        "ownHash",
+        "hidden",
+        "hiddenInArray",
+        "besideEqual"
+      ].map((id) => `{"id":"${id}"}`)
       return Effect.gen(function*() {
         for (const id of Object.keys(values)) yield* GetAny.get({ id })
         // The first run is stopped: its patches go, and the server values keep the mutation.
@@ -614,7 +809,10 @@ describe("Query runs", () => {
         // The same patches on the same stored values are reported again.
         yield* issue({ optimistic: mutating })
         const second = yield* TestQuery.expectProblem("PatchMutated")
-        assert.deepStrictEqual(second.map((problem) => problem.logKey), reported)
+        assert.deepStrictEqual(
+          second.map((problem) => problem.logKey),
+          reported
+        )
         // The getter never stopped a run: the patch registered.
         const hidden = yield* TestQuery.entry(GetAny, { id: "hidden" })
         assert.isTrue(hidden?.patched)
@@ -630,21 +828,34 @@ describe("Query runs", () => {
       }
       const values: Record<string, unknown> = {
         memo: new Lazy(),
-        closure: Object.defineProperty({ n: 0 }, "f", { get: () => () => 0, enumerable: true }),
-        time: Object.defineProperty({ n: 0 }, "now", { get: () => Math.random(), enumerable: true }),
+        closure: Object.defineProperty({ n: 0 }, "f", {
+          get: () => () => 0,
+          enumerable: true
+        }),
+        time: Object.defineProperty({ n: 0 }, "now", {
+          get: () => Math.random(),
+          enumerable: true
+        }),
         // Reading a getter that memoizes into the value's own data changes the stored value.
         memoRead: new Lazy()
       }
       class GetAny extends Query.Service<GetAny>()(
         "any/GetAny",
-        { args: { id: Schema.String }, success: Schema.Any, error: Schema.Never, staleTime: "30 seconds" },
+        {
+          args: { id: Schema.String },
+          success: Schema.Any,
+          error: Schema.Never,
+          staleTime: "30 seconds"
+        },
         Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
       ) {}
       return Effect.gen(function*() {
         for (const id of Object.keys(values)) yield* GetAny.get({ id })
         yield* issue({
           optimistic: [
-            ...["memo", "closure", "time"].map((id) => GetAny.patch({ id }, (value) => value)),
+            ...["memo", "closure", "time"].map((id) =>
+              GetAny.patch({ id }, (value) => value)
+            ),
             GetAny.patch({ id: "memoRead" }, (value: Lazy) => {
               assert.strictEqual(value.total, 1)
               return value
@@ -652,7 +863,9 @@ describe("Query runs", () => {
           ]
         })
         const mutated = yield* TestQuery.expectProblem("PatchMutated")
-        assert.deepStrictEqual(mutated.map((problem) => problem.logKey), [`{"id":"memoRead"}`])
+        assert.deepStrictEqual(mutated.map((problem) => problem.logKey), [
+          `{"id":"memoRead"}`
+        ])
         assert.strictEqual(computed, 1)
       }).pipe(Effect.provide(Layer.merge(GetAny.layer, TestQuery.layer())))
     })
@@ -725,7 +938,9 @@ describe("Query runs", () => {
         new Proxy(
           target,
           Object.fromEntries(
-            Object.getOwnPropertyNames(Reflect).map((trap) => [trap, (...args: Array<any>) => {
+            Object.getOwnPropertyNames(Reflect).map((
+              trap
+            ) => [trap, (...args: Array<any>) => {
               traps.add(trap)
               return (Reflect as any)[trap](...args)
             }])
@@ -753,7 +968,12 @@ describe("Query runs", () => {
       }
       class GetAny extends Query.Service<GetAny>()(
         "any/GetAny",
-        { args: { id: Schema.String }, success: Schema.Any, error: Schema.Never, staleTime: "30 seconds" },
+        {
+          args: { id: Schema.String },
+          success: Schema.Any,
+          error: Schema.Never,
+          staleTime: "30 seconds"
+        },
         Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
       ) {}
       const inPlace = (id: string, mutate: (value: any) => void) =>
@@ -767,7 +987,9 @@ describe("Query runs", () => {
         traps.clear()
         yield* issue({
           optimistic: [
-            ...Object.keys(values).map((id) => GetAny.patch({ id }, (value) => value)),
+            ...Object.keys(values).map((id) =>
+              GetAny.patch({ id }, (value) => value)
+            ),
             inPlace("besideOpaque", (value) => value.n++),
             inPlace("besideEqualAccessor", (value) => value.n++),
             // Read through the built-in slots, not the overridden getters.
@@ -779,13 +1001,19 @@ describe("Query runs", () => {
         const mutated = yield* TestQuery.expectProblem("PatchMutated")
         assert.deepStrictEqual(
           mutated.map((problem) => problem.logKey),
-          ["besideOpaque", "besideEqualAccessor", "mutatedBytes", "proxyRecord"].map((id) => `{"id":"${id}"}`)
+          ["besideOpaque", "besideEqualAccessor", "mutatedBytes", "proxyRecord"]
+            .map((id) => `{"id":"${id}"}`)
         )
         assert.strictEqual(owned, 0)
         // The snapshots reflected on the proxies, through the reflection traps only.
-        assert.isTrue(traps.has("ownKeys") && traps.has("getOwnPropertyDescriptor"))
+        assert.isTrue(
+          traps.has("ownKeys") && traps.has("getOwnPropertyDescriptor")
+        )
         assert.deepStrictEqual(
-          [...traps].filter((trap) => !["getPrototypeOf", "has", "ownKeys", "getOwnPropertyDescriptor"].includes(trap)),
+          [...traps].filter((trap) =>
+            !["getPrototypeOf", "has", "ownKeys", "getOwnPropertyDescriptor"]
+              .includes(trap)
+          ),
           []
         )
       }).pipe(Effect.provide(Layer.merge(GetAny.layer, TestQuery.layer())))
@@ -808,7 +1036,12 @@ describe("Query runs", () => {
       }
       class GetBinary extends Query.Service<GetBinary>()(
         "binary/GetBinary",
-        { args: { id: Schema.String }, success: Schema.Any, error: Schema.Never, staleTime: "30 seconds" },
+        {
+          args: { id: Schema.String },
+          success: Schema.Any,
+          error: Schema.Never,
+          staleTime: "30 seconds"
+        },
         Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
       ) {}
       const inPlace = (id: string, mutate: (value: any) => void) =>
@@ -820,8 +1053,14 @@ describe("Query runs", () => {
         for (const id of Object.keys(values)) yield* GetBinary.get({ id })
         yield* issue({
           optimistic: [
-            inPlace("buffer", (value: ArrayBuffer) => new Uint8Array(value)[0]++),
-            inPlace("shared", (value: SharedArrayBuffer) => new Uint8Array(value)[0]++),
+            inPlace(
+              "buffer",
+              (value: ArrayBuffer) => new Uint8Array(value)[0]++
+            ),
+            inPlace(
+              "shared",
+              (value: SharedArrayBuffer) => new Uint8Array(value)[0]++
+            ),
             inPlace("bytes", (value: Uint8Array) => value[0]++),
             inPlace("floats", (value: Float64Array) => value[1] = 0.5),
             inPlace("view", (value: DataView) => value.setUint8(1, 7)),
@@ -829,9 +1068,17 @@ describe("Query runs", () => {
             // A NaN beside the changed element doesn't hide the change.
             inPlace("nanMutated", (value: Float64Array) => value[1] = 2),
             // Equal.equals compares byte lengths: the same elements, wider, differ.
-            inPlace("widened", (value: { bytes: ArrayBufferView }) => value.bytes = new Uint16Array([1])),
+            inPlace(
+              "widened",
+              (value: { bytes: ArrayBufferView }) =>
+                value.bytes = new Uint16Array([1])
+            ),
             // Each kind is kept apart: the same bytes in another kind differ.
-            inPlace("retyped", (value: { bytes: ArrayBufferView }) => value.bytes = new Int8Array([1])),
+            inPlace(
+              "retyped",
+              (value: { bytes: ArrayBufferView }) =>
+                value.bytes = new Int8Array([1])
+            ),
             // Binary data compares by bytes, so 0 to -0 is a change.
             inPlace("signedZero", (value: Float64Array) => value[0] = -0),
             // Returned as they are, unchanged: never reported, NaN included.
@@ -866,19 +1113,32 @@ describe("Query runs", () => {
       return Effect.gen(function*() {
         const watcher = yield* watchPatched(GetUser, { id: "1" })
         yield* advance(10)
-        yield* issue({ optimistic: [GetUser.patch({ id: "1" }, (user) => ({ ...user, name: "Bob" }))] })
+        yield* issue({
+          optimistic: [
+            GetUser.patch({ id: "1" }, (user) => ({ ...user, name: "Bob" }))
+          ]
+        })
         // The server value, never the patched one.
-        assert.deepStrictEqual(yield* GetUser.get({ id: "1" }), { id: "1", name: "Ann" })
+        assert.deepStrictEqual(yield* GetUser.get({ id: "1" }), {
+          id: "1",
+          name: "Ann"
+        })
         yield* advance("31 seconds")
         db.name = "Cid"
         const a = yield* GetUser.get({ id: "1" }).pipe(Effect.forkScoped)
         const b = yield* GetUser.get({ id: "1" }).pipe(Effect.forkScoped)
         yield* advance(10)
-        assert.deepStrictEqual([(yield* Fiber.join(a)).name, (yield* Fiber.join(b)).name], ["Cid", "Cid"])
+        assert.deepStrictEqual([
+          (yield* Fiber.join(a)).name,
+          (yield* Fiber.join(b)).name
+        ], ["Cid", "Cid"])
         // One request for both callers, never stored and invisible to the entry.
         assert.deepStrictEqual(yield* fetchLog, ["watch", "get unstored"])
         const entry = yield* TestQuery.entry(GetUser, { id: "1" })
-        assert.strictEqual(entry?.stored._tag === "Success" && entry.stored.value.name, "Ann")
+        assert.strictEqual(
+          entry?.stored._tag === "Success" && entry.stored.value.name,
+          "Ann"
+        )
         assert.deepStrictEqual(watcher.seen, ["Ann", "Bob patched"])
       }).pipe(provide)
     })
@@ -892,12 +1152,18 @@ describe("Query runs", () => {
         const pending = yield* GetUser.get({ id: "1" }).pipe(Effect.forkScoped)
         yield* advance(5)
         const { handle } = yield* issue({
-          optimistic: [GetUser.patch({ id: "1" }, (user) => ({ ...user, name: "Bob" }))]
+          optimistic: [
+            GetUser.patch({ id: "1" }, (user) => ({ ...user, name: "Bob" }))
+          ]
         })
         db.name = "Cid"
         yield* advance(10)
         assert.strictEqual((yield* Fiber.join(pending)).name, "Cid")
-        assert.deepStrictEqual(yield* fetchLog, ["get", "get", "get restart unstored"])
+        assert.deepStrictEqual(yield* fetchLog, [
+          "get",
+          "get",
+          "get restart unstored"
+        ])
         // An unwatched entry is owed no fetch when the run exits.
         handle.start()
         handle.finish({ _tag: "Failure" })
@@ -912,7 +1178,12 @@ describe("Query runs", () => {
       let calls = 0
       class GetGated extends Query.Service<GetGated>()(
         "gated/GetGated",
-        { args: { id: Schema.String }, success: Schema.String, error: Schema.Never, staleTime: "30 seconds" },
+        {
+          args: { id: Schema.String },
+          success: Schema.String,
+          error: Schema.Never,
+          staleTime: "30 seconds"
+        },
         Effect.sync(() => () =>
           Effect.suspend(() => {
             const n = ++calls
@@ -920,7 +1191,9 @@ describe("Query runs", () => {
             return Effect.sleep(10).pipe(
               Effect.as("v" + n),
               Effect.onInterrupt(() =>
-                Deferred.await(gate).pipe(Effect.andThen(Effect.sync(() => log.push("cleaned " + n))))
+                Deferred.await(gate).pipe(
+                  Effect.andThen(Effect.sync(() => log.push("cleaned " + n)))
+                )
               )
             )
           })
@@ -932,13 +1205,20 @@ describe("Query runs", () => {
         yield* GetGated.invalidate({ id: "1" })
         const pending = yield* GetGated.get({ id: "1" }).pipe(Effect.forkScoped)
         yield* advance(5)
-        yield* issue({ optimistic: [GetGated.patch({ id: "1" }, (s) => s + "!")] })
+        yield* issue({
+          optimistic: [GetGated.patch({ id: "1" }, (s) => s + "!")]
+        })
         yield* advance(5)
         // The interrupted fetch is still cleaning up, so its replacement waits.
         assert.deepStrictEqual(log, ["start 1", "start 2"])
         Deferred.doneUnsafe(gate, Exit.void)
         yield* flush
-        assert.deepStrictEqual(log, ["start 1", "start 2", "cleaned 2", "start 3"])
+        assert.deepStrictEqual(log, [
+          "start 1",
+          "start 2",
+          "cleaned 2",
+          "start 3"
+        ])
         yield* advance(10)
         assert.strictEqual(yield* Fiber.join(pending), "v3")
       }).pipe(Effect.provide(Layer.merge(GetGated.layer, TestQuery.layer())))
@@ -950,40 +1230,78 @@ describe("Query runs", () => {
       let calls = 0
       class GetGated extends Query.Service<GetGated>()(
         "gated/GetGated",
-        { args: { id: Schema.String }, success: Schema.String, error: Schema.Never, staleTime: "30 seconds" },
+        {
+          args: { id: Schema.String },
+          success: Schema.String,
+          error: Schema.Never,
+          staleTime: "30 seconds"
+        },
         Effect.sync(() => () =>
           Effect.suspend(() => {
             const n = ++calls
             log.push("start " + n)
             return Effect.sleep(10).pipe(
               Effect.as("v" + n),
-              Effect.onInterrupt(() => cleanup.await.pipe(Effect.andThen(Effect.sync(() => log.push("cleaned " + n)))))
+              Effect.onInterrupt(() =>
+                cleanup.await.pipe(
+                  Effect.andThen(Effect.sync(() => log.push("cleaned " + n)))
+                )
+              )
             )
           })
         )
       ) {}
       return Effect.gen(function*() {
         const scopeA = yield* Scope.make()
-        const buildA = yield* Layer.buildWithScope(Layer.fresh(GetGated.layer), scopeA)
-        const buildB = yield* Layer.buildWithScope(Layer.fresh(GetGated.layer), yield* Effect.scope)
-        yield* GetGated.get({ id: "1" }).pipe(Effect.provideContext(buildB), Effect.forkScoped)
+        const buildA = yield* Layer.buildWithScope(
+          Layer.fresh(GetGated.layer),
+          scopeA
+        )
+        const buildB = yield* Layer.buildWithScope(
+          Layer.fresh(GetGated.layer),
+          yield* Effect.scope
+        )
+        yield* GetGated.get({ id: "1" }).pipe(
+          Effect.provideContext(buildB),
+          Effect.forkScoped
+        )
         yield* advance(10)
         yield* GetGated.invalidate({ id: "1" })
-        yield* issue({ optimistic: [GetGated.patch({ id: "1" }, (s) => s + "!")] })
+        yield* issue({
+          optimistic: [GetGated.patch({ id: "1" }, (s) => s + "!")]
+        })
         // Stale under a live patch: one caller-only fetch, under the first caller's build.
-        const a = yield* GetGated.get({ id: "1" }).pipe(Effect.provideContext(buildA), Effect.forkScoped)
-        const b = yield* GetGated.get({ id: "1" }).pipe(Effect.provideContext(buildB), Effect.forkScoped)
+        const a = yield* GetGated.get({ id: "1" }).pipe(
+          Effect.provideContext(buildA),
+          Effect.forkScoped
+        )
+        const b = yield* GetGated.get({ id: "1" }).pipe(
+          Effect.provideContext(buildB),
+          Effect.forkScoped
+        )
         yield* advance(5)
         yield* Effect.forkScoped(Scope.close(scopeA, Exit.void))
         yield* flush
         assert.deepStrictEqual(log, ["start 1", "start 2"])
         yield* cleanup.open
         yield* flush
-        assert.deepStrictEqual(log, ["start 1", "start 2", "cleaned 2", "start 3"])
+        assert.deepStrictEqual(log, [
+          "start 1",
+          "start 2",
+          "cleaned 2",
+          "start 3"
+        ])
         yield* advance(10)
         // Both callers get the one answer.
-        assert.deepStrictEqual([yield* Fiber.join(a), yield* Fiber.join(b)], ["v3", "v3"])
-        assert.deepStrictEqual(yield* fetchLog, ["get", "get unstored", "get restart unstored"])
+        assert.deepStrictEqual([yield* Fiber.join(a), yield* Fiber.join(b)], [
+          "v3",
+          "v3"
+        ])
+        assert.deepStrictEqual(yield* fetchLog, [
+          "get",
+          "get unstored",
+          "get restart unstored"
+        ])
       }).pipe(Effect.provide(TestQuery.layer()))
     })
   })
@@ -1005,8 +1323,19 @@ describe("Query runs", () => {
         yield* Fiber.join(fiber)
         yield* advance(10)
         // Stored stale, so the run's own invalidation refetches it.
-        assert.deepStrictEqual(watcher.seen, ["Ann", "Ann waiting", "Ann", "Bob", "Bob waiting", "Ann"])
-        assert.deepStrictEqual(yield* fetchLog, ["watch", "invalidation", "invalidation"])
+        assert.deepStrictEqual(watcher.seen, [
+          "Ann",
+          "Ann waiting",
+          "Ann",
+          "Bob",
+          "Bob waiting",
+          "Ann"
+        ])
+        assert.deepStrictEqual(yield* fetchLog, [
+          "watch",
+          "invalidation",
+          "invalidation"
+        ])
       }).pipe(provide)
     })
 
@@ -1028,7 +1357,10 @@ describe("Query runs", () => {
           ])
         )
         const one = yield* TestQuery.entry(GetUser, { id: "1" })
-        assert.deepStrictEqual([one?.stored._tag === "Success" && one.stored.value.name, one?.stale], ["Cold", false])
+        assert.deepStrictEqual([
+          one?.stored._tag === "Success" && one.stored.value.name,
+          one?.stale
+        ], ["Cold", false])
         assert.deepStrictEqual(failing.seen, ["Failure(nope)", "Fixed"])
         // The fetch that began before the write restarts, so older data can't overwrite it.
         yield* advance(10)
@@ -1043,16 +1375,26 @@ describe("Query runs", () => {
         yield* GetUser.get({ id: "1" }).pipe(Effect.forkScoped)
         yield* advance(10)
         yield* Fiber.join(
-          yield* run({ command: "Rename", invalidates: [] }, Effect.void, () => [
-            GetUser.set({ id: "1" }, { id: "1", name: "Bob" }),
-            // An entry the run's start didn't know: not reported.
-            GetUser.set({ id: "9" }, { id: "9", name: "New" })
-          ])
+          yield* run(
+            { command: "Rename", invalidates: [] },
+            Effect.void,
+            () => [
+              GetUser.set({ id: "1" }, { id: "1", name: "Bob" }),
+              // An entry the run's start didn't know: not reported.
+              GetUser.set({ id: "9" }, { id: "9", name: "New" })
+            ]
+          )
         )
         const problems = yield* TestQuery.expectProblem("UncoveredWrite")
-        assert.deepStrictEqual(problems.map((p) => [p.logKey, p.command]), [[`{"id":"1"}`, "Rename"]])
+        assert.deepStrictEqual(problems.map((p) => [p.logKey, p.command]), [[
+          `{"id":"1"}`,
+          "Rename"
+        ]])
         const entry = yield* TestQuery.entry(GetUser, { id: "1" })
-        assert.strictEqual(entry?.stored._tag === "Success" && entry.stored.value.name, "Bob")
+        assert.strictEqual(
+          entry?.stored._tag === "Success" && entry.stored.value.name,
+          "Bob"
+        )
       }).pipe(provide)
     })
 
@@ -1062,16 +1404,29 @@ describe("Query runs", () => {
         const watcher = yield* watchPatched(GetUser, { id: "1" })
         yield* advance(10)
         const fiber = yield* run(
-          { invalidates: [GetUser], optimistic: [GetUser.patch({ id: "1" }, (user) => ({ ...user, name: "Bob" }))] },
+          {
+            invalidates: [GetUser],
+            optimistic: [
+              GetUser.patch({ id: "1" }, (user) => ({ ...user, name: "Bob" }))
+            ]
+          },
           Effect.void,
           () => {
             throw new Error("bad writes")
           }
         )
         assert.isTrue(Exit.hasDies(yield* Fiber.await(fiber)))
-        assert.deepStrictEqual((yield* TestQuery.entry(GetUser, { id: "1" }))?.patches, { live: 0, held: 1 })
+        assert.deepStrictEqual(
+          (yield* TestQuery.entry(GetUser, { id: "1" }))?.patches,
+          { live: 0, held: 1 }
+        )
         yield* advance(10)
-        assert.deepStrictEqual(watcher.seen, ["Ann", "Bob patched", "Bob waiting patched", "Ann"])
+        assert.deepStrictEqual(watcher.seen, [
+          "Ann",
+          "Bob patched",
+          "Bob waiting patched",
+          "Ann"
+        ])
       }).pipe(provide)
     })
   })

@@ -96,7 +96,11 @@ export type H<Msg> = Helper<Msg, unknown> & Tags<Registered, Msg>
  * @category models
  * @since 0.1.0
  */
-export type Node<Msg, R = never> = Element<Msg, R> | Text | Child<Msg, R> | Outlet
+export type Node<Msg, R = never> =
+  | Element<Msg, R>
+  | Text
+  | Child<Msg, R>
+  | Outlet
 
 /**
  * Where a component places what its parent passed for one of its slots:
@@ -151,7 +155,9 @@ export interface Text {
  * @category models
  * @since 0.1.0
  */
-export type Handler<Msg, Payload> = Msg | ((payload: Payload) => Msg | undefined)
+export type Handler<Msg, Payload> =
+  | Msg
+  | ((payload: Payload) => Msg | undefined)
 
 /**
  * How a host treats one event of an element, set with the handler by `on`.
@@ -299,7 +305,12 @@ export interface Element<out Msg, out R = never> {
  * @category models
  * @since 0.1.0
  */
-export type Mount<Msg> = MountModule.Issued<Msg | Component.Noop, any, any, never>
+export type Mount<Msg> = MountModule.Issued<
+  Msg | Component.Noop,
+  any,
+  any,
+  never
+>
 
 /**
  * The text of the type error `onMount` gives for a mount that doesn't end
@@ -388,10 +399,16 @@ export interface Child<out Msg, out R = never> {
   readonly onEmit: (events: any) => Msg | undefined
   /** What shows in the child's place while it can't be shown. Required for a feature child. */
   readonly fallback:
-    | ((result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>) => Content<Msg, any>)
+    | ((
+      result:
+        | AsyncResult.Initial<never, unknown>
+        | AsyncResult.Failure<never, unknown>
+    ) => Content<Msg, any>)
     | undefined
   /** Also tells the parent that the child failed. */
-  readonly onFailure: ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined) | undefined
+  readonly onFailure:
+    | ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined)
+    | undefined
   /** A headless child's whole view, written by whoever declared the child. */
   readonly view: ((parts: any) => Content<Msg, any>) | undefined
   /** What the parent passed for each of the child's slots. */
@@ -437,11 +454,17 @@ export declare namespace Child {
        * Handle the child's events with a callback, or supply one handler per tag for tagged events.
        * Return a parent message to dispatch it, or `undefined` to ignore the event.
        */
-      readonly onEmit?: ((events: Events) => Msg | undefined) | EmitHandlers<Events, Msg> | undefined
+      readonly onEmit?:
+        | ((events: Events) => Msg | undefined)
+        | EmitHandlers<Events, Msg>
+        | undefined
       /** Also tells the parent that the child failed. The failure stays in the child either way. */
-      readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined) | undefined
+      readonly onFailure?:
+        | ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined)
+        | undefined
     }
-    & ({} extends Props ? { readonly props?: Props | undefined } : { readonly props: Props })
+    & ({} extends Props ? { readonly props?: Props | undefined }
+      : { readonly props: Props })
 
   /**
    * One handler for each tag in a child's event union.
@@ -453,8 +476,13 @@ export declare namespace Child {
     : [Events] extends [{ readonly _tag: string }]
     // Reject a wide tag with a conditional on a fixed type: one on a type that depends on Events wouldn't relate
     // for two Events, and would fail a variance check.
-      ? [(tag: EventTag<Events>) => void] extends [(tag: string) => void] ? never
-      : { readonly [T in EventTag<Events>]: (event: Extract<Events, { readonly _tag: T }>) => Msg | undefined }
+      ? [(tag: EventTag<Events>) => void] extends [(tag: string) => void] ?
+        never
+      : {
+        readonly [T in EventTag<Events>]: (
+          event: Extract<Events, { readonly _tag: T }>
+        ) => Msg | undefined
+      }
     : never
 
   /**
@@ -474,18 +502,25 @@ export declare namespace Child {
        * Handle the child's events with a callback, or supply one handler per tag for tagged events.
        * Return a parent message to dispatch it, or `undefined` to ignore the event.
        */
-      readonly onEmit?: ((events: Events) => Msg | undefined) | EmitHandlers<Events, Msg> | undefined
+      readonly onEmit?:
+        | ((events: Events) => Msg | undefined)
+        | EmitHandlers<Events, Msg>
+        | undefined
       /** Also tells the parent that the child failed. The failure stays in the child either way. */
-      readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined) | undefined
+      readonly onFailure?:
+        | ((failure: AsyncResult.Failure<never, unknown>) => Msg | undefined)
+        | undefined
     }
-    & ({} extends Props ? { readonly props?: Props | undefined } : { readonly props: Props })
+    & ({} extends Props ? { readonly props?: Props | undefined }
+      : { readonly props: Props })
 }
 
 type ScopedKey<K, Ends extends boolean> = [Ends] extends [true] ? K
   : true extends WideKey<K> ? ScopedKeyHint
   : K
 
-type WideKey<K> = K extends string ? {} extends Record<K, 1> ? true : false : false
+type WideKey<K> = K extends string ? {} extends Record<K, 1> ? true : false
+  : false
 
 /**
  * The type a key takes when it needs a predicate, so the error names the fix.
@@ -510,12 +545,16 @@ export type ScopedKeyHint =
  * @category models
  * @since 0.1.0
  */
-export interface Scope<Msg, out Ends extends boolean = boolean> extends Helper<Msg, unknown> {
+export interface Scope<Msg, out Ends extends boolean = boolean>
+  extends Helper<Msg, unknown>
+{
   /** Phantom: the brand only `h.scoped` gives. Its name is the error a scoped component called with `h` shows. */
   readonly "written inside h.scoped((s) => ...)": Ends
 }
 
-type EventTag<Events> = Events extends { readonly _tag: infer T extends string } ? T : never
+type EventTag<Events> = Events extends { readonly _tag: infer T extends string }
+  ? T
+  : never
 
 /**
  * One child argument of an element: a node, an element builder, text, an
@@ -570,7 +609,9 @@ export type Input<Msg, R = never> =
  * @category utility types
  * @since 0.1.0
  */
-export type Children<Msg, R = any> = ReadonlyArray<Content<Msg, R> | string | false | null | undefined>
+export type Children<Msg, R = any> = ReadonlyArray<
+  Content<Msg, R> | string | false | null | undefined
+>
 
 /**
  * What a view, a child and a fallback may return: a node, or an element
@@ -580,7 +621,9 @@ export type Children<Msg, R = any> = ReadonlyArray<Content<Msg, R> | string | fa
  * @category models
  * @since 0.1.0
  */
-export type Content<Msg, R = never> = Node<Msg, R> | ElementBuilder<Msg, R, any, any>
+export type Content<Msg, R = never> =
+  | Node<Msg, R>
+  | ElementBuilder<Msg, R, any, any>
 
 /**
  * The requirements of a tuple of children, collected one at a time, so two
@@ -591,13 +634,14 @@ export type Content<Msg, R = never> = Node<Msg, R> | ElementBuilder<Msg, R, any,
  * @category utility types
  * @since 0.1.0
  */
-export type Requirements<T> = 0 extends 1 & T ? any : T extends string | false | null | undefined ? never
-: T extends Text | Outlet ? never
-: T extends ReadonlyArray<infer E> ? Requirements<E>
-: T extends Child<infer _Msg, infer R> ? R
-: T extends Element<infer _Msg, infer R> ? R
-: T extends ElementBuilder<infer _Msg, infer R, any, any> ? R
-: never
+export type Requirements<T> = 0 extends 1 & T ? any :
+  T extends string | false | null | undefined ? never
+  : T extends Text | Outlet ? never
+  : T extends ReadonlyArray<infer E> ? Requirements<E>
+  : T extends Child<infer _Msg, infer R> ? R
+  : T extends Element<infer _Msg, infer R> ? R
+  : T extends ElementBuilder<infer _Msg, infer R, any, any> ? R
+  : never
 
 /**
  * Builds a text node.
@@ -622,14 +666,19 @@ export const text = (text: string): Text => ({ _tag: "Text", text })
  * @category constructors
  * @since 0.1.0
  */
-export const children = <Msg>(inputs: ReadonlyArray<Input<Msg, any>>): Array<Node<Msg, any>> => {
+export const children = <Msg>(
+  inputs: ReadonlyArray<Input<Msg, any>>
+): Array<Node<Msg, any>> => {
   const out: Array<Node<Msg, any>> = []
   for (let i = 0; i < inputs.length; i++) {
     const input = inputs[i]
     if (Array.isArray(input)) {
       for (let j = 0; j < input.length; j++) pushChild(out, input[j])
     } else {
-      pushChild(out, input as Content<Msg, any> | string | false | null | undefined)
+      pushChild(
+        out,
+        input as Content<Msg, any> | string | false | null | undefined
+      )
     }
   }
   return out
@@ -643,8 +692,9 @@ const pushChild = <Msg>(
   if (typeof input === "string") {
     if (input === "") return
     const last = out.length === 0 ? undefined : out[out.length - 1]
-    if (last !== undefined && last._tag === "Text") out[out.length - 1] = text(last.text + input)
-    else out.push(text(input))
+    if (last !== undefined && last._tag === "Text") {
+      out[out.length - 1] = text(last.text + input)
+    } else out.push(text(input))
     return
   }
   const node: Node<Msg, any> = toNode(input)
@@ -666,7 +716,9 @@ const pushChild = <Msg>(
  * @category guards
  * @since 0.1.0
  */
-export const isElementBuilder = (u: unknown): u is ElementBuilder<unknown, unknown, unknown, unknown> =>
+export const isElementBuilder = (
+  u: unknown
+): u is ElementBuilder<unknown, unknown, unknown, unknown> =>
   u instanceof ElementBuilder
 
 /**
@@ -697,7 +749,8 @@ export const toNode = <Msg, R>(content: Content<Msg, R>): Node<Msg, R> =>
 export const build = <Msg, R, const C extends ReadonlyArray<Input<Msg, any>>>(
   builder: ElementBuilder<Msg, R, any, any>,
   inputs: C
-): Element<Msg, R | Requirements<C[number]>> => buildWith(builder, inputs.length === 0 ? noChildren : children(inputs))
+): Element<Msg, R | Requirements<C[number]>> =>
+  buildWith(builder, inputs.length === 0 ? noChildren : children(inputs))
 
 const buildWith = <Msg, R>(
   builder: ElementBuilder<Msg, any, any, any>,
@@ -706,9 +759,15 @@ const buildWith = <Msg, R>(
   // What the builder holds from `children` comes first, and what it is
   // given now comes after.
   const content = builder.content
-  const all = content === undefined ? given : given.length === 0 ? content : children([...content, ...given])
+  const all = content === undefined
+    ? given
+    : given.length === 0
+    ? content
+    : children([...content, ...given])
   const hooks = builder.hooks
-  return hooks === undefined ? elementOf(builder, all) : forwardTo(builder, hooks, all)
+  return hooks === undefined
+    ? elementOf(builder, all)
+    : forwardTo(builder, hooks, all)
 }
 
 const elementOf = <Msg, R>(
@@ -718,7 +777,9 @@ const elementOf = <Msg, R>(
   _tag: "Element",
   tag: builder.tag,
   elementKey: builder.elementKey,
-  attrs: builder.owned.length === 0 ? builder.elementAttrs : withTokens(builder.elementAttrs, builder.owned),
+  attrs: builder.owned.length === 0
+    ? builder.elementAttrs
+    : withTokens(builder.elementAttrs, builder.owned),
   props: builder.props,
   handlers: builder.handlers,
   eventOptions: builder.eventOptions,
@@ -736,7 +797,9 @@ const elementOf = <Msg, R>(
  * @category models
  * @since 0.1.0
  */
-export type Forward = (node: any) => Element<any, any> | ElementBuilder<any, any, any, any>
+export type Forward = (
+  node: any
+) => Element<any, any> | ElementBuilder<any, any, any, any>
 
 // Builds a builder that holds hooks. The last hook set runs first. It gets
 // the finished builder: this one without that hook and without its key,
@@ -748,15 +811,21 @@ const forwardTo = <Msg, R>(
   hooks: ReadonlyArray<Forward>,
   content: ReadonlyArray<Node<Msg, any>>
 ): Element<Msg, R> => {
-  const finished = copyBuilder(builder) as Mutable<ElementBuilder<Msg, any, any, any>>
+  const finished = copyBuilder(builder) as Mutable<
+    ElementBuilder<Msg, any, any, any>
+  >
   finished.hooks = hooks.length === 1 ? undefined : hooks.slice(0, -1)
   finished.content = content
   finished.elementKey = undefined
   const out: Node<Msg, R> = toNode(hooks[hooks.length - 1]!(finished))
   if (out._tag !== "Element") {
-    throw new Error(`forward: the <${builder.tag}> was built into a ${out._tag}, and its hook has to return an element`)
+    throw new Error(
+      `forward: the <${builder.tag}> was built into a ${out._tag}, and its hook has to return an element`
+    )
   }
-  return builder.elementKey === undefined ? out : { ...out, elementKey: builder.elementKey }
+  return builder.elementKey === undefined
+    ? out
+    : { ...out, elementKey: builder.elementKey }
 }
 
 /**
@@ -765,7 +834,10 @@ const forwardTo = <Msg, R>(
  *
  * @internal
  */
-export const withForward = <B extends ElementBuilder<any, any, any, any>>(builder: B, place: Forward): B => {
+export const withForward = <B extends ElementBuilder<any, any, any, any>>(
+  builder: B,
+  place: Forward
+): B => {
   const out = copyBuilder(builder) as Mutable<B>
   out.hooks = builder.hooks === undefined ? [place] : [...builder.hooks, place]
   return out
@@ -785,7 +857,9 @@ export const withContent = <B extends ElementBuilder<any, any, any, any>>(
   const out = copyBuilder(builder) as Mutable<B>
   const content = builder.content
   out.content = content === undefined
-    ? (inputs.length === 0 ? noChildren : childrenOf(inputs as Array<Input<any, any>>))
+    ? (inputs.length === 0
+      ? noChildren
+      : childrenOf(inputs as Array<Input<any, any>>))
     : inputs.length === 0
     ? content
     : children([...content, ...inputs])
@@ -800,7 +874,9 @@ export const withContent = <B extends ElementBuilder<any, any, any, any>>(
  * that needs more, a hole, a nested array or text to join, hands what's left
  * to `children`.
  */
-const childrenOf = <Msg>(inputs: Array<Input<Msg, any>>): Array<Node<Msg, any>> => {
+const childrenOf = <Msg>(
+  inputs: Array<Input<Msg, any>>
+): Array<Node<Msg, any>> => {
   let afterText = false
   for (let i = 0; i < inputs.length; i++) {
     const input = inputs[i]
@@ -808,7 +884,10 @@ const childrenOf = <Msg>(inputs: Array<Input<Msg, any>>): Array<Node<Msg, any>> 
       if (input === "" || afterText) return children(inputs)
       inputs[i] = text(input)
       afterText = true
-    } else if (input === false || input === null || input === undefined || Array.isArray(input)) {
+    } else if (
+      input === false || input === null || input === undefined ||
+      Array.isArray(input)
+    ) {
       return children(inputs)
     } else {
       const node: Node<Msg, any> = toNode(input as Content<Msg, any>)
@@ -839,7 +918,9 @@ const withTokens = (
 }
 
 const joinTokens = (current: string | undefined, added: string): string => {
-  const tokens = current === undefined ? [] : current.split(/\s+/).filter((token) => token !== "")
+  const tokens = current === undefined
+    ? []
+    : current.split(/\s+/).filter((token) => token !== "")
   for (const token of added.split(/\s+/)) {
     if (token !== "" && !tokens.includes(token)) tokens.push(token)
   }
@@ -859,7 +940,14 @@ export const withFields = <B extends ElementBuilder<any, any, any, any>>(
   fields: Partial<
     Pick<
       ElementBuilder<unknown>,
-      "elementKey" | "elementAttrs" | "props" | "handlers" | "eventOptions" | "refKey" | "mount" | "owned"
+      | "elementKey"
+      | "elementAttrs"
+      | "props"
+      | "handlers"
+      | "eventOptions"
+      | "refKey"
+      | "mount"
+      | "owned"
     >
   >
 ): B => Object.assign(copyBuilder(builder), fields)
@@ -876,7 +964,9 @@ export const withFields = <B extends ElementBuilder<any, any, any, any>>(
  * builder's symbols on every copy cost about as much as the rest of
  * building a view, so a copy leaves it behind.
  */
-const copyBuilder = <B extends ElementBuilder<any, any, any, any>>(builder: B): B => {
+const copyBuilder = <B extends ElementBuilder<any, any, any, any>>(
+  builder: B
+): B => {
   // Counted in place: `Object.keys` would make an array for every copy.
   let fields = 0
   for (const _ in builder) fields++
@@ -908,7 +998,9 @@ const builderFields = [
   "tag"
 ] as const
 
-type Copier = new(builder: ElementBuilder<any, any, any, any>) => ElementBuilder<any, any, any, any>
+type Copier = new(
+  builder: ElementBuilder<any, any, any, any>
+) => ElementBuilder<any, any, any, any>
 
 /** A class's copier by its prototype, or `null` for a class whose builders are copied generically. */
 const copiers = new WeakMap<object, Copier | null>()
@@ -918,11 +1010,17 @@ const copiers = new WeakMap<object, Copier | null>()
  * `proto`. `null` when `first`, the first builder of the class to be copied,
  * lacks a base field, which a count of its keys doesn't show.
  */
-const makeCopier = (proto: object, first: ElementBuilder<any, any, any, any>): Copier | null => {
+const makeCopier = (
+  proto: object,
+  first: ElementBuilder<any, any, any, any>
+): Copier | null => {
   for (const field of builderFields) {
     if (!Object.hasOwn(first, field)) return null
   }
-  const copier = function(this: Mutable<ElementBuilder<any, any, any, any>>, from: ElementBuilder<any, any, any, any>) {
+  const copier = function(
+    this: Mutable<ElementBuilder<any, any, any, any>>,
+    from: ElementBuilder<any, any, any, any>
+  ) {
     this.elementKey = from.elementKey
     this.elementAttrs = from.elementAttrs
     this.props = from.props
@@ -964,7 +1062,11 @@ const makeCopier = (proto: object, first: ElementBuilder<any, any, any, any>): C
  * @category models
  * @since 0.1.0
  */
-export interface Part<in out Tag extends string, in Args extends ReadonlyArray<any>, out R = never> {
+export interface Part<
+  in out Tag extends string,
+  in Args extends ReadonlyArray<any>,
+  out R = never
+> {
   <B extends PartTarget<Tag>>(builder: B, ...args: Args): ReturnType<B["attr"]>
   readonly "~R"?: (_: never) => R
 }
@@ -996,7 +1098,8 @@ export interface PartTarget<out Tag extends string> {
  * @category utility types
  * @since 0.1.0
  */
-export type PartRequirements<P> = P extends { readonly "~R"?: (_: never) => infer R } ? R : never
+export type PartRequirements<P> = P extends
+  { readonly "~R"?: (_: never) => infer R } ? R : never
 
 /**
  * Keeps a part's requirements on a wrapper function returned from a headless
@@ -1042,15 +1145,23 @@ export const wrapPart = <
 export const makePart = (
   owner: Owner,
   tags: ReadonlyArray<string> | undefined,
-  decorate: (builder: any, ...args: ReadonlyArray<any>) => ElementBuilder<any, any, any, any>
+  decorate: (
+    builder: any,
+    ...args: ReadonlyArray<any>
+  ) => ElementBuilder<any, any, any, any>
 ): Part<any, any, any> =>
 (target: PartTarget<any>, ...args: ReadonlyArray<any>): any => {
   const builder: unknown = target
   if (!(builder instanceof ElementBuilder)) {
-    throw new Error(owner.path + ": a part takes an element builder, such as h.button")
+    throw new Error(
+      owner.path + ": a part takes an element builder, such as h.button"
+    )
   }
   if (tags !== undefined && !tags.includes(builder.tag)) {
-    throw new Error(owner.path + ": a part for <" + tags.join("> or <") + "> was given <" + builder.tag + ">")
+    throw new Error(
+      owner.path + ": a part for <" + tags.join("> or <") + "> was given <" +
+        builder.tag + ">"
+    )
   }
   const blank: ElementBuilder<any, any, any, any> = Object.assign(
     Object.create(Object.getPrototypeOf(builder)),
@@ -1061,8 +1172,12 @@ export const makePart = (
   if (!(patch instanceof ElementBuilder)) {
     throw new Error(owner.path + ": a part returns the builder it was given")
   }
-  if (patch.elementKey !== undefined) throw new Error(owner.path + ": a part can't set an element's key")
-  if (patch.owned.length > 0) throw new Error(owner.path + ": a part can't apply another part")
+  if (patch.elementKey !== undefined) {
+    throw new Error(owner.path + ": a part can't set an element's key")
+  }
+  if (patch.owned.length > 0) {
+    throw new Error(owner.path + ": a part can't apply another part")
+  }
   const attrs: Record<string, string> = { ...builder.elementAttrs }
   const tokens: Record<string, string> = {}
   for (const name of patch.removals ?? []) {
@@ -1094,7 +1209,9 @@ export const makePart = (
       : children([...builder.content, ...patch.content])
   }
   if (patch.hooks !== undefined) {
-    ;(out as Mutable<typeof out>).hooks = builder.hooks === undefined ? patch.hooks : [...builder.hooks, ...patch.hooks]
+    ;(out as Mutable<typeof out>).hooks = builder.hooks === undefined
+      ? patch.hooks
+      : [...builder.hooks, ...patch.hooks]
   }
   return out
 }
@@ -1108,7 +1225,11 @@ const withEntry = <A>(
   name: string,
   value: A | undefined
 ): Readonly<Record<string, A>> => {
-  if (!Object.hasOwn(record, name)) return value === undefined ? record : assoc(record, name, value)
+  if (!Object.hasOwn(record, name)) {
+    return value === undefined
+      ? record
+      : assoc(record, name, value)
+  }
   const out: Record<string, A> = {}
   for (const key in record) {
     if (key !== name) put(out, key, record[key]!)
@@ -1121,7 +1242,11 @@ const withEntry = <A>(
  * `{ ...record, [name]: value }`, written as a copy and a store: an object
  * literal with a computed key is several times slower.
  */
-const assoc = <A>(record: Readonly<Record<string, A>>, name: string, value: A): Readonly<Record<string, A>> => {
+const assoc = <A>(
+  record: Readonly<Record<string, A>>,
+  name: string,
+  value: A
+): Readonly<Record<string, A>> => {
   // The first entry of most records: nothing to copy.
   if (record === noFields) return firstEntry(name, value)
   const out: Record<string, A> = { ...record }
@@ -1153,7 +1278,12 @@ const firstEntry = <A>(name: string, value: A): Record<string, A> => {
 /** Sets an own entry, `__proto__` included, which a plain store would take as the prototype. */
 const put = <A>(record: Record<string, A>, name: string, value: A): void => {
   if (name === "__proto__") {
-    Object.defineProperty(record, name, { value, writable: true, enumerable: true, configurable: true })
+    Object.defineProperty(record, name, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true
+    })
   } else {
     record[name] = value
   }
@@ -1184,12 +1314,20 @@ const blankFields = {
  *
  * @internal
  */
-export const idOf = (path: string, name: string, key?: string | number | undefined): string =>
-  escapeId(path) + "-" + escapeId(name) + (key === undefined ? "" : "-" + escapeId(String(key)))
+export const idOf = (
+  path: string,
+  name: string,
+  key?: string | number | undefined
+): string =>
+  escapeId(path) + "-" + escapeId(name) +
+  (key === undefined ? "" : "-" + escapeId(String(key)))
 
 // The underscore that opens and closes an escape is escaped too, so the escaping can be undone.
 const escapeId = (value: string): string =>
-  value.replace(/[^A-Za-z0-9]/g, (char) => "_" + char.codePointAt(0)!.toString(36) + "_")
+  value.replace(
+    /[^A-Za-z0-9]/g,
+    (char) => "_" + char.codePointAt(0)!.toString(36) + "_"
+  )
 
 /**
  * The element builder: `h.el(tag)` and a vocabulary's element names. It
@@ -1340,7 +1478,9 @@ export class ElementBuilder<
     out.handlers = assoc(this.handlers, event, handler)
     const eventOptions = this.eventOptions
     if (eventOptions === noFields) {
-      if (options !== undefined) out.eventOptions = assoc(eventOptions, event, options)
+      if (options !== undefined) {
+        out.eventOptions = assoc(eventOptions, event, options)
+      }
     } else if (options !== undefined || Object.hasOwn(eventOptions, event)) {
       out.eventOptions = withEntry(eventOptions, event, options)
     }
@@ -1364,7 +1504,9 @@ export class ElementBuilder<
   attr(name: string, value: string | undefined): this {
     const out = copyBuilder(this) as Mutable<this>
     const removals = this.removals
-    if (value === undefined && removals !== undefined) out.removals = [...removals, name]
+    if (value === undefined && removals !== undefined) {
+      out.removals = [...removals, name]
+    }
     const attrs = this.elementAttrs
     if (attrs === noFields) {
       if (value !== undefined) out.elementAttrs = assoc(attrs, name, value)
@@ -1383,7 +1525,9 @@ export class ElementBuilder<
     if (this.attr !== ElementBuilder.prototype.attr) {
       let out: this | undefined
       for (const name in attributes) {
-        if (Object.hasOwn(attributes, name)) out = (out ?? this).attr(name, attributes[name])
+        if (Object.hasOwn(attributes, name)) {
+          out = (out ?? this).attr(name, attributes[name])
+        }
       }
       return out ?? copyBuilder(this)
     }
@@ -1482,7 +1626,14 @@ export class ElementBuilder<
    *
    * @since 0.1.0
    */
-  onMount(mount: MountModule.Issued<Msg | Component.Noop | MountHint, any, HostNode, never>): never
+  onMount(
+    mount: MountModule.Issued<
+      Msg | Component.Noop | MountHint,
+      any,
+      HostNode,
+      never
+    >
+  ): never
   onMount(mount: Mount<Msg>): any {
     if (this.mount !== undefined) {
       throw new Error(
@@ -1582,7 +1733,14 @@ export class ContainerBuilder<
    *
    * @since 0.1.0
    */
-  override onMount(mount: MountModule.Issued<Msg | Component.Noop | MountHint, any, HostNode, never>): never
+  override onMount(
+    mount: MountModule.Issued<
+      Msg | Component.Noop | MountHint,
+      any,
+      HostNode,
+      never
+    >
+  ): never
   override onMount(mount: Mount<Msg>): any {
     return (super.onMount as any)(mount)
   }
@@ -1595,7 +1753,13 @@ export class ContainerBuilder<
    */
   children<const C extends ReadonlyArray<Input<Msg, any>>>(
     ...inputs: C
-  ): ContainerBuilder<Msg, R | Requirements<C[number]>, Handlers, HostNode, Tag> {
+  ): ContainerBuilder<
+    Msg,
+    R | Requirements<C[number]>,
+    Handlers,
+    HostNode,
+    Tag
+  > {
     return withContent(this, inputs) as any
   }
   /**
@@ -1627,7 +1791,9 @@ export class ContainerBuilder<
  * @category models
  * @since 0.1.0
  */
-export type Shorthand<B extends { readonly children: (...inputs: any) => any }> = Omit<B, never> & B["children"]
+export type Shorthand<
+  B extends { readonly children: (...inputs: any) => any }
+> = Omit<B, never> & B["children"]
 
 /**
  * Makes a builder callable as `Shorthand` describes, for a vocabulary's
@@ -1644,11 +1810,14 @@ export type Shorthand<B extends { readonly children: (...inputs: any) => any }> 
  * @since 0.1.0
  */
 export const shorthand = <
-  B extends ElementBuilder<any, any, any, any> & { readonly children: (...inputs: any) => any }
+  B extends ElementBuilder<any, any, any, any> & {
+    readonly children: (...inputs: any) => any
+  }
 >(
   builder: B
 ): Shorthand<B> => {
-  const root = (...inputs: ReadonlyArray<Input<any, any>>) => (root as any).children(...inputs)
+  const root = (...inputs: ReadonlyArray<Input<any, any>>) =>
+    (root as any).children(...inputs)
   Object.setPrototypeOf(root, Object.getPrototypeOf(builder))
   return Object.assign(root, builder) as any
 }
@@ -1785,7 +1954,8 @@ export interface Register {}
  * @category utility types
  * @since 0.1.0
  */
-export type Registered = Register extends { readonly elements: infer V extends Elements } ? V : never
+export type Registered = Register extends
+  { readonly elements: infer V extends Elements } ? V : never
 
 /**
  * The element names a vocabulary adds to `h`, bound to a component's message
@@ -1795,7 +1965,9 @@ export type Registered = Register extends { readonly elements: infer V extends E
  * @category utility types
  * @since 0.1.0
  */
-export type Tags<V, Msg> = [V] extends [never] ? {} : V extends Elements ? (V & { readonly Msg: Msg })["Tags"] : {}
+export type Tags<V, Msg> = [V] extends [never] ? {}
+  : V extends Elements ? (V & { readonly Msg: Msg })["Tags"]
+  : {}
 
 let registered: Vocabulary<any> | undefined
 
@@ -1846,7 +2018,12 @@ export interface Helper<Msg, Props> {
    */
   el(tag: string): ContainerBuilder<Msg>
   /** Shorthand for `h.el(tag).children(...children)`, with at least one child. */
-  el<const C extends readonly [Input<Msg, any>, ...ReadonlyArray<Input<Msg, any>>]>(
+  el<
+    const C extends readonly [
+      Input<Msg, any>,
+      ...ReadonlyArray<Input<Msg, any>>
+    ]
+  >(
     tag: string,
     ...children: C
   ): ContainerBuilder<Msg, Requirements<C[number]>>
@@ -1964,7 +2141,10 @@ export interface LazyStore {
   lazy: unknown
 }
 
-const sameArgs = (a: ReadonlyArray<unknown>, b: ReadonlyArray<unknown>): boolean => {
+const sameArgs = (
+  a: ReadonlyArray<unknown>,
+  b: ReadonlyArray<unknown>
+): boolean => {
   if (a.length !== b.length) return false
   for (let i = 0; i < a.length; i++) {
     if (a[i] !== b[i]) return false
@@ -2002,7 +2182,11 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
     this.at = at
     this.store = store
   }
-  lazy(this: any, fn: (h: any, ...args: Array<any>) => Content<Msg, any>, ...args: Array<any>): any {
+  lazy(
+    this: any,
+    fn: (h: any, ...args: Array<any>) => Content<Msg, any>,
+    ...args: Array<any>
+  ): any {
     const store = this.store
     if (store === undefined) return toNode(fn(this, ...args))
     const lazies = (store.lazy ??= new Lazies()) as Lazies
@@ -2035,7 +2219,10 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
     return (content ?? alive)(s)
   }
   isRunning(command: Command.Definition.Any, group?: unknown): boolean {
-    return this.runningFn(Command.nameOf(command), Command.groupKeyOf(command, group))
+    return this.runningFn(
+      Command.nameOf(command),
+      Command.groupKeyOf(command, group)
+    )
   }
   id(name: string, key?: string | number | undefined): string {
     const at = this.at
@@ -2057,7 +2244,11 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
 class NoTextBuilder<Msg> extends ContainerBuilder<Msg> {
   readonly vocabulary: string
   readonly textParents: ReadonlyArray<string>
-  constructor(tag: string, vocabulary: string, textParents: ReadonlyArray<string>) {
+  constructor(
+    tag: string,
+    vocabulary: string,
+    textParents: ReadonlyArray<string>
+  ) {
     super(tag)
     this.vocabulary = vocabulary
     this.textParents = textParents
@@ -2071,11 +2262,17 @@ class NoTextBuilder<Msg> extends ContainerBuilder<Msg> {
     const content = out.content ?? []
     for (let index = 0; index < content.length; index++) {
       const child = content[index]!
-      if (child._tag === "Text") throw new Error(message ??= this.noTextMessage())
+      if (child._tag === "Text") {
+        throw new Error(message ??= this.noTextMessage())
+      }
       // An outlet's content isn't known yet, so the runtime checks it when it builds the content.
       if (child._tag === "Outlet") {
         children ??= [...content]
-        children[index] = { _tag: "Outlet", name: child.name, noText: message ??= this.noTextMessage() }
+        children[index] = {
+          _tag: "Outlet",
+          name: child.name,
+          noText: message ??= this.noTextMessage()
+        }
       }
     }
     if (children !== undefined) out.content = children
@@ -2088,7 +2285,10 @@ class NoTextBuilder<Msg> extends ContainerBuilder<Msg> {
   }
 }
 
-const helperClasses = new WeakMap<Vocabulary<any>, typeof HelperImpl<any, any>>()
+const helperClasses = new WeakMap<
+  Vocabulary<any>,
+  typeof HelperImpl<any, any>
+>()
 
 /**
  * What a runtime can give a view in place of its path: something whose
@@ -2119,7 +2319,8 @@ export const readsPathLazily = <F extends object>(view: F): F => {
  *
  * @internal
  */
-export const takesPathSource = (view: object): boolean => lazyPathViews.has(view)
+export const takesPathSource = (view: object): boolean =>
+  lazyPathViews.has(view)
 
 /**
  * Builds the view helper for one render, with a vocabulary's element names
@@ -2134,7 +2335,9 @@ export const makeHelper = <Msg, Props, V extends Elements = never>(
   path?: string | PathSource | undefined,
   store?: LazyStore | undefined
 ): Helper<Msg, Props> & Tags<V, Msg> => {
-  if (elements === undefined) return new HelperImpl(props, undefined, running, path ?? "", store) as any
+  if (elements === undefined) {
+    return new HelperImpl(props, undefined, running, path ?? "", store) as any
+  }
   let Class = helperClasses.get(elements)
   if (Class === undefined) {
     const Made = class extends HelperImpl<any, any> {}
@@ -2176,7 +2379,9 @@ export const textOf = (node: Node<any, any>): string => {
  * @category queries
  * @since 0.1.0
  */
-export const nodes = function*<Msg>(node: Node<Msg, any>): Generator<Node<Msg, any>> {
+export const nodes = function*<Msg>(
+  node: Node<Msg, any>
+): Generator<Node<Msg, any>> {
   yield node
   if (node._tag === "Element") {
     for (const child of node.children) yield* nodes(child)
@@ -2193,9 +2398,13 @@ const noNodes: ReadonlyArray<never> = []
  *
  * @internal
  */
-export const slotNodes = <Msg>(child: Child<Msg, any>): ReadonlyArray<Node<Msg, any>> => {
+export const slotNodes = <Msg>(
+  child: Child<Msg, any>
+): ReadonlyArray<Node<Msg, any>> => {
   if (child.slots === undefined) return noNodes
   const out: Array<Node<Msg, any>> = []
-  for (const name in child.slots) out.push(...children<Msg>([child.slots[name]]))
+  for (const name in child.slots) {
+    out.push(...children<Msg>([child.slots[name]]))
+  }
   return out
 }

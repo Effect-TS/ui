@@ -2,7 +2,10 @@ import { Array, Data, Option } from "effect"
 
 export type FileTreeEntry = Data.TaggedEnum<{
   File: { readonly name: string; readonly sizeInBytes: number }
-  Directory: { readonly name: string; readonly entries: ReadonlyArray<FileTreeEntry> }
+  Directory: {
+    readonly name: string
+    readonly entries: ReadonlyArray<FileTreeEntry>
+  }
 }>
 
 export const FileTreeEntry = Data.taggedEnum<FileTreeEntry>()
@@ -42,7 +45,10 @@ export const findEntry = (
   path: Array.NonEmptyReadonlyArray<string>,
   entries: ReadonlyArray<FileTreeEntry> = fileTree
 ): Option.Option<FileTreeEntry> => {
-  const entry = Array.findFirst(entries, (entry) => entry.name === Array.headNonEmpty(path))
+  const entry = Array.findFirst(
+    entries,
+    (entry) => entry.name === Array.headNonEmpty(path)
+  )
   return Array.match(Array.tailNonEmpty(path), {
     onEmpty: () => entry,
     onNonEmpty: (rest) =>

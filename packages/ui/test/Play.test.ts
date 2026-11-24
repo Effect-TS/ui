@@ -10,7 +10,9 @@ const SaverEvents = UiSchema.TaggedEnum({ Saved: {} })
 class Save extends Command.Service<Save>()(
   "Saver/Save",
   { args: {} },
-  Effect.succeed(() => Effect.as(Effect.sleep("1 second"), SaverMessage.SucceededSave()))
+  Effect.succeed(() =>
+    Effect.as(Effect.sleep("1 second"), SaverMessage.SucceededSave())
+  )
 ) {}
 
 const Saver = Component.define({
@@ -26,7 +28,8 @@ const Saver = Component.define({
       ClickedSave: () => $.run(Save.make({})),
       SucceededSave: () => $.emit(SaverEvents.Saved())
     }),
-  view: (h) => h.el("button").on("click", SaverMessage.ClickedSave()).children("Save")
+  view: (h) =>
+    h.el("button").on("click", SaverMessage.ClickedSave()).children("Save")
 })
 
 const Page = Component.define({
@@ -71,20 +74,28 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Play", (it) => {
       )
       yield* play.expectIgnored()
       yield* play.click("Save")
-      assert.match(failureOf(yield* Effect.exit(play.expectIgnored())), /the last interaction produced a message/)
+      assert.match(
+        failureOf(yield* Effect.exit(play.expectIgnored())),
+        /the last interaction produced a message/
+      )
 
       const unacknowledged = yield* Effect.exit(Effect.scoped(Effect.andThen(
         Play.make(Page, {}),
         (play) => play.click("Nothing")
       )))
-      assert.match(failureOf(unacknowledged), /Play\.make: the last click produced no message/)
+      assert.match(
+        failureOf(unacknowledged),
+        /Play\.make: the last click produced no message/
+      )
     }))
 
   it.effect("a failed expectation lists the tree's elements", () =>
     Effect.gen(function*() {
       const play = yield* Play.make(Page, {})
       assert.match(
-        failureOf(yield* Effect.exit(play.expect(saves).toHaveText("saves: 9"))),
+        failureOf(
+          yield* Effect.exit(play.expect(saves).toHaveText("saves: 9"))
+        ),
         /Play\.expect\(<p>\)\.toHaveText\("saves: 9"\): its text is "saves: 0"; elements:\n  <div>/
       )
     }))

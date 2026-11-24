@@ -21,7 +21,13 @@ type Element<K extends keyof HTMLElementTagNameMap, R = never> = Html.Element<
 
 describe("Fieldset", () => {
   it("each part returns the builder it was given, with the consumer's message type and the children's requirements", () => {
-    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({
+      name: "App",
+      scoped: false,
+      model: Schema.Null,
+      message: Msg,
+      elements: Html
+    }).make({
       init: () => null,
       update: ($) => $.model,
       view: (h) =>
@@ -29,11 +35,16 @@ describe("Fieldset", () => {
           props: { disabled: true },
           view: (fieldset) => {
             expect(fieldset.disabled).type.toBe<boolean>()
-            expect(fieldset.legend(h.div.onClick(Msg.Clicked()))).type.toBe<Element<"div">>()
+            expect(fieldset.legend(h.div.onClick(Msg.Clicked()))).type.toBe<
+              Element<"div">
+            >()
             expect(fieldset.legend(h.legend)).type.toBe<Element<"legend">>()
             const root = fieldset.root(h.fieldset.class("billing")).children(
               fieldset.legend(h.div),
-              Field(h, { view: (field) => field.root(h.div).children(field.control(h.input)) }),
+              Field(h, {
+                view: (field) =>
+                  field.root(h.div).children(field.control(h.input))
+              }),
               needsClock
             )
             expect(root).type.toBe<Element<"fieldset", Clock>>()
@@ -44,15 +55,25 @@ describe("Fieldset", () => {
   })
 
   it("the root takes only a fieldset", () => {
-    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({
+      name: "App",
+      scoped: false,
+      model: Schema.Null,
+      message: Msg,
+      elements: Html
+    }).make({
       init: () => null,
       update: ($) => $.model,
       view: (h) =>
         Fieldset(h, {
           view: (fieldset) => {
             expect(fieldset.root).type.not.toBeCallableWith(h.div)
-            expect(fieldset.root).type.not.toBeCallableWith({ element: h.fieldset })
-            expect(fieldset.legend).type.not.toBeCallableWith({ element: h.div })
+            expect(fieldset.root).type.not.toBeCallableWith({
+              element: h.fieldset
+            })
+            expect(fieldset.legend).type.not.toBeCallableWith({
+              element: h.div
+            })
             return fieldset.root(h.fieldset)
           }
         })
@@ -60,7 +81,9 @@ describe("Fieldset", () => {
   })
 
   it("a fieldset needs no service, and disabled is an optional boolean", () => {
-    expect<Component.Headless.Requirements<typeof Fieldset>>().type.toBe<never>()
+    expect<Component.Headless.Requirements<typeof Fieldset>>().type.toBe<
+      never
+    >()
     expect({}).type.toBeAssignableTo<FieldsetProps>()
     expect({ disabled: null }).type.not.toBeAssignableTo<FieldsetProps>()
   })

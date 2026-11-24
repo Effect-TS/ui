@@ -8,14 +8,32 @@ describe("Subscription", () => {
   })
 
   it("a name can't pass for a name with deps", () => {
-    assert.strictEqual(Subscription.make("page:null", Stream.empty).key, "page::null")
-    assert.strictEqual(Subscription.make("page", null, () => Stream.empty).key, "page:null")
-    assert.strictEqual(Subscription.make("a:b", "c", () => Stream.empty).key, "a::b:\"c\"")
+    assert.strictEqual(
+      Subscription.make("page:null", Stream.empty).key,
+      "page::null"
+    )
+    assert.strictEqual(
+      Subscription.make("page", null, () => Stream.empty).key,
+      "page:null"
+    )
+    assert.strictEqual(
+      Subscription.make("a:b", "c", () => Stream.empty).key,
+      "a::b:\"c\""
+    )
   })
 
   it("numbers JSON can't tell apart keep distinct keys", () => {
-    const key = (dep: Subscription.Dep) => Subscription.make("page", dep, () => Stream.empty).key
-    const keys = [key(NaN), key(Infinity), key(-Infinity), key(null), key(0), key(-0), key("null")]
+    const key = (dep: Subscription.Dep) =>
+      Subscription.make("page", dep, () => Stream.empty).key
+    const keys = [
+      key(NaN),
+      key(Infinity),
+      key(-Infinity),
+      key(null),
+      key(0),
+      key(-0),
+      key("null")
+    ]
     assert.strictEqual(new Set(keys).size, keys.length)
     assert.strictEqual(key(NaN), "page:NaN")
     assert.strictEqual(key(-0), "page:-0")
@@ -23,7 +41,8 @@ describe("Subscription", () => {
   })
 
   it("deps join the key without colliding", () => {
-    const key = (deps: Subscription.Deps) => Subscription.make("room", deps, () => Stream.empty).key
+    const key = (deps: Subscription.Deps) =>
+      Subscription.make("room", deps, () => Stream.empty).key
     assert.strictEqual(key("42"), "room:\"42\"")
     assert.strictEqual(key(42), "room:42")
     assert.notStrictEqual(key("1"), key(1))
@@ -34,15 +53,31 @@ describe("Subscription", () => {
 
   it("keeps the name and deps its key was built from", () => {
     const room = Subscription.make("room", "42", () => Stream.empty)
-    assert.deepStrictEqual([room.name, room.deps, room.key], ["room", ["42"], "room:\"42\""])
+    assert.deepStrictEqual([room.name, room.deps, room.key], [
+      "room",
+      ["42"],
+      "room:\"42\""
+    ])
     // A single dep and a one-element tuple share a key, so they share their deps.
-    assert.deepStrictEqual(Subscription.make("room", ["42"], () => Stream.empty).deps, ["42"])
-    assert.deepStrictEqual(Subscription.make("cell", [1, true], () => Stream.empty).deps, [1, true])
+    assert.deepStrictEqual(
+      Subscription.make("room", ["42"], () => Stream.empty).deps,
+      ["42"]
+    )
+    assert.deepStrictEqual(
+      Subscription.make("cell", [1, true], () => Stream.empty).deps,
+      [1, true]
+    )
     // No deps isn't an empty tuple of them: the keys differ too.
     assert.isUndefined(Subscription.make("tick", Stream.empty).deps)
-    assert.deepStrictEqual(Subscription.make("tick", [], () => Stream.empty).deps, [])
+    assert.deepStrictEqual(
+      Subscription.make("tick", [], () => Stream.empty).deps,
+      []
+    )
     // The key escapes the name, and the name is kept as given.
-    assert.strictEqual(Subscription.make("page:null", Stream.empty).name, "page:null")
+    assert.strictEqual(
+      Subscription.make("page:null", Stream.empty).name,
+      "page:null"
+    )
   })
 
   it.effect("builds lazily with only its deps each time the Stream runs", () =>

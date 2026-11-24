@@ -37,15 +37,27 @@ describe("HtmlKeyboard.shortcuts", () => {
     assert.strictEqual(handle(key({ key: "?", editable: true })), undefined)
     assert.strictEqual(handle(key({ key: "?", repeat: true })), undefined)
     assert.strictEqual(handle(key({ key: "?", composing: true })), undefined)
-    assert.strictEqual(handle(key({ key: "?", defaultPrevented: true })), undefined)
+    assert.strictEqual(
+      handle(key({ key: "?", defaultPrevented: true })),
+      undefined
+    )
     assert.strictEqual(handle(key({ key: "Escape", editable: true })), "close")
     assert.strictEqual(handle(key({ key: "ArrowDown", repeat: true })), "down")
-    assert.strictEqual(handle(key({ key: "k", meta: true, shift: true })), "cmd-shift-k")
+    assert.strictEqual(
+      handle(key({ key: "k", meta: true, shift: true })),
+      "cmd-shift-k"
+    )
     assert.strictEqual(handle(key({ key: "k", meta: true })), "cmd-k")
     assert.strictEqual(handle(key({ key: "o", ctrl: true })), "open")
     assert.strictEqual(handle(key({ key: "o", meta: true })), "open")
-    assert.strictEqual(handle(key({ key: "o", ctrl: true, meta: true })), undefined)
-    assert.strictEqual(handle(key({ key: "o", ctrl: true, alt: true })), undefined)
+    assert.strictEqual(
+      handle(key({ key: "o", ctrl: true, meta: true })),
+      undefined
+    )
+    assert.strictEqual(
+      handle(key({ key: "o", ctrl: true, alt: true })),
+      undefined
+    )
     assert.strictEqual(handle(key({ key: "o" })), undefined)
     assert.strictEqual(handle(key({ key: "x" })), undefined)
   })
@@ -63,7 +75,10 @@ describe("HtmlKeyboard.shortcuts", () => {
         update: ($, entry) => [...$.model, entry],
         view: (h, log) =>
           h.div(
-            h.button.onKeyDown(HtmlKeyboard.shortcuts([{ key: "j", message: "el:j" }]), { preventDefault: true })
+            h.button.onKeyDown(
+              HtmlKeyboard.shortcuts([{ key: "j", message: "el:j" }]),
+              { preventDefault: true }
+            )
               .children("Row"),
             h.output(log.join(","))
           ),
@@ -80,10 +95,13 @@ describe("HtmlKeyboard.shortcuts", () => {
       })
       const s = yield* HtmlScene.make(Panel, {})
       s.keydown(Locator.text("Row"), "j").expectDefaultPrevented()
-        .keydown(Locator.text("Row"), "x").expectIgnored().expectDefaultPrevented(false)
+        .keydown(Locator.text("Row"), "x").expectIgnored()
+        .expectDefaultPrevented(false)
         .fireDocument("keydown", { key: "?", editable: true }).expectIgnored()
-        .fireDocument("keydown", { key: "?", shift: true }).expectDefaultPrevented()
-        .fireDocument("keydown", { key: "Escape", editable: true }).expectDefaultPrevented()
+        .fireDocument("keydown", { key: "?", shift: true })
+        .expectDefaultPrevented()
+        .fireDocument("keydown", { key: "Escape", editable: true })
+        .expectDefaultPrevented()
         .expect(Locator.tag("output")).toHaveText("el:j,doc:help,doc:close")
     }))
 })

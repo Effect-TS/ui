@@ -1,4 +1,12 @@
-import { Command, Component, MessageLog, Query, Route, Router, UiSchema } from "@effect/ui"
+import {
+  Command,
+  Component,
+  MessageLog,
+  Query,
+  Route,
+  Router,
+  UiSchema
+} from "@effect/ui"
 import { Html, HtmlServer } from "@effect/ui/html"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -8,7 +16,10 @@ import { TestClock } from "effect/testing"
 import { defect } from "./utils/scoped.ts"
 
 const Message = Schema.Struct({ id: Schema.String, text: Schema.String })
-const Page = Schema.Struct({ messages: Schema.Array(Message), next: Schema.NullOr(Schema.Number) })
+const Page = Schema.Struct({
+  messages: Schema.Array(Message),
+  next: Schema.NullOr(Schema.Number)
+})
 
 /** A room of `db.length` pages, 10 ms each. Every page after the first repeats the first message. */
 const makeApp = () => {
@@ -32,14 +43,20 @@ const makeApp = () => {
         if (db.fail.has(index)) return yield* Effect.fail("nope")
         const messages = [{ id: "m" + index, text: room + index }]
         return {
-          messages: index === 0 ? messages : [{ id: "m0", text: "again" }, ...messages],
+          messages: index === 0
+            ? messages
+            : [{ id: "m0", text: "again" }, ...messages],
           next: index + 1 < db.length ? index + 1 : null
         }
       })
     )
   ) {}
 
-  const ChatMessage = UiSchema.TaggedEnum({ Changed: {}, More: {}, Refresh: {} })
+  const ChatMessage = UiSchema.TaggedEnum({
+    Changed: {},
+    More: {},
+    Refresh: {}
+  })
   const Chat = Component.define({
     name: "Chat",
     scoped: false,
@@ -50,7 +67,8 @@ const makeApp = () => {
     queries: {
       messages: {
         query: ListMessages,
-        args: ({ props }) => props.room === "" ? undefined : { room: props.room },
+        args: ({ props }) =>
+          props.room === "" ? undefined : { room: props.room },
         onChange: () => ChatMessage.Changed()
       }
     }
@@ -59,7 +77,8 @@ const makeApp = () => {
     update: ($, message) =>
       ChatMessage.match(message, {
         // On the server, a load more is dropped and reported.
-        Changed: () => $.props.room === "ssr" ? $.loadMore("messages") : $.model,
+        Changed: () =>
+          $.props.room === "ssr" ? $.loadMore("messages") : $.model,
         More: () => $.loadMore("messages"),
         Refresh: () => $.reset("messages")
       }),
@@ -70,21 +89,32 @@ const makeApp = () => {
             onInitial: () => "loading",
             onFailure: () => "failed",
             onSuccess: ({ value: { items, more, pages } }) =>
-              items.map((message) => message.text).join(",") + " /" + pages.length + " " + more._tag
+              items.map((message) => message.text).join(",") + " /" +
+              pages.length + " " + more._tag
           })
         ),
         // No text, so the view's text stays the list's.
-        h.el("button").attr("data-testid", "refresh").on("click", ChatMessage.Refresh())
+        h.el("button").attr("data-testid", "refresh").on(
+          "click",
+          ChatMessage.Refresh()
+        )
       )
   })
   return { db, ListMessages, ChatMessage, Chat, layer: ListMessages.layer }
 }
 
 const run = <A, E>(layer: Layer.Layer<any>, effect: Effect.Effect<A, E, any>) =>
-  effect.pipe(Effect.provide(layer), Effect.scoped, Effect.provide(TestHost.layer())) as Effect.Effect<A, E>
+  effect.pipe(
+    Effect.provide(layer),
+    Effect.scoped,
+    Effect.provide(TestHost.layer())
+  ) as Effect.Effect<A, E>
 
 /** Starts what is due and lets one page finish. */
-const page = TestHost.settle.pipe(Effect.andThen(TestClock.adjust("10 millis")), Effect.andThen(TestHost.settle))
+const page = TestHost.settle.pipe(
+  Effect.andThen(TestClock.adjust("10 millis")),
+  Effect.andThen(TestHost.settle)
+)
 
 describe("Infinite queries", () => {
   it.effect("h.queries opens a list as its items, pages and more; $.loadMore appends and $.reset drops pages", () => {
@@ -105,7 +135,10 @@ describe("Infinite queries", () => {
         root.send(app.ChatMessage.More())
         yield* page
         assert.strictEqual(root.text(), "r0,r1,r2 /3 End")
-        assert.deepStrictEqual(root.entry(app.ListMessages, { room: "r" })?.more, { _tag: "End" })
+        assert.deepStrictEqual(
+          root.entry(app.ListMessages, { room: "r" })?.more,
+          { _tag: "End" }
+        )
         root.send(app.ChatMessage.Refresh())
         yield* page
         assert.strictEqual(root.text(), "r0 /1 Available")
@@ -115,7 +148,9 @@ describe("Infinite queries", () => {
         )
         // Both are logged on the update entry.
         const lists = root.log().flatMap((entry) =>
-          entry._tag === "Update" ? (entry as MessageLog.Update).lists ?? [] : []
+          entry._tag === "Update"
+            ? (entry as MessageLog.Update).lists ?? []
+            : []
         )
         assert.deepStrictEqual(lists, [
           { name: "messages", op: "loadMore" },
@@ -162,7 +197,9 @@ describe("Infinite queries", () => {
         staleTime: "30 seconds"
       },
       Effect.succeed((_args, cursor) =>
-        Option.isSome(cursor) ? Effect.fail(42) : Effect.sleep("10 millis").pipe(Effect.as(["a"]))
+        Option.isSome(cursor)
+          ? Effect.fail(42)
+          : Effect.sleep("10 millis").pipe(Effect.as(["a"]))
       )
     ) {}
     const CodesMessage = UiSchema.TaggedEnum({ More: {}, Look: {} })
@@ -189,7 +226,9 @@ describe("Infinite queries", () => {
       view: (h, model) => h.p(model)
     })
     const warnings: Array<string> = []
-    const encoder = MessageLog.makeEncoder({ onWarning: (warning) => warnings.push(warning) })
+    const encoder = MessageLog.makeEncoder({
+      onWarning: (warning) => warnings.push(warning)
+    })
     return run(
       ListCodes.layer,
       Effect.gen(function*() {
@@ -203,19 +242,26 @@ describe("Infinite queries", () => {
 
         const wire = root.log().map(encoder.encode)
         assert.deepStrictEqual(warnings, [])
-        const changed = wire.filter((entry) => entry._tag === "QueryChanged") as ReadonlyArray<
+        const changed = wire.filter((entry) =>
+          entry._tag === "QueryChanged"
+        ) as ReadonlyArray<
           { readonly result: ReadonlyArray<unknown> }
         >
-        assert.deepStrictEqual(changed.at(-1)!.result.at(-1), [false, { Failed: "42" }])
+        assert.deepStrictEqual(changed.at(-1)!.result.at(-1), [false, {
+          Failed: "42"
+        }])
         const replay = Story.fromLog(Codes, wire)
         assert.isUndefined(replay.divergence)
         assert.strictEqual(replay.model, "failed 42")
         const codes = replay.queries().codes
         assert.isTrue(AsyncResult.isSuccess(codes))
-        assert.deepStrictEqual(AsyncResult.isSuccess(codes) ? codes.value.more : undefined, {
-          _tag: "Failed",
-          error: 42
-        })
+        assert.deepStrictEqual(
+          AsyncResult.isSuccess(codes) ? codes.value.more : undefined,
+          {
+            _tag: "Failed",
+            error: 42
+          }
+        )
       })
     )
   })
@@ -238,19 +284,29 @@ describe("Infinite queries", () => {
     const app = makeApp()
     const encoder = MessageLog.makeEncoder()
     const json = (log: boolean) =>
-      Schema.toCodecJson(Query.snapshotSchema(app.ListMessages, "messages", log)) as unknown as Schema.Codec<
+      Schema.toCodecJson(
+        Query.snapshotSchema(app.ListMessages, "messages", log)
+      ) as unknown as Schema.Codec<
         unknown,
         unknown
       >
     const state = json(false)
     const log = json(true)
     /** The last result written for "messages": as page state encodes it, as the Wire does, and each decoded back. */
-    const lastResult = (root: Pick<TestHost.TestRoot<any, any, any>, "log">) => {
-      const entry = [...root.log()].reverse().find((entry): entry is MessageLog.QueryChanged =>
+    const lastResult = (
+      root: Pick<TestHost.TestRoot<any, any, any>, "log">
+    ) => {
+      const entry = [...root.log()].reverse().find((
+        entry
+      ): entry is MessageLog.QueryChanged =>
         entry._tag === "QueryChanged" && entry.name === "messages"
       )!
-      const encoded = Schema.encodeUnknownSync(state)(entry.result) as ReadonlyArray<unknown>
-      const wire = (encoder.encode(entry) as { readonly result: ReadonlyArray<unknown> }).result
+      const encoded = Schema.encodeUnknownSync(state)(
+        entry.result
+      ) as ReadonlyArray<unknown>
+      const wire =
+        (encoder.encode(entry) as { readonly result: ReadonlyArray<unknown> })
+          .result
       return {
         result: entry.result,
         encoded,
@@ -267,22 +323,32 @@ describe("Infinite queries", () => {
         root.send(app.ChatMessage.More())
         yield* TestHost.settle
         const loading = lastResult(root)
-        assert.deepStrictEqual(Query.snapshotData(loading.result)?.more, { _tag: "Loading" })
+        assert.deepStrictEqual(Query.snapshotData(loading.result)?.more, {
+          _tag: "Loading"
+        })
         assert.strictEqual(loading.encoded.length, 6)
         assert.strictEqual(loading.encoded[5], true)
-        assert.deepStrictEqual(Query.snapshotData(loading.decoded)?.more, { _tag: "Available" })
+        assert.deepStrictEqual(Query.snapshotData(loading.decoded)?.more, {
+          _tag: "Available"
+        })
         // The log's form ends with [waiting, more], so a replayed update reads the load more as in flight.
         assert.strictEqual(loading.wire.length, 7)
         assert.deepStrictEqual(loading.wire[6], [false, "Loading"])
-        assert.deepStrictEqual(Query.snapshotData(loading.replayed)?.more, { _tag: "Loading" })
+        assert.deepStrictEqual(Query.snapshotData(loading.replayed)?.more, {
+          _tag: "Loading"
+        })
         yield* page
         root.send(app.ChatMessage.More())
         yield* page
         const ended = lastResult(root)
         assert.strictEqual(ended.encoded[5], false)
-        assert.deepStrictEqual(Query.snapshotData(ended.decoded)?.more, { _tag: "End" })
+        assert.deepStrictEqual(Query.snapshotData(ended.decoded)?.more, {
+          _tag: "End"
+        })
         assert.deepStrictEqual(ended.wire[6], [false, "End"])
-        assert.deepStrictEqual(Query.snapshotData(ended.replayed)?.more, { _tag: "End" })
+        assert.deepStrictEqual(Query.snapshotData(ended.replayed)?.more, {
+          _tag: "End"
+        })
       })
     )
   })
@@ -293,14 +359,23 @@ describe("Infinite queries", () => {
     return Effect.gen(function*() {
       const log = MessageLog.makeMemory({ size: 100 })
       const problems: Array<Query.Problem.Any> = []
-      const result = yield* HtmlServer.renderToHtml(app.Chat.pipe(Component.provide(app.layer)), { room: "ssr" }, {
-        budget: "1 hour"
-      }).pipe(
+      const result = yield* HtmlServer.renderToHtml(
+        app.Chat.pipe(Component.provide(app.layer)),
+        { room: "ssr" },
+        {
+          budget: "1 hour"
+        }
+      ).pipe(
         Effect.provideService(MessageLog.MessageLog, log),
-        Effect.provideService(Query.Problems, (problem) => problems.push(problem))
+        Effect.provideService(
+          Query.Problems,
+          (problem) => problems.push(problem)
+        )
       )
       assert.include(result.html, "ssr0 /1 Available")
-      assert.deepStrictEqual(problems.map((problem) => problem._tag), ["ServerCommandIssued"])
+      assert.deepStrictEqual(problems.map((problem) => problem._tag), [
+        "ServerCommandIssued"
+      ])
       assert.include(JSON.stringify(result.state["~query"]), "ssr0")
       assert.notInclude(JSON.stringify(result.state["~query"]), "ssr1")
     })
@@ -327,7 +402,10 @@ describe("Infinite queries", () => {
       assert.strictEqual(result._tag, "Failure")
       if (result._tag === "Failure") {
         assert.isTrue(result.waiting)
-        assert.deepStrictEqual(Cause.findErrorOption(result.cause), Option.some("nope"))
+        assert.deepStrictEqual(
+          Cause.findErrorOption(result.cause),
+          Option.some("nope")
+        )
         assert.deepStrictEqual(
           Option.map(result.previousSuccess, (success) => success.value.pages),
           Option.some([pageAt(0, 1)])
@@ -359,7 +437,10 @@ describe("Infinite queries", () => {
       const s = yield* Story.make(app.Chat, { room: "r" })
       s.given({}, { messages: [pageAt(0, 1), pageAt(1, null)] })
       const messages = s.queries.messages
-      assert.deepStrictEqual(AsyncResult.isSuccess(messages) ? messages.value.more : undefined, { _tag: "End" })
+      assert.deepStrictEqual(
+        AsyncResult.isSuccess(messages) ? messages.value.more : undefined,
+        { _tag: "End" }
+      )
     }))
 
   it.effect("Story: a load more is pending until a step settles it, and reset sends the first page", () =>
@@ -396,7 +477,9 @@ describe("Infinite queries", () => {
         .send(app.ChatMessage.Refresh())
       const messages = s.queries.messages
       assert.deepStrictEqual(
-        AsyncResult.isSuccess(messages) ? [messages.value.pages, messages.value.more] : undefined,
+        AsyncResult.isSuccess(messages)
+          ? [messages.value.pages, messages.value.more]
+          : undefined,
         [[pageAt(0, 1)], { _tag: "Available" }]
       )
       const message = yield* defect(Effect.gen(function*() {
@@ -406,7 +489,9 @@ describe("Infinite queries", () => {
       assert.match(message, /a load more of "messages" is pending/)
       assert.throws(
         () =>
-          Story.start(app.Chat, { room: "r" }).loaded("messages", [pageAt(0, 1)]).loadedMore(
+          Story.start(app.Chat, { room: "r" }).loaded("messages", [
+            pageAt(0, 1)
+          ]).loadedMore(
             "messages",
             pageAt(1, null)
           ),
@@ -416,8 +501,15 @@ describe("Infinite queries", () => {
 
   it.effect("a history restore seeds the held pages stale and walks them again", () => {
     const app = makeApp()
-    const ShellRoute = Route.union({ Home: Route.make("/"), Chat: Route.make("/chat") })
-    const ShellMessage = UiSchema.TaggedEnum({ ChangedRoute: { route: ShellRoute }, Go: {}, Navigated: {} })
+    const ShellRoute = Route.union({
+      Home: Route.make("/"),
+      Chat: Route.make("/chat")
+    })
+    const ShellMessage = UiSchema.TaggedEnum({
+      ChangedRoute: { route: ShellRoute },
+      Go: {},
+      Navigated: {}
+    })
     const Shell = Component.define({
       name: "Shell",
       scoped: false,
@@ -439,19 +531,35 @@ describe("Infinite queries", () => {
           Navigated: () => $.model
         }),
       subscriptions: ({ model }) => [
-        Router.subscription(ShellRoute, model, (route) => ShellMessage.ChangedRoute({ route }))
+        Router.subscription(
+          ShellRoute,
+          model,
+          (route) => ShellMessage.ChangedRoute({ route })
+        )
       ],
-      view: (h, model) => model._tag === "Chat" ? app.Chat(h, { key: "chat", props: { room: "r" } }) : h.el("p", "home")
+      view: (h, model) =>
+        model._tag === "Chat"
+          ? app.Chat(h, { key: "chat", props: { room: "r" } })
+          : h.el("p", "home")
     })
     const history = Router.memoryHistory("/chat")
     const hosted = (effect: Effect.Effect<void, unknown, any>) =>
-      run(Layer.merge(Router.make({ routes: ShellRoute, history }), app.layer), effect)
-    const mount = Effect.flatMap(Router.currentRoute(ShellRoute), (route) => TestHost.mount(Shell, { route }))
+      run(
+        Layer.merge(Router.make({ routes: ShellRoute, history }), app.layer),
+        effect
+      )
+    const mount = Effect.flatMap(
+      Router.currentRoute(ShellRoute),
+      (route) => TestHost.mount(Shell, { route })
+    )
     return Effect.gen(function*() {
       yield* hosted(Effect.gen(function*() {
         const root = yield* mount
         yield* page
-        Locator.fire(root.get(Locator.text("r0 /1 Available", { exact: true })), "click")
+        Locator.fire(
+          root.get(Locator.text("r0 /1 Available", { exact: true })),
+          "click"
+        )
         yield* page
         assert.strictEqual(root.text(), "r0,r1 /2 Available")
         root.send(ShellMessage.Go())
@@ -468,7 +576,10 @@ describe("Infinite queries", () => {
         yield* page
         yield* page
         assert.strictEqual(root.text(), "r0,r1 /2 Available")
-        assert.deepStrictEqual(root.fetches().map((fetch) => fetch.trigger + "@" + fetch.page), ["watch@0", "watch@1"])
+        assert.deepStrictEqual(
+          root.fetches().map((fetch) => fetch.trigger + "@" + fetch.page),
+          ["watch@0", "watch@1"]
+        )
       }))
     })
   })

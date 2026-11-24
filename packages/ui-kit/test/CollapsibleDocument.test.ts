@@ -35,14 +35,22 @@ const Page = Component.define({
   message: PageMessage,
   elements: Html
 }).make({
-  init: ($) => ({ config: $.props, open: $.props.initialOpen, holdExit: $.props.holdExit, log: [] }),
+  init: ($) => ({
+    config: $.props,
+    open: $.props.initialOpen,
+    holdExit: $.props.holdExit,
+    log: []
+  }),
   update: {
     Toggled: ($, { open, reason }) => ({
       ...$.model,
       open: $.model.config.refuse ? $.model.open : open,
       log: [...$.model.log, `Toggled ${open} ${reason}`]
     }),
-    Settled: ($, { open }) => ({ ...$.model, log: [...$.model.log, `Settled ${open}`] }),
+    Settled: ($, { open }) => ({
+      ...$.model,
+      log: [...$.model.log, `Settled ${open}`]
+    }),
     ReleaseHold: ($) => ({ ...$.model, holdExit: false })
   },
   view: (h, model) =>
@@ -59,9 +67,14 @@ const Page = Component.define({
       },
       view: (collapsible) =>
         collapsible.root(h.div.attr("id", "root")).children(
-          collapsible.trigger(h.button.attr("id", "trigger")).children("Details"),
-          h.button.attr("id", "release").onClick(PageMessage.ReleaseHold()).children("Release"),
-          collapsible.panel(h.div.attr("id", "panel").attr("style", model.config.style))?.children(
+          collapsible.trigger(h.button.attr("id", "trigger")).children(
+            "Details"
+          ),
+          h.button.attr("id", "release").onClick(PageMessage.ReleaseHold())
+            .children("Release"),
+          collapsible.panel(
+            h.div.attr("id", "panel").attr("style", model.config.style)
+          )?.children(
             "Content",
             h.div.attr("id", "child")
           )
@@ -76,13 +89,21 @@ const layout = Effect.acquireRelease(
       function(this: HTMLElement) {
         return this.id === "panel" ? value : 0
       }
-    Object.defineProperty(proto, "scrollHeight", { configurable: true, get: sized(120) })
-    Object.defineProperty(proto, "scrollWidth", { configurable: true, get: sized(200) })
+    Object.defineProperty(proto, "scrollHeight", {
+      configurable: true,
+      get: sized(120)
+    })
+    Object.defineProperty(proto, "scrollWidth", {
+      configurable: true,
+      get: sized(200)
+    })
   }),
   () =>
     Effect.sync(() => {
-      delete (window.HTMLElement.prototype as { scrollHeight?: number }).scrollHeight
-      delete (window.HTMLElement.prototype as { scrollWidth?: number }).scrollWidth
+      delete (window.HTMLElement.prototype as { scrollHeight?: number })
+        .scrollHeight
+      delete (window.HTMLElement.prototype as { scrollWidth?: number })
+        .scrollWidth
     })
 )
 
@@ -109,7 +130,8 @@ const animations = Effect.acquireRelease(
       }
     }
   }),
-  ({ original }) => Effect.sync(() => (Element.prototype.getAnimations = original))
+  ({ original }) =>
+    Effect.sync(() => (Element.prototype.getAnimations = original))
 )
 
 const frames = Effect.acquireRelease(
@@ -143,25 +165,40 @@ const record = (target: () => Element | null) => {
         panel.hasAttribute("data-starting-style") ? "starting" : "",
         panel.hasAttribute("data-ending-style") ? "ending" : "",
         panel.hasAttribute("hidden") ? "hidden" : "",
-        /--collapsible-panel-height:\s*(\d+px|auto)/.exec(panel.getAttribute("style") ?? "")?.[1] ?? ""
+        /--collapsible-panel-height:\s*(\d+px|auto)/.exec(
+          panel.getAttribute("style") ?? ""
+        )?.[1] ?? ""
       ].filter((part) => part !== "").join(" ")
     if (seen.at(-1) !== line) seen.push(line)
   })
-  observer.observe(document.body, { subtree: true, childList: true, attributes: true })
+  observer.observe(document.body, {
+    subtree: true,
+    childList: true,
+    attributes: true
+  })
   return { seen, stop: () => observer.disconnect() }
 }
 
-const mountPage = Effect.fnUntraced(function*(overrides: Partial<PageProps> = {}) {
-  yield* layout
-  const app = yield* container
-  const root = yield* BrowserHost.mountEffect(
-    Page,
-    { initialOpen: false, hiddenUntilFound: false, refuse: false, disabled: false, holdExit: false, ...overrides },
-    app
-  )
-  yield* tick
-  return { log: () => root.model()!.log }
-})
+const mountPage = Effect.fnUntraced(
+  function*(overrides: Partial<PageProps> = {}) {
+    yield* layout
+    const app = yield* container
+    const root = yield* BrowserHost.mountEffect(
+      Page,
+      {
+        initialOpen: false,
+        hiddenUntilFound: false,
+        refuse: false,
+        disabled: false,
+        holdExit: false,
+        ...overrides
+      },
+      app
+    )
+    yield* tick
+    return { log: () => root.model()!.log }
+  }
+)
 
 describe("Collapsible in a document", { concurrent: false }, () => {
   it.effect("opens and closes with measured sizes, respects holdExit, and starts settled when open on load", () =>
@@ -174,11 +211,17 @@ describe("Collapsible in a document", { concurrent: false }, () => {
       yield* tick
       yield* tick
       assert.deepStrictEqual(seen, ["starting auto", "starting 120px", "120px"])
-      assert.include(byId("panel").getAttribute("style") ?? "", "--collapsible-panel-width:200px")
+      assert.include(
+        byId("panel").getAttribute("style") ?? "",
+        "--collapsible-panel-width:200px"
+      )
       finish()
       yield* tick
       assert.strictEqual(seen.at(-1), "auto")
-      assert.deepStrictEqual(log(), ["Toggled true trigger-press", "Settled true"])
+      assert.deepStrictEqual(log(), [
+        "Toggled true trigger-press",
+        "Settled true"
+      ])
 
       seen.length = 0
       byId("trigger").click()
@@ -191,7 +234,11 @@ describe("Collapsible in a document", { concurrent: false }, () => {
       finish()
       yield* tick
       assert.isNotNull(document.getElementById("panel"))
-      assert.deepStrictEqual(log(), ["Toggled true trigger-press", "Settled true", "Toggled false trigger-press"])
+      assert.deepStrictEqual(log(), [
+        "Toggled true trigger-press",
+        "Settled true",
+        "Toggled false trigger-press"
+      ])
 
       byId("release").click()
       yield* tick
@@ -199,14 +246,23 @@ describe("Collapsible in a document", { concurrent: false }, () => {
       yield* tick
       stop()
       assert.strictEqual(seen.at(-1), "gone")
-      assert.deepStrictEqual(log().slice(2), ["Toggled false trigger-press", "Settled false"])
+      assert.deepStrictEqual(log().slice(2), [
+        "Toggled false trigger-press",
+        "Settled false"
+      ])
 
       yield* Effect.scoped(Effect.gen(function*() {
-        const opened = yield* mountPage({ initialOpen: true, style: "animation-name:slide-in" })
+        const opened = yield* mountPage({
+          initialOpen: true,
+          style: "animation-name:slide-in"
+        })
         const panel = byId("panel")
         assert.isFalse(panel.hasAttribute("data-starting-style"))
         assert.strictEqual(panel.style.animationName, "none")
-        assert.include(panel.getAttribute("style") ?? "", "--collapsible-panel-height:auto")
+        assert.include(
+          panel.getAttribute("style") ?? "",
+          "--collapsible-panel-height:auto"
+        )
         assert.deepStrictEqual(opened.log(), [])
       }))
     }))
@@ -234,8 +290,14 @@ describe("Collapsible in a document", { concurrent: false }, () => {
       yield* tick
       yield* next
       assert.isFalse(panel().hasAttribute("data-ending-style"))
-      assert.strictEqual(panel().style.getPropertyValue("justify-content"), "flex-end")
-      assert.strictEqual(panel().style.getPropertyPriority("justify-content"), "important")
+      assert.strictEqual(
+        panel().style.getPropertyValue("justify-content"),
+        "flex-end"
+      )
+      assert.strictEqual(
+        panel().style.getPropertyPriority("justify-content"),
+        "important"
+      )
 
       yield* next
       assert.isTrue(panel().hasAttribute("data-ending-style"))
@@ -257,7 +319,10 @@ describe("Collapsible in a document", { concurrent: false }, () => {
         byId("child").dispatchEvent(new Event("beforematch", { bubbles: true }))
         yield* tick
         yield* tick
-        assert.deepStrictEqual(log(), ["Toggled true trigger-press", "Toggled false trigger-press"])
+        assert.deepStrictEqual(log(), [
+          "Toggled true trigger-press",
+          "Toggled false trigger-press"
+        ])
         assert.isTrue(panel.hasAttribute("data-ending-style"))
       }))
 
@@ -285,7 +350,10 @@ describe("Collapsible in a document", { concurrent: false }, () => {
 
       finish()
       yield* tick
-      assert.deepStrictEqual(log(), ["Toggled true find-in-page", "Settled true"])
+      assert.deepStrictEqual(log(), [
+        "Toggled true find-in-page",
+        "Settled true"
+      ])
       assert.isFalse(panel.hasAttribute("hidden"))
       assert.isFalse(panel.hasAttribute("data-starting-style"))
       assert.strictEqual(panel.style.transitionDuration, "150ms")
@@ -295,20 +363,29 @@ describe("Collapsible in a document", { concurrent: false }, () => {
   it.effect("refused, overlapping, and disabled reveals restore hidden until found and starting style", () =>
     Effect.gen(function*() {
       yield* Effect.scoped(Effect.gen(function*() {
-        const { log } = yield* mountPage({ hiddenUntilFound: true, refuse: true })
+        const { log } = yield* mountPage({
+          hiddenUntilFound: true,
+          refuse: true
+        })
         const panel = byId("panel")
         panel.dispatchEvent(new Event("beforematch", { bubbles: true }))
         panel.dispatchEvent(new Event("beforematch", { bubbles: true }))
         panel.removeAttribute("hidden")
         yield* tick
         yield* tick
-        assert.deepStrictEqual(log(), ["Toggled true find-in-page", "Toggled true find-in-page"])
+        assert.deepStrictEqual(log(), [
+          "Toggled true find-in-page",
+          "Toggled true find-in-page"
+        ])
         assert.strictEqual(panel.getAttribute("hidden"), "until-found")
         assert.isTrue(panel.hasAttribute("data-starting-style"))
         assert.notInclude(panel.getAttribute("style") ?? "", "duration")
       }))
 
-      const { log } = yield* mountPage({ hiddenUntilFound: true, disabled: true })
+      const { log } = yield* mountPage({
+        hiddenUntilFound: true,
+        disabled: true
+      })
       const panel = byId("panel")
       panel.dispatchEvent(new Event("beforematch", { bubbles: true }))
       panel.removeAttribute("hidden")

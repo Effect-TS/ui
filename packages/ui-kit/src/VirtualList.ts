@@ -226,7 +226,12 @@ export type VirtualListScrollTarget = typeof VirtualListScrollTarget.Type
  * @category models
  * @since 0.1.0
  */
-export const VirtualListAlign = Schema.Literals(["start", "center", "end", "nearest"])
+export const VirtualListAlign = Schema.Literals([
+  "start",
+  "center",
+  "end",
+  "nearest"
+])
 
 /**
  * Where an item `scrollTo` goes to ends up in the viewport.
@@ -331,7 +336,10 @@ export const VirtualListProps = Schema.Struct({
    * is within `threshold` pixels of it, 1 when omitted.
    */
   followEnd: Schema.optional(
-    Schema.Union([Schema.Boolean, Schema.Struct({ threshold: Schema.optional(Schema.Number) })])
+    Schema.Union([
+      Schema.Boolean,
+      Schema.Struct({ threshold: Schema.optional(Schema.Number) })
+    ])
   ),
   /** Where a list shorter than its viewport sits. `"start"` when omitted. */
   contentAlignment: Schema.optional(Schema.Literals(["start", "end"])),
@@ -387,11 +395,19 @@ const Visible = Schema.Struct({
   atEnd: Schema.Boolean
 })
 
-const Tracked = Schema.Struct({ offset: Schema.Number, height: Schema.Number, length: Schema.Number })
+const Tracked = Schema.Struct({
+  offset: Schema.Number,
+  height: Schema.Number,
+  length: Schema.Number
+})
 
 type Tracked = typeof Tracked.Type
 
-const Announced = Schema.Struct({ ...Visible.fields, ...Tracked.fields, scrolling: Schema.Boolean })
+const Announced = Schema.Struct({
+  ...Visible.fields,
+  ...Tracked.fields,
+  scrolling: Schema.Boolean
+})
 
 type Announced = typeof Announced.Type
 
@@ -419,7 +435,9 @@ type Announced = typeof Announced.Type
  * @category models
  * @since 0.1.0
  */
-export const VirtualListEvents = UiSchema.TaggedEnum({ Scrolled: Announced.fields })
+export const VirtualListEvents = UiSchema.TaggedEnum({
+  Scrolled: Announced.fields
+})
 
 /**
  * The events of a {@link VirtualList}.
@@ -430,7 +448,10 @@ export const VirtualListEvents = UiSchema.TaggedEnum({ Scrolled: Announced.field
  */
 export type VirtualListEvents = typeof VirtualListEvents.Type
 
-const ItemRef = Schema.Struct({ index: Schema.Number, key: Schema.NullOr(Schema.String) })
+const ItemRef = Schema.Struct({
+  index: Schema.Number,
+  key: Schema.NullOr(Schema.String)
+})
 
 const Position = Schema.Struct({ ...ItemRef.fields, offset: Schema.Number })
 
@@ -448,7 +469,9 @@ const VirtualListModel = Schema.Struct({
   dataset: Schema.NullOr(Schema.String),
   epoch: Schema.Number,
   focused: Schema.NullOr(ItemRef),
-  scroll: Schema.NullOr(Schema.Struct({ scrollTo: VirtualListScrollTo, done: Schema.Boolean })),
+  scroll: Schema.NullOr(
+    Schema.Struct({ scrollTo: VirtualListScrollTo, done: Schema.Boolean })
+  ),
   offset: Schema.Number,
   length: Schema.Number,
   scrolling: Schema.Boolean,
@@ -479,7 +502,11 @@ const VirtualListMessage = UiSchema.TaggedEnum({
   },
   RequestedScroll: { scrollTo: VirtualListScrollTo },
   ScrolledByUser: {},
-  MeasuredItems: { epoch: Schema.Number, width: Schema.Number, items: Schema.Array(MeasuredItem) },
+  MeasuredItems: {
+    epoch: Schema.Number,
+    width: Schema.Number,
+    items: Schema.Array(MeasuredItem)
+  },
   FocusedItem: ItemRef.fields,
   BlurredItems: {},
   ScrolledViewport: { ...Tracked.fields, scrolling: Schema.Boolean }
@@ -494,14 +521,19 @@ const sameVisible = Schema.toEquivalence(Visible)
 const same = (a: number, b: number): boolean => Math.abs(a - b) < 0.5
 
 const sameTracked = (a: Tracked, b: Tracked): boolean =>
-  same(a.offset, b.offset) && same(a.height, b.height) && same(a.length, b.length)
+  same(a.offset, b.offset) && same(a.height, b.height) &&
+  same(a.length, b.length)
 
 const countOf = (props: VirtualListProps): number =>
-  props.keys === undefined ? Math.max(0, Math.floor(props.count ?? 0)) : props.keys.length
+  props.keys === undefined
+    ? Math.max(0, Math.floor(props.count ?? 0))
+    : props.keys.length
 
-const keyOf = (props: VirtualListProps, index: number): string | null => props.keys?.[index] ?? null
+const keyOf = (props: VirtualListProps, index: number): string | null =>
+  props.keys?.[index] ?? null
 
-const sizeKey = (props: VirtualListProps, index: number): string => keyOf(props, index) ?? String(index)
+const sizeKey = (props: VirtualListProps, index: number): string =>
+  keyOf(props, index) ?? String(index)
 
 const endThreshold = (props: VirtualListProps): number | null =>
   props.followEnd === undefined || props.followEnd === false
@@ -510,14 +542,26 @@ const endThreshold = (props: VirtualListProps): number | null =>
     ? defaultEndThreshold
     : props.followEnd.threshold ?? defaultEndThreshold
 
-const current = (model: VirtualListModel, props: VirtualListProps): VirtualListModel => {
+const current = (
+  model: VirtualListModel,
+  props: VirtualListProps
+): VirtualListModel => {
   const dataset = props.dataset ?? null
   return dataset === model.dataset
     ? model
-    : UiStruct.evolve(model, { dataset, sizes: {}, focused: null, epoch: (epoch) => epoch + 1 })
+    : UiStruct.evolve(model, {
+      dataset,
+      sizes: {},
+      focused: null,
+      epoch: (epoch) => epoch + 1
+    })
 }
 
-const resolve = (props: VirtualListProps, ref: typeof ItemRef.Type, fallback: boolean): number | null => {
+const resolve = (
+  props: VirtualListProps,
+  ref: typeof ItemRef.Type,
+  fallback: boolean
+): number | null => {
   const count = countOf(props)
   if (ref.key !== null) {
     const at = props.keys?.indexOf(ref.key) ?? -1
@@ -544,18 +588,33 @@ const layoutOf = (model: VirtualListModel, props: VirtualListProps): Layout => {
   const rows = Math.ceil(count / lanes)
   const measured = props.measure !== false
   const known = measured ? Object.values(model.sizes) : []
-  const estimate = known.length === 0 ? props.itemSize : known.reduce((sum, size) => sum + size, 0) / known.length
+  const estimate = known.length === 0
+    ? props.itemSize
+    : known.reduce((sum, size) => sum + size, 0) / known.length
   const offsets = [0]
   for (let row = 0; row < rows; row++) {
     let size = 0
-    for (let index = row * lanes; index < Math.min(count, (row + 1) * lanes); index++) {
+    for (
+      let index = row * lanes;
+      index < Math.min(count, (row + 1) * lanes);
+      index++
+    ) {
       const given = props.sizes?.[index]
-      const item = measured ? model.sizes[sizeKey(props, index)] ?? given ?? estimate : given ?? props.itemSize
+      const item = measured
+        ? model.sizes[sizeKey(props, index)] ?? given ?? estimate
+        : given ?? props.itemSize
       size = Math.max(size, item)
     }
     offsets.push(offsets[row]! + size + gap)
   }
-  return { count, lanes, gap, rows, offsets, total: rows === 0 ? 0 : offsets[rows]! - gap }
+  return {
+    count,
+    lanes,
+    gap,
+    rows,
+    offsets,
+    total: rows === 0 ? 0 : offsets[rows]! - gap
+  }
 }
 
 const rowAt = (layout: Layout, y: number): number => {
@@ -569,14 +628,19 @@ const rowAt = (layout: Layout, y: number): number => {
   return low
 }
 
-const rowOf = (layout: Layout, index: number): number => Math.floor(index / layout.lanes)
+const rowOf = (layout: Layout, index: number): number =>
+  Math.floor(index / layout.lanes)
 
 interface Band {
   readonly start: number
   readonly end: number
 }
 
-const restingBand = (model: VirtualListModel, props: VirtualListProps, layout: Layout): Band | null => {
+const restingBand = (
+  model: VirtualListModel,
+  props: VirtualListProps,
+  layout: Layout
+): Band | null => {
   if (model.position === null || layout.rows === 0) return null
   if (endThreshold(props) !== null && model.atEnd) {
     return { start: layout.total - model.height, end: layout.total }
@@ -594,23 +658,39 @@ const ScrollRequest = Schema.Struct({
 
 type Pending = typeof ScrollRequest.Type
 
-const sameRequest = (a: VirtualListScrollTo | undefined, b: VirtualListScrollTo | null): boolean =>
-  a !== undefined && b !== null && sameScrollTo(a, b)
+const sameRequest = (
+  a: VirtualListScrollTo | undefined,
+  b: VirtualListScrollTo | null
+): boolean => a !== undefined && b !== null && sameScrollTo(a, b)
 
-const latestOf = (model: VirtualListModel): VirtualListScrollTo | null => model.scroll?.scrollTo ?? null
+const latestOf = (model: VirtualListModel): VirtualListScrollTo | null =>
+  model.scroll?.scrollTo ?? null
 
 const waitingOf = (model: VirtualListModel): VirtualListScrollTo | null =>
   model.scroll === null || model.scroll.done ? null : model.scroll.scrollTo
 
-const freshOf = (model: VirtualListModel, props: VirtualListProps): VirtualListScrollTo | null =>
-  props.scrollTo === undefined || sameRequest(props.scrollTo, latestOf(model)) ? null : props.scrollTo
+const freshOf = (
+  model: VirtualListModel,
+  props: VirtualListProps
+): VirtualListScrollTo | null =>
+  props.scrollTo === undefined || sameRequest(props.scrollTo, latestOf(model))
+    ? null
+    : props.scrollTo
 
-const pendingOf = (scrollTo: VirtualListScrollTo | null, props: VirtualListProps, layout: Layout): Pending | null => {
+const pendingOf = (
+  scrollTo: VirtualListScrollTo | null,
+  props: VirtualListProps,
+  layout: Layout
+): Pending | null => {
   if (scrollTo === null || layout.count === 0) return null
   const target = scrollTo.target
   switch (target._tag) {
     case "Index":
-      return { scrollTo, index: clamp(Math.floor(target.index), 0, layout.count - 1), offset: null }
+      return {
+        scrollTo,
+        index: clamp(Math.floor(target.index), 0, layout.count - 1),
+        offset: null
+      }
     case "Key": {
       const index = resolve(props, { index: -1, key: target.key }, false)
       return index === null ? null : { scrollTo, index, offset: null }
@@ -622,7 +702,13 @@ const pendingOf = (scrollTo: VirtualListScrollTo | null, props: VirtualListProps
   }
 }
 
-const alignedStart = (top: number, bottom: number, view: number, height: number, align: VirtualListAlign): number =>
+const alignedStart = (
+  top: number,
+  bottom: number,
+  view: number,
+  height: number,
+  align: VirtualListAlign
+): number =>
   align === "start"
     ? top
     : align === "end"
@@ -635,14 +721,25 @@ const alignedStart = (top: number, bottom: number, view: number, height: number,
     ? Math.min(bottom - height, top)
     : view
 
-const pendingBand = (model: VirtualListModel, layout: Layout, pending: Pending, resting: Band | null): Band => {
+const pendingBand = (
+  model: VirtualListModel,
+  layout: Layout,
+  pending: Pending,
+  resting: Band | null
+): Band => {
   const height = model.height
   let start: number
   if (pending.index !== null) {
     const row = rowOf(layout, pending.index)
     const top = layout.offsets[row]!
     const bottom = layout.offsets[row + 1]! - layout.gap
-    start = alignedStart(top, bottom, resting?.start ?? 0, height, pending.scrollTo.align ?? "start")
+    start = alignedStart(
+      top,
+      bottom,
+      resting?.start ?? 0,
+      height,
+      pending.scrollTo.align ?? "start"
+    )
   } else {
     start = pending.offset ?? layout.total - height
   }
@@ -657,16 +754,28 @@ interface Rendering {
   readonly visible: readonly [number, number] | null
 }
 
-const visibleRows = (layout: Layout, band: Band | null): readonly [number, number] | null =>
+const visibleRows = (
+  layout: Layout,
+  band: Band | null
+): readonly [number, number] | null =>
   band === null || layout.rows === 0
     ? null
-    : [rowAt(layout, band.start), rowAt(layout, Math.max(band.start, band.end - 1))]
+    : [
+      rowAt(layout, band.start),
+      rowAt(layout, Math.max(band.start, band.end - 1))
+    ]
 
-const visibleItems = (layout: Layout, band: Band | null): readonly [number, number] | null => {
+const visibleItems = (
+  layout: Layout,
+  band: Band | null
+): readonly [number, number] | null => {
   const rows = visibleRows(layout, band)
   return rows === null
     ? null
-    : [rows[0] * layout.lanes, Math.min(layout.count, (rows[1] + 1) * layout.lanes) - 1]
+    : [
+      rows[0] * layout.lanes,
+      Math.min(layout.count, (rows[1] + 1) * layout.lanes) - 1
+    ]
 }
 
 const windowOf = (
@@ -684,32 +793,53 @@ const windowOf = (
   })
   let startRow = 0
   let endRow = ahead === null
-    ? props.initialCount === undefined ? overscan + 1 : Math.ceil(props.initialCount / layout.lanes)
+    ? props.initialCount === undefined
+      ? overscan + 1
+      : Math.ceil(props.initialCount / layout.lanes)
     : ahead[1] + overscan + 1
   if (ahead !== null) startRow = Math.max(0, ahead[0] - overscan)
   endRow = Math.min(layout.rows, endRow)
   startRow = Math.min(startRow, endRow)
 
   const rows: Array<[number, number]> = [[startRow, endRow]]
-  const focused = model.focused === null ? null : resolve(props, model.focused, false)
+  const focused = model.focused === null
+    ? null
+    : resolve(props, model.focused, false)
   if (focused !== null) {
     const row = rowOf(layout, focused)
-    const kept: [number, number] = [Math.max(0, row - 1), Math.min(layout.rows, row + 2)]
+    const kept: [number, number] = [
+      Math.max(0, row - 1),
+      Math.min(layout.rows, row + 2)
+    ]
     if (kept[1] < startRow) rows.unshift(kept)
     else if (kept[0] > endRow) rows.push(kept)
     else rows[0] = [Math.min(startRow, kept[0]), Math.max(endRow, kept[1])]
   }
   const last = rows[rows.length - 1]![1]
   return {
-    ranges: rows.map(([start, end]) => [start * layout.lanes, Math.min(layout.count, end * layout.lanes)] as const),
+    ranges: rows.map(([start, end]) =>
+      [
+        start * layout.lanes,
+        Math.min(layout.count, end * layout.lanes)
+      ] as const
+    ),
     before: layout.offsets[rows[0]![0]]!,
-    after: last >= layout.rows ? 0 : layout.offsets[layout.rows]! - layout.offsets[last]!,
-    between: rows.length === 1 ? 0 : layout.offsets[rows[1]![0]]! - layout.offsets[rows[0]![1]]!,
+    after: last >= layout.rows
+      ? 0
+      : layout.offsets[layout.rows]! - layout.offsets[last]!,
+    between: rows.length === 1
+      ? 0
+      : layout.offsets[rows[1]![0]]! - layout.offsets[rows[0]![1]]!,
     visible: visible === null ? null : [visible[0], visible[1]]
   }
 }
 
-const Bounds = Schema.NullOr(Schema.Struct({ start: Schema.NullOr(Schema.Number), end: Schema.NullOr(Schema.Number) }))
+const Bounds = Schema.NullOr(
+  Schema.Struct({
+    start: Schema.NullOr(Schema.Number),
+    end: Schema.NullOr(Schema.Number)
+  })
+)
 
 type Bounds = typeof Bounds.Type
 
@@ -735,18 +865,26 @@ const measured = (
   const count = countOf(props)
   const flow = props.layout !== "absolute"
   const found = lanesOf(items)
-  const lanesChanged = flow && items.length > 0 && found !== lanes && (found < items.length || found > lanes)
+  const lanesChanged = flow && items.length > 0 && found !== lanes &&
+    (found < items.length || found > lanes)
   if (lanesChanged) {
     lanes = found
     reset = changed = true
   }
   const fresh = props.measure === false ? [] : items.filter((item) => {
-    const known = reset ? undefined : model.sizes[item.key ?? String(item.index)]
+    const known = reset
+      ? undefined
+      : model.sizes[item.key ?? String(item.index)]
     return known === undefined || !same(known, item.size)
   })
   let sizes: VirtualListModel["sizes"] = reset ? {} : model.sizes
   if (fresh.length > 0) {
-    sizes = { ...sizes, ...Object.fromEntries(fresh.map((item) => [item.key ?? String(item.index), item.size])) }
+    sizes = {
+      ...sizes,
+      ...Object.fromEntries(
+        fresh.map((item) => [item.key ?? String(item.index), item.size])
+      )
+    }
     changed = true
   }
   if (flow && !lanesChanged) {
@@ -754,8 +892,9 @@ const measured = (
     for (const item of items) {
       const index = Math.floor(item.index / lanes)
       const row = rows.get(index)
-      if (row === undefined) rows.set(index, { top: item.top, bottom: item.top + item.size })
-      else {
+      if (row === undefined) {
+        rows.set(index, { top: item.top, bottom: item.top + item.size })
+      } else {
         row.top = Math.min(row.top, item.top)
         row.bottom = Math.max(row.bottom, item.top + item.size)
       }
@@ -774,9 +913,17 @@ const measured = (
   if (!changed) return model
   if (props.keys !== undefined && Object.keys(sizes).length > 2 * count + 64) {
     const live = new Set(props.keys)
-    sizes = Object.fromEntries(Object.entries(sizes).filter(([key]) => live.has(key)))
+    sizes = Object.fromEntries(
+      Object.entries(sizes).filter(([key]) => live.has(key))
+    )
   }
-  return UiStruct.evolve(model, { gap, lanes, width, sizes, epoch: reset ? model.epoch + 1 : model.epoch })
+  return UiStruct.evolve(model, {
+    gap,
+    lanes,
+    width,
+    sizes,
+    epoch: reset ? model.epoch + 1 : model.epoch
+  })
 }
 
 const TrackVirtualListArgs = {
@@ -798,7 +945,8 @@ const TrackVirtualListArgs = {
 type TrackVirtualListArgs = Schema.Struct<typeof TrackVirtualListArgs>["Type"]
 
 const within = (bounds: Bounds, y: number): boolean =>
-  bounds !== null && (bounds.start === null || y >= bounds.start - 0.5) && (bounds.end === null || y < bounds.end + 0.5)
+  bounds !== null && (bounds.start === null || y >= bounds.start - 0.5) &&
+  (bounds.end === null || y < bounds.end + 0.5)
 
 const TrackVirtualList = Mount.makeStream(
   "TrackVirtualList",
@@ -807,14 +955,19 @@ const TrackVirtualList = Mount.makeStream(
     Stream.callback<VirtualListMessage>((queue) =>
       Effect.gen(function*() {
         let args: TrackVirtualListArgs = initial
-        const send = (message: VirtualListMessage) => Queue.offerUnsafe(queue, message)
+        const send = (message: VirtualListMessage) =>
+          Queue.offerUnsafe(queue, message)
         const document = list.ownerDocument
         const window = document.defaultView!
 
         let viewport: HTMLElement | null = null
         let listening: AbortController | undefined
         let disposed = false
-        let anchor: { readonly id: string; readonly top: number; readonly placed: number } | null = null
+        let anchor: {
+          readonly id: string
+          readonly top: number
+          readonly placed: number
+        } | null = null
         let atEnd = false
         let reported: {
           readonly start: number
@@ -834,28 +987,44 @@ const TrackVirtualList = Mount.makeStream(
         const observed = new Set<Element>()
         const watched = new Set<Element>()
 
-        const itemsOf = () => Array.from(list.querySelectorAll<HTMLElement>(attrSelector(itemAttr, args.id)))
-        const identity = (item: Element) => item.getAttribute("data-key") ?? "#" + item.getAttribute("data-index")
+        const itemsOf = () =>
+          Array.from(
+            list.querySelectorAll<HTMLElement>(attrSelector(itemAttr, args.id))
+          )
+        const identity = (item: Element) =>
+          item.getAttribute("data-key") ?? "#" + item.getAttribute("data-index")
         const refOf = (item: Element) => ({
           index: Number(item.getAttribute("data-index")),
           key: item.getAttribute("data-key")
         })
 
         const listTop = () =>
-          list.getBoundingClientRect().top + list.clientTop - (list === viewport ? list.scrollTop : 0)
+          list.getBoundingClientRect().top + list.clientTop -
+          (list === viewport ? list.scrollTop : 0)
         const placedAt = (item: HTMLElement) => {
           const rect = item.getBoundingClientRect()
-          const shift = args.absolute ? /translateY\((-?[\d.]+)px\)/.exec(item.style.transform) : null
+          const shift = args.absolute
+            ? /translateY\((-?[\d.]+)px\)/.exec(item.style.transform)
+            : null
           if (shift === null) return rect
           const top = listTop() + Number(shift[1])
-          return { top, bottom: top + rect.height, left: rect.left, height: rect.height }
+          return {
+            top,
+            bottom: top + rect.height,
+            left: rect.left,
+            height: rect.height
+          }
         }
 
         const box = () => {
           if (viewport === null) return { top: 0, height: window.innerHeight }
-          return { top: viewport.getBoundingClientRect().top + viewport.clientTop, height: viewport.clientHeight }
+          return {
+            top: viewport.getBoundingClientRect().top + viewport.clientTop,
+            height: viewport.clientHeight
+          }
         }
-        const scrollTop = () => viewport === null ? window.scrollY : viewport.scrollTop
+        const scrollTop = () =>
+          viewport === null ? window.scrollY : viewport.scrollTop
         const origin = () => listTop() + args.inset
         const scrollBy = (delta: number) => {
           if (Math.abs(delta) < 0.5) return
@@ -864,16 +1033,22 @@ const TrackVirtualList = Mount.makeStream(
           else viewport.scrollTo({ top, behavior: "instant" })
           seen = scrollTop()
         }
-        const scroller = () => viewport ?? document.scrollingElement ?? document.documentElement
+        const scroller = () =>
+          viewport ?? document.scrollingElement ?? document.documentElement
         const movedByUser = () => {
           const top = scrollTop()
           const element = scroller()
-          const moved = !same(top, Math.min(seen, element.scrollHeight - element.clientHeight))
+          const moved = !same(
+            top,
+            Math.min(seen, element.scrollHeight - element.clientHeight)
+          )
           seen = top
           return moved
         }
         const toEnd = () => {
-          if (list === viewport) return list.scrollHeight - list.clientHeight - list.scrollTop
+          if (list === viewport) {
+            return list.scrollHeight - list.clientHeight - list.scrollTop
+          }
           const { height, top } = box()
           return list.getBoundingClientRect().bottom - top - height
         }
@@ -882,7 +1057,8 @@ const TrackVirtualList = Mount.makeStream(
           return rect.width === 0 && rect.height === 0
         }
 
-        const placement = (top: number) => list === viewport ? 0 : listTop() - top
+        const placement = (top: number) =>
+          list === viewport ? 0 : listTop() - top
 
         const capture = () => {
           const top = box().top
@@ -913,7 +1089,9 @@ const TrackVirtualList = Mount.makeStream(
             const rect = placedAt(item)
             const top = rect.top - zero
             if (top > start + 0.5) return null
-            if (rect.bottom - zero > start) return { ...refOf(item), offset: start - top }
+            if (rect.bottom - zero > start) {
+              return { ...refOf(item), offset: start - top }
+            }
           }
           return null
         }
@@ -924,7 +1102,9 @@ const TrackVirtualList = Mount.makeStream(
           return {
             offset: top - zero,
             height,
-            length: list === viewport ? list.scrollHeight - args.inset : list.getBoundingClientRect().bottom - zero
+            length: list === viewport
+              ? list.scrollHeight - args.inset
+              : list.getBoundingClientRect().bottom - zero
           }
         }
 
@@ -939,11 +1119,13 @@ const TrackVirtualList = Mount.makeStream(
           const { height, length, offset: start } = next
           const atStart = start <= defaultEndThreshold
           atEnd = toEnd() <= (args.threshold ?? defaultEndThreshold)
-          const unchanged = reported !== null && same(height, reported.height) && atStart === reported.atStart &&
+          const unchanged = reported !== null &&
+            same(height, reported.height) && atStart === reported.atStart &&
             atEnd === reported.atEnd
           if (
             scrolled === null && unchanged &&
-            (same(start, reported!.start) || (within(args.first, start) && within(args.last, start + height)))
+            (same(start, reported!.start) ||
+              (within(args.first, start) && within(args.last, start + height)))
           ) {
             if (args.track && !sameTracked(next, tracked)) sendMetrics(next)
             return
@@ -991,23 +1173,45 @@ const TrackVirtualList = Mount.makeStream(
             const box = placedAt(item)
             const top = box.top - zero
             firstTop ??= top
-            shape += "|" + identity(item) + ":" + Math.round(box.height) + ":" + Math.round(top - firstTop) + ":" +
+            shape += "|" + identity(item) + ":" + Math.round(box.height) + ":" +
+              Math.round(top - firstTop) + ":" +
               Math.round(box.left - rect.left)
-            items.push({ ...refOf(item), top, left: box.left - rect.left, size: box.height })
+            items.push({
+              ...refOf(item),
+              top,
+              left: box.left - rect.left,
+              size: box.height
+            })
           }
           if (shape === sent) return
           sent = shape
-          send(VirtualListMessage.MeasuredItems({ epoch: args.epoch, width: rect.width, items }))
+          send(
+            VirtualListMessage.MeasuredItems({
+              epoch: args.epoch,
+              width: rect.width,
+              items
+            })
+          )
         }
 
-        const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => sync())
-        const mutationObserver = typeof MutationObserver === "undefined" ? null : new MutationObserver(() => sync())
-        const structureObserver = typeof MutationObserver === "undefined" ? null : new MutationObserver(() => {
-          watchOutside()
-          sync()
-        })
+        const resizeObserver = typeof ResizeObserver === "undefined"
+          ? null
+          : new ResizeObserver(() => sync())
+        const mutationObserver = typeof MutationObserver === "undefined"
+          ? null
+          : new MutationObserver(() => sync())
+        const structureObserver = typeof MutationObserver === "undefined" ?
+          null :
+          new MutationObserver(() => {
+            watchOutside()
+            sync()
+          })
 
-        const observeOnly = (current: Set<Element>, next: ReadonlySet<Element>, options?: ResizeObserverOptions) => {
+        const observeOnly = (
+          current: Set<Element>,
+          next: ReadonlySet<Element>,
+          options?: ResizeObserverOptions
+        ) => {
           for (const element of current) {
             if (!next.has(element)) {
               resizeObserver?.unobserve(element)
@@ -1045,7 +1249,10 @@ const TrackVirtualList = Mount.makeStream(
           observeOnly(watched, before)
           structureObserver?.disconnect()
           for (const element of before) {
-            structureObserver?.observe(element, { attributes: true, attributeFilter: layoutAttributes })
+            structureObserver?.observe(element, {
+              attributes: true,
+              attributeFilter: layoutAttributes
+            })
           }
           for (const element of ancestors) {
             structureObserver?.observe(element, {
@@ -1057,17 +1264,28 @@ const TrackVirtualList = Mount.makeStream(
         }
 
         const resolveViewport = (): HTMLElement | null => {
-          const own = list.closest<HTMLElement>(attrSelector(viewportAttr, args.id))
+          const own = list.closest<HTMLElement>(
+            attrSelector(viewportAttr, args.id)
+          )
           if (own !== null) return own
           const container = args.scrollContainer
           if (container === null) return null
-          if (container !== "nearest") return list.parentElement?.closest<HTMLElement>(container.selector) ?? null
+          if (container !== "nearest") {
+            return list.parentElement?.closest<HTMLElement>(
+              container.selector
+            ) ?? null
+          }
           for (
             let element = list.parentElement;
-            element !== null && element !== document.body && element !== document.documentElement;
+            element !== null && element !== document.body &&
+            element !== document.documentElement;
             element = element.parentElement
           ) {
-            if (/^(auto|scroll|overlay)$/.test(window.getComputedStyle(element).overflowY)) return element
+            if (
+              /^(auto|scroll|overlay)$/.test(
+                window.getComputedStyle(element).overflowY
+              )
+            ) return element
           }
           return null
         }
@@ -1090,16 +1308,24 @@ const TrackVirtualList = Mount.makeStream(
           const next = resolveViewport()
           if (listening === undefined || next !== viewport) {
             listening?.abort()
-            if (viewport !== null && viewport !== list) resizeObserver?.unobserve(viewport)
+            if (viewport !== null && viewport !== list) {
+              resizeObserver?.unobserve(viewport)
+            }
             viewport = next
             seen = scrollTop()
             listening = new AbortController()
             const options = { signal: listening.signal, passive: true }
             const target = viewport ?? window
-            for (const type of ["wheel", "touchmove", "keydown", "pointerdown"]) {
+            for (
+              const type of ["wheel", "touchmove", "keydown", "pointerdown"]
+            ) {
               target.addEventListener(type, unpin, options)
             }
-            ;(viewport ?? document).addEventListener("scrollend", onScrollEnd, options)
+            ;(viewport ?? document).addEventListener(
+              "scrollend",
+              onScrollEnd,
+              options
+            )
             if (viewport === null) {
               window.addEventListener("scroll", onScroll, options)
               window.addEventListener("resize", () => sync(), options)
@@ -1109,7 +1335,9 @@ const TrackVirtualList = Mount.makeStream(
             }
             watchOutside()
           }
-          observeOnly(observed, new Set(args.measure ? itemsOf() : []), { box: "border-box" })
+          observeOnly(observed, new Set(args.measure ? itemsOf() : []), {
+            box: "border-box"
+          })
         }
 
         const sync = () => {
@@ -1118,10 +1346,16 @@ const TrackVirtualList = Mount.makeStream(
           const request = args.request
           const fresh = args.fresh
           if (request === null) applied = null
-          if (fresh !== null && (request === null || !sameScrollTo(request.scrollTo, fresh))) {
+          if (
+            fresh !== null &&
+            (request === null || !sameScrollTo(request.scrollTo, fresh))
+          ) {
             send(VirtualListMessage.RequestedScroll({ scrollTo: fresh }))
           }
-          if (request !== null && (applied === null || !sameScrollTo(applied, request.scrollTo))) {
+          if (
+            request !== null &&
+            (applied === null || !sameScrollTo(applied, request.scrollTo))
+          ) {
             applied = request.scrollTo
             pinned = request
             go(request)
@@ -1148,18 +1382,31 @@ const TrackVirtualList = Mount.makeStream(
             )
             if (item === undefined) return
             const { bottom, top } = placedAt(item)
-            scrollBy(alignedStart(top, bottom, view.top, view.height, scrollTo.align ?? "start") - view.top)
+            scrollBy(
+              alignedStart(
+                top,
+                bottom,
+                view.top,
+                view.height,
+                scrollTo.align ?? "start"
+              ) - view.top
+            )
           } else if (offset !== null) scrollBy(origin() + offset - view.top)
           else scrollBy(toEnd())
         }
 
         const onFocus = () => {
-          const item = activeOf(document)?.closest(attrSelector(itemAttr, args.id)) ?? null
+          const item =
+            activeOf(document)?.closest(attrSelector(itemAttr, args.id)) ?? null
           const next = item !== null && list.contains(item) ? item : null
           const id = next === null ? null : identity(next)
           if (id === focused) return
           focused = id
-          send(next === null ? VirtualListMessage.BlurredItems() : VirtualListMessage.FocusedItem(refOf(next)))
+          send(
+            next === null
+              ? VirtualListMessage.BlurredItems()
+              : VirtualListMessage.FocusedItem(refOf(next))
+          )
         }
 
         const own = new AbortController()
@@ -1170,7 +1417,11 @@ const TrackVirtualList = Mount.makeStream(
           focusTimer = setTimeout(onFocus, 0)
         }, { signal: own.signal })
         resizeObserver?.observe(list, { box: "border-box" })
-        mutationObserver?.observe(list, { childList: true, attributes: true, attributeFilter: ["style"] })
+        mutationObserver?.observe(list, {
+          childList: true,
+          attributes: true,
+          attributeFilter: ["style"]
+        })
 
         yield* Effect.addFinalizer(() =>
           Effect.sync(() => {
@@ -1194,12 +1445,22 @@ const TrackVirtualList = Mount.makeStream(
     )
 )
 
-type VirtualListUpdate = Component.Update<VirtualListModel, VirtualListMessage, VirtualListEvents, VirtualListProps>
+type VirtualListUpdate = Component.Update<
+  VirtualListModel,
+  VirtualListMessage,
+  VirtualListEvents,
+  VirtualListProps
+>
 
 const sameAnnounced = (a: Announced, b: Announced, track: boolean): boolean =>
-  sameVisible(a, b) && a.scrolling === b.scrolling && (!track || sameTracked(a, b))
+  sameVisible(a, b) && a.scrolling === b.scrolling &&
+  (!track || sameTracked(a, b))
 
-const announce = ($: VirtualListUpdate, next: VirtualListModel, layout = layoutOf(next, $.props)) => {
+const announce = (
+  $: VirtualListUpdate,
+  next: VirtualListModel,
+  layout = layoutOf(next, $.props)
+) => {
   const visible = visibleItems(layout, restingBand(next, $.props, layout))
   if (visible === null) return $.set(next)
   const announced = {
@@ -1212,14 +1473,25 @@ const announce = ($: VirtualListUpdate, next: VirtualListModel, layout = layoutO
     length: next.length,
     scrolling: next.scrolling
   }
-  return next.announced !== null && sameAnnounced(next.announced, announced, $.props.trackScroll === true)
+  return next.announced !== null &&
+      sameAnnounced(next.announced, announced, $.props.trackScroll === true)
     ? $.set(next)
-    : $.set(next).evolve({ announced }).emit(VirtualListEvents.Scrolled(announced))
+    : $.set(next).evolve({ announced }).emit(
+      VirtualListEvents.Scrolled(announced)
+    )
 }
 
-type ItemOf<B extends View.PartTarget<"div" | "li" | "tr">> = ReturnType<B["attr"]>
+type ItemOf<B extends View.PartTarget<"div" | "li" | "tr">> = ReturnType<
+  B["attr"]
+>
 
-type Div = Html.Element<VirtualListMessage, never, Html.EventsOf<"div">, HTMLDivElement, "div">
+type Div = Html.Element<
+  VirtualListMessage,
+  never,
+  Html.EventsOf<"div">,
+  HTMLDivElement,
+  "div"
+>
 
 /**
  * A headless virtual list. Call it with the consumer's `h`, its `props`, and
@@ -1260,7 +1532,8 @@ export const VirtualList = Component.define({
   model: VirtualListModel,
   message: VirtualListMessage,
   events: VirtualListEvents,
-  restore: (model) => UiStruct.evolve(model, { focused: null, lead: 0, scrolling: false }),
+  restore: (model) =>
+    UiStruct.evolve(model, { focused: null, lead: 0, scrolling: false }),
   elements: Html
 }).make({
   init: ($) => ({
@@ -1275,7 +1548,9 @@ export const VirtualList = Component.define({
     dataset: $.props.dataset ?? null,
     epoch: 0,
     focused: null,
-    scroll: $.props.scrollTo === undefined ? null : { scrollTo: $.props.scrollTo, done: false },
+    scroll: $.props.scrollTo === undefined
+      ? null
+      : { scrollTo: $.props.scrollTo, done: false },
     offset: 0,
     length: 0,
     scrolling: false,
@@ -1283,7 +1558,10 @@ export const VirtualList = Component.define({
     lead: 0
   }),
   update: {
-    MovedViewport: ($, { anchor, atEnd, atStart, height, length, scrolled, start }) => {
+    MovedViewport: (
+      $,
+      { anchor, atEnd, atStart, height, length, scrolled, start }
+    ) => {
       const model = current($.model, $.props)
       const layout = layoutOf(model, $.props)
       const row = rowAt(layout, start)
@@ -1293,7 +1571,9 @@ export const VirtualList = Component.define({
         offset: start - (layout.offsets[row] ?? 0)
       }
       const before = restingBand(model, $.props, layout)
-      const moved = scrolled === null && before !== null ? start - before.start : 0
+      const moved = scrolled === null && before !== null
+        ? start - before.start
+        : 0
       const lead = Math.abs(moved) <= height ? moved : 0
       return announce(
         $,
@@ -1305,13 +1585,17 @@ export const VirtualList = Component.define({
           offset: start,
           length,
           lead,
-          scroll: scrolled === null ? model.scroll : { scrollTo: scrolled, done: true }
+          scroll: scrolled === null
+            ? model.scroll
+            : { scrollTo: scrolled, done: true }
         }),
         layout
       )
     },
     RequestedScroll: ($, { scrollTo }) =>
-      sameRequest(scrollTo, latestOf($.model)) ? $.model : $.evolve({ scroll: { scrollTo, done: false } }),
+      sameRequest(scrollTo, latestOf($.model))
+        ? $.model
+        : $.evolve({ scroll: { scrollTo, done: false } }),
     ScrolledByUser: ($) =>
       $.model.scroll === null || $.model.scroll.done
         ? $.model
@@ -1321,10 +1605,20 @@ export const VirtualList = Component.define({
       const next = measured(model, $.props, message)
       return next === model ? $.model : announce($, next)
     },
-    FocusedItem: ($, { index, key }) => UiStruct.evolve(current($.model, $.props), { focused: { index, key } }),
-    BlurredItems: ($) => UiStruct.evolve(current($.model, $.props), { focused: null }),
+    FocusedItem: ($, { index, key }) =>
+      UiStruct.evolve(current($.model, $.props), { focused: { index, key } }),
+    BlurredItems: ($) =>
+      UiStruct.evolve(current($.model, $.props), { focused: null }),
     ScrolledViewport: ($, { height, length, offset, scrolling }) =>
-      announce($, UiStruct.evolve(current($.model, $.props), { offset, height, length, scrolling }))
+      announce(
+        $,
+        UiStruct.evolve(current($.model, $.props), {
+          offset,
+          height,
+          length,
+          scrolling
+        })
+      )
   },
   parts: (p, stored) => {
     const props = p.props
@@ -1335,7 +1629,9 @@ export const VirtualList = Component.define({
     const fresh = freshOf(model, props)
     const waiting = fresh ?? waitingOf(model)
     const pending = pendingOf(waiting, props, layout)
-    const band = pending === null ? resting : pendingBand(model, layout, pending, resting)
+    const band = pending === null
+      ? resting
+      : pendingBand(model, layout, pending, resting)
     const { after, before, between, ranges, visible } = windowOf(
       model,
       props,
@@ -1356,13 +1652,18 @@ export const VirtualList = Component.define({
     const itemPart = p.part(["div", "li", "tr"], (b, index: number) => {
       const row = b.tag === "tr"
       const style = [
-        props.measure === false ? `box-sizing:border-box;block-size:${props.sizes?.[index] ?? props.itemSize}px` : "",
+        props.measure === false
+          ? `box-sizing:border-box;block-size:${
+            props.sizes?.[index] ?? props.itemSize
+          }px`
+          : "",
         absolute
           ? `position:absolute;inset-inline:0;top:0;transform:translateY(${
             inset + layout.offsets[rowOf(layout, index)]!
           }px)`
           : "",
-        !absolute && !row && pushed !== undefined && index >= pushed && index < pushed + layout.lanes
+        !absolute && !row && pushed !== undefined && index >= pushed &&
+          index < pushed + layout.lanes
           ? `margin-block-start:${between}px`
           : ""
       ].filter((declarations) => declarations !== "").join(";")
@@ -1381,7 +1682,10 @@ export const VirtualList = Component.define({
         })
     })
 
-    const spacer = (name: string, height: number): ReadonlyArray<View.Node<never>> =>
+    const spacer = (
+      name: string,
+      height: number
+    ): ReadonlyArray<View.Node<never>> =>
       height <= 0 ? [] : [
         View.toNode(
           new Html.Element<never>("tr").key(spacerAttr + ":" + name).attrs({
@@ -1392,10 +1696,13 @@ export const VirtualList = Component.define({
         )
       ]
 
-    const withSpacers = (children: ReadonlyArray<View.Node<any>>): ReadonlyArray<View.Node<any>> => [
+    const withSpacers = (
+      children: ReadonlyArray<View.Node<any>>
+    ): ReadonlyArray<View.Node<any>> => [
       ...spacer("before", before + inset),
       ...children.flatMap((child) =>
-        pushed !== undefined && child._tag === "Element" && child.attrs[itemAttr] === id &&
+        pushed !== undefined && child._tag === "Element" &&
+          child.attrs[itemAttr] === id &&
           child.attrs["data-index"] === String(pushed)
           ? [...spacer("between", between), child]
           : [child]
@@ -1404,7 +1711,9 @@ export const VirtualList = Component.define({
     ]
 
     return {
-      items: ranges.flatMap(([start, end]) => Array.from({ length: end - start }, (_, i) => start + i)),
+      items: ranges.flatMap(([start, end]) =>
+        Array.from({ length: end - start }, (_, i) => start + i)
+      ),
       count: layout.count,
       atStart: model.position !== null && model.atStart,
       atEnd: model.position !== null && model.atEnd,
@@ -1412,11 +1721,21 @@ export const VirtualList = Component.define({
       viewport: p.part(["div", "ul", "ol"], (b) => b.attr(viewportAttr, id)),
       table: p.part(
         ["table"],
-        (b) => b.attr("aria-rowcount", props.setSize === undefined ? String(layout.count + first - 1) : setSize)
+        (b) =>
+          b.attr(
+            "aria-rowcount",
+            props.setSize === undefined
+              ? String(layout.count + first - 1)
+              : setSize
+          )
       ),
       list: p.part(["div", "ul", "ol", "tbody"], (b) => {
         const table = b.tag === "tbody"
-        if (table && absolute) throw new Error("VirtualList: a <tbody> list can't use layout: \"absolute\"")
+        if (table && absolute) {
+          throw new Error(
+            "VirtualList: a <tbody> list can't use layout: \"absolute\""
+          )
+        }
         return (b as Div)
           .onMount(TrackVirtualList({
             id,
@@ -1435,13 +1754,22 @@ export const VirtualList = Component.define({
           }))
           .forward((node) => {
             if (table) {
-              const built = View.build(ownStyle("overflow-anchor:none")(node), [])
+              const built = View.build(
+                ownStyle("overflow-anchor:none")(node),
+                []
+              )
               return { ...built, children: withSpacers(built.children) }
             }
             const style = absolute
-              ? `position:relative;padding-block-start:0px;padding-block-end:${inset + layout.total}px`
-              : `padding-block-start:${before + inset}px;padding-block-end:${after}px`
-            return ownStyle(style + ";overflow-anchor:none")(defaults(node, { role: "list" }))
+              ? `position:relative;padding-block-start:0px;padding-block-end:${
+                inset + layout.total
+              }px`
+              : `padding-block-start:${
+                before + inset
+              }px;padding-block-end:${after}px`
+            return ownStyle(style + ";overflow-anchor:none")(
+              defaults(node, { role: "list" })
+            )
           })
       }),
       item: View.wrapPart(

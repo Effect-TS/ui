@@ -113,7 +113,9 @@ export interface Service<in out Self, in out Props, in out Events>
     h: View.Helper<Msg, unknown>,
     options: View.Child.Options<Props, Events, NoInfer<Msg>> & {
       readonly fallback: (
-        result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
+        result:
+          | AsyncResult.Initial<never, unknown>
+          | AsyncResult.Failure<never, unknown>
       ) => View.Content<NoInfer<Msg>, RF>
       /** A feature takes no slots: its implementation may not declare them, and its parent can't see. */
       readonly slots?: never
@@ -126,7 +128,9 @@ export interface Service<in out Self, in out Props, in out Events>
   // A method, so `Feature.Any` takes every feature, including one without
   // events, whose `Events` is `never`: `any` doesn't stand in for `never`
   // in a strictly checked parameter.
-  toLayer<R>(component: Component.Mountable<Props, Events, R>): Layer.Layer<Self, never, R>
+  toLayer<R>(
+    component: Component.Mountable<Props, Events, R>
+  ): Layer.Layer<Self, never, R>
 }
 
 /**
@@ -145,7 +149,8 @@ export type Any = Service<any, any, any>
  * @category guards
  * @since 0.1.0
  */
-export const isService = (u: unknown): u is Any => Predicate.hasProperty(u, TypeId)
+export const isService = (u: unknown): u is Any =>
+  Predicate.hasProperty(u, TypeId)
 
 /**
  * Declares a feature service from its Props and Events Schemas.
@@ -203,7 +208,11 @@ export const Service: <Self>() => <
     readonly events?: Events | undefined
   }
 ) =>
-  & Context.ServiceClass<Self, `feature/${Name}`, Implementation<Props["Type"], Events["Type"]>>
+  & Context.ServiceClass<
+    Self,
+    `feature/${Name}`,
+    Implementation<Props["Type"], Events["Type"]>
+  >
   & Service<Self, Props["Type"], Events["Type"]>
   & {
     readonly props: Props
@@ -216,16 +225,27 @@ export const Service: <Self>() => <
       readonly events?: Schema.Codec<any, any> | undefined
     }
   ): any => {
-    const Base = Context.Service<any, Implementation<any, any>>()(`feature/${name}`)
+    const Base = Context.Service<any, Implementation<any, any>>()(
+      `feature/${name}`
+    )
     class FeatureService extends Base {
       static readonly [TypeId] = { name }
       static readonly props = schemas.props
       static readonly events = schemas.events ?? Schema.Never
-      static render(this: unknown, _h: unknown, options: child.Options): View.Child<any, any> {
+      static render(
+        this: unknown,
+        _h: unknown,
+        options: child.Options
+      ): View.Child<any, any> {
         // `this` is the subclass the user declared, unless the method was detached.
-        return child.make(isService(this) ? this : (FeatureService as any), options)
+        return child.make(
+          isService(this) ? this : (FeatureService as any),
+          options
+        )
       }
-      static toLayer<R>(component: Component.Mountable<any, any, R>): Layer.Layer<any, never, R> {
+      static toLayer<R>(
+        component: Component.Mountable<any, any, R>
+      ): Layer.Layer<any, never, R> {
         return Layer.effect(
           Base,
           Effect.map(Effect.context<R>(), (context) => ({
@@ -233,7 +253,9 @@ export const Service: <Self>() => <
             // The implementation's requirements are closed with the build site's
             // Context. The Layer's own Scope isn't part of that contract: the
             // runtime gives every instance its own.
-            context: Context.omit(Scope.Scope)(context) as Context.Context<never>
+            context: Context.omit(Scope.Scope)(context) as Context.Context<
+              never
+            >
           }))
         )
       }

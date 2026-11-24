@@ -100,7 +100,9 @@ export interface Events {
  * @since 0.1.0
  */
 export interface HostEvents<Node> {
-  connect(lookup: (path: ReadonlyArray<Node>) => ReadonlyArray<Events | undefined>): () => void
+  connect(
+    lookup: (path: ReadonlyArray<Node>) => ReadonlyArray<Events | undefined>
+  ): () => void
   listen(
     handlers: Readonly<Record<string, View.Handler<unknown, any>>>,
     options: Readonly<Record<string, View.EventOptions>>
@@ -182,7 +184,12 @@ export interface Host<Node> {
    * the call: the one it last set, or the one hydration read from the node,
    * and `undefined` when it holds none.
    */
-  setAttr(node: Node, name: string, value: string | undefined, previous?: string | undefined): void
+  setAttr(
+    node: Node,
+    name: string,
+    value: string | undefined,
+    previous?: string | undefined
+  ): void
   setProp(node: Node, name: string, value: unknown): void
   insertBefore(parent: Node, node: Node, ref: Node | undefined): void
   remove(node: Node): void
@@ -204,15 +211,22 @@ export interface Host<Node> {
    * names it returns are passed to `setAttr` as they are.
    */
   readonly normalizeAttrs?:
-    | ((node: Node, attrs: Readonly<Record<string, string>>) => Readonly<Record<string, string>>)
+    | ((
+      node: Node,
+      attrs: Readonly<Record<string, string>>
+    ) => Readonly<Record<string, string>>)
     | undefined
   readonly commit?: (() => void) | undefined
   readonly head?: ((head: any) => void) | undefined
   readonly hydration?: Hydration<Node> | undefined
   readonly createContainer?: (() => Node) | undefined
-  readonly removeChildren?: ((parent: Node, nodes: ReadonlyArray<Node>) => void) | undefined
+  readonly removeChildren?:
+    | ((parent: Node, nodes: ReadonlyArray<Node>) => void)
+    | undefined
   readonly events?: HostEvents<Node> | undefined
-  readonly viewTransition?: ((update: () => void, types: ReadonlyArray<string>) => void) | undefined
+  readonly viewTransition?:
+    | ((update: () => void, types: ReadonlyArray<string>) => void)
+    | undefined
 }
 
 /**
@@ -243,13 +257,19 @@ export interface Host<Node> {
 export interface Hydration<Node> {
   firstChild(node: Node): Node | undefined
   inspect(node: Node):
-    | { readonly _tag: "Element"; readonly tag: string; readonly textOnly?: boolean | undefined }
+    | {
+      readonly _tag: "Element"
+      readonly tag: string
+      readonly textOnly?: boolean | undefined
+    }
     | { readonly _tag: "Text"; readonly text: string }
     | { readonly _tag: "Open"; readonly path: string }
     | { readonly _tag: "Close"; readonly path: string }
     | { readonly _tag: "Other" }
   getAttr(node: Node, name: string): string | undefined
-  readonly adoptProp?: ((node: Node, name: string, value: unknown) => void) | undefined
+  readonly adoptProp?:
+    | ((node: Node, name: string, value: unknown) => void)
+    | undefined
 }
 
 /**
@@ -322,7 +342,11 @@ export type ServerNode =
     readonly children: ReadonlyArray<ServerNode>
   }
   | { readonly _tag: "Text"; readonly text: string }
-  | { readonly _tag: "Range"; readonly path: string; readonly children: ReadonlyArray<ServerNode> }
+  | {
+    readonly _tag: "Range"
+    readonly path: string
+    readonly children: ReadonlyArray<ServerNode>
+  }
 
 /**
  * The result of `prerender`: the tree to serialise, the state the client
@@ -368,7 +392,8 @@ export const Renderer: Context.Service<Renderer, Renderer> = services.Renderer
  * @category layers
  * @since 0.1.0
  */
-export const layer = <Node>(host: Host<Node>): Layer.Layer<Renderer> => Layer.succeed(Renderer, { host })
+export const layer = <Node>(host: Host<Node>): Layer.Layer<Renderer> =>
+  Layer.succeed(Renderer, { host })
 
 /**
  * A name for an element, so a Command can reach its host node.
@@ -400,7 +425,8 @@ export interface Ref<in out Node> {
  * @category constructors
  * @since 0.1.0
  */
-export const ref = <Node = unknown>(name: string): Ref<Node> => refAt(name, name)
+export const ref = <Node = unknown>(name: string): Ref<Node> =>
+  refAt(name, name)
 
 const refAt = <Node>(name: string, key: string): Ref<Node> => ({
   name,
@@ -409,8 +435,10 @@ const refAt = <Node>(name: string, key: string): Ref<Node> => ({
 })
 
 const isRef = (u: unknown): u is Ref<any> =>
-  Predicate.hasProperty(u, "name") && typeof u.name === "string" && Predicate.hasProperty(u, "key") &&
-  typeof u.key === "string" && Predicate.hasProperty(u, "at") && typeof u.at === "function"
+  Predicate.hasProperty(u, "name") && typeof u.name === "string" &&
+  Predicate.hasProperty(u, "key") &&
+  typeof u.key === "string" && Predicate.hasProperty(u, "at") &&
+  typeof u.at === "function"
 
 /**
  * The Schema of a ref in a Command's `args`: it encodes to the ref's `key`.
@@ -430,18 +458,19 @@ const isRef = (u: unknown): u is Ref<any> =>
  * @category schemas
  * @since 0.1.0
  */
-export const Ref: Schema.decodeTo<Schema.declare<Ref<any>>, Schema.String> = Schema.String.pipe(
-  Schema.decodeTo(
-    Schema.declare(isRef, { expected: "Renderer.Ref" }),
-    SchemaTransformation.transform({
-      decode: (key: string): Ref<any> => {
-        const at = key.indexOf("[")
-        return refAt(at < 0 ? key : key.slice(0, at), key)
-      },
-      encode: (ref: Ref<any>) => ref.key
-    })
+export const Ref: Schema.decodeTo<Schema.declare<Ref<any>>, Schema.String> =
+  Schema.String.pipe(
+    Schema.decodeTo(
+      Schema.declare(isRef, { expected: "Renderer.Ref" }),
+      SchemaTransformation.transform({
+        decode: (key: string): Ref<any> => {
+          const at = key.indexOf("[")
+          return refAt(at < 0 ? key : key.slice(0, at), key)
+        },
+        encode: (ref: Ref<any>) => ref.key
+      })
+    )
   )
-)
 
 /**
  * How a Command reaches an element of the instance that issued it.
@@ -504,7 +533,9 @@ export interface Root<out Model, in Msg> {
  * @category utility types
  * @since 0.1.0
  */
-export type HostOf<V> = [V] extends [never] ? never : V extends View.Elements ? V["Host"] : never
+export type HostOf<V> = [V] extends [never] ? never
+  : V extends View.Elements ? V["Host"]
+  : never
 
 /**
  * Mounts a component tree in `container` on the `Renderer`'s host, for the
@@ -585,7 +616,11 @@ export const mount: <
     readonly query?: QueryOptions | undefined
     readonly head?: boolean | undefined
   }
-) => Effect.Effect<Root<Model, Msg>, never, R | RF | RP | HostOf<V> | Renderer | Scope.Scope> = runtime.mount as any
+) => Effect.Effect<
+  Root<Model, Msg>,
+  never,
+  R | RF | RP | HostOf<V> | Renderer | Scope.Scope
+> = runtime.mount as any
 
 /**
  * Cache-wide options for the query cache a mount owns. The app never
@@ -658,7 +693,11 @@ export const prerender: <
     readonly elements?: ReadonlyArray<string> | "any" | undefined
     readonly static?: boolean | undefined
   }
-) => Effect.Effect<Prerendered<Model, View.HeadValue<V>>, never, R | RP> = (component, props, options) =>
+) => Effect.Effect<Prerendered<Model, View.HeadValue<V>>, never, R | RP> = (
+  component,
+  props,
+  options
+) =>
   runtime.prerender(component as any, props, {
     budget: options?.budget ?? "500 millis",
     elements: options?.elements ?? "any",

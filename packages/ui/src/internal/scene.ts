@@ -26,7 +26,9 @@ const findDeclared = (
 ): engine.Occurrence => {
   const found = engine.findChild(state.view(), child, key, step)
   const owner = found.child.owner
-  if (owner !== undefined && owner.path !== "/" + state.component.definition.name) {
+  if (
+    owner !== undefined && owner.path !== "/" + state.component.definition.name
+  ) {
     throw new Error(
       `${step}: ${
         engine.pathOf(state, found)
@@ -44,16 +46,23 @@ const findDeclared = (
  *
  * @internal
  */
-export type Matcher = (nodes: ReadonlyArray<Locator.Node>, root: Locator.Node) => string | undefined
+export type Matcher = (
+  nodes: ReadonlyArray<Locator.Node>,
+  root: Locator.Node
+) => string | undefined
 
 /**
  * One element, for the matchers that check a single one.
  *
  * @internal
  */
-export const single =
-  (check: (node: Locator.Node, root: Locator.Node) => string | undefined): Matcher => (nodes, root) =>
-    nodes.length === 1 ? check(nodes[0]!, root) : `${nodes.length} elements match`
+export const single = (
+  check: (node: Locator.Node, root: Locator.Node) => string | undefined
+): Matcher =>
+(nodes, root) =>
+  nodes.length === 1
+    ? check(nodes[0]!, root)
+    : `${nodes.length} elements match`
 
 /**
  * The matchers every scene's `expect` has, each made from the arguments the test gave it.
@@ -61,14 +70,18 @@ export const single =
  * @internal
  */
 export const matchers = {
-  toExist: (): Matcher => (nodes) => nodes.length === 0 ? "nothing matches" : undefined,
-  toBeAbsent: (): Matcher => (nodes) => nodes.length === 0 ? undefined : `${nodes.length} elements match`,
+  toExist: (): Matcher => (nodes) =>
+    nodes.length === 0 ? "nothing matches" : undefined,
+  toBeAbsent: (): Matcher => (nodes) =>
+    nodes.length === 0 ? undefined : `${nodes.length} elements match`,
   toHaveCount: (count: number): Matcher => (nodes) =>
     nodes.length === count ? undefined : `${nodes.length} elements match`,
   toHaveText: (expected: string | RegExp): Matcher =>
     single((node) => {
       const text = Locator.textOf(node).replace(/\s+/g, " ").trim()
-      const pass = typeof expected === "string" ? text === expected : expected.test(text)
+      const pass = typeof expected === "string"
+        ? text === expected
+        : expected.test(text)
       return pass ? undefined : `its text is ${JSON.stringify(text)}`
     })
 }
@@ -82,7 +95,11 @@ export const makeExpectation = <A>(
   locator: Locator.Locator,
   matchers: { readonly [name: string]: (...args: Array<any>) => Matcher },
   run: (
-    check: (nodes: ReadonlyArray<Locator.Node>, root: Locator.Node, listed?: Locator.Node) => void,
+    check: (
+      nodes: ReadonlyArray<Locator.Node>,
+      root: Locator.Node,
+      listed?: Locator.Node
+    ) => void,
     method: Function
   ) => A
 ): object => {
@@ -93,9 +110,9 @@ export const makeExpectation = <A>(
         const failure = make(...args)(nodes, root)
         if (failure !== undefined) {
           throw new Error(
-            `${step}(${locator.description}).${name}(${args.map(describeExpected).join(", ")}): ${failure}; ${
-              engine.describeCandidates(listed)
-            }`
+            `${step}(${locator.description}).${name}(${
+              args.map(describeExpected).join(", ")
+            }): ${failure}; ${engine.describeCandidates(listed)}`
           )
         }
       }, method)
@@ -105,7 +122,11 @@ export const makeExpectation = <A>(
 }
 
 /** A child a scene step names. */
-type ChildTarget = Component.Any | Component.Headless.Any | Component.Lazy.Any | Feature.Any
+type ChildTarget =
+  | Component.Any
+  | Component.Headless.Any
+  | Component.Lazy.Any
+  | Feature.Any
 
 /** `state` with the slot of `found` recorded as `result`: the view shows its `fallback` of it. */
 const withSlot = (
@@ -121,7 +142,9 @@ const withSlot = (
 /** The arguments after a child step's component: an optional key, then the step's value. */
 type KeyAnd<A> = readonly [value: A] | readonly [key: string, value: A]
 
-const keyAnd = <A>(args: KeyAnd<A>): readonly [key: string | undefined, value: A] =>
+const keyAnd = <A>(
+  args: KeyAnd<A>
+): readonly [key: string | undefined, value: A] =>
   args.length === 1 ? [undefined, args[0]] : args
 
 // ---------------------------------------------------------------------------
@@ -129,23 +152,33 @@ const keyAnd = <A>(args: KeyAnd<A>): readonly [key: string | undefined, value: A
 // ---------------------------------------------------------------------------
 
 /** A node as its siblings match it: an expanded headless child by the outermost child it was. */
-const asSibling = (node: View.Node<any, any>): View.Node<any, any> => engine.expansionOf.get(node)?.[0] ?? node
+const asSibling = (node: View.Node<any, any>): View.Node<any, any> =>
+  engine.expansionOf.get(node)?.[0] ?? node
 
 /**
  * Whether `node` patches `old` once matched with it, as the runtime decides: for an expanded headless
  * child, each child it stands for patches the old one, and then the closure's root patches the old root.
  */
-const continues = (old: View.Node<any, any>, node: View.Node<any, any>): boolean => {
+const continues = (
+  old: View.Node<any, any>,
+  node: View.Node<any, any>
+): boolean => {
   const olds = [...(engine.expansionOf.get(old) ?? []), old]
   const news = [...(engine.expansionOf.get(node) ?? []), node]
-  return olds.length === news.length && news.every((each, index) => match.patches(olds[index]!, each))
+  return olds.length === news.length &&
+    news.every((each, index) => match.patches(olds[index]!, each))
 }
 
-const childrenOf = (node: View.Node<any, any>): ReadonlyArray<View.Node<any, any>> =>
-  (node as { readonly children?: ReadonlyArray<View.Node<any, any>> }).children ?? []
+const childrenOf = (
+  node: View.Node<any, any>
+): ReadonlyArray<View.Node<any, any>> =>
+  (node as { readonly children?: ReadonlyArray<View.Node<any, any>> })
+    .children ?? []
 
 /** A slotted child's `children` by slot, else the one list. */
-const groups = (node: View.Node<any, any>): Map<string, ReadonlyArray<View.Node<any, any>>> => {
+const groups = (
+  node: View.Node<any, any>
+): Map<string, ReadonlyArray<View.Node<any, any>>> => {
   const children = childrenOf(node)
   const lengths = engine.slotLengths.get(node)
   if (lengths === undefined) return new Map([["", children]])
@@ -168,7 +201,10 @@ const groups = (node: View.Node<any, any>): Map<string, ReadonlyArray<View.Node<
 const followMounts = (
   state: engine.State<any, any, any, any>,
   tree: View.Node<any, any>
-): { readonly mounts: ReadonlyArray<engine.LiveMount>; readonly removed: ReadonlyArray<engine.LiveMount> } => {
+): {
+  readonly mounts: ReadonlyArray<engine.LiveMount>
+  readonly removed: ReadonlyArray<engine.LiveMount>
+} => {
   const own = "/" + state.component.definition.name
   const before = new Map<View.Element<any, any>, Array<engine.LiveMount>>()
   for (const live of state.ack.mounts) {
@@ -184,7 +220,9 @@ const followMounts = (
     element: View.Element<any, any>,
     old: ReadonlyArray<engine.LiveMount>
   ) => {
-    const kept = old.find((live) => live.owner === owner && live.mount.name === mount.name)
+    const kept = old.find((live) =>
+      live.owner === owner && live.mount.name === mount.name
+    )
     if (kept !== undefined) continued.add(kept)
     mounts.push(
       kept === undefined ?
@@ -192,12 +230,22 @@ const followMounts = (
         { ...kept, mount, element }
     )
   }
-  const walk = (old: View.Node<any, any> | undefined, node: View.Node<any, any>, authored: boolean): void => {
+  const walk = (
+    old: View.Node<any, any> | undefined,
+    node: View.Node<any, any>,
+    authored: boolean
+  ): void => {
     if (node._tag === "Element") {
-      const olds = old === undefined ? [] : before.get(old as View.Element<any, any>) ?? []
-      if (authored && node.mount !== undefined) follow(node.mount, undefined, node, olds)
+      const olds = old === undefined
+        ? []
+        : before.get(old as View.Element<any, any>) ?? []
+      if (authored && node.mount !== undefined) {
+        follow(node.mount, undefined, node, olds)
+      }
       for (const layer of node.owned ?? []) {
-        if (layer.mount !== undefined && layer.owner.path === own) follow(layer.mount, own, node, olds)
+        if (layer.mount !== undefined && layer.owner.path === own) {
+          follow(layer.mount, own, node, olds)
+        }
       }
     }
     // A slotted child and an outlet show their content under `children`: an outlet's is a parent's.
@@ -210,17 +258,31 @@ const followMounts = (
     const oldGroups = groups(old)
     for (const [name, news] of groups(node)) {
       const olds: ReadonlyArray<View.Node<any, any>> = oldGroups.get(name) ?? []
-      const paired = match.matchSiblings(olds.map(asSibling), news.map(asSibling))
+      const paired = match.matchSiblings(
+        olds.map(asSibling),
+        news.map(asSibling)
+      )
       news.forEach((child, index) => {
         const was = paired[index]! < 0 ? undefined : olds[paired[index]!]
-        walk(was !== undefined && continues(was, child) ? was : undefined, child, below)
+        walk(
+          was !== undefined && continues(was, child) ? was : undefined,
+          child,
+          below
+        )
       })
     }
   }
   // With no mount to follow, every mount in `tree` is new.
   const root = state.ack.mounts.length === 0 ? undefined : state.ack.tree
-  walk(root !== undefined && continues(root, tree) ? root : undefined, tree, true)
-  return { mounts, removed: state.ack.mounts.filter((live) => !continued.has(live)) }
+  walk(
+    root !== undefined && continues(root, tree) ? root : undefined,
+    tree,
+    true
+  )
+  return {
+    mounts,
+    removed: state.ack.mounts.filter((live) => !continued.has(live))
+  }
 }
 
 /**
@@ -257,11 +319,17 @@ const findMount = (
 ): engine.LiveMount => {
   const rendered = state.ack.mounts
   const found = rendered.filter((live) =>
-    Mount.isDefinition(target) ? live.mount.name === target.name : Mount.sameArgs(live.mount, target)
+    Mount.isDefinition(target)
+      ? live.mount.name === target.name
+      : Mount.sameArgs(live.mount, target)
   )
   if (found.length === 1) return found[0]!
-  const wanted = Mount.isDefinition(target) ? target.name : engine.describeMount(target as View.Mount<any>)
-  const list = rendered.length === 0 ? "nothing" : rendered.map((live) => engine.describeMount(live.mount)).join(", ")
+  const wanted = Mount.isDefinition(target)
+    ? target.name
+    : engine.describeMount(target as View.Mount<any>)
+  const list = rendered.length === 0
+    ? "nothing"
+    : rendered.map((live) => engine.describeMount(live.mount)).join(", ")
   throw new Error(
     found.length === 0
       ? `${step}: no rendered mount matches ${wanted}; mounts: ${list}`
@@ -280,7 +348,10 @@ export interface PlannedEvent {
   readonly description: string
   readonly event: string
   /** Its payload, read when the event runs, with the element it goes to. */
-  readonly payload: (state: engine.State<any, any, any, any>, node: Locator.Node) => unknown
+  readonly payload: (
+    state: engine.State<any, any, any, any>,
+    node: Locator.Node
+  ) => unknown
   /** Skipped when nothing handles it, rather than a failure. */
   readonly optional?: boolean | undefined
   /** A default action of the events before it, which a cancelled one skips. */
@@ -293,7 +364,10 @@ const withMount = (
   next: engine.LiveMount
 ): engine.State<any, any, any, any> =>
   engine.update(state, {
-    ack: { ...state.ack, mounts: state.ack.mounts.map((each) => each === live ? next : each) }
+    ack: {
+      ...state.ack,
+      mounts: state.ack.mounts.map((each) => each === live ? next : each)
+    }
   })
 
 /**
@@ -333,7 +407,10 @@ export class SceneCursor extends Cursor {
   all(locator: Locator.Locator): ReadonlyArray<Locator.Node> {
     return this.state.all(locator)
   }
-  protected override settled(state: engine.State<any, any, any, any>, step: string): engine.State<any, any, any, any> {
+  protected override settled(
+    state: engine.State<any, any, any, any>,
+    step: string
+  ): engine.State<any, any, any, any> {
     // Rendered once the step has settled, so a defect in `view` fails it.
     return trackMounts(state, step)
   }
@@ -347,41 +424,74 @@ export class SceneCursor extends Cursor {
    */
   protected interact(
     step: string,
-    events: (state: engine.State<any, any, any, any>) => ReadonlyArray<PlannedEvent>
+    events: (
+      state: engine.State<any, any, any, any>
+    ) => ReadonlyArray<PlannedEvent>
   ): this {
     let prevented = false
     let handled = false
-    return this.act(step, "message", (state) => {
-      let out = state
-      let cancelled = false
-      for (const { description, event, isDefault, node, optional, payload } of events(state)) {
-        if (isDefault === true && cancelled) continue
-        const target = node(out)
-        if (optional === true && !engine.handles(out, target, event)) continue
-        const fired = engine.fireNode(out, target, event, payload(out, target), this.name(step), description)
-        prevented ||= fired.prevented
-        if (isDefault !== true) cancelled ||= fired.prevented
-        handled ||= fired.handled
-        out = fired.story
-      }
-      return out
-    }, () => ({ interaction: handled ? "handled" : "ignored", defaultPrevented: prevented }))
+    return this.act(
+      step,
+      "message",
+      (state) => {
+        let out = state
+        let cancelled = false
+        for (
+          const { description, event, isDefault, node, optional, payload }
+            of events(state)
+        ) {
+          if (isDefault === true && cancelled) continue
+          const target = node(out)
+          if (optional === true && !engine.handles(out, target, event)) continue
+          const fired = engine.fireNode(
+            out,
+            target,
+            event,
+            payload(out, target),
+            this.name(step),
+            description
+          )
+          prevented ||= fired.prevented
+          if (isDefault !== true) cancelled ||= fired.prevented
+          handled ||= fired.handled
+          out = fired.story
+        }
+        return out
+      },
+      () => ({
+        interaction: handled ? "handled" : "ignored",
+        defaultPrevented: prevented
+      })
+    )
   }
   /** An interaction of one event, on the one element `locator` matches. */
   protected one(
     step: string,
     locator: Locator.Locator,
     event: string,
-    payload: (node: Locator.Node, state: engine.State<any, any, any, any>) => unknown
+    payload: (
+      node: Locator.Node,
+      state: engine.State<any, any, any, any>
+    ) => unknown
   ): this {
     return this.interact(step, (state) => {
       const node = engine.findOne(state, locator, this.name(step))
-      return [{ node: () => node, description: locator.description, event, payload: () => payload(node, state) }]
+      return [{
+        node: () => node,
+        description: locator.description,
+        event,
+        payload: () => payload(node, state)
+      }]
     })
   }
 
   click(target: string | Locator.Locator): this {
-    return this.one("click", typeof target === "string" ? Locator.text(target) : target, "click", () => pointer)
+    return this.one(
+      "click",
+      typeof target === "string" ? Locator.text(target) : target,
+      "click",
+      () => pointer
+    )
   }
   fire(locator: Locator.Locator, event: string, payload: unknown = {}): this {
     return this.one("fire", locator, event, () => payload)
@@ -389,16 +499,25 @@ export class SceneCursor extends Cursor {
   childEmit(child: ChildTarget, ...args: KeyAnd<unknown>): this {
     const [key, event] = keyAnd(args)
     return this.act("childEmit", "message", (state) => {
-      const found = findDeclared(state, child, key, this.name("childEmit")).child
+      const found =
+        findDeclared(state, child, key, this.name("childEmit")).child
       return engine.dispatch(state, found.onEmit(event))
     })
   }
-  childFailure(child: ChildTarget, ...args: KeyAnd<Cause.Cause<unknown>>): this {
+  childFailure(
+    child: ChildTarget,
+    ...args: KeyAnd<Cause.Cause<unknown>>
+  ): this {
     const [key, cause] = keyAnd(args)
     return this.act("childFailure", "message", (state) => {
       const found = findDeclared(state, child, key, this.name("childFailure"))
-      const failure: AsyncResult.Failure<never, unknown> = AsyncResult.failure(cause)
-      return engine.dispatch(withSlot(state, found, failure), found.child.onFailure?.(failure))
+      const failure: AsyncResult.Failure<never, unknown> = AsyncResult.failure(
+        cause
+      )
+      return engine.dispatch(
+        withSlot(state, found, failure),
+        found.child.onFailure?.(failure)
+      )
     })
   }
   childPending(child: ChildTarget, key?: string): this {
@@ -406,7 +525,9 @@ export class SceneCursor extends Cursor {
     return this.act("childPending", "acting", (state) => {
       const found = findDeclared(state, child, key, step)
       if (found.child.fallback === undefined) {
-        throw new Error(`${step}: the child has no fallback to show while it's pending`)
+        throw new Error(
+          `${step}: the child has no fallback to show while it's pending`
+        )
       }
       return withSlot(state, found, AsyncResult.initial(true))
     })
@@ -416,7 +537,9 @@ export class SceneCursor extends Cursor {
     const step = this.name("givenChild")
     // The Model is for the instance the step selected: the one at its path, as the runtime keys instances.
     const path = engine.findChild(this.state.view(), child, key, step).path
-    if (path === undefined) throw new Error(`${step}: the child isn't one the scene expands`)
+    if (path === undefined) {
+      throw new Error(`${step}: the child isn't one the scene expands`)
+    }
     return this.act("givenChild", "acting", (state) => {
       const given = new Map(engine.childModels.get(state))
       given.set(path, model)
@@ -425,7 +548,11 @@ export class SceneCursor extends Cursor {
   }
   collected(reports: ReadonlyArray<unknown>): this {
     const step = this.name("collected")
-    return this.act("collected", "message", (state) => engine.withReports(state, reports, step))
+    return this.act(
+      "collected",
+      "message",
+      (state) => engine.withReports(state, reports, step)
+    )
   }
   protected override givenShared(
     state: engine.State<any, any, any, any>,
@@ -434,7 +561,10 @@ export class SceneCursor extends Cursor {
     // Another `shared` step may give a value the view still misses.
     return engine.renderSharing(state) ? trackMounts(state, step) : state
   }
-  mounted(target: Mount.Definition.Any | Mount.Any, ...result: ReadonlyArray<unknown>): this {
+  mounted(
+    target: Mount.Definition.Any | Mount.Any,
+    ...result: ReadonlyArray<unknown>
+  ): this {
     const step = this.name("mounted")
     const live = findMount(this.state, target, step)
     if (live.ended && !live.mount.stream) {
@@ -446,24 +576,43 @@ export class SceneCursor extends Cursor {
     }
     // `findMount` matched `target`, so `result` is the Source of this mount. A mount that ends with
     // `Component.noop` takes no result, but `undefined` given is a result.
-    const message = (live.mount.resolve as (result: unknown) => unknown)(result.length === 0 ? noop : result[0])
+    const message = (live.mount.resolve as (result: unknown) => unknown)(
+      result.length === 0 ? noop : result[0]
+    )
     return this.act(
       "mounted",
       "acting",
-      (state) => engine.dispatch(withMount(state, live, { ...live, acknowledged: true, ended: true }), message)
+      (state) =>
+        engine.dispatch(
+          withMount(state, live, { ...live, acknowledged: true, ended: true }),
+          message
+        )
     )
   }
   expectMount(mount: Mount.Any): this {
     const live = findMount(this.state, mount, this.name("expectMount"))
-    return this.replace(withMount(this.state, live, { ...live, acknowledged: true }))
+    return this.replace(
+      withMount(this.state, live, { ...live, acknowledged: true })
+    )
   }
 
   parts(f: (parts: unknown) => void): this {
-    const component = this.state.component as unknown as Partial<Component.Headless.Any>
+    const component = this.state.component as unknown as Partial<
+      Component.Headless.Any
+    >
     if (component.parts === undefined) {
-      throw new Error(`${this.name("parts")}: ${this.state.component.definition.name} is not a headless component`)
+      throw new Error(
+        `${
+          this.name("parts")
+        }: ${this.state.component.definition.name} is not a headless component`
+      )
     }
-    f(engine.rootParts(component as Component.Headless.Any, this.state.model, this.state.props, this.state))
+    f(engine.rootParts(
+      component as Component.Headless.Any,
+      this.state.model,
+      this.state.props,
+      this.state
+    ))
     return this
   }
   expect(locator: Locator.Locator): object {
@@ -481,20 +630,28 @@ export class SceneCursor extends Cursor {
   }
   expectHandled(): this {
     if (this.state.ack.interaction !== "handled") {
-      throw new Error(`${this.name("expectHandled")}: ${describeInteraction(this.state)}`)
+      throw new Error(
+        `${this.name("expectHandled")}: ${describeInteraction(this.state)}`
+      )
     }
     return this
   }
   expectIgnored(): this {
     if (this.state.ack.interaction !== "ignored") {
-      throw new Error(`${this.name("expectIgnored")}: ${describeInteraction(this.state)}`)
+      throw new Error(
+        `${this.name("expectIgnored")}: ${describeInteraction(this.state)}`
+      )
     }
-    return this.replace(engine.update(this.state, { ack: { ...this.state.ack, ignored: false } }))
+    return this.replace(
+      engine.update(this.state, { ack: { ...this.state.ack, ignored: false } })
+    )
   }
   expectDefaultPrevented(expected = true): this {
     if (this.state.defaultPrevented !== expected) {
       throw new Error(
-        `${this.name("expectDefaultPrevented")}: the default was ${this.state.defaultPrevented ? "" : "not "}cancelled`
+        `${this.name("expectDefaultPrevented")}: the default was ${
+          this.state.defaultPrevented ? "" : "not "
+        }cancelled`
       )
     }
     return this
@@ -548,5 +705,8 @@ export const begin = <S extends SceneCursor>(
     : engine.withView(component, options.view!, options.elements)
   const state = cursor.initial(made, props)
   // A missing shared value can't be given before the first step.
-  return new Ctor(module, engine.renderSharing(state) ? trackMounts(state, `${module}.start`) : state)
+  return new Ctor(
+    module,
+    engine.renderSharing(state) ? trackMounts(state, `${module}.start`) : state
+  )
 }

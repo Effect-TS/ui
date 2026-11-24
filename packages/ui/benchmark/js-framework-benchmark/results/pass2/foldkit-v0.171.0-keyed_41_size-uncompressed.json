@@ -4,6 +4,13 @@
   "benchmark": "41_size-uncompressed",
   "type": "size",
   "values": {
-    "DEFAULT": { "min": 302.3, "max": 302.3, "median": 302.3, "mean": 302.3, "stddev": null, "values": [302.3] }
+    "DEFAULT": {
+      "min": 302.3,
+      "max": 302.3,
+      "median": 302.3,
+      "mean": 302.3,
+      "stddev": null,
+      "values": [302.3]
+    }
   }
 }

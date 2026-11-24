@@ -5,14 +5,25 @@ import { KeyValueStore } from "effect/persistence"
 const SESSION_STORAGE_KEY = "auth_session"
 
 export class SessionStore extends Context.Service<SessionStore, {
-  readonly get: Effect.Effect<Option.Option<Session>, KeyValueStore.KeyValueStoreError | Schema.SchemaError>
-  readonly set: (session: Session) => Effect.Effect<void, KeyValueStore.KeyValueStoreError | Schema.SchemaError>
+  readonly get: Effect.Effect<
+    Option.Option<Session>,
+    KeyValueStore.KeyValueStoreError | Schema.SchemaError
+  >
+  readonly set: (
+    session: Session
+  ) => Effect.Effect<
+    void,
+    KeyValueStore.KeyValueStoreError | Schema.SchemaError
+  >
   readonly remove: Effect.Effect<void, KeyValueStore.KeyValueStoreError>
 }>()("auth/SessionStore") {
   static readonly layer = Layer.effect(
     SessionStore,
     Effect.gen(function*() {
-      const store = KeyValueStore.toSchemaStore(yield* KeyValueStore.KeyValueStore, Session)
+      const store = KeyValueStore.toSchemaStore(
+        yield* KeyValueStore.KeyValueStore,
+        Session
+      )
       return SessionStore.of({
         get: store.get(SESSION_STORAGE_KEY),
         set: (session) => store.set(SESSION_STORAGE_KEY, session),

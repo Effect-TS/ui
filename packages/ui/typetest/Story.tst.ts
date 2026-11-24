@@ -37,25 +37,39 @@ describe("Story", () => {
     const toggled = { _tag: "Toggled", done: true } as const
     expect(scene.childEmit).type.toBeCallableWith(TodoItem, toggled)
     expect(scene.childEmit).type.toBeCallableWith(TodoItem, "t1", toggled)
-    expect(scene.childEmit).type.not.toBeCallableWith(TodoItem, { _tag: "Missing" })
+    expect(scene.childEmit).type.not.toBeCallableWith(TodoItem, {
+      _tag: "Missing"
+    })
     expect(scene.childEmit).type.not.toBeCallableWith("t1", toggled)
   })
 
   it("checks subscription messages and infers model callbacks", () => {
-    const Message = UiSchema.TaggedEnum({ Set: { value: Schema.Number }, Reset: {} })
-    const Setter = Component.define({ name: "Setter", scoped: false, model: Schema.Number, message: Message }).make({
+    const Message = UiSchema.TaggedEnum({
+      Set: { value: Schema.Number },
+      Reset: {}
+    })
+    const Setter = Component.define({
+      name: "Setter",
+      scoped: false,
+      model: Schema.Number,
+      message: Message
+    }).make({
       init: () => 0,
       update: (_, message) => message._tag === "Set" ? message.value : 0,
       view: (h, model) => h.text(String(model))
     })
     const steps: Steps.Steps<typeof Setter> = Story.start(Setter, {})
     expect(steps.subscription).type.toBeCallableWith("tick", { _tag: "Reset" })
-    expect(steps.subscription).type.not.toBeCallableWith("tick", { _tag: "Missing" })
+    expect(steps.subscription).type.not.toBeCallableWith("tick", {
+      _tag: "Missing"
+    })
     counter.send((model) => {
       expect(model).type.toBe<{ readonly count: number }>()
       return { _tag: "Increment" }
     })
-    expect(counter.send).type.not.toBeCallableWith((_model: { readonly count: number }) => "bad")
+    expect(counter.send).type.not.toBeCallableWith((
+      _model: { readonly count: number }
+    ) => "bad")
   })
 
   it("types steps by the component", () => {
@@ -94,22 +108,30 @@ describe("Story", () => {
   })
 
   it("a shared step needs no explicit generics", () => {
-    const twice = (s: Story.Steps<typeof Counter>) => s.send(increment).send(increment)
+    const twice = (s: Story.Steps<typeof Counter>) =>
+      s.send(increment).send(increment)
     expect(counter.pipe(twice)).type.toBe<Story.Steps<typeof Counter>>()
     expect(todoItem.pipe).type.not.toBeCallableWith(twice)
   })
 
   it("a step over any component keeps the caller's type", () => {
-    const sendIncrement = <S extends Story.Steps.Any>(s: S): S => s.send(increment)
+    const sendIncrement = <S extends Story.Steps.Any>(s: S): S =>
+      s.send(increment)
     expect(sendIncrement(counter)).type.toBe<Story.Steps<typeof Counter>>()
-    expect(counter.pipe(sendIncrement).current.model).type.toBe<{ readonly count: number }>()
+    expect(counter.pipe(sendIncrement).current.model).type.toBe<
+      { readonly count: number }
+    >()
   })
 
   it("a step over the shared steps keeps the caller's type", () => {
     const quiet = <S extends Steps.Steps.Any>(s: S): S => s.expectNone()
     expect(quiet(counter)).type.toBe<Story.Steps<typeof Counter>>()
-    expect(quiet(counter).send).type.toBeCallableWith(CounterMessage.Increment())
-    expect(counter.pipe(quiet).current.model).type.toBe<{ readonly count: number }>()
+    expect(quiet(counter).send).type.toBeCallableWith(
+      CounterMessage.Increment()
+    )
+    expect(counter.pipe(quiet).current.model).type.toBe<
+      { readonly count: number }
+    >()
     counter.check((story) => {
       expect(story.model).type.toBe<{ readonly count: number }>()
     })
@@ -129,7 +151,9 @@ describe("Story", () => {
     const steps = Story.start(Static, {})
     expect(steps).type.toBe<Story.Steps<typeof Static>>()
     expect(steps.current.model).type.toBe<number>()
-    expect(Story.make(Static, {})).type.toBe<Effect.Effect<Story.Steps<typeof Static>, never, Scope.Scope>>()
+    expect(Story.make(Static, {})).type.toBe<
+      Effect.Effect<Story.Steps<typeof Static>, never, Scope.Scope>
+    >()
     expect(Story.start(Static, {}).given(1).model).type.toBe<number>()
     expect(steps.send).type.not.toBeCallableWith(CounterMessage.Increment())
     const shared = <S extends Story.Steps.Any>(s: S): S => s
@@ -137,24 +161,49 @@ describe("Story", () => {
   })
 
   it("resolves a Command with the definition's own message", () => {
-    expect(todoItem.resolve).type.toBeCallableWith(SaveTodo, TodoItemMessage.Saved())
-    expect(todoItem.resolve).type.not.toBeCallableWith(SaveTodo, SearchMessage.Tick())
+    expect(todoItem.resolve).type.toBeCallableWith(
+      SaveTodo,
+      TodoItemMessage.Saved()
+    )
+    expect(todoItem.resolve).type.not.toBeCallableWith(
+      SaveTodo,
+      SearchMessage.Tick()
+    )
     expect(searchBox.resolve).type.toBeCallableWith(
       Search.make({ text: "x" }),
       SearchMessage.Results({ items: [] })
     )
-    expect(searchBox.resolve).type.not.toBeCallableWith(Search.make({ text: "x" }), TodoItemMessage.Saved())
+    expect(searchBox.resolve).type.not.toBeCallableWith(
+      Search.make({ text: "x" }),
+      TodoItemMessage.Saved()
+    )
   })
 
   it("an issued Command whose result never arrives is a target, and takes no result", () => {
-    const Hold = Command.make("Hold", { args: { key: Schema.String } }, () => Effect.never)
-    const Watch = Command.make("Watch", { args: { key: Schema.String }, stream: true }, () => Stream.never)
-    expect(counter.expectExact).type.toBeCallableWith(Hold.make({ key: "one" }), Watch.make({ key: "one" }))
+    const Hold = Command.make(
+      "Hold",
+      { args: { key: Schema.String } },
+      () => Effect.never
+    )
+    const Watch = Command.make("Watch", {
+      args: { key: Schema.String },
+      stream: true
+    }, () => Stream.never)
+    expect(counter.expectExact).type.toBeCallableWith(
+      Hold.make({ key: "one" }),
+      Watch.make({ key: "one" })
+    )
     expect(counter.expectHas).type.toBeCallableWith(Hold.make({ key: "one" }))
     expect(counter.end).type.toBeCallableWith(Watch.make({ key: "one" }))
     expect(counter.end).type.not.toBeCallableWith(Hold.make({ key: "one" }))
-    expect(counter.resolve).type.not.toBeCallableWith(Hold.make({ key: "one" }), "anything")
-    expect(counter.next).type.not.toBeCallableWith(Watch.make({ key: "one" }), "anything")
+    expect(counter.resolve).type.not.toBeCallableWith(
+      Hold.make({ key: "one" }),
+      "anything"
+    )
+    expect(counter.next).type.not.toBeCallableWith(
+      Watch.make({ key: "one" }),
+      "anything"
+    )
   })
 
   it("a mapped Command as the target takes the definition's own result", () => {
@@ -164,10 +213,17 @@ describe("Story", () => {
       { args: { name: Schema.String } },
       ({ name }) => Effect.succeed(`https://cdn/${name}`)
     )
-    const mapped = UploadFile.make({ name: "me.png" }).pipe(Command.map((url) => Uploaded.Uploaded({ url })))
-    expect(mapped).type.toBe<Command.Issued<typeof Uploaded.Type, never, string, "Effect">>()
+    const mapped = UploadFile.make({ name: "me.png" }).pipe(
+      Command.map((url) => Uploaded.Uploaded({ url }))
+    )
+    expect(mapped).type.toBe<
+      Command.Issued<typeof Uploaded.Type, never, string, "Effect">
+    >()
     expect(counter.resolve).type.toBeCallableWith(mapped, "https://cdn/me.png")
-    expect(counter.resolve).type.not.toBeCallableWith(mapped, Uploaded.Uploaded({ url: "" }))
+    expect(counter.resolve).type.not.toBeCallableWith(
+      mapped,
+      Uploaded.Uploaded({ url: "" })
+    )
     const Progress = Command.make(
       "Progress",
       { args: { name: Schema.String }, stream: true },
@@ -177,29 +233,51 @@ describe("Story", () => {
       Command.map((percent) => Uploaded.Uploaded({ url: String(percent) }))
     )
     expect(counter.next).type.toBeCallableWith(mappedStream, 50)
-    expect(counter.next).type.not.toBeCallableWith(mappedStream, Uploaded.Uploaded({ url: "" }))
+    expect(counter.next).type.not.toBeCallableWith(
+      mappedStream,
+      Uploaded.Uploaded({ url: "" })
+    )
     expect(counter.end).type.toBeCallableWith(mappedStream)
   })
 
   it("next and end only take stream Commands", () => {
-    expect(searchBox.next).type.toBeCallableWith(Upload, SearchMessage.Progress({ percent: 1 }))
+    expect(searchBox.next).type.toBeCallableWith(
+      Upload,
+      SearchMessage.Progress({ percent: 1 })
+    )
     expect(searchBox.end).type.toBeCallableWith(Upload)
-    expect(searchBox.next).type.not.toBeCallableWith(Search, SearchMessage.Results({ items: [] }))
+    expect(searchBox.next).type.not.toBeCallableWith(
+      Search,
+      SearchMessage.Results({ items: [] })
+    )
     expect(searchBox.end).type.not.toBeCallableWith(SaveTodo)
   })
 
   it("fail takes the typed failure of a Command whose body can fail", () => {
-    class SaveFailed extends Data.TaggedError("SaveFailed")<{ readonly reason: string }> {}
+    class SaveFailed
+      extends Data.TaggedError("SaveFailed")<{ readonly reason: string }>
+    {}
     class Save extends Command.Service<Save>()(
       "Save",
       { args: {}, invalidates: () => [] },
       Effect.succeed(() => Effect.fail(new SaveFailed({ reason: "x" })))
     ) {}
-    const matched = Save.make().pipe(Command.match({ onSuccess: () => 1, onFailure: () => 2 }))
-    expect(counter.fail).type.toBeCallableWith(Save, new SaveFailed({ reason: "disk full" }))
-    expect(counter.fail).type.toBeCallableWith(matched, new SaveFailed({ reason: "disk full" }))
+    const matched = Save.make().pipe(
+      Command.match({ onSuccess: () => 1, onFailure: () => 2 })
+    )
+    expect(counter.fail).type.toBeCallableWith(
+      Save,
+      new SaveFailed({ reason: "disk full" })
+    )
+    expect(counter.fail).type.toBeCallableWith(
+      matched,
+      new SaveFailed({ reason: "disk full" })
+    )
     expect(counter.fail).type.not.toBeCallableWith(Save, new Error("other"))
-    expect(todoItem.fail).type.not.toBeCallableWith(SaveTodo, new Error("never fails"))
+    expect(todoItem.fail).type.not.toBeCallableWith(
+      SaveTodo,
+      new Error("never fails")
+    )
   })
 })
 
@@ -228,7 +306,9 @@ describe("Story.make and Scene.make", () => {
     expect(scene.subscriptions).type.toBe<ReadonlyArray<string>>()
     expect(scene.defaultPrevented).type.toBe<boolean>()
     // The record still has them as functions.
-    expect(counter.current.subscriptions).type.toBe<() => ReadonlyArray<string>>()
+    expect(counter.current.subscriptions).type.toBe<
+      () => ReadonlyArray<string>
+    >()
     expect(scene.current.view).type.toBeCallableWith()
   })
 })
@@ -236,7 +316,9 @@ describe("Story.make and Scene.make", () => {
 describe("Story's re-exports of the Steps types", () => {
   it("resolve to the Steps types", () => {
     type Read = Query.Query<{ readonly id: string }, string, never>
-    expect<Story.Pending<CounterMessage>>().type.toBe<Steps.Pending<CounterMessage>>()
+    expect<Story.Pending<CounterMessage>>().type.toBe<
+      Steps.Pending<CounterMessage>
+    >()
     expect<Story.AwaitedQuery>().type.toBe<Steps.AwaitedQuery>()
     expect<Story.QueryInfo>().type.toBe<Steps.QueryInfo>()
     expect<Story.KeyedLoad<Read>>().type.toBe<Steps.KeyedLoad<Read>>()

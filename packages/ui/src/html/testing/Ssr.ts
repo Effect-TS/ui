@@ -105,8 +105,12 @@ export interface Ssr<out Model, in Msg, out Events = never> {
   readonly adopted: ReadonlyArray<string>
   readonly log: ReadonlyArray<MessageLog.Entry>
   readonly serverLog: ReadonlyArray<MessageLog.Entry>
-  readonly commands: ReadonlyArray<{ readonly path: string; readonly name: string; readonly index: number }>
-  readonly misses: ReadonlyArray<{ readonly query: string; readonly logKey: string }>
+  readonly commands: ReadonlyArray<
+    { readonly path: string; readonly name: string; readonly index: number }
+  >
+  readonly misses: ReadonlyArray<
+    { readonly query: string; readonly logKey: string }
+  >
 }
 
 /**
@@ -121,7 +125,9 @@ export class SsrError extends Data.TaggedError("SsrError")<{
   readonly problems: ReadonlyArray<string>
 }> {
   override get message(): string {
-    return `Server rendering and hydration disagree:\n${this.problems.map((problem) => `- ${problem}`).join("\n")}`
+    return `Server rendering and hydration disagree:\n${
+      this.problems.map((problem) => `- ${problem}`).join("\n")
+    }`
   }
 }
 
@@ -129,7 +135,8 @@ export class SsrError extends Data.TaggedError("SsrError")<{
  * Whether a marker path is a placed slot's, such as `/Page/Card[c]/[body]`. A key or slot name
  * escapes `]/`, and a component's name escapes `[`, so only a slot's segment starts with one.
  */
-const isSlotPath = (path: string): boolean => path[path.lastIndexOf("]/") + 2] === "["
+const isSlotPath = (path: string): boolean =>
+  path[path.lastIndexOf("]/") + 2] === "["
 
 /**
  * The instance a node is judged with: the innermost with markers around it, so the nodes of a child
@@ -163,7 +170,9 @@ const serverNodes = (container: globalThis.Element): Array<ServerNode> => {
       }
       out.push({ node, paths: paths.slice() })
       // A text-only element's content is rebuilt by design: only the element itself is adopted.
-      if (!server.textOnlyTags.has((node as globalThis.Element).localName)) visit(node)
+      if (!server.textOnlyTags.has((node as globalThis.Element).localName)) {
+        visit(node)
+      }
     }
   }
   visit(container)
@@ -184,35 +193,71 @@ const markersLeft = (container: globalThis.Element): Array<string> => {
   return out
 }
 
-const show = (value: unknown): string => value === undefined ? "nothing" : JSON.stringify(value)
+const show = (value: unknown): string =>
+  value === undefined ? "nothing" : JSON.stringify(value)
 
 /** The differences between two merged heads, one line per field or identity. */
-const compareHeads = (serverHead: HtmlHead.HtmlHead, client: HtmlHead.HtmlHead): Array<string> => {
+const compareHeads = (
+  serverHead: HtmlHead.HtmlHead,
+  client: HtmlHead.HtmlHead
+): Array<string> => {
   const problems: Array<string> = []
   const same = (what: string, a: unknown, b: unknown) => {
-    if (a !== b) problems.push(`head ${what}: the server has ${show(a)}, the client ${show(b)}`)
+    if (a !== b) {
+      problems.push(
+        `head ${what}: the server has ${show(a)}, the client ${show(b)}`
+      )
+    }
   }
   same("title", serverHead.title, client.title)
   same("html lang", serverHead.html.lang, client.html.lang)
   same("html dir", serverHead.html.dir, client.html.dir)
-  const tokens = (what: string, a: ReadonlyArray<string>, b: ReadonlyArray<string>) =>
-    same(what, [...new Set(a)].sort().join(" "), [...new Set(b)].sort().join(" "))
+  const tokens = (
+    what: string,
+    a: ReadonlyArray<string>,
+    b: ReadonlyArray<string>
+  ) =>
+    same(
+      what,
+      [...new Set(a)].sort().join(" "),
+      [...new Set(b)].sort().join(" ")
+    )
   tokens("html class", serverHead.html.class, client.html.class)
   tokens("body class", serverHead.body.class, client.body.class)
-  const byName = (what: string, a: Readonly<Record<string, string>>, b: Readonly<Record<string, string>>) => {
-    for (const name of new Set([...Object.keys(a), ...Object.keys(b)])) same(`${what} ${name}`, a[name], b[name])
+  const byName = (
+    what: string,
+    a: Readonly<Record<string, string>>,
+    b: Readonly<Record<string, string>>
+  ) => {
+    for (const name of new Set([...Object.keys(a), ...Object.keys(b)])) {
+      same(`${what} ${name}`, a[name], b[name])
+    }
   }
   byName("html", serverHead.html.data, client.html.data)
   byName("body", serverHead.body.data, client.body.data)
   const entries = (head: HtmlHead.HtmlHead) =>
     new Map<string, string>([
-      ...head.meta.map((entry) => [HtmlHead.identity(entry), JSON.stringify(HtmlHead.attributes(entry))] as const),
-      ...head.links.map((entry) => [HtmlHead.identity(entry), JSON.stringify(HtmlHead.attributes(entry))] as const),
-      ...head.jsonLd.map((entry) => [HtmlHead.identity(entry), entry.json] as const)
+      ...head.meta.map((entry) =>
+        [
+          HtmlHead.identity(entry),
+          JSON.stringify(HtmlHead.attributes(entry))
+        ] as const
+      ),
+      ...head.links.map((entry) =>
+        [
+          HtmlHead.identity(entry),
+          JSON.stringify(HtmlHead.attributes(entry))
+        ] as const
+      ),
+      ...head.jsonLd.map((entry) =>
+        [HtmlHead.identity(entry), entry.json] as const
+      )
     ])
   const a = entries(serverHead)
   const b = entries(client)
-  for (const identity of new Set([...a.keys(), ...b.keys()])) same(identity, a.get(identity), b.get(identity))
+  for (const identity of new Set([...a.keys(), ...b.keys()])) {
+    same(identity, a.get(identity), b.get(identity))
+  }
   return problems
 }
 
@@ -285,7 +330,9 @@ export const ssr = <
   V extends View.Elements,
   RP = never
 >(
-  component: Component.Members<Name, Props, Model, Msg, Events, R, V, any> & BrowserHost.HtmlRoot<V>,
+  component:
+    & Component.Members<Name, Props, Model, Msg, Events, R, V, any>
+    & BrowserHost.HtmlRoot<V>,
   props: Props | Effect.Effect<Props, never, RP>,
   options?: {
     readonly budget?: Duration.Input | undefined
@@ -304,7 +351,11 @@ export const ssr = <
     const outer = yield* Effect.context<never>()
     const clock = Context.get(outer, Clock.Clock)
     if (typeof (clock as Partial<TestClock.TestClock>).setTime !== "function") {
-      return yield* Effect.die(new Error("[ssr] runs on the test clock: run it under it.effect, or provide TestClock"))
+      return yield* Effect.die(
+        new Error(
+          "[ssr] runs on the test clock: run it under it.effect, or provide TestClock"
+        )
+      )
     }
     const budget = Duration.toMillis(options?.budget ?? "500 millis")
     const isStatic = options?.static === true
@@ -319,7 +370,10 @@ export const ssr = <
         Effect.suspend(() => {
           const sleeper = { at: now() + Duration.toMillis(duration) }
           sleepers.add(sleeper)
-          return Effect.ensuring(draining.sleep(duration), Effect.sync(() => sleepers.delete(sleeper)))
+          return Effect.ensuring(
+            draining.sleep(duration),
+            Effect.sync(() => sleepers.delete(sleeper))
+          )
         })
     })
     /** Runs the scheduler until nothing is left, giving outside work a few macrotasks to come back. */
@@ -330,7 +384,9 @@ export const ssr = <
           quiet = 0
           if (!testHost.drain(testHost.budget)) {
             return yield* new SsrError({
-              problems: [`a step ran ${testHost.budget} scheduler tasks and work is still being scheduled`]
+              problems: [
+                `a step ran ${testHost.budget} scheduler tasks and work is still being scheduled`
+              ]
             })
           }
           continue
@@ -340,23 +396,29 @@ export const ssr = <
       }
     })
     /** Steps the clock to each wake of the tree's sleepers until `done`, or no wake is left by `deadline`. */
-    const stepUntil = Effect.fnUntraced(function*(done: () => boolean, deadline: number) {
-      for (let step = 0; step < stepLimit; step++) {
-        yield* quiesce
-        if (done()) return true
-        let next = Infinity
-        for (const sleeper of sleepers) if (sleeper.at < next) next = sleeper.at
-        if (next > deadline) return false
-        yield* TestClock.setTime(Math.max(next, now()))
+    const stepUntil = Effect.fnUntraced(
+      function*(done: () => boolean, deadline: number) {
+        for (let step = 0; step < stepLimit; step++) {
+          yield* quiesce
+          if (done()) return true
+          let next = Infinity
+          for (const sleeper of sleepers) {
+            if (sleeper.at < next) next = sleeper.at
+          }
+          if (next > deadline) return false
+          yield* TestClock.setTime(Math.max(next, now()))
+        }
+        return false
       }
-      return false
-    })
+    )
 
     // -- server ---------------------------------------------------------------
     const start = now()
     const serverLog = MessageLog.makeMemory({ size: logSize })
     let serverCache: ReturnType<typeof Query.internals> | undefined
-    let misses: ReadonlyArray<{ readonly query: string; readonly logKey: string }> = []
+    let misses: ReadonlyArray<
+      { readonly query: string; readonly logKey: string }
+    > = []
     const writer = server.makeWriter()
     const serverFiber = yield* runtime.prerender(component as any, props, {
       budget,
@@ -379,42 +441,61 @@ export const ssr = <
       // A sleep the tree's clock didn't see: the budget is spent whole.
       yield* TestClock.setTime(start + budget)
       if (!(yield* stepUntil(serverDone, start + budget))) {
-        return yield* new SsrError({ problems: ["the server render didn't finish when its budget was spent"] })
+        return yield* new SsrError({
+          problems: [
+            "the server render didn't finish when its budget was spent"
+          ]
+        })
       }
     }
-    const rendered = (yield* Fiber.join(serverFiber)) as Renderer.Prerendered<Model>
+    const rendered = (yield* Fiber.join(serverFiber)) as Renderer.Prerendered<
+      Model
+    >
     const serverHead = server.htmlHead(rendered.head)
     if (now() < start + budget) yield* TestClock.setTime(start + budget)
 
     const problems: Array<string> = []
     // The state as the client reads it from the page.
-    const state = JSON.parse(HtmlServer.serializeState(rendered.state)) as Renderer.State
+    const state = JSON.parse(
+      HtmlServer.serializeState(rendered.state)
+    ) as Renderer.State
     if (serverCache !== undefined) {
-      for (const problem of serverCache.checkWire(state["~query"] ?? {})) problems.push(`~query: ${problem}`)
+      for (
+        const problem of serverCache.checkWire(state["~query"] ?? {})
+      ) problems.push(`~query: ${problem}`)
     }
     const html = writer.html()
-    const page = `<!doctype html><html ${server.attributes(server.htmlOwned(serverHead))}><head>${
-      server.headTags(serverHead)
-    }</head><body ${server.attributes(server.bodyOwned(serverHead))}><div id="app">${html}</div></body></html>`
+    const page = `<!doctype html><html ${
+      server.attributes(server.htmlOwned(serverHead))
+    }><head>${server.headTags(serverHead)}</head><body ${
+      server.attributes(server.bodyOwned(serverHead))
+    }><div id="app">${html}</div></body></html>`
     const document = new DOMParser().parseFromString(page, "text/html")
     const container = document.getElementById("app")!
     const before = serverNodes(container)
-    const project = options?.frames ?? ((container: globalThis.Element) => container.textContent ?? "")
+    const project = options?.frames ??
+      ((container: globalThis.Element) => container.textContent ?? "")
     const frames: Array<string> = []
     const frame = () => {
       const next = project(container)
-      if (frames.length === 0 || frames[frames.length - 1] !== next) frames.push(next)
+      if (frames.length === 0 || frames[frames.length - 1] !== next) {
+        frames.push(next)
+      }
     }
     frame()
 
     // -- client ---------------------------------------------------------------
-    const host = BrowserHost.makeHost(document, { warn: (message) => problems.push(message) })
+    const host = BrowserHost.makeHost(document, {
+      warn: (message) => problems.push(message)
+    })
     yield* Effect.addFinalizer(() => Effect.sync(host.dispose))
     const clientLog = MessageLog.makeMemory({ size: logSize })
     // Adoption is judged at the commit of the flush in which each instance adopted, so a later
     // update, such as the message an `onMount` sends, may replace nodes without counting against it.
     const deferred = new Set(state["~deferred"] ?? [])
-    let unjudged = before.filter(({ paths }) => paths.length > 0 && !paths.some((path) => deferred.has(path)))
+    let unjudged = before.filter(({ paths }) =>
+      paths.length > 0 && !paths.some((path) => deferred.has(path))
+    )
     const rebuilt = new Map<string, string>()
     let read = 0
     const judge = () => {
@@ -422,13 +503,22 @@ export const ssr = <
       const adoptedNow = new Set<string>()
       for (; read < entries.length; read++) {
         const entry = entries[read]!
-        if (entry._tag === "Mounted" && entry.adopted) adoptedNow.add(entry.path)
+        if (entry._tag === "Mounted" && entry.adopted) {
+          adoptedNow.add(
+            entry.path
+          )
+        }
       }
       unjudged = unjudged.filter(({ node, paths }) => {
         if (!adoptedNow.has(ownerOf(paths))) return true
         const path = paths[paths.length - 1]!
         if (!container.contains(node) && !rebuilt.has(path)) {
-          rebuilt.set(path, node.nodeType === 1 ? `<${(node as globalThis.Element).localName}>` : "#text")
+          rebuilt.set(
+            path,
+            node.nodeType === 1
+              ? `<${(node as globalThis.Element).localName}>`
+              : "#text"
+          )
         }
         return false
       })
@@ -456,13 +546,26 @@ export const ssr = <
           Context.add(Query.Problems, testHost.report)
         )
       )
-    ) as Effect.Effect<runtime.Root & Renderer.Root<any, any>, never, Exclude<R | RP, Html.Host> | Scope.Scope>
-    const root = yield* TestHost.register(testHost, mounted, clientLog, () => frames.slice())
+    ) as Effect.Effect<
+      runtime.Root & Renderer.Root<any, any>,
+      never,
+      Exclude<R | RP, Html.Host> | Scope.Scope
+    >
+    const root = yield* TestHost.register(testHost, mounted, clientLog, () =>
+      frames.slice())
     let adoptedDone = false
-    yield* Effect.forkChild(Effect.andThen(mounted.adopted, Effect.sync(() => adoptedDone = true)))
+    yield* Effect.forkChild(Effect.andThen(
+      mounted.adopted,
+      Effect.sync(() =>
+        adoptedDone = true
+      )
+    ))
     const deadline = now() + budget
     const adoptedOrFallback = Effect.gen(function*() {
-      if (yield* stepUntil(() => adoptedDone, deadline)) return true
+      if (
+        yield* stepUntil(() =>
+          adoptedDone, deadline)
+      ) return true
       // A sleep the tree's clock didn't see: the budget is spent whole.
       if (now() < deadline) yield* TestClock.setTime(deadline)
       return yield* stepUntil(() => adoptedDone, deadline)
@@ -482,7 +585,9 @@ export const ssr = <
 
     // -- checks ---------------------------------------------------------------
     const log = clientLog.entries()
-    const adoptedEntries = log.filter((entry): entry is MessageLog.Mounted => entry._tag === "Mounted" && entry.adopted)
+    const adoptedEntries = log.filter((entry): entry is MessageLog.Mounted =>
+      entry._tag === "Mounted" && entry.adopted
+    )
     const adopted = adoptedEntries.map((entry) => entry.path)
     for (const path of Object.keys(state)) {
       if (path.startsWith("~")) continue
@@ -491,38 +596,56 @@ export const ssr = <
         problems.push(`${path}: the client didn't adopt the server's Model`)
         continue
       }
-      const encoded = yield* Effect.option(runtime.stateCodecOf(entry.component).encode(entry.model, entry.queries))
-      const json = encoded._tag === "Some" ? JSON.stringify(encoded.value) : undefined
+      const encoded = yield* Effect.option(
+        runtime.stateCodecOf(entry.component).encode(entry.model, entry.queries)
+      )
+      const json = encoded._tag === "Some"
+        ? JSON.stringify(encoded.value)
+        : undefined
       if (json !== JSON.stringify(state[path])) {
         problems.push(
-          `${path}: the adopted state encodes to ${json ?? "nothing"}, the server's is ${JSON.stringify(state[path])}`
+          `${path}: the adopted state encodes to ${
+            json ?? "nothing"
+          }, the server's is ${JSON.stringify(state[path])}`
         )
       }
     }
     for (const [path, first] of rebuilt) {
-      problems.push(`${path}: the client rebuilt the server's nodes instead of adopting them, starting at ${first}`)
+      problems.push(
+        `${path}: the client rebuilt the server's nodes instead of adopting them, starting at ${first}`
+      )
     }
     // Every server node outside a deferred instance is judged: one whose instance never adopted under
     // the path its markers carry was not adopted either.
     for (const path of new Set(unjudged.map(({ paths }) => ownerOf(paths)))) {
-      problems.push(`${path}: no instance adopted the server's nodes under this path`)
+      problems.push(
+        `${path}: no instance adopted the server's nodes under this path`
+      )
     }
-    for (const path of markersLeft(container)) problems.push(`${path}: its markers are still in the document`)
+    for (const path of markersLeft(container)) {
+      problems.push(`${path}: its markers are still in the document`)
+    }
     problems.push(...compareHeads(serverHead, clientHead))
     if (!isStatic) {
       for (const entry of log) {
         // A caller-only fetch (`stored: false`) is allowed: only a fetch the cache stores defeats hydration.
         if (entry._tag === "FetchStarted" && entry.inWindow && entry.stored) {
-          problems.push(`${entry.query} ${entry.logKey}: fetched inside the fetch-free window (${entry.trigger})`)
+          problems.push(
+            `${entry.query} ${entry.logKey}: fetched inside the fetch-free window (${entry.trigger})`
+          )
         }
       }
     }
-    for (const problem of testHost.problems()) problems.push(`${problem._tag}: ${problem.message}`)
+    for (const problem of testHost.problems()) {
+      problems.push(`${problem._tag}: ${problem.message}`)
+    }
     if (problems.length > 0) return yield* new SsrError({ problems })
 
     const commands = adoptedEntries.flatMap((entry) =>
       entry.commands.flatMap((command, index) =>
-        command._tag === "Interrupt" ? [] : [{ path: entry.path, name: command.name, index }]
+        command._tag === "Interrupt"
+          ? []
+          : [{ path: entry.path, name: command.name, index }]
       )
     )
     return {

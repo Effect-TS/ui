@@ -6,12 +6,36 @@ import { describe, expect, it } from "tstyche"
 const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 type Msg = typeof Msg.Type
 
-type Button = Html.Element<Msg, never, Html.EventsOf<"button">, HTMLButtonElement, "button">
-type DialogElement = Html.Element<Msg, never, Html.EventsOf<"dialog">, HTMLDialogElement, "dialog">
+type Button = Html.Element<
+  Msg,
+  never,
+  Html.EventsOf<"button">,
+  HTMLButtonElement,
+  "button"
+>
+type DialogElement = Html.Element<
+  Msg,
+  never,
+  Html.EventsOf<"dialog">,
+  HTMLDialogElement,
+  "dialog"
+>
 type Div = Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
-type H2 = Html.Element<Msg, never, Html.EventsOf<"h2">, HTMLHeadingElement, "h2">
+type H2 = Html.Element<
+  Msg,
+  never,
+  Html.EventsOf<"h2">,
+  HTMLHeadingElement,
+  "h2"
+>
 type P = Html.Element<Msg, never, Html.EventsOf<"p">, HTMLParagraphElement, "p">
-type Input = Html.VoidElement<Msg, never, Html.EventsOf<"input">, HTMLInputElement, "input">
+type Input = Html.VoidElement<
+  Msg,
+  never,
+  Html.EventsOf<"input">,
+  HTMLInputElement,
+  "input"
+>
 
 declare const h: View.Helper<Msg, unknown> & View.Tags<Html.Elements, Msg>
 
@@ -24,7 +48,9 @@ describe("Dialog", () => {
     Dialog(h, {
       props: { open: false },
       view: (dialog) => {
-        const trigger = dialog.trigger(h.button.class("open").onClick(Msg.Clicked()))
+        const trigger = dialog.trigger(
+          h.button.class("open").onClick(Msg.Clicked())
+        )
         expect(trigger).type.toBe<Button>()
         expect(dialog.portal(h.dialog)).type.toBe<DialogElement | undefined>()
         expect(dialog.backdrop(h.div)).type.toBe<Div | undefined>()
@@ -35,8 +61,12 @@ describe("Dialog", () => {
         expect(dialog.close(h.button)).type.toBe<Button>()
         expect(dialog.initialFocus(h.input)).type.toBe<Input>()
         expect(dialog.finalFocus(h.button)).type.toBe<Button>()
-        expect(dialog.transitionStatus).type.toBe<"starting" | "ending" | null>()
-        expect(dialog.openMethod).type.toBe<"mouse" | "touch" | "pen" | "keyboard" | null>()
+        expect(dialog.transitionStatus).type.toBe<
+          "starting" | "ending" | null
+        >()
+        expect(dialog.openMethod).type.toBe<
+          "mouse" | "touch" | "pen" | "keyboard" | null
+        >()
 
         expect(dialog.trigger).type.not.toBeCallableWith(h.div)
         expect(dialog.portal).type.not.toBeCallableWith(h.div)
@@ -46,7 +76,10 @@ describe("Dialog", () => {
         expect(dialog.title).type.not.toBeCallableWith(h.p)
         expect(dialog.description).type.not.toBeCallableWith(h.div)
         expect(dialog.close).type.not.toBeCallableWith(h.a)
-        return h.div(trigger.children("Open"), dialog.portal(h.dialog)?.children(dialog.popup(h.div)))
+        return h.div(
+          trigger.children("Open"),
+          dialog.portal(h.dialog)?.children(dialog.popup(h.div))
+        )
       }
     })
   })
@@ -54,9 +87,18 @@ describe("Dialog", () => {
   it("open is required, and the events carry their payloads", () => {
     const view = () => h.button
     expect(Dialog).type.not.toBeCallableWith(h, { props: {}, view })
-    expect(Dialog).type.not.toBeCallableWith(h, { props: { open: true, openMethod: "stylus" }, view })
+    expect(Dialog).type.not.toBeCallableWith(h, {
+      props: { open: true, openMethod: "stylus" },
+      view
+    })
     Dialog(h, {
-      props: { open: true, modal: "trap-focus", id: "settings", openMethod: "touch", holdExit: false },
+      props: {
+        open: true,
+        modal: "trap-focus",
+        id: "settings",
+        openMethod: "touch",
+        holdExit: false
+      },
       onEmit: {
         RequestedOpen: ({ triggerId }) => {
           expect(triggerId).type.toBe<string | null>()
@@ -64,7 +106,12 @@ describe("Dialog", () => {
         },
         RequestedClose: ({ reason }) => {
           expect(reason).type.toBe<
-            "trigger-press" | "outside-press" | "escape-key" | "close-press" | "focus-out" | "close-watcher"
+            | "trigger-press"
+            | "outside-press"
+            | "escape-key"
+            | "close-press"
+            | "focus-out"
+            | "close-watcher"
           >()
           return undefined
         },
@@ -77,9 +124,16 @@ describe("Dialog", () => {
 
 describe("DialogTrigger", () => {
   it("returns the button it was given, and its press has the caller's message type", () => {
-    expect(DialogTrigger(h, { props: { open: false }, onPress: Msg.Clicked() })).type.toBe<Button>()
-    expect(DialogTrigger).type.not.toBeCallableWith(h, { props: { open: false }, onPress: "other" })
-    expect(DialogTrigger).type.not.toBeCallableWith(h, { element: h.div, props: { open: false } })
+    expect(DialogTrigger(h, { props: { open: false }, onPress: Msg.Clicked() }))
+      .type.toBe<Button>()
+    expect(DialogTrigger).type.not.toBeCallableWith(h, {
+      props: { open: false },
+      onPress: "other"
+    })
+    expect(DialogTrigger).type.not.toBeCallableWith(h, {
+      element: h.div,
+      props: { open: false }
+    })
     DialogTrigger(h, { props: { open: false } })
   })
 
@@ -93,7 +147,12 @@ describe("DialogTrigger", () => {
         return Msg.Clicked()
       }
     })
-    expect(DialogTrigger).type.not.toBeCallableWith(h, { props: { open: false }, onPress: () => "other" })
-    expect(DialogTrigger).type.not.toBeCallableWith(h, { props: { open: false, popupId: 1 } })
+    expect(DialogTrigger).type.not.toBeCallableWith(h, {
+      props: { open: false },
+      onPress: () => "other"
+    })
+    expect(DialogTrigger).type.not.toBeCallableWith(h, {
+      props: { open: false, popupId: 1 }
+    })
   })
 })

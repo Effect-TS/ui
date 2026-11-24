@@ -159,7 +159,8 @@ export declare namespace Query {
    * @category utility types
    * @since 0.1.0
    */
-  export type Args<R> = R extends Query<infer Args, infer _A, infer _E> ? Args : never
+  export type Args<R> = R extends Query<infer Args, infer _A, infer _E> ? Args
+    : never
 
   /**
    * The result of a query.
@@ -167,7 +168,8 @@ export declare namespace Query {
    * @category utility types
    * @since 0.1.0
    */
-  export type Success<R> = R extends Query<infer _Args, infer A, infer _E> ? A : never
+  export type Success<R> = R extends Query<infer _Args, infer A, infer _E> ? A
+    : never
 
   /**
    * The error of a query.
@@ -175,7 +177,8 @@ export declare namespace Query {
    * @category utility types
    * @since 0.1.0
    */
-  export type Error<R> = R extends Query<infer _Args, infer _A, infer E> ? E : never
+  export type Error<R> = R extends Query<infer _Args, infer _A, infer E> ? E
+    : never
 }
 
 /**
@@ -199,7 +202,10 @@ export interface Service<
   in out E,
   out LE,
   out LR
-> extends Context.ServiceClass<Self, Name, (args: Args) => Effect.Effect<A, E>>, Query<Args, A, E> {
+> extends
+  Context.ServiceClass<Self, Name, (args: Args) => Effect.Effect<A, E>>,
+  Query<Args, A, E>
+{
   /**
    * The fetcher's Layer. It requires what the fetcher captured. A fetch runs
    * under the build that asked for it, and is interrupted when that build's
@@ -243,7 +249,9 @@ export interface Service<
    * when the entry is settled, skips a state equal to the last one, and dies
    * with a fetcher's defect.
    */
-  changes(args: Args): Stream.Stream<AsyncResult.AsyncResult<A, E>, never, Self | Cache>
+  changes(
+    args: Args
+  ): Stream.Stream<AsyncResult.AsyncResult<A, E>, never, Self | Cache>
   /**
    * Reads an entry's state without fetching. It doesn't create the entry or
    * keep it alive.
@@ -280,9 +288,10 @@ export declare namespace Service {
    * @category utility types
    * @since 0.1.0
    */
-  export type ArgsType<Args extends Schema.Top | Schema.Struct.Fields> = Args extends Schema.Top ? Args["Type"]
-    : Args extends Schema.Struct.Fields ? Schema.Struct<Args>["Type"]
-    : never
+  export type ArgsType<Args extends Schema.Top | Schema.Struct.Fields> =
+    Args extends Schema.Top ? Args["Type"]
+      : Args extends Schema.Struct.Fields ? Schema.Struct<Args>["Type"]
+      : never
 
   /**
    * A Schema whose JSON encoding needs no services, which is what an entry's
@@ -399,7 +408,9 @@ export declare namespace Service {
  */
 export const Service: <Self>() => <
   const Name extends string,
-  const Args extends Service.NoServices | { readonly [x: string]: Service.NoServices },
+  const Args extends Service.NoServices | {
+    readonly [x: string]: Service.NoServices
+  },
   Success extends Service.NoServices,
   Error extends Service.NoServices,
   LE,
@@ -418,11 +429,21 @@ export const Service: <Self>() => <
     readonly tags?: ReadonlyArray<Tag> | undefined
   },
   fetcher: Effect.Effect<
-    (args: Service.ArgsType<Args>) => Effect.Effect<Success["Type"], Error["Type"]>,
+    (
+      args: Service.ArgsType<Args>
+    ) => Effect.Effect<Success["Type"], Error["Type"]>,
     LE,
     LR
   >
-) => Service<Self, Name, Service.ArgsType<Args>, Success["Type"], Error["Type"], LE, Exclude<LR, Scope.Scope>> = () =>
+) => Service<
+  Self,
+  Name,
+  Service.ArgsType<Args>,
+  Success["Type"],
+  Error["Type"],
+  LE,
+  Exclude<LR, Scope.Scope>
+> = () =>
 (
   name: string,
   options: {
@@ -449,7 +470,10 @@ export const Service: <Self>() => <
  * The class every query is: the fetcher's service, its Layer and the statics
  * that look the cache up. An infinite query adds its own.
  */
-const queryClass = (def: QueryDef, fetcher: Effect.Effect<Fetcher, any, any>) => {
+const queryClass = (
+  def: QueryDef,
+  fetcher: Effect.Effect<Fetcher, any, any>
+) => {
   const Base = Context.Service<any, Fetcher>()(def.name)
   class QueryService extends Base {
     static readonly [TypeId]: any = def
@@ -464,16 +488,25 @@ const queryClass = (def: QueryDef, fetcher: Effect.Effect<Fetcher, any, any>) =>
     )
     static get(args: unknown) {
       return withCache((cache, context) =>
-        cache.get(def, args, fetcherOf(context, Base), Context.get(context, CurrentRun))
+        cache.get(
+          def,
+          args,
+          fetcherOf(context, Base),
+          Context.get(context, CurrentRun)
+        )
       )
     }
     static prefetch(args: unknown) {
-      return withCache((cache, context) => Effect.sync(() => cache.prefetch(def, args, fetcherOf(context, Base))))
+      return withCache((cache, context) =>
+        Effect.sync(() => cache.prefetch(def, args, fetcherOf(context, Base)))
+      )
     }
     static invalidate(args?: unknown) {
       return withCache((cache) =>
         Effect.sync(() =>
-          cache.invalidate([args === undefined ? QueryService : entryTarget(QueryService, args)], {
+          cache.invalidate([
+            args === undefined ? QueryService : entryTarget(QueryService, args)
+          ], {
             byHand: true
           })
         )
@@ -485,14 +518,22 @@ const queryClass = (def: QueryDef, fetcher: Effect.Effect<Fetcher, any, any>) =>
           Effect.acquireRelease(
             Effect.sync(() => {
               let last: AsyncResult.AsyncResult<any, any> | undefined
-              const offer = (result: AsyncResult.AsyncResult<any, any>): void => {
+              const offer = (
+                result: AsyncResult.AsyncResult<any, any>
+              ): void => {
                 if (last !== undefined && Equal.equals(result, last)) return
                 last = result
                 Queue.offerUnsafe(queue, result)
               }
-              const handle = cache.watch(def, args, fetcherOf(context, Base), offer, (cause) => {
-                Queue.failCauseUnsafe(queue, cause)
-              })
+              const handle = cache.watch(
+                def,
+                args,
+                fetcherOf(context, Base),
+                offer,
+                (cause) => {
+                  Queue.failCauseUnsafe(queue, cause)
+                }
+              )
               // The cache never calls back for the state at registration.
               const current = handle.current()
               if (current._tag !== "Initial") offer(current)
@@ -520,15 +561,20 @@ const queryClass = (def: QueryDef, fetcher: Effect.Effect<Fetcher, any, any>) =>
 }
 
 const withCache = <A, E, R>(
-  f: (cache: CacheInternals, context: Context.Context<never>) => Effect.Effect<A, E, R>
+  f: (
+    cache: CacheInternals,
+    context: Context.Context<never>
+  ) => Effect.Effect<A, E, R>
 ): Effect.Effect<A, E, any> =>
   Effect.flatMap(
     Effect.context<never>(),
     (context) => f(internals(Context.getUnsafe(context, Cache)), context)
   )
 
-const fetcherOf = (context: Context.Context<never>, service: Context.Key<any, Fetcher>): Fetcher =>
-  Context.getUnsafe(context, service)
+const fetcherOf = (
+  context: Context.Context<never>,
+  service: Context.Key<any, Fetcher>
+): Fetcher => Context.getUnsafe(context, service)
 
 /**
  * Identifies an infinite query: a class made by `InfiniteService`.
@@ -587,7 +633,9 @@ export declare namespace InfiniteQuery {
    * @category models
    * @since 0.1.0
    */
-  export type Any = InfiniteQuery<any, any, any, any> | InfiniteQuery<any, any, any, never>
+  export type Any =
+    | InfiniteQuery<any, any, any, any>
+    | InfiniteQuery<any, any, any, never>
 
   /**
    * The page of an infinite query.
@@ -595,7 +643,8 @@ export declare namespace InfiniteQuery {
    * @category utility types
    * @since 0.1.0
    */
-  export type Page<R> = R extends InfiniteQuery<infer _Args, infer Page, infer _Item, infer _E> ? Page : never
+  export type Page<R> = R extends
+    InfiniteQuery<infer _Args, infer Page, infer _Item, infer _E> ? Page : never
 
   /**
    * The item of an infinite query: what its `items` returns for a page.
@@ -603,7 +652,8 @@ export declare namespace InfiniteQuery {
    * @category utility types
    * @since 0.1.0
    */
-  export type Item<R> = R extends InfiniteQuery<infer _Args, infer _Page, infer Item, infer _E> ? Item : never
+  export type Item<R> = R extends
+    InfiniteQuery<infer _Args, infer _Page, infer Item, infer _E> ? Item : never
 }
 
 /**
@@ -667,7 +717,11 @@ export interface InfiniteService<
   out LE,
   out LR
 > extends
-  Context.ServiceClass<Self, Name, (args: Args, cursor: Option.Option<Cursor>) => Effect.Effect<Page, E>>,
+  Context.ServiceClass<
+    Self,
+    Name,
+    (args: Args, cursor: Option.Option<Cursor>) => Effect.Effect<Page, E>
+  >,
   InfiniteQuery<Args, Page, Item, E>
 {
   /** The fetcher's Layer, as for any query. */
@@ -687,9 +741,21 @@ export interface InfiniteService<
   /** Marks one list, or every list of the query, stale, as for any query. */
   invalidate(args?: Args): Effect.Effect<void, never, Cache>
   /** Watches a list and emits its page array, as `changes` does for any query. */
-  changes(args: Args): Stream.Stream<AsyncResult.AsyncResult<ReadonlyArray<Page>, E>, never, Self | Cache>
+  changes(
+    args: Args
+  ): Stream.Stream<
+    AsyncResult.AsyncResult<ReadonlyArray<Page>, E>,
+    never,
+    Self | Cache
+  >
   /** Reads a list's page array without loading anything. */
-  peek(args: Args): Effect.Effect<AsyncResult.AsyncResult<ReadonlyArray<Page>, E>, never, Cache>
+  peek(
+    args: Args
+  ): Effect.Effect<
+    AsyncResult.AsyncResult<ReadonlyArray<Page>, E>,
+    never,
+    Cache
+  >
   /**
    * Loads the page after the held ones, and resolves with every page held
    * and whether there is a next one.
@@ -719,13 +785,18 @@ export interface InfiniteService<
    * An optimistic patch of one list, applied to each held page. It can't
    * change the page count, and implies invalidation of the list.
    */
-  patch(args: Args, f: (page: Page, index: number) => Page): Patch<InfiniteQuery<Args, Page, Item, E>>
+  patch(
+    args: Args,
+    f: (page: Page, index: number) => Page
+  ): Patch<InfiniteQuery<Args, Page, Item, E>>
   /**
    * An optimistic patch of every list of the query that holds pages when the
    * run is issued, applied to each page. It implies invalidation of the whole
    * query.
    */
-  patchAll(f: (page: Page, args: Args, index: number) => Page): Patch<InfiniteQuery<Args, Page, Item, E>>
+  patchAll(
+    f: (page: Page, args: Args, index: number) => Page
+  ): Patch<InfiniteQuery<Args, Page, Item, E>>
 }
 
 /**
@@ -826,7 +897,9 @@ export interface InfiniteService<
  */
 export const InfiniteService: <Self>() => <
   const Name extends string,
-  const Args extends Service.NoServices | { readonly [x: string]: Service.NoServices },
+  const Args extends Service.NoServices | {
+    readonly [x: string]: Service.NoServices
+  },
   PageSchema extends Service.NoServices,
   Item,
   CursorSchema extends Service.NoServices,
@@ -849,7 +922,11 @@ export const InfiniteService: <Self>() => <
     readonly staleTime: Duration.Input
     readonly idleTimeToLive?: Duration.Input | undefined
     readonly refetchInterval?:
-      | RefetchInterval<Service.ArgsType<Args>, ReadonlyArray<PageSchema["Type"]>, Error["Type"]>
+      | RefetchInterval<
+        Service.ArgsType<Args>,
+        ReadonlyArray<PageSchema["Type"]>,
+        Error["Type"]
+      >
       | undefined
     readonly tags?: ReadonlyArray<Tag> | undefined
   },
@@ -889,19 +966,28 @@ export const InfiniteService: <Self>() => <
   },
   fetcher: Effect.Effect<Fetcher, any, any>
 ): any => {
-  const def = makeDef(name, { ...options, success: Schema.Array(options.page) }, {
-    items: options.items,
-    key: options.key,
-    next: options.next,
-    cursor: options.cursor
-  })
+  const def = makeDef(
+    name,
+    { ...options, success: Schema.Array(options.page) },
+    {
+      items: options.items,
+      key: options.key,
+      next: options.next,
+      cursor: options.cursor
+    }
+  )
   const QueryService = queryClass(def, fetcher)
   return class extends QueryService {
     static readonly [InfiniteTypeId]: any = InfiniteTypeId
     static loadMore(args: unknown) {
       return withCache((cache, context) =>
         Effect.callback<any, any>((resume) => {
-          const cancel = cache.loadMore(def, args, fetcherOf(context, QueryService), resume)
+          const cancel = cache.loadMore(
+            def,
+            args,
+            fetcherOf(context, QueryService),
+            resume
+          )
           return Effect.sync(cancel)
         })
       )
@@ -913,12 +999,17 @@ export const InfiniteService: <Self>() => <
       return infiniteItems(def, pages)
     }
     static override patch(args: unknown, f: (page: any, index: number) => any) {
-      return patchOne(QueryService, args, (pages: ReadonlyArray<unknown>) => pages.map((page, i) => f(page, i)))
+      return patchOne(
+        QueryService,
+        args,
+        (pages: ReadonlyArray<unknown>) => pages.map((page, i) => f(page, i))
+      )
     }
     static override patchAll(f: (page: any, args: any, index: number) => any) {
       return patchAll(
         QueryService,
-        (pages: ReadonlyArray<unknown>, args: unknown) => pages.map((page, i) => f(page, args, i))
+        (pages: ReadonlyArray<unknown>, args: unknown) =>
+          pages.map((page, i) => f(page, args, i))
       )
     }
   }
@@ -930,7 +1021,10 @@ export const InfiniteService: <Self>() => <
  *
  * @internal
  */
-export const infiniteItems = (def: QueryDef, pages: ReadonlyArray<unknown>): ReadonlyArray<unknown> => {
+export const infiniteItems = (
+  def: QueryDef,
+  pages: ReadonlyArray<unknown>
+): ReadonlyArray<unknown> => {
   const list = def.list!
   const seen = new Set<string>()
   const out: Array<unknown> = []
@@ -1019,7 +1113,10 @@ export type Patch<R extends Query.Any = Query.Any> =
   | {
     readonly _tag: "PatchAll"
     readonly query: R
-    readonly patch: (value: Query.Success<R>, args: Query.Args<R>) => Query.Success<R>
+    readonly patch: (
+      value: Query.Success<R>,
+      args: Query.Args<R>
+    ) => Query.Success<R>
   }
 
 /**
@@ -1076,7 +1173,11 @@ export const applyPatches = <R extends Query.Any>(
 ): Query.Success<R> => {
   const def = defOf(query)
   const argsKey = def.argsKey(args)
-  for (const patch of patches) value = applyPatch(patch, def.name, argsKey, args, value) as Query.Success<R>
+  for (const patch of patches) {
+    value = applyPatch(patch, def.name, argsKey, args, value) as Query.Success<
+      R
+    >
+  }
   return value
 }
 
@@ -1128,7 +1229,12 @@ export const invalidatesEntry = <R extends Query.Any>(
   args: Query.Args<R>
 ): boolean => {
   const def = defOf(query)
-  return targetsHit(compileTargets(run.invalidates, run.optimistic), def.name, def.tags, def.argsKey(args))
+  return targetsHit(
+    compileTargets(run.invalidates, run.optimistic),
+    def.name,
+    def.tags,
+    def.argsKey(args)
+  )
 }
 
 /**
@@ -1415,13 +1521,15 @@ export class HydrationMalformed extends Data.TaggedClass("HydrationMalformed")<{
  * @category problems
  * @since 0.1.0
  */
-export class HydrationDecodeFailed extends Data.TaggedClass("HydrationDecodeFailed")<{
-  readonly message: string
-  readonly query: string
-  readonly part: "value" | "args"
-  /** Only when `part` is `"value"`: decoded args are what a log key is built from. */
-  readonly logKey: string | undefined
-}> {}
+export class HydrationDecodeFailed
+  extends Data.TaggedClass("HydrationDecodeFailed")<{
+    readonly message: string
+    readonly query: string
+    readonly part: "value" | "args"
+    /** Only when `part` is `"value"`: decoded args are what a log key is built from. */
+    readonly logKey: string | undefined
+  }>
+{}
 
 /**
  * Diagnostic problems reported by the cache without changing its behavior.
@@ -1489,7 +1597,8 @@ export declare namespace Problem {
  * @category references
  * @since 0.1.0
  */
-export const Problems: Context.Reference<(problem: Problem.Any) => void> = queryCore.Problems
+export const Problems: Context.Reference<(problem: Problem.Any) => void> =
+  queryCore.Problems
 
 /**
  * The cache service used by queries.
@@ -1583,7 +1692,10 @@ const canonical = queryCore.canonical
  * cache by object, and a hash cached before one mutation would hide the next.
  * Throws when a trap throws or a buffer is detached.
  */
-const materialize = (u: unknown, seen = new Map<object, unknown>()): unknown => {
+const materialize = (
+  u: unknown,
+  seen = new Map<object, unknown>()
+): unknown => {
   if (typeof u === "function") return standIn(u)
   if (typeof u !== "object" || u === null) return u
   if (Equal.symbol in u) return standIn(u)
@@ -1593,14 +1705,24 @@ const materialize = (u: unknown, seen = new Map<object, unknown>()): unknown => 
     const kind: string | undefined = typedArrayTag.call(u)
     if (kind === undefined) {
       // A `DataView`: its getter throws on a detached buffer, skipping the check.
-      return new DataView(copyBytes(dataViewBuffer.call(u), dataViewOffset.call(u), dataViewLength.call(u)).buffer)
+      return new DataView(
+        copyBytes(
+          dataViewBuffer.call(u),
+          dataViewOffset.call(u),
+          dataViewLength.call(u)
+        ).buffer
+      )
     }
     // `Equal.equals` compares typed array elements with `!==`, which never matches `NaN` and matches `0` with `-0`,
     // and doesn't tell kinds apart. A record under a private key holds the kind and the bytes instead.
     const out: Record<PropertyKey, unknown> = Object.create(null)
     out[typedArrayKey] = [
       kind,
-      copyBytes(typedArrayBuffer.call(u), typedArrayOffset.call(u), typedArrayLength.call(u)).buffer
+      copyBytes(
+        typedArrayBuffer.call(u),
+        typedArrayOffset.call(u),
+        typedArrayLength.call(u)
+      ).buffer
     ]
     return out
   }
@@ -1620,13 +1742,18 @@ const materialize = (u: unknown, seen = new Map<object, unknown>()): unknown => 
   }
   // `instanceof` only walks the prototypes; the slot check then tells a built-in object from a `Proxy` or an
   // object made from its prototype, which are copied as records.
-  if (u instanceof Date && hasSlot(dateTime, u)) return new Date(dateTime.call(u))
-  if (u instanceof RegExp && hasSlot(regExpSource, u)) return new RegExp(regExpSource.call(u), regExpFlags(u))
+  if (u instanceof Date && hasSlot(dateTime, u)) {
+    return new Date(dateTime.call(u))
+  }
+  if (u instanceof RegExp && hasSlot(regExpSource, u)) {
+    return new RegExp(regExpSource.call(u), regExpFlags(u))
+  }
   if (u instanceof ArrayBuffer && hasSlot(arrayBufferLength, u)) {
     return copyBytes(u as ArrayBuffer, 0, arrayBufferLength.call(u)).buffer
   }
   if (
-    sharedArrayBufferLength !== undefined && u instanceof SharedArrayBuffer && hasSlot(sharedArrayBufferLength, u)
+    sharedArrayBufferLength !== undefined && u instanceof SharedArrayBuffer &&
+    hasSlot(sharedArrayBufferLength, u)
   ) {
     const length: number = sharedArrayBufferLength.call(u)
     const out = new SharedArrayBuffer(length)
@@ -1636,7 +1763,10 @@ const materialize = (u: unknown, seen = new Map<object, unknown>()): unknown => 
   if (u instanceof Map && hasSlot(mapSize, u)) {
     const out = new Map()
     seen.set(u, out)
-    mapForEach.call(u, (value, key) => out.set(materialize(key, seen), materialize(value, seen)))
+    mapForEach.call(
+      u,
+      (value, key) => out.set(materialize(key, seen), materialize(value, seen))
+    )
     return out
   }
   if (u instanceof Set && hasSlot(setSize, u)) {
@@ -1650,7 +1780,9 @@ const materialize = (u: unknown, seen = new Map<object, unknown>()): unknown => 
   for (const key of Reflect.ownKeys(u)) {
     if (key === Hash.symbol) continue
     const descriptor = Object.getOwnPropertyDescriptor(u, key)
-    if (descriptor !== undefined && "value" in descriptor) out[key] = materialize(descriptor.value, seen)
+    if (descriptor !== undefined && "value" in descriptor) {
+      out[key] = materialize(descriptor.value, seen)
+    }
   }
   return out
 }
@@ -1672,7 +1804,8 @@ const accessorSlot = Symbol("@effect/ui/Query/accessor")
 // The built-in getters and methods, called directly: they read internal slots and nothing through the object, and
 // throw on an object without the slot, a `Proxy` included.
 type Intrinsic = (this: unknown, ...args: Array<any>) => any
-const getter = (proto: object, key: PropertyKey): Intrinsic => Object.getOwnPropertyDescriptor(proto, key)!.get!
+const getter = (proto: object, key: PropertyKey): Intrinsic =>
+  Object.getOwnPropertyDescriptor(proto, key)!.get!
 const hasSlot = (intrinsic: Intrinsic, u: object): boolean => {
   try {
     intrinsic.call(u)
@@ -1707,7 +1840,11 @@ const regExpFlagGetters = (
     ["v", "unicodeSets"],
     ["y", "sticky"]
   ] as const
-).flatMap(([flag, key]) => key in RegExp.prototype ? [[flag, getter(RegExp.prototype, key)] as const] : [])
+).flatMap(([flag, key]) =>
+  key in RegExp.prototype
+    ? [[flag, getter(RegExp.prototype, key)] as const]
+    : []
+)
 const regExpFlags = (u: object): string => {
   let flags = ""
   for (const [flag, get] of regExpFlagGetters) if (get.call(u)) flags += flag
@@ -1715,18 +1852,27 @@ const regExpFlags = (u: object): string => {
 }
 const mapSize = getter(Map.prototype, "size")
 const setSize = getter(Set.prototype, "size")
-const mapForEach: (this: unknown, f: (value: unknown, key: unknown) => void) => void = Map.prototype.forEach
-const setForEach: (this: unknown, f: (value: unknown) => void) => void = Set.prototype.forEach
+const mapForEach: (
+  this: unknown,
+  f: (value: unknown, key: unknown) => void
+) => void = Map.prototype.forEach
+const setForEach: (this: unknown, f: (value: unknown) => void) => void =
+  Set.prototype.forEach
 /** A copy of a buffer's bytes in a new `ArrayBuffer`. A detached buffer throws, skipping the check. */
-const copyBytes = (buffer: ArrayBufferLike, offset: number, length: number): Uint8Array<ArrayBuffer> =>
-  new Uint8Array(buffer, offset, length).slice()
+const copyBytes = (
+  buffer: ArrayBufferLike,
+  offset: number,
+  length: number
+): Uint8Array<ArrayBuffer> => new Uint8Array(buffer, offset, length).slice()
 
 /**
  * A snapshot of the encoding of a server value, for the `PatchMutated`
  * check, or `undefined` when the check can't be made: the encoding or the
  * snapshot throws. Never throws, since the check only reports.
  */
-const materializedEncoding = (encode: () => unknown): { readonly encoded: unknown } | undefined => {
+const materializedEncoding = (
+  encode: () => unknown
+): { readonly encoded: unknown } | undefined => {
   try {
     return { encoded: materialize(encode()) }
   } catch {
@@ -1745,7 +1891,10 @@ const lazy = <A>(make: () => A): () => A => {
  * its members does, whatever the union's mode. A declaration doesn't name it,
  * since only its guard could say. A `suspend` is followed, once.
  */
-const namesUndefined = (ast: SchemaAST.AST, seen: Set<SchemaAST.AST> = new Set()): boolean => {
+const namesUndefined = (
+  ast: SchemaAST.AST,
+  seen: Set<SchemaAST.AST> = new Set()
+): boolean => {
   switch (ast._tag) {
     case "Undefined":
     case "Void":
@@ -1771,7 +1920,8 @@ const namesUndefined = (ast: SchemaAST.AST, seen: Set<SchemaAST.AST> = new Set()
  * extension when `o` is.
  */
 const copyWithout = (o: object, names: ReadonlyArray<PropertyKey>): object => {
-  const descriptors: Record<PropertyKey, PropertyDescriptor> = Object.getOwnPropertyDescriptors(o)
+  const descriptors: Record<PropertyKey, PropertyDescriptor> = Object
+    .getOwnPropertyDescriptors(o)
   for (const name of names) delete descriptors[name]
   const out = Object.create(Object.getPrototypeOf(o), descriptors)
   if (Object.isFrozen(o)) Object.freeze(out)
@@ -1804,20 +1954,29 @@ const copyWithout = (o: object, names: ReadonlyArray<PropertyKey>): object => {
  *
  * Args with nothing to drop are returned as they are, not as a copy.
  */
-const dropUndefinedOf = (ast: SchemaAST.AST): ((args: unknown) => unknown) | null => {
+const dropUndefinedOf = (
+  ast: SchemaAST.AST
+): ((args: unknown) => unknown) | null => {
   if (ast._tag !== "Objects") return null
   const optional = ast.propertySignatures.flatMap((property) => {
     const type = property.type
     // Asked on first use: the type may be behind a `suspend` that can't be followed yet.
-    return SchemaAST.isOptional(type) ? [{ name: property.name, allowed: lazy(() => namesUndefined(type)) }] : []
+    return SchemaAST.isOptional(type)
+      ? [{ name: property.name, allowed: lazy(() => namesUndefined(type)) }]
+      : []
   })
   if (optional.length === 0) return null
   return (args) => {
-    if (typeof args !== "object" || args === null || Array.isArray(args)) return args
+    if (typeof args !== "object" || args === null || Array.isArray(args)) {
+      return args
+    }
     let names: Array<PropertyKey> | undefined
     for (const { allowed, name } of optional) {
       const descriptor = Object.getOwnPropertyDescriptor(args, name)
-      if (descriptor !== undefined && "value" in descriptor && descriptor.value === undefined && allowed()) {
+      if (
+        descriptor !== undefined && "value" in descriptor &&
+        descriptor.value === undefined && allowed()
+      ) {
         ;(names ??= []).push(name)
       }
     }
@@ -1830,7 +1989,9 @@ const dropUndefinedOf = (ast: SchemaAST.AST): ((args: unknown) => unknown) | nul
  * `undefined` properties of an args struct are dropped.
  */
 const argsEncoder = (ast: SchemaAST.AST): (args: unknown) => unknown => {
-  const encode = Schema.encodeUnknownSync(Schema.toCodecJson(Schema.make<Schema.Codec<unknown, unknown>>(ast)))
+  const encode = Schema.encodeUnknownSync(
+    Schema.toCodecJson(Schema.make<Schema.Codec<unknown, unknown>>(ast))
+  )
   const drop = dropUndefinedOf(ast)
   return drop === null ? encode : (args) => encode(drop(args))
 }
@@ -1848,7 +2009,8 @@ interface SettableSignal extends Signal {
  *
  * @internal
  */
-export const makeSignal: (initial?: boolean) => SettableSignal = queryCore.makeSignal
+export const makeSignal: (initial?: boolean) => SettableSignal =
+  queryCore.makeSignal
 
 // -----------------------------------------------------------------------------
 // Problems
@@ -1874,7 +2036,10 @@ interface QueryDef {
   readonly staleMs: number
   readonly idleMs: number | undefined
   /** The constant form in milliseconds (`Infinity` is no interval), or the function form. */
-  readonly refetchInterval: number | ((result: Settled, args: any) => Duration.Input | undefined) | undefined
+  readonly refetchInterval:
+    | number
+    | ((result: Settled, args: any) => Duration.Input | undefined)
+    | undefined
   readonly tags: ReadonlyArray<string>
   /** Throws when the args don't encode, or encode to something JSON can't carry. */
   readonly argsKey: (args: unknown) => string
@@ -1907,9 +2072,14 @@ interface QueryCodec {
   readonly decodeArgs: (argsKey: string) => unknown
 }
 
-const jsonCodec = (schema: Schema.Top) => Schema.toCodecJson(schema as Schema.Codec<unknown, unknown>)
+const jsonCodec = (schema: Schema.Top) =>
+  Schema.toCodecJson(schema as Schema.Codec<unknown, unknown>)
 
-const makeCodec = (args: Schema.Top, success: Schema.Top, error: Schema.Top): QueryCodec => {
+const makeCodec = (
+  args: Schema.Top,
+  success: Schema.Top,
+  error: Schema.Top
+): QueryCodec => {
   const successJson = jsonCodec(success)
   const errorJson = jsonCodec(error)
   const argsJson = jsonCodec(args)
@@ -1926,15 +2096,22 @@ const makeCodec = (args: Schema.Top, success: Schema.Top, error: Schema.Top): Qu
 
 const quote = (name: string): string => JSON.stringify(name)
 
-const nonNegative = (name: string, field: string, input: Duration.Input): number => {
+const nonNegative = (
+  name: string,
+  field: string,
+  input: Duration.Input
+): number => {
   const duration = Duration.fromInputUnsafe(input)
   if (Duration.isNegative(duration)) {
-    throw new Error("[Query] " + quote(name) + ": " + field + " can't be negative")
+    throw new Error(
+      "[Query] " + quote(name) + ": " + field + " can't be negative"
+    )
   }
   return Duration.toMillis(duration)
 }
 
-const subSecondHint = "A bare number is milliseconds: write a sub-second interval as a Duration string, such as " +
+const subSecondHint =
+  "A bare number is milliseconds: write a sub-second interval as a Duration string, such as " +
   "\"500 millis\"."
 
 /** The interval in milliseconds, or why the input isn't one. */
@@ -1974,13 +2151,16 @@ const makeDef = (name: string, options: {
     const ms = parseInterval(options.refetchInterval)
     if (ms === "invalid") {
       throw new Error(
-        "[Query] " + quote(name) + ": refetchInterval must be positive, and not a bare number under 1000. " +
+        "[Query] " + quote(name) +
+          ": refetchInterval must be positive, and not a bare number under 1000. " +
           subSecondHint
       )
     }
     refetchInterval = ms
   }
-  const args: Schema.Top = Schema.isSchema(options.args) ? options.args : Schema.Struct(options.args)
+  const args: Schema.Top = Schema.isSchema(options.args)
+    ? options.args
+    : Schema.Struct(options.args)
   // Built on first use: deriving a codec walks the Schema.
   const encodeArgs = lazy(() => argsEncoder(args.ast))
   const encodeLogArgs = lazy(() => {
@@ -1997,14 +2177,19 @@ const makeDef = (name: string, options: {
       encoded = encode(value)
     } catch {
       // The Schema issue prints the value, so it isn't passed on.
-      throw new Error("[Query] " + quote(name) + ": the args don't encode with the query's args Schema")
+      throw new Error(
+        "[Query] " + quote(name) +
+          ": the args don't encode with the query's args Schema"
+      )
     }
     try {
       return canonical(encoded)
     } catch (leaf) {
       throw new Error(
-        "[Query] " + quote(name) + ": the encoded args hold a value JSON can't carry (" +
-          (leaf instanceof NonJsonLeaf ? leaf.kind : "unknown") + "). Give the args Schema a JSON encoding.",
+        "[Query] " + quote(name) +
+          ": the encoded args hold a value JSON can't carry (" +
+          (leaf instanceof NonJsonLeaf ? leaf.kind : "unknown") +
+          "). Give the args Schema a JSON encoding.",
         { cause: leaf }
       )
     }
@@ -2049,15 +2234,18 @@ const makeListDef = (options: {
     items: options.items,
     key: options.key,
     next: options.next,
-    encodeCursor: (cursor) => (encode ??= Schema.encodeUnknownSync(jsonCodec(options.cursor)))(cursor)
+    encodeCursor: (cursor) =>
+      (encode ??= Schema.encodeUnknownSync(jsonCodec(options.cursor)))(cursor)
   }
 }
 
 /** @internal */
-export const defOf = (query: { readonly [TypeId]: unknown }): QueryDef => query[TypeId] as QueryDef
+export const defOf = (query: { readonly [TypeId]: unknown }): QueryDef =>
+  query[TypeId] as QueryDef
 
 const isQuery = <T>(u: T): u is Extract<T, { readonly [TypeId]: unknown }> =>
-  (typeof u === "function" || (typeof u === "object" && u !== null)) && TypeId in u
+  (typeof u === "function" || (typeof u === "object" && u !== null)) &&
+  TypeId in u
 
 // -----------------------------------------------------------------------------
 // Targets, patches and writes
@@ -2071,22 +2259,47 @@ const isQuery = <T>(u: T): u is Extract<T, { readonly [TypeId]: unknown }> =>
 const ArgsKey = "~argsKey"
 
 // The args key a target, patch or write was built with.
-const argsKeyOf = (x: { readonly _tag: "Entry" | "Patch" | "Set" }): string => (x as any)[ArgsKey]
+const argsKeyOf = (x: { readonly _tag: "Entry" | "Patch" | "Set" }): string =>
+  (x as any)[ArgsKey]
 
 const entryTarget = (query: Query.Any, args: unknown): EntryTarget =>
-  ({ _tag: "Entry", query, args, [ArgsKey]: defOf(query).argsKey(args) }) as EntryTarget
+  ({
+    _tag: "Entry",
+    query,
+    args,
+    [ArgsKey]: defOf(query).argsKey(args)
+  }) as EntryTarget
 
-const patchOne = (query: Query.Any, args: unknown, patch: (value: any) => any): Patch =>
-  ({ _tag: "Patch", query, args, patch, [ArgsKey]: defOf(query).argsKey(args) }) as Patch
+const patchOne = (
+  query: Query.Any,
+  args: unknown,
+  patch: (value: any) => any
+): Patch =>
+  ({
+    _tag: "Patch",
+    query,
+    args,
+    patch,
+    [ArgsKey]: defOf(query).argsKey(args)
+  }) as Patch
 
-const patchAll = (query: Query.Any, patch: (value: any, args: any) => any): Patch => ({
+const patchAll = (
+  query: Query.Any,
+  patch: (value: any, args: any) => any
+): Patch => ({
   _tag: "PatchAll",
   query,
   patch
 })
 
 const write = (query: Query.Any, args: unknown, value: unknown): Write =>
-  ({ _tag: "Set", query, args, value, [ArgsKey]: defOf(query).argsKey(args) }) as Write
+  ({
+    _tag: "Set",
+    query,
+    args,
+    value,
+    [ArgsKey]: defOf(query).argsKey(args)
+  }) as Write
 
 /**
  * A run's declarations compiled for matching: the queries it names whole, the
@@ -2116,12 +2329,14 @@ const compileTargets = (
   }
   for (const target of invalidates) {
     if (isQuery(target)) queries.add(defOf(target).name)
-    else if (target._tag === "Entry") addEntry(defOf(target.query).name, argsKeyOf(target))
-    else tags.add(target.name)
+    else if (target._tag === "Entry") {
+      addEntry(defOf(target.query).name, argsKeyOf(target))
+    } else tags.add(target.name)
   }
   for (const patch of optimistic) {
-    if (patch._tag === "Patch") addEntry(defOf(patch.query).name, argsKeyOf(patch))
-    else queries.add(defOf(patch.query).name)
+    if (patch._tag === "Patch") {
+      addEntry(defOf(patch.query).name, argsKeyOf(patch))
+    } else queries.add(defOf(patch.query).name)
   }
   return { queries, entries, tags }
 }
@@ -2136,7 +2351,10 @@ const targetsHit = (
   tags: ReadonlyArray<string> | undefined,
   argsKey: string
 ): boolean => {
-  if (targets.queries.has(name) || targets.entries.get(name)?.has(argsKey) === true) return true
+  if (
+    targets.queries.has(name) ||
+    targets.entries.get(name)?.has(argsKey) === true
+  ) return true
   if (targets.tags.size === 0) return false
   if (tags === undefined) return true
   return tags.some((tag) => targets.tags.has(tag))
@@ -2146,7 +2364,13 @@ const targetsHit = (
  * Applies one patch to a value of the entry of `name` at `argsKey`. A patch
  * of another entry leaves it as it is.
  */
-const applyPatch = (patch: Patch, name: string, argsKey: string, args: unknown, value: unknown): unknown => {
+const applyPatch = (
+  patch: Patch,
+  name: string,
+  argsKey: string,
+  args: unknown,
+  value: unknown
+): unknown => {
   if (defOf(patch.query).name !== name) return value
   if (patch._tag === "PatchAll") return patch.patch(value, args)
   return argsKeyOf(patch) === argsKey ? patch.patch(value) : value
@@ -2178,7 +2402,12 @@ interface Build {
  */
 const makeBuild = (fetcher: Fetcher): Build => {
   const wrapped: Fetcher = (args, cursor) => fetcher(args, cursor)
-  const build: Build = { fetcher: wrapped, closed: false, listeners: new Set(), fibers: new Set() }
+  const build: Build = {
+    fetcher: wrapped,
+    closed: false,
+    listeners: new Set(),
+    fibers: new Set()
+  }
   Object.defineProperty(wrapped, BuildTypeId, { value: build })
   return build
 }
@@ -2332,8 +2561,18 @@ export interface AwaitedEntry {
 type Dehydrated = Record<
   string,
   Array<
-    | readonly [argsKey: string, tag: 0, encodedSuccess: unknown, timestamp: number]
-    | readonly [argsKey: string, tag: 1, encodedErrors: ReadonlyArray<unknown>, timestamp: number]
+    | readonly [
+      argsKey: string,
+      tag: 0,
+      encodedSuccess: unknown,
+      timestamp: number
+    ]
+    | readonly [
+      argsKey: string,
+      tag: 1,
+      encodedErrors: ReadonlyArray<unknown>,
+      timestamp: number
+    ]
   >
 >
 
@@ -2356,7 +2595,11 @@ interface CacheInternals {
     def: QueryDef,
     args: unknown,
     fetcher: Fetcher,
-    onChange: (result: Settled, patched: boolean, more: More<any> | undefined) => void,
+    onChange: (
+      result: Settled,
+      patched: boolean,
+      more: More<any> | undefined
+    ) => void,
     onDefect?: ((cause: Cause.Cause<never>) => void) | undefined,
     options?: { readonly patched?: boolean | undefined } | undefined
   ) => WatchHandle
@@ -2378,9 +2621,17 @@ interface CacheInternals {
    */
   readonly hold: () => () => void
   /** The server value. Doesn't create the entry or reset its idle timer. */
-  readonly peek: (def: QueryDef, args: unknown) => AsyncResult.AsyncResult<any, any>
+  readonly peek: (
+    def: QueryDef,
+    args: unknown
+  ) => AsyncResult.AsyncResult<any, any>
   /** `run` is the caller's, from `CurrentRun`. */
-  readonly get: (def: QueryDef, args: unknown, fetcher: Fetcher, run: RunHandle | undefined) => Effect.Effect<any, any>
+  readonly get: (
+    def: QueryDef,
+    args: unknown,
+    fetcher: Fetcher,
+    run: RunHandle | undefined
+  ) => Effect.Effect<any, any>
   readonly prefetch: (def: QueryDef, args: unknown, fetcher: Fetcher) => void
   /**
    * A list's load more. `resume` gets the pages and whether there is more
@@ -2453,7 +2704,9 @@ interface CacheInternals {
    * fetches off, that a watcher or `get` waits on. An entry whose fetcher
    * died isn't one: its fetch ended.
    */
-  readonly misses: () => ReadonlyArray<{ readonly query: string; readonly logKey: string }>
+  readonly misses: () => ReadonlyArray<
+    { readonly query: string; readonly logKey: string }
+  >
   /**
    * Decodes every entry of a `~query` payload with the queries this cache
    * knows, args key included, and encodes it again. Returns a line per entry
@@ -2475,8 +2728,11 @@ interface PendingFetch {
  *
  * @internal
  */
-export const internals = (cache: { readonly [CacheTypeId]: unknown }): CacheInternals => {
-  const make = (cache as Partial<queryCore.CacheCell>)[queryCore.CacheCellTypeId]
+export const internals = (
+  cache: { readonly [CacheTypeId]: unknown }
+): CacheInternals => {
+  const make =
+    (cache as Partial<queryCore.CacheCell>)[queryCore.CacheCellTypeId]
   return make === undefined ? cache as CacheInternals : make()
 }
 
@@ -2484,7 +2740,9 @@ export const internals = (cache: { readonly [CacheTypeId]: unknown }): CacheInte
  * The run a Command body runs in. The @effect/ui runtime provides it, so a
  * `get` in the body can tell its run's own targets.
  */
-const CurrentRun: Context.Reference<RunHandle | undefined> = Context.Reference<RunHandle | undefined>(
+const CurrentRun: Context.Reference<RunHandle | undefined> = Context.Reference<
+  RunHandle | undefined
+>(
   "@effect/ui/Query/CurrentRun",
   { defaultValue: () => undefined }
 )
@@ -2523,12 +2781,15 @@ class SnapshotImpl implements Equal.Equal {
     if (!(that instanceof SnapshotImpl)) return false
     const a = this[SnapshotTypeId]
     const b = that[SnapshotTypeId]
-    return a.def.name === b.def.name && a.label === b.label && a.argsKey === b.argsKey && a.patched === b.patched &&
+    return a.def.name === b.def.name && a.label === b.label &&
+      a.argsKey === b.argsKey && a.patched === b.patched &&
       sameMore(a.more, b.more) && Equal.equals(a.result, b.result)
   }
   [Hash.symbol](): number {
     const data = this[SnapshotTypeId]
-    return Hash.string(data.def.name + "\u0000" + data.label + "\u0000" + data.argsKey)
+    return Hash.string(
+      data.def.name + "\u0000" + data.label + "\u0000" + data.argsKey
+    )
   }
 }
 
@@ -2549,7 +2810,9 @@ export const makeSnapshot = (
     args: entry === undefined ? undefined : def.normalize(entry.args),
     result: entry === undefined ? undefined : result,
     patched: entry !== undefined && patched && result?._tag === "Success",
-    more: def.list === undefined || entry === undefined || result === undefined ? undefined : more ?? moreEnd
+    more: def.list === undefined || entry === undefined || result === undefined
+      ? undefined
+      : more ?? moreEnd
   })
 
 /** @internal */
@@ -2567,21 +2830,31 @@ const settledMap = (
   if (result._tag === "Success") {
     return Effect.map(
       success(result.value),
-      (value) => AsyncResult.success(value, { timestamp: result.timestamp, waiting })
+      (value) =>
+        AsyncResult.success(value, { timestamp: result.timestamp, waiting })
     )
   }
   const fails = result.cause.reasons.filter(Cause.isFailReason)
   return Effect.flatMap(
     Effect.forEach(fails, (reason) => error(reason.error)),
     (errors) => {
-      const cause = Cause.fromReasons(errors.map((e) => Cause.makeFailReason(e)))
-      if (Option.isNone(result.previousSuccess)) return Effect.succeed(AsyncResult.failure(cause, { waiting }))
+      const cause = Cause.fromReasons(
+        errors.map((e) => Cause.makeFailReason(e))
+      )
+      if (Option.isNone(result.previousSuccess)) {
+        return Effect.succeed(AsyncResult.failure(cause, { waiting }))
+      }
       const previous = result.previousSuccess.value
-      return Effect.map(success(previous.value), (value) =>
-        AsyncResult.failure(cause, {
-          previousSuccess: Option.some(AsyncResult.success(value, { timestamp: previous.timestamp })),
-          waiting
-        }))
+      return Effect.map(
+        success(previous.value),
+        (value) =>
+          AsyncResult.failure(cause, {
+            previousSuccess: Option.some(
+              AsyncResult.success(value, { timestamp: previous.timestamp })
+            ),
+            waiting
+          })
+      )
     }
   )
 }
@@ -2629,25 +2902,33 @@ export const snapshotSchema = (
   )
 }
 
-const isSnapshotOf = (def: QueryDef, label: string) => (u: unknown): u is SnapshotImpl =>
-  u instanceof SnapshotImpl && u[SnapshotTypeId].def.name === def.name && u[SnapshotTypeId].label === label
+const isSnapshotOf =
+  (def: QueryDef, label: string) => (u: unknown): u is SnapshotImpl =>
+    u instanceof SnapshotImpl && u[SnapshotTypeId].def.name === def.name &&
+    u[SnapshotTypeId].label === label
 
 const snapshotIssue = (def: QueryDef, message: string) =>
-  new SchemaIssue.InvalidValue({ message: "a snapshot of " + quote(def.name) + ": " + message })
+  new SchemaIssue.InvalidValue({
+    message: "a snapshot of " + quote(def.name) + ": " + message
+  })
 
 /** Checks a snapshot against the query's Schemas, the type parameters. */
 const snapshotRun = (def: QueryDef, label: string, decoding: boolean) => {
   const is = isSnapshotOf(def, label)
   return (typeParameters: ReadonlyArray<SchemaAST.AST>) => {
     const [args, success, error] = typeParameters.map((ast) =>
-      SchemaParser.decodeUnknownEffect(Schema.make<Schema.Codec<unknown, unknown>>(ast))
+      SchemaParser.decodeUnknownEffect(
+        Schema.make<Schema.Codec<unknown, unknown>>(ast)
+      )
     )
     return (
       input: unknown,
       ast: SchemaAST.Declaration,
       options: SchemaAST.ParseOptions
     ): Effect.Effect<SnapshotImpl, SchemaIssue.Issue> => {
-      if (!is(input)) return Effect.fail(new SchemaIssue.InvalidType(ast, input, options))
+      if (!is(input)) {
+        return Effect.fail(new SchemaIssue.InvalidType(ast, input, options))
+      }
       const data = input[SnapshotTypeId]
       if (data.result === undefined) return Effect.succeed(input)
       const result = data.result
@@ -2658,10 +2939,17 @@ const snapshotRun = (def: QueryDef, label: string, decoding: boolean) => {
           args(data.args, options),
           // A patched value is used as it is: a patch that fails `success` is reported as `PatchInvalid`, and a
           // check of a query result mustn't throw on it.
-          settledMap(result, (u) => data.patched ? Effect.succeed(u) : success(u, options), (u) => error(u, options)),
+          settledMap(
+            result,
+            (u) => data.patched ? Effect.succeed(u) : success(u, options),
+            (u) => error(u, options)
+          ),
           // A failed load more holds a typed error too, which the message log's form carries.
           data.more?._tag === "Failed"
-            ? Effect.map(error(data.more.error, options), (error): More<unknown> => ({ _tag: "Failed", error }))
+            ? Effect.map(
+              error(data.more.error, options),
+              (error): More<unknown> => ({ _tag: "Failed", error })
+            )
             : Effect.succeed(data.more)
         ]),
         ([args, result, more]) => {
@@ -2672,9 +2960,15 @@ const snapshotRun = (def: QueryDef, label: string, decoding: boolean) => {
             } catch {
               back = undefined
             }
-            if (back !== data.argsKey) return Effect.fail(snapshotIssue(def, "the args key isn't the key of its args"))
+            if (back !== data.argsKey) {
+              return Effect.fail(
+                snapshotIssue(def, "the args key isn't the key of its args")
+              )
+            }
           }
-          return Effect.succeed(new SnapshotImpl({ ...data, args, result, more }))
+          return Effect.succeed(
+            new SnapshotImpl({ ...data, args, result, more })
+          )
         }
       )
     }
@@ -2696,12 +2990,17 @@ const snapshotWire = (
   const encodeArgs = SchemaParser.encodeUnknownEffect(argsJson)
   const decodeArgs = SchemaParser.decodeUnknownEffect(argsJson)
   // `args` here is the encoded side of the args Schema, so these see the args as the declaration passes them.
-  const toKey = (args: unknown, options: SchemaAST.ParseOptions): Effect.Effect<string, SchemaIssue.Issue> =>
+  const toKey = (
+    args: unknown,
+    options: SchemaAST.ParseOptions
+  ): Effect.Effect<string, SchemaIssue.Issue> =>
     Effect.flatMap(encodeArgs(args, options), (encoded) => {
       try {
         return Effect.succeed(canonical(encoded))
       } catch {
-        return Effect.fail(invalid("the encoded args hold a value JSON can't carry"))
+        return Effect.fail(
+          invalid("the encoded args hold a value JSON can't carry")
+        )
       }
     })
   const fromKey = (
@@ -2720,9 +3019,15 @@ const snapshotWire = (
   // The log's form adds what page state drops: whether a fetch is in flight, and a list's exact more.
   const transient = Schema.Tuple([
     Schema.Boolean,
-    Schema.NullOr(Schema.Union([Schema.Literals(["End", "Available", "Loading"]), Schema.Struct({ Failed: error })]))
+    Schema.NullOr(
+      Schema.Union([
+        Schema.Literals(["End", "Available", "Loading"]),
+        Schema.Struct({ Failed: error })
+      ])
+    )
   ])
-  const settled = (elements: ReadonlyArray<Schema.Top>) => Schema.Tuple(log ? [...elements, transient] : elements)
+  const settled = (elements: ReadonlyArray<Schema.Top>) =>
+    Schema.Tuple(log ? [...elements, transient] : elements)
   const decodeSettled = (
     tuple: any,
     options: SchemaAST.ParseOptions
@@ -2735,8 +3040,14 @@ const snapshotWire = (
       return new SnapshotImpl({
         ...data,
         result: !waiting ? result : result._tag === "Success"
-          ? AsyncResult.success(result.value, { timestamp: result.timestamp, waiting: true })
-          : AsyncResult.failure(result.cause, { previousSuccess: result.previousSuccess, waiting: true }),
+          ? AsyncResult.success(result.value, {
+            timestamp: result.timestamp,
+            waiting: true
+          })
+          : AsyncResult.failure(result.cause, {
+            previousSuccess: result.previousSuccess,
+            waiting: true
+          }),
         more: def.list === undefined || more === null
           ? data.more
           : typeof more === "string"
@@ -2745,7 +3056,10 @@ const snapshotWire = (
       })
     })
   }
-  const decodeState = (tuple: any, options: SchemaAST.ParseOptions): Effect.Effect<SnapshotImpl, SchemaIssue.Issue> => {
+  const decodeState = (
+    tuple: any,
+    options: SchemaAST.ParseOptions
+  ): Effect.Effect<SnapshotImpl, SchemaIssue.Issue> => {
     const [key, tag, payload, fourth, fifth, sixth] = tuple
     return Effect.map(fromKey(key, options), (args) => {
       const data = { def, label, argsKey: key as string, args }
@@ -2754,17 +3068,27 @@ const snapshotWire = (
           ...data,
           result: AsyncResult.success(payload, { timestamp: fourth }),
           patched: fifth === true,
-          more: def.list === undefined ? undefined : sixth === true ? moreAvailable : moreEnd
+          more: def.list === undefined
+            ? undefined
+            : sixth === true
+            ? moreAvailable
+            : moreEnd
         })
       }
       return new SnapshotImpl({
         ...data,
         result: AsyncResult.failure(
-          Cause.fromReasons((payload as ReadonlyArray<unknown>).map((e) => Cause.makeFailReason(e))),
+          Cause.fromReasons(
+            (payload as ReadonlyArray<unknown>).map((e) =>
+              Cause.makeFailReason(e)
+            )
+          ),
           {
             previousSuccess: fourth === null
               ? Option.none()
-              : Option.some(AsyncResult.success(fourth[0], { timestamp: fourth[1] }))
+              : Option.some(
+                AsyncResult.success(fourth[0], { timestamp: fourth[1] })
+              )
           }
         ),
         patched: false,
@@ -2776,9 +3100,22 @@ const snapshotWire = (
     tuple: Schema.Union([
       Schema.Tuple([]),
       def.list === undefined
-        ? settled([Schema.String, Schema.Literal(0), success, Schema.Number, Schema.Boolean])
+        ? settled([
+          Schema.String,
+          Schema.Literal(0),
+          success,
+          Schema.Number,
+          Schema.Boolean
+        ])
         // A list adds whether it holds more pages: `Loading` and `Failed` are written as more.
-        : settled([Schema.String, Schema.Literal(0), success, Schema.Number, Schema.Boolean, Schema.Boolean]),
+        : settled([
+          Schema.String,
+          Schema.Literal(0),
+          success,
+          Schema.Number,
+          Schema.Boolean,
+          Schema.Boolean
+        ]),
       settled([
         Schema.String,
         Schema.Literal(1),
@@ -2786,11 +3123,17 @@ const snapshotWire = (
         Schema.NullOr(Schema.Tuple([success, Schema.Number]))
       ])
     ]),
-    decode: (tuple: any, options: SchemaAST.ParseOptions): Effect.Effect<SnapshotImpl, SchemaIssue.Issue> =>
+    decode: (
+      tuple: any,
+      options: SchemaAST.ParseOptions
+    ): Effect.Effect<SnapshotImpl, SchemaIssue.Issue> =>
       tuple.length === 0
         ? Effect.succeed(makeSnapshot(def, label, undefined, undefined))
         : decodeSettled(tuple, options),
-    encode: (snapshot: SnapshotImpl, options: SchemaAST.ParseOptions): Effect.Effect<any, SchemaIssue.Issue> => {
+    encode: (
+      snapshot: SnapshotImpl,
+      options: SchemaAST.ParseOptions
+    ): Effect.Effect<any, SchemaIssue.Issue> => {
       const data = snapshot[SnapshotTypeId]
       const result = data.result
       if (result === undefined) return Effect.succeed([])
@@ -2814,9 +3157,14 @@ const snapshotWire = (
           : [
             key,
             1,
-            result.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error),
+            result.cause.reasons.filter(Cause.isFailReason).map((reason) =>
+              reason.error
+            ),
             Option.isSome(result.previousSuccess)
-              ? [result.previousSuccess.value.value, result.previousSuccess.value.timestamp]
+              ? [
+                result.previousSuccess.value.value,
+                result.previousSuccess.value.timestamp
+              ]
               : null
           ]
         if (log) tuple.push([result.waiting, more])
@@ -2827,13 +3175,18 @@ const snapshotWire = (
 }
 
 /** The JSON codec of a snapshot. */
-const snapshotJson = (def: QueryDef, label: string, log: boolean) => (typeParameters: ReadonlyArray<Schema.Top>) => {
-  const wire = snapshotWire(def, label, typeParameters, log)
-  return Schema.link<SnapshotImpl>()(
-    wire.tuple,
-    SchemaTransformation.transformEffect<SnapshotImpl, any>({ decode: wire.decode, encode: wire.encode })
-  )
-}
+const snapshotJson =
+  (def: QueryDef, label: string, log: boolean) =>
+  (typeParameters: ReadonlyArray<Schema.Top>) => {
+    const wire = snapshotWire(def, label, typeParameters, log)
+    return Schema.link<SnapshotImpl>()(
+      wire.tuple,
+      SchemaTransformation.transformEffect<SnapshotImpl, any>({
+        decode: wire.decode,
+        encode: wire.encode
+      })
+    )
+  }
 
 // -----------------------------------------------------------------------------
 // Snapshot maps
@@ -2857,7 +3210,10 @@ class SnapshotMapImpl implements Equal.Equal {
     if (!(that instanceof SnapshotMapImpl)) return false
     const a = this[SnapshotMapTypeId]
     const b = that[SnapshotMapTypeId]
-    if (a.def.name !== b.def.name || a.label !== b.label || a.entries.size !== b.entries.size) return false
+    if (
+      a.def.name !== b.def.name || a.label !== b.label ||
+      a.entries.size !== b.entries.size
+    ) return false
     for (const [key, snapshot] of a.entries) {
       if (!Equal.equals(snapshot, b.entries.get(key))) return false
     }
@@ -2865,7 +3221,9 @@ class SnapshotMapImpl implements Equal.Equal {
   }
   [Hash.symbol](): number {
     const data = this[SnapshotMapTypeId]
-    return Hash.string(data.def.name + "\u0000" + data.label + "\u0000" + data.entries.size)
+    return Hash.string(
+      data.def.name + "\u0000" + data.label + "\u0000" + data.entries.size
+    )
   }
 }
 
@@ -2906,41 +3264,70 @@ export const snapshotMapSchema = (
 ): Schema.Top => {
   const def = defOf(query)
   const is = (u: unknown): u is SnapshotMapImpl =>
-    u instanceof SnapshotMapImpl && u[SnapshotMapTypeId].def.name === def.name &&
+    u instanceof SnapshotMapImpl &&
+    u[SnapshotMapTypeId].def.name === def.name &&
     u[SnapshotMapTypeId].label === label
-  const makeRun = (decoding: boolean) => (typeParameters: ReadonlyArray<SchemaAST.AST>) => {
-    const one = snapshotRun(def, label, decoding)(typeParameters)
-    return (
-      input: unknown,
-      ast: SchemaAST.Declaration,
-      options: SchemaAST.ParseOptions
-    ): Effect.Effect<SnapshotMapImpl, SchemaIssue.Issue> => {
-      if (!is(input)) return Effect.fail(new SchemaIssue.InvalidType(ast, input, options))
-      return Effect.map(
-        Effect.forEach(input[SnapshotMapTypeId].entries.values(), (snapshot) => one(snapshot, ast, options)),
-        (snapshots) => makeSnapshotMap(def, label, snapshots)
-      )
+  const makeRun =
+    (decoding: boolean) => (typeParameters: ReadonlyArray<SchemaAST.AST>) => {
+      const one = snapshotRun(def, label, decoding)(typeParameters)
+      return (
+        input: unknown,
+        ast: SchemaAST.Declaration,
+        options: SchemaAST.ParseOptions
+      ): Effect.Effect<SnapshotMapImpl, SchemaIssue.Issue> => {
+        if (!is(input)) {
+          return Effect.fail(new SchemaIssue.InvalidType(ast, input, options))
+        }
+        return Effect.map(
+          Effect.forEach(
+            input[SnapshotMapTypeId].entries.values(),
+            (snapshot) => one(snapshot, ast, options)
+          ),
+          (snapshots) => makeSnapshotMap(def, label, snapshots)
+        )
+      }
     }
-  }
   const toCodecJson = (typeParameters: ReadonlyArray<Schema.Top>) => {
     const wire = snapshotWire(def, label, typeParameters, log)
     return Schema.link<SnapshotMapImpl>()(
       Schema.Array(wire.tuple),
-      SchemaTransformation.transformEffect<SnapshotMapImpl, ReadonlyArray<any>>({
-        decode: (tuples, options) =>
-          Effect.flatMap(Effect.forEach(tuples, (tuple) => wire.decode(tuple, options)), (snapshots) => {
-            const keys = new Set<string>()
-            for (const snapshot of snapshots) {
-              const key = snapshot[SnapshotTypeId].argsKey
-              if (key === undefined) return Effect.fail(snapshotIssue(def, "a keyed field holds an empty snapshot"))
-              if (keys.has(key)) return Effect.fail(snapshotIssue(def, "a keyed field holds one args key twice"))
-              keys.add(key)
-            }
-            return Effect.succeed(makeSnapshotMap(def, label, snapshots))
-          }),
-        encode: (map, options) =>
-          Effect.forEach(map[SnapshotMapTypeId].entries.values(), (snapshot) => wire.encode(snapshot, options))
-      })
+      SchemaTransformation.transformEffect<SnapshotMapImpl, ReadonlyArray<any>>(
+        {
+          decode: (tuples, options) =>
+            Effect.flatMap(
+              Effect.forEach(tuples, (tuple) => wire.decode(tuple, options)),
+              (snapshots) => {
+                const keys = new Set<string>()
+                for (const snapshot of snapshots) {
+                  const key = snapshot[SnapshotTypeId].argsKey
+                  if (key === undefined) {
+                    return Effect.fail(
+                      snapshotIssue(
+                        def,
+                        "a keyed field holds an empty snapshot"
+                      )
+                    )
+                  }
+                  if (keys.has(key)) {
+                    return Effect.fail(
+                      snapshotIssue(
+                        def,
+                        "a keyed field holds one args key twice"
+                      )
+                    )
+                  }
+                  keys.add(key)
+                }
+                return Effect.succeed(makeSnapshotMap(def, label, snapshots))
+              }
+            ),
+          encode: (map, options) =>
+            Effect.forEach(
+              map[SnapshotMapTypeId].entries.values(),
+              (snapshot) => wire.encode(snapshot, options)
+            )
+        }
+      )
     )
   }
   return Schema.make(
@@ -2948,7 +3335,8 @@ export const snapshotMapSchema = (
       [def.args.ast, def.success.ast, def.error.ast],
       makeRun(true),
       {
-        expected: "a keyed query result " + quote(label) + " of " + quote(def.name),
+        expected: "a keyed query result " + quote(label) + " of " +
+          quote(def.name),
         toCodecJson
       } as Schema.Annotations.Annotations,
       undefined,
@@ -2965,7 +3353,11 @@ export const snapshotMapSchema = (
 // -----------------------------------------------------------------------------
 
 interface Watcher {
-  readonly onChange: (result: Settled, patched: boolean, more: More<any> | undefined) => void
+  readonly onChange: (
+    result: Settled,
+    patched: boolean,
+    more: More<any> | undefined
+  ) => void
   readonly onDefect: ((cause: Cause.Cause<never>) => void) | undefined
   readonly build: Build
   /** On an infinite query, the `More` it last saw. */
@@ -3142,14 +3534,23 @@ const runBody = <A, E, R>(
   })
 
 const isBareFailure = (result: Settled | undefined): boolean =>
-  result !== undefined && result._tag === "Failure" && Option.isNone(result.previousSuccess)
+  result !== undefined && result._tag === "Failure" &&
+  Option.isNone(result.previousSuccess)
 
 // A fetched Failure holds only its Fails, so it has the shape of a hydrated one.
 const failsOnly = (cause: Cause.Cause<any>): Cause.Cause<any> =>
-  Cause.fromReasons(cause.reasons.filter(Cause.isFailReason).map((reason) => Cause.makeFailReason(reason.error)))
+  Cause.fromReasons(
+    cause.reasons.filter(Cause.isFailReason).map((reason) =>
+      Cause.makeFailReason(reason.error)
+    )
+  )
 
 const diesOnly = (cause: Cause.Cause<any>): Cause.Cause<never> =>
-  Cause.fromReasons(cause.reasons.filter(Cause.isDieReason).map((reason) => Cause.makeDieReason(reason.defect)))
+  Cause.fromReasons(
+    cause.reasons.filter(Cause.isDieReason).map((reason) =>
+      Cause.makeDieReason(reason.defect)
+    )
+  )
 
 /** What a caller of a fetch gets: a defect, the Fails only, or an interrupt for a revert. */
 const callerExit = (exit: Exit.Exit<any, any>): Exit.Exit<any, any> =>
@@ -3165,8 +3566,14 @@ const withWaiting = (result: Settled, waiting: boolean): Settled =>
   result.waiting === waiting
     ? result
     : result._tag === "Success"
-    ? AsyncResult.success(result.value, { waiting, timestamp: result.timestamp })
-    : AsyncResult.failure(result.cause, { previousSuccess: result.previousSuccess, waiting })
+    ? AsyncResult.success(result.value, {
+      waiting,
+      timestamp: result.timestamp
+    })
+    : AsyncResult.failure(result.cause, {
+      previousSuccess: result.previousSuccess,
+      waiting
+    })
 
 const constVoid = (): void => {}
 
@@ -3181,14 +3588,24 @@ interface PageRef {
 }
 
 /** The `page` and `cursor` of a list's `FetchEvent`. */
-const pageFields = (page: PageRef | undefined): { readonly page?: number; readonly cursor?: Schema.Json } =>
-  page === undefined ? {} : page.cursor === undefined ? { page: page.page } : { page: page.page, cursor: page.cursor }
+const pageFields = (
+  page: PageRef | undefined
+): { readonly page?: number; readonly cursor?: Schema.Json } =>
+  page === undefined
+    ? {}
+    : page.cursor === undefined
+    ? { page: page.page }
+    : { page: page.page, cursor: page.cursor }
 
 /** @internal */
-export const sameMore = (a: More<any> | undefined, b: More<any> | undefined): boolean =>
+export const sameMore = (
+  a: More<any> | undefined,
+  b: More<any> | undefined
+): boolean =>
   a === b ||
   (a !== undefined && b !== undefined && a._tag === b._tag &&
-    (a._tag !== "Failed" || Equal.equals(a.error, (b as { readonly error: unknown }).error)))
+    (a._tag !== "Failed" ||
+      Equal.equals(a.error, (b as { readonly error: unknown }).error)))
 
 /** A cursor as the log shows it: encoded, or `undefined` when it doesn't encode. */
 const logCursor = (list: ListDef, cursor: unknown): Schema.Json | undefined => {
@@ -3209,15 +3626,22 @@ const cursorKey = (list: ListDef, cursor: unknown): string | undefined => {
 }
 
 const settledEffect = (result: Settled): Effect.Effect<any, any> =>
-  result._tag === "Success" ? Effect.succeed(result.value) : Effect.failCause(result.cause)
+  result._tag === "Success"
+    ? Effect.succeed(result.value)
+    : Effect.failCause(result.cause)
 
 const isRawTuple = (u: unknown): u is RawTuple =>
-  Array.isArray(u) && u.length === 4 && typeof u[0] === "string" && typeof u[3] === "number" &&
+  Array.isArray(u) && u.length === 4 && typeof u[0] === "string" &&
+  typeof u[3] === "number" &&
   (u[1] === 0 || (u[1] === 1 && Array.isArray(u[2])))
 
 /** The `~query` payload by query name and args key, or `undefined` when it isn't the tuple shape. */
-const parseRaw = (input: unknown): Map<string, Map<string, RawTuple>> | undefined => {
-  if (typeof input !== "object" || input === null || Array.isArray(input)) return undefined
+const parseRaw = (
+  input: unknown
+): Map<string, Map<string, RawTuple>> | undefined => {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return undefined
+  }
   const out = new Map<string, Map<string, RawTuple>>()
   for (const [name, tuples] of Object.entries(input)) {
     if (!Array.isArray(tuples)) return undefined
@@ -3257,7 +3681,9 @@ export const makeCache = (options: {
   Effect.map(
     // Uninterruptible from the build to the finalizer's registration, so no build goes without disposal.
     Effect.acquireRelease(
-      Effect.contextWith((context: Context.Context<never>) => Effect.sync(() => buildCache(context, options))),
+      Effect.contextWith((context: Context.Context<never>) =>
+        Effect.sync(() => buildCache(context, options))
+      ),
       (built) => built.dispose
     ),
     (built) => built.cache
@@ -3266,7 +3692,10 @@ export const makeCache = (options: {
 const buildCache = (
   context: Context.Context<never>,
   options: Parameters<typeof makeCache>[0]
-): { readonly cache: CacheInternals; readonly dispose: Effect.Effect<void> } => {
+): {
+  readonly cache: CacheInternals
+  readonly dispose: Effect.Effect<void>
+} => {
   const { connectivity, visibility } = options
   const clock = Context.get(context, Clock.Clock)
   const defaultIdleMs = options.idleMs
@@ -3302,7 +3731,12 @@ const buildCache = (
   const runFork = Effect.runForkWith(context)
   /** Runs `f` one scheduler step later. */
   const defer = (f: () => void): void => {
-    runFork(Effect.andThen(Effect.yieldNow, Effect.sync(() => disposed ? undefined : f())))
+    runFork(
+      Effect.andThen(
+        Effect.yieldNow,
+        Effect.sync(() => disposed ? undefined : f())
+      )
+    )
   }
   /** A `Clock` sleep. Returns its cancel. */
   const timer = (ms: number, f: () => void): () => void => {
@@ -3369,11 +3803,18 @@ const buildCache = (
   }
   const allEntries = (): Array<Entry> => {
     const out: Array<Entry> = []
-    for (const byKey of index.values()) for (const entry of byKey.values()) out.push(entry)
+    for (const byKey of index.values()) {
+      for (const entry of byKey.values()) out.push(entry)
+    }
     return out
   }
-  const lookup = (def: QueryDef, argsKey: string): Entry | undefined => index.get(def.name)?.get(argsKey)
-  const ensureEntry = (def: QueryDef, args: unknown, argsKey = def.argsKey(args)): Entry => {
+  const lookup = (def: QueryDef, argsKey: string): Entry | undefined =>
+    index.get(def.name)?.get(argsKey)
+  const ensureEntry = (
+    def: QueryDef,
+    args: unknown,
+    argsKey = def.argsKey(args)
+  ): Entry => {
     const found = lookup(def, argsKey)
     if (found !== undefined) return found
     const entry: Entry = {
@@ -3427,7 +3868,9 @@ const buildCache = (
   }
   /** A refetch in flight, or one owed: held by a live patch, or owed after a list's append. */
   const owesRefetch = (entry: Entry): boolean =>
-    !entry.removed && (entry.fetch !== undefined || entry.deferred !== undefined || entry.owed !== undefined)
+    !entry.removed &&
+    (entry.fetch !== undefined || entry.deferred !== undefined ||
+      entry.owed !== undefined)
   /** An entry that may have gone quiet leaves the awaited sets, and a set it empties is heard. */
   const checkAwaits = (entry: Entry): void => {
     if (awaits.size === 0 || owesRefetch(entry)) return
@@ -3439,8 +3882,10 @@ const buildCache = (
       listener?.()
     }
   }
-  const drainKey = (entry: Entry): string => quote(entry.def.name) + entry.argsKey
-  const logKeyOf = (entry: Entry): string => entry.logKey ??= entry.def.logKey(entry.args, entry.argsKey)
+  const drainKey = (entry: Entry): string =>
+    quote(entry.def.name) + entry.argsKey
+  const logKeyOf = (entry: Entry): string =>
+    entry.logKey ??= entry.def.logKey(entry.args, entry.argsKey)
 
   // -- builds -----------------------------------------------------------------
   const buildOf = (fetcher: Fetcher): Build => {
@@ -3448,7 +3893,12 @@ const buildCache = (
     if (build === undefined) {
       build = fakeBuilds.get(fetcher)
       if (build === undefined) {
-        build = { fetcher, closed: false, listeners: new Set(), fibers: new Set() }
+        build = {
+          fetcher,
+          closed: false,
+          listeners: new Set(),
+          fibers: new Set()
+        }
         fakeBuilds.set(fetcher, build)
       }
       return build
@@ -3461,9 +3911,15 @@ const buildCache = (
   }
   /** The build the cache uses when it asks itself: the earliest live watcher's, then a waiter's. */
   const survivingBuild = (entry: Entry): Build | undefined => {
-    for (const watcher of entry.watchers) if (!watcher.build.closed) return watcher.build
-    for (const waiter of entry.waiters) if (!waiter.build.closed) return waiter.build
-    for (const waiter of entry.moreWaiters) if (!waiter.build.closed) return waiter.build
+    for (const watcher of entry.watchers) {
+      if (!watcher.build.closed) return watcher.build
+    }
+    for (const waiter of entry.waiters) {
+      if (!waiter.build.closed) return waiter.build
+    }
+    for (const waiter of entry.moreWaiters) {
+      if (!waiter.build.closed) return waiter.build
+    }
     return undefined
   }
 
@@ -3471,30 +3927,48 @@ const buildCache = (
   const isStale = (entry: Entry): boolean =>
     settleOnce
       ? entry.result === undefined
-      : entry.result === undefined || entry.result._tag === "Failure" || entry.invalidated ||
+      : entry.result === undefined || entry.result._tag === "Failure" ||
+        entry.invalidated ||
         now() - entry.settledAt >= entry.def.staleMs
-  const hasLive = (entry: Entry): boolean => entry.patches.some((patch) => patch.live)
+  const hasLive = (entry: Entry): boolean =>
+    entry.patches.some((patch) => patch.live)
   /** Inside the fetch-free window, a hydrated entry. */
   const inWindow = (entry: Entry): boolean => windowOpen && entry.hydrated
   /** The server value. `waiting` means only that a stored fetch is in flight, and not a list's append. */
   const view = (entry: Entry): AsyncResult.AsyncResult<any, any> => {
     const waiting = entry.fetch !== undefined && !entry.fetch.append
-    return entry.result === undefined ? AsyncResult.initial(waiting) : withWaiting(entry.result, waiting)
+    return entry.result === undefined
+      ? AsyncResult.initial(waiting)
+      : withWaiting(entry.result, waiting)
   }
   /** The server value with every patch applied in issue order. A patch that throws is dropped from the entry. */
-  const patchedViewOf = (entry: Entry, server: AsyncResult.AsyncResult<any, any>): PatchedView => {
-    if (entry.patches.length === 0 || server._tag !== "Success") return { result: server, patched: false }
+  const patchedViewOf = (
+    entry: Entry,
+    server: AsyncResult.AsyncResult<any, any>
+  ): PatchedView => {
+    if (entry.patches.length === 0 || server._tag !== "Success") {
+      return { result: server, patched: false }
+    }
     let value = server.value
     for (const rec of entry.patches.slice()) {
       try {
-        value = applyPatch(rec.patch, entry.def.name, entry.argsKey, entry.args, value)
+        value = applyPatch(
+          rec.patch,
+          entry.def.name,
+          entry.argsKey,
+          entry.args,
+          value
+        )
       } catch {
         entry.patches = entry.patches.filter((other) => other !== rec)
       }
     }
     if (entry.patches.length === 0) return { result: server, patched: false }
     return {
-      result: AsyncResult.success(value, { waiting: server.waiting, timestamp: server.timestamp }),
+      result: AsyncResult.success(value, {
+        waiting: server.waiting,
+        timestamp: server.timestamp
+      }),
       patched: true
     }
   }
@@ -3519,7 +3993,10 @@ const buildCache = (
         result = patchedView.result
         patched = patchedView.patched
       }
-      if (patched === watcher.lastPatched && sameMore(more, watcher.lastMore) && Equal.equals(result, watcher.last)) {
+      if (
+        patched === watcher.lastPatched && sameMore(more, watcher.lastMore) &&
+        Equal.equals(result, watcher.last)
+      ) {
         continue
       }
       watcher.last = result
@@ -3556,7 +4033,8 @@ const buildCache = (
   }
   // A live patch blocks collection. A patch held after success doesn't.
   const idleEligible = (entry: Entry): boolean =>
-    !entry.removed && entry.watchers.size === 0 && entry.waiters.size === 0 && entry.moreWaiters.size === 0 &&
+    !entry.removed && entry.watchers.size === 0 && entry.waiters.size === 0 &&
+    entry.moreWaiters.size === 0 &&
     entry.fetch === undefined && !hasLive(entry)
   const idleTtl = (entry: Entry): number => entry.def.idleMs ?? defaultIdleMs
   // Built like `RcMap`'s: an `expiresAt` a reset moves, and a sleep that goes round again.
@@ -3609,10 +4087,17 @@ const buildCache = (
     entry.interval = { ms }
     return ms
   }
-  const evaluateInterval = (entry: Entry, result: Settled): number | undefined => {
+  const evaluateInterval = (
+    entry: Entry,
+    result: Settled
+  ): number | undefined => {
     const interval = entry.def.refetchInterval
     if (interval === undefined) return undefined
-    if (typeof interval === "number") return interval === Infinity ? undefined : interval
+    if (typeof interval === "number") {
+      return interval === Infinity
+        ? undefined
+        : interval
+    }
     let input: Duration.Input | undefined
     try {
       input = interval(result, entry.args)
@@ -3623,7 +4108,8 @@ const buildCache = (
           query: entry.def.name,
           logKey,
           error,
-          message: "[Query] refetchInterval of " + quote(entry.def.name) + " threw at " + logKey +
+          message: "[Query] refetchInterval of " + quote(entry.def.name) +
+            " threw at " + logKey +
             ". There is no interval until the next settle."
         })
       )
@@ -3638,7 +4124,8 @@ const buildCache = (
           query: entry.def.name,
           logKey,
           message: "[Query] refetchInterval of " + quote(entry.def.name) +
-            " returned zero, a negative or a bare number under 1000 at " + logKey +
+            " returned zero, a negative or a bare number under 1000 at " +
+            logKey +
             ". There is no interval until the next settle. " + subSecondHint
         })
       )
@@ -3694,14 +4181,18 @@ const buildCache = (
    * polling carries on. While paused the due time stays for the edge pass.
    */
   const rearmInterval = (entry: Entry): void => {
-    if (settleOnce || disposed || entry.removed || entry.watchers.size === 0 || entry.fetch !== undefined) return
+    if (
+      settleOnce || disposed || entry.removed || entry.watchers.size === 0 ||
+      entry.fetch !== undefined
+    ) return
     if (entry.intervalCancel !== undefined || paused()) return
     const ms = intervalMs(entry)
     if (ms === undefined) return
     entry.intervalDue = now() + ms
     armInterval(entry)
   }
-  const intervalElapsed = (entry: Entry): boolean => entry.intervalDue !== undefined && entry.intervalDue <= now()
+  const intervalElapsed = (entry: Entry): boolean =>
+    entry.intervalDue !== undefined && entry.intervalDue <= now()
 
   // -- lists ------------------------------------------------------------------
   /** The pages a list holds: its Success's, or its Failure's previous Success's. */
@@ -3709,7 +4200,9 @@ const buildCache = (
     const result = entry.result
     if (result === undefined) return []
     if (result._tag === "Success") return result.value
-    return Option.isSome(result.previousSuccess) ? result.previousSuccess.value.value : []
+    return Option.isSome(result.previousSuccess)
+      ? result.previousSuccess.value.value
+      : []
   }
   const hasMoreOf = (entry: Entry): boolean => {
     const result = entry.result
@@ -3719,7 +4212,9 @@ const buildCache = (
     let value = false
     if (pages.length > 0) {
       try {
-        value = Option.isSome(entry.def.list!.next(pages[pages.length - 1], pages))
+        value = Option.isSome(
+          entry.def.list!.next(pages[pages.length - 1], pages)
+        )
       } catch {
         // A hydrated or seeded list: the walk that loads past it reports the defect.
       }
@@ -3729,11 +4224,18 @@ const buildCache = (
   }
   const moreOf = (entry: Entry): More<any> | undefined => {
     if (entry.def.list === undefined) return undefined
-    if (entry.target !== undefined && entry.target > heldPages(entry).length) return moreLoading
-    if (entry.moreError !== undefined) return { _tag: "Failed", error: entry.moreError.error }
+    if (entry.target !== undefined && entry.target > heldPages(entry).length) {
+      return moreLoading
+    }
+    if (entry.moreError !== undefined) {
+      return { _tag: "Failed", error: entry.moreError.error }
+    }
     return hasMoreOf(entry) ? moreAvailable : moreEnd
   }
-  const loadedMore = (entry: Entry): LoadedMore<any> => ({ pages: heldPages(entry), hasMore: hasMoreOf(entry) })
+  const loadedMore = (entry: Entry): LoadedMore<any> => ({
+    pages: heldPages(entry),
+    hasMore: hasMoreOf(entry)
+  })
   /**
    * A list's pages, one request after the other, from after `base`: from the first page when it is empty. It
    * loads to `target()` pages and stops early at the end. A Fail ends it with the pages before; a defect or an
@@ -3754,8 +4256,16 @@ const buildCache = (
       const used = new Set<string>()
       let repeated = false
       const ended = (hasMore: boolean): Effect.Effect<WalkOutcome> =>
-        Effect.succeed({ pages, hasMore, failedAt: undefined, cause: undefined })
-      const step = (cursor: Option.Option<unknown>, first: boolean): Effect.Effect<WalkOutcome, any> => {
+        Effect.succeed({
+          pages,
+          hasMore,
+          failedAt: undefined,
+          cause: undefined
+        })
+      const step = (
+        cursor: Option.Option<unknown>,
+        first: boolean
+      ): Effect.Effect<WalkOutcome, any> => {
         const index = pages.length
         if (Option.isSome(cursor)) {
           const key = cursorKey(list, cursor.value)
@@ -3767,7 +4277,8 @@ const buildCache = (
                 new PageRepeated({
                   query: def.name,
                   logKey: at,
-                  message: "[Query] a walk of " + quote(def.name) + " at " + at + " got page " + index +
+                  message: "[Query] a walk of " + quote(def.name) + " at " +
+                    at + " got page " + index +
                     " with a cursor it already used. Check the list's next."
                 })
               )
@@ -3775,28 +4286,47 @@ const buildCache = (
             used.add(key)
           }
         }
-        if (!first) onPage(index, Option.isSome(cursor) ? logCursor(list, cursor.value) : undefined)
-        return Effect.flatMap(Effect.exit(build.fetcher(args, cursor)), (exit): Effect.Effect<WalkOutcome, any> => {
-          if (exit._tag === "Failure") {
-            if (Cause.hasDies(exit.cause) || !Cause.hasFails(exit.cause)) return exit
-            return Effect.succeed({ pages, hasMore: true, failedAt: index, cause: failsOnly(exit.cause) })
+        if (!first) {
+          onPage(
+            index,
+            Option.isSome(cursor) ? logCursor(list, cursor.value) : undefined
+          )
+        }
+        return Effect.flatMap(
+          Effect.exit(build.fetcher(args, cursor)),
+          (exit): Effect.Effect<WalkOutcome, any> => {
+            if (exit._tag === "Failure") {
+              if (
+                Cause.hasDies(exit.cause) || !Cause.hasFails(exit.cause)
+              ) return exit
+              return Effect.succeed({
+                pages,
+                hasMore: true,
+                failedAt: index,
+                cause: failsOnly(exit.cause)
+              })
+            }
+            return Effect.suspend(() => {
+              const page = exit.value
+              checkPage(def, logKey, page)
+              pages.push(page)
+              const next = list.next(page, pages)
+              if (Option.isNone(next)) return ended(false)
+              if (pages.length >= target()) return ended(true)
+              return step(next, false)
+            })
           }
-          return Effect.suspend(() => {
-            const page = exit.value
-            checkPage(def, logKey, page)
-            pages.push(page)
-            const next = list.next(page, pages)
-            if (Option.isNone(next)) return ended(false)
-            if (pages.length >= target()) return ended(true)
-            return step(next, false)
-          })
-        })
+        )
       }
       if (pages.length === 0) return step(Option.none(), true)
       const next = list.next(pages[pages.length - 1], pages)
       return Option.isNone(next) ? ended(false) : step(next, true)
     })
-  const checkPage = (def: QueryDef, logKey: () => string, page: unknown): void => {
+  const checkPage = (
+    def: QueryDef,
+    logKey: () => string,
+    page: unknown
+  ): void => {
     const list = def.list!
     const seen = new Set<string>()
     for (const item of list.items(page)) {
@@ -3831,7 +4361,10 @@ const buildCache = (
   ): Effect.Effect<ReadonlyArray<unknown>, any> =>
     Effect.flatMap(
       walk(def, args, logKey, build, [], () => count, onPage),
-      (out) => out.failedAt === undefined ? Effect.succeed(out.pages) : Effect.failCause(out.cause!)
+      (out) =>
+        out.failedAt === undefined
+          ? Effect.succeed(out.pages)
+          : Effect.failCause(out.cause!)
     )
   /**
    * Starts what a list's load more waits for: an append over a Success when the target is one page past it, or
@@ -3853,7 +4386,13 @@ const buildCache = (
   }
 
   // -- fetching ---------------------------------------------------------------
-  const startFetch = (entry: Entry, trigger: Trigger, build: Build, restart: boolean, append = false): void => {
+  const startFetch = (
+    entry: Entry,
+    trigger: Trigger,
+    build: Build,
+    restart: boolean,
+    append = false
+  ): void => {
     if (entry.heldRestart && !append) {
       entry.heldRestart = false
       restart = true
@@ -3869,7 +4408,9 @@ const buildCache = (
       entry.moreError = undefined
       const logKey = () => logKeyOf(entry)
       const onPage = (index: number, cursor: Schema.Json | undefined): void => {
-        if (entry.fetch === fetch) emitFetch(entry, trigger, false, true, { page: index, cursor })
+        if (entry.fetch === fetch) {
+          emitFetch(entry, trigger, false, true, { page: index, cursor })
+        }
       }
       if (append) {
         const base = heldPages(entry)
@@ -3881,12 +4422,32 @@ const buildCache = (
           // The walk dies with it.
         }
         page = { page: base.length, cursor }
-        body = () => walk(entry.def, entry.args, logKey, build, base, () => base.length + 1, onPage)
+        body = () =>
+          walk(
+            entry.def,
+            entry.args,
+            logKey,
+            build,
+            base,
+            () => base.length + 1,
+            onPage
+          )
       } else {
         // The server renders the first page.
-        entry.target = settleOnce ? 1 : Math.max(entry.target ?? 0, heldPages(entry).length, 1)
+        entry.target = settleOnce
+          ? 1
+          : Math.max(entry.target ?? 0, heldPages(entry).length, 1)
         page = { page: 0, cursor: undefined }
-        body = () => walk(entry.def, entry.args, logKey, build, [], () => entry.target ?? 1, onPage)
+        body = () =>
+          walk(
+            entry.def,
+            entry.args,
+            logKey,
+            build,
+            [],
+            () => entry.target ?? 1,
+            onPage
+          )
       }
     }
     // Reported before the entry turns ordinary, so the event says whether it fetched inside the window.
@@ -3898,7 +4459,9 @@ const buildCache = (
     const key = drainKey(entry)
     const previous = draining.get(key)
     const fiber = runFork(Effect.andThen(
-      previous === undefined ? Effect.yieldNow : Effect.uninterruptible(Fiber.await(previous)),
+      previous === undefined
+        ? Effect.yieldNow
+        : Effect.uninterruptible(Fiber.await(previous)),
       Effect.suspend(body)
     ))
     fetch.fiber = fiber
@@ -3946,7 +4509,8 @@ const buildCache = (
         new FetchRestarted({
           query: entry.def.name,
           logKey,
-          message: "[Query] the fetch of " + quote(entry.def.name) + " at " + logKey + " was restarted " +
+          message: "[Query] the fetch of " + quote(entry.def.name) + " at " +
+            logKey + " was restarted " +
             restartLimit + " times in a row without settling."
         })
       )
@@ -3961,7 +4525,9 @@ const buildCache = (
     entry.heldRestart = false
     entry.interval = undefined
     entry.hydrated = false
-    if (entry.patches.length > 0) entry.patches = entry.patches.filter((patch) => patch.live)
+    if (entry.patches.length > 0) {
+      entry.patches = entry.patches.filter((patch) => patch.live)
+    }
     scheduleInterval(entry)
   }
   /**
@@ -3975,17 +4541,26 @@ const buildCache = (
       : previous._tag === "Success"
       ? Option.some(previous)
       : previous.previousSuccess
-    if (entry.watchers.size === 0 && !settleOnce && Option.isNone(previousSuccess)) return false
+    if (
+      entry.watchers.size === 0 && !settleOnce && Option.isNone(previousSuccess)
+    ) return false
     store(entry, AsyncResult.failure(cause, { previousSuccess }))
     return true
   }
   /** A fetcher's defect is never stored: the previous state stays, marked stale, so a remount fetches fresh. */
-  const markDefect = (entry: Entry, cause: Cause.Cause<any>): Cause.Cause<never> => {
+  const markDefect = (
+    entry: Entry,
+    cause: Cause.Cause<any>
+  ): Cause.Cause<never> => {
     if (entry.result !== undefined) entry.invalidated = true
     return diesOnly(cause)
   }
   /** What ends every fetch, after its result is in: the defect and the emission, then the timers. */
-  const afterFetch = (entry: Entry, stored: boolean, defect: Cause.Cause<never> | undefined): void => {
+  const afterFetch = (
+    entry: Entry,
+    stored: boolean,
+    defect: Cause.Cause<never> | undefined
+  ): void => {
     if (defect !== undefined) {
       for (const watcher of Array.from(entry.watchers)) {
         if (watcher.active) watcher.onDefect?.(defect)
@@ -4009,7 +4584,11 @@ const buildCache = (
     rearmInterval(entry)
     afterQuiet(entry)
   }
-  const onFetchExit = (entry: Entry, fetch: FetchRec, exit: Exit.Exit<any, any>): void => {
+  const onFetchExit = (
+    entry: Entry,
+    fetch: FetchRec,
+    exit: Exit.Exit<any, any>
+  ): void => {
     if (entry.fetch !== fetch || disposed) return
     entry.kept = false
     if (entry.def.list !== undefined) return onWalkExit(entry, fetch, exit)
@@ -4032,7 +4611,11 @@ const buildCache = (
    * A list's walk or append ended. A walk swaps the pages in at once. A Fail on a page the list held is a Failure
    * over the held pages; on a page past them, the pages loaded are swapped in and the error is the append's.
    */
-  const onWalkExit = (entry: Entry, fetch: FetchRec, exit: Exit.Exit<WalkOutcome, any>): void => {
+  const onWalkExit = (
+    entry: Entry,
+    fetch: FetchRec,
+    exit: Exit.Exit<WalkOutcome, any>
+  ): void => {
     entry.fetch = undefined
     const previous = entry.result
     const held = heldPages(entry).length
@@ -4045,27 +4628,39 @@ const buildCache = (
     let stored = false
     if (exit._tag === "Success") {
       const out = exit.value
-      const failed = out.cause === undefined ? undefined : Exit.failCause(out.cause)
-      const error = out.cause === undefined ? undefined : Cause.findErrorOption(out.cause)
+      const failed = out.cause === undefined
+        ? undefined
+        : Exit.failCause(out.cause)
+      const error = out.cause === undefined
+        ? undefined
+        : Cause.findErrorOption(out.cause)
       if (fetch.append) {
         if (failed === undefined && previous?._tag === "Success") {
           // An append changes no timestamp and settles nothing.
-          entry.result = AsyncResult.success(out.pages, { timestamp: previous.timestamp })
+          entry.result = AsyncResult.success(out.pages, {
+            timestamp: previous.timestamp
+          })
           entry.hasMore = { result: entry.result, value: out.hasMore }
           entry.hydrated = false
         } else if (error !== undefined && Option.isSome(error)) {
           entry.moreError = { error: error.value }
         }
-      } else if (failed === undefined || (out.failedAt! >= held && out.failedAt! > 0)) {
+      } else if (
+        failed === undefined || (out.failedAt! >= held && out.failedAt! > 0)
+      ) {
         store(entry, AsyncResult.success(out.pages, { timestamp: now() }))
         entry.hasMore = { result: entry.result!, value: out.hasMore }
-        if (error !== undefined && Option.isSome(error)) entry.moreError = { error: error.value }
+        if (error !== undefined && Option.isSome(error)) {
+          entry.moreError = { error: error.value }
+        }
         stored = true
       } else {
         stored = storeFailure(entry, out.cause!)
       }
       const server = entry.result
-      getExit = server?._tag === "Success" ? Exit.succeed(server.value) : failed ?? Exit.interrupt()
+      getExit = server?._tag === "Success"
+        ? Exit.succeed(server.value)
+        : failed ?? Exit.interrupt()
       moreExit = failed ?? Exit.succeed(loadedMore(entry))
     } else {
       getExit = moreExit = callerExit(exit)
@@ -4096,7 +4691,8 @@ const buildCache = (
    */
   const replaceFetch = (entry: Entry, fetch: FetchRec): void => {
     dropFetch(entry, fetch)
-    const build = survivingBuild(entry) ?? (fetch.build.closed ? undefined : fetch.build)
+    const build = survivingBuild(entry) ??
+      (fetch.build.closed ? undefined : fetch.build)
     if (build === undefined) return revert(entry)
     countRestart(entry)
     startFetch(entry, fetch.trigger, build, true)
@@ -4106,7 +4702,9 @@ const buildCache = (
     if (disposed) return
     for (const entry of allEntries()) {
       const fetch = entry.fetch
-      if (fetch !== undefined && fetch.build === build) replaceFetch(entry, fetch)
+      if (fetch !== undefined && fetch.build === build) {
+        replaceFetch(entry, fetch)
+      }
     }
     for (const shared of Array.from(sharedFetches)) {
       if (shared.build !== build) continue
@@ -4137,7 +4735,9 @@ const buildCache = (
       "get",
       restart,
       false,
-      shared.entry.def.list === undefined ? undefined : { page: 0, cursor: undefined }
+      shared.entry.def.list === undefined
+        ? undefined
+        : { page: 0, cursor: undefined }
     )
     const build = shared.build
     const previous: Array<Fiber.Fiber<any, any>> = []
@@ -4160,11 +4760,15 @@ const buildCache = (
         build,
         Math.max(heldPages(entry).length, 1),
         (page, cursor) => {
-          if (shared.fiber === fiber) emitFetch(entry, "get", false, false, { page, cursor })
+          if (shared.fiber === fiber) {
+            emitFetch(entry, "get", false, false, { page, cursor })
+          }
         }
       )
     const fiber = runFork(Effect.andThen(
-      previous.length === 0 ? Effect.yieldNow : Effect.uninterruptible(Fiber.awaitAll(previous)),
+      previous.length === 0
+        ? Effect.yieldNow
+        : Effect.uninterruptible(Fiber.awaitAll(previous)),
       body
     ))
     shared.fiber = fiber
@@ -4185,8 +4789,18 @@ const buildCache = (
     if (exit._tag === "Failure" && fiber !== undefined) fiber.interruptUnsafe()
     resumeAll(shared.callers, callerExit(exit))
   }
-  const startShared = (entry: Entry, build: Build, callers: Iterable<Waiter>, restart: boolean): Shared => {
-    const shared: Shared = { entry, build, callers: new Set(), fiber: undefined }
+  const startShared = (
+    entry: Entry,
+    build: Build,
+    callers: Iterable<Waiter>,
+    restart: boolean
+  ): Shared => {
+    const shared: Shared = {
+      entry,
+      build,
+      callers: new Set(),
+      fiber: undefined
+    }
     for (const caller of callers) {
       caller.shared = shared
       shared.callers.add(caller)
@@ -4208,7 +4822,14 @@ const buildCache = (
   }
 
   // -- watch, peek, get, prefetch ---------------------------------------------
-  const watch: CacheInternals["watch"] = (def, args, fetcher, onChange, onDefect, watchOptions) => {
+  const watch: CacheInternals["watch"] = (
+    def,
+    args,
+    fetcher,
+    onChange,
+    onDefect,
+    watchOptions
+  ) => {
     const entry = ensureEntry(register(def), args)
     const build = buildOf(fetcher)
     const first = entry.watchers.size === 0
@@ -4224,10 +4845,15 @@ const buildCache = (
     const patched = watchOptions?.patched === true
     // A bare Failure that the last watcher leaving would drop is withheld until release, which drops it if no
     // watcher that has seen it survives, so the order of releases and registrations never shows it.
-    const provisional = holds > 0 && isBareFailure(entry.result) && !settleOnce && !windowed ? entry.result : undefined
-    const withheld = (): boolean => watcher.provisional !== undefined && watcher.provisional === entry.result
+    const provisional =
+      holds > 0 && isBareFailure(entry.result) && !settleOnce && !windowed
+        ? entry.result
+        : undefined
+    const withheld = (): boolean =>
+      watcher.provisional !== undefined && watcher.provisional === entry.result
     // What it would read had the Failure already been dropped.
-    const provisionalView = (): AsyncResult.AsyncResult<any, any> => AsyncResult.initial(entry.fetch !== undefined)
+    const provisionalView = (): AsyncResult.AsyncResult<any, any> =>
+      AsyncResult.initial(entry.fetch !== undefined)
     const current = provisional !== undefined
       ? { result: provisionalView(), patched: false }
       : patched
@@ -4252,7 +4878,10 @@ const buildCache = (
     return {
       logKey: () => logKeyOf(entry),
       current: () => withheld() ? provisionalView() : view(entry),
-      patchedView: () => withheld() ? { result: provisionalView(), patched: false } : patchedViewOf(entry, view(entry)),
+      patchedView: () =>
+        withheld()
+          ? { result: provisionalView(), patched: false }
+          : patchedViewOf(entry, view(entry)),
       more: () => moreOf(entry),
       unregister: (abandon) => {
         if (!watcher.active) return
@@ -4261,10 +4890,13 @@ const buildCache = (
         if (entry.watchers.size > 0) return
         stopInterval(entry)
         entry.moreError = undefined
-        if (isBareFailure(entry.result) && !settleOnce && !inWindow(entry)) entry.result = undefined
+        if (isBareFailure(entry.result) && !settleOnce && !inWindow(entry)) {
+          entry.result = undefined
+        }
         const fetch = entry.fetch
         if (
-          abandon === true && fetch !== undefined && fetch.trigger === "watch" && !entry.kept &&
+          abandon === true && fetch !== undefined &&
+          fetch.trigger === "watch" && !entry.kept &&
           entry.waiters.size === 0 && entry.moreWaiters.size === 0
         ) {
           // Nothing else asked for it: a `get` waits, and a prefetch is kept.
@@ -4309,10 +4941,15 @@ const buildCache = (
           for (const watcher of entry.watchers) {
             if (watcher.generation < since) fresh = false
             else if (watcher.windowed) windowed = true
-            if (watcher.provisional !== undefined && watcher.provisional === entry.result) withheld = true
+            if (
+              watcher.provisional !== undefined &&
+              watcher.provisional === entry.result
+            ) withheld = true
             else seen = true
             watcher.provisional = undefined
-            if (build === undefined && !watcher.build.closed) build = watcher.build
+            if (build === undefined && !watcher.build.closed) {
+              build = watcher.build
+            }
           }
           if (withheld && !seen) {
             // No watcher that has seen the Failure survived: it goes, as when the last watcher leaves first.
@@ -4323,7 +4960,9 @@ const buildCache = (
             }
           }
           if (fresh) {
-            if (!windowed && build !== undefined && isStale(entry)) ensureFetch(entry, "watch", build)
+            if (!windowed && build !== undefined && isStale(entry)) {
+              ensureFetch(entry, "watch", build)
+            }
             scheduleInterval(entry)
           }
           // Otherwise the withheld Failure is delivered, to the watchers that haven't seen it.
@@ -4373,11 +5012,16 @@ const buildCache = (
       const argsKey = registered.argsKey(args)
       // A started run reading back an entry it invalidates calls the fetcher itself: never from the store, never
       // joined and never stored.
-      if (run !== undefined && run.isStarted() && run.invalidates(registered, argsKey)) {
+      if (
+        run !== undefined && run.isStarted() &&
+        run.invalidates(registered, argsKey)
+      ) {
         const existing = lookup(registered, argsKey)
         const logKey = () => registered.logKey(args, argsKey)
         const event = (page: PageRef | undefined): void => {
-          if (existing !== undefined) return emitFetch(existing, "get", false, false, page)
+          if (existing !== undefined) {
+            return emitFetch(existing, "get", false, false, page)
+          }
           if (fetchListeners.size === 0) return
           notify<FetchEvent>(fetchListeners, {
             query: registered.name,
@@ -4395,8 +5039,17 @@ const buildCache = (
           return buildOf(fetcher).fetcher(args)
         }
         event({ page: 0, cursor: undefined })
-        const count = existing === undefined ? 1 : Math.max(heldPages(existing).length, 1)
-        return callerWalk(registered, args, logKey, buildOf(fetcher), count, (page, cursor) => event({ page, cursor }))
+        const count = existing === undefined
+          ? 1
+          : Math.max(heldPages(existing).length, 1)
+        return callerWalk(
+          registered,
+          args,
+          logKey,
+          buildOf(fetcher),
+          count,
+          (page, cursor) => event({ page, cursor })
+        )
       }
       const entry = ensureEntry(registered, args, argsKey)
       const result = entry.result
@@ -4408,10 +5061,14 @@ const buildCache = (
       if (hasLive(entry)) {
         resetIdle(entry)
         // A live patch only registers over a Success, and no stored fetch runs under it.
-        if (result !== undefined && result._tag === "Success" && !isStale(entry)) return Effect.succeed(result.value)
+        if (
+          result !== undefined && result._tag === "Success" && !isStale(entry)
+        ) return Effect.succeed(result.value)
         return getShared(entry, build)
       }
-      if (result !== undefined && result._tag === "Success" && !isStale(entry)) {
+      if (
+        result !== undefined && result._tag === "Success" && !isStale(entry)
+      ) {
         resetIdle(entry)
         return Effect.succeed(result.value)
       }
@@ -4424,7 +5081,10 @@ const buildCache = (
     // Nothing under a live patch.
     if (hasLive(entry)) return
     // A list that holds pages, stale ones included, isn't loaded again.
-    if (inWindow(entry) || !isStale(entry) || (entry.def.list !== undefined && heldPages(entry).length > 0)) {
+    if (
+      inWindow(entry) || !isStale(entry) ||
+      (entry.def.list !== undefined && heldPages(entry).length > 0)
+    ) {
       return resetIdle(entry)
     }
     if (entry.fetch !== undefined) entry.kept = true
@@ -4443,7 +5103,11 @@ const buildCache = (
     const result = entry.result
     // A per-request cache loads the first page only.
     if (settleOnce && result !== undefined) {
-      resume(result._tag === "Success" ? Exit.succeed(loadedMore(entry)) : Exit.failCause(result.cause))
+      resume(
+        result._tag === "Success"
+          ? Exit.succeed(loadedMore(entry))
+          : Exit.failCause(result.cause)
+      )
       return constVoid
     }
     const waiter: MoreWaiter = { build, resume }
@@ -4454,7 +5118,10 @@ const buildCache = (
     if (fetch !== undefined) {
       // A walk running loads one page more. An append running is this load more.
       if (!fetch.append) entry.target = Math.max(entry.target ?? held, held + 1)
-    } else if (result?._tag === "Success" && !hasMoreOf(entry) && entry.target === undefined) {
+    } else if (
+      result?._tag === "Success" && !hasMoreOf(entry) &&
+      entry.target === undefined
+    ) {
       entry.moreWaiters.delete(waiter)
       resume(Exit.succeed(loadedMore(entry)))
       afterQuiet(entry)
@@ -4480,13 +5147,19 @@ const buildCache = (
     // Truncated first, so the walk it starts loads one page.
     const result = entry.result
     if (result?._tag === "Success" && result.value.length > 1) {
-      entry.result = AsyncResult.success(result.value.slice(0, 1), { timestamp: result.timestamp })
-    } else if (result?._tag === "Failure" && Option.isSome(result.previousSuccess)) {
+      entry.result = AsyncResult.success(result.value.slice(0, 1), {
+        timestamp: result.timestamp
+      })
+    } else if (
+      result?._tag === "Failure" && Option.isSome(result.previousSuccess)
+    ) {
       const previous = result.previousSuccess.value
       if (previous.value.length > 1) {
         entry.result = AsyncResult.failure(result.cause, {
           previousSuccess: Option.some(
-            AsyncResult.success(previous.value.slice(0, 1), { timestamp: previous.timestamp })
+            AsyncResult.success(previous.value.slice(0, 1), {
+              timestamp: previous.timestamp
+            })
           )
         })
       }
@@ -4509,12 +5182,17 @@ const buildCache = (
   const resolve = (targets: Targets): Set<Entry> => {
     const out = new Set<Entry>()
     for (const entry of allEntries()) {
-      if (targetsHit(targets, entry.def.name, entry.def.tags, entry.argsKey)) out.add(entry)
+      if (targetsHit(targets, entry.def.name, entry.def.tags, entry.argsKey)) {
+        out.add(entry)
+      }
     }
     if (targets.tags.size > 0) raw.clear()
     return out
   }
-  const invalidateEntry = (entry: Entry, cause: Trigger = "invalidation"): void => {
+  const invalidateEntry = (
+    entry: Entry,
+    cause: Trigger = "invalidation"
+  ): void => {
     entry.touched = ++seq
     // A never-fetched entry is a no-op.
     if (entry.result === undefined && entry.fetch === undefined) return
@@ -4534,12 +5212,17 @@ const buildCache = (
       if (build !== undefined) ensureFetch(entry, trigger, build)
     }
   }
-  const invalidate: CacheInternals["invalidate"] = (targets, invalidateOptions) => {
+  const invalidate: CacheInternals["invalidate"] = (
+    targets,
+    invalidateOptions
+  ) => {
     if (disposed) return
     registerTargets(targets)
     if (settleOnce) {
       if (invalidateOptions?.byHand === true) {
-        const named = targets.find((target) => isQuery(target) || target._tag === "Entry")
+        const named = targets.find((target) =>
+          isQuery(target) || target._tag === "Entry"
+        )
         const query = named === undefined
           ? undefined
           : isQuery(named)
@@ -4548,7 +5231,8 @@ const buildCache = (
         report(
           new InvalidateIgnored({
             query,
-            message: "[Query] invalidate" + (query === undefined ? "" : " of " + quote(query)) +
+            message: "[Query] invalidate" +
+              (query === undefined ? "" : " of " + quote(query)) +
               " was called on a per-request server cache, where it does nothing."
           })
         )
@@ -4570,12 +5254,19 @@ const buildCache = (
       if (entry.fetch === undefined && entry.watchers.size > 0) {
         if (isStale(entry) || (intervalElapsed(entry) && !paused())) {
           const build = survivingBuild(entry)
-          if (build !== undefined) ensureFetch(entry, deferred ?? "invalidation", build)
-        } else if (entry.intervalDue !== undefined && entry.intervalCancel === undefined && !paused()) {
+          if (build !== undefined) {
+            ensureFetch(entry, deferred ?? "invalidation", build)
+          }
+        } else if (
+          entry.intervalDue !== undefined &&
+          entry.intervalCancel === undefined && !paused()
+        ) {
           armInterval(entry)
         }
       }
-      if (entry.def.list !== undefined && entry.fetch === undefined) heldLoadMore(entry, deferred ?? "loadMore")
+      if (entry.def.list !== undefined && entry.fetch === undefined) {
+        heldLoadMore(entry, deferred ?? "loadMore")
+      }
       // A dropped walk nothing restarted isn't owed a restart by a later fetch, and a prefetch's claim is spent.
       if (entry.fetch === undefined) {
         entry.heldRestart = false
@@ -4622,14 +5313,19 @@ const buildCache = (
     afterQuiet(entry)
   }
   /** Returns the entries stored fresh, and adds those whose write was skipped to `skipped`. */
-  const applyWrites = (run: Run, writes: ReadonlyArray<Write>, skipped: Set<Entry>): Set<Entry> => {
+  const applyWrites = (
+    run: Run,
+    writes: ReadonlyArray<Write>,
+    skipped: Set<Entry>
+  ): Set<Entry> => {
     const fresh = new Set<Entry>()
     for (const set of writes) {
       const def = register(defOf(set.query))
       const argsKey = argsKeyOf(set)
       const existing = lookup(def, argsKey)
       if (
-        existing !== undefined && existing.born <= run.startSeq && !targetsHit(run.targets, def.name, def.tags, argsKey)
+        existing !== undefined && existing.born <= run.startSeq &&
+        !targetsHit(run.targets, def.name, def.tags, argsKey)
       ) {
         const logKey = logKeyOf(existing)
         report(
@@ -4637,7 +5333,8 @@ const buildCache = (
             query: def.name,
             logKey,
             command: run.command,
-            message: "[Query] " + quote(run.command) + " wrote " + quote(def.name) + " at " + logKey +
+            message: "[Query] " + quote(run.command) + " wrote " +
+              quote(def.name) + " at " + logKey +
               ", which neither its invalidates nor a patch covers. The write applies."
           })
         )
@@ -4674,7 +5371,9 @@ const buildCache = (
       const def = register(defOf(patch.query))
       if (patch._tag === "Patch") {
         const entry = lookup(def, argsKeyOf(patch))
-        if (entry !== undefined && entry.result?._tag === "Success") planned.push({ entry, patch })
+        if (entry !== undefined && entry.result?._tag === "Success") {
+          planned.push({ entry, patch })
+        }
       } else {
         for (const entry of index.get(def.name)?.values() ?? []) {
           if (entry.result?._tag === "Success") planned.push({ entry, patch })
@@ -4689,14 +5388,25 @@ const buildCache = (
       if (!values.has(entry)) {
         const server = (entry.result as AsyncResult.Success<any, any>).value
         // Materialized: an encoding can share parts with the value, such as under `Schema.Any`.
-        before.set(entry, materializedEncoding(() => entry.def.codec().encodeSuccess(server)))
+        before.set(
+          entry,
+          materializedEncoding(() => entry.def.codec().encodeSuccess(server))
+        )
         values.set(
           entry,
-          (patchedViewOf(entry, entry.result!) as { readonly result: AsyncResult.Success<any, any> })
+          (patchedViewOf(entry, entry.result!) as {
+            readonly result: AsyncResult.Success<any, any>
+          })
             .result.value
         )
       }
-      const next = applyPatch(patch, entry.def.name, entry.argsKey, entry.args, values.get(entry))
+      const next = applyPatch(
+        patch,
+        entry.def.name,
+        entry.argsKey,
+        entry.args,
+        values.get(entry)
+      )
       values.set(entry, next)
       if (!isValidSuccess(entry, next)) invalid.add(entry)
     }
@@ -4721,7 +5431,8 @@ const buildCache = (
             query: entry.def.name,
             logKey,
             command: run.command,
-            message: "[Query] a patch of " + quote(run.command) + " on " + quote(entry.def.name) + " at " + logKey +
+            message: "[Query] a patch of " + quote(run.command) + " on " +
+              quote(entry.def.name) + " at " + logKey +
               " made a value the query's success Schema rejects. It is used as is."
           })
         )
@@ -4729,15 +5440,21 @@ const buildCache = (
       const encoded = before.get(entry)
       if (encoded !== undefined && entry.result?._tag === "Success") {
         const value = entry.result.value
-        const after = materializedEncoding(() => entry.def.codec().encodeSuccess(value))
-        if (after !== undefined && !equalsOrTrue(encoded.encoded, after.encoded)) {
+        const after = materializedEncoding(() =>
+          entry.def.codec().encodeSuccess(value)
+        )
+        if (
+          after !== undefined && !equalsOrTrue(encoded.encoded, after.encoded)
+        ) {
           report(
             new PatchMutated({
               query: entry.def.name,
               logKey,
               command: run.command,
-              message: "[Query] a patch of " + quote(run.command) + " on " + quote(entry.def.name) + " at " +
-                logKey + " changed the value it was given. A patch must return a new value."
+              message: "[Query] a patch of " + quote(run.command) + " on " +
+                quote(entry.def.name) + " at " +
+                logKey +
+                " changed the value it was given. A patch must return a new value."
             })
           )
         }
@@ -4770,12 +5487,16 @@ const buildCache = (
     let awaited: Await | undefined
     let awaitedEntries: ReadonlyArray<AwaitedEntry> | undefined
     let appliedAt: number | undefined
-    const entryRef = (entry: Entry): AwaitedEntry => ({ query: entry.def.name, logKey: logKeyOf(entry) })
+    const entryRef = (entry: Entry): AwaitedEntry => ({
+      query: entry.def.name,
+      logKey: logKeyOf(entry)
+    })
     const handle: RunHandle = {
       command: run.command,
       run: (body, writes) => runBody(handle, body, writes),
       awaited: () => awaitedEntries,
-      outstanding: () => awaited === undefined ? [] : Array.from(awaited.entries, entryRef),
+      outstanding: () =>
+        awaited === undefined ? [] : Array.from(awaited.entries, entryRef),
       onRefetched: (f) => {
         const rec = awaited
         if (rec === undefined || !awaits.has(rec)) return constVoid
@@ -4785,7 +5506,8 @@ const buildCache = (
         }
       },
       sinceApplied: () => appliedAt === undefined ? 0 : now() - appliedAt,
-      invalidates: (def, argsKey) => targetsHit(targets, def.name, def.tags, argsKey),
+      invalidates: (def, argsKey) =>
+        targetsHit(targets, def.name, def.tags, argsKey),
       start: () => {
         if (run.started || run.done) return
         run.started = true
@@ -4799,7 +5521,9 @@ const buildCache = (
         if (disposed) return
         if (exit._tag === "Success") {
           for (const entry of run.entries) {
-            for (const patch of entry.patches) if (patch.run === run) patch.live = false
+            for (const patch of entry.patches) {
+              if (patch.run === run) patch.live = false
+            }
           }
           const skipped = new Set<Entry>()
           const fresh = applyWrites(run, exit.writes, skipped)
@@ -4818,14 +5542,22 @@ const buildCache = (
           if (runOptions.afterRefetch === true) {
             // Fixed now: a watcher that comes later doesn't join, and an unwatched refetch isn't awaited.
             for (const entry of run.entries) settleRunEntry(entry)
-            const entries = new Set(invalidated.filter((entry) => entry.watchers.size > 0 && owesRefetch(entry)))
+            const entries = new Set(
+              invalidated.filter((entry) =>
+                entry.watchers.size > 0 && owesRefetch(entry)
+              )
+            )
             awaitedEntries = Array.from(entries, entryRef)
             appliedAt = now()
-            if (entries.size > 0) awaits.add(awaited = { entries, listener: undefined })
+            if (entries.size > 0) {
+              awaits.add(awaited = { entries, listener: undefined })
+            }
             return
           }
         } else {
-          for (const entry of run.entries) entry.patches = entry.patches.filter((patch) => patch.run !== run)
+          for (const entry of run.entries) {
+            entry.patches = entry.patches.filter((patch) => patch.run !== run)
+          }
           if (exit._tag === "Failure" && !settleOnce) {
             // A failed run may still have landed its server write, so an older answer is no longer the latest.
             for (const entry of resolve(targets)) {
@@ -4858,7 +5590,8 @@ const buildCache = (
             query: def.name,
             part: "args",
             logKey: undefined,
-            message: "[Query] the args of a hydrated entry of " + quote(def.name) +
+            message: "[Query] the args of a hydrated entry of " +
+              quote(def.name) +
               " failed to decode. The entry is cold."
           })
         )
@@ -4870,9 +5603,15 @@ const buildCache = (
       try {
         const codec = def.codec()
         result = tuple[1] === 0
-          ? AsyncResult.success(codec.decodeSuccess(tuple[2]), { timestamp: tuple[3] })
+          ? AsyncResult.success(codec.decodeSuccess(tuple[2]), {
+            timestamp: tuple[3]
+          })
           : AsyncResult.failure(
-            Cause.fromReasons(tuple[2].map((error) => Cause.makeFailReason(codec.decodeError(error))))
+            Cause.fromReasons(
+              tuple[2].map((error) =>
+                Cause.makeFailReason(codec.decodeError(error))
+              )
+            )
           )
       } catch {
         const logKey = def.logKey(args, argsKey)
@@ -4881,7 +5620,8 @@ const buildCache = (
             query: def.name,
             part: "value",
             logKey,
-            message: "[Query] a hydrated entry of " + quote(def.name) + " at " + logKey +
+            message: "[Query] a hydrated entry of " + quote(def.name) + " at " +
+              logKey +
               " failed to decode. The entry is cold."
           })
         )
@@ -4900,7 +5640,12 @@ const buildCache = (
     if (disposed) return
     const parsed = parseRaw(input)
     if (parsed === undefined) {
-      report(new HydrationMalformed({ message: "[Query] the ~query state isn't the tuple shape. It was ignored." }))
+      report(
+        new HydrationMalformed({
+          message:
+            "[Query] the ~query state isn't the tuple shape. It was ignored."
+        })
+      )
       return
     }
     hydratedAt = hydrateOptions?.at ?? now()
@@ -4917,7 +5662,9 @@ const buildCache = (
     if (!windowOpen) return
     windowOpen = false
     for (const [name, byKey] of raw) {
-      for (const [argsKey, tuple] of byKey) if (tuple[1] === 1) byKey.delete(argsKey)
+      for (const [argsKey, tuple] of byKey) {
+        if (tuple[1] === 1) byKey.delete(argsKey)
+      }
       if (byKey.size === 0) raw.delete(name)
     }
     for (const entry of allEntries()) {
@@ -4927,7 +5674,10 @@ const buildCache = (
         entry.result = undefined
         afterQuiet(entry)
       }
-      if (entry.def.list !== undefined && entry.fetch === undefined && !hasLive(entry)) {
+      if (
+        entry.def.list !== undefined && entry.fetch === undefined &&
+        !hasLive(entry)
+      ) {
         heldLoadMore(entry, "loadMore")
       }
     }
@@ -4953,11 +5703,18 @@ const buildCache = (
       try {
         const codec = entry.def.codec()
         const tuple: RawTuple = result._tag === "Success"
-          ? [entry.argsKey, 0, codec.encodeSuccess(result.value), result.timestamp]
+          ? [
+            entry.argsKey,
+            0,
+            codec.encodeSuccess(result.value),
+            result.timestamp
+          ]
           : [
             entry.argsKey,
             1,
-            result.cause.reasons.filter(Cause.isFailReason).map((reason) => codec.encodeError(reason.error)),
+            result.cause.reasons.filter(Cause.isFailReason).map((reason) =>
+              codec.encodeError(reason.error)
+            ),
             entry.settledAt
           ]
         ;(out[entry.def.name] ??= []).push(tuple)
@@ -4967,7 +5724,8 @@ const buildCache = (
           new EncodeFailed({
             query: entry.def.name,
             logKey,
-            message: "[Query] the entry of " + quote(entry.def.name) + " at " + logKey +
+            message: "[Query] the entry of " + quote(entry.def.name) + " at " +
+              logKey +
               " failed to encode. It was left out, and the client fetches it."
           })
         )
@@ -4982,7 +5740,10 @@ const buildCache = (
     for (const [name, byKey] of parsed) {
       const def = queries.get(name)
       if (def === undefined) {
-        out.push("the query " + quote(name) + " shipped entries, and this cache doesn't know it")
+        out.push(
+          "the query " + quote(name) +
+            " shipped entries, and this cache doesn't know it"
+        )
         continue
       }
       const codec = def.codec()
@@ -4994,22 +5755,35 @@ const buildCache = (
           const argsKey = def.argsKey(args)
           logKey = def.logKey(args, argsKey)
           if (argsKey !== wireKey) {
-            out.push("an entry of " + quote(name) + " at " + logKey + " has args that key differently once decoded")
+            out.push(
+              "an entry of " + quote(name) + " at " + logKey +
+                " has args that key differently once decoded"
+            )
             continue
           }
         } catch {
-          out.push("the args of an entry of " + quote(name) + " failed to decode")
+          out.push(
+            "the args of an entry of " + quote(name) + " failed to decode"
+          )
           continue
         }
         try {
           const again = tuple[1] === 0
             ? codec.encodeSuccess(codec.decodeSuccess(tuple[2]))
-            : tuple[2].map((error) => codec.encodeError(codec.decodeError(error)))
+            : tuple[2].map((error) =>
+              codec.encodeError(codec.decodeError(error))
+            )
           if (JSON.stringify(again) !== JSON.stringify(tuple[2])) {
-            out.push("the entry of " + quote(name) + " at " + logKey + " encodes differently once decoded")
+            out.push(
+              "the entry of " + quote(name) + " at " + logKey +
+                " encodes differently once decoded"
+            )
           }
         } catch {
-          out.push("the entry of " + quote(name) + " at " + logKey + " failed to decode or encode again")
+          out.push(
+            "the entry of " + quote(name) + " at " + logKey +
+              " failed to decode or encode again"
+          )
         }
       }
     }
@@ -5020,12 +5794,17 @@ const buildCache = (
     // A per-request cache never refetches a settled entry, so a seed there would be final.
     if (disposed || settleOnce || data === undefined) return false
     // Never from a value that may never have been saved.
-    if (data.patched || data.argsKey === undefined || data.result?._tag !== "Success") return false
+    if (
+      data.patched || data.argsKey === undefined ||
+      data.result?._tag !== "Success"
+    ) return false
     const def = register(data.def)
     const existing = lookup(def, data.argsKey)
     if (existing?.result !== undefined) return false
     const entry = existing ?? ensureEntry(def, data.args, data.argsKey)
-    entry.result = AsyncResult.success(data.result.value, { timestamp: data.result.timestamp })
+    entry.result = AsyncResult.success(data.result.value, {
+      timestamp: data.result.timestamp
+    })
     entry.settledAt = now()
     entry.invalidated = true
     afterQuiet(entry)
@@ -5038,19 +5817,26 @@ const buildCache = (
     for (const entry of allEntries()) {
       if (entry.watchers.size === 0) continue
       if (entry.fetch !== undefined) {
-        if (entry.fetch.append && (isStale(entry) || intervalElapsed(entry))) entry.owed ??= trigger
+        if (entry.fetch.append && (isStale(entry) || intervalElapsed(entry))) {
+          entry.owed ??= trigger
+        }
         continue
       }
       if (isStale(entry) || intervalElapsed(entry)) {
         const build = survivingBuild(entry)
         if (build !== undefined) ensureFetch(entry, trigger, build)
-      } else if (entry.intervalDue !== undefined && entry.intervalCancel === undefined) {
+      } else if (
+        entry.intervalDue !== undefined && entry.intervalCancel === undefined
+      ) {
         // Not due yet: it sleeps for the remainder.
         armInterval(entry)
       }
     }
   }
-  const listen = (signal: Signal, trigger: "visibility" | "connectivity"): () => void => {
+  const listen = (
+    signal: Signal,
+    trigger: "visibility" | "connectivity"
+  ): () => void => {
     let last = signal.get()
     return signal.subscribe((value) => {
       const was = last
@@ -5121,7 +5907,11 @@ const buildCache = (
         patched: patched.patched,
         stale: isStale(entry),
         watchers: entry.watchers.size,
-        fetch: entry.fetch !== undefined ? "running" : entry.deferred !== undefined ? "held" : "none",
+        fetch: entry.fetch !== undefined
+          ? "running"
+          : entry.deferred !== undefined
+          ? "held"
+          : "none",
         trigger: entry.fetch?.trigger ?? entry.deferred,
         patches: {
           live: entry.patches.filter((patch) => patch.live).length,
@@ -5143,7 +5933,9 @@ const buildCache = (
       resumeAll(entry.waiters, Exit.interrupt())
       resumeAll(entry.moreWaiters, Exit.interrupt())
     }
-    for (const shared of Array.from(sharedFetches)) endShared(shared, Exit.interrupt())
+    for (const shared of Array.from(sharedFetches)) {
+      endShared(shared, Exit.interrupt())
+    }
     for (const fiber of Array.from(timers)) fiber.interruptUnsafe()
     timers.clear()
     // A run's wait outlives no cache: its owner is closing too.

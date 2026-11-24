@@ -25,7 +25,10 @@ const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 describe("Avatar", () => {
   it.effect("the fallback waits for its delay, and then shows whenever the image isn't loaded", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Avatar, { src: "/ada.png", fallbackDelay: 600 }, standIn)
+      const s = yield* Scene.make(Avatar, {
+        src: "/ada.png",
+        fallbackDelay: 600
+      }, standIn)
       assert.isUndefined(s.query(fallback))
       s.subscription("fallbackDelay:600", { _tag: "ElapsedFallbackDelay" })
       assert.isDefined(s.query(fallback))
@@ -49,14 +52,17 @@ describe("Avatar", () => {
           Avatar(h, {
             props: { src },
             view: (avatar) =>
-              avatar.root(h.span.attr("data-status", avatar.imageLoadingStatus)).children(
-                avatar.image(h.img),
-                avatar.fallback(h.span.class("fallback"))
-              )
+              avatar.root(h.span.attr("data-status", avatar.imageLoadingStatus))
+                .children(
+                  avatar.image(h.img),
+                  avatar.fallback(h.span.class("fallback"))
+                )
           })
       })
       const root = yield* TestHost.mount(Page, {}, {
-        frames: (root) => [root.query(image) && "image", root.query(fallback) && "fallback"].filter(Boolean).join("+")
+        frames: (root) =>
+          [root.query(image) && "image", root.query(fallback) && "fallback"]
+            .filter(Boolean).join("+")
       })
       yield* TestHost.settle
       // Ada's load settles after the page picks Grace, but before it renders.
@@ -88,11 +94,17 @@ describe("Avatar", () => {
       })
     const shown = (props: AvatarProps) => {
       const avatar = Story.parts(Avatar, {
-        model: { report: { source: props, status: "loaded" }, delayElapsed: true },
+        model: {
+          report: { source: props, status: "loaded" },
+          delayElapsed: true
+        },
         props
       })
       // A source attribute chained after the part loses too.
-      return View.build(avatar.image(element)!.attrs({ src: "/chained.png", title: "Ada" }), []).attrs
+      return View.build(
+        avatar.image(element)!.attrs({ src: "/chained.png", title: "Ada" }),
+        []
+      ).attrs
     }
     assert.deepStrictEqual(shown({ src: "/ada.png" }), {
       class: "photo",

@@ -135,28 +135,47 @@ export interface TestText extends Locator.Firable {
 export type TestNode = TestElement | TestText
 
 /** The events of each node of a path, innermost first: what a host's lookups find. */
-type EventsAlong = (path: ReadonlyArray<TestNode>) => ReadonlyArray<Renderer.Events | undefined>
+type EventsAlong = (
+  path: ReadonlyArray<TestNode>
+) => ReadonlyArray<Renderer.Events | undefined>
 
 const noLookup: EventsAlong = () => []
 
-const controlledProps: ReadonlySet<string> = new Set(["value", "checked", "selected", "open"])
+const controlledProps: ReadonlySet<string> = new Set([
+  "value",
+  "checked",
+  "selected",
+  "open"
+])
 
 /** `node` and its ancestors. */
 const pathFrom = (node: TestNode): Array<TestNode> => {
   const path: Array<TestNode> = []
-  for (let at: TestNode | undefined = node; at !== undefined; at = at.parent) path.push(at)
+  for (let at: TestNode | undefined = node; at !== undefined; at = at.parent) {
+    path.push(at)
+  }
   return path
 }
 
-const fireFrom = (along: EventsAlong, node: TestNode, event: string, payload: unknown): boolean => {
+const fireFrom = (
+  along: EventsAlong,
+  node: TestNode,
+  event: string,
+  payload: unknown
+): boolean => {
   for (const entry of along(pathFrom(node))) {
     const handler = entry?.handlers[event]
-    if (entry !== undefined && handler !== undefined) return entry.dispatch(event, handler, payload)
+    if (entry !== undefined && handler !== undefined) {
+      return entry.dispatch(event, handler, payload)
+    }
   }
   throw new Error(`TestHost: nothing handles "${event}" here or above`)
 }
 
-const makeElement = (tag: string, along: EventsAlong = noLookup): TestElement => {
+const makeElement = (
+  tag: string,
+  along: EventsAlong = noLookup
+): TestElement => {
   const events = () => along(pathFrom(element))[0]
   const element: TestElement = {
     _tag: "Element",
@@ -173,7 +192,9 @@ const makeElement = (tag: string, along: EventsAlong = noLookup): TestElement =>
     },
     get owners() {
       const found = events()
-      return found === undefined ? View.noFields : runtime.eventOwners(found.handlers)
+      return found === undefined
+        ? View.noFields
+        : runtime.eventOwners(found.handlers)
     },
     get dispatch() {
       return events()?.dispatch
@@ -193,7 +214,8 @@ const makeText = (text: string, along: EventsAlong): TestText => {
   return node
 }
 
-const describe = (node: TestNode): string => node._tag === "Text" ? JSON.stringify(node.text) : `<${node.tag}>`
+const describe = (node: TestNode): string =>
+  node._tag === "Text" ? JSON.stringify(node.text) : `<${node.tag}>`
 
 const detach = (node: TestNode) => {
   const parent = node.parent
@@ -251,7 +273,11 @@ export const makeHost = (): Renderer.Host<TestNode> & {
     },
     setAttr(node, name, value) {
       const element = node as TestElement
-      operations.push(`attr ${describe(node)} ${name}=${value === undefined ? "(removed)" : JSON.stringify(value)}`)
+      operations.push(
+        `attr ${describe(node)} ${name}=${
+          value === undefined ? "(removed)" : JSON.stringify(value)
+        }`
+      )
       if (value === undefined) delete element.attrs[name]
       else element.attrs[name] = value
     },
@@ -265,10 +291,16 @@ export const makeHost = (): Renderer.Host<TestNode> & {
       else element.props[name] = value
     },
     insertBefore(parent, node, ref) {
-      operations.push(`insert ${describe(node)}${ref === undefined ? "" : ` before ${describe(ref)}`}`)
+      operations.push(
+        `insert ${describe(node)}${
+          ref === undefined ? "" : ` before ${describe(ref)}`
+        }`
+      )
       const into = parent as TestElement
       detach(node)
-      const index = ref === undefined ? into.children.length : into.children.indexOf(ref)
+      const index = ref === undefined
+        ? into.children.length
+        : into.children.indexOf(ref)
       into.children.splice(index < 0 ? into.children.length : index, 0, node)
       node.parent = into
     },
@@ -279,7 +311,9 @@ export const makeHost = (): Renderer.Host<TestNode> & {
     parentOf: (node) => node.parent,
     nextOf(node) {
       const parent = node.parent
-      return parent === undefined ? undefined : parent.children[parent.children.indexOf(node) + 1]
+      return parent === undefined
+        ? undefined
+        : parent.children[parent.children.indexOf(node) + 1]
     },
     setEvents(node, handlers, dispatch, options) {
       set(node, { handlers, dispatch, options })
@@ -320,7 +354,9 @@ export interface TestHost {
   /** The settable `Query.Visibility` every mount gets. */
   readonly visibility: Query.Signal & { readonly set: (value: boolean) => void }
   /** The settable `Query.Connectivity` every mount gets. */
-  readonly connectivity: Query.Signal & { readonly set: (value: boolean) => void }
+  readonly connectivity: Query.Signal & {
+    readonly set: (value: boolean) => void
+  }
   /** The problems reported and not yet taken. */
   readonly problems: () => ReadonlyArray<Query.Problem.Any>
   /** Collects a problem. Every mount's cache reports here. */
@@ -328,7 +364,10 @@ export interface TestHost {
   /** Takes every problem with this tag. Throws when there is none. */
   readonly expectProblem: (tag: string) => ReadonlyArray<Query.Problem.Any>
   /** Wraps a `Clock` so that a woken sleeper drains the test scheduler. */
-  readonly drainingClock: (clock: Clock.Clock, context: Context.Context<never>) => Clock.Clock
+  readonly drainingClock: (
+    clock: Clock.Clock,
+    context: Context.Context<never>
+  ) => Clock.Clock
   /** The trees mounted on this host. */
   readonly trees: () => ReadonlySet<Tree>
 }
@@ -425,7 +464,9 @@ export class DrainExhausted extends Data.TaggedClass("DrainExhausted")<{
  * @category services
  * @since 0.1.0
  */
-export const TestHost: Context.Service<TestHost, TestHost> = Context.Service<TestHost>("@effect/ui/testing/TestHost")
+export const TestHost: Context.Service<TestHost, TestHost> = Context.Service<
+  TestHost
+>("@effect/ui/testing/TestHost")
 
 /**
  * When a tree's render flush runs among the tasks the test scheduler holds:
@@ -492,7 +533,12 @@ export const layer = (options?: {
     const host = makeHost()
     // No config, or a provider that fails to read, is no setting.
     const flush = options?.flush ??
-      flushFrom(yield* Effect.orElseSucceed(Config.String("EFFECT_UI_TEST_FLUSH"), () => "")) ??
+      flushFrom(
+        yield* Effect.orElseSucceed(
+          Config.String("EFFECT_UI_TEST_FLUSH"),
+          () => ""
+        )
+      ) ??
       "queued"
     const executor = new Executor.TestExecutor(flush)
     const log = MessageLog.makeMemory({ size: options?.logSize ?? Infinity })
@@ -513,7 +559,10 @@ export const layer = (options?: {
     const report = (problem: Query.Problem.Any) => {
       problems.push(problem)
     }
-    const drainingClock = (clock: Clock.Clock, context: Context.Context<never>): Clock.Clock => {
+    const drainingClock = (
+      clock: Clock.Clock,
+      context: Context.Context<never>
+    ): Clock.Clock => {
       const run = Effect.runForkWith(context)
       const sleep = (duration: Duration.Duration): Effect.Effect<void> =>
         Effect.callback<void>((resume) => {
@@ -527,7 +576,8 @@ export const layer = (options?: {
             if (!drain(budget)) {
               report(
                 new DrainExhausted({
-                  message: `[TestHost] a clock wake ran ${budget} tasks and work is still being scheduled.`
+                  message:
+                    `[TestHost] a clock wake ran ${budget} tasks and work is still being scheduled.`
                 })
               )
             }
@@ -561,8 +611,11 @@ export const layer = (options?: {
         const matched = problems.filter((problem) => problem._tag === tag)
         if (matched.length === 0) {
           throw new Error(
-            "[TestHost] expected a " + tag + " problem, and the cache reported " +
-              (problems.length === 0 ? "none" : problems.map((problem) => problem._tag).join(", "))
+            "[TestHost] expected a " + tag +
+              " problem, and the cache reported " +
+              (problems.length === 0
+                ? "none"
+                : problems.map((problem) => problem._tag).join(", "))
           )
         }
         problems = problems.filter((problem) => problem._tag !== tag)
@@ -572,7 +625,11 @@ export const layer = (options?: {
       trees: () => trees
     }
     yield* Effect.addFinalizer(() =>
-      Effect.suspend(() => problems.length === 0 ? Effect.void : Effect.die(new TestQuery.ProblemsError({ problems })))
+      Effect.suspend(() =>
+        problems.length === 0
+          ? Effect.void
+          : Effect.die(new TestQuery.ProblemsError({ problems }))
+      )
     )
     return Context.make(TestHost, service).pipe(
       Context.add(Renderer.Renderer, { host }),
@@ -636,7 +693,9 @@ export interface Root<out Model, in Msg, out Events> {
  * @category models
  * @since 0.1.0
  */
-export interface TestRoot<out Model, in Msg, out Events> extends Root<Model, Msg, Events> {
+export interface TestRoot<out Model, in Msg, out Events>
+  extends Root<Model, Msg, Events>
+{
   /** The element the tree is mounted in. */
   readonly container: TestElement
   /** The text of everything mounted. */
@@ -691,30 +750,52 @@ export const mount = <
       ) => View.Content<never, RF>)
       | undefined
     readonly query?: Renderer.QueryOptions | undefined
-    readonly frames?: ((root: TestRoot<Model, Msg, Events>) => string) | undefined
+    readonly frames?:
+      | ((root: TestRoot<Model, Msg, Events>) => string)
+      | undefined
   }
-): Effect.Effect<TestRoot<Model, Msg, Events>, never, R | RF | RP | TestHost | Scope.Scope> =>
+): Effect.Effect<
+  TestRoot<Model, Msg, Events>,
+  never,
+  R | RF | RP | TestHost | Scope.Scope
+> =>
   Effect.gen(function*() {
     const testHost = yield* TestHost
     const container = makeElement("#root")
     const outer = yield* Effect.context<never>()
-    const project = options?.frames ?? ((root: TestRoot<Model, Msg, Events>) => root.text())
+    const project = options?.frames ??
+      ((root: TestRoot<Model, Msg, Events>) => root.text())
     const frames: Array<string> = []
     let testRoot: TestRoot<Model, Msg, Events> | undefined
     const frame = () => {
       if (testRoot === undefined) return
       const next = project(testRoot)
-      if (frames.length === 0 || frames[frames.length - 1] !== next) frames.push(next)
+      if (frames.length === 0 || frames[frames.length - 1] !== next) {
+        frames.push(next)
+      }
     }
     const offCommit = testHost.host.onCommit(frame)
     yield* Effect.addFinalizer(() => Effect.sync(offCommit))
-    const root = yield* runtime.mount(component as any, props, container, options as any).pipe(
-      Effect.provideService(Clock.Clock, testHost.drainingClock(Context.get(outer, Clock.Clock), outer)),
+    const root = yield* runtime.mount(
+      component as any,
+      props,
+      container,
+      options as any
+    ).pipe(
+      Effect.provideService(
+        Clock.Clock,
+        testHost.drainingClock(Context.get(outer, Clock.Clock), outer)
+      ),
       Effect.provideService(Query.Visibility, testHost.visibility),
       Effect.provideService(Query.Connectivity, testHost.connectivity),
       Effect.provideService(Query.Problems, testHost.report)
     )
-    const neutral = yield* register(testHost, root, testHost.log, () => frames.slice())
+    const neutral = yield* register(
+      testHost,
+      root,
+      testHost.log,
+      () => frames.slice()
+    )
     testRoot = {
       ...neutral,
       container,
@@ -743,12 +824,21 @@ export const register = (
   Effect.gen(function*() {
     const pending = (): ReadonlyArray<Pending> => [
       ...root.pending().map((run): Pending => ({ _tag: "Command", ...run })),
-      ...root.cache.pending().map((fetch): Pending => ({ _tag: "Fetch", path: root.path, ...fetch })),
+      ...root.cache.pending().map((fetch): Pending => ({
+        _tag: "Fetch",
+        path: root.path,
+        ...fetch
+      })),
       ...root.loads().map((load): Pending => ({ _tag: "Load", ...load }))
     ]
-    const unregister = testHost.register({ path: root.path, pending, crashed: root.crashed })
+    const unregister = testHost.register({
+      path: root.path,
+      pending,
+      crashed: root.crashed
+    })
     yield* Effect.addFinalizer(() => Effect.sync(unregister))
-    const entries = () => log.entries().filter((entry) => entry.session === root.session)
+    const entries = () =>
+      log.entries().filter((entry) => entry.session === root.session)
     return {
       path: root.path,
       session: root.session,
@@ -757,7 +847,10 @@ export const register = (
       emitted: root.emitted,
       log: entries,
       pending,
-      fetches: () => entries().filter((entry): entry is MessageLog.FetchStarted => entry._tag === "FetchStarted"),
+      fetches: () =>
+        entries().filter((entry): entry is MessageLog.FetchStarted =>
+          entry._tag === "FetchStarted"
+        ),
       entry: (read, args) => root.cache.inspect(Query.defOf(read), args) as any,
       head: root.head as <H>() => H,
       frames
@@ -821,16 +914,24 @@ const nextMacrotask = Effect.callback<void>((resume) => {
  * @category combinators
  * @since 0.1.0
  */
-export const settle: Effect.Effect<void, SettleError | RootCrashed | TestQuery.ProblemsError, TestHost> = Effect
+export const settle: Effect.Effect<
+  void,
+  SettleError | RootCrashed | TestQuery.ProblemsError,
+  TestHost
+> = Effect
   .gen(function*() {
     const testHost = yield* TestHost
     yield* drainAll(testHost)
     for (const tree of testHost.trees()) {
       const cause = tree.crashed()
-      if (cause !== undefined) return yield* new RootCrashed({ path: tree.path, cause })
+      if (cause !== undefined) {
+        return yield* new RootCrashed({ path: tree.path, cause })
+      }
     }
     const problems = testHost.problems()
-    if (problems.length > 0) return yield* new TestQuery.ProblemsError({ problems })
+    if (problems.length > 0) {
+      return yield* new TestQuery.ProblemsError({ problems })
+    }
   })
 
 const drainAll = Effect.fnUntraced(function*(testHost: TestHost) {
@@ -849,7 +950,9 @@ const drainAll = Effect.fnUntraced(function*(testHost: TestHost) {
             "Last log entries:",
             formatLog(log),
             "Pending:",
-            pending.length === 0 ? "  (none)" : pending.map(describePending).join("\n")
+            pending.length === 0
+              ? "  (none)"
+              : pending.map(describePending).join("\n")
           ].join("\n"),
           pending,
           log
@@ -884,7 +987,9 @@ const describePending = (pending: Pending): string =>
  * @category testing
  * @since 0.1.0
  */
-export const setVisible = (visible: boolean): Effect.Effect<void, never, TestHost> =>
+export const setVisible = (
+  visible: boolean
+): Effect.Effect<void, never, TestHost> =>
   TestHost.useSync((testHost) => testHost.visibility.set(visible))
 
 /**
@@ -896,7 +1001,9 @@ export const setVisible = (visible: boolean): Effect.Effect<void, never, TestHos
  * @category testing
  * @since 0.1.0
  */
-export const setOnline = (online: boolean): Effect.Effect<void, never, TestHost> =>
+export const setOnline = (
+  online: boolean
+): Effect.Effect<void, never, TestHost> =>
   TestHost.useSync((testHost) => testHost.connectivity.set(online))
 
 /**
@@ -906,7 +1013,11 @@ export const setOnline = (online: boolean): Effect.Effect<void, never, TestHost>
  * @category testing
  * @since 0.1.0
  */
-export const problems: Effect.Effect<ReadonlyArray<Query.Problem.Any>, never, TestHost> = TestHost.useSync(
+export const problems: Effect.Effect<
+  ReadonlyArray<Query.Problem.Any>,
+  never,
+  TestHost
+> = TestHost.useSync(
   (testHost) => testHost.problems()
 )
 
@@ -924,7 +1035,8 @@ export const problems: Effect.Effect<ReadonlyArray<Query.Problem.Any>, never, Te
  */
 export const expectProblem = <Tag extends string>(tag: Tag): Effect.Effect<
   ReadonlyArray<
-    [Extract<Query.Problem | DrainExhausted, { readonly _tag: Tag }>] extends [never] ? Query.Problem.Any
+    [Extract<Query.Problem | DrainExhausted, { readonly _tag: Tag }>] extends
+      [never] ? Query.Problem.Any
       : Extract<Query.Problem | DrainExhausted, { readonly _tag: Tag }>
   >,
   never,
@@ -932,7 +1044,9 @@ export const expectProblem = <Tag extends string>(tag: Tag): Effect.Effect<
 > => TestHost.useSync((testHost) => testHost.expectProblem(tag) as any)
 
 const summary = (value: unknown): string => {
-  if (typeof value === "object" && value !== null && "_tag" in value) return String((value as any)._tag)
+  if (typeof value === "object" && value !== null && "_tag" in value) {
+    return String((value as any)._tag)
+  }
   try {
     const json = JSON.stringify(MessageLog.structural(value))
     return json.length > 60 ? json.slice(0, 57) + "..." : json
@@ -986,24 +1100,34 @@ export const formatLog = (entries: ReadonlyArray<MessageLog.Entry>): string =>
  * @category formatting
  * @since 0.1.0
  */
-export const formatTimeline = (entries: ReadonlyArray<MessageLog.Entry>): string => {
+export const formatTimeline = (
+  entries: ReadonlyArray<MessageLog.Entry>
+): string => {
   const facts = new Map<number, Array<MessageLog.Entry>>()
   for (const entry of entries) {
-    if (entry.causedBy === undefined || !facts.has(entry.causedBy)) facts.set(entry.seq, [])
-    else facts.get(entry.causedBy)!.push(entry)
+    if (entry.causedBy === undefined || !facts.has(entry.causedBy)) {
+      facts.set(entry.seq, [])
+    } else facts.get(entry.causedBy)!.push(entry)
   }
   const lines: Array<string> = []
   for (const entry of entries) {
     const followed = facts.get(entry.seq)
     if (followed === undefined) continue
-    lines.push(formatEntry(entry) + (entry.causedBy === undefined ? "" : ` (after #${entry.causedBy})`))
-    for (const consequence of followed) lines.push("    " + formatEntry(consequence))
+    lines.push(
+      formatEntry(entry) +
+        (entry.causedBy === undefined ? "" : ` (after #${entry.causedBy})`)
+    )
+    for (const consequence of followed) {
+      lines.push("    " + formatEntry(consequence))
+    }
   }
   return lines.join("\n")
 }
 
 const formatEntry = (entry: MessageLog.Entry): string => {
-  const head = `#${entry.seq}${"path" in entry ? ` ${entry.path}` : ""} ${entry._tag}`
+  const head = `#${entry.seq}${
+    "path" in entry ? ` ${entry.path}` : ""
+  } ${entry._tag}`
   switch (entry._tag) {
     case "Update": {
       const source = entry.source
@@ -1028,17 +1152,33 @@ const formatEntry = (entry: MessageLog.Entry): string => {
         : source._tag === "Mount"
         ? `mount ${source.name}`
         : "dispatch"
-      const commands = entry.commands.length === 0 ? "" : ` -> ${entry.commands.map((c) => c.name).join(", ")}`
-      const events = entry.events.length === 0 ? "" : ` events ${entry.events.map(summary).join(", ")}`
+      const commands = entry.commands.length === 0
+        ? ""
+        : ` -> ${entry.commands.map((c) => c.name).join(", ")}`
+      const events = entry.events.length === 0
+        ? ""
+        : ` events ${entry.events.map(summary).join(", ")}`
       const sends = entry.sends.length === 0
         ? ""
-        : ` sends ${entry.sends.map((send) => `${send.owner.definition.name} ${summary(send.message)}`).join(", ")}`
-      return `${head} ${summary(entry.message)} (${from})${commands}${events}${sends}`
+        : ` sends ${
+          entry.sends.map((send) =>
+            `${send.owner.definition.name} ${summary(send.message)}`
+          ).join(", ")
+        }`
+      return `${head} ${
+        summary(entry.message)
+      } (${from})${commands}${events}${sends}`
     }
     case "Mounted":
-      return `${head}${entry.commands.length === 0 ? "" : ` -> ${entry.commands.map((c) => c.name).join(", ")}`}`
+      return `${head}${
+        entry.commands.length === 0
+          ? ""
+          : ` -> ${entry.commands.map((c) => c.name).join(", ")}`
+      }`
     case "Failed":
-      return `${head} in ${entry.in}${entry.name === undefined ? "" : ` (${entry.name})`}${
+      return `${head} in ${entry.in}${
+        entry.name === undefined ? "" : ` (${entry.name})`
+      }${
         entry.update === undefined ? "" : ` of ${summary(entry.update.message)}`
       }: ${entry.cause.toString().split("\n")[0]}`
     case "SubscriptionStarted":
@@ -1049,7 +1189,9 @@ const formatEntry = (entry: MessageLog.Entry): string => {
         entry.waitEnded === undefined ? "" : ` (wait ${entry.waitEnded})`
       }`
     case "MountEnded":
-      return `${head} ${entry.name} (${entry.reason})${entry.silent ? " (silent)" : ""}`
+      return `${head} ${entry.name} (${entry.reason})${
+        entry.silent ? " (silent)" : ""
+      }`
     case "MountStarted":
     case "CommandStarted":
       return `${head} ${entry.name}`
@@ -1057,14 +1199,17 @@ const formatEntry = (entry: MessageLog.Entry): string => {
       return `${head} ${entry.name} (${entry.reason})`
     case "CommandAwaiting":
       return `${head} ${entry.name} on ${
-        entry.entries.map((awaited) => `${awaited.query} ${awaited.logKey}`).join(", ")
+        entry.entries.map((awaited) => `${awaited.query} ${awaited.logKey}`)
+          .join(", ")
       }`
     case "CommandDropped":
       return `${head} ${entry.name} (${entry.reason})`
     case "SendDropped":
       return `${head} ${entry.owner}`
     case "FetchStarted":
-      return `${head} ${entry.query} ${entry.logKey} (${entry.trigger}${entry.restart ? ", restart" : ""})`
+      return `${head} ${entry.query} ${entry.logKey} (${entry.trigger}${
+        entry.restart ? ", restart" : ""
+      })`
     default:
       return head
   }
@@ -1101,7 +1246,9 @@ export const stub = <Self, Props, Events>(
   const name: string = feature[Feature.TypeId].name
   const seen: Array<Props> = []
   const listeners = new Set<(events: Events) => void>()
-  const Emit = Schema.TaggedStruct("~@effect/ui/TestHost/Emit", { events: feature.events })
+  const Emit = Schema.TaggedStruct("~@effect/ui/TestHost/Emit", {
+    events: feature.events
+  })
   const component = Component.define({
     name,
     scoped: false,
@@ -1113,7 +1260,9 @@ export const stub = <Self, Props, Events>(
     init: () => 0,
     update: ($, message) => $.set($.model + 1).emit(message.events),
     view: (h) => {
-      if (seen.length === 0 || seen[seen.length - 1] !== h.props) seen.push(h.props)
+      if (seen.length === 0 || seen[seen.length - 1] !== h.props) {
+        seen.push(h.props)
+      }
       return h.el("stub").attr("data-stub", name)
     },
     subscriptions: () => [

@@ -3,13 +3,35 @@ import { Html } from "@effect/ui/html"
 import { Scene } from "@effect/ui/testing"
 import { Context, type Effect, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
-import { Dialog, DialogEvents, type Item, Menu, type MenuEvents } from "../../test/html/fixtures/headless.ts"
+import {
+  Dialog,
+  DialogEvents,
+  type Item,
+  Menu,
+  type MenuEvents
+} from "../../test/html/fixtures/headless.ts"
 
-class Clock extends Context.Service<Clock, { readonly now: Effect.Effect<number> }>()("Clock") {}
-class Tracker extends Context.Service<Tracker, { readonly seen: Effect.Effect<void> }>()("Tracker") {}
+class Clock
+  extends Context.Service<Clock, { readonly now: Effect.Effect<number> }>()(
+    "Clock"
+  )
+{}
+class Tracker
+  extends Context.Service<Tracker, { readonly seen: Effect.Effect<void> }>()(
+    "Tracker"
+  )
+{}
 
-const Tick = Mount.make("Tick", { args: {} }, () => Clock.use((clock) => clock.now))
-const MarkSeen = Mount.make("MarkSeen", { args: {} }, () => Tracker.use((tracker) => tracker.seen))
+const Tick = Mount.make(
+  "Tick",
+  { args: {} },
+  () => Clock.use((clock) => clock.now)
+)
+const MarkSeen = Mount.make(
+  "MarkSeen",
+  { args: {} },
+  () => Tracker.use((tracker) => tracker.seen)
+)
 
 const Timed = Component.define({
   name: "Timed",
@@ -31,14 +53,24 @@ const define = () =>
   Component.define({
     name: "Combo",
     scoped: false,
-    props: Schema.Struct({ items: Schema.Array(Schema.Struct({ id: Schema.String, label: Schema.String })) }),
+    props: Schema.Struct({
+      items: Schema.Array(
+        Schema.Struct({ id: Schema.String, label: Schema.String })
+      )
+    }),
     model: Schema.Number,
     message: Msg,
     elements: Html
   })
 
 declare const h: View.Helper<AppMsg, unknown> & View.Tags<Html.Elements, AppMsg>
-type Button = Html.Element<AppMsg, never, Html.EventsOf<"button">, HTMLButtonElement, "button">
+type Button = Html.Element<
+  AppMsg,
+  never,
+  Html.EventsOf<"button">,
+  HTMLButtonElement,
+  "button"
+>
 
 describe("p.child", () => {
   it("infers the consumer's parts from the merge, with no annotations", () => {
@@ -46,7 +78,10 @@ describe("p.child", () => {
       init: () => 0,
       update: ($) => $.model,
       parts: (p, count) => {
-        const badge = p.part("output", (b) => b.attr("data-count", String(count)))
+        const badge = p.part(
+          "output",
+          (b) => b.attr("data-count", String(count))
+        )
         return p.child(Dialog, {
           props: { label: "Confirm" },
           onEmit: (event) => {
@@ -57,7 +92,8 @@ describe("p.child", () => {
             ...dialog,
             count,
             badge,
-            trigger: <B extends View.PartTarget<"button">>(element: B) => dialog.trigger(element)
+            trigger: <B extends View.PartTarget<"button">>(element: B) =>
+              dialog.trigger(element)
           })
         })
       }
@@ -104,11 +140,16 @@ describe("p.child", () => {
       init: () => 0,
       update: ($) => $.model,
       parts: (p) => {
-        const seen = p.part("div", (b) => b.onMount(MarkSeen().pipe(Mount.map(() => Component.noop))))
+        const seen = p.part(
+          "div",
+          (b) => b.onMount(MarkSeen().pipe(Mount.map(() => Component.noop)))
+        )
         return p.child(Timed, { parts: (timed) => ({ timed, seen }) })
       }
     })
-    expect<Component.Headless.Requirements<typeof Combo>>().type.toBe<Clock | Tracker>()
+    expect<Component.Headless.Requirements<typeof Combo>>().type.toBe<
+      Clock | Tracker
+    >()
   })
 
   it("a reader of the child's shared state in the consumer's closure leaves no requirement", () => {
@@ -136,14 +177,22 @@ describe("p.child", () => {
       update: ($) => $.model,
       parts: (p) => p.child(Tips, { parts: (tips) => tips })
     })
-    const App = Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make(
+    const App = Component.define({
+      name: "App",
+      scoped: false,
+      model: Schema.Null,
+      message: Msg,
+      elements: Html
+    }).make(
       {
         init: () => null,
         update: ($) => $.model,
         view: (h) => Bar(h, { props: { items: [] }, view: () => Tip(h, {}) })
       }
     )
-    expect<Component.Requirements<typeof Tip>>().type.toBe<Component.Shared<"Tips">>()
+    expect<Component.Requirements<typeof Tip>>().type.toBe<
+      Component.Shared<"Tips">
+    >()
     expect<Component.Requirements<typeof App>>().type.toBe<never>()
   })
 
@@ -152,7 +201,9 @@ describe("p.child", () => {
       init: () => 0,
       update: ($) => $.model,
       parts: (p) => {
-        expect(p.child).type.not.toBeCallableWith(Dialog, { parts: (dialog: unknown) => ({ dialog }) })
+        expect(p.child).type.not.toBeCallableWith(Dialog, {
+          parts: (dialog: unknown) => ({ dialog })
+        })
         expect(p.child).type.not.toBeCallableWith(Dialog, {
           props: { label: "Confirm" },
           fallback: () => "down",
@@ -176,7 +227,13 @@ describe("p.child", () => {
 
 describe("Scene.childEmit", () => {
   it("takes the events of a headless child", () => {
-    const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Msg, elements: Html })
+    const Page = Component.define({
+      name: "Page",
+      scoped: false,
+      model: Schema.Null,
+      message: Msg,
+      elements: Html
+    })
       .make({
         init: () => null,
         update: ($) => $.model,
@@ -189,6 +246,8 @@ describe("Scene.childEmit", () => {
       })
     const scene = Scene.start(Page, {})
     expect(scene.childEmit).type.toBeCallableWith(Dialog, DialogEvents.Closed())
-    expect(scene.childEmit).type.not.toBeCallableWith(Dialog, { _tag: "Missing" })
+    expect(scene.childEmit).type.not.toBeCallableWith(Dialog, {
+      _tag: "Missing"
+    })
   })
 })

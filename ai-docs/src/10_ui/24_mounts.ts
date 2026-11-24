@@ -87,7 +87,11 @@ export const Snippet = Component.define({
       UpdatedCode: ({ text }) => $.evolve({ text })
     }),
   view: (h, model) =>
-    h.section.onMount(Measure().pipe(Mount.map((width) => SnippetMessage.CompletedMeasure({ width }))))
+    h.section.onMount(
+      Measure().pipe(
+        Mount.map((width) => SnippetMessage.CompletedMeasure({ width }))
+      )
+    )
       .children(
         h.div.onMount(
           AttachEditor({ text: model.text }).pipe(

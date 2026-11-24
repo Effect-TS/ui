@@ -54,16 +54,20 @@ interface Reader<N> {
 }
 
 const isDom = (node: unknown): node is globalThis.Node =>
-  typeof node === "object" && node !== null && typeof (node as { nodeType?: unknown }).nodeType === "number"
+  typeof node === "object" && node !== null &&
+  typeof (node as { nodeType?: unknown }).nodeType === "number"
 
 const domReader: Reader<globalThis.Node> = {
   isElement: (node) => node.nodeType === 1,
   tag: (node) => (node as globalThis.Element).localName,
   attr: (node, name) =>
-    node.nodeType === 1 ? ((node as globalThis.Element).getAttribute(name) ?? undefined) : undefined,
+    node.nodeType === 1
+      ? ((node as globalThis.Element).getAttribute(name) ?? undefined)
+      : undefined,
   prop: (node, name) => (node as any)[name],
   children: (node) => Array.from(node.childNodes),
-  text: (node) => node.nodeType === 3 ? (node as globalThis.Text).data : undefined
+  text: (node) =>
+    node.nodeType === 3 ? (node as globalThis.Text).data : undefined
 }
 
 const structuralReader: Reader<Locator.Node> = {
@@ -75,14 +79,21 @@ const structuralReader: Reader<Locator.Node> = {
   text: (node) => node.tag === undefined ? node.text : undefined
 }
 
-const readerOf = (node: unknown): Reader<any> => isDom(node) ? domReader : structuralReader
+const readerOf = (node: unknown): Reader<any> =>
+  isDom(node) ? domReader : structuralReader
 
 // ---------------------------------------------------------------------------
 // roles
 // ---------------------------------------------------------------------------
 
 /** Elements under which `header` and `footer` lose their landmark role. */
-const sectioning: ReadonlySet<string> = new Set(["article", "aside", "main", "nav", "section"])
+const sectioning: ReadonlySet<string> = new Set([
+  "article",
+  "aside",
+  "main",
+  "nav",
+  "section"
+])
 
 const fixedRoles: Readonly<Record<string, string>> = {
   article: "article",
@@ -210,7 +221,9 @@ interface Index<N> {
 /** Whether a `dialog` is open: its `open` property, or its `open` attribute when no property was set. */
 const dialogOpen = <N>(reader: Reader<N>, node: N): boolean => {
   const open = reader.prop(node, "open")
-  return open === undefined ? reader.attr(node, "open") !== undefined : open === true || open === "modal"
+  return open === undefined
+    ? reader.attr(node, "open") !== undefined
+    : open === true || open === "modal"
 }
 
 /**
@@ -232,19 +245,25 @@ const notShown = <N>(reader: Reader<N>, node: N): boolean => {
   const dialog = reader.tag(node) === "dialog"
   const popover = reader.attr(node, "popover") !== undefined
   if (!dialog && !popover) return false
-  return !((dialog && dialogOpen(reader, node)) || (popover && popoverOpen(reader, node)))
+  return !((dialog && dialogOpen(reader, node)) ||
+    (popover && popoverOpen(reader, node)))
 }
 
 const isHidden = <N>(reader: Reader<N>, node: N): boolean =>
   reader.attr(node, "hidden") !== undefined ||
   reader.attr(node, "aria-hidden") === "true" ||
-  (reader.tag(node) === "input" && (reader.attr(node, "type") ?? "").toLowerCase() === "hidden") ||
+  (reader.tag(node) === "input" &&
+    (reader.attr(node, "type") ?? "").toLowerCase() === "hidden") ||
   reader.tag(node) === "template" ||
   // A closed dialog or a popover that isn't showing isn't rendered, so neither it nor anything in it is
   // in the accessibility tree. A dialog shown as a popover is rendered, though its `open` is false.
   notShown(reader, node)
 
-const implicitRole = <N>(reader: Reader<N>, node: N, inSection: boolean): string | undefined => {
+const implicitRole = <N>(
+  reader: Reader<N>,
+  node: N,
+  inSection: boolean
+): string | undefined => {
   const tag = reader.tag(node)
   switch (tag) {
     case "a":
@@ -257,13 +276,19 @@ const implicitRole = <N>(reader: Reader<N>, node: N, inSection: boolean): string
     case "img":
       return reader.attr(node, "alt") === "" ? "presentation" : "img"
     case "input":
-      return inputRole((reader.attr(node, "type") ?? "").toLowerCase(), reader.attr(node, "list") !== undefined)
+      return inputRole(
+        (reader.attr(node, "type") ?? "").toLowerCase(),
+        reader.attr(node, "list") !== undefined
+      )
     case "select": {
       const size = Number(reader.attr(node, "size") ?? "1")
-      return reader.attr(node, "multiple") !== undefined || size > 1 ? "listbox" : "combobox"
+      return reader.attr(node, "multiple") !== undefined || size > 1
+        ? "listbox"
+        : "combobox"
     }
     case "section":
-      return reader.attr(node, "aria-label") !== undefined || reader.attr(node, "aria-labelledby") !== undefined ||
+      return reader.attr(node, "aria-label") !== undefined ||
+          reader.attr(node, "aria-labelledby") !== undefined ||
           reader.attr(node, "title") !== undefined
         ? "region"
         : undefined
@@ -284,11 +309,18 @@ const buildIndex = <N>(root: N): Index<N> => {
     labelsFor: new Map()
   }
   const entries = index.entries as Array<Entry<N>>
-  const walk = (node: N, hidden: boolean, labels: ReadonlyArray<N>, inSection: boolean) => {
+  const walk = (
+    node: N,
+    hidden: boolean,
+    labels: ReadonlyArray<N>,
+    inSection: boolean
+  ) => {
     if (!reader.isElement(node)) {
       // A document, a fragment or a structural wrapper isn't indexed, but what it holds is.
       if (reader.text(node) === undefined) {
-        for (const child of reader.children(node)) walk(child, hidden, labels, inSection)
+        for (const child of reader.children(node)) {
+          walk(child, hidden, labels, inSection)
+        }
       }
       return
     }
@@ -297,7 +329,9 @@ const buildIndex = <N>(root: N): Index<N> => {
     const explicit = reader.attr(node, "role")?.trim().split(/\s+/)[0]
     const entry: Entry<N> = {
       node,
-      role: explicit !== undefined && explicit !== "" ? explicit : implicitRole(reader, node, inSection),
+      role: explicit !== undefined && explicit !== ""
+        ? explicit
+        : implicitRole(reader, node, inSection),
       hidden: isHiddenHere,
       labels,
       inSection
@@ -316,7 +350,9 @@ const buildIndex = <N>(root: N): Index<N> => {
     }
     const childLabels = tag === "label" ? [node, ...labels] : labels
     const childSection = inSection || sectioning.has(tag)
-    for (const child of reader.children(node)) walk(child, isHiddenHere, childLabels, childSection)
+    for (const child of reader.children(node)) {
+      walk(child, isHiddenHere, childLabels, childSection)
+    }
   }
   walk(root, false, [], false)
   return index
@@ -359,7 +395,12 @@ const phrasing: ReadonlySet<string> = new Set([
 ])
 
 /** The text an element contributes as content: its text, with hidden parts and controls left out. */
-const contentText = <N>(index: Index<N>, node: N, skip: N | undefined, includeHidden: boolean): string => {
+const contentText = <N>(
+  index: Index<N>,
+  node: N,
+  skip: N | undefined,
+  includeHidden: boolean
+): string => {
   const { reader } = index
   const text = reader.text(node)
   if (text !== undefined) return text
@@ -372,7 +413,9 @@ const contentText = <N>(index: Index<N>, node: N, skip: N | undefined, includeHi
   const label = reader.attr(node, "aria-label")
   const inner = label !== undefined && label.trim() !== ""
     ? label
-    : reader.children(node).map((child) => contentText(index, child, skip, includeHidden)).join("")
+    : reader.children(node).map((child) =>
+      contentText(index, child, skip, includeHidden)
+    ).join("")
   return phrasing.has(tag) ? inner : ` ${inner} `
 }
 
@@ -384,9 +427,17 @@ const textOfIds = <N>(index: Index<N>, ids: string): string =>
     }).join(" ")
   )
 
-const firstChildText = <N>(index: Index<N>, node: N, tag: string): string | undefined => {
-  const child = index.reader.children(node).find((c) => index.reader.isElement(c) && index.reader.tag(c) === tag)
-  return child === undefined ? undefined : normalize(contentText(index, child, undefined, false))
+const firstChildText = <N>(
+  index: Index<N>,
+  node: N,
+  tag: string
+): string | undefined => {
+  const child = index.reader.children(node).find((c) =>
+    index.reader.isElement(c) && index.reader.tag(c) === tag
+  )
+  return child === undefined
+    ? undefined
+    : normalize(contentText(index, child, undefined, false))
 }
 
 const computeName = <N>(index: Index<N>, entry: Entry<N>): string => {
@@ -401,17 +452,33 @@ const computeName = <N>(index: Index<N>, entry: Entry<N>): string => {
   if (label !== undefined && label.trim() !== "") return normalize(label)
   const tag = reader.tag(node)
   const type = (reader.attr(node, "type") ?? "").toLowerCase()
-  if (tag === "input" && (type === "button" || type === "submit" || type === "reset")) {
-    const value = reader.attr(node, "value") ?? (reader.prop(node, "value") as string | undefined)
+  if (
+    tag === "input" &&
+    (type === "button" || type === "submit" || type === "reset")
+  ) {
+    const value = reader.attr(node, "value") ??
+      (reader.prop(node, "value") as string | undefined)
     if (value !== undefined && value !== "") return normalize(value)
     return type === "submit" ? "Submit" : type === "reset" ? "Reset" : ""
   }
-  if (tag === "input" && type === "image") return normalize(reader.attr(node, "alt") ?? "")
-  if (tag === "input" || tag === "select" || tag === "textarea" || tag === "meter" || tag === "progress") {
+  if (tag === "input" && type === "image") {
+    return normalize(reader.attr(node, "alt") ?? "")
+  }
+  if (
+    tag === "input" || tag === "select" || tag === "textarea" ||
+    tag === "meter" || tag === "progress"
+  ) {
     const id = reader.attr(node, "id")
     // A label can both name the control by `for` and wrap it: it counts once.
-    const labels = [...new Set([...(id === undefined ? [] : index.labelsFor.get(id) ?? []), ...entry.labels])]
-    const fromLabels = normalize(labels.map((l) => contentText(index, l, node, false)).join(" "))
+    const labels = [
+      ...new Set([
+        ...(id === undefined ? [] : index.labelsFor.get(id) ?? []),
+        ...entry.labels
+      ])
+    ]
+    const fromLabels = normalize(
+      labels.map((l) => contentText(index, l, node, false)).join(" ")
+    )
     if (fromLabels !== "") return fromLabels
   }
   if (tag === "img" || tag === "area") {
@@ -484,26 +551,49 @@ export interface RoleOptions {
   readonly hidden?: boolean | undefined
 }
 
-const describeOptions = (role: string, options: RoleOptions | undefined): string => {
+const describeOptions = (
+  role: string,
+  options: RoleOptions | undefined
+): string => {
   const parts = [`role ${JSON.stringify(role)}`]
   if (options?.name !== undefined) {
-    parts.push(`name ${typeof options.name === "string" ? JSON.stringify(options.name) : String(options.name)}`)
+    parts.push(
+      `name ${
+        typeof options.name === "string"
+          ? JSON.stringify(options.name)
+          : String(options.name)
+      }`
+    )
   }
   if (options?.checked !== undefined) parts.push(`checked ${options.checked}`)
   if (options?.level !== undefined) parts.push(`level ${options.level}`)
   return parts.join(", ")
 }
 
-const select = <N>(index: Index<N>, role: string, options: RoleOptions | undefined): Array<N> => {
+const select = <N>(
+  index: Index<N>,
+  role: string,
+  options: RoleOptions | undefined
+): Array<N> => {
   const out: Array<N> = []
   for (const entry of index.entries) {
     if (entry.role !== role) continue
     if (entry.hidden && options?.hidden !== true) continue
-    if (options?.checked !== undefined && isChecked(index.reader, entry.node) !== options.checked) continue
-    if (options?.level !== undefined && levelOf(index.reader, entry.node) !== options.level) continue
+    if (
+      options?.checked !== undefined &&
+      isChecked(index.reader, entry.node) !== options.checked
+    ) continue
+    if (
+      options?.level !== undefined &&
+      levelOf(index.reader, entry.node) !== options.level
+    ) continue
     if (options?.name !== undefined) {
       const name = computeName(index, entry)
-      if (typeof options.name === "string" ? name !== normalize(options.name) : !options.name.test(name)) continue
+      if (
+        typeof options.name === "string"
+          ? name !== normalize(options.name)
+          : !options.name.test(name)
+      ) continue
     }
     out.push(entry.node)
   }
@@ -519,9 +609,18 @@ const select = <N>(index: Index<N>, role: string, options: RoleOptions | undefin
  * @since 0.1.0
  */
 export const queryAllByRole: {
-  (root: globalThis.Node, role: string, options?: RoleOptions): ReadonlyArray<HTMLElement>
-  (root: Locator.Node, role: string, options?: RoleOptions): ReadonlyArray<Locator.Node>
-} = (root: any, role: string, options?: RoleOptions): ReadonlyArray<any> => select(buildIndex(root), role, options)
+  (
+    root: globalThis.Node,
+    role: string,
+    options?: RoleOptions
+  ): ReadonlyArray<HTMLElement>
+  (
+    root: Locator.Node,
+    role: string,
+    options?: RoleOptions
+  ): ReadonlyArray<Locator.Node>
+} = (root: any, role: string, options?: RoleOptions): ReadonlyArray<any> =>
+  select(buildIndex(root), role, options)
 
 /**
  * The one element under `root` with role `role` and matching `options`.
@@ -539,15 +638,25 @@ export const getByRole: {
   const found = select(index, role, options)
   if (found.length === 1) return found[0]
   if (found.length > 1) {
-    throw new Error(`HtmlLocator: ${found.length} elements have ${describeOptions(role, options)}`)
+    throw new Error(
+      `HtmlLocator: ${found.length} elements have ${
+        describeOptions(role, options)
+      }`
+    )
   }
-  throw new Error(`HtmlLocator: nothing has ${describeOptions(role, options)}. Roles here:\n${describeIndex(index)}`)
+  throw new Error(
+    `HtmlLocator: nothing has ${describeOptions(role, options)}. Roles here:\n${
+      describeIndex(index)
+    }`
+  )
 }
 
 const describeIndex = <N>(index: Index<N>): string => {
   const lines = index.entries
     .filter((entry) => entry.role !== undefined && !entry.hidden)
-    .map((entry) => `  ${entry.role} ${JSON.stringify(computeName(index, entry))}`)
+    .map((entry) =>
+      `  ${entry.role} ${JSON.stringify(computeName(index, entry))}`
+    )
   return lines.length === 0 ? "  (none)" : lines.join("\n")
 }
 
@@ -563,7 +672,8 @@ const describeIndex = <N>(index: Index<N>): string => {
 export const roleOf: {
   (root: globalThis.Node, node: globalThis.Node): string | undefined
   (root: Locator.Node, node: Locator.Node): string | undefined
-} = (root: any, node: any): string | undefined => buildIndex(root).byNode.get(node)?.role
+} = (root: any, node: any): string | undefined =>
+  buildIndex(root).byNode.get(node)?.role
 
 /**
  * The accessible name of `node`, computed within `root`: from
@@ -628,13 +738,21 @@ export const role = (role: string, options?: RoleOptions): Locator.Locator => ({
  * @category locators
  * @since 0.1.0
  */
-export const label = (text: string, options?: { readonly exact?: boolean | undefined }): Locator.Locator => {
-  const matches = (label: string) => options?.exact === false ? label.includes(text) : label.trim() === text
+export const label = (
+  text: string,
+  options?: { readonly exact?: boolean | undefined }
+): Locator.Locator => {
+  const matches = (label: string) =>
+    options?.exact === false ? label.includes(text) : label.trim() === text
   return {
     description: `label ${JSON.stringify(text)}`,
     all: <N extends Locator.Node>(root: N): ReadonlyArray<N> => {
       const all = Locator.elements(root)
-      const byId = new Map(all.flatMap((node) => node.attrs?.id === undefined ? [] : [[node.attrs.id, node] as const]))
+      const byId = new Map(
+        all.flatMap((node) =>
+          node.attrs?.id === undefined ? [] : [[node.attrs.id, node] as const]
+        )
+      )
       const found = new Set<Locator.Node>()
       for (const node of all) {
         if (node.tag === "label" && matches(Locator.textOf(node))) {
@@ -643,7 +761,9 @@ export const label = (text: string, options?: { readonly exact?: boolean | undef
             const field = byId.get(target)
             if (field !== undefined) found.add(field)
           } else {
-            const field = Locator.elements(node).find((inner) => inner !== node && labelable.has(inner.tag!))
+            const field = Locator.elements(node).find((inner) =>
+              inner !== node && labelable.has(inner.tag!)
+            )
             if (field !== undefined) found.add(field)
           }
         }
@@ -663,7 +783,15 @@ export const label = (text: string, options?: { readonly exact?: boolean | undef
   }
 }
 
-const labelable: ReadonlySet<string> = new Set(["input", "select", "textarea", "button", "meter", "output", "progress"])
+const labelable: ReadonlySet<string> = new Set([
+  "input",
+  "select",
+  "textarea",
+  "button",
+  "meter",
+  "output",
+  "progress"
+])
 
 /**
  * The elements whose `placeholder` is `text`.
@@ -672,7 +800,8 @@ const labelable: ReadonlySet<string> = new Set(["input", "select", "textarea", "
  * @category locators
  * @since 0.1.0
  */
-export const placeholder = (text: string): Locator.Locator => Locator.attr("placeholder", text)
+export const placeholder = (text: string): Locator.Locator =>
+  Locator.attr("placeholder", text)
 
 /**
  * Whether a dialog is closed, open, or open as a modal. It reads a story's
@@ -768,7 +897,8 @@ export const value = (node: unknown): string | undefined => {
  * @category getters
  * @since 0.1.0
  */
-export const checked = (node: unknown): boolean | undefined => isChecked(readerOf(node), node)
+export const checked = (node: unknown): boolean | undefined =>
+  isChecked(readerOf(node), node)
 
 /**
  * Whether a popover is showing. It reads a scene's view or a `TestHost`
@@ -789,7 +919,8 @@ export const checked = (node: unknown): boolean | undefined => isChecked(readerO
  * @category getters
  * @since 0.1.0
  */
-export const popoverState = (node: unknown): "closed" | "open" => popoverOpen(readerOf(node), node) ? "open" : "closed"
+export const popoverState = (node: unknown): "closed" | "open" =>
+  popoverOpen(readerOf(node), node) ? "open" : "closed"
 
 /**
  * Clicks `element` as the user would: a button submits its form, and a
@@ -817,7 +948,11 @@ export const type = (element: globalThis.Element, value: string): void => {
   field.value = value
   const make = (name: string) =>
     view !== null && typeof view.InputEvent === "function"
-      ? new view.InputEvent(name, { bubbles: true, data: value, inputType: "insertText" })
+      ? new view.InputEvent(name, {
+        bubbles: true,
+        data: value,
+        inputType: "insertText"
+      })
       : new (view?.Event ?? Event)(name, { bubbles: true })
   field.dispatchEvent(make("input"))
   field.dispatchEvent(new (view?.Event ?? Event)("change", { bubbles: true }))
@@ -867,10 +1002,14 @@ export const submit = (element: globalThis.Element): void => {
   const form = element.localName === "form"
     ? element as HTMLFormElement
     : (element as HTMLInputElement).form ?? element.closest("form")
-  if (form === null) throw new Error("HtmlLocator.submit: the element isn't in a form")
+  if (form === null) {
+    throw new Error("HtmlLocator.submit: the element isn't in a form")
+  }
   if (typeof form.requestSubmit === "function") form.requestSubmit()
   else {
     const view = form.ownerDocument.defaultView
-    form.dispatchEvent(new (view?.Event ?? Event)("submit", { bubbles: true, cancelable: true }))
+    form.dispatchEvent(
+      new (view?.Event ?? Event)("submit", { bubbles: true, cancelable: true })
+    )
   }
 }

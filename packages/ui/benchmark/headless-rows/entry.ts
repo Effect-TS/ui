@@ -2,19 +2,35 @@ import { Component, UiSchema, type View } from "@effect/ui"
 import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { Effect, Exit, Schema, Scope } from "effect"
 
-const Row = Schema.Struct({ id: Schema.String, label: Schema.String, done: Schema.Boolean })
+const Row = Schema.Struct({
+  id: Schema.String,
+  label: Schema.String,
+  done: Schema.Boolean
+})
 type Row = typeof Row.Type
 const AppProps = Schema.Struct({ count: Schema.Number })
-const AppMessage = UiSchema.TaggedEnum({ Toggle: { id: Schema.String }, Reverse: {} })
+const AppMessage = UiSchema.TaggedEnum({
+  Toggle: { id: Schema.String },
+  Reverse: {}
+})
 type AppMessage = typeof AppMessage.Type
 const Flip = UiSchema.TaggedEnum({ Flip: {} })
 const flip = Flip.Flip()
 
-const init = ($: { readonly props: { readonly count: number } }): ReadonlyArray<Row> =>
-  Array.from({ length: $.props.count }, (_, i) => ({ id: "r" + i, label: "Row " + i, done: false }))
-const update = ({ model }: { readonly model: ReadonlyArray<Row> }, message: AppMessage): ReadonlyArray<Row> =>
+const init = (
+  $: { readonly props: { readonly count: number } }
+): ReadonlyArray<Row> =>
+  Array.from(
+    { length: $.props.count },
+    (_, i) => ({ id: "r" + i, label: "Row " + i, done: false })
+  )
+const update = (
+  { model }: { readonly model: ReadonlyArray<Row> },
+  message: AppMessage
+): ReadonlyArray<Row> =>
   AppMessage.match(message, {
-    Toggle: ({ id }) => model.map((row) => row.id === id ? { ...row, done: !row.done } : row),
+    Toggle: ({ id }) =>
+      model.map((row) => row.id === id ? { ...row, done: !row.done } : row),
     Reverse: () => [...model].reverse()
   })
 const app = {
@@ -34,14 +50,22 @@ const Plain = Component.define(app).make({
   init,
   update,
   view: (h, rows) =>
-    h.ul.children(rows.map((row) =>
-      h.li.key(row.id).class("row").attr("data-done", row.done ? "" : undefined).children(
-        h.button.attrs({ "aria-expanded": "false", "aria-controls": h.id("panel", row.id) })
-          .onClick(AppMessage.Toggle({ id: row.id })).children(row.label),
-        h.span(row.done ? "done" : "todo"),
-        h.div.id(h.id("panel", row.id)).attr("hidden", "").children("details")
+    h.ul.children(
+      rows.map((row) =>
+        h.li.key(row.id).class("row").attr(
+          "data-done",
+          row.done ? "" : undefined
+        ).children(
+          h.button.attrs({
+            "aria-expanded": "false",
+            "aria-controls": h.id("panel", row.id)
+          })
+            .onClick(AppMessage.Toggle({ id: row.id })).children(row.label),
+          h.span(row.done ? "done" : "todo"),
+          h.div.id(h.id("panel", row.id)).attr("hidden", "").children("details")
+        )
       )
-    ))
+    )
 })
 
 /** A normal child per row: it owns the markup, and skips when its props are the same. */
@@ -56,17 +80,26 @@ const NormalRow = Component.define({
   init: () => false,
   update: ($) => !$.model,
   view: (h, open) =>
-    h.li.class("row").attr("data-done", h.props.row.done ? "" : undefined).children(
-      h.button.attrs({ "aria-expanded": String(open), "aria-controls": h.id("panel") }).onClick(flip)
-        .children(h.props.row.label),
-      h.span(h.props.row.done ? "done" : "todo"),
-      h.div.id(h.id("panel")).attr("hidden", open ? undefined : "").children("details")
-    )
+    h.li.class("row").attr("data-done", h.props.row.done ? "" : undefined)
+      .children(
+        h.button.attrs({
+          "aria-expanded": String(open),
+          "aria-controls": h.id("panel")
+        }).onClick(flip)
+          .children(h.props.row.label),
+        h.span(h.props.row.done ? "done" : "todo"),
+        h.div.id(h.id("panel")).attr("hidden", open ? undefined : "").children(
+          "details"
+        )
+      )
 })
 const Normal = Component.define(app).make({
   init,
   update,
-  view: (h, rows) => h.ul.children(rows.map((row) => NormalRow(h, { key: row.id, props: { row } })))
+  view: (h, rows) =>
+    h.ul.children(
+      rows.map((row) => NormalRow(h, { key: row.id, props: { row } }))
+    )
 })
 
 /** The same disclosure, headless: the list's closure owns the markup. */
@@ -83,9 +116,16 @@ const Disclosure = Component.define({
     open,
     trigger: p.part(
       "button",
-      (b) => b.attrs({ "aria-expanded": String(open), "aria-controls": p.id("panel") }).onClick(flip)
+      (b) =>
+        b.attrs({
+          "aria-expanded": String(open),
+          "aria-controls": p.id("panel")
+        }).onClick(flip)
     ),
-    panel: p.part("div", (b) => b.id(p.id("panel")).attr("hidden", open ? undefined : ""))
+    panel: p.part(
+      "div",
+      (b) => b.id(p.id("panel")).attr("hidden", open ? undefined : "")
+    )
   })
 })
 const Headless = Component.define(app).make({
@@ -96,11 +136,12 @@ const Headless = Component.define(app).make({
       Disclosure(h, {
         key: row.id,
         view: (disclosure) =>
-          h.li.class("row").attr("data-done", row.done ? "" : undefined).children(
-            disclosure.trigger(h.button).children(row.label),
-            h.span(row.done ? "done" : "todo"),
-            disclosure.panel(h.div).children("details")
-          )
+          h.li.class("row").attr("data-done", row.done ? "" : undefined)
+            .children(
+              disclosure.trigger(h.button).children(row.label),
+              h.span(row.done ? "done" : "todo"),
+              disclosure.panel(h.div).children("details")
+            )
       })
     ))
 })
@@ -120,17 +161,21 @@ const WrappedRow = Component.define({
     Disclosure(h, {
       key: "d",
       view: (disclosure) =>
-        h.li.class("row").attr("data-done", h.props.row.done ? "" : undefined).children(
-          disclosure.trigger(h.button).children(h.props.row.label),
-          h.span(h.props.row.done ? "done" : "todo"),
-          disclosure.panel(h.div).children("details")
-        )
+        h.li.class("row").attr("data-done", h.props.row.done ? "" : undefined)
+          .children(
+            disclosure.trigger(h.button).children(h.props.row.label),
+            h.span(h.props.row.done ? "done" : "todo"),
+            disclosure.panel(h.div).children("details")
+          )
     })
 })
 const Wrapped = Component.define(app).make({
   init,
   update,
-  view: (h, rows) => h.ul.children(rows.map((row) => WrappedRow(h, { key: row.id, props: { row } })))
+  view: (h, rows) =>
+    h.ul.children(
+      rows.map((row) => WrappedRow(h, { key: row.id, props: { row } }))
+    )
 })
 
 // -- under an owner of shared state ---------------------------------------------------------------
@@ -138,13 +183,22 @@ const Wrapped = Component.define(app).make({
 // these measure what a Provider update costs with each shape of subtree under it. `touch` changes
 // the Provider's Model but not what it shares; `open` changes what it shares.
 
-const ProviderMessage = UiSchema.TaggedEnum({ Touch: {}, Open: { id: Schema.String } })
+const ProviderMessage = UiSchema.TaggedEnum({
+  Touch: {},
+  Open: { id: Schema.String }
+})
 const Provider = Component.define({
   name: "Provider",
   scoped: false,
-  model: Schema.Struct({ open: Schema.NullOr(Schema.String), touches: Schema.Number }),
+  model: Schema.Struct({
+    open: Schema.NullOr(Schema.String),
+    touches: Schema.Number
+  }),
   message: ProviderMessage,
-  shares: { value: (model) => ({ open: model.open }), receives: ["Touch", "Open"] },
+  shares: {
+    value: (model) => ({ open: model.open }),
+    receives: ["Touch", "Open"]
+  },
   elements: Html
 }).make({
   init: () => ({ open: null, touches: 0 }),
@@ -169,8 +223,11 @@ const Poker = Component.define({
     update: ($, message) => $.send(Provider, message),
     view: (h) =>
       h.div(
-        h.button.class("poke-touch").onClick(ProviderMessage.Touch()).children("touch"),
-        h.button.class("poke-open").onClick(ProviderMessage.Open({ id: "r0" })).children("open")
+        h.button.class("poke-touch").onClick(ProviderMessage.Touch()).children(
+          "touch"
+        ),
+        h.button.class("poke-open").onClick(ProviderMessage.Open({ id: "r0" }))
+          .children("open")
       )
   })
 
@@ -200,11 +257,12 @@ const OwnerHeadless = Component.define(app).make({
         Disclosure(h, {
           key: row.id,
           view: (disclosure) =>
-            h.li.class("row").attr("data-done", row.done ? "" : undefined).children(
-              disclosure.trigger(h.button).children(row.label),
-              h.span(row.done ? "done" : "todo"),
-              disclosure.panel(h.div).children("details")
-            )
+            h.li.class("row").attr("data-done", row.done ? "" : undefined)
+              .children(
+                disclosure.trigger(h.button).children(row.label),
+                h.span(row.done ? "done" : "todo"),
+                disclosure.panel(h.div).children("details")
+              )
         })
       )))
 })
@@ -214,7 +272,13 @@ const OwnerWrapped = Component.define(app).make({
   init,
   update,
   view: (h, rows) =>
-    underProvider(h, () => h.ul.children(rows.map((row) => WrappedRow(h, { key: row.id, props: { row } }))))
+    underProvider(
+      h,
+      () =>
+        h.ul.children(
+          rows.map((row) => WrappedRow(h, { key: row.id, props: { row } }))
+        )
+    )
 })
 
 /** The guidance: one normal component directly under the Provider, holding the headless rows. */
@@ -233,18 +297,20 @@ const Body = Component.define({
       Disclosure(h, {
         key: row.id,
         view: (disclosure) =>
-          h.li.class("row").attr("data-done", row.done ? "" : undefined).children(
-            disclosure.trigger(h.button).children(row.label),
-            h.span(row.done ? "done" : "todo"),
-            disclosure.panel(h.div).children("details")
-          )
+          h.li.class("row").attr("data-done", row.done ? "" : undefined)
+            .children(
+              disclosure.trigger(h.button).children(row.label),
+              h.span(row.done ? "done" : "todo"),
+              disclosure.panel(h.div).children("details")
+            )
       })
     ))
 })
 const OwnerBoundary = Component.define(app).make({
   init,
   update,
-  view: (h, rows) => underProvider(h, () => Body(h, { key: "body", props: { rows } }))
+  view: (h, rows) =>
+    underProvider(h, () => Body(h, { key: "body", props: { rows } }))
 })
 
 /** Wrapped rows that each read the Provider: every row re-renders when what it shares changes. */
@@ -265,7 +331,9 @@ const ReaderRow = Component.define({
       view: (disclosure) =>
         h.li.class("row").attrs({
           "data-done": h.props.row.done ? "" : undefined,
-          "data-open": h.shared.provider.open === h.props.row.id ? "" : undefined
+          "data-open": h.shared.provider.open === h.props.row.id
+            ? ""
+            : undefined
         }).children(
           disclosure.trigger(h.button).children(h.props.row.label),
           h.span(h.props.row.done ? "done" : "todo"),
@@ -277,7 +345,13 @@ const OwnerReaders = Component.define(app).make({
   init,
   update,
   view: (h, rows) =>
-    underProvider(h, () => h.ul.children(rows.map((row) => ReaderRow(h, { key: row.id, props: { row } }))))
+    underProvider(
+      h,
+      () =>
+        h.ul.children(
+          rows.map((row) => ReaderRow(h, { key: row.id, props: { row } }))
+        )
+    )
 })
 
 const variants = {
@@ -320,14 +394,22 @@ const settle = async (done: () => boolean, label = ""): Promise<number> => {
     end = performance.now()
     if (done()) return end
   }
-  throw new Error("bench: the change never rendered: " + label + " :: " + document.body.innerHTML.slice(0, 600))
+  throw new Error(
+    "bench: the change never rendered: " + label + " :: " +
+      document.body.innerHTML.slice(0, 600)
+  )
 }
 const check = (condition: boolean, message: string) => {
   if (!condition) throw new Error("bench check failed: " + message)
 }
-const median = (values: Array<number>) => values.sort((a, b) => a - b)[Math.floor(values.length / 2)]
+const median = (values: Array<number>) =>
+  values.sort((a, b) => a - b)[Math.floor(values.length / 2)]
 
-const pass = async (name: keyof typeof variants, count: number, repeats: number) => {
+const pass = async (
+  name: keyof typeof variants,
+  count: number,
+  repeats: number
+) => {
   const App = variants[name]
   hops = 0
   const container = document.body.appendChild(document.createElement("div"))
@@ -335,8 +417,11 @@ const pass = async (name: keyof typeof variants, count: number, repeats: number)
   const rows = () => container.querySelectorAll("li.row")
   const done = () => container.querySelectorAll("li.row[data-done]").length
   let start = performance.now()
-  const root = await Effect.runPromise(Scope.provide(BrowserHost.mountEffect(App, { count }, container), scope))
-  const mount = (await settle(() => rows().length === count, name + " mount")) - start
+  const root = await Effect.runPromise(
+    Scope.provide(BrowserHost.mountEffect(App, { count }, container), scope)
+  )
+  const mount = (await settle(() => rows().length === count, name + " mount")) -
+    start
   const mountHops = hops
   hops = 0
 
@@ -346,14 +431,20 @@ const pass = async (name: keyof typeof variants, count: number, repeats: number)
     const before = done()
     start = performance.now()
     root.send(AppMessage.Toggle({ id }))
-    toggle.push((await settle(() => Math.abs(done() - before) === 1, name + " toggle")) - start)
+    toggle.push(
+      (await settle(() => Math.abs(done() - before) === 1, name + " toggle")) -
+        start
+    )
   }
   const reverse: Array<number> = []
   for (let i = 0; i < repeats; i++) {
     const first = rows()[0]
     start = performance.now()
     root.send(AppMessage.Reverse())
-    reverse.push((await settle(() => rows()[count - 1] === first, name + " reverse")) - start)
+    reverse.push(
+      (await settle(() => rows()[count - 1] === first, name + " reverse")) -
+        start
+    )
     check(rows().length === count, "every row is still there")
   }
   // A click on one row's button: the child's own state everywhere but in the plain list.
@@ -363,7 +454,9 @@ const pass = async (name: keyof typeof variants, count: number, repeats: number)
     const before = row.outerHTML
     start = performance.now()
     row.querySelector("button")!.click()
-    click.push((await settle(() => row.outerHTML !== before, name + " click")) - start)
+    click.push(
+      (await settle(() => row.outerHTML !== before, name + " click")) - start
+    )
   }
   // A Provider update from the Poker: one that keeps what it shares, then one that changes it.
   const touch: Array<number> = []
@@ -376,36 +469,61 @@ const pass = async (name: keyof typeof variants, count: number, repeats: number)
       const before = touches()
       start = performance.now()
       poke.click()
-      touch.push((await settle(() => touches() !== before, name + " touch")) - start)
+      touch.push(
+        (await settle(() => touches() !== before, name + " touch")) - start
+      )
     }
     for (let i = 0; i < repeats; i++) {
       const before = opened()
       start = performance.now()
       container.querySelector<HTMLButtonElement>("button.poke-open")!.click()
-      open.push((await settle(() => opened() !== before, name + " open")) - start)
+      open.push(
+        (await settle(() => opened() !== before, name + " open")) - start
+      )
       if (name === "owner-readers") {
-        check(container.querySelectorAll("li.row[data-open]").length === (opened() === "r0" ? 1 : 0), "readers follow")
+        check(
+          container.querySelectorAll("li.row[data-open]").length ===
+            (opened() === "r0" ? 1 : 0),
+          "readers follow"
+        )
       }
     }
   }
   const updateHops = hops
-  check(updateHops === 0, name + ": an update rendered later than the first microtask")
+  check(
+    updateHops === 0,
+    name + ": an update rendered later than the first microtask"
+  )
   await Effect.runPromise(Scope.close(scope, Exit.void))
   container.remove()
 
-  const rendered = await Effect.runPromise(HtmlServer.renderToHtml(App, { count }) as Effect.Effect<any>)
+  const rendered = await Effect.runPromise(
+    HtmlServer.renderToHtml(App, { count }) as Effect.Effect<any>
+  )
   const target = document.body.appendChild(document.createElement("div"))
   target.innerHTML = rendered.html
-  check(target.querySelectorAll("li.row").length === count, "the server rendered every row")
+  check(
+    target.querySelectorAll("li.row").length === count,
+    "the server rendered every row"
+  )
   const firstRow = target.querySelector("li.row")!
   const hydrateScope = Effect.runSync(Scope.make())
   start = performance.now()
   const hydrated = await Effect.runPromise(
-    Scope.provide(BrowserHost.mountEffect(App, { count }, target, { state: rendered.state }), hydrateScope)
+    Scope.provide(
+      BrowserHost.mountEffect(App, { count }, target, {
+        state: rendered.state
+      }),
+      hydrateScope
+    )
   )
   await Effect.runPromise(hydrated.adopted)
   const hydrate = performance.now() - start
-  check(target.querySelector("li.row") === firstRow && target.querySelectorAll("li.row").length === count, "adopted")
+  check(
+    target.querySelector("li.row") === firstRow &&
+      target.querySelectorAll("li.row").length === count,
+    "adopted"
+  )
   // Live after hydration: the first row's button answers.
   const before = firstRow.outerHTML
   firstRow.querySelector("button")!.click()

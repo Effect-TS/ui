@@ -32,24 +32,35 @@ const Scene = Component.define({
   },
   view: (h, model) =>
     h.main(
-      h.button.onClick(SceneMessage.ClickedCount()).children("Count " + model.count),
+      h.button.onClick(SceneMessage.ClickedCount()).children(
+        "Count " + model.count
+      ),
       h.button.onClick(SceneMessage.ClickedMenu()).children("Open menu"),
-      h.div.attr("id", "menu").popover("auto", model.menu).onToggle(({ open }) => SceneMessage.ToggledMenu({ open }))
+      h.div.attr("id", "menu").popover("auto", model.menu).onToggle((
+        { open }
+      ) => SceneMessage.ToggledMenu({ open }))
         .children(
           h.p("Menu"),
-          h.button.onClick(SceneMessage.ClickedOpenDialog()).children("Open dialog")
+          h.button.onClick(SceneMessage.ClickedOpenDialog()).children(
+            "Open dialog"
+          )
         ),
-      h.dialog.attr("aria-label", "Settings").modal(model.dialog).onCancel(SceneMessage.ClickedCloseDialog())
+      h.dialog.attr("aria-label", "Settings").modal(model.dialog).onCancel(
+        SceneMessage.ClickedCloseDialog()
+      )
         .children(
           h.p("Settings"),
-          h.button.onClick(SceneMessage.ClickedCloseDialog()).children("Close dialog")
+          h.button.onClick(SceneMessage.ClickedCloseDialog()).children(
+            "Close dialog"
+          )
         )
     )
 })
 
-const Main = BrowserHost.mount(Scene, {}, document.getElementById("root")!).pipe(
-  Layer.provide(DevTools.layer({ position: "BottomRight" }))
-)
+const Main = BrowserHost.mount(Scene, {}, document.getElementById("root")!)
+  .pipe(
+    Layer.provide(DevTools.layer({ position: "BottomRight" }))
+  )
 
 Layer.launch(Main).pipe(Effect.runFork)
 document.body.setAttribute("data-ready", "")

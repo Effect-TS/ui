@@ -9,7 +9,11 @@ import { SaveTodo, TodoItem, TodoItemMessage } from "./fixtures/components.ts"
 const todo = { id: "t1", title: "buy milk", done: false }
 const save = TodoItemMessage.Save()
 
-const Hello = Mount.make("Hello", { args: {} }, () => Effect.succeed(Component.noop))
+const Hello = Mount.make(
+  "Hello",
+  { args: {} },
+  () => Effect.succeed(Component.noop)
+)
 const Greeting = Component.define({
   name: "Greeting",
   scoped: false,
@@ -25,7 +29,9 @@ const Greeting = Component.define({
 // The tests that fail on purpose run with the scope `it.effect` provides, so the end check runs as that
 // scope closes, after the test's own code. `fails` turns their failure into a pass, and the errors
 // vitest saw are recorded here for the last test to read, so the block runs in order, and as a whole.
-describe("make's end check, in the scope it.effect provides", { concurrent: false }, () => {
+describe("make's end check, in the scope it.effect provides", {
+  concurrent: false
+}, () => {
   const reported: Array<ReadonlyArray<TestError>> = []
   const record = (ctx: TestContext) =>
     ctx.onTestFinished(({ task }) => {
@@ -72,7 +78,9 @@ describe("make's end check, in the scope it.effect provides", { concurrent: fals
 
   it("reported the end check's failure at the make call, or only the body's when the body failed", () => {
     assert.lengthOf(reported, 3)
-    const [command, mount, body] = reported.map((errors) => errors.map((error) => error.message))
+    const [command, mount, body] = reported.map((errors) =>
+      errors.map((error) => error.message)
+    )
     assert.lengthOf(command!, 1)
     assert.match(
       command![0]!,

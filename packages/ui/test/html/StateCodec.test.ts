@@ -1,5 +1,12 @@
 // @vitest-environment happy-dom
-import { Command, Component, Renderer, Route, Router, UiSchema } from "@effect/ui"
+import {
+  Command,
+  Component,
+  Renderer,
+  Route,
+  Router,
+  UiSchema
+} from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
@@ -8,23 +15,33 @@ import { Effect, Logger, Option, Schema, SchemaGetter } from "effect"
 
 let gate = Promise.resolve()
 const Label = Schema.String.pipe(Schema.decode({
-  decode: SchemaGetter.transformEffect((label: string) => Effect.promise(() => gate.then(() => label))),
+  decode: SchemaGetter.transformEffect((label: string) =>
+    Effect.promise(() => gate.then(() => label))
+  ),
   encode: SchemaGetter.passthrough()
 }))
 
-const macrotask = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
+const macrotask = Effect.promise(() =>
+  new Promise<void>((resolve) => setTimeout(resolve, 0))
+)
 
 const Bumped = UiSchema.TaggedEnum({ Bumped: {} })
 
 const Upload = Component.define({
   name: "Upload",
   scoped: false,
-  model: Schema.Struct({ file: Schema.Option(Schema.File), label: Label, count: Schema.Number }),
+  model: Schema.Struct({
+    file: Schema.Option(Schema.File),
+    label: Label,
+    count: Schema.Number
+  }),
   message: Bumped,
   elements: Html
 }).make({
   init: () => ({
-    file: Option.some(new File(["hello"], "notes.txt", { type: "text/plain", lastModified: 1 })),
+    file: Option.some(
+      new File(["hello"], "notes.txt", { type: "text/plain", lastModified: 1 })
+    ),
     label: "Attached",
     count: 0
   }),
@@ -32,7 +49,10 @@ const Upload = Component.define({
   view: (h, model) =>
     h.el("button").on("click", Bumped.Bumped()).children(
       `${model.label} ${
-        Option.match(model.file, { onNone: () => "nothing", onSome: (file) => file.name })
+        Option.match(model.file, {
+          onNone: () => "nothing",
+          onSome: (file) => file.name
+        })
       } ${model.count}`
     )
 })
@@ -58,23 +78,39 @@ describe("state codecs", () => {
       name: "Callback",
       scoped: false,
       model: Schema.Struct({
-        extra: Schema.Struct({ value: Schema.declare((u): u is () => void => typeof u === "function") })
+        extra: Schema.Struct({
+          value: Schema.declare((u): u is () => void => typeof u === "function")
+        })
       }),
       message: Schema.Never
-    }).make({ init: () => ({ extra: { value: () => {} } }), update: ($) => $.model, view: (h) => h.text("") })
+    }).make({
+      init: () => ({ extra: { value: () => {} } }),
+      update: ($) => $.model,
+      view: (h) => h.text("")
+    })
     return Effect.gen(function*() {
       const first = yield* Renderer.prerender(Callback, {})
       yield* Renderer.prerender(Callback, {})
       assert.deepStrictEqual(first.state["~deferred"], ["/Callback"])
       assert.strictEqual(messages.length, 1)
       assert.include(messages[0], "Callback: its state doesn't encode as JSON")
-      assert.include(messages[0], "Expected JSON value\n  at [\"extra\"][\"value\"]")
+      assert.include(
+        messages[0],
+        "Expected JSON value\n  at [\"extra\"][\"value\"]"
+      )
     }).pipe(Effect.provide(layer))
   })
 
   it.effect("restores a state that encodes later from memory only, and one that decodes later once decoded", () => {
-    const Routes = Route.union({ Upload: Route.make("/"), Other: Route.make("/other") })
-    const Message = UiSchema.TaggedEnum({ ChangedRoute: { route: Routes }, Go: {}, Went: {} })
+    const Routes = Route.union({
+      Upload: Route.make("/"),
+      Other: Route.make("/other")
+    })
+    const Message = UiSchema.TaggedEnum({
+      ChangedRoute: { route: Routes },
+      Go: {},
+      Went: {}
+    })
     const App = Component.define({
       name: "App",
       scoped: false,
@@ -87,17 +123,30 @@ describe("state codecs", () => {
       update: ($, message) =>
         Message.match(message, {
           ChangedRoute: (changed) => changed.route,
-          Go: () => $.run(Router.push(Routes, Routes.Other()).pipe(Command.map(() => Message.Went()))),
+          Go: () =>
+            $.run(
+              Router.push(Routes, Routes.Other()).pipe(
+                Command.map(() => Message.Went())
+              )
+            ),
           Went: () => $.model
         }),
       subscriptions: (
         { model: route }
-      ) => [Router.subscription(Routes, route, (route) => Message.ChangedRoute({ route }))],
+      ) => [
+        Router.subscription(
+          Routes,
+          route,
+          (route) => Message.ChangedRoute({ route })
+        )
+      ],
       view: (h, route) =>
         h.el(
           "div",
           h.el("a").on("click", Message.Go()).children("Other"),
-          route._tag === "Upload" ? Upload(h, { key: "upload" }) : h.text("Other page")
+          route._tag === "Upload"
+            ? Upload(h, { key: "upload" })
+            : h.text("Other page")
         )
     })
     const history = Router.memoryHistory("/")

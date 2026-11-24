@@ -142,16 +142,29 @@ const TrackArrowKeys = Mount.makeStream(
       Effect.gen(function*() {
         let { vertical } = args
         const onKeyDown = (event: KeyboardEvent) => {
-          if (event.defaultPrevented || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return
-          const [backward, forward] = vertical ? ["ArrowUp", "ArrowDown"] : ["ArrowLeft", "ArrowRight"]
+          if (
+            event.defaultPrevented || event.shiftKey || event.ctrlKey ||
+            event.altKey || event.metaKey
+          ) return
+          const [backward, forward] = vertical
+            ? ["ArrowUp", "ArrowDown"]
+            : ["ArrowLeft", "ArrowRight"]
           if (event.key !== backward && event.key !== forward) return
-          const rtl = !vertical && node.ownerDocument.defaultView?.getComputedStyle(node).direction === "rtl"
+          const rtl = !vertical &&
+            node.ownerDocument.defaultView?.getComputedStyle(node).direction ===
+              "rtl"
           const links = Array.from(
-            node.querySelectorAll<HTMLElement>(`[${linkAttribute}="${CSS.escape(args.scope)}"]`)
+            node.querySelectorAll<HTMLElement>(
+              `[${linkAttribute}="${CSS.escape(args.scope)}"]`
+            )
           )
-          const from = links.findIndex((link) => link.contains(event.target as Node | null))
+          const from = links.findIndex((link) =>
+            link.contains(event.target as Node | null)
+          )
           if (from < 0) return
-          const ahead = (event.key === forward) !== rtl ? links.slice(from + 1) : links.slice(0, from).reverse()
+          const ahead = (event.key === forward) !== rtl
+            ? links.slice(from + 1)
+            : links.slice(0, from).reverse()
           const root = node.getRootNode() as Document | ShadowRoot
           const focused = root.activeElement
           const moved = ahead.some((link) => {
@@ -163,7 +176,8 @@ const TrackArrowKeys = Mount.makeStream(
         }
         yield* Effect.acquireRelease(
           Effect.sync(() => node.addEventListener("keydown", onKeyDown)),
-          () => Effect.sync(() => node.removeEventListener("keydown", onKeyDown))
+          () =>
+            Effect.sync(() => node.removeEventListener("keydown", onKeyDown))
         )
         yield* Stream.runForEach(changes, (next) =>
           Effect.sync(() => {
@@ -216,18 +230,33 @@ export const NavigationMenu = Component.define({
   update: ($) => $.model,
   parts: (p) => {
     const scope = p.id("list")
-    const link = p.part("a", (b, active: boolean) =>
-      b.attr("aria-current", active ? "page" : undefined)
-        .attr("data-active", flag(active))
-        .attr(linkAttribute, scope))
+    const link = p.part(
+      "a",
+      (b, active: boolean) =>
+        b.attr("aria-current", active ? "page" : undefined)
+          .attr("data-active", flag(active))
+          .attr(linkAttribute, scope)
+    )
     return {
       root: p.part("nav", (b) => b),
-      list: p.part("ul", (b) => b.onMount(TrackArrowKeys({ scope, vertical: p.props.orientation === "vertical" }))),
+      list: p.part(
+        "ul",
+        (b) =>
+          b.onMount(
+            TrackArrowKeys({
+              scope,
+              vertical: p.props.orientation === "vertical"
+            })
+          )
+      ),
       item: p.part("li", (b) => b),
       link: View.wrapPart(
         link,
         <B extends View.PartTarget<"a">>(
-          { active, element }: { readonly element: B; readonly active?: boolean | undefined }
+          { active, element }: {
+            readonly element: B
+            readonly active?: boolean | undefined
+          }
         ): ReturnType<B["attr"]> => link(element, active === true)
       )
     }

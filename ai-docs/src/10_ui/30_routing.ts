@@ -39,8 +39,15 @@ import { AppRoute } from "./fixtures/routes.ts"
 //
 // The Router and the HTTP client are the only Layers here. The pages provide
 // their own domain Layers.
-const Main = BrowserHost.mount(App, Router.props(AppRoute), document.getElementById("app")!).pipe(
-  Layer.provide([BrowserRouter.layer({ routes: AppRoute }), FetchHttpClient.layer])
+const Main = BrowserHost.mount(
+  App,
+  Router.props(AppRoute),
+  document.getElementById("app")!
+).pipe(
+  Layer.provide([
+    BrowserRouter.layer({ routes: AppRoute }),
+    FetchHttpClient.layer
+  ])
 )
 
 Layer.launch(Main).pipe(Effect.runFork)

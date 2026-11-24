@@ -13,12 +13,15 @@ import * as AST from "./schemaAST.ts"
 
 const isRedactedAST = (ast: SchemaAST.AST): boolean =>
   ast._tag === "Declaration" &&
-  (ast.annotations?.representation as { readonly id?: unknown } | undefined)?.id === "effect/schema/Redacted"
+  (ast.annotations?.representation as { readonly id?: unknown } | undefined)
+      ?.id === "effect/schema/Redacted"
 
 const redactedLink = Schema.link<Redacted.Redacted<unknown>>()(
   Schema.Struct({ "~redacted": Schema.Literal(true) }),
   {
-    decode: SchemaGetter.forbidden(() => "a redacted value was sent as a placeholder and can't be decoded"),
+    decode: SchemaGetter.forbidden(() =>
+      "a redacted value was sent as a placeholder and can't be decoded"
+    ),
     encode: SchemaGetter.transform(() => ({ "~redacted": true as const }))
   }
 )
@@ -36,19 +39,28 @@ const redactedLink = Schema.link<Redacted.Redacted<unknown>>()(
  *
  * @internal
  */
-export const redactAST: (ast: SchemaAST.AST) => SchemaAST.AST = memoize((ast: SchemaAST.AST): SchemaAST.AST => {
-  if (isRedactedAST(ast)) {
-    const out = AST.replaceEncoding(ast, [redactedLink])
-    return ast.context === undefined ? out : AST.replaceContextLastLink(out, ast.context)
+export const redactAST: (ast: SchemaAST.AST) => SchemaAST.AST = memoize(
+  (ast: SchemaAST.AST): SchemaAST.AST => {
+    if (isRedactedAST(ast)) {
+      const out = AST.replaceEncoding(ast, [redactedLink])
+      return ast.context === undefined
+        ? out
+        : AST.replaceContextLastLink(out, ast.context)
+    }
+    if (ast.encoding !== undefined) {
+      const body = AST.replaceEncoding(ast, undefined)
+      const redactedBody = redactAST(body)
+      const encoding = SchemaAST.mapOrSame(
+        ast.encoding,
+        (link) => AST.mapLink(link, redactAST)
+      )
+      return redactedBody === body && encoding === ast.encoding
+        ? ast
+        : AST.replaceEncoding(redactedBody, encoding)
+    }
+    return AST.recur(ast, redactAST)
   }
-  if (ast.encoding !== undefined) {
-    const body = AST.replaceEncoding(ast, undefined)
-    const redactedBody = redactAST(body)
-    const encoding = SchemaAST.mapOrSame(ast.encoding, (link) => AST.mapLink(link, redactAST))
-    return redactedBody === body && encoding === ast.encoding ? ast : AST.replaceEncoding(redactedBody, encoding)
-  }
-  return AST.recur(ast, redactAST)
-})
+)
 
 /**
  * Whether `ast` declares a `Schema.Redacted` anywhere, as `redactAST` finds
@@ -65,8 +77,12 @@ export const holdsRedacted = memoize((ast: SchemaAST.AST): boolean => {
     if (node.encoding?.some((link) => visit(link.to))) return true
     switch (node._tag) {
       case "Objects":
-        return node.propertySignatures.some((property) => visit(property.type)) ||
-          node.indexSignatures.some((index) => visit(index.parameter) || visit(index.type))
+        return node.propertySignatures.some((property) =>
+          visit(property.type)
+        ) ||
+          node.indexSignatures.some((index) =>
+            visit(index.parameter) || visit(index.type)
+          )
       case "Arrays":
         return node.elements.some(visit) || node.rest.some(visit)
       case "Union":

@@ -12,5 +12,9 @@ export type AppRoute = typeof AppRoute.Type
 export const LoggedOutRoute = AppRoute.subset(["Home", "Login", "NotFound"])
 export type LoggedOutRoute = typeof LoggedOutRoute.Type
 
-export const LoggedInRoute = AppRoute.subset(["Dashboard", "Settings", "NotFound"])
+export const LoggedInRoute = AppRoute.subset([
+  "Dashboard",
+  "Settings",
+  "NotFound"
+])
 export type LoggedInRoute = typeof LoggedInRoute.Type

@@ -5,18 +5,32 @@ import { Context, Effect, Option, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
 
-const User = Schema.Struct({ id: Schema.String, name: Schema.String, teamId: Schema.String })
+const User = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  teamId: Schema.String
+})
 const Team = Schema.Struct({ id: Schema.String, title: Schema.String })
 
 class GetUser extends Query.Service<GetUser>()(
   "typetest/GetUser",
-  { args: { id: Schema.String }, success: User, error: Schema.String, staleTime: "1 minute" },
+  {
+    args: { id: Schema.String },
+    success: User,
+    error: Schema.String,
+    staleTime: "1 minute"
+  },
   Effect.succeed(({ id }) => Effect.succeed({ id, name: "Ann", teamId: "t" }))
 ) {}
 
 class GetTeam extends Query.Service<GetTeam>()(
   "typetest/GetTeam",
-  { args: { id: Schema.String }, success: Team, error: Schema.Never, staleTime: 0 },
+  {
+    args: { id: Schema.String },
+    success: Team,
+    error: Schema.Never,
+    staleTime: 0
+  },
   Effect.succeed(({ id }) => Effect.succeed({ id, title: "T" }))
 ) {}
 
@@ -38,19 +52,30 @@ const Card = Component.define({
       query: GetUser,
       args: ({ props }) => ({ id: props.id }),
       onChange: (result) => {
-        expect(result).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
-        return Message.UserChanged({ state: result._tag, failed: AsyncResult.isFailure(result) })
+        expect(result).type.toBe<
+          AsyncResult.AsyncResult<typeof User.Type, string>
+        >()
+        return Message.UserChanged({
+          state: result._tag,
+          failed: AsyncResult.isFailure(result)
+        })
       }
     },
     team: {
       query: GetTeam,
       args: ({ queries }) => {
-        expect(queries.user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
+        expect(queries.user).type.toBe<
+          AsyncResult.AsyncResult<typeof User.Type, string>
+        >()
         expect(queries).type.not.toHaveProperty("team")
-        return AsyncResult.isSuccess(queries.user) ? { id: queries.user.value.teamId } : undefined
+        return AsyncResult.isSuccess(queries.user)
+          ? { id: queries.user.value.teamId }
+          : undefined
       },
       onChange: (result) => {
-        expect(result).type.toBe<AsyncResult.AsyncResult<typeof Team.Type, never>>()
+        expect(result).type.toBe<
+          AsyncResult.AsyncResult<typeof Team.Type, never>
+        >()
         return Message.TeamChanged({ state: result._tag })
       }
     }
@@ -58,8 +83,12 @@ const Card = Component.define({
 }).make({
   init: () => ({ n: 0 }),
   update: ($, message) => {
-    expect($.queries.user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
-    expect($.queries.team).type.toBe<AsyncResult.AsyncResult<typeof Team.Type, never>>()
+    expect($.queries.user).type.toBe<
+      AsyncResult.AsyncResult<typeof User.Type, string>
+    >()
+    expect($.queries.team).type.toBe<
+      AsyncResult.AsyncResult<typeof Team.Type, never>
+    >()
     return Message.match(message, {
       UserChanged: () => $.model,
       TeamChanged: () => $.model,
@@ -67,30 +96,53 @@ const Card = Component.define({
     })
   },
   subscriptions: ({ queries }) => {
-    expect(queries.user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
+    expect(queries.user).type.toBe<
+      AsyncResult.AsyncResult<typeof User.Type, string>
+    >()
     return []
   },
   head: ({ queries }) => {
-    expect(queries.team).type.toBe<AsyncResult.AsyncResult<typeof Team.Type, never>>()
+    expect(queries.team).type.toBe<
+      AsyncResult.AsyncResult<typeof Team.Type, never>
+    >()
     return [Head.title("Card")]
   },
   view: (h) => {
-    expect(h.queries.user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
+    expect(h.queries.user).type.toBe<
+      AsyncResult.AsyncResult<typeof User.Type, string>
+    >()
     expect(h.previous.user).type.toBe<Option.Option<typeof User.Type>>()
     expect(h.patched.team).type.toBe<boolean>()
     return AsyncResult.match(h.queries.user, {
-      onInitial: () => h.p(Option.isSome(h.previous.user) ? h.previous.user.value.name : "Loading"),
+      onInitial: () =>
+        h.p(
+          Option.isSome(h.previous.user)
+            ? h.previous.user.value.name
+            : "Loading"
+        ),
       onFailure: () => h.p("Missing"),
-      onSuccess: ({ value }) => h.p.onClick(Message.Bump()).children(value.name, h.patched.team ? "*" : "")
+      onSuccess: ({ value }) =>
+        h.p.onClick(Message.Bump()).children(
+          value.name,
+          h.patched.team ? "*" : ""
+        )
     })
   }
 })
 
-class Api extends Context.Service<Api, { readonly name: (id: string) => Effect.Effect<string> }>()("typetest/Api") {}
+class Api extends Context.Service<
+  Api,
+  { readonly name: (id: string) => Effect.Effect<string> }
+>()("typetest/Api") {}
 
 class GetName extends Query.Service<GetName>()(
   "typetest/GetName",
-  { args: { id: Schema.String }, success: Schema.String, error: Schema.Never, staleTime: 0 },
+  {
+    args: { id: Schema.String },
+    success: Schema.String,
+    error: Schema.Never,
+    staleTime: 0
+  },
   Effect.gen(function*() {
     const api = yield* Api
     return ({ id }) => api.name(id)
@@ -105,9 +157,14 @@ describe("Component queries", () => {
     expect<Component.KeyedNames<L>>().type.toBe<never>()
     expect<Component.InfiniteNames<L>>().type.toBe<never>()
     expect<L>().type.toBe<
-      { readonly user: Component.QueryOne<typeof GetUser>; readonly team: Component.QueryOne<typeof GetTeam> }
+      {
+        readonly user: Component.QueryOne<typeof GetUser>
+        readonly team: Component.QueryOne<typeof GetTeam>
+      }
     >()
-    expect<Component.QueryResultOf<L["user"]>>().type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
+    expect<Component.QueryResultOf<L["user"]>>().type.toBe<
+      AsyncResult.AsyncResult<typeof User.Type, string>
+    >()
     expect<Component.QueryHelpers<L>>().type.toBe<{
       readonly queries: {
         readonly user: AsyncResult.AsyncResult<typeof User.Type, string>
@@ -135,7 +192,9 @@ describe("Component queries", () => {
       update: ($: Component.Update<{}, never, never, {}>) => $.set($.model),
       view: (h) => h.text("")
     })
-    expect<Component.Queries<typeof Annotated>>().type.toBe<{ readonly name: Component.QueryOne<typeof GetName> }>()
+    expect<Component.Queries<typeof Annotated>>().type.toBe<
+      { readonly name: Component.QueryOne<typeof GetName> }
+    >()
     expect<Component.Requirements<typeof Annotated>>().type.toBe<GetName>()
   })
 
@@ -149,7 +208,10 @@ describe("Component queries", () => {
     }).make({
       init: () => ({}),
       update: ($) => $.model,
-      view: (h) => h.text(AsyncResult.isSuccess(h.queries.name) ? h.queries.name.value : "")
+      view: (h) =>
+        h.text(
+          AsyncResult.isSuccess(h.queries.name) ? h.queries.name.value : ""
+        )
     })
     expect<Component.Requirements<typeof Named>>().type.toBe<GetName>()
     // Provided, the query's layer brings what its fetcher uses.
@@ -167,11 +229,13 @@ describe("Component queries", () => {
         user: {
           query: GetUser,
           // @ts-expect-error Property 'user' does not exist
-          args: ({ queries }) => AsyncResult.isSuccess(queries.user) ? { id: "1" } : undefined
+          args: ({ queries }) =>
+            AsyncResult.isSuccess(queries.user) ? { id: "1" } : undefined
         },
         team: {
           query: GetTeam,
-          args: ({ queries }) => AsyncResult.isSuccess(queries.user) ? { id: "1" } : undefined
+          args: ({ queries }) =>
+            AsyncResult.isSuccess(queries.user) ? { id: "1" } : undefined
         }
       }
     }).make({
@@ -195,7 +259,8 @@ describe("Component queries", () => {
           query: GetTeam,
           args: ({ props }) => ({ id: props.id }),
           // @ts-expect-error not assignable
-          onChange: (_result: AsyncResult.AsyncResult<string, never>) => Message.Bump()
+          onChange: (_result: AsyncResult.AsyncResult<string, never>) =>
+            Message.Bump()
         }
       }
     }).make({
@@ -210,7 +275,11 @@ describe("Component queries", () => {
       message: Message,
       queries: {
         // @ts-expect-error not assignable
-        user: { query: GetUser, args: () => ({ id: "1" }), onChange: () => "not a message" }
+        user: {
+          query: GetUser,
+          args: () => ({ id: "1" }),
+          onChange: () => "not a message"
+        }
       }
     }).make({
       init: () => ({}),
@@ -239,7 +308,11 @@ describe("debounce", () => {
           }
         },
         // @ts-expect-error Type 'number' is not assignable to type 'string'
-        team: { queryMany: GetTeam, debounce: "300 millis", args: () => [{ id: 1 }] }
+        team: {
+          queryMany: GetTeam,
+          debounce: "300 millis",
+          args: () => [{ id: 1 }]
+        }
       }
     }).make({
       init: () => ({}),
@@ -280,7 +353,11 @@ describe("Story query steps", () => {
       .loadFailed("team", "missing")
       // @ts-expect-error Argument of type '"other"' is not assignable
       .loadFailed("other", "missing")
-    const story = Story.start(Card, { id: "1" }).loaded("user", { id: "1", name: "Ann", teamId: "t" }).current
+    const story = Story.start(Card, { id: "1" }).loaded("user", {
+      id: "1",
+      name: "Ann",
+      teamId: "t"
+    }).current
     expect(story).type.toBe<
       Story.Story<
         { readonly id: string },
@@ -294,13 +371,18 @@ describe("Story query steps", () => {
       >
     >()
     // `queries()` is typed as `h.queries` is.
-    expect(story.queries().user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
+    expect(story.queries().user).type.toBe<
+      AsyncResult.AsyncResult<typeof User.Type, string>
+    >()
     expect(story.queries()).type.not.toHaveProperty("n")
   })
 
   it("given takes queries results by query name", () => {
     Story.start(Card, { id: "1" })
-      .given((model) => model, { user: { id: "1", name: "Ann", teamId: "t" }, team: { id: "t", title: "T" } })
+      .given((model) => model, {
+        user: { id: "1", name: "Ann", teamId: "t" },
+        team: { id: "t", title: "T" }
+      })
       .given((model) => model, { team: { id: "t", title: "T" } })
       // @ts-expect-error 'title' does not exist
       .given((model) => model, { user: { id: "t", title: "T" } })
@@ -311,14 +393,21 @@ describe("Story query steps", () => {
   it("fromLog types the replay's props and queries results", () => {
     const replay = Story.fromLog(Card, [])
     expect(replay.props).type.toBe<{ readonly id: string }>()
-    expect(replay.queries().user).type.toBe<AsyncResult.AsyncResult<typeof User.Type, string>>()
+    expect(replay.queries().user).type.toBe<
+      AsyncResult.AsyncResult<typeof User.Type, string>
+    >()
     expect(replay.queries()).type.not.toHaveProperty("n")
   })
 })
 
 class GetCount extends Query.Service<GetCount>()(
   "typetest/GetCount",
-  { args: Schema.String, success: Schema.Number, error: Schema.Never, staleTime: 0 },
+  {
+    args: Schema.String,
+    success: Schema.Number,
+    error: Schema.Never,
+    staleTime: 0
+  },
   Effect.succeed(() => Effect.succeed(1))
 ) {}
 
@@ -330,7 +419,10 @@ const ListMessage = UiSchema.TaggedEnum({
 const List = Component.define({
   name: "List",
   scoped: false,
-  model: Schema.Struct({ ids: Schema.Array(Schema.String), changed: Schema.Number }),
+  model: Schema.Struct({
+    ids: Schema.Array(Schema.String),
+    changed: Schema.Number
+  }),
   message: ListMessage,
   elements: Html,
   queries: {
@@ -339,7 +431,9 @@ const List = Component.define({
       args: ({ model }) => model.ids.map((id) => ({ id })),
       onChange: (results, changes) => {
         expect(results).type.toBe<Component.KeyedResults<typeof GetUser>>()
-        expect(changes).type.toBe<ReadonlyArray<Component.KeyedChange<typeof GetUser>>>()
+        expect(changes).type.toBe<
+          ReadonlyArray<Component.KeyedChange<typeof GetUser>>
+        >()
         return ListMessage.UsersChanged({ changed: changes.length })
       }
     }
@@ -356,7 +450,11 @@ const List = Component.define({
   view: (h) =>
     h.ul(
       h.queries.users.map(({ args, result, patched }) =>
-        h.li.key(args.id).children(AsyncResult.isSuccess(result) ? result.value.name + (patched ? "*" : "") : "…")
+        h.li.key(args.id).children(
+          AsyncResult.isSuccess(result)
+            ? result.value.name + (patched ? "*" : "")
+            : "…"
+        )
       )
     )
 })
@@ -369,15 +467,20 @@ describe("Keyed queries", () => {
     expect<Component.SingleNames<L>>().type.toBe<never>()
     expect<Component.InfiniteNames<L>>().type.toBe<never>()
     expect<Component.Requirements<typeof List>>().type.toBe<GetUser>()
-    expect<Component.QueryResultOf<L["users"]>>().type.toBe<Component.KeyedResults<typeof GetUser>>()
-    expect<Component.QueryResultOf<L["users"]>[number]["args"]>().type.toBe<{ readonly id: string }>()
+    expect<Component.QueryResultOf<L["users"]>>().type.toBe<
+      Component.KeyedResults<typeof GetUser>
+    >()
+    expect<Component.QueryResultOf<L["users"]>[number]["args"]>().type.toBe<
+      { readonly id: string }
+    >()
     expect<Component.QueryResultOf<L["users"]>[number]["result"]>().type.toBe<
       AsyncResult.AsyncResult<typeof User.Type, string>
     >()
     expect<ReturnType<Component.QueryResultOf<L["users"]>["get"]>>().type.toBe<
       Option.Option<Component.KeyedEntry<typeof GetUser>>
     >()
-    expect<Parameters<Component.QueryResultOf<L["users"]>["get"]>[0]>().type.toBe<{ readonly id: string }>()
+    expect<Parameters<Component.QueryResultOf<L["users"]>["get"]>[0]>().type
+      .toBe<{ readonly id: string }>()
   })
 
   it("have no previous or patched view", () => {
@@ -396,12 +499,15 @@ describe("Keyed queries", () => {
         users: {
           queryMany: GetUser,
           // @ts-expect-error Property 'users' does not exist
-          args: ({ queries }) => queries.users === undefined ? [] : [{ id: "1" }]
+          args: ({ queries }) =>
+            queries.users === undefined ? [] : [{ id: "1" }]
         },
         team: {
           query: GetTeam,
           args: ({ queries }) => {
-            expect(queries.users).type.toBe<Component.KeyedResults<typeof GetUser>>()
+            expect(queries.users).type.toBe<
+              Component.KeyedResults<typeof GetUser>
+            >()
             return queries.users.length > 0 ? { id: "1" } : undefined
           }
         }
@@ -419,7 +525,12 @@ describe("Keyed queries", () => {
     Component.define({
       ...base,
       // @ts-expect-error is missing the following properties from type 'readonly { readonly id: string; }[]'
-      queries: { users: { queryMany: GetUser, args: ({ model }) => ({ id: model.ids[0] }) } }
+      queries: {
+        users: {
+          queryMany: GetUser,
+          args: ({ model }) => ({ id: model.ids[0] })
+        }
+      }
     })
     Component.define({
       ...base,
@@ -428,7 +539,8 @@ describe("Keyed queries", () => {
           queryMany: GetUser,
           args: ({ model }) => model.ids.map((id) => ({ id })),
           // @ts-expect-error not assignable
-          onChange: (_loaded: AsyncResult.AsyncResult<unknown, unknown>) => ListMessage.Show({ ids: [] })
+          onChange: (_loaded: AsyncResult.AsyncResult<unknown, unknown>) =>
+            ListMessage.Show({ ids: [] })
         }
       }
     })
@@ -460,7 +572,8 @@ describe("Keyed queries", () => {
       update: ($) => $.model,
       view: () => null as never
     })
-    expect<Component.QueryResultOf<Component.Queries<typeof Keyed>["counts"]>>().type.toBe<
+    expect<Component.QueryResultOf<Component.Queries<typeof Keyed>["counts"]>>()
+      .type.toBe<
       Component.KeyedResults<typeof GetCount>
     >()
   })
@@ -471,33 +584,53 @@ describe("Keyed queries", () => {
       .loaded("users", { id: "1" }, { id: "1", name: "Ann", teamId: "t" })
       .loadFailed("users", { id: "2" }, "missing", { waiting: true })
       .loadedMany("users", [
-        { args: { id: "1" }, value: { id: "1", name: "Ann", teamId: "t" }, patched: true },
+        {
+          args: { id: "1" },
+          value: { id: "1", name: "Ann", teamId: "t" },
+          patched: true
+        },
         { args: { id: "2" }, error: "missing" }
       ])
       // @ts-expect-error not assignable
       .loaded("users", { id: "1", name: "Ann", teamId: "t" })
       // @ts-expect-error not assignable
-      .loadedMany("users", [{ args: { id: 1 }, value: { id: "1", name: "Ann", teamId: "t" } }])
+      .loadedMany("users", [{
+        args: { id: 1 },
+        value: { id: "1", name: "Ann", teamId: "t" }
+      }])
       // @ts-expect-error not assignable
       .loadedMany("others", [])
   })
 })
 
 const ChatItem = Schema.Struct({ id: Schema.String, text: Schema.String })
-const ChatPage = Schema.Struct({ messages: Schema.Array(ChatItem), next: Schema.NullOr(Schema.Number) })
+const ChatPage = Schema.Struct({
+  messages: Schema.Array(ChatItem),
+  next: Schema.NullOr(Schema.Number)
+})
 
-class ListMessages extends Query.InfiniteService<ListMessages>()("typetest/ListMessages", {
-  args: { room: Schema.String },
-  page: ChatPage,
-  items: (page) => page.messages,
-  key: (message) => message.id,
-  error: Schema.String,
-  cursor: Schema.Number,
-  next: (lastPage) => Option.fromNullishOr(lastPage.next),
-  staleTime: "1 minute"
-}, Effect.succeed((_args, _cursor) => Effect.succeed({ messages: [], next: null }))) {}
+class ListMessages extends Query.InfiniteService<ListMessages>()(
+  "typetest/ListMessages",
+  {
+    args: { room: Schema.String },
+    page: ChatPage,
+    items: (page) => page.messages,
+    key: (message) => message.id,
+    error: Schema.String,
+    cursor: Schema.Number,
+    next: (lastPage) => Option.fromNullishOr(lastPage.next),
+    staleTime: "1 minute"
+  },
+  Effect.succeed((_args, _cursor) =>
+    Effect.succeed({ messages: [], next: null })
+  )
+) {}
 
-const ChatMessage = UiSchema.TaggedEnum({ Changed: { count: Schema.Number }, More: {}, Refresh: {} })
+const ChatMessage = UiSchema.TaggedEnum({
+  Changed: { count: Schema.Number },
+  More: {},
+  Refresh: {}
+})
 
 const Chat = Component.define({
   name: "Chat",
@@ -512,7 +645,10 @@ const Chat = Component.define({
       args: ({ props }) => ({ room: props.room }),
       onChange: (result) => {
         expect(result).type.toBe<
-          AsyncResult.AsyncResult<Component.InfiniteData<typeof ListMessages>, string>
+          AsyncResult.AsyncResult<
+            Component.InfiniteData<typeof ListMessages>,
+            string
+          >
         >()
         return ChatMessage.Changed({
           count: AsyncResult.isSuccess(result) ? result.value.items.length : 0
@@ -525,7 +661,10 @@ const Chat = Component.define({
   init: () => ({}),
   update: ($, message) => {
     expect($.queries.messages).type.toBe<
-      AsyncResult.AsyncResult<Component.InfiniteData<typeof ListMessages>, string>
+      AsyncResult.AsyncResult<
+        Component.InfiniteData<typeof ListMessages>,
+        string
+      >
     >()
     return ChatMessage.match(message, {
       Changed: () => $.model,
@@ -534,8 +673,15 @@ const Chat = Component.define({
     })
   },
   view: (h) => {
-    expect(h.queries.messages).type.toBe<AsyncResult.AsyncResult<Component.InfiniteData<typeof ListMessages>, string>>()
-    expect(h.previous.messages).type.toBe<Option.Option<Omit<Component.InfiniteData<typeof ListMessages>, "more">>>()
+    expect(h.queries.messages).type.toBe<
+      AsyncResult.AsyncResult<
+        Component.InfiniteData<typeof ListMessages>,
+        string
+      >
+    >()
+    expect(h.previous.messages).type.toBe<
+      Option.Option<Omit<Component.InfiniteData<typeof ListMessages>, "more">>
+    >()
     expect(h.patched.messages).type.toBe<boolean>()
     return h.p("")
   }
@@ -544,7 +690,9 @@ const Chat = Component.define({
 describe("List queries", () => {
   it("open to items, pages and more", () => {
     expect<Component.InfiniteData<typeof ListMessages>>().type.toBe<{
-      readonly items: ReadonlyArray<{ readonly id: string; readonly text: string }>
+      readonly items: ReadonlyArray<
+        { readonly id: string; readonly text: string }
+      >
       readonly pages: ReadonlyArray<typeof ChatPage.Type>
       readonly more: Query.More<string>
     }>()
@@ -552,7 +700,9 @@ describe("List queries", () => {
     expect<Component.InfiniteNames<L>>().type.toBe<"messages">()
     expect<Component.SingleNames<L>>().type.toBe<"messages" | "user">()
     expect<Component.KeyedNames<L>>().type.toBe<never>()
-    expect<Component.Requirements<typeof Chat>>().type.toBe<ListMessages | GetUser>()
+    expect<Component.Requirements<typeof Chat>>().type.toBe<
+      ListMessages | GetUser
+    >()
   })
 
   it("take loadMore and reset for an infinite query only, and not in init", () => {
@@ -564,7 +714,10 @@ describe("List queries", () => {
       message: ChatMessage,
       elements: Html,
       queries: {
-        messages: { query: ListMessages, args: ({ props }) => ({ room: props.room }) },
+        messages: {
+          query: ListMessages,
+          args: ({ props }) => ({ room: props.room })
+        },
         user: { query: GetUser, args: () => ({ id: "1" }) }
       }
     }).make({
@@ -586,7 +739,9 @@ describe("List queries", () => {
       scoped: false,
       model: Schema.Struct({}),
       message: ChatMessage,
-      queries: { messages: { query: ListMessages, args: () => ({ room: "r" }) } }
+      queries: {
+        messages: { query: ListMessages, args: () => ({ room: "r" }) }
+      }
     }).make({
       init: () => ({}),
       // @ts-expect-error Argument of type '"missing"' is not assignable to parameter of type '"messages"'

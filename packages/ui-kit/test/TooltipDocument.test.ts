@@ -6,7 +6,10 @@ import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { byId, container, popovers, tick } from "./utils/document.ts"
 
-const rects = new Map<string, { x: number; y: number; width: number; height: number }>()
+const rects = new Map<
+  string,
+  { x: number; y: number; width: number; height: number }
+>()
 const layouts = new Map<string, { width: number; height: number }>()
 const content = { width: 200, height: 100 }
 let heightFor: ((node: Element) => number) | null = null
@@ -19,7 +22,12 @@ class FakeResizeObserver {
   readonly bordered = new Set<Element>()
   readonly pending = new Set<Element>()
   timer: ReturnType<typeof setTimeout> | undefined
-  constructor(readonly callback: (entries: Array<{ target: Element }>, observer: FakeResizeObserver) => void) {
+  constructor(
+    readonly callback: (
+      entries: Array<{ target: Element }>,
+      observer: FakeResizeObserver
+    ) => void
+  ) {
     resizeObservers.add(this)
   }
   observe(target: Element, options?: { readonly box?: string }) {
@@ -42,7 +50,9 @@ class FakeResizeObserver {
     this.pending.add(target)
     this.timer ??= setTimeout(() => {
       this.timer = undefined
-      const targets = [...this.observed].filter((element) => this.pending.has(element))
+      const targets = [...this.observed].filter((element) =>
+        this.pending.has(element)
+      )
       this.pending.clear()
       if (targets.length === 0) return
       deliveries++
@@ -72,16 +82,28 @@ const geometry = Effect.acquireRelease(
     }
     ;(window as any).ResizeObserver = FakeResizeObserver
     element.getBoundingClientRect = function(this: Element) {
-      const { height, width, x, y } = rects.get(this.id) ?? { x: 0, y: 0, ...size(this) }
-      return { x, y, width, height, left: x, top: y, right: x + width, bottom: y + height }
+      const { height, width, x, y } = rects.get(this.id) ??
+        { x: 0, y: 0, ...size(this) }
+      return {
+        x,
+        y,
+        width,
+        height,
+        left: x,
+        top: y,
+        right: x + width,
+        bottom: y + height
+      }
     }
     const size = (node: Element) => {
       const style = (node as HTMLElement).style
-      const padding = (side: string) => parseFloat(style.getPropertyValue("padding-" + side)) || 0
+      const padding = (side: string) =>
+        parseFloat(style.getPropertyValue("padding-" + side)) || 0
       if (node.id === "positioner") {
         return {
           width: content.width + padding("left") + padding("right"),
-          height: (heightFor?.(node) ?? content.height) + padding("top") + padding("bottom")
+          height: (heightFor?.(node) ?? content.height) + padding("top") +
+            padding("bottom")
         }
       }
       if (node.id.endsWith("arrow")) return { width: 10, height: 10 }
@@ -111,8 +133,14 @@ const geometry = Effect.acquireRelease(
         return layouts.get(this.id)?.height ?? 0
       }
     })
-    Object.defineProperty(root, "clientWidth", { configurable: true, value: 1000 })
-    Object.defineProperty(root, "clientHeight", { configurable: true, value: 800 })
+    Object.defineProperty(root, "clientWidth", {
+      configurable: true,
+      value: 1000
+    })
+    Object.defineProperty(root, "clientHeight", {
+      configurable: true,
+      value: 800
+    })
     return () => {
       element.getBoundingClientRect = saved.rect
       Object.defineProperty(html, "offsetWidth", saved.offsetWidth!)
@@ -136,7 +164,11 @@ const geometry = Effect.acquireRelease(
   (restore) => Effect.sync(restore)
 )
 
-const Message = UiSchema.TaggedEnum({ Closed: {}, RequestedOpen: {}, Restyled: {} })
+const Message = UiSchema.TaggedEnum({
+  Closed: {},
+  RequestedOpen: {},
+  Restyled: {}
+})
 
 const Page = Component.define({
   name: "Page",
@@ -167,23 +199,41 @@ const Page = Component.define({
       },
       view: (tooltip) =>
         h.div.attr("id", "clip").children(
-          h.div.attr("id", "layer").children(tooltip.trigger(h.button.attr("id", "trigger")).children("B")),
-          tooltip.positioner(h.div.attr("id", "positioner").style(model.tinted ? { zIndex: "10" } : {})).children(
-            tooltip.popup(h.div.attr("id", "popup")).children(tooltip.arrow(h.div), "Bold")
+          h.div.attr("id", "layer").children(
+            tooltip.trigger(h.button.attr("id", "trigger")).children("B")
+          ),
+          tooltip.positioner(
+            h.div.attr("id", "positioner").style(
+              model.tinted ? { zIndex: "10" } : {}
+            )
+          ).children(
+            tooltip.popup(h.div.attr("id", "popup")).children(
+              tooltip.arrow(h.div),
+              "Bold"
+            )
           )
         )
     })
 })
 
-const mountPage = Effect.fnUntraced(function*(sideOffset = 8, disableAnchorTracking = false, anchor?: string) {
-  yield* popovers
-  yield* geometry
-  rects.set("trigger", rects.get("trigger") ?? { x: 400, y: 700, width: 100, height: 40 })
-  const app = yield* container
-  const root = yield* BrowserHost.mountEffect(Page, { sideOffset, disableAnchorTracking, anchor }, app)
-  yield* tick
-  return root
-})
+const mountPage = Effect.fnUntraced(
+  function*(sideOffset = 8, disableAnchorTracking = false, anchor?: string) {
+    yield* popovers
+    yield* geometry
+    rects.set(
+      "trigger",
+      rects.get("trigger") ?? { x: 400, y: 700, width: 100, height: 40 }
+    )
+    const app = yield* container
+    const root = yield* BrowserHost.mountEffect(Page, {
+      sideOffset,
+      disableAnchorTracking,
+      anchor
+    }, app)
+    yield* tick
+    return root
+  }
+)
 
 const style = (name: string) => byId("positioner").style.getPropertyValue(name)
 
@@ -283,7 +333,10 @@ describe("Tooltip in a document", { concurrent: false }, () => {
       heightFor = (node) => node.getAttribute("data-side") === "top" ? 100 : 40
       yield* mountPage(8, true)
       assert.strictEqual(style("top"), "340px")
-      assert.deepStrictEqual([...resizeObservers].flatMap((observer) => [...observer.observed]), [byId("positioner")])
+      assert.deepStrictEqual(
+        [...resizeObservers].flatMap((observer) => [...observer.observed]),
+        [byId("positioner")]
+      )
 
       rects.set("trigger", { x: 400, y: 760, width: 100, height: 40 })
       window.dispatchEvent(new Event("resize"))
@@ -316,7 +369,10 @@ describe("Tooltip in a document", { concurrent: false }, () => {
       rects.set("second", right)
       window.dispatchEvent(new Event("resize"))
       yield* tick
-      assert.strictEqual(byId("positioner").getAttribute("data-anchor-hidden"), "")
+      assert.strictEqual(
+        byId("positioner").getAttribute("data-anchor-hidden"),
+        ""
+      )
     }).pipe(Effect.scoped))
 
   it.effect("follows the trigger on a scroll until the tooltip closes, and reopens on another side", () =>

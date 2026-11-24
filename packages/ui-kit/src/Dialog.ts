@@ -215,13 +215,32 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { type Attributed, attrOf, flag, idOf, noSelect, withStyle, withTokens } from "./internal/attributes.ts"
-import { byAttribute, isElement, isHTMLElement, perDocument, radioGroup } from "./internal/dom.ts"
+import {
+  type Attributed,
+  attrOf,
+  flag,
+  idOf,
+  noSelect,
+  withStyle,
+  withTokens
+} from "./internal/attributes.ts"
+import {
+  byAttribute,
+  isElement,
+  isHTMLElement,
+  perDocument,
+  radioGroup
+} from "./internal/dom.ts"
 import { methodOf, onScrollbar } from "./internal/interaction.ts"
 import { hideOthers, lockScroll, nextLayerOrder } from "./internal/modal.ts"
 import { isAndroid } from "./internal/platform.ts"
 import { inKept, portalBox, raiseAbove } from "./internal/topLayer.ts"
-import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transition.ts"
+import {
+  frameOf,
+  settling,
+  statusOf,
+  transitionAttrs
+} from "./internal/transition.ts"
 
 /**
  * How a dialog limits the page behind it: `true` for a modal, `"trap-focus"`
@@ -231,7 +250,10 @@ import { frameOf, settling, statusOf, transitionAttrs } from "./internal/transit
  * @category schemas
  * @since 0.1.0
  */
-export const DialogModal = Schema.Union([Schema.Boolean, Schema.Literal("trap-focus")])
+export const DialogModal = Schema.Union([
+  Schema.Boolean,
+  Schema.Literal("trap-focus")
+])
 
 /**
  * How a dialog limits the page behind it.
@@ -250,7 +272,12 @@ export type DialogModal = typeof DialogModal.Type
  * @category schemas
  * @since 0.1.0
  */
-export const DialogInteraction = Schema.Literals(["mouse", "touch", "pen", "keyboard"])
+export const DialogInteraction = Schema.Literals([
+  "mouse",
+  "touch",
+  "pen",
+  "keyboard"
+])
 
 /**
  * How the user opened or closed a dialog.
@@ -388,7 +415,11 @@ export type DialogEvents = typeof DialogEvents.Type
 export type DialogTransitionStatus = "starting" | "ending" | null
 
 const DialogMessage = UiSchema.TaggedEnum({
-  ClickedTrigger: { triggerId: Schema.NullOr(Schema.String), key: Schema.String, pointerType: Schema.String },
+  ClickedTrigger: {
+    triggerId: Schema.NullOr(Schema.String),
+    key: Schema.String,
+    pointerType: Schema.String
+  },
   ClickedClose: { pointerType: Schema.String },
   PressedEscape: {},
   PressedOutside: { pointerType: Schema.String },
@@ -414,7 +445,12 @@ const DialogModel = Schema.Struct({
 
 type DialogModel = typeof DialogModel.Type
 
-type DialogUpdate = Component.Update<DialogModel, DialogMessage, DialogEvents, DialogProps>
+type DialogUpdate = Component.Update<
+  DialogModel,
+  DialogMessage,
+  DialogEvents,
+  DialogProps
+>
 
 const topmost = (model: DialogModel): boolean => model.nestedOpen === 0
 
@@ -422,7 +458,10 @@ const dismiss = (
   $: DialogUpdate,
   reason: DialogDismissReason,
   closeMethod: DialogInteraction | null
-) => $.evolve({ reason, closeMethod }).emit(DialogEvents.RequestedClose({ reason }))
+) =>
+  $.evolve({ reason, closeMethod }).emit(
+    DialogEvents.RequestedClose({ reason })
+  )
 
 const blocker = new Html.Element<never>("div").attrs({
   role: "presentation",
@@ -445,14 +484,21 @@ const tabbableSelector = [
   "[contenteditable=\"true\"]"
 ].join(",")
 
-const closestOf = (target: Node, selector: string): Element | null | undefined =>
+const closestOf = (
+  target: Node,
+  selector: string
+): Element | null | undefined =>
   (isElement(target) ? target : target.parentElement)?.closest(selector)
 
-const inNested = (dialog: Element, element: Element): boolean => element.parentElement?.closest("dialog") !== dialog
+const inNested = (dialog: Element, element: Element): boolean =>
+  element.parentElement?.closest("dialog") !== dialog
 
 const radioOut = (element: HTMLElement): boolean => {
   const radio = element as HTMLInputElement
-  if (radio.localName !== "input" || radio.type !== "radio" || radio.name === "" || radio.checked) {
+  if (
+    radio.localName !== "input" || radio.type !== "radio" ||
+    radio.name === "" || radio.checked
+  ) {
     return false
   }
   const group = radioGroup(radio)
@@ -461,11 +507,14 @@ const radioOut = (element: HTMLElement): boolean => {
 
 const tabbables = (dialog: Element, root: Element): Array<HTMLElement> => {
   const view = dialog.ownerDocument.defaultView
-  return Array.from(root.querySelectorAll<HTMLElement>(tabbableSelector)).filter((element) =>
-    element.tabIndex >= 0 && element.getClientRects().length > 0 && !inNested(dialog, element) &&
-    !element.matches(":disabled") && element.closest("[inert]") === null &&
-    view?.getComputedStyle(element).visibility !== "hidden" && !radioOut(element)
-  )
+  return Array.from(root.querySelectorAll<HTMLElement>(tabbableSelector))
+    .filter((element) =>
+      element.tabIndex >= 0 && element.getClientRects().length > 0 &&
+      !inNested(dialog, element) &&
+      !element.matches(":disabled") && element.closest("[inert]") === null &&
+      view?.getComputedStyle(element).visibility !== "hidden" &&
+      !radioOut(element)
+    )
 }
 
 const TrackDialogArgs = {
@@ -500,7 +549,9 @@ type Showing = {
 
 interface Stack {
   readonly showing: Array<Showing>
-  watched: { readonly entry: Showing; readonly watcher: CloseWatcher } | undefined
+  watched:
+    | { readonly entry: Showing; readonly watcher: CloseWatcher }
+    | undefined
 }
 const stackOf = perDocument((): Stack => ({ showing: [], watched: undefined }))
 const rewatch = (stack: Stack) => {
@@ -508,9 +559,12 @@ const rewatch = (stack: Stack) => {
   if (stack.watched?.entry === top) return
   stack.watched?.watcher.destroy()
   const watcher = top?.watch()
-  stack.watched = top !== undefined && watcher !== undefined ? { entry: top, watcher } : undefined
+  stack.watched = top !== undefined && watcher !== undefined
+    ? { entry: top, watcher }
+    : undefined
 }
-const orderOf = ({ showing }: Stack, node: Element): number => showing.findIndex((entry) => entry.node === node)
+const orderOf = ({ showing }: Stack, node: Element): number =>
+  showing.findIndex((entry) => entry.node === node)
 const onTop = (stack: Stack, node: HTMLDialogElement): boolean => {
   const mine = orderOf(stack, node)
   return stack.showing.every((other, index) =>
@@ -520,7 +574,10 @@ const onTop = (stack: Stack, node: HTMLDialogElement): boolean => {
 }
 
 let handingOff = 0
-const handOff = (element: HTMLElement | null | undefined, focusVisible = false): void => {
+const handOff = (
+  element: HTMLElement | null | undefined,
+  focusVisible = false
+): void => {
   if (element == null) return
   handingOff++
   try {
@@ -530,7 +587,11 @@ const handOff = (element: HTMLElement | null | undefined, focusVisible = false):
   }
 }
 
-const inDialogAbove = (stack: Stack, node: HTMLDialogElement, target: Node): boolean => {
+const inDialogAbove = (
+  stack: Stack,
+  node: HTMLDialogElement,
+  target: Node
+): boolean => {
   const other = closestOf(target, "dialog")
   if (other == null || other === node || other.contains(node)) return false
   const index = orderOf(stack, other)
@@ -539,12 +600,16 @@ const inDialogAbove = (stack: Stack, node: HTMLDialogElement, target: Node): boo
 
 const inOtherLayer = (node: HTMLDialogElement, target: Node): boolean => {
   const other = closestOf(target, "[popover]")
-  return other != null && other !== node && !other.contains(node) && !node.contains(other)
+  return other != null && other !== node && !other.contains(node) &&
+    !node.contains(other)
 }
 
-const closeWatcherOf = (view: Window | null): (new() => CloseWatcher) | undefined =>
+const closeWatcherOf = (
+  view: Window | null
+): (new() => CloseWatcher) | undefined =>
   view !== null && isAndroid(view)
-    ? (view as Window & { readonly CloseWatcher?: new() => CloseWatcher }).CloseWatcher
+    ? (view as Window & { readonly CloseWatcher?: new() => CloseWatcher })
+      .CloseWatcher
     : undefined
 
 const TrackDialog = Mount.makeStream(
@@ -558,7 +623,8 @@ const TrackDialog = Mount.makeStream(
       const stack = stackOf(document)
       let current: TrackDialogArgs = args
       const send = (message: DialogMessage) => Queue.offerUnsafe(queue, message)
-      const popup = (): HTMLElement => (document.getElementById(current.popupId) as HTMLElement | null) ?? node
+      const popup = (): HTMLElement =>
+        (document.getElementById(current.popupId) as HTMLElement | null) ?? node
       const topmost = () => current.topmost && onTop(stack, node)
       const Watcher = closeWatcherOf(view)
       const entry: Showing = {
@@ -582,28 +648,44 @@ const TrackDialog = Mount.makeStream(
         }
       }
       const controls = `[aria-controls="${CSS.escape(args.portalId)}"]`
-      const anyTrigger = `${controls},[data-dialog-trigger="${CSS.escape(args.portalId)}"]`
+      const anyTrigger = `${controls},[data-dialog-trigger="${
+        CSS.escape(args.portalId)
+      }"]`
       const onTrigger = (target: Node): boolean =>
-        closestOf(target, anyTrigger) != null || trigger?.contains(target) === true
+        closestOf(target, anyTrigger) != null ||
+        trigger?.contains(target) === true
       const findTrigger = (): HTMLElement | null =>
-        (current.triggerId === null ? null : document.getElementById(current.triggerId)) ??
-          (isHTMLElement(document.activeElement) && document.activeElement.matches(controls)
+        (current.triggerId === null
+          ? null
+          : document.getElementById(current.triggerId)) ??
+          (isHTMLElement(document.activeElement) &&
+              document.activeElement.matches(controls)
             ? document.activeElement
             : document.querySelector<HTMLElement>(controls))
       let trigger = findTrigger()
       const active = document.activeElement
       let focusInside = node.contains(active)
-      let lastFocused: HTMLElement | null = focusInside ? active as HTMLElement : null
-      let before: HTMLElement | null = isHTMLElement(active) && !focusInside ? active : null
+      let lastFocused: HTMLElement | null = focusInside
+        ? active as HTMLElement
+        : null
+      let before: HTMLElement | null = isHTMLElement(active) && !focusInside
+        ? active
+        : null
       const visited: Array<HTMLElement> = []
       let added = new WeakSet<Node>()
       const record = (records: ReadonlyArray<MutationRecord>) => {
-        for (const { addedNodes } of records) for (const child of addedNodes) added.add(child)
+        for (const { addedNodes } of records) {
+          for (const child of addedNodes) added.add(child)
+        }
       }
       const page = new MutationObserver(record)
       const addedSince = (target: Node): boolean => {
         record(page.takeRecords())
-        for (let at: Node | null = target; at !== null && at !== document.body; at = at.parentNode) {
+        for (
+          let at: Node | null = target;
+          at !== null && at !== document.body;
+          at = at.parentNode
+        ) {
           if (added.has(at)) return true
         }
         return false
@@ -615,14 +697,21 @@ const TrackDialog = Mount.makeStream(
         if (!current.initialFocus) {
           const focused = document.activeElement
           if (focused === null || !node.contains(focused)) return
-          if (isHTMLElement(from) && from !== document.body && from.isConnected) handOff(from)
+          if (
+            isHTMLElement(from) && from !== document.body && from.isConnected
+          ) handOff(from)
           else (focused as HTMLElement).blur()
           return
         }
-        const marked = Array.from(node.querySelectorAll<HTMLElement>("[autofocus]")).find((element) =>
-          !inNested(node, element)
+        const marked = Array.from(
+          node.querySelectorAll<HTMLElement>("[autofocus]")
+        ).find((element) => !inNested(node, element))
+        handOff(
+          marked ?? (current.openMethod === "touch"
+            ? undefined
+            : tabbables(node, root)[0]) ??
+            root
         )
-        handOff(marked ?? (current.openMethod === "touch" ? undefined : tabbables(node, root)[0]) ?? root)
       }
 
       let release: (() => void) | undefined
@@ -649,7 +738,10 @@ const TrackDialog = Mount.makeStream(
         if (event.defaultPrevented || !current.open || !topmost()) return
         const target = event.target as Node | null
         if (event.key === "Escape") {
-          if (event.isComposing || event.keyCode === 229 || event.timeStamp - composed < 20) return
+          if (
+            event.isComposing || event.keyCode === 229 ||
+            event.timeStamp - composed < 20
+          ) return
           if (target !== null && inOtherLayer(node, target)) return
           event.preventDefault()
           send(DialogMessage.PressedEscape())
@@ -658,7 +750,8 @@ const TrackDialog = Mount.makeStream(
         if (event.key !== "Tab" || current.modal === false) return
         const focused = document.activeElement
         if (
-          focused !== null && focused !== document.body && !node.contains(focused) &&
+          focused !== null && focused !== document.body &&
+          !node.contains(focused) &&
           (current.modal !== true || inOtherLayer(node, focused))
         ) return
         const root = popup()
@@ -669,7 +762,10 @@ const TrackDialog = Mount.makeStream(
           event.preventDefault()
           handOff(root)
         } else if (
-          !node.contains(focused) || (event.shiftKey ? focused === first || focused === root : focused === last)
+          !node.contains(focused) ||
+          (event.shiftKey
+            ? focused === first || focused === root
+            : focused === last)
         ) {
           event.preventDefault()
           handOff(event.shiftKey ? last : first)
@@ -680,18 +776,23 @@ const TrackDialog = Mount.makeStream(
         const root = popup()
         if (root.contains(target) || onTrigger(target)) return false
         if (current.modal === true) {
-          return isElement(target) && target !== node && target.closest("dialog") === node &&
-            (target.contains(root) || target.getAttribute("role") === "presentation")
+          return isElement(target) && target !== node &&
+            target.closest("dialog") === node &&
+            (target.contains(root) ||
+              target.getAttribute("role") === "presentation")
         }
         return node.contains(target) || inKept(target) || !addedSince(target)
       }
       const hasBackdrop = (): boolean =>
-        node.querySelector(`[data-dialog-backdrop="${CSS.escape(args.portalId)}"]`) !== null
+        node.querySelector(
+          `[data-dialog-backdrop="${CSS.escape(args.portalId)}"]`
+        ) !== null
       const touches = new Set<number>()
       let pressed: string | undefined
       let dismissing: number | undefined
       let ignored: Node | null = null
-      const listens = (): boolean => current.open && current.dismissible && topmost()
+      const listens = (): boolean =>
+        current.open && current.dismissible && topmost()
       // A touch dismisses on pointerdown, so the dialog has left the top
       // layer before the tap's click, which would land on the page below.
       const swallowClick = (press: PointerEvent) => {
@@ -703,8 +804,16 @@ const TrackDialog = Mount.makeStream(
           event.stopPropagation()
           stop()
         }, options)
-        document.addEventListener("pointerdown", (event) => event !== press && stop(), options)
-        document.addEventListener("pointercancel", (event) => event.pointerId === press.pointerId && stop(), options)
+        document.addEventListener(
+          "pointerdown",
+          (event) => event !== press && stop(),
+          options
+        )
+        document.addEventListener(
+          "pointercancel",
+          (event) => event.pointerId === press.pointerId && stop(),
+          options
+        )
         document.addEventListener("pointerup", (event) => {
           if (event.pointerId === press.pointerId) setTimeout(stop, 400)
         }, options)
@@ -713,11 +822,22 @@ const TrackDialog = Mount.makeStream(
         pressed = undefined
         const target = event.target as Node | null
         const out = target !== null && outside(target)
-        ignored = target !== null && current.open && !out && !node.contains(target) ? target : null
+        ignored =
+          target !== null && current.open && !out && !node.contains(target)
+            ? target
+            : null
         if (event.pointerType === "touch") touches.add(event.pointerId)
-        if (!listens() || !event.isPrimary || event.button !== 0 || touches.size > 1) return
-        if (!out || (event.pointerType !== "touch" && onScrollbar(target, event))) return
-        if (event.pointerType === "touch" || (current.modal === "trap-focus" && !hasBackdrop())) {
+        if (
+          !listens() || !event.isPrimary || event.button !== 0 ||
+          touches.size > 1
+        ) return
+        if (
+          !out || (event.pointerType !== "touch" && onScrollbar(target, event))
+        ) return
+        if (
+          event.pointerType === "touch" ||
+          (current.modal === "trap-focus" && !hasBackdrop())
+        ) {
           if (event.pointerType === "touch") swallowClick(event)
           dismissing = event.pointerId
           send(DialogMessage.PressedOutside({ pointerType: event.pointerType }))
@@ -730,7 +850,9 @@ const TrackDialog = Mount.makeStream(
         if (event.pointerId === dismissing) dismissing = undefined
         ignored = null
         const target = event.target as Node | null
-        if (event.type === "pointercancel" || target === null || !outside(target)) pressed = undefined
+        if (
+          event.type === "pointercancel" || target === null || !outside(target)
+        ) pressed = undefined
       }
       const onClick = (event: MouseEvent) => {
         const pointerType = pressed
@@ -746,10 +868,20 @@ const TrackDialog = Mount.makeStream(
         const target = event.target as Node | null
         focusInside = target !== null && node.contains(target)
         if (focusInside) lastFocused = target as HTMLElement
-        else if (isHTMLElement(target) && visited.push(target) > 20) visited.shift()
-        if (focusInside || target === null || current.modal !== false || !current.open || !showed) return
-        if (!topmost() || inDialogAbove(stack, node, target) || (ignored !== null && target.contains(ignored))) return
-        if (current.dismissible && handingOff === 0 && !onTrigger(target)) send(DialogMessage.FocusedOutside())
+        else if (isHTMLElement(target) && visited.push(target) > 20) {
+          visited.shift()
+        }
+        if (
+          focusInside || target === null || current.modal !== false ||
+          !current.open || !showed
+        ) return
+        if (
+          !topmost() || inDialogAbove(stack, node, target) ||
+          (ignored !== null && target.contains(ignored))
+        ) return
+        if (current.dismissible && handingOff === 0 && !onTrigger(target)) {
+          send(DialogMessage.FocusedOutside())
+        }
       }
 
       const recover = () =>
@@ -757,7 +889,9 @@ const TrackDialog = Mount.makeStream(
           const focused = document.activeElement
           if (!current.open || !focusInside || lastFocused === null) return
           if (focused !== null && focused !== document.body) return
-          if (lastFocused.isConnected && lastFocused.getClientRects().length > 0) return
+          if (
+            lastFocused.isConnected && lastFocused.getClientRects().length > 0
+          ) return
           handOff(popup())
         })
       const onFocusOut = (event: FocusEvent) => {
@@ -770,17 +904,33 @@ const TrackDialog = Mount.makeStream(
           if (current.open && topmost()) focusFirst(from)
           focusInside = node.contains(document.activeElement)
           if (focusInside) lastFocused = document.activeElement as HTMLElement
-          if (current.open && !current.started) frame(() => send(DialogMessage.RenderedFirstFrame()))
+          if (current.open && !current.started) {
+            frame(() => send(DialogMessage.RenderedFirstFrame()))
+          }
         })
 
-      const parentsOf = () => stack.showing.filter((other) => other.node.contains(node))
-      const restoreFocus = (parents: ReadonlyArray<typeof entry>, held: boolean) => {
-        const { closedByFocusOut, closedByOutsidePress, closeMethod, finalFocus, portalId } = current
+      const parentsOf = () =>
+        stack.showing.filter((other) => other.node.contains(node))
+      const restoreFocus = (
+        parents: ReadonlyArray<typeof entry>,
+        held: boolean
+      ) => {
+        const {
+          closedByFocusOut,
+          closedByOutsidePress,
+          closeMethod,
+          finalFocus,
+          portalId
+        } = current
         const focused = document.activeElement as HTMLElement | null
-        const away = !held && focused !== null && focused !== document.body && !node.contains(focused)
+        const away = !held && focused !== null && focused !== document.body &&
+          !node.contains(focused)
         if (
           focused !== null &&
-          stack.showing.some((other) => other.open() && other.node.contains(focused) && !parents.includes(other))
+          stack.showing.some((other) =>
+            other.open() && other.node.contains(focused) &&
+            !parents.includes(other)
+          )
         ) return
         if (!finalFocus) {
           if (focusInside && node.contains(focused)) focused?.blur()
@@ -792,9 +942,9 @@ const TrackDialog = Mount.makeStream(
           : byAttribute(document, "data-final-focus", portalId)
         if (marked?.isConnected === true) return handOff(marked, visible)
         if (away) return
-        const back = [trigger, before, ...[...visited].reverse()].find((element) =>
-          element?.isConnected === true && !node.contains(element)
-        )
+        const back = [trigger, before, ...[...visited].reverse()].find((
+          element
+        ) => element?.isConnected === true && !node.contains(element))
         handOff(back, visible)
       }
       const restore = (parents: ReadonlyArray<typeof entry>) =>
@@ -816,15 +966,27 @@ const TrackDialog = Mount.makeStream(
         document.addEventListener("pointercancel", end, options)
       }
 
-      const transition = settling(node, popup, frame, (open) => send(DialogMessage.FinishedTransition({ open })))
+      const transition = settling(
+        node,
+        popup,
+        frame,
+        (open) => send(DialogMessage.FinishedTransition({ open }))
+      )
       const onChange = (next: TrackDialogArgs) => {
         const previous = current
         current = next
         if (next.mounted && !previous.mounted) shows()
-        if (next.open && next.triggerId !== previous.triggerId) trigger = findTrigger() ?? trigger
-        if (next.open && previous.open && next.initialFocus && !previous.initialFocus) opening(document.activeElement)
+        if (next.open && next.triggerId !== previous.triggerId) {
+          trigger = findTrigger() ?? trigger
+        }
+        if (
+          next.open && previous.open && next.initialFocus &&
+          !previous.initialFocus
+        ) opening(document.activeElement)
         if (next.open !== previous.open || next.modal !== previous.modal) hold()
-        if (next.open !== previous.open || next.topmost !== previous.topmost) rewatch(stack)
+        if (next.open !== previous.open || next.topmost !== previous.topmost) {
+          rewatch(stack)
+        }
         if (previous.open && !next.open) {
           pressed = undefined
           closing()
@@ -833,7 +995,9 @@ const TrackDialog = Mount.makeStream(
           page.takeRecords()
           added = new WeakSet()
           const focused = document.activeElement
-          if (isHTMLElement(focused) && !node.contains(focused)) before = focused
+          if (isHTMLElement(focused) && !node.contains(focused)) {
+            before = focused
+          }
           opening(focused)
         }
         transition.follow(previous, next)
@@ -853,14 +1017,31 @@ const TrackDialog = Mount.makeStream(
         Effect.sync(() => {
           stack.showing.push(entry)
           document.addEventListener("keydown", onKeyDown, { signal })
-          document.addEventListener("compositionend", onCompositionEnd, { capture: true, signal })
-          document.addEventListener("pointerdown", onPointerDown, { capture: true, signal })
-          document.addEventListener("pointerup", onPointerEnd, { capture: true, signal })
-          document.addEventListener("pointercancel", onPointerEnd, { capture: true, signal })
+          document.addEventListener("compositionend", onCompositionEnd, {
+            capture: true,
+            signal
+          })
+          document.addEventListener("pointerdown", onPointerDown, {
+            capture: true,
+            signal
+          })
+          document.addEventListener("pointerup", onPointerEnd, {
+            capture: true,
+            signal
+          })
+          document.addEventListener("pointercancel", onPointerEnd, {
+            capture: true,
+            signal
+          })
           document.addEventListener("click", onClick, { capture: true, signal })
-          document.addEventListener("focusin", onFocusIn, { capture: true, signal })
+          document.addEventListener("focusin", onFocusIn, {
+            capture: true,
+            signal
+          })
           node.addEventListener("focusout", onFocusOut, { signal })
-          if (document.body !== null) page.observe(document.body, { subtree: true, childList: true })
+          if (document.body !== null) {
+            page.observe(document.body, { subtree: true, childList: true })
+          }
           observer.observe(node, {
             subtree: true,
             childList: true,
@@ -872,7 +1053,12 @@ const TrackDialog = Mount.makeStream(
           if (current.mounted) shows()
           else send(DialogMessage.ShowedPortal())
         }).pipe(
-          Effect.tap(() => Effect.forkScoped(Stream.runForEach(changes, (next) => Effect.sync(() => onChange(next)))))
+          Effect.tap(() =>
+            Effect.forkScoped(
+              Stream.runForEach(changes, (next) =>
+                Effect.sync(() => onChange(next)))
+            )
+          )
         ),
         () =>
           Effect.sync(() => {
@@ -893,7 +1079,11 @@ const TrackDialog = Mount.makeStream(
     })
 )
 
-const triggerAttrs = <B extends Attributed<B>>(builder: B, active: boolean, popupId: string | undefined): B =>
+const triggerAttrs = <B extends Attributed<B>>(
+  builder: B,
+  active: boolean,
+  popupId: string | undefined
+): B =>
   builder
     .attrs({
       type: "button",
@@ -980,7 +1170,10 @@ export const DialogTrigger = <Msg, R = never>(
     readonly element?: DialogTriggerElement<Msg, R> | undefined
     readonly props: DialogTriggerProps
     /** What a press sends, with a click, Space or Enter. */
-    readonly onPress?: NoInfer<Msg> | ((press: DialogTriggerPress) => NoInfer<Msg>) | undefined
+    readonly onPress?:
+      | NoInfer<Msg>
+      | ((press: DialogTriggerPress) => NoInfer<Msg>)
+      | undefined
   }
 ): DialogTriggerElement<Msg, R> => {
   const element: DialogTriggerElement<Msg, R> = options.element ?? h.button
@@ -997,7 +1190,9 @@ export const DialogTrigger = <Msg, R = never>(
     if (typeof onPress !== "function") return button.onClick(onPress)
     const triggerId = idOf(node)
     const press = onPress as (press: DialogTriggerPress) => Msg
-    return button.onClick(({ pointerType }) => press({ triggerId, method: methodOf(pointerType) }))
+    return button.onClick(({ pointerType }) =>
+      press({ triggerId, method: methodOf(pointerType) })
+    )
   })
 }
 
@@ -1062,14 +1257,20 @@ export const Dialog = Component.define({
     value: (_, props) => ({ open: props.open }),
     collects: {
       schema: Schema.Number,
-      onChange: (counts) => DialogMessage.ChangedNested({ count: counts.reduce((sum, count) => sum + count, 0) })
+      onChange: (counts) =>
+        DialogMessage.ChangedNested({
+          count: counts.reduce((sum, count) => sum + count, 0)
+        })
     }
   },
   shared: {
     parent: {
       owner: "self",
       optional: true,
-      report: (model, props) => (props.open && props.nested !== false ? 1 + model.nestedOpen : 0)
+      report: (
+        model,
+        props
+      ) => (props.open && props.nested !== false ? 1 + model.nestedOpen : 0)
     }
   },
   restore: false,
@@ -1095,27 +1296,39 @@ export const Dialog = Component.define({
         DialogEvents.RequestedOpen({ triggerId })
       )
     },
-    ClickedClose: ($, { pointerType }) => $.props.open ? dismiss($, "close-press", methodOf(pointerType)) : $.model,
-    PressedEscape: ($) => $.props.open && topmost($.model) ? dismiss($, "escape-key", "keyboard") : $.model,
+    ClickedClose: ($, { pointerType }) =>
+      $.props.open ? dismiss($, "close-press", methodOf(pointerType)) : $.model,
+    PressedEscape: ($) =>
+      $.props.open && topmost($.model)
+        ? dismiss($, "escape-key", "keyboard")
+        : $.model,
     PressedOutside: ($, { pointerType }) =>
-      $.props.open && topmost($.model) && $.props.disablePointerDismissal !== true
+      $.props.open && topmost($.model) &&
+        $.props.disablePointerDismissal !== true
         ? dismiss($, "outside-press", methodOf(pointerType))
         : $.model,
-    CancelledCloseWatcher: ($) => $.props.open && topmost($.model) ? dismiss($, "close-watcher", null) : $.model,
+    CancelledCloseWatcher: ($) =>
+      $.props.open && topmost($.model)
+        ? dismiss($, "close-watcher", null)
+        : $.model,
     FocusedOutside: ($) =>
-      $.props.open && topmost($.model) && $.props.modal === false && $.props.disablePointerDismissal !== true
+      $.props.open && topmost($.model) && $.props.modal === false &&
+        $.props.disablePointerDismissal !== true
         ? dismiss($, "focus-out", null)
         : $.model,
     ShowedPortal: ($) =>
       $.props.open
         ? $.evolve({ mounted: true, reason: null, closeMethod: null })
         : $.evolve({ mounted: true }),
-    RenderedFirstFrame: ($) => $.props.open ? $.evolve({ started: true }) : $.model,
+    RenderedFirstFrame: ($) =>
+      $.props.open ? $.evolve({ started: true }) : $.model,
     FinishedTransition: ($, { open }) => {
       if (open !== $.props.open) return $.model
       if (open) return $.emit(DialogEvents.Settled({ open }))
       return $.model.mounted && $.props.holdExit !== true
-        ? $.evolve({ mounted: false, started: false, openMethod: null }).emit(DialogEvents.Settled({ open }))
+        ? $.evolve({ mounted: false, started: false, openMethod: null }).emit(
+          DialogEvents.Settled({ open })
+        )
         : $.model
     },
     ChangedNested: ($, { count }) => $.evolve({ nestedOpen: count })
@@ -1135,10 +1348,14 @@ export const Dialog = Component.define({
     let triggers = 0
     let titleId: string | undefined
     let descriptionId: string | undefined
-    const states = <B extends Attributed<B>>(builder: B): B => transitionAttrs(builder, open, transitionStatus)
+    const states = <B extends Attributed<B>>(builder: B): B =>
+      transitionAttrs(builder, open, transitionStatus)
     const nesting = <B extends Attributed<B>>(builder: B): B =>
       states(builder)
-        .attrs({ "data-nested": flag(nested), "data-nested-dialog-open": flag(nestedDialogs > 0) })
+        .attrs({
+          "data-nested": flag(nested),
+          "data-nested-dialog-open": flag(nestedDialogs > 0)
+        })
     const passThrough = "pointer-events:none"
 
     const triggerPart = p.part(
@@ -1152,14 +1369,23 @@ export const Dialog = Component.define({
         // A click can still reach a disabled button from an element inside it.
         return disabled
           ? button
-          : button.onClick(({ pointerType }) => DialogMessage.ClickedTrigger({ triggerId, key, pointerType }))
+          : button.onClick(({ pointerType }) =>
+            DialogMessage.ClickedTrigger({ triggerId, key, pointerType })
+          )
       }
     )
     const trigger = View.wrapPart(
       triggerPart,
-      <B extends View.PartTarget<"button">>(element: B): ReturnType<B["attr"]> => {
+      <B extends View.PartTarget<"button">>(
+        element: B
+      ): ReturnType<B["attr"]> => {
         const id = idOf(element)
-        return triggerPart(element, id, id ?? p.id("trigger", triggers++), attrOf(element, "disabled") !== undefined)
+        return triggerPart(
+          element,
+          id,
+          id ?? p.id("trigger", triggers++),
+          attrOf(element, "disabled") !== undefined
+        )
       }
     )
 
@@ -1173,8 +1399,14 @@ export const Dialog = Component.define({
           node
             .attrs({
               style: withStyle(node.elementAttrs.style, portalBox),
-              "aria-labelledby": withTokens(node.elementAttrs["aria-labelledby"], titleId),
-              "aria-describedby": withTokens(node.elementAttrs["aria-describedby"], descriptionId)
+              "aria-labelledby": withTokens(
+                node.elementAttrs["aria-labelledby"],
+                titleId
+              ),
+              "aria-describedby": withTokens(
+                node.elementAttrs["aria-describedby"],
+                descriptionId
+              )
             })
         )
         .children(modal === true && (open ? layer : inertLayer))
@@ -1202,7 +1434,9 @@ export const Dialog = Component.define({
     })
     const portal = View.wrapPart(
       portalPart,
-      <B extends View.PartTarget<"dialog">>(element: B): ReturnType<B["attr"]> | undefined => {
+      <B extends View.PartTarget<"dialog">>(
+        element: B
+      ): ReturnType<B["attr"]> | undefined => {
         const out = portalPart(element)
         return shown || props.keepMounted === true ? out : undefined
       }
@@ -1212,11 +1446,19 @@ export const Dialog = Component.define({
       states(b)
         .attrs({ role: "presentation", "data-dialog-backdrop": portalId })
         .forward((node) =>
-          node.attr("style", withStyle(node.elementAttrs.style, open ? noSelect : noSelect + ";" + passThrough))
+          node.attr(
+            "style",
+            withStyle(
+              node.elementAttrs.style,
+              open ? noSelect : noSelect + ";" + passThrough
+            )
+          )
         ))
     const backdrop = View.wrapPart(
       backdropPart,
-      <B extends View.PartTarget<"div">>(element: B): ReturnType<B["attr"]> | undefined => {
+      <B extends View.PartTarget<"div">>(
+        element: B
+      ): ReturnType<B["attr"]> | undefined => {
         const out = backdropPart(element)
         return nested && props.forceRenderBackdrop !== true ? undefined : out
       }
@@ -1224,11 +1466,26 @@ export const Dialog = Component.define({
     const viewport = p.part("div", (b) =>
       nesting(b)
         .attr("role", "presentation")
-        .forward((node) => open ? node : node.attr("style", withStyle(node.elementAttrs.style, passThrough))))
+        .forward((node) =>
+          open
+            ? node
+            : node.attr(
+              "style",
+              withStyle(node.elementAttrs.style, passThrough)
+            )
+        ))
     const popup = p.part("div", (b) =>
       nesting(b)
         .attrs({ id: popupId, tabindex: "-1", inert: flag(!open) })
-        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, `--nested-dialogs:${nestedDialogs}`))))
+        .forward((node) =>
+          node.attr(
+            "style",
+            withStyle(
+              node.elementAttrs.style,
+              `--nested-dialogs:${nestedDialogs}`
+            )
+          )
+        ))
 
     const titlePart = p.part(
       ["h1", "h2", "h3", "h4", "h5", "h6"],
@@ -1240,16 +1497,21 @@ export const Dialog = Component.define({
     )
     const title = View.wrapPart(
       titlePart,
-      <B extends View.PartTarget<"h1" | "h2" | "h3" | "h4" | "h5" | "h6">>(element: B): ReturnType<B["attr"]> => {
+      <B extends View.PartTarget<"h1" | "h2" | "h3" | "h4" | "h5" | "h6">>(
+        element: B
+      ): ReturnType<B["attr"]> => {
         titleId = idOf(element) ?? p.id("title")
         return titlePart(element, titleId)
       }
     )
-    const descriptionPart = p.part("p", (b, id: string) =>
-      b.attr("id", id).forward((node) => {
-        descriptionId = node.elementAttrs.id ?? id
-        return node
-      }))
+    const descriptionPart = p.part(
+      "p",
+      (b, id: string) =>
+        b.attr("id", id).forward((node) => {
+          descriptionId = node.elementAttrs.id ?? id
+          return node
+        })
+    )
     const description = View.wrapPart(
       descriptionPart,
       <B extends View.PartTarget<"p">>(element: B): ReturnType<B["attr"]> => {
@@ -1259,9 +1521,14 @@ export const Dialog = Component.define({
     )
     const close = p.part(
       "button",
-      (b) => b.attr("type", "button").onClick(({ pointerType }) => DialogMessage.ClickedClose({ pointerType }))
+      (b) =>
+        b.attr("type", "button").onClick(({ pointerType }) =>
+          DialogMessage.ClickedClose({ pointerType })
+        )
     )
-    const initialFocus = p.part((b) => b.attr("autofocus", props.initialFocus === false ? undefined : ""))
+    const initialFocus = p.part((b) =>
+      b.attr("autofocus", props.initialFocus === false ? undefined : "")
+    )
     const finalFocus = p.part((b) => b.attr("data-final-focus", portalId))
     return {
       open,

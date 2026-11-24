@@ -33,7 +33,9 @@ describe("HtmlLocator", () => {
         el("div", { role: "alert  status" }),
         el("ul", {}, el("li", {}))
       )
-      const roles = Locator.elements(tree).map((node) => HtmlLocator.roleOf(tree, node))
+      const roles = Locator.elements(tree).map((node) =>
+        HtmlLocator.roleOf(tree, node)
+      )
       expect(roles).toEqual([
         undefined,
         "link",
@@ -53,7 +55,13 @@ describe("HtmlLocator", () => {
     })
 
     it("header and footer are landmarks outside sectioning elements only", () => {
-      const tree = el("div", {}, el("header", {}), el("article", {}, el("header", {}), el("footer", {})), el("footer"))
+      const tree = el(
+        "div",
+        {},
+        el("header", {}),
+        el("article", {}, el("header", {}), el("footer", {})),
+        el("footer")
+      )
       expect(HtmlLocator.queryAllByRole(tree, "banner")).toHaveLength(1)
       expect(HtmlLocator.queryAllByRole(tree, "contentinfo")).toHaveLength(1)
     })
@@ -66,33 +74,54 @@ describe("HtmlLocator", () => {
         el("div", { "aria-hidden": "true" }, el("button", {}, text("B"))),
         el("button", {}, text("C"))
       )
-      expect(HtmlLocator.queryAllByRole(tree, "button").map((node) => Locator.textOf(node))).toEqual(["C"])
-      expect(HtmlLocator.queryAllByRole(tree, "button", { hidden: true })).toHaveLength(3)
+      expect(
+        HtmlLocator.queryAllByRole(tree, "button").map((node) =>
+          Locator.textOf(node)
+        )
+      ).toEqual(["C"])
+      expect(HtmlLocator.queryAllByRole(tree, "button", { hidden: true }))
+        .toHaveLength(3)
     })
 
     it.effect("a closed dialog and what's in it are hidden, and dialogState tells closed, open and modal apart", () =>
       Effect.gen(function*() {
         const dialog = HtmlLocator.role("dialog", { name: "Delete note?" })
         const keep = HtmlLocator.role("button", { name: "Keep" })
-        const s = yield* Scene.make(Confirm, { state: "closed", acceptEscape: false })
+        const s = yield* Scene.make(Confirm, {
+          state: "closed",
+          acceptEscape: false
+        })
         expect(s.query(dialog)).toBeUndefined()
         expect(s.query(keep)).toBeUndefined()
-        expect(HtmlLocator.dialogState(s.get(HtmlLocator.role("dialog", { hidden: true })))).toBe("closed")
+        expect(
+          HtmlLocator.dialogState(
+            s.get(HtmlLocator.role("dialog", { hidden: true }))
+          )
+        ).toBe("closed")
         s.click("Ask")
         expect(HtmlLocator.dialogState(s.get(dialog))).toBe("modal")
         expect(s.query(keep)).toBeDefined()
         // Escape is rejected by `update`, so the dialog stays modal.
         s.fire(dialog, "cancel")
         expect(HtmlLocator.dialogState(s.get(dialog))).toBe("modal")
-        const open = yield* TestHost.mount(Confirm, { state: "open" as const, acceptEscape: false })
+        const open = yield* TestHost.mount(Confirm, {
+          state: "open" as const,
+          acceptEscape: false
+        })
         expect(HtmlLocator.dialogState(open.get(dialog))).toBe("open")
         // A static `open` attribute counts too.
         expect(HtmlLocator.dialogState(el("dialog", { open: "" }))).toBe("open")
-        expect(HtmlLocator.dialogState(document.createElement("dialog"))).toBe("closed")
+        expect(HtmlLocator.dialogState(document.createElement("dialog"))).toBe(
+          "closed"
+        )
       }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 
     it("a dialog shown as a popover is visible though its open is false; hidden attributes still hide", () => {
-      const dialog = (attrs: Record<string, string>, props: Record<string, unknown>, label: string) => ({
+      const dialog = (
+        attrs: Record<string, string>,
+        props: Record<string, unknown>,
+        label: string
+      ) => ({
         tag: "dialog",
         attrs: { "aria-label": label, ...attrs },
         props,
@@ -105,32 +134,57 @@ describe("HtmlLocator", () => {
         dialog({ popover: "manual" }, { popoverOpen: false }, "Popover closed"),
         dialog({}, { open: false }, "Closed"),
         dialog({}, { open: "modal" }, "Modal"),
-        dialog({ popover: "manual", hidden: "" }, { popoverOpen: true }, "Hidden")
+        dialog(
+          { popover: "manual", hidden: "" },
+          { popoverOpen: true },
+          "Hidden"
+        )
       )
       const names = (role: string) =>
-        HtmlLocator.queryAllByRole(tree, role).map((node) => HtmlLocator.nameOf(tree, node))
+        HtmlLocator.queryAllByRole(tree, role).map((node) =>
+          HtmlLocator.nameOf(tree, node)
+        )
       expect(names("dialog")).toEqual(["As popover", "Modal"])
       expect(names("button")).toEqual(["As popover", "Modal"])
-      expect(HtmlLocator.queryAllByRole(tree, "dialog", { hidden: true })).toHaveLength(5)
+      expect(HtmlLocator.queryAllByRole(tree, "dialog", { hidden: true }))
+        .toHaveLength(5)
     })
 
     it.effect("a popover that isn't showing and what's in it are hidden, and popoverState tells", () =>
       Effect.gen(function*() {
         const menu = HtmlLocator.role("menu", { name: "Menu" })
         const rename = HtmlLocator.role("button", { name: "Rename" })
-        const s = yield* Scene.make(Menu, { mode: "auto", open: false, follow: true })
+        const s = yield* Scene.make(Menu, {
+          mode: "auto",
+          open: false,
+          follow: true
+        })
         expect(s.query(menu)).toBeUndefined()
         expect(s.query(rename)).toBeUndefined()
-        expect(HtmlLocator.popoverState(s.get(HtmlLocator.role("menu", { hidden: true })))).toBe("closed")
+        expect(
+          HtmlLocator.popoverState(
+            s.get(HtmlLocator.role("menu", { hidden: true }))
+          )
+        ).toBe("closed")
         // A parent opening it, as `Set` would: nothing in the view sends that.
         s.given((model) => ({ ...model, open: true }))
         expect(HtmlLocator.popoverState(s.get(menu))).toBe("open")
         // A light dismiss, as the browser host reports it; the Model follows.
-        s.fire(menu, "toggle", { open: false, newState: "closed", oldState: "open" })
+        s.fire(menu, "toggle", {
+          open: false,
+          newState: "closed",
+          oldState: "open"
+        })
         expect(s.query(menu)).toBeUndefined()
-        const root = yield* TestHost.mount(Menu, { mode: "manual" as const, open: true, follow: false })
+        const root = yield* TestHost.mount(Menu, {
+          mode: "manual" as const,
+          open: true,
+          follow: false
+        })
         expect(HtmlLocator.popoverState(root.get(menu))).toBe("open")
-        expect(HtmlLocator.popoverState(document.createElement("div"))).toBe("closed")
+        expect(HtmlLocator.popoverState(document.createElement("div"))).toBe(
+          "closed"
+        )
       }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
   })
 
@@ -141,11 +195,19 @@ describe("HtmlLocator", () => {
         {},
         el("span", { id: "first" }, text("First")),
         el("span", { id: "last" }, text("name")),
-        el("input", { "aria-labelledby": "first last", "aria-label": "ignored" }),
+        el("input", {
+          "aria-labelledby": "first last",
+          "aria-label": "ignored"
+        }),
         el("input", { "aria-label": "  Search   site " }),
         el("label", { for: "email" }, text("Email")),
         el("input", { id: "email", title: "ignored" }),
-        el("label", {}, el("input", { type: "checkbox" }), text(" Remember me")),
+        el(
+          "label",
+          {},
+          el("input", { type: "checkbox" }),
+          text(" Remember me")
+        ),
         el("input", { type: "submit" }),
         el("input", { type: "button", value: "Go" }),
         el("button", {}, el("img", { alt: "Close" })),
@@ -154,32 +216,56 @@ describe("HtmlLocator", () => {
         el("fieldset", {}, el("legend", {}, text("Address"))),
         el("h2", {}, text("Section "), el("em", {}, text("two")))
       )
-      const names = HtmlLocator.queryAllByRole(tree, "textbox").map((node) => HtmlLocator.nameOf(tree, node))
+      const names = HtmlLocator.queryAllByRole(tree, "textbox").map((node) =>
+        HtmlLocator.nameOf(tree, node)
+      )
       expect(names).toEqual(["First name", "Search site", "Email", "Notes"])
-      expect(HtmlLocator.nameOf(tree, HtmlLocator.getByRole(tree, "checkbox"))).toBe("Remember me")
-      expect(HtmlLocator.queryAllByRole(tree, "button").map((node) => HtmlLocator.nameOf(tree, node))).toEqual([
+      expect(HtmlLocator.nameOf(tree, HtmlLocator.getByRole(tree, "checkbox")))
+        .toBe("Remember me")
+      expect(
+        HtmlLocator.queryAllByRole(tree, "button").map((node) =>
+          HtmlLocator.nameOf(tree, node)
+        )
+      ).toEqual([
         "Submit",
         "Go",
         "Close",
         "Menu"
       ])
-      expect(HtmlLocator.nameOf(tree, HtmlLocator.getByRole(tree, "group"))).toBe("Address")
-      expect(HtmlLocator.getByRole(tree, "heading", { name: "Section two", level: 2 })).toBeDefined()
-      expect(HtmlLocator.getByRole(tree, "heading", { name: /two$/ })).toBeDefined()
+      expect(HtmlLocator.nameOf(tree, HtmlLocator.getByRole(tree, "group")))
+        .toBe("Address")
+      expect(
+        HtmlLocator.getByRole(tree, "heading", {
+          name: "Section two",
+          level: 2
+        })
+      ).toBeDefined()
+      expect(HtmlLocator.getByRole(tree, "heading", { name: /two$/ }))
+        .toBeDefined()
     })
 
     it("a label that both wraps and names a control counts once", () => {
       const container = document.createElement("div")
-      container.innerHTML = `<label for="agreed">Agree <input id="agreed" type="checkbox"></label>`
-      expect(HtmlLocator.getByRole(container, "checkbox", { name: "Agree" })).toBeDefined()
+      container.innerHTML =
+        `<label for="agreed">Agree <input id="agreed" type="checkbox"></label>`
+      expect(HtmlLocator.getByRole(container, "checkbox", { name: "Agree" }))
+        .toBeDefined()
     })
 
     it("getByRole lists what's there when nothing matches", () => {
-      const tree = el("div", {}, el("button", {}, text("Save")), el("a", { href: "/" }, text("Home")))
-      expect(() => HtmlLocator.getByRole(tree, "button", { name: "Cancel" })).toThrow(
-        "HtmlLocator: nothing has role \"button\", name \"Cancel\". Roles here:\n  button \"Save\"\n  link \"Home\""
+      const tree = el(
+        "div",
+        {},
+        el("button", {}, text("Save")),
+        el("a", { href: "/" }, text("Home"))
       )
-      expect(() => HtmlLocator.getByRole(el("div", {}, el("p"), el("p")), "paragraph")).toThrow("2 elements")
+      expect(() => HtmlLocator.getByRole(tree, "button", { name: "Cancel" }))
+        .toThrow(
+          "HtmlLocator: nothing has role \"button\", name \"Cancel\". Roles here:\n  button \"Save\"\n  link \"Home\""
+        )
+      expect(() =>
+        HtmlLocator.getByRole(el("div", {}, el("p"), el("p")), "paragraph")
+      ).toThrow("2 elements")
     })
   })
 
@@ -189,14 +275,29 @@ describe("HtmlLocator", () => {
         const scene = yield* HtmlScene.make(TodoApp, {})
         scene.type(HtmlLocator.role("textbox", { name: "New todo" }), "Read")
         // `.value(text)` sets a property, so the attributes don't hold it.
-        const field = scene.get(HtmlLocator.role("textbox", { name: "New todo" }))
+        const field = scene.get(
+          HtmlLocator.role("textbox", { name: "New todo" })
+        )
         expect(field.attrs?.value).toBeUndefined()
         expect(HtmlLocator.value(field)).toBe("Read")
-        const item = yield* Scene.make(TodoItem, { todo: { id: "1", title: "Read", done: true } })
-        expect(HtmlLocator.checked(item.get(HtmlLocator.role("checkbox", { name: "Read" })))).toBe(true)
-        expect(HtmlLocator.checked(item.get(HtmlLocator.role("button")))).toBeUndefined()
-        expect(HtmlLocator.getByRole(scene.root, "button", { name: "Clear done" })).toBeDefined()
-        expect(scene.all(Locator.inside(Locator.tag("form"), HtmlLocator.role("button")))).toHaveLength(1)
+        const item = yield* Scene.make(TodoItem, {
+          todo: { id: "1", title: "Read", done: true }
+        })
+        expect(
+          HtmlLocator.checked(
+            item.get(HtmlLocator.role("checkbox", { name: "Read" }))
+          )
+        ).toBe(true)
+        expect(HtmlLocator.checked(item.get(HtmlLocator.role("button"))))
+          .toBeUndefined()
+        expect(
+          HtmlLocator.getByRole(scene.root, "button", { name: "Clear done" })
+        ).toBeDefined()
+        expect(
+          scene.all(
+            Locator.inside(Locator.tag("form"), HtmlLocator.role("button"))
+          )
+        ).toHaveLength(1)
       }))
 
     it.effect("a TestHost tree, checked state included", () =>
@@ -205,13 +306,27 @@ describe("HtmlLocator", () => {
         root.send(TodoAppMessage.Draft({ value: "Read" }))
         root.send(TodoAppMessage.Add())
         yield* TestHost.settle
-        const box = HtmlLocator.getByRole(root.container, "checkbox", { name: "Read", checked: false })
+        const box = HtmlLocator.getByRole(root.container, "checkbox", {
+          name: "Read",
+          checked: false
+        })
         expect(HtmlLocator.checked(box)).toBe(false)
-        Locator.fire(box as TestHost.TestElement, "input", { value: "on", checked: true })
+        Locator.fire(box as TestHost.TestElement, "input", {
+          value: "on",
+          checked: true
+        })
         yield* TestHost.settle
         expect(HtmlLocator.checked(box)).toBe(true)
-        expect(HtmlLocator.value(root.get(HtmlLocator.role("textbox", { name: "New todo" })))).toBe("")
-        expect(HtmlLocator.queryAllByRole(root.container, "checkbox", { checked: true })).toEqual([box])
+        expect(
+          HtmlLocator.value(
+            root.get(HtmlLocator.role("textbox", { name: "New todo" }))
+          )
+        ).toBe("")
+        expect(
+          HtmlLocator.queryAllByRole(root.container, "checkbox", {
+            checked: true
+          })
+        ).toEqual([box])
         expect(root.all(HtmlLocator.role("listitem"))).toHaveLength(1)
       }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 
@@ -220,10 +335,18 @@ describe("HtmlLocator", () => {
       doc.body.innerHTML = "<button>One</button>"
       const fragment = document.createDocumentFragment()
       fragment.append(document.createElement("button"))
-      const wrapper: Locator.Node = { children: [el("button", {}, text("Two"))] }
-      expect(HtmlLocator.queryAllByRole(doc, "button").map((node) => node.textContent)).toEqual(["One"])
+      const wrapper: Locator.Node = {
+        children: [el("button", {}, text("Two"))]
+      }
+      expect(
+        HtmlLocator.queryAllByRole(doc, "button").map((node) =>
+          node.textContent
+        )
+      ).toEqual(["One"])
       expect(HtmlLocator.queryAllByRole(fragment, "button")).toHaveLength(1)
-      expect(HtmlLocator.getByRole(wrapper, "button", { name: "Two" })).toBe(wrapper.children![0])
+      expect(HtmlLocator.getByRole(wrapper, "button", { name: "Two" })).toBe(
+        wrapper.children![0]
+      )
     })
 
     it("the DOM", () => {
@@ -232,11 +355,23 @@ describe("HtmlLocator", () => {
         <nav aria-label="Main"><a href="/a">A</a><a href="/b">B</a></nav>
         <label>Agree <input type="checkbox" checked></label>
         <table><caption>Totals</caption><tr><th>Item</th><td>3</td></tr></table>`
-      expect(HtmlLocator.queryAllByRole(container, "link").map((node) => node.textContent)).toEqual(["A", "B"])
-      expect(HtmlLocator.getByRole(container, "navigation", { name: "Main" }).localName).toBe("nav")
-      const box = HtmlLocator.getByRole(container, "checkbox", { name: "Agree", checked: true }) as HTMLInputElement
+      expect(
+        HtmlLocator.queryAllByRole(container, "link").map((node) =>
+          node.textContent
+        )
+      ).toEqual(["A", "B"])
+      expect(
+        HtmlLocator.getByRole(container, "navigation", { name: "Main" })
+          .localName
+      ).toBe("nav")
+      const box = HtmlLocator.getByRole(container, "checkbox", {
+        name: "Agree",
+        checked: true
+      }) as HTMLInputElement
       box.checked = false
-      expect(HtmlLocator.queryAllByRole(container, "checkbox", { checked: true })).toEqual([])
+      expect(
+        HtmlLocator.queryAllByRole(container, "checkbox", { checked: true })
+      ).toEqual([])
       expect(HtmlLocator.checked(box)).toBe(false)
       const field = document.createElement("input")
       field.setAttribute("value", "first")
@@ -244,9 +379,13 @@ describe("HtmlLocator", () => {
       // The property wins over the attribute, as the user typed it.
       field.value = "typed"
       expect(HtmlLocator.value(field)).toBe("typed")
-      expect(HtmlLocator.nameOf(container, HtmlLocator.getByRole(container, "table"))).toBe("Totals")
-      expect(HtmlLocator.getByRole(container, "columnheader", { name: "Item" })).toBeDefined()
-      expect(HtmlLocator.getByRole(container, "cell", { name: "3" })).toBeDefined()
+      expect(
+        HtmlLocator.nameOf(container, HtmlLocator.getByRole(container, "table"))
+      ).toBe("Totals")
+      expect(HtmlLocator.getByRole(container, "columnheader", { name: "Item" }))
+        .toBeDefined()
+      expect(HtmlLocator.getByRole(container, "cell", { name: "3" }))
+        .toBeDefined()
     })
   })
 })

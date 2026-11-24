@@ -18,11 +18,16 @@ const Board = Component.define({
   update: ($, message) => [...$.model, message],
   view: (h, log) =>
     h.section.onDrop(
-      ({ data, files }) => `outer ${data["application/x-todo"] ?? files.map((file) => file.name).join(",")}`,
+      ({ data, files }) =>
+        `outer ${
+          data["application/x-todo"] ?? files.map((file) => file.name).join(",")
+        }`,
       { accepts: ["application/x-todo", "Files"] }
     ).children(
       h.div.attr("aria-label", "Inner")
-        .onDrop(() => "inner", { accepts: ["text/uri-list"] }).children(h.p("Inner child")),
+        .onDrop(() => "inner", { accepts: ["text/uri-list"] }).children(
+          h.p("Inner child")
+        ),
       h.p("Plain"),
       h.output(log.join("|"))
     )
@@ -35,44 +40,62 @@ describe("HtmlScene", () => {
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(Board, {})
       // The inner target doesn't accept a todo, so the outer one takes it.
-      s.drop(Locator.text("Inner child"), { data: { "application/x-todo": "milk" } })
+      s.drop(Locator.text("Inner child"), {
+        data: { "application/x-todo": "milk" }
+      })
       assert.isTrue(s.defaultPrevented)
-      s.drop(Locator.text("Inner child"), { data: { "text/uri-list": "https://example.com" } })
+      s.drop(Locator.text("Inner child"), {
+        data: { "text/uri-list": "https://example.com" }
+      })
         .drop(Locator.text("Plain"), { files: [new File(["x"], "a.txt")] })
         .expect(log).toHaveText("outer milk|inner|outer a.txt")
       assert.throws(
-        () => s.drop(Locator.text("Plain"), { data: { "text/plain": "hello" } }),
+        () =>
+          s.drop(Locator.text("Plain"), { data: { "text/plain": "hello" } }),
         /HtmlScene\.drop: nothing at text "Plain" accepts "text\/plain"/
       )
     }))
 
   it("a message step reports unacknowledged work before a lookup that fails", () => {
     const missing = Locator.text("Missing")
-    const steps: Record<string, (s: HtmlScene.Steps<typeof Board>) => unknown> = {
-      click: (s) => s.click(missing),
-      fire: (s) => s.fire(missing, "click"),
-      type: (s) => s.type(missing, "x"),
-      change: (s) => s.change(missing, "x"),
-      compositionEnd: (s) => s.compositionEnd(missing),
-      keydown: (s) => s.keydown(missing, "a"),
-      submit: (s) => s.submit(missing),
-      focus: (s) => s.focus(missing),
-      blur: (s) => s.blur(missing),
-      drop: (s) => s.drop(missing, { data: { "application/x-todo": "milk" } }),
-      childEmit: (s) => s.childEmit(Board, "none", undefined as never),
-      childFailure: (s) => s.childFailure(Board, "none", Cause.fail("boom"))
-    }
+    const steps: Record<string, (s: HtmlScene.Steps<typeof Board>) => unknown> =
+      {
+        click: (s) => s.click(missing),
+        fire: (s) => s.fire(missing, "click"),
+        type: (s) => s.type(missing, "x"),
+        change: (s) => s.change(missing, "x"),
+        compositionEnd: (s) => s.compositionEnd(missing),
+        keydown: (s) => s.keydown(missing, "a"),
+        submit: (s) => s.submit(missing),
+        focus: (s) => s.focus(missing),
+        blur: (s) => s.blur(missing),
+        drop: (s) =>
+          s.drop(missing, { data: { "application/x-todo": "milk" } }),
+        childEmit: (s) => s.childEmit(Board, "none", undefined as never),
+        childFailure: (s) => s.childFailure(Board, "none", Cause.fail("boom"))
+      }
     for (const [name, run] of Object.entries(steps)) {
       const scene = HtmlScene.start(Board, {}).click("Plain")
-      assert.throws(() => run(scene), new RegExp(`^HtmlScene\\.${name}: earlier work isn't settled or acknowledged`))
+      assert.throws(
+        () => run(scene),
+        new RegExp(
+          `^HtmlScene\\.${name}: earlier work isn't settled or acknowledged`
+        )
+      )
       scene.expectIgnored()
-      assert.throws(() => run(scene), new RegExp(`^HtmlScene\\.${name}: (nothing matches|no child)`))
+      assert.throws(
+        () => run(scene),
+        new RegExp(`^HtmlScene\\.${name}: (nothing matches|no child)`)
+      )
     }
   })
 
   it.effect("a scene names a mount by its definition, checks its args and ends it with the definition's result", () =>
     Effect.gen(function*() {
-      const Message = UiSchema.TaggedEnum({ Add: { point: Schema.Number }, Drawn: { width: Schema.Number } })
+      const Message = UiSchema.TaggedEnum({
+        Add: { point: Schema.Number },
+        Drawn: { width: Schema.Number }
+      })
       const DrawChart = Mount.make(
         "DrawChart",
         { args: { points: Schema.Array(Schema.Number) } },
@@ -81,20 +104,28 @@ describe("HtmlScene", () => {
       const Chart = Component.define({
         name: "Chart",
         scoped: false,
-        model: Schema.Struct({ points: Schema.Array(Schema.Number), width: Schema.Number }),
+        model: Schema.Struct({
+          points: Schema.Array(Schema.Number),
+          width: Schema.Number
+        }),
         message: Message,
         elements: Html
       }).make({
         init: () => ({ points: [1, 2], width: 0 }),
         update: ($, message) =>
           Message.match(message, {
-            Add: ({ point }) => ({ ...$.model, points: [...$.model.points, point] }),
+            Add: ({ point }) => ({
+              ...$.model,
+              points: [...$.model.points, point]
+            }),
             Drawn: ({ width }) => ({ ...$.model, width })
           }),
         view: (h, model) =>
           h.div(
             h.canvas.onMount(
-              DrawChart({ points: model.points }).pipe(Mount.map((width) => Message.Drawn({ width })))
+              DrawChart({ points: model.points }).pipe(
+                Mount.map((width) => Message.Drawn({ width }))
+              )
             ),
             h.button.onClick(Message.Add({ point: 3 })).children("Add"),
             h.p(`width ${model.width}`)
@@ -134,17 +165,21 @@ describe("HtmlScene", () => {
       init: (): ReadonlyArray<string> => [],
       update: ($, message) => [...$.model, message],
       view: (h, log) => {
-        const saw = (event: string) => (payload: object) => `${event} ${JSON.stringify(payload)}`
+        const saw = (event: string) => (payload: object) =>
+          `${event} ${JSON.stringify(payload)}`
         return h.div(
-          h.input.attr("aria-label", "Name").value("Ada").onInput(saw("input")).onChange(saw("change"))
+          h.input.attr("aria-label", "Name").value("Ada").onInput(saw("input"))
+            .onChange(saw("change"))
             .onCompositionEnd(saw("compositionend")).onKeyDown(saw("keydown")),
-          h.input.prop("type", "checkbox").attr("aria-label", "PropBox").onKeyDown(saw("keydown")),
-          h.div.attr("contenteditable", "true").onKeyDown(saw("keydown")).children(
-            h.span.attr("id", "ce-child").children("Edit"),
-            h.div.attr("contenteditable", "false").children(
-              h.button.attr("id", "ce-island-btn").children("Stop")
-            )
-          ),
+          h.input.prop("type", "checkbox").attr("aria-label", "PropBox")
+            .onKeyDown(saw("keydown")),
+          h.div.attr("contenteditable", "true").onKeyDown(saw("keydown"))
+            .children(
+              h.span.attr("id", "ce-child").children("Edit"),
+              h.div.attr("contenteditable", "false").children(
+                h.button.attr("id", "ce-island-btn").children("Stop")
+              )
+            ),
           h.output(log.join("\n"))
         )
       }
@@ -159,28 +194,39 @@ describe("HtmlScene", () => {
       .change(name, "Ada")
       .change(name, { inputType: "insertReplacementText" })
       .keydown(name, "a")
-      .keydown(name, "a", { composing: true, repeat: true, editable: false, selectionStart: 1, selectionEnd: 3 })
+      .keydown(name, "a", {
+        composing: true,
+        repeat: true,
+        editable: false,
+        selectionStart: 1,
+        selectionEnd: 3
+      })
       .keydown(propBox, " ")
       .keydown(Locator.attr("id", "ce-child"), "g")
       .keydown(Locator.attr("id", "ce-island-btn"), "g")
-    assert.deepStrictEqual(s.get(log).children?.map((child) => child.text).join("").split("\n"), [
-      `input {"value":"A","checked":false,"files":[],"composing":false,"inputType":"insertText"}`,
-      `input {"value":"Ad","checked":false,"files":[],"composing":true,"inputType":"insertCompositionText"}`,
-      `compositionend {"value":"Adam"}`,
-      `compositionend {"value":"Ada"}`,
-      `change {"value":"Ada","checked":false,"files":[],"composing":false,"inputType":""}`,
-      `change {"value":"Ada","checked":false,"files":[],"composing":false,"inputType":"insertReplacementText"}`,
-      `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":true,"selectionStart":null,"selectionEnd":null}`,
-      `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":true,"repeat":true,"editable":false,"selectionStart":1,"selectionEnd":3}`,
-      `keydown {"key":" ","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`,
-      `keydown {"key":"g","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":true,"selectionStart":null,"selectionEnd":null}`,
-      `keydown {"key":"g","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`
-    ])
+    assert.deepStrictEqual(
+      s.get(log).children?.map((child) => child.text).join("").split("\n"),
+      [
+        `input {"value":"A","checked":false,"files":[],"composing":false,"inputType":"insertText"}`,
+        `input {"value":"Ad","checked":false,"files":[],"composing":true,"inputType":"insertCompositionText"}`,
+        `compositionend {"value":"Adam"}`,
+        `compositionend {"value":"Ada"}`,
+        `change {"value":"Ada","checked":false,"files":[],"composing":false,"inputType":""}`,
+        `change {"value":"Ada","checked":false,"files":[],"composing":false,"inputType":"insertReplacementText"}`,
+        `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":true,"selectionStart":null,"selectionEnd":null}`,
+        `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":true,"repeat":true,"editable":false,"selectionStart":1,"selectionEnd":3}`,
+        `keydown {"key":" ","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`,
+        `keydown {"key":"g","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":true,"selectionStart":null,"selectionEnd":null}`,
+        `keydown {"key":"g","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`
+      ]
+    )
   })
 
   it.effect("change with files sends them to a file input's change, and other inputs get none", () =>
     Effect.gen(function*() {
-      const Message = UiSchema.TaggedEnum({ Changed: { names: Schema.Array(Schema.String) } })
+      const Message = UiSchema.TaggedEnum({
+        Changed: { names: Schema.Array(Schema.String) }
+      })
       const Upload = Component.define({
         name: "Upload",
         scoped: false,
@@ -193,14 +239,23 @@ describe("HtmlScene", () => {
         view: (h, log) =>
           h.div(
             h.input.attrs({ type: "file", "aria-label": "File" }).value("")
-              .onChange(({ files }) => Message.Changed({ names: files.map((file) => file.name) })),
-            h.input.attr("aria-label", "Name").onChange(({ files }) => Message.Changed({ names: [`${files.length}`] })),
+              .onChange(({ files }) =>
+                Message.Changed({ names: files.map((file) => file.name) })
+              ),
+            h.input.attr("aria-label", "Name").onChange(({ files }) =>
+              Message.Changed({ names: [`${files.length}`] })
+            ),
             h.output(log.join(" | "))
           )
       })
       const s = yield* HtmlScene.make(Upload, {})
-      s.change(HtmlLocator.label("File"), { files: [new File(["a"], "a.txt"), new File(["b"], "b.txt")] })
-        .change(HtmlLocator.label("Name"), { value: "Ada", files: [new File(["c"], "c.txt")] })
+      s.change(HtmlLocator.label("File"), {
+        files: [new File(["a"], "a.txt"), new File(["b"], "b.txt")]
+      })
+        .change(HtmlLocator.label("Name"), {
+          value: "Ada",
+          files: [new File(["c"], "c.txt")]
+        })
         .expect(Locator.text("a.txt,b.txt | 0")).toExist()
     }))
 
@@ -211,7 +266,9 @@ describe("HtmlScene", () => {
         .click(HtmlLocator.role("checkbox", { name: "Agree" }))
         .click(HtmlLocator.role("button", { name: "Go" }))
         // The disabled checkbox is left out, the submitter is in.
-        .expect(log).toHaveText("zip:10001|agree:true|submit:zip=10001&agree=on&via=go")
+        .expect(log).toHaveText(
+          "zip:10001|agree:true|submit:zip=10001&agree=on&via=go"
+        )
         // Submitting without a submitter.
         .submit(HtmlLocator.label("Zip code"))
         .expect(log).toHaveText(/\|submit:zip=10001&agree=on$/)
@@ -229,45 +286,80 @@ describe("HtmlScene", () => {
         .expect(HtmlLocator.label("Agree")).toBeDisabled(false)
         .expect(HtmlLocator.label("Zip code")).toHaveAccessibleName("Zip code")
       const started = HtmlScene.start(Settings, {})
-      assert.throws(() => started.expect(HtmlLocator.label("Agree")).toBeChecked(), /toBeChecked\(\): it is unchecked/)
-      assert.throws(() => started.expect(HtmlLocator.label("Agree")).toBeDisabled(), /toBeDisabled\(\): it is enabled/)
+      assert.throws(
+        () => started.expect(HtmlLocator.label("Agree")).toBeChecked(),
+        /toBeChecked\(\): it is unchecked/
+      )
+      assert.throws(
+        () => started.expect(HtmlLocator.label("Agree")).toBeDisabled(),
+        /toBeDisabled\(\): it is enabled/
+      )
       assert.throws(
         () => started.expect(HtmlLocator.label("Zip code")).toHaveValue("1"),
         /toHaveValue\("1"\): its value is ""/
       )
       assert.throws(
-        () => started.expect(HtmlLocator.label("Zip code")).toHaveAccessibleName("Zip"),
+        () =>
+          started.expect(HtmlLocator.label("Zip code")).toHaveAccessibleName(
+            "Zip"
+          ),
         /toHaveAccessibleName\("Zip"\): its accessible name is "Zip code"/
       )
     }))
 
   it("clicking a disabled control throws", () => {
     const s = HtmlScene.start(Settings, {})
-    assert.throws(() => s.click(HtmlLocator.label("Off")), /^HtmlScene\.click: label "Off" is disabled/)
-    assert.throws(() => s.click("Later"), /^HtmlScene\.click: text "Later" is disabled/)
+    assert.throws(
+      () => s.click(HtmlLocator.label("Off")),
+      /^HtmlScene\.click: label "Off" is disabled/
+    )
+    assert.throws(
+      () => s.click("Later"),
+      /^HtmlScene\.click: text "Later" is disabled/
+    )
   })
 
   it.effect("click, type and keydown send what BrowserHost sends for the same actions", () =>
     Effect.gen(function*() {
       const app = yield* Effect.acquireRelease(
-        Effect.sync(() => document.body.appendChild(document.createElement("div"))),
+        Effect.sync(() =>
+          document.body.appendChild(document.createElement("div"))
+        ),
         (element) => Effect.sync(() => element.remove())
       )
       yield* BrowserHost.mountEffect(Settings, {}, app)
-      const zip = HtmlLocator.getByRole(app, "textbox", { name: "Zip code" }) as HTMLInputElement
+      const zip = HtmlLocator.getByRole(app, "textbox", {
+        name: "Zip code"
+      }) as HTMLInputElement
       HtmlLocator.type(zip, "10001")
-      zip.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true }))
-      HtmlLocator.click(HtmlLocator.getByRole(app, "checkbox", { name: "Agree" }))
+      zip.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          shiftKey: true,
+          bubbles: true
+        })
+      )
+      HtmlLocator.click(
+        HtmlLocator.getByRole(app, "checkbox", { name: "Agree" })
+      )
       HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Go" }))
-      yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+      yield* Effect.promise(() =>
+        new Promise<void>((resolve) => setTimeout(resolve, 30))
+      )
       const browser = app.querySelector("output")!.textContent
       const s = yield* HtmlScene.make(Settings, {})
       s.type(HtmlLocator.label("Zip code"), "10001")
         .keydown(HtmlLocator.label("Zip code"), "Enter", { shift: true })
         .click(HtmlLocator.role("checkbox", { name: "Agree" }))
         .click(HtmlLocator.role("button", { name: "Go" }))
-      assert.strictEqual(browser, "zip:10001|key:Enter+shift|agree:true|submit:zip=10001&agree=on&via=go")
-      assert.strictEqual(s.get(log).children?.map((child) => child.text).join(""), browser)
+      assert.strictEqual(
+        browser,
+        "zip:10001|key:Enter+shift|agree:true|submit:zip=10001&agree=on&via=go"
+      )
+      assert.strictEqual(
+        s.get(log).children?.map((child) => child.text).join(""),
+        browser
+      )
     }).pipe(Effect.scoped))
 
   it.effect("a popovertarget button toggles its popover", () =>
@@ -281,7 +373,10 @@ describe("HtmlScene", () => {
     const Checkout = Component.define({
       name: "Checkout",
       scoped: false,
-      model: Schema.Struct({ log: Schema.Array(Schema.String), zip: Schema.String }),
+      model: Schema.Struct({
+        log: Schema.Array(Schema.String),
+        zip: Schema.String
+      }),
       message: Schema.String,
       elements: Html
     }).make({
@@ -293,23 +388,37 @@ describe("HtmlScene", () => {
       view: (h, model) =>
         h.div(
           h.form.attr("id", "f").onSubmit(({ entries }) =>
-            `submit:${entries.map(([name, value]) => `${name}=${value}`).join("&")}`
+            `submit:${
+              entries.map(([name, value]) => `${name}=${value}`).join("&")
+            }`
           ).children(
-            h.input.attrs({ name: "zip", "aria-label": "Zip" }).value(model.zip),
+            h.input.attrs({ name: "zip", "aria-label": "Zip" }).value(
+              model.zip
+            ),
             // Inside the form, but owned by another one.
             h.input.attrs({ name: "elsewhere", form: "other" }).value("x"),
             h.button.onClick("fill").children("Fill"),
-            h.button.onClick("stopped", { preventDefault: true }).children("Stop"),
+            h.button.onClick("stopped", { preventDefault: true }).children(
+              "Stop"
+            ),
             h.input.attrs({ type: "checkbox", "aria-label": "Agree" })
               .onClick("checked?", { preventDefault: true })
               .onChange(({ checked }) => `agree:${checked}`)
           ),
           // Outside the form, owned by it through its form attribute.
           h.input.attrs({ name: "note", form: "f" }).value("hi"),
-          h.button.attr("popovertarget", "menu").onClick("menu?", { preventDefault: true }).children("Menu"),
-          h.div.attrs({ id: "menu", popover: "" }).onToggle(({ newState }) => `toggle:${newState}`),
+          h.button.attr("popovertarget", "menu").onClick("menu?", {
+            preventDefault: true
+          }).children("Menu"),
+          h.div.attrs({ id: "menu", popover: "" }).onToggle(({ newState }) =>
+            `toggle:${newState}`
+          ),
           h.fieldset.attr("disabled", "").children(
-            h.legend(h.button.attr("type", "button").onClick("legend").children("In legend")),
+            h.legend(
+              h.button.attr("type", "button").onClick("legend").children(
+                "In legend"
+              )
+            ),
             h.button.attr("type", "button").onClick("body").children("In body")
           ),
           h.output(model.log.join("|"))
@@ -333,8 +442,12 @@ describe("HtmlScene", () => {
       }))
 
     it("the first legend of a disabled fieldset stays clickable, and the rest of it doesn't", () => {
-      const s = HtmlScene.start(Checkout, {}).click("In legend").expect(log).toHaveText("legend")
-      assert.throws(() => s.click("In body"), /^HtmlScene\.click: text "In body" is disabled/)
+      const s = HtmlScene.start(Checkout, {}).click("In legend").expect(log)
+        .toHaveText("legend")
+      assert.throws(
+        () => s.click("In body"),
+        /^HtmlScene\.click: text "In body" is disabled/
+      )
     })
   })
 })

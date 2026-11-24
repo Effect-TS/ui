@@ -4,7 +4,12 @@ import { assert, describe, it } from "@effect/vitest"
 import { Effect, Stream } from "effect"
 import { tick } from "./utils/document.ts"
 
-type Rect = { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
+type Rect = {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
 
 const rects = new Map<string, Rect>()
 const lines = new Map<string, ReadonlyArray<Rect>>()
@@ -38,10 +43,19 @@ const geometry = Effect.acquireRelease(
       return edgesOf(rects.get(this.id) ?? { x: 0, y: 0, width: 0, height: 0 })
     }
     element.getClientRects = function(this: Element) {
-      return (lines.get(this.id) ?? [rects.get(this.id) ?? { x: 0, y: 0, width: 0, height: 0 }]).map(edgesOf)
+      return (lines.get(this.id) ??
+        [rects.get(this.id) ?? { x: 0, y: 0, width: 0, height: 0 }]).map(
+          edgesOf
+        )
     }
-    Object.defineProperty(root, "clientWidth", { configurable: true, value: 1000 })
-    Object.defineProperty(root, "clientHeight", { configurable: true, value: 800 })
+    Object.defineProperty(root, "clientWidth", {
+      configurable: true,
+      value: 1000
+    })
+    Object.defineProperty(root, "clientHeight", {
+      configurable: true,
+      value: 800
+    })
     return () => {
       element.getBoundingClientRect = saved.rect
       element.getClientRects = saved.rects
@@ -55,23 +69,35 @@ const geometry = Effect.acquireRelease(
   (restore) => Effect.sync(restore)
 )
 
-const track = Effect.fnUntraced(function*(leaveCoordinates: boolean, props: Positioning.PositionerOptions = {}) {
-  yield* geometry
-  document.body.innerHTML = `<button id="anchor"></button><div id="positioner"><div id="list"></div></div>`
-  rects.set("anchor", { x: 100, y: 100, width: 80, height: 20 })
-  rects.set("positioner", { x: 0, y: 0, width: 120, height: 60 })
-  const node = document.getElementById("positioner")!
-  node.style.left = "7px"
-  node.style.top = "9px"
-  const args = Positioning.trackArgs(props, { side: "bottom", anchorSelector: "#anchor", leaveCoordinates })
-  const placements: Array<Positioning.Placement> = []
-  yield* Positioning.trackPosition(node, args, Stream.never).pipe(
-    Stream.runForEach((placement) => Effect.sync(() => placements.push(placement))),
-    Effect.forkScoped
-  )
-  yield* tick
-  return { node, placements }
-})
+const track = Effect.fnUntraced(
+  function*(
+    leaveCoordinates: boolean,
+    props: Positioning.PositionerOptions = {}
+  ) {
+    yield* geometry
+    document.body.innerHTML =
+      `<button id="anchor"></button><div id="positioner"><div id="list"></div></div>`
+    rects.set("anchor", { x: 100, y: 100, width: 80, height: 20 })
+    rects.set("positioner", { x: 0, y: 0, width: 120, height: 60 })
+    const node = document.getElementById("positioner")!
+    node.style.left = "7px"
+    node.style.top = "9px"
+    const args = Positioning.trackArgs(props, {
+      side: "bottom",
+      anchorSelector: "#anchor",
+      leaveCoordinates
+    })
+    const placements: Array<Positioning.Placement> = []
+    yield* Positioning.trackPosition(node, args, Stream.never).pipe(
+      Stream.runForEach((placement) =>
+        Effect.sync(() => placements.push(placement))
+      ),
+      Effect.forkScoped
+    )
+    yield* tick
+    return { node, placements }
+  }
+)
 
 describe("trackPosition in a document", { concurrent: false }, () => {
   it.effect("with leaveCoordinates, it leaves left and top to the caller and still writes the variables", () =>
@@ -80,7 +106,10 @@ describe("trackPosition in a document", { concurrent: false }, () => {
       assert.strictEqual(node.style.left, "7px")
       assert.strictEqual(node.style.top, "9px")
       assert.strictEqual(node.style.getPropertyValue("--anchor-width"), "80px")
-      assert.notStrictEqual(node.style.getPropertyValue("--available-height"), "")
+      assert.notStrictEqual(
+        node.style.getPropertyValue("--available-height"),
+        ""
+      )
       assert.strictEqual(placements[0]?.side, "bottom")
     }).pipe(Effect.scoped))
 
@@ -93,7 +122,9 @@ describe("trackPosition in a document", { concurrent: false }, () => {
 
   it.effect("a rectangle given as the anchor takes the element's place", () =>
     Effect.gen(function*() {
-      const { node, placements } = yield* track(false, { anchor: { x: 300, y: 200, width: 0, height: 0 } })
+      const { node, placements } = yield* track(false, {
+        anchor: { x: 300, y: 200, width: 0, height: 0 }
+      })
       assert.strictEqual(node.style.left, "300px")
       assert.strictEqual(node.style.top, "200px")
       assert.strictEqual(node.style.getPropertyValue("--anchor-width"), "0px")
@@ -113,12 +144,21 @@ describe("trackPosition in a document", { concurrent: false }, () => {
     }).pipe(Effect.scoped))
 })
 
-const wrapped = [{ x: 300, y: 200, width: 200, height: 20 }, { x: 0, y: 220, width: 100, height: 20 }]
+const wrapped = [{ x: 300, y: 200, width: 200, height: 20 }, {
+  x: 0,
+  y: 220,
+  width: 100,
+  height: 20
+}]
 
 const trackInline = Effect.fnUntraced(function*(options: {
   readonly side: Positioning.Side
   readonly anchor: ReadonlyArray<Rect>
-  readonly hit?: { readonly x: number; readonly y: number; readonly line?: number }
+  readonly hit?: {
+    readonly x: number
+    readonly y: number
+    readonly line?: number
+  }
   readonly popupHeight?: number
   readonly placedAgainst?: string
 }) {
@@ -135,8 +175,14 @@ const trackInline = Effect.fnUntraced(function*(options: {
   })
   lines.set("link", options.anchor)
   const node = document.getElementById("positioner")!
-  Object.defineProperty(node, "offsetHeight", { configurable: true, value: options.popupHeight ?? 0 })
-  const args = Positioning.trackArgs({ side: options.side, anchor: options.placedAgainst }, {
+  Object.defineProperty(node, "offsetHeight", {
+    configurable: true,
+    value: options.popupHeight ?? 0
+  })
+  const args = Positioning.trackArgs({
+    side: options.side,
+    anchor: options.placedAgainst
+  }, {
     side: "bottom",
     anchorSelector: "#link",
     inline: true,
@@ -144,77 +190,126 @@ const trackInline = Effect.fnUntraced(function*(options: {
   })
   const placements: Array<Positioning.Placement> = []
   yield* Positioning.trackPosition(node, args, Stream.never).pipe(
-    Stream.runForEach((placement) => Effect.sync(() => placements.push(placement))),
+    Stream.runForEach((placement) =>
+      Effect.sync(() => placements.push(placement))
+    ),
     Effect.forkScoped
   )
   yield* tick
   return { node, placements }
 })
 
-describe("trackPosition against an inline anchor", { concurrent: false }, () => {
-  it.effect("places against the hovered line, prefers its recorded index, and falls back on a miss, custom anchor, or single line", () =>
-    Effect.gen(function*() {
-      const cases = [
-        {
-          options: { side: "bottom" as const, anchor: wrapped, hit: { x: 350, y: 210 } },
-          left: "400px",
-          top: "220px",
-          width: "200px"
-        },
-        {
-          options: { side: "bottom" as const, anchor: wrapped, hit: { x: 350, y: 210, line: 1 } },
-          left: "50px",
-          top: "240px",
-          width: "100px"
-        },
-        {
-          options: {
-            side: "bottom" as const,
-            anchor: wrapped,
-            hit: { x: 350, y: 210, line: 0 },
-            placedAgainst: "link"
+describe(
+  "trackPosition against an inline anchor",
+  { concurrent: false },
+  () => {
+    it.effect("places against the hovered line, prefers its recorded index, and falls back on a miss, custom anchor, or single line", () =>
+      Effect.gen(function*() {
+        const cases = [
+          {
+            options: {
+              side: "bottom" as const,
+              anchor: wrapped,
+              hit: { x: 350, y: 210 }
+            },
+            left: "400px",
+            top: "220px",
+            width: "200px"
           },
-          left: "50px",
-          top: "240px"
-        },
-        { options: { side: "bottom" as const, anchor: wrapped, hit: { x: 200, y: 210 } }, left: "250px", top: "240px" },
-        {
-          options: {
-            side: "bottom" as const,
-            anchor: [{ x: 100, y: 200, width: 60, height: 20 }],
-            hit: { x: 110, y: 210 }
+          {
+            options: {
+              side: "bottom" as const,
+              anchor: wrapped,
+              hit: { x: 350, y: 210, line: 1 }
+            },
+            left: "50px",
+            top: "240px",
+            width: "100px"
           },
-          left: "130px",
-          top: "220px"
+          {
+            options: {
+              side: "bottom" as const,
+              anchor: wrapped,
+              hit: { x: 350, y: 210, line: 0 },
+              placedAgainst: "link"
+            },
+            left: "50px",
+            top: "240px"
+          },
+          {
+            options: {
+              side: "bottom" as const,
+              anchor: wrapped,
+              hit: { x: 200, y: 210 }
+            },
+            left: "250px",
+            top: "240px"
+          },
+          {
+            options: {
+              side: "bottom" as const,
+              anchor: [{ x: 100, y: 200, width: 60, height: 20 }],
+              hit: { x: 110, y: 210 }
+            },
+            left: "130px",
+            top: "220px"
+          }
+        ]
+        for (const c of cases) {
+          const { node } = yield* Effect.scoped(trackInline(c.options))
+          assert.strictEqual(node.style.left, c.left)
+          assert.strictEqual(node.style.top, c.top)
+          if (c.width !== undefined) {
+            assert.strictEqual(
+              node.style.getPropertyValue("--anchor-width"),
+              c.width
+            )
+          }
         }
-      ]
-      for (const c of cases) {
-        const { node } = yield* Effect.scoped(trackInline(c.options))
-        assert.strictEqual(node.style.left, c.left)
-        assert.strictEqual(node.style.top, c.top)
-        if (c.width !== undefined) assert.strictEqual(node.style.getPropertyValue("--anchor-width"), c.width)
-      }
-    }))
+      }))
 
-  it.effect("without a hit, picks the line facing the side and re-picks after a flip", () =>
-    Effect.gen(function*() {
-      const nearTop = [{ x: 300, y: 10, width: 200, height: 20 }, { x: 0, y: 30, width: 100, height: 20 }]
-      const cases = [
-        { options: { side: "bottom" as const, anchor: wrapped }, side: "bottom", left: "50px", top: "240px" },
-        { options: { side: "top" as const, anchor: wrapped }, side: "top", left: "400px", top: "200px" },
-        { options: { side: "right" as const, anchor: wrapped }, side: "right", left: "500px", top: "210px" },
-        {
-          options: { side: "top" as const, anchor: nearTop, popupHeight: 60 },
-          side: "bottom",
-          left: "50px",
-          top: "50px"
+    it.effect("without a hit, picks the line facing the side and re-picks after a flip", () =>
+      Effect.gen(function*() {
+        const nearTop = [{ x: 300, y: 10, width: 200, height: 20 }, {
+          x: 0,
+          y: 30,
+          width: 100,
+          height: 20
+        }]
+        const cases = [
+          {
+            options: { side: "bottom" as const, anchor: wrapped },
+            side: "bottom",
+            left: "50px",
+            top: "240px"
+          },
+          {
+            options: { side: "top" as const, anchor: wrapped },
+            side: "top",
+            left: "400px",
+            top: "200px"
+          },
+          {
+            options: { side: "right" as const, anchor: wrapped },
+            side: "right",
+            left: "500px",
+            top: "210px"
+          },
+          {
+            options: { side: "top" as const, anchor: nearTop, popupHeight: 60 },
+            side: "bottom",
+            left: "50px",
+            top: "50px"
+          }
+        ]
+        for (const c of cases) {
+          const { node, placements } = yield* Effect.scoped(
+            trackInline(c.options)
+          )
+          assert.strictEqual(placements[0]?.side, c.side)
+          assert.strictEqual(node.style.left, c.left)
+          assert.strictEqual(node.style.top, c.top)
         }
-      ]
-      for (const c of cases) {
-        const { node, placements } = yield* Effect.scoped(trackInline(c.options))
-        assert.strictEqual(placements[0]?.side, c.side)
-        assert.strictEqual(node.style.left, c.left)
-        assert.strictEqual(node.style.top, c.top)
-      }
-    }))
-})
+      }))
+  }
+)

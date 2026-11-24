@@ -38,7 +38,9 @@ const reachedOf = new WeakMap<object, Reached>()
  * @internal
  */
 // oxlint-disable-next-line effect/no-unused-internal
-export const viewOf = (replay: Replay<any, any, any, any, any>): View.Node<any, any> => {
+export const viewOf = (
+  replay: Replay<any, any, any, any, any>
+): View.Node<any, any> => {
   const reached = reachedOf.get(replay)
   if (reached === undefined) throw new Error("viewOf: not a replay")
   return engine.expandedView({
@@ -59,9 +61,17 @@ export const viewOf = (replay: Replay<any, any, any, any, any>): View.Node<any, 
 }
 
 // A Layer entry is the provider's, at its own path: the instances whose `boundary` it is read it.
-type Layer = Extract<MessageLog.Entry | MessageLog.Wire, { _tag: "LayerPending" | "LayerReady" | "LayerFailed" }>
-const layerTags: ReadonlySet<string> = new Set(["LayerPending", "LayerReady", "LayerFailed"])
-const isLayer = (entry: { readonly _tag: string }): entry is Layer => layerTags.has(entry._tag)
+type Layer = Extract<
+  MessageLog.Entry | MessageLog.Wire,
+  { _tag: "LayerPending" | "LayerReady" | "LayerFailed" }
+>
+const layerTags: ReadonlySet<string> = new Set([
+  "LayerPending",
+  "LayerReady",
+  "LayerFailed"
+])
+const isLayer = (entry: { readonly _tag: string }): entry is Layer =>
+  layerTags.has(entry._tag)
 // The entries about the replayed path: those that carry its state, and those that end one of its runs.
 type Ended = Extract<
   MessageLog.Entry | MessageLog.Wire,
@@ -80,15 +90,20 @@ const ownTags: ReadonlySet<string> = new Set([
 /** A logged cause back as a Cause: a Wire frame holds its reasons as JSON. */
 const causeOf = (entry: Extract<Layer, { _tag: "LayerFailed" }>) => {
   if (entry.redacted === true) return serverFailure()
-  if (typeof entry.component !== "string") return (entry as MessageLog.LayerFailed).cause
-  const reasons = (entry as Extract<MessageLog.Wire, { _tag: "LayerFailed" }>).cause.reasons as ReadonlyArray<any>
-  return Cause.fromReasons(reasons.map((reason): Cause.Reason<unknown> =>
-    reason._tag === "Fail"
-      ? Cause.makeFailReason(reason.error)
-      : reason._tag === "Die"
-      ? Cause.makeDieReason(reason.defect)
-      : Cause.makeInterruptReason(reason.fiberId ?? undefined)
-  ))
+  if (typeof entry.component !== "string") {
+    return (entry as MessageLog.LayerFailed).cause
+  }
+  const reasons = (entry as Extract<MessageLog.Wire, { _tag: "LayerFailed" }>)
+    .cause.reasons as ReadonlyArray<any>
+  return Cause.fromReasons(
+    reasons.map((reason): Cause.Reason<unknown> =>
+      reason._tag === "Fail"
+        ? Cause.makeFailReason(reason.error)
+        : reason._tag === "Die"
+        ? Cause.makeDieReason(reason.defect)
+        : Cause.makeInterruptReason(reason.fiberId ?? undefined)
+    )
+  )
 }
 
 const findPlaceholder = (value: unknown): string | undefined => {
@@ -107,7 +122,15 @@ const findPlaceholder = (value: unknown): string | undefined => {
  *
  * @internal
  */
-export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V extends View.Elements>(
+export const replayLog = <
+  Name extends string,
+  Props,
+  Model,
+  Msg,
+  Events,
+  R,
+  V extends View.Elements
+>(
   label: string,
   component: Component.Component<Name, Props, Model, Msg, Events, R, V, any>,
   entries: ReadonlyArray<MessageLog.Entry | MessageLog.Wire>,
@@ -119,34 +142,55 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
     | MessageLog.Mounted
     | MessageLog.QueryChanged
     | MessageLog.PropsChanged
-    | Extract<MessageLog.Wire, { _tag: "Update" | "Mounted" | "QueryChanged" | "PropsChanged" }>
+    | Extract<
+      MessageLog.Wire,
+      { _tag: "Update" | "Mounted" | "QueryChanged" | "PropsChanged" }
+    >
   const stateful = entries.filter((entry): entry is Stateful =>
-    entry._tag === "Update" || entry._tag === "Mounted" || entry._tag === "QueryChanged" ||
+    entry._tag === "Update" || entry._tag === "Mounted" ||
+    entry._tag === "QueryChanged" ||
     entry._tag === "PropsChanged"
   )
   const path = options?.path ??
     stateful.find((entry) =>
-      (typeof entry.component === "string" ? entry.component : entry.component.definition.name) ===
+      (typeof entry.component === "string"
+        ? entry.component
+        : entry.component.definition.name) ===
         component.definition.name
     )?.path
-  if (path === undefined) throw new Error(`${label}: the log has no entry for ${component.definition.name}`)
+  if (path === undefined) {
+    throw new Error(
+      `${label}: the log has no entry for ${component.definition.name}`
+    )
+  }
   const all = entries.filter((entry): entry is Stateful | Layer | Ended =>
-    "path" in entry && (isLayer(entry) || entry.path === path && ownTags.has(entry._tag))
+    "path" in entry &&
+    (isLayer(entry) || entry.path === path && ownTags.has(entry._tag))
   )
   // The replay starts at the first Model. Props and query results written before it are in that Update's record, or
   // belong to an earlier mount.
-  const start = all.findIndex((entry) => (entry._tag === "Update" || entry._tag === "Mounted") && entry.path === path)
-  if (start === -1) throw new Error(`${label}: the log has no entry for ${path}`)
+  const start = all.findIndex((entry) =>
+    (entry._tag === "Update" || entry._tag === "Mounted") && entry.path === path
+  )
+  if (start === -1) {
+    throw new Error(`${label}: the log has no entry for ${path}`)
+  }
   const first = all[start] as
     | MessageLog.Update
     | MessageLog.Mounted
     | Extract<MessageLog.Wire, { _tag: "Update" | "Mounted" }>
   const bound = componentQueries.boundOf(component)
-  const resultOf = (entry: MessageLog.QueryChanged | Extract<MessageLog.Wire, { _tag: "QueryChanged" }>) => {
+  const resultOf = (
+    entry:
+      | MessageLog.QueryChanged
+      | Extract<MessageLog.Wire, { _tag: "QueryChanged" }>
+  ) => {
     if (typeof entry.component !== "string") return entry.result
     const schema = bound?.logSchema.fields[entry.name]
     if (schema === undefined) {
-      throw new Error(`${label}: entry #${entry.seq} (${path}) writes "${entry.name}", which isn't a query`)
+      throw new Error(
+        `${label}: entry #${entry.seq} (${path}) writes "${entry.name}", which isn't a query`
+      )
     }
     return decodeWith(entry, `query "${entry.name}"`, schema, entry.result)
   }
@@ -157,10 +201,17 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
     field: "props" | "model" | "message" | "events",
     value: unknown
   ): any => decodeWith(entry, field, component[field] as Schema.Top, value)
-  function decodeWith(entry: { readonly seq: number }, field: string, schema: Schema.Top, value: unknown): any {
+  function decodeWith(
+    entry: { readonly seq: number },
+    field: string,
+    schema: Schema.Top,
+    value: unknown
+  ): any {
     let run = decoders.get(schema)
     if (run === undefined) {
-      run = Schema.decodeUnknownSync(Schema.toCodecJson(schema as Schema.Codec<unknown, unknown>))
+      run = Schema.decodeUnknownSync(
+        Schema.toCodecJson(schema as Schema.Codec<unknown, unknown>)
+      )
       decoders.set(schema, run)
     }
     try {
@@ -169,15 +220,21 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
       const placeholder = findPlaceholder(value)
       throw new Error(
         `${label}: entry #${entry.seq} (${path}) has a ${field} that can't be decoded${
-          placeholder === undefined ? "" : `, because it was logged as a ${placeholder} placeholder`
+          placeholder === undefined
+            ? ""
+            : `, because it was logged as a ${placeholder} placeholder`
         }: ${String(error)}`,
         { cause: error }
       )
     }
   }
   const reads = sharedReads.readsOf(component.definition)
-  const sharedOf = (wire: Extract<MessageLog.Wire, { _tag: "Update" }>): Component.SharedRecord | undefined => {
-    const encoded = wire.shared as { readonly [name: string]: unknown } | undefined
+  const sharedOf = (
+    wire: Extract<MessageLog.Wire, { _tag: "Update" }>
+  ): Component.SharedRecord | undefined => {
+    const encoded = wire.shared as
+      | { readonly [name: string]: unknown }
+      | undefined
     if (encoded === undefined) return undefined
     const placeholder = findPlaceholder(encoded)
     if (placeholder !== undefined) {
@@ -187,7 +244,9 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
     }
     const out: { [name: string]: unknown } = {}
     for (const read of reads) {
-      const value = Object.hasOwn(encoded, read.name) ? encoded[read.name] : undefined
+      const value = Object.hasOwn(encoded, read.name)
+        ? encoded[read.name]
+        : undefined
       const schema = read.owner.definition.sharesSchema
       out[read.name] = value === undefined || schema === undefined
         ? value
@@ -199,45 +258,72 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
     if (typeof entry.component !== "string") {
       return {
         results: (entry as MessageLog.Update | MessageLog.Mounted).queries,
-        shared: entry._tag === "Update" ? (entry as MessageLog.Update).shared : undefined,
+        shared: entry._tag === "Update"
+          ? (entry as MessageLog.Update).shared
+          : undefined,
         props: entry.props as Props,
         model: entry.model as Model,
         events: entry.events as ReadonlyArray<Events>,
-        commands: (entry as MessageLog.Update).commands.map(MessageLog.encodeCommand),
+        commands: (entry as MessageLog.Update).commands.map(
+          MessageLog.encodeCommand
+        ),
         lists: entry._tag === "Update" ? entry.lists : [],
-        sends: entry._tag === "Update" ? (entry as MessageLog.Update).sends.map(MessageLog.encodeSend) : [],
+        sends: entry._tag === "Update"
+          ? (entry as MessageLog.Update).sends.map(MessageLog.encodeSend)
+          : [],
         message: entry._tag === "Update" ? entry.message as Msg : undefined
       }
     }
-    const wire = entry as Extract<MessageLog.Wire, { _tag: "Update" | "Mounted" }>
+    const wire = entry as Extract<
+      MessageLog.Wire,
+      { _tag: "Update" | "Mounted" }
+    >
     return {
       results: wire.queries !== undefined && bound !== undefined
-        ? decodeWith(entry, "queries", bound.logSchema, wire.queries) as Component.Results
+        ? decodeWith(
+          entry,
+          "queries",
+          bound.logSchema,
+          wire.queries
+        ) as Component.Results
         : undefined,
       shared: wire._tag === "Update" ? sharedOf(wire) : undefined,
       props: decode(entry, "props", wire.props) as Props,
       model: decode(entry, "model", wire.model) as Model,
-      events: wire.events.map((emitted) => decode(entry, "events", emitted)) as ReadonlyArray<Events>,
+      events: wire.events.map((emitted) =>
+        decode(entry, "events", emitted)
+      ) as ReadonlyArray<Events>,
       commands: wire.commands,
       lists: wire._tag === "Update" ? wire.lists : [],
       sends: wire._tag === "Update" ? wire.sends : [],
-      message: wire._tag === "Update" ? decode(entry, "message", wire.message) as Msg : undefined
+      message: wire._tag === "Update"
+        ? decode(entry, "message", wire.message) as Msg
+        : undefined
     }
   }
 
-  const sameModel = Schema.toEquivalence(component.model as Schema.Codec<Model, unknown>)
-  const sameEvents = Schema.toEquivalence(Schema.Array(component.events as Schema.Codec<Events, unknown>))
-  const sameCommands = (a: ReadonlyArray<unknown>, b: ReadonlyArray<unknown>) => JSON.stringify(a) === JSON.stringify(b)
+  const sameModel = Schema.toEquivalence(
+    component.model as Schema.Codec<Model, unknown>
+  )
+  const sameEvents = Schema.toEquivalence(
+    Schema.Array(component.events as Schema.Codec<Events, unknown>)
+  )
+  const sameCommands = (a: ReadonlyArray<unknown>, b: ReadonlyArray<unknown>) =>
+    JSON.stringify(a) === JSON.stringify(b)
 
   // A path can hold one instance after another, and the one leaving can still log after the next
   // has mounted, so each instance's state is tracked by its number. The result is the last one's.
   // The last entry each provider's Layer logged, by its instance.
   const layers = new Map<number, Layer>()
   /** What the feature slots reading the provider `boundary` show: nothing once its Layer is ready. */
-  const slotStatusOf = (boundary: number | undefined): SlotResult | undefined => {
+  const slotStatusOf = (
+    boundary: number | undefined
+  ): SlotResult | undefined => {
     const entry = boundary === undefined ? undefined : layers.get(boundary)
     if (entry === undefined || entry._tag === "LayerReady") return undefined
-    return entry._tag === "LayerPending" ? AsyncResult.initial(true) : AsyncResult.failure(causeOf(entry))
+    return entry._tag === "LayerPending"
+      ? AsyncResult.initial(true)
+      : AsyncResult.failure(causeOf(entry))
   }
   interface State {
     model: Model
@@ -249,10 +335,17 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
     runs: Map<string, { readonly name: string; readonly group: string | null }>
   }
   const states = new Map<number, State>()
-  const issue = (state: State, entry: { readonly seq: number }, commands: ReturnType<typeof read>["commands"]) =>
+  const issue = (
+    state: State,
+    entry: { readonly seq: number },
+    commands: ReturnType<typeof read>["commands"]
+  ) =>
     commands.forEach((command, index) => {
       if (command._tag !== "Interrupt") {
-        state.runs.set(`${entry.seq}:${index}`, { name: command.name, group: command.group })
+        state.runs.set(`${entry.seq}:${index}`, {
+          name: command.name,
+          group: command.group
+        })
       }
     })
   const begin = (entry: typeof first): State => {
@@ -280,14 +373,19 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
       model: reached.model,
       props: reached.props,
       results: reached.results,
-      queries: () => bound?.context(reached.model, reached.props, reached.results).queries ?? {},
+      queries: () =>
+        bound?.context(reached.model, reached.props, reached.results).queries ??
+          {},
       replayed,
       divergence
     }
     reachedOf.set(out, {
       component: component as any,
       slotStatus: slotStatusOf(reached.boundary),
-      running: (name, key) => runs.some((run) => run.name === name && (key === undefined || run.group === key))
+      running: (name, key) =>
+        runs.some((run) =>
+          run.name === name && (key === undefined || run.group === key)
+        )
     })
     return out
   }
@@ -302,20 +400,28 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
       continue
     }
     const state = states.get(entry.instance)
-    if (entry._tag === "CommandEnded" || entry._tag === "CommandInterrupted" || entry._tag === "CommandDropped") {
+    if (
+      entry._tag === "CommandEnded" || entry._tag === "CommandInterrupted" ||
+      entry._tag === "CommandDropped"
+    ) {
       state?.runs.delete(`${entry.issued.seq}:${entry.issued.index}`)
       continue
     }
     if (entry._tag === "QueryChanged") {
       // Without a Model yet, the write is in the instance's first surviving `Update`.
       if (state !== undefined) {
-        state.results = { ...(state.results ?? bound?.empty), [entry.name]: resultOf(entry) }
+        state.results = {
+          ...(state.results ?? bound?.empty),
+          [entry.name]: resultOf(entry)
+        }
       }
       continue
     }
     if (entry._tag === "PropsChanged") {
       if (state !== undefined) {
-        state.props = typeof entry.component === "string" ? decode(entry, "props", entry.props) : entry.props
+        state.props = typeof entry.component === "string"
+          ? decode(entry, "props", entry.props)
+          : entry.props
       }
       continue
     }
@@ -345,8 +451,10 @@ export const replayLog = <Name extends string, Props, Model, Msg, Events, R, V e
       sends: (next.sends ?? []).map(MessageLog.encodeSend)
     }
     if (
-      !sameModel(recomputed.model, recorded.model) || !sameEvents(recomputed.events, recorded.events) ||
-      !sameCommands(recomputed.commands, recorded.commands) || !sameCommands(recomputed.lists, recorded.lists) ||
+      !sameModel(recomputed.model, recorded.model) ||
+      !sameEvents(recomputed.events, recorded.events) ||
+      !sameCommands(recomputed.commands, recorded.commands) ||
+      !sameCommands(recomputed.lists, recorded.lists) ||
       !sameCommands(recomputed.sends, recorded.sends)
     ) {
       return result(state, {

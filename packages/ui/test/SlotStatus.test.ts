@@ -1,46 +1,89 @@
-import { Command, Component, Feature, MessageLog, UiSchema, type View } from "@effect/ui"
+import {
+  Command,
+  Component,
+  Feature,
+  MessageLog,
+  UiSchema,
+  type View
+} from "@effect/ui"
 import * as replay from "@effect/ui/internal/replay"
 import { Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Deferred, Effect, Exit, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 
-const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(TestHost.layer()))
+const provideHost = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(Effect.provide(TestHost.layer()))
 
-class Editor extends Feature.Service<Editor>()("SlotStatus/Editor", { props: Schema.Struct({}) }) {}
-const EditorView = Component.define({ name: "EditorView", scoped: false, model: Schema.Null, message: Schema.Never })
+class Editor extends Feature.Service<Editor>()("SlotStatus/Editor", {
+  props: Schema.Struct({})
+}) {}
+const EditorView = Component.define({
+  name: "EditorView",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never
+})
   .make({
     init: () => null,
     update: ($) => $.model,
     view: (h) => h.text("editor")
   })
-const shown = (result: AsyncResult.AsyncResult<never, unknown>) => AsyncResult.isFailure(result) ? "down" : "loading"
+const shown = (result: AsyncResult.AsyncResult<never, unknown>) =>
+  AsyncResult.isFailure(result) ? "down" : "loading"
 
 /** The text a view shows: a child the scene didn't expand shows none. */
 const textOf = (node: View.Node<any, any>): string =>
-  node._tag === "Text" ? node.text : node._tag === "Element" ? node.children.map(textOf).join("") : ""
+  node._tag === "Text"
+    ? node.text
+    : node._tag === "Element"
+    ? node.children.map(textOf).join("")
+    : ""
 
 /** Whether a view shows a child of `component` in place: what a feature slot shows once it's ready. */
 const showsChild = (node: View.Node<any, any>, component: unknown): boolean =>
   node._tag === "Child"
     ? node.component === component
-    : node._tag === "Element" && node.children.some((child) => showsChild(child, component))
+    : node._tag === "Element" &&
+      node.children.some((child) => showsChild(child, component))
 
 /** What `Story.fromLog` reached, rendered as a Scene renders. */
-const replayed = (component: Parameters<typeof Story.fromLog>[0], entries: Parameters<typeof Story.fromLog>[1]) =>
-  replay.viewOf(Story.fromLog(component, entries))
+const replayed = (
+  component: Parameters<typeof Story.fromLog>[0],
+  entries: Parameters<typeof Story.fromLog>[1]
+) => replay.viewOf(Story.fromLog(component, entries))
 
-const Doc = Component.define({ name: "Doc", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+const Doc = Component.define({
+  name: "Doc",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never
+}).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.el("div", "doc:", Editor.render(h, { key: "e", props: {}, fallback: (r) => h.text(shown(r)) }))
+  view: (h) =>
+    h.el(
+      "div",
+      "doc:",
+      Editor.render(h, {
+        key: "e",
+        props: {},
+        fallback: (r) => h.text(shown(r))
+      })
+    )
 })
 
 describe("slot status", () => {
   it.effect("a keyed slot shows fallback while rebuilding and replays an immediately ready selection after pending or failure", () =>
     provideHost(Effect.gen(function*() {
-      const Message = UiSchema.TaggedEnum({ Move: { room: Schema.Literals(["a", "b", "c"]) }, Failed: {} })
-      const gates = { a: yield* Deferred.make<void, string>(), c: yield* Deferred.make<void, string>() }
+      const Message = UiSchema.TaggedEnum({
+        Move: { room: Schema.Literals(["a", "b", "c"]) },
+        Failed: {}
+      })
+      const gates = {
+        a: yield* Deferred.make<void, string>(),
+        c: yield* Deferred.make<void, string>()
+      }
       const Room = Component.define({
         name: "Room",
         scoped: false,
@@ -48,16 +91,30 @@ describe("slot status", () => {
         message: Message
       }).make({
         init: () => "a" as const,
-        update: ($, message) => Message.match(message, { Move: ({ room }) => room, Failed: () => $.model }),
+        update: ($, message) =>
+          Message.match(message, {
+            Move: ({ room }) => room,
+            Failed: () => $.model
+          }),
         view: (h, room) =>
-          h.el("div", room + ":", Editor.render(h, { key: "e", props: {}, fallback: (r) => h.text(shown(r)) }))
+          h.el(
+            "div",
+            room + ":",
+            Editor.render(h, {
+              key: "e",
+              props: {},
+              fallback: (r) => h.text(shown(r))
+            })
+          )
       })
       const Keyed = Component.provide(Room, {
         key: (_, room) => room,
         layer: (room) =>
           room === "b"
             ? Editor.toLayer(EditorView)
-            : Editor.toLayer(EditorView).pipe(Layer.provide(Layer.effectDiscard(Deferred.await(gates[room]))))
+            : Editor.toLayer(EditorView).pipe(
+              Layer.provide(Layer.effectDiscard(Deferred.await(gates[room])))
+            )
       }, { onFailure: () => Message.Failed() })
       const root = yield* TestHost.mount(Keyed, {})
       yield* TestHost.settle
@@ -69,10 +126,15 @@ describe("slot status", () => {
       root.send(Message.Move({ room: "c" }))
       yield* TestHost.settle
       assert.strictEqual(root.text(), "c:loading")
-      assert.deepStrictEqual(root.log().flatMap((entry) => entry._tag === "LayerPending" ? [entry.status] : []), [
-        "Pending",
-        "Rebuilding"
-      ])
+      assert.deepStrictEqual(
+        root.log().flatMap((entry) =>
+          entry._tag === "LayerPending" ? [entry.status] : []
+        ),
+        [
+          "Pending",
+          "Rebuilding"
+        ]
+      )
       yield* Deferred.fail(gates.c, "offline")
       yield* TestHost.settle
       assert.strictEqual(root.text(), "c:down")
@@ -84,34 +146,64 @@ describe("slot status", () => {
 
   it.effect("Story.fromLog renders each slot against its provider before and after LayerReady", () =>
     provideHost(Effect.gen(function*() {
-      class Viewer extends Feature.Service<Viewer>()("SlotStatus/Viewer", { props: Schema.Struct({}) }) {}
+      class Viewer extends Feature.Service<Viewer>()("SlotStatus/Viewer", {
+        props: Schema.Struct({})
+      }) {}
       const gate = yield* Deferred.make<void>()
       // A plain child below a pending provider reads that provider's Layer.
       // A component a pending provider's fallback placed renders against the settled services above it.
-      const Spinner = Component.define({ name: "Spinner", scoped: false, model: Schema.Null, message: Schema.Never })
+      const Spinner = Component.define({
+        name: "Spinner",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never
+      })
         .make({
           init: () => null,
           update: ($) => $.model,
           view: (h) =>
-            h.el("div", "spinner:", Editor.render(h, { key: "e", props: {}, fallback: (r) => h.text(shown(r)) }))
+            h.el(
+              "div",
+              "spinner:",
+              Editor.render(h, {
+                key: "e",
+                props: {},
+                fallback: (r) => h.text(shown(r))
+              })
+            )
         })
       const Inner = Component.provide(
-        Component.define({ name: "Inner", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+        Component.define({
+          name: "Inner",
+          scoped: false,
+          model: Schema.Null,
+          message: Schema.Never
+        }).make({
           init: () => null,
           update: ($) => $.model,
           view: (h) =>
             h.el(
               "div",
               Doc(h, { key: "p" }),
-              Viewer.render(h, { key: "v", props: {}, fallback: () => Spinner(h, { key: "s" }) })
+              Viewer.render(h, {
+                key: "v",
+                props: {},
+                fallback: () => Spinner(h, { key: "s" })
+              })
             )
         }),
-        Layer.mergeAll(Viewer.toLayer(EditorView), Editor.toLayer(EditorView)).pipe(
-          Layer.provide(Layer.effectDiscard(Deferred.await(gate)))
-        )
+        Layer.mergeAll(Viewer.toLayer(EditorView), Editor.toLayer(EditorView))
+          .pipe(
+            Layer.provide(Layer.effectDiscard(Deferred.await(gate)))
+          )
       )
       const Outer = Component.provide(
-        Component.define({ name: "Outer", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+        Component.define({
+          name: "Outer",
+          scoped: false,
+          model: Schema.Null,
+          message: Schema.Never
+        }).make({
           init: () => null,
           update: ($) => $.model,
           view: (h) => h.el("div", Inner(h, { key: "i" }))
@@ -137,7 +229,10 @@ describe("slot status", () => {
   it("Scene's childPending shows a slot's pending branch, and childFailure its failure branch", () => {
     const pending = Scene.start(Doc, {}).childPending(Editor, "e")
     assert.strictEqual(textOf(pending.view), "doc:loading")
-    assert.strictEqual(textOf(pending.childFailure(Editor, "e", Cause.fail("offline")).view), "doc:down")
+    assert.strictEqual(
+      textOf(pending.childFailure(Editor, "e", Cause.fail("offline")).view),
+      "doc:down"
+    )
   })
 
   it.effect("h.isRunning counts a stopping run until its fiber exits, in the runtime and in Story.fromLog's view", () =>
@@ -146,10 +241,16 @@ describe("slot status", () => {
       const Job = Command.make(
         "SlotStatus/Job",
         { args: {} },
-        () => Effect.never.pipe(Effect.onInterrupt(() => Deferred.await(cleanup)))
+        () =>
+          Effect.never.pipe(Effect.onInterrupt(() => Deferred.await(cleanup)))
       )
       const Msg = UiSchema.TaggedEnum({ Go: {}, Stop: {} })
-      const Jobs = Component.define({ name: "Jobs", scoped: false, model: Schema.Null, message: Msg }).make({
+      const Jobs = Component.define({
+        name: "Jobs",
+        scoped: false,
+        model: Schema.Null,
+        message: Msg
+      }).make({
         init: () => null,
         update: ($, message) =>
           Msg.match(message, {

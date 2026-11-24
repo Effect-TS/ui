@@ -11,7 +11,9 @@ Checkbox(h, {
   onEmit: { Toggled: ({ checked }) => Message.ToggledTerms({ checked }) },
   view: (checkbox) =>
     h.label(
-      checkbox.root(h.button.class("checkbox")).children(checkbox.indicator(h.span.class("tick"))),
+      checkbox.root(h.button.class("checkbox")).children(
+        checkbox.indicator(h.span.class("tick"))
+      ),
       "I accept the terms"
     )
 })

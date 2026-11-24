@@ -17,7 +17,9 @@ export const whenFinished = (
   done: () => void
 ): void => {
   if (!live()) return
-  const running = elements().flatMap((element) => element?.getAnimations?.() ?? []).filter(finite)
+  const running = elements().flatMap((element) =>
+    element?.getAnimations?.() ?? []
+  ).filter(finite)
   Promise.all(running.map((animation) => animation.finished)).then(
     () => {
       if (live()) done()
@@ -31,9 +33,18 @@ export type TransitionStatus = "starting" | "ending" | null
 export const statusOf = (
   model: { readonly mounted: boolean; readonly started: boolean },
   props: { readonly open: boolean }
-): TransitionStatus => props.open ? (model.started ? null : "starting") : model.mounted ? "ending" : null
+): TransitionStatus =>
+  props.open
+    ? (model.started ? null : "starting")
+    : model.mounted
+    ? "ending"
+    : null
 
-export const transitionAttrs = <B extends Attributed<B>>(builder: B, open: boolean, status: TransitionStatus): B =>
+export const transitionAttrs = <B extends Attributed<B>>(
+  builder: B,
+  open: boolean,
+  status: TransitionStatus
+): B =>
   builder
     .attrs({
       "data-open": flag(open),
@@ -50,7 +61,11 @@ export interface Phase {
 }
 
 const waits = (phase: Phase): boolean | undefined =>
-  phase.open ? (phase.started ? true : undefined) : phase.mounted && !phase.holdExit ? false : undefined
+  phase.open
+    ? (phase.started ? true : undefined)
+    : phase.mounted && !phase.holdExit
+    ? false
+    : undefined
 
 export interface Settling {
   readonly follow: (previous: Phase, next: Phase) => void
@@ -66,7 +81,14 @@ export const settling = (
   let generation = 0
   const settle = (open: boolean) => {
     const mine = ++generation
-    frame(() => whenFinished(() => [element()], frame, () => mine === generation && node.isConnected, () => done(open)))
+    frame(() =>
+      whenFinished(
+        () => [element()],
+        frame,
+        () => mine === generation && node.isConnected,
+        () => done(open)
+      )
+    )
   }
   const cancel = () => {
     generation++

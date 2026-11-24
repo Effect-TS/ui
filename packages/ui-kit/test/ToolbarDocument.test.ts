@@ -36,7 +36,13 @@ const Page = Component.define({
   message: Message,
   elements: Html
 }).make({
-  init: () => ({ clicks: 0, align: [], menu: false, select: false, zoom: "100" }),
+  init: () => ({
+    clicks: 0,
+    align: [],
+    menu: false,
+    select: false,
+    zoom: "100"
+  }),
   update: {
     ClickedBold: ($) => ({ ...$.model, clicks: $.model.clicks + 1 }),
     Toggled: ($, { value }) => ({ ...$.model, align: value }),
@@ -67,22 +73,38 @@ const Page = Component.define({
           ]
         },
         view: (toolbar) =>
-          toolbar.root(h.div.attrs({ id: "toolbar", "data-clicks": String(model.clicks) })).children(
-            toolbar.button({ element: h.button.attr("id", "bold").onClick(Message.ClickedBold()), value: "bold" })
+          toolbar.root(
+            h.div.attrs({ id: "toolbar", "data-clicks": String(model.clicks) })
+          ).children(
+            toolbar.button({
+              element: h.button.attr("id", "bold").onClick(
+                Message.ClickedBold()
+              ),
+              value: "bold"
+            })
               .children("Bold"),
             toolbar.group({ element: h.div, value: "align" }).children(
               ToggleGroup(h, {
-                props: { value: model.align, items: [{ value: "left" }, { value: "right" }] },
+                props: {
+                  value: model.align,
+                  items: [{ value: "left" }, { value: "right" }]
+                },
                 onEmit: { Toggled: ({ value }) => Message.Toggled({ value }) },
                 view: (group) =>
                   group.root(h.div.attr("id", "align")).children(
                     toolbar.button({
-                      element: group.item({ element: h.button.attr("id", "left"), value: "left" }),
+                      element: group.item({
+                        element: h.button.attr("id", "left"),
+                        value: "left"
+                      }),
                       value: "left"
                     })
                       .children("Left"),
                     toolbar.button({
-                      element: group.item({ element: h.button.attr("id", "right"), value: "right" }),
+                      element: group.item({
+                        element: h.button.attr("id", "right"),
+                        value: "right"
+                      }),
                       value: "right"
                     })
                       .children("Right")
@@ -90,12 +112,21 @@ const Page = Component.define({
               })
             ),
             toolbar.separator(h.div),
-            toolbar.button({ element: h.button.attr("id", "off"), value: "off" }).children("Off"),
-            toolbar.button({ element: h.button.attr("id", "dim"), value: "dim" }).children("Dim"),
+            toolbar.button({
+              element: h.button.attr("id", "off"),
+              value: "off"
+            }).children("Off"),
+            toolbar.button({
+              element: h.button.attr("id", "dim"),
+              value: "dim"
+            }).children("Dim"),
             Menu(h, {
               props: {
                 open: model.menu,
-                items: [{ value: "copy", label: "Copy" }, { value: "paste", label: "Paste" }]
+                items: [{ value: "copy", label: "Copy" }, {
+                  value: "paste",
+                  label: "Paste"
+                }]
               },
               onEmit: {
                 RequestedOpen: () => Message.OpenedMenu(),
@@ -116,8 +147,14 @@ const Page = Component.define({
                   }).children("Edit"),
                   menu.positioner(h.div.attr("id", "menu-positioner")).children(
                     menu.popup(h.div).children(
-                      menu.item({ element: h.div.attr("id", "copy"), value: "copy" }).children("Copy"),
-                      menu.item({ element: h.div.attr("id", "paste"), value: "paste" }).children("Paste")
+                      menu.item({
+                        element: h.div.attr("id", "copy"),
+                        value: "copy"
+                      }).children("Copy"),
+                      menu.item({
+                        element: h.div.attr("id", "paste"),
+                        value: "paste"
+                      }).children("Paste")
                     )
                   )
                 )
@@ -128,29 +165,51 @@ const Page = Component.define({
                 id: "zoom",
                 disabled: toolbar.isDisabled("zoom"),
                 value: model.zoom,
-                items: [{ value: "100", label: "100%" }, { value: "200", label: "200%" }]
+                items: [{ value: "100", label: "100%" }, {
+                  value: "200",
+                  label: "200%"
+                }]
               },
               onEmit: {
                 RequestedOpen: () => Message.OpenedSelect(),
                 RequestedClose: () => Message.DismissedSelect(),
-                Picked: ({ value }) => typeof value === "string" ? Message.Picked({ value }) : undefined,
+                Picked: ({ value }) =>
+                  typeof value === "string"
+                    ? Message.Picked({ value })
+                    : undefined,
                 Settled: () => undefined
               },
               view: (select) =>
                 h.div(
-                  toolbar.button({ element: select.trigger(h.button.attr("id", "zoom")), value: "zoom" }).children(
+                  toolbar.button({
+                    element: select.trigger(h.button.attr("id", "zoom")),
+                    value: "zoom"
+                  }).children(
                     select.value(h.span)
                   ),
-                  select.positioner(h.div.attr("id", "select-positioner")).children(
-                    select.popup(h.div).children(
-                      select.item({ element: h.div.attr("id", "zoom-100"), value: "100" }).children("100%"),
-                      select.item({ element: h.div.attr("id", "zoom-200"), value: "200" }).children("200%")
+                  select.positioner(h.div.attr("id", "select-positioner"))
+                    .children(
+                      select.popup(h.div).children(
+                        select.item({
+                          element: h.div.attr("id", "zoom-100"),
+                          value: "100"
+                        }).children("100%"),
+                        select.item({
+                          element: h.div.attr("id", "zoom-200"),
+                          value: "200"
+                        }).children("200%")
+                      )
                     )
-                  )
                 )
             }),
-            toolbar.link({ element: h.a.attrs({ id: "help", href: "#help" }), value: "help" }).children("Help"),
-            toolbar.input({ element: h.input.attrs({ id: "search", value: "abc" }), value: "search" })
+            toolbar.link({
+              element: h.a.attrs({ id: "help", href: "#help" }),
+              value: "help"
+            }).children("Help"),
+            toolbar.input({
+              element: h.input.attrs({ id: "search", value: "abc" }),
+              value: "search"
+            })
           )
       }),
       h.button.attrs({ id: "after", type: "button" }).children("After")
@@ -158,7 +217,12 @@ const Page = Component.define({
 })
 
 const key = (target: Element, key: string, init: KeyboardEventInit = {}) => {
-  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init })
+  const event = new KeyboardEvent("keydown", {
+    key,
+    bubbles: true,
+    cancelable: true,
+    ...init
+  })
   target.dispatchEvent(event)
   return event
 }
@@ -168,24 +232,43 @@ const focused = () => document.activeElement?.id
 const focusedText = () => document.activeElement?.textContent
 
 const pointerClick = (target: Element) => {
-  const event = new PointerEvent("click", { bubbles: true, cancelable: true, detail: 1, pointerType: "mouse" })
+  const event = new PointerEvent("click", {
+    bubbles: true,
+    cancelable: true,
+    detail: 1,
+    pointerType: "mouse"
+  })
   target.dispatchEvent(event)
   return event
 }
 
 const keyboardClick = (target: Element) =>
-  target.dispatchEvent(new PointerEvent("click", { bubbles: true, cancelable: true, detail: 0, pointerType: "" }))
-
-const mount = Effect.fnUntraced(function*(props: Partial<typeof Config.Type> = {}) {
-  yield* popovers
-  const app = yield* container
-  yield* BrowserHost.mountEffect(
-    Page,
-    { disabled: false, groupDisabled: false, orientation: "horizontal", ...props },
-    app
+  target.dispatchEvent(
+    new PointerEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      detail: 0,
+      pointerType: ""
+    })
   )
-  yield* tick
-})
+
+const mount = Effect.fnUntraced(
+  function*(props: Partial<typeof Config.Type> = {}) {
+    yield* popovers
+    const app = yield* container
+    yield* BrowserHost.mountEffect(
+      Page,
+      {
+        disabled: false,
+        groupDisabled: false,
+        orientation: "horizontal",
+        ...props
+      },
+      app
+    )
+    yield* tick
+  }
+)
 
 const walk = Effect.fnUntraced(function*(pressed: string, count: number) {
   const visited: Array<string | undefined> = []
@@ -197,8 +280,19 @@ const walk = Effect.fnUntraced(function*(pressed: string, count: number) {
   return visited
 })
 
-const ids = ["bold", "left", "right", "off", "dim", "menu", "zoom", "help", "search"]
-const tabStops = () => ids.filter((id) => byId(id).getAttribute("tabindex") === "0")
+const ids = [
+  "bold",
+  "left",
+  "right",
+  "off",
+  "dim",
+  "menu",
+  "zoom",
+  "help",
+  "search"
+]
+const tabStops = () =>
+  ids.filter((id) => byId(id).getAttribute("tabindex") === "0")
 
 describe("Toolbar in a document", { concurrent: false }, () => {
   it.effect("the arrow keys move focus across the buttons, the toggle group, the triggers, the link and the input", () =>
@@ -218,7 +312,10 @@ describe("Toolbar in a document", { concurrent: false }, () => {
         "search"
       ])
       const search = byId("search") as HTMLInputElement
-      assert.deepStrictEqual([search.selectionStart, search.selectionEnd], [0, 3])
+      assert.deepStrictEqual([search.selectionStart, search.selectionEnd], [
+        0,
+        3
+      ])
       search.setSelectionRange(1, 1)
       assert.isFalse(key(search, "ArrowRight").defaultPrevented)
       yield* tick
@@ -251,7 +348,11 @@ describe("Toolbar in a document", { concurrent: false }, () => {
       assert.strictEqual(byId("align").getAttribute("data-disabled"), "")
       byId("bold").focus()
       yield* tick
-      assert.deepStrictEqual(yield* walk("ArrowRight", 3), ["left", "right", "dim"])
+      assert.deepStrictEqual(yield* walk("ArrowRight", 3), [
+        "left",
+        "right",
+        "dim"
+      ])
       assert.isTrue(pointerClick(byId("bold")).defaultPrevented)
       assert.isTrue(pointerClick(byId("dim")).defaultPrevented)
       for (const id of ["left", "menu", "zoom"]) {
@@ -294,7 +395,11 @@ describe("Toolbar in a document", { concurrent: false }, () => {
       yield* mount({ orientation: "vertical" })
       byId("dim").focus()
       yield* tick
-      assert.deepStrictEqual(yield* walk("ArrowDown", 3), ["menu", "zoom", "help"])
+      assert.deepStrictEqual(yield* walk("ArrowDown", 3), [
+        "menu",
+        "zoom",
+        "help"
+      ])
       assert.deepStrictEqual(yield* walk("ArrowUp", 2), ["zoom", "menu"])
       assert.isFalse(key(byId("menu"), "ArrowRight").defaultPrevented)
       yield* tick

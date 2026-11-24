@@ -21,7 +21,9 @@ describe("FilePreview", () => {
   it.effect("choosing a file reads it and shows its line count and first lines", () =>
     Effect.gen(function*() {
       const play = yield* HtmlPlay.make(FilePreview, {})
-      yield* play.change(chooser, { files: [new File(["one\ntwo\nthree"], "notes.txt")] })
+      yield* play.change(chooser, {
+        files: [new File(["one\ntwo\nthree"], "notes.txt")]
+      })
       yield* play.expect(Locator.text("notes.txt: 3 lines")).toExist()
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 

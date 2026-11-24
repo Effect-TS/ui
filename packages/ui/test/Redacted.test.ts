@@ -13,19 +13,34 @@ import { Effect, Exit, Logger, Redacted, Schema } from "effect"
 
 class GetToken extends Query.Service<GetToken>()(
   "test/GetToken",
-  { args: {}, success: Schema.Redacted(Schema.String), error: Schema.Never, staleTime: "1 minute" },
+  {
+    args: {},
+    success: Schema.Redacted(Schema.String),
+    error: Schema.Never,
+    staleTime: "1 minute"
+  },
   Effect.succeed(() => Effect.succeed(Redacted.make("loaded-secret")))
 ) {}
 
 class GetByKey extends Query.Service<GetByKey>()(
   "test/GetByKey",
-  { args: { key: Schema.Redacted(Schema.String) }, success: Schema.String, error: Schema.Never, staleTime: "1 minute" },
+  {
+    args: { key: Schema.Redacted(Schema.String) },
+    success: Schema.String,
+    error: Schema.Never,
+    staleTime: "1 minute"
+  },
   Effect.succeed(() => Effect.succeed("ok"))
 ) {}
 
 class GetFailing extends Query.Service<GetFailing>()(
   "test/GetFailing",
-  { args: {}, success: Schema.String, error: Schema.Redacted(Schema.String), staleTime: "1 minute" },
+  {
+    args: {},
+    success: Schema.String,
+    error: Schema.Redacted(Schema.String),
+    staleTime: "1 minute"
+  },
   Effect.succeed(() => Effect.fail(Redacted.make("error-secret")))
 ) {}
 
@@ -35,7 +50,12 @@ const ByArgs = Component.define({
   scoped: false,
   model: Schema.Number,
   message: Schema.Never,
-  queries: { value: { query: GetByKey, args: () => ({ key: Redacted.make("args-secret") }) } }
+  queries: {
+    value: {
+      query: GetByKey,
+      args: () => ({ key: Redacted.make("args-secret") })
+    }
+  }
 }).make({
   init: () => 0,
   update: ($) => $.model,
@@ -57,7 +77,12 @@ const ByKeys = Component.define({
   scoped: false,
   model: Schema.Number,
   message: Schema.Never,
-  queries: { value: { queryMany: GetByKey, args: () => [{ key: Redacted.make("keyed-secret") }] } }
+  queries: {
+    value: {
+      queryMany: GetByKey,
+      args: () => [{ key: Redacted.make("keyed-secret") }]
+    }
+  }
 }).make({
   init: () => 0,
   update: ($) => $.model,
@@ -67,7 +92,10 @@ const ByKeys = Component.define({
 const Secret = Component.define({
   name: "Secret",
   scoped: false,
-  model: Schema.Struct({ token: Schema.Redacted(Schema.String), n: Schema.Number }),
+  model: Schema.Struct({
+    token: Schema.Redacted(Schema.String),
+    n: Schema.Number
+  }),
   message: Schema.Never
 }).make({
   init: () => ({ token: Redacted.make("model-secret"), n: 0 }),
@@ -91,7 +119,10 @@ interface Tree {
   readonly n: number
   readonly children: ReadonlyArray<Tree>
 }
-const Tree: Schema.Codec<Tree> = Schema.Struct({ n: Schema.Number, children: Schema.Array(Schema.suspend(() => Tree)) })
+const Tree: Schema.Codec<Tree> = Schema.Struct({
+  n: Schema.Number,
+  children: Schema.Array(Schema.suspend(() => Tree))
+})
 
 interface SecretTree {
   readonly token: Redacted.Redacted<string>
@@ -107,20 +138,32 @@ const legacyState = (component: Component.Any, model: unknown) => {
   const bound = componentQueries.boundOf(component)!
   const codec = Schema.toCodecJson(
     Schema.Struct({
-      model: (component as Component.Component<any, any, any, any, any, any, any>).model,
+      model:
+        (component as Component.Component<any, any, any, any, any, any, any>)
+          .model,
       queries: bound.schema
     })
   )
   return Schema.encodeUnknownSync(codec)({ model, queries: bound.empty })
 }
 
-const Plain = Component.define({ name: "Plain", scoped: false, model: Schema.Number, message: Schema.Never }).make({
+const Plain = Component.define({
+  name: "Plain",
+  scoped: false,
+  model: Schema.Number,
+  message: Schema.Never
+}).make({
   init: () => 1,
   update: ($) => $.model,
   view: (h, n) => h.text(String(n))
 })
 
-const QueryPage = Component.define({ name: "QueryPage", scoped: false, model: Schema.Null, message: Schema.Never })
+const QueryPage = Component.define({
+  name: "QueryPage",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never
+})
   .make({
     init: () => null,
     update: ($) => $.model,
@@ -134,7 +177,12 @@ const QueryPage = Component.define({ name: "QueryPage", scoped: false, model: Sc
       )
   })
 
-const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+const Page = Component.define({
+  name: "Page",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never
+}).make({
   init: () => null,
   update: ($) => $.model,
   view: (h) =>
@@ -155,7 +203,10 @@ const historyHooks = (stored: Record<string, unknown> = {}) => {
       return () => {}
     },
     afterFlush: () => {},
-    restore: (path) => Object.hasOwn(stored, path) ? { state: stored[path], reported: undefined } : undefined,
+    restore: (path) =>
+      Object.hasOwn(stored, path)
+        ? { state: stored[path], reported: undefined }
+        : undefined,
     entry: () => stored,
     prefetch: () => () => {}
   }
@@ -183,7 +234,10 @@ describe("Redacted state", () => {
       yield* TestHost.settle
       assert.strictEqual(root.text(), "001")
       const snapshot = history.snapshot()
-      assert.deepStrictEqual(Object.keys(snapshot), ["/Page", "/Page/Plain[plain]"])
+      assert.deepStrictEqual(Object.keys(snapshot), [
+        "/Page",
+        "/Page/Plain[plain]"
+      ])
       assert.notInclude(JSON.stringify(snapshot), "secret")
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 
@@ -199,8 +253,18 @@ describe("Redacted state", () => {
       yield* TestHost.settle
       // Only the plain component adopts its stored Model.
       assert.strictEqual(root.text(), "007")
-      assert.isTrue(Exit.isFailure(Effect.runSyncExit(runtime.stateCodecOf(Secret).decode({ token: "plain", n: 1 }))))
-      assert.isTrue(Exit.isFailure(Effect.runSyncExit(runtime.stateCodecOf(Loaded).decode(loaded))))
+      assert.isTrue(
+        Exit.isFailure(
+          Effect.runSyncExit(
+            runtime.stateCodecOf(Secret).decode({ token: "plain", n: 1 })
+          )
+        )
+      )
+      assert.isTrue(
+        Exit.isFailure(
+          Effect.runSyncExit(runtime.stateCodecOf(Loaded).decode(loaded))
+        )
+      )
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 
   it.effect("defers an instance whose state holds a Redacted on the server, and warns once per component", () =>
@@ -215,19 +279,32 @@ describe("Redacted state", () => {
       )
       const first = yield* render
       yield* render
-      assert.deepStrictEqual(first.state["~deferred"], ["/Page/Secret[secret]", "/Page/Loaded[loaded]"])
-      assert.deepStrictEqual(Object.keys(first.state).filter((key) => key.startsWith("/")), [
-        "/Page",
-        "/Page/Plain[plain]"
+      assert.deepStrictEqual(first.state["~deferred"], [
+        "/Page/Secret[secret]",
+        "/Page/Loaded[loaded]"
       ])
-      const paths = Object.fromEntries(Object.entries(first.state).filter(([key]) => key.startsWith("/")))
+      assert.deepStrictEqual(
+        Object.keys(first.state).filter((key) => key.startsWith("/")),
+        [
+          "/Page",
+          "/Page/Plain[plain]"
+        ]
+      )
+      const paths = Object.fromEntries(
+        Object.entries(first.state).filter(([key]) => key.startsWith("/"))
+      )
       assert.notInclude(JSON.stringify(paths), "secret")
-      assert.deepStrictEqual(warnings.map((message) => String(message).split(":")[0]), ["Secret", "Loaded"])
+      assert.deepStrictEqual(
+        warnings.map((message) => String(message).split(":")[0]),
+        ["Secret", "Loaded"]
+      )
     }))
 
   it.effect("finds a Redacted in a query's args, error or keyed args, and leaves its page state out", () =>
     Effect.gen(function*() {
-      for (const part of [ByArgs, ByError, ByKeys]) assert.isTrue(runtime.stateCodecOf(part).redacted)
+      for (const part of [ByArgs, ByError, ByKeys]) {
+        assert.isTrue(runtime.stateCodecOf(part).redacted)
+      }
       const rendered = yield* Renderer.prerender(QueryPage, {}).pipe(
         Effect.provide([GetByKey.layer, GetFailing.layer]),
         Effect.provide(Logger.layer([]))
@@ -237,8 +314,13 @@ describe("Redacted state", () => {
         "/QueryPage/ByError[error]",
         "/QueryPage/ByKeys[keys]"
       ])
-      const paths = Object.fromEntries(Object.entries(rendered.state).filter(([key]) => key.startsWith("/")))
-      assert.deepStrictEqual(Object.keys(paths), ["/QueryPage", "/QueryPage/Plain[plain]"])
+      const paths = Object.fromEntries(
+        Object.entries(rendered.state).filter(([key]) => key.startsWith("/"))
+      )
+      assert.deepStrictEqual(Object.keys(paths), [
+        "/QueryPage",
+        "/QueryPage/Plain[plain]"
+      ])
       assert.notInclude(JSON.stringify(paths), "secret")
     }))
 
@@ -250,12 +332,23 @@ describe("Redacted state", () => {
         model: Schema.suspend(() => Schema.Number),
         message: Schema.Never
       })
-        .make({ init: () => 1, update: ($) => $.model, view: (h, n) => h.text(String(n)) })
-      const rendered = yield* Renderer.prerender(Lazy, {}).pipe(Effect.provide(Logger.layer([])))
+        .make({
+          init: () => 1,
+          update: ($) => $.model,
+          view: (h, n) => h.text(String(n))
+        })
+      const rendered = yield* Renderer.prerender(Lazy, {}).pipe(
+        Effect.provide(Logger.layer([]))
+      )
       assert.deepStrictEqual(rendered.state["~deferred"], [])
       assert.strictEqual(rendered.state["/Lazy"], 1)
       const component = (model: Schema.Codec<any, any>) =>
-        Component.define({ name: "Tree", scoped: false, model, message: Schema.Never }).make({
+        Component.define({
+          name: "Tree",
+          scoped: false,
+          model,
+          message: Schema.Never
+        }).make({
           init: () => null as any,
           update: ($) => $.model,
           view: (h) => h.text("")

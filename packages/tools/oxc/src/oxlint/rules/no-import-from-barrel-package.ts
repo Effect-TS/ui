@@ -7,7 +7,16 @@ interface RuleOptions {
   checkRelativeIndexImports?: boolean
 }
 
-const extensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]
+const extensions = [
+  ".ts",
+  ".tsx",
+  ".mts",
+  ".cts",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs"
+]
 
 function getModuleName(specifier: ESTree.ImportSpecifier): string {
   return specifier.imported.type === "Identifier"
@@ -30,7 +39,8 @@ function hasIndexFile(dirPath: string): boolean {
 
 function isIndexImport(importPath: string): boolean {
   const basename = path.basename(importPath)
-  return basename === "index" || /^index\.(ts|tsx|js|jsx|mts|cts|mjs|cjs)$/.test(basename)
+  return basename === "index" ||
+    /^index\.(ts|tsx|js|jsx|mts|cts|mjs|cjs)$/.test(basename)
 }
 
 function resolvesToBarrel(importSource: string, currentFile: string): boolean {
@@ -48,7 +58,9 @@ function resolvesToBarrel(importSource: string, currentFile: string): boolean {
   return false
 }
 
-function createBarrelMatcher(options: RuleOptions): (source: string, currentFile: string) => boolean {
+function createBarrelMatcher(
+  options: RuleOptions
+): (source: string, currentFile: string) => boolean {
   const patterns = (options.checkPatterns ?? []).map((p) => new RegExp(p))
   const checkRelative = options.checkRelativeIndexImports !== false
 
@@ -71,7 +83,8 @@ const rule: CreateRule = {
   meta: {
     type: "suggestion",
     docs: {
-      description: "Disallow importing from barrel files (index.ts), encourage importing specific modules instead"
+      description:
+        "Disallow importing from barrel files (index.ts), encourage importing specific modules instead"
     },
     schema: [
       {
@@ -84,7 +97,8 @@ const rule: CreateRule = {
           },
           checkRelativeIndexImports: {
             type: "boolean",
-            description: "Whether to check relative imports that resolve to index files"
+            description:
+              "Whether to check relative imports that resolve to index files"
           }
         },
         additionalProperties: false

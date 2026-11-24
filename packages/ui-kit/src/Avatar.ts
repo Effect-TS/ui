@@ -91,7 +91,9 @@ const Source = Schema.Struct({
   src: Schema.optional(Schema.String),
   srcSet: Schema.optional(Schema.String),
   sizes: Schema.optional(Schema.String),
-  crossOrigin: Schema.optional(Schema.Literals(["anonymous", "use-credentials"])),
+  crossOrigin: Schema.optional(
+    Schema.Literals(["anonymous", "use-credentials"])
+  ),
   referrerPolicy: Schema.optional(Schema.String)
 })
 type Source = typeof Source.Type
@@ -162,13 +164,18 @@ const AvatarMessage = UiSchema.TaggedEnum({
 // The props' source, without the fields they leave out or set to
 // `undefined`, so both are the same source.
 const sourceOf = ({ fallbackDelay: _, ...source }: AvatarProps): Source =>
-  Object.fromEntries(Object.entries(source).filter(([, value]) => value !== undefined))
+  Object.fromEntries(
+    Object.entries(source).filter(([, value]) => value !== undefined)
+  )
 
 const hasImage = (source: Source): boolean => !!source.src || !!source.srcSet
 
 const sameSource = Schema.toEquivalence(Source)
 
-const statusOf = (report: Report | null, source: Source): AvatarImageLoadingStatus =>
+const statusOf = (
+  report: Report | null,
+  source: Source
+): AvatarImageLoadingStatus =>
   !hasImage(source)
     ? "error"
     : report !== null && sameSource(report.source, source)
@@ -182,11 +189,14 @@ const loadImage = (source: Source) =>
     "image",
     sourceFields.map((field) => source[field] ?? null),
     () => {
-      const report = (status: AvatarImageLoadingStatus) => AvatarMessage.ChangedImageStatus({ source, status })
+      const report = (status: AvatarImageLoadingStatus) =>
+        AvatarMessage.ChangedImageStatus({ source, status })
       return hasImage(source)
         ? Stream.concat(
           Stream.make(report("loading")),
-          Stream.fromEffect(HtmlImages.Images.use((images) => images.load(source))).pipe(Stream.map(report))
+          Stream.fromEffect(
+            HtmlImages.Images.use((images) => images.load(source))
+          ).pipe(Stream.map(report))
         )
         : Stream.make(report("error"))
     }
@@ -195,7 +205,13 @@ const loadImage = (source: Source) =>
 // Removed from the consumer's finished image before the part writes them,
 // so they come last and in this order: a browser may start fetching as soon
 // as `src` is set, so the request policy, `sizes` and `srcset` go before it.
-const imageAttributes = ["crossorigin", "referrerpolicy", "sizes", "srcset", "src"]
+const imageAttributes = [
+  "crossorigin",
+  "referrerpolicy",
+  "sizes",
+  "srcset",
+  "src"
+]
 
 /**
  * A `<span>` the avatar's root and fallback accept, from the consumer's
@@ -205,7 +221,13 @@ const imageAttributes = ["crossorigin", "referrerpolicy", "sizes", "srcset", "sr
  * @category models
  * @since 0.1.0
  */
-export type AvatarSpan<Msg, R = never> = Html.Element<Msg, R, Html.EventsOf<"span">, HTMLSpanElement, "span">
+export type AvatarSpan<Msg, R = never> = Html.Element<
+  Msg,
+  R,
+  Html.EventsOf<"span">,
+  HTMLSpanElement,
+  "span"
+>
 
 /**
  * An `<img>` the avatar's image accepts, from the consumer's `h.img`.
@@ -214,7 +236,13 @@ export type AvatarSpan<Msg, R = never> = Html.Element<Msg, R, Html.EventsOf<"spa
  * @category models
  * @since 0.1.0
  */
-export type AvatarImg<Msg, R = never> = Html.VoidElement<Msg, R, Html.EventsOf<"img">, HTMLImageElement, "img">
+export type AvatarImg<Msg, R = never> = Html.VoidElement<
+  Msg,
+  R,
+  Html.EventsOf<"img">,
+  HTMLImageElement,
+  "img"
+>
 
 /**
  * A headless avatar. Call it with the consumer's `h` and a `view` closure
@@ -254,7 +282,8 @@ export const Avatar = Component.define({
     delayElapsed: !((props.fallbackDelay ?? 0) > 0)
   }),
   update: {
-    ChangedImageStatus: ($, { source, status }) => $.evolve({ report: { source, status } }),
+    ChangedImageStatus: ($, { source, status }) =>
+      $.evolve({ report: { source, status } }),
     ElapsedFallbackDelay: ($) => $.evolve({ delayElapsed: true })
   },
   subscriptions: ({ model, props }) => [
@@ -263,7 +292,10 @@ export const Avatar = Component.define({
     Subscription.make(
       "fallbackDelay",
       props.fallbackDelay ?? 0,
-      (delay) => Stream.fromEffect(Effect.sleep(delay)).pipe(Stream.as(AvatarMessage.ElapsedFallbackDelay()))
+      (delay) =>
+        Stream.fromEffect(Effect.sleep(delay)).pipe(
+          Stream.as(AvatarMessage.ElapsedFallbackDelay())
+        )
     )
   ],
   parts: (p, model) => {
@@ -290,14 +322,19 @@ export const Avatar = Component.define({
     const showsFallback = status !== "loaded" && model.delayElapsed
     return {
       imageLoadingStatus: status,
-      root: <Msg, R = never>(element: AvatarSpan<Msg, R>): AvatarSpan<Msg, R> => root(element),
+      root: <Msg, R = never>(element: AvatarSpan<Msg, R>): AvatarSpan<Msg, R> =>
+        root(element),
       // The image and the fallback are applied before they're dropped, so a
       // wrong tag throws in every state.
-      image: <Msg, R = never>(element: AvatarImg<Msg, R>): AvatarImg<Msg, R> | undefined => {
+      image: <Msg, R = never>(
+        element: AvatarImg<Msg, R>
+      ): AvatarImg<Msg, R> | undefined => {
         const shown = image(element)
         return status === "loaded" ? shown : undefined
       },
-      fallback: <Msg, R = never>(element: AvatarSpan<Msg, R>): AvatarSpan<Msg, R> | undefined => {
+      fallback: <Msg, R = never>(
+        element: AvatarSpan<Msg, R>
+      ): AvatarSpan<Msg, R> | undefined => {
         const shown = fallback(element)
         return showsFallback ? shown : undefined
       }

@@ -19,23 +19,37 @@ export const PagedDemo = Component.define({
   view: (h, model) =>
     h.div.class("page").children(
       h.div.class("toolbar").children(
-        h.button.attr("id", "known").onClick(PagedMessage.PickedTotal({ total: "known" })).children("10,000 results"),
-        h.button.attr("id", "unknown").onClick(PagedMessage.PickedTotal({ total: "unknown" })).children(
+        h.button.attr("id", "known").onClick(
+          PagedMessage.PickedTotal({ total: "known" })
+        ).children("10,000 results"),
+        h.button.attr("id", "unknown").onClick(
+          PagedMessage.PickedTotal({ total: "unknown" })
+        ).children(
           "Unknown total"
         ),
-        h.button.attr("id", "none").onClick(PagedMessage.PickedTotal({ total: "none" })).children("Neither prop")
+        h.button.attr("id", "none").onClick(
+          PagedMessage.PickedTotal({ total: "none" })
+        ).children("Neither prop")
       ),
       VirtualList(h, {
         props: {
           count: 50,
           itemSize: 40,
-          ...(model.total === "none" ? {} : { firstPosition: 201, setSize: model.total === "known" ? 10_000 : -1 })
+          ...(model.total === "none"
+            ? {}
+            : {
+              firstPosition: 201,
+              setSize: model.total === "known" ? 10_000 : -1
+            })
         },
         view: (virtualList) =>
           virtualList.viewport(h.div.class("scroller")).children(
             virtualList.list(h.ul.class("rows")).children(
               virtualList.items.map((index) =>
-                virtualList.item({ element: h.li.class("row").key(String(index)), index }).children(
+                virtualList.item({
+                  element: h.li.class("row").key(String(index)),
+                  index
+                }).children(
                   "Result " + (201 + index)
                 )
               )

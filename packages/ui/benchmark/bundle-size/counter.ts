@@ -12,7 +12,8 @@ const Counter = Component.define({
   elements: Html
 }).make({
   init: () => 0,
-  update: ($, message) => message._tag === "Increment" ? $.model + 1 : $.model - 1,
+  update: ($, message) =>
+    message._tag === "Increment" ? $.model + 1 : $.model - 1,
   view: (h, model) =>
     h.div.children(
       h.button.onClick(Message.Decrement()).children("-"),
@@ -21,4 +22,5 @@ const Counter = Component.define({
     )
 })
 
-Layer.launch(BrowserHost.mount(Counter, {}, document.getElementById("app")!)).pipe(Effect.runFork)
+Layer.launch(BrowserHost.mount(Counter, {}, document.getElementById("app")!))
+  .pipe(Effect.runFork)

@@ -12,7 +12,13 @@ import * as defaults from "./defaults.ts"
 export type Listener = (payload: unknown, preventDefault: () => void) => void
 
 const key = defaults.keyPayload("", undefined)
-const pointerEvents: ReadonlySet<string> = new Set(["click", "mousedown", "mouseup", "pointerup", "pointercancel"])
+const pointerEvents: ReadonlySet<string> = new Set([
+  "click",
+  "mousedown",
+  "mouseup",
+  "pointerup",
+  "pointercancel"
+])
 
 /**
  * Fires `event` at the capture listeners, then at the bubble ones, and
@@ -36,20 +42,28 @@ export const fire = (
     : pointerEvents.has(event)
     ? scene.pointer
     : undefined
-  const prevented = (given as { readonly defaultPrevented?: unknown } | undefined)?.defaultPrevented === true
+  const prevented =
+    (given as { readonly defaultPrevented?: unknown } | undefined)
+      ?.defaultPrevented === true
   let cancelled = false
   const preventDefault = () => {
     cancelled = true
   }
   for (const capture of [true, false]) {
     for (const listener of listening(capture)) {
-      listener({ ...defaults, ...given, defaultPrevented: prevented || cancelled }, preventDefault)
+      listener({
+        ...defaults,
+        ...given,
+        defaultPrevented: prevented || cancelled
+      }, preventDefault)
     }
   }
   return cancelled
 }
 
-export const custom = (given: { readonly detail?: unknown } | undefined): object => ({
+export const custom = (
+  given: { readonly detail?: unknown } | undefined
+): object => ({
   ...given,
   detail: given?.detail ?? null
 })

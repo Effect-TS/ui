@@ -12,22 +12,46 @@ const Message = UiSchema.TaggedEnum({
 type Message = typeof Message.Type
 const got = (n: number) => Message.Got({ n })
 
-const Quiet = Command.make("Quiet", { args: {} }, () => Effect.succeed(Component.noop))
+const Quiet = Command.make(
+  "Quiet",
+  { args: {} },
+  () => Effect.succeed(Component.noop)
+)
 const Mixed = Command.make(
   "Mixed",
   { args: {}, stream: true },
-  () => Stream.make<Array<Message | Component.Noop>>(Component.noop, got(1), Component.noop, got(2))
+  () =>
+    Stream.make<Array<Message | Component.Noop>>(
+      Component.noop,
+      got(1),
+      Component.noop,
+      got(2)
+    )
 )
-const AllQuiet = Command.make("AllQuiet", { args: {}, stream: true }, () => Stream.make(Component.noop, Component.noop))
-const Empty = Command.make("Empty", { args: {}, stream: true }, () => Stream.empty)
+const AllQuiet = Command.make(
+  "AllQuiet",
+  { args: {}, stream: true },
+  () => Stream.make(Component.noop, Component.noop)
+)
+const Empty = Command.make(
+  "Empty",
+  { args: {}, stream: true },
+  () => Stream.empty
+)
 const Loud = Command.make("Loud", { args: {} }, () => Effect.succeed(got(0)))
 const Queued = Command.make(
   "Queued",
   { args: { n: Schema.Number, silent: Schema.Boolean }, mode: "queue" },
-  ({ n, silent }) => Effect.sleep(`${10 * (3 - n)} millis`).pipe(Effect.as(silent ? Component.noop : got(n)))
+  ({ n, silent }) =>
+    Effect.sleep(`${10 * (3 - n)} millis`).pipe(
+      Effect.as(silent ? Component.noop : got(n))
+    )
 )
 
-const commands: Record<string, () => Command.Command<Message | Component.Noop>> = {
+const commands: Record<
+  string,
+  () => Command.Command<Message | Component.Noop>
+> = {
   Quiet: () => Quiet.make(),
   Mixed: () => Mixed.make(),
   AllQuiet: () => AllQuiet.make(),
@@ -45,12 +69,17 @@ const Recorder = Component.define({
 }).make({
   init: () => [],
   update: ($, message) => {
-    const next = [...$.model, message._tag === "Got" ? `Got ${message.n}` : message._tag]
+    const next = [
+      ...$.model,
+      message._tag === "Got" ? `Got ${message.n}` : message._tag
+    ]
     switch (message._tag) {
       case "Fire":
         return $.set(next).run(commands[message.command]())
       case "Queue":
-        return $.set(next).run(Queued.make({ n: message.n, silent: message.silent }))
+        return $.set(next).run(
+          Queued.make({ n: message.n, silent: message.silent })
+        )
       case "Got":
         return next
     }
@@ -59,7 +88,10 @@ const Recorder = Component.define({
 })
 
 const run = <A, E>(effect: Effect.Effect<A, E, any>) =>
-  effect.pipe(Effect.scoped, Effect.provide(TestHost.layer())) as Effect.Effect<A, E>
+  effect.pipe(Effect.scoped, Effect.provide(TestHost.layer())) as Effect.Effect<
+    A,
+    E
+  >
 
 const ended = (root: { readonly log: () => ReadonlyArray<MessageLog.Entry> }) =>
   root.log().flatMap((entry) => entry._tag === "CommandEnded" ? [entry] : [])
@@ -71,7 +103,10 @@ describe("Component.noop", () => {
       root.send(Message.Fire({ command: "Quiet" }))
       yield* TestHost.settle
       assert.deepStrictEqual(root.model(), ["Fire"])
-      assert.deepStrictEqual(root.log().filter((entry) => entry._tag === "Update").length, 1)
+      assert.deepStrictEqual(
+        root.log().filter((entry) => entry._tag === "Update").length,
+        1
+      )
       const [entry] = ended(root)
       assert.strictEqual(entry.name, "Quiet")
       assert.strictEqual(entry.silent, true)
@@ -80,7 +115,12 @@ describe("Component.noop", () => {
       assert.deepStrictEqual(root.pending(), [])
       // The wire keeps the flag and the ids.
       const wire = MessageLog.makeEncoder().encode(entry)
-      assert.deepStrictEqual(Schema.decodeUnknownSync(MessageLog.Wire)(JSON.parse(JSON.stringify(wire))), wire)
+      assert.deepStrictEqual(
+        Schema.decodeUnknownSync(MessageLog.Wire)(
+          JSON.parse(JSON.stringify(wire))
+        ),
+        wire
+      )
       assert.deepStrictEqual(
         [(wire as any).silent, (wire as any).spanId, (wire as any).traceId],
         [true, entry.spanId, entry.traceId]
@@ -95,10 +135,15 @@ describe("Component.noop", () => {
       assert.deepStrictEqual(root.model(), ["Fire", "Got 0"])
       const [entry] = ended(root)
       assert.isFalse(entry.silent)
-      const update = root.log().find((entry) => entry._tag === "Update" && entry.source._tag === "Command")
+      const update = root.log().find((entry) =>
+        entry._tag === "Update" && entry.source._tag === "Command"
+      )
       assert.isDefined(update)
       if (update?._tag !== "Update" || update.source._tag !== "Command") return
-      assert.deepStrictEqual([entry.spanId, entry.traceId], [update.source.spanId, update.source.traceId])
+      assert.deepStrictEqual([entry.spanId, entry.traceId], [
+        update.source.spanId,
+        update.source.traceId
+      ])
       assert.strictEqual(typeof entry.spanId, "string")
     })))
 
@@ -128,10 +173,13 @@ describe("Component.noop", () => {
       root.send(Message.Fire({ command: "Empty" }))
       yield* TestHost.settle
       assert.deepStrictEqual(root.model(), ["Fire", "Fire"])
-      assert.deepStrictEqual(ended(root).map((entry) => [entry.name, entry.silent]), [
-        ["AllQuiet", true],
-        ["Empty", false]
-      ])
+      assert.deepStrictEqual(
+        ended(root).map((entry) => [entry.name, entry.silent]),
+        [
+          ["AllQuiet", true],
+          ["Empty", false]
+        ]
+      )
     })))
 
   it.effect("queue: silent and message-bearing runs of one definition keep issue order", () =>
@@ -143,8 +191,18 @@ describe("Component.noop", () => {
       yield* TestHost.settle
       yield* TestClock.adjust("60 millis")
       yield* TestHost.settle
-      assert.deepStrictEqual(root.model(), ["Queue", "Queue", "Queue", "Got 0", "Got 2"])
-      assert.deepStrictEqual(ended(root).map((entry) => entry.silent), [false, true, false])
+      assert.deepStrictEqual(root.model(), [
+        "Queue",
+        "Queue",
+        "Queue",
+        "Got 0",
+        "Got 2"
+      ])
+      assert.deepStrictEqual(ended(root).map((entry) => entry.silent), [
+        false,
+        true,
+        false
+      ])
       assert.deepStrictEqual(root.pending(), [])
     })))
 
@@ -163,7 +221,12 @@ describe("Component.noop", () => {
 
   it.effect("a component whose Message is Schema.Never runs a silent Command", () =>
     Effect.gen(function*() {
-      const Silent = Component.define({ name: "Silent", scoped: false, model: Schema.Number, message: Schema.Never })
+      const Silent = Component.define({
+        name: "Silent",
+        scoped: false,
+        model: Schema.Number,
+        message: Schema.Never
+      })
         .make({
           init: ($) => $.set(0).run(Quiet.make()),
           update: ($) => $.model,
@@ -181,7 +244,12 @@ describe("Component.noop", () => {
         Effect.succeed(() => Effect.sleep("1 second"))
       ) {}
       let mapped = 0
-      const Child = Component.define({ name: "Child", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+      const Child = Component.define({
+        name: "Child",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
         init: ($) =>
           $.set(null).run(
             Slow.make({}).pipe(Command.map(() => {
@@ -194,10 +262,16 @@ describe("Component.noop", () => {
       })
       const Close = UiSchema.TaggedEnum({ Close: {} })
       const Parent = Component.provide(
-        Component.define({ name: "Parent", scoped: false, model: Schema.Boolean, message: Close }).make({
+        Component.define({
+          name: "Parent",
+          scoped: false,
+          model: Schema.Boolean,
+          message: Close
+        }).make({
           init: () => true,
           update: () => false,
-          view: (h, open) => h.el("div", [open ? Child(h, { key: "child", props: {} }) : null])
+          view: (h, open) =>
+            h.el("div", [open ? Child(h, { key: "child", props: {} }) : null])
         }),
         Slow.layer
       )
@@ -211,7 +285,9 @@ describe("Component.noop", () => {
       assert.strictEqual(mapped, 0)
       assert.deepStrictEqual(ended(root), [])
       assert.deepStrictEqual(
-        root.log().flatMap((entry) => entry._tag === "CommandInterrupted" ? [entry.name] : []),
+        root.log().flatMap((entry) =>
+          entry._tag === "CommandInterrupted" ? [entry.name] : []
+        ),
         ["test/Slow"]
       )
     })))

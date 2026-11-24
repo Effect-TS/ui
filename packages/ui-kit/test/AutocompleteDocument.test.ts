@@ -19,16 +19,26 @@ const Message = UiSchema.TaggedEnum({
   Submitted: { query: Schema.String }
 })
 
-const FormModel = Schema.Struct({ open: Schema.Boolean, value: Schema.String, log: Schema.Array(Schema.String) })
+const FormModel = Schema.Struct({
+  open: Schema.Boolean,
+  value: Schema.String,
+  log: Schema.Array(Schema.String)
+})
 type FormModel = typeof FormModel.Type
 
 const formUpdate = {
-  RequestedOpen: ({ model }: { readonly model: FormModel }, { reason }: { readonly reason: string }) => ({
+  RequestedOpen: (
+    { model }: { readonly model: FormModel },
+    { reason }: { readonly reason: string }
+  ) => ({
     ...model,
     open: true,
     log: [...model.log, "RequestedOpen " + reason]
   }),
-  RequestedClose: ({ model }: { readonly model: FormModel }, { reason }: { readonly reason: string }) => ({
+  RequestedClose: (
+    { model }: { readonly model: FormModel },
+    { reason }: { readonly reason: string }
+  ) => ({
     ...model,
     open: false,
     log: [...model.log, "RequestedClose " + reason]
@@ -41,7 +51,10 @@ const formUpdate = {
     value,
     log: [...model.log, "Updated " + JSON.stringify(value) + " " + reason]
   }),
-  Submitted: ({ model }: { readonly model: FormModel }, { query }: { readonly query: string }) => ({
+  Submitted: (
+    { model }: { readonly model: FormModel },
+    { query }: { readonly query: string }
+  ) => ({
     ...model,
     log: [...model.log, "Submitted " + JSON.stringify(query)]
   })
@@ -57,16 +70,26 @@ const Page = Component.define({
   init: () => ({ open: false, value: "", log: [] }),
   update: formUpdate,
   view: (h, model) =>
-    h.form.onSubmit(({ fields }) => Message.Submitted({ query: fields.q ?? "" })).children(
+    h.form.onSubmit(({ fields }) =>
+      Message.Submitted({ query: fields.q ?? "" })
+    ).children(
       Field(h, {
         props: { filled: model.value !== "" },
         view: (field) =>
           Autocomplete(h, {
-            props: { open: model.open, value: model.value, items, name: "q", submitOnItemClick: true },
+            props: {
+              open: model.open,
+              value: model.value,
+              items,
+              name: "q",
+              submitOnItemClick: true
+            },
             onEmit: {
               RequestedOpen: ({ reason }) => Message.RequestedOpen({ reason }),
-              RequestedClose: ({ reason }) => Message.RequestedClose({ reason }),
-              Updated: ({ reason, value }) => Message.Updated({ value, reason }),
+              RequestedClose: ({ reason }) =>
+                Message.RequestedClose({ reason }),
+              Updated: ({ reason, value }) =>
+                Message.Updated({ value, reason }),
               Highlighted: () => undefined,
               Settled: () => undefined
             },
@@ -74,15 +97,19 @@ const Page = Component.define({
               field.root(h.div).children(
                 field.label(h.label).children("Fruit"),
                 autocomplete.input(field.control(h.input.class("input"))),
-                autocomplete.positioner(h.div.attr("id", "positioner")).children(
-                  autocomplete.popup(h.div).children(
-                    autocomplete.list(h.div).children(
-                      ...autocomplete.items.map(({ label, value }) =>
-                        autocomplete.item({ element: h.div.attr("data-testid", value), value }).children(label)
+                autocomplete.positioner(h.div.attr("id", "positioner"))
+                  .children(
+                    autocomplete.popup(h.div).children(
+                      autocomplete.list(h.div).children(
+                        ...autocomplete.items.map(({ label, value }) =>
+                          autocomplete.item({
+                            element: h.div.attr("data-testid", value),
+                            value
+                          }).children(label)
+                        )
                       )
                     )
                   )
-                )
               )
           })
       })
@@ -100,7 +127,9 @@ const InPopup = Component.define({
   update: formUpdate,
   view: (h, model) =>
     h.div(
-      h.form.attr("id", "search").onSubmit(({ fields }) => Message.Submitted({ query: fields.q ?? "" })),
+      h.form.attr("id", "search").onSubmit(({ fields }) =>
+        Message.Submitted({ query: fields.q ?? "" })
+      ),
       Autocomplete(h, {
         props: {
           open: model.open,
@@ -120,13 +149,18 @@ const InPopup = Component.define({
         },
         view: (autocomplete) =>
           h.div(
-            autocomplete.trigger(h.button.attr("id", "trigger")).children(autocomplete.value(h.span)),
+            autocomplete.trigger(h.button.attr("id", "trigger")).children(
+              autocomplete.value(h.span)
+            ),
             autocomplete.positioner(h.div).children(
               autocomplete.popup(h.div).children(
                 autocomplete.input(h.input.class("input")),
                 autocomplete.list(h.div).children(
                   ...autocomplete.items.map(({ label, value }) =>
-                    autocomplete.item({ element: h.div.attr("data-testid", value), value }).children(label)
+                    autocomplete.item({
+                      element: h.div.attr("data-testid", value),
+                      value
+                    }).children(label)
                   )
                 )
               )
@@ -137,7 +171,11 @@ const InPopup = Component.define({
 })
 
 const NestedMessage = UiSchema.TaggedEnum({
-  Toggled: { which: Schema.Literals(["outer", "inner", "picker"]), open: Schema.Boolean, reason: Schema.String }
+  Toggled: {
+    which: Schema.Literals(["outer", "inner", "picker"]),
+    open: Schema.Boolean,
+    reason: Schema.String
+  }
 })
 
 const Nested = Component.define({
@@ -157,15 +195,20 @@ const Nested = Component.define({
     Toggled: ($, { open, reason, which }) => ({
       ...$.model,
       [which]: open,
-      log: [...$.model.log, which + (open ? " RequestedOpen " : " RequestedClose ") + reason]
+      log: [
+        ...$.model.log,
+        which + (open ? " RequestedOpen " : " RequestedClose ") + reason
+      ]
     })
   },
   view: (h, model) =>
     Combobox(h, {
       props: { open: model.outer, value: null, inputValue: "", items },
       onEmit: {
-        RequestedOpen: ({ reason }) => NestedMessage.Toggled({ which: "outer", open: true, reason }),
-        RequestedClose: ({ reason }) => NestedMessage.Toggled({ which: "outer", open: false, reason }),
+        RequestedOpen: ({ reason }) =>
+          NestedMessage.Toggled({ which: "outer", open: true, reason }),
+        RequestedClose: ({ reason }) =>
+          NestedMessage.Toggled({ which: "outer", open: false, reason }),
         Picked: () => undefined,
         RequestedInputValue: () => undefined,
         Highlighted: () => undefined,
@@ -181,8 +224,18 @@ const Nested = Component.define({
                   key: "inner",
                   props: { open: model.inner, value: "", items, modal: true },
                   onEmit: {
-                    RequestedOpen: ({ reason }) => NestedMessage.Toggled({ which: "inner", open: true, reason }),
-                    RequestedClose: ({ reason }) => NestedMessage.Toggled({ which: "inner", open: false, reason }),
+                    RequestedOpen: ({ reason }) =>
+                      NestedMessage.Toggled({
+                        which: "inner",
+                        open: true,
+                        reason
+                      }),
+                    RequestedClose: ({ reason }) =>
+                      NestedMessage.Toggled({
+                        which: "inner",
+                        open: false,
+                        reason
+                      }),
                     Updated: () => undefined,
                     Highlighted: () => undefined,
                     Settled: () => undefined
@@ -190,23 +243,40 @@ const Nested = Component.define({
                   view: (autocomplete) =>
                     h.div(
                       autocomplete.input(h.input.class("inner")),
-                      autocomplete.positioner(h.div.attr("id", "inner")).children(
-                        autocomplete.popup(h.div).children(
-                          autocomplete.list(h.div).children(
-                            ...autocomplete.items.map(({ label, value }) =>
-                              autocomplete.item({ element: h.div, value }).children(label)
+                      autocomplete.positioner(h.div.attr("id", "inner"))
+                        .children(
+                          autocomplete.popup(h.div).children(
+                            autocomplete.list(h.div).children(
+                              ...autocomplete.items.map(({ label, value }) =>
+                                autocomplete.item({ element: h.div, value })
+                                  .children(label)
+                              )
                             )
                           )
                         )
-                      )
                     )
                 }),
                 Autocomplete(h, {
                   key: "picker",
-                  props: { open: model.picker, value: "", items, inputInPopup: true },
+                  props: {
+                    open: model.picker,
+                    value: "",
+                    items,
+                    inputInPopup: true
+                  },
                   onEmit: {
-                    RequestedOpen: ({ reason }) => NestedMessage.Toggled({ which: "picker", open: true, reason }),
-                    RequestedClose: ({ reason }) => NestedMessage.Toggled({ which: "picker", open: false, reason }),
+                    RequestedOpen: ({ reason }) =>
+                      NestedMessage.Toggled({
+                        which: "picker",
+                        open: true,
+                        reason
+                      }),
+                    RequestedClose: ({ reason }) =>
+                      NestedMessage.Toggled({
+                        which: "picker",
+                        open: false,
+                        reason
+                      }),
                     Updated: () => undefined,
                     Highlighted: () => undefined,
                     Settled: () => undefined
@@ -214,15 +284,18 @@ const Nested = Component.define({
                   view: (autocomplete) =>
                     h.div(
                       autocomplete.trigger(h.button.class("picker")),
-                      autocomplete.positioner(h.div.attr("id", "picker")).children(
-                        autocomplete.popup(h.div).children(
-                          autocomplete.input(h.input.class("picker-input")),
-                          autocomplete.list(h.div)
+                      autocomplete.positioner(h.div.attr("id", "picker"))
+                        .children(
+                          autocomplete.popup(h.div).children(
+                            autocomplete.input(h.input.class("picker-input")),
+                            autocomplete.list(h.div)
+                          )
                         )
-                      )
                     )
                 }),
-                ...combobox.items.map(({ label, value }) => combobox.item({ element: h.div, value }).children(label))
+                ...combobox.items.map(({ label, value }) =>
+                  combobox.item({ element: h.div, value }).children(label)
+                )
               )
             )
           )
@@ -231,12 +304,19 @@ const Nested = Component.define({
 })
 
 const input = () => document.querySelector<HTMLInputElement>(".input")!
-const item = (value: string) => document.querySelector<HTMLElement>("[data-testid=" + value + "]")!
+const item = (value: string) =>
+  document.querySelector<HTMLElement>("[data-testid=" + value + "]")!
 const type = (value: string) => {
   const target = input()
   target.focus()
   target.value = value
-  target.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }))
+  target.dispatchEvent(
+    new InputEvent("input", {
+      bubbles: true,
+      inputType: "insertText",
+      data: value
+    })
+  )
 }
 
 describe("Autocomplete in a document", { concurrent: false }, () => {
@@ -248,15 +328,33 @@ describe("Autocomplete in a document", { concurrent: false }, () => {
       assert.strictEqual(input().name, "q")
       type("ap")
       yield* tick
-      input().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }))
+      input().dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "ArrowDown",
+          bubbles: true,
+          cancelable: true
+        })
+      )
       yield* tick
-      input().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }))
+      input().dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true
+        })
+      )
       yield* tick
       assert.strictEqual(input().value, "Apple")
       assert.strictEqual(document.activeElement, input())
       type("ba")
       yield* tick
-      item("banana").dispatchEvent(new PointerEvent("click", { bubbles: true, detail: 1, pointerType: "mouse" }))
+      item("banana").dispatchEvent(
+        new PointerEvent("click", {
+          bubbles: true,
+          detail: 1,
+          pointerType: "mouse"
+        })
+      )
       yield* tick
       assert.strictEqual(input().value, "Banana")
       assert.deepStrictEqual(root.model()?.log, [
@@ -279,11 +377,23 @@ describe("Autocomplete in a document", { concurrent: false }, () => {
       const root = yield* BrowserHost.mountEffect(InPopup, {}, yield* container)
       yield* tick
       const trigger = document.getElementById("trigger")!
-      trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }))
+      trigger.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "ArrowDown",
+          bubbles: true,
+          cancelable: true
+        })
+      )
       yield* tick
       type("ba")
       yield* tick
-      item("banana").dispatchEvent(new PointerEvent("click", { bubbles: true, detail: 1, pointerType: "mouse" }))
+      item("banana").dispatchEvent(
+        new PointerEvent("click", {
+          bubbles: true,
+          detail: 1,
+          pointerType: "mouse"
+        })
+      )
       yield* tick
       assert.strictEqual(trigger.textContent, "Banana")
       const named = document.querySelectorAll<HTMLInputElement>("[name=q]")
@@ -310,18 +420,29 @@ describe("Autocomplete in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement, inner)
       press(document.querySelector("#inner > [data-combobox-blocker]")!)
       yield* tick
-      assert.deepStrictEqual(root.model()?.log, ["inner RequestedClose outside-press"])
+      assert.deepStrictEqual(root.model()?.log, [
+        "inner RequestedClose outside-press"
+      ])
       const picker = document.querySelector<HTMLButtonElement>(".picker")!
       picker.focus()
       yield* tick
       assert.strictEqual(document.activeElement, picker)
-      picker.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }))
+      picker.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "ArrowDown",
+          bubbles: true,
+          cancelable: true
+        })
+      )
       yield* tick
       assert.deepStrictEqual(root.model()?.log, [
         "inner RequestedClose outside-press",
         "picker RequestedOpen list-navigation"
       ])
       assert.isTrue(document.getElementById("picker")!.matches(":popover-open"))
-      assert.strictEqual(document.activeElement, document.querySelector(".picker-input"))
+      assert.strictEqual(
+        document.activeElement,
+        document.querySelector(".picker-input")
+      )
     }).pipe(Effect.scoped))
 })

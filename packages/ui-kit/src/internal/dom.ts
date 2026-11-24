@@ -1,7 +1,9 @@
-export const isElement = (node: unknown): node is Element => (node as Node | null)?.nodeType === 1
+export const isElement = (node: unknown): node is Element =>
+  (node as Node | null)?.nodeType === 1
 
 export const isHTMLElement = (node: unknown): node is HTMLElement => {
-  const ctor = (node as Node | null)?.ownerDocument?.defaultView?.HTMLElement ?? globalThis.HTMLElement
+  const ctor = (node as Node | null)?.ownerDocument?.defaultView?.HTMLElement ??
+    globalThis.HTMLElement
   return ctor !== undefined && node instanceof ctor
 }
 
@@ -24,24 +26,39 @@ export const focusVisible = (element: Element): boolean => {
 
 export const activeOf = (document: Document): Element | null => {
   let active = document.activeElement
-  while (active?.shadowRoot?.activeElement != null) active = active.shadowRoot.activeElement
+  while (active?.shadowRoot?.activeElement != null) {
+    active = active.shadowRoot.activeElement
+  }
   return active
 }
 
 export const radioGroup = (element: HTMLElement): Array<HTMLInputElement> => {
   const radio = element as HTMLInputElement
-  if (radio.localName !== "input" || radio.type !== "radio" || radio.name === "") return []
-  return Array.from((radio.form ?? radio.ownerDocument).querySelectorAll<HTMLInputElement>("input[type=\"radio\"]"))
+  if (
+    radio.localName !== "input" || radio.type !== "radio" || radio.name === ""
+  ) return []
+  return Array.from(
+    (radio.form ?? radio.ownerDocument).querySelectorAll<HTMLInputElement>(
+      "input[type=\"radio\"]"
+    )
+  )
     .filter((other) => other.name === radio.name && other.form === radio.form)
 }
 
 export const onRange = (event: Event): boolean =>
   event.composedPath().some((target) =>
-    isHTMLElement(target) && target.localName === "input" && (target as HTMLInputElement).type === "range"
+    isHTMLElement(target) && target.localName === "input" &&
+    (target as HTMLInputElement).type === "range"
   )
 
-export const byAttribute = (document: Document, name: string, value: string): HTMLElement | null =>
-  document.querySelector<HTMLElement>("[" + name + "=\"" + CSS.escape(value) + "\"]")
+export const byAttribute = (
+  document: Document,
+  name: string,
+  value: string
+): HTMLElement | null =>
+  document.querySelector<HTMLElement>(
+    "[" + name + "=\"" + CSS.escape(value) + "\"]"
+  )
 
 export const focusFinal = (
   document: Document,
@@ -58,11 +75,17 @@ export const focusFinal = (
 }
 
 type StyleName = Exclude<
-  { [K in keyof CSSStyleDeclaration]: CSSStyleDeclaration[K] extends string ? K : never }[keyof CSSStyleDeclaration],
+  {
+    [K in keyof CSSStyleDeclaration]: CSSStyleDeclaration[K] extends string ? K
+      : never
+  }[keyof CSSStyleDeclaration],
   number
 >
 
-export const saved = (element: HTMLElement, names: ReadonlyArray<StyleName>): () => void => {
+export const saved = (
+  element: HTMLElement,
+  names: ReadonlyArray<StyleName>
+): () => void => {
   const values = names.map((name) => element.style[name])
   return () => names.forEach((name, i) => (element.style[name] = values[i]!))
 }
@@ -74,9 +97,15 @@ export const override = (
 ): () => void => {
   const style = element.style
   const before = Object.keys(styles).map((name) =>
-    [name, style.getPropertyValue(name), style.getPropertyPriority(name)] as const
+    [
+      name,
+      style.getPropertyValue(name),
+      style.getPropertyPriority(name)
+    ] as const
   )
-  for (const [name, value] of Object.entries(styles)) style.setProperty(name, value, priority)
+  for (const [name, value] of Object.entries(styles)) {
+    style.setProperty(name, value, priority)
+  }
   return () => {
     for (const [name, value, priority] of before) {
       if (value === "") style.removeProperty(name)

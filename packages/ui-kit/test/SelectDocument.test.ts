@@ -4,9 +4,21 @@ import { Dialog, Field, Select } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { byId, container, holdExits, popovers, press, tick } from "./utils/document.ts"
+import {
+  byId,
+  container,
+  holdExits,
+  popovers,
+  press,
+  tick
+} from "./utils/document.ts"
 
-type Rect = { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
+type Rect = {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
 
 const rects = new Map<string, Rect>()
 const positionerSize = { width: 200, height: 150 }
@@ -25,9 +37,15 @@ const rectOf = (element: Element): Rect => {
   if (key?.startsWith("text-")) {
     const positioner = rectOf(byId("positioner"))
     const index = items.findIndex(({ value }) => "text-" + value === key)
-    return { x: positioner.x + 8, y: positioner.y + 10 + index * 30, width: 80, height: 20 }
+    return {
+      x: positioner.x + 8,
+      y: positioner.y + 10 + index * 30,
+      width: 80,
+      height: 20
+    }
   }
-  return rects.get(element.id || key || "") ?? { x: 0, y: 0, width: 0, height: 0 }
+  return rects.get(element.id || key || "") ??
+    { x: 0, y: 0, width: 0, height: 0 }
 }
 
 class StillResizeObserver {
@@ -54,18 +72,33 @@ const geometry = Effect.acquireRelease(
       if (target.id !== "positioner") return computed
       const inline = (target as HTMLElement).style
       const usedMargin = (declared: string) =>
-        declared !== "" ? declared : inline.top === "0px" && inline.bottom === "0px" ? "400px" : "0px"
+        declared !== ""
+          ? declared
+          : inline.top === "0px" && inline.bottom === "0px"
+          ? "400px"
+          : "0px"
       return new Proxy(computed, {
         get: (style, name) => {
           const value = Reflect.get(style, name)
-          if (name === "marginTop" || name === "marginBottom") return usedMargin(value)
+          if (name === "marginTop" || name === "marginBottom") {
+            return usedMargin(value)
+          }
           return typeof value === "function" ? value.bind(style) : value
         }
       })
     }
     element.getBoundingClientRect = function(this: Element) {
       const { height, width, x, y } = rectOf(this)
-      return { x, y, width, height, left: x, top: y, right: x + width, bottom: y + height }
+      return {
+        x,
+        y,
+        width,
+        height,
+        left: x,
+        top: y,
+        right: x + width,
+        bottom: y + height
+      }
     }
     Object.defineProperty(html, "offsetWidth", {
       configurable: true,
@@ -79,8 +112,14 @@ const geometry = Effect.acquireRelease(
         return rectOf(this).height
       }
     })
-    Object.defineProperty(root, "clientWidth", { configurable: true, value: 1000 })
-    Object.defineProperty(root, "clientHeight", { configurable: true, value: 800 })
+    Object.defineProperty(root, "clientWidth", {
+      configurable: true,
+      value: 1000
+    })
+    Object.defineProperty(root, "clientHeight", {
+      configurable: true,
+      value: 800
+    })
     return () => {
       element.getBoundingClientRect = saved.rect
       Object.defineProperty(html, "offsetWidth", saved.offsetWidth!)
@@ -132,14 +171,25 @@ const Page = Component.define({
 }).make({
   init: () => ({ open: false, value: null, log: [] }),
   update: {
-    RequestedOpen: ($, { reason }) => ({ ...$.model, open: true, log: [...$.model.log, "RequestedOpen " + reason] }),
+    RequestedOpen: ($, { reason }) => ({
+      ...$.model,
+      open: true,
+      log: [...$.model.log, "RequestedOpen " + reason]
+    }),
     RequestedClose: ($, { reason }) => ({
       ...$.model,
       open: $.props.refuseFocusOut && reason === "focus-out",
       log: [...$.model.log, "RequestedClose " + reason]
     }),
-    Picked: ($, { value }) => ({ ...$.model, value, log: [...$.model.log, "Picked " + value] }),
-    RequestedCloseDialog: ($, { reason }) => ({ ...$.model, log: [...$.model.log, "RequestedCloseDialog " + reason] })
+    Picked: ($, { value }) => ({
+      ...$.model,
+      value,
+      log: [...$.model.log, "Picked " + value]
+    }),
+    RequestedCloseDialog: ($, { reason }) => ({
+      ...$.model,
+      log: [...$.model.log, "RequestedCloseDialog " + reason]
+    })
   },
   view: (h, model) => {
     const select = Field(h, {
@@ -159,20 +209,33 @@ const Page = Component.define({
           onEmit: {
             RequestedOpen: ({ reason }) => Message.RequestedOpen({ reason }),
             RequestedClose: ({ reason }) => Message.RequestedClose({ reason }),
-            Picked: ({ value }) => Message.Picked({ value: typeof value === "string" ? value : null }),
+            Picked: ({ value }) =>
+              Message.Picked({
+                value: typeof value === "string" ? value : null
+              }),
             Settled: () => undefined
           },
           view: (select) =>
             field.root(h.div.attr("id", "field")).children(
               select.label(h.div.attr("id", "label")).children("Theme"),
-              h.props.finalFocus ? select.finalFocus(h.button.attr("id", "final")).children("Final") : null,
+              h.props.finalFocus
+                ? select.finalFocus(h.button.attr("id", "final")).children(
+                  "Final"
+                )
+                : null,
               field.focusWithin(h.div).children(
-                select.trigger(field.member(h.button)).children(select.value(h.span.attr("data-geo", "value"))),
+                select.trigger(field.member(h.button)).children(
+                  select.value(h.span.attr("data-geo", "value"))
+                ),
                 select.positioner(h.div.attr("id", "positioner")).children(
                   select.popup(h.div.class("popup")).children(
                     ...items.map(({ label, value }) =>
-                      select.item({ element: h.div.attr("data-testid", value), value }).children(
-                        select.itemText(h.div.attr("data-geo", "text-" + value)).children(label)
+                      select.item({
+                        element: h.div.attr("data-testid", value),
+                        value
+                      }).children(
+                        select.itemText(h.div.attr("data-geo", "text-" + value))
+                          .children(label)
                       )
                     )
                   )
@@ -191,10 +254,16 @@ const Page = Component.define({
         props: { open: true },
         onEmit: {
           RequestedOpen: () => undefined,
-          RequestedClose: ({ reason }) => Message.RequestedCloseDialog({ reason }),
+          RequestedClose: ({ reason }) =>
+            Message.RequestedCloseDialog({ reason }),
           Settled: () => undefined
         },
-        view: (dialog) => h.div(dialog.portal(h.dialog)?.children(dialog.popup(h.div).children(form)))
+        view: (dialog) =>
+          h.div(
+            dialog.portal(h.dialog)?.children(
+              dialog.popup(h.div).children(form)
+            )
+          )
       })
       : form
   }
@@ -203,7 +272,10 @@ const Page = Component.define({
 const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
   yield* popovers
   yield* geometry
-  rects.set("trigger", rects.get("trigger") ?? { x: 100, y: 300, width: 120, height: 30 })
+  rects.set(
+    "trigger",
+    rects.get("trigger") ?? { x: 100, y: 300, width: 120, height: 30 }
+  )
   rects.set("value", { x: 110, y: 305, width: 60, height: 20 })
   const app = yield* container
   const root = yield* BrowserHost.mountEffect(
@@ -224,16 +296,30 @@ const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
 })
 
 const style = (name: string) => byId("positioner").style.getPropertyValue(name)
-const item = (value: string) => document.querySelector<HTMLElement>("[data-testid=" + value + "]")!
-const keydown = (target: Element, key: string, init: KeyboardEventInit = {}) => {
-  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init })
+const item = (value: string) =>
+  document.querySelector<HTMLElement>("[data-testid=" + value + "]")!
+const keydown = (
+  target: Element,
+  key: string,
+  init: KeyboardEventInit = {}
+) => {
+  const event = new KeyboardEvent("keydown", {
+    key,
+    bubbles: true,
+    cancelable: true,
+    ...init
+  })
   target.dispatchEvent(event)
   return event
 }
 const keyup = (target: Element, key: string) =>
-  target.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true, cancelable: true }))
+  target.dispatchEvent(
+    new KeyboardEvent("keyup", { key, bubbles: true, cancelable: true })
+  )
 const mousedown = (target: Element) =>
-  target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }))
+  target.dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 })
+  )
 const shown = () => byId("positioner").matches(":popover-open")
 const reveals = Effect.acquireRelease(
   Effect.sync(() => {
@@ -241,7 +327,9 @@ const reveals = Effect.acquireRelease(
     const saved = element.scrollIntoView
     const seen: Array<string> = []
     element.scrollIntoView = function(this: Element) {
-      seen.push(this.getAttribute("data-testid") + " with the popup at " + style("top"))
+      seen.push(
+        this.getAttribute("data-testid") + " with the popup at " + style("top")
+      )
     }
     return { seen, restore: () => (element.scrollIntoView = saved) }
   }),
@@ -269,7 +357,10 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(revealed, ["light with the popup at 330px"])
       assert.strictEqual(style("--anchor-width"), "120px")
       assert.strictEqual(byId("positioner").getAttribute("data-side"), "bottom")
-      assert.strictEqual(byId("trigger").getAttribute("data-popup-side"), "bottom")
+      assert.strictEqual(
+        byId("trigger").getAttribute("data-popup-side"),
+        "bottom"
+      )
       root.send(Message.RequestedClose({ reason: "test" }))
       yield* tick
       rects.set("trigger", { x: 100, y: 700, width: 120, height: 30 })
@@ -333,7 +424,9 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.strictEqual(style("left"), "60px")
       assert.strictEqual(style("top"), "40px")
       assert.strictEqual(style("height"), "")
-      const blocker = byId("positioner").querySelector<HTMLElement>("[data-select-blocker]")!
+      const blocker = byId("positioner").querySelector<HTMLElement>(
+        "[data-select-blocker]"
+      )!
       assert.include(blocker.style.getPropertyValue("clip-path"), "100px 10px")
     }).pipe(Effect.scoped))
 
@@ -441,19 +534,29 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement, byId("trigger"))
       keyup(byId("trigger"), " ")
       yield* tick
-      assert.deepStrictEqual(log(), ["RequestedOpen list-navigation", "Picked light", "RequestedClose item-press"])
+      assert.deepStrictEqual(log(), [
+        "RequestedOpen list-navigation",
+        "Picked light",
+        "RequestedClose item-press"
+      ])
     }).pipe(Effect.scoped))
 
   it.effect("a close the consumer makes returns focus, whatever the last dismissal did, unless focus is still outside", () =>
     Effect.gen(function*() {
       for (const kept of [false, true]) {
         yield* Effect.scoped(Effect.gen(function*() {
-          const { root } = yield* mountPage({ finalFocus: kept, holdExit: kept })
+          const { root } = yield* mountPage({
+            finalFocus: kept,
+            holdExit: kept
+          })
           const back = byId(kept ? "final" : "trigger")
           const visible: Array<unknown> = []
           const focus = back.focus
           back.focus = (options?: FocusOptions) => {
-            visible.push((options as { readonly focusVisible?: boolean } | undefined)?.focusVisible)
+            visible.push(
+              (options as { readonly focusVisible?: boolean } | undefined)
+                ?.focusVisible
+            )
             focus.call(back, options)
           }
           const reopenAndClose = Effect.gen(function*() {
@@ -478,7 +581,10 @@ describe("Select in a document", { concurrent: false }, () => {
           assert.deepStrictEqual(visible, [false, true, false])
         }))
         yield* Effect.scoped(Effect.gen(function*() {
-          const { log, root } = yield* mountPage({ finalFocus: kept, refuseFocusOut: true })
+          const { log, root } = yield* mountPage({
+            finalFocus: kept,
+            refuseFocusOut: true
+          })
           for (const returned of [false, true]) {
             keydown(byId("trigger"), "ArrowDown")
             yield* tick
@@ -490,7 +596,11 @@ describe("Select in a document", { concurrent: false }, () => {
             yield* tick
             assert.isFalse(shown())
             const expected = returned ? (kept ? "final" : "trigger") : "after"
-            assert.strictEqual(document.activeElement, byId(expected), kept + " " + returned)
+            assert.strictEqual(
+              document.activeElement,
+              byId(expected),
+              kept + " " + returned
+            )
           }
           assert.deepStrictEqual(log(), [
             "RequestedOpen list-navigation",
@@ -517,8 +627,13 @@ describe("Select in a document", { concurrent: false }, () => {
       keydown(byId("trigger"), "ArrowDown")
       yield* tick
       const page = document.documentElement
-      Object.defineProperty(page, "scrollHeight", { configurable: true, value: 2000 })
-      yield* Effect.addFinalizer(() => Effect.sync(() => delete (page as any).scrollHeight))
+      Object.defineProperty(page, "scrollHeight", {
+        configurable: true,
+        value: 2000
+      })
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => delete (page as any).scrollHeight)
+      )
       const pressPage = (offsetX: number) => {
         const event = new PointerEvent("pointerdown", {
           bubbles: true,
@@ -554,7 +669,11 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.strictEqual(document.body.style.overflowY, "hidden")
       const blocker = byId("positioner").querySelector("[data-select-blocker]")!
       assert.isNotNull(blocker)
-      const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 })
+      const down = new MouseEvent("mousedown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0
+      })
       blocker.dispatchEvent(down)
       assert.isTrue(down.defaultPrevented)
       press(blocker)
@@ -574,7 +693,10 @@ describe("Select in a document", { concurrent: false }, () => {
       yield* tick
       press(item("dark"))
       yield* tick
-      assert.deepStrictEqual(log(), ["RequestedOpen list-navigation", "RequestedClose escape-key"])
+      assert.deepStrictEqual(log(), [
+        "RequestedOpen list-navigation",
+        "RequestedClose escape-key"
+      ])
       assert.strictEqual(document.activeElement, byId("trigger"))
     }).pipe(Effect.scoped))
 

@@ -13,7 +13,11 @@ import { Effect, Layer } from "effect"
 import { App } from "./App.ts"
 
 const Main = BrowserHost.mount(App, {}, document.getElementById("app")!).pipe(
-  Layer.provide(import.meta.env.DEV ? DevTools.layer({ position: "BottomRight" }) : Layer.empty)
+  Layer.provide(
+    import.meta.env.DEV
+      ? DevTools.layer({ position: "BottomRight" })
+      : Layer.empty
+  )
 )
 
 Effect.runFork(Layer.launch(Main))

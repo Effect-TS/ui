@@ -1,7 +1,13 @@
 import { Feature } from "@effect/ui"
 import { assert, describe, it } from "@effect/vitest"
 import { Context, Effect, Layer, Option, Schema, Scope } from "effect"
-import { SaveTodo, Todo, TodoItem, TodoItemEvents, TodoItemMessage } from "./fixtures/components.ts"
+import {
+  SaveTodo,
+  Todo,
+  TodoItem,
+  TodoItemEvents,
+  TodoItemMessage
+} from "./fixtures/components.ts"
 
 class Todos extends Feature.Service<Todos>()("Todos", {
   props: Schema.Struct({ todo: Todo }),
@@ -18,18 +24,25 @@ describe("Feature", () => {
   })
 
   it("defaults events to Schema.Never", () => {
-    class Quiet extends Feature.Service<Quiet>()("Quiet", { props: Schema.Struct({}) }) {}
+    class Quiet
+      extends Feature.Service<Quiet>()("Quiet", { props: Schema.Struct({}) })
+    {}
     assert.strictEqual(Quiet.events, Schema.Never)
   })
 
   it.effect("layer closes the implementation's requirements with the build site's Context, minus Scope", () =>
     Effect.gen(function*() {
-      const fake = Layer.succeed(SaveTodo, () => Effect.succeed(TodoItemMessage.Saved()))
+      const fake = Layer.succeed(
+        SaveTodo,
+        () => Effect.succeed(TodoItemMessage.Saved())
+      )
       const layer = Todos.toLayer(TodoItem).pipe(Layer.provide(fake))
       const context = yield* Layer.build(layer)
       const todos = Context.get(context, Todos)
       assert.strictEqual<unknown>(todos.component, TodoItem)
       assert.isTrue(Option.isSome(Context.getOption(todos.context, SaveTodo)))
-      assert.isTrue(Option.isNone(Context.getOption(todos.context, Scope.Scope)))
+      assert.isTrue(
+        Option.isNone(Context.getOption(todos.context, Scope.Scope))
+      )
     }).pipe(Effect.scoped))
 })

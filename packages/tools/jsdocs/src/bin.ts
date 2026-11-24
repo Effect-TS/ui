@@ -1,9 +1,21 @@
 #!/usr/bin/env node
 import * as path from "node:path"
-import { computeJSDocInputHash, extractJSDocsSync, loadJSDocConfig, readJSDocModel, writeJSDocModel } from "./Jsdocs.ts"
+import {
+  computeJSDocInputHash,
+  extractJSDocsSync,
+  loadJSDocConfig,
+  readJSDocModel,
+  writeJSDocModel
+} from "./Jsdocs.ts"
 
-function reportDiagnostics(model: ReturnType<typeof extractJSDocsSync>, check: boolean) {
-  const diagnostics = model.files.reduce((count, file) => count + file.diagnostics.length, 0)
+function reportDiagnostics(
+  model: ReturnType<typeof extractJSDocsSync>,
+  check: boolean
+) {
+  const diagnostics = model.files.reduce(
+    (count, file) => count + file.diagnostics.length,
+    0
+  )
   if (diagnostics > 0) {
     for (const file of model.files) {
       for (const diagnostic of file.diagnostics) {
@@ -30,6 +42,8 @@ try {
     reportDiagnostics(model, check)
   }
 } catch (error) {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
+  process.stderr.write(
+    `${error instanceof Error ? error.message : String(error)}\n`
+  )
   process.exitCode = 1
 }

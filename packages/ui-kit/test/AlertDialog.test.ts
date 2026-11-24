@@ -28,7 +28,10 @@ const Page = Component.define({
       },
       view: (alertDialog) =>
         h.div(
-          alertDialog.portal(h.dialog.attr("role", "dialog"))?.attr("role", "region").children(alertDialog.popup(h.div))
+          alertDialog.portal(h.dialog.attr("role", "dialog"))?.attr(
+            "role",
+            "region"
+          ).children(alertDialog.popup(h.div))
         )
     })
 })
@@ -42,7 +45,10 @@ it.effect("opens as a modal alertdialog and ignores a press on its layer despite
     const dialog = app.querySelector("dialog")!
     assert.strictEqual(dialog.getAttribute("popover"), "manual")
     assert.strictEqual(dialog.getAttribute("role"), "alertdialog")
-    assert.strictEqual(dialog.firstElementChild?.getAttribute("role"), "presentation")
+    assert.strictEqual(
+      dialog.firstElementChild?.getAttribute("role"),
+      "presentation"
+    )
     assert.strictEqual(document.body.style.overflowY, "hidden")
     click(dialog.firstElementChild!)
     yield* tick

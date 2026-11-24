@@ -175,7 +175,9 @@ export type Mode = "concurrent" | "switch" | "queue"
  * @category models
  * @since 0.1.0
  */
-export type ArgsInput = Schema.Struct.Fields | Schema.Struct<Schema.Struct.Fields>
+export type ArgsInput =
+  | Schema.Struct.Fields
+  | Schema.Struct<Schema.Struct.Fields>
 
 /**
  * The fields of an `args` input.
@@ -198,7 +200,14 @@ export type ArgsFields<In> = In extends Schema.Struct<infer Fields> ? Fields
  */
 export type ArgsOf<In> = Schema.Struct<ArgsFields<In>>["Type"]
 
-type Json = string | number | boolean | null | undefined | ReadonlyArray<Json> | { readonly [key: string]: Json }
+type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | ReadonlyArray<Json>
+  | { readonly [key: string]: Json }
 
 /**
  * The args fields a `group` may name: those whose encoded form is JSON.
@@ -209,8 +218,8 @@ type Json = string | number | boolean | null | undefined | ReadonlyArray<Json> |
  */
 export type GroupField<In> =
   & {
-    [K in keyof ArgsFields<In>]: ArgsFields<In>[K] extends { readonly Encoded: infer E } ?
-      [E] extends [Json] ? K : never
+    [K in keyof ArgsFields<In>]: ArgsFields<In>[K] extends
+      { readonly Encoded: infer E } ? [E] extends [Json] ? K : never
       : never
   }[keyof ArgsFields<In>]
   & string
@@ -224,7 +233,8 @@ export type GroupField<In> =
  * @category utility types
  * @since 0.1.0
  */
-export type GroupArg<Args, G extends string> = [G] extends [never] ? [] : [group?: Pick<Args, G & keyof Args>]
+export type GroupArg<Args, G extends string> = [G] extends [never] ? []
+  : [group?: Pick<Args, G & keyof Args>]
 
 /**
  * The arguments of `make`: optional when every field of the args is.
@@ -316,7 +326,8 @@ export type FrameworkService = FrameworkServices[keyof FrameworkServices]
  * @category utility types
  * @since 0.1.0
  */
-export type CapturesServices<R> = [Exclude<R, FrameworkService>] extends [never] ? unknown
+export type CapturesServices<R> = [Exclude<R, FrameworkService>] extends
+  [never] ? unknown
   : {
     readonly "A Command.Service captures its services when its Layer is built. Its function may only require framework services; it needs":
       Exclude<R, FrameworkService>
@@ -385,7 +396,9 @@ export interface Data extends Declared {
  * @category models
  * @since 0.1.0
  */
-export interface Proto<out Msg, in Source = Msg, in SourceE = never> extends Pipeable.Pipeable, Data {
+export interface Proto<out Msg, in Source = Msg, in SourceE = never>
+  extends Pipeable.Pipeable, Data
+{
   readonly [TypeId]: Variance<Msg, Source, SourceE>
   /**
    * Maps the success of the underlying definition to the message this Command
@@ -449,9 +462,13 @@ export type Kind = "Effect" | "Stream"
  * @category models
  * @since 0.1.0
  */
-export interface Issued<out Msg, out R, in Source, out K extends Kind, in SourceE = never>
-  extends Proto<Msg, Source, SourceE>
-{
+export interface Issued<
+  out Msg,
+  out R,
+  in Source,
+  out K extends Kind,
+  in SourceE = never
+> extends Proto<Msg, Source, SourceE> {
   readonly _tag: K
   /** The work of an `"Effect"` Command, with `map` and `match` applied. `undefined` on a `"Stream"` one. */
   readonly effect: K extends "Effect" ? Effect.Effect<Msg, never, R> : undefined
@@ -463,7 +480,8 @@ export interface Issued<out Msg, out R, in Source, out K extends Kind, in Source
    *
    * @internal
    */
-  readonly work: K extends "Effect" ? Effect.Effect<unknown, unknown, R> : Stream.Stream<unknown, unknown, R>
+  readonly work: K extends "Effect" ? Effect.Effect<unknown, unknown, R>
+    : Stream.Stream<unknown, unknown, R>
 }
 
 /**
@@ -480,7 +498,9 @@ export interface Issued<out Msg, out R, in Source, out K extends Kind, in Source
  * @category models
  * @since 0.1.0
  */
-export interface Unmatched<out A, out E, out R, out K extends Kind> extends Pipeable.Pipeable, Data {
+export interface Unmatched<out A, out E, out R, out K extends Kind>
+  extends Pipeable.Pipeable, Data
+{
   readonly [UnmatchedTypeId]: {
     readonly _A: Types.Covariant<A>
     readonly _E: Types.Covariant<E>
@@ -529,7 +549,10 @@ export interface Interrupt extends Pipeable.Pipeable {
  * @category models
  * @since 0.1.0
  */
-export type Command<Msg, R = never> = Issued<Msg, R, never, "Effect"> | Issued<Msg, R, never, "Stream"> | Interrupt
+export type Command<Msg, R = never> =
+  | Issued<Msg, R, never, "Effect">
+  | Issued<Msg, R, never, "Stream">
+  | Interrupt
 
 /**
  * The requirements of a Command, or of a union of them.
@@ -538,7 +561,8 @@ export type Command<Msg, R = never> = Issued<Msg, R, never, "Effect"> | Issued<M
  * @category utility types
  * @since 0.1.0
  */
-export type Requirements<C> = C extends Issued<infer _Msg, infer R, infer _S, infer _K, infer _SE> ? R : never
+export type Requirements<C> = C extends
+  Issued<infer _Msg, infer R, infer _S, infer _K, infer _SE> ? R : never
 
 /**
  * The message type of a Command, or of a union of them.
@@ -547,8 +571,10 @@ export type Requirements<C> = C extends Issued<infer _Msg, infer R, infer _S, in
  * @category utility types
  * @since 0.1.0
  */
-export type Message<C> = C extends Proto<infer Msg, infer _Source, infer _SourceE> ? Msg
-  : C extends Definition<infer _Args, infer Msg, infer _S, infer _E, infer _G> ? Msg
+export type Message<C> = C extends
+  Proto<infer Msg, infer _Source, infer _SourceE> ? Msg
+  : C extends Definition<infer _Args, infer Msg, infer _S, infer _E, infer _G> ?
+    Msg
   : never
 
 /**
@@ -559,7 +585,8 @@ export type Message<C> = C extends Proto<infer Msg, infer _Source, infer _Source
  * @category utility types
  * @since 0.1.0
  */
-export type Result<C> = C extends Proto<infer _Msg, infer Source, infer _SourceE> ? Source
+export type Result<C> = C extends
+  Proto<infer _Msg, infer Source, infer _SourceE> ? Source
   : C extends Unmatched<infer A, infer _E, infer _R, infer _K> ? A
   : C extends Definition<infer _Args, infer A, infer _S, infer _E, infer _G> ? A
   : never
@@ -572,7 +599,8 @@ export type Result<C> = C extends Proto<infer _Msg, infer Source, infer _SourceE
  * @category utility types
  * @since 0.1.0
  */
-export type Failure<C> = C extends Proto<infer _Msg, infer _Source, infer SourceE> ? SourceE
+export type Failure<C> = C extends
+  Proto<infer _Msg, infer _Source, infer SourceE> ? SourceE
   : C extends Unmatched<infer _A, infer E, infer _R, infer _K> ? E
   : C extends Definition<infer _Args, infer _A, infer _S, infer E, infer _G> ? E
   : never
@@ -586,7 +614,8 @@ export type Failure<C> = C extends Proto<infer _Msg, infer _Source, infer Source
  * @category utility types
  * @since 0.1.0
  */
-export type Mapped<C, B> = C extends Issued<infer _Msg, infer R, infer Source, infer K, infer SourceE> ?
+export type Mapped<C, B> = C extends
+  Issued<infer _Msg, infer R, infer Source, infer K, infer SourceE> ?
   (K extends Kind ? Issued<B, R, Source, K, SourceE> : never)
   : C extends Interrupt ? Interrupt
   : never
@@ -606,7 +635,13 @@ export type Mapped<C, B> = C extends Issued<infer _Msg, infer R, infer Source, i
  * @category models
  * @since 0.1.0
  */
-export interface Definition<in Args, out A, out IsStream extends boolean, out E = never, out G extends string = never> {
+export interface Definition<
+  in Args,
+  out A,
+  out IsStream extends boolean,
+  out E = never,
+  out G extends string = never
+> {
   readonly [DefinitionTypeId]: Definition.Variance<Args, A, IsStream, E, G>
   /** Whether the Command was declared with `stream: true`. */
   readonly stream: IsStream
@@ -634,7 +669,13 @@ export declare namespace Definition {
    * @category models
    * @since 0.1.0
    */
-  export interface Variance<in Args, out A, out IsStream extends boolean, out E, out G extends string> {
+  export interface Variance<
+    in Args,
+    out A,
+    out IsStream extends boolean,
+    out E,
+    out G extends string
+  > {
     readonly _Args: Types.Contravariant<Args>
     readonly _A: Types.Covariant<A>
     readonly _IsStream: Types.Covariant<IsStream>
@@ -656,7 +697,8 @@ export declare namespace Definition {
    * @category utility types
    * @since 0.1.0
    */
-  export type Args<D> = D extends Definition<infer A, infer _A, infer _S, infer _E, infer _G> ? A : never
+  export type Args<D> = D extends
+    Definition<infer A, infer _A, infer _S, infer _E, infer _G> ? A : never
 
   /**
    * Whether a definition was declared with `stream: true`.
@@ -664,7 +706,8 @@ export declare namespace Definition {
    * @category utility types
    * @since 0.1.0
    */
-  export type IsStream<D> = D extends Definition<infer _Args, infer _A, infer S, infer _E, infer _G> ? S : never
+  export type IsStream<D> = D extends
+    Definition<infer _Args, infer _A, infer S, infer _E, infer _G> ? S : never
 }
 
 /**
@@ -675,13 +718,17 @@ export declare namespace Definition {
  * @category models
  * @since 0.1.0
  */
-export interface Factory<in out Args, in out Msg, out IsStream extends boolean = false, out G extends string = never>
-  extends Definition<Args, Msg, IsStream, never, G>
-{
+export interface Factory<
+  in out Args,
+  in out Msg,
+  out IsStream extends boolean = false,
+  out G extends string = never
+> extends Definition<Args, Msg, IsStream, never, G> {
   /** Issues the Command. */
   make(
     ...args: MakeArgs<Args>
-  ): IsStream extends true ? Issued<Msg, never, Msg, "Stream"> : Issued<Msg, never, Msg, "Effect">
+  ): IsStream extends true ? Issued<Msg, never, Msg, "Stream">
+    : Issued<Msg, never, Msg, "Effect">
   readonly name: string
   /** The args Schema. */
   readonly args: Schema.Top
@@ -712,7 +759,11 @@ export interface Service<
   in out Err = never,
   out G extends string = never
 > extends
-  Context.ServiceClass<Self, Key, Service.Implementation<Args, A, IsStream, Err>>,
+  Context.ServiceClass<
+    Self,
+    Key,
+    Service.Implementation<Args, A, IsStream, Err>
+  >,
   Definition<Args, A, IsStream, Err, G>
 {
   /** The implementation's Layer. It requires what the implementation captured. */
@@ -727,7 +778,9 @@ export interface Service<
    */
   make(
     ...args: MakeArgs<Args>
-  ): [Err] extends [never] ? (IsStream extends true ? Issued<A, Self, A, "Stream"> : Issued<A, Self, A, "Effect">)
+  ): [Err] extends [never] ?
+    (IsStream extends true ? Issued<A, Self, A, "Stream">
+      : Issued<A, Self, A, "Effect">)
     : Unmatched<A, Err, Self, IsStream extends true ? "Stream" : "Effect">
 }
 
@@ -745,9 +798,10 @@ export declare namespace Service {
    * @category models
    * @since 0.1.0
    */
-  export type Implementation<Args, A, IsStream extends boolean, Err = never> = IsStream extends true ?
-    (args: Args) => Stream.Stream<A, Err, FrameworkService>
-    : (args: Args) => Effect.Effect<A, Err, FrameworkService>
+  export type Implementation<Args, A, IsStream extends boolean, Err = never> =
+    IsStream extends true ?
+      (args: Args) => Stream.Stream<A, Err, FrameworkService>
+      : (args: Args) => Effect.Effect<A, Err, FrameworkService>
 
   /**
    * The options accepted by `Service`.
@@ -765,10 +819,18 @@ export declare namespace Service {
    * @category models
    * @since 0.1.0
    */
-  export interface Options<In extends ArgsInput, A, G extends string> extends CommandOptions<In, G> {
-    readonly invalidates?: ((args: ArgsOf<In>) => ReadonlyArray<Query.Target>) | undefined
-    readonly optimistic?: ((args: ArgsOf<In>) => ReadonlyArray<Query.Patch>) | undefined
-    readonly writes?: ((success: A, args: ArgsOf<In>) => ReadonlyArray<Query.Write>) | undefined
+  export interface Options<In extends ArgsInput, A, G extends string>
+    extends CommandOptions<In, G>
+  {
+    readonly invalidates?:
+      | ((args: ArgsOf<In>) => ReadonlyArray<Query.Target>)
+      | undefined
+    readonly optimistic?:
+      | ((args: ArgsOf<In>) => ReadonlyArray<Query.Patch>)
+      | undefined
+    readonly writes?:
+      | ((success: A, args: ArgsOf<In>) => ReadonlyArray<Query.Write>)
+      | undefined
   }
 }
 
@@ -777,7 +839,11 @@ type CommandOptions<In extends ArgsInput, G extends string> = Options<In, G>
 const identity = (result: any) => result
 
 const Proto = {
-  [TypeId]: { _Msg: (_: never) => _, _Source: (_: never) => _, _SourceE: (_: never) => _ },
+  [TypeId]: {
+    _Msg: (_: never) => _,
+    _Source: (_: never) => _,
+    _SourceE: (_: never) => _
+  },
   pipe() {
     return Pipeable.pipeArguments(this, arguments)
   }
@@ -785,7 +851,11 @@ const Proto = {
 
 const UnmatchedProto = {
   ...Proto,
-  [UnmatchedTypeId]: { _A: (_: never) => _, _E: (_: never) => _, _R: (_: never) => _ }
+  [UnmatchedTypeId]: {
+    _A: (_: never) => _,
+    _E: (_: never) => _,
+    _R: (_: never) => _
+  }
 }
 
 interface Fields extends Data {
@@ -805,20 +875,30 @@ const makeIssued = (fields: Fields, unmatched = false): any => {
     const mapped = resolve === identity
       ? work as Effect.Effect<any, any, any>
       : Effect.map(work as Effect.Effect<any, any, any>, resolve)
-    effect = reject === undefined ? mapped : Effect.catch(mapped, (error) => Effect.sync(() => reject(error)))
+    effect = reject === undefined
+      ? mapped
+      : Effect.catch(mapped, (error) => Effect.sync(() => reject(error)))
   } else {
     const mapped = resolve === identity
       ? work as Stream.Stream<any, any, any>
       : Stream.map(work as Stream.Stream<any, any, any>, resolve)
-    stream = reject === undefined ? mapped : Stream.catch(mapped, (error) => Stream.sync(() => reject(error)))
+    stream = reject === undefined
+      ? mapped
+      : Stream.catch(mapped, (error) => Stream.sync(() => reject(error)))
   }
-  return Object.assign(Object.create(unmatched ? UnmatchedProto : Proto), fields, { effect, stream })
+  return Object.assign(
+    Object.create(unmatched ? UnmatchedProto : Proto),
+    fields,
+    { effect, stream }
+  )
 }
 
 const noTargets: ReadonlyArray<never> = []
 
 const argsSchemaOf = (args: ArgsInput): Schema.Struct<Schema.Struct.Fields> =>
-  Schema.isSchema(args) ? args as Schema.Struct<Schema.Struct.Fields> : Schema.Struct(args as Schema.Struct.Fields)
+  Schema.isSchema(args)
+    ? args as Schema.Struct<Schema.Struct.Fields>
+    : Schema.Struct(args as Schema.Struct.Fields)
 
 /**
  * A Command's group: its key, and the `group` fields it was made from, so the
@@ -845,7 +925,9 @@ const makeGroup = (
   const fields: Record<string, Schema.Top> = {}
   for (const field of group) {
     if (!Object.hasOwn(schema.fields, field)) {
-      throw new Error(`${name}: the group field "${field}" isn't one of its args`)
+      throw new Error(
+        `${name}: the group field "${field}" isn't one of its args`
+      )
     }
     fields[field] = schema.fields[field] as Schema.Top
   }
@@ -854,12 +936,17 @@ const makeGroup = (
   return (args) => {
     if (encode === undefined) {
       encode = Schema.encodeUnknownSync(
-        Schema.toCodecJson(pickSchema) as unknown as Schema.Codec<unknown, unknown>
+        Schema.toCodecJson(pickSchema) as unknown as Schema.Codec<
+          unknown,
+          unknown
+        >
       )
     }
     const picked: Record<string, unknown> = {}
     const source = (args ?? {}) as Record<string, unknown>
-    for (const field of group) if (Object.hasOwn(source, field)) picked[field] = source[field]
+    for (const field of group) {
+      if (Object.hasOwn(source, field)) picked[field] = source[field]
+    }
     return { key: canonical(encode(picked)), schema: pickSchema, picked }
   }
 }
@@ -868,7 +955,12 @@ const define = (
   name: string,
   options: Options<ArgsInput, string>,
   unmatched: boolean,
-  issue: (args: any) => Pick<Fields, "service" | "invalidates" | "optimistic" | "writes" | "work">
+  issue: (
+    args: any
+  ) => Pick<
+    Fields,
+    "service" | "invalidates" | "optimistic" | "writes" | "work"
+  >
 ) => {
   const stream = options.stream === true
   const mode = options.mode ?? "concurrent"
@@ -908,7 +1000,8 @@ const define = (
  * @category guards
  * @since 0.1.0
  */
-export const isCommand = (u: unknown): u is Command<unknown, unknown> => Predicate.hasProperty(u, TypeId)
+export const isCommand = (u: unknown): u is Command<unknown, unknown> =>
+  Predicate.hasProperty(u, TypeId)
 
 /**
  * Returns `true` if `u` is a Command issued by a `Service` whose body can
@@ -918,7 +1011,9 @@ export const isCommand = (u: unknown): u is Command<unknown, unknown> => Predica
  * @category guards
  * @since 0.1.0
  */
-export const isUnmatched = (u: unknown): u is Unmatched<unknown, unknown, unknown, Kind> =>
+export const isUnmatched = (
+  u: unknown
+): u is Unmatched<unknown, unknown, unknown, Kind> =>
   Predicate.hasProperty(u, UnmatchedTypeId)
 
 /**
@@ -929,7 +1024,8 @@ export const isUnmatched = (u: unknown): u is Unmatched<unknown, unknown, unknow
  * @category guards
  * @since 0.1.0
  */
-export const isDefinition = (u: unknown): u is Definition.Any => Predicate.hasProperty(u, DefinitionTypeId)
+export const isDefinition = (u: unknown): u is Definition.Any =>
+  Predicate.hasProperty(u, DefinitionTypeId)
 
 /**
  * The name of a Command definition: the factory's name, or the service's key.
@@ -939,7 +1035,9 @@ export const isDefinition = (u: unknown): u is Definition.Any => Predicate.hasPr
  * @since 0.1.0
  */
 export const nameOf = (definition: Definition.Any): string =>
-  Context.isKey(definition) ? definition.key : (definition as Factory<any, any, any>).name
+  Context.isKey(definition)
+    ? definition.key
+    : (definition as Factory<any, any, any>).name
 
 /**
  * The group key a definition's `group` pick addresses, or `undefined` for
@@ -947,7 +1045,10 @@ export const nameOf = (definition: Definition.Any): string =>
  *
  * @internal
  */
-export const groupKeyOf = (definition: Definition.Any, group: unknown): string | undefined =>
+export const groupKeyOf = (
+  definition: Definition.Any,
+  group: unknown
+): string | undefined =>
   group === undefined ? undefined : definition["~group"](group)?.key
 
 /**
@@ -1118,11 +1219,23 @@ export const Service: <Self>() => {
     const G extends GroupField<In> = never
   >(
     key: Key,
-    options: Service.Options<In, A, G> & { readonly stream?: false | undefined },
+    options: Service.Options<In, A, G> & {
+      readonly stream?: false | undefined
+    },
     implementation:
       & Effect.Effect<(args: ArgsOf<In>) => Effect.Effect<A, Err, RInner>, E, R>
       & CapturesServices<RInner>
-  ): Service<Self, Key, ArgsOf<In>, A, false, E, Exclude<R, Scope.Scope>, Err, G>
+  ): Service<
+    Self,
+    Key,
+    ArgsOf<In>,
+    A,
+    false,
+    E,
+    Exclude<R, Scope.Scope>,
+    Err,
+    G
+  >
   <
     const Key extends string,
     const In extends ArgsInput,
@@ -1160,7 +1273,9 @@ export const Service: <Self>() => {
       service: Base,
       invalidates: invalidates?.(args) ?? noTargets,
       optimistic: optimistic?.(args) ?? noTargets,
-      writes: writes === undefined ? undefined : (success) => writes(success, args),
+      writes: writes === undefined
+        ? undefined
+        : (success) => writes(success, args),
       work: stream
         ? Stream.unwrap(Effect.map(service, (run) => run(args)))
         : Effect.flatMap(service, (run) => run(args))
@@ -1218,7 +1333,10 @@ export const map: {
   ): <R, Source, K extends Kind, SourceE>(
     self: Issued<A, R, Source, K, SourceE>
   ) => Mapped<Issued<A, R, Source, K, SourceE>, B>
-  <C extends Command<any, any>, B>(self: C, f: (a: Message<C>) => B): Mapped<C, B>
+  <C extends Command<any, any>, B>(
+    self: C,
+    f: (a: Message<C>) => B
+  ): Mapped<C, B>
 } = dual(2, <A, R, B>(self: Command<A, R>, f: (a: A) => B): Command<B, R> => {
   if (self._tag === "Interrupt") return self
   const { reject, resolve } = self as unknown as Fields
@@ -1261,7 +1379,11 @@ export const as: {
     self: Issued<A, R, Source, K, SourceE>
   ) => Mapped<Issued<A, R, Source, K, SourceE>, B>
   <C extends Command<any, any>, B>(self: C, message: B): Mapped<C, B>
-} = dual(2, <A, R, B>(self: Command<A, R>, message: B): Command<B, R> => map(self, () => message))
+} = dual(
+  2,
+  <A, R, B>(self: Command<A, R>, message: B): Command<B, R> =>
+    map(self, () => message)
+)
 
 /**
  * Makes a Command send nothing when it finishes.
@@ -1302,8 +1424,9 @@ export const as: {
  * @category mapping
  * @since 0.1.0
  */
-export const asNoop = <C extends Command<any, any>>(self: C): Mapped<C, Component.Noop> =>
-  as(self, internalNoop.noop) as any
+export const asNoop = <C extends Command<any, any>>(
+  self: C
+): Mapped<C, Component.Noop> => as(self, internalNoop.noop) as any
 
 /**
  * Maps both channels of a Command whose body can fail to messages.
@@ -1357,7 +1480,9 @@ export const match: {
   <A, E, B, C>(options: {
     readonly onSuccess: (a: A) => B
     readonly onFailure: (e: E) => C
-  }): <R, K extends Kind>(self: Unmatched<A, E, R, K>) => Issued<B | C, R, A, K, E>
+  }): <R, K extends Kind>(
+    self: Unmatched<A, E, R, K>
+  ) => Issued<B | C, R, A, K, E>
   <A, E, R, K extends Kind, B, C>(self: Unmatched<A, E, R, K>, options: {
     readonly onSuccess: (a: A) => B
     readonly onFailure: (e: E) => C
@@ -1380,18 +1505,26 @@ export const match: {
  * @category utility types
  * @since 0.1.0
  */
-export type AwaitsRefetch<C> = C extends Unmatched<infer _A, infer _E, infer R, infer K> ? AwaitsRefetchOf<R, K>
-  : C extends Issued<infer _Msg, infer R, infer _S, infer K, infer _SE> ? AwaitsRefetchOf<R, K>
+export type AwaitsRefetch<C> = C extends
+  Unmatched<infer _A, infer _E, infer R, infer K> ? AwaitsRefetchOf<R, K>
+  : C extends Issued<infer _Msg, infer R, infer _S, infer K, infer _SE> ?
+    AwaitsRefetchOf<R, K>
   : never
 
 // `SourceE` is contravariant: `never` admits every issued Command.
-type Awaitable = Issued<any, any, any, Kind, never> | Unmatched<any, any, any, Kind>
+type Awaitable =
+  | Issued<any, any, any, Kind, never>
+  | Unmatched<any, any, any, Kind>
 
 type AwaitsRefetchOf<R, K> = [K] extends ["Effect"] ? [R] extends [never] ? {
-      readonly "Command.afterRefetch takes a Command.Service Command. A Command.make Command invalidates nothing": never
+      readonly "Command.afterRefetch takes a Command.Service Command. A Command.make Command invalidates nothing":
+        never
     }
   : unknown
-  : { readonly "Command.afterRefetch takes an Effect Command. A Stream Command has no final message to hold": never }
+  : {
+    readonly "Command.afterRefetch takes an Effect Command. A Stream Command has no final message to hold":
+      never
+  }
 
 /**
  * Holds a Command's success message until the entries its run invalidated
@@ -1455,11 +1588,16 @@ type AwaitsRefetchOf<R, K> = [K] extends ["Effect"] ? [R] extends [never] ? {
  * @since 0.1.0
  */
 export const afterRefetch: {
-  (budget: Duration.Input): <C extends Awaitable>(self: C & AwaitsRefetch<C>) => C
+  (
+    budget: Duration.Input
+  ): <C extends Awaitable>(self: C & AwaitsRefetch<C>) => C
   <C extends Awaitable>(self: C & AwaitsRefetch<C>, budget: Duration.Input): C
 } = dual(2, (self: Awaitable, budget: Duration.Input): any =>
   makeIssued(
-    { ...(self as unknown as Fields), afterRefetch: Duration.fromInputUnsafe(budget) },
+    {
+      ...(self as unknown as Fields),
+      afterRefetch: Duration.fromInputUnsafe(budget)
+    },
     UnmatchedTypeId in self
   ))
 
@@ -1503,7 +1641,9 @@ export const interrupt = <Args, G extends string>(
   definition: Definition<Args, any, boolean, any, G>,
   ...group: GroupArg<Args, G>
 ): Interrupt => {
-  const source = group[0] === undefined ? undefined : definition["~group"](group[0])
+  const source = group[0] === undefined
+    ? undefined
+    : definition["~group"](group[0])
   return Object.assign(Object.create(Proto), {
     _tag: "Interrupt",
     name: nameOf(definition),

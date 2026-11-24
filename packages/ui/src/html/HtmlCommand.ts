@@ -32,26 +32,43 @@ export interface Found {
 
 const withElement = <A>(
   ref: Renderer.Ref<any>,
-  f: (host: Context.Service.Shape<typeof Html.Host>, element: globalThis.Element) => A
+  f: (
+    host: Context.Service.Shape<typeof Html.Host>,
+    element: globalThis.Element
+  ) => A
 ): Effect.Effect<Option.Option<A>, never, Renderer.Refs | Html.Host> =>
   Renderer.Refs.use((refs) =>
     Effect.flatMap(refs.lookup(ref), (node) =>
       Option.isNone(node)
         ? Effect.succeed(Option.none())
-        : Html.Host.useSync((host) => Option.some(f(host, node.value as globalThis.Element))))
+        : Html.Host.useSync((host) =>
+          Option.some(f(host, node.value as globalThis.Element))
+        ))
   )
 
 const found = (
   ref: Renderer.Ref<any>,
-  f: (host: Context.Service.Shape<typeof Html.Host>, element: globalThis.Element) => void
+  f: (
+    host: Context.Service.Shape<typeof Html.Host>,
+    element: globalThis.Element
+  ) => void
 ): Effect.Effect<Found, never, Renderer.Refs | Html.Host> =>
-  Effect.map(withElement(ref, f), (done): Found => ({ found: Option.isSome(done) }))
+  Effect.map(
+    withElement(ref, f),
+    (done): Found => ({ found: Option.isSome(done) })
+  )
 
-const FocusOptionsSchema = Schema.Struct({ preventScroll: Schema.optional(Schema.Boolean) })
+const FocusOptionsSchema = Schema.Struct({
+  preventScroll: Schema.optional(Schema.Boolean)
+})
 const ScrollOptionsSchema = Schema.Struct({
   behavior: Schema.optional(Schema.Literals(["auto", "instant", "smooth"])),
-  block: Schema.optional(Schema.Literals(["center", "end", "nearest", "start"])),
-  inline: Schema.optional(Schema.Literals(["center", "end", "nearest", "start"]))
+  block: Schema.optional(
+    Schema.Literals(["center", "end", "nearest", "start"])
+  ),
+  inline: Schema.optional(
+    Schema.Literals(["center", "end", "nearest", "start"])
+  )
 })
 
 /**
@@ -62,12 +79,16 @@ const ScrollOptionsSchema = Schema.Struct({
  * @since 0.1.0
  */
 export const Focus: Command.Factory<
-  { readonly ref: Renderer.Ref<any>; readonly options?: Html.FocusOptions | undefined },
+  {
+    readonly ref: Renderer.Ref<any>
+    readonly options?: Html.FocusOptions | undefined
+  },
   Found
 > = Command.make(
   "HtmlCommand.focus",
   { args: { ref: Renderer.Ref, options: Schema.optional(FocusOptionsSchema) } },
-  ({ options, ref }) => found(ref, (host, element) => host.focus(element, options ?? {}))
+  ({ options, ref }) =>
+    found(ref, (host, element) => host.focus(element, options ?? {}))
 )
 
 /**
@@ -77,11 +98,12 @@ export const Focus: Command.Factory<
  * @category commands
  * @since 0.1.0
  */
-export const Blur: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Found> = Command.make(
-  "HtmlCommand.blur",
-  { args: { ref: Renderer.Ref } },
-  ({ ref }) => found(ref, (host, element) => host.blur(element))
-)
+export const Blur: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Found> =
+  Command.make(
+    "HtmlCommand.blur",
+    { args: { ref: Renderer.Ref } },
+    ({ ref }) => found(ref, (host, element) => host.blur(element))
+  )
 
 /**
  * The Command behind `scrollIntoView`.
@@ -91,12 +113,18 @@ export const Blur: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Found> =
  * @since 0.1.0
  */
 export const ScrollIntoView: Command.Factory<
-  { readonly ref: Renderer.Ref<any>; readonly options?: Html.ScrollOptions | undefined },
+  {
+    readonly ref: Renderer.Ref<any>
+    readonly options?: Html.ScrollOptions | undefined
+  },
   Found
 > = Command.make(
   "HtmlCommand.scrollIntoView",
-  { args: { ref: Renderer.Ref, options: Schema.optional(ScrollOptionsSchema) } },
-  ({ options, ref }) => found(ref, (host, element) => host.scrollIntoView(element, options ?? {}))
+  {
+    args: { ref: Renderer.Ref, options: Schema.optional(ScrollOptionsSchema) }
+  },
+  ({ options, ref }) =>
+    found(ref, (host, element) => host.scrollIntoView(element, options ?? {}))
 )
 
 /**
@@ -106,7 +134,10 @@ export const ScrollIntoView: Command.Factory<
  * @category commands
  * @since 0.1.0
  */
-export const Measure: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Option.Option<Html.Rect>> = Command.make(
+export const Measure: Command.Factory<
+  { readonly ref: Renderer.Ref<any> },
+  Option.Option<Html.Rect>
+> = Command.make(
   "HtmlCommand.measure",
   { args: { ref: Renderer.Ref } },
   ({ ref }) => withElement(ref, (host, element) => host.measure(element))
@@ -119,7 +150,10 @@ export const Measure: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Optio
  * @category commands
  * @since 0.1.0
  */
-export const Select: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Found> = Command.make(
+export const Select: Command.Factory<
+  { readonly ref: Renderer.Ref<any> },
+  Found
+> = Command.make(
   "HtmlCommand.select",
   { args: { ref: Renderer.Ref } },
   ({ ref }) => found(ref, (host, element) => host.select(element))
@@ -144,14 +178,20 @@ export interface Submitted extends Found {
  * @category commands
  * @since 0.1.0
  */
-export const RequestSubmit: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Submitted> = Command.make(
+export const RequestSubmit: Command.Factory<
+  { readonly ref: Renderer.Ref<any> },
+  Submitted
+> = Command.make(
   "HtmlCommand.requestSubmit",
   { args: { ref: Renderer.Ref } },
   ({ ref }) =>
-    Effect.map(withElement(ref, (host, element) => host.requestSubmit(element)), (done): Submitted => ({
-      found: Option.isSome(done),
-      submitted: Option.getOrElse(done, () => false)
-    }))
+    Effect.map(
+      withElement(ref, (host, element) => host.requestSubmit(element)),
+      (done): Submitted => ({
+        found: Option.isSome(done),
+        submitted: Option.getOrElse(done, () => false)
+      })
+    )
 )
 
 /**
@@ -198,7 +238,8 @@ export const focus = <N extends HTMLElement | SVGElement, Msg>(
 export const blur = <N extends HTMLElement | SVGElement, Msg>(
   ref: Renderer.Ref<N>,
   f: (result: Found) => Msg
-): Command.Mapped<Command.Issued<Found, never, Found, "Effect">, Msg> => Command.map(Blur.make({ ref }), f)
+): Command.Mapped<Command.Issued<Found, never, Found, "Effect">, Msg> =>
+  Command.map(Blur.make({ ref }), f)
 
 /**
  * Scrolls the element `ref` names into view, and sends `f`'s message.
@@ -212,7 +253,10 @@ export const scrollIntoView = <N extends globalThis.Element, Msg>(
   f: (result: Found) => Msg,
   options?: Html.ScrollOptions
 ): Command.Mapped<Command.Issued<Found, never, Found, "Effect">, Msg> =>
-  Command.map(ScrollIntoView.make(options === undefined ? { ref } : { ref, options }), f)
+  Command.map(
+    ScrollIntoView.make(options === undefined ? { ref } : { ref, options }),
+    f
+  )
 
 /**
  * Measures the element `ref` names, and sends `f`'s message with its box, or
@@ -225,8 +269,15 @@ export const scrollIntoView = <N extends globalThis.Element, Msg>(
 export const measure = <N extends globalThis.Element, Msg>(
   ref: Renderer.Ref<N>,
   f: (rect: Option.Option<Html.Rect>) => Msg
-): Command.Mapped<Command.Issued<Option.Option<Html.Rect>, never, Option.Option<Html.Rect>, "Effect">, Msg> =>
-  Command.map(Measure.make({ ref }), f)
+): Command.Mapped<
+  Command.Issued<
+    Option.Option<Html.Rect>,
+    never,
+    Option.Option<Html.Rect>,
+    "Effect"
+  >,
+  Msg
+> => Command.map(Measure.make({ ref }), f)
 
 /**
  * Selects all the text in the `input` or `textarea` `ref` names, once the
@@ -258,7 +309,8 @@ export const measure = <N extends globalThis.Element, Msg>(
 export const select = <N extends HTMLInputElement | HTMLTextAreaElement, Msg>(
   ref: Renderer.Ref<N>,
   f: (result: Found) => Msg
-): Command.Mapped<Command.Issued<Found, never, Found, "Effect">, Msg> => Command.map(Select.make({ ref }), f)
+): Command.Mapped<Command.Issued<Found, never, Found, "Effect">, Msg> =>
+  Command.map(Select.make({ ref }), f)
 
 /**
  * Submits the form of the element `ref` names, as a press on its submit
@@ -300,14 +352,20 @@ export interface Opened extends Found {
  * @category commands
  * @since 0.1.0
  */
-export const ShowPicker: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Opened> = Command.make(
+export const ShowPicker: Command.Factory<
+  { readonly ref: Renderer.Ref<any> },
+  Opened
+> = Command.make(
   "HtmlCommand.showPicker",
   { args: { ref: Renderer.Ref } },
   ({ ref }) =>
-    Effect.map(withElement(ref, (host, element) => host.showPicker(element)), (done): Opened => ({
-      found: Option.isSome(done),
-      opened: Option.getOrElse(done, () => false)
-    }))
+    Effect.map(
+      withElement(ref, (host, element) => host.showPicker(element)),
+      (done): Opened => ({
+        found: Option.isSome(done),
+        opened: Option.getOrElse(done, () => false)
+      })
+    )
 )
 
 /**
@@ -347,4 +405,5 @@ export const ShowPicker: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Op
 export const showPicker = <N extends HTMLInputElement | HTMLSelectElement, Msg>(
   ref: Renderer.Ref<N>,
   f: (result: Opened) => Msg
-): Command.Mapped<Command.Issued<Opened, never, Opened, "Effect">, Msg> => Command.map(ShowPicker.make({ ref }), f)
+): Command.Mapped<Command.Issued<Opened, never, Opened, "Effect">, Msg> =>
+  Command.map(ShowPicker.make({ ref }), f)

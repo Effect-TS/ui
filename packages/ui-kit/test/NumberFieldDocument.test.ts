@@ -22,7 +22,12 @@ interface Parent {
 const mount = Effect.fnUntraced(function*(
   props: Omit<NumberFieldProps, "value">,
   value: number | null = 5,
-  { accepts = () => true, hideScrubOnCommit = false, scrubs = () => true, vertical = false }: Parent = {}
+  {
+    accepts = () => true,
+    hideScrubOnCommit = false,
+    scrubs = () => true,
+    vertical = false
+  }: Parent = {}
 ) {
   const log: Array<string> = []
   const Amount = Component.define({
@@ -73,12 +78,29 @@ const mount = Effect.fnUntraced(function*(
   return { app, input, taken }
 })
 
-const wait = (ms: number) => Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+const wait = (ms: number) =>
+  Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, ms)))
 
-const blocks = (input: HTMLInputElement, key: string, init: KeyboardEventInit = {}) =>
-  !input.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }))
+const blocks = (
+  input: HTMLInputElement,
+  key: string,
+  init: KeyboardEventInit = {}
+) =>
+  !input.dispatchEvent(
+    new KeyboardEvent("keydown", {
+      key,
+      bubbles: true,
+      cancelable: true,
+      ...init
+    })
+  )
 
-const select = (input: HTMLInputElement, text: string, start: number, end = start) => {
+const select = (
+  input: HTMLInputElement,
+  text: string,
+  start: number,
+  end = start
+) => {
   input.value = text
   input.setSelectionRange(start, end)
 }
@@ -86,22 +108,41 @@ const select = (input: HTMLInputElement, text: string, start: number, end = star
 const paste = (input: HTMLInputElement, text: string) => {
   const clipboardData = new DataTransfer()
   clipboardData.setData("text/plain", text)
-  return !input.dispatchEvent(new ClipboardEvent("paste", { clipboardData, bubbles: true, cancelable: true }))
+  return !input.dispatchEvent(
+    new ClipboardEvent("paste", {
+      clipboardData,
+      bubbles: true,
+      cancelable: true
+    })
+  )
 }
 
 // happy-dom's WheelEvent drops the modifier keys.
 const turn = (target: HTMLInputElement, init: WheelEventInit) =>
   !target.dispatchEvent(
-    Object.assign(new WheelEvent("wheel", { bubbles: true, cancelable: true, ...init }), {
-      shiftKey: init.shiftKey ?? false,
-      altKey: init.altKey ?? false,
-      ctrlKey: init.ctrlKey ?? false
-    })
+    Object.assign(
+      new WheelEvent("wheel", { bubbles: true, cancelable: true, ...init }),
+      {
+        shiftKey: init.shiftKey ?? false,
+        altKey: init.altKey ?? false,
+        ctrlKey: init.ctrlKey ?? false
+      }
+    )
   )
 
-const pointer = (target: EventTarget, type: string, init: PointerEventInit = {}) =>
+const pointer = (
+  target: EventTarget,
+  type: string,
+  init: PointerEventInit = {}
+) =>
   target.dispatchEvent(
-    new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, pointerType: "mouse", ...init })
+    new PointerEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      pointerType: "mouse",
+      ...init
+    })
   )
 
 const type = (input: HTMLInputElement, text: string) => {
@@ -116,14 +157,25 @@ const pointerLock = Effect.acquireRelease(
   Effect.sync(() => {
     let held: Element | null = null
     const css = Object.getOwnPropertyDescriptor(window, "CSS")!
-    Object.defineProperty(window, "CSS", { configurable: true, value: { supports: () => false } })
+    Object.defineProperty(window, "CSS", {
+      configurable: true,
+      value: { supports: () => false }
+    })
     const change = (element: Element | null) => {
       held = element
       document.dispatchEvent(new Event("pointerlockchange"))
     }
-    Object.defineProperty(document, "pointerLockElement", { configurable: true, get: () => held })
-    Object.assign(document, { exitPointerLock: () => held !== null && change(null) })
-    Object.assign(document.body, { requestPointerLock: () => Promise.resolve().then(() => change(document.body)) })
+    Object.defineProperty(document, "pointerLockElement", {
+      configurable: true,
+      get: () => held
+    })
+    Object.assign(document, {
+      exitPointerLock: () => held !== null && change(null)
+    })
+    Object.assign(document.body, {
+      requestPointerLock: () =>
+        Promise.resolve().then(() => change(document.body))
+    })
     return { css, held: () => held, lose: () => change(null) }
   }),
   ({ css }) =>
@@ -171,7 +223,10 @@ describe("NumberField in a document", { concurrent: false }, () => {
       select(positive.input, "12.5", 0)
       assert.isTrue(blocks(positive.input, "-"))
 
-      const eur = yield* mount({ locale: "de-DE", format: { style: "currency", currency: "EUR" } })
+      const eur = yield* mount({
+        locale: "de-DE",
+        format: { style: "currency", currency: "EUR" }
+      })
       select(eur.input, "2.345,75 ", 9)
       assert.isFalse(blocks(eur.input, "€"))
       assert.isTrue(blocks(eur.input, "$"))
@@ -211,7 +266,9 @@ describe("NumberField in a document", { concurrent: false }, () => {
       const increment = app.querySelector<HTMLButtonElement>(".increment")!
       const decrement = app.querySelector<HTMLButtonElement>(".decrement")!
       pointer(decrement, "pointerdown", { button: 2 })
-      decrement.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
+      decrement.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, detail: 1 })
+      )
       yield* tick
       assert.deepStrictEqual(taken(), [])
 
@@ -223,7 +280,12 @@ describe("NumberField in a document", { concurrent: false }, () => {
       yield* wait(250)
       assert.deepStrictEqual(taken(), [])
       yield* wait(700)
-      assert.deepStrictEqual(taken(), [7, 8, 9, 10, 11, 12].map((value) => "updated " + value + " increment-press"))
+      assert.deepStrictEqual(
+        taken(),
+        [7, 8, 9, 10, 11, 12].map((value) =>
+          "updated " + value + " increment-press"
+        )
+      )
       assert.strictEqual(increment.getAttribute("aria-disabled"), "true")
       pointer(window, "pointerup")
       yield* tick
@@ -232,14 +294,22 @@ describe("NumberField in a document", { concurrent: false }, () => {
       yield* wait(200)
       assert.deepStrictEqual(taken(), [])
 
-      decrement.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0, shiftKey: true }))
+      decrement.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, detail: 0, shiftKey: true })
+      )
       yield* tick
-      assert.deepStrictEqual(taken(), ["updated 2 decrement-press", "committed 2 decrement-press"])
+      assert.deepStrictEqual(taken(), [
+        "updated 2 decrement-press",
+        "committed 2 decrement-press"
+      ])
     }))
 
   it.effect("wheel steps only a focused input when allowWheelScrub is set", () =>
     Effect.gen(function*() {
-      const { input, taken } = yield* mount({ locale: "en-US", allowWheelScrub: true })
+      const { input, taken } = yield* mount({
+        locale: "en-US",
+        allowWheelScrub: true
+      })
       assert.isFalse(turn(input, { deltaY: 100 }))
       input.focus()
       assert.isTrue(turn(input, { deltaY: 100 }))
@@ -272,7 +342,11 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.isNull(app.querySelector(".cursor"))
       pointer(window, "pointermove", { clientX: 14, clientY: 30 })
       pointer(window, "pointermove", { clientX: 15, clientY: 30 })
-      pointer(window, "pointermove", { clientX: 12, clientY: 30, shiftKey: true })
+      pointer(window, "pointermove", {
+        clientX: 12,
+        clientY: 30,
+        shiftKey: true
+      })
       yield* tick
       assert.deepStrictEqual(taken(), ["updated 9 scrub", "updated -21 scrub"])
       pointer(window, "pointerup")
@@ -285,18 +359,27 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(taken(), [])
 
       const vertical = yield* mount({ locale: "en-US" }, 5, { vertical: true })
-      pointer(vertical.app.querySelector(".scrub")!, "pointerdown", { clientX: 10, clientY: 40 })
+      pointer(vertical.app.querySelector(".scrub")!, "pointerdown", {
+        clientX: 10,
+        clientY: 40
+      })
       pointer(window, "pointermove", { clientX: 90, clientY: 36 })
       pointer(window, "pointerup")
       yield* tick
-      assert.deepStrictEqual(vertical.taken(), ["updated 9 scrub", "committed 9 scrub"])
+      assert.deepStrictEqual(vertical.taken(), [
+        "updated 9 scrub",
+        "committed 9 scrub"
+      ])
     }))
 
   it.effect("locked pointer scrub shows popover cursor, steps by movement, and keeps scrubbing if lock is lost", () =>
     Effect.gen(function*() {
       const lock = yield* pointerLock
       const { app, taken } = yield* mount({ locale: "en-US" })
-      pointer(app.querySelector(".scrub")!, "pointerdown", { clientX: 10, clientY: 10 })
+      pointer(app.querySelector(".scrub")!, "pointerdown", {
+        clientX: 10,
+        clientY: 10
+      })
       yield* tick
       assert.strictEqual(lock.held(), document.body)
       const cursor = app.querySelector<HTMLElement>(".cursor")!
@@ -310,10 +393,17 @@ describe("NumberField in a document", { concurrent: false }, () => {
       yield* tick
       assert.isNull(app.querySelector(".cursor"))
       assert.isTrue(app.firstElementChild!.hasAttribute("data-scrubbing"))
-      pointer(window, "pointermove", { clientX: 13, clientY: 10, movementX: 50 })
+      pointer(window, "pointermove", {
+        clientX: 13,
+        clientY: 10,
+        movementX: 50
+      })
       pointer(window, "pointerup")
       yield* tick
-      assert.deepStrictEqual(taken(), ["updated 12 scrub", "committed 12 scrub"])
+      assert.deepStrictEqual(taken(), [
+        "updated 12 scrub",
+        "committed 12 scrub"
+      ])
     }))
 
   it.effect("post-release pointermove during Firefox unlock delay changes nothing and preserves label click", () =>
@@ -328,7 +418,12 @@ describe("NumberField in a document", { concurrent: false }, () => {
       yield* tick
       pointer(window, "pointerup")
       assert.strictEqual(lock.held(), document.body)
-      pointer(window, "pointermove", { clientX: 10, clientY: 10, movementX: 10, buttons: 0 })
+      pointer(window, "pointermove", {
+        clientX: 10,
+        clientY: 10,
+        movementX: 10,
+        buttons: 0
+      })
       yield* tick
       assert.isNull(lock.held())
       assert.deepStrictEqual(taken(), ["committed 5 scrub"])
@@ -338,8 +433,13 @@ describe("NumberField in a document", { concurrent: false }, () => {
   it.effect("removing the scrub area mid-drag releases lock, clears data-scrubbing, and does not commit", () =>
     Effect.gen(function*() {
       const lock = yield* pointerLock
-      const { app, taken } = yield* mount({ locale: "en-US" }, 5, { scrubs: (value) => value === 5 })
-      pointer(app.querySelector(".scrub")!, "pointerdown", { clientX: 10, clientY: 10 })
+      const { app, taken } = yield* mount({ locale: "en-US" }, 5, {
+        scrubs: (value) => value === 5
+      })
+      pointer(app.querySelector(".scrub")!, "pointerdown", {
+        clientX: 10,
+        clientY: 10
+      })
       yield* tick
       pointer(window, "pointermove", { clientX: 10, clientY: 10, movementX: 4 })
       yield* tick
@@ -356,8 +456,13 @@ describe("NumberField in a document", { concurrent: false }, () => {
     Effect.gen(function*() {
       yield* firefox
       const lock = yield* pointerLock
-      const { app, taken } = yield* mount({ locale: "en-US" }, 5, { hideScrubOnCommit: true })
-      pointer(app.querySelector(".scrub")!, "pointerdown", { clientX: 10, clientY: 10 })
+      const { app, taken } = yield* mount({ locale: "en-US" }, 5, {
+        hideScrubOnCommit: true
+      })
+      pointer(app.querySelector(".scrub")!, "pointerdown", {
+        clientX: 10,
+        clientY: 10
+      })
       yield* tick
       assert.strictEqual(lock.held(), document.body)
       pointer(window, "pointerup")
@@ -380,54 +485,87 @@ describe("NumberField in a document", { concurrent: false }, () => {
       yield* wait(560)
       const beforeOtherCancel = taken()
       assert.isAbove(beforeOtherCancel.length, 1)
-      assert.isFalse(beforeOtherCancel.some((entry) => entry.startsWith("committed ")))
+      assert.isFalse(
+        beforeOtherCancel.some((entry) => entry.startsWith("committed "))
+      )
       pointer(window, "pointercancel", { pointerType: "touch", pointerId: 8 })
       yield* wait(150)
       const afterOtherCancel = taken()
       assert.isAbove(afterOtherCancel.length, 0)
-      assert.isFalse(afterOtherCancel.some((entry) => entry.startsWith("committed ")))
+      assert.isFalse(
+        afterOtherCancel.some((entry) => entry.startsWith("committed "))
+      )
       pointer(window, "pointercancel", touch)
       yield* tick
       const afterCancel = taken()
-      const totalSteps = beforeOtherCancel.length + afterOtherCancel.length + afterCancel.length - 1
-      assert.strictEqual(afterCancel.filter((entry) => entry.startsWith("committed ")).length, 1)
-      assert.strictEqual(afterCancel.at(-1), "committed " + (5 + totalSteps) + " increment-press")
+      const totalSteps = beforeOtherCancel.length + afterOtherCancel.length +
+        afterCancel.length - 1
+      assert.strictEqual(
+        afterCancel.filter((entry) => entry.startsWith("committed ")).length,
+        1
+      )
+      assert.strictEqual(
+        afterCancel.at(-1),
+        "committed " + (5 + totalSteps) + " increment-press"
+      )
       yield* wait(200)
       assert.deepStrictEqual(taken(), [])
-      pointer(app.querySelector(".scrub")!, "pointerdown", { ...touch, clientX: 10, clientY: 10 })
+      pointer(app.querySelector(".scrub")!, "pointerdown", {
+        ...touch,
+        clientX: 10,
+        clientY: 10
+      })
       pointer(window, "pointermove", { ...touch, clientX: 14, clientY: 10 })
       pointer(window, "pointercancel", touch)
       pointer(window, "pointermove", { ...touch, clientX: 30, clientY: 10 })
       yield* tick
       const value = 5 + totalSteps + 4
-      assert.deepStrictEqual(taken(), ["updated " + value + " scrub", "committed " + value + " scrub"])
+      assert.deepStrictEqual(taken(), [
+        "updated " + value + " scrub",
+        "committed " + value + " scrub"
+      ])
       assert.isFalse(app.firstElementChild!.hasAttribute("data-scrubbing"))
     }))
 
   it.effect("refused edits restore displayed text on blur without committing, and stepper release commits props.value", () =>
     Effect.gen(function*() {
-      const { app, input, taken } = yield* mount({ locale: "en-US" }, 5, { accepts: () => false })
+      const { app, input, taken } = yield* mount({ locale: "en-US" }, 5, {
+        accepts: () => false
+      })
       type(input, "19")
       yield* tick
       input.blur()
       yield* tick
-      assert.deepStrictEqual(taken(), ["updated 19 input-change", "updated 19 input-blur"])
+      assert.deepStrictEqual(taken(), [
+        "updated 19 input-change",
+        "updated 19 input-blur"
+      ])
       assert.strictEqual(input.value, "5")
       type(input, "")
       yield* tick
       input.blur()
       yield* tick
-      assert.deepStrictEqual(taken(), ["updated null input-clear", "updated null input-clear"])
+      assert.deepStrictEqual(taken(), [
+        "updated null input-clear",
+        "updated null input-clear"
+      ])
       assert.strictEqual(input.value, "5")
       pointer(app.querySelector(".increment")!, "pointerdown")
       pointer(window, "pointerup")
       yield* tick
-      assert.deepStrictEqual(taken(), ["updated 6 increment-press", "committed 5 increment-press"])
+      assert.deepStrictEqual(taken(), [
+        "updated 6 increment-press",
+        "committed 5 increment-press"
+      ])
     }))
 
   it.effect("disabled field takes no press, drag, or wheel", () =>
     Effect.gen(function*() {
-      const { app, input, taken } = yield* mount({ locale: "en-US", disabled: true, allowWheelScrub: true })
+      const { app, input, taken } = yield* mount({
+        locale: "en-US",
+        disabled: true,
+        allowWheelScrub: true
+      })
       assert.isTrue(pointer(app.querySelector(".increment")!, "pointerdown"))
       pointer(window, "pointerup")
       assert.isTrue(pointer(app.querySelector(".scrub")!, "pointerdown"))

@@ -46,11 +46,15 @@ export interface Decision<A> {
   readonly interrupt: ReadonlyArray<Entry<A>>
 }
 
-const sameGroup = <A>(entry: Entry<A>, name: string, key: string | undefined): boolean =>
-  entry.name === name && entry.key === key
+const sameGroup = <A>(
+  entry: Entry<A>,
+  name: string,
+  key: string | undefined
+): boolean => entry.name === name && entry.key === key
 
 /** Whether a run holds its group: its fiber hasn't exited. */
-const holds = <A>(entry: Entry<A>): boolean => entry.status === "running" || entry.status === "stopping"
+const holds = <A>(entry: Entry<A>): boolean =>
+  entry.status === "running" || entry.status === "stopping"
 
 /**
  * Decides how an issued Command relates to the in-flight runs of its instance.
@@ -78,11 +82,14 @@ export const schedule = <A>(
     return {
       action: "none",
       interrupt: live.filter((entry) =>
-        entry.name === command.name && (command.groupKey === undefined || entry.key === command.groupKey)
+        entry.name === command.name &&
+        (command.groupKey === undefined || entry.key === command.groupKey)
       )
     }
   }
-  const group = inFlight.filter((entry) => sameGroup(entry, command.name, command.groupKey))
+  const group = inFlight.filter((entry) =>
+    sameGroup(entry, command.name, command.groupKey)
+  )
   switch (command.mode) {
     case "concurrent":
       return { action: "start", interrupt: [] }
@@ -103,7 +110,10 @@ export const schedule = <A>(
  *
  * @internal
  */
-export const next = <A>(inFlight: ReadonlyArray<Entry<A>>, run: Entry<A>): Entry<A> | undefined => {
+export const next = <A>(
+  inFlight: ReadonlyArray<Entry<A>>,
+  run: Entry<A>
+): Entry<A> | undefined => {
   const group = inFlight.filter((entry) => sameGroup(entry, run.name, run.key))
   if (group.some(holds)) return undefined
   return group.find((entry) => entry.status === "queued")
@@ -123,7 +133,11 @@ export const deliverable = <A>(
   ready: (value: A) => boolean
 ): Entry<A> | undefined => {
   const next = entry.mode === "queue"
-    ? inFlight.find((other) => sameGroup(other, entry.name, entry.key) && other.status === "awaiting")
-    : inFlight.find((other) => other.value === entry.value && other.status === "awaiting")
+    ? inFlight.find((other) =>
+      sameGroup(other, entry.name, entry.key) && other.status === "awaiting"
+    )
+    : inFlight.find((other) =>
+      other.value === entry.value && other.status === "awaiting"
+    )
   return next !== undefined && ready(next.value) ? next : undefined
 }

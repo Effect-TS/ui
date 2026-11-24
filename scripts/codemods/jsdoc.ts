@@ -22,14 +22,22 @@ export default function transformer(file: cs.FileInfo, api: cs.API) {
 
     const comments = path.node.comments ?? []
     declaration.declarations.forEach((declarator) => {
-      if (!j.VariableDeclarator.check(declarator) || !j.Identifier.check(declarator.id)) return
+      if (
+        !j.VariableDeclarator.check(declarator) ||
+        !j.Identifier.check(declarator.id)
+      ) return
 
       const annotation = declarator.id.typeAnnotation
       if (annotation) {
         // An explicit annotation is the public type; leave the initializer alone.
-        if (!j.TSTypeAnnotation.check(annotation) || !j.TSTypeLiteral.check(annotation.typeAnnotation)) return
+        if (
+          !j.TSTypeAnnotation.check(annotation) ||
+          !j.TSTypeLiteral.check(annotation.typeAnnotation)
+        ) return
         annotation.typeAnnotation.members.forEach((member) => {
-          if (!j.TSCallSignatureDeclaration.check(member) || hasComments(member)) return
+          if (
+            !j.TSCallSignatureDeclaration.check(member) || hasComments(member)
+          ) return
           member.comments = comments
         })
         return
@@ -41,7 +49,8 @@ export default function transformer(file: cs.FileInfo, api: cs.API) {
       const isDual = j.Identifier.check(callee) && callee.name === "dual"
         || j.MemberExpression.check(callee) && !callee.computed
           && j.Identifier.check(callee.object) && callee.object.name === "Dual"
-          && j.Identifier.check(callee.property) && callee.property.name === "dual"
+          && j.Identifier.check(callee.property) &&
+          callee.property.name === "dual"
       if (!isDual) return
 
       // Only the dual call's own type arguments describe the public overloads.
@@ -61,5 +70,6 @@ function hasComments(node: cs.Node) {
 }
 
 function hasLeadingCommentRanges(node: TSTypeKind) {
-  return "leadingComments" in node && Array.isArray(node.leadingComments) && node.leadingComments.length > 0
+  return "leadingComments" in node && Array.isArray(node.leadingComments) &&
+    node.leadingComments.length > 0
 }

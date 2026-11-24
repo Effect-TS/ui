@@ -19,12 +19,18 @@ it.effect("omits reads with Redacted args, success or error schemas from the ser
     error: Schema.Never,
     staleTime: Infinity
   }, Effect.succeed(() => Effect.succeed(Redacted.make("success-secret")))) {}
-  class Error extends Query.Service<Error>()("secret/Error", {
-    args: { fail: Schema.Boolean },
-    success: Schema.String,
-    error: Schema.Redacted(Schema.String),
-    staleTime: Infinity
-  }, Effect.succeed(({ fail }) => fail ? Effect.fail(Redacted.make("error-secret")) : Effect.succeed("ok"))) {}
+  class Error extends Query.Service<Error>()(
+    "secret/Error",
+    {
+      args: { fail: Schema.Boolean },
+      success: Schema.String,
+      error: Schema.Redacted(Schema.String),
+      staleTime: Infinity
+    },
+    Effect.succeed(({ fail }) =>
+      fail ? Effect.fail(Redacted.make("error-secret")) : Effect.succeed("ok")
+    )
+  ) {}
   class Optional extends Query.Service<Optional>()("secret/Optional", {
     args: { token: Schema.optional(Schema.Redacted(Schema.String)) },
     success: Schema.String,
@@ -38,18 +44,35 @@ it.effect("omits reads with Redacted args, success or error schemas from the ser
     message: Schema.Never,
     elements: Html,
     queries: {
-      args: { query: Args, args: () => ({ token: Redacted.make("args-secret") }) },
+      args: {
+        query: Args,
+        args: () => ({ token: Redacted.make("args-secret") })
+      },
       success: { query: Success, args: () => ({}) },
-      keyed: { queryMany: Args, args: () => [{ token: Redacted.make("keyed-secret") }] },
+      keyed: {
+        queryMany: Args,
+        args: () => [{ token: Redacted.make("keyed-secret") }]
+      },
       error: { query: Error, args: () => ({ fail: true }) },
       unusedError: { query: Error, args: () => ({ fail: false }) },
       absent: { query: Optional, args: () => ({}) }
     }
-  }).make({ init: () => ({}), update: ($) => $.model, view: (h) => h.div("safe") })
+  }).make({
+    init: () => ({}),
+    update: ($) => $.model,
+    view: (h) => h.div("safe")
+  })
   return Effect.gen(function*() {
     const rendered = yield* ssr(App, {})
     const wire = rendered.html + HtmlServer.serializeState(rendered.state)
-    for (const secret of ["args-secret", "success-secret", "error-secret", "keyed-secret"]) {
+    for (
+      const secret of [
+        "args-secret",
+        "success-secret",
+        "error-secret",
+        "keyed-secret"
+      ]
+    ) {
       assert.notInclude(wire, secret)
     }
     // Even absent optional secrets and a successful read with a Redacted error
@@ -58,7 +81,9 @@ it.effect("omits reads with Redacted args, success or error schemas from the ser
     yield* TestHost.settle
     assert.lengthOf(rendered.root.fetches(), 6)
   }).pipe(
-    Effect.provide(Layer.mergeAll(Args.layer, Success.layer, Error.layer, Optional.layer)),
+    Effect.provide(
+      Layer.mergeAll(Args.layer, Success.layer, Error.layer, Optional.layer)
+    ),
     Effect.provide(TestHost.layer())
   )
 })
@@ -72,7 +97,12 @@ const Tree: Schema.Codec<Tree> = Schema.Struct({
   children: Schema.Array(Schema.suspend(() => Tree))
 })
 
-const hydrationCase = <A>(name: string, schema: Schema.Codec<A>, value: A, excluded = false) => {
+const hydrationCase = <A>(
+  name: string,
+  schema: Schema.Codec<A>,
+  value: A,
+  excluded = false
+) => {
   it.effect("hydrates " + name + " according to its schema", () => {
     class Read extends Query.Service<Read>()("read/" + name, {
       args: {},
@@ -87,10 +117,17 @@ const hydrationCase = <A>(name: string, schema: Schema.Codec<A>, value: A, exclu
       message: Schema.Never,
       elements: Html,
       queries: { value: { query: Read, args: () => ({}) } }
-    }).make({ init: () => ({ value }), update: ($) => $.model, view: (h) => h.div("safe") })
+    }).make({
+      init: () => ({ value }),
+      update: ($) => $.model,
+      view: (h) => h.div("safe")
+    })
     return Effect.gen(function*() {
       const rendered = yield* ssr(App, {})
-      assert.notInclude(rendered.html + HtmlServer.serializeState(rendered.state), "recursive-secret")
+      assert.notInclude(
+        rendered.html + HtmlServer.serializeState(rendered.state),
+        "recursive-secret"
+      )
       assert.deepStrictEqual(rendered.adopted, excluded ? [] : ["/App"])
       if (excluded) {
         assert.deepStrictEqual(rendered.state["~query"], {})
@@ -104,7 +141,10 @@ const hydrationCase = <A>(name: string, schema: Schema.Codec<A>, value: A, exclu
 }
 
 hydrationCase("suspended string", Schema.suspend(() => Schema.String), "ok")
-hydrationCase("recursive tree", Tree, { value: "ok", children: [{ value: "child", children: [] }] })
+hydrationCase("recursive tree", Tree, {
+  value: "ok",
+  children: [{ value: "child", children: [] }]
+})
 hydrationCase(
   "suspended secret",
   Schema.suspend(() => Schema.Redacted(Schema.String)),
@@ -124,6 +164,11 @@ const A: Schema.Codec<A> = Schema.Struct({
   b: Schema.Array(Schema.suspend(() => B)),
   secret: Schema.Redacted(Schema.String)
 })
-const B: Schema.Codec<B> = Schema.Struct({ a: Schema.Array(Schema.suspend(() => A)) })
-hydrationCase("mutual recursion from A", A, { b: [], secret: Redacted.make("recursive-secret") }, true)
+const B: Schema.Codec<B> = Schema.Struct({
+  a: Schema.Array(Schema.suspend(() => A))
+})
+hydrationCase("mutual recursion from A", A, {
+  b: [],
+  secret: Redacted.make("recursive-secret")
+}, true)
 hydrationCase("mutual recursion from B", B, { a: [] }, true)

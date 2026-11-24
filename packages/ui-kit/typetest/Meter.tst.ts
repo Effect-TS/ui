@@ -12,11 +12,23 @@ type Msg = typeof Msg.Type
 declare const needsClock: View.Child<never, Clock>
 
 type Div<R> = Html.Element<Msg, R, Html.EventsOf<"div">, HTMLDivElement, "div">
-type Span<R> = Html.Element<Msg, R, Html.EventsOf<"span">, HTMLSpanElement, "span">
+type Span<R> = Html.Element<
+  Msg,
+  R,
+  Html.EventsOf<"span">,
+  HTMLSpanElement,
+  "span"
+>
 
 describe("Meter", () => {
   it("each part returns the builder it was given, with the consumer's message type and the children's requirements", () => {
-    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({
+      name: "App",
+      scoped: false,
+      model: Schema.Null,
+      message: Msg,
+      elements: Html
+    }).make({
       init: () => null,
       update: ($) => $.model,
       view: (h) =>
@@ -25,11 +37,18 @@ describe("Meter", () => {
           view: (meter) => {
             expect(meter.percentage).type.toBe<number>()
             expect(meter.valueText).type.toBe<string>()
-            expect(meter.label(h.span).children(needsClock)).type.toBe<Span<Clock>>()
-            expect(meter.value(h.span.onClick(Msg.Clicked()))).type.toBe<Span<never>>()
+            expect(meter.label(h.span).children(needsClock)).type.toBe<
+              Span<Clock>
+            >()
+            expect(meter.value(h.span.onClick(Msg.Clicked()))).type.toBe<
+              Span<never>
+            >()
             expect(meter.track(h.div)).type.toBe<Div<never>>()
             expect(meter.indicator(h.div)).type.toBe<Div<never>>()
-            const root = meter.root(h.div).children(meter.label(h.span), needsClock)
+            const root = meter.root(h.div).children(
+              meter.label(h.span),
+              needsClock
+            )
             expect(root).type.toBe<Div<Clock>>()
             return root
           }
@@ -38,7 +57,13 @@ describe("Meter", () => {
   })
 
   it("root, track and indicator take only a div, and label and value only a span", () => {
-    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({
+      name: "App",
+      scoped: false,
+      model: Schema.Null,
+      message: Msg,
+      elements: Html
+    }).make({
       init: () => null,
       update: ($) => $.model,
       view: (h) =>

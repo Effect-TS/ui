@@ -16,12 +16,20 @@ if (!Fs.existsSync(Path.join(dist, "index.d.ts"))) {
   process.exit(1)
 }
 
-const pkg = JSON.parse(Fs.readFileSync(Path.join(pkgDir, "package.json"), "utf8"))
+const pkg = JSON.parse(
+  Fs.readFileSync(Path.join(pkgDir, "package.json"), "utf8")
+)
 const exported = Object.entries(pkg.publishConfig.exports)
-  .filter(([key, target]) => target !== null && key !== "./package.json" && !key.includes("*"))
+  .filter(([key, target]) =>
+    target !== null && key !== "./package.json" && !key.includes("*")
+  )
 const entrypoints = exported
   .filter(([, target]) => typeof target === "string")
-  .map(([key, target]) => [Path.posix.join(pkg.name, key), [Path.join(pkgDir, target.replace(/\.js$/, ".d.ts"))]])
+  .map((
+    [key, target]
+  ) => [Path.posix.join(pkg.name, key), [
+    Path.join(pkgDir, target.replace(/\.js$/, ".d.ts"))
+  ]])
 
 const ambient = exported
   .filter(([, target]) => typeof target === "object")
@@ -31,7 +39,9 @@ const dir = Fs.mkdtempSync(Path.join(Os.tmpdir(), "effect-ui-dist-types-"))
 try {
   Fs.writeFileSync(
     Path.join(dir, "index.ts"),
-    entrypoints.map(([entry], i) => `import * as _${i} from "${entry}"\nexport { _${i} }\n`).join("")
+    entrypoints.map(([entry], i) =>
+      `import * as _${i} from "${entry}"\nexport { _${i} }\n`
+    ).join("")
   )
   const config = {
     compilerOptions: {
@@ -51,20 +61,33 @@ try {
     files: ["index.ts", ...ambient]
   }
   Fs.writeFileSync(Path.join(dir, "tsconfig.json"), JSON.stringify(config))
-  execFileSync("pnpm", ["exec", "tsc", "-p", Path.join(dir, "tsconfig.json")], { cwd: root, stdio: "inherit" })
+  execFileSync("pnpm", ["exec", "tsc", "-p", Path.join(dir, "tsconfig.json")], {
+    cwd: root,
+    stdio: "inherit"
+  })
 
   // Only `@effect/ui/html` may need the DOM lib: the core and its testing
   // helpers must type check without it.
   Fs.writeFileSync(
     Path.join(dir, "index.ts"),
-    ["@effect/ui", "@effect/ui/Query", "@effect/ui/testing", "@effect/ui/testing/TestQuery"]
-      .map((entry, i) => `import * as _${i} from "${entry}"\nexport { _${i} }\n`).join("")
+    [
+      "@effect/ui",
+      "@effect/ui/Query",
+      "@effect/ui/testing",
+      "@effect/ui/testing/TestQuery"
+    ]
+      .map((entry, i) =>
+        `import * as _${i} from "${entry}"\nexport { _${i} }\n`
+      ).join("")
   )
   config.files = ["index.ts"]
   config.compilerOptions.lib = ["ES2024"]
   config.compilerOptions.exactOptionalPropertyTypes = true
   Fs.writeFileSync(Path.join(dir, "tsconfig.json"), JSON.stringify(config))
-  execFileSync("pnpm", ["exec", "tsc", "-p", Path.join(dir, "tsconfig.json")], { cwd: root, stdio: "inherit" })
+  execFileSync("pnpm", ["exec", "tsc", "-p", Path.join(dir, "tsconfig.json")], {
+    cwd: root,
+    stdio: "inherit"
+  })
 } catch (error) {
   process.exitCode = typeof error.status === "number" ? error.status : 1
 } finally {

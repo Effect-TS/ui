@@ -66,12 +66,16 @@ export declare namespace TaggedEnum {
    * @category models
    * @since 0.1.0
    */
-  export interface Base<Cases extends Record<string, Schema.Constraint>> extends Schema.TaggedUnion<Cases> {
+  export interface Base<Cases extends Record<string, Schema.Constraint>>
+    extends Schema.TaggedUnion<Cases>
+  {
     readonly "Rebuild": TaggedEnum<Cases>
     /**
      * Returns a type guard that checks only the `_tag` field.
      */
-    readonly is: <Tag extends keyof Cases>(tag: Tag) => (u: unknown) => u is Cases[Tag]["Type"]
+    readonly is: <Tag extends keyof Cases>(
+      tag: Tag
+    ) => (u: unknown) => u is Cases[Tag]["Type"]
   }
 
   /**
@@ -89,7 +93,11 @@ export declare namespace TaggedEnum {
   export type Constructors<Cases extends Record<string, Schema.Constraint>> = {
     readonly [K in keyof Cases]: (
       args: Types.VoidIfEmpty<
-        { readonly [P in keyof Cases[K]["Type"] as P extends "_tag" ? never : P]: Cases[K]["Type"][P] }
+        {
+          readonly [
+            P in keyof Cases[K]["Type"] as P extends "_tag" ? never : P
+          ]: Cases[K]["Type"][P]
+        }
       >
     ) => Cases[K]["Type"]
   }
@@ -176,13 +184,23 @@ type TagOf<K> = K extends number ? `${K}` : Extract<K, string>
  * @category constructors
  * @since 0.1.0
  */
-export const TaggedEnum = <const CasesByTag extends Record<string, Schema.Struct.Fields>>(
+export const TaggedEnum = <
+  const CasesByTag extends Record<string, Schema.Struct.Fields>
+>(
   casesByTag:
     & CasesByTag
     & {
-      readonly [K in keyof CasesByTag]: K extends TaggedEnum.ReservedTag ? never : { readonly _tag?: never }
+      readonly [K in keyof CasesByTag]: K extends TaggedEnum.ReservedTag ? never
+        : { readonly _tag?: never }
     }
-): TaggedEnum<{ readonly [K in keyof CasesByTag as TagOf<K>]: Schema.TaggedStruct<TagOf<K>, CasesByTag[K]> }> => {
+): TaggedEnum<
+  {
+    readonly [K in keyof CasesByTag as TagOf<K>]: Schema.TaggedStruct<
+      TagOf<K>,
+      CasesByTag[K]
+    >
+  }
+> => {
   const tags = Object.keys(casesByTag)
   for (const key of tags) {
     if (Object.hasOwn(casesByTag[key], "_tag")) {
@@ -191,7 +209,15 @@ export const TaggedEnum = <const CasesByTag extends Record<string, Schema.Struct
   }
   const union = Schema.TaggedUnion(casesByTag)
   const { tag, cases, isAnyOf, guards, match, matchOrElse } = union
-  const members: Record<string, unknown> = { tag, cases, isAnyOf, guards, match, matchOrElse, is }
+  const members: Record<string, unknown> = {
+    tag,
+    cases,
+    isAnyOf,
+    guards,
+    match,
+    matchOrElse,
+    is
+  }
   for (const key of tags) {
     members[key] = (args: object | undefined) => ({ ...args, _tag: key })
   }

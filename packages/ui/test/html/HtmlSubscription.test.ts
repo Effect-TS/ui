@@ -1,7 +1,11 @@
 // @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlSubscription } from "@effect/ui/html"
-import { HtmlScene, TestAnimationFrames, TestGlobalEvents } from "@effect/ui/html/testing"
+import {
+  HtmlScene,
+  TestAnimationFrames,
+  TestGlobalEvents
+} from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Exit, Layer, Schema } from "effect"
@@ -17,7 +21,11 @@ const Message = UiSchema.TaggedEnum({
 const Keys = Component.define({
   name: "Keys",
   scoped: false,
-  model: Schema.Struct({ listening: Schema.Boolean, prefix: Schema.String, log: Schema.Array(Schema.String) }),
+  model: Schema.Struct({
+    listening: Schema.Boolean,
+    prefix: Schema.String,
+    log: Schema.Array(Schema.String)
+  }),
   message: Message,
   elements: Html
 }).make({
@@ -30,7 +38,8 @@ const Keys = Component.define({
   view: (h, model) =>
     h.div(
       h.input.attr("id", "field").onKeyDown(
-        ({ key }) => key === "Enter" ? Message.Renamed({ prefix: "field" }) : undefined,
+        ({ key }) =>
+          key === "Enter" ? Message.Renamed({ prefix: "field" }) : undefined,
         {
           preventDefault: true
         }
@@ -43,7 +52,11 @@ const Keys = Component.define({
     model.listening && HtmlSubscription.onDocument(
       "keydown",
       ({ defaultPrevented, key }) =>
-        key === "Escape" ? undefined : Message.Pressed({ key: `${model.prefix}${key}${defaultPrevented ? "!" : ""}` }),
+        key === "Escape"
+          ? undefined
+          : Message.Pressed({
+            key: `${model.prefix}${key}${defaultPrevented ? "!" : ""}`
+          }),
       { preventDefault: true }
     )
   ]
@@ -62,22 +75,29 @@ const Phases = Component.define({
 }).make({
   init: (): ReadonlyArray<string> => [],
   update: ($, { what }) => [...$.model, what],
-  view: (h, log) => h.div(h.button.attr("id", "inner"), h.output(log.join(","))),
+  view: (h, log) =>
+    h.div(h.button.attr("id", "inner"), h.output(log.join(","))),
   subscriptions: ({ model: log }) => [
     !log.includes("capture") &&
-    HtmlSubscription.onDocument("mousedown", PhaseMessage.Heard({ what: "capture" }), {
-      capture: true,
-      preventDefault: "always"
-    }),
+    HtmlSubscription.onDocument(
+      "mousedown",
+      PhaseMessage.Heard({ what: "capture" }),
+      {
+        capture: true,
+        preventDefault: "always"
+      }
+    ),
     log.length > 0 &&
     HtmlSubscription.onDocument(
       "mousedown",
-      ({ defaultPrevented }) => PhaseMessage.Heard({ what: `bubble ${defaultPrevented}` })
+      ({ defaultPrevented }) =>
+        PhaseMessage.Heard({ what: `bubble ${defaultPrevented}` })
     ),
     HtmlSubscription.onWindow("focus", PhaseMessage.Heard({ what: "focus" })),
     HtmlSubscription.onDocument(
       "pointercancel",
-      ({ button, pointerType }) => PhaseMessage.Heard({ what: `cancel ${button} ${pointerType}` })
+      ({ button, pointerType }) =>
+        PhaseMessage.Heard({ what: `cancel ${button} ${pointerType}` })
     )
   ]
 })
@@ -105,10 +125,15 @@ describe("HtmlSubscription.onDocument and HtmlSubscription.onWindow", () => {
     Effect.gen(function*() {
       const root = yield* TestHost.mount(Keys, {})
       yield* TestHost.settle
-      const click = (id: string) => Locator.fire(root.get(Locator.attr("id", id)), "click")
+      const click = (id: string) =>
+        Locator.fire(root.get(Locator.attr("id", id)), "click")
       // A message cancels the default, and no message leaves it.
-      assert.isTrue(yield* TestGlobalEvents.fire("document", "keydown", { key: "x" }))
-      assert.isFalse(yield* TestGlobalEvents.fire("document", "keydown", { key: "Escape" }))
+      assert.isTrue(
+        yield* TestGlobalEvents.fire("document", "keydown", { key: "x" })
+      )
+      assert.isFalse(
+        yield* TestGlobalEvents.fire("document", "keydown", { key: "Escape" })
+      )
       click("rename")
       yield* TestHost.settle
       yield* TestGlobalEvents.fire("document", "keydown", { key: "y" })
@@ -116,7 +141,9 @@ describe("HtmlSubscription.onDocument and HtmlSubscription.onWindow", () => {
       assert.deepStrictEqual(root.model()?.log, ["ax", "by"])
       click("stop")
       yield* TestHost.settle
-      assert.isFalse(yield* TestGlobalEvents.fire("document", "keydown", { key: "z" }))
+      assert.isFalse(
+        yield* TestGlobalEvents.fire("document", "keydown", { key: "z" })
+      )
       yield* TestHost.settle
       assert.deepStrictEqual(root.model()?.log, ["ax", "by"])
     }).pipe(Effect.provide(testLayer)))
@@ -156,7 +183,9 @@ describe("HtmlSubscription.onDocument and HtmlSubscription.onWindow", () => {
 })
 
 const PreventDefault = Schema.Literals(["always", true, false])
-const ParentMessage = UiSchema.TaggedEnum({ Set: { listen: Schema.NullOr(PreventDefault) } })
+const ParentMessage = UiSchema.TaggedEnum({
+  Set: { listen: Schema.NullOr(PreventDefault) }
+})
 
 // A child listens for keys with the `preventDefault` its parent picks, or not
 // at all for `null`. Its handler emits a message for every key but Escape.
@@ -172,9 +201,13 @@ const Listener = Component.define({
   update: ($) => $.model,
   view: (h) => h.span(),
   subscriptions: ({ props: { preventDefault } }) => [
-    HtmlSubscription.onDocument("keydown", ({ key }) => key === "Escape" ? undefined : Message.Pressed({ key }), {
-      preventDefault
-    })
+    HtmlSubscription.onDocument(
+      "keydown",
+      ({ key }) => key === "Escape" ? undefined : Message.Pressed({ key }),
+      {
+        preventDefault
+      }
+    )
   ]
 })
 
@@ -187,18 +220,29 @@ const Parent = Component.define({
 }).make({
   init: () => "always" as const,
   update: { Set: (_, { listen }) => listen },
-  view: (h, listen) => h.div(listen === null ? undefined : Listener(h, { props: { preventDefault: listen } }))
+  view: (h, listen) =>
+    h.div(
+      listen === null
+        ? undefined
+        : Listener(h, { props: { preventDefault: listen } })
+    )
 })
 
 describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
-  const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+  const tick = Effect.promise(() =>
+    new Promise<void>((resolve) => setTimeout(resolve, 30))
+  )
   const container = Effect.acquireRelease(
     Effect.sync(() => document.body.appendChild(document.createElement("div"))),
     (element) => Effect.sync(() => element.remove())
   )
   const byId = (id: string) => document.querySelector<HTMLElement>("#" + id)!
   const press = (target: EventTarget, key: string) => {
-    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })
+    const event = new KeyboardEvent("keydown", {
+      key,
+      bubbles: true,
+      cancelable: true
+    })
     target.dispatchEvent(event)
     return event.defaultPrevented
   }
@@ -218,7 +262,8 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
   it.effect("a key pressed before the parent renders goes by the declaration that render gives", () =>
     Effect.gen(function*() {
       const root = yield* BrowserHost.mountEffect(Parent, {}, yield* container)
-      const set = (listen: typeof PreventDefault.Type | null) => root.send(ParentMessage.Set({ listen }))
+      const set = (listen: typeof PreventDefault.Type | null) =>
+        root.send(ParentMessage.Set({ listen }))
       yield* tick
       // A current "always" listener cancels even when its handler emits nothing.
       assert.isTrue(press(document.body, "Escape"))
@@ -247,18 +292,36 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
       const root = yield* BrowserHost.mountEffect(Phases, {}, yield* container)
       yield* tick
       const inner = byId("inner")
-      const press = () => inner.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }))
-      inner.addEventListener("mousedown", (event) => event.stopPropagation(), { once: true })
+      const press = () =>
+        inner.dispatchEvent(
+          new MouseEvent("mousedown", { bubbles: true, cancelable: true })
+        )
+      inner.addEventListener("mousedown", (event) => event.stopPropagation(), {
+        once: true
+      })
       press()
       yield* tick
       press()
       window.dispatchEvent(new FocusEvent("focus"))
-      inner.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, button: 2, pointerType: "pen" }))
+      inner.dispatchEvent(
+        new PointerEvent("pointercancel", {
+          bubbles: true,
+          button: 2,
+          pointerType: "pen"
+        })
+      )
       yield* tick
       // The stopped press reached capture; only the second press bubbled.
-      assert.deepStrictEqual(root.model(), ["capture", "bubble false", "focus", "cancel 2 pen"])
+      assert.deepStrictEqual(root.model(), [
+        "capture",
+        "bubble false",
+        "focus",
+        "cancel 2 pen"
+      ])
       const s = yield* HtmlScene.make(Phases, {})
-      s.fireDocument("pointercancel", { button: 1 }).expect(Locator.tag("output")).toHaveText("cancel 1 mouse")
+      s.fireDocument("pointercancel", { button: 1 }).expect(
+        Locator.tag("output")
+      ).toHaveText("cancel 1 mouse")
     }).pipe(Effect.scoped))
 
   it.effect("delivers CustomEvent detail on BrowserHost, TestGlobalEvents and HtmlScene", () =>
@@ -278,7 +341,9 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
             "submit",
             ({ defaultPrevented, detail }) =>
               typeof detail === "string"
-                ? PhaseMessage.Heard({ what: `${detail}${defaultPrevented ? "!" : ""}` })
+                ? PhaseMessage.Heard({
+                  what: `${detail}${defaultPrevented ? "!" : ""}`
+                })
                 : detail === null
                 ? PhaseMessage.Heard({ what: "empty" })
                 : undefined,
@@ -287,9 +352,16 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
         ]
       })
 
-      const browser = yield* BrowserHost.mountEffect(Custom, {}, yield* container)
+      const browser = yield* BrowserHost.mountEffect(
+        Custom,
+        {},
+        yield* container
+      )
       yield* tick
-      const cancelled = new CustomEvent("submit", { detail: "hello", cancelable: true })
+      const cancelled = new CustomEvent("submit", {
+        detail: "hello",
+        cancelable: true
+      })
       document.dispatchEvent(cancelled)
       document.dispatchEvent(new CustomEvent("submit", { detail: undefined }))
       document.dispatchEvent(new CustomEvent("submit", { detail: 123 }))
@@ -299,14 +371,19 @@ describe("BrowserHost's GlobalEvents", { concurrent: false }, () => {
 
       const root = yield* TestHost.mount(Custom, {})
       yield* TestHost.settle
-      assert.isTrue(yield* TestGlobalEvents.fireCustomEvent("submit", { detail: "test" }))
+      assert.isTrue(
+        yield* TestGlobalEvents.fireCustomEvent("submit", { detail: "test" })
+      )
       yield* TestGlobalEvents.fireCustomEvent("submit", { detail: undefined })
-      assert.isFalse(yield* TestGlobalEvents.fireCustomEvent("submit", { detail: 42 }))
+      assert.isFalse(
+        yield* TestGlobalEvents.fireCustomEvent("submit", { detail: 42 })
+      )
       yield* TestHost.settle
       assert.deepStrictEqual(root.model(), ["test", "empty"])
 
       const s = yield* HtmlScene.make(Custom, {})
-      s.fireCustomEvent("submit", { detail: "scene", defaultPrevented: true }).expectDefaultPrevented()
+      s.fireCustomEvent("submit", { detail: "scene", defaultPrevented: true })
+        .expectDefaultPrevented()
         .fireCustomEvent("submit", { detail: undefined })
         .fireCustomEvent("submit", { detail: 0 }).expectIgnored()
         .expect(Locator.tag("output")).toHaveText("scene!,empty")
@@ -329,7 +406,9 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
       // The capture listener is gone, so only the bubble one runs.
       s.fireDocument("mousedown").expectDefaultPrevented(false)
         .fireWindow("focus")
-        .expect(Locator.tag("output")).toHaveText("capture,bubble true,bubble false,focus")
+        .expect(Locator.tag("output")).toHaveText(
+          "capture,bubble true,bubble false,focus"
+        )
     }).pipe(Effect.provide(testLayer)))
 
   it.effect("run the handler of the current Model, and a listener that returns nothing is ignored", () =>
@@ -338,7 +417,8 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
       s.fireDocument("keydown", { key: "x" }).expectDefaultPrevented()
         .click(Locator.attr("id", "rename"))
         .fireDocument("keydown", { key: "y", defaultPrevented: true })
-        .fireDocument("keydown", { key: "Escape" }).expectIgnored().expectDefaultPrevented(false)
+        .fireDocument("keydown", { key: "Escape" }).expectIgnored()
+        .expectDefaultPrevented(false)
         .expect(Locator.tag("output")).toHaveText("ax,by!")
     }))
 
@@ -355,13 +435,20 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
         update: ($, entry) => [...$.model, entry],
         view: (h, log) => h.output(log.join(",")),
         subscriptions: () => [
-          HtmlSubscription.onDocument("keydown", ({ editable, key, repeat }) => `${key}:${editable}:${repeat}`)
+          HtmlSubscription.onDocument(
+            "keydown",
+            ({ editable, key, repeat }) => `${key}:${editable}:${repeat}`
+          )
         ]
       })
       const root = yield* TestHost.mount(Shortcut, {})
       yield* TestHost.settle
       yield* TestGlobalEvents.fire("document", "keydown", { key: "g" })
-      yield* TestGlobalEvents.fire("document", "keydown", { key: "g", editable: true, repeat: true })
+      yield* TestGlobalEvents.fire("document", "keydown", {
+        key: "g",
+        editable: true,
+        repeat: true
+      })
       yield* TestHost.settle
       assert.deepStrictEqual(root.model(), ["g:false:false", "g:true:true"])
     }).pipe(Effect.provide(testLayer)))
@@ -391,19 +478,26 @@ describe("HtmlSubscription.shortcuts", () => {
             init: (): ReadonlyArray<string> => [],
             update: ($, entry) => [...$.model, entry],
             view: (h, log) => h.output(log.join(",")),
-            subscriptions: () => [HtmlSubscription.shortcuts([{ key: "?", message: "help" }], options)]
+            subscriptions: () => [
+              HtmlSubscription.shortcuts(
+                [{ key: "?", message: "help" }],
+                options
+              )
+            ]
           }),
           {}
         )
 
       const defaults = yield* mount()
-      defaults.fireDocument("keydown", { key: "x" }).expectIgnored().expectDefaultPrevented(false)
+      defaults.fireDocument("keydown", { key: "x" }).expectIgnored()
+        .expectDefaultPrevented(false)
         .fireDocument("keydown", { key: "?" }).expectDefaultPrevented()
         .expect(Locator.tag("output")).toHaveText("help")
 
       const options = { capture: true, preventDefault: false } as const
       assert.strictEqual(
-        HtmlSubscription.shortcuts([{ key: "?", message: "help" }], options).key,
+        HtmlSubscription.shortcuts([{ key: "?", message: "help" }], options)
+          .key,
         `@effect/ui/html/document:"keydown","capture"`
       )
       const custom = yield* mount(options)
@@ -413,23 +507,35 @@ describe("HtmlSubscription.shortcuts", () => {
     }))
 })
 
-const FrameMessage = UiSchema.TaggedEnum({ TickedFrame: { delta: Schema.Number }, Toggled: {} })
+const FrameMessage = UiSchema.TaggedEnum({
+  TickedFrame: { delta: Schema.Number },
+  Toggled: {}
+})
 
 const Frames = Component.define({
   name: "Frames",
   scoped: false,
-  model: Schema.Struct({ running: Schema.Boolean, deltas: Schema.Array(Schema.Number) }),
+  model: Schema.Struct({
+    running: Schema.Boolean,
+    deltas: Schema.Array(Schema.Number)
+  }),
   message: FrameMessage,
   elements: Html
 }).make({
   init: () => ({ running: true, deltas: [] }),
   update: {
-    TickedFrame: ($, { delta }) => ({ ...$.model, deltas: [...$.model.deltas, delta] }),
+    TickedFrame: ($, { delta }) => ({
+      ...$.model,
+      deltas: [...$.model.deltas, delta]
+    }),
     Toggled: ($) => ({ ...$.model, running: !$.model.running })
   },
   view: (h, model) => h.p(model.deltas.join(",")),
   subscriptions: ({ model }) => [
-    model.running && HtmlSubscription.onAnimationFrame((delta) => FrameMessage.TickedFrame({ delta }))
+    model.running &&
+    HtmlSubscription.onAnimationFrame((delta) =>
+      FrameMessage.TickedFrame({ delta })
+    )
   ]
 })
 
@@ -447,7 +553,10 @@ describe("onAnimationFrame", { concurrent: false }, () => {
       yield* TestHost.settle
       yield* TestAnimationFrames.fire(5)
       assert.deepStrictEqual(root.model()?.deltas, [16, 17, 5])
-    }).pipe(Effect.provide(Layer.merge(TestHost.layer(), TestAnimationFrames.layer)), Effect.scoped))
+    }).pipe(
+      Effect.provide(Layer.merge(TestHost.layer(), TestAnimationFrames.layer)),
+      Effect.scoped
+    ))
 
   it.effect("on BrowserHost, dispatches in the frame's callback and requests no frame once the tree unmounts", () =>
     Effect.gen(function*() {
@@ -473,7 +582,9 @@ describe("onAnimationFrame", { concurrent: false }, () => {
         pending.clear()
         for (const callback of callbacks) callback(performance.now())
       }
-      const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+      const tick = Effect.promise(() =>
+        new Promise<void>((resolve) => setTimeout(resolve, 30))
+      )
       const deltas = yield* Effect.gen(function*() {
         const app = document.body.appendChild(document.createElement("div"))
         yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))

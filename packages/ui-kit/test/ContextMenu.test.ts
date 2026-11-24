@@ -19,12 +19,21 @@ const standIn = {
   elements: Html,
   view: (menu: Parts, h: H) =>
     h.div(
-      menu.trigger({ element: h.button.class("button").attr("id", "more") }).children("More"),
-      menu.contextTrigger(h.div.class("area").attr("id", "row")).children("Row"),
+      menu.trigger({ element: h.button.class("button").attr("id", "more") })
+        .children("More"),
+      menu.contextTrigger(h.div.class("area").attr("id", "row")).children(
+        "Row"
+      ),
       menu.positioner(h.div.class("positioner")).children(
         menu.popup(h.div.class("popup")).children(
-          menu.item({ element: h.div.attr("data-testid", "copy"), value: "copy" }).children("Copy"),
-          menu.item({ element: h.div.attr("data-testid", "paste"), value: "paste" }).children("Paste")
+          menu.item({
+            element: h.div.attr("data-testid", "copy"),
+            value: "copy"
+          }).children("Copy"),
+          menu.item({
+            element: h.div.attr("data-testid", "paste"),
+            value: "paste"
+          }).children("Paste")
         )
       )
     )
@@ -36,33 +45,58 @@ const positioner = Locator.attr("class", "positioner")
 const popup = Locator.attr("class", "popup")
 
 type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
-const mountOf = (s: Rendered, locator: Locator.Locator): Mount.Issued<unknown, never, never, unknown> =>
-  (s.get(locator) as unknown as View.Element<unknown>).owned?.find((layer) => layer.mount !== undefined)
+const mountOf = (
+  s: Rendered,
+  locator: Locator.Locator
+): Mount.Issued<unknown, never, never, unknown> =>
+  (s.get(locator) as unknown as View.Element<unknown>).owned?.find((layer) =>
+    layer.mount !== undefined
+  )
     ?.mount as unknown as Mount.Issued<unknown, never, never, unknown>
 const tracked = (s: Rendered) => mountOf(s, positioner)
 const longPress = (s: Rendered) => mountOf(s, area)
 const trackedArgs = (s: Rendered) => tracked(s).args as any
-const sent = (tag: string, fields: object = {}) => ({ _tag: tag, ...fields }) as never
-const touch = (tag: "Started" | "Cancelled", fields: object = {}) => ({ _tag: tag, ...fields }) as never
+const sent = (tag: string, fields: object = {}) =>
+  ({ _tag: tag, ...fields }) as never
+const touch = (tag: "Started" | "Cancelled", fields: object = {}) =>
+  ({ _tag: tag, ...fields }) as never
 
-const opened = (triggerId: string) => ({ _tag: "RequestedOpen", reason: "trigger-press", triggerId }) as MenuEvents
-const dismissed = (reason: string) => ({ _tag: "RequestedClose", reason }) as MenuEvents
-const rightClick = (x: number, y: number, pointerType = "mouse") => ({ button: 2, x, y, pointerType })
-
-type Pending = { readonly current: { readonly pending: ReadonlyArray<{ readonly command: any }> } }
-
-const elapse = Effect.fnUntraced(function*<S extends Pending & { readonly resolve: (command: any, result: any) => S }>(
-  s: S,
-  name: string,
-  millis: number
-) {
-  const command = s.current.pending.find((run) => run.command.name === name)!.command
-  const fiber = yield* Effect.forkChild(command.effect as Effect.Effect<unknown>)
-  yield* TestClock.adjust(`${millis - 1} millis`)
-  assert.isUndefined(fiber.pollUnsafe())
-  yield* TestClock.adjust("1 millis")
-  return s.resolve(command, yield* Fiber.join(fiber))
+const opened = (triggerId: string) =>
+  ({ _tag: "RequestedOpen", reason: "trigger-press", triggerId }) as MenuEvents
+const dismissed = (reason: string) =>
+  ({ _tag: "RequestedClose", reason }) as MenuEvents
+const rightClick = (x: number, y: number, pointerType = "mouse") => ({
+  button: 2,
+  x,
+  y,
+  pointerType
 })
+
+type Pending = {
+  readonly current: {
+    readonly pending: ReadonlyArray<{ readonly command: any }>
+  }
+}
+
+const elapse = Effect.fnUntraced(
+  function*<
+    S extends Pending & { readonly resolve: (command: any, result: any) => S }
+  >(
+    s: S,
+    name: string,
+    millis: number
+  ) {
+    const command =
+      s.current.pending.find((run) => run.command.name === name)!.command
+    const fiber = yield* Effect.forkChild(
+      command.effect as Effect.Effect<unknown>
+    )
+    yield* TestClock.adjust(`${millis - 1} millis`)
+    assert.isUndefined(fiber.pollUnsafe())
+    yield* TestClock.adjust("1 millis")
+    return s.resolve(command, yield* Fiber.join(fiber))
+  }
+)
 
 describe("Menu contextTrigger", () => {
   it.effect("a right click opens a modal menu at the pointer, and the menu's own trigger still opens it as a menu button", () =>
@@ -71,9 +105,13 @@ describe("Menu contextTrigger", () => {
       s.expectMount(longPress(s))
       assert.include(s.get(area).attrs?.style, "-webkit-touch-callout:none")
       assert.isUndefined(s.get(area).attrs?.["aria-haspopup"])
-      s.fire(area, "contextmenu", rightClick(100, 50)).expectDefaultPrevented().emitted(opened("row"))
+      s.fire(area, "contextmenu", rightClick(100, 50)).expectDefaultPrevented()
+        .emitted(opened("row"))
       s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
-      assert.deepInclude(s.get(area).attrs, { "data-popup-open": "", "data-pressed": "" })
+      assert.deepInclude(s.get(area).attrs, {
+        "data-popup-open": "",
+        "data-pressed": ""
+      })
       assert.deepInclude(s.get(button).attrs, { "aria-expanded": "false" })
       assert.isUndefined(s.get(popup).attrs?.["aria-labelledby"])
       const args = trackedArgs(s)
@@ -92,12 +130,23 @@ describe("Menu contextTrigger", () => {
       })
 
       s.props({ open: false, items })
-      s.fire(button, "mousedown", { button: 0, x: 0, y: 0, pointerType: "mouse" }).emitted(opened("more"))
+      s.fire(button, "mousedown", {
+        button: 0,
+        x: 0,
+        y: 0,
+        pointerType: "mouse"
+      }).emitted(opened("more"))
       s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
       assert.isUndefined(s.get(area).attrs?.["data-popup-open"])
       assert.deepInclude(trackedArgs(s), { context: false, release: false })
-      assert.deepInclude(trackedArgs(s).position, { anchorRect: null, positionMethod: "absolute" })
-      assert.deepInclude(trackedArgs(s).position.options, { align: "center", shiftCrossAxis: false })
+      assert.deepInclude(trackedArgs(s).position, {
+        anchorRect: null,
+        positionMethod: "absolute"
+      })
+      assert.deepInclude(trackedArgs(s).position.options, {
+        align: "center",
+        shiftCrossAxis: false
+      })
 
       yield* elapse(s, "WaitBeforeContextGrace", 500)
     }))
@@ -112,12 +161,20 @@ describe("Menu contextTrigger", () => {
       )
       s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
       assert.isNull(trackedArgs(s).position.anchorRect)
-      assert.deepInclude(trackedArgs(s).position.options, { sideOffset: 0, alignOffset: 0 })
+      assert.deepInclude(trackedArgs(s).position.options, {
+        sideOffset: 0,
+        alignOffset: 0
+      })
       s.fire(area, "contextmenu", rightClick(200, 80)).emitted(
         { _tag: "Highlighted", value: null, reason: "none" },
         opened("row")
       )
-      assert.deepStrictEqual(trackedArgs(s).position.anchorRect, { x: 200, y: 80, width: 0, height: 0 })
+      assert.deepStrictEqual(trackedArgs(s).position.anchorRect, {
+        x: 200,
+        y: 80,
+        width: 0,
+        height: 0
+      })
       yield* elapse(s, "WaitBeforeContextGrace", 500)
     }))
 
@@ -126,7 +183,11 @@ describe("Menu contextTrigger", () => {
       const s = yield* HtmlScene.make(Menu, { open: false, items }, standIn)
       s.mounted(longPress(s), touch("Started", { x: 30, y: 40 }))
       s.mounted(longPress(s), touch("Cancelled"))
-      if (s.current.pending.some((run) => run.command.name === "WaitBeforeLongPress")) {
+      if (
+        s.current.pending.some((run) =>
+          run.command.name === "WaitBeforeLongPress"
+        )
+      ) {
         yield* elapse(s, "WaitBeforeLongPress", 500)
       }
       assert.isEmpty(s.current.emitted)
@@ -135,10 +196,16 @@ describe("Menu contextTrigger", () => {
       s.emitted(opened("row"))
       s.props({ open: true, items }).mounted(tracked(s), sent("ShowedPopup"))
       assert.deepInclude(trackedArgs(s), { touch: true, release: false })
-      assert.deepStrictEqual(trackedArgs(s).position.anchorRect, { x: 30, y: 40, width: 10, height: 10 })
+      assert.deepStrictEqual(trackedArgs(s).position.anchorRect, {
+        x: 30,
+        y: 40,
+        width: 10,
+        height: 10
+      })
       s.mounted(tracked(s), sent("PressedOutside", { pointerType: "touch" }))
       yield* elapse(s, "WaitBeforeContextGrace", 500)
-      s.mounted(tracked(s), sent("PressedOutside", { pointerType: "touch" })).emitted(dismissed("outside-press"))
+      s.mounted(tracked(s), sent("PressedOutside", { pointerType: "touch" }))
+        .emitted(dismissed("outside-press"))
     }))
 
   it.effect("the first release after a right click closes it with cancel-open only away from the popup and after 500ms", () =>
@@ -154,6 +221,7 @@ describe("Menu contextTrigger", () => {
       s.mounted(tracked(s), sent("ReleasedContextPointer", { outside: false }))
       s.fire(area, "contextmenu", rightClick(100, 50)).emitted(opened("row"))
       yield* elapse(s, "WaitBeforeContextGrace", 500)
-      s.mounted(tracked(s), sent("ReleasedContextPointer", { outside: true })).emitted(dismissed("cancel-open"))
+      s.mounted(tracked(s), sent("ReleasedContextPointer", { outside: true }))
+        .emitted(dismissed("cancel-open"))
     }))
 })

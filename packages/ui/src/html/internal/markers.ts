@@ -9,10 +9,12 @@
  */
 
 // The control characters are what must be escaped.
-// oxlint-disable-next-line no-control-regex
-const unsafe = /[%<>\-\u0000-\u001f\u007f]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g
+const unsafe =
+  // oxlint-disable-next-line no-control-regex
+  /[%<>\-\u0000-\u001f\u007f]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g
 
-const hex = (code: number, width: number): string => code.toString(16).toUpperCase().padStart(width, "0")
+const hex = (code: number, width: number): string =>
+  code.toString(16).toUpperCase().padStart(width, "0")
 
 const escape = (path: string): string =>
   path.replace(unsafe, (char) => {
@@ -31,14 +33,17 @@ export const close = (path: string): string => `<!--]${escape(path)}-->`
  *
  * @internal
  */
-export const parse = (data: string): { readonly _tag: "Open" | "Close"; readonly path: string } | undefined => {
+export const parse = (
+  data: string
+): { readonly _tag: "Open" | "Close"; readonly path: string } | undefined => {
   const kind = data[0] === "[" ? "Open" : data[0] === "]" ? "Close" : undefined
   if (kind === undefined) return undefined
   return {
     _tag: kind,
     path: data.slice(1).replace(
       /%u([0-9A-F]{4})|%([0-9A-F]{2})/g,
-      (_, wide: string | undefined, narrow: string | undefined) => String.fromCharCode(parseInt(wide ?? narrow!, 16))
+      (_, wide: string | undefined, narrow: string | undefined) =>
+        String.fromCharCode(parseInt(wide ?? narrow!, 16))
     )
   }
 }

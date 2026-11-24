@@ -98,7 +98,13 @@ export interface ToggleProps {
  * @category models
  * @since 0.1.0
  */
-export type ToggleElement<Msg, R = never> = Html.Element<Msg, R, Html.EventsOf<"button">, HTMLButtonElement, "button">
+export type ToggleElement<Msg, R = never> = Html.Element<
+  Msg,
+  R,
+  Html.EventsOf<"button">,
+  HTMLButtonElement,
+  "button"
+>
 
 /**
  * A toggle button. Call it with the consumer's `h`, the `props`, and the
@@ -137,7 +143,9 @@ export const Toggle = <Msg, R = never>(
     readonly element?: ToggleElement<Msg, R> | undefined
     readonly props: ToggleProps
     /** The message a click sends, from the value the user asked for. */
-    readonly onToggle?: ((event: { readonly pressed: boolean }) => NoInfer<Msg> | undefined) | undefined
+    readonly onToggle?:
+      | ((event: { readonly pressed: boolean }) => NoInfer<Msg> | undefined)
+      | undefined
   }
 ): ToggleElement<Msg, R> => {
   const element: ToggleElement<Msg, R> = options.element ?? h.button

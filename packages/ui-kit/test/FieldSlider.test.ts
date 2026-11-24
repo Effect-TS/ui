@@ -35,7 +35,10 @@ it.effect("a range slider in a field is named by the legend, described, and focu
                               slider.thumb({
                                 element: h.div,
                                 index,
-                                input: field.member(h.input).attr("aria-label", name)
+                                input: field.member(h.input).attr(
+                                  "aria-label",
+                                  name
+                                )
                               })
                             )
                           )
@@ -55,8 +58,13 @@ it.effect("a range slider in a field is named by the legend, described, and focu
     const field = app.querySelector(".field")!
     const group = app.querySelector("[role=group]")!
     const [minimum, maximum] = Array.from(app.querySelectorAll("input"))
-    const ids = [app.querySelector("p")!.id, app.querySelector("span")!.id].join(" ")
-    assert.strictEqual(app.querySelector(`#${group.getAttribute("aria-labelledby")}`)?.textContent, "Price")
+    const ids = [app.querySelector("p")!.id, app.querySelector("span")!.id]
+      .join(" ")
+    assert.strictEqual(
+      app.querySelector(`#${group.getAttribute("aria-labelledby")}`)
+        ?.textContent,
+      "Price"
+    )
     assert.isFalse(group.hasAttribute("aria-invalid"))
     for (const input of [minimum!, maximum!]) {
       assert.isFalse(input.hasAttribute("id"))

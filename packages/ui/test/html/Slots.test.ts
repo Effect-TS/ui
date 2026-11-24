@@ -7,7 +7,9 @@ import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
 /** Lets the render flush and Commands run. */
-const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+const tick = Effect.promise(() =>
+  new Promise<void>((resolve) => setTimeout(resolve, 30))
+)
 
 const container = Effect.acquireRelease(
   Effect.sync(() => document.body.appendChild(document.createElement("div"))),
@@ -39,7 +41,12 @@ const Card = Component.define({
   init: () => null,
   update: ($) => $.model,
   // Text either side of the title, and an aside its parent leaves empty.
-  view: (h) => h.article(h.h2("[", h.slots.title, "]"), h.slots.body, h.aside(h.slots.aside))
+  view: (h) =>
+    h.article(
+      h.h2("[", h.slots.title, "]"),
+      h.slots.body,
+      h.aside(h.slots.aside)
+    )
 })
 
 const where = { server: true }
@@ -61,7 +68,10 @@ const Page = Component.define({
           title: "note",
           body: [
             h.p(where.server ? "from the server" : "from the client"),
-            Counter(h, { key: "n", onEmit: (event) => PageMsg.Added({ count: event.count }) })
+            Counter(h, {
+              key: "n",
+              onEmit: (event) => PageMsg.Added({ count: event.count })
+            })
           ]
         }
       }),
@@ -81,13 +91,25 @@ describe("slots on the server", () => {
       }
       assert.include(result.adopted, "/Page/Card[c]")
       assert.include(result.adopted, "/Page/Card[c]/[body]/Counter[n]")
-      assert.strictEqual(result.container.querySelector("h2")!.textContent, "[note]")
-      assert.strictEqual(result.container.querySelector("aside")!.childNodes.length, 1)
-      assert.strictEqual(result.container.querySelector("aside")!.textContent, "")
+      assert.strictEqual(
+        result.container.querySelector("h2")!.textContent,
+        "[note]"
+      )
+      assert.strictEqual(
+        result.container.querySelector("aside")!.childNodes.length,
+        1
+      )
+      assert.strictEqual(
+        result.container.querySelector("aside")!.textContent,
+        ""
+      )
       // Live: the content's child reports to the parent that wrote it.
       HtmlLocator.click(result.container.querySelector("button")!)
       yield* TestHost.settle
-      assert.strictEqual(result.container.querySelector("output")!.textContent, "added 1")
+      assert.strictEqual(
+        result.container.querySelector("output")!.textContent,
+        "added 1"
+      )
     }).pipe(Effect.provide(TestHost.layer())))
 
   it.effect("builds content fresh when it doesn't match the server's, and adopts the rest", () =>
@@ -100,7 +122,9 @@ describe("slots on the server", () => {
       const article = app.querySelector("article")!
       const title = app.querySelector("h2")!
 
-      const root = yield* BrowserHost.mountEffect(Page, {}, app, { state: rendered.state })
+      const root = yield* BrowserHost.mountEffect(Page, {}, app, {
+        state: rendered.state
+      })
       yield* root.adopted
       yield* tick
       // Card and the slots that match keep the server's nodes; the body shows the client's content.
@@ -124,7 +148,11 @@ describe("slots on the server", () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => Card(h, { key: "c", slots: { body: h.p(renders++ === 0 ? "server" : "client") } })
+        view: (h) =>
+          Card(h, {
+            key: "c",
+            slots: { body: h.p(renders++ === 0 ? "server" : "client") }
+          })
       })
       const error = yield* Effect.flip(ssr(Flip, {}))
       assert.include(

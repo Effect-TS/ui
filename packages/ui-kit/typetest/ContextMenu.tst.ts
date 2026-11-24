@@ -6,7 +6,11 @@ import { expect, it } from "tstyche"
 
 class Clock extends Context.Service<Clock, {}>()("Clock") {}
 
-const NeedsClock = Mount.make("NeedsClock", { args: {} }, () => Clock.use(() => Effect.succeed(Component.noop)))
+const NeedsClock = Mount.make(
+  "NeedsClock",
+  { args: {} },
+  () => Clock.use(() => Effect.succeed(Component.noop))
+)
 
 const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 type Msg = typeof Msg.Type
@@ -26,10 +30,23 @@ it("omits button, hover, submenu and filter props and requires no RequestedQuery
     Highlighted: () => undefined,
     Settled: () => undefined
   }
-  expect(ContextMenu).type.toBeCallableWith(h, { props: { open: true, items }, onEmit, view })
-  expect(ContextMenu).type.not.toBeCallableWith(h, { props: { open: true, items, modal: false }, view })
-  expect(ContextMenu).type.not.toBeCallableWith(h, { props: { open: true, items, openOnHover: true }, view })
-  expect(ContextMenu).type.not.toBeCallableWith(h, { props: { open: true, items, query: "" }, view })
+  expect(ContextMenu).type.toBeCallableWith(h, {
+    props: { open: true, items },
+    onEmit,
+    view
+  })
+  expect(ContextMenu).type.not.toBeCallableWith(h, {
+    props: { open: true, items, modal: false },
+    view
+  })
+  expect(ContextMenu).type.not.toBeCallableWith(h, {
+    props: { open: true, items, openOnHover: true },
+    view
+  })
+  expect(ContextMenu).type.not.toBeCallableWith(h, {
+    props: { open: true, items, query: "" },
+    view
+  })
 })
 
 it("draws its area with trigger and has no viewport or filter parts", () => {

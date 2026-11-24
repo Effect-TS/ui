@@ -338,7 +338,10 @@ export interface Inspector {
  * @category diffing
  * @since 0.1.0
  */
-export const diff: (before: Schema.Json, after: Schema.Json) => ReadonlyArray<Change> = internal.diff
+export const diff: (
+  before: Schema.Json,
+  after: Schema.Json
+) => ReadonlyArray<Change> = internal.diff
 
 /**
  * Makes an inspector whose sessions each hold their last `size` shown entries
@@ -364,4 +367,8 @@ export const diff: (before: Schema.Json, after: Schema.Json) => ReadonlyArray<Ch
 export const make = (options?: {
   readonly size?: number | undefined
   readonly exclude?: ReadonlyArray<string> | undefined
-}): Inspector => internal.make({ size: options?.size, isExcluded: internal.matchTags(new Set(options?.exclude)) })
+}): Inspector =>
+  internal.make({
+    size: options?.size,
+    isExcluded: internal.matchTags(new Set(options?.exclude))
+  })

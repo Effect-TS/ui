@@ -114,7 +114,13 @@ export interface ButtonProps {
  * @category models
  * @since 0.1.0
  */
-export type ButtonElement<Msg, R = never> = Html.Element<Msg, R, Html.EventsOf<"button">, HTMLButtonElement, "button">
+export type ButtonElement<Msg, R = never> = Html.Element<
+  Msg,
+  R,
+  Html.EventsOf<"button">,
+  HTMLButtonElement,
+  "button"
+>
 
 /**
  * A button that can stay focusable while disabled. Call it with the
@@ -163,7 +169,10 @@ export const Button = <Msg, R = never>(
   return element.forward((node) => {
     // By the options alone, not by the state: a clash that waited for the
     // button to be disabled would first show in production.
-    if ((onPress !== undefined || props.focusableWhenDisabled === true) && node.handlers.click !== undefined) {
+    if (
+      (onPress !== undefined || props.focusableWhenDisabled === true) &&
+      node.handlers.click !== undefined
+    ) {
       throw new Error(
         "Button: the element already handles click, which Button would replace. Send the message from onPress"
       )

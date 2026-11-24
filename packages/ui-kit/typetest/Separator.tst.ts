@@ -12,14 +12,24 @@ declare const needsClock: View.Child<never, Clock>
 
 describe("Separator", () => {
   it("returns a div of the caller's message type, whose chained children keep their requirements", () => {
-    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({
+      name: "App",
+      scoped: false,
+      model: Schema.Null,
+      message: Msg,
+      elements: Html
+    }).make({
       init: () => null,
       update: ($) => $.model,
       view: (h) => {
         expect(Separator(h)).type.toBe<SeparatorElement<typeof Msg.Type>>()
-        expect(Separator(h).children(needsClock)).type.toBe<SeparatorElement<typeof Msg.Type, Clock>>()
+        expect(Separator(h).children(needsClock)).type.toBe<
+          SeparatorElement<typeof Msg.Type, Clock>
+        >()
         expect(Separator).type.not.toBeCallableWith(h, { element: h.span })
-        expect(Separator).type.not.toBeCallableWith(h, { props: { orientation: "diagonal" } })
+        expect(Separator).type.not.toBeCallableWith(h, {
+          props: { orientation: "diagonal" }
+        })
         return Separator(h)
       }
     })

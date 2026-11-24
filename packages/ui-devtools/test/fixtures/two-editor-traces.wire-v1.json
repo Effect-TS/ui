@@ -1,6 +1,12 @@
 {
   "interrupted": [
-    { "_tag": "SessionStarted", "seq": 1, "at": 1795392417750, "session": "mwsiafo5-0", "app": "Workspace" },
+    {
+      "_tag": "SessionStarted",
+      "seq": 1,
+      "at": 1795392417750,
+      "session": "mwsiafo5-0",
+      "app": "Workspace"
+    },
     {
       "_tag": "Mounted",
       "seq": 2,
@@ -26,7 +32,13 @@
       "instance": 2,
       "component": "Editor",
       "props": { "noteId": "n1", "token": { "~redacted": true } },
-      "model": { "draft": "", "saved": "", "status": "Clean", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "",
+        "saved": "",
+        "status": "Clean",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "adopted": false,
@@ -66,7 +78,13 @@
       "instance": 3,
       "component": "Editor",
       "props": { "noteId": "n2", "token": { "~redacted": true } },
-      "model": { "draft": "", "saved": "", "status": "Clean", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "",
+        "saved": "",
+        "status": "Clean",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "adopted": false,
@@ -136,10 +154,21 @@
       "path": "/Workspace/Editor[n1]",
       "instance": 2,
       "component": "Editor",
-      "source": { "_tag": "Mount", "name": "FocusBody", "seq": 11, "args": { "noteId": "n1" } },
+      "source": {
+        "_tag": "Mount",
+        "name": "FocusBody",
+        "seq": 11,
+        "args": { "noteId": "n1" }
+      },
       "message": { "_tag": "CompletedFocusBody" },
       "props": { "noteId": "n1", "token": { "~redacted": true } },
-      "model": { "draft": "", "saved": "", "status": "Clean", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "",
+        "saved": "",
+        "status": "Clean",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "lists": [],
@@ -180,10 +209,21 @@
       "path": "/Workspace/Editor[n2]",
       "instance": 3,
       "component": "Editor",
-      "source": { "_tag": "Mount", "name": "FocusBody", "seq": 14, "args": { "noteId": "n2" } },
+      "source": {
+        "_tag": "Mount",
+        "name": "FocusBody",
+        "seq": 14,
+        "args": { "noteId": "n2" }
+      },
       "message": { "_tag": "CompletedFocusBody" },
       "props": { "noteId": "n2", "token": { "~redacted": true } },
-      "model": { "draft": "", "saved": "", "status": "Clean", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "",
+        "saved": "",
+        "status": "Clean",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "lists": [],
@@ -214,7 +254,13 @@
       "source": { "_tag": "DomEvent", "name": "input" },
       "message": { "_tag": "UpdatedDraft", "text": "Ship the inspector" },
       "props": { "noteId": "n1", "token": { "~redacted": true } },
-      "model": { "draft": "Ship the inspector", "saved": "", "status": "Dirty", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "Ship the inspector",
+        "saved": "",
+        "status": "Dirty",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "lists": [],
@@ -244,7 +290,11 @@
           "_tag": "Effect",
           "name": "notes/SaveNote",
           "group": "{\"noteId\":\"n1\"}",
-          "args": { "noteId": "n1", "text": "Ship the inspector", "token": { "~redacted": true } }
+          "args": {
+            "noteId": "n1",
+            "text": "Ship the inspector",
+            "token": { "~redacted": true }
+          }
         }
       ],
       "events": [],
@@ -277,7 +327,13 @@
       "source": { "_tag": "DomEvent", "name": "input" },
       "message": { "_tag": "UpdatedDraft", "text": "Follow the command" },
       "props": { "noteId": "n2", "token": { "~redacted": true } },
-      "model": { "draft": "Follow the command", "saved": "", "status": "Dirty", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "Follow the command",
+        "saved": "",
+        "status": "Dirty",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "lists": [],
@@ -307,7 +363,11 @@
           "_tag": "Effect",
           "name": "notes/SaveNote",
           "group": "{\"noteId\":\"n2\"}",
-          "args": { "noteId": "n2", "text": "Follow the command", "token": { "~redacted": true } }
+          "args": {
+            "noteId": "n2",
+            "text": "Follow the command",
+            "token": { "~redacted": true }
+          }
         }
       ],
       "events": [],
@@ -344,7 +404,10 @@
         "spanId": "5d261426fabdfb31",
         "traceId": "e5f79175c15644ab8575c39479e6826c"
       },
-      "message": { "_tag": "SucceededSaveNote", "savedAt": "2026-11-22T18:10:00Z" },
+      "message": {
+        "_tag": "SucceededSaveNote",
+        "savedAt": "2026-11-22T18:10:00Z"
+      },
       "props": { "noteId": "n1", "token": { "~redacted": true } },
       "model": {
         "draft": "Ship the inspector",
@@ -397,7 +460,14 @@
         "viewers": 1,
         "linkPickerOpen": false
       },
-      "commands": [{ "_tag": "Interrupt", "name": "notes/SaveNote", "group": "{\"noteId\":\"n1\"}", "args": null }],
+      "commands": [
+        {
+          "_tag": "Interrupt",
+          "name": "notes/SaveNote",
+          "group": "{\"noteId\":\"n1\"}",
+          "args": null
+        }
+      ],
       "events": [],
       "lists": [],
       "sends": [],
@@ -426,7 +496,14 @@
         "viewers": 1,
         "linkPickerOpen": false
       },
-      "commands": [{ "_tag": "Interrupt", "name": "notes/SaveNote", "group": "{\"noteId\":\"n2\"}", "args": null }],
+      "commands": [
+        {
+          "_tag": "Interrupt",
+          "name": "notes/SaveNote",
+          "group": "{\"noteId\":\"n2\"}",
+          "args": null
+        }
+      ],
       "events": [],
       "lists": [],
       "sends": [],
@@ -476,7 +553,13 @@
     }
   ],
   "open": [
-    { "_tag": "SessionStarted", "seq": 1, "at": 1795392418134, "session": "mwsiafyt-1", "app": "Workspace" },
+    {
+      "_tag": "SessionStarted",
+      "seq": 1,
+      "at": 1795392418134,
+      "session": "mwsiafyt-1",
+      "app": "Workspace"
+    },
     {
       "_tag": "Mounted",
       "seq": 2,
@@ -502,7 +585,13 @@
       "instance": 2,
       "component": "Editor",
       "props": { "noteId": "n1", "token": { "~redacted": true } },
-      "model": { "draft": "", "saved": "", "status": "Clean", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "",
+        "saved": "",
+        "status": "Clean",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "adopted": false,
@@ -542,7 +631,13 @@
       "instance": 3,
       "component": "Editor",
       "props": { "noteId": "n2", "token": { "~redacted": true } },
-      "model": { "draft": "", "saved": "", "status": "Clean", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "",
+        "saved": "",
+        "status": "Clean",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "adopted": false,
@@ -612,10 +707,21 @@
       "path": "/Workspace/Editor[n1]",
       "instance": 2,
       "component": "Editor",
-      "source": { "_tag": "Mount", "name": "FocusBody", "seq": 11, "args": { "noteId": "n1" } },
+      "source": {
+        "_tag": "Mount",
+        "name": "FocusBody",
+        "seq": 11,
+        "args": { "noteId": "n1" }
+      },
       "message": { "_tag": "CompletedFocusBody" },
       "props": { "noteId": "n1", "token": { "~redacted": true } },
-      "model": { "draft": "", "saved": "", "status": "Clean", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "",
+        "saved": "",
+        "status": "Clean",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "lists": [],
@@ -656,10 +762,21 @@
       "path": "/Workspace/Editor[n2]",
       "instance": 3,
       "component": "Editor",
-      "source": { "_tag": "Mount", "name": "FocusBody", "seq": 14, "args": { "noteId": "n2" } },
+      "source": {
+        "_tag": "Mount",
+        "name": "FocusBody",
+        "seq": 14,
+        "args": { "noteId": "n2" }
+      },
       "message": { "_tag": "CompletedFocusBody" },
       "props": { "noteId": "n2", "token": { "~redacted": true } },
-      "model": { "draft": "", "saved": "", "status": "Clean", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "",
+        "saved": "",
+        "status": "Clean",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "lists": [],
@@ -690,7 +807,13 @@
       "source": { "_tag": "DomEvent", "name": "input" },
       "message": { "_tag": "UpdatedDraft", "text": "Ship the inspector" },
       "props": { "noteId": "n1", "token": { "~redacted": true } },
-      "model": { "draft": "Ship the inspector", "saved": "", "status": "Dirty", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "Ship the inspector",
+        "saved": "",
+        "status": "Dirty",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "lists": [],
@@ -720,7 +843,11 @@
           "_tag": "Effect",
           "name": "notes/SaveNote",
           "group": "{\"noteId\":\"n1\"}",
-          "args": { "noteId": "n1", "text": "Ship the inspector", "token": { "~redacted": true } }
+          "args": {
+            "noteId": "n1",
+            "text": "Ship the inspector",
+            "token": { "~redacted": true }
+          }
         }
       ],
       "events": [],
@@ -753,7 +880,13 @@
       "source": { "_tag": "DomEvent", "name": "input" },
       "message": { "_tag": "UpdatedDraft", "text": "Follow the command" },
       "props": { "noteId": "n2", "token": { "~redacted": true } },
-      "model": { "draft": "Follow the command", "saved": "", "status": "Dirty", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "Follow the command",
+        "saved": "",
+        "status": "Dirty",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "lists": [],
@@ -783,7 +916,11 @@
           "_tag": "Effect",
           "name": "notes/SaveNote",
           "group": "{\"noteId\":\"n2\"}",
-          "args": { "noteId": "n2", "text": "Follow the command", "token": { "~redacted": true } }
+          "args": {
+            "noteId": "n2",
+            "text": "Follow the command",
+            "token": { "~redacted": true }
+          }
         }
       ],
       "events": [],
@@ -820,7 +957,10 @@
         "spanId": "e89e2f2af4b2860a",
         "traceId": "fe822a6c6c0f8341043e13326cbc3268"
       },
-      "message": { "_tag": "SucceededSaveNote", "savedAt": "2026-11-22T18:10:00Z" },
+      "message": {
+        "_tag": "SucceededSaveNote",
+        "savedAt": "2026-11-22T18:10:00Z"
+      },
       "props": { "noteId": "n1", "token": { "~redacted": true } },
       "model": {
         "draft": "Ship the inspector",
@@ -852,7 +992,13 @@
     }
   ],
   "closed": [
-    { "_tag": "SessionStarted", "seq": 1, "at": 1795392418376, "session": "mwsiag5k-2", "app": "Workspace" },
+    {
+      "_tag": "SessionStarted",
+      "seq": 1,
+      "at": 1795392418376,
+      "session": "mwsiag5k-2",
+      "app": "Workspace"
+    },
     {
       "_tag": "Mounted",
       "seq": 2,
@@ -878,7 +1024,13 @@
       "instance": 2,
       "component": "Editor",
       "props": { "noteId": "n1", "token": { "~redacted": true } },
-      "model": { "draft": "", "saved": "", "status": "Clean", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "",
+        "saved": "",
+        "status": "Clean",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "adopted": false,
@@ -918,7 +1070,13 @@
       "instance": 3,
       "component": "Editor",
       "props": { "noteId": "n2", "token": { "~redacted": true } },
-      "model": { "draft": "", "saved": "", "status": "Clean", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "",
+        "saved": "",
+        "status": "Clean",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "adopted": false,
@@ -988,10 +1146,21 @@
       "path": "/Workspace/Editor[n1]",
       "instance": 2,
       "component": "Editor",
-      "source": { "_tag": "Mount", "name": "FocusBody", "seq": 11, "args": { "noteId": "n1" } },
+      "source": {
+        "_tag": "Mount",
+        "name": "FocusBody",
+        "seq": 11,
+        "args": { "noteId": "n1" }
+      },
       "message": { "_tag": "CompletedFocusBody" },
       "props": { "noteId": "n1", "token": { "~redacted": true } },
-      "model": { "draft": "", "saved": "", "status": "Clean", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "",
+        "saved": "",
+        "status": "Clean",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "lists": [],
@@ -1032,10 +1201,21 @@
       "path": "/Workspace/Editor[n2]",
       "instance": 3,
       "component": "Editor",
-      "source": { "_tag": "Mount", "name": "FocusBody", "seq": 14, "args": { "noteId": "n2" } },
+      "source": {
+        "_tag": "Mount",
+        "name": "FocusBody",
+        "seq": 14,
+        "args": { "noteId": "n2" }
+      },
       "message": { "_tag": "CompletedFocusBody" },
       "props": { "noteId": "n2", "token": { "~redacted": true } },
-      "model": { "draft": "", "saved": "", "status": "Clean", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "",
+        "saved": "",
+        "status": "Clean",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "lists": [],
@@ -1066,7 +1246,13 @@
       "source": { "_tag": "DomEvent", "name": "input" },
       "message": { "_tag": "UpdatedDraft", "text": "Ship the inspector" },
       "props": { "noteId": "n1", "token": { "~redacted": true } },
-      "model": { "draft": "Ship the inspector", "saved": "", "status": "Dirty", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "Ship the inspector",
+        "saved": "",
+        "status": "Dirty",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "lists": [],
@@ -1096,7 +1282,11 @@
           "_tag": "Effect",
           "name": "notes/SaveNote",
           "group": "{\"noteId\":\"n1\"}",
-          "args": { "noteId": "n1", "text": "Ship the inspector", "token": { "~redacted": true } }
+          "args": {
+            "noteId": "n1",
+            "text": "Ship the inspector",
+            "token": { "~redacted": true }
+          }
         }
       ],
       "events": [],
@@ -1129,7 +1319,13 @@
       "source": { "_tag": "DomEvent", "name": "input" },
       "message": { "_tag": "UpdatedDraft", "text": "Follow the command" },
       "props": { "noteId": "n2", "token": { "~redacted": true } },
-      "model": { "draft": "Follow the command", "saved": "", "status": "Dirty", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "Follow the command",
+        "saved": "",
+        "status": "Dirty",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "lists": [],
@@ -1159,7 +1355,11 @@
           "_tag": "Effect",
           "name": "notes/SaveNote",
           "group": "{\"noteId\":\"n2\"}",
-          "args": { "noteId": "n2", "text": "Follow the command", "token": { "~redacted": true } }
+          "args": {
+            "noteId": "n2",
+            "text": "Follow the command",
+            "token": { "~redacted": true }
+          }
         }
       ],
       "events": [],
@@ -1196,7 +1396,10 @@
         "spanId": "ba6d5ca7d35bae86",
         "traceId": "511d934f2f6fb0533e9a25409cc7a5ed"
       },
-      "message": { "_tag": "SucceededSaveNote", "savedAt": "2026-11-22T18:10:00Z" },
+      "message": {
+        "_tag": "SucceededSaveNote",
+        "savedAt": "2026-11-22T18:10:00Z"
+      },
       "props": { "noteId": "n1", "token": { "~redacted": true } },
       "model": {
         "draft": "Ship the inspector",
@@ -1270,7 +1473,13 @@
     }
   ],
   "switched": [
-    { "_tag": "SessionStarted", "seq": 1, "at": 1795392418673, "session": "mwsiagdt-3", "app": "Workspace" },
+    {
+      "_tag": "SessionStarted",
+      "seq": 1,
+      "at": 1795392418673,
+      "session": "mwsiagdt-3",
+      "app": "Workspace"
+    },
     {
       "_tag": "Mounted",
       "seq": 2,
@@ -1296,7 +1505,13 @@
       "instance": 2,
       "component": "Editor",
       "props": { "noteId": "n1", "token": { "~redacted": true } },
-      "model": { "draft": "", "saved": "", "status": "Clean", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "",
+        "saved": "",
+        "status": "Clean",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "adopted": false,
@@ -1336,7 +1551,13 @@
       "instance": 3,
       "component": "Editor",
       "props": { "noteId": "n2", "token": { "~redacted": true } },
-      "model": { "draft": "", "saved": "", "status": "Clean", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "",
+        "saved": "",
+        "status": "Clean",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "adopted": false,
@@ -1406,10 +1627,21 @@
       "path": "/Workspace/Editor[n1]",
       "instance": 2,
       "component": "Editor",
-      "source": { "_tag": "Mount", "name": "FocusBody", "seq": 11, "args": { "noteId": "n1" } },
+      "source": {
+        "_tag": "Mount",
+        "name": "FocusBody",
+        "seq": 11,
+        "args": { "noteId": "n1" }
+      },
       "message": { "_tag": "CompletedFocusBody" },
       "props": { "noteId": "n1", "token": { "~redacted": true } },
-      "model": { "draft": "", "saved": "", "status": "Clean", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "",
+        "saved": "",
+        "status": "Clean",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "lists": [],
@@ -1450,10 +1682,21 @@
       "path": "/Workspace/Editor[n2]",
       "instance": 3,
       "component": "Editor",
-      "source": { "_tag": "Mount", "name": "FocusBody", "seq": 14, "args": { "noteId": "n2" } },
+      "source": {
+        "_tag": "Mount",
+        "name": "FocusBody",
+        "seq": 14,
+        "args": { "noteId": "n2" }
+      },
       "message": { "_tag": "CompletedFocusBody" },
       "props": { "noteId": "n2", "token": { "~redacted": true } },
-      "model": { "draft": "", "saved": "", "status": "Clean", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "",
+        "saved": "",
+        "status": "Clean",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "lists": [],
@@ -1484,7 +1727,13 @@
       "source": { "_tag": "DomEvent", "name": "input" },
       "message": { "_tag": "UpdatedDraft", "text": "Ship the inspector" },
       "props": { "noteId": "n1", "token": { "~redacted": true } },
-      "model": { "draft": "Ship the inspector", "saved": "", "status": "Dirty", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "Ship the inspector",
+        "saved": "",
+        "status": "Dirty",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "lists": [],
@@ -1514,7 +1763,11 @@
           "_tag": "Effect",
           "name": "notes/SaveNote",
           "group": "{\"noteId\":\"n1\"}",
-          "args": { "noteId": "n1", "text": "Ship the inspector", "token": { "~redacted": true } }
+          "args": {
+            "noteId": "n1",
+            "text": "Ship the inspector",
+            "token": { "~redacted": true }
+          }
         }
       ],
       "events": [],
@@ -1547,7 +1800,13 @@
       "source": { "_tag": "DomEvent", "name": "input" },
       "message": { "_tag": "UpdatedDraft", "text": "Follow the command" },
       "props": { "noteId": "n2", "token": { "~redacted": true } },
-      "model": { "draft": "Follow the command", "saved": "", "status": "Dirty", "viewers": 1, "linkPickerOpen": false },
+      "model": {
+        "draft": "Follow the command",
+        "saved": "",
+        "status": "Dirty",
+        "viewers": 1,
+        "linkPickerOpen": false
+      },
       "commands": [],
       "events": [],
       "lists": [],
@@ -1577,7 +1836,11 @@
           "_tag": "Effect",
           "name": "notes/SaveNote",
           "group": "{\"noteId\":\"n2\"}",
-          "args": { "noteId": "n2", "text": "Follow the command", "token": { "~redacted": true } }
+          "args": {
+            "noteId": "n2",
+            "text": "Follow the command",
+            "token": { "~redacted": true }
+          }
         }
       ],
       "events": [],
@@ -1614,7 +1877,10 @@
         "spanId": "9c989de3d3046971",
         "traceId": "de647b50a4b79f49c2d63a08f68a98b8"
       },
-      "message": { "_tag": "SucceededSaveNote", "savedAt": "2026-11-22T18:10:00Z" },
+      "message": {
+        "_tag": "SucceededSaveNote",
+        "savedAt": "2026-11-22T18:10:00Z"
+      },
       "props": { "noteId": "n1", "token": { "~redacted": true } },
       "model": {
         "draft": "Ship the inspector",
@@ -1667,7 +1933,11 @@
           "_tag": "Effect",
           "name": "notes/SaveNote",
           "group": "{\"noteId\":\"n2\"}",
-          "args": { "noteId": "n2", "text": "Follow the command", "token": { "~redacted": true } }
+          "args": {
+            "noteId": "n2",
+            "text": "Follow the command",
+            "token": { "~redacted": true }
+          }
         }
       ],
       "events": [],

@@ -83,28 +83,43 @@ export interface Parsed {
   readonly frontmatter: Option.Option<Readonly<Record<string, string>>>
 }
 
-const isStruct = (value: unknown): boolean => Schema.isSchema(value) && "fields" in value
+const isStruct = (value: unknown): boolean =>
+  Schema.isSchema(value) && "fields" in value
 
 const checkOptions = (options: Options): Options => {
   for (const [name, schema] of Object.entries(options.islands ?? {})) {
     if (!isStruct(schema)) {
-      throw new Error(`Island "${name}" in the Markdown options must map to a Schema struct describing its attributes.`)
+      throw new Error(
+        `Island "${name}" in the Markdown options must map to a Schema struct describing its attributes.`
+      )
     }
   }
   if (options.frontmatter !== undefined && !isStruct(options.frontmatter)) {
-    throw new Error("The `frontmatter` Markdown option must be a Schema struct describing the frontmatter fields.")
+    throw new Error(
+      "The `frontmatter` Markdown option must be a Schema struct describing the frontmatter fields."
+    )
   }
   return options
 }
 
 const fieldName = (issue: SchemaIssue.Issue): string | undefined => {
   const first = issue._tag === "Composite" ? issue.issues[0] : issue
-  return first._tag === "Pointer" && typeof first.path[0] === "string" ? first.path[0] : undefined
+  return first._tag === "Pointer" && typeof first.path[0] === "string"
+    ? first.path[0]
+    : undefined
 }
 
 type FieldProblem =
-  | { readonly _tag: "Unknown"; readonly name: string; readonly allowed: ReadonlyArray<string> }
-  | { readonly _tag: "Invalid"; readonly name: string | undefined; readonly detail: string }
+  | {
+    readonly _tag: "Unknown"
+    readonly name: string
+    readonly allowed: ReadonlyArray<string>
+  }
+  | {
+    readonly _tag: "Invalid"
+    readonly name: string | undefined
+    readonly detail: string
+  }
 
 const checkFields = (
   schema: FrontmatterDefinition,
@@ -117,48 +132,69 @@ const checkFields = (
   }
   const decoded = Schema.decodeUnknownResult(schema)(values)
   return Result.isFailure(decoded)
-    ? { _tag: "Invalid", name: fieldName(decoded.failure.issue), detail: decoded.failure.message }
+    ? {
+      _tag: "Invalid",
+      name: fieldName(decoded.failure.issue),
+      detail: decoded.failure.message
+    }
     : undefined
 }
 
 const allowedText = (allowed: ReadonlyArray<string>, noun: string): string =>
-  allowed.length === 0 ? `It takes no ${noun}.` : `Allowed ${noun}: ${allowed.join(", ")}.`
+  allowed.length === 0
+    ? `It takes no ${noun}.`
+    : `Allowed ${noun}: ${allowed.join(", ")}.`
 
-const islandCheck =
-  (islands: Markdown.IslandDefinitions) =>
-  (name: string, attributes: Readonly<Record<string, string>>, line: number): string | undefined => {
-    if (!Object.hasOwn(islands, name)) {
-      return `Unknown island "${name}" (line ${line}). Allowed islands: ${Object.keys(islands).join(", ")}.`
-    }
-    const problem = checkFields(islands[name], attributes)
-    if (problem === undefined) {
-      return undefined
-    }
-    return problem._tag === "Unknown"
-      ? `Unknown attribute "${problem.name}" for island "${name}" (line ${line}). ${
-        allowedText(problem.allowed, "attributes")
-      }`
-      : `Invalid attributes for island "${name}" (line ${line}). ${problem.detail}`
+const islandCheck = (islands: Markdown.IslandDefinitions) =>
+(
+  name: string,
+  attributes: Readonly<Record<string, string>>,
+  line: number
+): string | undefined => {
+  if (!Object.hasOwn(islands, name)) {
+    return `Unknown island "${name}" (line ${line}). Allowed islands: ${
+      Object.keys(islands).join(", ")
+    }.`
   }
+  const problem = checkFields(islands[name], attributes)
+  if (problem === undefined) {
+    return undefined
+  }
+  return problem._tag === "Unknown"
+    ? `Unknown attribute "${problem.name}" for island "${name}" (line ${line}). ${
+      allowedText(problem.allowed, "attributes")
+    }`
+    : `Invalid attributes for island "${name}" (line ${line}). ${problem.detail}`
+}
 
 const frontmatterFence = /^---[ \t]*$/
 
-const splitFrontmatter = (source: string): { readonly lines: Array<string>; readonly body: string } | undefined => {
+const splitFrontmatter = (
+  source: string
+): { readonly lines: Array<string>; readonly body: string } | undefined => {
   const lines = source.split(/\r\n|\n|\r/)
   if (!frontmatterFence.test(lines[0])) {
     return undefined
   }
-  const end = lines.findIndex((line, index) => index > 0 && frontmatterFence.test(line))
+  const end = lines.findIndex((line, index) =>
+    index > 0 && frontmatterFence.test(line)
+  )
   if (end === -1) {
     return undefined
   }
-  return { lines: lines.slice(1, end), body: "\n".repeat(end + 1) + lines.slice(end + 1).join("\n") }
+  return {
+    lines: lines.slice(1, end),
+    body: "\n".repeat(end + 1) + lines.slice(end + 1).join("\n")
+  }
 }
 
 const frontmatterEntry = /^([A-Za-z][A-Za-z0-9_-]*):(.*)$/
 
 const unquote = (value: string): string =>
-  value.length >= 2 && (value[0] === "\"" || value[0] === "'") && value.endsWith(value[0]) ? value.slice(1, -1) : value
+  value.length >= 2 && (value[0] === "\"" || value[0] === "'") &&
+    value.endsWith(value[0])
+    ? value.slice(1, -1)
+    : value
 
 const parseFrontmatter = (
   lines: ReadonlyArray<string>,
@@ -180,7 +216,10 @@ const parseFrontmatter = (
       })
     }
     if (fields.has(entry[1])) {
-      throw new ParseError({ line, message: `Duplicate frontmatter field "${entry[1]}" (line ${line}).` })
+      throw new ParseError({
+        line,
+        message: `Duplicate frontmatter field "${entry[1]}" (line ${line}).`
+      })
     }
     fields.set(entry[1], unquote(entry[2].trim()))
     fieldLines.set(entry[1], line)
@@ -188,11 +227,15 @@ const parseFrontmatter = (
   const values = Object.fromEntries(fields)
   const problem = checkFields(schema, values)
   if (problem !== undefined) {
-    const line = (problem.name === undefined ? undefined : fieldLines.get(problem.name)) ?? 1
+    const line =
+      (problem.name === undefined ? undefined : fieldLines.get(problem.name)) ??
+        1
     throw new ParseError({
       line,
       message: problem._tag === "Unknown"
-        ? `Unknown frontmatter field "${problem.name}" (line ${line}). ${allowedText(problem.allowed, "fields")}`
+        ? `Unknown frontmatter field "${problem.name}" (line ${line}). ${
+          allowedText(problem.allowed, "fields")
+        }`
         : `Invalid frontmatter (line ${line}). ${problem.detail}`
     })
   }
@@ -212,7 +255,10 @@ const parseFrontmatter = (
  * @category parsing
  * @since 0.1.0
  */
-export const parseMarkdownWithFrontmatter = (input: string, options: Options = {}): Parsed => {
+export const parseMarkdownWithFrontmatter = (
+  input: string,
+  options: Options = {}
+): Parsed => {
   const { frontmatter, islands } = checkOptions(options)
   const source = input.replace(/^\uFEFF/, "")
   const split = splitFrontmatter(source)
@@ -222,9 +268,14 @@ export const parseMarkdownWithFrontmatter = (input: string, options: Options = {
   const fields = split === undefined || frontmatter === undefined
     ? Option.none()
     : Option.some(parseFrontmatter(split.lines, frontmatter))
-  const result = parse(split?.body ?? source, { island: islands === undefined ? undefined : islandCheck(islands) })
+  const result = parse(split?.body ?? source, {
+    island: islands === undefined ? undefined : islandCheck(islands)
+  })
   if (Result.isFailure(result)) {
-    throw new ParseError({ line: result.failure.line, message: result.failure.message })
+    throw new ParseError({
+      line: result.failure.line,
+      message: result.failure.message
+    })
   }
   return { document: result.success, frontmatter: fields }
 }
@@ -249,5 +300,7 @@ export const parseMarkdownWithFrontmatter = (input: string, options: Options = {
  * @category parsing
  * @since 0.1.0
  */
-export const parseMarkdown = (source: string, options?: Options): Markdown.Document =>
-  parseMarkdownWithFrontmatter(source, options).document
+export const parseMarkdown = (
+  source: string,
+  options?: Options
+): Markdown.Document => parseMarkdownWithFrontmatter(source, options).document

@@ -77,9 +77,13 @@ export default defineConfig({
   test: {
     passWithNoTests: true,
     projects: [
-      ...project("scripts", "scripts", true, { test: { include: ["codemods/jsdoc.test.ts"] } }),
+      ...project("scripts", "scripts", true, {
+        test: { include: ["codemods/jsdoc.test.ts"] }
+      }),
       // Node reuses workers across test files, which skips re-importing the effect module graph for every file.
-      ...project("@effect/ui", "packages/ui", true, { test: { isolate: !isNode } }),
+      ...project("@effect/ui", "packages/ui", true, {
+        test: { isolate: !isNode }
+      }),
       ...project("@effect/ui-kit", "packages/ui-kit"),
       ...project("@effect/ui-devtools", "packages/ui-devtools"),
       ...example("auth"),

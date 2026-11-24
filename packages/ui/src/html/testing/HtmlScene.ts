@@ -126,7 +126,9 @@ type EditDetails = Partial<Pick<Html.InputPayload, "composing" | "inputType">>
  * @category models
  * @since 0.1.0
  */
-export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Steps<C, Parts> {
+export interface Steps<C extends AnyComponent, Parts = never>
+  extends Scene.Steps<C, Parts>
+{
   /**
    * Clicks the one element `target` matches, as a browser does: the `click`
    * goes to the innermost element that handles it, then the defaults run.
@@ -166,7 +168,10 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
    * `composing` and `inputType`, `false` and `""` otherwise.
    * `change(locator, { files })` chooses files in a file input.
    */
-  change(locator: Locator.Locator, value: string | Partial<Html.InputPayload>): this
+  change(
+    locator: Locator.Locator,
+    value: string | Partial<Html.InputPayload>
+  ): this
   /**
    * Ends an input method's composition: sends `compositionend` with
    * `value`, or the field's current value when it's left out.
@@ -222,7 +227,9 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
    */
   fireDocument<K extends keyof HtmlSubscription.DocumentEvents>(
     event: K,
-    payload?: Partial<HtmlSubscription.GlobalPayload<HtmlSubscription.DocumentEvents[K]>>
+    payload?: Partial<
+      HtmlSubscription.GlobalPayload<HtmlSubscription.DocumentEvents[K]>
+    >
   ): this
   /**
    * Fires `event` on the window, as `fireDocument` does for
@@ -230,7 +237,9 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
    */
   fireWindow<K extends keyof HtmlSubscription.WindowEvents>(
     event: K,
-    payload?: Partial<HtmlSubscription.GlobalPayload<HtmlSubscription.WindowEvents[K]>>
+    payload?: Partial<
+      HtmlSubscription.GlobalPayload<HtmlSubscription.WindowEvents[K]>
+    >
   ): this
   /**
    * Fires a custom `event` on the document, as `fireDocument` does for
@@ -239,7 +248,9 @@ export interface Steps<C extends AnyComponent, Parts = never> extends Scene.Step
    */
   fireCustomEvent(
     event: string,
-    payload?: Partial<HtmlSubscription.GlobalPayload<HtmlSubscription.CustomEventPayload>>
+    payload?: Partial<
+      HtmlSubscription.GlobalPayload<HtmlSubscription.CustomEventPayload>
+    >
   ): this
   /**
    * Fires an animation frame `delta` ms after the last, `16` by default,
@@ -274,7 +285,10 @@ export declare namespace Steps {
 }
 
 /** Child indices from the root to `node`, to find it again in a view rendered after an event. */
-const indexPath = (root: Locator.Node, node: Locator.Node): ReadonlyArray<number> | undefined => {
+const indexPath = (
+  root: Locator.Node,
+  node: Locator.Node
+): ReadonlyArray<number> | undefined => {
   if (root === node) return []
   const children = root.children ?? []
   for (let i = 0; i < children.length; i++) {
@@ -285,18 +299,21 @@ const indexPath = (root: Locator.Node, node: Locator.Node): ReadonlyArray<number
 }
 
 /** `node` in `state`'s view: itself while the view is the one it came from, else the node at its place. */
-const follow = (root: Locator.Node, node: Locator.Node, description: string) =>
-(
-  state: engine.State<any, any, any, any>
-): Locator.Node => {
-  if (state.root === root) return node
-  let at: Locator.Node | undefined = state.root
-  for (const index of indexPath(root, node) ?? []) at = at?.children?.[index]
-  if (at === undefined || at.tag !== node.tag) {
-    throw new Error(`HtmlScene.click: ${description} is no longer in the view`)
+const follow =
+  (root: Locator.Node, node: Locator.Node, description: string) =>
+  (
+    state: engine.State<any, any, any, any>
+  ): Locator.Node => {
+    if (state.root === root) return node
+    let at: Locator.Node | undefined = state.root
+    for (const index of indexPath(root, node) ?? []) at = at?.children?.[index]
+    if (at === undefined || at.tag !== node.tag) {
+      throw new Error(
+        `HtmlScene.click: ${description} is no longer in the view`
+      )
+    }
+    return at
   }
-  return at
-}
 
 // ---------------------------------------------------------------------------
 // the cursor
@@ -310,29 +327,48 @@ class StepsImpl extends internal.SceneCursor {
       const node = engine.findOne(state, locator, step)
       const root = state.root
       const path = engine.ancestry(state, node) as ReadonlyArray<Locator.Node>
-      return defaults.planClick(root, node, path, locator.description, step).map((planned) => ({
-        node: follow(root, planned.node, planned.description),
-        description: planned.description,
-        event: planned.event,
-        payload: (at: engine.State<any, any, any, any>) =>
-          planned.payload(at.root, (node, description) => follow(root, node, description)(at)),
-        optional: true,
-        isDefault: planned.isDefault
-      }))
+      return defaults.planClick(root, node, path, locator.description, step)
+        .map((planned) => ({
+          node: follow(root, planned.node, planned.description),
+          description: planned.description,
+          event: planned.event,
+          payload: (at: engine.State<any, any, any, any>) =>
+            planned.payload(
+              at.root,
+              (node, description) => follow(root, node, description)(at)
+            ),
+          optional: true,
+          isDefault: planned.isDefault
+        }))
     })
   }
   type(locator: Locator.Locator, value: string, details?: EditDetails): this {
-    return this.one("type", locator, "input", (node) => defaults.inputPayload(node, value, details))
+    return this.one(
+      "type",
+      locator,
+      "input",
+      (node) => defaults.inputPayload(node, value, details)
+    )
   }
-  change(locator: Locator.Locator, value: string | Partial<Html.InputPayload>): this {
-    return this.one("change", locator, "change", (node) => defaults.changePayload(node, value))
+  change(
+    locator: Locator.Locator,
+    value: string | Partial<Html.InputPayload>
+  ): this {
+    return this.one(
+      "change",
+      locator,
+      "change",
+      (node) => defaults.changePayload(node, value)
+    )
   }
   compositionEnd(locator: Locator.Locator, value?: string): this {
     return this.one(
       "compositionEnd",
       locator,
       "compositionend",
-      (node): Html.CompositionPayload => ({ value: value ?? HtmlLocator.value(node) ?? "" })
+      (node): Html.CompositionPayload => ({
+        value: value ?? HtmlLocator.value(node) ?? ""
+      })
     )
   }
   keydown(locator: Locator.Locator, key: string, details?: KeyDetails): this {
@@ -340,15 +376,25 @@ class StepsImpl extends internal.SceneCursor {
       "keydown",
       locator,
       "keydown",
-      (node, state) => defaults.keyPayload(key, details, engine.ancestry(state, node) as ReadonlyArray<Locator.Node>)
+      (node, state) =>
+        defaults.keyPayload(
+          key,
+          details,
+          engine.ancestry(state, node) as ReadonlyArray<Locator.Node>
+        )
     )
   }
   submit(locator: Locator.Locator): this {
     return this.interact("submit", (state) => {
       const step = this.name("submit")
       const node = engine.findOne(state, locator, step)
-      const form = defaults.formOf(engine.ancestry(state, node) as ReadonlyArray<Locator.Node>, state.root)
-      if (form === undefined) throw new Error(`${step}: ${locator.description} isn't in a form`)
+      const form = defaults.formOf(
+        engine.ancestry(state, node) as ReadonlyArray<Locator.Node>,
+        state.root
+      )
+      if (form === undefined) {
+        throw new Error(`${step}: ${locator.description} isn't in a form`)
+      }
       return [{
         node: () => form,
         description: `the form of ${locator.description}`,
@@ -369,10 +415,13 @@ class StepsImpl extends internal.SceneCursor {
       const step = this.name("drop")
       const node = engine.findOne(state, locator, step)
       // Any layer's `onDrop` makes a target, a part's included. The scene then decides which layers run.
-      const target = engine.ancestry(state, node).find((at): at is View.Element<any, any> =>
+      const target = engine.ancestry(state, node).find((
+        at
+      ): at is View.Element<any, any> =>
         at._tag === "Element" &&
         [at, ...(at.owned ?? [])].some((layer) =>
-          Object.hasOwn(layer.handlers, "drop") && drop.accepts(layer.eventOptions.drop)
+          Object.hasOwn(layer.handlers, "drop") &&
+          drop.accepts(layer.eventOptions.drop)
         )
       )
       if (target === undefined) throw drop.noTarget(step, locator.description)
@@ -395,7 +444,12 @@ class StepsImpl extends internal.SceneCursor {
     return this.fireGlobal("fireWindow", "window", event, payload)
   }
   fireCustomEvent(event: string, payload?: object): this {
-    return this.fireGlobal("fireCustomEvent", "document", event, fireGlobal.custom(payload))
+    return this.fireGlobal(
+      "fireCustomEvent",
+      "document",
+      event,
+      fireGlobal.custom(payload)
+    )
   }
   private fireGlobal(
     step: string,
@@ -405,40 +459,62 @@ class StepsImpl extends internal.SceneCursor {
   ): this {
     let cancelled = false
     let handled = false
-    return this.act(step, "message", (state) => {
-      let out = state
-      let heard = false
-      cancelled = fireGlobal.fire(event, given, (capture) => {
-        const declared = out.declared().map(globalEvents.listenerOf).find((declared) =>
-          declared !== undefined && declared.target === target && declared.event === event &&
-          declared.capture === capture
-        )
-        if (declared === undefined) return []
-        heard = true
-        return [(payload, preventDefault) =>
-          globalEvents.run(declared, payload, preventDefault, (message, cancel) => {
-            cancel()
-            handled = true
-            out = engine.dispatch(out, message)
-          })]
+    return this.act(
+      step,
+      "message",
+      (state) => {
+        let out = state
+        let heard = false
+        cancelled = fireGlobal.fire(event, given, (capture) => {
+          const declared = out.declared().map(globalEvents.listenerOf).find((
+            declared
+          ) =>
+            declared !== undefined && declared.target === target &&
+            declared.event === event &&
+            declared.capture === capture
+          )
+          if (declared === undefined) return []
+          heard = true
+          return [(payload, preventDefault) =>
+            globalEvents.run(
+              declared,
+              payload,
+              preventDefault,
+              (message, cancel) => {
+                cancel()
+                handled = true
+                out = engine.dispatch(out, message)
+              }
+            )]
+        })
+        if (!heard) {
+          throw new Error(
+            `${this.name(step)}: nothing listens for ${
+              JSON.stringify(event)
+            } on the ${target}; active keys: ${
+              JSON.stringify(state.subscriptions())
+            }`
+          )
+        }
+        return out
+      },
+      () => ({
+        interaction: handled ? "handled" : "ignored",
+        defaultPrevented: cancelled
       })
-      if (!heard) {
-        throw new Error(
-          `${this.name(step)}: nothing listens for ${JSON.stringify(event)} on the ${target}; active keys: ${
-            JSON.stringify(state.subscriptions())
-          }`
-        )
-      }
-      return out
-    }, () => ({ interaction: handled ? "handled" : "ignored", defaultPrevented: cancelled }))
+    )
   }
   frame(delta = 16): this {
     let handled = false
     return this.act("frame", "message", (state) => {
-      const handler = state.declared().map(frames.handlerOf).find((handler) => handler !== undefined)
+      const handler = state.declared().map(frames.handlerOf).find((handler) =>
+        handler !== undefined
+      )
       if (handler === undefined) {
         throw new Error(
-          `${this.name("frame")}: nothing listens for animation frames; active keys: ${
+          `${
+            this.name("frame")
+          }: nothing listens for animation frames; active keys: ${
             JSON.stringify(state.subscriptions())
           }`
         )
@@ -464,14 +540,19 @@ class StepsImpl extends internal.SceneCursor {
  * @since 0.1.0
  */
 export const make: {
-  <C extends AnyComponent>(component: C, props: Component.Props<C>): Effect.Effect<Steps<C>, never, Scope.Scope>
+  <C extends AnyComponent>(
+    component: C,
+    props: Component.Props<C>
+  ): Effect.Effect<Steps<C>, never, Scope.Scope>
   <C extends AnyComponent, V extends View.Elements = never>(
     component: C,
     props: Component.Props<C>,
     options: {
       readonly elements?: View.Vocabulary<V> | undefined
       readonly slots: (
-        h: View.Helper<never, unknown> & View.Tags<[V] extends [never] ? VocabularyOf<C> : V, never>
+        h:
+          & View.Helper<never, unknown>
+          & View.Tags<[V] extends [never] ? VocabularyOf<C> : V, never>
       ) => { readonly [K in Component.Slots<C>]?: View.Input<never, any> }
     }
   ): Effect.Effect<Steps<C>, never, Scope.Scope>
@@ -480,11 +561,21 @@ export const make: {
     props: Props,
     options: {
       readonly elements?: View.Vocabulary<V> | undefined
-      readonly view: (parts: Parts, h: View.Helper<never, Props> & View.Tags<V, never>) => View.Content<never, any>
+      readonly view: (
+        parts: Parts,
+        h: View.Helper<never, Props> & View.Tags<V, never>
+      ) => View.Content<never, any>
     }
-  ): Effect.Effect<Steps<Component.Component<string, Props, any, any, Events, R, V>, Parts>, never, Scope.Scope>
+  ): Effect.Effect<
+    Steps<Component.Component<string, Props, any, any, Events, R, V>, Parts>,
+    never,
+    Scope.Scope
+  >
 } = (component: any, props: any, options?: any): any =>
-  cursor.scoped(make, () => internal.begin(StepsImpl, "HtmlScene", component, props, options))
+  cursor.scoped(
+    make,
+    () => internal.begin(StepsImpl, "HtmlScene", component, props, options)
+  )
 
 /**
  * The cursor after `init`. Its steps follow the acknowledgement rule, but
@@ -501,7 +592,10 @@ export const start: {
     props: Props,
     options: {
       readonly elements?: View.Vocabulary<V> | undefined
-      readonly view: (parts: Parts, h: View.Helper<never, Props> & View.Tags<V, never>) => View.Content<never, any>
+      readonly view: (
+        parts: Parts,
+        h: View.Helper<never, Props> & View.Tags<V, never>
+      ) => View.Content<never, any>
     }
   ): Steps<Component.Component<string, Props, any, any, Events, R, V>, Parts>
 } = (component: any, props: any, options?: any): any =>

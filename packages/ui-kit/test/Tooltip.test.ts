@@ -1,5 +1,10 @@
 import { Command, Component, Route, Router, UiSchema, View } from "@effect/ui"
-import { Positioning, Tooltip, type TooltipProps, TooltipProvider } from "@effect/ui-kit"
+import {
+  Positioning,
+  Tooltip,
+  type TooltipProps,
+  TooltipProvider
+} from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { HtmlScene, TestGlobalEvents } from "@effect/ui/html/testing"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
@@ -15,7 +20,12 @@ const standIn = {
   ) =>
     h.span(
       tooltip.trigger(h.button.attr("aria-label", "Bold")).children("B"),
-      tooltip.positioner(h.div).children(tooltip.popup(h.div.class("popup")).children(tooltip.arrow(h.div), "Bold"))
+      tooltip.positioner(h.div).children(
+        tooltip.popup(h.div.class("popup")).children(
+          tooltip.arrow(h.div),
+          "Bold"
+        )
+      )
     )
 }
 
@@ -23,22 +33,40 @@ const standIn = {
 const Button = <Msg, R>(
   h: View.Tags<Html.Elements, Msg>,
   options: {
-    readonly element?: Html.Element<Msg, R, Html.EventsOf<"button">, HTMLButtonElement, "button">
+    readonly element?: Html.Element<
+      Msg,
+      R,
+      Html.EventsOf<"button">,
+      HTMLButtonElement,
+      "button"
+    >
     readonly props?: { readonly disabled?: boolean }
     readonly onPress?: Msg
   }
 ) => {
-  const element = (options.element ?? h.button).attr("type", "button").disabled(options.props?.disabled === true)
-  return options.onPress === undefined ? element : element.onClick(options.onPress)
+  const element = (options.element ?? h.button).attr("type", "button").disabled(
+    options.props?.disabled === true
+  )
+  return options.onPress === undefined
+    ? element
+    : element.onClick(options.onPress)
 }
 
 // A parent that opens the tooltip on a styled Button and counts what it hears.
-const ToolbarMessage = UiSchema.TaggedEnum({ PressedBold: {}, RequestedOpenBoldTip: {}, RequestedCloseBoldTip: {} })
+const ToolbarMessage = UiSchema.TaggedEnum({
+  PressedBold: {},
+  RequestedOpenBoldTip: {},
+  RequestedCloseBoldTip: {}
+})
 
 const Toolbar = Component.define({
   name: "Toolbar",
   scoped: false,
-  model: Schema.Struct({ open: Schema.Boolean, pressed: Schema.Number, dismissed: Schema.Number }),
+  model: Schema.Struct({
+    open: Schema.Boolean,
+    pressed: Schema.Number,
+    dismissed: Schema.Number
+  }),
   message: ToolbarMessage,
   elements: Html
 }).make({
@@ -46,7 +74,11 @@ const Toolbar = Component.define({
   update: {
     PressedBold: ($) => ({ ...$.model, pressed: $.model.pressed + 1 }),
     RequestedOpenBoldTip: ($) => ({ ...$.model, open: true }),
-    RequestedCloseBoldTip: ($) => ({ ...$.model, open: false, dismissed: $.model.dismissed + 1 })
+    RequestedCloseBoldTip: ($) => ({
+      ...$.model,
+      open: false,
+      dismissed: $.model.dismissed + 1
+    })
   },
   view: (h, model) =>
     h.div(
@@ -72,7 +104,10 @@ const Toolbar = Component.define({
 
 // Two tooltips under a provider, and one Model field for which one shows.
 const Tip = Schema.Literals(["bold", "italic"])
-const GroupedMessage = UiSchema.TaggedEnum({ RequestedOpenTip: { tip: Tip }, RequestedCloseTip: { tip: Tip } })
+const GroupedMessage = UiSchema.TaggedEnum({
+  RequestedOpenTip: { tip: Tip },
+  RequestedCloseTip: { tip: Tip }
+})
 
 const Grouped = Component.define({
   name: "Grouped",
@@ -84,7 +119,10 @@ const Grouped = Component.define({
   init: () => ({ tip: null }),
   update: {
     RequestedOpenTip: (_, { tip }) => ({ tip }),
-    RequestedCloseTip: ($, { tip }) => ($.model.tip === tip ? { tip: null } : $.model)
+    RequestedCloseTip: (
+      $,
+      { tip }
+    ) => ($.model.tip === tip ? { tip: null } : $.model)
   },
   view: (h, model) =>
     TooltipProvider(h, {
@@ -101,8 +139,12 @@ const Grouped = Component.define({
                   : GroupedMessage.RequestedCloseTip({ tip }),
               view: (tooltip) =>
                 h.span(
-                  tooltip.trigger(h.button.attr("aria-label", tip)).children(tip),
-                  tooltip.positioner(h.div).children(tooltip.popup(h.div.class(`${tip}-popup`)).children(tip))
+                  tooltip.trigger(h.button.attr("aria-label", tip)).children(
+                    tip
+                  ),
+                  tooltip.positioner(h.div).children(
+                    tooltip.popup(h.div.class(`${tip}-popup`)).children(tip)
+                  )
                 )
             })
           )
@@ -110,8 +152,15 @@ const Grouped = Component.define({
     })
 })
 
-const PageRoute = Route.union({ Tips: Route.make("/"), Away: Route.make("/away") })
-const PagesMessage = UiSchema.TaggedEnum({ ChangedRoute: { route: PageRoute }, Left: {}, Navigated: {} })
+const PageRoute = Route.union({
+  Tips: Route.make("/"),
+  Away: Route.make("/away")
+})
+const PagesMessage = UiSchema.TaggedEnum({
+  ChangedRoute: { route: PageRoute },
+  Left: {},
+  Navigated: {}
+})
 
 const Pages = Component.define({
   name: "Pages",
@@ -124,12 +173,23 @@ const Pages = Component.define({
   init: ($) => $.props.route,
   update: {
     ChangedRoute: (_, { route }) => route,
-    Left: ($) => $.run(Router.push(PageRoute, PageRoute.Away()).pipe(Command.map(() => PagesMessage.Navigated()))),
+    Left: ($) =>
+      $.run(
+        Router.push(PageRoute, PageRoute.Away()).pipe(
+          Command.map(() => PagesMessage.Navigated())
+        )
+      ),
     Navigated: ($) => $.model
   },
   subscriptions: (
     { model: route }
-  ) => [Router.subscription(PageRoute, route, (to) => PagesMessage.ChangedRoute({ route: to }))],
+  ) => [
+    Router.subscription(
+      PageRoute,
+      route,
+      (to) => PagesMessage.ChangedRoute({ route: to })
+    )
+  ],
   view: (h, route) =>
     h.div(
       h.a.onClick(PagesMessage.Left()).children("Away"),
@@ -139,13 +199,20 @@ const Pages = Component.define({
 
 // Two tooltips under a provider, each with its own field. `keep` refuses
 // bold's `RequestedClose`, and `bold` counts bold's requests to close.
-const IndependentMessage = UiSchema.TaggedEnum({ RequestedOpenTip: { tip: Tip }, RequestedCloseTip: { tip: Tip } })
+const IndependentMessage = UiSchema.TaggedEnum({
+  RequestedOpenTip: { tip: Tip },
+  RequestedCloseTip: { tip: Tip }
+})
 
 const Independent = Component.define({
   name: "Independent",
   scoped: false,
   props: Schema.Struct({ keep: Schema.Boolean, closeDelay: Schema.Number }),
-  model: Schema.Struct({ bold: Schema.Boolean, italic: Schema.Boolean, requests: Schema.Number }),
+  model: Schema.Struct({
+    bold: Schema.Boolean,
+    italic: Schema.Boolean,
+    requests: Schema.Number
+  }),
   message: IndependentMessage,
   elements: Html
 }).make({
@@ -166,15 +233,22 @@ const Independent = Component.define({
             ...Tip.literals.map((tip) =>
               Tooltip(h, {
                 key: tip,
-                props: { open: model[tip], closeDelay: tip === "bold" ? h.props.closeDelay : 0 },
+                props: {
+                  open: model[tip],
+                  closeDelay: tip === "bold" ? h.props.closeDelay : 0
+                },
                 onEmit: (event) =>
                   event._tag === "RequestedOpen"
                     ? IndependentMessage.RequestedOpenTip({ tip })
                     : IndependentMessage.RequestedCloseTip({ tip }),
                 view: (tooltip) =>
                   h.span(
-                    tooltip.trigger(h.button.attr("aria-label", tip)).children(tip),
-                    tooltip.positioner(h.div).children(tooltip.popup(h.div).children(tip))
+                    tooltip.trigger(h.button.attr("aria-label", tip)).children(
+                      tip
+                    ),
+                    tooltip.positioner(h.div).children(
+                      tooltip.popup(h.div).children(tip)
+                    )
                   )
               })
             )
@@ -212,7 +286,9 @@ const Deferred = Component.define({
   update: {
     RequestedOpen: ($) => $.model,
     RequestedClose: ($, { tip }) =>
-      tip === "bold" ? { ...$.model, requests: $.model.requests + 1 } : { ...$.model, [tip]: false },
+      tip === "bold"
+        ? { ...$.model, requests: $.model.requests + 1 }
+        : { ...$.model, [tip]: false },
     AcceptedOpen: ($, { tip }) => ({ ...$.model, [tip]: true }),
     AcceptedClose: ($, { tip }) => ({ ...$.model, [tip]: false })
   },
@@ -232,8 +308,12 @@ const Deferred = Component.define({
                     : DeferredMessage.RequestedClose({ tip }),
                 view: (tooltip) =>
                   h.span(
-                    tooltip.trigger(h.button.attr("aria-label", tip)).children(tip),
-                    tooltip.positioner(h.div).children(tooltip.popup(h.div).children(tip))
+                    tooltip.trigger(h.button.attr("aria-label", tip)).children(
+                      tip
+                    ),
+                    tooltip.positioner(h.div).children(
+                      tooltip.popup(h.div).children(tip)
+                    )
                   )
               })
             )
@@ -247,13 +327,22 @@ const trigger = Locator.tag("button")
 const positioner = Locator.attr("role", "presentation")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
-const top = { side: "top", align: "center", anchorHidden: false, arrowUncentered: false } as const
+const top = {
+  side: "top",
+  align: "center",
+  anchorHidden: false,
+  arrowUncentered: false
+} as const
 
 const opened = (props: TooltipProps) =>
-  HtmlScene.make(Tooltip, props, standIn).pipe(Effect.map((s) => s.mounted(Positioning.TrackPosition, top)))
+  HtmlScene.make(Tooltip, props, standIn).pipe(
+    Effect.map((s) => s.mounted(Positioning.TrackPosition, top))
+  )
 
 // The message a wait would have produced: the Command's own result.
-const completed = (tag: "CompletedWaitBeforeOpening" | "CompletedWaitBeforeClosing") => ({ _tag: tag }) as never
+const completed = (
+  tag: "CompletedWaitBeforeOpening" | "CompletedWaitBeforeClosing"
+) => ({ _tag: tag }) as never
 
 describe("Tooltip", () => {
   it.effect("hover opens after the delay and stays open across the offset until the pointer leaves", () =>
@@ -265,7 +354,10 @@ describe("Tooltip", () => {
       s.resolve(opening!.command, completed("CompletedWaitBeforeOpening"))
         .emitted({ _tag: "RequestedOpen" })
       assert.isFalse(s.get(positioner).props?.popoverOpen)
-      s.props({ open: true, side: "bottom", sideOffset: 8 }).mounted(Positioning.TrackPosition, top)
+      s.props({ open: true, side: "bottom", sideOffset: 8 }).mounted(
+        Positioning.TrackPosition,
+        top
+      )
 
       assert.isTrue(s.get(positioner).props?.popoverOpen)
       // Each part draws the children it was given.
@@ -275,9 +367,14 @@ describe("Tooltip", () => {
       // The gap is the positioner's padding, so the pointer reaches it as it
       // leaves the trigger, before the wait ends, and the tooltip stays open.
       s.fire(positioner, "mouseenter")
-      assert.deepStrictEqual(s.current.interrupted.map((c) => c.name), ["WaitBeforeClosing"])
+      assert.deepStrictEqual(s.current.interrupted.map((c) => c.name), [
+        "WaitBeforeClosing"
+      ])
       s.fire(positioner, "mouseleave")
-      s.resolve(s.current.pending[0]!.command, completed("CompletedWaitBeforeClosing"))
+      s.resolve(
+        s.current.pending[0]!.command,
+        completed("CompletedWaitBeforeClosing")
+      )
         .emitted({ _tag: "RequestedClose" })
     }))
 
@@ -295,12 +392,18 @@ describe("Tooltip", () => {
   it.effect("document Escape skips another key, a composition, modified Escape and an Escape already handled", () =>
     Effect.gen(function*() {
       const s = yield* opened({ open: true })
-      s.fireDocument("keydown", { key: "a" }).expectIgnored().expectDefaultPrevented(false)
-        .fireDocument("keydown", { key: "Escape", composing: true }).expectIgnored()
-        .fireDocument("keydown", { key: "Escape", ctrl: true }).expectIgnored().expectDefaultPrevented(false)
-        .fireDocument("keydown", { key: "Escape", alt: true }).expectIgnored().expectDefaultPrevented(false)
-        .fireDocument("keydown", { key: "Escape", meta: true }).expectIgnored().expectDefaultPrevented(false)
-        .fireDocument("keydown", { key: "Escape", defaultPrevented: true }).expectIgnored()
+      s.fireDocument("keydown", { key: "a" }).expectIgnored()
+        .expectDefaultPrevented(false)
+        .fireDocument("keydown", { key: "Escape", composing: true })
+        .expectIgnored()
+        .fireDocument("keydown", { key: "Escape", ctrl: true }).expectIgnored()
+        .expectDefaultPrevented(false)
+        .fireDocument("keydown", { key: "Escape", alt: true }).expectIgnored()
+        .expectDefaultPrevented(false)
+        .fireDocument("keydown", { key: "Escape", meta: true }).expectIgnored()
+        .expectDefaultPrevented(false)
+        .fireDocument("keydown", { key: "Escape", defaultPrevented: true })
+        .expectIgnored()
       assert.deepStrictEqual(s.current.emitted, [])
     }))
 
@@ -312,7 +415,10 @@ describe("Tooltip", () => {
       assert.deepStrictEqual(s.current.emitted, [])
       s.props({ open: true }).mounted(Positioning.TrackPosition, top)
         .fire(trigger, "mouseleave")
-      s.resolve(s.current.pending[0]!.command, completed("CompletedWaitBeforeClosing"))
+      s.resolve(
+        s.current.pending[0]!.command,
+        completed("CompletedWaitBeforeClosing")
+      )
         .emitted({ _tag: "RequestedClose" })
     }))
 
@@ -330,7 +436,11 @@ describe("Tooltip", () => {
 
   it.effect("a press outside closes the tooltip at once, while focus or the close delay holds it open", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Tooltip, { open: false, closeDelay: 300 }, standIn)
+      const s = yield* HtmlScene.make(
+        Tooltip,
+        { open: false, closeDelay: 300 },
+        standIn
+      )
       s.fire(trigger, "focus")
         .emitted({ _tag: "RequestedOpen" })
         .props({ open: true, closeDelay: 300 })
@@ -351,7 +461,9 @@ describe("Tooltip", () => {
       s.fire(trigger, "mouseenter")
         .fire(trigger, "blur")
         .fire(trigger, "mouseleave")
-      assert.deepStrictEqual(s.current.pending.map((run) => run.command.args), [{ delay: 300 }])
+      assert.deepStrictEqual(s.current.pending.map((run) => run.command.args), [
+        { delay: 300 }
+      ])
       s.fireDocument("mousedown")
         .emitted({ _tag: "RequestedClose" })
       assert.deepStrictEqual(s.current.pending, [])
@@ -359,7 +471,11 @@ describe("Tooltip", () => {
 
   it.effect("a disabled tooltip never shows and emits nothing", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Tooltip, { open: true, disabled: true }, standIn)
+      const s = yield* HtmlScene.make(
+        Tooltip,
+        { open: true, disabled: true },
+        standIn
+      )
       assert.isFalse(s.get(positioner).props?.popoverOpen)
       assert.isUndefined(s.get(trigger).attrs?.disabled)
       s.fire(trigger, "mouseenter")
@@ -385,20 +501,38 @@ describe("Tooltip", () => {
       },
       props: { open: false, positionMethod: "fixed" }
     })
-    const trigger = View.build(tooltip.trigger(h.button.attr("data-popup-open", "")), [])
+    const trigger = View.build(
+      tooltip.trigger(h.button.attr("data-popup-open", "")),
+      []
+    )
     assert.isUndefined(trigger.attrs["data-popup-open"])
-    const positioner = View.build(tooltip.positioner(h.div).style({ zIndex: "10" }), [])
-    assert.match(positioner.attrs.style ?? "", /^z-index:10;position:fixed;inset:auto;margin:0;/)
+    const positioner = View.build(
+      tooltip.positioner(h.div).style({ zIndex: "10" }),
+      []
+    )
+    assert.match(
+      positioner.attrs.style ?? "",
+      /^z-index:10;position:fixed;inset:auto;margin:0;/
+    )
   })
 
   it.effect("the placement the positioner reports reaches every part", () =>
     Effect.gen(function*() {
-      const s = yield* HtmlScene.make(Tooltip, { open: false, side: "bottom" }, standIn)
+      const s = yield* HtmlScene.make(
+        Tooltip,
+        { open: false, side: "bottom" },
+        standIn
+      )
       const popup = Locator.attr("class", "popup")
       const arrow = Locator.attr("aria-hidden", "true")
       s.props({ open: true, side: "bottom" })
       assert.strictEqual(s.get(popup).attrs?.["data-side"], "bottom")
-      s.mounted(Positioning.TrackPosition, { side: "left", align: "end", anchorHidden: true, arrowUncentered: true })
+      s.mounted(Positioning.TrackPosition, {
+        side: "left",
+        align: "end",
+        anchorHidden: true,
+        arrowUncentered: true
+      })
       for (const part of [positioner, popup, arrow]) {
         assert.strictEqual(s.get(part).attrs?.["data-side"], "left")
         assert.strictEqual(s.get(part).attrs?.["data-align"], "end")
@@ -419,7 +553,10 @@ describe("Tooltip", () => {
       Locator.fire(button, "click")
       yield* TestHost.settle
       // The parent got Button's press and the tooltip's dismissal, once each.
-      assert.strictEqual(Locator.textOf(root.get(Locator.tag("output"))), "pressed 1, dismissed 1")
+      assert.strictEqual(
+        Locator.textOf(root.get(Locator.tag("output"))),
+        "pressed 1, dismissed 1"
+      )
       assert.isUndefined(root.get(trigger).attrs?.["data-popup-open"])
     }).pipe(Effect.provide(TestHost.layer())))
 
@@ -427,24 +564,39 @@ describe("Tooltip", () => {
     Effect.gen(function*() {
       const root = yield* TestHost.mount(Toolbar, {})
       yield* TestHost.settle
-      assert.isTrue(yield* TestGlobalEvents.fire("document", "keydown", { key: "Escape" }))
+      assert.isTrue(
+        yield* TestGlobalEvents.fire("document", "keydown", { key: "Escape" })
+      )
       yield* TestHost.settle
-      assert.strictEqual(Locator.textOf(root.get(Locator.tag("output"))), "pressed 0, dismissed 1")
-      assert.isFalse(yield* TestGlobalEvents.fire("document", "keydown", { key: "Escape" }))
-    }).pipe(Effect.provide(Layer.merge(TestHost.layer(), TestGlobalEvents.layer))))
+      assert.strictEqual(
+        Locator.textOf(root.get(Locator.tag("output"))),
+        "pressed 0, dismissed 1"
+      )
+      assert.isFalse(
+        yield* TestGlobalEvents.fire("document", "keydown", { key: "Escape" })
+      )
+    }).pipe(
+      Effect.provide(Layer.merge(TestHost.layer(), TestGlobalEvents.layer))
+    ))
 
   it.effect("after one tooltip of a group closes, another opens at once inside the timeout and waits outside it", () =>
     Effect.gen(function*() {
       const root = yield* TestHost.mount(Grouped, {})
-      const hover = (tip: string) => Locator.fire(root.get(Locator.attr("aria-label", tip)), "mouseenter")
-      const leave = (tip: string) => Locator.fire(root.get(Locator.attr("aria-label", tip)), "mouseleave")
-      const instant = (tip: string) => root.get(Locator.attr("class", `${tip}-popup`)).attrs?.["data-instant"]
+      const hover = (tip: string) =>
+        Locator.fire(root.get(Locator.attr("aria-label", tip)), "mouseenter")
+      const leave = (tip: string) =>
+        Locator.fire(root.get(Locator.attr("aria-label", tip)), "mouseleave")
+      const instant = (tip: string) =>
+        root.get(Locator.attr("class", `${tip}-popup`)).attrs?.["data-instant"]
       const open = () => root.query(Locator.attr("data-popup-open", ""))
       const openTip = () => Locator.textOf(open()!)
       const settle = TestHost.settle
       // Commands start when the host settles, so settle before moving the clock.
       const wait = (millis: number) =>
-        settle.pipe(Effect.andThen(TestClock.adjust(`${millis} millis`)), Effect.andThen(settle))
+        settle.pipe(
+          Effect.andThen(TestClock.adjust(`${millis} millis`)),
+          Effect.andThen(settle)
+        )
 
       // A opens after its hover delay, then the consumer accepts its close.
       hover("bold")
@@ -503,15 +655,25 @@ describe("Tooltip", () => {
   it.effect("when another tooltip of the group is shown, one held open asks once to close, and stays if refused", () =>
     Effect.gen(function*() {
       const wait = (millis: number) =>
-        TestHost.settle.pipe(Effect.andThen(TestClock.adjust(`${millis} millis`)), Effect.andThen(TestHost.settle))
-      const scene = (root: { readonly get: (locator: Locator.Locator) => TestHost.TestNode }) => ({
-        fire: (tip: string, event: string) => Locator.fire(root.get(Locator.attr("aria-label", tip)), event),
-        shows: (tip: string) => root.get(Locator.attr("aria-label", tip)).attrs?.["data-popup-open"] === "",
+        TestHost.settle.pipe(
+          Effect.andThen(TestClock.adjust(`${millis} millis`)),
+          Effect.andThen(TestHost.settle)
+        )
+      const scene = (
+        root: { readonly get: (locator: Locator.Locator) => TestHost.TestNode }
+      ) => ({
+        fire: (tip: string, event: string) =>
+          Locator.fire(root.get(Locator.attr("aria-label", tip)), event),
+        shows: (tip: string) =>
+          root.get(Locator.attr("aria-label", tip)).attrs
+            ?.["data-popup-open"] === "",
         requests: () => Locator.textOf(root.get(Locator.tag("output")))
       })
 
       // Keyboard focus holds bold open, and the consumer refuses its close.
-      const held = scene(yield* TestHost.mount(Independent, { keep: true, closeDelay: 0 }))
+      const held = scene(
+        yield* TestHost.mount(Independent, { keep: true, closeDelay: 0 })
+      )
       held.fire("bold", "focus")
       yield* wait(0)
       held.fire("italic", "mouseenter")
@@ -525,7 +687,9 @@ describe("Tooltip", () => {
       assert.isTrue(held.shows("bold"))
 
       // A close delay holds bold open, and the consumer accepts at once.
-      const delayed = scene(yield* TestHost.mount(Independent, { keep: false, closeDelay: 1000 }))
+      const delayed = scene(
+        yield* TestHost.mount(Independent, { keep: false, closeDelay: 1000 })
+      )
       delayed.fire("bold", "mouseenter")
       yield* wait(600)
       delayed.fire("bold", "mouseleave")
@@ -540,10 +704,16 @@ describe("Tooltip", () => {
     Effect.gen(function*() {
       const root = yield* TestHost.mount(Deferred, {})
       const wait = (millis: number) =>
-        TestHost.settle.pipe(Effect.andThen(TestClock.adjust(`${millis} millis`)), Effect.andThen(TestHost.settle))
-      const fire = (tip: string, event: string) => Locator.fire(root.get(Locator.attr("aria-label", tip)), event)
+        TestHost.settle.pipe(
+          Effect.andThen(TestClock.adjust(`${millis} millis`)),
+          Effect.andThen(TestHost.settle)
+        )
+      const fire = (tip: string, event: string) =>
+        Locator.fire(root.get(Locator.attr("aria-label", tip)), event)
       const requests = () => Locator.textOf(root.get(Locator.tag("output")))
-      const shows = (tip: string) => root.get(Locator.attr("aria-label", tip)).attrs?.["data-popup-open"] === ""
+      const shows = (tip: string) =>
+        root.get(Locator.attr("aria-label", tip)).attrs?.["data-popup-open"] ===
+          ""
 
       fire("bold", "focus")
       fire("italic", "mouseenter")
@@ -565,11 +735,20 @@ describe("Tooltip", () => {
     Effect.gen(function*() {
       const root = yield* TestHost.mount(Deferred, {})
       const wait = (millis: number) =>
-        TestHost.settle.pipe(Effect.andThen(TestClock.adjust(`${millis} millis`)), Effect.andThen(TestHost.settle))
+        TestHost.settle.pipe(
+          Effect.andThen(TestClock.adjust(`${millis} millis`)),
+          Effect.andThen(TestHost.settle)
+        )
       const accept = (tip: typeof Mark.Type, open: boolean) =>
-        root.send(open ? DeferredMessage.AcceptedOpen({ tip }) : DeferredMessage.AcceptedClose({ tip }))
+        root.send(
+          open
+            ? DeferredMessage.AcceptedOpen({ tip })
+            : DeferredMessage.AcceptedClose({ tip })
+        )
       const requests = () => Locator.textOf(root.get(Locator.tag("output")))
-      const shows = (tip: string) => root.get(Locator.attr("aria-label", tip)).attrs?.["data-popup-open"] === ""
+      const shows = (tip: string) =>
+        root.get(Locator.attr("aria-label", tip)).attrs?.["data-popup-open"] ===
+          ""
 
       accept("bold", true)
       yield* wait(0)

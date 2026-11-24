@@ -6,7 +6,11 @@ import { Locator, Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect } from "effect"
 
-const stale = { "data-progressing": "stale", "data-complete": "stale", "data-indeterminate": "stale" }
+const stale = {
+  "data-progressing": "stale",
+  "data-complete": "stale",
+  "data-indeterminate": "stale"
+}
 
 // Every part, with the consumer's own name for the bar next to the label.
 const standIn = {
@@ -27,10 +31,18 @@ const standIn = {
       })
     )
       .children(
-        progress.label(h.span.class("label").attrs({ ...stale, id: "custom-label", role: "heading" })).children(
+        progress.label(
+          h.span.class("label").attrs({
+            ...stale,
+            id: "custom-label",
+            role: "heading"
+          })
+        ).children(
           "Uploading"
         ),
-        progress.value(h.span.class("value").attrs({ ...stale, "aria-hidden": "false" })),
+        progress.value(
+          h.span.class("value").attrs({ ...stale, "aria-hidden": "false" })
+        ),
         progress.track(h.div.class("track").attrs(stale)).children(
           progress.indicator(h.div.class("fill").attrs(stale))
         )
@@ -44,10 +56,17 @@ const track = Locator.attr("class", "track")
 const indicator = Locator.attr("class", "fill")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
-const parts = (props: ProgressProps) => Story.parts(Progress, { model: {}, props })
-const build = (builder: View.ElementBuilder<never, never, any, any>) => View.build(builder, [])
-const expectState = (attrs: Locator.Node["attrs"], active: keyof typeof stale) => {
-  for (const name of Object.keys(stale)) assert.strictEqual(attrs?.[name], name === active ? "" : undefined, name)
+const parts = (props: ProgressProps) =>
+  Story.parts(Progress, { model: {}, props })
+const build = (builder: View.ElementBuilder<never, never, any, any>) =>
+  View.build(builder, [])
+const expectState = (
+  attrs: Locator.Node["attrs"],
+  active: keyof typeof stale
+) => {
+  for (const name of Object.keys(stale)) {
+    assert.strictEqual(attrs?.[name], name === active ? "" : undefined, name)
+  }
 }
 const everyPart = [root, label, value, track, indicator]
 
@@ -69,18 +88,28 @@ describe("Progress", () => {
       assert.strictEqual(s.get(label).attrs?.role, "presentation")
       assert.strictEqual(s.get(value).attrs?.["aria-hidden"], "true")
       assert.strictEqual(Locator.textOf(s.get(value)), "33%")
-      for (const part of everyPart) expectState(s.get(part).attrs, "data-progressing")
+      for (const part of everyPart) {
+        expectState(s.get(part).attrs, "data-progressing")
+      }
 
       s.props({ value: 1, valueText: "One file uploaded" })
-      assert.strictEqual(s.get(root).attrs?.["aria-valuetext"], "One file uploaded")
+      assert.strictEqual(
+        s.get(root).attrs?.["aria-valuetext"],
+        "One file uploaded"
+      )
       assert.strictEqual(Locator.textOf(s.get(value)), "One file uploaded")
 
       // Above the range: clamped to it, and complete.
       s.props({ value: 150, max: undefined, valueText: "All files uploaded" })
       assert.strictEqual(s.get(root).attrs?.["aria-valuenow"], "100")
-      assert.strictEqual(s.get(root).attrs?.["aria-valuetext"], "All files uploaded")
+      assert.strictEqual(
+        s.get(root).attrs?.["aria-valuetext"],
+        "All files uploaded"
+      )
       assert.strictEqual(Locator.textOf(s.get(value)), "All files uploaded")
-      for (const part of everyPart) expectState(s.get(part).attrs, "data-complete")
+      for (const part of everyPart) {
+        expectState(s.get(part).attrs, "data-complete")
+      }
 
       s.props({ value: null, valueText: undefined })
       const attrs = s.get(root).attrs
@@ -88,7 +117,9 @@ describe("Progress", () => {
       assert.isUndefined(attrs?.["aria-valuenow"])
       assert.strictEqual(attrs?.["aria-valuetext"], "indeterminate progress")
       assert.strictEqual(Locator.textOf(s.get(value)), "")
-      for (const part of everyPart) expectState(s.get(part).attrs, "data-indeterminate")
+      for (const part of everyPart) {
+        expectState(s.get(part).attrs, "data-indeterminate")
+      }
 
       s.props({ value: null, valueText: "Preparing" })
       assert.strictEqual(s.get(root).attrs?.["aria-valuetext"], "Preparing")
@@ -100,22 +131,36 @@ describe("Progress", () => {
     assert.strictEqual(progress.valueText, "33%")
     const custom = progress.value(h.span).children("Almost there")
     const before = progress.value(h.span.children("Starting"))
-    const bar = build(progress.root(h.div.attr("aria-label", "Upload").children(before)).children(custom))
+    const bar = build(
+      progress.root(h.div.attr("aria-label", "Upload").children(before))
+        .children(custom)
+    )
     assert.strictEqual(bar.attrs["aria-label"], "Upload")
     const children = bar.children
-    assert.deepStrictEqual(children.map((child) => child._tag === "Element" ? child.tag : child._tag), [
-      "span",
-      "span",
-      "span"
-    ])
+    assert.deepStrictEqual(
+      children.map((child) =>
+        child._tag === "Element" ? child.tag : child._tag
+      ),
+      [
+        "span",
+        "span",
+        "span"
+      ]
+    )
     const texts = children.slice(0, 2).map((node) =>
-      node._tag === "Element" && node.children.map((child) => child._tag === "Text" && child.text)
+      node._tag === "Element" &&
+      node.children.map((child) => child._tag === "Text" && child.text)
     )
     assert.deepStrictEqual(texts, [["Starting"], ["Almost there"]])
     const last = children[2]
-    if (last?._tag !== "Element") return assert.fail("the root has no hidden span")
+    if (last?._tag !== "Element") {
+      return assert.fail("the root has no hidden span")
+    }
     assert.strictEqual(last.attrs.role, "presentation")
-    assert.match(last.attrs.style ?? "", /position:absolute;width:1px;height:1px/)
+    assert.match(
+      last.attrs.style ?? "",
+      /position:absolute;width:1px;height:1px/
+    )
   })
 
   it("the indicator's width wins over the consumer's inline style, whose other declarations stay", () => {
@@ -125,19 +170,30 @@ describe("Progress", () => {
     assert.strictEqual(progress.percentage, 50)
     const own = "inset-inline-start:0;height:inherit;width:50%"
     assert.strictEqual(
-      build(progress.indicator(h.div).style({ background: "red", width: "10%" })).attrs.style,
+      build(
+        progress.indicator(h.div).style({ background: "red", width: "10%" })
+      ).attrs.style,
       `background:red;width:10%;${own}`
     )
-    assert.strictEqual(build(progress.indicator(h.div.style({ color: "red" }))).attrs.style, `color:red;${own}`)
+    assert.strictEqual(
+      build(progress.indicator(h.div.style({ color: "red" }))).attrs.style,
+      `color:red;${own}`
+    )
     // While indeterminate, the consumer's style is all there is.
     const unknown = parts({ value: Number.NaN })
     assert.strictEqual(unknown.status, "indeterminate")
     assert.isNull(unknown.percentage)
-    assert.strictEqual(build(unknown.indicator(h.div.style({ width: "30%" }))).attrs.style, "width:30%")
+    assert.strictEqual(
+      build(unknown.indicator(h.div.style({ width: "30%" }))).attrs.style,
+      "width:30%"
+    )
 
     const empty = parts({ value: 10, min: 5, max: 5 })
     assert.strictEqual(empty.percentage, 0)
     assert.strictEqual(empty.valueText, "0%")
-    assert.strictEqual(build(empty.indicator(h.div)).attrs.style, "inset-inline-start:0;height:inherit;width:0%")
+    assert.strictEqual(
+      build(empty.indicator(h.div)).attrs.style,
+      "inset-inline-start:0;height:inherit;width:0%"
+    )
   })
 })

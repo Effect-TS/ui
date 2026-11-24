@@ -58,11 +58,17 @@ const App = Component.define({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.main(Counter(h, { key: "counter", props: {} }), Side(h, { key: "side", props: {} }))
+  view: (h) =>
+    h.main(
+      Counter(h, { key: "counter", props: {} }),
+      Side(h, { key: "side", props: {} })
+    )
 })
 
 const Main = BrowserHost.mount(App, {}, document.getElementById("root")!).pipe(
-  Layer.provide(DevTools.layer({ position: "BottomRight", size: 50, exclude: ["Moved"] }))
+  Layer.provide(
+    DevTools.layer({ position: "BottomRight", size: 50, exclude: ["Moved"] })
+  )
 )
 
 Layer.launch(Main).pipe(Effect.runFork)

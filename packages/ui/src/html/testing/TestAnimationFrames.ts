@@ -72,7 +72,10 @@ export interface TestAnimationFrames {
  * @category services
  * @since 0.1.0
  */
-export const TestAnimationFrames: Context.Service<TestAnimationFrames, TestAnimationFrames> = Context.Service<
+export const TestAnimationFrames: Context.Service<
+  TestAnimationFrames,
+  TestAnimationFrames
+> = Context.Service<
   TestAnimationFrames
 >("@effect/ui/html/testing/TestAnimationFrames")
 
@@ -84,7 +87,10 @@ export const TestAnimationFrames: Context.Service<TestAnimationFrames, TestAnima
  * @category constructors
  * @since 0.1.0
  */
-export const make = (): HtmlSubscription.AnimationFrames & TestAnimationFrames => {
+export const make = ():
+  & HtmlSubscription.AnimationFrames
+  & TestAnimationFrames =>
+{
   const listeners = new Set<{ readonly listener: (time: number) => void }>()
   let now = 0
   return {
@@ -116,7 +122,9 @@ export const make = (): HtmlSubscription.AnimationFrames & TestAnimationFrames =
 export const layer: Layer.Layer<TestAnimationFrames> = Layer.effectContext(
   Effect.sync(() => {
     const frames = make()
-    return Context.make(TestAnimationFrames, frames).pipe(Context.add(HtmlSubscription.AnimationFrames, frames))
+    return Context.make(TestAnimationFrames, frames).pipe(
+      Context.add(HtmlSubscription.AnimationFrames, frames)
+    )
   })
 )
 
@@ -128,5 +136,7 @@ export const layer: Layer.Layer<TestAnimationFrames> = Layer.effectContext(
  * @category testing
  * @since 0.1.0
  */
-export const fire = (delta?: number): Effect.Effect<void, never, TestAnimationFrames> =>
+export const fire = (
+  delta?: number
+): Effect.Effect<void, never, TestAnimationFrames> =>
   TestAnimationFrames.useSync((frames) => frames.fire(delta))

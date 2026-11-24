@@ -17,8 +17,15 @@ const PageMessage = UiSchema.TaggedEnum({
 const Page = Component.define({
   name: "Page",
   scoped: false,
-  props: Schema.Struct({ disabled: Schema.Boolean, refuseClose: Schema.Boolean }),
-  model: Schema.Struct({ outer: Schema.Boolean, inner: Schema.Boolean, log: Schema.Array(Schema.String) }),
+  props: Schema.Struct({
+    disabled: Schema.Boolean,
+    refuseClose: Schema.Boolean
+  }),
+  model: Schema.Struct({
+    outer: Schema.Boolean,
+    inner: Schema.Boolean,
+    log: Schema.Array(Schema.String)
+  }),
   message: PageMessage,
   elements: Html
 }).make({
@@ -34,29 +41,44 @@ const Page = Component.define({
       [menu]: $.props.refuseClose && $.model[menu as "outer" | "inner"],
       log: [...$.model.log, menu + " RequestedClose " + reason]
     }),
-    Picked: ($, { menu, value }) => ({ ...$.model, log: [...$.model.log, menu + " Picked " + value] })
+    Picked: ($, { menu, value }) => ({
+      ...$.model,
+      log: [...$.model.log, menu + " Picked " + value]
+    })
   },
   view: (h, model) => {
-    const menu = (name: "outer" | "inner", inside?: View.Content<typeof PageMessage.Type, any>) =>
+    const menu = (
+      name: "outer" | "inner",
+      inside?: View.Content<typeof PageMessage.Type, any>
+    ) =>
       ContextMenu(h, {
         key: name,
         props: { open: model[name], items, disabled: h.props.disabled },
         onEmit: {
-          RequestedOpen: ({ reason }) => PageMessage.RequestedOpen({ menu: name, reason }),
-          RequestedClose: ({ reason }) => PageMessage.RequestedClose({ menu: name, reason }),
+          RequestedOpen: ({ reason }) =>
+            PageMessage.RequestedOpen({ menu: name, reason }),
+          RequestedClose: ({ reason }) =>
+            PageMessage.RequestedClose({ menu: name, reason }),
           Picked: ({ value }) => PageMessage.Picked({ menu: name, value }),
           Highlighted: () => undefined,
           Settled: () => undefined
         },
         view: (contextMenu) =>
           h.div(
-            contextMenu.trigger(h.div.attr("id", name)).children(name, inside ?? ""),
+            contextMenu.trigger(h.div.attr("id", name)).children(
+              name,
+              inside ?? ""
+            ),
             contextMenu.backdrop(h.div.attr("id", name + "-backdrop")),
-            contextMenu.positioner(h.div.attr("id", name + "-positioner")).children(
-              contextMenu.popup(h.div).children(
-                contextMenu.item({ element: h.div.attr("data-testid", name + "-copy"), value: "copy" }).children("Copy")
+            contextMenu.positioner(h.div.attr("id", name + "-positioner"))
+              .children(
+                contextMenu.popup(h.div).children(
+                  contextMenu.item({
+                    element: h.div.attr("data-testid", name + "-copy"),
+                    value: "copy"
+                  }).children("Copy")
+                )
               )
-            )
           )
       })
     return h.div(
@@ -66,7 +88,10 @@ const Page = Component.define({
   }
 })
 
-const HybridMessage = UiSchema.TaggedEnum({ RequestedOpen: {}, RequestedClose: {} })
+const HybridMessage = UiSchema.TaggedEnum({
+  RequestedOpen: {},
+  RequestedClose: {}
+})
 
 const Hybrid = Component.define({
   name: "Hybrid",
@@ -94,10 +119,14 @@ const Hybrid = Component.define({
       },
       view: (menu) =>
         h.div(
-          menu.trigger({ element: h.button.attr("id", "more") }).children("More"),
+          menu.trigger({ element: h.button.attr("id", "more") }).children(
+            "More"
+          ),
           menu.contextTrigger(h.div.attr("id", "area")).children("Area"),
           menu.positioner(h.div.attr("id", "hybrid-positioner")).children(
-            menu.popup(h.div).children(menu.item({ element: h.div, value: "copy" }).children("Copy"))
+            menu.popup(h.div).children(
+              menu.item({ element: h.div, value: "copy" }).children("Copy")
+            )
           )
         )
     })
@@ -105,25 +134,52 @@ const Hybrid = Component.define({
 
 const withGeometry = (
   boxes: Readonly<
-    Record<string, { readonly x: number; readonly y: number; readonly width: number; readonly height: number }>
+    Record<
+      string,
+      {
+        readonly x: number
+        readonly y: number
+        readonly width: number
+        readonly height: number
+      }
+    >
   >
 ) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       const element = window.Element.prototype as any
       const root = document.documentElement as any
-      const saved = { rect: element.getBoundingClientRect, ResizeObserver: (window as any).ResizeObserver }
+      const saved = {
+        rect: element.getBoundingClientRect,
+        ResizeObserver: (window as any).ResizeObserver
+      }
       ;(window as any).ResizeObserver = class {
         observe() {}
         unobserve() {}
         disconnect() {}
       }
       element.getBoundingClientRect = function(this: Element) {
-        const { height, width, x, y } = boxes[this.id] ?? { x: 0, y: 0, width: 0, height: 0 }
-        return { x, y, width, height, left: x, top: y, right: x + width, bottom: y + height }
+        const { height, width, x, y } = boxes[this.id] ??
+          { x: 0, y: 0, width: 0, height: 0 }
+        return {
+          x,
+          y,
+          width,
+          height,
+          left: x,
+          top: y,
+          right: x + width,
+          bottom: y + height
+        }
       }
-      Object.defineProperty(root, "clientWidth", { configurable: true, value: 1000 })
-      Object.defineProperty(root, "clientHeight", { configurable: true, value: 800 })
+      Object.defineProperty(root, "clientWidth", {
+        configurable: true,
+        value: 1000
+      })
+      Object.defineProperty(root, "clientHeight", {
+        configurable: true,
+        value: 800
+      })
       return () => {
         element.getBoundingClientRect = saved.rect
         ;(window as any).ResizeObserver = saved.ResizeObserver
@@ -137,36 +193,65 @@ const withGeometry = (
 const withPlatform = (platform: string) =>
   Effect.acquireRelease(
     Effect.sync(() => {
-      const prevPlatform = Object.getOwnPropertyDescriptor(window.navigator, "platform")
-      const prevTouch = Object.getOwnPropertyDescriptor(window.navigator, "maxTouchPoints")
-      Object.defineProperty(window.navigator, "platform", { configurable: true, value: platform })
-      Object.defineProperty(window.navigator, "maxTouchPoints", { configurable: true, value: 0 })
+      const prevPlatform = Object.getOwnPropertyDescriptor(
+        window.navigator,
+        "platform"
+      )
+      const prevTouch = Object.getOwnPropertyDescriptor(
+        window.navigator,
+        "maxTouchPoints"
+      )
+      Object.defineProperty(window.navigator, "platform", {
+        configurable: true,
+        value: platform
+      })
+      Object.defineProperty(window.navigator, "maxTouchPoints", {
+        configurable: true,
+        value: 0
+      })
       return () => {
-        if (prevPlatform) Object.defineProperty(window.navigator, "platform", prevPlatform)
-        else delete (window.navigator as any).platform
-        if (prevTouch) Object.defineProperty(window.navigator, "maxTouchPoints", prevTouch)
-        else delete (window.navigator as any).maxTouchPoints
+        if (prevPlatform) {
+          Object.defineProperty(window.navigator, "platform", prevPlatform)
+        } else delete (window.navigator as any).platform
+        if (prevTouch) {
+          Object.defineProperty(window.navigator, "maxTouchPoints", prevTouch)
+        } else delete (window.navigator as any).maxTouchPoints
       }
     }),
     (restore) => Effect.sync(restore)
   )
 
 const mountPage = Effect.fnUntraced(
-  function*(config: { readonly disabled?: boolean; readonly refuseClose?: boolean } = {}) {
+  function*(
+    config: { readonly disabled?: boolean; readonly refuseClose?: boolean } = {}
+  ) {
     yield* popovers
     const app = yield* container
-    const root = yield* BrowserHost.mountEffect(Page, { disabled: false, refuseClose: false, ...config }, app)
+    const root = yield* BrowserHost.mountEffect(Page, {
+      disabled: false,
+      refuseClose: false,
+      ...config
+    }, app)
     yield* tick
     return () => root.model()?.log ?? []
   }
 )
 
-const contextmenu = (target: Element, init: MouseEventInit = { clientX: 100, clientY: 50 }) => {
-  const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, ...init })
+const contextmenu = (
+  target: Element,
+  init: MouseEventInit = { clientX: 100, clientY: 50 }
+) => {
+  const event = new MouseEvent("contextmenu", {
+    bubbles: true,
+    cancelable: true,
+    button: 2,
+    ...init
+  })
   target.dispatchEvent(event)
   return event
 }
-const popupOf = (name: string) => byId(name + "-positioner").querySelector<HTMLElement>("[data-menu-popup]")!
+const popupOf = (name: string) =>
+  byId(name + "-positioner").querySelector<HTMLElement>("[data-menu-popup]")!
 const shown = (id: string) => byId(id).matches(":popover-open")
 
 describe("ContextMenu in a document", { concurrent: false }, () => {
@@ -178,15 +263,30 @@ describe("ContextMenu in a document", { concurrent: false }, () => {
       yield* tick
       assert.isTrue(shown("outer-positioner"))
       assert.isTrue(shown("outer-backdrop"))
-      assert.notInclude(byId("outer-backdrop").getAttribute("style"), "pointer-events:none")
+      assert.notInclude(
+        byId("outer-backdrop").getAttribute("style"),
+        "pointer-events:none"
+      )
       assert.isTrue(contextmenu(byId("outer-backdrop")).defaultPrevented)
-      assert.isTrue(contextmenu(document.querySelector("[data-testid=outer-copy]")!).defaultPrevented)
+      assert.isTrue(
+        contextmenu(document.querySelector("[data-testid=outer-copy]")!)
+          .defaultPrevented
+      )
       assert.strictEqual(document.activeElement, popupOf("outer"))
-      popupOf("outer").dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }))
+      popupOf("outer").dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Tab",
+          bubbles: true,
+          cancelable: true
+        })
+      )
       yield* tick
       assert.isFalse(shown("outer-positioner"))
       assert.strictEqual(document.activeElement, byId("before"))
-      assert.deepStrictEqual(log(), ["outer RequestedOpen trigger-press", "outer RequestedClose focus-out"])
+      assert.deepStrictEqual(log(), [
+        "outer RequestedOpen trigger-press",
+        "outer RequestedClose focus-out"
+      ])
     }))
 
   it.effect("Tab that the consumer refuses to close on leaves the popup open and interactive", () =>
@@ -195,14 +295,31 @@ describe("ContextMenu in a document", { concurrent: false }, () => {
       byId("before").focus()
       contextmenu(byId("outer"))
       yield* tick
-      popupOf("outer").dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }))
+      popupOf("outer").dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Tab",
+          bubbles: true,
+          cancelable: true
+        })
+      )
       yield* tick
-      assert.deepStrictEqual(log(), ["outer RequestedOpen trigger-press", "outer RequestedClose focus-out"])
+      assert.deepStrictEqual(log(), [
+        "outer RequestedOpen trigger-press",
+        "outer RequestedClose focus-out"
+      ])
       assert.isTrue(shown("outer-positioner"))
       assert.isNull(popupOf("outer").closest("[inert]"))
-      const copy = document.querySelector<HTMLElement>("[data-testid=outer-copy]")!
+      const copy = document.querySelector<HTMLElement>(
+        "[data-testid=outer-copy]"
+      )!
       copy.focus()
-      copy.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }))
+      copy.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true
+        })
+      )
       yield* tick
       assert.isTrue(shown("outer-positioner"))
       assert.deepStrictEqual(log().slice(-2), [
@@ -269,14 +386,22 @@ describe("ContextMenu in a document", { concurrent: false }, () => {
             yield* tick
             const item = document.querySelector("[data-testid=outer-copy]")!
             item.dispatchEvent(
-              new MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 2, clientX: 110, clientY: 60 })
+              new MouseEvent("mouseup", {
+                bubbles: true,
+                cancelable: true,
+                button: 2,
+                clientX: 110,
+                clientY: 60
+              })
             )
             yield* tick
             return log()
           })
         )
       })
-      assert.deepStrictEqual(yield* release("Linux x86_64"), ["outer RequestedOpen trigger-press"])
+      assert.deepStrictEqual(yield* release("Linux x86_64"), [
+        "outer RequestedOpen trigger-press"
+      ])
       assert.deepStrictEqual(yield* release("MacIntel"), [
         "outer RequestedOpen trigger-press",
         "outer Picked copy",

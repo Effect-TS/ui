@@ -80,7 +80,10 @@ and look the key up:
 ```ts
 h.scoped(
   ({ key, model }) => key in model.notes,
-  (s) => visible.map((id) => NoteRow(s, { key: id, props: { note: model.notes[id] } }))
+  (s) =>
+    visible.map((id) =>
+      NoteRow(s, { key: id, props: { note: model.notes[id] } })
+    )
 )
 ```
 
@@ -253,7 +256,8 @@ export class SaveNote extends Command.Service<SaveNote>()(
       notes.save(note).pipe(
         Effect.match({
           onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
-          onFailure: (error) => NoteEditorMessage.FailedSaveNote({ reason: error.reason })
+          onFailure: (error) =>
+            NoteEditorMessage.FailedSaveNote({ reason: error.reason })
         })
       )
   })
@@ -269,7 +273,9 @@ can't know its caller's messages: one from a library, such as
 can't fail with `Command.map` or `Command.asNoop`:
 
 ```ts
-Router.replace(AppRoute, route).pipe(Command.map((outcome) => AppMessage.CompletedReplace({ outcome })))
+Router.replace(AppRoute, route).pipe(
+  Command.map((outcome) => AppMessage.CompletedReplace({ outcome }))
+)
 Router.replace(AppRoute, route).pipe(Command.asNoop)
 ```
 
@@ -288,11 +294,19 @@ function from its old value to the new one. It returns a step, so `.run`,
 `.emit` and another `.evolve` chain after it:
 
 ```ts
-const submittedOrder = CheckoutDef.update("SubmittedOrder", ($) =>
-  $.model.submitting
-    ? $.model
-    : $.evolve({ form: submit, submitting: true, attempts: (n) => n + 1, notice: null })
-      .run(placeOrder($.model.form.values)))
+const submittedOrder = CheckoutDef.update(
+  "SubmittedOrder",
+  ($) =>
+    $.model.submitting
+      ? $.model
+      : $.evolve({
+        form: submit,
+        submitting: true,
+        attempts: (n) => n + 1,
+        notice: null
+      })
+        .run(placeOrder($.model.form.values))
+)
 ```
 
 `UiStruct.evolve` takes the same fields for a struct inside the Model:
@@ -301,11 +315,18 @@ takes the struct's type from the field. It also changes the Model in a
 handler that returns a bare Model rather than a step:
 
 ```ts
-const clickedIncrement = CheckoutDef.update("ClickedIncrement", ($, { id }) =>
-  $.evolve({
-    lines: Arr.map((line) => line.id === id ? UiStruct.evolve(line, { quantity: (n) => n + 1 }) : line),
-    coupon: UiStruct.evolve({ status: "Idle" })
-  }))
+const clickedIncrement = CheckoutDef.update(
+  "ClickedIncrement",
+  ($, { id }) =>
+    $.evolve({
+      lines: Arr.map((line) =>
+        line.id === id
+          ? UiStruct.evolve(line, { quantity: (n) => n + 1 })
+          : line
+      ),
+      coupon: UiStruct.evolve({ status: "Idle" })
+    })
+)
 
 const failedSaveNote = NoteEditorDef.update(
   "FailedSaveNote",
@@ -320,7 +341,10 @@ a misspelt key there is copied onto the Model. Check fields declared on
 their own where they're declared, which also types the updaters:
 
 ```ts
-const bump = { attempts: (n) => n + 1, notice: null } satisfies UiStruct.EvolveFields<Checkout>
+const bump = {
+  attempts: (n) => n + 1,
+  notice: null
+} satisfies UiStruct.EvolveFields<Checkout>
 ```
 
 Unlike with `Struct.evolve` from
@@ -340,14 +364,26 @@ the union first and evolve the member:
 ```ts
 const updatedName = AuthDef.update(
   "UpdatedName",
-  ($, { value }) => Auth.match($.model, { LoggedOut: (auth) => auth, LoggedIn: UiStruct.evolve({ name: value }) })
+  ($, { value }) =>
+    Auth.match($.model, {
+      LoggedOut: (auth) => auth,
+      LoggedIn: UiStruct.evolve({ name: value })
+    })
 )
 
 // A union field in a struct Model, with `match` data-last.
-$.evolve({ auth: Auth.match({ LoggedOut: (auth) => auth, LoggedIn: UiStruct.evolve({ name: value }) }) })
+$.evolve({
+  auth: Auth.match({
+    LoggedOut: (auth) => auth,
+    LoggedIn: UiStruct.evolve({ name: value })
+  })
+})
 
 // A nullable struct.
-$.evolve({ coupon: (coupon) => coupon === null ? null : UiStruct.evolve(coupon, { status: "Idle" }) })
+$.evolve({
+  coupon: (coupon) =>
+    coupon === null ? null : UiStruct.evolve(coupon, { status: "Idle" })
+})
 ```
 
 A union Model has no `$.evolve`, so a handler that also runs a Command
@@ -384,7 +420,11 @@ const Card = <M>(h: View.H<M>) => h.section.class("card")
 const Field = <M, C extends View.Children<M>>(h: View.H<M>, options: {
   readonly label: string
   readonly children: C
-}) => h.label.children(options.label, h.div.class("control").children(options.children))
+}) =>
+  h.label.children(
+    options.label,
+    h.div.class("control").children(options.children)
+  )
 ```
 
 Pass `children: [child, otherChild]`. The unspread array retains the union
@@ -397,7 +437,10 @@ and children land on an element below the root: the function returns the
 inner builder, and `forward` says what goes around it when it is built.
 
 ```ts
-const Framed = <M>(h: View.H<M>) => h.div.class("control").forward((control) => h.div.class("frame").children(control))
+const Framed = <M>(h: View.H<M>) =>
+  h.div.class("control").forward((control) =>
+    h.div.class("frame").children(control)
+  )
 
 // The class and the children land on the control, inside the frame.
 Framed(h).class("wide").children(h.input)
@@ -460,7 +503,11 @@ Collapsible(h, {
   key: "note",
   slots: {
     summary: h.h2(note.title),
-    body: NoteEditor(h, { key: note.id, props: { note }, onEmit: { Saved: () => SavedNote } })
+    body: NoteEditor(h, {
+      key: note.id,
+      props: { note },
+      onEmit: { Saved: () => SavedNote }
+    })
   }
 })
 ```
@@ -777,7 +824,11 @@ The `restore` option of `Component.define` changes what is saved:
 const LoginPage = Component.define({
   name: "LoginPage",
   scoped: false,
-  model: Schema.Struct({ email: Schema.String, password: Schema.String, submitting: Schema.Boolean }),
+  model: Schema.Struct({
+    email: Schema.String,
+    password: Schema.String,
+    submitting: Schema.Boolean
+  }),
   message: LoginPageMessage,
   restore: (model) => ({ ...model, password: "", submitting: false })
 })
@@ -933,7 +984,8 @@ and call it in the view as the component would be called:
 // The `import()` is the only reference to the page's module.
 const SearchPage = Component.lazy(
   "SearchPage",
-  () => import("./pages/search/SearchPage.ts").then((module) => module.SearchPage)
+  () =>
+    import("./pages/search/SearchPage.ts").then((module) => module.SearchPage)
 )
 
 // In the root's view. `fallback` shows while the module loads, and if the
@@ -941,7 +993,8 @@ const SearchPage = Component.lazy(
 SearchPage(h, {
   key: AppRoute.printPath(route),
   props: { route },
-  fallback: (result) => h.p(result._tag === "Failure" ? "Couldn't load this page." : "Loading…")
+  fallback: (result) =>
+    h.p(result._tag === "Failure" ? "Couldn't load this page." : "Loading…")
 })
 ```
 

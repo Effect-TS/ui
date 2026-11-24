@@ -30,7 +30,8 @@ export const used = [Component.define, UiSchema.TaggedEnum, Html, Schema.String]
 const leaves = (scoped) => {
   const out = [imports, ""]
   for (let i = 0; i < 100; i++) {
-    out.push(`const M${i} = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
+    out.push(
+      `const M${i} = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
 const E${i} = UiSchema.TaggedEnum({ Saved: { id: Schema.String } })
 export const C${i} = Component.define({
   name: "C${i}",${scopedField(scoped)}
@@ -44,7 +45,8 @@ export const C${i} = Component.define({
   update: ($, message) => $.set({ draft: message.value }).emit(E${i}.Saved({ id: message.value })),
   view: (h, model) => h.p(model.draft)
 })
-`)
+`
+    )
   }
   return out.join("\n")
 }
@@ -75,7 +77,9 @@ const owner = (scoped) => {
       ${placed.join(",\n      ")}
     )`
   return `${imports}
-import { ${names.join(", ")} } from "./${scoped ? "scoped" : "inline"}-leaves.ts"
+import { ${names.join(", ")} } from "./${
+    scoped ? "scoped" : "inline"
+  }-leaves.ts"
 
 const OwnerMessage = UiSchema.TaggedEnum({ ChildSaved: { id: Schema.String } })
 export const Owner = Component.define({
@@ -97,9 +101,13 @@ const deep = (scoped, depth) => {
   for (let i = depth - 1; i >= 0; i--) {
     const last = i === depth - 1
     const onEmit = `{ Saved: (e) => LM${i}.Below({ id: e.id }) }`
-    const child = (at) => `L${i + 1}(${at}, { key: "below", props: { id: model.draft }, onEmit: ${onEmit} })`
+    const child = (at) =>
+      `L${
+        i + 1
+      }(${at}, { key: "below", props: { id: model.draft }, onEmit: ${onEmit} })`
     const below = scoped ? `h.scoped((s) => ${child("s")})` : child("h")
-    out.push(`const LM${i} = UiSchema.TaggedEnum({ Typed: { value: Schema.String }, Below: { id: Schema.String } })
+    out.push(
+      `const LM${i} = UiSchema.TaggedEnum({ Typed: { value: Schema.String }, Below: { id: Schema.String } })
 const LE${i} = UiSchema.TaggedEnum({ Saved: { id: Schema.String } })
 export const L${i} = Component.define({
   name: "L${i}",${scopedField(scoped)}
@@ -116,7 +124,8 @@ export const L${i} = Component.define({
       : $.set($.model).emit(LE${i}.Saved({ id: message.id })),
   view: (h, model) => h.div(h.p(model.draft)${last ? "" : `, ${below}`})
 })
-`)
+`
+    )
   }
   return out.join("\n")
 }
@@ -139,7 +148,9 @@ const generate = (dir) => {
       "scoped-deep16.ts": deep(true, 16)
     })
   }
-  for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), text)
+  for (const [name, text] of Object.entries(files)) {
+    fs.writeFileSync(path.join(dir, name), text)
+  }
   return Object.keys(files)
 }
 
@@ -176,21 +187,37 @@ const config = (names) => ({
     }
   }
 })
-fs.writeFileSync(path.join(dir, "tsconfig.json"), JSON.stringify(config(files), null, 2))
+fs.writeFileSync(
+  path.join(dir, "tsconfig.json"),
+  JSON.stringify(config(files), null, 2)
+)
 
 const count = (file) => {
   const project = path.join(dir, `tsconfig.${path.basename(file, ".ts")}.json`)
   fs.writeFileSync(project, JSON.stringify(config([file]), null, 2))
   let output
   try {
-    output = execFileSync(tsc, ["-p", project, "--singleThreaded", "--extendedDiagnostics", "--pretty", "false"], {
+    output = execFileSync(tsc, [
+      "-p",
+      project,
+      "--singleThreaded",
+      "--extendedDiagnostics",
+      "--pretty",
+      "false"
+    ], {
       encoding: "utf8"
     })
   } catch (error) {
-    throw new Error(`${file} doesn't compile:\n${error.stdout}`, { cause: error })
+    throw new Error(`${file} doesn't compile:\n${error.stdout}`, {
+      cause: error
+    })
   }
-  const field = (name) => Number(new RegExp(`^${name}:\\s+([\\d.]+)`, "m").exec(output)[1])
-  return { instantiations: field("Instantiations"), checkSeconds: field("Check time") }
+  const field = (name) =>
+    Number(new RegExp(`^${name}:\\s+([\\d.]+)`, "m").exec(output)[1])
+  return {
+    instantiations: field("Instantiations"),
+    checkSeconds: field("Check time")
+  }
 }
 
 const counts = {}
@@ -198,32 +225,44 @@ for (const file of files) counts[path.basename(file, ".ts")] = count(file)
 const n = (name) => counts[name]?.instantiations ?? NaN
 
 const shapes = values.main ? ["inline"] : ["inline", "scoped"]
-const measure = (f) => Object.fromEntries(shapes.map((shape) => [shape, f(shape)]))
+const measure = (f) =>
+  Object.fromEntries(shapes.map((shape) => [shape, f(shape)]))
 const measures = {
   leaves: measure((shape) => n(`${shape}-leaves`)),
   owner: measure((shape) => n(`${shape}-owner`) - n(`${shape}-leaves`)),
   deep8: measure((shape) => n(`${shape}-deep8`) - n("imports")),
-  deepRatio: measure((shape) => (n(`${shape}-deep16`) - n("imports")) / (n(`${shape}-deep8`) - n("imports")))
+  deepRatio: measure((shape) =>
+    (n(`${shape}-deep16`) - n("imports")) / (n(`${shape}-deep8`) - n("imports"))
+  )
 }
 
 const lsp = async (file, marker, runs = 10) => {
   const uri = pathToFileURL(file).href
   const text = fs.readFileSync(file, "utf8")
-  const server = spawn(tsc, ["--lsp", "--stdio"], { cwd: dir, stdio: ["pipe", "pipe", "inherit"] })
+  const server = spawn(tsc, ["--lsp", "--stdio"], {
+    cwd: dir,
+    stdio: ["pipe", "pipe", "inherit"]
+  })
   let buffer = Buffer.alloc(0)
   const pending = new Map()
   const send = (message) => {
     const body = JSON.stringify(message)
-    server.stdin.write(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`)
+    server.stdin.write(
+      `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`
+    )
   }
   server.stdout.on("data", (chunk) => {
     buffer = Buffer.concat([buffer, chunk])
     while (true) {
       const end = buffer.indexOf("\r\n\r\n")
       if (end < 0) return
-      const length = Number(/Content-Length: (\d+)/.exec(buffer.subarray(0, end).toString())[1])
+      const length = Number(
+        /Content-Length: (\d+)/.exec(buffer.subarray(0, end).toString())[1]
+      )
       if (buffer.length < end + 4 + length) return
-      const message = JSON.parse(buffer.subarray(end + 4, end + 4 + length).toString())
+      const message = JSON.parse(
+        buffer.subarray(end + 4, end + 4 + length).toString()
+      )
       buffer = buffer.subarray(end + 4 + length)
       if (message.id !== undefined && message.method === undefined) {
         pending.get(message.id)?.(message)
@@ -249,29 +288,49 @@ const lsp = async (file, marker, runs = 10) => {
   await request("initialize", {
     processId: process.pid,
     rootUri: pathToFileURL(dir).href,
-    capabilities: { textDocument: { diagnostic: {}, completion: { completionItem: {} } } }
+    capabilities: {
+      textDocument: { diagnostic: {}, completion: { completionItem: {} } }
+    }
   })
   notify("initialized", {})
-  notify("textDocument/didOpen", { textDocument: { uri, languageId: "typescript", version: 1, text } })
-  const [, first] = await timed("textDocument/diagnostic", { textDocument: { uri } })
+  notify("textDocument/didOpen", {
+    textDocument: { uri, languageId: "typescript", version: 1, text }
+  })
+  const [, first] = await timed("textDocument/diagnostic", {
+    textDocument: { uri }
+  })
   const offset = text.indexOf(marker) + marker.length
   const before = text.slice(0, offset).split("\n")
-  const position = { line: before.length - 1, character: before[before.length - 1].length }
+  const position = {
+    line: before.length - 1,
+    character: before[before.length - 1].length
+  }
   const diagnostics = []
   const completions = []
   let items = 0
   const edit = (version, text) => {
     notify("textDocument/didChange", {
       textDocument: { uri, version },
-      contentChanges: [{ range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }, text }]
+      contentChanges: [{
+        range: {
+          start: { line: 0, character: 0 },
+          end: { line: 0, character: 0 }
+        },
+        text
+      }]
     })
     position.line += 1
   }
   for (let version = 2; version < 2 + runs; version++) {
     edit(version, `// ${version}\n`)
-    diagnostics.push((await timed("textDocument/diagnostic", { textDocument: { uri } }))[0])
+    diagnostics.push(
+      (await timed("textDocument/diagnostic", { textDocument: { uri } }))[0]
+    )
     edit(version + 1000, `// c${version}\n`)
-    const [ms, response] = await timed("textDocument/completion", { textDocument: { uri }, position })
+    const [ms, response] = await timed("textDocument/completion", {
+      textDocument: { uri },
+      position
+    })
     completions.push(ms)
     items = (response.result?.items ?? response.result ?? []).length
   }
@@ -283,27 +342,40 @@ const lsp = async (file, marker, runs = 10) => {
     items
   }
 }
-const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]
+const median = (values) =>
+  [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]
 
-const base = values.base === undefined ? undefined : JSON.parse(fs.readFileSync(values.base, "utf8"))
+const base = values.base === undefined
+  ? undefined
+  : JSON.parse(fs.readFileSync(values.base, "utf8"))
 
 let editor
 if (values.lsp) {
   const sessions = []
   for (let i = 0; i < Number(values.sessions); i++) {
     const inline = await lsp(path.join(dir, "inline-owner.ts"), "h.")
-    const scoped = values.main ? undefined : await lsp(path.join(dir, "scoped-owner.ts"), "h.")
+    const scoped = values.main
+      ? undefined
+      : await lsp(path.join(dir, "scoped-owner.ts"), "h.")
     sessions.push({ inline, scoped })
   }
   editor = { sessions }
   if (!values.main) {
-    const ratio = (key) => median(sessions.map((s) => s.scoped[key] / s.inline[key]))
+    const ratio = (key) =>
+      median(sessions.map((s) => s.scoped[key] / s.inline[key]))
     const ofMain = (key) =>
       base?.editor === undefined
         ? undefined
-        : median(sessions.map((s) => s.scoped[key])) / median(base.editor.sessions.map((s) => s.inline[key]))
-    measures.diagnosticsRatio = { scoped: ratio("diagnosticsMs"), ofMain: ofMain("diagnosticsMs") }
-    measures.completionRatio = { scoped: ratio("completionMs"), ofMain: ofMain("completionMs") }
+        : median(sessions.map((s) => s.scoped[key])) /
+          median(base.editor.sessions.map((s) => s.inline[key]))
+    measures.diagnosticsRatio = {
+      scoped: ratio("diagnosticsMs"),
+      ofMain: ofMain("diagnosticsMs")
+    }
+    measures.completionRatio = {
+      scoped: ratio("completionMs"),
+      ofMain: ofMain("completionMs")
+    }
   }
 }
 
@@ -313,18 +385,20 @@ const format = (value) =>
     : Number.isInteger(value)
     ? value.toLocaleString("en-US")
     : value.toFixed(2)
-const rows = Object.entries(measures).map(([name, { inline, scoped, ofMain }]) => {
-  const checked = ofMain ?? scoped
-  return {
-    name,
-    main: format(base?.measures[name]?.inline),
-    inline: format(inline),
-    scoped: format(scoped),
-    ofMain: format(ofMain),
-    ceiling: format(ceilings[name]),
-    pass: checked === undefined || checked <= ceilings[name]
+const rows = Object.entries(measures).map(
+  ([name, { inline, scoped, ofMain }]) => {
+    const checked = ofMain ?? scoped
+    return {
+      name,
+      main: format(base?.measures[name]?.inline),
+      inline: format(inline),
+      scoped: format(scoped),
+      ofMain: format(ofMain),
+      ceiling: format(ceilings[name]),
+      pass: checked === undefined || checked <= ceilings[name]
+    }
   }
-})
+)
 console.log("| Measure | main | Inline | Scoped | Scoped / main | Ceiling | |")
 console.log("| --- | ---: | ---: | ---: | ---: | ---: | --- |")
 for (const row of rows) {
@@ -334,15 +408,23 @@ for (const row of rows) {
   )
 }
 if (editor !== undefined) {
-  const ms = (run) => `${Math.round(run.diagnosticsMs)} / ${Math.round(run.completionMs)} ms`
+  const ms = (run) =>
+    `${Math.round(run.diagnosticsMs)} / ${Math.round(run.completionMs)} ms`
   for (const [i, { inline, scoped }] of editor.sessions.entries()) {
     console.log(
-      `session ${i + 1}: inline ${ms(inline)}${scoped === undefined ? "" : `, scoped ${ms(scoped)}`} ` +
-        `(diagnostics / completion), ${(scoped ?? inline).items} completions at h., ${(scoped ?? inline).errors} errors`
+      `session ${i + 1}: inline ${ms(inline)}${
+        scoped === undefined ? "" : `, scoped ${ms(scoped)}`
+      } ` +
+        `(diagnostics / completion), ${
+          (scoped ?? inline).items
+        } completions at h., ${(scoped ?? inline).errors} errors`
     )
   }
 }
 if (values.json !== undefined) {
-  fs.writeFileSync(values.json, JSON.stringify({ counts, measures, ceilings, editor }, null, 2))
+  fs.writeFileSync(
+    values.json,
+    JSON.stringify({ counts, measures, ceilings, editor }, null, 2)
+  )
 }
 process.exitCode = rows.every((row) => row.pass) ? 0 : 1

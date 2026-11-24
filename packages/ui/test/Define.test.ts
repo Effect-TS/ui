@@ -33,7 +33,10 @@ const Counter = CounterDef.make({
   init: () => ({ n: 0, seen: [] }),
   update: {
     Step: ($) => $.combine(bump, bump),
-    Logged: ($, msg) => ({ ...$.model, seen: [...$.model.seen, `logged ${msg.n}`] })
+    Logged: ($, msg) => ({
+      ...$.model,
+      seen: [...$.model.seen, `logged ${msg.n}`]
+    })
   },
   view: (h, model) => h.el("p", String(model.n))
 })
@@ -44,7 +47,8 @@ const onLogged = CounterDef.update("Logged", ($) => $.combine(bump))
 // Calls the slice by hand with a message other than the one it received.
 const ByHand = CounterDef.make({
   init: () => ({ n: 0, seen: [] }),
-  update: ($, msg) => msg._tag === "Step" ? onLogged($, { _tag: "Logged", n: 0 }) : $.model,
+  update: ($, msg) =>
+    msg._tag === "Step" ? onLogged($, { _tag: "Logged", n: 0 }) : $.model,
   view: (h, model) => h.el("p", String(model.n))
 })
 
@@ -67,7 +71,12 @@ describe("Component.define", () => {
         .emitted(Events.Stepped({ n: 1 }), Events.Stepped({ n: 2 }))
         .resolve(Log.make({ n: 1 }), Message.Logged({ n: 1 }))
         .resolve(Log.make({ n: 2 }), Message.Logged({ n: 2 }))
-      assert.deepStrictEqual(s.model.seen, ["Step", "Step", "logged 1", "logged 2"])
+      assert.deepStrictEqual(s.model.seen, [
+        "Step",
+        "Step",
+        "logged 1",
+        "logged 2"
+      ])
     }))
 
   it.effect("a slice called by hand binds $ to the message it is given", () =>

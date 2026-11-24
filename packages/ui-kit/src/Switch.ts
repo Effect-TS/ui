@@ -131,7 +131,13 @@ export interface SwitchProps {
  * @category models
  * @since 0.1.0
  */
-export type SwitchButton<Msg, R = never> = Html.Element<Msg, R, Html.EventsOf<"button">, HTMLButtonElement, "button">
+export type SwitchButton<Msg, R = never> = Html.Element<
+  Msg,
+  R,
+  Html.EventsOf<"button">,
+  HTMLButtonElement,
+  "button"
+>
 
 /**
  * A span the switch's thumb accepts, from the consumer's `h.span`.
@@ -140,7 +146,13 @@ export type SwitchButton<Msg, R = never> = Html.Element<Msg, R, Html.EventsOf<"b
  * @category models
  * @since 0.1.0
  */
-export type SwitchSpan<Msg, R = never> = Html.Element<Msg, R, Html.EventsOf<"span">, HTMLSpanElement, "span">
+export type SwitchSpan<Msg, R = never> = Html.Element<
+  Msg,
+  R,
+  Html.EventsOf<"span">,
+  HTMLSpanElement,
+  "span"
+>
 
 /**
  * What a `Switch` gives its `view`: the parts, and the state resolved to
@@ -171,7 +183,9 @@ export interface SwitchParts<Msg> {
    * The consumer's `h.button`. The form field follows the children already
    * on it and comes before those chained on the result.
    */
-  readonly root: <R = never>(element: SwitchButton<Msg, R>) => SwitchButton<Msg, R>
+  readonly root: <R = never>(
+    element: SwitchButton<Msg, R>
+  ) => SwitchButton<Msg, R>
   /** The consumer's `h.span`, usually a child of the root. */
   readonly thumb: <R = never>(element: SwitchSpan<Msg, R>) => SwitchSpan<Msg, R>
 }
@@ -223,7 +237,9 @@ export const Switch = <Msg, A extends View.Content<Msg, any>>(
   options: {
     readonly props: SwitchProps
     /** The message a click sends, from the value the user asked for. */
-    readonly onToggle?: ((event: { readonly checked: boolean }) => NoInfer<Msg> | undefined) | undefined
+    readonly onToggle?:
+      | ((event: { readonly checked: boolean }) => NoInfer<Msg> | undefined)
+      | undefined
     /** The switch's whole view, from its parts. */
     readonly view: (parts: SwitchParts<Msg>) => A
   }

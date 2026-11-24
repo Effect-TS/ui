@@ -18,7 +18,10 @@ const Page = Component.define({
   elements: Html
 }).make({
   init: () => ({ vertical: false }),
-  update: { ClickedTurn: () => ({ vertical: true }), PressedRight: ($) => $.model },
+  update: {
+    ClickedTurn: () => ({ vertical: true }),
+    PressedRight: ($) => $.model
+  },
   view: (h, model) =>
     h.div(
       NavigationMenu(h, {
@@ -26,32 +29,46 @@ const Page = Component.define({
         props: { orientation: model.vertical ? "vertical" : "horizontal" },
         view: (navigationMenu) =>
           navigationMenu.root(h.nav).children(
-            navigationMenu.list(h.ul.attr("style", h.props.rtl ? "direction:rtl" : undefined)).children(
+            navigationMenu.list(
+              h.ul.attr("style", h.props.rtl ? "direction:rtl" : undefined)
+            ).children(
               navigationMenu.item(h.li).children(
                 navigationMenu.link({
                   element: h.a.attr("href", "/").onKeyDown(
-                    ({ key }) => h.props.claimsRight && key === "ArrowRight" ? Message.PressedRight() : undefined,
+                    ({ key }) =>
+                      h.props.claimsRight && key === "ArrowRight"
+                        ? Message.PressedRight()
+                        : undefined,
                     { preventDefault: true }
                   ),
                   active: true
                 }).children("Home")
               ),
               navigationMenu.item(h.li).children(
-                navigationMenu.link({ element: h.a.attr("href", "/people") }).children("People")
+                navigationMenu.link({ element: h.a.attr("href", "/people") })
+                  .children("People")
               ),
               navigationMenu.item(h.li).children(
-                navigationMenu.link({ element: h.a.attr("href", "/files").attr("aria-disabled", "true") })
+                navigationMenu.link({
+                  element: h.a.attr("href", "/files").attr(
+                    "aria-disabled",
+                    "true"
+                  )
+                })
                   .children("Files")
               ),
               navigationMenu.item(h.li).children(
-                navigationMenu.link({ element: h.a.attr("href", "/nested") }).children("Nested"),
+                navigationMenu.link({ element: h.a.attr("href", "/nested") })
+                  .children("Nested"),
                 NavigationMenu(h, {
                   key: "inner",
                   view: (inner) =>
                     inner.root(h.nav).children(
                       inner.list(h.ul).children(
                         inner.item(h.li).children(
-                          inner.link({ element: h.a.attr("href", "/nested/inner") }).children("Inner")
+                          inner.link({
+                            element: h.a.attr("href", "/nested/inner")
+                          }).children("Inner")
                         )
                       )
                     )
@@ -64,19 +81,32 @@ const Page = Component.define({
     )
 })
 
-const mount = Effect.fn(function*(props: { readonly rtl?: boolean; readonly claimsRight?: boolean } = {}) {
-  const app = yield* container
-  yield* BrowserHost.mountEffect(Page, { rtl: false, claimsRight: false, ...props }, app)
-  yield* tick
-  const links = Array.from(app.querySelectorAll("a"))
-  links[0]!.focus()
-  return { app, links }
-})
+const mount = Effect.fn(
+  function*(
+    props: { readonly rtl?: boolean; readonly claimsRight?: boolean } = {}
+  ) {
+    const app = yield* container
+    yield* BrowserHost.mountEffect(Page, {
+      rtl: false,
+      claimsRight: false,
+      ...props
+    }, app)
+    yield* tick
+    const links = Array.from(app.querySelectorAll("a"))
+    links[0]!.focus()
+    return { app, links }
+  }
+)
 
 const focused = () => document.activeElement?.textContent
 
 const press = (key: string, init: KeyboardEventInit = {}) => {
-  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init })
+  const event = new KeyboardEvent("keydown", {
+    key,
+    bubbles: true,
+    cancelable: true,
+    ...init
+  })
   document.activeElement!.dispatchEvent(event)
   return event.defaultPrevented
 }
@@ -85,8 +115,14 @@ describe("NavigationMenu", () => {
   it.effect("marks only the active link, keeps links in the Tab order, and moves focus with arrow keys past disabled and nested links", () =>
     Effect.gen(function*() {
       const { app, links } = yield* mount()
-      assert.deepStrictEqual(links.map((link) => link.getAttribute("aria-current")), ["page", null, null, null, null])
-      assert.deepStrictEqual(links.map((link) => link.getAttribute("data-active")), ["", null, null, null, null])
+      assert.deepStrictEqual(
+        links.map((link) => link.getAttribute("aria-current")),
+        ["page", null, null, null, null]
+      )
+      assert.deepStrictEqual(
+        links.map((link) => link.getAttribute("data-active")),
+        ["", null, null, null, null]
+      )
       assert.isTrue(links.every((link) => !link.hasAttribute("tabindex")))
 
       assert.isFalse(press("ArrowRight", { shiftKey: true }))
@@ -143,20 +179,35 @@ describe("NavigationMenu", () => {
   it("the link keeps the consumer's attributes, but its own win, present or absent", () => {
     const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
     const navigationMenu = Story.parts(NavigationMenu, { model: {}, props: {} })
-    const element = h.a.class("link").attr("href", "/").attr("tabindex", "-1").attr("aria-label", "Home")
-    const scope = View.build(navigationMenu.link({ element: h.a }), []).attrs["data-navigation-menu-link"]
+    const element = h.a.class("link").attr("href", "/").attr("tabindex", "-1")
+      .attr("aria-label", "Home")
+    const scope = View.build(navigationMenu.link({ element: h.a }), [])
+      .attrs["data-navigation-menu-link"]
     assert.isString(scope)
     assert.deepStrictEqual(
       View.build(
         navigationMenu.link({
-          element: element.attr("aria-current", "step").attr("data-active", "").attr("data-navigation-menu-link", "x")
+          element: element.attr("aria-current", "step").attr("data-active", "")
+            .attr("data-navigation-menu-link", "x")
         }),
         []
       ).attrs,
-      { class: "link", href: "/", tabindex: "-1", "aria-label": "Home", "data-navigation-menu-link": scope }
+      {
+        class: "link",
+        href: "/",
+        tabindex: "-1",
+        "aria-label": "Home",
+        "data-navigation-menu-link": scope
+      }
     )
     assert.deepStrictEqual(
-      View.build(navigationMenu.link({ element: element.attr("aria-current", "step"), active: true }), []).attrs,
+      View.build(
+        navigationMenu.link({
+          element: element.attr("aria-current", "step"),
+          active: true
+        }),
+        []
+      ).attrs,
       {
         class: "link",
         href: "/",

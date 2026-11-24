@@ -12,10 +12,12 @@ import { AppRoute } from "./routes.ts"
 
 const PeoplePage = Component.lazy(
   "PeoplePage",
-  () => import("./pages/people/PeoplePage.ts").then((module) => module.PeoplePage)
+  () =>
+    import("./pages/people/PeoplePage.ts").then((module) => module.PeoplePage)
 )
 
-const filesPathOf = (route: typeof AppRoute.cases.Files.Type) => String.split(route.params["*"], "/")
+const filesPathOf = (route: typeof AppRoute.cases.Files.Type) =>
+  String.split(route.params["*"], "/")
 
 const routeTitle = (route: AppRoute): string =>
   AppRoute.match(route, {
@@ -24,11 +26,13 @@ const routeTitle = (route: AppRoute): string =>
     People: () => "People | Routing",
     Person: ({ params }) => `Person ${params.personId} | Routing`,
     FilesIndex: () => "Files | Routing",
-    Files: (route) => `${Array.lastNonEmpty(filesPathOf(route))} | Files | Routing`,
+    Files: (route) =>
+      `${Array.lastNonEmpty(filesPathOf(route))} | Files | Routing`,
     NotFound: () => "NotFound | Routing"
   })
 
-const searchTextOf = (route: AppRoute): string => route._tag === "People" ? route.search.searchText : ""
+const searchTextOf = (route: AppRoute): string =>
+  route._tag === "People" ? route.search.searchText : ""
 
 export const AppMessage = UiSchema.TaggedEnum({
   ChangedRoute: { route: AppRoute },
@@ -49,8 +53,18 @@ const AppDef = Component.define({
 
 const navLinks = (route: AppRoute) => [
   { label: "Home", to: AppRoute.Home(), active: route._tag === "Home" },
-  { label: "People", to: AppRoute.People(), active: route._tag === "People", inSection: route._tag === "Person" },
-  { label: "Files", to: AppRoute.FilesIndex(), active: route._tag === "FilesIndex", inSection: route._tag === "Files" },
+  {
+    label: "People",
+    to: AppRoute.People(),
+    active: route._tag === "People",
+    inSection: route._tag === "Person"
+  },
+  {
+    label: "Files",
+    to: AppRoute.FilesIndex(),
+    active: route._tag === "FilesIndex",
+    inSection: route._tag === "Files"
+  },
   { label: "Nested", to: AppRoute.Nested(), active: route._tag === "Nested" }
 ]
 
@@ -78,7 +92,11 @@ export const App = AppDef.make({
   },
 
   subscriptions: ({ model }) => [
-    Router.subscription(AppRoute, model.route, (route) => AppMessage.ChangedRoute({ route }))
+    Router.subscription(
+      AppRoute,
+      model.route,
+      (route) => AppMessage.ChangedRoute({ route })
+    )
   ],
 
   head: ({ model }) => [Head.title(routeTitle(model.route))],
@@ -88,8 +106,15 @@ export const App = AppDef.make({
       h.header.children(
         NavigationMenu(h, {
           view: (navigationMenu) =>
-            navigationMenu.root(h.nav.class("bg-blue-500 text-white p-4 mb-6").attr("aria-label", "Main")).children(
-              navigationMenu.list(h.ul.class("max-w-4xl mx-auto flex gap-6 list-none")).children(
+            navigationMenu.root(
+              h.nav.class("bg-blue-500 text-white p-4 mb-6").attr(
+                "aria-label",
+                "Main"
+              )
+            ).children(
+              navigationMenu.list(
+                h.ul.class("max-w-4xl mx-auto flex gap-6 list-none")
+              ).children(
                 navLinks(route).map(({ active, inSection, label, to }) =>
                   navigationMenu.item(h.li.key(label)).children(
                     navigationMenu.link({
@@ -113,10 +138,15 @@ export const App = AppDef.make({
           People: (route) =>
             PeoplePage(h, {
               props: { route, searchInput, searchHistory },
-              onEmit: { ChangedSearchInput: ({ value }) => AppMessage.ChangedSearchInput({ value }) },
+              onEmit: {
+                ChangedSearchInput: ({ value }) =>
+                  AppMessage.ChangedSearchInput({ value })
+              },
               fallback: (result) =>
                 h.p.class("text-lg text-gray-600").children(
-                  result._tag === "Failure" ? "Couldn't load this page. Reload to try again." : "Loading…"
+                  result._tag === "Failure"
+                    ? "Couldn't load this page. Reload to try again."
+                    : "Loading…"
                 )
             }),
           Person: ({ params }) => PersonPage(h, params.personId),

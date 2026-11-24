@@ -108,13 +108,17 @@ export const shortcuts = <const Rows extends ReadonlyArray<Shortcut<unknown>>>(
   payload: Html.KeyPayload | HtmlSubscription.GlobalPayload<Html.KeyPayload>
 ) => Rows[number]["message"] | undefined =>
 (payload) => {
-  if (("defaultPrevented" in payload && payload.defaultPrevented) || payload.composing) return undefined
+  if (
+    ("defaultPrevented" in payload && payload.defaultPrevented) ||
+    payload.composing
+  ) return undefined
   for (const shortcut of table) {
     if (
       shortcut.key === payload.key &&
       (shortcut.mod === true
         ? payload.ctrl !== payload.meta
-        : payload.ctrl === (shortcut.ctrl ?? false) && payload.meta === (shortcut.meta ?? false)) &&
+        : payload.ctrl === (shortcut.ctrl ?? false) &&
+          payload.meta === (shortcut.meta ?? false)) &&
       payload.alt === (shortcut.alt ?? false) &&
       (shortcut.shift === undefined || payload.shift === shortcut.shift) &&
       (!payload.editable || shortcut.whileTyping === true) &&

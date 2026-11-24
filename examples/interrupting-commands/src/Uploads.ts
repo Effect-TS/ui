@@ -22,8 +22,12 @@ const isUploading = (upload: Upload): boolean => upload.status === "Uploading"
 
 // Sets the status of one upload. `UiStruct.evolve` changes one row, and
 // returning a function lets `$.evolve` pass it the current uploads.
-const withStatus = (uploadId: number, status: UploadStatus) => (uploads: ReadonlyArray<Upload>) =>
-  uploads.map((upload) => upload.id === uploadId ? UiStruct.evolve(upload, { status }) : upload)
+const withStatus =
+  (uploadId: number, status: UploadStatus) =>
+  (uploads: ReadonlyArray<Upload>) =>
+    uploads.map((upload) =>
+      upload.id === uploadId ? UiStruct.evolve(upload, { status }) : upload
+    )
 
 export const UploadsMessage = UiSchema.TaggedEnum({
   ClickedStartUpload: {},
@@ -57,9 +61,10 @@ export class UploadFile extends Command.Service<UploadFile>()(
   },
   Effect.gen(function*() {
     return ({ uploadId, sizeMegabytes }) =>
-      Effect.sleep(Duration.millis(sizeMegabytes * MILLISECONDS_PER_MEGABYTE)).pipe(
-        Effect.as(UploadsMessage.CompletedUploadFile({ uploadId }))
-      )
+      Effect.sleep(Duration.millis(sizeMegabytes * MILLISECONDS_PER_MEGABYTE))
+        .pipe(
+          Effect.as(UploadsMessage.CompletedUploadFile({ uploadId }))
+        )
   })
 ) {}
 
@@ -69,7 +74,8 @@ const BADGE_CLASS: Record<UploadStatus, string> = {
   Cancelled: "bg-gray-200 text-gray-600"
 }
 
-const ACTION_BUTTON_CLASS = "px-3 py-1 text-sm font-medium rounded-md border transition"
+const ACTION_BUTTON_CLASS =
+  "px-3 py-1 text-sm font-medium rounded-md border transition"
 
 const UploadsDef = Component.define({
   name: "Uploads",
@@ -81,14 +87,24 @@ const UploadsDef = Component.define({
 const UploadAction = UploadsDef.fragment((h, upload: Upload) => {
   switch (upload.status) {
     case "Uploading":
-      return h.button.onClick(UploadsMessage.ClickedCancelUpload({ uploadId: upload.id }))
+      return h.button.onClick(
+        UploadsMessage.ClickedCancelUpload({ uploadId: upload.id })
+      )
         .attr("aria-label", `Cancel upload ${upload.id}`)
-        .class(ACTION_BUTTON_CLASS, "border-red-300 text-red-600 hover:bg-red-50")
+        .class(
+          ACTION_BUTTON_CLASS,
+          "border-red-300 text-red-600 hover:bg-red-50"
+        )
         .children("Cancel")
     case "Cancelled":
-      return h.button.onClick(UploadsMessage.ClickedRestartUpload({ uploadId: upload.id }))
+      return h.button.onClick(
+        UploadsMessage.ClickedRestartUpload({ uploadId: upload.id })
+      )
         .attr("aria-label", `Restart upload ${upload.id}`)
-        .class(ACTION_BUTTON_CLASS, "border-blue-300 text-blue-600 hover:bg-blue-50")
+        .class(
+          ACTION_BUTTON_CLASS,
+          "border-blue-300 text-blue-600 hover:bg-blue-50"
+        )
         .children("Restart")
     case "Done":
       return null
@@ -96,19 +112,29 @@ const UploadAction = UploadsDef.fragment((h, upload: Upload) => {
 })
 
 const UploadRow = UploadsDef.fragment((h, upload: Upload) =>
-  h.li.key(String(upload.id)).class("p-4 bg-white rounded-lg shadow flex flex-col gap-2").children(
+  h.li.key(String(upload.id)).class(
+    "p-4 bg-white rounded-lg shadow flex flex-col gap-2"
+  ).children(
     h.div.class("flex items-center justify-between gap-3").children(
       h.div.class("flex items-baseline gap-2 min-w-0").children(
-        h.span.class("font-medium text-gray-800 truncate").children(upload.fileName),
-        h.span.class("text-sm text-gray-500 shrink-0").children(`${upload.sizeMegabytes} MB`)
+        h.span.class("font-medium text-gray-800 truncate").children(
+          upload.fileName
+        ),
+        h.span.class("text-sm text-gray-500 shrink-0").children(
+          `${upload.sizeMegabytes} MB`
+        )
       ),
       h.div.class("flex items-center gap-3 shrink-0").children(
-        h.span.class("px-2 py-0.5 text-xs font-semibold rounded-full", BADGE_CLASS[upload.status])
+        h.span.class(
+          "px-2 py-0.5 text-xs font-semibold rounded-full",
+          BADGE_CLASS[upload.status]
+        )
           .children(upload.status),
         UploadAction(h, upload)
       )
     ),
-    isUploading(upload) && h.div.class("h-1.5 rounded-full bg-blue-400 animate-pulse")
+    isUploading(upload) &&
+      h.div.class("h-1.5 rounded-full bg-blue-400 animate-pulse")
   )
 )
 
@@ -123,24 +149,40 @@ export const UploadsNoDeps = UploadsDef.make({
         sizeMegabytes: file.sizeMegabytes,
         status: "Uploading"
       }
-      return $.set({ uploadId: $.model.uploadId + 1, uploads: [...$.model.uploads, upload] }).run(
-        UploadFile.make({ uploadId: upload.id, sizeMegabytes: upload.sizeMegabytes })
+      return $.set({
+        uploadId: $.model.uploadId + 1,
+        uploads: [...$.model.uploads, upload]
+      }).run(
+        UploadFile.make({
+          uploadId: upload.id,
+          sizeMegabytes: upload.sizeMegabytes
+        })
       )
     },
 
     ClickedCancelUpload: ($, { uploadId }) =>
-      $.model.uploads.some((upload) => upload.id === uploadId && isUploading(upload))
-        ? $.evolve({ uploads: withStatus(uploadId, "Cancelled") }).run(Command.interrupt(UploadFile, { uploadId }))
+      $.model.uploads.some((upload) =>
+          upload.id === uploadId && isUploading(upload)
+        )
+        ? $.evolve({ uploads: withStatus(uploadId, "Cancelled") }).run(
+          Command.interrupt(UploadFile, { uploadId })
+        )
         : $.model,
 
     ClickedCancelAllUploads: ($) =>
       $.evolve({
         uploads: (uploads) =>
-          uploads.map((upload) => isUploading(upload) ? UiStruct.evolve(upload, { status: "Cancelled" }) : upload)
+          uploads.map((upload) =>
+            isUploading(upload)
+              ? UiStruct.evolve(upload, { status: "Cancelled" })
+              : upload
+          )
       }).run(Command.interrupt(UploadFile)),
 
     ClickedRestartUpload: ($, { uploadId }) => {
-      const upload = $.model.uploads.find((upload) => upload.id === uploadId && upload.status === "Cancelled")
+      const upload = $.model.uploads.find((upload) =>
+        upload.id === uploadId && upload.status === "Cancelled"
+      )
       return upload === undefined
         ? $.model
         : $.evolve({ uploads: withStatus(uploadId, "Uploading") }).run(
@@ -148,24 +190,33 @@ export const UploadsNoDeps = UploadsDef.make({
         )
     },
 
-    CompletedUploadFile: ($, { uploadId }) => $.evolve({ uploads: withStatus(uploadId, "Done") })
+    CompletedUploadFile: ($, { uploadId }) =>
+      $.evolve({ uploads: withStatus(uploadId, "Done") })
   },
   head: () => [Head.title("Effect UI Interrupting Commands Example")],
   view: (h, model) =>
     h.div.class("min-h-screen bg-gray-100 py-8").children(
       h.div.class("max-w-lg mx-auto flex flex-col gap-6 px-4").children(
-        h.h1.class("text-3xl font-bold text-gray-800 text-center").children("File Uploads"),
+        h.h1.class("text-3xl font-bold text-gray-800 text-center").children(
+          "File Uploads"
+        ),
         h.div.class("flex justify-center gap-3").children(
           h.button.onClick(UploadsMessage.ClickedStartUpload())
-            .class("px-4 py-2 rounded-md bg-blue-500 text-white font-medium hover:bg-blue-600 transition")
+            .class(
+              "px-4 py-2 rounded-md bg-blue-500 text-white font-medium hover:bg-blue-600 transition"
+            )
             .children("Upload a file"),
           model.uploads.some(isUploading) &&
             h.button.onClick(UploadsMessage.ClickedCancelAllUploads())
-              .class("px-4 py-2 rounded-md border border-red-300 text-red-600 font-medium hover:bg-red-50 transition")
+              .class(
+                "px-4 py-2 rounded-md border border-red-300 text-red-600 font-medium hover:bg-red-50 transition"
+              )
               .children("Cancel all")
         ),
         model.uploads.length === 0
-          ? h.p.class("text-center text-gray-500").children("Nothing here yet. Start an upload.")
+          ? h.p.class("text-center text-gray-500").children(
+            "Nothing here yet. Start an upload."
+          )
           : h.ul.class("flex flex-col gap-3").children(
             model.uploads.map((upload) => UploadRow(h, upload))
           )

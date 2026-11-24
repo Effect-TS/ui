@@ -98,16 +98,23 @@ export type Results = Readonly<Record<string, unknown>>
  *
  * @internal
  */
-export const boundOf: (component: { readonly "~queries": unknown }) => Bound | undefined = queryCore.boundOf
+export const boundOf: (
+  component: { readonly "~queries": unknown }
+) => Bound | undefined = queryCore.boundOf
 
 /** @internal */
 export const isWatchKey: (key: string) => boolean = queryCore.isWatchKey
 
 /** Strict open: the stored result at the query's current args, else `Initial`, waiting when enabled. */
-const open = (snapshot: unknown, argsKey: string | undefined): AsyncResult.AsyncResult<any, any> => {
+const open = (
+  snapshot: unknown,
+  argsKey: string | undefined
+): AsyncResult.AsyncResult<any, any> => {
   if (argsKey === undefined) return AsyncResult.initial(false)
   const data = queryModule().snapshotData(snapshot)
-  if (data?.result === undefined || data.argsKey !== argsKey) return AsyncResult.initial(true)
+  if (data?.result === undefined || data.argsKey !== argsKey) {
+    return AsyncResult.initial(true)
+  }
   return data.result
 }
 
@@ -118,15 +125,31 @@ const patched = (snapshot: unknown, argsKey: string | undefined): boolean => {
 }
 
 /** "Keep the previous page": a Success stored for other args, while the query is enabled. */
-const previous = (snapshot: unknown, argsKey: string | undefined): Option.Option<any> => {
+const previous = (
+  snapshot: unknown,
+  argsKey: string | undefined
+): Option.Option<any> => {
   if (argsKey === undefined) return Option.none()
   const data = queryModule().snapshotData(snapshot)
-  if (data?.result === undefined || data.argsKey === argsKey || data.result._tag !== "Success") return Option.none()
-  return Option.some(data.def.list === undefined ? data.result.value : listOf(data.def, data.result.value))
+  if (
+    data?.result === undefined || data.argsKey === argsKey ||
+    data.result._tag !== "Success"
+  ) return Option.none()
+  return Option.some(
+    data.def.list === undefined
+      ? data.result.value
+      : listOf(data.def, data.result.value)
+  )
 }
 
 /** A list's pages, with their items: the dedupe runs once per page array. */
-const lists = new WeakMap<object, { readonly items: ReadonlyArray<unknown>; readonly pages: ReadonlyArray<unknown> }>()
+const lists = new WeakMap<
+  object,
+  {
+    readonly items: ReadonlyArray<unknown>
+    readonly pages: ReadonlyArray<unknown>
+  }
+>()
 const listOf = (def: QueryDef, pages: ReadonlyArray<unknown>) => {
   let out = lists.get(pages)
   if (out === undefined) {
@@ -146,10 +169,15 @@ const openList = (
 ): AsyncResult.AsyncResult<any, any> => {
   if (result._tag === "Initial") return result
   const data = queryModule().snapshotData(snapshot)!
-  const cached = data.result === result ? openedLists.get(snapshot as object) : undefined
+  const cached = data.result === result
+    ? openedLists.get(snapshot as object)
+    : undefined
   if (cached !== undefined) return cached
   const more = data.more ?? { _tag: "End" }
-  const opened = AsyncResult.map(result, (pages: ReadonlyArray<unknown>) => ({ ...listOf(data.def, pages), more }))
+  const opened = AsyncResult.map(
+    result,
+    (pages: ReadonlyArray<unknown>) => ({ ...listOf(data.def, pages), more })
+  )
   if (data.result === result) openedLists.set(snapshot as object, opened)
   return opened
 }
@@ -162,7 +190,9 @@ const openKeyed = (
   def: QueryDef,
   snapshots: unknown,
   entries: ReadonlyArray<Keyed>
-): ReadonlyArray<{ readonly args: unknown; readonly result: AsyncResult.AsyncResult<any, any> }> => {
+): ReadonlyArray<
+  { readonly args: unknown; readonly result: AsyncResult.AsyncResult<any, any> }
+> => {
   const stored = queryModule().snapshotMapData(snapshots)?.entries
   const opened = entries.map((entry) => {
     const data = queryModule().snapshotData(stored?.get(entry.argsKey))
@@ -181,9 +211,16 @@ const openKeyed = (
 /**
  * Returns query arguments deduplicated by key, in first-occurrence order.
  */
-const uniqueArgs = (component: string, name: string, def: QueryDef, args: unknown): ReadonlyArray<Keyed> => {
+const uniqueArgs = (
+  component: string,
+  name: string,
+  def: QueryDef,
+  args: unknown
+): ReadonlyArray<Keyed> => {
   if (!Array.isArray(args)) {
-    throw new Error(`${component}: queries.${name} is a queryMany query, and its args must return an array.`)
+    throw new Error(
+      `${component}: queries.${name} is a queryMany query, and its args must return an array.`
+    )
   }
   const seen = new Set<string>()
   const out: Array<Keyed> = []
@@ -198,7 +235,8 @@ const uniqueArgs = (component: string, name: string, def: QueryDef, args: unknow
 
 type QueryDef = ReturnType<typeof Query.defOf>
 
-const isQuery = (u: unknown): u is Query.Query.Any => Predicate.hasProperty(u, QueryTypeId)
+const isQuery = (u: unknown): u is Query.Query.Any =>
+  Predicate.hasProperty(u, QueryTypeId)
 
 /**
  * Checks the entries of `queries`. Throws at module load on an entry that
@@ -207,20 +245,40 @@ const isQuery = (u: unknown): u is Query.Query.Any => Predicate.hasProperty(u, Q
 const parse = (component: string, queries: unknown): ReadonlyArray<Entry> => {
   if (queries === undefined) return []
   if (typeof queries !== "object" || queries === null) {
-    throw new Error(`${component}: queries must be a record of { query, args } or { queryMany, args } entries.`)
+    throw new Error(
+      `${component}: queries must be a record of { query, args } or { queryMany, args } entries.`
+    )
   }
   return Object.entries(queries).map(([name, entry]): Entry => {
-    const fail = (why: string) => new Error(`${component}: queries.${name} ${why}`)
-    if (typeof entry !== "object" || entry === null) throw fail("must be { query, args } or { queryMany, args }.")
-    const { args, debounce, query, queryMany, onChange } = entry as Record<string, unknown>
-    if ((query === undefined) === (queryMany === undefined)) throw fail("must have exactly one of query and queryMany.")
+    const fail = (why: string) =>
+      new Error(`${component}: queries.${name} ${why}`)
+    if (typeof entry !== "object" || entry === null) {
+      throw fail("must be { query, args } or { queryMany, args }.")
+    }
+    const { args, debounce, query, queryMany, onChange } = entry as Record<
+      string,
+      unknown
+    >
+    if ((query === undefined) === (queryMany === undefined)) {
+      throw fail("must have exactly one of query and queryMany.")
+    }
     const definition = query ?? queryMany
-    if (!isQuery(definition)) throw fail(`has a ${query === undefined ? "queryMany" : "query"} that isn't a Query.`)
+    if (!isQuery(definition)) {
+      throw fail(
+        `has a ${
+          query === undefined ? "queryMany" : "query"
+        } that isn't a Query.`
+      )
+    }
     if (typeof args !== "function") throw fail("must have an args function.")
-    if (onChange !== undefined && typeof onChange !== "function") throw fail("has an onChange that isn't a function.")
+    if (onChange !== undefined && typeof onChange !== "function") {
+      throw fail("has an onChange that isn't a function.")
+    }
     const list = queryModule().defOf(definition).list !== undefined
     if (queryMany !== undefined && list) {
-      throw fail("has an infinite query under queryMany. An infinite query takes query.")
+      throw fail(
+        "has an infinite query under queryMany. An infinite query takes query."
+      )
     }
     return {
       name,
@@ -228,7 +286,9 @@ const parse = (component: string, queries: unknown): ReadonlyArray<Entry> => {
       keyed: queryMany !== undefined,
       list,
       args: args as QueryFn,
-      debounce: debounce === undefined ? undefined : Duration.toMillis(debounce as Duration.Input),
+      debounce: debounce === undefined
+        ? undefined
+        : Duration.toMillis(debounce as Duration.Input),
       onChange: onChange as Entry["onChange"]
     }
   })
@@ -236,8 +296,16 @@ const parse = (component: string, queries: unknown): ReadonlyArray<Entry> => {
 
 /** A query's evaluated arguments, deduplicated by key for a keyed query. */
 type Current =
-  | { readonly args: unknown; readonly argsKey: string | undefined; readonly entries?: undefined }
-  | { readonly args: ReadonlyArray<unknown>; readonly argsKey: undefined; readonly entries: ReadonlyArray<Keyed> }
+  | {
+    readonly args: unknown
+    readonly argsKey: string | undefined
+    readonly entries?: undefined
+  }
+  | {
+    readonly args: ReadonlyArray<unknown>
+    readonly argsKey: undefined
+    readonly entries: ReadonlyArray<Keyed>
+  }
 
 /**
  * The views of one `(model, props, results)`: each query runs at most once,
@@ -257,7 +325,10 @@ export interface Context {
    * The message a query's `onChange` returns for its result as these views open
    * it, or `undefined` without `onChange`. A keyed query's also gets `changes`.
    */
-  readonly changed: (name: string, changes: ReadonlyArray<KeyedChange>) => { readonly value: unknown } | undefined
+  readonly changed: (
+    name: string,
+    changes: ReadonlyArray<KeyedChange>
+  ) => { readonly value: unknown } | undefined
 }
 
 /**
@@ -265,7 +336,9 @@ export interface Context {
  *
  * @internal
  */
-export type ResultsSchema = Schema.Struct<{ readonly [name: string]: Schema.Codec<unknown, unknown> }>
+export type ResultsSchema = Schema.Struct<
+  { readonly [name: string]: Schema.Codec<unknown, unknown> }
+>
 
 /** @internal */
 export interface Bound {
@@ -280,7 +353,11 @@ export interface Bound {
    * list's exact `more`, which `update` can read and page state drops.
    */
   readonly logSchema: ResultsSchema
-  readonly context: (model: unknown, props: unknown, results: Results | undefined) => Context
+  readonly context: (
+    model: unknown,
+    props: unknown,
+    results: Results | undefined
+  ) => Context
   /** A single or infinite query's result holding `result` at `entry`. */
   readonly snapshot: (
     entry: Entry,
@@ -307,7 +384,10 @@ interface State {
  *
  * @internal
  */
-export const bind = (component: string, queries: unknown): Bound | undefined => {
+export const bind = (
+  component: string,
+  queries: unknown
+): Bound | undefined => {
   const entries = parse(component, queries)
   if (entries.length === 0) return undefined
   const byName = new Map(entries.map((entry) => [entry.name, entry]))
@@ -334,7 +414,10 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
     if (state.running.includes(entry.name)) {
       throw new Error(
         `${component}: the queries ${
-          [...state.running.slice(state.running.indexOf(entry.name)), entry.name].join(" -> ")
+          [
+            ...state.running.slice(state.running.indexOf(entry.name)),
+            entry.name
+          ].join(" -> ")
         } read each other in a cycle.`
       )
     }
@@ -348,14 +431,25 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
     const def = queryModule().defOf(entry.query)
     if (entry.keyed) {
       const keyed = uniqueArgs(component, entry.name, def, args)
-      current = { args: keyed.map((one) => one.args), argsKey: undefined, entries: keyed }
-    } else current = { args, argsKey: args === undefined ? undefined : def.argsKey(args) }
+      current = {
+        args: keyed.map((one) => one.args),
+        argsKey: undefined,
+        entries: keyed
+      }
+    } else {current = {
+        args,
+        argsKey: args === undefined ? undefined : def.argsKey(args)
+      }}
     state.memo.set(entry.name, current)
     return current
   }
   // The three views share prototypes built once here, so a render defines no property.
   const view = (
-    read: (snapshot: unknown, argsKey: string | undefined, entry: Entry) => unknown,
+    read: (
+      snapshot: unknown,
+      argsKey: string | undefined,
+      entry: Entry
+    ) => unknown,
     keyed: ((state: State, entry: Entry) => unknown) | undefined
   ) => {
     const proto = {}
@@ -367,7 +461,11 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
           const state: State = this[stateKey]
           return entry.keyed
             ? keyed!(state, entry)
-            : read(state.results[entry.name], argsOf(state, entry).argsKey, entry)
+            : read(
+              state.results[entry.name],
+              argsOf(state, entry).argsKey,
+              entry
+            )
         }
       })
     }
@@ -376,7 +474,11 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
   const openKeyedResult = (state: State, entry: Entry) => {
     let opened = state.opened.get(entry.name)
     if (opened === undefined) {
-      opened = openKeyed(queryModule().defOf(entry.query), state.results[entry.name], argsOf(state, entry).entries!)
+      opened = openKeyed(
+        queryModule().defOf(entry.query),
+        state.results[entry.name],
+        argsOf(state, entry).entries!
+      )
       state.opened.set(entry.name, opened)
     }
     return opened
@@ -396,8 +498,19 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
     entries.flatMap((entry) => {
       const current = argsOf(state, entry)
       const watchName = `~query/${entry.name}`
-      const watchOf = (args: unknown, argsKey: string | undefined, keyed: boolean) => {
-        const marker: Marker = { query: entry.query, name: entry.name, args, argsKey, keyed, debounce: entry.debounce }
+      const watchOf = (
+        args: unknown,
+        argsKey: string | undefined,
+        keyed: boolean
+      ) => {
+        const marker: Marker = {
+          query: entry.query,
+          name: entry.name,
+          args,
+          argsKey,
+          keyed,
+          debounce: entry.debounce
+        }
         return {
           [Subscription.TypeId]: Subscription.TypeId,
           // New args are a new key, so the old watcher goes before the new one registers.
@@ -408,9 +521,15 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
           [queryCore.markerKey]: marker
         } as unknown as Subscription.Subscription<any, any>
       }
-      if (current.entries === undefined) return [watchOf(current.args, current.argsKey, false)]
+      if (current.entries === undefined) {
+        return [watchOf(current.args, current.argsKey, false)]
+      }
       // A keyed query: one watcher per unique key, and the group that collects their values.
-      const group: Group = { name: entry.name, query: entry.query, entries: current.entries }
+      const group: Group = {
+        name: entry.name,
+        query: entry.query,
+        entries: current.entries
+      }
       return [
         {
           [Subscription.TypeId]: Subscription.TypeId,
@@ -424,7 +543,13 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
       ]
     })
   const make = (model: any, props: any, results: Results): Context => {
-    const state: State = { $: undefined!, results, memo: new Map(), opened: new Map(), running: [] }
+    const state: State = {
+      $: undefined!,
+      results,
+      memo: new Map(),
+      opened: new Map(),
+      running: []
+    }
     const queries = viewOf(queriesProto, state)
     state.$ = { model, props, queries }
     return {
@@ -436,14 +561,22 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
       changed: (name, changes) => {
         const entry = byName.get(name)!
         if (entry.onChange === undefined) return undefined
-        return { value: entry.keyed ? entry.onChange(queries[name], changes) : entry.onChange(queries[name]) }
+        return {
+          value: entry.keyed
+            ? entry.onChange(queries[name], changes)
+            : entry.onChange(queries[name])
+        }
       }
     }
   }
   // One context per (model, props, results), shared by the watches and the view of that triple.
   const contexts = new WeakMap<
     object,
-    { readonly model: unknown; readonly props: unknown; readonly context: Context }
+    {
+      readonly model: unknown
+      readonly props: unknown
+      readonly context: Context
+    }
   >()
   return {
     entries,
@@ -453,14 +586,27 @@ export const bind = (component: string, queries: unknown): Bound | undefined => 
     logSchema: Schema.Struct(logFields) as unknown as ResultsSchema,
     context: (model, props, results = empty) => {
       const found = contexts.get(results)
-      if (found !== undefined && found.model === model && found.props === props) return found.context
+      if (
+        found !== undefined && found.model === model && found.props === props
+      ) return found.context
       const context = make(model, props, results)
       contexts.set(results, { model, props, context })
       return context
     },
     snapshot: (entry, at, result, patched, more) =>
-      queryModule().makeSnapshot(queryModule().defOf(entry.query), entry.name, at, result, patched, more),
+      queryModule().makeSnapshot(
+        queryModule().defOf(entry.query),
+        entry.name,
+        at,
+        result,
+        patched,
+        more
+      ),
     snapshotMany: (entry, snapshots) =>
-      queryModule().makeSnapshotMap(queryModule().defOf(entry.query), entry.name, snapshots)
+      queryModule().makeSnapshotMap(
+        queryModule().defOf(entry.query),
+        entry.name,
+        snapshots
+      )
   }
 }

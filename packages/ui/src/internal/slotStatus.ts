@@ -12,7 +12,9 @@ import type * as AsyncResult from "effect/reactivity/AsyncResult"
  *
  * @internal
  */
-export type SlotResult = AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
+export type SlotResult =
+  | AsyncResult.Initial<never, unknown>
+  | AsyncResult.Failure<never, unknown>
 
 /**
  * What a slot's `fallback` gets for a handled Layer failure on the server, and on a client that adopts

@@ -1,9 +1,19 @@
-import { Command, Component, type MessageLog, Route, Router, UiSchema } from "@effect/ui"
+import {
+  Command,
+  Component,
+  type MessageLog,
+  Route,
+  Router,
+  UiSchema
+} from "@effect/ui"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
-const AppRoute = Route.union({ Home: Route.make("/"), Page: Route.make("/page") })
+const AppRoute = Route.union({
+  Home: Route.make("/"),
+  Page: Route.make("/page")
+})
 
 const LoginMessage = UiSchema.TaggedEnum({ Filled: {} })
 
@@ -18,7 +28,9 @@ const login = <Scoped extends boolean>(scoped: Scoped) =>
     init: () => ({ email: "", password: "" }),
     update: () => ({ email: "ada@example.com", password: "hunter2" }),
     view: (h, model) =>
-      h.el("button").on("click", LoginMessage.Filled()).children(`login ${model.email}|${model.password}`)
+      h.el("button").on("click", LoginMessage.Filled()).children(
+        `login ${model.email}|${model.password}`
+      )
   })
 const Login = login(false)
 const ScopedLogin = login(true)
@@ -35,10 +47,16 @@ const Counter = Component.define({
   .make({
     init: () => 0,
     update: ($) => $.model + 1,
-    view: (h, count) => h.el("button").on("click", CounterMessage.Clicked()).children(`counter ${count}`)
+    view: (h, count) =>
+      h.el("button").on("click", CounterMessage.Clicked()).children(
+        `counter ${count}`
+      )
   })
 
-const GroupMessage = UiSchema.TaggedEnum({ ChangedOn: { on: Schema.Boolean }, Picked: {} })
+const GroupMessage = UiSchema.TaggedEnum({
+  ChangedOn: { on: Schema.Boolean },
+  Picked: {}
+})
 
 const Group = Component.define({
   name: "Group",
@@ -48,7 +66,11 @@ const Group = Component.define({
   shares: {
     value: (model) => model,
     receives: ["Picked"],
-    collects: { schema: Schema.Boolean, onChange: (reports) => GroupMessage.ChangedOn({ on: reports.includes(true) }) }
+    collects: {
+      schema: Schema.Boolean,
+      onChange: (reports) =>
+        GroupMessage.ChangedOn({ on: reports.includes(true) })
+    }
   }
 }).make({
   init: () => ({ on: false, picks: 0 }),
@@ -80,16 +102,28 @@ const makeReader = (name: string, restore: false | undefined) =>
     view: (h) =>
       h.el(
         "p",
-        h.el("button").on("click", ReaderMessage.Toggled()).children(`toggle ${name}`),
-        h.el("button").on("click", ReaderMessage.Picked()).children(`pick ${name}`),
-        h.el("span", `${name} on=${h.shared.group.on} picks=${h.shared.group.picks}`)
+        h.el("button").on("click", ReaderMessage.Toggled()).children(
+          `toggle ${name}`
+        ),
+        h.el("button").on("click", ReaderMessage.Picked()).children(
+          `pick ${name}`
+        ),
+        h.el(
+          "span",
+          `${name} on=${h.shared.group.on} picks=${h.shared.group.picks}`
+        )
       )
   })
 
 const Kept = makeReader("Kept", undefined)
 const Fresh = makeReader("Fresh", false)
 
-const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+const Page = Component.define({
+  name: "Page",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never
+}).make({
   init: () => null,
   update: ($) => $.model,
   view: (h) =>
@@ -102,7 +136,11 @@ const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null,
     )
 })
 
-const AppMessage = UiSchema.TaggedEnum({ ChangedRoute: { route: AppRoute }, Go: { route: AppRoute }, Navigated: {} })
+const AppMessage = UiSchema.TaggedEnum({
+  ChangedRoute: { route: AppRoute },
+  Go: { route: AppRoute },
+  Navigated: {}
+})
 
 const App = Component.define({
   name: "App",
@@ -115,47 +153,91 @@ const App = Component.define({
   update: ($, message) =>
     AppMessage.match(message, {
       ChangedRoute: (changed) => changed.route,
-      Go: ({ route: next }) => $.run(Router.push(AppRoute, next).pipe(Command.map(() => AppMessage.Navigated()))),
+      Go: ({ route: next }) =>
+        $.run(
+          Router.push(AppRoute, next).pipe(
+            Command.map(() => AppMessage.Navigated())
+          )
+        ),
       Navigated: () => $.model
     }),
   subscriptions: (
     { model: route }
-  ) => [Router.subscription(AppRoute, route, (next) => AppMessage.ChangedRoute({ route: next }))],
+  ) => [
+    Router.subscription(
+      AppRoute,
+      route,
+      (next) => AppMessage.ChangedRoute({ route: next })
+    )
+  ],
   view: (h, route) =>
     h.el(
       "div",
-      h.el("button").on("click", AppMessage.Go({ route: AppRoute.Home() })).children("Home"),
-      AppRoute.match(route, { Home: () => h.el("h1", "Home"), Page: () => Page(h, { key: "page" }) })
+      h.el("button").on("click", AppMessage.Go({ route: AppRoute.Home() }))
+        .children("Home"),
+      AppRoute.match(route, {
+        Home: () => h.el("h1", "Home"),
+        Page: () => Page(h, { key: "page" })
+      })
     )
 })
 
-const click = (root: TestHost.TestRoot<unknown, never, unknown>, text: string) =>
-  Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
-const textOf = (root: TestHost.TestRoot<unknown, never, unknown>, prefix: string) =>
-  root.all(Locator.tag("span")).map(Locator.textOf).find((text) => text.startsWith(prefix))
+const click = (
+  root: TestHost.TestRoot<unknown, never, unknown>,
+  text: string
+) => Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
+const textOf = (
+  root: TestHost.TestRoot<unknown, never, unknown>,
+  prefix: string
+) =>
+  root.all(Locator.tag("span")).map(Locator.textOf).find((text) =>
+    text.startsWith(prefix)
+  )
 const collectedAt = (log: ReadonlyArray<MessageLog.Entry>, path: string) =>
-  log.filter((entry) => entry._tag === "Update" && entry.path === path && entry.source._tag === "Collected").length
+  log.filter((entry) =>
+    entry._tag === "Update" && entry.path === path &&
+    entry.source._tag === "Collected"
+  ).length
 
-const Editor = Component.define({ name: "Editor", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+const Editor = Component.define({
+  name: "Editor",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never
+}).make({
   init: () => null,
   update: ($) => $.model,
   view: (h) => h.scoped((s) => ScopedLogin(s, { key: "login" }))
 })
 
 const desk = (restore?: false) =>
-  Component.define({ name: "Desk", scoped: true, model: Schema.Number, message: CounterMessage, restore }).make({
+  Component.define({
+    name: "Desk",
+    scoped: true,
+    model: Schema.Number,
+    message: CounterMessage,
+    restore
+  }).make({
     init: () => 0,
     update: ($) => $.model + 1,
     view: (h, count) =>
       h.el(
         "div",
-        h.el("button").on("click", CounterMessage.Clicked()).children(`desk ${count}`),
+        h.el("button").on("click", CounterMessage.Clicked()).children(
+          `desk ${count}`
+        ),
         h.scoped((s) => ScopedLogin(s, { key: "login" }))
       )
   })
 const Desk = desk()
 const office = (child: typeof Desk) =>
-  Component.define({ name: "Office", scoped: false, model: Schema.Null, message: Schema.Never, restore: false }).make({
+  Component.define({
+    name: "Office",
+    scoped: false,
+    model: Schema.Null,
+    message: Schema.Never,
+    restore: false
+  }).make({
     init: () => null,
     update: ($) => $.model,
     view: (h) => h.scoped((s) => child(s, { key: "desk" }))
@@ -181,14 +263,21 @@ const Shell = Component.define({
   view: (h, model) =>
     h.el(
       "div",
-      h.el("button").on("click", ShellMessage.Counted()).children(`shell ${model.count}`),
+      h.el("button").on("click", ShellMessage.Counted()).children(
+        `shell ${model.count}`
+      ),
       h.el("button").on("click", ShellMessage.Shown()).children("show"),
       model.shown ? Editor(h, { key: "editor" }) : null
     )
 })
 
-const buttonText = (root: TestHost.TestRoot<unknown, never, unknown>, prefix: string) =>
-  root.all(Locator.tag("button")).map(Locator.textOf).find((text) => text.startsWith(prefix))
+const buttonText = (
+  root: TestHost.TestRoot<unknown, never, unknown>,
+  prefix: string
+) =>
+  root.all(Locator.tag("button")).map(Locator.textOf).find((text) =>
+    text.startsWith(prefix)
+  )
 
 const leaveOffice = Effect.gen(function*() {
   const history = Router.memoryHistory("/page")
@@ -196,7 +285,9 @@ const leaveOffice = Effect.gen(function*() {
     const app = yield* TestHost.mount(App, Router.props(AppRoute))
     const office = yield* TestHost.mount(Office, {})
     yield* TestHost.settle
-    const steps: ReadonlyArray<readonly [TestHost.TestRoot<unknown, never, unknown>, string]> = [
+    const steps: ReadonlyArray<
+      readonly [TestHost.TestRoot<unknown, never, unknown>, string]
+    > = [
       [app, "login |"],
       [office, "desk 0"],
       [office, "login |"],
@@ -208,14 +299,21 @@ const leaveOffice = Effect.gen(function*() {
     }
     history.go(-1)
     yield* TestHost.settle
-  }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: AppRoute, history })))
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(Router.make({ routes: AppRoute, history }))
+  )
   return history
 })
 const shown = Effect.fnUntraced(
-  function*<E, R>(mount: Effect.Effect<TestHost.TestRoot<unknown, never, unknown>, E, R>) {
+  function*<E, R>(
+    mount: Effect.Effect<TestHost.TestRoot<unknown, never, unknown>, E, R>
+  ) {
     const root = yield* mount
     yield* TestHost.settle
-    return [buttonText(root, "desk"), buttonText(root, "login")].filter((text) => text !== undefined).join(" ")
+    return [buttonText(root, "desk"), buttonText(root, "login")].filter((
+      text
+    ) => text !== undefined).join(" ")
   },
   Effect.scoped
 )
@@ -227,7 +325,15 @@ describe("restore", () => {
       yield* Effect.gen(function*() {
         const root = yield* TestHost.mount(App, Router.props(AppRoute))
         yield* TestHost.settle
-        for (const button of ["login |", "counter 0", "toggle Kept", "toggle Fresh", "pick Kept"]) {
+        for (
+          const button of [
+            "login |",
+            "counter 0",
+            "toggle Kept",
+            "toggle Fresh",
+            "pick Kept"
+          ]
+        ) {
           click(root, button)
           yield* TestHost.settle
         }
@@ -240,12 +346,21 @@ describe("restore", () => {
         root.get(Locator.text("login ada@example.com|", { exact: true }))
         root.get(Locator.text("counter 0", { exact: true }))
         assert.notInclude(JSON.stringify(history.current().state), "hunter2")
-        assert.notInclude(JSON.stringify(history.current().state), "/App/Page[page]/Counter[counter]")
+        assert.notInclude(
+          JSON.stringify(history.current().state),
+          "/App/Page[page]/Counter[counter]"
+        )
         assert.strictEqual(textOf(root, "Kept"), "Kept on=true picks=1")
         assert.strictEqual(collectedAt(since, "/App/Page[page]/Group[kept]"), 0)
-        assert.strictEqual(collectedAt(since, "/App/Page[page]/Group[fresh]"), 1)
+        assert.strictEqual(
+          collectedAt(since, "/App/Page[page]/Group[fresh]"),
+          1
+        )
         assert.strictEqual(textOf(root, "Fresh"), "Fresh on=false picks=0")
-      }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: AppRoute, history })))
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(Router.make({ routes: AppRoute, history }))
+      )
     }).pipe(Effect.provide(TestHost.layer())))
 
   it.effect("restores every root on its first mount after a reload, and none on a remount", () =>
@@ -256,7 +371,10 @@ describe("restore", () => {
         const shell = yield* TestHost.mount(Shell, {})
         yield* TestHost.settle
         for (
-          const [root, button] of [[app, "login |"], [shell, "shell 0"], [shell, "show"], [shell, "login |"]] as const
+          const [root, button] of [[app, "login |"], [shell, "shell 0"], [
+            shell,
+            "show"
+          ], [shell, "login |"]] as const
         ) {
           click(root, button)
           yield* TestHost.settle
@@ -265,19 +383,30 @@ describe("restore", () => {
         yield* TestHost.settle
         history.go(-1)
         yield* TestHost.settle
-      }).pipe(Effect.scoped, Effect.provide(Router.make({ routes: AppRoute, history })))
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(Router.make({ routes: AppRoute, history }))
+      )
       const mountBoth = Effect.gen(function*() {
         const app = yield* TestHost.mount(App, Router.props(AppRoute))
         const shell = yield* TestHost.mount(Shell, {})
         yield* TestHost.settle
         click(shell, "show")
         yield* TestHost.settle
-        return [buttonText(app, "login"), buttonText(shell, "shell"), buttonText(shell, "login")]
+        return [
+          buttonText(app, "login"),
+          buttonText(shell, "shell"),
+          buttonText(shell, "login")
+        ]
       }).pipe(Effect.scoped)
       const [first, again] = yield* Effect.all([mountBoth, mountBoth]).pipe(
         Effect.provide(Router.make({ routes: AppRoute, history }))
       )
-      assert.deepStrictEqual(first, ["login ada@example.com|", "shell 1", "login |"])
+      assert.deepStrictEqual(first, [
+        "login ada@example.com|",
+        "shell 1",
+        "login |"
+      ])
       assert.deepStrictEqual(again, ["login |", "shell 0", "login |"])
     }).pipe(Effect.provide(TestHost.layer())))
 
@@ -297,8 +426,12 @@ describe("restore", () => {
         const history = yield* leaveOffice
         const office = shown(TestHost.mount(Office, {}))
         const app = shown(TestHost.mount(App, Router.props(AppRoute)))
-        const order = first === "Office" ? [office, office, app] : [app, office, office]
-        const texts = yield* Effect.all(order).pipe(Effect.provide(Router.make({ routes: AppRoute, history })))
+        const order = first === "Office"
+          ? [office, office, app]
+          : [app, office, office]
+        const texts = yield* Effect.all(order).pipe(
+          Effect.provide(Router.make({ routes: AppRoute, history }))
+        )
         const restored = "desk 1 login ada@example.com|"
         assert.deepStrictEqual(
           texts,

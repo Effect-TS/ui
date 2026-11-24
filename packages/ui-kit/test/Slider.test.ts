@@ -38,31 +38,40 @@ const indicator = Locator.attr("class", "indicator")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
 const released = { active: -1, pressed: -1, pressedValues: [], moved: null }
-const parts = (props: SliderProps) => Story.parts(Slider, { model: released, props })
+const parts = (props: SliderProps) =>
+  Story.parts(Slider, { model: released, props })
 
 type TrackPointer = Mount.Issued<unknown, never, never, unknown>
 type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
 // The control's mount is private, so a test reads it off the rendered element.
 const tracked = (s: Rendered): TrackPointer =>
-  (s.get(control) as unknown as View.Element<unknown>).owned?.find((layer) => layer.mount !== undefined)
+  (s.get(control) as unknown as View.Element<unknown>).owned?.find((layer) =>
+    layer.mount !== undefined
+  )
     ?.mount as unknown as TrackPointer
 const scene = (props: SliderProps) =>
-  HtmlScene.make(Slider, props, standIn).pipe(Effect.map((s) => s.expectMount(tracked(s))))
+  HtmlScene.make(Slider, props, standIn).pipe(
+    Effect.map((s) => s.expectMount(tracked(s)))
+  )
 
 // What the mount's Stream reports.
 const pressed = (index: number, fraction: number, onThumb = false) =>
   ({ _tag: "PressedPointer", index, fraction, onThumb }) as never
-const moved = (fraction: number) => ({ _tag: "MovedPointer", fraction }) as never
+const moved = (fraction: number) =>
+  ({ _tag: "MovedPointer", fraction }) as never
 const releasedPointer = { _tag: "ReleasedPointer" } as never
 
-const both = (value: number | ReadonlyArray<number>): readonly [SliderEvents, SliderEvents] => [
+const both = (
+  value: number | ReadonlyArray<number>
+): readonly [SliderEvents, SliderEvents] => [
   { _tag: "Moved", value },
   { _tag: "Committed", value }
 ]
 
 // Nothing emitted since the last acknowledged event.
-const quiet = (s: { readonly current: { readonly emitted: ReadonlyArray<unknown> } }) =>
-  assert.deepStrictEqual(s.current.emitted, [])
+const quiet = (
+  s: { readonly current: { readonly emitted: ReadonlyArray<unknown> } }
+) => assert.deepStrictEqual(s.current.emitted, [])
 
 describe("Slider", () => {
   it.effect("a thumb's input is a range input at the value, and the thumb and indicator get their positions", () =>
@@ -86,24 +95,33 @@ describe("Slider", () => {
         style: "--slider-thumb-position:20%",
         "data-orientation": "horizontal"
       })
-      assert.strictEqual(s.get(indicator).attrs?.style, "--slider-indicator-start:0%;--slider-indicator-size:20%")
+      assert.strictEqual(
+        s.get(indicator).attrs?.style,
+        "--slider-indicator-start:0%;--slider-indicator-size:20%"
+      )
       assert.deepInclude(s.get(Locator.attr("class", "slider")).attrs, {
         role: "group",
         "data-orientation": "horizontal"
       })
-      assert.deepInclude(s.get(Locator.tag("output")).attrs, { "aria-live": "off" })
+      assert.deepInclude(s.get(Locator.tag("output")).attrs, {
+        "aria-live": "off"
+      })
       // The input is inside the thumb.
       assert.strictEqual(s.get(thumb()).children?.[0], s.get(input()))
       s.props({ value: 40, orientation: "vertical" })
       assert.strictEqual(s.get(input()).attrs?.["aria-orientation"], "vertical")
-      assert.match(s.get(input()).attrs?.style ?? "", /writing-mode:vertical-lr$/)
+      assert.match(
+        s.get(input()).attrs?.style ?? "",
+        /writing-mode:vertical-lr$/
+      )
       assert.strictEqual(s.get(control).attrs?.["data-orientation"], "vertical")
     }))
 
   it.effect("the keys move the focused thumb by a step or a large step, to the ends, and commit at once", () =>
     Effect.gen(function*() {
       const s = yield* scene({ value: 40, largeStep: 20 })
-      s.keydown(input(), "ArrowRight").emitted(...both(41)).expectDefaultPrevented()
+      s.keydown(input(), "ArrowRight").emitted(...both(41))
+        .expectDefaultPrevented()
       s.keydown(input(), "ArrowUp").emitted(...both(41))
       s.keydown(input(), "ArrowLeft").emitted(...both(39))
       s.keydown(input(), "ArrowDown").emitted(...both(39))
@@ -144,7 +162,10 @@ describe("Slider", () => {
       assert.strictEqual(s.get(control).attrs?.["data-dragging"], "")
       s.props({ value: 0.7, max: 1, step: 0.1 })
       s.mounted(tracked(s), moved(1.4)).emitted({ _tag: "Moved", value: 1 })
-      s.mounted(tracked(s), releasedPointer).emitted({ _tag: "Committed", value: 1 })
+      s.mounted(tracked(s), releasedPointer).emitted({
+        _tag: "Committed",
+        value: 1
+      })
       s.parts((slider) => assert.isFalse(slider.dragging))
       assert.isUndefined(s.get(thumb()).attrs?.["data-dragging"])
     }))
@@ -153,7 +174,15 @@ describe("Slider", () => {
     Effect.gen(function*() {
       const s = yield* scene({ value: 40, disabled: true })
       assert.strictEqual(s.get(input()).attrs?.disabled, "")
-      for (const locator of [thumb(), control, indicator, Locator.tag("output"), Locator.attr("class", "slider")]) {
+      for (
+        const locator of [
+          thumb(),
+          control,
+          indicator,
+          Locator.tag("output"),
+          Locator.attr("class", "slider")
+        ]
+      ) {
         assert.strictEqual(s.get(locator).attrs?.["data-disabled"], "")
       }
       s.keydown(input(), "ArrowRight")
@@ -175,7 +204,10 @@ describe("Slider", () => {
       s.props({ value: 0, max: 10, step: 3 })
       s.keydown(input(), "End").emitted(...both(9))
       s.mounted(tracked(s), pressed(0, 1)).emitted({ _tag: "Moved", value: 9 })
-      s.mounted(tracked(s), releasedPointer).emitted({ _tag: "Committed", value: 9 })
+      s.mounted(tracked(s), releasedPointer).emitted({
+        _tag: "Committed",
+        value: 9
+      })
       // A value off the grid shows at the step the native input shows, which
       // also bounds its neighbour.
       s.props({ value: [0, 5], max: 12, step: 3 })
@@ -193,53 +225,97 @@ describe("Slider", () => {
       const s = yield* scene({ value: [70, 20], minStepsBetweenValues: 5 })
       // The values are sorted.
       s.parts((slider) => assert.deepStrictEqual(slider.values, [20, 70]))
-      assert.strictEqual(s.get(input(0)).attrs?.["aria-valuetext"], "20 start range")
-      assert.strictEqual(s.get(input(1)).attrs?.["aria-valuetext"], "70 end range")
+      assert.strictEqual(
+        s.get(input(0)).attrs?.["aria-valuetext"],
+        "20 start range"
+      )
+      assert.strictEqual(
+        s.get(input(1)).attrs?.["aria-valuetext"],
+        "70 end range"
+      )
       assert.strictEqual(s.get(input(1)).props?.value, "70")
-      assert.strictEqual(s.get(indicator).attrs?.style, "--slider-indicator-start:20%;--slider-indicator-size:50%")
+      assert.strictEqual(
+        s.get(indicator).attrs?.style,
+        "--slider-indicator-start:20%;--slider-indicator-size:50%"
+      )
       s.keydown(input(0), "Home").emitted(...both([0, 70]))
       // A key that brings the thumbs closer than the gap reports nothing.
       s.props({ value: [65, 70], minStepsBetweenValues: 5 })
       s.keydown(input(0), "ArrowRight")
       quiet(s)
-      s.focus(input(0)).parts((slider) => assert.strictEqual(slider.activeThumbIndex, 0))
-      s.blur(input(0)).parts((slider) => assert.strictEqual(slider.activeThumbIndex, -1))
+      s.focus(input(0)).parts((slider) =>
+        assert.strictEqual(slider.activeThumbIndex, 0)
+      )
+      s.blur(input(0)).parts((slider) =>
+        assert.strictEqual(slider.activeThumbIndex, -1)
+      )
     }))
 
   it.effect("a track press drags the selected thumb and a pushed neighbour stays put on reversal", () =>
     Effect.gen(function*() {
       const s = yield* scene({ value: [20, 60], minStepsBetweenValues: 10 })
       // The control's mount picks the thumb; the press drags it there.
-      s.mounted(tracked(s), pressed(0, 0.3)).emitted({ _tag: "Moved", value: [30, 60] })
+      s.mounted(tracked(s), pressed(0, 0.3)).emitted({
+        _tag: "Moved",
+        value: [30, 60]
+      })
       s.props({ value: [30, 60], minStepsBetweenValues: 10 })
-      s.mounted(tracked(s), moved(0.8)).emitted({ _tag: "Moved", value: [80, 90] })
+      s.mounted(tracked(s), moved(0.8)).emitted({
+        _tag: "Moved",
+        value: [80, 90]
+      })
       s.props({ value: [80, 90], minStepsBetweenValues: 10 })
       // Dragged back, the pushed thumb stays where it was pushed.
-      s.mounted(tracked(s), moved(0.4)).emitted({ _tag: "Moved", value: [40, 90] })
+      s.mounted(tracked(s), moved(0.4)).emitted({
+        _tag: "Moved",
+        value: [40, 90]
+      })
       s.props({ value: [40, 90], minStepsBetweenValues: 10 })
-      s.mounted(tracked(s), releasedPointer).emitted({ _tag: "Committed", value: [40, 90] })
+      s.mounted(tracked(s), releasedPointer).emitted({
+        _tag: "Committed",
+        value: [40, 90]
+      })
     }))
 
   it.effect("with swap, a thumb dragged past the other trades places and the drag goes on with the other thumb", () =>
     Effect.gen(function*() {
-      const s = yield* scene({ value: [20, 60], thumbCollisionBehavior: "swap" })
+      const s = yield* scene({
+        value: [20, 60],
+        thumbCollisionBehavior: "swap"
+      })
       s.mounted(tracked(s), pressed(0, 0.2, true))
       quiet(s)
-      s.mounted(tracked(s), moved(0.8)).emitted({ _tag: "Moved", value: [60, 80] })
+      s.mounted(tracked(s), moved(0.8)).emitted({
+        _tag: "Moved",
+        value: [60, 80]
+      })
       s.props({ value: [60, 80], thumbCollisionBehavior: "swap" })
       // The drag now moves the thumb at index 1.
-      s.mounted(tracked(s), moved(0.9)).emitted({ _tag: "Moved", value: [60, 90] })
+      s.mounted(tracked(s), moved(0.9)).emitted({
+        _tag: "Moved",
+        value: [60, 90]
+      })
     }))
 
   it.effect("with none, a dragged thumb stops at the other", () =>
     Effect.gen(function*() {
-      const s = yield* scene({ value: [20, 60], thumbCollisionBehavior: "none" })
+      const s = yield* scene({
+        value: [20, 60],
+        thumbCollisionBehavior: "none"
+      })
       s.mounted(tracked(s), pressed(0, 0.2, true))
-      s.mounted(tracked(s), moved(0.8)).emitted({ _tag: "Moved", value: [60, 60] })
+      s.mounted(tracked(s), moved(0.8)).emitted({
+        _tag: "Moved",
+        value: [60, 60]
+      })
     }))
 
   it("each part keeps the consumer's attributes, while the slider's own win, present or absent", () => {
-    const stale = { "data-dragging": "", "data-orientation": "vertical", "data-disabled": "" }
+    const stale = {
+      "data-dragging": "",
+      "data-orientation": "vertical",
+      "data-disabled": ""
+    }
     const slider = parts({ value: 40 })
     const element = h.input
       .class("range")
@@ -261,7 +337,11 @@ describe("Slider", () => {
       .disabled(true)
     const built = View.build(
       slider.thumb({
-        element: h.div.class("thumb").attrs({ ...stale, "data-index": "9", style: "color:blue" }),
+        element: h.div.class("thumb").attrs({
+          ...stale,
+          "data-index": "9",
+          style: "color:blue"
+        }),
         input: element
       }),
       []
@@ -285,22 +365,46 @@ describe("Slider", () => {
     assert.isUndefined(attrs["aria-disabled"])
     assert.isUndefined(attrs.disabled)
     assert.match(attrs.style ?? "", /^color:red;position:absolute/)
-    const expectAttrs = (part: View.ElementBuilder<never, never, any, any>, attrs: Record<string, string>) =>
-      assert.deepStrictEqual(View.build(part, []).attrs, { "data-orientation": "horizontal", ...attrs })
-    expectAttrs(slider.root(h.div.class("slider").attrs({ ...stale, role: "region" })), {
-      class: "slider",
-      role: "group"
+    const expectAttrs = (
+      part: View.ElementBuilder<never, never, any, any>,
+      attrs: Record<string, string>
+    ) =>
+      assert.deepStrictEqual(View.build(part, []).attrs, {
+        "data-orientation": "horizontal",
+        ...attrs
+      })
+    expectAttrs(
+      slider.root(h.div.class("slider").attrs({ ...stale, role: "region" })),
+      {
+        class: "slider",
+        role: "group"
+      }
+    )
+    expectAttrs(
+      slider.value(
+        h.output.class("value").attrs({ ...stale, "aria-live": "polite" })
+      ),
+      {
+        class: "value",
+        "aria-live": "off"
+      }
+    )
+    expectAttrs(slider.control(h.div.class("control").attrs(stale)), {
+      class: "control"
     })
-    expectAttrs(slider.value(h.output.class("value").attrs({ ...stale, "aria-live": "polite" })), {
-      class: "value",
-      "aria-live": "off"
+    expectAttrs(slider.track(h.div.class("track").attrs(stale)), {
+      class: "track"
     })
-    expectAttrs(slider.control(h.div.class("control").attrs(stale)), { class: "control" })
-    expectAttrs(slider.track(h.div.class("track").attrs(stale)), { class: "track" })
-    expectAttrs(slider.indicator(h.div.class("indicator").attrs({ ...stale, style: "color:blue" })), {
-      class: "indicator",
-      style: "color:blue;--slider-indicator-start:0%;--slider-indicator-size:40%"
-    })
+    expectAttrs(
+      slider.indicator(
+        h.div.class("indicator").attrs({ ...stale, style: "color:blue" })
+      ),
+      {
+        class: "indicator",
+        style:
+          "color:blue;--slider-indicator-start:0%;--slider-indicator-size:40%"
+      }
+    )
     assert.deepStrictEqual(built.attrs, {
       class: "thumb",
       "data-orientation": "horizontal",
@@ -313,7 +417,10 @@ describe("Slider", () => {
     const thumbOf = (props: SliderProps, index?: number) => () =>
       parts(props).thumb({ element: h.div, input: h.input, index })
     assert.throws(thumbOf({ value: [10, 20] }), /needs its index/)
-    assert.throws(thumbOf({ value: [10, 20] }, 2), /no value for the thumb at index 2/)
+    assert.throws(
+      thumbOf({ value: [10, 20] }, 2),
+      /no value for the thumb at index 2/
+    )
   })
 
   it("the input is a native input, the value an output and the control a div", () => {
@@ -322,7 +429,13 @@ describe("Slider", () => {
       () => slider.thumb({ element: h.div, input: h.button as any }),
       /a part for <input> was given <button>/
     )
-    assert.throws(() => slider.value(h.div as any), /a part for <output> was given <div>/)
-    assert.throws(() => slider.control(h.span as any), /a part for <div> was given <span>/)
+    assert.throws(
+      () => slider.value(h.div as any),
+      /a part for <output> was given <div>/
+    )
+    assert.throws(
+      () => slider.control(h.span as any),
+      /a part for <div> was given <span>/
+    )
   })
 })

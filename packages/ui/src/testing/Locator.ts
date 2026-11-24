@@ -70,7 +70,9 @@ export interface Locator {
  * @since 0.1.0
  */
 export const textOf = (node: Node): string =>
-  node.text !== undefined && node.tag === undefined ? node.text : (node.children ?? []).map(textOf).join("")
+  node.text !== undefined && node.tag === undefined
+    ? node.text
+    : (node.children ?? []).map(textOf).join("")
 
 /**
  * Every element under `root`, `root` included, in document order.
@@ -94,9 +96,14 @@ export const elements = <N extends Node>(root: N): ReadonlyArray<N> => {
  * as the content a story shows under a child's slots, is seen through.
  */
 const childElements = (node: Node): ReadonlyArray<Node> =>
-  (node.children ?? []).flatMap((child) => child.tag !== undefined ? [child] : childElements(child))
+  (node.children ?? []).flatMap((child) =>
+    child.tag !== undefined ? [child] : childElements(child)
+  )
 
-const make = (description: string, all: <N extends Node>(root: N) => ReadonlyArray<N>): Locator => ({
+const make = (
+  description: string,
+  all: <N extends Node>(root: N) => ReadonlyArray<N>
+): Locator => ({
   description,
   all
 })
@@ -109,11 +116,20 @@ const make = (description: string, all: <N extends Node>(root: N) => ReadonlyArr
  * @category locators
  * @since 0.1.0
  */
-export const text = (text: string, options?: { readonly exact?: boolean | undefined }): Locator => {
-  const matches = (node: Node) => options?.exact === true ? textOf(node).trim() === text : textOf(node).includes(text)
+export const text = (
+  text: string,
+  options?: { readonly exact?: boolean | undefined }
+): Locator => {
+  const matches = (node: Node) =>
+    options?.exact === true
+      ? textOf(node).trim() === text
+      : textOf(node).includes(text)
   return make(
     `text ${JSON.stringify(text)}`,
-    (root) => elements(root).filter((node) => matches(node) && !childElements(node).some(matches))
+    (root) =>
+      elements(root).filter((node) =>
+        matches(node) && !childElements(node).some(matches)
+      )
   )
 }
 
@@ -129,7 +145,9 @@ export const attr = (name: string, value?: string): Locator =>
     value === undefined ? `[${name}]` : `[${name}=${JSON.stringify(value)}]`,
     (root) =>
       elements(root).filter((node) =>
-        value === undefined ? node.attrs?.[name] !== undefined : node.attrs?.[name] === value
+        value === undefined
+          ? node.attrs?.[name] !== undefined
+          : node.attrs?.[name] === value
       )
   )
 
@@ -177,7 +195,10 @@ export const inside = (container: Locator, locator: Locator): Locator =>
  * @category queries
  * @since 0.1.0
  */
-export const all = <N extends Node>(root: N, locator: Locator): ReadonlyArray<N> => locator.all(root)
+export const all = <N extends Node>(
+  root: N,
+  locator: Locator
+): ReadonlyArray<N> => locator.all(root)
 
 /**
  * The one match, or `undefined`. Throws when there are several.
@@ -186,9 +207,16 @@ export const all = <N extends Node>(root: N, locator: Locator): ReadonlyArray<N>
  * @category queries
  * @since 0.1.0
  */
-export const query = <N extends Node>(root: N, locator: Locator): N | undefined => {
+export const query = <N extends Node>(
+  root: N,
+  locator: Locator
+): N | undefined => {
   const found = locator.all(root)
-  if (found.length > 1) throw new Error(`Locator: ${found.length} elements match ${locator.description}`)
+  if (found.length > 1) {
+    throw new Error(
+      `Locator: ${found.length} elements match ${locator.description}`
+    )
+  }
   return found[0]
 }
 
@@ -201,7 +229,9 @@ export const query = <N extends Node>(root: N, locator: Locator): N | undefined 
  */
 export const get = <N extends Node>(root: N, locator: Locator): N => {
   const found = query(root, locator)
-  if (found === undefined) throw new Error(`Locator: nothing matches ${locator.description}`)
+  if (found === undefined) {
+    throw new Error(`Locator: nothing matches ${locator.description}`)
+  }
   return found
 }
 
@@ -230,4 +260,8 @@ export interface Firable extends Node {
  * @category events
  * @since 0.1.0
  */
-export const fire = (node: Firable, event: string, payload: unknown = {}): void => node.fire(event, payload)
+export const fire = (
+  node: Firable,
+  event: string,
+  payload: unknown = {}
+): void => node.fire(event, payload)

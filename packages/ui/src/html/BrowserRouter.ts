@@ -150,7 +150,8 @@ export interface Options {
  * @category layers
  * @since 0.1.0
  */
-export const layer = (options: Options): Layer.Layer<Router.Services> => make(options, false)
+export const layer = (options: Options): Layer.Layer<Router.Services> =>
+  make(options, false)
 
 /**
  * The browser Router for static hosting, with routes in the URL's fragment,
@@ -169,19 +170,28 @@ export const layer = (options: Options): Layer.Layer<Router.Services> => make(op
  * @category layers
  * @since 0.1.0
  */
-export const layerHash = (options: Omit<Options, "base">): Layer.Layer<Router.Services> => make(options, true)
+export const layerHash = (
+  options: Omit<Options, "base">
+): Layer.Layer<Router.Services> => make(options, true)
 
 const claimed = new WeakSet<Document>()
 
-const make = (options: Options, inFragment: boolean): Layer.Layer<Router.Services> =>
+const make = (
+  options: Options,
+  inFragment: boolean
+): Layer.Layer<Router.Services> =>
   Layer.effectContext(Effect.gen(function*() {
     const window = options.window ?? globalThis.window
     const document = window.document
     if (claimed.has(document)) {
-      return yield* Effect.die(new Error("BrowserRouter: this document already has a Router"))
+      return yield* Effect.die(
+        new Error("BrowserRouter: this document already has a Router")
+      )
     }
     claimed.add(document)
-    yield* Effect.addFinalizer(() => Effect.sync(() => claimed.delete(document)))
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => claimed.delete(document))
+    )
 
     const { routes } = options
     const scroll = options.scroll !== false
@@ -194,23 +204,33 @@ const make = (options: Options, inFragment: boolean): Layer.Layer<Router.Service
     else if (typeof options.base === "string") routes.setBase(options.base)
     else if (options.base !== undefined) {
       const segment = location.pathname.split("/")[1] ?? ""
-      routes.setBase(segment !== "" && options.base(segment) ? `/${segment}` : "")
+      routes.setBase(
+        segment !== "" && options.base(segment) ? `/${segment}` : ""
+      )
     } else routes.setBase("")
 
     const currentUrl = () =>
-      inFragment ? (location.hash === "" ? "#/" : location.hash) : location.pathname + location.search + location.hash
+      inFragment
+        ? (location.hash === "" ? "#/" : location.hash)
+        : location.pathname + location.search + location.hash
 
     // --- scroll ------------------------------------------------------------
-    const positions = new Map<number, { readonly x: number; readonly y: number }>()
+    const positions = new Map<
+      number,
+      { readonly x: number; readonly y: number }
+    >()
     if (scroll && "scrollRestoration" in history) {
       const previous = history.scrollRestoration
       history.scrollRestoration = "manual"
-      yield* Effect.addFinalizer(() => Effect.sync(() => (history.scrollRestoration = previous)))
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => (history.scrollRestoration = previous))
+      )
     }
     const target = (hash: string): HTMLElement | null => {
       if (hash.length <= 1) return null
       const id = decodeURIComponent(hash.slice(1))
-      return document.getElementById(id) ?? document.getElementsByName(id)[0] as HTMLElement | undefined ?? null
+      return document.getElementById(id) ??
+        document.getElementsByName(id)[0] as HTMLElement | undefined ?? null
     }
     const scrollTo = (hash: string) => {
       const element = target(hash)
@@ -245,10 +265,13 @@ const make = (options: Options, inFragment: boolean): Layer.Layer<Router.Service
     yield* Effect.addFinalizer(() => Effect.sync(() => cancelAnnouncement?.()))
 
     // --- focus -------------------------------------------------------------
-    const focusOn = (element: HTMLElement) => element.focus({ preventScroll: true })
+    const focusOn = (element: HTMLElement) =>
+      element.focus({ preventScroll: true })
     const resetFocus = () => {
       const body = document.body
-      if (document.activeElement !== null && document.activeElement !== body) return
+      if (
+        document.activeElement !== null && document.activeElement !== body
+      ) return
       const tabindex = body.getAttribute("tabindex")
       body.setAttribute("tabindex", "-1")
       focusOn(body)
@@ -261,15 +284,21 @@ const make = (options: Options, inFragment: boolean): Layer.Layer<Router.Service
       if (settled.quiet) {
         // Within the page: no announcement and no focus move, and scroll only for a pop or when asked.
         if (scroll && settled.scroll) {
-          const saved = action === "pop" ? positions.get(settled.index) : undefined
+          const saved = action === "pop"
+            ? positions.get(settled.index)
+            : undefined
           window.scrollTo(saved?.x ?? 0, saved?.y ?? 0)
         }
         return
       }
       const container = settled.container as Element
       // Decided in the announcing flush, applied after scroll.
-      const autofocus = focus ? container.querySelector<HTMLElement>("[autofocus]") : null
-      const hashTarget = focus && action === "push" && !inFragment ? target(hash) : null
+      const autofocus = focus
+        ? container.querySelector<HTMLElement>("[autofocus]")
+        : null
+      const hashTarget = focus && action === "push" && !inFragment
+        ? target(hash)
+        : null
       if (scroll) {
         if (action === "pop") {
           const saved = positions.get(settled.index)
@@ -279,7 +308,9 @@ const make = (options: Options, inFragment: boolean): Layer.Layer<Router.Service
       if (focus) {
         if (autofocus !== null) focusOn(autofocus)
         else if (hashTarget !== null) {
-          if (hashTarget.tabIndex < 0 && !hashTarget.hasAttribute("tabindex")) hashTarget.setAttribute("tabindex", "-1")
+          if (
+            hashTarget.tabIndex < 0 && !hashTarget.hasAttribute("tabindex")
+          ) hashTarget.setAttribute("tabindex", "-1")
           focusOn(hashTarget)
         } else resetFocus()
       }
@@ -345,7 +376,8 @@ const make = (options: Options, inFragment: boolean): Layer.Layer<Router.Service
     const local = (url: URL): string | undefined => {
       if (url.origin !== location.origin) return undefined
       if (!inFragment) return url.pathname + url.search + url.hash
-      return url.pathname === location.pathname && url.search === location.search && url.hash !== ""
+      return url.pathname === location.pathname &&
+          url.search === location.search && url.hash !== ""
         ? url.hash
         : undefined
     }
@@ -357,21 +389,29 @@ const make = (options: Options, inFragment: boolean): Layer.Layer<Router.Service
     /** The nearest anchor with an `href` on the event's path. */
     const anchorOf = (event: Event): Element | undefined =>
       event.composedPath().find((node): node is Element =>
-        "localName" in node && (node as Element).localName === "a" && (node as Element).hasAttribute("href")
+        "localName" in node && (node as Element).localName === "a" &&
+        (node as Element).hasAttribute("href")
       )
     /** The href a click on `anchor` would follow, or undefined when the browser keeps it. */
     const hrefOf = (anchor: Element): string | undefined => {
       const targetAttribute = anchor.getAttribute("target")
       if (
-        (targetAttribute !== null && targetAttribute !== "" && targetAttribute !== "_self") ||
+        (targetAttribute !== null && targetAttribute !== "" &&
+          targetAttribute !== "_self") ||
         anchor.hasAttribute("download")
       ) return undefined
-      const href = local(new URL(anchor.getAttribute("href")!, document.baseURI))
-      return href === undefined || Option.isNone(routes.parse(href)) ? undefined : href
+      const href = local(
+        new URL(anchor.getAttribute("href")!, document.baseURI)
+      )
+      return href === undefined || Option.isNone(routes.parse(href))
+        ? undefined
+        : href
     }
     const onClick = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0) return
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+      if (
+        event.metaKey || event.ctrlKey || event.shiftKey || event.altKey
+      ) return
       const anchor = anchorOf(event)
       if (anchor === undefined) return
       flushHistory()
@@ -410,7 +450,9 @@ const make = (options: Options, inFragment: boolean): Layer.Layer<Router.Service
     const onLeave = (event: FocusEvent | MouseEvent) => {
       if (intended === undefined) return
       const next = event.relatedTarget
-      if (next !== null && "nodeType" in next && intended.contains(next as Node)) return
+      if (
+        next !== null && "nodeType" in next && intended.contains(next as Node)
+      ) return
       cancelIntent()
     }
     const onTouch = (event: TouchEvent) => {
@@ -428,23 +470,36 @@ const make = (options: Options, inFragment: boolean): Layer.Layer<Router.Service
       if (form === null || form.localName !== "form") return
       flushHistory()
       const submitter = event.submitter as HTMLButtonElement | null
-      const method = (submitter?.getAttribute("formmethod") ?? form.getAttribute("method") ?? "get").toLowerCase()
-      const targetAttribute = submitter?.getAttribute("formtarget") ?? form.getAttribute("target")
-      if (method !== "get" || (targetAttribute !== null && targetAttribute !== "" && targetAttribute !== "_self")) {
+      const method =
+        (submitter?.getAttribute("formmethod") ?? form.getAttribute("method") ??
+          "get").toLowerCase()
+      const targetAttribute = submitter?.getAttribute("formtarget") ??
+        form.getAttribute("target")
+      if (
+        method !== "get" ||
+        (targetAttribute !== null && targetAttribute !== "" &&
+          targetAttribute !== "_self")
+      ) {
         return
       }
-      const action = submitter?.getAttribute("formaction") ?? form.getAttribute("action") ?? ""
+      const action = submitter?.getAttribute("formaction") ??
+        form.getAttribute("action") ?? ""
       const url = new URL(action, document.baseURI)
       const data = new FormData(form, submitter ?? undefined)
       const search = new URLSearchParams()
-      for (const [name, value] of data) if (typeof value === "string") search.append(name, value)
+      for (const [name, value] of data) {
+        if (typeof value === "string") search.append(name, value)
+      }
       url.search = search.toString()
       url.hash = ""
       const href = local(url)
       // The host already stopped the browser's submission, so the Router makes it: a full page
       // load for anything the routes don't parse.
-      if (ownedUnhandled) Effect.runSync(href !== undefined ? router.navigate(href) : router.load(url.href))
-      else follow(event, href)
+      if (ownedUnhandled) {
+        Effect.runSync(
+          href !== undefined ? router.navigate(href) : router.load(url.href)
+        )
+      } else follow(event, href)
     }
     document.addEventListener("click", onClick)
     document.addEventListener("submit", onSubmit)

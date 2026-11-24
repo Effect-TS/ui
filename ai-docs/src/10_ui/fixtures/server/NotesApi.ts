@@ -8,7 +8,11 @@ const noteJson = HttpServerResponse.schemaJson(Note)
 const resultsJson = HttpServerResponse.schemaJson(NoteResults)
 const noteId = HttpRouter.schemaPathParams(Schema.Struct({ id: Schema.String }))
 const noteSearch = HttpRouter.schemaParams(
-  Schema.Struct({ q: Schema.String, page: Schema.NumberFromString, sort: NoteSort })
+  Schema.Struct({
+    q: Schema.String,
+    page: Schema.NumberFromString,
+    sort: NoteSort
+  })
 )
 
 // The JSON API that `Notes.layerHttp` calls, as plain routes to keep it
@@ -47,7 +51,10 @@ export const NotesApi = HttpRouter.addAll([
       const { id } = yield* noteId
       return yield* noteJson(yield* notes.get(id))
     }).pipe(
-      Effect.catchTag("NoteNotFound", () => Effect.succeed(HttpServerResponse.empty({ status: 404 })))
+      Effect.catchTag(
+        "NoteNotFound",
+        () => Effect.succeed(HttpServerResponse.empty({ status: 404 }))
+      )
     )
   ),
   HttpRouter.route(
@@ -62,10 +69,17 @@ export const NotesApi = HttpRouter.addAll([
     }).pipe(
       Effect.catchTag(
         "NoteSaveError",
-        (error) => Effect.succeed(HttpServerResponse.text(error.reason, { status: 422 }))
+        (error) =>
+          Effect.succeed(HttpServerResponse.text(error.reason, { status: 422 }))
       )
     )
   )
 ]).pipe(
-  HttpRouter.provideRequest(Notes.layerMemory([{ id: "welcome", title: "Welcome", body: "Write something." }]))
+  HttpRouter.provideRequest(
+    Notes.layerMemory([{
+      id: "welcome",
+      title: "Welcome",
+      body: "Write something."
+    }])
+  )
 )

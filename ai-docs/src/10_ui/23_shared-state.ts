@@ -36,7 +36,10 @@ export const TooltipProvider = Component.define({
   message: TooltipProviderMessage,
   // `receives` lists what `$.send(TooltipProvider, message)` takes. They are
   // facts, named like any other message.
-  shares: { value: (model) => ({ open: model.open }), receives: ["FocusedTooltip", "BlurredTooltip"] },
+  shares: {
+    value: (model) => ({ open: model.open }),
+    receives: ["FocusedTooltip", "BlurredTooltip"]
+  },
   restore: false,
   elements: Html
 }).make({
@@ -89,7 +92,8 @@ export const Tooltip = Component.define({
         .onBlur(TooltipMessage.BlurredTooltip({ id }))
         .attr("aria-describedby", id)
         .children(h.props.label),
-      h.shared.provider.open === id && h.span.id(id).attr("role", "tooltip").children(h.props.tip)
+      h.shared.provider.open === id &&
+        h.span.id(id).attr("role", "tooltip").children(h.props.tip)
     )
   }
 })
@@ -157,7 +161,9 @@ export const focused = Effect.gen(function*() {
 // An optional owner, reports and onChange
 // ---------------------------------------------------------------------------
 
-const PanelGroupMessage = UiSchema.TaggedEnum({ ChangedOpen: { open: Schema.Boolean } })
+const PanelGroupMessage = UiSchema.TaggedEnum({
+  ChangedOpen: { open: Schema.Boolean }
+})
 
 // `shares` in its long form. `value` is what readers read, and `schema` its
 // Schema, which encodes it in a reader's `Update` on the Wire. Without one,
@@ -180,7 +186,8 @@ export const PanelGroup = Component.define({
     schema: Schema.Struct({ anyOpen: Schema.Boolean }),
     collects: {
       schema: Schema.Boolean,
-      onChange: (collected) => PanelGroupMessage.ChangedOpen({ open: collected.includes(true) })
+      onChange: (collected) =>
+        PanelGroupMessage.ChangedOpen({ open: collected.includes(true) })
     }
   },
   elements: Html
@@ -190,7 +197,10 @@ export const PanelGroup = Component.define({
   parts: (_, model) => ({ anyOpen: model.anyOpen })
 })
 
-const PanelMessage = UiSchema.TaggedEnum({ Toggled: {}, ChangedGroup: { anyOpen: Schema.Boolean } })
+const PanelMessage = UiSchema.TaggedEnum({
+  Toggled: {},
+  ChangedGroup: { anyOpen: Schema.Boolean }
+})
 
 // The long form of a `shared` entry, typed by its `owner`.
 //
@@ -237,12 +247,14 @@ export const Panel = Component.define({
   update: ($, message) =>
     PanelMessage.match(message, {
       Toggled: () => $.evolve({ open: (open) => !open }),
-      ChangedGroup: ({ anyOpen }) => anyOpen ? $.evolve({ groupOpened: (times) => times + 1 }) : $.model
+      ChangedGroup: ({ anyOpen }) =>
+        anyOpen ? $.evolve({ groupOpened: (times) => times + 1 }) : $.model
     }),
   view: (h, model) =>
     h.section(
       h.button.onClick(PanelMessage.Toggled()).children(h.props.title),
-      model.open && h.p.children(h.shared.group === undefined ? "On its own" : "In a group")
+      model.open &&
+        h.p.children(h.shared.group === undefined ? "On its own" : "In a group")
     )
 })
 
@@ -264,7 +276,8 @@ export const panels = Effect.gen(function*() {
 
   const group = yield* Scene.make(PanelGroup, {}, {
     elements: Html,
-    view: (panelGroup, h) => h.p.children(panelGroup.anyOpen ? "open" : "closed")
+    view: (panelGroup, h) =>
+      h.p.children(panelGroup.anyOpen ? "open" : "closed")
   })
   // The same message as for no reports: nothing is sent.
   group.collected([false, false])
@@ -300,10 +313,19 @@ export const Menu = Component.define({
     receives: ["PickedItem"],
     collects: {
       schema: Schema.Number,
-      onChange: (counts) => MenuMessage.ChangedOpenBelow({ count: counts.reduce((sum, count) => sum + count, 0) })
+      onChange: (counts) =>
+        MenuMessage.ChangedOpenBelow({
+          count: counts.reduce((sum, count) => sum + count, 0)
+        })
     }
   },
-  shared: { parent: { owner: "self", optional: true, report: (below, props) => (props.open ? below + 1 : 0) } },
+  shared: {
+    parent: {
+      owner: "self",
+      optional: true,
+      report: (below, props) => (props.open ? below + 1 : 0)
+    }
+  },
   elements: Html
 }).make({
   init: () => 0,
@@ -323,7 +345,10 @@ export const Menu = Component.define({
   parts: (p, below) => ({
     nested: p.shared.parent !== undefined,
     openBelow: below,
-    item: p.part("button", (b, item: string) => b.onClick(MenuMessage.PickedItem({ item })))
+    item: p.part(
+      "button",
+      (b, item: string) => b.onClick(MenuMessage.PickedItem({ item }))
+    )
   })
 })
 
@@ -332,7 +357,11 @@ export const Menu = Component.define({
 export const nestedMenu = Effect.gen(function*() {
   const menu = yield* Scene.make(Menu, { open: true }, {
     elements: Html,
-    view: (menu, h) => h.div(h.p.children(menu.nested ? "nested" : "outermost"), menu.item(h.button("Copy"), "copy"))
+    view: (menu, h) =>
+      h.div(
+        h.p.children(menu.nested ? "nested" : "outermost"),
+        menu.item(h.button("Copy"), "copy")
+      )
   })
   menu.expect(Locator.text("outermost")).toExist()
   // The outermost menu tells its consumer.

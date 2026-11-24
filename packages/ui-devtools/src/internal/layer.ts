@@ -49,7 +49,8 @@ export const make = (options: {
       const excluded = new Map<string, Set<number>>()
       const inspector = InspectorInternal.make({
         size,
-        isExcluded: (entry) => excluded.get(entry.session)?.delete(entry.seq) === true
+        isExcluded: (entry) =>
+          excluded.get(entry.session)?.delete(entry.seq) === true
       })
       const history = History.make(size)
       const roots = new Map<string, BrowserHost.Pausable>()
@@ -76,37 +77,45 @@ export const make = (options: {
         inspector,
         origin: (session) => origins.get(session),
         changes: Stream.fromPubSub(changes),
-        paintable: (session, seq) => roots.has(session) && history.holds(session, seq),
+        paintable: (session, seq) =>
+          roots.has(session) && history.holds(session, seq),
         pausing: () => paused !== undefined,
         open: load(openKey) === true
       }
       const resume: Effect.Effect<void> = Effect.suspend(() => {
         const root = paused
         paused = undefined
-        return root === undefined ? Effect.void : Effect.andThen(root.resume, Effect.sync(() => lower(frame)))
+        return root === undefined
+          ? Effect.void
+          : Effect.andThen(root.resume, Effect.sync(() => lower(frame)))
       })
       const pages = Pages.of({
         paint: (session, seq) =>
           Effect.suspend(() => {
             const root = roots.get(session)
             const state = history.at(session, seq)
-            if (root === undefined || state === undefined) return Effect.undefined
+            if (root === undefined || state === undefined) {
+              return Effect.undefined
+            }
             const previous = paused
             paused = root
-            return (previous === undefined || previous === root ? Effect.void : previous.resume).pipe(
-              Effect.andThen(root.pause(state)),
-              Effect.map((painted) => {
-                raise(frame)
-                return painted
-              })
-            )
+            return (previous === undefined || previous === root
+              ? Effect.void
+              : previous.resume).pipe(
+                Effect.andThen(root.pause(state)),
+                Effect.map((painted) => {
+                  raise(frame)
+                  return painted
+                })
+              )
           }),
         resume,
         clear: (sessionId) =>
           Effect.sync(() => {
             const upTo = latest.get(sessionId)
             if (paused !== undefined || upTo === undefined) return
-            inspector.sessions().find((session) => session.id === sessionId)?.clear()
+            inspector.sessions().find((session) => session.id === sessionId)
+              ?.clear()
             history.clear(sessionId, upTo)
           }),
         setOpen: (open) => Effect.sync(() => save(openKey, open))
@@ -135,10 +144,13 @@ export const make = (options: {
           "background:transparent;color-scheme:light dark;max-width:none;max-height:none;" +
           "box-shadow:0 8px 28px rgb(0 0 0 / .14)"
       )
-      frame.srcdoc = "<!doctype html><html><head><meta charset=\"utf-8\"><style>" + styles +
+      frame.srcdoc =
+        "<!doctype html><html><head><meta charset=\"utf-8\"><style>" + styles +
         "</style></head><body><div id=\"root\"></div></body></html>"
       yield* Effect.callback<void>((resume) => {
-        frame.addEventListener("load", () => resume(Effect.void), { once: true })
+        frame.addEventListener("load", () => resume(Effect.void), {
+          once: true
+        })
         document.body.appendChild(frame)
       })
       yield* Effect.addFinalizer(() => Effect.sync(() => frame.remove()))
@@ -148,20 +160,36 @@ export const make = (options: {
       const root = inner.documentElement
       root.setAttribute("data-position", position)
       const resize = (width: number, height: number) => {
-        root.style.setProperty("--panel-w", Math.max(480, Math.round(width)) + "px")
-        root.style.setProperty("--panel-h", Math.max(300, Math.round(height)) + "px")
+        root.style.setProperty(
+          "--panel-w",
+          Math.max(480, Math.round(width)) + "px"
+        )
+        root.style.setProperty(
+          "--panel-h",
+          Math.max(300, Math.round(height)) + "px"
+        )
       }
       const saved = load(sizeKey)
-      if (Array.isArray(saved) && typeof saved[0] === "number" && typeof saved[1] === "number") {
+      if (
+        Array.isArray(saved) && typeof saved[0] === "number" &&
+        typeof saved[1] === "number"
+      ) {
         resize(saved[0], saved[1])
       }
-      const grow = { x: position.endsWith("Right") ? -1 : 1, y: position.startsWith("Bottom") ? -1 : 1 }
+      const grow = {
+        x: position.endsWith("Right") ? -1 : 1,
+        y: position.startsWith("Bottom") ? -1 : 1
+      }
       container.addEventListener("pointerdown", (event) => {
         const grip = (event.target as Element).closest<HTMLElement>(".grip")
         const panel = grip?.parentElement
         if (grip == null || panel == null || event.button !== 0) return
         event.preventDefault()
-        const start = { x: event.screenX, y: event.screenY, rect: panel.getBoundingClientRect() }
+        const start = {
+          x: event.screenX,
+          y: event.screenY,
+          rect: panel.getBoundingClientRect()
+        }
         const move = (moved: PointerEvent) =>
           resize(
             start.rect.width + grow.x * (moved.screenX - start.x),
@@ -184,30 +212,44 @@ export const make = (options: {
       }
       viewport()
       view?.addEventListener("resize", viewport)
-      yield* Effect.addFinalizer(() => Effect.sync(() => view?.removeEventListener("resize", viewport)))
-      const Observer = (frame.contentWindow as (Window & typeof globalThis) | null)?.ResizeObserver
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => view?.removeEventListener("resize", viewport))
+      )
+      const Observer =
+        (frame.contentWindow as (Window & typeof globalThis) | null)
+          ?.ResizeObserver
       if (Observer !== undefined) {
         const observer = new Observer(() => {
           const shape = container.firstElementChild?.firstElementChild
           frame.style.width = container.offsetWidth + "px"
           frame.style.height = container.offsetHeight + "px"
-          frame.style.borderRadius = shape == null ? "0" : inner.defaultView!.getComputedStyle(shape).borderRadius
+          frame.style.borderRadius = shape == null
+            ? "0"
+            : inner.defaultView!.getComputedStyle(shape).borderRadius
         })
         observer.observe(container)
-        yield* Effect.addFinalizer(() => Effect.sync(() => observer.disconnect()))
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => observer.disconnect())
+        )
       }
 
-      yield* BrowserHost.mountEffect(Overlay, { feed }, container, { head: false }).pipe(
+      yield* BrowserHost.mountEffect(Overlay, { feed }, container, {
+        head: false
+      }).pipe(
         Effect.provideService(MessageLog.MessageLog, MessageLog.noop),
         Effect.provide(
-          Layer.mergeAll(Paint.layer, Clear.layer, SaveOpen.layer).pipe(Layer.provide(Layer.succeed(Pages, pages)))
+          Layer.mergeAll(Paint.layer, Clear.layer, SaveOpen.layer).pipe(
+            Layer.provide(Layer.succeed(Pages, pages))
+          )
         )
       )
 
       const encoded = yield* MessageLog.makeEncoded((batch) =>
         Effect.suspend(() => {
           for (const entry of batch) {
-            if (!origins.has(entry.session)) origins.set(entry.session, entry.at)
+            if (!origins.has(entry.session)) {
+              origins.set(entry.session, entry.at)
+            }
             latest.set(entry.session, entry.seq)
           }
           inspector.ingest(batch)
@@ -224,6 +266,8 @@ export const make = (options: {
         history.record(entry, hide)
       }
       const log = MessageLog.fanoutAll([{ enabled: true, record }, encoded])
-      return Context.make(MessageLog.MessageLog, log).pipe(Context.add(BrowserHost.Pausables, pausables))
+      return Context.make(MessageLog.MessageLog, log).pipe(
+        Context.add(BrowserHost.Pausables, pausables)
+      )
     })
   )

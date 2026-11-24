@@ -25,7 +25,11 @@ import "@effect/ui/html/register"
 // picker.
 import { NoteLinkPicker } from "./fixtures/notes/components/NoteLinkPicker.ts"
 
-const Main = BrowserHost.mount(NoteLinkPicker, { noteId: "welcome" }, document.getElementById("app")!).pipe(
+const Main = BrowserHost.mount(
+  NoteLinkPicker,
+  { noteId: "welcome" },
+  document.getElementById("app")!
+).pipe(
   Layer.provide(FetchHttpClient.layer)
 )
 

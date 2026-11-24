@@ -12,5 +12,7 @@ export class SearchPeople extends Query.Service<SearchPeople>()(
     error: Schema.Never,
     staleTime: "Infinity"
   },
-  Effect.succeed(({ searchText }) => Effect.as(Effect.sleep(SEARCH_LATENCY), searchPeople(searchText)))
+  Effect.succeed(({ searchText }) =>
+    Effect.as(Effect.sleep(SEARCH_LATENCY), searchPeople(searchText))
+  )
 ) {}

@@ -28,13 +28,18 @@ const apply = (states: Map<number, Held>, entry: MessageLog.Entry) => {
       return
     case "PropsChanged": {
       const held = states.get(entry.instance)
-      if (held !== undefined) states.set(entry.instance, { ...held, props: entry.props })
+      if (held !== undefined) {
+        states.set(entry.instance, { ...held, props: entry.props })
+      }
       return
     }
     case "QueryChanged": {
       const held = states.get(entry.instance)
       if (held !== undefined) {
-        states.set(entry.instance, { ...held, queries: { ...held.queries, [entry.name]: entry.result } })
+        states.set(entry.instance, {
+          ...held,
+          queries: { ...held.queries, [entry.name]: entry.result }
+        })
       }
       return
     }
@@ -52,17 +57,22 @@ const makeSession = (size: number) => {
   const drop = () => {
     const oldest = entries.shift()!
     shown.delete(oldest.seq)
-    if (oldest._tag === "Update" && coalesced.get(oldest.instance) === oldest) coalesced.delete(oldest.instance)
+    if (oldest._tag === "Update" && coalesced.get(oldest.instance) === oldest) {
+      coalesced.delete(oldest.instance)
+    }
     apply(base, oldest)
   }
   return {
     record: (entry: MessageLog.Entry, excluded = false) => {
       if (excluded && entry._tag === "Update") {
         const replaced = coalesced.get(entry.instance)
-        if (replaced !== undefined) entries.splice(entries.lastIndexOf(replaced), 1)
-        const merged = entry.queries === undefined && replaced?.queries !== undefined
-          ? { ...entry, queries: replaced.queries }
-          : entry
+        if (replaced !== undefined) {
+          entries.splice(entries.lastIndexOf(replaced), 1)
+        }
+        const merged =
+          entry.queries === undefined && replaced?.queries !== undefined
+            ? { ...entry, queries: replaced.queries }
+            : entry
         entries.push(merged)
         coalesced.set(entry.instance, merged)
         return
@@ -97,7 +107,9 @@ export const make = (size: number): History => {
   return {
     record: (entry, excluded) => {
       let session = sessions.get(entry.session)
-      if (session === undefined) sessions.set(entry.session, session = makeSession(size))
+      if (session === undefined) {
+        sessions.set(entry.session, session = makeSession(size))
+      }
       session.record(entry, excluded)
     },
     clear: (session, upTo) => {

@@ -1,4 +1,10 @@
-import { Note, NoteNotFound, NoteResults, NoteSaveError, type NoteSort } from "#domain/Note"
+import {
+  Note,
+  NoteNotFound,
+  NoteResults,
+  NoteSaveError,
+  type NoteSort
+} from "#domain/Note"
 import { Context, Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 
@@ -52,7 +58,9 @@ export class Notes extends Context.Service<Notes, {
           HttpClientRequest.bodyJsonUnsafe(note),
           client.execute,
           Effect.flatMap(HttpClientResponse.schemaBodyJson(Note)),
-          Effect.mapError((cause) => new NoteSaveError({ reason: cause.message }))
+          Effect.mapError((cause) =>
+            new NoteSaveError({ reason: cause.message })
+          )
         )
 
       const search = ({ page, q, sort }: NoteSearch) =>
@@ -78,11 +86,17 @@ export class Notes extends Context.Service<Notes, {
         get: (id) =>
           Effect.suspend(() => {
             const note = notes.get(id)
-            return note === undefined ? Effect.fail(new NoteNotFound({ id })) : Effect.succeed(note)
+            return note === undefined
+              ? Effect.fail(new NoteNotFound({ id }))
+              : Effect.succeed(note)
           }),
         save: (note) =>
           Effect.suspend(() => {
-            if (note.title === "") return Effect.fail(new NoteSaveError({ reason: "A note needs a title" }))
+            if (note.title === "") {
+              return Effect.fail(
+                new NoteSaveError({ reason: "A note needs a title" })
+              )
+            }
             notes.set(note.id, note)
             return Effect.succeed(note)
           }),
@@ -90,8 +104,14 @@ export class Notes extends Context.Service<Notes, {
           Effect.sync(() => {
             const needle = q.toLowerCase()
             const found = Array.from(notes.values())
-              .filter((note) => `${note.title} ${note.body}`.toLowerCase().includes(needle))
-              .sort((a, b) => sort === "asc" ? a.title.localeCompare(b.title) : b.title.localeCompare(a.title))
+              .filter((note) =>
+                `${note.title} ${note.body}`.toLowerCase().includes(needle)
+              )
+              .sort((a, b) =>
+                sort === "asc"
+                  ? a.title.localeCompare(b.title)
+                  : b.title.localeCompare(a.title)
+              )
             return {
               notes: found.slice((page - 1) * pageSize, page * pageSize),
               pages: Math.max(1, Math.ceil(found.length / pageSize))

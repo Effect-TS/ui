@@ -11,18 +11,37 @@ import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import * as Positioning from "../Positioning.ts"
-import { type Attributed, attrSelector, flag, separatorAttrs, visuallyHidden, withStyle } from "./attributes.ts"
+import {
+  type Attributed,
+  attrSelector,
+  flag,
+  separatorAttrs,
+  visuallyHidden,
+  withStyle
+} from "./attributes.ts"
 import { backdropBox, blockers, cutPath } from "./blocker.ts"
 import { byAttribute, focusFinal } from "./dom.ts"
 import { textFilter } from "./filter.ts"
-import { autofillMatch, filledOf, formInputs, toggled, valuesOf } from "./formInputs.ts"
+import {
+  autofillMatch,
+  filledOf,
+  formInputs,
+  toggled,
+  valuesOf
+} from "./formInputs.ts"
 import { methodOf } from "./interaction.ts"
 import { available, grouped, type Loop, stepped, valued } from "./list.ts"
 import { hideOthers, holdScroll, nextLayerOrder } from "./modal.ts"
 import { listenOutside, releasedOutside } from "./outside.ts"
 import { fillValue } from "./range.ts"
 import { raiseAbove } from "./topLayer.ts"
-import { frameOf, settling, statusOf, transitionAttrs, type TransitionStatus } from "./transition.ts"
+import {
+  frameOf,
+  settling,
+  statusOf,
+  transitionAttrs,
+  type TransitionStatus
+} from "./transition.ts"
 import { printable, typeahead } from "./typeahead.ts"
 
 export const Item = Schema.Struct({
@@ -43,7 +62,12 @@ export interface Group {
 
 export type { TransitionStatus }
 
-export const Interaction = Schema.Literals(["mouse", "touch", "pen", "keyboard"])
+export const Interaction = Schema.Literals([
+  "mouse",
+  "touch",
+  "pen",
+  "keyboard"
+])
 
 export type Interaction = typeof Interaction.Type
 
@@ -65,7 +89,10 @@ export const TextReason = Schema.Literals([
 
 export type TextReason = typeof TextReason.Type
 
-export const ChangeReason = Schema.Literals([...TextReason.literals, "chip-remove-press"])
+export const ChangeReason = Schema.Literals([
+  ...TextReason.literals,
+  "chip-remove-press"
+])
 
 export type ChangeReason = typeof ChangeReason.Type
 
@@ -73,16 +100,30 @@ export const HighlightReason = Schema.Literals(["keyboard", "pointer", "none"])
 
 export type HighlightReason = typeof HighlightReason.Type
 
-export const FilterMode = Schema.Literals(["contains", "startsWith", "endsWith", "none"])
+export const FilterMode = Schema.Literals([
+  "contains",
+  "startsWith",
+  "endsWith",
+  "none"
+])
 
 export type FilterMode = typeof FilterMode.Type
 
 export interface Emits<E> {
   readonly requestedOpen: (reason: TextReason) => E
   readonly requestedClose: (reason: TextReason) => E
-  readonly picked?: ((value: string | ReadonlyArray<string> | null, reason: ChangeReason) => E) | undefined
+  readonly picked?:
+    | ((
+      value: string | ReadonlyArray<string> | null,
+      reason: ChangeReason
+    ) => E)
+    | undefined
   readonly edited: (inputValue: string, reason: TextReason) => E
-  readonly highlighted: (value: string | null, index: number, reason: HighlightReason) => E
+  readonly highlighted: (
+    value: string | null,
+    index: number,
+    reason: HighlightReason
+  ) => E
   readonly settled: (open: boolean) => E
 }
 
@@ -127,7 +168,11 @@ type AnySettings = Settings<unknown>
 export const Message = UiSchema.TaggedEnum({
   PressedInput: { pointerType: Schema.String },
   PressedGroup: { pointerType: Schema.String },
-  ChangedInput: { value: Schema.String, inputType: Schema.String, composing: Schema.Boolean },
+  ChangedInput: {
+    value: Schema.String,
+    inputType: Schema.String,
+    composing: Schema.Boolean
+  },
   PressedInputKey: { key: Schema.String, chips: Schema.Boolean },
   ReleasedInputKey: { key: Schema.String },
   FocusedInput: {},
@@ -178,7 +223,9 @@ export const Model = Schema.Struct({
   typedFrom: Schema.Number,
   matched: Schema.Number,
   placement: Schema.NullOr(Positioning.Placement),
-  completion: Schema.NullOr(Schema.Struct({ label: Schema.String, from: Schema.String }))
+  completion: Schema.NullOr(
+    Schema.Struct({ label: Schema.String, from: Schema.String })
+  )
 })
 
 export type Model = typeof Model.Type
@@ -213,51 +260,75 @@ const Chip = Html.ref("ComboboxChip", "div")
 const WaitBeforeResetTyping = Command.make(
   "WaitBeforeResetTyping",
   { args: {}, mode: "switch" },
-  () => Effect.as(Effect.sleep(Duration.millis(750)), Message.CompletedWaitBeforeResetTyping())
+  () =>
+    Effect.as(
+      Effect.sleep(Duration.millis(750)),
+      Message.CompletedWaitBeforeResetTyping()
+    )
 )
 
-const lockedOf = (props: AnySettings): boolean => props.disabled === true || props.readOnly === true
+const lockedOf = (props: AnySettings): boolean =>
+  props.disabled === true || props.readOnly === true
 
-const navigableOf = (props: AnySettings): boolean => props.open || props.inline === true
+const navigableOf = (props: AnySettings): boolean =>
+  props.open || props.inline === true
 
-const selectableOf = (props: AnySettings): boolean => props.emits.picked !== undefined
+const selectableOf = (props: AnySettings): boolean =>
+  props.emits.picked !== undefined
 
-const autoOf = (props: AnySettings): boolean => props.autoHighlight !== undefined && props.autoHighlight !== false
+const autoOf = (props: AnySettings): boolean =>
+  props.autoHighlight !== undefined && props.autoHighlight !== false
 
 const completesOf = (props: AnySettings): boolean =>
   (props.mode === "inline" || props.mode === "both") && props.readOnly !== true
 
-const nonEmptyOf = (props: AnySettings): boolean => selectableOf(props) ? filledOf(props) : props.inputValue !== ""
+const nonEmptyOf = (props: AnySettings): boolean =>
+  selectableOf(props) ? filledOf(props) : props.inputValue !== ""
 
 const displayedOf = (model: Model, props: AnySettings): string =>
-  model.completion !== null && model.completion.from === props.inputValue && completesOf(props) &&
+  model.completion !== null && model.completion.from === props.inputValue &&
+    completesOf(props) &&
     navigableOf(props)
     ? model.completion.label
     : props.inputValue
 
 const itemOf = (props: AnySettings, value: string): Item | undefined =>
-  props.items.find((item) => item.value === value) ?? props.filteredItems?.find((item) => item.value === value)
+  props.items.find((item) => item.value === value) ??
+    props.filteredItems?.find((item) => item.value === value)
 
 const selectedLabelOf = (props: AnySettings): string => {
   if (props.multiple === true) return ""
   const value = valuesOf(props)[0]
-  return value === undefined || value === "" ? "" : itemOf(props, value)?.label ?? value
+  return value === undefined || value === ""
+    ? ""
+    : itemOf(props, value)?.label ?? value
 }
 
 const queryOf = (model: Model, props: AnySettings, open: boolean): string =>
-  !open && model.closeQuery !== null ? model.closeQuery : props.inputValue.trim()
+  !open && model.closeQuery !== null
+    ? model.closeQuery
+    : props.inputValue.trim()
 
 const bypassed = (model: Model, props: AnySettings, query: string): boolean => {
-  if (props.multiple === true || model.queryChanged || query === "") return false
+  if (props.multiple === true || model.queryChanged || query === "") {
+    return false
+  }
   const label = selectedLabelOf(props)
-  return label.length === query.length && textFilter(props.locale).contains(label, query)
+  return label.length === query.length &&
+    textFilter(props.locale).contains(label, query)
 }
 
-const shownOf = (model: Model, props: AnySettings, open = props.open): ReadonlyArray<Item> => {
+const shownOf = (
+  model: Model,
+  props: AnySettings,
+  open = props.open
+): ReadonlyArray<Item> => {
   const query = queryOf(model, props, open)
   const bypass = bypassed(model, props, query)
   if (props.filteredItems !== undefined && !bypass) return props.filteredItems
-  const filter = props.mode === "inline" || props.mode === "none" ? "none" : props.filter ?? "contains"
+  const filter = props.mode === "inline" || props.mode === "none"
+    ? "none"
+    : props.filter ?? "contains"
   const match = textFilter(props.locale)
   const text = bypass ? "" : query
   const limit = props.limit ?? -1
@@ -269,20 +340,28 @@ const shownOf = (model: Model, props: AnySettings, open = props.open): ReadonlyA
   return shown
 }
 
-const highlightedOf = (model: Model, props: AnySettings, shown: ReadonlyArray<Item>): string | null =>
+const highlightedOf = (
+  model: Model,
+  props: AnySettings,
+  shown: ReadonlyArray<Item>
+): string | null =>
   model.active !== null && shown.some((item) => item.value === model.active)
     ? model.active
-    : model.autoFirst || (props.autoHighlight === "always" && navigableOf(props))
+    : model.autoFirst ||
+        (props.autoHighlight === "always" && navigableOf(props))
     ? shown[0]?.value ?? null
     : null
 
-const rowsOf = (items: ReadonlyArray<Item>): ReadonlyArray<ReadonlyArray<number>> => {
+const rowsOf = (
+  items: ReadonlyArray<Item>
+): ReadonlyArray<ReadonlyArray<number>> => {
   const rows: Array<Array<number>> = []
   items.forEach((item, index) => {
     const before = items[index - 1]
     const last = rows[rows.length - 1]
     if (
-      last !== undefined && before !== undefined && item.row !== undefined && before.row === item.row &&
+      last !== undefined && before !== undefined && item.row !== undefined &&
+      before.row === item.row &&
       before.group === item.group
     ) last.push(index)
     else rows.push([index])
@@ -304,22 +383,30 @@ const groupsOf = (items: ReadonlyArray<Item>): ReadonlyArray<Group> => {
   }))
 }
 
-const focus = <E>(step: Step<E>, ref: typeof Input | typeof Trigger | typeof Chip): Step<E> =>
-  step.run(HtmlCommand.Focus.make({ ref }).pipe(Command.asNoop))
+const focus = <E>(
+  step: Step<E>,
+  ref: typeof Input | typeof Trigger | typeof Chip
+): Step<E> => step.run(HtmlCommand.Focus.make({ ref }).pipe(Command.asNoop))
 
 const picked = <E>(
   step: Step<E>,
   props: Settings<E>,
   value: string | ReadonlyArray<string> | null,
   reason: ChangeReason
-): Step<E> => props.emits.picked === undefined ? step : step.emit(props.emits.picked(value, reason))
+): Step<E> =>
+  props.emits.picked === undefined
+    ? step
+    : step.emit(props.emits.picked(value, reason))
 
 const rewrite = <E>(
   step: Step<E>,
   props: Settings<E>,
   inputValue: string,
   reason: TextReason
-): Step<E> => props.inputValue === inputValue ? step : step.emit(props.emits.edited(inputValue, reason))
+): Step<E> =>
+  props.inputValue === inputValue
+    ? step
+    : step.emit(props.emits.edited(inputValue, reason))
 
 const highlight = <E>(
   step: Step<E>,
@@ -338,10 +425,19 @@ const highlight = <E>(
     : label === undefined
     ? null
     : { label, from: props.inputValue }
-  const next = step.evolve({ active: value, activeByKey: byKey, autoFirst: false, completion })
+  const next = step.evolve({
+    active: value,
+    activeByKey: byKey,
+    autoFirst: false,
+    completion
+  })
   const after = highlightedOf(next.model, props, shown)
   return before === after ? next : next.emit(
-    props.emits.highlighted(after, after === null ? -1 : shown.findIndex((item) => item.value === after), reason)
+    props.emits.highlighted(
+      after,
+      after === null ? -1 : shown.findIndex((item) => item.value === after),
+      reason
+    )
   )
 }
 
@@ -369,11 +465,15 @@ const open = <E>(
   if (closeQuery !== null) {
     const typed = reason === "input-change"
     const label = selectedLabelOf(props)
-    const clears = !typed && selectableOf(props) && props.inputInPopup === true && props.inline !== true &&
+    const clears = !typed && selectableOf(props) &&
+      props.inputInPopup === true && props.inline !== true &&
       inputValue !== "" &&
       (inputValue.trim() === closeQuery || inputValue === label)
-    const matchesSelected = props.multiple !== true && props.inputInPopup !== true && inputValue === label
-    if (!typed && (clears || inputValue === "" || matchesSelected)) next = next.evolve({ queryChanged: false })
+    const matchesSelected = props.multiple !== true &&
+      props.inputInPopup !== true && inputValue === label
+    if (!typed && (clears || inputValue === "" || matchesSelected)) {
+      next = next.evolve({ queryChanged: false })
+    }
     next = next.evolve({ closeQuery: null })
     if (clears) {
       next = rewrite(next, props, "", "input-clear")
@@ -386,7 +486,8 @@ const open = <E>(
     focusLeft: false,
     pressedItem: null,
     typed: "",
-    pressing: reason === "trigger-press" && props.inputInPopup === true && (method === "mouse" || method === "pen")
+    pressing: reason === "trigger-press" && props.inputInPopup === true &&
+      (method === "mouse" || method === "pen")
   }).emit(props.emits.requestedOpen(reason))
   const opened = { ...props, open: true, inputValue }
   const shown = shownOf(next.model, opened, true)
@@ -394,8 +495,12 @@ const open = <E>(
   if (reason !== "input-change" && !next.model.queryChanged) {
     const chosen = new Set(valuesOf(props))
     target = shown.find((item) => chosen.has(item.value))?.value ?? null
-    if (target === null && reason === "list-navigation" && (selectableOf(props) || autoOf(props))) {
-      target = (key === "ArrowUp" ? shown[shown.length - 1] : shown[0])?.value ?? null
+    if (
+      target === null && reason === "list-navigation" &&
+      (selectableOf(props) || autoOf(props))
+    ) {
+      target =
+        (key === "ArrowUp" ? shown[shown.length - 1] : shown[0])?.value ?? null
     }
   }
   next = highlight(
@@ -407,7 +512,9 @@ const open = <E>(
     method === "keyboard",
     highlightedOf(next.model, props, shown)
   )
-  return reason === "input-change" && autoOf(props) ? next.evolve({ autoFirst: true }) : next
+  return reason === "input-change" && autoOf(props)
+    ? next.evolve({ autoFirst: true })
+    : next
 }
 
 const dismiss = <E>(
@@ -427,25 +534,46 @@ const dismiss = <E>(
       if (query === "") next = next.evolve({ queryChanged: false })
     } else {
       if (props.inputInPopup === true) next = unhighlight(next, props, "none")
-      if (props.inputInPopup !== true || inline) next = rewrite(next, props, "", "input-clear")
+      if (props.inputInPopup !== true || inline) {
+        next = rewrite(next, props, "", "input-clear")
+      }
     }
   }
-  return next.evolve({ closeMethod: method, focusLeft, pressing: false, completion: null })
+  return next.evolve({
+    closeMethod: method,
+    focusLeft,
+    pressing: false,
+    completion: null
+  })
     .emit(props.emits.requestedClose(reason))
 }
 
-const toggle = <E>(step: Step<E>, props: Settings<E>, method: Interaction): Step<E> =>
+const toggle = <E>(
+  step: Step<E>,
+  props: Settings<E>,
+  method: Interaction
+): Step<E> =>
   props.disabled === true
     ? step
     : props.open
     ? dismiss(step, props, "trigger-press", method)
     : open(step, props, "trigger-press", method)
 
-const pick = <E>(step: Step<E>, props: Settings<E>, value: string, method: Interaction): Step<E> => {
+const pick = <E>(
+  step: Step<E>,
+  props: Settings<E>,
+  value: string,
+  method: Interaction
+): Step<E> => {
   const item = itemOf(props, value)
   if (item === undefined || !available(item) || lockedOf(props)) return step
   if (props.multiple === true) {
-    const added = picked(step, props, toggled(valuesOf(props), value), "item-press")
+    const added = picked(
+      step,
+      props,
+      toggled(valuesOf(props), value),
+      "item-press"
+    )
     if (props.inputValue.trim() === "") return added
     return props.inputInPopup === true
       ? rewrite(added, props, "", "input-clear")
@@ -453,22 +581,32 @@ const pick = <E>(step: Step<E>, props: Settings<E>, value: string, method: Inter
   }
   const chosen = picked(step, props, value, "item-press")
   const closed = dismiss(
-    props.inputInPopup === true && selectableOf(props) ? chosen : rewrite(chosen, props, item.label, "item-press"),
+    props.inputInPopup === true && selectableOf(props)
+      ? chosen
+      : rewrite(chosen, props, item.label, "item-press"),
     props,
     "item-press",
     method
   )
   return props.submitOnItemClick === true
     ? closed.run(
-      HtmlCommand.RequestSubmit.make({ ref: props.inputInPopup === true ? Trigger : Input }).pipe(Command.asNoop)
+      HtmlCommand.RequestSubmit.make({
+        ref: props.inputInPopup === true ? Trigger : Input
+      }).pipe(Command.asNoop)
     )
     : closed
 }
 
-const clear = <E>(step: Step<E>, props: Settings<E>, reason: TextReason): Step<E> => {
+const clear = <E>(
+  step: Step<E>,
+  props: Settings<E>,
+  reason: TextReason
+): Step<E> => {
   if (lockedOf(props)) return step
   const cleared = rewrite(step, props, "", reason)
-  return filledOf(props) ? picked(cleared, props, props.multiple === true ? [] : null, reason) : cleared
+  return filledOf(props)
+    ? picked(cleared, props, props.multiple === true ? [] : null, reason)
+    : cleared
 }
 
 const navigate = <E>(
@@ -484,17 +622,30 @@ const navigate = <E>(
   const loop: Loop = !loops ? "none" : autoOf(props) ? "wrap" : "escape"
   let index: number
   if (props.grid === true && (key === "ArrowLeft" || key === "ArrowRight")) {
-    index = stepped(at, last, (key === "ArrowRight") !== (props.dir === "rtl") ? 1 : -1, loops ? "wrap" : "none")
+    index = stepped(
+      at,
+      last,
+      (key === "ArrowRight") !== (props.dir === "rtl") ? 1 : -1,
+      loops ? "wrap" : "none"
+    )
   } else if (props.grid === true && at !== -1) {
     const rows = rowsOf(shown)
     const row = rows.findIndex((cells) => cells.includes(at))
     const column = rows[row]!.indexOf(at)
-    const next = rows[stepped(row, rows.length - 1, key === "ArrowDown" ? 1 : -1, loop)]
+    const next =
+      rows[stepped(row, rows.length - 1, key === "ArrowDown" ? 1 : -1, loop)]
     index = next === undefined ? -1 : next[Math.min(column, next.length - 1)]!
   } else {
     index = stepped(at, last, key === "ArrowDown" ? 1 : -1, loop)
   }
-  return highlight(step, props, shown, shown[index]?.value ?? null, "keyboard", true)
+  return highlight(
+    step,
+    props,
+    shown,
+    shown[index]?.value ?? null,
+    "keyboard",
+    true
+  )
 }
 
 const edit = <E>(
@@ -511,9 +662,15 @@ const edit = <E>(
   const inPopup = props.inputInPopup === true
   let next = step
   if (composing) {
-    if (value === "" && props.openOnInputClick === false && !inPopup) next = dismiss(next, props, "input-clear", null)
-    if (!props.open && query !== "") return open(next, props, "input-change", "keyboard")
-    return navigable && !(auto && query !== "") ? unhighlight(next, props, "none", step.model) : next
+    if (value === "" && props.openOnInputClick === false && !inPopup) {
+      next = dismiss(next, props, "input-clear", null)
+    }
+    if (!props.open && query !== "") {
+      return open(next, props, "input-change", "keyboard")
+    }
+    return navigable && !(auto && query !== "")
+      ? unhighlight(next, props, "none", step.model)
+      : next
   }
   const typed = inputType !== "" && inputType !== "insertReplacementText"
   next = next.emit(props.emits.edited(value, "input-change"))
@@ -522,13 +679,24 @@ const edit = <E>(
     if (props.open) next = next.evolve({ closeQuery: null })
   }
   if (value === "" && !inPopup) {
-    if (props.multiple !== true && filledOf(props)) next = picked(next, props, null, "input-clear")
-    if (props.openOnInputClick === false) next = dismiss(next, props, "input-clear", null)
+    if (props.multiple !== true && filledOf(props)) {
+      next = picked(next, props, null, "input-clear")
+    }
+    if (props.openOnInputClick === false) {
+      next = dismiss(next, props, "input-clear", null)
+    }
   }
   if (!props.open && typed && query !== "") {
-    return open(next, { ...props, inputValue: value }, "input-change", "keyboard")
+    return open(
+      next,
+      { ...props, inputValue: value },
+      "input-change",
+      "keyboard"
+    )
   }
-  if (auto && typed) return next.evolve({ active: null, autoFirst: query !== "" })
+  if (auto && typed) {
+    return next.evolve({ active: null, autoFirst: query !== "" })
+  }
   return navigable ? unhighlight(next, props, "none", step.model) : next
 }
 
@@ -541,18 +709,33 @@ const removeChip = <E>(
   if (lockedOf(props)) return step
   const values = valuesOf(props)
   if (!values.includes(value)) return step
-  const removed = picked(unhighlight(step, props, "keyboard"), props, values.filter((other) => other !== value), reason)
+  const removed = picked(
+    unhighlight(step, props, "keyboard"),
+    props,
+    values.filter((other) => other !== value),
+    reason
+  )
   return reason === "chip-remove-press" ? focus(removed, Input) : removed
 }
 
-const hover = <E>(step: Step<E>, props: Settings<E>, value: string | null): Step<E> =>
-  props.highlightItemOnHover === false || !navigableOf(props) || (value === null && props.keepHighlight === true)
+const hover = <E>(
+  step: Step<E>,
+  props: Settings<E>,
+  value: string | null
+): Step<E> =>
+  props.highlightItemOnHover === false || !navigableOf(props) ||
+    (value === null && props.keepHighlight === true)
     ? step
     : value === null
     ? unhighlight(step, props, "pointer")
     : highlight(step, props, shownOf(step.model, props), value, "pointer")
 
-const pressInputKey = <E>(step: Step<E>, props: Settings<E>, key: string, chips: boolean): Step<E> => {
+const pressInputKey = <E>(
+  step: Step<E>,
+  props: Settings<E>,
+  key: string,
+  chips: boolean
+): Step<E> => {
   const values = valuesOf(props)
   switch (key) {
     case "ArrowDown":
@@ -564,19 +747,33 @@ const pressInputKey = <E>(step: Step<E>, props: Settings<E>, key: string, chips:
     case "ArrowRight": {
       if (props.grid === true && navigableOf(props)) {
         const shown = shownOf(step.model, props)
-        if (highlightedOf(step.model, props, shown) !== null) return navigate(step, props, shown, key)
+        if (highlightedOf(step.model, props, shown) !== null) {
+          return navigate(step, props, shown, key)
+        }
       }
-      return chips && values.length > 0 ? focus(step, Chip.at(values[values.length - 1]!)) : step
+      return chips && values.length > 0
+        ? focus(step, Chip.at(values[values.length - 1]!))
+        : step
     }
     case "Enter":
     case " ": {
-      const highlighted = highlightedOf(step.model, props, shownOf(step.model, props))
-      return highlighted === null ? step : pick(step, props, highlighted, "keyboard")
+      const highlighted = highlightedOf(
+        step.model,
+        props,
+        shownOf(step.model, props)
+      )
+      return highlighted === null
+        ? step
+        : pick(step, props, highlighted, "keyboard")
     }
     case "Escape":
-      return props.open ? dismiss(step, props, "escape-key", "keyboard") : clear(step, props, "escape-key")
+      return props.open
+        ? dismiss(step, props, "escape-key", "keyboard")
+        : clear(step, props, "escape-key")
     case "Backspace":
-      return values.length > 0 ? removeChip(step, props, values[values.length - 1]!, "none") : step
+      return values.length > 0
+        ? removeChip(step, props, values[values.length - 1]!, "none")
+        : step
     default:
       return step
   }
@@ -603,7 +800,9 @@ const following = (document: Document, list: () => HTMLElement | null) => {
   const reveal = () =>
     frame(() => {
       if (current !== null && current.active !== null && !current.virtualized) {
-        document.getElementById(current.active)?.scrollIntoView({ block: "nearest" })
+        document.getElementById(current.active)?.scrollIntoView({
+          block: "nearest"
+        })
       }
     })
   const toTop = () => {
@@ -651,27 +850,41 @@ type TrackComboboxArgs = Schema.Struct<typeof TrackComboboxArgs>["Type"]
 
 const blocking = blockers("data-combobox-blocker")
 
-const watch = (node: HTMLElement, args: TrackComboboxArgs, changes: Stream.Stream<TrackComboboxArgs>) =>
+const watch = (
+  node: HTMLElement,
+  args: TrackComboboxArgs,
+  changes: Stream.Stream<TrackComboboxArgs>
+) =>
   Stream.callback<Message>((queue) => {
     const document = node.ownerDocument
     const view = document.defaultView
     const frame = frameOf(view)
     let current = args
     const send = (message: Message) => Queue.offerUnsafe(queue, message)
-    const popup = (): HTMLElement => document.getElementById(current.popupId) ?? node
-    const list = (): HTMLElement | null => document.getElementById(current.listId)
+    const popup = (): HTMLElement =>
+      document.getElementById(current.popupId) ?? node
+    const list = (): HTMLElement | null =>
+      document.getElementById(current.listId)
     const owned = (): Array<HTMLElement> =>
-      Array.from(document.querySelectorAll<HTMLElement>(attrSelector("data-combobox-inside", current.owner)))
-    const find = (name: string): HTMLElement | null => byAttribute(document, name, current.owner)
+      Array.from(
+        document.querySelectorAll<HTMLElement>(
+          attrSelector("data-combobox-inside", current.owner)
+        )
+      )
+    const find = (name: string): HTMLElement | null =>
+      byAttribute(document, name, current.owner)
     const inside = (target: Node): boolean =>
-      (node.contains(target) && !blocking.owns(node, target)) || owned().some((element) => element.contains(target))
+      (node.contains(target) && !blocking.owns(node, target)) ||
+      owned().some((element) => element.contains(target))
 
     const cut = () => {
-      const layer = Array.from(node.children).find(blocking.is) as HTMLElement | undefined
+      const layer = Array.from(node.children).find(blocking.is) as
+        | HTMLElement
+        | undefined
       if (layer === undefined) return
-      const holes = owned().filter((element) => !node.contains(element)).map((element) =>
-        element.getBoundingClientRect()
-      )
+      const holes = owned().filter((element) => !node.contains(element)).map((
+        element
+      ) => element.getBoundingClientRect())
       layer.style.setProperty("clip-path", cutPath(holes))
     }
 
@@ -694,17 +907,33 @@ const watch = (node: HTMLElement, args: TrackComboboxArgs, changes: Stream.Strea
       node.inert = false
       cut()
       if (current.inputInPopup) {
-        const input = popup().querySelector<HTMLElement>(attrSelector("data-combobox-input", current.owner))
-        ;(current.touch || input === null ? popup() : input).focus({ preventScroll: true })
+        const input = popup().querySelector<HTMLElement>(
+          attrSelector("data-combobox-input", current.owner)
+        )
+        ;(current.touch || input === null ? popup() : input).focus({
+          preventScroll: true
+        })
       }
-      if (!current.started) frame(() => frame(() => send(Message.RenderedFirstFrame())))
+      if (!current.started) {
+        frame(() => frame(() => send(Message.RenderedFirstFrame())))
+      }
     }
 
     const closing = () => {
       const focused = document.activeElement
-      const lost = focused === null || focused === document.body || node.contains(focused)
-      if (current.inputInPopup && current.finalFocus && (lost || !current.focusLeft)) {
-        focusFinal(document, current.popupId, find("data-combobox-trigger"), lost, current.closeMethod === "keyboard")
+      const lost = focused === null || focused === document.body ||
+        node.contains(focused)
+      if (
+        current.inputInPopup && current.finalFocus &&
+        (lost || !current.focusLeft)
+      ) {
+        focusFinal(
+          document,
+          current.popupId,
+          find("data-combobox-trigger"),
+          lost,
+          current.closeMethod === "keyboard"
+        )
       } else if (focused instanceof HTMLElement && node.contains(focused)) {
         if (current.inputInPopup) focused.blur()
         else find("data-combobox-input")?.focus({ preventScroll: true })
@@ -714,7 +943,11 @@ const watch = (node: HTMLElement, args: TrackComboboxArgs, changes: Stream.Strea
 
     const onMouseUp = (event: MouseEvent) => {
       if (!current.pressing) return
-      send(Message.ReleasedPointer({ outside: releasedOutside(event, inside, find("data-combobox-trigger")) }))
+      send(
+        Message.ReleasedPointer({
+          outside: releasedOutside(event, inside, find("data-combobox-trigger"))
+        })
+      )
     }
     const onFocusIn = (event: FocusEvent) => {
       if (current.inputInPopup || current.touch || !current.open) return
@@ -722,28 +955,45 @@ const watch = (node: HTMLElement, args: TrackComboboxArgs, changes: Stream.Strea
       if (!(target instanceof Element)) return
       if (target !== popup()) {
         const owner = list()
-        if (owner === null || !owner.contains(target) || target.closest("[role=listbox],[role=grid]") !== owner) return
-        const marked = target.closest("[data-combobox-inside],[data-combobox-positioner]")
-        if (marked !== node && marked?.getAttribute("data-combobox-inside") !== current.owner) return
+        if (
+          owner === null || !owner.contains(target) ||
+          target.closest("[role=listbox],[role=grid]") !== owner
+        ) return
+        const marked = target.closest(
+          "[data-combobox-inside],[data-combobox-positioner]"
+        )
+        if (
+          marked !== node &&
+          marked?.getAttribute("data-combobox-inside") !== current.owner
+        ) return
       }
       find("data-combobox-input")?.focus({ preventScroll: true })
     }
     const onMouseDown = (event: MouseEvent) => {
-      if (event.target instanceof Node && blocking.owns(node, event.target)) event.preventDefault()
+      if (
+        event.target instanceof Node && blocking.owns(node, event.target)
+      ) event.preventDefault()
     }
 
-    const transition = settling(node, popup, frame, (open) => send(Message.FinishedTransition({ open })))
+    const transition = settling(node, popup, frame, (open) =>
+      send(Message.FinishedTransition({ open })))
     const follow = following(document, list)
 
     const onChange = (next: TrackComboboxArgs) => {
       const previous = current
       current = next
       if (
-        next.open !== previous.open || next.modal !== previous.modal || next.hide !== previous.hide ||
+        next.open !== previous.open || next.modal !== previous.modal ||
+        next.hide !== previous.hide ||
         next.touch !== previous.touch
-      ) hold()
-      if (previous.open && !next.open) closing()
-      else if (!previous.open && next.open) opening()
+      ) {
+        hold()
+      }
+      if (previous.open && !next.open) {
+        closing()
+      } else if (!previous.open && next.open) {
+        opening()
+      }
       transition.follow(previous, next)
       follow(next.open ? next.list : null)
     }
@@ -754,12 +1004,17 @@ const watch = (node: HTMLElement, args: TrackComboboxArgs, changes: Stream.Strea
     return Effect.acquireRelease(
       Effect.sync(() => {
         listenOutside(document, signal, {
-          open: () => current.open,
+          open: () =>
+            current.open,
           inside,
-          pressed: (pointerType) => send(Message.PressedOutside({ pointerType })),
+          pressed: (pointerType) =>
+            send(Message.PressedOutside({ pointerType })),
           focused: () => send(Message.FocusedOutside())
         })
-        document.addEventListener("mouseup", onMouseUp, { capture: true, signal })
+        document.addEventListener("mouseup", onMouseUp, {
+          capture: true,
+          signal
+        })
         node.addEventListener("focusin", onFocusIn, { signal })
         node.addEventListener("mousedown", onMouseDown, { signal })
         hold()
@@ -768,7 +1023,14 @@ const watch = (node: HTMLElement, args: TrackComboboxArgs, changes: Stream.Strea
         else node.inert = true
         follow(current.open ? current.list : null)
       }).pipe(
-        Effect.tap(() => Effect.forkScoped(Stream.runForEach(changes, (next) => Effect.sync(() => onChange(next)))))
+        Effect.tap(() =>
+          Effect.forkScoped(
+            Stream.runForEach(
+              changes,
+              (next) => Effect.sync(() => onChange(next))
+            )
+          )
+        )
       ),
       () =>
         Effect.sync(() => {
@@ -787,7 +1049,11 @@ const TrackCombobox = Mount.makeStream(
   (node: HTMLElement, args, changes) =>
     Stream.merge(
       watch(node, args, changes),
-      Positioning.trackPosition(node, args.position, Stream.map(changes, (next) => next.position)).pipe(
+      Positioning.trackPosition(
+        node,
+        args.position,
+        Stream.map(changes, (next) => next.position)
+      ).pipe(
         Stream.map((placement) => Message.ChangedPlacement({ placement }))
       )
     )
@@ -800,34 +1066,43 @@ const TrackComboboxList = Mount.makeStream(
     Stream.callback<Message>(() => {
       const follow = following(node.ownerDocument, () => node)
       return Effect.sync(() => follow(args.list)).pipe(
-        Effect.andThen(Effect.forkScoped(Stream.runForEach(changes, (next) => Effect.sync(() => follow(next.list)))))
+        Effect.andThen(Effect.forkScoped(Stream.runForEach(changes, (next) =>
+          Effect.sync(() =>
+            follow(next.list)
+          ))))
       )
     })
 )
 
 const TrackComboboxChips = Mount.makeStream(
   "TrackComboboxChips",
-  { args: { owner: Schema.String, rtl: Schema.Boolean, locked: Schema.Boolean } },
+  {
+    args: { owner: Schema.String, rtl: Schema.Boolean, locked: Schema.Boolean }
+  },
   (node: HTMLElement, args, changes) =>
     Stream.callback<Message>((queue) => {
       let current = args
       const send = (message: Message) => Queue.offerUnsafe(queue, message)
       const chips = () =>
-        Array.from(node.querySelectorAll<HTMLElement>("[data-combobox-chip]")).filter((chip) =>
-          chip.closest("[data-combobox-chips]") === node
-        )
-      const input = () => byAttribute(node.ownerDocument, "data-combobox-input", current.owner)
+        Array.from(node.querySelectorAll<HTMLElement>("[data-combobox-chip]"))
+          .filter((chip) => chip.closest("[data-combobox-chips]") === node)
+      const input = () =>
+        byAttribute(node.ownerDocument, "data-combobox-input", current.owner)
       const onKeyDown = (event: KeyboardEvent) => {
         const chip = event.target
         if (
-          event.defaultPrevented || current.locked || event.isComposing || !(chip instanceof HTMLElement) ||
+          event.defaultPrevented || current.locked || event.isComposing ||
+          !(chip instanceof HTMLElement) ||
           !chip.hasAttribute("data-combobox-chip")
         ) return
         const all = chips()
         const index = all.indexOf(chip)
         if (index === -1) return
-        const move = (target: HTMLElement | undefined) => (target ?? input())?.focus()
-        const [previous, next] = current.rtl ? ["ArrowRight", "ArrowLeft"] : ["ArrowLeft", "ArrowRight"]
+        const move = (target: HTMLElement | undefined) =>
+          (target ?? input())?.focus()
+        const [previous, next] = current.rtl
+          ? ["ArrowRight", "ArrowLeft"]
+          : ["ArrowLeft", "ArrowRight"]
         const key = event.key
         if (key === previous || key === next) {
           event.preventDefault()
@@ -835,7 +1110,12 @@ const TrackComboboxChips = Mount.makeStream(
         } else if (key === "Backspace" || key === "Delete") {
           event.preventDefault()
           move(index >= all.length - 1 ? all[index - 1] : all[index + 1])
-          send(Message.RequestedChipRemoval({ value: chip.getAttribute("data-combobox-chip") ?? "", reason: "none" }))
+          send(
+            Message.RequestedChipRemoval({
+              value: chip.getAttribute("data-combobox-chip") ?? "",
+              reason: "none"
+            })
+          )
         } else if (key === "Enter" || key === " ") {
           event.preventDefault()
           move(undefined)
@@ -849,7 +1129,11 @@ const TrackComboboxChips = Mount.makeStream(
       }
       const controller = new AbortController()
       return Effect.acquireRelease(
-        Effect.sync(() => node.addEventListener("keydown", onKeyDown, { signal: controller.signal })).pipe(
+        Effect.sync(() =>
+          node.addEventListener("keydown", onKeyDown, {
+            signal: controller.signal
+          })
+        ).pipe(
           Effect.tap(() =>
             Effect.forkScoped(Stream.runForEach(changes, (next) =>
               Effect.sync(() => {
@@ -857,7 +1141,8 @@ const TrackComboboxChips = Mount.makeStream(
               })))
           )
         ),
-        () => Effect.sync(() => controller.abort())
+        () =>
+          Effect.sync(() => controller.abort())
       )
     })
 )
@@ -869,43 +1154,65 @@ type Handlers<P, E> = {
   ) => Model | Step<E>
 }
 
-export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) => {
+export const make = <P, E>(
+  name: string,
+  settingsOf: (props: P) => Settings<E>
+) => {
   const s = ($: { readonly props: P }): Settings<E> => settingsOf($.props)
 
   const focusInput = ($: Component.Update<Model, Message, E, P>) => {
     const props = s($)
-    return focus($, props.inputInPopup === true && !props.open ? Trigger : Input)
+    return focus(
+      $,
+      props.inputInPopup === true && !props.open ? Trigger : Input
+    )
   }
 
   const update: Handlers<P, E> = {
-    PressedInput: ($, { pointerType }) => open($, s($), "input-press", methodOf(pointerType)),
+    PressedInput: ($, { pointerType }) =>
+      open($, s($), "input-press", methodOf(pointerType)),
     PressedGroup: ($, { pointerType }) => {
       const props = s($)
       if (props.disabled === true) return $.model
       const focused = focus($, Input)
-      return props.openOnInputClick === false ? focused : open(focused, props, "input-press", methodOf(pointerType))
+      return props.openOnInputClick === false
+        ? focused
+        : open(focused, props, "input-press", methodOf(pointerType))
     },
-    ChangedInput: ($, { composing, inputType, value }) => edit($, s($), value, inputType, composing),
+    ChangedInput: ($, { composing, inputType, value }) =>
+      edit($, s($), value, inputType, composing),
     PressedInputKey: ($, { chips, key }) => pressInputKey($, s($), key, chips),
     ReleasedInputKey: ($, { key }) =>
-      key === "Enter" ? dismiss($, s($), "none", "keyboard") : clear($, s($), "escape-key"),
+      key === "Enter"
+        ? dismiss($, s($), "none", "keyboard")
+        : clear($, s($), "escape-key"),
     FocusedInput: ($) => {
       if ($.model.saved === null) return $.model
       const props = s($)
-      return highlight($, props, shownOf($.model, props), $.model.saved, "none").evolve({ saved: null })
+      return highlight($, props, shownOf($.model, props), $.model.saved, "none")
+        .evolve({ saved: null })
     },
     BlurredInput: ($) => {
       const props = s($)
       const shown = shownOf($.model, props)
       const highlighted = highlightedOf($.model, props, shown)
-      return highlighted === null ? $.model : highlight($, props, shown, null, "none").evolve({ saved: highlighted })
+      return highlighted === null
+        ? $.model
+        : highlight($, props, shown, null, "none").evolve({
+          saved: highlighted
+        })
     },
     PressedTrigger: ($, { pointerType }) => {
       const props = s($)
-      return toggle(props.inputInPopup === true ? $ : focus($, Input), props, methodOf(pointerType))
+      return toggle(
+        props.inputInPopup === true ? $ : focus($, Input),
+        props,
+        methodOf(pointerType)
+      )
     },
     ReleasedTrigger: ($) => $.evolve({ pressing: false }),
-    ClickedTrigger: ($, { pointerType }) => toggle($, s($), methodOf(pointerType)),
+    ClickedTrigger: ($, { pointerType }) =>
+      toggle($, s($), methodOf(pointerType)),
     PressedTriggerKey: ($, { key }) => {
       const props = s($)
       if (props.disabled === true) return $.model
@@ -934,31 +1241,52 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
       if (lockedOf(props) || props.multiple === true) return $.model
       if (!selectableOf(props)) return rewrite($, props, value, "none")
       const item = autofillMatch(props.items, value)
-      if (!available(item) || valuesOf(props).includes(item.value)) return $.model
+      if (!available(item) || valuesOf(props).includes(item.value)) {
+        return $.model
+      }
       const chosen = picked($, props, item.value, "none")
-      return props.inputInPopup === true ? chosen : rewrite(chosen, props, item.label, "none")
+      return props.inputInPopup === true
+        ? chosen
+        : rewrite(chosen, props, item.label, "none")
     },
     PressedClear: ($) => {
       const props = s($)
-      return lockedOf(props) ? $.model : focus(clear(unhighlight($, props, "pointer"), props, "clear-press"), Input)
+      return lockedOf(props)
+        ? $.model
+        : focus(
+          clear(unhighlight($, props, "pointer"), props, "clear-press"),
+          Input
+        )
     },
-    RequestedChipRemoval: ($, { reason, value }) => removeChip($, s($), value, reason),
-    PressedChipArrow: ($, { key }) => open($, s($), "list-navigation", "keyboard", key),
+    RequestedChipRemoval: ($, { reason, value }) =>
+      removeChip($, s($), value, reason),
+    PressedChipArrow: ($, { key }) =>
+      open($, s($), "list-navigation", "keyboard", key),
     EnteredItem: ($, { value }) => hover($, s($), value),
     LeftItem: ($) => hover($, s($), null),
     PressedItem: ($, { value }) => $.evolve({ pressedItem: value }),
     ReleasedItem: ($, { button, value }) => {
       const props = s($)
       const next = $.evolve({ pressedItem: null })
-      if ($.model.pressedItem === value || button !== 0 || !navigableOf(props)) return next
-      return highlightedOf($.model, props, shownOf($.model, props)) === value ? pick(next, props, value, "mouse") : next
+      if (
+        $.model.pressedItem === value || button !== 0 || !navigableOf(props)
+      ) return next
+      return highlightedOf($.model, props, shownOf($.model, props)) === value
+        ? pick(next, props, value, "mouse")
+        : next
     },
-    ClickedItem: ($, { pointerType, value }) => pick($, s($), value, methodOf(pointerType)),
+    ClickedItem: ($, { pointerType, value }) =>
+      pick($, s($), value, methodOf(pointerType)),
     PressedDismiss: ($) => dismiss($, s($), "close-press", null),
     CompletedWaitBeforeResetTyping: ($) => $.evolve({ typed: "" }),
     ShowedPopup: ($) =>
-      $.evolve(s($).open ? { mounted: true, closeMethod: null, focusLeft: false } : { mounted: true }),
-    RenderedFirstFrame: ($) => s($).open ? $.evolve({ started: true }) : $.model,
+      $.evolve(
+        s($).open
+          ? { mounted: true, closeMethod: null, focusLeft: false }
+          : { mounted: true }
+      ),
+    RenderedFirstFrame: ($) =>
+      s($).open ? $.evolve({ started: true }) : $.model,
     FinishedTransition: ($, { open }) => {
       const props = s($)
       if (open !== props.open) return $.model
@@ -973,11 +1301,14 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         pressedItem: null,
         pressing: false
       })
-      const settled = selectableOf(props) ? rewrite(closed, props, rest, rest === "" ? "input-clear" : "none") : closed
+      const settled = selectableOf(props)
+        ? rewrite(closed, props, rest, rest === "" ? "input-clear" : "none")
+        : closed
       return settled.emit(props.emits.settled(open))
     },
     ChangedPlacement: ($, { placement }) => $.evolve({ placement }),
-    PressedOutside: ($, { pointerType }) => dismiss($, s($), "outside-press", methodOf(pointerType)),
+    PressedOutside: ($, { pointerType }) =>
+      dismiss($, s($), "outside-press", methodOf(pointerType)),
     FocusedOutside: ($) => dismiss($, s($), "focus-out", null, true),
     ReleasedPointer: ($, { outside }) => {
       if (!$.model.pressing) return $.model
@@ -986,7 +1317,10 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     }
   }
 
-  const parts = (p: Component.PartsHelper<Message, P, Html.Elements>, model: Model) => {
+  const parts = (
+    p: Component.PartsHelper<Message, P, Html.Elements>,
+    model: Model
+  ) => {
     const props = settingsOf(p.props)
     const open = props.open
     const inline = props.inline === true
@@ -1009,8 +1343,14 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     const displayed = displayedOf(model, props)
     const items = shownOf(model, props)
     const listEmpty = items.length === 0
-    const highlighted = navigable || model.mounted ? highlightedOf(model, props, items) : null
-    const known = new Map([...(props.filteredItems ?? []), ...props.items].map((item) => [item.value, item] as const))
+    const highlighted = navigable || model.mounted
+      ? highlightedOf(model, props, items)
+      : null
+    const known = new Map(
+      [...(props.filteredItems ?? []), ...props.items].map((item) =>
+        [item.value, item] as const
+      )
+    )
     const owner = p.id("combobox")
     const inputId = inPopup ? p.id("input") : props.id ?? p.id("input")
     const triggerId = inPopup ? props.id ?? p.id("trigger") : p.id("trigger")
@@ -1025,13 +1365,16 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
       collisionAvoidance: Positioning.dropdownCollisionAvoidance,
       anchorSelector: inPopup
         ? attrSelector("data-combobox-trigger", owner)
-        : attrSelector("data-combobox-group", owner) + "," + attrSelector("data-combobox-input", owner),
+        : attrSelector("data-combobox-group", owner) + "," +
+          attrSelector("data-combobox-input", owner),
       arrowId
     })
     const side = model.placement?.side ?? tracked.options.side
     const align = model.placement?.align ?? tracked.options.align
     const popupSide = shown ? side : undefined
-    const selectedItems = values.map((value) => known.get(value) ?? { value, label: value })
+    const selectedItems = values.map((value) =>
+      known.get(value) ?? { value, label: value }
+    )
     const text = !selectable
       ? displayed
       : placeholding && props.placeholder !== undefined
@@ -1048,8 +1391,10 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     let labelled = false
     let chipsDrawn = false
 
-    const inside = <B extends Attributed<B>>(builder: B): B => builder.attr("data-combobox-inside", owner)
-    const states = <B extends Attributed<B>>(builder: B): B => transitionAttrs(builder, open, transitionStatus)
+    const inside = <B extends Attributed<B>>(builder: B): B =>
+      builder.attr("data-combobox-inside", owner)
+    const states = <B extends Attributed<B>>(builder: B): B =>
+      transitionAttrs(builder, open, transitionStatus)
     const placed = <B extends Attributed<B>>(builder: B): B =>
       states(builder).attrs({ "data-side": side, "data-align": align })
     const control = <B extends Attributed<B>>(builder: B): B =>
@@ -1073,8 +1418,14 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
       multiple,
       values: selectable ? values : [props.inputValue],
       filled
-    }, { focused: Message.FocusedFormInput(), autofilled: (value) => Message.Autofilled({ value }) })
-    const inputsBox = new Html.Element<Message>("span").attr("style", "display:contents")
+    }, {
+      focused: Message.FocusedFormInput(),
+      autofilled: (value) => Message.Autofilled({ value })
+    })
+    const inputsBox = new Html.Element<Message>("span").attr(
+      "style",
+      "display:contents"
+    )
 
     const dismissPart = p.part("span", (b) =>
       inside(b)
@@ -1091,9 +1442,12 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
       return b.attr("id", labelId).onClick(Message.ClickedLabel())
     })
 
-    const value = p.part("span", (b) =>
-      b.attr("data-placeholder", flag(placeholding))
-        .forward((node) => fillValue(node, text)))
+    const value = p.part(
+      "span",
+      (b) =>
+        b.attr("data-placeholder", flag(placeholding))
+          .forward((node) => fillValue(node, text))
+    )
 
     const pressGroup = ({ button, pointerType }: Html.PointerPayload) =>
       button === 0 ? Message.PressedGroup({ pointerType }) : undefined
@@ -1107,7 +1461,10 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         })
         .on("mousedown", pressGroup, { preventDefault: true }))
 
-    const keyHandled = (key: string, selectionStart: number | null): boolean => {
+    const keyHandled = (
+      key: string,
+      selectionStart: number | null
+    ): boolean => {
       switch (key) {
         case "ArrowDown":
         case "ArrowUp":
@@ -1115,16 +1472,20 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         case "ArrowLeft":
         case "ArrowRight":
           return (grid && navigable && highlighted !== null) ||
-            (!readOnly && chipsDrawn && values.length > 0 && selectionStart === 0 &&
+            (!readOnly && chipsDrawn && values.length > 0 &&
+              selectionStart === 0 &&
               key === (props.dir === "rtl" ? "ArrowRight" : "ArrowLeft"))
         case "Enter":
           return navigable && highlighted !== null
         case " ":
           return !readOnly && open && props.inputValue === ""
         case "Escape":
-          return open || (!readOnly && !inline && !model.mounted && (props.inputValue !== "" || filled))
+          return open ||
+            (!readOnly && !inline && !model.mounted &&
+              (props.inputValue !== "" || filled))
         case "Backspace":
-          return !readOnly && chipsDrawn && props.inputValue === "" && values.length > 0
+          return !readOnly && chipsDrawn && props.inputValue === "" &&
+            values.length > 0
         default:
           return false
       }
@@ -1145,7 +1506,9 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
           "aria-haspopup": grid ? "grid" : "listbox",
           "aria-controls": navigable ? listId : undefined,
           "aria-autocomplete": readOnly ? "none" : props.mode ?? "list",
-          "aria-activedescendant": navigable && highlighted !== null ? itemId(highlighted) : undefined,
+          "aria-activedescendant": navigable && highlighted !== null
+            ? itemId(highlighted)
+            : undefined,
           "aria-readonly": readOnly ? "true" : undefined,
           "aria-required": required ? "true" : undefined,
           autocomplete: "off",
@@ -1159,38 +1522,64 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .on(
           "mousedown",
           ({ button, pointerType }) =>
-            button === 0 && !inPopup && !open && !disabled && props.openOnInputClick !== false
+            button === 0 && !inPopup && !open && !disabled &&
+              props.openOnInputClick !== false
               ? Message.PressedInput({ pointerType })
               : undefined
         )
-        .on("input", ({ composing, inputType, value }) => Message.ChangedInput({ value, inputType, composing }))
+        .on(
+          "input",
+          ({ composing, inputType, value }) =>
+            Message.ChangedInput({ value, inputType, composing })
+        )
         .on(
           "compositionend",
-          ({ value }) => Message.ChangedInput({ value, inputType: "insertCompositionText", composing: false })
+          ({ value }) =>
+            Message.ChangedInput({
+              value,
+              inputType: "insertCompositionText",
+              composing: false
+            })
         )
         .onKeyDown(
           ({ alt, composing, ctrl, key, meta, selectionStart, shift }) =>
-            composing || alt || ctrl || meta || shift || disabled || !keyHandled(key, selectionStart)
+            composing || alt || ctrl || meta || shift || disabled ||
+              !keyHandled(key, selectionStart)
               ? undefined
               : Message.PressedInputKey({ key, chips: chipsDrawn }),
           { preventDefault: true }
         )
         // Enter with nothing highlighted closes on keyup, so its keydown can still submit the form, and an
         // inline list clears on Escape's keyup, so its keydown can still close a dialog around it.
-        .on("keyup", ({ key }) =>
-          (key === "Enter" && open && !inline && highlighted === null) ||
-            (key === "Escape" && inline && !readOnly && (props.inputValue !== "" || filled))
-            ? Message.ReleasedInputKey({ key })
-            : undefined)
+        .on(
+          "keyup",
+          ({ key }) =>
+            (key === "Enter" && open && !inline && highlighted === null) ||
+              (key === "Escape" && inline && !readOnly &&
+                (props.inputValue !== "" || filled))
+              ? Message.ReleasedInputKey({ key })
+              : undefined
+        )
       const focusable = inline
-        ? decorated.on("focusin", Message.FocusedInput()).on("focusout", Message.BlurredInput())
+        ? decorated.on("focusin", Message.FocusedInput()).on(
+          "focusout",
+          Message.BlurredInput()
+        )
         : decorated
       const field = nativeField
-        ? focusable.attrs({ name: props.name, form: props.form, required: flag(required) })
+        ? focusable.attrs({
+          name: props.name,
+          form: props.form,
+          required: flag(required)
+        })
         : focusable
       return field.forward((node) => {
-        const named = node.elementAttrs.id === undefined ? node.attr("id", inputId) : node
-        return inPopup || inputs.length === 0 ? named : inputsBox.children(named, ...inputs)
+        const named = node.elementAttrs.id === undefined
+          ? node.attr("id", inputId)
+          : node
+        return inPopup || inputs.length === 0
+          ? named
+          : inputsBox.children(named, ...inputs)
       })
     })
 
@@ -1211,19 +1600,24 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .on(
           "mousedown",
           ({ button, pointerType }) =>
-            button === 0 && pointerType !== "touch" ? Message.PressedTrigger({ pointerType }) : undefined,
+            button === 0 && pointerType !== "touch"
+              ? Message.PressedTrigger({ pointerType })
+              : undefined,
           { preventDefault: !inPopup }
         )
         .on("mouseup", Message.ReleasedTrigger())
         .onClick(({ pointerType }) =>
-          pointerType === "" || pointerType === "touch" ? Message.ClickedTrigger({ pointerType }) : undefined
+          pointerType === "" || pointerType === "touch"
+            ? Message.ClickedTrigger({ pointerType })
+            : undefined
         )
         .onKeyDown(
           ({ alt, composing, ctrl, key, meta }) =>
             composing
               ? undefined
               : key === "ArrowDown" || key === "ArrowUp" ||
-                  (inPopup && selectable && !multiple && !open && !readOnly && printable(key, alt, ctrl, meta) &&
+                  (inPopup && selectable && !multiple && !open && !readOnly &&
+                    printable(key, alt, ctrl, meta) &&
                     (key !== " " || model.typed !== ""))
               ? Message.PressedTriggerKey({ key })
               : undefined,
@@ -1239,13 +1633,19 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .forward((node) => {
           const named = node.attrs({
             id: node.elementAttrs.id ?? triggerId,
-            "aria-labelledby": node.elementAttrs["aria-labelledby"] ?? (labelled ? labelId : undefined)
+            "aria-labelledby": node.elementAttrs["aria-labelledby"] ??
+              (labelled ? labelId : undefined)
           })
-          return inputs.length === 0 ? named : inputsBox.children(named, ...inputs)
+          return inputs.length === 0
+            ? named
+            : inputsBox.children(named, ...inputs)
         })
     })
 
-    const icon = p.part("span", (b) => b.attrs({ "aria-hidden": "true", "data-popup-open": flag(open) }))
+    const icon = p.part(
+      "span",
+      (b) => b.attrs({ "aria-hidden": "true", "data-popup-open": flag(open) })
+    )
 
     const clearPart = p.part("button", (b) =>
       inside(b)
@@ -1263,7 +1663,10 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     const clearButton = View.wrapPart(
       clearPart,
       <B extends View.PartTarget<"button">>(
-        { element, keepMounted }: { readonly element: B; readonly keepMounted?: boolean | undefined }
+        { element, keepMounted }: {
+          readonly element: B
+          readonly keepMounted?: boolean | undefined
+        }
       ): ReturnType<B["attr"]> | undefined => {
         const applied = clearPart(element)
         return filled || keepMounted === true ? applied : undefined
@@ -1273,9 +1676,18 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     const chips = p.part("div", (b) => {
       chipsDrawn = true
       return inside(b)
-        .attrs({ role: values.length > 0 ? "toolbar" : undefined, "data-combobox-chips": owner })
+        .attrs({
+          role: values.length > 0 ? "toolbar" : undefined,
+          "data-combobox-chips": owner
+        })
         .on("mousedown", pressGroup, { preventDefault: true })
-        .onMount(TrackComboboxChips({ owner, rtl: props.dir === "rtl", locked: disabled || readOnly }))
+        .onMount(
+          TrackComboboxChips({
+            owner,
+            rtl: props.dir === "rtl",
+            locked: disabled || readOnly
+          })
+        )
     })
 
     const chipPart = p.part("div", (b, value: string) =>
@@ -1299,11 +1711,14 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         })
         .disabled(disabled)
         .on("mousedown", () => undefined, { preventDefault: "always" })
-        .onClick(Message.RequestedChipRemoval({ value, reason: "chip-remove-press" })))
+        .onClick(
+          Message.RequestedChipRemoval({ value, reason: "chip-remove-press" })
+        ))
     const chipRemove = View.wrapPart(
       chipRemovePart,
-      <B extends View.PartTarget<"button">>({ element, value }: { readonly element: B; readonly value: string }) =>
-        chipRemovePart(element, value)
+      <B extends View.PartTarget<"button">>(
+        { element, value }: { readonly element: B; readonly value: string }
+      ) => chipRemovePart(element, value)
     )
 
     const backdrop = p.part("div", (b) =>
@@ -1313,7 +1728,10 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         .forward((node) =>
           node.attr(
             "style",
-            withStyle(node.elementAttrs.style, open ? backdropBox : backdropBox + ";pointer-events:none")
+            withStyle(
+              node.elementAttrs.style,
+              open ? backdropBox : backdropBox + ";pointer-events:none"
+            )
           )
         ))
 
@@ -1328,14 +1746,27 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         })
         .popover("manual", shown)
         .forward((node) => {
-          const styled = node.attr("style", withStyle(node.elementAttrs.style, positionerStyle))
+          const styled = node.attr(
+            "style",
+            withStyle(node.elementAttrs.style, positionerStyle)
+          )
           return dismissable
             ? styled.children(
-              dismissPart(new Html.Element<never, never, Html.EventsOf<"span">, HTMLSpanElement, "span">("span"))
+              dismissPart(
+                new Html.Element<
+                  never,
+                  never,
+                  Html.EventsOf<"span">,
+                  HTMLSpanElement,
+                  "span"
+                >("span")
+              )
             )
             : styled
         })
-      const layered = modal ? decorated.children(open ? blocking.open : blocking.closed) : decorated
+      const layered = modal
+        ? decorated.children(open ? blocking.open : blocking.closed)
+        : decorated
       if (!shown) return layered
       return layered.onMount(
         TrackCombobox({
@@ -1371,12 +1802,17 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         })
         .onKeyDown(
           ({ composing, key }) =>
-            key === "Escape" && open && !composing ? Message.PressedInputKey({ key, chips: chipsDrawn }) : undefined,
+            key === "Escape" && open && !composing
+              ? Message.PressedInputKey({ key, chips: chipsDrawn })
+              : undefined,
           { preventDefault: true }
         )
         .forward((node) =>
           inPopup && labelled
-            ? node.attr("aria-labelledby", node.elementAttrs["aria-labelledby"] ?? labelId)
+            ? node.attr(
+              "aria-labelledby",
+              node.elementAttrs["aria-labelledby"] ?? labelId
+            )
             : node
         ))
 
@@ -1388,7 +1824,9 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
           "aria-hidden": "true",
           "data-uncentered": flag(model.placement?.arrowUncentered)
         })
-        .forward((node) => node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))))
+        .forward((node) =>
+          node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))
+        ))
 
     const list = p.part("div", (b) => {
       const decorated = b.attrs({
@@ -1399,7 +1837,9 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
         "aria-readonly": !grid && readOnly ? "true" : undefined,
         "data-empty": flag(listEmpty)
       })
-      return inline ? decorated.onMount(TrackComboboxList({ list: listArgs })) : decorated
+      return inline
+        ? decorated.onMount(TrackComboboxList({ list: listArgs }))
+        : decorated
     })
 
     const row = p.part("div", (b) => b.attr("role", "row"))
@@ -1407,7 +1847,9 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     const itemPart = p.part("div", (b, value: string) => {
       const option = known.get(value)
       if (option === undefined) {
-        throw new Error(name + ": no item in the items prop has the value \"" + value + "\"")
+        throw new Error(
+          name + ": no item in the items prop has the value \"" + value + "\""
+        )
       }
       const selected = chosen.has(value)
       const active = highlighted === value
@@ -1422,14 +1864,24 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
           "data-highlighted": flag(active),
           "data-disabled": flag(off)
         })
-        .on("mouseenter", () => hovers ? Message.EnteredItem({ value }) : undefined)
+        .on(
+          "mouseenter",
+          () => hovers ? Message.EnteredItem({ value }) : undefined
+        )
         .on("mouseleave", () => hovers ? Message.LeftItem() : undefined)
-        .on("mousedown", Message.PressedItem({ value }), { preventDefault: "always" })
+        .on("mousedown", Message.PressedItem({ value }), {
+          preventDefault: "always"
+        })
         .on(
           "mouseup",
-          ({ button, pointerType }) => pointerType === "touch" ? undefined : Message.ReleasedItem({ value, button })
+          ({ button, pointerType }) =>
+            pointerType === "touch"
+              ? undefined
+              : Message.ReleasedItem({ value, button })
         )
-        .onClick(({ pointerType }) => off ? undefined : Message.ClickedItem({ value, pointerType }))
+        .onClick(({ pointerType }) =>
+          off ? undefined : Message.ClickedItem({ value, pointerType })
+        )
     })
     const item = valued(itemPart)
 
@@ -1451,19 +1903,34 @@ export const make = <P, E>(name: string, settingsOf: (props: P) => Settings<E>) 
     const group = grouped(
       p.part(
         "div",
-        (b, key: string) => b.attrs({ role: grid ? "rowgroup" : "group", "aria-labelledby": groupLabelId(key) })
+        (b, key: string) =>
+          b.attrs({
+            role: grid ? "rowgroup" : "group",
+            "aria-labelledby": groupLabelId(key)
+          })
       )
     )
     const groupLabel = grouped(
-      p.part("div", (b, key: string) => b.attrs({ id: groupLabelId(key), "aria-hidden": "true" }))
+      p.part(
+        "div",
+        (b, key: string) =>
+          b.attrs({ id: groupLabelId(key), "aria-hidden": "true" })
+      )
     )
     const separator = p.part("div", (b) => separatorAttrs(b, "horizontal"))
 
     const live = <B extends Attributed<B>>(builder: B): B =>
-      builder.attrs({ role: "status", "aria-live": "polite", "aria-atomic": "true" })
+      builder.attrs({
+        role: "status",
+        "aria-live": "polite",
+        "aria-atomic": "true"
+      })
     const empty = p.part(
       "div",
-      (b) => live(b).forward((node) => listEmpty ? node : { ...View.build(node, []), children: [] })
+      (b) =>
+        live(b).forward((node) =>
+          listEmpty ? node : { ...View.build(node, []), children: [] }
+        )
     )
     const status = p.part("div", (b) => live(b))
 

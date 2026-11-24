@@ -20,15 +20,28 @@ export interface Valued {
 }
 
 export const valuesOf = (props: Valued): ReadonlyArray<string> =>
-  props.value == null ? [] : typeof props.value === "string" ? [props.value] : props.value
+  props.value == null
+    ? []
+    : typeof props.value === "string"
+    ? [props.value]
+    : props.value
 
 export const filledOf = (props: Valued): boolean =>
-  props.multiple === true ? valuesOf(props).length > 0 : valuesOf(props).some((value) => value !== "")
+  props.multiple === true
+    ? valuesOf(props).length > 0
+    : valuesOf(props).some((value) => value !== "")
 
-export const toggled = (values: ReadonlyArray<string>, value: string): ReadonlyArray<string> =>
-  values.includes(value) ? values.filter((other) => other !== value) : [...values, value]
+export const toggled = (
+  values: ReadonlyArray<string>,
+  value: string
+): ReadonlyArray<string> =>
+  values.includes(value)
+    ? values.filter((other) => other !== value)
+    : [...values, value]
 
-export const autofillMatch = <A extends { readonly value: string; readonly label: string }>(
+export const autofillMatch = <
+  A extends { readonly value: string; readonly label: string }
+>(
   items: ReadonlyArray<A>,
   text: string
 ): A | undefined => {
@@ -43,14 +56,21 @@ export interface FormFieldMessages<Msg> {
 }
 
 export const input = () =>
-  new Html.VoidElement<never, never, Html.EventsOf<"input">, HTMLInputElement, "input">("input")
+  new Html.VoidElement<
+    never,
+    never,
+    Html.EventsOf<"input">,
+    HTMLInputElement,
+    "input"
+  >("input")
 
 export const formInputs = <Msg>(
   p: Pick<Component.PartsHelper<Msg, unknown, Html.Elements>, "part">,
   field: FormField,
   messages: FormFieldMessages<Msg>
 ) => {
-  const real = field.name !== undefined || field.required || field.autoComplete !== undefined
+  const real = field.name !== undefined || field.required ||
+    field.autoComplete !== undefined
   const main = p.part("input", (b) => {
     const value = field.multiple ? "" : (field.values[0] ?? "")
     return b
@@ -84,6 +104,8 @@ export const formInputs = <Msg>(
       .disabled(field.disabled))
   return [
     ...(field.form !== undefined || real ? [main(input())] : []),
-    ...(field.multiple && field.name !== undefined ? field.values.map((value) => each(input().key(value), value)) : [])
+    ...(field.multiple && field.name !== undefined
+      ? field.values.map((value) => each(input().key(value), value))
+      : [])
   ]
 }

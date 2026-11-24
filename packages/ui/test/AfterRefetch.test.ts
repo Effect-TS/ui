@@ -35,7 +35,12 @@ const makeApp = (options?: {
 
   class GetUser extends Query.Service<GetUser>()(
     "users/GetUser",
-    { args: { id: Schema.String }, success: User, error: Schema.String, staleTime: "30 seconds" },
+    {
+      args: { id: Schema.String },
+      success: User,
+      error: Schema.String,
+      staleTime: "30 seconds"
+    },
     Effect.succeed(({ id }) =>
       Effect.gen(function*() {
         yield* Effect.sleep(db.delay.get(id) ?? 10)
@@ -58,13 +63,19 @@ const makeApp = (options?: {
           ? [GetUser.entry({ id: "9" })]
           : [GetUser.entry({ id })],
       optimistic: ({ id, name }) =>
-        invalidates === "unwatched" ? [] : [GetUser.patch({ id }, (user) => ({ ...user, name }))]
+        invalidates === "unwatched"
+          ? []
+          : [GetUser.patch({ id }, (user) => ({ ...user, name }))]
     },
-    Effect.succeed(({ id, name }: { readonly id: string; readonly name: string }) =>
+    Effect.succeed((
+      { id, name }: { readonly id: string; readonly name: string }
+    ) =>
       Effect.gen(function*() {
         order.push(`body ${name}`)
         const cleanup = options?.cleanup
-        if (cleanup !== undefined) yield* Effect.addFinalizer(() => Effect.sleep(cleanup))
+        if (cleanup !== undefined) {
+          yield* Effect.addFinalizer(() => Effect.sleep(cleanup))
+        }
         yield* Effect.sleep("10 millis")
         if (name === "") return yield* Effect.fail("empty")
         db.names.set(id, name)
@@ -92,7 +103,9 @@ const makeApp = (options?: {
         onFailure: () => CardMessage.Failed({ name })
       })
     )
-    return options?.wait === false ? matched : Command.afterRefetch(matched, budget)
+    return options?.wait === false
+      ? matched
+      : Command.afterRefetch(matched, budget)
   }
   const Card = Component.define({
     name: "Card",
@@ -110,35 +123,49 @@ const makeApp = (options?: {
   }).make({
     init: () => ({ done: [] }),
     update: ($, message) => {
-      order.push(`update ${$.props.tag} ${message._tag}${"name" in message ? " " + message.name : ""}`)
+      order.push(
+        `update ${$.props.tag} ${message._tag}${
+          "name" in message ? " " + message.name : ""
+        }`
+      )
       return CardMessage.match(message, {
         UserChanged: () => $.model,
         Rename: ({ name }) => $.run(rename($.props.id, name)),
         Renamed: ({ name }) => {
           const next = { ...$.model, done: [...$.model.done, name] }
           const chain = options?.chain
-          return chain !== undefined && $.model.done.length === 0 ? $.set(next).run(rename($.props.id, chain)) : next
+          return chain !== undefined && $.model.done.length === 0
+            ? $.set(next).run(rename($.props.id, chain))
+            : next
         },
-        Failed: ({ name }) => ({ ...$.model, done: [...$.model.done, "failed " + name] }),
+        Failed: ({ name }) => ({
+          ...$.model,
+          done: [...$.model.done, "failed " + name]
+        }),
         Stop: () => $.run(Command.interrupt(RenameUser))
       })
     },
     view: (h, model) => {
       const text = AsyncResult.match(h.queries.user, {
         onInitial: () => "loading",
-        onSuccess: (success) => success.value.name + (h.patched.user ? "~" : "") + (success.waiting ? "…" : ""),
+        onSuccess: (success) =>
+          success.value.name + (h.patched.user ? "~" : "") +
+          (success.waiting ? "…" : ""),
         onFailure: () => "failed"
       })
-      const shown = `${h.props.tag}=${text}${h.isRunning(RenameUser) ? " saving" : ""}${
-        model.done.length === 0 ? "" : " [" + model.done.join(",") + "]"
-      };`
+      const shown = `${h.props.tag}=${text}${
+        h.isRunning(RenameUser) ? " saving" : ""
+      }${model.done.length === 0 ? "" : " [" + model.done.join(",") + "]"};`
       order.push(`view ${shown}`)
-      return h.el("p").on("click", CardMessage.Rename({ name: "Bob" })).children(shown)
+      return h.el("p").on("click", CardMessage.Rename({ name: "Bob" }))
+        .children(shown)
     }
   })
 
   /** A parent whose Model says which cards are mounted: "tag:id" each. */
-  const ListMessage = UiSchema.TaggedEnum({ Set: { cards: Schema.Array(Schema.String) } })
+  const ListMessage = UiSchema.TaggedEnum({
+    Set: { cards: Schema.Array(Schema.String) }
+  })
   const List = Component.define({
     name: "List",
     scoped: false,
@@ -173,43 +200,68 @@ const makeApp = (options?: {
 }
 
 const run = <A, E>(layer: Layer.Layer<any>, effect: Effect.Effect<A, E, any>) =>
-  effect.pipe(Effect.provide(layer), Effect.scoped, Effect.provide(TestHost.layer())) as Effect.Effect<A, E>
+  effect.pipe(
+    Effect.provide(layer),
+    Effect.scoped,
+    Effect.provide(TestHost.layer())
+  ) as Effect.Effect<A, E>
 
 /** Starts what is due and lets 10 ms pass: a fetch or a rename body. */
-const tick = TestHost.settle.pipe(Effect.andThen(TestClock.adjust("10 millis")), Effect.andThen(TestHost.settle))
+const tick = TestHost.settle.pipe(
+  Effect.andThen(TestClock.adjust("10 millis")),
+  Effect.andThen(TestHost.settle)
+)
 
 type Root = Pick<TestHost.TestRoot<any, any, any>, "log" | "pending">
 
 /** The log's Command entries, without their bookkeeping. */
 const commandLog = (root: Root) =>
-  root.log().flatMap((entry): ReadonlyArray<{ readonly _tag: string; readonly [key: string]: unknown }> => {
-    switch (entry._tag) {
-      case "CommandAwaiting":
-        return [{ _tag: entry._tag, entries: entry.entries }]
-      case "CommandEnded":
-        return [{
-          _tag: entry._tag,
-          ...(entry.waitEnded === undefined
-            ? undefined
-            : { waitEnded: entry.waitEnded, outstanding: entry.outstanding }),
-          ...(entry.silent ? { silent: true } : undefined)
-        }]
-      case "CommandInterrupted":
-        return [{ _tag: entry._tag }]
-      case "CommandDropped":
-        return [{ _tag: entry._tag, reason: entry.reason }]
-      default:
-        return []
+  root.log().flatMap(
+    (
+      entry
+    ): ReadonlyArray<
+      { readonly _tag: string; readonly [key: string]: unknown }
+    > => {
+      switch (entry._tag) {
+        case "CommandAwaiting":
+          return [{ _tag: entry._tag, entries: entry.entries }]
+        case "CommandEnded":
+          return [{
+            _tag: entry._tag,
+            ...(entry.waitEnded === undefined
+              ? undefined
+              : { waitEnded: entry.waitEnded, outstanding: entry.outstanding }),
+            ...(entry.silent ? { silent: true } : undefined)
+          }]
+        case "CommandInterrupted":
+          return [{ _tag: entry._tag }]
+        case "CommandDropped":
+          return [{ _tag: entry._tag, reason: entry.reason }]
+        default:
+          return []
+      }
     }
-  })
+  )
 
-const statuses = (root: Root) => root.pending().flatMap((pending) => pending._tag === "Command" ? [pending.status] : [])
+const statuses = (root: Root) =>
+  root.pending().flatMap((pending) =>
+    pending._tag === "Command" ? [pending.status] : []
+  )
 
-const user1: MessageLog.AwaitedEntry = { query: "users/GetUser", logKey: "{\"id\":\"1\"}" }
-const user2: MessageLog.AwaitedEntry = { query: "users/GetUser", logKey: "{\"id\":\"2\"}" }
+const user1: MessageLog.AwaitedEntry = {
+  query: "users/GetUser",
+  logKey: "{\"id\":\"1\"}"
+}
+const user2: MessageLog.AwaitedEntry = {
+  query: "users/GetUser",
+  logKey: "{\"id\":\"2\"}"
+}
 
-const renameOn = (root: { readonly send: (message: any) => void }, app: ReturnType<typeof makeApp>, name: string) =>
-  root.send(app.CardMessage.Rename({ name }))
+const renameOn = (
+  root: { readonly send: (message: any) => void },
+  app: ReturnType<typeof makeApp>,
+  name: string
+) => root.send(app.CardMessage.Rename({ name }))
 
 describe("Command.afterRefetch", () => {
   it.effect("holds onSuccess until the refetch settles, after the query's onChange message and in the same render", () => {
@@ -224,13 +276,23 @@ describe("Command.afterRefetch", () => {
         // The body succeeded. The refetch is in flight and the message waits: still saving.
         assert.strictEqual(root.text(), "a=Bob~… saving;")
         assert.deepStrictEqual(statuses(root), ["awaiting"])
-        assert.deepStrictEqual(commandLog(root), [{ _tag: "CommandAwaiting", entries: [user1] }])
+        assert.deepStrictEqual(commandLog(root), [{
+          _tag: "CommandAwaiting",
+          entries: [user1]
+        }])
         // The awaited set's refetch comes before CommandAwaiting.
         const tags = root.log().map((entry) => entry._tag)
-        assert.isBelow(tags.lastIndexOf("FetchStarted"), tags.indexOf("CommandAwaiting"))
+        assert.isBelow(
+          tags.lastIndexOf("FetchStarted"),
+          tags.indexOf("CommandAwaiting")
+        )
         app.order.length = 0
         yield* tick
-        assert.deepStrictEqual(app.order, ["update a UserChanged", "update a Renamed Bob", "view a=Bob [Bob];"])
+        assert.deepStrictEqual(app.order, [
+          "update a UserChanged",
+          "update a Renamed Bob",
+          "view a=Bob [Bob];"
+        ])
         assert.deepStrictEqual(statuses(root), [])
         assert.deepStrictEqual(commandLog(root), [
           { _tag: "CommandAwaiting", entries: [user1] },
@@ -253,7 +315,10 @@ describe("Command.afterRefetch", () => {
         app.db.fail.add("2")
         Locator.fire(root.get(Locator.text("a=Ann;", { exact: true })), "click")
         yield* tick
-        assert.deepStrictEqual(commandLog(root), [{ _tag: "CommandAwaiting", entries: [user1, user2] }])
+        assert.deepStrictEqual(commandLog(root), [{
+          _tag: "CommandAwaiting",
+          entries: [user1, user2]
+        }])
         yield* tick
         // The card's own entry settled. The message still waits on b's.
         assert.strictEqual(root.text(), "a=Bob saving;b=Bea…;")
@@ -261,7 +326,11 @@ describe("Command.afterRefetch", () => {
         assert.strictEqual(root.text(), "a=Bob saving;b=Bea…;")
         yield* tick
         assert.strictEqual(root.text(), "a=Bob [Bob];b=failed;")
-        assert.deepStrictEqual(commandLog(root).at(-1), { _tag: "CommandEnded", waitEnded: "settled", outstanding: [] })
+        assert.deepStrictEqual(commandLog(root).at(-1), {
+          _tag: "CommandEnded",
+          waitEnded: "settled",
+          outstanding: []
+        })
       })
     )
   })
@@ -276,7 +345,11 @@ describe("Command.afterRefetch", () => {
         renameOn(root, app, "Bob")
         yield* tick
         assert.strictEqual(root.text(), "a=Ann [Bob];")
-        assert.deepStrictEqual(commandLog(root), [{ _tag: "CommandEnded", waitEnded: "nothing", outstanding: [] }])
+        assert.deepStrictEqual(commandLog(root), [{
+          _tag: "CommandEnded",
+          waitEnded: "nothing",
+          outstanding: []
+        }])
       })
     )
   })
@@ -377,7 +450,11 @@ describe("Command.afterRefetch", () => {
 
   it.effect("a queryMany query: the last key's onChange message, then onSuccess, then one view", () => {
     const app = makeApp({ invalidates: "all" })
-    const BoardMessage = UiSchema.TaggedEnum({ Changed: {}, Rename: {}, Renamed: {} })
+    const BoardMessage = UiSchema.TaggedEnum({
+      Changed: {},
+      Rename: {},
+      Renamed: {}
+    })
     const order: Array<string> = []
     const Board = Component.define({
       name: "Board",
@@ -389,7 +466,9 @@ describe("Command.afterRefetch", () => {
           queryMany: app.GetUser,
           args: () => [{ id: "1" }, { id: "2" }],
           onChange: (_loaded, changes) => {
-            order.push(`changes ${changes.map((change) => change.args.id).join(",")}`)
+            order.push(
+              `changes ${changes.map((change) => change.args.id).join(",")}`
+            )
             return BoardMessage.Changed()
           }
         }
@@ -416,8 +495,10 @@ describe("Command.afterRefetch", () => {
       view: (h, model) => {
         const text = h.queries.users.map(({ result }) =>
           AsyncResult.match(result, {
-            onInitial: () => "…",
-            onSuccess: (success) => success.value.name + (success.waiting ? "…" : ""),
+            onInitial: () =>
+              "…",
+            onSuccess: (success) =>
+              success.value.name + (success.waiting ? "…" : ""),
             onFailure: () => "failed"
           })
         ).join(",") + (model.renamed ? " renamed" : "")
@@ -433,15 +514,27 @@ describe("Command.afterRefetch", () => {
         app.db.delay.set("2", 20)
         root.send(BoardMessage.Rename())
         yield* tick
-        assert.deepStrictEqual(commandLog(root), [{ _tag: "CommandAwaiting", entries: [user1, user2] }])
+        assert.deepStrictEqual(commandLog(root), [{
+          _tag: "CommandAwaiting",
+          entries: [user1, user2]
+        }])
         order.length = 0
         yield* tick
         // The first key settles on its own: the message still waits on the second.
-        assert.deepStrictEqual(order, ["changes 1", "update Changed", "view Bob,Bea…"])
+        assert.deepStrictEqual(order, [
+          "changes 1",
+          "update Changed",
+          "view Bob,Bea…"
+        ])
         order.length = 0
         yield* tick
         // The keyed message goes through the flush's deferred drain, and the delivery goes behind it.
-        assert.deepStrictEqual(order, ["changes 2", "update Changed", "update Renamed", "view Bob,Bea renamed"])
+        assert.deepStrictEqual(order, [
+          "changes 2",
+          "update Changed",
+          "update Renamed",
+          "view Bob,Bea renamed"
+        ])
       })
     )
   })
@@ -489,13 +582,30 @@ describe("Command.afterRefetch", () => {
         ])
         // Both entries survive the wire.
         const encoder = MessageLog.makeEncoder()
-        for (const entry of root.log().filter((entry) => entry._tag.startsWith("Command"))) {
+        for (
+          const entry of root.log().filter((entry) =>
+            entry._tag.startsWith("Command")
+          )
+        ) {
           const wire = encoder.encode(entry)
-          assert.deepStrictEqual(Schema.decodeUnknownSync(MessageLog.Wire)(JSON.parse(JSON.stringify(wire))), wire)
+          assert.deepStrictEqual(
+            Schema.decodeUnknownSync(MessageLog.Wire)(
+              JSON.parse(JSON.stringify(wire))
+            ),
+            wire
+          )
         }
-        const wire: Array<any> = root.log().map((entry) => encoder.encode(entry))
-        assert.deepStrictEqual(wire.find((entry) => entry._tag === "CommandAwaiting")?.entries, [user1])
-        assert.strictEqual(wire.find((entry) => entry._tag === "CommandEnded")?.waitEnded, "switch")
+        const wire: Array<any> = root.log().map((entry) =>
+          encoder.encode(entry)
+        )
+        assert.deepStrictEqual(
+          wire.find((entry) => entry._tag === "CommandAwaiting")?.entries,
+          [user1]
+        )
+        assert.strictEqual(
+          wire.find((entry) => entry._tag === "CommandEnded")?.waitEnded,
+          "switch"
+        )
         yield* tick
         assert.deepStrictEqual(statuses(root), ["awaiting"])
         yield* TestClock.adjust("1 second")
@@ -566,21 +676,31 @@ describe("Command.afterRefetch", () => {
         yield* tick
         // Bob's fiber exited: Cy runs, and its live patch holds the refetch Bob waits for.
         assert.deepStrictEqual(statuses(root), ["awaiting", "running"])
-        assert.isTrue(root.pending().some((pending) => pending._tag === "Fetch" && pending.status === "held"))
+        assert.isTrue(
+          root.pending().some((pending) =>
+            pending._tag === "Fetch" && pending.status === "held"
+          )
+        )
         yield* tick
         assert.deepStrictEqual(statuses(root), ["awaiting", "awaiting"])
         app.order.length = 0
         yield* tick
-        assert.deepStrictEqual(app.order.filter((line) => line.startsWith("update")), [
-          "update a UserChanged",
-          "update a Renamed Bob",
-          "update a Renamed Cy"
-        ])
+        assert.deepStrictEqual(
+          app.order.filter((line) => line.startsWith("update")),
+          [
+            "update a UserChanged",
+            "update a Renamed Bob",
+            "update a Renamed Cy"
+          ]
+        )
         assert.strictEqual(root.text(), "a=Cy [Bob,Cy];")
-        assert.deepStrictEqual(commandLog(root).filter((entry) => entry._tag === "CommandEnded"), [
-          { _tag: "CommandEnded", waitEnded: "settled", outstanding: [] },
-          { _tag: "CommandEnded", waitEnded: "settled", outstanding: [] }
-        ])
+        assert.deepStrictEqual(
+          commandLog(root).filter((entry) => entry._tag === "CommandEnded"),
+          [
+            { _tag: "CommandEnded", waitEnded: "settled", outstanding: [] },
+            { _tag: "CommandEnded", waitEnded: "settled", outstanding: [] }
+          ]
+        )
       })
     )
   })
@@ -598,11 +718,19 @@ describe("Command.afterRefetch", () => {
         assert.deepStrictEqual(statuses(root), ["awaiting"])
         app.order.length = 0
         yield* tick
-        assert.deepStrictEqual(app.order, ["update a UserChanged", "view a=Bob;"])
+        assert.deepStrictEqual(app.order, [
+          "update a UserChanged",
+          "view a=Bob;"
+        ])
         assert.deepStrictEqual(statuses(root), [])
         assert.deepStrictEqual(commandLog(root), [
           { _tag: "CommandAwaiting", entries: [user1] },
-          { _tag: "CommandEnded", waitEnded: "settled", outstanding: [], silent: true }
+          {
+            _tag: "CommandEnded",
+            waitEnded: "settled",
+            outstanding: [],
+            silent: true
+          }
         ])
       })
     )
@@ -621,20 +749,35 @@ describe("Command.afterRefetch", () => {
         yield* tick
         yield* tick
         yield* tick
-        assert.deepStrictEqual(statuses(root), ["awaiting", "awaiting", "awaiting"])
+        assert.deepStrictEqual(statuses(root), [
+          "awaiting",
+          "awaiting",
+          "awaiting"
+        ])
         app.order.length = 0
         yield* tick
-        assert.deepStrictEqual(app.order.filter((line) => line.startsWith("update")), [
-          "update a UserChanged",
-          "update a Renamed Cy",
-          "update a Renamed Dan"
-        ])
+        assert.deepStrictEqual(
+          app.order.filter((line) => line.startsWith("update")),
+          [
+            "update a UserChanged",
+            "update a Renamed Cy",
+            "update a Renamed Dan"
+          ]
+        )
         assert.strictEqual(root.text(), "a=Dan [Cy,Dan];")
-        assert.deepStrictEqual(commandLog(root).filter((entry) => entry._tag === "CommandEnded"), [
-          { _tag: "CommandEnded", waitEnded: "settled", outstanding: [], silent: true },
-          { _tag: "CommandEnded", waitEnded: "settled", outstanding: [] },
-          { _tag: "CommandEnded", waitEnded: "settled", outstanding: [] }
-        ])
+        assert.deepStrictEqual(
+          commandLog(root).filter((entry) => entry._tag === "CommandEnded"),
+          [
+            {
+              _tag: "CommandEnded",
+              waitEnded: "settled",
+              outstanding: [],
+              silent: true
+            },
+            { _tag: "CommandEnded", waitEnded: "settled", outstanding: [] },
+            { _tag: "CommandEnded", waitEnded: "settled", outstanding: [] }
+          ]
+        )
       })
     )
   })
@@ -651,13 +794,21 @@ describe("Command.afterRefetch", () => {
         yield* tick
         app.order.length = 0
         renameOn(root, app, "Cy")
-        assert.deepStrictEqual(app.order.filter((line) => line.startsWith("update")), [
-          "update a Rename Cy",
-          "update a UserChanged"
-        ])
+        assert.deepStrictEqual(
+          app.order.filter((line) => line.startsWith("update")),
+          [
+            "update a Rename Cy",
+            "update a UserChanged"
+          ]
+        )
         assert.deepStrictEqual(commandLog(root), [
           { _tag: "CommandAwaiting", entries: [user1] },
-          { _tag: "CommandEnded", waitEnded: "switch", outstanding: [user1], silent: true }
+          {
+            _tag: "CommandEnded",
+            waitEnded: "switch",
+            outstanding: [user1],
+            silent: true
+          }
         ])
         yield* tick
         yield* TestClock.adjust("1 second")
@@ -682,7 +833,9 @@ describe("Command.afterRefetch", () => {
         app.order.length = 0
         yield* tick
         assert.deepStrictEqual(
-          app.order.filter((line) => line.startsWith("update a R") || line.startsWith("update a F")),
+          app.order.filter((line) =>
+            line.startsWith("update a R") || line.startsWith("update a F")
+          ),
           [
             "update a Renamed Bob",
             "update a Failed "
@@ -707,10 +860,17 @@ describe("Command.afterRefetch", () => {
         assert.deepStrictEqual(statuses(root), ["running", "queued"])
         yield* tick
         yield* tick
-        assert.deepStrictEqual(app.order.filter((line) => line.startsWith("body")), ["body Bob", "body Cy", "body Dan"])
+        assert.deepStrictEqual(
+          app.order.filter((line) => line.startsWith("body")),
+          ["body Bob", "body Cy", "body Dan"]
+        )
         assert.deepStrictEqual(
           app.order.filter((line) => line.startsWith("update a Renamed")),
-          ["update a Renamed Bob", "update a Renamed Cy", "update a Renamed Dan"]
+          [
+            "update a Renamed Bob",
+            "update a Renamed Cy",
+            "update a Renamed Dan"
+          ]
         )
       })
     )
@@ -718,7 +878,10 @@ describe("Command.afterRefetch", () => {
 
   it.effect("an infinite query: the wait ends when the walk swaps, not on its first page", () => {
     const Item = Schema.Struct({ id: Schema.String })
-    const Page = Schema.Struct({ items: Schema.Array(Item), next: Schema.NullOr(Schema.Number) })
+    const Page = Schema.Struct({
+      items: Schema.Array(Item),
+      next: Schema.NullOr(Schema.Number)
+    })
     const db = { version: 0 }
     class ListItems extends Query.InfiniteService<ListItems>()(
       "items/ListItems",
@@ -736,7 +899,10 @@ describe("Command.afterRefetch", () => {
         Effect.gen(function*() {
           const index = Option.getOrElse(cursor, () => 0)
           yield* Effect.sleep("10 millis")
-          return { items: [{ id: `${db.version}-${index}` }], next: index < 1 ? index + 1 : null }
+          return {
+            items: [{ id: `${db.version}-${index}` }],
+            next: index < 1 ? index + 1 : null
+          }
         })
       )
     ) {}
@@ -749,7 +915,11 @@ describe("Command.afterRefetch", () => {
         })))
       )
     ) {}
-    const ItemsMessage = UiSchema.TaggedEnum({ More: {}, Touch: {}, Touched: {} })
+    const ItemsMessage = UiSchema.TaggedEnum({
+      More: {},
+      Touch: {},
+      Touched: {}
+    })
     const ItemsView = Component.define({
       name: "ItemsView",
       scoped: false,
@@ -776,7 +946,8 @@ describe("Command.afterRefetch", () => {
           AsyncResult.match(h.queries.items, {
             onInitial: () => "loading",
             onFailure: () => "failed",
-            onSuccess: ({ value: { items } }) => items.map((item) => item.id).join(",")
+            onSuccess: ({ value: { items } }) =>
+              items.map((item) => item.id).join(",")
           }) + (model.touched ? " touched" : "")
         )
     })
@@ -799,7 +970,11 @@ describe("Command.afterRefetch", () => {
         assert.strictEqual(root.text(), "0-0,0-1")
         yield* tick
         assert.strictEqual(root.text(), "1-0,1-1 touched")
-        assert.deepStrictEqual(commandLog(root).at(-1), { _tag: "CommandEnded", waitEnded: "settled", outstanding: [] })
+        assert.deepStrictEqual(commandLog(root).at(-1), {
+          _tag: "CommandEnded",
+          waitEnded: "settled",
+          outstanding: []
+        })
       })
     )
   })
@@ -815,16 +990,22 @@ describe("Command.afterRefetch", () => {
           .loaded("user", ann)
           .send(app.CardMessage.Rename({ name: "Bob" }))
           .resolve(app.RenameUser, "Bob")
-        assert.deepStrictEqual(s.pending.map((entry) => [entry.status, entry.awaiting]), [
-          ["awaiting", [{ name: "user", args: { id: "1" } }]]
-        ])
+        assert.deepStrictEqual(
+          s.pending.map((entry) => [entry.status, entry.awaiting]),
+          [
+            ["awaiting", [{ name: "user", args: { id: "1" } }]]
+          ]
+        )
         assert.deepStrictEqual(s.model.done, [])
         app.order.length = 0
         s.loaded("user", { id: "1", name: "Bob" })
-        assert.deepStrictEqual(app.order.filter((line) => line.startsWith("update")), [
-          "update a UserChanged",
-          "update a Renamed Bob"
-        ])
+        assert.deepStrictEqual(
+          app.order.filter((line) => line.startsWith("update")),
+          [
+            "update a UserChanged",
+            "update a Renamed Bob"
+          ]
+        )
         assert.deepStrictEqual(s.model.done, ["Bob"])
         s.expectNone()
         // h.isRunning stays true through the wait.
@@ -891,7 +1072,10 @@ describe("Command.afterRefetch", () => {
           .send(queued.CardMessage.Rename({ name: "Bob" }))
           .send(queued.CardMessage.Rename({ name: "" }))
           .resolve(queued.RenameUser, "Bob")
-        assert.deepStrictEqual(s.pending.map((entry) => entry.status), ["awaiting", "running"])
+        assert.deepStrictEqual(s.pending.map((entry) => entry.status), [
+          "awaiting",
+          "running"
+        ])
         s.fail(queued.RenameUser, "empty")
         // The failure waits behind Bob's message.
         assert.deepStrictEqual(s.model.done, [])
@@ -907,7 +1091,9 @@ describe("Command.afterRefetch", () => {
           .send(app.CardMessage.Rename({ name: "Bob" }))
           .loaded("user", ann)
           .resolve(app.RenameUser, "Bob")
-        assert.deepStrictEqual(s.pending.map((entry) => entry.status), ["awaiting"])
+        assert.deepStrictEqual(s.pending.map((entry) => entry.status), [
+          "awaiting"
+        ])
         s.loaded("user", { id: "1", name: "Bob" })
         assert.deepStrictEqual(s.model.done, ["Bob"])
         // Nor does a query that held only a Failure.

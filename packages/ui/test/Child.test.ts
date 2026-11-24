@@ -20,7 +20,12 @@ const Row = RowDef.make({
   view: (h, text) => h.el("li", text)
 })
 
-const ListboxDef = Component.define({ name: "Listbox", scoped: false, model: Schema.Null, message: Schema.Never })
+const ListboxDef = Component.define({
+  name: "Listbox",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never
+})
 
 const Listbox = ListboxDef.make({
   init: () => null,
@@ -28,7 +33,10 @@ const Listbox = ListboxDef.make({
   parts: (p) => ({ id: p.id("list") })
 })
 
-class Todos extends Feature.Service<Todos>()("Todos", { props: Schema.Struct({}), events: RowEvents }) {}
+class Todos extends Feature.Service<Todos>()("Todos", {
+  props: Schema.Struct({}),
+  events: RowEvents
+}) {}
 
 const ParentMessage = UiSchema.TaggedEnum({ Changed: { text: Schema.String } })
 const h = View.makeHelper<typeof ParentMessage.Type, {}>({}, undefined)
@@ -53,12 +61,21 @@ describe("a component call", () => {
     const copy = { ...Row }
     assert.strictEqual(copy.definition, RowDef)
     assert.strictEqual(copy.update, Row.update)
-    assert.includeMembers(Object.keys(Row), ["definition", "props", "model", "message", "init", "update", "view"])
+    assert.includeMembers(Object.keys(Row), [
+      "definition",
+      "props",
+      "model",
+      "message",
+      "init",
+      "update",
+      "view"
+    ])
     assert.includeMembers(Object.keys(Listbox), ["definition", "parts"])
   })
 
   it("builds a child with a key", () => {
-    const onEmit = (events: typeof RowEvents.Type) => ParentMessage.Changed({ text: events.text })
+    const onEmit = (events: typeof RowEvents.Type) =>
+      ParentMessage.Changed({ text: events.text })
     const child = Row(h, { key: "a", props: { id: "a" }, onEmit })
     assert.strictEqual(child._tag, "Child")
     assert.strictEqual(child.component, Row)
@@ -95,12 +112,22 @@ describe("a component call", () => {
     assert.strictEqual(typeof Provided, "function")
     // `provide` keeps the definition, so nested provides do too.
     assert.strictEqual(Provided.definition, RowDef)
-    assert.strictEqual(Component.provide(Provided, Layer.empty).definition, RowDef)
-    assert.includeMembers(Object.keys(Provided), ["definition", "layer", "update"])
+    assert.strictEqual(
+      Component.provide(Provided, Layer.empty).definition,
+      RowDef
+    )
+    assert.includeMembers(Object.keys(Provided), [
+      "definition",
+      "layer",
+      "update"
+    ])
     assert.isTrue(Component.isComponent(Provided))
     assert.isDefined(Provided.layer)
     assert.strictEqual(Provided.update, Row.update)
-    assert.strictEqual(Provided(h, { key: "p", props: { id: "p" } }).component, Provided)
+    assert.strictEqual(
+      Provided(h, { key: "p", props: { id: "p" } }).component,
+      Provided
+    )
   })
 })
 

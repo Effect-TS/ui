@@ -21,13 +21,27 @@ const geometry = Effect.acquireRelease(
   (restore) => Effect.sync(restore)
 )
 
-const menus: ReadonlyArray<{ readonly name: string; readonly items: ReadonlyArray<MenuItem> }> = [
-  { name: "file", items: [{ value: "new", label: "New" }, { value: "share", label: "Share" }] },
-  { name: "edit", items: [{ value: "copy", label: "Copy" }, { value: "paste", label: "Paste" }] },
+const menus: ReadonlyArray<
+  { readonly name: string; readonly items: ReadonlyArray<MenuItem> }
+> = [
+  {
+    name: "file",
+    items: [{ value: "new", label: "New" }, { value: "share", label: "Share" }]
+  },
+  {
+    name: "edit",
+    items: [{ value: "copy", label: "Copy" }, {
+      value: "paste",
+      label: "Paste"
+    }]
+  },
   { name: "view", items: [{ value: "zoom", label: "Zoom" }] }
 ]
 
-const shareItems: ReadonlyArray<MenuItem> = [{ value: "email", label: "Email" }, { value: "print", label: "Print" }]
+const shareItems: ReadonlyArray<MenuItem> = [
+  { value: "email", label: "Email" },
+  { value: "print", label: "Print" }
+]
 
 const Config = Schema.Struct({
   orientation: Schema.Literals(["horizontal", "vertical"]),
@@ -64,22 +78,32 @@ const Page = Component.define({
   update: {
     RequestedOpen: ($, { menu, reason }) => ({
       ...$.model,
-      ...(menu === "share" ? { share: true } : { open: $.props.independent ? [...$.model.open, menu] : [menu] }),
+      ...(menu === "share"
+        ? { share: true }
+        : { open: $.props.independent ? [...$.model.open, menu] : [menu] }),
       log: [...$.model.log, menu + " RequestedOpen " + reason]
     }),
     RequestedClose: ($, { menu, reason }) => ({
       ...$.model,
-      ...(menu === "share" ? { share: false } : { open: $.model.open.filter((name) => name !== menu) }),
+      ...(menu === "share"
+        ? { share: false }
+        : { open: $.model.open.filter((name) => name !== menu) }),
       log: [...$.model.log, menu + " RequestedClose " + reason]
     }),
-    Picked: ($, { menu, value }) => ({ ...$.model, log: [...$.model.log, menu + " Picked " + value] }),
+    Picked: ($, { menu, value }) => ({
+      ...$.model,
+      log: [...$.model.log, menu + " Picked " + value]
+    }),
     ChangedModal: ($, { modal }) => ({ ...$.model, modal })
   },
   view: (h, model) => {
     const onEmit = (menu: string) => ({
-      RequestedOpen: ({ reason }: { readonly reason: string }) => Message.RequestedOpen({ menu, reason }),
-      RequestedClose: ({ reason }: { readonly reason: string }) => Message.RequestedClose({ menu, reason }),
-      Picked: ({ value }: { readonly value: string }) => Message.Picked({ menu, value }),
+      RequestedOpen: ({ reason }: { readonly reason: string }) =>
+        Message.RequestedOpen({ menu, reason }),
+      RequestedClose: ({ reason }: { readonly reason: string }) =>
+        Message.RequestedClose({ menu, reason }),
+      Picked: ({ value }: { readonly value: string }) =>
+        Message.Picked({ menu, value }),
       Highlighted: () => undefined,
       RequestedQuery: () => undefined,
       Settled: () => undefined
@@ -87,7 +111,11 @@ const Page = Component.define({
     return h.div(
       h.button.attrs({ id: "before", type: "button" }).children("Before"),
       Menubar(h, {
-        props: { orientation: h.props.orientation, disabled: h.props.disabled, modal: model.modal },
+        props: {
+          orientation: h.props.orientation,
+          disabled: h.props.disabled,
+          modal: model.modal
+        },
         view: (menubar) =>
           menubar.root(
             h.div.attrs({
@@ -100,46 +128,75 @@ const Page = Component.define({
             ...menus.map(({ items, name }) =>
               Menu(h, {
                 key: name,
-                props: { open: model.open.includes(name), items, disabled: name === "file" && h.props.fileDisabled },
+                props: {
+                  open: model.open.includes(name),
+                  items,
+                  disabled: name === "file" && h.props.fileDisabled
+                },
                 onEmit: onEmit(name),
                 view: (menu) =>
                   h.div(
-                    menu.trigger({ element: h.button.attrs({ id: name, role: "button", tabindex: "5" }) }).children(
+                    menu.trigger({
+                      element: h.button.attrs({
+                        id: name,
+                        role: "button",
+                        tabindex: "5"
+                      })
+                    }).children(
                       name
                     ),
                     name === "view" && h.props.twin
-                      ? menu.trigger({ element: h.button.attr("id", "view2") }).children("view 2")
+                      ? menu.trigger({ element: h.button.attr("id", "view2") })
+                        .children("view 2")
                       : null,
-                    menu.positioner(h.div.attr("id", name + "-positioner")).children(
-                      menu.popup(h.div).children(
-                        ...items.map((item) =>
-                          item.value === "share"
-                            ? Menu(h, {
-                              props: { open: model.share, items: shareItems, parentItem: "share" },
-                              onEmit: onEmit("share"),
-                              view: (share) =>
-                                h.div(
-                                  menu.item({
-                                    element: share.submenuTrigger(h.div.attr("data-testid", "share")),
-                                    value: "share"
-                                  })
-                                    .children("Share"),
-                                  share.positioner(h.div.attr("id", "share-positioner")).children(
-                                    share.popup(h.div).children(
-                                      ...shareItems.map((sub) =>
-                                        share.item({ element: h.div.attr("data-testid", sub.value), value: sub.value })
-                                          .children(sub.label)
+                    menu.positioner(h.div.attr("id", name + "-positioner"))
+                      .children(
+                        menu.popup(h.div).children(
+                          ...items.map((item) =>
+                            item.value === "share"
+                              ? Menu(h, {
+                                props: {
+                                  open: model.share,
+                                  items: shareItems,
+                                  parentItem: "share"
+                                },
+                                onEmit: onEmit("share"),
+                                view: (share) =>
+                                  h.div(
+                                    menu.item({
+                                      element: share.submenuTrigger(
+                                        h.div.attr("data-testid", "share")
+                                      ),
+                                      value: "share"
+                                    })
+                                      .children("Share"),
+                                    share.positioner(
+                                      h.div.attr("id", "share-positioner")
+                                    ).children(
+                                      share.popup(h.div).children(
+                                        ...shareItems.map((sub) =>
+                                          share.item({
+                                            element: h.div.attr(
+                                              "data-testid",
+                                              sub.value
+                                            ),
+                                            value: sub.value
+                                          })
+                                            .children(sub.label)
+                                        )
                                       )
                                     )
                                   )
-                                )
-                            })
-                            : menu.item({ element: h.div.attr("data-testid", item.value), value: item.value }).children(
-                              item.label
-                            )
+                              })
+                              : menu.item({
+                                element: h.div.attr("data-testid", item.value),
+                                value: item.value
+                              }).children(
+                                item.label
+                              )
+                          )
                         )
                       )
-                    )
                   )
               })
             )
@@ -168,27 +225,47 @@ const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
   return { root, log: () => root.model()?.log ?? [] }
 })
 
-const item = (value: string) => document.querySelector<HTMLElement>("[data-testid=" + value + "]")!
+const item = (value: string) =>
+  document.querySelector<HTMLElement>("[data-testid=" + value + "]")!
 const keydown = (target: Element, key: string) =>
-  target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }))
+  target.dispatchEvent(
+    new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })
+  )
 const mousedown = (target: Element) => {
   target.dispatchEvent(
-    new PointerEvent("pointerdown", { bubbles: true, isPrimary: true, pointerType: "mouse", button: 0 })
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      isPrimary: true,
+      pointerType: "mouse",
+      button: 0
+    })
   )
-  target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }))
+  target.dispatchEvent(
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 })
+  )
 }
 const shown = (id: string) => byId(id).matches(":popover-open")
-const tabindexes = () => ["file", "edit", "view"].map((id) => byId(id).getAttribute("tabindex"))
+const tabindexes = () =>
+  ["file", "edit", "view"].map((id) => byId(id).getAttribute("tabindex"))
 
 describe("Menubar in a document", { concurrent: false }, () => {
   it.effect("the arrow keys, Home and End move focus between the triggers without opening a menu", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage()
       assert.strictEqual(byId("bar").getAttribute("role"), "menubar")
-      assert.strictEqual(byId("bar").getAttribute("aria-orientation"), "horizontal")
-      assert.strictEqual(byId("bar").getAttribute("data-orientation"), "horizontal")
+      assert.strictEqual(
+        byId("bar").getAttribute("aria-orientation"),
+        "horizontal"
+      )
+      assert.strictEqual(
+        byId("bar").getAttribute("data-orientation"),
+        "horizontal"
+      )
       assert.strictEqual(byId("bar").getAttribute("data-modal"), "")
-      assert.strictEqual(byId("bar").getAttribute("data-part-state"), "horizontal:true:false:false")
+      assert.strictEqual(
+        byId("bar").getAttribute("data-part-state"),
+        "horizontal:true:false:false"
+      )
       assert.strictEqual(byId("file").getAttribute("role"), "menuitem")
       assert.deepStrictEqual(tabindexes(), ["0", "-1", "-1"])
       byId("file").focus()
@@ -211,8 +288,14 @@ describe("Menubar in a document", { concurrent: false }, () => {
       keydown(byId("file"), "ArrowDown")
       yield* tick
       assert.isTrue(shown("file-positioner"))
-      assert.strictEqual(byId("file-positioner").getAttribute("data-side"), "bottom")
-      assert.strictEqual(byId("file-positioner").getAttribute("data-align"), "start")
+      assert.strictEqual(
+        byId("file-positioner").getAttribute("data-side"),
+        "bottom"
+      )
+      assert.strictEqual(
+        byId("file-positioner").getAttribute("data-align"),
+        "start"
+      )
       assert.strictEqual(document.activeElement, item("new"))
       assert.deepStrictEqual(log(), ["file RequestedOpen list-navigation"])
     }))
@@ -224,13 +307,19 @@ describe("Menubar in a document", { concurrent: false }, () => {
       yield* tick
       assert.isTrue(shown("file-positioner"))
       assert.strictEqual(byId("bar").getAttribute("data-has-submenu-open"), "")
-      assert.strictEqual(byId("bar").getAttribute("data-part-state"), "horizontal:true:false:true")
+      assert.strictEqual(
+        byId("bar").getAttribute("data-part-state"),
+        "horizontal:true:false:true"
+      )
       keydown(document.activeElement!, "ArrowRight")
       yield* tick
       assert.isFalse(shown("file-positioner"))
       assert.isTrue(shown("edit-positioner"))
       assert.strictEqual(document.activeElement, item("copy"))
-      assert.strictEqual(byId("edit-positioner").getAttribute("data-instant"), "group")
+      assert.strictEqual(
+        byId("edit-positioner").getAttribute("data-instant"),
+        "group"
+      )
       keydown(item("copy"), "ArrowLeft")
       yield* tick
       assert.isTrue(shown("file-positioner"))
@@ -244,7 +333,10 @@ describe("Menubar in a document", { concurrent: false }, () => {
       assert.isFalse(shown("view-positioner"))
       assert.strictEqual(document.activeElement, byId("view"))
       assert.isUndefined(byId("bar").dataset.hasSubmenuOpen)
-      assert.strictEqual(byId("bar").getAttribute("data-part-state"), "horizontal:true:false:false")
+      assert.strictEqual(
+        byId("bar").getAttribute("data-part-state"),
+        "horizontal:true:false:false"
+      )
       assert.deepStrictEqual(log(), [
         "file RequestedOpen trigger-press",
         "edit RequestedOpen list-navigation",
@@ -304,15 +396,24 @@ describe("Menubar in a document", { concurrent: false }, () => {
       assert.isFalse(shown("file-positioner"))
       assert.isTrue(shown("edit-positioner"))
       assert.strictEqual(document.activeElement, item("copy"))
-      assert.includeMembers([...log()], ["share RequestedOpen list-navigation", "edit RequestedOpen list-navigation"])
+      assert.includeMembers([...log()], [
+        "share RequestedOpen list-navigation",
+        "edit RequestedOpen list-navigation"
+      ])
     }))
 
   it.effect("a vertical menubar moves with ArrowDown, opens with ArrowRight and closes with ArrowLeft", () =>
     Effect.gen(function*() {
       yield* Effect.scoped(Effect.gen(function*() {
         const { log } = yield* mountPage({ orientation: "vertical" })
-        assert.strictEqual(byId("bar").getAttribute("aria-orientation"), "vertical")
-        assert.strictEqual(byId("bar").getAttribute("data-orientation"), "vertical")
+        assert.strictEqual(
+          byId("bar").getAttribute("aria-orientation"),
+          "vertical"
+        )
+        assert.strictEqual(
+          byId("bar").getAttribute("data-orientation"),
+          "vertical"
+        )
         byId("file").focus()
         keydown(byId("file"), "ArrowDown")
         yield* tick
@@ -324,8 +425,14 @@ describe("Menubar in a document", { concurrent: false }, () => {
         keydown(byId("edit"), "ArrowRight")
         yield* tick
         assert.isTrue(shown("edit-positioner"))
-        assert.strictEqual(byId("edit-positioner").getAttribute("data-side"), "inline-end")
-        assert.strictEqual(byId("edit-positioner").getAttribute("data-align"), "start")
+        assert.strictEqual(
+          byId("edit-positioner").getAttribute("data-side"),
+          "inline-end"
+        )
+        assert.strictEqual(
+          byId("edit-positioner").getAttribute("data-align"),
+          "start"
+        )
         assert.strictEqual(document.activeElement, item("copy"))
         keydown(item("copy"), "ArrowDown")
         yield* tick
@@ -334,7 +441,10 @@ describe("Menubar in a document", { concurrent: false }, () => {
         yield* tick
         assert.isFalse(shown("edit-positioner"))
         assert.strictEqual(document.activeElement, byId("edit"))
-        assert.deepStrictEqual(log(), ["edit RequestedOpen list-navigation", "edit RequestedClose list-navigation"])
+        assert.deepStrictEqual(log(), [
+          "edit RequestedOpen list-navigation",
+          "edit RequestedClose list-navigation"
+        ])
       }))
       yield* mountPage({ orientation: "vertical", rtl: true })
       byId("edit").focus()
@@ -371,14 +481,30 @@ describe("Menubar in a document", { concurrent: false }, () => {
       yield* tick
       assert.isTrue(shown("edit-positioner"))
       assert.isFalse(shown("file-positioner"))
-      assert.strictEqual(document.activeElement?.getAttribute("aria-labelledby"), "edit")
-      byId("edit").dispatchEvent(
-        new PointerEvent("pointerdown", { bubbles: true, isPrimary: true, pointerType: "touch" })
+      assert.strictEqual(
+        document.activeElement?.getAttribute("aria-labelledby"),
+        "edit"
       )
-      byId("edit").dispatchEvent(new PointerEvent("click", { bubbles: true, detail: 1, pointerType: "touch" }))
+      byId("edit").dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          isPrimary: true,
+          pointerType: "touch"
+        })
+      )
+      byId("edit").dispatchEvent(
+        new PointerEvent("click", {
+          bubbles: true,
+          detail: 1,
+          pointerType: "touch"
+        })
+      )
       yield* tick
       assert.isTrue(shown("edit-positioner"))
-      assert.deepStrictEqual(log(), ["file RequestedOpen trigger-press", "edit RequestedOpen trigger-focus"])
+      assert.deepStrictEqual(log(), [
+        "file RequestedOpen trigger-press",
+        "edit RequestedOpen trigger-focus"
+      ])
     }))
 
   it.effect("two triggers of one menu hand its popup over with the arrow keys and the pointer", () =>
@@ -402,7 +528,10 @@ describe("Menubar in a document", { concurrent: false }, () => {
       }))
       yield* mountPage({ initial: ["view"], twin: true })
       assert.strictEqual(byId("view").getAttribute("aria-expanded"), "true")
-      keydown(byId("view-positioner").querySelector("[role=menu]")!, "ArrowRight")
+      keydown(
+        byId("view-positioner").querySelector("[role=menu]")!,
+        "ArrowRight"
+      )
       yield* tick
       assert.strictEqual(byId("view2").getAttribute("aria-expanded"), "true")
       assert.strictEqual(byId("view").getAttribute("aria-expanded"), "false")
@@ -416,11 +545,15 @@ describe("Menubar in a document", { concurrent: false }, () => {
       mousedown(byId("file"))
       yield* tick
       assert.isFalse(byId("bar").hasAttribute("data-modal"))
-      assert.isNull(byId("file-positioner").querySelector("[data-menu-blocker]"))
+      assert.isNull(
+        byId("file-positioner").querySelector("[data-menu-blocker]")
+      )
       root.send(Message.ChangedModal({ modal: true }))
       yield* tick
       assert.strictEqual(byId("bar").getAttribute("data-modal"), "")
-      const blocker = byId("file-positioner").querySelector<HTMLElement>("[data-menu-blocker]")!
+      const blocker = byId("file-positioner").querySelector<HTMLElement>(
+        "[data-menu-blocker]"
+      )!
       assert.isFalse(blocker.inert)
       assert.notStrictEqual(blocker.style.getPropertyValue("clip-path"), "")
     }))
@@ -440,7 +573,11 @@ describe("Menubar in a document", { concurrent: false }, () => {
     Effect.gen(function*() {
       const { log } = yield* mountPage({ disabled: true })
       assert.deepStrictEqual(tabindexes(), ["-1", "-1", "-1"])
-      assert.isTrue(["file", "edit", "view"].every((id) => byId(id).hasAttribute("disabled")))
+      assert.isTrue(
+        ["file", "edit", "view"].every((id) =>
+          byId(id).hasAttribute("disabled")
+        )
+      )
       mousedown(byId("file"))
       yield* tick
       assert.isFalse(shown("file-positioner"))

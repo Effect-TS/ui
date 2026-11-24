@@ -58,14 +58,22 @@ const attributeSpecial = /[&"<>]/
 
 const escapeText = (text: string): string =>
   textSpecial.test(text)
-    ? text.replace(/[&<>]/g, (char) => char === "&" ? "&amp;" : char === "<" ? "&lt;" : "&gt;")
+    ? text.replace(/[&<>]/g, (char) =>
+      char === "&" ? "&amp;" : char === "<" ? "&lt;" : "&gt;")
     : text
 
 const escapeAttribute = (value: string): string =>
   attributeSpecial.test(value)
     ? value.replace(
       /[&"<>]/g,
-      (char) => char === "&" ? "&amp;" : char === "\"" ? "&quot;" : char === "<" ? "&lt;" : "&gt;"
+      (char) =>
+        char === "&"
+          ? "&amp;"
+          : char === "\""
+          ? "&quot;"
+          : char === "<"
+          ? "&lt;"
+          : "&gt;"
     )
     : value
 
@@ -88,7 +96,9 @@ const elementAttributes = (
   for (const [name, value] of Object.entries(props)) {
     switch (name) {
       case "value":
-        if (tag !== "textarea" && tag !== "select" && value !== undefined) out.set("value", String(value))
+        if (tag !== "textarea" && tag !== "select" && value !== undefined) {
+          out.set("value", String(value))
+        }
         break
       case "checked":
       case "selected":
@@ -203,7 +213,12 @@ export const makeWriter = (): ServerSink & { readonly html: () => string } => {
 }
 
 const write = (tape: ReadonlyArray<any>): string => {
-  const framed = framedTags ??= new Set([...voidTags, ...textOnlyTags, ...newlineTags, "select"])
+  const framed = framedTags ??= new Set([
+    ...voidTags,
+    ...textOnlyTags,
+    ...newlineTags,
+    "select"
+  ])
   let out = ""
   let depth = 0
   let frame: Frame | undefined
@@ -248,7 +263,9 @@ const write = (tape: ReadonlyArray<any>): string => {
         const plain = plainAttributes(tag, attrs, props)
         // Most elements: outside a select, and closed by their closing tag.
         if (selectValue === undefined && !framed.has(tag)) {
-          out += `<${tag}${plain ?? written(elementAttributes(tag, attrs, props))}>`
+          out += `<${tag}${
+            plain ?? written(elementAttributes(tag, attrs, props))
+          }>`
           // Read for nothing: every element's `value` is read once, whether or not its tag writes it.
           void props.value
           break
@@ -258,23 +275,43 @@ const write = (tape: ReadonlyArray<any>): string => {
         if (plain !== undefined) out += `${plain}>`
         else {
           const attributes = elementAttributes(tag, attrs, props)
-          if (tag === "option" && selectValue !== undefined && !Object.hasOwn(props, "selected")) {
+          if (
+            tag === "option" && selectValue !== undefined &&
+            !Object.hasOwn(props, "selected")
+          ) {
             const value = attributes.get("value")
             if (value === undefined) option = attributes
             else if (value === selectValue) attributes.set("selected", "")
           }
           if (option === undefined) out += `${written(attributes)}>`
         }
-        const kind = voidTags.has(tag) ? "void" : textOnlyTags.has(tag) ? "text" : undefined
+        const kind = voidTags.has(tag)
+          ? "void"
+          : textOnlyTags.has(tag)
+          ? "text"
+          : undefined
         const value = kind === "void" ? undefined : props.value
         const inside = tag === "select" && value !== undefined
           ? String(value)
           : tag === "option" || tag === "optgroup"
           ? selectValue
           : undefined
-        if (kind === undefined && option === undefined && inside === selectValue && !newlineTags.has(tag)) break
+        if (
+          kind === undefined && option === undefined &&
+          inside === selectValue && !newlineTags.has(tag)
+        ) break
         const gathers = kind === "text" || option !== undefined
-        frame = { parent: frame, depth, before: out, text, gathers, selectValue, kind, value, option }
+        frame = {
+          parent: frame,
+          depth,
+          before: out,
+          text,
+          gathers,
+          selectValue,
+          kind,
+          value,
+          option
+        }
         out = ""
         bare = true
         skips = kind !== undefined
@@ -301,13 +338,24 @@ const write = (tape: ReadonlyArray<any>): string => {
             before += `${written(open.option)}>`
           }
           let inner = open.kind === "text"
-            ? textContent(tag, bare && tag === "textarea" && open.value !== undefined ? String(open.value) : text!)
+            ? textContent(
+              tag,
+              bare && tag === "textarea" && open.value !== undefined
+                ? String(open.value)
+                : text!
+            )
             : out
-          if (newlineTags.has(tag) && inner.startsWith("\n")) inner = `\n${inner}`
+          if (newlineTags.has(tag) && inner.startsWith("\n")) {
+            inner = `\n${inner}`
+          }
           out = `${before}${inner}</${tag}>`
         }
         frame = open.parent
-        if (open.gathers) text = open.text === undefined ? undefined : open.text + text
+        if (open.gathers) {
+          text = open.text === undefined
+            ? undefined
+            : open.text + text
+        }
         selectValue = open.selectValue
         bare = false
         break
@@ -321,9 +369,14 @@ const write = (tape: ReadonlyArray<any>): string => {
 // Head
 // ---------------------------------------------------------------------------
 
-const tag = (name: string, pairs: ReadonlyArray<readonly [string, string]>): string =>
+const tag = (
+  name: string,
+  pairs: ReadonlyArray<readonly [string, string]>
+): string =>
   `<${name}${
-    headAttributes.normalize(pairs).map(([key, value]) => ` ${key}="${escapeAttribute(value)}"`).join("")
+    headAttributes.normalize(pairs).map(([key, value]) =>
+      ` ${key}="${escapeAttribute(value)}"`
+    ).join("")
   } ${Head.marker}>`
 
 /**
@@ -340,34 +393,50 @@ export const htmlHead = (head: unknown): Head.HtmlHead => {
 
 /** @internal */
 export const headTags = (head: Head.HtmlHead): string => {
-  let out = head.title === undefined ? "" : `<title ${Head.marker}>${escapeText(head.title)}</title>`
+  let out = head.title === undefined
+    ? ""
+    : `<title ${Head.marker}>${escapeText(head.title)}</title>`
   for (const entry of head.meta) out += tag("meta", Head.attributes(entry))
   for (const entry of head.links) out += tag("link", Head.attributes(entry))
   // The JSON is canonical, with `<` escaped, so it can't end the script.
-  for (const entry of head.jsonLd) out += `${tag("script", [["type", "application/ld+json"]])}${entry.json}</script>`
+  for (const entry of head.jsonLd) {
+    out += `${
+      tag("script", [["type", "application/ld+json"]])
+    }${entry.json}</script>`
+  }
   return out
 }
 
 /** The attributes the head sets on `<html>`, in the order the browser host lists them in the marker. */
 /** @internal */
-export const htmlOwned = (head: Head.HtmlHead): ReadonlyArray<readonly [string, string]> => [
+export const htmlOwned = (
+  head: Head.HtmlHead
+): ReadonlyArray<readonly [string, string]> => [
   ...(head.html.lang === undefined ? [] : [["lang", head.html.lang] as const]),
   ...(head.html.dir === undefined ? [] : [["dir", head.html.dir] as const]),
   ...bodyOwned({ ...head, body: head.html })
 ]
 
 /** @internal */
-export const bodyOwned = (head: Head.HtmlHead): ReadonlyArray<readonly [string, string]> => [
-  ...(head.body.class.length === 0 ? [] : [["class", head.body.class.join(" ")] as const]),
+export const bodyOwned = (
+  head: Head.HtmlHead
+): ReadonlyArray<readonly [string, string]> => [
+  ...(head.body.class.length === 0
+    ? []
+    : [["class", head.body.class.join(" ")] as const]),
   ...Object.entries(head.body.data)
 ]
 
 /** Escaped attributes, plus the marker listing their names; empty when the head sets none. */
 /** @internal */
-export const attributes = (pairs: ReadonlyArray<readonly [string, string]>): string => {
+export const attributes = (
+  pairs: ReadonlyArray<readonly [string, string]>
+): string => {
   const normalized = headAttributes.normalize(pairs)
   return normalized.length === 0 ? "" : [
     ...normalized.map(([name, value]) => `${name}="${escapeAttribute(value)}"`),
-    `${Head.marker}="${escapeAttribute(normalized.map(([name]) => name).join(" "))}"`
+    `${Head.marker}="${
+      escapeAttribute(normalized.map(([name]) => name).join(" "))
+    }"`
   ].join(" ")
 }

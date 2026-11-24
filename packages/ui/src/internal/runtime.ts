@@ -113,7 +113,9 @@ const awaitingStatus: Status = { _tag: "Awaiting" }
 const readyStatus: Status = { _tag: "Ready" }
 /** What a slot's `fallback` is passed for a status other than `Ready`. */
 const resultOf = (status: Status): SlotResult =>
-  status._tag === "Failed" ? AsyncResult.failure(status.cause) : AsyncResult.initial(true)
+  status._tag === "Failed"
+    ? AsyncResult.failure(status.cause)
+    : AsyncResult.initial(true)
 
 const readyEnv = (ctx: Context.Context<any>, parent?: Env): Env => ({
   ctx,
@@ -124,7 +126,11 @@ const readyEnv = (ctx: Context.Context<any>, parent?: Env): Env => ({
   waiters: [],
   never: false
 })
-const buildingEnv = (parent: Env, never = parent.never, status: Status = pendingStatus): Env => ({
+const buildingEnv = (
+  parent: Env,
+  never = parent.never,
+  status: Status = pendingStatus
+): Env => ({
   ctx: undefined,
   failure: undefined,
   status,
@@ -134,7 +140,8 @@ const buildingEnv = (parent: Env, never = parent.never, status: Status = pending
   never
 })
 /** The nearest Env with services: what a fallback, or work after a handled Layer failure, runs against. */
-const settled = (env: Env): Env => env.ctx !== undefined ? env : settled(env.parent!)
+const settled = (env: Env): Env =>
+  env.ctx !== undefined ? env : settled(env.parent!)
 const whenReady = (
   env: Env,
   ready: (ctx: Context.Context<any>) => void,
@@ -155,11 +162,16 @@ const failEnv = (env: Env, cause: Cause.Cause<unknown>, shown = cause) => {
   env.status = { _tag: "Failed", cause: shown }
   for (const waiter of env.waiters.splice(0)) waiter.failed?.(cause)
 }
-const memoMapOf = (env: Env): Layer.MemoMap => env.memoMap ??= Layer.CurrentMemoMap.forkOrCreate(env.ctx!)
+const memoMapOf = (env: Env): Layer.MemoMap =>
+  env.memoMap ??= Layer.CurrentMemoMap.forkOrCreate(env.ctx!)
 
 /** What a keyed provide's keys read: one value per keyed provide, or the defect a key threw. */
 type Keys = ReadonlyArray<unknown> | { readonly defect: unknown }
-const readKeys = (component: Component.Any, props: unknown, model: unknown): Keys => {
+const readKeys = (
+  component: Component.Any,
+  props: unknown,
+  model: unknown
+): Keys => {
   try {
     return component.layerKeys!.map((key) => key(props, model))
   } catch (defect) {
@@ -246,7 +258,8 @@ type Packed = Rendered | Array<Rendered> | undefined
 const listOf = (items: Packed): Array<Rendered> =>
   items === undefined ? emptyList : Array.isArray(items) ? items : [items]
 /** How a list is held. */
-const packed = (items: Array<Rendered>): Packed => items.length > 1 ? items : items[0]
+const packed = (items: Array<Rendered>): Packed =>
+  items.length > 1 ? items : items[0]
 
 /** Where a walk down the tree along an event's path is: the items to look in next, and the instance they are in. */
 interface EventCursor {
@@ -266,7 +279,9 @@ export const eventOwners = (
   const out: Record<string, ReadonlyArray<string>> = {}
   for (const event in handlers) {
     const handler = handlers[event]
-    if (handler instanceof Layered) out[event] = handler.layers.map((layer) => layer.inst.path)
+    if (handler instanceof Layered) {
+      out[event] = handler.layers.map((layer) => layer.inst.path)
+    }
   }
   return out
 }
@@ -388,7 +403,12 @@ type Saved = Record<string, unknown>
 interface KeptTable {
   round: number
   readonly children: Map<string, Kept>
-  ask: ((alive: (input: Component.Alive<any, any, any>) => boolean, key: string) => boolean) | undefined
+  ask:
+    | ((
+      alive: (input: Component.Alive<any, any, any>) => boolean,
+      key: string
+    ) => boolean)
+    | undefined
 }
 
 const keptTables = new WeakMap<Instance, KeptTable>()
@@ -410,7 +430,10 @@ const outletOf = new WeakMap<Instance, OutletOf>()
  * The first result of `f` over the outlets `receiver` places. Their content was written by the author
  * of the tree `receiver` sits in, so a search of that author's trees goes into them.
  */
-const firstInOutlets = <A>(receiver: Instance, f: (out: Instance) => A | undefined): A | undefined => {
+const firstInOutlets = <A>(
+  receiver: Instance,
+  f: (out: Instance) => A | undefined
+): A | undefined => {
   // Read first: most components declare no slots, and this is cheaper than the map.
   if (receiver.component.definition.slots.length === 0) return undefined
   const slotted = slottedBy.get(receiver)
@@ -428,7 +451,9 @@ const firstInOutlets = <A>(receiver: Instance, f: (out: Instance) => A | undefin
 // ---------------------------------------------------------------------------
 
 interface Run {
-  readonly command: Command.Issued<any, any, never, "Effect"> | Command.Issued<any, any, never, "Stream">
+  readonly command:
+    | Command.Issued<any, any, never, "Effect">
+    | Command.Issued<any, any, never, "Stream">
   readonly issued: MessageLog.Issued
   /**
    * The run at the cache, begun at issue. `undefined` for a `Command.make` Command, and for a run issued
@@ -442,7 +467,9 @@ interface Run {
    * From fiber exit until delivery: the result an awaiting run holds, and its source. A silent result
    * (`Component.noop`) is held like a message, so `held !== undefined` always means awaiting.
    */
-  held: { readonly message: unknown; readonly source: MessageLog.Source } | undefined
+  held:
+    | { readonly message: unknown; readonly source: MessageLog.Source }
+    | undefined
   /**
    * Whether every result the run has had so far (its Effect's result, each Stream element, a mapped
    * failure) was `Component.noop`. `undefined` until the first result.
@@ -490,7 +517,14 @@ interface WatchRun {
 interface KeyedRun {
   group: componentQueries.Group
   readonly logKey: string
-  readonly values: Map<string, { readonly args: unknown; readonly result: Settled; readonly patched: boolean }>
+  readonly values: Map<
+    string,
+    {
+      readonly args: unknown
+      readonly result: Settled
+      readonly patched: boolean
+    }
+  >
   readonly changes: Set<string>
 }
 
@@ -529,7 +563,9 @@ export interface Instance {
   /** The query results, beside the Model: what each query last returned. */
   results: componentQueries.Results | undefined
   onEmit: (events: unknown) => unknown
-  onFailure: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
+  onFailure:
+    | ((failure: AsyncResult.Failure<never, unknown>) => unknown)
+    | undefined
   failure: Cause.Cause<unknown> | undefined
   /**
    * What the current render uses: each fallback it shows is checked against it, and adds to it. Once the
@@ -580,7 +616,10 @@ export interface Instance {
    */
   watched: Set<string> | undefined
   /** The instance's `Router.prefetch` declaration, registered with the Router. */
-  prefetch: { declaration: services.Prefetch; release: (() => void) | undefined } | undefined
+  prefetch: {
+    declaration: services.Prefetch
+    release: (() => void) | undefined
+  } | undefined
   keyed: Map<string, KeyedRun> | undefined
   /** A drain of the keyed queries is queued in the flush's deferred work. */
   keyedQueued: boolean
@@ -590,7 +629,14 @@ export interface Instance {
    * Set while the first emissions are folded before the first render: the Commands of those
    * updates, issued after `init`'s.
    */
-  mounting: Array<{ readonly command: Command.Command<any, any>; readonly issued: MessageLog.Issued }> | undefined
+  mounting:
+    | Array<
+      {
+        readonly command: Command.Command<any, any>
+        readonly issued: MessageLog.Issued
+      }
+    >
+    | undefined
   /** An owner of shared state: what its `shares` last returned. */
   shares: unknown
   /** An owner of shared state: the instances below it that read it, marked dirty when its value changes. */
@@ -653,7 +699,12 @@ interface Selection {
 }
 
 /** The Model and query results an instance adopts instead of `init`'s: the server's, or history's. */
-type Adopted = Option.Option<{ readonly model: unknown; readonly results: componentQueries.Results | undefined }>
+type Adopted = Option.Option<
+  {
+    readonly model: unknown
+    readonly results: componentQueries.Results | undefined
+  }
+>
 
 interface Retired {
   readonly scope: Scope.Closeable
@@ -723,7 +774,10 @@ export interface Root {
 /** The options `start` takes. */
 interface Options {
   readonly fallback?:
-    | ((failure: AsyncResult.Failure<never, unknown>, h: any) => View.Content<never, any>)
+    | ((
+      failure: AsyncResult.Failure<never, unknown>,
+      h: any
+    ) => View.Content<never, any>)
     | undefined
   /** Hydration: the server's state. The container holds the server's nodes. */
   readonly state?: Renderer.State | undefined
@@ -760,20 +814,27 @@ interface ServerOptions {
 /** A Schema as JSON. */
 interface JsonCodec {
   readonly encode: (value: unknown) => Effect.Effect<unknown, SchemaIssue.Issue>
-  readonly decode: (encoded: unknown) => Effect.Effect<unknown, SchemaIssue.Issue>
+  readonly decode: (
+    encoded: unknown
+  ) => Effect.Effect<unknown, SchemaIssue.Issue>
 }
 const jsonCodecs = new WeakMap<object, JsonCodec>()
 const jsonCodecOf = (schema: Schema.Codec<any, any>): JsonCodec => {
   let found = jsonCodecs.get(schema)
   if (found === undefined) {
     const codec = Schema.toCodecJson(schema as Schema.Codec<unknown, unknown>)
-    found = { encode: SchemaParser.encodeUnknownEffect(codec), decode: SchemaParser.decodeUnknownEffect(codec) }
+    found = {
+      encode: SchemaParser.encodeUnknownEffect(codec),
+      decode: SchemaParser.decodeUnknownEffect(codec)
+    }
     jsonCodecs.set(schema, found)
   }
   return found
 }
 
-const runCodec = <A, E>(effect: Effect.Effect<A, E>): Exit.Exit<A, E> | Fiber.Fiber<A, E> => {
+const runCodec = <A, E>(
+  effect: Effect.Effect<A, E>
+): Exit.Exit<A, E> | Fiber.Fiber<A, E> => {
   const exit = Effect.runSyncExit(effect)
   if (Exit.isFailure(exit)) {
     const defect = Cause.findDefect(exit.cause)
@@ -799,37 +860,60 @@ interface StateCodec {
     model: unknown,
     results: componentQueries.Results | undefined
   ) => Effect.Effect<unknown, SchemaIssue.Issue>
-  readonly decode: (encoded: unknown) => Effect.Effect<Decoded, SchemaIssue.Issue>
+  readonly decode: (
+    encoded: unknown
+  ) => Effect.Effect<Decoded, SchemaIssue.Issue>
 }
 interface Decoded {
   readonly model: unknown
   readonly results: componentQueries.Results | undefined
 }
-const redactedIssue = new SchemaIssue.Forbidden({ message: "the Schema holds a Schema.Redacted" })
+const redactedIssue = new SchemaIssue.Forbidden({
+  message: "the Schema holds a Schema.Redacted"
+})
 const failRedacted = Effect.fail(redactedIssue)
-const redactedState: StateCodec = { redacted: true, encode: () => failRedacted, decode: () => failRedacted }
+const redactedState: StateCodec = {
+  redacted: true,
+  encode: () => failRedacted,
+  decode: () => failRedacted
+}
 /** @internal */
 export const stateCodecOf = (component: Component.Any): StateCodec => {
   let found = stateCodecs.get(component)
   if (found === undefined) {
-    const schema = (component as Component.Component<any, any, any, any, any, any, any>).model
+    const schema =
+      (component as Component.Component<any, any, any, any, any, any, any>)
+        .model
     const bound = queryCore.boundOf(component)
-    if (holdsRedacted(schema.ast) || (bound !== undefined && holdsRedacted(bound.schema.ast))) {
+    if (
+      holdsRedacted(schema.ast) ||
+      (bound !== undefined && holdsRedacted(bound.schema.ast))
+    ) {
       found = redactedState
     } else if (bound === undefined) {
       const codec = jsonCodecOf(schema)
       found = {
         redacted: false,
         encode: (model) => codec.encode(model),
-        decode: (encoded) => Effect.mapEager(codec.decode(encoded), (model) => ({ model, results: undefined }))
+        decode: (encoded) =>
+          Effect.mapEager(
+            codec.decode(encoded),
+            (model) => ({ model, results: undefined })
+          )
       }
     } else {
-      const codec = jsonCodecOf(Schema.Struct({ model: schema, queries: bound.schema }))
+      const codec = jsonCodecOf(
+        Schema.Struct({ model: schema, queries: bound.schema })
+      )
       found = {
         redacted: false,
-        encode: (model, results) => codec.encode({ model, queries: results ?? bound.empty }),
+        encode: (model, results) =>
+          codec.encode({ model, queries: results ?? bound.empty }),
         decode: (encoded) =>
-          Effect.mapEager(codec.decode(encoded), (state: any) => ({ model: state.model, results: state.queries }))
+          Effect.mapEager(
+            codec.decode(encoded),
+            (state: any) => ({ model: state.model, results: state.queries })
+          )
       }
     }
     stateCodecs.set(component, found)
@@ -852,7 +936,9 @@ const warnOnce = (
 ) => {
   if (warned.has(inst.component)) return
   warned.add(inst.component)
-  Effect.runForkWith(ctx)(Effect.logWarning(`${inst.component.definition.name}: ${message()}`))
+  Effect.runForkWith(ctx)(
+    Effect.logWarning(`${inst.component.definition.name}: ${message()}`)
+  )
 }
 
 /** A `Redacted` in an instance's state defers it and its subtree, so the client builds them fresh. */
@@ -866,7 +952,11 @@ const warnRedacted = (inst: Instance, ctx: Context.Context<any>) =>
       "everything under it fresh, without hydration. Keep the secret in a leaf component or in a service."
   )
 
-const warnUnencoded = (inst: Instance, ctx: Context.Context<any>, cause: Cause.Cause<SchemaIssue.Issue>) => {
+const warnUnencoded = (
+  inst: Instance,
+  ctx: Context.Context<any>,
+  cause: Cause.Cause<SchemaIssue.Issue>
+) => {
   const error = Cause.findErrorOption(cause)
   if (Option.isSome(error) && error.value === redactedIssue) return
   warnOnce(
@@ -876,7 +966,10 @@ const warnUnencoded = (inst: Instance, ctx: Context.Context<any>, cause: Cause.C
     () =>
       "its state doesn't encode as JSON, so the server sends no state for it and the client builds it and " +
       "everything under it fresh, without hydration, and history doesn't restore it. " +
-      Option.match(error, { onNone: () => Cause.pretty(cause), onSome: formatIssue })
+      Option.match(error, {
+        onNone: () => Cause.pretty(cause),
+        onSome: formatIssue
+      })
   )
 }
 
@@ -890,25 +983,36 @@ const warnLate = (inst: Instance, ctx: Context.Context<any>) =>
       "after a reload it starts from init."
   )
 
-const warnRestore = (inst: Instance, ctx: Context.Context<any>, error: unknown) =>
+const warnRestore = (
+  inst: Instance,
+  ctx: Context.Context<any>,
+  error: unknown
+) =>
   warnOnce(
     warnedRestore,
     inst,
     ctx,
-    () => "its restore threw, so history doesn't restore it. " + Cause.pretty(Cause.die(error))
+    () =>
+      "its restore threw, so history doesn't restore it. " +
+      Cause.pretty(Cause.die(error))
   )
 
 /** An entry of the cache, by query name and args key: what a watch registered on, or a prefetch fetched. */
-const entryKey = (query: string, argsKey: string): string => `${query}\u0000${argsKey}`
+const entryKey = (query: string, argsKey: string): string =>
+  `${query}\u0000${argsKey}`
 
 const emptyText: View.Text = { _tag: "Text", text: "" }
 const ignoreEvents = () => undefined
 
 /** How a root folds its head when its vocabulary has no fold of its own: the title only. */
-const neutralFold: View.HeadFold<Head.Entry, Head.Head> = { merge: Head.merge, title: (head) => head.title }
+const neutralFold: View.HeadFold<Head.Entry, Head.Head> = {
+  merge: Head.merge,
+  title: (head) => head.title
+}
 
 /** The fold of a component's vocabulary, or the title-only one. */
-const foldOf = (component: Component.Any): View.HeadFold => component.elements()?.head ?? neutralFold
+const foldOf = (component: Component.Any): View.HeadFold =>
+  component.elements()?.head ?? neutralFold
 
 interface HeadPart {
   readonly inst: Instance
@@ -921,11 +1025,12 @@ const emptyTree: Head.Tree<any> = { entries: [], children: [] }
 
 /** An entry about an instance, without what `record` adds. */
 type Draft = MessageLog.InstanceEntry extends infer E
-  ? E extends MessageLog.InstanceEntry ? Omit<E, keyof MessageLog.InstanceBase> : never
+  ? E extends MessageLog.InstanceEntry ? Omit<E, keyof MessageLog.InstanceBase>
+  : never
   : never
 /** An entry about the tree, without what `recordTree` adds. */
-type TreeDraft = Exclude<MessageLog.Entry, MessageLog.InstanceEntry> extends infer E
-  ? E extends MessageLog.Entry ? Omit<E, keyof MessageLog.Base> : never
+type TreeDraft = Exclude<MessageLog.Entry, MessageLog.InstanceEntry> extends
+  infer E ? E extends MessageLog.Entry ? Omit<E, keyof MessageLog.Base> : never
   : never
 
 let sessions = 0
@@ -952,7 +1057,9 @@ const withProps = <A, E, R>(
   rootProps: unknown,
   f: (props: unknown) => Effect.Effect<A, E, R>
 ): Effect.Effect<A, E, R> =>
-  Effect.isEffect(rootProps) ? Effect.flatMap(rootProps as Effect.Effect<unknown>, f) : f(rootProps)
+  Effect.isEffect(rootProps)
+    ? Effect.flatMap(rootProps as Effect.Effect<unknown>, f)
+    : f(rootProps)
 
 /** @internal */
 export const mount = (
@@ -960,16 +1067,26 @@ export const mount = (
   rootProps: unknown,
   container: unknown,
   options?: Options
-): Effect.Effect<Root & Renderer.Root<any, any>, never, Scope.Scope | Renderer.Renderer> =>
-  withProps(rootProps, (props) =>
-    Effect.contextWith((caller: Context.Context<Scope.Scope | Renderer.Renderer>) => {
-      const ctx = onScheduler(caller)
-      const startOptions = { ...options, server: undefined }
-      return Effect.flatMap(
-        makeQueryCache(ctx, startOptions),
-        (cell) => start(component, props, container, ctx, cell, startOptions)
+): Effect.Effect<
+  Root & Renderer.Root<any, any>,
+  never,
+  Scope.Scope | Renderer.Renderer
+> =>
+  withProps(
+    rootProps,
+    (props) =>
+      Effect.contextWith(
+        (caller: Context.Context<Scope.Scope | Renderer.Renderer>) => {
+          const ctx = onScheduler(caller)
+          const startOptions = { ...options, server: undefined }
+          return Effect.flatMap(
+            makeQueryCache(ctx, startOptions),
+            (cell) =>
+              start(component, props, container, ctx, cell, startOptions)
+          )
+        }
       )
-    }))
+  )
 
 /** @internal */
 export const paint = (
@@ -978,26 +1095,34 @@ export const paint = (
   container: unknown,
   state: (path: string) => PaintState | undefined
 ): Effect.Effect<
-  { readonly fellBack: ReadonlyArray<string>; readonly fallbacks: ReadonlyArray<string> },
+  {
+    readonly fellBack: ReadonlyArray<string>
+    readonly fallbacks: ReadonlyArray<string>
+  },
   never,
   Scope.Scope | Renderer.Renderer
 > =>
-  Effect.contextWith((caller: Context.Context<Scope.Scope | Renderer.Renderer>) => {
-    const ctx = onScheduler(caller.pipe(
-      Context.omit(services.RootHooks),
-      Context.add(messageLog.MessageLog, messageLog.noop)
-    ))
-    const inert: Inert = { state, fellBack: [], fallbacks: new Set() }
-    const options: Options = { head: false, inert }
-    return Effect.flatMap(
-      makeQueryCache(ctx, options),
-      (cell) =>
-        Effect.map(
-          start(component, rootProps, container, ctx, cell, options),
-          () => ({ fellBack: inert.fellBack, fallbacks: Array.from(inert.fallbacks) })
-        )
-    )
-  })
+  Effect.contextWith(
+    (caller: Context.Context<Scope.Scope | Renderer.Renderer>) => {
+      const ctx = onScheduler(caller.pipe(
+        Context.omit(services.RootHooks),
+        Context.add(messageLog.MessageLog, messageLog.noop)
+      ))
+      const inert: Inert = { state, fellBack: [], fallbacks: new Set() }
+      const options: Options = { head: false, inert }
+      return Effect.flatMap(
+        makeQueryCache(ctx, options),
+        (cell) =>
+          Effect.map(
+            start(component, rootProps, container, ctx, cell, options),
+            () => ({
+              fellBack: inert.fellBack,
+              fallbacks: Array.from(inert.fallbacks)
+            })
+          )
+      )
+    }
+  )
 
 /**
  * Renders a tree on the server: on a host that only keeps the node tree,
@@ -1016,7 +1141,9 @@ export const prerender = (
     /** Where the frozen tree is written, for a caller that writes it itself. The render then builds no `nodes`. */
     readonly sink?: services.ServerSink | undefined
     /** Called once the tree is frozen, before the cache is serialised and its fetches are interrupted. */
-    readonly onFinish?: ((cache: ReturnType<typeof Query.internals>) => void) | undefined
+    readonly onFinish?:
+      | ((cache: ReturnType<typeof Query.internals>) => void)
+      | undefined
   }
 ): Effect.Effect<Renderer.Prerendered<any>> =>
   withProps(rootProps, (props) =>
@@ -1027,12 +1154,21 @@ export const prerender = (
         const budget = Duration.fromInputUnsafe(options.budget)
         const started = !Duration.isZero(budget)
         const host = serverHost.make(options.elements)
-        const ctx = onScheduler(Context.add(yield* Effect.context<never>(), Scope.Scope, scope))
+        const ctx = onScheduler(
+          Context.add(yield* Effect.context<never>(), Scope.Scope, scope)
+        )
         const startOptions: Options = {
           server: { host, fetches: started }
         }
         const cell = yield* makeQueryCache(ctx, startOptions)
-        const root = yield* start(component, props, host.createElement("#root"), ctx, cell, startOptions)
+        const root = yield* start(
+          component,
+          props,
+          host.createElement("#root"),
+          ctx,
+          cell,
+          startOptions
+        )
         if (started) {
           yield* Effect.raceFirst(
             Effect.callback<void>((resume) => {
@@ -1084,18 +1220,30 @@ const onScheduler = (ctx: Context.Context<any>): Context.Context<any> => {
 
 type PageState = services.PageState
 
-const encodePage = (inst: Instance, model = inst.model): Effect.Effect<PageState, SchemaIssue.Issue> => {
+const encodePage = (
+  inst: Instance,
+  model = inst.model
+): Effect.Effect<PageState, SchemaIssue.Issue> => {
   const state = stateCodecOf(inst.component).encode(model, inst.results)
   const last = inst.owning?.collected
-  if (last === undefined) return Effect.mapEager(state, (state) => ({ state, reported: undefined }))
+  if (last === undefined) {
+    return Effect.mapEager(state, (state) => ({ state, reported: undefined }))
+  }
   const message = inst.component.definition.message
   // An owner whose message can't be shipped, a `Redacted` in its Schema included, is deferred with its
   // subtree, as a Model adopted without it would get the same message again.
-  const reported = holdsRedacted(message.ast) ? failRedacted : jsonCodecOf(message).encode(last.message)
-  return Effect.flatMapEager(state, (state) => Effect.mapEager(reported, (reported) => ({ state, reported })))
+  const reported = holdsRedacted(message.ast)
+    ? failRedacted
+    : jsonCodecOf(message).encode(last.message)
+  return Effect.flatMapEager(
+    state,
+    (state) => Effect.mapEager(reported, (reported) => ({ state, reported }))
+  )
 }
 
-const encodeTree = (root: Instance): Effect.Effect<Map<Instance, Exit.Exit<PageState, SchemaIssue.Issue>>> => {
+const encodeTree = (
+  root: Instance
+): Effect.Effect<Map<Instance, Exit.Exit<PageState, SchemaIssue.Issue>>> => {
   const exits = new Map<Instance, Exit.Exit<PageState, SchemaIssue.Issue>>()
   const late = new Map<Instance, Fiber.Fiber<PageState, SchemaIssue.Issue>>()
   const visit = (inst: Instance) => {
@@ -1112,16 +1260,23 @@ const encodeTree = (root: Instance): Effect.Effect<Map<Instance, Exit.Exit<PageS
     const table = keptLive > 0 ? keptTables.get(inst) : undefined
     if (table === undefined) return
     for (const entry of table.children.values()) {
-      if (entry.inner._tag === "Child" && entry.at === undefined) visit(entry.inner.inst)
+      if (entry.inner._tag === "Child" && entry.at === undefined) {
+        visit(entry.inner.inst)
+      }
     }
   }
   visit(root)
   if (late.size === 0) return Effect.succeed(exits)
   return Effect.onInterrupt(
     Effect.as(
-      Effect.forEach(late, ([inst, fiber]) => Effect.map(Fiber.await(fiber), (exit) => exits.set(inst, exit)), {
-        discard: true
-      }),
+      Effect.forEach(
+        late,
+        ([inst, fiber]) =>
+          Effect.map(Fiber.await(fiber), (exit) => exits.set(inst, exit)),
+        {
+          discard: true
+        }
+      ),
       exits
     ),
     () => Fiber.interruptAll(late.values())
@@ -1156,7 +1311,13 @@ const nodeSink = (nodes: Array<Renderer.ServerNode>): services.ServerSink => {
   }
 }
 
-const noSink: services.ServerSink = { text() {}, open() {}, close() {}, enter() {}, leave() {} }
+const noSink: services.ServerSink = {
+  text() {},
+  open() {},
+  close() {},
+  enter() {},
+  leave() {}
+}
 
 /**
  * Writes a frozen tree to `to` once, in document order, and returns the state the client adopts. It is
@@ -1181,10 +1342,16 @@ const serializeTree = (
   const homes = new Map<Instance, Saved>()
   let into: Saved = state
   const noted = (home: Saved, key: "~kept" | "~scoped"): Saved =>
-    home !== state ? (home[key] ??= {}) as Saved : key === "~kept" ? kept : drawnScoped
+    home !== state
+      ? (home[key] ??= {}) as Saved
+      : key === "~kept"
+      ? kept
+      : drawnScoped
   /** Ships a status other than `Ready`: the client starts from it. */
   const ship = (path: string, status: Status) => {
-    if (status._tag === "Pending" || status._tag === "Failed") statuses[path] = status._tag
+    if (status._tag === "Pending" || status._tag === "Failed") {
+      statuses[path] = status._tag
+    }
   }
   // `under`: inside a deferred instance, whose subtree the client builds fresh.
   const instance = (inst: Instance, under: boolean) => {
@@ -1193,47 +1360,69 @@ const serializeTree = (
     const entry = keptLive > 0 ? keptEntries.get(inst) : undefined
     const was = into
     const home = entry === undefined ? undefined : homes.get(entry.author)!
-    const nested = home !== undefined && (entry!.at === undefined || home !== into)
-    if (nested) into = ((noted(home, "~kept")[entry!.author.path] ??= {}) as Saved)[path] = {}
+    const nested = home !== undefined &&
+      (entry!.at === undefined || home !== into)
+    if (nested) {
+      into =
+        ((noted(home, "~kept")[entry!.author.path] ??= {}) as Saved)[path] =
+          {}
+    }
     if (!under) {
       // A failed instance, and one kept off the server, are built fresh. One whose Layer is pending
       // or failed ships its status with its state.
-      const exit = inst.failure !== undefined || inst.deferred ? undefined : encoded.get(inst)
+      const exit = inst.failure !== undefined || inst.deferred
+        ? undefined
+        : encoded.get(inst)
       if (stateCodecOf(inst.component).redacted) warnRedacted(inst, ctx)
-      else if (exit !== undefined && Exit.isFailure(exit)) warnUnencoded(inst, ctx, exit.cause)
+      else if (exit !== undefined && Exit.isFailure(exit)) {
+        warnUnencoded(inst, ctx, exit.cause)
+      }
       if (exit === undefined || Exit.isFailure(exit)) {
         if (into === state) deferredPaths.push(path)
         inner = true
       } else {
         into[path] = exit.value.state
         if (home !== undefined && !nested) {
-          ;((noted(home, "~scoped")[entry!.author.path] ??= []) as Array<string>).push(path)
+          ;((noted(home, "~scoped")[entry!.author.path] ??= []) as Array<
+            string
+          >).push(path)
         }
         // What an owner's reports last sent: the client compares its reports with it.
-        if (exit.value.reported !== undefined) collected[path] = exit.value.reported
+        if (exit.value.reported !== undefined) {
+          collected[path] = exit.value.reported
+        }
         if (inst.component.layer !== undefined) ship(path, inst.env.status)
       }
     }
-    const bare = !inner && entry === undefined && inst.parent !== undefined && inst.component.layer === undefined &&
+    const bare = !inner && entry === undefined && inst.parent !== undefined &&
+      inst.component.layer === undefined &&
       !Array.isArray(inst.rendered) && inst.rendered?._tag === "Element"
     const table = keptLive > 0 ? keptTables.get(inst) : undefined
     if (table !== undefined) homes.set(inst, into)
     if (!bare) sink.enter(path)
     if (inst.failure === undefined) {
-      for (const rendered of listOf(inst.rendered)) serialize(inst, rendered, inner)
+      for (const rendered of listOf(inst.rendered)) {
+        serialize(inst, rendered, inner)
+      }
     }
     if (!bare) sink.leave(path)
     if (table !== undefined) {
       const shown = sink
       sink = noSink
       for (const kept of table.children.values()) {
-        if (kept.inner._tag === "Child" && kept.at === undefined) instance(kept.inner.inst, inner)
+        if (kept.inner._tag === "Child" && kept.at === undefined) {
+          instance(kept.inner.inst, inner)
+        }
       }
       sink = shown
     }
     into = was
   }
-  const serialize = (inst: Instance, rendered: Rendered, under: boolean): void => {
+  const serialize = (
+    inst: Instance,
+    rendered: Rendered,
+    under: boolean
+  ): void => {
     switch (rendered._tag) {
       case "Text":
         return sink.text(rendered.v.text)
@@ -1251,7 +1440,9 @@ const serializeTree = (
       case "Outlet": {
         const outlet = rendered.inst
         sink.enter(outlet.path)
-        for (const child of listOf(outlet.rendered)) serialize(outlet, child, under)
+        for (const child of listOf(outlet.rendered)) {
+          serialize(outlet, child, under)
+        }
         return sink.leave(outlet.path)
       }
       case "Fallback": {
@@ -1274,7 +1465,12 @@ const serializeTree = (
   // with a key for each instance costs more than everything else done with it. Defined as a copy would
   // define them, so each is the record's own whatever `Object.prototype` has under its name.
   const add = (key: string, value: unknown) =>
-    Object.defineProperty(state, key, { value, writable: true, enumerable: true, configurable: true })
+    Object.defineProperty(state, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true
+    })
   add("~deferred", deferredPaths)
   if (Object.keys(statuses).length > 0) add("~status", statuses)
   add("~query", query)
@@ -1328,7 +1524,8 @@ const makeQueryCache = (
     idleMs: queryCore.cacheIdleMs(options?.query?.idleTimeToLive),
     // The server's per-request cache: one fetch per key per request, and none with a budget of 0.
     settleOnce: server !== undefined,
-    fetches: (server === undefined || server.fetches) && options?.inert === undefined
+    fetches: (server === undefined || server.fetches) &&
+      options?.inert === undefined
   }
   let dispose: Effect.Effect<void> | undefined
   let closed = false
@@ -1384,10 +1581,18 @@ const start = (
     if (isClosed(owner)) return Effect.interrupt
     const scope = Scope.makeUnsafe("sequential")
     const setUp = Latch.makeUnsafe(false)
-    scopeAddFinalizerUnsafe(owner, {}, (exit) => setUp.whenOpen(Scope.close(scope, exit)))
+    scopeAddFinalizerUnsafe(owner, {}, (exit) =>
+      setUp.whenOpen(Scope.close(scope, exit)))
     let root: Root & Renderer.Root<any, any>
     try {
-      root = setup(component, rootProps, container, Context.add(ctx, Scope.Scope, scope), cell, options)
+      root = setup(
+        component,
+        rootProps,
+        container,
+        Context.add(ctx, Scope.Scope, scope),
+        cell,
+        options
+      )
     } finally {
       setUp.openUnsafe()
     }
@@ -1410,16 +1615,25 @@ const setup = (
 ): Root & Renderer.Root<any, any> => {
   const server = options?.server
   const inert = options?.inert
-  const host: Renderer.Host<any> = server !== undefined ? server.host : Context.get(ctx, services.Renderer).host
+  const host: Renderer.Host<any> = server !== undefined
+    ? server.host
+    : Context.get(ctx, services.Renderer).host
   const log = Context.get(ctx, messageLog.MessageLog)
   const executor = Context.get(ctx, Executor.CurrentExecutor)
   const clock = Context.get(ctx, Clock.Clock)
   const rootScope = Context.get(ctx, Scope.Scope)
-  const session = `${clock.currentTimeMillisUnsafe().toString(36)}-${(sessions++).toString(36)}`
+  const session = `${clock.currentTimeMillisUnsafe().toString(36)}-${
+    (sessions++).toString(36)
+  }`
   const controlled = host.controlled
   const rootEmitted: Array<unknown> = []
-  const sharedBuilds = new WeakMap<Env, Map<Layer.Layer<any, any, any>, SharedBuild>>()
-  const hooks = Option.getOrUndefined(Context.getOption(ctx, services.RootHooks))
+  const sharedBuilds = new WeakMap<
+    Env,
+    Map<Layer.Layer<any, any, any>, SharedBuild>
+  >()
+  const hooks = Option.getOrUndefined(
+    Context.getOption(ctx, services.RootHooks)
+  )
 
   // The problems sink, read once. A throw from it is swallowed: a check only reports.
   const problems = Context.get(ctx, queryCore.Problems)
@@ -1443,18 +1657,23 @@ const setup = (
   const hydration = host.hydration
   // Sets a property of an adopted element: the host's own way, or as on any other element.
   const adoptProp = hydration?.adoptProp ??
-    ((node: unknown, name: string, value: unknown) => host.setProp(node, name, value))
+    ((node: unknown, name: string, value: unknown) =>
+      host.setProp(node, name, value))
   // The server's state, until every instance has adopted.
   let hydrating: {
     readonly state: Renderer.State
     readonly deferred: ReadonlySet<string>
     readonly claimed: Set<string>
-  } | undefined = options?.state === undefined || server !== undefined ? undefined : {
-    state: options.state,
-    deferred: new Set(options.state["~deferred"] ?? []),
-    claimed: new Set()
-  }
-  const rawState = new WeakSet<Saved>(options?.state === undefined ? [] : [options.state])
+  } | undefined = options?.state === undefined || server !== undefined ?
+    undefined :
+    {
+      state: options.state,
+      deferred: new Set(options.state["~deferred"] ?? []),
+      claimed: new Set()
+    }
+  const rawState = new WeakSet<Saved>(
+    options?.state === undefined ? [] : [options.state]
+  )
   let popped: Saved | undefined
   let navigated = false
   let replaced: Instance | undefined
@@ -1462,32 +1681,52 @@ const setup = (
   let supply: Saved | undefined
   let late: RScoped | undefined
   const claimSaved = (author: Instance, from: Saved) => {
-    const all = from["~kept"] as Record<string, Record<string, Saved>> | undefined
+    const all = from["~kept"] as
+      | Record<string, Record<string, Saved>>
+      | undefined
     const kept = all?.[author.path]
-    const drawn = (from["~scoped"] as Record<string, ReadonlyArray<string>> | undefined)?.[author.path]
+    const drawn =
+      (from["~scoped"] as Record<string, ReadonlyArray<string>> | undefined)
+        ?.[author.path]
     if (kept === undefined && drawn === undefined) return
     const path = author.path
     if (from === popped) delete all![path]
     else if (from === hydrating?.state) {
-      if (hydrating.claimed.has(path) && !author.component.definition.scoped) return
+      if (hydrating.claimed.has(path) && !author.component.definition.scoped) {
+        return
+      }
       hydrating.claimed.add(path)
     }
     const waits = { ...kept }
-    if (rawState.has(from)) { for (const child in kept) rawState.add(kept[child]) }
+    if (rawState.has(from)) {
+      for (const child in kept) {
+        rawState.add(kept[child])
+      }
+    }
     if (drawn !== undefined) { for (const child of drawn) waits[child] = from }
     waitingOf.set(author, waits)
   }
-  const waitingAt = (waits: Record<string, Saved> | undefined, child: string): Saved | undefined => {
+  const waitingAt = (
+    waits: Record<string, Saved> | undefined,
+    child: string
+  ): Saved | undefined => {
     const from = waits?.[child]
-    return from === hydrating?.state || from !== options?.state ? from : waits![child] = subtree(from!, child)
+    return from === hydrating?.state || from !== options?.state
+      ? from
+      : waits![child] = subtree(from!, child)
   }
-  const below = (path: string, root: string) => (path + "/").startsWith(root + "/")
+  const below = (path: string, root: string) =>
+    (path + "/").startsWith(root + "/")
   const subtree = (state: Saved, root: string): Saved => {
     const out: Saved = {}
     for (const path in state) if (below(path, root)) out[path] = state[path]
     for (const key of ["~kept", "~scoped", "~reported"]) {
       const all = state[key] as Saved | undefined
-      for (const author in all) if (below(author, root)) ((out[key] ??= {}) as Saved)[author] = all[author]
+      for (const author in all) {
+        if (below(author, root)) {
+          ;((out[key] ??= {}) as Saved)[author] = all[author]
+        }
+      }
     }
     if (rawState.has(state)) rawState.add(out)
     return out
@@ -1500,7 +1739,11 @@ const setup = (
   }
   const restoreKept = () => {
     const left = hooks!.entry()
-    popped = left && { __proto__: left, "~kept": { ...left["~kept" + rootPath] as Saved | undefined } }
+    popped = left &&
+      {
+        __proto__: left,
+        "~kept": { ...left["~kept" + rootPath] as Saved | undefined }
+      }
   }
   // Slots still waiting for their Layer before they adopt, and whether the first render is done.
   let waiting = 0
@@ -1514,7 +1757,9 @@ const setup = (
    * runtime's own page metadata, not part of `Renderer.State`'s type.
    */
   const shippedStatus = (path: string): Shipped | undefined =>
-    (hydrating?.state["~status"] as { readonly [path: string]: Shipped } | undefined)?.[path]
+    (hydrating?.state["~status"] as
+      | { readonly [path: string]: Shipped }
+      | undefined)?.[path]
   const settleWaiting = () => {
     // A reader below a held owner may have mounted, or gone.
     if (heldReports.size > 0) {
@@ -1546,7 +1791,9 @@ const setup = (
    * Numbers the next entry, and names the entry it follows from: `causedBy` when its caller knows it,
    * and otherwise the entry that started what is running. A step's first entry has none, and starts it.
    */
-  const number = (causedBy: number | undefined): Pick<MessageLog.Base, "seq" | "causedBy"> => {
+  const number = (
+    causedBy: number | undefined
+  ): Pick<MessageLog.Base, "seq" | "causedBy"> => {
     const next = ++seq
     const cause = causedBy ?? origin
     if (starting !== undefined) {
@@ -1557,11 +1804,17 @@ const setup = (
     return cause === undefined ? { seq: next } : { seq: next, causedBy: cause }
   }
   /** Runs `f` as what follows from the entry `cause`. */
-  const under = <A>(cause: number | undefined, f: () => A, start = false): A => {
+  const under = <A>(
+    cause: number | undefined,
+    f: () => A,
+    start = false
+  ): A => {
     const outer = origin
     const outerStarting = starting
     origin = cause
-    starting = start && cause === undefined && log.enabled ? { seq: undefined } : undefined
+    starting = start && cause === undefined && log.enabled
+      ? { seq: undefined }
+      : undefined
     depth++
     try {
       return f()
@@ -1592,7 +1845,12 @@ const setup = (
   /** Logs an entry about the tree, and returns its number. */
   const recordTree = (draft: TreeDraft, causedBy?: number): number => {
     if (!log.enabled) return -1
-    const entry = { ...draft, ...number(causedBy), at: clock.currentTimeMillisUnsafe(), session } as MessageLog.Entry
+    const entry = {
+      ...draft,
+      ...number(causedBy),
+      at: clock.currentTimeMillisUnsafe(),
+      session
+    } as MessageLog.Entry
     log.record(entry)
     return entry.seq
   }
@@ -1601,15 +1859,23 @@ const setup = (
    * included, whose own Env is the one `inst` renders with. None for an Env that is always ready.
    */
   const boundaryOf = (inst: Instance): number | undefined => {
-    for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) {
-      if (at.component.layer !== undefined && at.env === inst.env) return at.born
+    for (
+      let at: Instance | undefined = inst;
+      at !== undefined;
+      at = at.parent
+    ) {
+      if (at.component.layer !== undefined && at.env === inst.env) {
+        return at
+          .born
+      }
     }
     return undefined
   }
   /** Logs an entry about `inst`, and returns its number. */
   const record = (inst: Instance, draft: Draft, causedBy?: number): number => {
     if (!log.enabled) return -1
-    const boundary = draft._tag === "Mounted" || draft._tag === "Waiting" || draft._tag === "Update"
+    const boundary = draft._tag === "Mounted" || draft._tag === "Waiting" ||
+        draft._tag === "Update"
       ? boundaryOf(inst)
       : undefined
     const entry = {
@@ -1628,25 +1894,34 @@ const setup = (
 
   // -- fibers ---------------------------------------------------------------
   const withScheduler = (context: Context.Context<any>): Context.Context<any> =>
-    executor.scheduler === undefined ? context : Context.add(context, Scheduler.Scheduler, executor.scheduler)
+    executor.scheduler === undefined
+      ? context
+      : Context.add(context, Scheduler.Scheduler, executor.scheduler)
   /** Starts at once, so a Layer that builds synchronously is ready for the first frame. */
   const forkNow = <A, E>(
     context: Context.Context<any>,
     effect: Effect.Effect<A, E, any>,
     options?: Effect.RunOptions
-  ): Fiber.Fiber<A, E> => Effect.runForkWith(withScheduler(context))(effect, options)
+  ): Fiber.Fiber<A, E> =>
+    Effect.runForkWith(withScheduler(context))(effect, options)
   /**
    * Starts on the scheduler, never inside the `update` that issued it. A navigation Command starts
    * sooner, in the deferred work of the flush its `update` caused: see `startRun`.
    */
-  const forkLater = <A, E>(context: Context.Context<any>, effect: Effect.Effect<A, E, any>): Fiber.Fiber<A, E> =>
+  const forkLater = <A, E>(
+    context: Context.Context<any>,
+    effect: Effect.Effect<A, E, any>
+  ): Fiber.Fiber<A, E> =>
     forkNow(context, Effect.andThen(Effect.yieldNow, effect))
   // Every run fiber and every Scope close the runtime has forked, until they exit. The root waits for both.
   const liveRuns = new Set<Fiber.Fiber<unknown, unknown>>()
   const closing = new Set<Fiber.Fiber<void>>()
   /** Layer builds the runtime interrupted, until their own cleanup ends: see `buildLayer`. */
   const releasedBuilds = new Set<Fiber.Fiber<unknown, unknown>>()
-  const track = <A, E>(fibers: Set<Fiber.Fiber<A, E>>, fiber: Fiber.Fiber<A, E>) => {
+  const track = <A, E>(
+    fibers: Set<Fiber.Fiber<A, E>>,
+    fiber: Fiber.Fiber<A, E>
+  ) => {
     fibers.add(fiber)
     fiber.addObserver(() => fibers.delete(fiber))
   }
@@ -1654,8 +1929,12 @@ const setup = (
    * Ends once the fibers tracked when it runs have. Never a wait for the fiber that runs it, should a
    * cleanup close its owner from inside.
    */
-  const awaitOthers = (fibers: Set<Fiber.Fiber<any, any>>): Effect.Effect<unknown> =>
-    Effect.withFiber((current) => Fiber.awaitAll([...fibers].filter((fiber) => fiber !== current)))
+  const awaitOthers = (
+    fibers: Set<Fiber.Fiber<any, any>>
+  ): Effect.Effect<unknown> =>
+    Effect.withFiber((current) =>
+      Fiber.awaitAll([...fibers].filter((fiber) => fiber !== current))
+    )
   /**
    * Closing a Scope detaches it from its parent, so the close is tracked until it ends. Its
    * finalizers start at once, as in a fiber started now: only a close left with something to wait
@@ -1664,8 +1943,12 @@ const setup = (
   const closeScope = (scope: Scope.Closeable): Fiber.Fiber<void> | undefined =>
     settleClose(Scope.closeUnsafe(scope, Exit.void))
   /** What a close returned: nothing left, or an Effect, run now, that a fiber is returned for if it waits. */
-  const settleClose = (rest: Effect.Effect<void> | undefined): Fiber.Fiber<void> | undefined => {
-    if (rest === undefined || (Exit.isExit(rest) && Exit.isSuccess(rest))) return undefined
+  const settleClose = (
+    rest: Effect.Effect<void> | undefined
+  ): Fiber.Fiber<void> | undefined => {
+    if (rest === undefined || (Exit.isExit(rest) && Exit.isSuccess(rest))) {
+      return undefined
+    }
     const fiber = forkNow(ctx, rest, uninterruptibly)
     // Ended in the fork: nothing is left to wait for.
     if (fiber.pollUnsafe() !== undefined) return undefined
@@ -1683,8 +1966,13 @@ const setup = (
   const closeInstance = (owner: Instance | undefined, inst: Instance) => {
     closedUnder(owner, settleClose((inst as Inst).close()))
   }
-  const closedUnder = (owner: Instance | undefined, fiber: Fiber.Fiber<void> | undefined) => {
-    if (fiber === undefined || owner === undefined || isClosed(owner.scope)) return
+  const closedUnder = (
+    owner: Instance | undefined,
+    fiber: Fiber.Fiber<void> | undefined
+  ) => {
+    if (fiber === undefined || owner === undefined || isClosed(owner.scope)) {
+      return
+    }
     if (owner.closes === undefined) {
       // Added after the instance's Layer and selection, so it runs before they close.
       addFinalizer(owner.scope, awaitOthers(owner.closes = new Set()))
@@ -1692,16 +1980,22 @@ const setup = (
     track(owner.closes, fiber)
   }
   /** Adds a finalizer without running an Effect. On a Scope already closed, it runs as a tracked close. */
-  const addFinalizer = (scope: Scope.Scope, finalizer: Effect.Effect<unknown>) => {
-    if (scope.state._tag === "Closed") track(closing, forkNow(ctx, Effect.asVoid(finalizer)))
-    else scopeAddFinalizerUnsafe(scope, {}, () => finalizer)
+  const addFinalizer = (
+    scope: Scope.Scope,
+    finalizer: Effect.Effect<unknown>
+  ) => {
+    if (scope.state._tag === "Closed") {
+      track(closing, forkNow(ctx, Effect.asVoid(finalizer)))
+    } else scopeAddFinalizerUnsafe(scope, {}, () => finalizer)
   }
   /**
    * The close interrupts the fiber and waits for it to exit, so its cleanup runs before whatever the
    * Scope's owner closes next, such as the Layer that provides its services.
    */
-  const interruptOnClose = (scope: Scope.Scope, fiber: Fiber.Fiber<unknown, unknown>) =>
-    addFinalizer(scope, Fiber.interrupt(fiber))
+  const interruptOnClose = (
+    scope: Scope.Scope,
+    fiber: Fiber.Fiber<unknown, unknown>
+  ) => addFinalizer(scope, Fiber.interrupt(fiber))
 
   // -- query cache ---------------------------------------------------------
   // Made at the mount when the app has loaded the `Query` module by then, and otherwise when it loads it.
@@ -1711,7 +2005,11 @@ const setup = (
   /** The cache, where a query is at hand: its module is loaded. */
   const queryCache = (): queryCore.Cache => cache ?? cell.get()!
   const withCache = (context: Context.Context<any>): Context.Context<any> =>
-    Context.add(context, queryCore.CacheKey, (cache ?? cell) as unknown as Query.Cache["Service"])
+    Context.add(
+      context,
+      queryCore.CacheKey,
+      (cache ?? cell) as unknown as Query.Cache["Service"]
+    )
   /**
    * History restore: each query result restored seeds a cold entry, stale, so the first frame shows the data
    * with `waiting: true` while one refetch runs. A snapshot taken under a patch may hold a value that
@@ -1750,7 +2048,9 @@ const setup = (
   }
   // Hydration: the server's entries and when they arrived, for a cache made after the mount.
   const hydratedQueries = hydrating?.state["~query"]
-  const hydratedAt = hydratedQueries === undefined ? 0 : clock.currentTimeMillisUnsafe()
+  const hydratedAt = hydratedQueries === undefined
+    ? 0
+    : clock.currentTimeMillisUnsafe()
   // Adoption or a navigation has closed the fetch-free window.
   let windowClosed = false
   const closeWindow = () => {
@@ -1767,7 +2067,9 @@ const setup = (
       if (frozen || !log.enabled) return
       recordTree(
         { _tag: "FetchStarted", ...event },
-        event.trigger === "watch" ? watchCauses.get(entryKey(event.query, event.logKey)) : undefined
+        event.trigger === "watch"
+          ? watchCauses.get(entryKey(event.query, event.logKey))
+          : undefined
       )
     })
     // On the server a fetch in flight holds the response, so one that ends may make the tree idle.
@@ -1829,7 +2131,9 @@ const setup = (
   const loads = (): Array<Load> => {
     const out: Array<Load> = []
     for (const slot of lazySlots) {
-      if (lazyOf.stateOf(slot.lazy)._tag === "Loading") out.push({ path: slot.path, name: slot.name })
+      if (lazyOf.stateOf(slot.lazy)._tag === "Loading") {
+        out.push({ path: slot.path, name: slot.name })
+      }
     }
     return out
   }
@@ -1894,11 +2198,14 @@ const setup = (
   const dirtyAbove = (inst: Instance): Instance | undefined => {
     if (dirty.size === 0 || busy > 0) return undefined
     let top: Instance | undefined
-    for (let at = inst.parent; at !== undefined; at = at.parent) if (dirty.has(at)) top = at
+    for (let at = inst.parent; at !== undefined; at = at.parent) {
+      if (dirty.has(at)) top = at
+    }
     return top
   }
   const waitsForTransition = (inst: Instance) =>
-    (resume !== undefined || (transitionTypes !== undefined && (mayTransition || !draining))) &&
+    (resume !== undefined ||
+      (transitionTypes !== undefined && (mayTransition || !draining))) &&
     dirtyAbove(inst) !== undefined
   /**
    * Renders the dirty instances above `inst`, outermost first, before it is given a message or a
@@ -1913,7 +2220,9 @@ const setup = (
     const top = dirtyAbove(inst)
     if (top === undefined) return
     const above: Array<Instance> = []
-    for (let at = inst.parent; at !== top.parent; at = at!.parent) above.push(at!)
+    for (let at = inst.parent; at !== top.parent; at = at!.parent) {
+      above.push(at!)
+    }
     const outer = receiving
     receiving = inst
     try {
@@ -2011,8 +2320,13 @@ const setup = (
     do {
       // A mount or a closure that rendered alone leaves its author's placed slots to check.
       checkPendingAuthors()
-      while (dirty.size > 0 || deferred.length > 0 || isHolding() || reportsDue.size > 0) {
-        if (mayTransition && transitionTypes !== undefined && dirty.size > 0) return false
+      while (
+        dirty.size > 0 || deferred.length > 0 || isHolding() ||
+        reportsDue.size > 0
+      ) {
+        if (mayTransition && transitionTypes !== undefined && dirty.size > 0) {
+          return false
+        }
         if (deferred.length > 0) {
           deferred.shift()!()
           checkPendingAuthors()
@@ -2034,7 +2348,10 @@ const setup = (
         else checkPendingAuthors()
       }
       foldHead()
-    } while (dirty.size > 0 || deferred.length > 0 || isHolding() || reportsDue.size > 0)
+    } while (
+      dirty.size > 0 || deferred.length > 0 || isHolding() ||
+      reportsDue.size > 0
+    )
     return true
   }
   /**
@@ -2048,7 +2365,10 @@ const setup = (
     idleCheck = true
     executor.schedule(() => {
       idleCheck = false
-      if (scheduled || dirty.size > 0 || deferred.length > 0 || building.size > 0 || loads().length > 0) return
+      if (
+        scheduled || dirty.size > 0 || deferred.length > 0 ||
+        building.size > 0 || loads().length > 0
+      ) return
       // Any fetch in flight holds the response: a watch's, a `get`'s, a prefetch nobody renders.
       if (cache !== undefined && cache.pending().length > 0) return
       for (const f of idleWaiters.splice(0)) f()
@@ -2065,7 +2385,8 @@ const setup = (
   let viewChanged = false
   // The root vocabulary's fold, or the title-only one.
   const rootFold = foldOf(component)
-  const skipsEmpty = rootFold !== neutralFold && headFold.skipsEmpty(rootFold.merge)
+  const skipsEmpty = rootFold !== neutralFold &&
+    headFold.skipsEmpty(rootFold.merge)
   const emptyHead: unknown = rootFold.merge(emptyTree)
   let merged: unknown = emptyHead
   // The title of `merged`, for the router's hook.
@@ -2074,9 +2395,10 @@ const setup = (
   // every instance has adopted. The mount's tree is recorded from its first kept fold, and a subtree that
   // waited for its Layer as it adopts, before the placement its parent rendered meanwhile reaches it. Then
   // the fold of those parts is the head of the adopted state.
-  let adoption: Map<Instance, HeadPart> | undefined = hydrating !== undefined && options?.adoptionHead === true
-    ? new Map()
-    : undefined
+  let adoption: Map<Instance, HeadPart> | undefined =
+    hydrating !== undefined && options?.adoptionHead === true
+      ? new Map()
+      : undefined
   let adoptionHead: unknown = undefined
   // Set when `merged` holds a head the host hasn't been given.
   let headChanged = false
@@ -2090,7 +2412,9 @@ const setup = (
     onError: (inst: Instance, error: unknown) => void,
     below = true
   ): HeadPart | undefined => {
-    if (inst.closed || inst.failure !== undefined || inst.waiting) return undefined
+    if (inst.closed || inst.failure !== undefined || inst.waiting) {
+      return undefined
+    }
     const head = inst.component.head
     let entries: ReadonlyArray<unknown> = none
     if (head !== undefined) {
@@ -2138,7 +2462,11 @@ const setup = (
     const skip = skipsEmpty
     const node = (inst: Instance): Head.Tree<unknown> | undefined => {
       const part = partOf(inst)
-      if (part === undefined) return skip ? undefined : { path: inst.path, ...emptyTree }
+      if (part === undefined) {
+        return skip
+          ? undefined
+          : { path: inst.path, ...emptyTree }
+      }
       if (fold === neutralFold) fold = foldOf(inst.component)
       const below = part.children
       const children: Array<Head.Tree<unknown>> = []
@@ -2146,7 +2474,9 @@ const setup = (
         const child = node(below[index]!)
         if (child !== undefined) children.push(child)
       }
-      if (skip && part.entries.length === 0 && children.length === 0) return undefined
+      if (skip && part.entries.length === 0 && children.length === 0) {
+        return undefined
+      }
       return {
         path: inst.path,
         entries: part.entries,
@@ -2158,7 +2488,8 @@ const setup = (
     const head = fold.merge(tree, options)
     return { head, title: fold.title(head) }
   }
-  const failHead = (inst: Instance, error: unknown) => failInstance(inst, Cause.die(error), "head")
+  const failHead = (inst: Instance, error: unknown) =>
+    failInstance(inst, Cause.die(error), "head")
   /** The adoption head skips what throws, as the server does. The live fold is what fails the instance. */
   const skipHead = () => {}
 
@@ -2185,9 +2516,13 @@ const setup = (
    */
   const settleAdoptionHead = (folded?: unknown) => {
     const parts = adoption
-    if (parts === undefined || !adoptedDone || rootInstance === undefined) return
+    if (parts === undefined || !adoptedDone || rootInstance === undefined) {
+      return
+    }
     adoption = undefined
-    adoptionHead = folded !== undefined ? folded : foldTree(rootInstance, (inst) => parts.get(inst), skipHead).head
+    adoptionHead = folded !== undefined
+      ? folded
+      : foldTree(rootInstance, (inst) => parts.get(inst), skipHead).head
   }
 
   /**
@@ -2249,7 +2584,9 @@ const setup = (
       if (adoption === undefined) continue
       // Without an instance that waited, the first kept fold is already the adopted state's.
       const first = adoption.size === 0
-      for (const part of parts) if (!adoption.has(part.inst)) adoption.set(part.inst, part)
+      for (const part of parts) {
+        if (!adoption.has(part.inst)) adoption.set(part.inst, part)
+      }
       settleAdoptionHead(first ? next.head : undefined)
     }
   }
@@ -2263,7 +2600,11 @@ const setup = (
     }
     // A head still to fold belongs to the flush already scheduled, which calls the hook.
     if (hooks !== undefined && handle !== undefined && !viewChanged) {
-      hooks.afterFlush(handle, { flush: flushes, title: mergedTitle, buildsPendingSince })
+      hooks.afterFlush(handle, {
+        flush: flushes,
+        title: mergedTitle,
+        buildsPendingSince
+      })
     }
   }
 
@@ -2293,7 +2634,11 @@ const setup = (
     inst.left = true
     inst.lazy = undefined
     if (inst.component.head !== undefined) {
-      for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) at.heads--
+      for (
+        let at: Instance | undefined = inst;
+        at !== undefined;
+        at = at.parent
+      ) at.heads--
     }
     // At once, not when the Scope closes: the host may hand out a container's handle again.
     if (inst.parked !== undefined) {
@@ -2319,7 +2664,9 @@ const setup = (
     const at = nodes[0]
     const parentNode = at === undefined ? undefined : host.parentOf(at)
     if (parentNode !== undefined) host.insertBefore(parentNode, placeholder, at)
-    else if (inst.depth === 0) host.insertBefore(container, placeholder, undefined)
+    else if (inst.depth === 0) {
+      host.insertBefore(container, placeholder, undefined)
+    }
     release()
     for (const node of nodes) host.remove(node)
     inst.rendered = new TextRecord(emptyText, placeholder)
@@ -2360,7 +2707,12 @@ const setup = (
     })
     forkNow(
       ctx,
-      Effect.logError(`${inst.path} failed in ${where}${name === undefined ? "" : ` (${name})`}`, cause)
+      Effect.logError(
+        `${inst.path} failed in ${where}${
+          name === undefined ? "" : ` (${name})`
+        }`,
+        cause
+      )
     )
     inst.failure = cause
     // Nodes from the render that failed aren't given again.
@@ -2377,8 +2729,18 @@ const setup = (
       // The code of whoever declared the child, so a defect in it is theirs, and it runs between renders.
       const author = inst.declarer ?? parent.author
       defer(() => {
-        const message = guard(author, "onFailure", () => onFailure(AsyncResult.failure(cause)))
-        if (message !== undefined) author.dispatch(message, { _tag: "Failure", path: inst.path, seq: failedSeq })
+        const message = guard(
+          author,
+          "onFailure",
+          () => onFailure(AsyncResult.failure(cause))
+        )
+        if (message !== undefined) {
+          author.dispatch(message, {
+            _tag: "Failure",
+            path: inst.path,
+            seq: failedSeq
+          })
+        }
       })
     }
     markDirty(parent)
@@ -2389,27 +2751,42 @@ const setup = (
     const fallback = options?.fallback
     if (fallback === undefined) return
     try {
-      const view = fallback(AsyncResult.failure(cause), View.makeHelper({}, root.component.elements()))
+      const view = fallback(
+        AsyncResult.failure(cause),
+        View.makeHelper({}, root.component.elements())
+      )
       const node = buildStatic(View.toNode(view))
       const placeholder = nodesOf(listOf(root.rendered)[0]!)[0]
       host.insertBefore(
         container,
         node,
-        placeholder !== undefined && host.parentOf(placeholder) === container ? placeholder : undefined
+        placeholder !== undefined && host.parentOf(placeholder) === container
+          ? placeholder
+          : undefined
       )
       rootFallbackNodes.push(node)
     } catch (error) {
-      record(root, { _tag: "Failed", props: root.props, in: "fallback", name: undefined, cause: Cause.die(error) })
+      record(root, {
+        _tag: "Failed",
+        props: root.props,
+        in: "fallback",
+        name: undefined,
+        cause: Cause.die(error)
+      })
     }
   }
   /** The root fallback runs with no instance: plain nodes, no handlers, no children. */
   const buildStatic = (view: View.Node<any, any>): unknown => {
     if (view._tag === "Text") return host.createText(view.text)
-    if (view._tag === "Child" || view._tag === "Outlet") return host.createText("")
+    if (view._tag === "Child" || view._tag === "Outlet") {
+      return host.createText("")
+    }
     const node = host.createElement(view.tag)
     const attrs = normalized(node, view.attrs)
     for (const name in attrs) host.setAttr(node, name, attrs[name])
-    for (const child of view.children) host.insertBefore(node, buildStatic(child), undefined)
+    for (const child of view.children) {
+      host.insertBefore(node, buildStatic(child), undefined)
+    }
     for (const name in view.props) host.setProp(node, name, view.props[name])
     return node
   }
@@ -2515,7 +2892,10 @@ const setup = (
    * It's built with the parent Env's memo map, so the memoised Layers inside it are built once per
    * Env too, and closed when the last build using them is.
    */
-  const acquireShared = (parentEnv: Env, layer: Layer.Layer<any, any, any>): SharedBuild => {
+  const acquireShared = (
+    parentEnv: Env,
+    layer: Layer.Layer<any, any, any>
+  ): SharedBuild => {
     let byLayer = sharedBuilds.get(parentEnv)
     if (byLayer === undefined) sharedBuilds.set(parentEnv, byLayer = new Map())
     const found = byLayer.get(layer)
@@ -2532,15 +2912,21 @@ const setup = (
     }
     byLayer.set(layer, entry)
     whenReady(parentEnv, (parentCtx) => {
-      buildLayer(layer, parentCtx, memoMapOf(parentEnv), entry.scope, (exit) => {
-        if (Exit.isFailure(exit)) {
-          // A failed build is evicted, so the next user builds again.
-          if (byLayer!.get(layer) === entry) byLayer!.delete(layer)
-          failEnv(entry.env, exit.cause)
-        } else {
-          resolveEnv(entry.env, Context.merge(parentCtx, exit.value))
+      buildLayer(
+        layer,
+        parentCtx,
+        memoMapOf(parentEnv),
+        entry.scope,
+        (exit) => {
+          if (Exit.isFailure(exit)) {
+            // A failed build is evicted, so the next user builds again.
+            if (byLayer!.get(layer) === entry) byLayer!.delete(layer)
+            failEnv(entry.env, exit.cause)
+          } else {
+            resolveEnv(entry.env, Context.merge(parentCtx, exit.value))
+          }
         }
-      })
+      )
     }, (cause) => failEnv(entry.env, cause))
     return entry
   }
@@ -2615,7 +3001,12 @@ const setup = (
    * that adopts the instance starts from it. Slots on both sides get `serverFailure`, not the cause. A
    * selection a keyed provide has replaced in the meantime is not heard from.
    */
-  const ownFailed = (inst: Instance, own: Env, cause: Cause.Cause<unknown>, before?: () => void) => {
+  const ownFailed = (
+    inst: Instance,
+    own: Env,
+    cause: Cause.Cause<unknown>,
+    before?: () => void
+  ) => {
     const handle = inst.component.layerFailure
     if (handle === undefined) {
       defer(() => {
@@ -2628,7 +3019,11 @@ const setup = (
     failEnv(own, cause, server !== undefined ? serverFailure() : cause)
     defer(() => {
       if (inst.env !== own) return
-      const message = guard(inst, "onFailure", () => handle(AsyncResult.failure(cause)))
+      const message = guard(
+        inst,
+        "onFailure",
+        () => handle(AsyncResult.failure(cause))
+      )
       if (message !== undefined) inst.dispatch(message, { _tag: "Dispatch" })
     })
   }
@@ -2638,20 +3033,33 @@ const setup = (
   const dueSelection = (inst: Instance): Selection | undefined =>
     inst.selection?.due === true ? inst.selection : undefined
   /** The Env an instance's work runs against. After a handled Layer failure, the nearest with services. */
-  const workEnv = (inst: Instance): Env => inst.env.failure !== undefined ? settled(inst.env) : inst.env
+  const workEnv = (inst: Instance): Env =>
+    inst.env.failure !== undefined ? settled(inst.env) : inst.env
   /** Runs `go` once the instance's Layer is ready. After a handled failure, against the parent's services. */
-  const againstEnv = (inst: Instance, go: (envCtx: Context.Context<any>) => void, failed?: () => void) =>
-    whenReady(workEnv(inst), go, failed)
+  const againstEnv = (
+    inst: Instance,
+    go: (envCtx: Context.Context<any>) => void,
+    failed?: () => void
+  ) => whenReady(workEnv(inst), go, failed)
   /**
    * Starts a Subscription or a query once the instance's Layer is ready. After a handled failure it
    * runs against the parent's services, except under a keyed provide: there it was set up for the
    * selected services, and it waits for the next selection rather than fail the instance without them.
    */
-  const startWatching = (inst: Instance, go: (envCtx: Context.Context<any>) => void) => {
-    if (inst.env.failure === undefined || inst.selection === undefined) againstEnv(inst, go)
+  const startWatching = (
+    inst: Instance,
+    go: (envCtx: Context.Context<any>) => void
+  ) => {
+    if (inst.env.failure === undefined || inst.selection === undefined) {
+      againstEnv(inst, go)
+    }
   }
   /** As `againstEnv`, now or once a due read of the keys has picked the Env it binds to. */
-  const onceSelected = (inst: Instance, go: (envCtx: Context.Context<any>) => void, failed?: () => void) => {
+  const onceSelected = (
+    inst: Instance,
+    go: (envCtx: Context.Context<any>) => void,
+    failed?: () => void
+  ) => {
     const due = dueSelection(inst)
     if (due !== undefined) due.held.push(() => againstEnv(inst, go, failed))
     else againstEnv(inst, go, failed)
@@ -2708,7 +3116,9 @@ const setup = (
     for (const run of stopped) if (run.status !== "running") dropRun(inst, run)
     for (const run of stopped) if (!run.done) dropRun(inst, run)
     // The runs asked to stop whose fibers haven't exited, just now or in an earlier flush.
-    for (const run of inst.runs) if (run.status === "stopping") waits.push(run.fiber!)
+    for (const run of inst.runs) {
+      if (run.status === "stopping") waits.push(run.fiber!)
+    }
     stopSubscriptions(inst, waits)
     clearRendered(inst)
     // What still closes may use the old services, removed in an earlier flush or just now.
@@ -2729,7 +3139,12 @@ const setup = (
    * log's last Layer entry for the instance isn't a `LayerReady`, so one built at once, which logs no
    * `LayerPending`, still says it's ready.
    */
-  const startSelection = (inst: Instance, selection: Selection, own: Env, unsettled: boolean) => {
+  const startSelection = (
+    inst: Instance,
+    selection: Selection,
+    own: Env,
+    unsettled: boolean
+  ) => {
     const keys = selection.keys
     const stamp = ++builds
     let pending = false
@@ -2744,7 +3159,9 @@ const setup = (
       ownFailed(inst, own, cause)
     }
     const ready = () => {
-      if (!inst.closed && (pending || unsettled)) record(inst, { _tag: "LayerReady" })
+      if (!inst.closed && (pending || unsettled)) {
+        record(inst, { _tag: "LayerReady" })
+      }
     }
     const release = () => releaseRetired(selection)
     whenReady(own, release, release)
@@ -2813,10 +3230,18 @@ const setup = (
   }
 
   /** Stops the instance's Subscriptions and queries, and resets its results, for a new selection. */
-  const stopSubscriptions = (inst: Instance, waits: Array<Fiber.Fiber<unknown, unknown>>) => {
+  const stopSubscriptions = (
+    inst: Instance,
+    waits: Array<Fiber.Fiber<unknown, unknown>>
+  ) => {
     if (inst.subscriptions !== undefined) {
       for (const [key, running] of inst.subscriptions) {
-        record(inst, { _tag: "SubscriptionStopped", key, name: running.name, deps: running.deps })
+        record(inst, {
+          _tag: "SubscriptionStopped",
+          key,
+          name: running.name,
+          deps: running.deps
+        })
         if (running.fiber !== undefined) waits.push(running.fiber)
         closeUnder(inst, running.scope)
       }
@@ -2861,7 +3286,11 @@ const setup = (
 
   // -- instances ------------------------------------------------------------
   /** Runs `update` for a message to `inst`, in a step of its own. */
-  const dispatchTo = (inst: Instance, message: unknown, source: MessageLog.Source) =>
+  const dispatchTo = (
+    inst: Instance,
+    message: unknown,
+    source: MessageLog.Source
+  ) =>
     receive(inst, () => {
       if (inst.closed || inst.waiting || frozen) return
       const component = inst.component
@@ -2870,10 +3299,19 @@ const setup = (
       busy++
       try {
         shared = sharedReads.record(component, sharedOf(inst))
-        next = component.update(inst.model, message as never, inst.props, inst.results, shared)
+        next = component.update(
+          inst.model,
+          message as never,
+          inst.props,
+          inst.results,
+          shared
+        )
       } catch (error) {
         // No `Update` is logged for it, so the failure carries the message.
-        return failInstance(inst, Cause.die(error), "update", undefined, { message, source })
+        return failInstance(inst, Cause.die(error), "update", undefined, {
+          message,
+          source
+        })
       } finally {
         busy--
       }
@@ -2889,9 +3327,13 @@ const setup = (
         events: next.events,
         lists: next.lists ?? [],
         sends: next.sends ?? [],
-        ...(next.viewTransition === undefined ? undefined : { viewTransition: next.viewTransition }),
+        ...(next.viewTransition === undefined
+          ? undefined
+          : { viewTransition: next.viewTransition }),
         // What `update` saw in `$.queries`, so a replay from any surviving entry sees it too.
-        ...(bound === undefined ? undefined : { queries: inst.results ?? bound.empty }),
+        ...(bound === undefined
+          ? undefined
+          : { queries: inst.results ?? bound.empty }),
         ...(shared === undefined ? undefined : { shared })
       })
       apply(inst, next, entrySeq, false)
@@ -2912,7 +3354,12 @@ const setup = (
     if (typeof event !== "string") return this.finalize()
     if (this.closed || this.waiting) return false
     const message = typeof handler === "function"
-      ? guard(this, "domEvent", () => (handler as (payload: unknown) => unknown)(payload), event)
+      ? guard(
+        this,
+        "domEvent",
+        () => (handler as (payload: unknown) => unknown)(payload),
+        event
+      )
       : handler
     if (message === undefined) return false
     // Before the message is sent, so the host can still act on its event.
@@ -2929,7 +3376,9 @@ const setup = (
    */
   const finishInstance = (inst: Instance): Effect.Effect<void> => {
     // However the instance goes, a removed ancestor and failure included, its owners forget it.
-    if (inst.owners !== undefined) { for (const owner of inst.owners.values()) owner.readers?.delete(inst) }
+    if (inst.owners !== undefined) {
+      for (const owner of inst.owners.values()) owner.readers?.delete(inst)
+    }
     const waits = stopRuns(inst)
     if (waits.length === 0) {
       unmounted(inst)
@@ -2946,7 +3395,9 @@ const setup = (
    * those stopped earlier and still stopping included. An awaiting run's message is dropped.
    */
   const stopRuns = (inst: Instance): Array<Effect.Effect<void>> =>
-    inst.runs.length === 0 ? [] : inst.runs.slice().map((run) => stopAndAwait(inst, run))
+    inst.runs.length === 0
+      ? []
+      : inst.runs.slice().map((run) => stopAndAwait(inst, run))
 
   const unmounted = (inst: Instance) => {
     dirty.delete(inst)
@@ -3004,7 +3455,9 @@ const setup = (
     model: unknown = undefined
     results: componentQueries.Results | undefined = undefined
     onEmit: (events: unknown) => unknown
-    onFailure: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
+    onFailure:
+      | ((failure: AsyncResult.Failure<never, unknown>) => unknown)
+      | undefined
     failure: Cause.Cause<unknown> | undefined = undefined
     childPaths: ChildPaths | undefined = undefined
     rendered: Packed = undefined
@@ -3044,7 +3497,9 @@ const setup = (
       env: Env,
       props: unknown,
       onEmit: (events: unknown) => unknown,
-      onFailure: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined,
+      onFailure:
+        | ((failure: AsyncResult.Failure<never, unknown>) => unknown)
+        | undefined,
       content: ((parts: any) => View.Content<any, any>) | undefined,
       author: Instance | undefined
     ) {
@@ -3062,7 +3517,12 @@ const setup = (
       this.onEmit = onEmit
       this.onFailure = onFailure
       if (component.definition.shares !== undefined) {
-        ;(this.rare = new Rare()).owning = { seq: -1, round: false, collected: undefined, restored: false }
+        ;(this.rare = new Rare()).owning = {
+          seq: -1,
+          round: false,
+          collected: undefined,
+          restored: false
+        }
       }
     }
     /**
@@ -3070,7 +3530,8 @@ const setup = (
      * are never asked, and a string for each row would outweigh the row's other fields.
      */
     get path(): string {
-      return this.named ??= this.parent!.path + "/" + segmentOf(this.component, this.key)
+      return this.named ??= this.parent!.path + "/" +
+        segmentOf(this.component, this.key)
     }
     // The rare fields, read from and written to `rare` by the accessors defined below the class.
     declare readonly owning: Owning | undefined
@@ -3100,7 +3561,8 @@ const setup = (
      */
     get closed(): boolean {
       const own = this.own
-      return (own === undefined ? this.dead : isClosed(own)) || this.parent?.closed === true
+      return (own === undefined ? this.dead : isClosed(own)) ||
+        this.parent?.closed === true
     }
     get scope(): Scope.Closeable {
       let own = this.own
@@ -3118,7 +3580,11 @@ const setup = (
           own = Scope.makeUnsafe("sequential")
           scopeAddFinalizerUnsafe(own, this, this.bound())
           const scope = own
-          scopeAddFinalizerUnsafe(under, this, (exit) => Scope.close(scope, exit))
+          scopeAddFinalizerUnsafe(
+            under,
+            this,
+            (exit) => Scope.close(scope, exit)
+          )
         } else {
           own = Scope.forkUnsafe(under, "sequential")
         }
@@ -3152,7 +3618,9 @@ const setup = (
         // A Scope made late sits in its finalizer's slot in the parent's, which closing it doesn't free.
         const under = (this.parent as Inst | undefined)?.own
         if (under !== undefined) scopeRemoveFinalizerUnsafe(under, this)
-        return Scope.closeUnsafe(own, Exit.void) as Effect.Effect<void> | undefined
+        return Scope.closeUnsafe(own, Exit.void) as
+          | Effect.Effect<void>
+          | undefined
       }
       if (this.dead) return undefined
       this.dead = true
@@ -3167,8 +3635,9 @@ const setup = (
     }
     /** An outlet's messages go to the author of its content. */
     dispatch(message: unknown, source: MessageLog.Source): void {
-      if (this.component === outletComponent) this.author.dispatch(message, source)
-      else dispatchTo(this, message, source)
+      if (this.component === outletComponent) {
+        this.author.dispatch(message, source)
+      } else dispatchTo(this, message, source)
     }
     get fire(): Renderer.Dispatch {
       return this.component === outletComponent
@@ -3176,8 +3645,12 @@ const setup = (
         : (this.fired ??= fireOn.bind(this)) as Renderer.Dispatch
     }
     /** What the Scope that holds the instance's finalizer calls. */
-    private bound(): (exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void> {
-      return (this.fired ??= fireOn.bind(this)) as (exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void>
+    private bound(): (
+      exit: Exit.Exit<unknown, unknown>
+    ) => Effect.Effect<void> {
+      return (this.fired ??= fireOn.bind(this)) as (
+        exit: Exit.Exit<unknown, unknown>
+      ) => Effect.Effect<void>
     }
   }
 
@@ -3207,7 +3680,9 @@ const setup = (
     parent: Instance | undefined,
     parentEnv: Env,
     onEmit: (events: unknown) => unknown,
-    onFailure: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined,
+    onFailure:
+      | ((failure: AsyncResult.Failure<never, unknown>) => unknown)
+      | undefined,
     range: Range | undefined,
     content?: ((parts: any) => View.Content<any, any>) | undefined,
     slots?: Slotted["values"],
@@ -3215,13 +3690,18 @@ const setup = (
     declarer?: Instance | undefined
   ): Instance => {
     // A child's Scope is made when it's needed: see `Inst.scope`.
-    const ownScope = parent === undefined ? Scope.forkUnsafe(rootScope, "sequential") : scope
+    const ownScope = parent === undefined
+      ? Scope.forkUnsafe(rootScope, "sequential")
+      : scope
     const depth = parent === undefined ? 0 : parent.depth + 1
     // Hydration reads state by path, and a headless instance's parts derive ids from it: made here then.
-    const path = named === undefined && (hydrating !== undefined || content !== undefined)
-      ? parent!.path + "/" + segmentOf(component, key)
-      : named
-    const owner: View.Owner | undefined = content === undefined ? undefined : { path: path!, depth }
+    const path =
+      named === undefined && (hydrating !== undefined || content !== undefined)
+        ? parent!.path + "/" + segmentOf(component, key)
+        : named
+    const owner: View.Owner | undefined = content === undefined
+      ? undefined
+      : { path: path!, depth }
     const inst: Instance = new Inst(
       content === undefined ? named : path,
       key,
@@ -3240,7 +3720,11 @@ const setup = (
     if (declarer !== undefined) inst.declarer = declarer
     addInstanceFinalizer(inst)
     if (component.head !== undefined) {
-      for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) {
+      for (
+        let at: Instance | undefined = inst;
+        at !== undefined;
+        at = at.parent
+      ) {
         at.heads++
       }
     }
@@ -3265,7 +3749,10 @@ const setup = (
         inert.fellBack.push(inst.path)
       } else {
         if (Object.hasOwn(recorded, "props")) inst.props = recorded.props
-        restoredState.set(inst, { model: recorded.model, results: recorded.queries })
+        restoredState.set(inst, {
+          model: recorded.model,
+          results: recorded.queries
+        })
       }
       startInstance(inst, parentEnv, range, Option.none(), Option.none())
       return inst
@@ -3275,16 +3762,26 @@ const setup = (
     const own = supply = from === hydrating?.state ? undefined : from
     const served = own !== from
     const serves = hydrating !== undefined &&
-      (scope !== undefined ? served : parent === undefined || parent.adoptsChildren) &&
+      (scope !== undefined
+        ? served
+        : parent === undefined || parent.adoptsChildren) &&
       !hydrating.deferred.has(path!) &&
       Object.hasOwn(hydrating.state, path!)
-    const restored = hooks !== undefined && component.definition.restore !== false && (navigated || !serves)
-      ? hooks.restore(inst.path)
-      : undefined
-    const hydrates = restored === undefined && serves && !(navigated && component.definition.restore === false)
+    const restored =
+      hooks !== undefined && component.definition.restore !== false &&
+        (navigated || !serves)
+        ? hooks.restore(inst.path)
+        : undefined
+    const hydrates = restored === undefined && serves &&
+      !(navigated && component.definition.restore === false)
     if (popped !== undefined) claimSaved(inst, popped)
-    const saved = own !== undefined && (component.definition.restore !== false || rawState.has(own)) ? own : undefined
-    const state = hydrates || restored !== undefined || saved === undefined ? restored?.state : saved[inst.path]
+    const saved = own !== undefined &&
+        (component.definition.restore !== false || rawState.has(own))
+      ? own
+      : undefined
+    const state = hydrates || restored !== undefined || saved === undefined
+      ? restored?.state
+      : saved[inst.path]
     const reported = restored !== undefined
       ? restored.reported
       : (saved?.["~reported"] as Saved | undefined)?.[inst.path]
@@ -3307,7 +3804,12 @@ const setup = (
     const go = () => {
       const decoded = stateless ? unsaved : runCodec(
         hydrates
-          ? decodeStart(component, hydrating!.state[path!], hydrating!.state["~reported"]?.[path!], Option.some)
+          ? decodeStart(
+            component,
+            hydrating!.state[path!],
+            hydrating!.state["~reported"]?.[path!],
+            Option.some
+          )
           : decodeStart(component, state, reported, (decoded) => {
             restoredState.set(inst, decoded)
             return Option.none()
@@ -3317,11 +3819,20 @@ const setup = (
       const resume = hold(
         inst,
         hydrates ? range : undefined,
-        hydrates ? undefined : restored === undefined ? from : { __proto__: popped, [inst.path]: restored.state }
+        hydrates
+          ? undefined
+          : restored === undefined
+          ? from
+          : { __proto__: popped, [inst.path]: restored.state }
       )
       interruptOnClose(inst.scope, decoded)
       decoded.addObserver((exit) =>
-        defer(() => resume(Exit.isSuccess(exit) && Option.isSome(exit.value.fromServer), () => start(exit)))
+        defer(() =>
+          resume(
+            Exit.isSuccess(exit) && Option.isSome(exit.value.fromServer),
+            () => start(exit)
+          )
+        )
       )
     }
     if (late !== undefined) {
@@ -3335,7 +3846,10 @@ const setup = (
     readonly fromServer: Adopted
     readonly collected: Option.Option<unknown>
   }
-  const fresh: ServerStart = { fromServer: Option.none(), collected: Option.none() }
+  const fresh: ServerStart = {
+    fromServer: Option.none(),
+    collected: Option.none()
+  }
   const unsaved = Exit.succeed(fresh)
   const restoredState = new WeakMap<Instance, Decoded>()
   const decodeStart = (
@@ -3344,13 +3858,18 @@ const setup = (
     reported: unknown,
     adopt: (decoded: Decoded) => Adopted
   ): Effect.Effect<ServerStart, SchemaIssue.Issue> =>
-    Effect.flatMapEager(stateCodecOf(component).decode(state), (decoded) =>
-      Effect.mapEager(
-        component.definition.collects === undefined || reported === undefined
-          ? Effect.succeedNone
-          : Effect.option(jsonCodecOf(component.definition.message).decode(reported)),
-        (collected) => ({ fromServer: adopt(decoded), collected })
-      ))
+    Effect.flatMapEager(
+      stateCodecOf(component).decode(state),
+      (decoded) =>
+        Effect.mapEager(
+          component.definition.collects === undefined || reported === undefined
+            ? Effect.succeedNone
+            : Effect.option(
+              jsonCodecOf(component.definition.message).decode(reported)
+            ),
+          (collected) => ({ fromServer: adopt(decoded), collected })
+        )
+    )
 
   const startInstance = (
     inst: Instance,
@@ -3366,7 +3885,10 @@ const setup = (
     // A provided Layer builds in the background. The instance renders at once; its Commands,
     // Subscriptions and mounts, and its descendants', wait for it.
     if (component.layer !== undefined) {
-      if (inert !== undefined || (server !== undefined && (!component.layerOnServer || parentEnv.never))) {
+      if (
+        inert !== undefined ||
+        (server !== undefined && (!component.layerOnServer || parentEnv.never))
+      ) {
         // Kept off the server: never built, and the budget doesn't wait for it. The client builds it fresh.
         inst.env = buildingEnv(parentEnv, true)
         inst.deferred = true
@@ -3375,7 +3897,16 @@ const setup = (
         selected = startLayer(inst, layer, parentEnv, fromServer)
       }
     }
-    if (layer === undefined) return begin(inst, range, fromServer, undefined, savedCollected, undefined)
+    if (layer === undefined) {
+      return begin(
+        inst,
+        range,
+        fromServer,
+        undefined,
+        savedCollected,
+        undefined
+      )
+    }
 
     if (layer.failedEarly !== undefined) {
       layer.constructing = false
@@ -3412,8 +3943,11 @@ const setup = (
     pending = false
     constructor(inst: Instance, range: Range | undefined, fromServer: Adopted) {
       this.inst = inst
-      this.shipped = Option.isSome(fromServer) ? shippedStatus(inst.path) : undefined
-      this.awaits = range !== undefined && Option.isSome(fromServer) && this.shipped === undefined
+      this.shipped = Option.isSome(fromServer)
+        ? shippedStatus(inst.path)
+        : undefined
+      this.awaits = range !== undefined && Option.isSome(fromServer) &&
+        this.shipped === undefined
     }
     lifecycle(draft: Draft) {
       if (this.buffering) this.early.push(draft)
@@ -3479,11 +4013,16 @@ const setup = (
     const sharedLayer = component.sharedLayer
     // Failed on the server: the client adopts the failure, which the Model already handled, and builds nothing.
     const adoptsFailure = layer.shipped === "Failed"
-    const shared = sharedLayer !== undefined && !adoptsFailure ? acquireShared(parentEnv, sharedLayer) : undefined
+    const shared = sharedLayer !== undefined && !adoptsFailure
+      ? acquireShared(parentEnv, sharedLayer)
+      : undefined
     const own = shared !== undefined ? shared.env : buildingEnv(parentEnv)
     inst.env = own
     if (shared !== undefined) {
-      addFinalizer(inst.scope, Effect.suspend(() => releaseShared(parentEnv, sharedLayer!, shared)))
+      addFinalizer(
+        inst.scope,
+        Effect.suspend(() => releaseShared(parentEnv, sharedLayer!, shared))
+      )
     }
     let settleBuild: (() => void) | undefined
     const buildStamp = shared !== undefined ? shared.stamp : ++builds
@@ -3493,10 +4032,16 @@ const setup = (
       // `init` failed, or a keyed provide has selected again since.
       if (inst.closed || inst.env !== own) return
       // A handled failure on the server: its slots get `serverFailure`, not `cause`. See `ownFailed`.
-      const redacted = server !== undefined && component.layerFailure !== undefined
-      layer.lifecycle({ _tag: "LayerFailed", cause, ...(redacted ? { redacted } : undefined) })
-      if (component.layerFailure === undefined && layer.constructing) layer.failedEarly = cause
-      else ownFailed(inst, own, cause, layer.logEarly)
+      const redacted = server !== undefined &&
+        component.layerFailure !== undefined
+      layer.lifecycle({
+        _tag: "LayerFailed",
+        cause,
+        ...(redacted ? { redacted } : undefined)
+      })
+      if (component.layerFailure === undefined && layer.constructing) {
+        layer.failedEarly = cause
+      } else ownFailed(inst, own, cause, layer.logEarly)
     }
     const ready = () => {
       if (!inst.closed && layer.pending) layer.lifecycle({ _tag: "LayerReady" })
@@ -3511,12 +4056,26 @@ const setup = (
     } else if (shared !== undefined) {
       whenReady(own, ready, fail)
     } else {
-      buildOwn(inst, parentEnv, own, buildScope, () => component.layer!(props, keysOrThrow(keys)), ready, fail)
+      buildOwn(
+        inst,
+        parentEnv,
+        own,
+        buildScope,
+        () => component.layer!(props, keysOrThrow(keys)),
+        ready,
+        fail
+      )
     }
-    if (!inst.closed && own.ctx === undefined && own.failure === undefined && layer.failedEarly === undefined) {
+    if (
+      !inst.closed && own.ctx === undefined && own.failure === undefined &&
+      layer.failedEarly === undefined
+    ) {
       layer.pending = true
       if (layer.awaits) own.status = awaitingStatus
-      layer.lifecycle({ _tag: "LayerPending", status: layer.awaits ? "Awaiting" : "Pending" })
+      layer.lifecycle({
+        _tag: "LayerPending",
+        status: layer.awaits ? "Awaiting" : "Pending"
+      })
       settleBuild = countBuilding(own, buildScope)
     }
     // Added after the Layer's Scopes, which all exist by now, so the close stops the instance's runs
@@ -3531,10 +4090,16 @@ const setup = (
     readonly adopted: Adopted
   }
   /** Runs `init`, once the host is known to show the component's elements. */
-  const initOf = (inst: Instance, recorded?: Decoded): Component.Next<any, any, any, any> => {
+  const initOf = (
+    inst: Instance,
+    recorded?: Decoded
+  ): Component.Next<any, any, any, any> => {
     const component = inst.component
     const elements = component.elements()
-    if (elements !== undefined && host.elements !== "any" && !host.elements.includes(elements.name)) {
+    if (
+      elements !== undefined && host.elements !== "any" &&
+      !host.elements.includes(elements.name)
+    ) {
       throw new Error(
         `${component.definition.name} renders ${elements.name} elements, and this host shows ${
           host.elements.join(", ")
@@ -3542,7 +4107,9 @@ const setup = (
       )
     }
     findOwners(inst)
-    return recorded === undefined ? component.init(inst.props) : { model: recorded.model, commands: none, events: none }
+    return recorded === undefined
+      ? component.init(inst.props)
+      : { model: recorded.model, commands: none, events: none }
   }
   /**
    * What the instance starts from: `init`'s result, and the Model it adopts from the server or from
@@ -3559,7 +4126,9 @@ const setup = (
       if (first !== undefined) {
         adopted = Option.some({
           model: restored.model,
-          results: inert === undefined ? restoreQueries(inst.component, restored.results) : restored.results
+          results: inert === undefined
+            ? restoreQueries(inst.component, restored.results)
+            : restored.results
         })
       }
     }
@@ -3587,7 +4156,9 @@ const setup = (
       inst.model = Option.isSome(adopted) ? adopted.value.model : first.model
       inst.results = Option.isSome(adopted) ? adopted.value.results : undefined
       inst.adoptsChildren = Option.isSome(serverModel)
-      if (inst.adoptsChildren && hydrating !== undefined) claimSaved(inst, hydrating.state)
+      if (inst.adoptsChildren && hydrating !== undefined) {
+        claimSaved(inst, hydrating.state)
+      }
       if (Option.isSome(adopted) && Option.isSome(savedCollected)) {
         inst.owning!.collected = { message: savedCollected.value }
         inst.owning!.restored = true
@@ -3601,7 +4172,9 @@ const setup = (
           props: inst.props,
           model: inst.model,
           // Restored or hydrated results, so a replay of the log starts from them.
-          ...(bound === undefined ? undefined : { queries: inst.results ?? bound.empty }),
+          ...(bound === undefined
+            ? undefined
+            : { queries: inst.results ?? bound.empty }),
           commands: first.commands,
           events: first.events,
           adopted: Option.isSome(adopted)
@@ -3651,15 +4224,27 @@ const setup = (
     viewChanged = true
     if (inst.failure !== undefined) return
     if (Option.isSome(adopted)) {
-      apply(inst, { model: inst.model, commands: none, events: none }, mountedSeq, true)
+      apply(
+        inst,
+        { model: inst.model, commands: none, events: none },
+        mountedSeq,
+        true
+      )
       const commands = first.commands
       for (let index = 0; index < commands.length; index++) {
         issue(inst, commands[index], { seq: mountedSeq, index }, index)
       }
-    } else apply(inst, inst.model === first.model ? first : { ...first, model: inst.model }, mountedSeq, true)
+    } else {apply(
+        inst,
+        inst.model === first.model ? first : { ...first, model: inst.model },
+        mountedSeq,
+        true
+      )}
     // The Commands of the updates folded before the render: issued where `init`'s are, after them.
     if (early !== undefined) {
-      for (const entry of early) issue(inst, entry.command, entry.issued, undefined)
+      for (const entry of early) {
+        issue(inst, entry.command, entry.issued, undefined)
+      }
     }
   }
 
@@ -3680,13 +4265,26 @@ const setup = (
       _tag: "Waiting",
       props: inst.props,
       model: fromServer.value.model,
-      ...(bound === undefined ? undefined : { queries: fromServer.value.results ?? bound.empty })
+      ...(bound === undefined
+        ? undefined
+        : { queries: fromServer.value.results ?? bound.empty })
     })
     layer.logEarly()
     const resume = hold(inst, range)
     const start = (adopt: boolean) =>
       defer(() =>
-        resume(adopt, () => begin(inst, range, adopt ? fromServer : Option.none(), undefined, savedCollected, layer))
+        resume(
+          adopt,
+          () =>
+            begin(
+              inst,
+              range,
+              adopt ? fromServer : Option.none(),
+              undefined,
+              savedCollected,
+              layer
+            )
+        )
       )
     whenReady(inst.env, () => start(true), () => {
       if (inst.component.layerFailure !== undefined) start(false)
@@ -3700,7 +4298,9 @@ const setup = (
     waiting++
     if (range !== undefined) {
       range.claimed = true
-      inst.rendered = packed(rangeNodes(range).map((node) => new TextRecord(emptyText, node)))
+      inst.rendered = packed(
+        rangeNodes(range).map((node) => new TextRecord(emptyText, node))
+      )
     } else inst.rendered = new TextRecord(emptyText, host.createText(""))
     const resume = (adopt: boolean | "late", start: () => void) => {
       if (inst.closed || !inst.waiting) return
@@ -3728,14 +4328,20 @@ const setup = (
       const draws = lates.splice(0)
       // Rebuilt: the server's nodes go. Adopted, the ones it kept are in place, and what it built fresh for
       // the rest isn't in the document yet. Nothing above it renders now, so it places its own nodes.
-      if (range === undefined || !range.claimed) { for (const node of nodes) host.remove(node) }
-      if (inst.failure === undefined && parentNode !== undefined) placeEach(parentNode, inst.rendered, after)
+      if (range === undefined || !range.claimed) {
+        for (const node of nodes) host.remove(node)
+      }
+      if (inst.failure === undefined && parentNode !== undefined) {
+        placeEach(parentNode, inst.rendered, after)
+      }
       if (inst.waiting) {
         if (held !== undefined) heldPlacement.set(inst, held)
         return settleWaiting()
       }
       if (adopt) recordAdopted(inst)
-      if (held !== undefined && !inst.closed && inst.failure === undefined) applyPlacement(inst, held)
+      if (held !== undefined && !inst.closed && inst.failure === undefined) {
+        applyPlacement(inst, held)
+      }
       for (const draw of draws) draw()
       viewChanged = true
       settleWaiting()
@@ -3743,7 +4349,12 @@ const setup = (
     return resume
   }
 
-  const apply = (inst: Instance, next: Component.Next<any, any, any, any>, entrySeq: number, initial: boolean) => {
+  const apply = (
+    inst: Instance,
+    next: Component.Next<any, any, any, any>,
+    entrySeq: number,
+    initial: boolean
+  ) => {
     inst.model = next.model
     if (!refreshShares(inst, entrySeq)) return
     // Before its Commands are issued, so they wait for the read, even when the Model is unchanged.
@@ -3753,20 +4364,35 @@ const setup = (
       // Before the first render: nothing is issued or marked dirty, and only the watches follow the Model.
       const commands = next.commands
       for (let index = 0; index < commands.length; index++) {
-        mounting.push({ command: commands[index], issued: { seq: entrySeq, index } })
+        mounting.push({
+          command: commands[index],
+          issued: { seq: entrySeq, index }
+        })
       }
       syncSubscriptions(inst, true)
-      if (next.sends !== undefined && next.sends.length > 0) defer(() => sendToOwners(inst, next.sends!, entrySeq))
-      if (next.events.length > 0) defer(() => deliverEvents(inst, next.events, entrySeq))
+      if (next.sends !== undefined && next.sends.length > 0) {
+        defer(() => sendToOwners(inst, next.sends!, entrySeq))
+      }
+      if (next.events.length > 0) {
+        defer(() => deliverEvents(inst, next.events, entrySeq))
+      }
       return
     }
     const commands = next.commands
     for (let index = 0; index < commands.length; index++) {
-      issue(inst, commands[index], { seq: entrySeq, index }, initial ? index : undefined)
+      issue(
+        inst,
+        commands[index],
+        { seq: entrySeq, index },
+        initial ? index : undefined
+      )
     }
     if (!initial) {
       markDirty(inst)
-      if (next.viewTransition !== undefined && attached && host.viewTransition !== undefined) {
+      if (
+        next.viewTransition !== undefined && attached &&
+        host.viewTransition !== undefined
+      ) {
         transitionTypes ??= new Set()
         for (const type of next.viewTransition) transitionTypes.add(type)
       }
@@ -3777,7 +4403,9 @@ const setup = (
       for (const list of next.lists) issueList(inst, list)
     }
     // Synchronous, as emits are: the owner's `update` applies before this one's emits are delivered.
-    if (next.sends !== undefined && next.sends.length > 0) sendToOwners(inst, next.sends, entrySeq)
+    if (next.sends !== undefined && next.sends.length > 0) {
+      sendToOwners(inst, next.sends, entrySeq)
+    }
     if (next.events.length === 0) return
     // An emit from `init` waits until the parent, which is still being built, has its first Model.
     if (initial) defer(() => deliverEvents(inst, next.events, entrySeq))
@@ -3792,7 +4420,9 @@ const setup = (
     const bound = queryCore.boundOf(inst.component)
     const field = bound?.byName.get(list.name)
     if (bound === undefined || field === undefined || !field.list) return
-    const args = bound.context(inst.model, inst.props, inst.results).argsOf(field.name).args
+    const args =
+      bound.context(inst.model, inst.props, inst.results).argsOf(field.name)
+        .args
     if (args === undefined) return
     const call = `$.${list.op}(${JSON.stringify(list.name)})`
     if (server !== undefined) {
@@ -3830,7 +4460,10 @@ const setup = (
    * The nearest instance of `definition` from `from` up: a definition, since `provide` and stories copy
    * components.
    */
-  const nearestOwner = (from: Instance | undefined, definition: Component.Definition.Any): Instance | undefined => {
+  const nearestOwner = (
+    from: Instance | undefined,
+    definition: Component.Definition.Any
+  ): Instance | undefined => {
     for (let at = from; at !== undefined; at = at.parent) {
       if (at.component.definition === definition) return at
     }
@@ -3840,7 +4473,10 @@ const setup = (
    * How an error ends when `nearestOwner` finds none. The types know an owner by its name, so a different
    * component with that name may be above.
    */
-  const ownerAbsent = (from: Instance | undefined, definition: Component.Definition.Any): string => {
+  const ownerAbsent = (
+    from: Instance | undefined,
+    definition: Component.Definition.Any
+  ): string => {
     for (let at = from; at !== undefined; at = at.parent) {
       if (at.component.definition.name === definition.name) {
         return `but a different component with the same name is above it at ${at.path}`
@@ -3860,18 +4496,24 @@ const setup = (
       if (owner === undefined) {
         if (read.optional) continue
         throw new Error(
-          `${inst.path} reads the shared state of ${definition.name}, ${ownerAbsent(inst.parent, definition)}`
+          `${inst.path} reads the shared state of ${definition.name}, ${
+            ownerAbsent(inst.parent, definition)
+          }`
         )
       }
       ;(inst.owners ??= new Map()).set(definition, owner)
       ;(owner.readers ??= new Set()).add(inst)
-      if (read.onChange !== undefined) (inst.seen ??= new Map()).set(owner, owner.shares)
+      if (read.onChange !== undefined) {
+        ;(inst.seen ??= new Map()).set(owner, owner.shares)
+      }
     }
   }
   /** What `h.shared` and `p.shared` query: each owner's current value, `undefined` for one that's absent. */
   const sharedOf = (inst: Instance): Component.SharedLookup | undefined => {
     const owners = inst.owners
-    return owners === undefined ? undefined : (owner) => owners.get(owner.definition)?.shares
+    return owners === undefined
+      ? undefined
+      : (owner) => owners.get(owner.definition)?.shares
   }
   /**
    * Recomputes an owner's shared value from its Model and props, and marks its readers dirty when it
@@ -3915,15 +4557,22 @@ const setup = (
    */
   const runRound = (owner: Instance) => {
     owner.owning!.round = false
-    if (owner.closed || owner.failure !== undefined || owner.readers === undefined) return
+    if (
+      owner.closed || owner.failure !== undefined || owner.readers === undefined
+    ) return
     // Read together: a reader's reply can change the owner before the next reader is told.
     const value = owner.shares
-    const source = { _tag: "Shared", path: owner.path, seq: owner.owning!.seq } as const
+    const source = {
+      _tag: "Shared",
+      path: owner.path,
+      seq: owner.owning!.seq
+    } as const
     let counted = false
     for (const reader of Array.from(owner.readers)) {
       const seen = reader.seen
       if (
-        seen === undefined || !seen.has(owner) || reader.closed || reader.failure !== undefined || reader.waiting ||
+        seen === undefined || !seen.has(owner) || reader.closed ||
+        reader.failure !== undefined || reader.waiting ||
         sharedEqual(seen.get(owner), value)
       ) continue
       if (!counted) {
@@ -3932,11 +4581,21 @@ const setup = (
       }
       seen.set(owner, value)
       // `define` allows one `onChange` per owner.
-      const read = sharedReads.readsOf(reader.component.definition).find((read) =>
-        read.onChange !== undefined && reader.owners?.get(read.owner.definition) === owner
+      const read = sharedReads.readsOf(reader.component.definition).find((
+        read
+      ) =>
+        read.onChange !== undefined &&
+        reader.owners?.get(read.owner.definition) === owner
       )!
-      const message = guard(reader, "shared", () => read.onChange!(value), read.name)
-      if (message !== undefined && !reader.closed) reader.dispatch(message, { ...source, name: read.name })
+      const message = guard(
+        reader,
+        "shared",
+        () => read.onChange!(value),
+        read.name
+      )
+      if (message !== undefined && !reader.closed) {
+        reader.dispatch(message, { ...source, name: read.name })
+      }
       if (owner.closed) return
     }
   }
@@ -3947,7 +4606,10 @@ const setup = (
     for (const read of sharedReads.readsOf(inst.component.definition)) {
       if (read.report === undefined) continue
       const owner = owners.get(read.owner.definition)
-      if (owner === undefined || owner.closed || owner.component.definition.collects === undefined) continue
+      if (
+        owner === undefined || owner.closed ||
+        owner.component.definition.collects === undefined
+      ) continue
       dueReports(owner)
     }
   }
@@ -3964,7 +4626,10 @@ const setup = (
   }
   const collectReports = (owner: Instance) => {
     const collects = owner.component.definition.collects
-    if (collects === undefined || owner.closed || owner.failure !== undefined || owner.waiting) return
+    if (
+      collects === undefined || owner.closed || owner.failure !== undefined ||
+      owner.waiting
+    ) return
     const owning = owner.owning!
     // The server's message is compared with every reader that adopts, so one still building its Layer isn't
     // counted as gone. Settling it delivers the owner again.
@@ -3979,11 +4644,19 @@ const setup = (
     for (const reader of owner.readers ?? []) {
       if (reader.left || reader.closed || reader.failure !== undefined) continue
       for (const read of sharedReads.readsOf(reader.component.definition)) {
-        if (read.report === undefined || reader.owners?.get(read.owner.definition) !== owner) continue
+        if (
+          read.report === undefined ||
+          reader.owners?.get(read.owner.definition) !== owner
+        ) continue
         const report = guard(
           reader,
           "shared",
-          () => read.report!(reader.model, reader.props, (name, key) => View.idOf(reader.path, name, key)),
+          () =>
+            read.report!(
+              reader.model,
+              reader.props,
+              (name, key) => View.idOf(reader.path, name, key)
+            ),
           read.name
         )
         // The reader failed, and leaving marked the owner again.
@@ -3995,7 +4668,10 @@ const setup = (
       owning.collected ??= { message: collects.onChange([]) }
       return { value: collects.onChange(reports as Array<never>) }
     })
-    if (message === undefined || sharedEqual(owning.collected!.message, message.value)) return
+    if (
+      message === undefined ||
+      sharedEqual(owning.collected!.message, message.value)
+    ) return
     owning.collected = { message: message.value }
     if (!countShared(owner)) return
     owner.dispatch(message.value, { _tag: "Collected" })
@@ -4029,7 +4705,11 @@ const setup = (
    * isn't above fails the sender. Past `maxSendPasses` rounds in one flush it fails the sender too: a
    * reader and its owner whose updates answer each other would never leave `drainLoop`.
    */
-  const sendToOwners = (inst: Instance, sends: ReadonlyArray<Component.Send>, entrySeq: number) => {
+  const sendToOwners = (
+    inst: Instance,
+    sends: ReadonlyArray<Component.Send>,
+    entrySeq: number
+  ) => {
     if (inst.closed) return
     const passes = (sendPasses.get(inst) ?? 0) + 1
     sendPasses.set(inst, passes)
@@ -4050,18 +4730,34 @@ const setup = (
           read.optional && read.owner.definition === definition
         )
       ) {
-        record(inst, { _tag: "SendDropped", owner: definition.name, issued: { seq: entrySeq, index } })
+        record(inst, {
+          _tag: "SendDropped",
+          owner: definition.name,
+          issued: { seq: entrySeq, index }
+        })
         continue
       }
       if (owner === undefined) {
-        const error = new Error(`${inst.path} sent to ${definition.name}, ${ownerAbsent(inst.parent, definition)}`)
+        const error = new Error(
+          `${inst.path} sent to ${definition.name}, ${
+            ownerAbsent(inst.parent, definition)
+          }`
+        )
         failInstance(inst, Cause.die(error), "send")
         return
       }
-      owner.dispatch(sends[index].message, { _tag: "Send", path: inst.path, seq: entrySeq })
+      owner.dispatch(sends[index].message, {
+        _tag: "Send",
+        path: inst.path,
+        seq: entrySeq
+      })
     }
   }
-  const deliverEvents = (inst: Instance, events: ReadonlyArray<unknown>, entrySeq: number) => {
+  const deliverEvents = (
+    inst: Instance,
+    events: ReadonlyArray<unknown>,
+    entrySeq: number
+  ) => {
     const parent = inst.declarer ?? (inst.parent ?? keptAuthor(inst))?.author
     for (const emitted of events) {
       if (inst.closed) return
@@ -4070,12 +4766,19 @@ const setup = (
         continue
       }
       const message = guard(parent, "onEmit", () => inst.onEmit(emitted))
-      if (message !== undefined) parent.dispatch(message, { _tag: "Emit", path: inst.path, seq: entrySeq })
+      if (message !== undefined) {
+        parent.dispatch(message, {
+          _tag: "Emit",
+          path: inst.path,
+          seq: entrySeq
+        })
+      }
     }
   }
 
   // -- Commands -------------------------------------------------------------
-  const entriesOf = (inst: Instance): Array<schedule.Entry<Run>> => inst.runs.map(entryOf)
+  const entriesOf = (inst: Instance): Array<schedule.Entry<Run>> =>
+    inst.runs.map(entryOf)
   const entryOf = (run: Run): schedule.Entry<Run> => ({
     name: run.command.name,
     key: run.command.groupKey,
@@ -4097,7 +4800,12 @@ const setup = (
       // No Command runs on the server. `init`'s are dropped silently, since the client reruns them when
       // it adopts. One from `update`, an interrupt included, is logged and reported.
       if (initIndex !== undefined) return
-      record(inst, { _tag: "CommandDropped", name: command.name, issued, reason: "server" })
+      record(inst, {
+        _tag: "CommandDropped",
+        name: command.name,
+        issued,
+        reason: "server"
+      })
       report(
         new Command.ServerCommandIssued({
           path: inst.path,
@@ -4110,7 +4818,9 @@ const setup = (
     }
     const decision = schedule.schedule(entriesOf(inst), command)
     if (command._tag === "Interrupt") {
-      for (const entry of decision.interrupt) stopRun(inst, entry.value, "interrupt")
+      for (const entry of decision.interrupt) {
+        stopRun(inst, entry.value, "interrupt")
+      }
       return
     }
     switch (decision.action) {
@@ -4120,18 +4830,27 @@ const setup = (
         // `switch` stops the earlier runs: the new patch layers over the old until the old fiber exits.
         let handle: Query.RunHandle | undefined
         // Without the `Query` module there's no cache, and nothing a run could invalidate, patch or read.
-        const runs = command.service === undefined ? undefined : cache ?? cell.get()
+        const runs = command.service === undefined
+          ? undefined
+          : cache ?? cell.get()
         if (runs !== undefined) {
           try {
             handle = beginRun(runs, command)
           } catch (error) {
             // Like a throw in `update`: the run doesn't start and the issuing instance fails.
-            failInstance(inst, Cause.die(error), initIndex === undefined ? "update" : "init", command.name)
+            failInstance(
+              inst,
+              Cause.die(error),
+              initIndex === undefined ? "update" : "init",
+              command.name
+            )
             return
           }
         }
         // A cut run that awaits delivers here, so `update` gets it after the new patch and before the new fiber.
-        for (const entry of decision.interrupt) stopRun(inst, entry.value, "switch")
+        for (const entry of decision.interrupt) {
+          stopRun(inst, entry.value, "switch")
+        }
         const run: Run = {
           command,
           issued,
@@ -4151,7 +4870,10 @@ const setup = (
         }
         if (inst.runs === emptyList) inst.runs = []
         inst.runs.push(run)
-        if (runs === undefined && command.service !== undefined && command.writes !== undefined) {
+        if (
+          runs === undefined && command.service !== undefined &&
+          command.writes !== undefined
+        ) {
           ;(early ??= new Set()).add(run)
         }
         // Issued before a keyed provide's due read: a change of key keeps it.
@@ -4198,7 +4920,11 @@ const setup = (
    * A wait only delays a message: an awaiting run delivers it at once, whatever stops it, unless its
    * instance is gone. `by` is what the log says cut its wait.
    */
-  const stopRun = (inst: Instance, run: Run, by: MessageLog.InterruptReason) => {
+  const stopRun = (
+    inst: Instance,
+    run: Run,
+    by: MessageLog.InterruptReason
+  ) => {
     if (run.done) return
     if (run.held !== undefined) {
       const closed = inst.closed || rootClosed
@@ -4238,8 +4964,12 @@ const setup = (
     stopRun(inst, run, "unmount")
     return fiber === undefined ? Effect.void : Effect.asVoid(Fiber.await(fiber))
   }
-  const awaitRuns = (waits: ReadonlyArray<Effect.Effect<void>>): Effect.Effect<void> =>
-    waits.length === 0 ? Effect.void : Effect.all(waits, { concurrency: "unbounded", discard: true })
+  const awaitRuns = (
+    waits: ReadonlyArray<Effect.Effect<void>>
+  ): Effect.Effect<void> =>
+    waits.length === 0
+      ? Effect.void
+      : Effect.all(waits, { concurrency: "unbounded", discard: true })
   // Repeats until nothing is left, since a close that finishes can stop more runs.
   const awaitAllOwned: Effect.Effect<void> = Effect.suspend(() =>
     liveRuns.size === 0 && closing.size === 0
@@ -4265,7 +4995,11 @@ const setup = (
       // the body acquires is released when the run ends, not when its instance does.
       const scope = Scope.makeUnsafe("sequential")
       const context = withCache(
-        Context.add(Context.add(envCtx, Scope.Scope, scope), services.Refs, refsOf(inst))
+        Context.add(
+          Context.add(envCtx, Scope.Scope, scope),
+          services.Refs,
+          refsOf(inst)
+        )
       )
       let source: MessageLog.Source = {
         _tag: "Command",
@@ -4306,10 +5040,17 @@ const setup = (
             spanId: span.spanId,
             traceId: span.traceId
           }
-          const work: Effect.Effect<unknown, unknown, any> = command._tag === "Effect"
-            ? command.work
-            : Stream.runForEach(command.work, (element) => Effect.sync(() => send(command.resolve(element as never))))
-          const writes = command.writes as ((success: unknown) => ReadonlyArray<Query.Write>) | undefined
+          const work: Effect.Effect<unknown, unknown, any> =
+            command._tag === "Effect"
+              ? command.work
+              : Stream.runForEach(
+                command.work,
+                (element) =>
+                  Effect.sync(() => send(command.resolve(element as never)))
+              )
+          const writes = command.writes as
+            | ((success: unknown) => ReadonlyArray<Query.Write>)
+            | undefined
           if (run.handle !== undefined) return run.handle.run(work, writes)
           if (writes === undefined) return work
           // Issued before the app loaded `Query`, so with nothing to invalidate or patch: both are made
@@ -4330,7 +5071,12 @@ const setup = (
               }
               const handle = run.handle
               const made = sets
-              if (handle !== undefined) return handle.run(exit, made === undefined ? writes : () => made)
+              if (handle !== undefined) {
+                return handle.run(
+                  exit,
+                  made === undefined ? writes : () => made
+                )
+              }
               // Its work is over: a cache made from here on has no run to begin for it.
               early?.delete(run)
               return exit
@@ -4338,7 +5084,10 @@ const setup = (
           )
         }
       )
-      const fiber = fork(context, Effect.onExit(program, (exit) => Scope.close(scope, exit)))
+      const fiber = fork(
+        context,
+        Effect.onExit(program, (exit) => Scope.close(scope, exit))
+      )
       run.fiber = fiber
       track(liveRuns, fiber)
       fiber.addObserver((exit) => step(() => ended(inst, run, exit, source)))
@@ -4348,12 +5097,16 @@ const setup = (
     onceSelected(inst, go, () => stopRun(inst, run, "layer"))
   }
 
-  const beginRun = (made: queryCore.Cache, command: Run["command"]): Query.RunHandle =>
+  const beginRun = (
+    made: queryCore.Cache,
+    command: Run["command"]
+  ): Query.RunHandle =>
     made.beginRun({
       command: command.name,
       invalidates: command.invalidates as ReadonlyArray<Query.Target>,
       optimistic: command.optimistic as ReadonlyArray<Query.Patch>,
-      afterRefetch: command._tag === "Effect" && command.afterRefetch !== undefined
+      afterRefetch: command._tag === "Effect" &&
+        command.afterRefetch !== undefined
     })
 
   /**
@@ -4390,20 +5143,37 @@ const setup = (
       return
     }
     if (run.done) return
-    const interrupted = Exit.isFailure(exit) && !Cause.hasDies(exit.cause) && !Cause.hasFails(exit.cause)
-    const waits = command._tag === "Effect" && command.afterRefetch !== undefined && Exit.isSuccess(exit)
+    const interrupted = Exit.isFailure(exit) && !Cause.hasDies(exit.cause) &&
+      !Cause.hasFails(exit.cause)
+    const waits = command._tag === "Effect" &&
+      command.afterRefetch !== undefined && Exit.isSuccess(exit)
     if (inst.closed) {
       // It ended while its instance closes, before the close stopped it. Its message is dropped, and a
       // failure tells only the log.
       removeRun(inst, run)
       if (interrupted) {
         if (run.spanId === undefined) run.cutBy = inst.leftBy
-        recordInterrupted(inst, run, run.spanId === undefined ? "unmount" : "self")
+        recordInterrupted(
+          inst,
+          run,
+          run.spanId === undefined ? "unmount" : "self"
+        )
       } else {
         if (Exit.isFailure(exit)) {
-          forkNow(ctx, Effect.logError(`${inst.path} is gone, and its Command ${command.name} failed`, exit.cause))
+          forkNow(
+            ctx,
+            Effect.logError(
+              `${inst.path} is gone, and its Command ${command.name} failed`,
+              exit.cause
+            )
+          )
         }
-        if (waits) run.waited = { waitEnded: "closed", outstanding: run.handle?.outstanding() ?? [] }
+        if (waits) {
+          run.waited = {
+            waitEnded: "closed",
+            outstanding: run.handle?.outstanding() ?? []
+          }
+        }
         recordEnded(inst, run)
       }
       promote(inst, run)
@@ -4417,10 +5187,20 @@ const setup = (
       return
     }
     const reject = command.reject
-    if (Exit.isFailure(exit) && (Cause.hasDies(exit.cause) || reject === undefined)) {
+    if (
+      Exit.isFailure(exit) &&
+      (Cause.hasDies(exit.cause) || reject === undefined)
+    ) {
       // A typed failure nothing maps is a defect too: an unmatched Command got past the types.
       removeRun(inst, run)
-      failInstance(inst, exit.cause, "command", command.name, undefined, run.issued)
+      failInstance(
+        inst,
+        exit.cause,
+        "command",
+        command.name,
+        undefined,
+        run.issued
+      )
       return
     }
     if (Exit.isSuccess(exit) && command._tag === "Stream") {
@@ -4433,11 +5213,20 @@ const setup = (
     let message: unknown
     try {
       message = Exit.isFailure(exit)
-        ? reject!(Option.getOrUndefined(Cause.findErrorOption(exit.cause)) as never)
+        ? reject!(
+          Option.getOrUndefined(Cause.findErrorOption(exit.cause)) as never
+        )
         : command.resolve(exit.value as never)
     } catch (error) {
       removeRun(inst, run)
-      failInstance(inst, Cause.die(error), "command", command.name, undefined, run.issued)
+      failInstance(
+        inst,
+        Cause.die(error),
+        "command",
+        command.name,
+        undefined,
+        run.issued
+      )
       return
     }
     if (run.done) return
@@ -4466,7 +5255,12 @@ const setup = (
       run.waited = { waitEnded: "nothing", outstanding: [] }
       return
     }
-    record(inst, { _tag: "CommandAwaiting", name: run.command.name, issued: run.issued, entries: awaited })
+    record(inst, {
+      _tag: "CommandAwaiting",
+      name: run.command.name,
+      issued: run.issued,
+      entries: awaited
+    })
     run.waiting = true
     const budget = run.command.afterRefetch!
     if (handle.outstanding().length === 0) return endWait(run, "settled")
@@ -4483,7 +5277,13 @@ const setup = (
       })
     const off = handle.onRefetched(() => ended("settled"))
     const timer = Number.isFinite(remaining)
-      ? forkNow(ctx, Effect.andThen(Effect.sleep(Duration.millis(remaining)), Effect.sync(() => ended("budget"))))
+      ? forkNow(
+        ctx,
+        Effect.andThen(
+          Effect.sleep(Duration.millis(remaining)),
+          Effect.sync(() => ended("budget"))
+        )
+      )
       : undefined
     run.cancelWait = () => {
       off()
@@ -4493,7 +5293,10 @@ const setup = (
   const endWait = (run: Run, by: MessageLog.WaitEnded) => {
     if (!run.waiting) return
     run.waiting = false
-    run.waited = { waitEnded: by, outstanding: by === "settled" ? [] : run.handle!.outstanding() }
+    run.waited = {
+      waitEnded: by,
+      outstanding: by === "settled" ? [] : run.handle!.outstanding()
+    }
     const cancel = run.cancelWait
     run.cancelWait = undefined
     cancel?.()
@@ -4502,7 +5305,11 @@ const setup = (
   const release = (inst: Instance, run: Run) => {
     for (;;) {
       if (run.command.mode !== "queue" && run.done) return
-      const next = schedule.deliverable(entriesOf(inst), entryOf(run), (other) => !other.waiting)
+      const next = schedule.deliverable(
+        entriesOf(inst),
+        entryOf(run),
+        (other) => !other.waiting
+      )
       if (next === undefined) return
       if (inst.closed || rootClosed) return stopRun(inst, next.value, "unmount")
       deliver(inst, next.value)
@@ -4532,7 +5339,11 @@ const setup = (
       silent: run.silent === true,
       ...run.waited
     })
-  const recordInterrupted = (inst: Instance, run: Run, reason: MessageLog.InterruptReason) =>
+  const recordInterrupted = (
+    inst: Instance,
+    run: Run,
+    reason: MessageLog.InterruptReason
+  ) =>
     record(inst, {
       _tag: "CommandInterrupted",
       name: run.command.name,
@@ -4543,8 +5354,12 @@ const setup = (
     }, run.cutBy)
 
   /** `h.isRunning` for one instance: a run of the Command in the schedule, of the group if given. */
-  const runningOf = (inst: Instance) => (name: string, groupKey: string | undefined): boolean =>
-    inst.runs.some((run) => run.command.name === name && (groupKey === undefined || run.command.groupKey === groupKey))
+  const runningOf =
+    (inst: Instance) => (name: string, groupKey: string | undefined): boolean =>
+      inst.runs.some((run) =>
+        run.command.name === name &&
+        (groupKey === undefined || run.command.groupKey === groupKey)
+      )
 
   // -- Subscriptions --------------------------------------------------------
   // On the server: whether the root's Subscriptions were sampled for their checks.
@@ -4554,7 +5369,10 @@ const setup = (
     const subscriptions = inst.component.subscriptions
     const bound = queryCore.boundOf(inst.component)
     // A waiting instance has no Model yet.
-    if (inst.closed || inst.waiting || inert !== undefined || (subscriptions === undefined && bound === undefined)) {
+    if (
+      inst.closed || inst.waiting || inert !== undefined ||
+      (subscriptions === undefined && bound === undefined)
+    ) {
       return
     }
     // A keyed provide's read is due: nothing starts against services that may be about to go. The read
@@ -4566,28 +5384,41 @@ const setup = (
     }
     // Sample the root once for server checks, and query components for their watches.
     // Nothing under a Layer kept off the server is sampled.
-    const checkRoot = server !== undefined && inst.parent === undefined && !rootChecked && subscriptions !== undefined
+    const checkRoot = server !== undefined && inst.parent === undefined &&
+      !rootChecked && subscriptions !== undefined
     if (server !== undefined) {
       if (inst.env.never || (!checkRoot && bound === undefined)) return
       if (checkRoot) rootChecked = true
     }
     const watches = bound === undefined
       ? []
-      : guard(inst, "subscription", () => bound.context(inst.model, inst.props, inst.results).watches())
+      : guard(
+        inst,
+        "subscription",
+        () => bound.context(inst.model, inst.props, inst.results).watches()
+      )
     if (watches === undefined) return
     // A throw from the root's check fails the render: `guard` would defer the root to the client, unchecked.
     // On the server only the root's are sampled, for their checks.
-    const wanted = subscriptions === undefined || (server !== undefined && !checkRoot)
-      ? []
-      : checkRoot
-      ? subscriptions(inst.model, inst.props, inst.results)
-      : guard(inst, "subscription", () => subscriptions(inst.model, inst.props, inst.results))
+    const wanted =
+      subscriptions === undefined || (server !== undefined && !checkRoot)
+        ? []
+        : checkRoot
+        ? subscriptions(inst.model, inst.props, inst.results)
+        : guard(
+          inst,
+          "subscription",
+          () => subscriptions(inst.model, inst.props, inst.results)
+        )
     if (wanted === undefined) return
     const byKey = new Map<string, Subscription.Subscription<any, any>>()
     const markers = new Map<string, componentQueries.Marker>()
     let declaration: services.Prefetch | undefined
     for (const subscription of [...watches, ...wanted]) {
-      const declared = (subscription as { readonly [services.prefetch]?: services.Prefetch })[services.prefetch]
+      const declared =
+        (subscription as { readonly [services.prefetch]?: services.Prefetch })[
+          services.prefetch
+        ]
       if (declared !== undefined) {
         if (declaration !== undefined) {
           return failInstance(
@@ -4605,14 +5436,22 @@ const setup = (
         continue
       }
       const marker = queryCore.markerOf(subscription)
-      const group = marker === undefined ? queryCore.groupOf(subscription) : undefined
+      const group = marker === undefined
+        ? queryCore.groupOf(subscription)
+        : undefined
       if (marker !== undefined) {
-        if (!markers.has(subscription.key)) markers.set(subscription.key, marker)
+        if (!markers.has(subscription.key)) {
+          markers.set(subscription.key, marker)
+        }
       } else if (group !== undefined) syncGroup(inst, group)
       else if (queryCore.isWatchKey(subscription.key)) {
         return failInstance(
           inst,
-          Cause.die(new Error(`${inst.path}: the Subscription key ${subscription.key} is reserved for queries.`)),
+          Cause.die(
+            new Error(
+              `${inst.path}: the Subscription key ${subscription.key} is reserved for queries.`
+            )
+          ),
           "subscription",
           subscription.key
         )
@@ -4629,7 +5468,9 @@ const setup = (
     if (checkRoot) {
       for (const subscription of byKey.values()) {
         const hook = (subscription as services.OnServer)[services.onServer]
-        if (hook !== undefined) whenReady(inst.env, (envCtx) => hook(envCtx, report))
+        if (hook !== undefined) {
+          whenReady(inst.env, (envCtx) => hook(envCtx, report))
+        }
       }
     }
     const folds = syncWatches(inst, markers)
@@ -4644,7 +5485,10 @@ const setup = (
     // The key set may have changed: the next drain checks for a prune.
     if (inst.keyed !== undefined && inst.keyed.size > 0) requestKeyed(inst)
   }
-  const syncStreams = (inst: Instance, byKey: Map<string, Subscription.Subscription<any, any>>) => {
+  const syncStreams = (
+    inst: Instance,
+    byKey: Map<string, Subscription.Subscription<any, any>>
+  ) => {
     // Close first, so `room:1` and `room:2` are never both connected.
     if (inst.subscriptions === undefined) {
       if (byKey.size === 0) return
@@ -4654,7 +5498,12 @@ const setup = (
     for (const [key, running] of subscriptions) {
       if (byKey.has(key)) continue
       subscriptions.delete(key)
-      record(inst, { _tag: "SubscriptionStopped", key, name: running.name, deps: running.deps })
+      record(inst, {
+        _tag: "SubscriptionStopped",
+        key,
+        name: running.name,
+        deps: running.deps
+      })
       closeUnder(inst, running.scope)
     }
     for (const [key, subscription] of byKey) {
@@ -4677,12 +5526,23 @@ const setup = (
       const current = () => !inst.closed && subscriptions.get(key) === running
       const go = (envCtx: Context.Context<any>) => {
         if (!current()) return
-        const source: MessageLog.Source = { _tag: "Subscription", key, name, deps }
+        const source: MessageLog.Source = {
+          _tag: "Subscription",
+          key,
+          name,
+          deps
+        }
         const context = withCache(
-          Context.add(Context.add(envCtx, Scope.Scope, running.scope), services.CurrentRoot, () => handle)
+          Context.add(
+            Context.add(envCtx, Scope.Scope, running.scope),
+            services.CurrentRoot,
+            () => handle
+          )
         )
         // Rendering the ancestors may stop this key, or change its declaration, as for a query result.
-        const enter = (f: (latest: Subscription.Subscription<any, any>) => void) =>
+        const enter = (
+          f: (latest: Subscription.Subscription<any, any>) => void
+        ) =>
           receive(inst, () => {
             if (current()) f(running.latest)
           })
@@ -4692,17 +5552,29 @@ const setup = (
             inst.dispatch(message, source)
           })
         // Attached to its source, it dispatches synchronously, and only its first check waits.
-        const attachedTo = (subscription as services.Direct)[services.direct]?.(context, (message, accepted) => {
-          if (current()) deliver(message, accepted)
-        }, (cause) => {
-          if (current()) step(() => failInstance(inst, cause, "subscription", key))
-        }, enter)
-        if (attachedTo !== undefined) addFinalizer(running.scope, Effect.sync(attachedTo.close))
+        const attachedTo = (subscription as services.Direct)[services.direct]?.(
+          context,
+          (message, accepted) => {
+            if (current()) deliver(message, accepted)
+          },
+          (cause) => {
+            if (current()) {
+              step(() => failInstance(inst, cause, "subscription", key))
+            }
+          },
+          enter
+        )
+        if (attachedTo !== undefined) {
+          addFinalizer(running.scope, Effect.sync(attachedTo.close))
+        }
         const fiber = forkLater(
           context,
           attachedTo !== undefined
             ? attachedTo.initial
-            : Stream.runForEach(subscription.stream, (message) => Effect.sync(() => deliver(message)))
+            : Stream.runForEach(
+              subscription.stream,
+              (message) => Effect.sync(() => deliver(message))
+            )
         )
         running.fiber = fiber
         interruptOnClose(running.scope, fiber)
@@ -4727,7 +5599,10 @@ const setup = (
    * on the Clock, unless registering now fetches nothing. Newer args are a new key: the waiting
    * watcher goes, and its sleep with it.
    */
-  const syncWatches = (inst: Instance, markers: Map<string, componentQueries.Marker>): ReadonlyArray<() => void> => {
+  const syncWatches = (
+    inst: Instance,
+    markers: Map<string, componentQueries.Marker>
+  ): ReadonlyArray<() => void> => {
     if (inst.watches === undefined) {
       if (markers.size === 0) return []
       inst.watches = new Map()
@@ -4754,9 +5629,19 @@ const setup = (
         continue
       }
       const def = queryModule().defOf(marker.query)
-      const fetchKey = marker.argsKey === undefined ? undefined : def.logKey(marker.args, marker.argsKey)
-      const logKey = fetchKey === undefined ? key : Subscription.keyOf(`~query/${marker.name}`, fetchKey)
-      const running: WatchRun = { marker, logKey, handle: undefined, released: false, debounce: undefined }
+      const fetchKey = marker.argsKey === undefined
+        ? undefined
+        : def.logKey(marker.args, marker.argsKey)
+      const logKey = fetchKey === undefined
+        ? key
+        : Subscription.keyOf(`~query/${marker.name}`, fetchKey)
+      const running: WatchRun = {
+        marker,
+        logKey,
+        handle: undefined,
+        released: false,
+        debounce: undefined
+      }
       holdsWatchers = true
       watches.set(key, running)
       // A disabled query: the marker is inert.
@@ -4780,7 +5665,8 @@ const setup = (
         if (running.released || inst.closed) return
         // An emission equal to this watcher's last is skipped. A list's `more` changing is a message.
         if (
-          last !== undefined && last.patched === patched && queryModule().sameMore(last.more, more) &&
+          last !== undefined && last.patched === patched &&
+          queryModule().sameMore(last.more, more) &&
           Equal.equals(last.result, result)
         ) return
         last = { result, patched, more }
@@ -4797,7 +5683,13 @@ const setup = (
         // watcher before that `update` returns.
         receive(inst, () => {
           if (running.released || inst.closed) return
-          writeResult(inst, query, bound.snapshot(query, entry, result, patched, more), [], logKey)
+          writeResult(
+            inst,
+            query,
+            bound.snapshot(query, entry, result, patched, more),
+            [],
+            logKey
+          )
         })
       }
       const go = (envCtx: Context.Context<any>) => {
@@ -4806,14 +5698,22 @@ const setup = (
         if (Option.isNone(fetcher)) {
           return failInstance(
             inst,
-            Cause.die(new Error(`${inst.path}: nothing provides the query ${JSON.stringify(def.name)}`)),
+            Cause.die(
+              new Error(
+                `${inst.path}: nothing provides the query ${
+                  JSON.stringify(def.name)
+                }`
+              )
+            ),
             "subscription",
             logKey
           )
         }
         holdWatches()
         const from = asked ?? origin
-        if (from !== undefined) watchCauses.set(entryKey(def.name, fetchKey!), from)
+        if (from !== undefined) {
+          watchCauses.set(entryKey(def.name, fetchKey!), from)
+        }
         const handle = queryCache().watch(
           def,
           marker.args,
@@ -4821,7 +5721,9 @@ const setup = (
           send,
           (cause) => {
             // A defect in a fetcher fails every watching instance. The cache never stores it.
-            if (!running.released) step(() => failInstance(inst, cause, "subscription", logKey))
+            if (!running.released) {
+              step(() => failInstance(inst, cause, "subscription", logKey))
+            }
           },
           { patched: true }
         )
@@ -4830,7 +5732,9 @@ const setup = (
         // cache has already called back with the newer value, which `send` skips as equal.
         const fold = () => {
           const current = handle.patchedView()
-          if (current.result._tag !== "Initial") send(current.result, current.patched, handle.more())
+          if (current.result._tag !== "Initial") {
+            send(current.result, current.patched, handle.more())
+          }
         }
         // Registered later, once the instance's Layer is ready: there is no loop to wait for.
         if (folds !== undefined) folds.push(fold)
@@ -4838,7 +5742,8 @@ const setup = (
       }
       const start = () => startWatching(inst, go)
       if (
-        marker.debounce === undefined || server !== undefined || !inst.watchesSynced || !wouldFetch(def, marker.args)
+        marker.debounce === undefined || server !== undefined ||
+        !inst.watchesSynced || !wouldFetch(def, marker.args)
       ) {
         start()
         continue
@@ -4865,9 +5770,13 @@ const setup = (
     return out
   }
   /** Whether a watcher registering on the entry now starts a fetch: no watcher, nothing in flight, and stale or cold. */
-  const wouldFetch = (def: ReturnType<typeof Query.defOf>, args: unknown): boolean => {
+  const wouldFetch = (
+    def: ReturnType<typeof Query.defOf>,
+    args: unknown
+  ): boolean => {
     const info = queryCache().inspect(def, args)
-    return info === undefined || (info.watchers === 0 && info.fetch === "none" && info.stale)
+    return info === undefined ||
+      (info.watchers === 0 && info.fetch === "none" && info.stale)
   }
   /** A keyed query's keys follow the state. */
   const syncGroup = (inst: Instance, group: componentQueries.Group) => {
@@ -4924,8 +5833,12 @@ const setup = (
     const group = run.group
     const declared = new Set(group.entries.map((entry) => entry.argsKey))
     const changes = group.entries.flatMap((entry) => {
-      const value = run.changes.has(entry.argsKey) ? run.values.get(entry.argsKey) : undefined
-      return value === undefined ? [] : [{ args: value.args, result: value.result }]
+      const value = run.changes.has(entry.argsKey)
+        ? run.values.get(entry.argsKey)
+        : undefined
+      return value === undefined
+        ? []
+        : [{ args: value.args, result: value.result }]
     })
     const held = queryModule().snapshotMapData(inst.results?.[group.name])
     let prune = false
@@ -4943,7 +5856,11 @@ const setup = (
       query,
       group.entries.flatMap((entry) => {
         const value = run.values.get(entry.argsKey)
-        return value === undefined ? [] : [bound.snapshot(query, entry, value.result, value.patched, undefined)]
+        return value === undefined
+          ? []
+          : [
+            bound.snapshot(query, entry, value.result, value.patched, undefined)
+          ]
       })
     )
     step(() => writeResult(inst, query, snapshot, changes, run.logKey))
@@ -4966,18 +5883,34 @@ const setup = (
     // The same snapshot, as when a watcher's first value is what the server or history already gave.
     if (Equal.equals((inst.results ?? bound.empty)[query.name], result)) return
     inst.results = { ...(inst.results ?? bound.empty), [query.name]: result }
-    const changedSeq = record(inst, { _tag: "QueryChanged", name: query.name, result })
+    const changedSeq = record(inst, {
+      _tag: "QueryChanged",
+      name: query.name,
+      result
+    })
     const mounting = inst.mounting !== undefined
     if (!mounting) markDirty(inst)
     syncSubscriptions(inst, mounting)
-    if (query.onChange === undefined || inst.closed || inst.failure !== undefined) return
+    if (
+      query.onChange === undefined || inst.closed || inst.failure !== undefined
+    ) return
     const message = guard(
       inst,
       "subscription",
-      () => bound.context(inst.model, inst.props, inst.results).changed(query.name, changes),
+      () =>
+        bound.context(inst.model, inst.props, inst.results).changed(
+          query.name,
+          changes
+        ),
       key
     )
-    if (message !== undefined) inst.dispatch(message.value, { _tag: "Query", name: query.name, seq: changedSeq })
+    if (message !== undefined) {
+      inst.dispatch(message.value, {
+        _tag: "Query",
+        name: query.name,
+        seq: changedSeq
+      })
+    }
   }
   const releaseWatch = (running: WatchRun, abandon = false) => {
     if (running.released) return
@@ -4988,7 +5921,11 @@ const setup = (
   /** Drops an instance's watchers, and its descendants', at once. Closing its Scope comes after. */
   const releaseWatches = (inst: Instance) => {
     releasePrefetch(inst)
-    if (inst.watches !== undefined) { for (const running of inst.watches.values()) releaseWatch(running) }
+    if (inst.watches !== undefined) {
+      for (const running of inst.watches.values()) {
+        releaseWatch(running)
+      }
+    }
     if (inst.loadMores !== undefined) {
       for (const cancel of inst.loadMores) cancel()
       inst.loadMores.clear()
@@ -5022,13 +5959,21 @@ const setup = (
       recorded
     }
   /** Registers, updates or drops the instance's declaration. The latest `subscriptions` run's map wins. */
-  const syncPrefetch = (inst: Instance, declaration: services.Prefetch | undefined) => {
-    if (declaration === undefined || hooks === undefined) return releasePrefetch(inst)
+  const syncPrefetch = (
+    inst: Instance,
+    declaration: services.Prefetch | undefined
+  ) => {
+    if (declaration === undefined || hooks === undefined) {
+      return releasePrefetch(inst)
+    }
     if (inst.prefetch !== undefined) {
       inst.prefetch.declaration = declaration
       return
     }
-    const state: NonNullable<Instance["prefetch"]> = { declaration, release: undefined }
+    const state: NonNullable<Instance["prefetch"]> = {
+      declaration,
+      release: undefined
+    }
     state.release = hooks.prefetch(prefetchRuntime(), inst, state)
     holdsWatchers = true
     inst.prefetch = state
@@ -5069,17 +6014,27 @@ const setup = (
    * of its elements is theirs, and an owned layer is its owner's. The search goes into headless
    * children, whose trees the same author wrote, and stops at any other child.
    */
-  const findRef = (rendered: Rendered, key: string, who: Instance, author: Instance): unknown => {
+  const findRef = (
+    rendered: Rendered,
+    key: string,
+    who: Instance,
+    author: Instance
+  ): unknown => {
     switch (rendered._tag) {
       case "Element": {
         const view = rendered.v
         if (author === who && view.refKey === key) return rendered.node
         if (who.owner !== undefined) {
           for (const layer of view.owned ?? none) {
-            if (layer.owner === who.owner && layer.refKey === key) return rendered.node
+            if (layer.owner === who.owner && layer.refKey === key) {
+              return rendered.node
+            }
           }
         }
-        return firstDefined(listOf(rendered.children), (child) => findRef(child, key, who, author))
+        return firstDefined(
+          listOf(rendered.children),
+          (child) => findRef(child, key, who, author)
+        )
       }
       case "Fallback":
         return findRef(rendered.inner, key, who, author)
@@ -5087,15 +6042,25 @@ const setup = (
         return rendered.inst.owner === undefined
           ? firstInOutlets(
             rendered.inst,
-            (out) => firstDefined(listOf(out.rendered), (child) => findRef(child, key, who, author))
+            (out) =>
+              firstDefined(
+                listOf(out.rendered),
+                (child) => findRef(child, key, who, author)
+              )
           )
-          : firstDefined(listOf(rendered.inst.rendered), (child) => findRef(child, key, who, author))
+          : firstDefined(
+            listOf(rendered.inst.rendered),
+            (child) => findRef(child, key, who, author)
+          )
       case "Text":
       case "Outlet":
         return undefined
     }
   }
-  const firstDefined = <A>(items: ReadonlyArray<A>, f: (item: A) => unknown): unknown => {
+  const firstDefined = <A>(
+    items: ReadonlyArray<A>,
+    f: (item: A) => unknown
+  ): unknown => {
     for (const item of items) {
       const found = f(item)
       if (found !== undefined) return found
@@ -5109,14 +6074,24 @@ const setup = (
         afterCommit(() => {
           const found = inst.closed
             ? undefined
-            : firstDefined(listOf(inst.rendered), (rendered) => findRef(rendered, ref.key, inst, inst.author))
-          const node = found === undefined || isParked(found) ? undefined : found
-          resume(Effect.succeed(Option.fromUndefinedOr(node as Node | undefined)))
+            : firstDefined(
+              listOf(inst.rendered),
+              (rendered) => findRef(rendered, ref.key, inst, inst.author)
+            )
+          const node = found === undefined || isParked(found)
+            ? undefined
+            : found
+          resume(
+            Effect.succeed(Option.fromUndefinedOr(node as Node | undefined))
+          )
         })
       })
   })
 
-  const parked = new Map<unknown, { readonly owner: Instance; readonly inner: Rendered }>()
+  const parked = new Map<
+    unknown,
+    { readonly owner: Instance; readonly inner: Rendered }
+  >()
   const park = (owner: Instance, container: unknown, inner: Rendered) => {
     parked.set(container, { owner, inner })
     ;(owner.parked ??= new Set()).add(container)
@@ -5128,7 +6103,11 @@ const setup = (
   const isParked = (node: unknown): boolean => {
     if (parked.size === 0) return false
     let top = node
-    for (let up = host.parentOf(top); up !== undefined; up = host.parentOf(up)) top = up
+    for (
+      let up = host.parentOf(top);
+      up !== undefined;
+      up = host.parentOf(up)
+    ) top = up
     return parked.has(top)
   }
 
@@ -5146,7 +6125,12 @@ const setup = (
     if (!host.runsMounts) return undefined
     const mountScope = Scope.forkUnsafe(renderer.scope, "sequential")
     const causedBy = origin
-    const running: RunningMount = { scope: mountScope, mount, args: undefined, cutBy: undefined }
+    const running: RunningMount = {
+      scope: mountScope,
+      mount,
+      args: undefined,
+      cutBy: undefined
+    }
     // A mount that never reads its args' changes pays nothing for them. What keeps them is the mount's
     // own, so an app that issues no mount ships none of it.
     const changes = Stream.suspend(() => {
@@ -5162,7 +6146,12 @@ const setup = (
       whenReady(env, (envCtx) => {
         if (inst.closed || isClosed(mountScope) || isParked(node)) return
         const { args, argsSchema, name } = running.mount
-        const started = record(inst, { _tag: "MountStarted", name, args, argsSchema }, causedBy)
+        const started = record(inst, {
+          _tag: "MountStarted",
+          name,
+          args,
+          argsSchema
+        }, causedBy)
         let silent: boolean | undefined
         const send = (result: unknown) =>
           Effect.sync(() => {
@@ -5181,13 +6170,22 @@ const setup = (
             })
           })
         const fiber = forkNow(
-          withCache(Context.add(Context.add(envCtx, Scope.Scope, mountScope), services.Refs, refsOf(inst))),
+          withCache(
+            Context.add(
+              Context.add(envCtx, Scope.Scope, mountScope),
+              services.Refs,
+              refsOf(inst)
+            )
+          ),
           Effect.suspend(() => mount.run(node, args, changes, send))
         )
         interruptOnClose(mountScope, fiber)
         fiber.addObserver((exit) =>
           step(() => {
-            const failure = Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause) ? exit.cause : undefined
+            const failure =
+              Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)
+                ? exit.cause
+                : undefined
             // A later finalizer can hold the close open while the body returns before its interrupt.
             const reason = failure !== undefined
               ? "failed"
@@ -5197,8 +6195,16 @@ const setup = (
             // The body can exit inside another step, such as the one whose close interrupted it. Its
             // end starts its own: only an element's removal gives it a cause, and a failure follows it.
             under(reason === "closed" ? running.cutBy : undefined, () => {
-              record(inst, { _tag: "MountEnded", name, started, reason, silent: silent === true })
-              if (failure !== undefined) failInstance(inst, failure, "mount", name)
+              record(inst, {
+                _tag: "MountEnded",
+                name,
+                started,
+                reason,
+                silent: silent === true
+              })
+              if (failure !== undefined) {
+                failInstance(inst, failure, "mount", name)
+              }
             }, true)
           })
         )
@@ -5223,7 +6229,10 @@ const setup = (
   const ownerInstance = (inst: Instance, owner: View.Owner): Instance => {
     const found = owners.get(owner)
     if (found === undefined || found.closed) {
-      throw new Error(inst.path + ": a part of " + owner.path + " was applied outside its view")
+      throw new Error(
+        inst.path + ": a part of " + owner.path +
+          " was applied outside its view"
+      )
     }
     return found
   }
@@ -5244,9 +6253,15 @@ const setup = (
           if (key === "preventDefault") {
             // `"always"` from any layer wins, then `true` from any: `fireLayered` still cancels only for a
             // message from a layer that set `true`, so another layer's `false` can't take that away.
-            if (value === "always" || (merged[key] !== "always" && merged[key] !== true)) merged[key] = value
+            if (
+              value === "always" ||
+              (merged[key] !== "always" && merged[key] !== true)
+            ) merged[key] = value
           } else if (key in merged) {
-            throw new Error(inst.path + ": two owners set the " + key + " option of " + event + " on one element")
+            throw new Error(
+              inst.path + ": two owners set the " + key + " option of " +
+                event + " on one element"
+            )
           } else {
             merged[key] = value
           }
@@ -5260,10 +6275,19 @@ const setup = (
    * Gives the host an element's events, or with a host that reads them from the tree, the names to listen
    * for. Owned layers are merged here too, so two owners' clashing options fail the render.
    */
-  const setEvents = (inst: Instance, node: unknown, view: View.Element<any, any>, patched = false) => {
+  const setEvents = (
+    inst: Instance,
+    node: unknown,
+    view: View.Element<any, any>,
+    patched = false
+  ) => {
     if (view.owned === undefined || view.owned.length === 0) {
-      if (hostEvents === undefined) host.setEvents(node, view.handlers, inst.author.fire, view.eventOptions)
-      else if (view.handlers !== View.noFields || view.eventOptions !== View.noFields || patched) {
+      if (hostEvents === undefined) {
+        host.setEvents(node, view.handlers, inst.author.fire, view.eventOptions)
+      } else if (
+        view.handlers !== View.noFields ||
+        view.eventOptions !== View.noFields || patched
+      ) {
         hostEvents.listen(view.handlers, view.eventOptions)
         published.push(node, inst, view)
       } else {
@@ -5273,8 +6297,9 @@ const setup = (
       return
     }
     const events = layeredEvents(inst, view, view.owned)
-    if (hostEvents === undefined) host.setEvents(node, events.handlers, events.dispatch, events.options)
-    else {
+    if (hostEvents === undefined) {
+      host.setEvents(node, events.handlers, events.dispatch, events.options)
+    } else {
       hostEvents.listen(events.handlers, events.options)
       published.push(node, inst, view)
     }
@@ -5306,7 +6331,9 @@ const setup = (
       }
       case "Child":
       case "Outlet": {
-        for (const child of listOf(rendered.inst.rendered)) publishAll(rendered.inst, child)
+        for (const child of listOf(rendered.inst.rendered)) {
+          publishAll(rendered.inst, child)
+        }
         return
       }
       case "Fallback":
@@ -5317,10 +6344,21 @@ const setup = (
   }
 
   /** An element's events: with only the author's layer, its handlers as they are. */
-  const eventsOf = (inst: Instance, view: View.Element<any, any>): Renderer.Events =>
+  const eventsOf = (
+    inst: Instance,
+    view: View.Element<any, any>
+  ): Renderer.Events =>
     view.owned === undefined || view.owned.length === 0
-      ? { handlers: view.handlers, dispatch: inst.author.fire, options: view.eventOptions }
-      : layeredEvents(inst, view, view.owned.filter((layer) => owners.get(layer.owner)?.closed !== true))
+      ? {
+        handlers: view.handlers,
+        dispatch: inst.author.fire,
+        options: view.eventOptions
+      }
+      : layeredEvents(
+        inst,
+        view,
+        view.owned.filter((layer) => owners.get(layer.owner)?.closed !== true)
+      )
 
   /** With owned layers, each event gets one `Layered` value, which the host hands back to `fireLayered`. */
   const layeredEvents = (
@@ -5329,9 +6367,14 @@ const setup = (
     layers: ReadonlyArray<View.Owned>
   ): Renderer.Events => {
     // Deepest owner first, and the author last.
-    const owned = layers.length === 1 ? layers : layers.slice().sort((a, b) => b.owner.depth - a.owner.depth)
+    const owned = layers.length === 1
+      ? layers
+      : layers.slice().sort((a, b) => b.owner.depth - a.owner.depth)
     const handlers: Record<string, Layered> = {}
-    const add = (target: Instance, layer: Pick<View.Owned, "handlers" | "eventOptions">) => {
+    const add = (
+      target: Instance,
+      layer: Pick<View.Owned, "handlers" | "eventOptions">
+    ) => {
       for (const event in layer.handlers) {
         ;(handlers[event] ??= new Layered()).layers.push({
           inst: target,
@@ -5342,7 +6385,11 @@ const setup = (
     }
     for (const layer of owned) add(ownerInstance(inst, layer.owner), layer)
     add(inst.author, view)
-    return { handlers: handlers as any, dispatch: fireLayered, options: mergeOptions(inst, [...owned, view]) }
+    return {
+      handlers: handlers as any,
+      dispatch: fireLayered,
+      options: mergeOptions(inst, [...owned, view])
+    }
   }
 
   /**
@@ -5355,12 +6402,16 @@ const setup = (
    * as `BrowserHost`'s are, gets no event from it: only a host that dispatches events on the container's
    * nodes itself, as `TestHost` does, reaches that walk.
    */
-  const eventsAlong = (path: ReadonlyArray<unknown>): ReadonlyArray<Renderer.Events | undefined> => {
+  const eventsAlong = (
+    path: ReadonlyArray<unknown>
+  ): ReadonlyArray<Renderer.Events | undefined> => {
     const out: Array<Renderer.Events | undefined> = new Array(path.length)
     for (let at = path.length - 1; at >= 0; at--) {
       const node = path[at]
       if (node === container) {
-        if (rootInstance !== undefined) walkEvents(rootInstance, rootInstance.rendered, path, at - 1, out)
+        if (rootInstance !== undefined) {
+          walkEvents(rootInstance, rootInstance.rendered, path, at - 1, out)
+        }
         break
       }
       const held = parked.size === 0 ? undefined : parked.get(node)
@@ -5373,7 +6424,10 @@ const setup = (
     return out
   }
   /** Reads over `out` the events a running patch gave the nodes of `path`, the latest of each. */
-  const publishedAlong = (path: ReadonlyArray<unknown>, out: Array<Renderer.Events | undefined>) => {
+  const publishedAlong = (
+    path: ReadonlyArray<unknown>,
+    out: Array<Renderer.Events | undefined>
+  ) => {
     for (let at = 0; at < path.length; at++) {
       let found = false
       for (let index = published.length - 3; index >= 0; index -= 3) {
@@ -5382,10 +6436,16 @@ const setup = (
         found = true
         break
       }
-      if (!found && out[at] === undefined && made.includes(path[at])) out[at] = noEvents
+      if (!found && out[at] === undefined && made.includes(path[at])) {
+        out[at] = noEvents
+      }
     }
   }
-  const noEvents: Renderer.Events = { handlers: View.noFields, dispatch: () => false, options: View.noFields }
+  const noEvents: Renderer.Events = {
+    handlers: View.noFields,
+    dispatch: () => false,
+    options: View.noFields
+  }
   /**
    * Writes to `out` the events of each node of `path`, from index `from` inwards, that `items` hold. A loop
    * along the path, so an event far down a tree takes no more stack than one at its top.
@@ -5408,7 +6468,12 @@ const setup = (
    * The element of `items` whose node is `node`, looked for through the children and fallbacks they place.
    * When there is one, `cursor` moves below it, into the instance that rendered it.
    */
-  const findElement = (inst: Instance, items: Packed, node: unknown, cursor: EventCursor): RElement | undefined => {
+  const findElement = (
+    inst: Instance,
+    items: Packed,
+    node: unknown,
+    cursor: EventCursor
+  ): RElement | undefined => {
     if (items === undefined) return undefined
     if (!Array.isArray(items)) return findIn(inst, items, node, cursor)
     for (let index = 0; index < items.length; index++) {
@@ -5417,7 +6482,12 @@ const setup = (
     }
     return undefined
   }
-  const findIn = (inst: Instance, item: Rendered, node: unknown, cursor: EventCursor): RElement | undefined => {
+  const findIn = (
+    inst: Instance,
+    item: Rendered,
+    node: unknown,
+    cursor: EventCursor
+  ): RElement | undefined => {
     switch (item._tag) {
       case "Element":
         if (item.node !== node) return undefined
@@ -5435,7 +6505,12 @@ const setup = (
     }
   }
 
-  const fireLayered: Renderer.Dispatch = (event, handler, payload, onMessage) => {
+  const fireLayered: Renderer.Dispatch = (
+    event,
+    handler,
+    payload,
+    onMessage
+  ) => {
     let told = false
     let sent = false
     for (const layer of (handler as unknown as Layered).layers) {
@@ -5443,7 +6518,12 @@ const setup = (
       if (target.closed || target.waiting) continue
       const own = layer.handler
       const message = typeof own === "function"
-        ? guard(target, "domEvent", () => (own as (payload: unknown) => unknown)(payload), event)
+        ? guard(
+          target,
+          "domEvent",
+          () => (own as (payload: unknown) => unknown)(payload),
+          event
+        )
         : own
       if (message === undefined) continue
       sent = true
@@ -5469,19 +6549,31 @@ const setup = (
     for (const layer of owned) {
       const mount = layer.mount
       if (mount === undefined) continue
-      const kept = running?.find((entry) => entry.owner === layer.owner && entry.name === mount.name)
+      const kept = running?.find((entry) =>
+        entry.owner === layer.owner && entry.name === mount.name
+      )
       if (kept?.running !== undefined) updateMount(kept.running, mount)
       out.push(
         kept ??
           {
             owner: layer.owner,
             name: mount.name,
-            running: startMount(ownerInstance(inst, layer.owner), mount, node, env, inst)
+            running: startMount(
+              ownerInstance(inst, layer.owner),
+              mount,
+              node,
+              env,
+              inst
+            )
           }
       )
     }
     // The part is no longer applied to the element, which stays: its mount ends here.
-    if (running !== undefined) { for (const entry of running) if (!out.includes(entry)) stopMount(inst, entry.running) }
+    if (running !== undefined) {
+      for (const entry of running) {
+        if (!out.includes(entry)) stopMount(inst, entry.running)
+      }
+    }
     return out.length === 0 ? undefined : out
   }
 
@@ -5508,12 +6600,17 @@ const setup = (
     env: Env
   ): RunningMount | undefined => {
     const running = rendered.mount
-    if (running !== undefined && mount !== undefined && running.mount.name === mount.name) {
+    if (
+      running !== undefined && mount !== undefined &&
+      running.mount.name === mount.name
+    ) {
       updateMount(running, mount)
       return running
     }
     stopMount(inst, running)
-    return mount === undefined ? undefined : startMount(inst.author, mount, rendered.node, env, inst)
+    return mount === undefined
+      ? undefined
+      : startMount(inst.author, mount, rendered.node, env, inst)
   }
 
   // -- create ---------------------------------------------------------------
@@ -5522,19 +6619,27 @@ const setup = (
     const owner = inst.owner
     if (owner === undefined) return guard(inst, "view", ownView)
     const parts = guard(inst, "view", () => ({
-      value: (inst.component as unknown as Component.Headless.Any).parts(inst.model, inst.props, {
-        owner,
-        running: runningOf(inst),
-        queries: inst.results,
-        shared: sharedOf(inst)
-      })
+      value: (inst.component as unknown as Component.Headless.Any).parts(
+        inst.model,
+        inst.props,
+        {
+          owner,
+          running: runningOf(inst),
+          queries: inst.results,
+          shared: sharedOf(inst)
+        }
+      )
     }))
     if (parts === undefined) return undefined
     // A closure is the consumer's code: what goes wrong in it is logged as `content`.
     return guard(
       inst,
       "content",
-      () => checked(inst, View.toNode(childOf.expand(parts.value, inst.content!, mergeFailed)))
+      () =>
+        checked(
+          inst,
+          View.toNode(childOf.expand(parts.value, inst.content!, mergeFailed))
+        )
     )
   }
 
@@ -5566,13 +6671,21 @@ const setup = (
   }
 
   /** Checks a fresh view's child paths, which its fallbacks are checked against as they're shown. */
-  const checked = (inst: Instance, tree: View.Node<any, any>): View.Node<any, any> => {
+  const checked = (
+    inst: Instance,
+    tree: View.Node<any, any>
+  ): View.Node<any, any> => {
     // The tree it rendered last, when that held no child, as `inst.childPaths` found: only a view that
     // used `h.lazy` gives its nodes again, so only its tree is worth comparing.
-    const last = inst.lazy !== undefined && inst.childPaths === undefined && !Array.isArray(inst.rendered)
+    const last = inst.lazy !== undefined && inst.childPaths === undefined &&
+        !Array.isArray(inst.rendered)
       ? inst.rendered
       : undefined
-    const paths = checkChildPaths(inst, tree, last?._tag === "Element" ? last.v : undefined)
+    const paths = checkChildPaths(
+      inst,
+      tree,
+      last?._tag === "Element" ? last.v : undefined
+    )
     // A view with no child or outlet has nothing to check its fallbacks or slots against.
     inst.childPaths = paths.paths === undefined && paths.placed === undefined
       ? undefined
@@ -5595,7 +6708,9 @@ const setup = (
   const checkAuthor = (author: Instance) => {
     authorChecks.delete(author)
     if (author.closed) return
-    const written: Array<ChildPaths> = author.childPaths === undefined ? [] : [author.childPaths]
+    const written: Array<ChildPaths> = author.childPaths === undefined
+      ? []
+      : [author.childPaths]
     closurePaths(author, written)
     try {
       checkAuthorPlacements(author, written)
@@ -5633,7 +6748,10 @@ const setup = (
    */
   const heldPlacement = new WeakMap<Instance, View.Child<any, any>>()
   /** Writes a placement's slots and a headless child's closure, and returns the instance's slots. */
-  const setPlacement = (inst: Instance, child: View.Child<any, any>): Slotted | undefined => {
+  const setPlacement = (
+    inst: Instance,
+    child: View.Child<any, any>
+  ): Slotted | undefined => {
     const slotted = slottedBy.get(inst)
     if (slotted !== undefined) {
       slotted.values = child.slots
@@ -5670,7 +6788,9 @@ const setup = (
     if (inst.waiting) return
     reselect(inst)
     if (inst.closed) return
-    const table = keptLive > 0 && inst.owner === undefined ? keptTables.get(inst) : undefined
+    const table = keptLive > 0 && inst.owner === undefined
+      ? keptTables.get(inst)
+      : undefined
     if (table !== undefined) table.round++
     const tree = viewOf(inst)
     if (tree === undefined) return
@@ -5705,7 +6825,9 @@ const setup = (
     env: Env
   ): RElement => {
     const rendered: RElement = new ElementRecord(view, node, children)
-    if (view.mount !== undefined) rendered.mount = startMount(inst.author, view.mount, node, env, inst)
+    if (view.mount !== undefined) {
+      rendered.mount = startMount(inst.author, view.mount, node, env, inst)
+    }
     if (view.owned !== undefined && view.owned.length > 0) {
       const owned = startOwnedMounts(inst, view, node, env)
       if (owned !== undefined) rendered.ownedMounts = owned
@@ -5717,7 +6839,11 @@ const setup = (
   // while it adopted them: the server's nodes it kept are already where they go.
   let created = 0
 
-  const create = (inst: Instance, view: View.Node<any, any>, env: Env): Rendered => {
+  const create = (
+    inst: Instance,
+    view: View.Node<any, any>,
+    env: Env
+  ): Rendered => {
     created++
     switch (view._tag) {
       case "Text":
@@ -5738,12 +6864,18 @@ const setup = (
           checkKeys(inst, views)
           children = new Array(views.length)
           for (let index = 0; index < views.length; index++) {
-            insertNodes(node, children[index] = create(inst, views[index]!, env), undefined)
+            insertNodes(
+              node,
+              children[index] = create(inst, views[index]!, env),
+              undefined
+            )
           }
         }
         // Properties go after the children, so a `select`'s `value` has its options to match.
         const props = view.props
-        if (props !== View.noFields) { for (const name in props) host.setProp(node, name, props[name]) }
+        if (props !== View.noFields) {
+          for (const name in props) host.setProp(node, name, props[name])
+        }
         return renderedElement(inst, view, node, children, env)
       }
       case "Child":
@@ -5759,18 +6891,26 @@ const setup = (
    * the outlet instance's parent is `inst`, so the content lives as long as `inst` places it, and its
    * author is whoever wrote the content.
    */
-  const createOutlet = (inst: Instance, view: View.Outlet, range?: Range): ROutlet => {
+  const createOutlet = (
+    inst: Instance,
+    view: View.Outlet,
+    range?: Range
+  ): ROutlet => {
     const out = makeOutlet(inst, view)
     const views = checkedViews(out)
     try {
       if (range !== undefined) {
         // The markers go, and the server's nodes that match are the content's.
-        out.rendered = packed(adoptList(out, views, host.nextOf(range.open), range.close, out.env))
+        out.rendered = packed(
+          adoptList(out, views, host.nextOf(range.open), range.close, out.env)
+        )
         host.remove(range.open)
         host.remove(range.close)
       } else {
         const rendered: Array<Rendered> = new Array(views.length)
-        for (let index = 0; index < views.length; index++) rendered[index] = create(out, views[index]!, out.env)
+        for (let index = 0; index < views.length; index++) {
+          rendered[index] = create(out, views[index]!, out.env)
+        }
         out.rendered = packed(rendered)
       }
     } catch (error) {
@@ -5786,7 +6926,11 @@ const setup = (
   const makeOutlet = (parent: Instance, view: View.Outlet): Instance => {
     const receiver = parent.author
     const slotted = slottedBy.get(receiver)
-    if (slotted === undefined) throw new Error(`${receiver.path} places the slot ${view.name}, and declares no slots`)
+    if (slotted === undefined) {
+      throw new Error(
+        `${receiver.path} places the slot ${view.name}, and declares no slots`
+      )
+    }
     // Who wrote the content: the author of the tree the receiver's child node sits in.
     const above = receiver.parent ?? keptAuthor(receiver)
     const author = above === undefined ? receiver : above.author
@@ -5819,13 +6963,16 @@ const setup = (
     return out
   }
 
-  const outletPath = (receiver: Instance, name: string): string => receiver.path + "/" + slotSegment(name)
+  const outletPath = (receiver: Instance, name: string): string =>
+    receiver.path + "/" + slotSegment(name)
 
   /** What the receiver's parent last passed for the outlet's slot. */
-  const contentOf = (outlet: OutletOf): unknown => outlet.slotted.values?.[outlet.view.name]
+  const contentOf = (outlet: OutletOf): unknown =>
+    outlet.slotted.values?.[outlet.view.name]
 
   /** Whether the outlet has to render: it was marked to, or its content isn't what it last rendered. */
-  const isStale = (out: Instance, outlet: OutletOf): boolean => dirty.has(out) || outlet.content !== contentOf(outlet)
+  const isStale = (out: Instance, outlet: OutletOf): boolean =>
+    dirty.has(out) || outlet.content !== contentOf(outlet)
 
   /**
    * The nodes an outlet shows: its slot's content, once it passes the checks the reconcile can make
@@ -5836,13 +6983,19 @@ const setup = (
     const outlet = outletOf.get(out)!
     const content = outlet.content = contentOf(outlet)
     try {
-      let views = content === undefined ? [] : View.children([content as View.Input<any, any>])
+      let views = content === undefined
+        ? []
+        : View.children([content as View.Input<any, any>])
       const noText = outlet.view.noText
       if (noText !== undefined) {
-        if (views.some((node) => node._tag === "Text")) throw new Error(out.path + ": " + noText)
+        if (views.some((node) => node._tag === "Text")) {
+          throw new Error(out.path + ": " + noText)
+        }
         // A forwarded slot sits where this one does, so its content can't hold text either.
         views = views.map((node) =>
-          node._tag === "Outlet" && node.noText !== noText ? { _tag: "Outlet", name: node.name, noText } : node
+          node._tag === "Outlet" && node.noText !== noText
+            ? { _tag: "Outlet", name: node.name, noText }
+            : node
         )
       }
       out.childPaths = checkContentPaths(out, views)
@@ -5874,7 +7027,9 @@ const setup = (
       const ref = host.nextOf(lastNodeOfList(out.rendered))
       const olds = listOf(out.rendered)
       releaseRemoved(olds, views)
-      out.rendered = packed(patchList(out, parentNode, olds, views, ref, out.env))
+      out.rendered = packed(
+        patchList(out, parentNode, olds, views, ref, out.env)
+      )
     } catch (error) {
       failLater(out.author, error)
     }
@@ -5897,9 +7052,19 @@ const setup = (
     }
   }
 
-  const createChild = (inst: Instance, view: View.Child<any, any>, env: Env, range?: Range): Rendered => {
+  const createChild = (
+    inst: Instance,
+    view: View.Child<any, any>,
+    env: Env,
+    range?: Range
+  ): Rendered => {
     if (view.alive === undefined) return makeChild(inst, view, env, range)
-    const at: RScoped = { _tag: "Fallback", scoped: true, v: view, inner: undefined! }
+    const at: RScoped = {
+      _tag: "Fallback",
+      scoped: true,
+      v: view,
+      inner: undefined!
+    }
     at.inner = drawScoped(inst, at, view, env, range) ?? blankText(range)
     return at
   }
@@ -5937,7 +7102,9 @@ const setup = (
     let childEnv = env
     if (feature) {
       const found = Context.getOption(env.ctx!, target)
-      if (Option.isNone(found)) throw new Error(`${inst.path}: nothing provides ${target.key}`)
+      if (Option.isNone(found)) {
+        throw new Error(`${inst.path}: nothing provides ${target.key}`)
+      }
       component = found.value.component
       // The Context that closed the implementation's requirements wins over the mount position's.
       childEnv = readyEnv(Context.merge(env.ctx!, found.value.context), env)
@@ -5952,12 +7119,15 @@ const setup = (
     } else {
       component = target
     }
-    const headless = (component as unknown as Component.Headless.Any).parts !== undefined
+    const headless =
+      (component as unknown as Component.Headless.Any).parts !== undefined
     if (headless !== (view.view !== undefined)) {
       throw new Error(
         headless
-          ? inst.path + ": " + component.definition.name + " is headless, so declaring it as a child needs a view"
-          : inst.path + ": " + component.definition.name + " has its own view, so declaring it as a child takes none"
+          ? inst.path + ": " + component.definition.name +
+            " is headless, so declaring it as a child needs a view"
+          : inst.path + ": " + component.definition.name +
+            " has its own view, so declaring it as a child takes none"
       )
     }
     const child = makeInstance(
@@ -5988,7 +7158,9 @@ const setup = (
     // it would cost more than anything else here.
     if (inst.children === noChildren) inst.children = new Set()
     inst.children.add(child)
-    const entry = keptLive > 0 && scope === undefined ? entryAt(inst, view) : undefined
+    const entry = keptLive > 0 && scope === undefined
+      ? entryAt(inst, view)
+      : undefined
     if (entry !== undefined) failShared(child, entry)
     return new ChildRecord(view, child)
   }
@@ -5998,7 +7170,11 @@ const setup = (
    * children and fallbacks. Outside the `fallback` guard: a clash fails `inst` with source `view`, as
    * one in its view does.
    */
-  const shownIn = (inst: Instance, view: View.Child<any, any>, node: View.Node<any, any>): View.Node<any, any> => {
+  const shownIn = (
+    inst: Instance,
+    view: View.Child<any, any>,
+    node: View.Node<any, any>
+  ): View.Node<any, any> => {
     if (inst.childPaths === undefined) return node
     try {
       checkFallbackPaths(inst.childPaths, view, node)
@@ -6025,16 +7201,27 @@ const setup = (
    * without one. A feature's slot always has one. A fallback that throws fails its author, who wrote
    * the tree it sits in, with source `fallback`.
    */
-  const fallbackOf = (inst: Instance, view: View.Child<any, any>, status: Status): View.Node<any, any> =>
+  const fallbackOf = (
+    inst: Instance,
+    view: View.Child<any, any>,
+    status: Status
+  ): View.Node<any, any> =>
     shownIn(
       inst,
       view,
       guard(inst.author, "fallback", () =>
-        view.fallback === undefined ? emptyText : View.toNode(view.fallback(resultOf(status)))) ??
+        view.fallback === undefined
+          ? emptyText
+          : View.toNode(view.fallback(resultOf(status)))) ??
         emptyText
     )
 
-  const loadingSlot = (inst: Instance, view: View.Child<any, any>, env: Env, range: Range | undefined): RFallback => {
+  const loadingSlot = (
+    inst: Instance,
+    view: View.Child<any, any>,
+    env: Env,
+    range: Range | undefined
+  ): RFallback => {
     const lazy = view.component as Component.Lazy.Any
     const unwatch = lazyOf.watch(lazy, () => {
       if (!inst.closed) markDirty(inst)
@@ -6058,7 +7245,10 @@ const setup = (
       scopeAddFinalizerUnsafe(scope, slot, () => Effect.sync(slot.release))
     }
     lazy.preload()
-    return { ...fallbackSlot(inst, view, pendingStatus, false, env, range), lazy: slot }
+    return {
+      ...fallbackSlot(inst, view, pendingStatus, false, env, range),
+      lazy: slot
+    }
   }
 
   const lazyStatus = (lazy: Component.Lazy.Any): Status => {
@@ -6075,7 +7265,15 @@ const setup = (
     view: View.Child<any, any>,
     failure: Cause.Cause<unknown>,
     env: Env
-  ): RFallback => fallbackSlot(inst, view, { _tag: "Failed", cause: failure }, true, env, undefined)
+  ): RFallback =>
+    fallbackSlot(
+      inst,
+      view,
+      { _tag: "Failed", cause: failure },
+      true,
+      env,
+      undefined
+    )
 
   /**
    * A slot showing its `fallback` for `status`. Given the server's range, it adopts the server's
@@ -6094,31 +7292,59 @@ const setup = (
     let inner: Rendered | undefined
     if (range !== undefined) {
       if (shippedStatus(`${inst.path}/${segment(view)}`) === status._tag) {
-        inner = adoptNode(inst, shown, firstOf(range), stopOf(range), settled(env))
+        inner = adoptNode(
+          inst,
+          shown,
+          firstOf(range),
+          stopOf(range),
+          settled(env)
+        )
       }
       if (inner !== undefined) claim(range)
       else removeRange(range)
     }
-    return { _tag: "Fallback", v: view, inner: inner ?? create(inst, shown, settled(env)), status, failedChild }
+    return {
+      _tag: "Fallback",
+      v: view,
+      inner: inner ?? create(inst, shown, settled(env)),
+      status,
+      failedChild
+    }
   }
 
   // -- hydration ------------------------------------------------------------
   /** The range that starts at `open`, the marker for `path`, up to its closing marker, looked for before `stop`. */
-  const rangeFrom = (open: unknown, path: string, stop: unknown): Range | undefined => {
-    for (let node = host.nextOf(open); node !== undefined && node !== stop; node = host.nextOf(node)) {
+  const rangeFrom = (
+    open: unknown,
+    path: string,
+    stop: unknown
+  ): Range | undefined => {
+    for (
+      let node = host.nextOf(open);
+      node !== undefined && node !== stop;
+      node = host.nextOf(node)
+    ) {
       const kind = hydration!.inspect(node)
-      if (kind._tag === "Close" && kind.path === path) return { open, close: node, claimed: false }
+      if (kind._tag === "Close" && kind.path === path) {
+        return { open, close: node, claimed: false }
+      }
     }
     return undefined
   }
 
-  const firstOf = (range: Range): unknown => range.open === range.close ? range.open : host.nextOf(range.open)
-  const stopOf = (range: Range): unknown => range.open === range.close ? host.nextOf(range.open) : range.close
+  const firstOf = (range: Range): unknown =>
+    range.open === range.close ? range.open : host.nextOf(range.open)
+  const stopOf = (range: Range): unknown =>
+    range.open === range.close ? host.nextOf(range.open) : range.close
 
   /** A range's nodes, its markers included. */
   const rangeNodes = (range: Range): Array<unknown> => {
     const out: Array<unknown> = []
-    for (let node = range.open; node !== range.close; node = host.nextOf(node)) out.push(node)
+    for (
+      let node = range.open;
+      node !== range.close;
+      node = host.nextOf(node)
+    ) out.push(node)
     out.push(range.close)
     return out
   }
@@ -6166,7 +7392,9 @@ const setup = (
     stop: unknown,
     env: Env
   ): Rendered | undefined => {
-    const kind = node === undefined || node === stop ? undefined : hydration!.inspect(node)
+    const kind = node === undefined || node === stop
+      ? undefined
+      : hydration!.inspect(node)
     switch (view._tag) {
       case "Text": {
         if (kind?._tag === "Text") {
@@ -6185,7 +7413,9 @@ const setup = (
         const attrs = normalized(node, view.attrs)
         for (const name in attrs) {
           const current = hydration!.getAttr(node, name)
-          if (current !== attrs[name]) host.setAttr(node, name, attrs[name], current)
+          if (current !== attrs[name]) {
+            host.setAttr(node, name, attrs[name], current)
+          }
         }
         setEvents(inst, node, view)
         checkKeys(inst, view.children)
@@ -6198,7 +7428,9 @@ const setup = (
           undefined,
           env
         )
-        if (kind.textOnly === true) removeUpTo(hydration!.firstChild(node), undefined)
+        if (kind.textOnly === true) {
+          removeUpTo(hydration!.firstChild(node), undefined)
+        }
         // Whatever was built under here isn't in the document yet, and goes among the nodes that were kept.
         if (created !== before) placeEach(node, children, undefined)
         for (const name in view.props) adoptProp(node, name, view.props[name])
@@ -6208,16 +7440,22 @@ const setup = (
       case "Child":
       case "Outlet": {
         const path = view._tag === "Child"
-          ? `${(view.alive === undefined ? inst : inst.author).path}/${segment(view)}`
+          ? `${(view.alive === undefined ? inst : inst.author).path}/${
+            segment(view)
+          }`
           : outletPath(inst.author, view.name)
-        const range: Range | undefined = kind?._tag === "Open" && kind.path === path
-          ? rangeFrom(node, path, stop)
-          : view._tag === "Child" && view.alive === undefined && kind?._tag === "Element" &&
-              hydrating !== undefined && Object.hasOwn(hydrating.state, path)
-          ? { open: node, close: node, claimed: false }
-          : undefined
+        const range: Range | undefined =
+          kind?._tag === "Open" && kind.path === path
+            ? rangeFrom(node, path, stop)
+            : view._tag === "Child" && view.alive === undefined &&
+                kind?._tag === "Element" &&
+                hydrating !== undefined && Object.hasOwn(hydrating.state, path)
+            ? { open: node, close: node, claimed: false }
+            : undefined
         if (range === undefined) {
-          if (view._tag !== "Child" || view.alive === undefined) return undefined
+          if (view._tag !== "Child" || view.alive === undefined) {
+            return undefined
+          }
           created++
           const made = createChild(inst, view, env)
           adoptedUpTo = node
@@ -6225,7 +7463,9 @@ const setup = (
         }
         const next = host.nextOf(range.close)
         // A child's content matches itself against the range, as an outlet's does, and builds fresh what doesn't.
-        const made = view._tag === "Child" ? createChild(inst, view, env, range) : createOutlet(inst, view, range)
+        const made = view._tag === "Child"
+          ? createChild(inst, view, env, range)
+          : createOutlet(inst, view, range)
         adoptedUpTo = next
         return made
       }
@@ -6254,7 +7494,9 @@ const setup = (
       node = adoptedUpTo
     }
     removeUpTo(node, stop)
-    for (; index < views.length; index++) out[index] = create(inst, views[index]!, env)
+    for (; index < views.length; index++) {
+      out[index] = create(inst, views[index]!, env)
+    }
     return out
   }
 
@@ -6267,7 +7509,10 @@ const setup = (
    * it is made, so the olds of a patch never share a key. Children aren't checked here: each
    * view's are checked by their paths, across the whole view, before it renders.
    */
-  const checkKeys = (inst: Instance, views: ReadonlyArray<View.Node<any, any>>): void => {
+  const checkKeys = (
+    inst: Instance,
+    views: ReadonlyArray<View.Node<any, any>>
+  ): void => {
     let seen: Set<string> | undefined
     for (let index = 0; index < views.length; index++) {
       const view = views[index]!
@@ -6282,7 +7527,11 @@ const setup = (
    * Keyed olds from `start` up to `end` by key, with their index. `undefined` when every one of them
    * is matched by position.
    */
-  const keyedIndex = (olds: ReadonlyArray<Rendered>, start: number, end: number): Map<string, number> | undefined => {
+  const keyedIndex = (
+    olds: ReadonlyArray<Rendered>,
+    start: number,
+    end: number
+  ): Map<string, number> | undefined => {
     let byKey: Map<string, number> | undefined
     for (let index = start; index < end; index++) {
       const view = olds[index]!.v
@@ -6292,7 +7541,8 @@ const setup = (
   }
 
   /** Whether `view` patches `rendered` once matched with it. */
-  const same = (rendered: Rendered, view: View.Node<any, any>): boolean => match.same(rendered.v, view)
+  const same = (rendered: Rendered, view: View.Node<any, any>): boolean =>
+    match.same(rendered.v, view)
 
   /**
    * Whether `view` is matched with `rendered` when both are at one index: an unkeyed node with an
@@ -6304,7 +7554,8 @@ const setup = (
       case "Text":
         return rendered._tag === "Text"
       case "Element":
-        return rendered._tag === "Element" && rendered.v.tag === view.tag && rendered.v.elementKey === view.elementKey
+        return rendered._tag === "Element" && rendered.v.tag === view.tag &&
+          rendered.v.elementKey === view.elementKey
       case "Child":
         return (rendered._tag === "Child" || rendered._tag === "Fallback") &&
           rendered.v.component === view.component && rendered.v.key === view.key
@@ -6324,11 +7575,16 @@ const setup = (
    * matched through a map of keys, so a row added or removed in a long list builds none.
    */
   /** The keys of the keyed elements in `news` before `end`. */
-  const elementKeys = (news: ReadonlyArray<View.Node<any, any>>, end: number): Set<string> => {
+  const elementKeys = (
+    news: ReadonlyArray<View.Node<any, any>>,
+    end: number
+  ): Set<string> => {
     const keys = new Set<string>()
     for (let index = 0; index < end; index++) {
       const view = news[index]!
-      if (view._tag === "Element" && view.elementKey !== undefined) keys.add(keyOf(view))
+      if (view._tag === "Element" && view.elementKey !== undefined) {
+        keys.add(keyOf(view))
+      }
     }
     return keys
   }
@@ -6359,7 +7615,10 @@ const setup = (
       const view = news[start]!
       // What `pairs` and `patch` do, for the two kinds most nodes are.
       if (view._tag === "Element") {
-        if (old._tag !== "Element" || old.v.tag !== view.tag || old.v.elementKey !== view.elementKey) break
+        if (
+          old._tag !== "Element" || old.v.tag !== view.tag ||
+          old.v.elementKey !== view.elementKey
+        ) break
         if (view.elementKey !== undefined) keyedBefore = true
         patchElement(inst, old, view, env)
       } else if (view._tag === "Text") {
@@ -6384,7 +7643,9 @@ const setup = (
         destroyAll(inst, parentNode, olds)
         return []
       }
-      for (let index = start; index < oldLength; index++) destroy(inst, olds[index]!)
+      for (let index = start; index < oldLength; index++) {
+        destroy(inst, olds[index]!)
+      }
       return olds.slice(0, start)
     }
     const result: Array<Rendered> = new Array(newLength)
@@ -6396,12 +7657,16 @@ const setup = (
         const view = news[index]!
         if (view._tag === "Element" && view.elementKey !== undefined) {
           const key = keyOf(view)
-          if ((seen ??= elementKeys(news, start)).has(key)) throw duplicateKey(inst, key)
+          if ((seen ??= elementKeys(news, start)).has(key)) {
+            throw duplicateKey(inst, key)
+          }
           seen.add(key)
         }
         result[index] = create(inst, view, env)
       }
-      for (let index = start; index < newLength; index++) insertNodes(parentNode, result[index]!, ref)
+      for (let index = start; index < newLength; index++) {
+        insertNodes(parentNode, result[index]!, ref)
+      }
       return result
     }
     // Where matching goes on from: after the nodes that stayed, and after a child that was replaced.
@@ -6456,10 +7721,15 @@ const setup = (
           byKey!.set(key, taken)
           at = found
         } else if (view._tag === "Element") {
-          if ((seen ??= elementKeys(news, first)).has(key)) throw duplicateKey(inst, key)
+          if ((seen ??= elementKeys(news, first)).has(key)) {
+            throw duplicateKey(inst, key)
+          }
           seen.add(key)
         }
-      } else if (index < oldLength && !isKeyed(olds[index]!.v) && same(olds[index]!, view)) {
+      } else if (
+        index < oldLength && !isKeyed(olds[index]!.v) &&
+        same(olds[index]!, view)
+      ) {
         at = index
       }
       if (at === -1) {
@@ -6487,16 +7757,26 @@ const setup = (
     } else if (matched < oldLength) {
       // What wasn't matched: the keyed olds left in the map, and the olds at a position no node took.
       // A marked old isn't among them: `taken` is no index.
-      const goneKeyed = byKey === undefined ? undefined : new Set(byKey.values())
+      const goneKeyed = byKey === undefined
+        ? undefined
+        : new Set(byKey.values())
       for (let index = first; index < oldEnd; index++) {
         const old = olds[index]!
         const gone = isKeyed(old.v)
           ? goneKeyed!.has(index)
-          : !(index < newLength && !isKeyed(news[index]!) && same(old, news[index]!))
+          : !(index < newLength && !isKeyed(news[index]!) &&
+            same(old, news[index]!))
         if (gone) destroy(inst, old)
       }
     }
-    if (!inPlace) place(parentNode, result, ref, from === undefined ? undefined : inOrder(from))
+    if (!inPlace) {
+      place(
+        parentNode,
+        result,
+        ref,
+        from === undefined ? undefined : inOrder(from)
+      )
+    }
     return result
   }
 
@@ -6510,9 +7790,13 @@ const setup = (
   ): Array<Rendered> => {
     checkKeys(inst, news)
     const result: Array<Rendered> = new Array(news.length)
-    for (let index = 0; index < news.length; index++) result[index] = create(inst, news[index]!, env)
+    for (let index = 0; index < news.length; index++) {
+      result[index] = create(inst, news[index]!, env)
+    }
     // After all of them are made, so a list that throws part way puts nothing in the host.
-    for (let index = 0; index < result.length; index++) insertNodes(parentNode, result[index]!, ref)
+    for (let index = 0; index < result.length; index++) {
+      insertNodes(parentNode, result[index]!, ref)
+    }
     return result
   }
 
@@ -6520,7 +7804,11 @@ const setup = (
    * The old indices of `result`'s first `upTo` nodes, while they were all kept, in order. The rest
    * of the list fills in the others.
    */
-  const orderSoFar = (olds: ReadonlyArray<Rendered>, result: ReadonlyArray<Rendered>, upTo: number) => {
+  const orderSoFar = (
+    olds: ReadonlyArray<Rendered>,
+    result: ReadonlyArray<Rendered>,
+    upTo: number
+  ) => {
     const from = new Int32Array(result.length)
     let at = 0
     for (let index = 0; index < upTo; index++) {
@@ -6555,7 +7843,11 @@ const setup = (
       starts[low] = index
       if (low === longest) longest++
     }
-    for (let index = longest > 0 ? starts[longest - 1]! : -1; index !== -1; index = after[index]!) stays[index] = 1
+    for (
+      let index = longest > 0 ? starts[longest - 1]! : -1;
+      index !== -1;
+      index = after[index]!
+    ) stays[index] = 1
     return stays
   }
 
@@ -6566,7 +7858,10 @@ const setup = (
    * instance rendered later in the pass removes. The cache hold each render pass runs under is what
    * makes the zero-to-one decision independent of that order.
    */
-  const releaseRemoved = (olds: ReadonlyArray<Rendered>, news: ReadonlyArray<View.Node<any, any>>) => {
+  const releaseRemoved = (
+    olds: ReadonlyArray<Rendered>,
+    news: ReadonlyArray<View.Node<any, any>>
+  ) => {
     // Nothing in the tree has watchers to let go of: the pass would do nothing.
     if (!holdsWatchers) return
     const byKey = keyedIndex(olds, 0, olds.length)
@@ -6581,7 +7876,12 @@ const setup = (
       const old = at === undefined ? undefined : olds[at]!
       if (old === undefined || !same(old, view) || kept.has(old)) continue
       kept.add(old)
-      if (old._tag === "Element") releaseRemoved(listOf(old.children), (view as View.Element<any, any>).children)
+      if (old._tag === "Element") {
+        releaseRemoved(
+          listOf(old.children),
+          (view as View.Element<any, any>).children
+        )
+      }
     }
     for (const old of olds) if (!kept.has(old)) releaseRendered(old)
   }
@@ -6598,14 +7898,17 @@ const setup = (
     }
     for (const name in next) {
       // A controlled property is re-applied: the user may have changed the live value since.
-      if (prev[name] !== next[name] || controlled.has(name)) host.setProp(node, name, next[name])
+      if (prev[name] !== next[name] || controlled.has(name)) {
+        host.setProp(node, name, next[name])
+      }
     }
   }
 
   const normalized = (
     node: unknown,
     attrs: Readonly<Record<string, string>>
-  ): Readonly<Record<string, string>> => host.normalizeAttrs === undefined ? attrs : host.normalizeAttrs(node, attrs)
+  ): Readonly<Record<string, string>> =>
+    host.normalizeAttrs === undefined ? attrs : host.normalizeAttrs(node, attrs)
 
   /**
    * Sets what changed between two attribute records: the names that went first, then the values
@@ -6620,12 +7923,21 @@ const setup = (
     prev = normalized(node, prev)
     next = normalized(node, next)
     for (const name in prev) {
-      if (typeof next[name] !== "string") host.setAttr(node, name, undefined, prev[name])
+      if (typeof next[name] !== "string") {
+        host.setAttr(node, name, undefined, prev[name])
+      }
     }
     for (const name in next) {
       const value = next[name]
       const previous = prev[name]
-      if (previous !== value) host.setAttr(node, name, value, typeof previous === "string" ? previous : undefined)
+      if (previous !== value) {
+        host.setAttr(
+          node,
+          name,
+          value,
+          typeof previous === "string" ? previous : undefined
+        )
+      }
     }
   }
 
@@ -6678,9 +7990,12 @@ const setup = (
     }
     const node = rendered.node
     // One record, as when no attribute is set or a builder is reused: nothing changed.
-    if (prev.attrs !== element.attrs) patchAttrs(node, prev.attrs, element.attrs)
+    if (prev.attrs !== element.attrs) {
+      patchAttrs(node, prev.attrs, element.attrs)
+    }
     if (
-      element.handlers !== prev.handlers || element.eventOptions !== prev.eventOptions ||
+      element.handlers !== prev.handlers ||
+      element.eventOptions !== prev.eventOptions ||
       element.owned !== prev.owned
     ) {
       setEvents(inst, node, element, true)
@@ -6688,36 +8003,62 @@ const setup = (
     const children = rendered.children
     const views = element.children
     if (children === undefined) {
-      if (views.length > 0) rendered.children = packed(createList(inst, node, views, undefined, env))
+      if (views.length > 0) {
+        rendered.children = packed(
+          createList(inst, node, views, undefined, env)
+        )
+      }
     } else if (Array.isArray(children)) {
-      rendered.children = packed(patchList(inst, node, children, views, undefined, env))
+      rendered.children = packed(
+        patchList(inst, node, children, views, undefined, env)
+      )
     } else {
       // One child, patched as `patchList` patches the two kinds most nodes are, without a list for it.
       const view = views.length === 1 ? views[0]! : undefined
       if (
-        view !== undefined && view._tag === "Element" && children._tag === "Element" &&
+        view !== undefined && view._tag === "Element" &&
+        children._tag === "Element" &&
         children.v.tag === view.tag && children.v.elementKey === view.elementKey
       ) {
         patchElement(inst, children, view, env)
-      } else if (view !== undefined && view._tag === "Text" && children._tag === "Text") {
-        if (view.text !== children.v.text) host.setText(children.node, view.text)
+      } else if (
+        view !== undefined && view._tag === "Text" && children._tag === "Text"
+      ) {
+        if (view.text !== children.v.text) {
+          host.setText(children.node, view.text)
+        }
         children.v = view
       } else {
-        rendered.children = packed(patchList(inst, node, [children], views, undefined, env))
+        rendered.children = packed(
+          patchList(inst, node, [children], views, undefined, env)
+        )
       }
     }
     patchProps(node, prev.props, element.props)
     // A mount belongs to the element, not to one view run: it keeps running across patches, and
     // gets each new args. A mount of another definition replaces it. An owned layer's mount belongs
     // to its part: it runs while the part is applied.
-    if (element.mount !== prev.mount) rendered.mount = patchMount(inst, rendered, element.mount, env)
+    if (element.mount !== prev.mount) {
+      rendered.mount = patchMount(inst, rendered, element.mount, env)
+    }
     rendered.v = element
     if (element.owned !== prev.owned) {
-      rendered.ownedMounts = startOwnedMounts(inst, element, rendered.node, env, rendered.ownedMounts ?? [])
+      rendered.ownedMounts = startOwnedMounts(
+        inst,
+        element,
+        rendered.node,
+        env,
+        rendered.ownedMounts ?? []
+      )
     }
   }
 
-  const patch = (inst: Instance, rendered: Rendered, view: View.Node<any, any>, env: Env): Rendered => {
+  const patch = (
+    inst: Instance,
+    rendered: Rendered,
+    view: View.Node<any, any>,
+    env: Env
+  ): Rendered => {
     switch (rendered._tag) {
       case "Element": {
         patchElement(inst, rendered, view as View.Element<any, any>, env)
@@ -6725,12 +8066,16 @@ const setup = (
       }
       case "Text": {
         const text = view as View.Text
-        if (text.text !== rendered.v.text) host.setText(rendered.node, text.text)
+        if (text.text !== rendered.v.text) {
+          host.setText(rendered.node, text.text)
+        }
         rendered.v = text
         return rendered
       }
       case "Fallback":
-        if (rendered.scoped) return patchScoped(inst, rendered, view as View.Child<any, any>, env)
+        if (rendered.scoped) {
+          return patchScoped(inst, rendered, view as View.Child<any, any>, env)
+        }
         return patchChild(inst, rendered, view as View.Child<any, any>, env)
       case "Child":
         return patchChild(inst, rendered, view as View.Child<any, any>, env)
@@ -6755,7 +8100,11 @@ const setup = (
     switch (rendered._tag) {
       case "Fallback": {
         const lazy = lazyOf.TypeId in child.component
-        const status = rendered.failedChild ? rendered.status : lazy ? lazyStatus(child.component) : env.status
+        const status = rendered.failedChild
+          ? rendered.status
+          : lazy
+          ? lazyStatus(child.component)
+          : env.status
         if (status._tag === "Ready") {
           // Ready now: the fallback goes, and the feature or the lazy component mounts in its place.
           rendered.lazy?.release()
@@ -6763,7 +8112,11 @@ const setup = (
           // A lazy scoped component makes a scoped slot, not a fallback: its parent's next patch sees
           // `scoped` and goes to `patchScoped`.
           return lazy
-            ? createChild(inst, lazyOf.scopedOnceLoaded(child), env) as RFallback
+            ? createChild(
+              inst,
+              lazyOf.scopedOnceLoaded(child),
+              env
+            ) as RFallback
             : makeChild(inst, child, env)
         }
         const shown = fallbackOf(inst, child, status)
@@ -6781,7 +8134,9 @@ const setup = (
         if (instance.closed) {
           for (const node of nodesOf(rendered)) host.remove(node)
           // Failed: the child shows its fallback until the key changes.
-          if (instance.failure !== undefined) return failedChild(inst, child, instance.failure, env)
+          if (instance.failure !== undefined) {
+            return failedChild(inst, child, instance.failure, env)
+          }
           return makeChild(inst, child, env)
         }
         instance.onEmit = child.onEmit
@@ -6794,9 +8149,10 @@ const setup = (
           return rendered
         }
         // Read first: most children are passed no slots, and this is cheaper than the map.
-        const slotted = child.slots !== undefined || rendered.v.slots !== undefined
-          ? slottedBy.get(instance)
-          : undefined
+        const slotted =
+          child.slots !== undefined || rendered.v.slots !== undefined
+            ? slottedBy.get(instance)
+            : undefined
         if (slotted !== undefined) {
           slotted.values = child.slots
           if (keptLive > 0) slotted.round = roundAt(inst)
@@ -6821,7 +8177,12 @@ const setup = (
   }
 
   /** Patches a single root (a view's or a fallback's), which is kept only if its key matches too. */
-  const patchOrReplace = (inst: Instance, rendered: Rendered, view: View.Node<any, any>, env: Env): Rendered => {
+  const patchOrReplace = (
+    inst: Instance,
+    rendered: Rendered,
+    view: View.Node<any, any>,
+    env: Env
+  ): Rendered => {
     // The pre-pass, as in `render`: a replaced subtree's watchers go before the new one is created.
     releaseRemoved([rendered], [view])
     if (match.patches(rendered.v, view)) {
@@ -6856,7 +8217,9 @@ const setup = (
         const items = rendered.inst.rendered
         if (items === undefined) return
         if (!Array.isArray(items)) return collectNodes(items, out)
-        for (let index = 0; index < items.length; index++) collectNodes(items[index]!, out)
+        for (let index = 0; index < items.length; index++) {
+          collectNodes(items[index]!, out)
+        }
       }
     }
   }
@@ -6881,10 +8244,18 @@ const setup = (
       ? hasNodes(rendered.inner)
       : true
   const hasNodesIn = (items: Packed): boolean =>
-    items === undefined ? false : Array.isArray(items) ? items.some(hasNodes) : hasNodes(items)
+    items === undefined
+      ? false
+      : Array.isArray(items)
+      ? items.some(hasNodes)
+      : hasNodes(items)
   const firstNodeOfList = (items: Packed): unknown => {
     if (items === undefined) return undefined
-    if (!Array.isArray(items)) return hasNodes(items) ? firstNodeOf(items) : undefined
+    if (!Array.isArray(items)) {
+      return hasNodes(items)
+        ? firstNodeOf(items)
+        : undefined
+    }
     for (let index = 0; index < items.length; index++) {
       if (hasNodes(items[index]!)) return firstNodeOf(items[index]!)
     }
@@ -6892,7 +8263,11 @@ const setup = (
   }
   const lastNodeOfList = (items: Packed): unknown => {
     if (items === undefined) return undefined
-    if (!Array.isArray(items)) return hasNodes(items) ? lastNodeOf(items) : undefined
+    if (!Array.isArray(items)) {
+      return hasNodes(items)
+        ? lastNodeOf(items)
+        : undefined
+    }
     for (let index = items.length - 1; index >= 0; index--) {
       if (hasNodes(items[index]!)) return lastNodeOf(items[index]!)
     }
@@ -6903,7 +8278,12 @@ const setup = (
    * Puts each item's nodes before `ref`, last first, moving only what's out of place. The items
    * `stays` marks are in order in the host already, so the others move around them.
    */
-  const place = (parentNode: unknown, items: ReadonlyArray<Rendered>, ref: unknown, stays?: Uint8Array) => {
+  const place = (
+    parentNode: unknown,
+    items: ReadonlyArray<Rendered>,
+    ref: unknown,
+    stays?: Uint8Array
+  ) => {
     let next = ref
     for (let index = items.length - 1; index >= 0; index--) {
       const item = items[index]!
@@ -6911,7 +8291,10 @@ const setup = (
       if (item._tag === "Element" || item._tag === "Text") {
         // One node: the common case, with no range to find.
         const node = item.node
-        if (moves && (host.parentOf(node) !== parentNode || host.nextOf(node) !== next)) {
+        if (
+          moves &&
+          (host.parentOf(node) !== parentNode || host.nextOf(node) !== next)
+        ) {
           host.insertBefore(parentNode, node, next)
         }
         next = node
@@ -6919,7 +8302,10 @@ const setup = (
       }
       if (!hasNodes(item)) continue
       const last = lastNodeOf(item)
-      if (moves && (host.parentOf(last) !== parentNode || host.nextOf(last) !== next)) {
+      if (
+        moves &&
+        (host.parentOf(last) !== parentNode || host.nextOf(last) !== next)
+      ) {
         insertNodes(parentNode, item, next)
       }
       next = firstNodeOf(item)
@@ -6930,7 +8316,11 @@ const setup = (
    * As `place`, for what hydration adopted. An item there can hold nodes built fresh among the server's,
    * so every node is checked, not each item's last. Returns the first node, or `ref` when there is none.
    */
-  const placeEach = (parentNode: unknown, packedItems: Packed, ref: unknown): unknown => {
+  const placeEach = (
+    parentNode: unknown,
+    packedItems: Packed,
+    ref: unknown
+  ): unknown => {
     const items = listOf(packedItems)
     let next = ref
     for (let index = items.length - 1; index >= 0; index--) {
@@ -6941,14 +8331,20 @@ const setup = (
         continue
       }
       const node = item.node
-      if (host.parentOf(node) !== parentNode || host.nextOf(node) !== next) host.insertBefore(parentNode, node, next)
+      if (host.parentOf(node) !== parentNode || host.nextOf(node) !== next) {
+        host.insertBefore(parentNode, node, next)
+      }
       next = node
     }
     return next
   }
 
   /** Puts an item's nodes before `ref`, in their order, without collecting them. */
-  const insertNodes = (parentNode: unknown, rendered: Rendered, ref: unknown): void => {
+  const insertNodes = (
+    parentNode: unknown,
+    rendered: Rendered,
+    ref: unknown
+  ): void => {
     switch (rendered._tag) {
       case "Element":
       case "Text":
@@ -6960,12 +8356,15 @@ const setup = (
         const items = rendered.inst.rendered
         if (items === undefined) return
         if (!Array.isArray(items)) return insertNodes(parentNode, items, ref)
-        for (let index = 0; index < items.length; index++) insertNodes(parentNode, items[index]!, ref)
+        for (let index = 0; index < items.length; index++) {
+          insertNodes(parentNode, items[index]!, ref)
+        }
       }
     }
   }
 
-  const keptAuthor = (inst: Instance): Instance | undefined => keptLive > 0 ? keptEntries.get(inst)?.author : undefined
+  const keptAuthor = (inst: Instance): Instance | undefined =>
+    keptLive > 0 ? keptEntries.get(inst)?.author : undefined
 
   const markTree = (inst: Instance) => {
     markReports(inst)
@@ -6979,8 +8378,10 @@ const setup = (
     return entry !== undefined && entry.at === undefined
   }
 
-  const entryAt = (author: Instance, view: View.Child<any, any>): Kept | undefined =>
-    keptTables.get(author)?.children.get(segment(view))
+  const entryAt = (
+    author: Instance,
+    view: View.Child<any, any>
+  ): Kept | undefined => keptTables.get(author)?.children.get(segment(view))
 
   const askAlive = (
     author: Instance,
@@ -7040,18 +8441,29 @@ const setup = (
     const table = tableOf(author)
     const named = segment(view)
     const found = table.children.get(named)
-    const entry = found?.inner.v.component === view.component ? found : undefined
-    const stale = replaced !== undefined && within(inst, replaced) && !within(author, replaced)
-    if (stale ? entry !== undefined : isOld(inst, table) && entry?.inner.v !== view) return
+    const entry = found?.inner.v.component === view.component
+      ? found
+      : undefined
+    const stale = replaced !== undefined && within(inst, replaced) &&
+      !within(author, replaced)
+    if (
+      stale
+        ? entry !== undefined
+        : isOld(inst, table) && entry?.inner.v !== view
+    ) return
     const alive = aliveOf(view)
-    if (!stale && alive !== undefined && !askAlive(author, table, alive, view, entry)) return
+    if (
+      !stale && alive !== undefined &&
+      !askAlive(author, table, alive, view, entry)
+    ) return
     if (entry !== undefined) {
       const from = entry.at
       const drawer = entry.drawer
       if (from !== undefined && drawer !== inst) {
         defer(() => {
           if (
-            !from.gone && !drawer.closed && !isOld(drawer, table) && from.v.component === view.component &&
+            !from.gone && !drawer.closed && !isOld(drawer, table) &&
+            from.v.component === view.component &&
             from.v.key === view.key
           ) failTwice(author, view)
         })
@@ -7059,7 +8471,9 @@ const setup = (
       entry.alive = alive
       entry.round = table.round
       const inner = entry.inner
-      if (inner._tag === "Fallback" || !inner.inst.waiting) return take(entry, inst, at, view, env, range)
+      if (inner._tag === "Fallback" || !inner.inst.waiting) {
+        return take(entry, inst, at, view, env, range)
+      }
       endKept(entry)
     }
     if (found !== entry) {
@@ -7072,10 +8486,19 @@ const setup = (
     const was = supply
     supply = saved
     if (stale) late = at
-    const inner = makeChild(inst, view, env, range, path, Scope.forkUnsafe(author.scope, "sequential"))
+    const inner = makeChild(
+      inst,
+      view,
+      env,
+      range,
+      path,
+      Scope.forkUnsafe(author.scope, "sequential")
+    )
     supply = was
     late = undefined
-    if (saved !== undefined && !(inner._tag === "Child" && inner.inst.waiting)) delete waits![path]
+    if (
+      saved !== undefined && !(inner._tag === "Child" && inner.inst.waiting)
+    ) delete waits![path]
     const made: Kept = {
       author,
       table,
@@ -7090,40 +8513,61 @@ const setup = (
     if (inner._tag === "Child") keptEntries.set(inner.inst, made)
     keptLive++
     if (inst !== author) {
-      for (const child of author.children) if (child.key === view.key && child.path === path) failShared(child, made)
+      for (const child of author.children) {
+        if (child.key === view.key && child.path === path) {
+          failShared(child, made)
+        }
+      }
     }
     if (stale) {
       lates.push(() => {
-        if (at.late !== undefined && !at.gone && !inst.closed) patchScoped(inst, at, at.v, env)
+        if (at.late !== undefined && !at.gone && !inst.closed) {
+          patchScoped(inst, at, at.v, env)
+        }
       })
     }
     return inner
   }
 
   const failTwice = (author: Instance, view: View.Child<any, any>) =>
-    failLater(author, new Error(`${author.path} writes ${segment(view)} twice in one render`))
+    failLater(
+      author,
+      new Error(`${author.path} writes ${segment(view)} twice in one render`)
+    )
   const failShared = (child: Instance, entry: Kept) =>
     defer(() => {
       const view = entry.inner.v
-      if (!child.closed && entryAt(entry.author, view) === entry) failTwice(entry.author, view)
+      if (!child.closed && entryAt(entry.author, view) === entry) {
+        failTwice(entry.author, view)
+      }
     })
 
   const tableOf = (author: Instance): KeptTable => {
     let table = keptTables.get(author)
-    if (table === undefined) keptTables.set(author, table = { round: 0, children: new Map(), ask: undefined })
+    if (table === undefined) {
+      keptTables.set(
+        author,
+        table = { round: 0, children: new Map(), ask: undefined }
+      )
+    }
     return table
   }
 
   const roundAt = (inst: Instance): number =>
-    inst.component === outletComponent ? outletOf.get(inst)!.slotted.round : keptTables.get(inst.author)?.round ?? 0
+    inst.component === outletComponent
+      ? outletOf.get(inst)!.slotted.round
+      : keptTables.get(inst.author)?.round ?? 0
   const isOld = (inst: Instance, table: KeptTable): boolean =>
     inst.component === outletComponent && roundAt(inst) !== table.round
-  const aliveOf = (view: View.Child<any, any>) => view.alive === true ? undefined : view.alive
+  const aliveOf = (view: View.Child<any, any>) =>
+    view.alive === true ? undefined : view.alive
 
   const pull = (entry: Kept) => {
     if (entry.at !== undefined) entry.at.inner = swapOut(entry.inner)
     else {
-      for (const node of nodesOf(entry.inner)) if (host.parentOf(node) !== undefined) host.remove(node)
+      for (const node of nodesOf(entry.inner)) {
+        if (host.parentOf(node) !== undefined) host.remove(node)
+      }
       if (entry.container !== undefined) unpark(entry.author, entry.container)
     }
     entry.container = entry.at = undefined
@@ -7139,7 +8583,9 @@ const setup = (
     const nodes = nodesOf(inner)
     const placeholder = host.createText("")
     const parentNode = nodes.length === 0 ? undefined : host.parentOf(nodes[0])
-    if (parentNode !== undefined) host.insertBefore(parentNode, placeholder, nodes[0])
+    if (parentNode !== undefined) {
+      host.insertBefore(parentNode, placeholder, nodes[0])
+    }
     for (const node of nodes) host.remove(node)
     return new TextRecord(emptyText, placeholder)
   }
@@ -7154,7 +8600,8 @@ const setup = (
   ): RChild | RFallback => {
     const inner = entry.inner
     const from = entry.at
-    const wasKept = entry.container !== undefined || from !== undefined && inner._tag === "Child" && isKept(inner.inst)
+    const wasKept = entry.container !== undefined ||
+      from !== undefined && inner._tag === "Child" && isKept(inner.inst)
     const failure = inner._tag === "Fallback"
       ? (inner.status as { readonly cause: Cause.Cause<unknown> }).cause
       : inner.inst.failure
@@ -7167,7 +8614,9 @@ const setup = (
     const drawer = entry.drawer
     entry.drawer = inst
     if (failure !== undefined) {
-      if (inner._tag === "Fallback" && from !== undefined) closeAll(drawer, inner)
+      if (inner._tag === "Fallback" && from !== undefined) {
+        closeAll(drawer, inner)
+      }
       return entry.inner = failedChild(inst, view, failure, env)
     }
     const child = (inner as RChild).inst
@@ -7205,7 +8654,9 @@ const setup = (
   const setDepth = (inst: Instance, depth: number) => {
     if (inst.depth === depth) return
     ;(inst as { depth: number }).depth = depth
-    if (inst.owner !== undefined) (inst.owner as { depth: number }).depth = depth
+    if (inst.owner !== undefined) {
+      ;(inst.owner as { depth: number }).depth = depth
+    }
     for (const child of inst.children) setDepth(child, depth + 1)
   }
   const rebind = (inst: Instance) => {
@@ -7214,7 +8665,9 @@ const setup = (
       const definition = read.owner.definition
       const owner = inst.owners?.get(definition)
       const found = nearestOwner(inst.parent, definition)
-      if (found !== undefined && found === owner && found.readers?.has(inst)) continue
+      if (found !== undefined && found === owner && found.readers?.has(inst)) {
+        continue
+      }
       moved = true
       if (owner !== undefined) {
         owner.readers?.delete(inst)
@@ -7227,7 +8680,9 @@ const setup = (
           failLater(
             inst,
             new Error(
-              `${inst.path} reads the shared state of ${definition.name}, ${ownerAbsent(inst.parent, definition)}`
+              `${inst.path} reads the shared state of ${definition.name}, ${
+                ownerAbsent(inst.parent, definition)
+              }`
             )
           )
         }
@@ -7235,17 +8690,23 @@ const setup = (
       }
       ;(inst.owners ??= new Map()).set(definition, found)
       ;(found.readers ??= new Set()).add(inst)
-      if (read.onChange !== undefined) (inst.seen ??= new Map()).set(found, found.shares)
+      if (read.onChange !== undefined) {
+        ;(inst.seen ??= new Map()).set(found, found.shares)
+      }
       if (read.report !== undefined) reportsMoved(found)
     }
     if (moved) markDirty(inst)
     for (const child of inst.children) rebind(child)
   }
   const reportsMoved = (owner: Instance) => {
-    if (!owner.closed && owner.component.definition.collects !== undefined) dueReports(owner)
+    if (!owner.closed && owner.component.definition.collects !== undefined) {
+      dueReports(owner)
+    }
   }
   const leaveOwners = (inst: Instance) => {
-    if (inst.owners !== undefined) { for (const owner of inst.owners.values()) owner.readers?.delete(inst) }
+    if (inst.owners !== undefined) {
+      for (const owner of inst.owners.values()) owner.readers?.delete(inst)
+    }
     for (const child of inst.children) leaveOwners(child)
   }
 
@@ -7264,22 +8725,28 @@ const setup = (
   const endWaiting = (inst: Instance, top: Instance) => {
     for (const child of inst.children) {
       const entry = keptEntries.get(child)
-      if (entry !== undefined && child.waiting && !within(entry.author, top)) endKept(entry)
-      else endWaiting(child, top)
+      if (entry !== undefined && child.waiting && !within(entry.author, top)) {
+        endKept(entry)
+      } else endWaiting(child, top)
     }
   }
   const keeping: Array<Kept> = []
   const flushKept = () => {
     for (const entry of keeping) {
       const inner = entry.inner
-      if (entry.at !== undefined || inner._tag !== "Child" || inner.inst.closed || entry.container !== undefined) {
+      if (
+        entry.at !== undefined || inner._tag !== "Child" || inner.inst.closed ||
+        entry.container !== undefined
+      ) {
         continue
       }
       const child = inner.inst
       if (host.createContainer === undefined) {
         failLater(
           entry.author,
-          new Error(`${child.path} is kept, and this host has no createContainer`)
+          new Error(
+            `${child.path} is kept, and this host has no createContainer`
+          )
         )
         continue
       }
@@ -7301,14 +8768,21 @@ const setup = (
   const keepBelow = (inst: Instance, closing: Instance) => {
     for (const child of inst.children) {
       const entry = keptEntries.get(child)
-      if (entry !== undefined && entry.at !== undefined && !within(entry.author, closing)) {
+      if (
+        entry !== undefined && entry.at !== undefined &&
+        !within(entry.author, closing)
+      ) {
         keep(entry)
         if (entry.at !== undefined) closeAll(inst, entry.inner)
       } else keepBelow(child, closing)
     }
   }
   const within = (inst: Instance, top: Instance): boolean => {
-    for (let at: Instance | undefined = inst; at !== undefined; at = at.parent) if (at === top) return true
+    for (
+      let at: Instance | undefined = inst;
+      at !== undefined;
+      at = at.parent
+    ) if (at === top) return true
     return false
   }
 
@@ -7351,7 +8825,12 @@ const setup = (
     }
   }
 
-  const patchScoped = (inst: Instance, at: RScoped, view: View.Child<any, any>, env: Env): RScoped => {
+  const patchScoped = (
+    inst: Instance,
+    at: RScoped,
+    view: View.Child<any, any>,
+    env: Env
+  ): RScoped => {
     at.v = view
     const late = at.late
     at.late = undefined
@@ -7361,7 +8840,10 @@ const setup = (
     let next: Rendered
     if (entry !== undefined && entry.at === at) {
       const alive = aliveOf(view)
-      if (alive !== undefined && !askAlive(entry.author, entry.table, alive, view, entry)) return at
+      if (
+        alive !== undefined &&
+        !askAlive(entry.author, entry.table, alive, view, entry)
+      ) return at
       entry.alive = alive
       entry.round = entry.table.round
       const inner = entry.inner
@@ -7385,7 +8867,12 @@ const setup = (
     return at
   }
 
-  const toggleMounts = (inst: Instance, rendered: Rendered, env: Env, start: boolean): void => {
+  const toggleMounts = (
+    inst: Instance,
+    rendered: Rendered,
+    env: Env,
+    start: boolean
+  ): void => {
     // No mount ever started.
     if (!host.runsMounts) return
     switch (rendered._tag) {
@@ -7397,9 +8884,16 @@ const setup = (
           rendered.mount = view.mount !== undefined
             ? startMount(inst.author, view.mount, rendered.node, env, inst)
             : undefined
-          rendered.ownedMounts = startOwnedMounts(inst, view, rendered.node, env)
+          rendered.ownedMounts = startOwnedMounts(
+            inst,
+            view,
+            rendered.node,
+            env
+          )
         }
-        for (const child of listOf(rendered.children)) toggleMounts(inst, child, env, start)
+        for (const child of listOf(rendered.children)) {
+          toggleMounts(inst, child, env, start)
+        }
         return
       }
       case "Fallback":
@@ -7407,7 +8901,9 @@ const setup = (
       case "Child":
       case "Outlet": {
         const child = rendered.inst
-        for (const item of listOf(child.rendered)) toggleMounts(child, item, child.env, start)
+        for (const item of listOf(child.rendered)) {
+          toggleMounts(child, item, child.env, start)
+        }
         return
       }
       case "Text":
@@ -7469,21 +8965,34 @@ const setup = (
   }
 
   /** Destroys every node of a list, in one step when the host can clear their parent. */
-  const destroyAll = (inst: Instance, parentNode: unknown, olds: ReadonlyArray<Rendered>) => {
+  const destroyAll = (
+    inst: Instance,
+    parentNode: unknown,
+    olds: ReadonlyArray<Rendered>
+  ) => {
     if (host.removeChildren === undefined) {
-      for (let index = 0; index < olds.length; index++) destroy(inst, olds[index]!)
+      for (let index = 0; index < olds.length; index++) {
+        destroy(inst, olds[index]!)
+      }
       return
     }
     // Collected first, as `destroy` does: closing a child empties what it rendered.
     const nodes: Array<unknown> = []
-    for (let index = 0; index < olds.length; index++) collectNodes(olds[index]!, nodes)
-    for (let index = 0; index < olds.length; index++) closeAll(inst, olds[index]!)
+    for (let index = 0; index < olds.length; index++) {
+      collectNodes(olds[index]!, nodes)
+    }
+    for (let index = 0; index < olds.length; index++) {
+      closeAll(inst, olds[index]!)
+    }
     host.removeChildren(parentNode, nodes)
   }
 
   // -- root -----------------------------------------------------------------
   // The first mount follows from the session's start.
-  origin = recordTree({ _tag: "SessionStarted", app: component.definition.name })
+  origin = recordTree({
+    _tag: "SessionStarted",
+    app: component.definition.name
+  })
   if (origin === -1) origin = undefined
   depth++
   // Registered before the root instance forks its Scope from `rootScope`: finalizers run in
@@ -7512,7 +9021,11 @@ const setup = (
   let rootRange: Range | undefined
   let rootRef: unknown = undefined
   if (hydrating !== undefined && hydration !== undefined) {
-    for (let node = hydration.firstChild(container); node !== undefined; node = host.nextOf(node)) {
+    for (
+      let node = hydration.firstChild(container);
+      node !== undefined;
+      node = host.nextOf(node)
+    ) {
       const kind = hydration.inspect(node)
       if (kind._tag === "Open" && kind.path === rootPath) {
         rootRange = rangeFrom(node, rootPath, undefined)
@@ -7562,7 +9075,8 @@ const setup = (
   const snapshot = (out: Record<string, unknown>): void => {
     const homes = new Map<Instance, Saved>()
     let into: Saved = out
-    const keptIn = (home: Saved): Saved => (home[home === out ? "~kept" + rootPath : "~kept"] ??= {}) as Saved
+    const keptIn = (home: Saved): Saved =>
+      (home[home === out ? "~kept" + rootPath : "~kept"] ??= {}) as Saved
     const write = (
       inst: Instance,
       to: Saved,
@@ -7572,7 +9086,9 @@ const setup = (
       if (Exit.isFailure(exit)) return warnUnencoded(inst, ctx, exit.cause)
       if (exit.value === undefined) return
       to[path] = exit.value.state
-      if (exit.value.reported !== undefined) ((to["~reported"] ??= {}) as Saved)[path] = exit.value.reported
+      if (exit.value.reported !== undefined) {
+        ;((to["~reported"] ??= {}) as Saved)[path] = exit.value.reported
+      }
     }
     const save = (inst: Instance, to: Saved) => {
       const restore = inst.component.definition.restore
@@ -7597,18 +9113,25 @@ const setup = (
       const state = from[path]
       if (state === undefined || restore === false) return
       const reported = (from["~reported"] as Saved | undefined)?.[path]
-      if (restore === undefined) return write(inst, to, path, Exit.succeed({ state, reported }))
+      if (restore === undefined) {
+        return write(inst, to, path, Exit.succeed({ state, reported }))
+      }
       const codec = stateCodecOf(inst.component)
-      const encoded = runCodec(Effect.flatMapEager(codec.decode(state), (decoded) => {
-        let model: unknown
-        try {
-          model = restore(decoded.model, inst.props)
-        } catch (error) {
-          warnRestore(inst, ctx, error)
-          return Effect.undefined
-        }
-        return Effect.mapEager(codec.encode(model, decoded.results), (state) => ({ state, reported }))
-      }))
+      const encoded = runCodec(
+        Effect.flatMapEager(codec.decode(state), (decoded) => {
+          let model: unknown
+          try {
+            model = restore(decoded.model, inst.props)
+          } catch (error) {
+            warnRestore(inst, ctx, error)
+            return Effect.undefined
+          }
+          return Effect.mapEager(
+            codec.encode(model, decoded.results),
+            (state) => ({ state, reported })
+          )
+        })
+      )
       if (Exit.isExit(encoded)) return write(inst, to, path, encoded)
       warnLate(inst, ctx)
       encoded.addObserver((exit) => write(inst, to, path, exit))
@@ -7621,17 +9144,25 @@ const setup = (
       if (inst.closed || inst.failure !== undefined) return
       const was = into
       const entry = keptLive > 0 ? keptEntries.get(inst) : undefined
-      const source = inst.waiting ? restoring.get(inst) ?? hydrating!.state : undefined
+      const source = inst.waiting
+        ? restoring.get(inst) ?? hydrating!.state
+        : undefined
       if (entry !== undefined) {
         if (source !== undefined && !rawState.has(source)) return
         const author = entry.author
-        into = ((keptIn(homes.get(author)!)[author.path] ??= {}) as Saved)[inst.path] = {}
+        into =
+          ((keptIn(homes.get(author)!)[author.path] ??= {}) as Saved)[
+            inst.path
+          ] =
+            {}
       }
       const waits = waitingOf.get(inst)
       if (waits !== undefined) {
         for (const child in waits) {
           const saved = waits[child]
-          if (!rawState.has(saved)) ((keptIn(into)[inst.path] ??= {}) as Saved)[child] = saved
+          if (!rawState.has(saved)) {
+            ;((keptIn(into)[inst.path] ??= {}) as Saved)[child] = saved
+          }
         }
       }
       if (source !== undefined && rawState.has(source)) {
@@ -7641,14 +9172,21 @@ const setup = (
       }
       if (source !== undefined) {
         const all = subtree(source, inst.path)
-        const { "~kept": kept, "~scoped": drawn, "~reported": reported, ...state } = all as {
+        const {
+          "~kept": kept,
+          "~scoped": drawn,
+          "~reported": reported,
+          ...state
+        } = all as {
           readonly "~kept"?: Record<string, Saved>
           readonly "~scoped"?: Record<string, ReadonlyArray<string>>
           readonly "~reported"?: Saved
         }
         const cut = Object.values(drawn ?? {}).flat()
         const home = (author: string) =>
-          (cut.some((child) => below(author, child)) ? {} : keptIn(into)[author] ??= {}) as Saved
+          (cut.some((child) => below(author, child))
+            ? {}
+            : keptIn(into)[author] ??= {}) as Saved
         for (const author in kept) Object.assign(home(author), kept[author])
         for (const author in drawn) {
           for (const child of drawn[author]) {
@@ -7657,7 +9195,9 @@ const setup = (
           }
         }
         Object.assign(into, state)
-        if (reported !== undefined) Object.assign((into["~reported"] ??= {}) as Saved, reported)
+        if (reported !== undefined) {
+          Object.assign((into["~reported"] ??= {}) as Saved, reported)
+        }
         return
       }
       save(inst, into)
@@ -7666,7 +9206,9 @@ const setup = (
       for (const child of inst.children) visit(child)
       if (table !== undefined) {
         for (const kept of table.children.values()) {
-          if (kept.inner._tag === "Child" && kept.at === undefined) visit(kept.inner.inst)
+          if (kept.inner._tag === "Child" && kept.at === undefined) {
+            visit(kept.inner.inst)
+          }
         }
       }
       into = was
@@ -7704,7 +9246,11 @@ const setup = (
   runCommitted()
 
   const runsOf = (inst: Instance): Array<Pending> =>
-    inst.runs.map((run) => ({ path: inst.path, name: run.command.name, status: run.status }))
+    inst.runs.map((run) => ({
+      path: inst.path,
+      name: run.command.name,
+      status: run.status
+    }))
   const pendingOf = (inst: Instance): Array<Pending> => [
     ...runsOf(inst),
     ...[...inst.children].flatMap(pendingOf)
@@ -7750,7 +9296,10 @@ const setup = (
     },
     freeze: () => {
       if (resume !== undefined) resume()
-      else if (scheduled || dirty.size > 0 || deferred.length > 0 || reportsDue.size > 0) flush(false)
+      else if (
+        scheduled || dirty.size > 0 || deferred.length > 0 ||
+        reportsDue.size > 0
+      ) flush(false)
       frozen = true
       return cache
     }

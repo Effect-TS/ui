@@ -43,7 +43,9 @@ export const field = (props: FieldProps): View.Node<never> | undefined => {
 
 // The control without that input, for a control something else disabled
 // after it read its own props, such as a field.
-export const withoutField = <Msg, R>(control: View.Element<Msg, R>): View.Element<Msg, R> => ({
+export const withoutField = <Msg, R>(
+  control: View.Element<Msg, R>
+): View.Element<Msg, R> => ({
   ...control,
   children: control.children.filter((node) => !proxies.has(node))
 })

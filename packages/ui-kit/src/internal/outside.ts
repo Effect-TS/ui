@@ -9,13 +9,18 @@ export interface Outside {
   readonly focused?: (() => void) | undefined
 }
 
-export const listenOutside = (document: Document, signal: AbortSignal, outside: Outside): void => {
+export const listenOutside = (
+  document: Document,
+  signal: AbortSignal,
+  outside: Outside
+): void => {
   let touchPress = false
   const onPointerDown = (event: PointerEvent) => {
     touchPress = false
     const target = event.target as Node | null
     if (
-      !outside.open() || target === null || (event.button !== 0 && outside.anyButton?.() !== true) ||
+      !outside.open() || target === null ||
+      (event.button !== 0 && outside.anyButton?.() !== true) ||
       !event.isPrimary || outside.inside(target)
     ) return
     if (inKept(target)) return
@@ -26,16 +31,25 @@ export const listenOutside = (document: Document, signal: AbortSignal, outside: 
     if (!touchPress) return
     touchPress = false
     const target = event.target as Node | null
-    if (outside.open() && target !== null && !outside.inside(target)) outside.pressed("touch")
+    if (outside.open() && target !== null && !outside.inside(target)) {
+      outside.pressed("touch")
+    }
   }
   const focused = outside.focused
   const onFocusIn = (event: FocusEvent) => {
     const target = event.target as Node | null
-    if (outside.open() && target !== null && !outside.inside(target)) focused?.()
+    if (outside.open() && target !== null && !outside.inside(target)) {
+      focused?.()
+    }
   }
-  document.addEventListener("pointerdown", onPointerDown, { capture: true, signal })
+  document.addEventListener("pointerdown", onPointerDown, {
+    capture: true,
+    signal
+  })
   document.addEventListener("click", onClick, { capture: true, signal })
-  if (focused !== undefined) document.addEventListener("focusin", onFocusIn, { capture: true, signal })
+  if (focused !== undefined) {
+    document.addEventListener("focusin", onFocusIn, { capture: true, signal })
+  }
 }
 
 export const releasedOutside = (
@@ -47,5 +61,6 @@ export const releasedOutside = (
   if (target === null || inside(target)) return false
   if (anchor === null) return true
   const r = anchor.getBoundingClientRect()
-  return event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom
+  return event.clientX < r.left || event.clientX > r.right ||
+    event.clientY < r.top || event.clientY > r.bottom
 }

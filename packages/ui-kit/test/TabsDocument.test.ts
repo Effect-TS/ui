@@ -23,21 +23,32 @@ const Page = Component.define({
       props: {
         value: model.tab,
         activateOnFocus: h.props.activateOnFocus,
-        tabs: [{ value: "a" }, { value: "b" }, { value: "c" }, { value: "d", disabled: true }, { value: "e" }]
+        tabs: [{ value: "a" }, { value: "b" }, { value: "c" }, {
+          value: "d",
+          disabled: true
+        }, { value: "e" }]
       },
       onEmit: { Selected: ({ value }) => Message.Selected({ value }) },
       view: (tabs) =>
         tabs.root(h.div.class("root")).children(
           tabs.list(h.div.class("list")).children(
-            tabs.tab({ element: h.button.class("a"), value: "a" }).children("A"),
-            tabs.tab({ element: h.button.class("b"), value: "b" }).children("B"),
-            tabs.tab({ element: h.a.class("c").attr("href", "#c"), value: "c" }).children("C"),
-            tabs.tab({ element: h.a.class("d").attr("href", "#d"), value: "d" }).children("D"),
+            tabs.tab({ element: h.button.class("a"), value: "a" }).children(
+              "A"
+            ),
+            tabs.tab({ element: h.button.class("b"), value: "b" }).children(
+              "B"
+            ),
+            tabs.tab({ element: h.a.class("c").attr("href", "#c"), value: "c" })
+              .children("C"),
+            tabs.tab({ element: h.a.class("d").attr("href", "#d"), value: "d" })
+              .children("D"),
             tabs.tab({ element: h.a.class("e"), value: "e" }).children("E"),
             tabs.indicator(h.span.class("indicator"))
           ),
           ["a", "b", "c", "d", "e"].map((value) =>
-            tabs.panel({ element: h.div.class("panel"), value })?.children(value)
+            tabs.panel({ element: h.div.class("panel"), value })?.children(
+              value
+            )
           )
         )
     })
@@ -49,7 +60,16 @@ const stub = (element: Element, values: Record<string, unknown>) => {
   }
 }
 const rect = (left: number, top: number, width: number, height: number) => () =>
-  ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top }) as DOMRect
+  ({
+    left,
+    top,
+    width,
+    height,
+    right: left + width,
+    bottom: top + height,
+    x: left,
+    y: top
+  }) as DOMRect
 
 const observers: Array<() => void> = []
 const fakeResizeObserver = Effect.acquireRelease(
@@ -70,28 +90,47 @@ const fakeResizeObserver = Effect.acquireRelease(
   (original) =>
     Effect.sync(() => {
       observers.length = 0
-      if (original === undefined) delete (window as { ResizeObserver?: unknown }).ResizeObserver
-      else Object.defineProperty(window, "ResizeObserver", original)
+      if (original === undefined) {
+        delete (window as { ResizeObserver?: unknown }).ResizeObserver
+      } else Object.defineProperty(window, "ResizeObserver", original)
     })
 )
 
-const mountPageWith = Effect.fnUntraced(function*(props: { readonly activateOnFocus?: boolean }) {
-  const app = yield* container
-  yield* BrowserHost.mountEffect(Page, props, app)
-  yield* tick
-  const get = (name: string) => app.querySelector<HTMLElement>("." + name)!
-  const panels = () => Array.from(app.querySelectorAll(".panel"), (panel) => panel.textContent)
-  return { get, panels }
-})
+const mountPageWith = Effect.fnUntraced(
+  function*(props: { readonly activateOnFocus?: boolean }) {
+    const app = yield* container
+    yield* BrowserHost.mountEffect(Page, props, app)
+    yield* tick
+    const get = (name: string) => app.querySelector<HTMLElement>("." + name)!
+    const panels = () =>
+      Array.from(app.querySelectorAll(".panel"), (panel) => panel.textContent)
+    return { get, panels }
+  }
+)
 const mountPage = Effect.suspend(() => mountPageWith({}))
 
-const key = (target: Element, key: string, init: KeyboardEventInit = {}, type = "keydown") => {
-  const event = new KeyboardEvent(type, { key, bubbles: true, cancelable: true, composed: true, ...init })
+const key = (
+  target: Element,
+  key: string,
+  init: KeyboardEventInit = {},
+  type = "keydown"
+) => {
+  const event = new KeyboardEvent(type, {
+    key,
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    ...init
+  })
   target.dispatchEvent(event)
   return event.defaultPrevented
 }
 const clicked = (target: Element) => {
-  const event = new MouseEvent("click", { bubbles: true, cancelable: true, composed: true })
+  const event = new MouseEvent("click", {
+    bubbles: true,
+    cancelable: true,
+    composed: true
+  })
   target.dispatchEvent(event)
   return event.defaultPrevented
 }
@@ -104,7 +143,10 @@ describe("Tabs in a document", { concurrent: false }, () => {
       assert.isTrue(key(get("a"), "ArrowRight"))
       yield* tick
       assert.strictEqual(document.activeElement, get("b"))
-      assert.deepStrictEqual(["a", "b", "c", "d", "e"].map((id) => get(id).tabIndex), [-1, 0, -1, -1, -1])
+      assert.deepStrictEqual(
+        ["a", "b", "c", "d", "e"].map((id) => get(id).tabIndex),
+        [-1, 0, -1, -1, -1]
+      )
       key(get("b"), "End")
       yield* tick
       assert.strictEqual(document.activeElement, get("e"))
@@ -114,14 +156,23 @@ describe("Tabs in a document", { concurrent: false }, () => {
       assert.strictEqual(get("b").getAttribute("aria-selected"), "true")
       assert.strictEqual(get("root").dataset.activationDirection, "right")
       assert.deepStrictEqual(panels(), ["b"])
-      assert.isNull(document.querySelector("[data-starting-style], [data-ending-style]"))
+      assert.isNull(
+        document.querySelector("[data-starting-style], [data-ending-style]")
+      )
     }).pipe(Effect.scoped))
 
   it.effect("with activateOnFocus, focus during a secondary press doesn't select, and focus after the press ends does", () =>
     Effect.gen(function*() {
       const { get } = yield* mountPageWith({ activateOnFocus: true })
       const press = (tab: HTMLElement, type: string, button = 2) =>
-        tab.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, composed: true, button }))
+        tab.dispatchEvent(
+          new PointerEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            button
+          })
+        )
       let mousedowns = 0
       const cancel = (event: Event) => event.preventDefault()
       const count = () => mousedowns++
@@ -133,7 +184,10 @@ describe("Tabs in a document", { concurrent: false }, () => {
           document.removeEventListener("mousedown", count)
         })
       )
-      const selected = () => ["a", "b", "c", "d", "e"].filter((id) => get(id).getAttribute("aria-selected") === "true")
+      const selected = () =>
+        ["a", "b", "c", "d", "e"].filter((id) =>
+          get(id).getAttribute("aria-selected") === "true"
+        )
       const focusFrom = function*(tab: HTMLElement) {
         get("a").focus()
         yield* tick
@@ -146,7 +200,13 @@ describe("Tabs in a document", { concurrent: false }, () => {
       yield* tick
       assert.deepStrictEqual(selected(), ["a"])
 
-      for (const [end, id, button] of [["pointercancel", "b", 2], ["pointerup", "c", 1]] as const) {
+      for (
+        const [end, id, button] of [["pointercancel", "b", 2], [
+          "pointerup",
+          "c",
+          1
+        ]] as const
+      ) {
         press(get(id), "pointerdown", button)
         yield* focusFrom(get(id))
         key(get(id), "Home")
@@ -176,9 +236,13 @@ describe("Tabs in a document", { concurrent: false }, () => {
       const { get } = yield* mountPage
       const clicks: Array<string> = []
       const record = (event: MouseEvent) =>
-        clicks.push((event.target as Element).className + (event.ctrlKey ? "+ctrl" : ""))
+        clicks.push(
+          (event.target as Element).className + (event.ctrlKey ? "+ctrl" : "")
+        )
       document.addEventListener("click", record)
-      yield* Effect.addFinalizer(() => Effect.sync(() => document.removeEventListener("click", record)))
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => document.removeEventListener("click", record))
+      )
 
       assert.isTrue(key(get("b"), " "))
       assert.isTrue(key(get("b"), " ", {}, "keyup"))
@@ -229,7 +293,12 @@ describe("Tabs in a document", { concurrent: false }, () => {
           offsetWidth: 60,
           offsetHeight: 32,
           offsetParent: list,
-          getBoundingClientRect: rect(100 + 2 * (offsetLeft + 0.25), 58, 120, 64)
+          getBoundingClientRect: rect(
+            100 + 2 * (offsetLeft + 0.25),
+            58,
+            120,
+            64
+          )
         })
       }
       observers.forEach((observe) => observe())
@@ -239,14 +308,38 @@ describe("Tabs in a document", { concurrent: false }, () => {
         ["left", "right", "top", "bottom", "width", "height"].map((name) =>
           indicator.style.getPropertyValue("--active-tab-" + name)
         )
-      assert.deepStrictEqual(vars(), ["0.25px", "239.75px", "4px", "4px", "60px", "32px"])
+      assert.deepStrictEqual(vars(), [
+        "0.25px",
+        "239.75px",
+        "4px",
+        "4px",
+        "60px",
+        "32px"
+      ])
 
       clicked(get("b"))
       yield* tick
-      assert.deepStrictEqual(vars(), ["80.25px", "159.75px", "4px", "4px", "60px", "32px"])
+      assert.deepStrictEqual(vars(), [
+        "80.25px",
+        "159.75px",
+        "4px",
+        "4px",
+        "60px",
+        "32px"
+      ])
 
-      stub(get("b"), { offsetWidth: 100, getBoundingClientRect: rect(400, 58, 200, 64) })
+      stub(get("b"), {
+        offsetWidth: 100,
+        getBoundingClientRect: rect(400, 58, 200, 64)
+      })
       observers.forEach((observe) => observe())
-      assert.deepStrictEqual(vars(), ["80px", "120px", "4px", "4px", "100px", "32px"])
+      assert.deepStrictEqual(vars(), [
+        "80px",
+        "120px",
+        "4px",
+        "4px",
+        "100px",
+        "32px"
+      ])
     }).pipe(Effect.scoped))
 })

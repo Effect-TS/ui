@@ -10,10 +10,14 @@ import type * as View from "../View.ts"
 import * as lazy from "./lazy.ts"
 
 /** @internal */
-export const childName = (component: Component.Any | Component.Lazy.Any | Feature.Any): string => {
+export const childName = (
+  component: Component.Any | Component.Lazy.Any | Feature.Any
+): string => {
   const definition = (component as Component.Any).definition
   if (definition !== undefined) return definition.name
-  return (Feature.TypeId in component ? component[Feature.TypeId] : (component as Component.Lazy.Any)[lazy.TypeId]).name
+  return (Feature.TypeId in component
+    ? component[Feature.TypeId]
+    : (component as Component.Lazy.Any)[lazy.TypeId]).name
 }
 
 /**
@@ -28,15 +32,18 @@ export const childName = (component: Component.Any | Component.Lazy.Any | Featur
  *
  * @internal
  */
-export const segment = (view: View.Child<any, any>): string => segmentOf(view.component, view.key)
+export const segment = (view: View.Child<any, any>): string =>
+  segmentOf(view.component, view.key)
 
 /**
  * `segment` of a child of `component` with `key`.
  *
  * @internal
  */
-export const segmentOf = (component: Component.Any | Component.Lazy.Any | Feature.Any, key: string): string =>
-  escapeName(childName(component)) + "[" + escapeKey(key) + "]"
+export const segmentOf = (
+  component: Component.Any | Component.Lazy.Any | Feature.Any,
+  key: string
+): string => escapeName(childName(component)) + "[" + escapeKey(key) + "]"
 
 /**
  * Where paths are checked: a path, or an instance, whose path is read only for an error.
@@ -57,11 +64,16 @@ export const slotSegment = (name: string): string => "[" + escapeKey(name) + "]"
 
 // Most names and keys need no escaping, so the regular expressions run only for those that do.
 const escapeName = (name: string): string =>
-  name.includes("%") || name.includes("[") ? name.replace(/[%[]/g, escapeChar) : name
+  name.includes("%") || name.includes("[")
+    ? name.replace(/[%[]/g, escapeChar)
+    : name
 const escapeKey = (key: string): string =>
-  key.includes("%") || key.includes("]/") ? key.replace(/%|(?<=\])\//g, escapeChar) : key
+  key.includes("%") || key.includes("]/")
+    ? key.replace(/%|(?<=\])\//g, escapeChar)
+    : key
 
-const escapeChar = (char: string): string => "%" + char.charCodeAt(0).toString(16).toUpperCase()
+const escapeChar = (char: string): string =>
+  "%" + char.charCodeAt(0).toString(16).toUpperCase()
 
 /**
  * The paths one render of an instance uses, each with the child
@@ -82,7 +94,11 @@ export interface ChildPaths {
 }
 
 /** The paths of a tree that held a child and no outlet, once its render is over. */
-const heldChildren: ChildPaths = Object.freeze({ at: "", paths: undefined, placed: undefined }) as any
+const heldChildren: ChildPaths = Object.freeze({
+  at: "",
+  paths: undefined,
+  placed: undefined
+}) as any
 
 /**
  * What an instance keeps of `paths` once its render is over. Fallbacks are only shown while their
@@ -92,7 +108,9 @@ const heldChildren: ChildPaths = Object.freeze({ at: "", paths: undefined, place
  *
  * @internal
  */
-export const settledPaths = (paths: ChildPaths | undefined): ChildPaths | undefined => {
+export const settledPaths = (
+  paths: ChildPaths | undefined
+): ChildPaths | undefined => {
   if (paths === undefined || paths.paths === undefined) return paths
   if (paths.placed === undefined) return heldChildren
   paths.paths = undefined
@@ -133,7 +151,10 @@ export const checkChildPaths = (
  *
  * @internal
  */
-export const checkContentPaths = (at: At, nodes: ReadonlyArray<View.Node<any, any>>): ChildPaths => {
+export const checkContentPaths = (
+  at: At,
+  nodes: ReadonlyArray<View.Node<any, any>>
+): ChildPaths => {
   const paths: ChildPaths = { at, paths: undefined, placed: undefined }
   for (const node of nodes) visit(paths, node, undefined, "")
   paths.placed = undefined
@@ -163,9 +184,16 @@ const visit = (
       // Text and an element with no children hold no child: most of a view, passed over without a call.
       if (
         child !== was &&
-        (child._tag === "Child" || child._tag === "Outlet" || (child._tag === "Element" && child.children.length > 0))
+        (child._tag === "Child" || child._tag === "Outlet" ||
+          (child._tag === "Element" && child.children.length > 0))
       ) {
-        visit(paths, child, replaced, where, pairs(child, was) ? was : undefined)
+        visit(
+          paths,
+          child,
+          replaced,
+          where,
+          pairs(child, was) ? was : undefined
+        )
       }
     }
   } else if (node._tag === "Child") {
@@ -178,15 +206,21 @@ const visit = (
       failure(paths.at, `at ${segment(node)}${where}${keyHint(name, node)}`)
     }
     taken.set(node.key, node)
-    if (node.slots !== undefined) { for (const name in node.slots) visitPlaced(paths, node.slots[name]) }
+    if (node.slots !== undefined) {
+      for (const name in node.slots) visitPlaced(paths, node.slots[name])
+    }
   } else if (node._tag === "Outlet") {
     place(paths, node.name)
   }
 }
 
 /** Whether a patch would pair two elements: a row a list replaced isn't compared below. */
-const pairs = (node: View.Node<any, any>, was: View.Node<any, any> | undefined): was is View.Element<any, any> =>
-  was !== undefined && was._tag === "Element" && node._tag === "Element" && was.tag === node.tag &&
+const pairs = (
+  node: View.Node<any, any>,
+  was: View.Node<any, any> | undefined
+): was is View.Element<any, any> =>
+  was !== undefined && was._tag === "Element" && node._tag === "Element" &&
+  was.tag === node.tag &&
   was.elementKey === node.elementKey
 
 // A missing key is a runtime error, not a type error, so the message names the fix.
@@ -197,7 +231,9 @@ const keyHint = (name: string, node: View.Child<any, any>): string =>
 
 const place = (paths: ChildPaths, name: string): void => {
   const placed = paths.placed ??= new Set()
-  if (placed.has(name)) throw new Error(`${pathAt(paths.at)} places its slot ${name} twice`)
+  if (placed.has(name)) {
+    throw new Error(`${pathAt(paths.at)} places its slot ${name} twice`)
+  }
   placed.add(name)
 }
 
@@ -210,8 +246,9 @@ const visitPlaced = (paths: ChildPaths, input: unknown): void => {
   }
   const node = input as View.Node<any, any>
   if (node._tag === "Outlet") place(paths, node.name)
-  else if (node._tag === "Element") { for (const child of node.children) visitPlaced(paths, child) }
-  else if (node._tag === "Child" && node.slots !== undefined) {
+  else if (node._tag === "Element") {
+    for (const child of node.children) visitPlaced(paths, child)
+  } else if (node._tag === "Child" && node.slots !== undefined) {
     for (const name in node.slots) visitPlaced(paths, node.slots[name])
   }
 }
@@ -240,14 +277,21 @@ export const checkFallbackPaths = (
  *
  * @internal
  */
-export const checkAuthorPlacements = (at: At, written: ReadonlyArray<ChildPaths>): void => {
+export const checkAuthorPlacements = (
+  at: At,
+  written: ReadonlyArray<ChildPaths>
+): void => {
   if (written.length < 2) return
   const taken = new Set<string>()
   for (const paths of written) {
     if (paths.placed === undefined) continue
     for (const name of paths.placed) {
       if (taken.has(name)) {
-        throw new Error(`${pathAt(at)} places its slot ${name} twice, in the view it gives ${pathAt(paths.at)}`)
+        throw new Error(
+          `${pathAt(at)} places its slot ${name} twice, in the view it gives ${
+            pathAt(paths.at)
+          }`
+        )
       }
       taken.add(name)
     }
@@ -255,7 +299,10 @@ export const checkAuthorPlacements = (at: At, written: ReadonlyArray<ChildPaths>
 }
 
 /** @internal */
-export const checkAuthorWrites = (at: At, written: ReadonlyArray<ChildPaths>): void => {
+export const checkAuthorWrites = (
+  at: At,
+  written: ReadonlyArray<ChildPaths>
+): void => {
   if (written.length < 2) return
   const taken = new Set<string>()
   for (const paths of written) {
@@ -264,7 +311,9 @@ export const checkAuthorWrites = (at: At, written: ReadonlyArray<ChildPaths>): v
       for (const child of byKey.values()) {
         if (child.alive === undefined) continue
         const named = segment(child)
-        if (taken.has(named)) throw new Error(`${pathAt(at)} writes ${named} twice in one render`)
+        if (taken.has(named)) {
+          throw new Error(`${pathAt(at)} writes ${named} twice in one render`)
+        }
         taken.add(named)
       }
     }

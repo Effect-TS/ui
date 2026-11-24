@@ -49,7 +49,10 @@ export const GuideFrontmatter = Schema.Struct({
 // raw HTML, reference-style links, a `javascript:` URL, an unknown island,
 // or an attribute its schema rejects. The plugin is typed structurally, so
 // `@effect/ui` doesn't depend on `vite`.
-export const guides = markdown({ islands: GuideIslands, frontmatter: GuideFrontmatter })
+export const guides = markdown({
+  islands: GuideIslands,
+  frontmatter: GuideFrontmatter
+})
 
 // ---------------------------------------------------------------------------
 // Rendering a page with islands
@@ -78,7 +81,10 @@ export const GuidePageNoDeps = Component.define({
         // unstyled semantic element from `Markdown.defaultViews`.
         views: {
           CodeBlock: (h, { language, value }) =>
-            h.pre.attr("data-language", language._tag === "Some" ? language.value : "text")
+            h.pre.attr(
+              "data-language",
+              language._tag === "Some" ? language.value : "text"
+            )
               .children(h.code.children(value))
         },
         // `islandsFor` needs a view for every definition, and each view
@@ -86,7 +92,8 @@ export const GuidePageNoDeps = Component.define({
         // directive the page has no view for renders nothing and warns once.
         islands: Markdown.islandsFor(GuideIslands, {
           // A container island gets its rendered Markdown as `content`.
-          Callout: (h, { tone }, content) => h.aside.attr("data-tone", tone).children(content),
+          Callout: (h, { tone }, content) =>
+            h.aside.attr("data-tone", tone).children(content),
           // Islands are ordinary children, so they keep their own state and
           // their services surface on this page. The last argument counts
           // this island's earlier occurrences in the document, which keys
@@ -95,7 +102,12 @@ export const GuidePageNoDeps = Component.define({
             NoteActivity.render(h, {
               key: `activity-${occurrence}`,
               props: { noteId: note },
-              fallback: (result) => h.p(AsyncResult.isInitial(result) ? "Loading activity…" : "No activity.")
+              fallback: (result) =>
+                h.p(
+                  AsyncResult.isInitial(result)
+                    ? "Loading activity…"
+                    : "No activity."
+                )
             })
         })
       })
@@ -104,7 +116,9 @@ export const GuidePageNoDeps = Component.define({
 
 // `GuidePageNoDeps` requires `NoteActivity`, from the island, as it would
 // from any child. Provide it as usual.
-export const GuidePage = GuidePageNoDeps.pipe(Component.provide(NoteActivity.toLayer(ActivityLog)))
+export const GuidePage = GuidePageNoDeps.pipe(
+  Component.provide(NoteActivity.toLayer(ActivityLog))
+)
 
 // ---------------------------------------------------------------------------
 // Parsing Markdown at runtime

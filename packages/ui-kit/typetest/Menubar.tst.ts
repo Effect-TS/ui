@@ -12,10 +12,18 @@ it("takes the orientation, modal, disabled and loopFocus props, all optional", (
   const view = () => h.div
   expect(Menubar).type.toBeCallableWith(h, { view })
   expect(Menubar).type.toBeCallableWith(h, {
-    props: { orientation: "vertical", modal: false, disabled: true, loopFocus: false },
+    props: {
+      orientation: "vertical",
+      modal: false,
+      disabled: true,
+      loopFocus: false
+    },
     view
   })
-  expect(Menubar).type.not.toBeCallableWith(h, { props: { orientation: "diagonal" }, view })
+  expect(Menubar).type.not.toBeCallableWith(h, {
+    props: { orientation: "diagonal" },
+    view
+  })
 })
 
 it("draws its root and reads its state", () => {

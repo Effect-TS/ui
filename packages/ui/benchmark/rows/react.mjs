@@ -26,7 +26,11 @@ const Cells = ({ row, dispatch }) => [
   e(
     "td",
     { key: "label", className: "col-md-4" },
-    e("a", { onClick: () => dispatch({ _tag: "Select", id: row.id }) }, row.label)
+    e(
+      "a",
+      { onClick: () => dispatch({ _tag: "Select", id: row.id }) },
+      row.label
+    )
   ),
   e(
     "td",
@@ -34,17 +38,25 @@ const Cells = ({ row, dispatch }) => [
     e(
       "a",
       { onClick: () => dispatch({ _tag: "Remove", id: row.id }) },
-      e("span", { className: "glyphicon glyphicon-remove", "aria-hidden": "true" })
+      e("span", {
+        className: "glyphicon glyphicon-remove",
+        "aria-hidden": "true"
+      })
     )
   ),
   e("td", { key: "pad", className: "col-md-6" })
 ]
 
 const Row = ({ row, selected, dispatch }) =>
-  e("tr", { className: selected ? "danger" : undefined }, Cells({ row, dispatch }))
+  e(
+    "tr",
+    { className: selected ? "danger" : undefined },
+    Cells({ row, dispatch })
+  )
 const MemoRow = memo(Row)
 
-const table = (rows) => e("table", { className: "table" }, e("tbody", null, rows))
+const table = (rows) =>
+  e("table", { className: "table" }, e("tbody", null, rows))
 
 const Plain = ({ bind }) => {
   const [model, dispatch] = useReducer(update, undefined, init)
@@ -52,7 +64,10 @@ const Plain = ({ bind }) => {
   return table(model.rows.map((row) =>
     e(
       "tr",
-      { key: row.id, className: row.id === model.selected ? "danger" : undefined },
+      {
+        key: row.id,
+        className: row.id === model.selected ? "danger" : undefined
+      },
       Cells({ row, dispatch })
     )
   ))
@@ -62,7 +77,14 @@ const withRow = (component) => ({ bind }) => {
   const [model, dispatch] = useReducer(update, undefined, init)
   bind(dispatch)
   return table(
-    model.rows.map((row) => e(component, { key: row.id, row, selected: row.id === model.selected, dispatch }))
+    model.rows.map((row) =>
+      e(component, {
+        key: row.id,
+        row,
+        selected: row.id === model.selected,
+        dispatch
+      })
+    )
   )
 }
 

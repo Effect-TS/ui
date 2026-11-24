@@ -142,7 +142,10 @@ import * as HtmlHead from "./HtmlHead.ts"
 export class Host extends Context.Service<Host, {
   readonly focus: (element: globalThis.Element, options: FocusOptions) => void
   readonly blur: (element: globalThis.Element) => void
-  readonly scrollIntoView: (element: globalThis.Element, options: ScrollOptions) => void
+  readonly scrollIntoView: (
+    element: globalThis.Element,
+    options: ScrollOptions
+  ) => void
   readonly measure: (element: globalThis.Element) => Rect
   readonly select: (element: globalThis.Element) => void
   readonly requestSubmit: (element: globalThis.Element) => boolean
@@ -526,7 +529,15 @@ export type DropEffect = "copy" | "move" | "link"
  * @category events
  * @since 0.1.0
  */
-export type EffectAllowed = "none" | "copy" | "copyLink" | "copyMove" | "link" | "linkMove" | "move" | "all"
+export type EffectAllowed =
+  | "none"
+  | "copy"
+  | "copyLink"
+  | "copyMove"
+  | "link"
+  | "linkMove"
+  | "move"
+  | "all"
 
 /**
  * A drag source, set with `draggable`: the strings it carries by type, and
@@ -679,10 +690,17 @@ export interface Events {
  */
 export type EventsOf<K extends string> =
   & Events
-  & (K extends "input" ? { readonly input: InputPayload; readonly change: InputPayload } : {})
-  & (K extends "textarea" | "select" ? { readonly input: ValuePayload; readonly change: ValuePayload } : {})
-  & (K extends "input" | "textarea" ? { readonly compositionend: CompositionPayload } : {})
-  & (K extends "form" ? { readonly submit: SubmitPayload; readonly reset: {} } : {})
+  & (K extends "input"
+    ? { readonly input: InputPayload; readonly change: InputPayload }
+    : {})
+  & (K extends "textarea" | "select"
+    ? { readonly input: ValuePayload; readonly change: ValuePayload }
+    : {})
+  & (K extends "input" | "textarea"
+    ? { readonly compositionend: CompositionPayload }
+    : {})
+  & (K extends "form" ? { readonly submit: SubmitPayload; readonly reset: {} }
+    : {})
   & (K extends "details" ? { readonly toggle: TogglePayload } : {})
   & (K extends "dialog" ? {
       readonly toggle: TogglePayload
@@ -690,7 +708,9 @@ export type EventsOf<K extends string> =
       readonly cancel: { readonly cancelable: boolean }
     }
     : {})
-  & (K extends "img" | "iframe" | "video" | "audio" ? { readonly load: {}; readonly error: {} } : {})
+  & (K extends "img" | "iframe" | "video" | "audio"
+    ? { readonly load: {}; readonly error: {} }
+    : {})
 
 // ---------------------------------------------------------------------------
 // elements
@@ -703,7 +723,10 @@ export type EventsOf<K extends string> =
  * @category models
  * @since 0.1.0
  */
-export type ValueNode = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+export type ValueNode =
+  | HTMLInputElement
+  | HTMLTextAreaElement
+  | HTMLSelectElement
 
 /**
  * The builder of a void HTML element, such as `h.input` or `h.br`: the core
@@ -743,7 +766,9 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  override onMount(mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>): never
+  override onMount(
+    mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>
+  ): never
   override onMount(mount: View.Mount<Msg>): any {
     return (super.onMount as any)(mount)
   }
@@ -809,10 +834,14 @@ export class VoidElement<
       if (!value) continue
       const property = name.startsWith("--")
         ? name
-        : name.replace(/[A-Z]/g, (letter) => "-" + letter.toLowerCase()).replace(/^(webkit|moz|ms)-/, "-$1-")
+        : name.replace(/[A-Z]/g, (letter) => "-" + letter.toLowerCase())
+          .replace(/^(webkit|moz|ms)-/, "-$1-")
       declarations.push(property + ":" + value)
     }
-    return this.attr("style", declarations.length === 0 ? undefined : declarations.join(";"))
+    return this.attr(
+      "style",
+      declarations.length === 0 ? undefined : declarations.join(";")
+    )
   }
   /**
    * Sets the `class` attribute from class tokens, skipping `false`, `null`,
@@ -843,7 +872,9 @@ export class VoidElement<
    */
   class(...tokens: ReadonlyArray<ClassToken>): this {
     // One token, the common call, is the value as it is.
-    const value = tokens.length === 1 ? tokens[0] || "" : joinClassTokens(tokens)
+    const value = tokens.length === 1
+      ? tokens[0] || ""
+      : joinClassTokens(tokens)
     return this.attr("class", value === "" ? undefined : value)
   }
   /**
@@ -863,7 +894,10 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  value<N extends ValueNode>(this: VoidElement<Msg, R, E, N>, value: string): this {
+  value<N extends ValueNode>(
+    this: VoidElement<Msg, R, E, N>,
+    value: string
+  ): this {
     return this.prop("value", value) as any
   }
   /**
@@ -871,7 +905,10 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  checked(this: VoidElement<Msg, R, E, HTMLInputElement>, checked: boolean): this {
+  checked(
+    this: VoidElement<Msg, R, E, HTMLInputElement>,
+    checked: boolean
+  ): this {
     return this.prop("checked", checked) as any
   }
   /**
@@ -879,7 +916,10 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  selected(this: VoidElement<Msg, R, E, HTMLOptionElement>, selected: boolean): this {
+  selected(
+    this: VoidElement<Msg, R, E, HTMLOptionElement>,
+    selected: boolean
+  ): this {
     return this.prop("selected", selected) as any
   }
   /**
@@ -889,7 +929,10 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  open<N extends HTMLDetailsElement | HTMLDialogElement>(this: VoidElement<Msg, R, E, N>, open: boolean): this {
+  open<N extends HTMLDetailsElement | HTMLDialogElement>(
+    this: VoidElement<Msg, R, E, N>,
+    open: boolean
+  ): this {
     return this.prop("open", open) as any
   }
   /**
@@ -920,7 +963,10 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  modal<N extends HTMLDialogElement>(this: VoidElement<Msg, R, E, N>, modal: boolean): this {
+  modal<N extends HTMLDialogElement>(
+    this: VoidElement<Msg, R, E, N>,
+    modal: boolean
+  ): this {
     return this.prop("open", modal ? "modal" : false) as any
   }
   /**
@@ -959,7 +1005,10 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  onClick(handler: View.Handler<Msg, PointerPayload>, options?: View.EventOptions | undefined): this {
+  onClick(
+    handler: View.Handler<Msg, PointerPayload>,
+    options?: View.EventOptions | undefined
+  ): this {
     return this.on("click" as any, handler as any, options)
   }
   /**
@@ -967,7 +1016,10 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  onDoubleClick(handler: View.Handler<Msg, PointerPayload>, options?: View.EventOptions | undefined): this {
+  onDoubleClick(
+    handler: View.Handler<Msg, PointerPayload>,
+    options?: View.EventOptions | undefined
+  ): this {
     return this.on("dblclick" as any, handler as any, options)
   }
   /**
@@ -975,7 +1027,10 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  onKeyDown(handler: View.Handler<Msg, KeyPayload>, options?: View.EventOptions | undefined): this {
+  onKeyDown(
+    handler: View.Handler<Msg, KeyPayload>,
+    options?: View.EventOptions | undefined
+  ): this {
     return this.on("keydown" as any, handler as any, options)
   }
   /**
@@ -983,7 +1038,10 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  onKeyUp(handler: View.Handler<Msg, KeyPayload>, options?: View.EventOptions | undefined): this {
+  onKeyUp(
+    handler: View.Handler<Msg, KeyPayload>,
+    options?: View.EventOptions | undefined
+  ): this {
     return this.on("keyup" as any, handler as any, options)
   }
   /**
@@ -1010,7 +1068,10 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  onPaste(handler: View.Handler<Msg, PastePayload>, options?: View.EventOptions | undefined): this {
+  onPaste(
+    handler: View.Handler<Msg, PastePayload>,
+    options?: View.EventOptions | undefined
+  ): this {
     return this.on("paste" as any, handler as any, options)
   }
   /**
@@ -1025,8 +1086,13 @@ export class VoidElement<
     data: Readonly<Record<string, string>>,
     options?: { readonly effectAllowed?: EffectAllowed | undefined } | undefined
   ): this {
-    const source: DragSourceOptions = { data, effectAllowed: options?.effectAllowed }
-    return View.withFields(this, { eventOptions: { ...this.eventOptions, dragstart: source } }).attr(
+    const source: DragSourceOptions = {
+      data,
+      effectAllowed: options?.effectAllowed
+    }
+    return View.withFields(this, {
+      eventOptions: { ...this.eventOptions, dragstart: source }
+    }).attr(
       "draggable",
       "true"
     )
@@ -1038,7 +1104,11 @@ export class VoidElement<
    * @since 0.1.0
    */
   onDragStart(handler: View.Handler<Msg, {}>): this {
-    return this.on("dragstart" as any, handler as any, this.eventOptions.dragstart)
+    return this.on(
+      "dragstart" as any,
+      handler as any,
+      this.eventOptions.dragstart
+    )
   }
   /**
    * Sugar for `on("dragend", handler)`, on the drag's source: `dropped` is
@@ -1079,7 +1149,10 @@ export class VoidElement<
    *
    * @since 0.1.0
    */
-  onDrop(handler: View.Handler<Msg, DropPayload>, options: Omit<DropTargetOptions, "preventDefault">): this {
+  onDrop(
+    handler: View.Handler<Msg, DropPayload>,
+    options: Omit<DropTargetOptions, "preventDefault">
+  ): this {
     const target: DropTargetOptions = { ...options, preventDefault: "always" }
     return this.on("drop" as any, handler as any, target)
   }
@@ -1246,7 +1319,9 @@ export class Element<
    *
    * @since 0.1.0
    */
-  override onMount(mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>): never
+  override onMount(
+    mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>
+  ): never
   override onMount(mount: View.Mount<Msg>): any {
     return (super.onMount as any)(mount)
   }
@@ -1302,7 +1377,9 @@ export type ClassToken = string | false | null | undefined
 export type StyleValue = string | false | null | undefined
 
 type StyleProperty = {
-  [K in keyof CSSStyleDeclaration]: K extends string ? CSSStyleDeclaration[K] extends string ? K : never : never
+  [K in keyof CSSStyleDeclaration]: K extends string
+    ? CSSStyleDeclaration[K] extends string ? K : never
+    : never
 }[keyof CSSStyleDeclaration]
 
 /**
@@ -1319,7 +1396,10 @@ type StyleProperty = {
  * @since 0.1.0
  */
 export type Style =
-  & { readonly [K in Exclude<StyleProperty, "cssText" | "cssFloat"> | "float"]?: StyleValue }
+  & {
+    readonly [K in Exclude<StyleProperty, "cssText" | "cssFloat"> | "float"]?:
+      StyleValue
+  }
   & { readonly [K in `--${string}`]?: StyleValue }
 
 /**
@@ -1352,7 +1432,8 @@ export type Style =
  * @category attributes
  * @since 0.1.0
  */
-export const classNames = (...tokens: ReadonlyArray<ClassToken>): string => joinClassTokens(tokens)
+export const classNames = (...tokens: ReadonlyArray<ClassToken>): string =>
+  joinClassTokens(tokens)
 
 const joinClassTokens = (tokens: ReadonlyArray<ClassToken>): string => {
   let out = ""
@@ -1468,7 +1549,16 @@ export const containerTags = [
  * @category vocabulary
  * @since 0.1.0
  */
-export const voidTags = ["br", "col", "hr", "img", "input", "source", "track", "wbr"] as const
+export const voidTags = [
+  "br",
+  "col",
+  "hr",
+  "img",
+  "input",
+  "source",
+  "track",
+  "wbr"
+] as const
 
 /**
  * A tag that takes children.
@@ -1499,8 +1589,20 @@ export type VoidTag = typeof voidTags[number]
  * @since 0.1.0
  */
 export type Tags<Msg> =
-  & { readonly [K in ContainerTag]: View.Shorthand<Element<Msg, never, EventsOf<K>, HTMLElementTagNameMap[K], K>> }
-  & { readonly [K in VoidTag]: VoidElement<Msg, never, EventsOf<K>, HTMLElementTagNameMap[K], K> }
+  & {
+    readonly [K in ContainerTag]: View.Shorthand<
+      Element<Msg, never, EventsOf<K>, HTMLElementTagNameMap[K], K>
+    >
+  }
+  & {
+    readonly [K in VoidTag]: VoidElement<
+      Msg,
+      never,
+      EventsOf<K>,
+      HTMLElementTagNameMap[K],
+      K
+    >
+  }
 
 /**
  * The type-level vocabulary, for `View.Register`.
@@ -1548,7 +1650,9 @@ export const head: View.HeadFold<HtmlHead.Entry, HtmlHead.HtmlHead> = {
   title: (head) => head.title
 }
 
-const makeTags = (): Readonly<Record<string, VoidElement<any, any, any, any>>> => {
+const makeTags = (): Readonly<
+  Record<string, VoidElement<any, any, any, any>>
+> => {
   const out: Record<string, VoidElement<any, any, any, any>> = {}
   for (const tag of containerTags) out[tag] = View.shorthand(new Element(tag))
   for (const tag of voidTags) out[tag] = new VoidElement(tag)
@@ -1564,7 +1668,8 @@ const makeTags = (): Readonly<Record<string, VoidElement<any, any, any, any>>> =
  * @category vocabulary
  * @since 0.1.0
  */
-export const tags: Readonly<Record<string, VoidElement<any, any, any, any>>> = makeTags()
+export const tags: Readonly<Record<string, VoidElement<any, any, any, any>>> =
+  makeTags()
 
 /**
  * The vocabulary alone: its name, its tags and its head fold.
@@ -1617,4 +1722,5 @@ export const vocabulary: View.Vocabulary<Elements> = { name, tags, head }
 export const ref = <K extends keyof HTMLElementTagNameMap>(
   name: string,
   _tag: K
-): Renderer.Ref<HTMLElementTagNameMap[K]> => Renderer.ref<HTMLElementTagNameMap[K]>(name)
+): Renderer.Ref<HTMLElementTagNameMap[K]> =>
+  Renderer.ref<HTMLElementTagNameMap[K]>(name)

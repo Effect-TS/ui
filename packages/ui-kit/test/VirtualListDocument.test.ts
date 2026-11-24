@@ -15,9 +15,14 @@ import { click, container, tick } from "./utils/document.ts"
 const itemSize = 20
 
 const padding = (element: Element, side: "start" | "end") =>
-  Number(new RegExp("padding-block-" + side + ":([\\d.]+)px").exec(element.getAttribute("style") ?? "")?.[1] ?? 0)
+  Number(
+    new RegExp("padding-block-" + side + ":([\\d.]+)px").exec(
+      element.getAttribute("style") ?? ""
+    )?.[1] ?? 0
+  )
 
-const rect = (top: number, height: number, width = 300) => DOMRect.fromRect({ x: 0, y: top, width, height })
+const rect = (top: number, height: number, width = 300) =>
+  DOMRect.fromRect({ x: 0, y: top, width, height })
 
 const layout = Effect.acquireRelease(
   Effect.sync(() => {
@@ -26,20 +31,32 @@ const layout = Effect.acquireRelease(
     const scroller = () => document.querySelector<HTMLElement>(".viewport")!
     const list = () => document.querySelector<HTMLElement>(".list")!
     const listHeight = () =>
-      padding(list(), "start") + list().querySelectorAll(".item").length * itemSize + padding(list(), "end")
-    const top = () => (stored = Math.max(0, Math.min(stored, listHeight() - 100)))
+      padding(list(), "start") +
+      list().querySelectorAll(".item").length * itemSize +
+      padding(list(), "end")
+    const top =
+      () => (stored = Math.max(0, Math.min(stored, listHeight() - 100)))
     Element.prototype.getBoundingClientRect = function(this: Element) {
       if (this.classList.contains("viewport")) return rect(0, 100)
       if (this.classList.contains("list")) return rect(-top(), listHeight())
       if (this.classList.contains("item")) {
-        return rect(-top() + Number(this.getAttribute("data-index")) * itemSize, itemSize)
+        return rect(
+          -top() + Number(this.getAttribute("data-index")) * itemSize,
+          itemSize
+        )
       }
       return original.call(this)
     }
     const install = () => {
       const element = scroller()
-      Object.defineProperty(element, "clientHeight", { configurable: true, value: 100 })
-      Object.defineProperty(element, "scrollHeight", { configurable: true, get: listHeight })
+      Object.defineProperty(element, "clientHeight", {
+        configurable: true,
+        value: 100
+      })
+      Object.defineProperty(element, "scrollHeight", {
+        configurable: true,
+        get: listHeight
+      })
       Object.defineProperty(element, "scrollTop", {
         configurable: true,
         get: top,
@@ -60,7 +77,8 @@ const layout = Effect.acquireRelease(
     const relayout = () => scroller().dispatchEvent(new Event("scroll"))
     return { install, scrollTo, relayout, scrollTop: top, original }
   }),
-  ({ original }) => Effect.sync(() => (Element.prototype.getBoundingClientRect = original))
+  ({ original }) =>
+    Effect.sync(() => (Element.prototype.getBoundingClientRect = original))
 )
 
 const Steps = Effect.fnUntraced(function*(
@@ -94,7 +112,10 @@ const Steps = Effect.fnUntraced(function*(
               : virtualList.viewport(h.div.class("viewport"))).children(
                 virtualList.list(h.ul.class("list")).children(
                   virtualList.items.map((index) =>
-                    virtualList.item({ element: h.li.class("item").key(String(index)), index }).children(
+                    virtualList.item({
+                      element: h.li.class("item").key(String(index)),
+                      index
+                    }).children(
                       h.button.children("Item " + index)
                     )
                   )
@@ -113,8 +134,13 @@ const Steps = Effect.fnUntraced(function*(
     yield* tick
     yield* tick
   })
-  const indices = () => Array.from(app.querySelectorAll(".item"), (item) => Number(item.getAttribute("data-index")))
-  const item = (index: number) => app.querySelector<HTMLElement>(`.item[data-index="${index}"]`)!
+  const indices = () =>
+    Array.from(
+      app.querySelectorAll(".item"),
+      (item) => Number(item.getAttribute("data-index"))
+    )
+  const item = (index: number) =>
+    app.querySelector<HTMLElement>(`.item[data-index="${index}"]`)!
   return { ...geometry, next, indices, item, events }
 })
 
@@ -126,7 +152,8 @@ const toKey = (key: string, id?: string): VirtualListScrollTo => ({
   ...(id === undefined ? {} : { id })
 })
 
-const span = (start: number, end: number) => Array.from({ length: end - start + 1 }, (_, i) => start + i)
+const span = (start: number, end: number) =>
+  Array.from({ length: end - start + 1 }, (_, i) => start + i)
 
 describe("VirtualList in a document", { concurrent: false }, () => {
   it.effect("keeps the focused item rendered while the list scrolls away from it", () =>
@@ -151,9 +178,15 @@ describe("VirtualList in a document", { concurrent: false }, () => {
     Effect.gen(function*() {
       const { indices, next, scrollTo, scrollTop } = yield* Steps([
         { scrollContainer: "nearest" },
-        { scrollContainer: "nearest", scrollTo: { target: VirtualListScrollTarget.Index({ index: 500 }) } }
+        {
+          scrollContainer: "nearest",
+          scrollTo: { target: VirtualListScrollTarget.Index({ index: 500 }) }
+        }
       ], { ownViewport: true })
-      document.querySelector(".viewport")!.setAttribute("style", "overflow-y:auto")
+      document.querySelector(".viewport")!.setAttribute(
+        "style",
+        "overflow-y:auto"
+      )
       yield* tick
       scrollTo(1000)
       yield* tick
@@ -165,7 +198,13 @@ describe("VirtualList in a document", { concurrent: false }, () => {
   it.effect("scrolls to a request once its items load, after the parent drops it", () =>
     Effect.gen(function*() {
       const { next, scrollTop } = yield* Steps([
-        { count: 0, scrollTo: { target: VirtualListScrollTarget.Index({ index: 500 }), align: "end" } },
+        {
+          count: 0,
+          scrollTo: {
+            target: VirtualListScrollTarget.Index({ index: 500 }),
+            align: "end"
+          }
+        },
         {}
       ])
       yield* next
@@ -175,8 +214,14 @@ describe("VirtualList in a document", { concurrent: false }, () => {
   it.effect("scrolls to a newer request that replaced the first while the list was empty", () =>
     Effect.gen(function*() {
       const { next, scrollTop } = yield* Steps([
-        { count: 0, scrollTo: { target: VirtualListScrollTarget.Index({ index: 500 }) } },
-        { count: 0, scrollTo: { target: VirtualListScrollTarget.Index({ index: 100 }) } },
+        {
+          count: 0,
+          scrollTo: { target: VirtualListScrollTarget.Index({ index: 500 }) }
+        },
+        {
+          count: 0,
+          scrollTo: { target: VirtualListScrollTarget.Index({ index: 100 }) }
+        },
         {}
       ])
       yield* next
@@ -262,7 +307,9 @@ describe("VirtualList in a document", { concurrent: false }, () => {
   it.effect("keeps the item in view in place when keyed items are added before it", () =>
     Effect.gen(function*() {
       const keys = Array.from({ length: 1000 }, (_, i) => "k" + i)
-      const added = (count: number) => [...Array.from({ length: count }, (_, i) => "n" + i), ...keys]
+      const added = (
+        count: number
+      ) => [...Array.from({ length: count }, (_, i) => "n" + i), ...keys]
       const { next, scrollTo, scrollTop } = yield* Steps([
         { keys, scrollTo: toKey("k100") },
         { count: 1010, keys: added(10), scrollTo: toKey("k100") },
@@ -280,10 +327,15 @@ describe("VirtualList in a document", { concurrent: false }, () => {
 
   it.effect("reports a list that grows without a scroll once with trackScroll, and not without it", () =>
     Effect.gen(function*() {
-      const tracked = yield* Steps([{ trackScroll: true }, { trackScroll: true, count: 1001 }])
+      const tracked = yield* Steps([{ trackScroll: true }, {
+        trackScroll: true,
+        count: 1001
+      }])
       tracked.events.length = 0
       yield* tracked.next
-      assert.deepStrictEqual(tracked.events.map((event) => event.length), [1001 * itemSize])
+      assert.deepStrictEqual(tracked.events.map((event) => event.length), [
+        1001 * itemSize
+      ])
 
       const quiet = yield* Steps([{}, { count: 1001 }])
       quiet.events.length = 0

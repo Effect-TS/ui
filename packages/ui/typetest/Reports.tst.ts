@@ -20,7 +20,8 @@ const Provider = Component.define({
     receives: ["Completed"],
     collects: {
       schema: Schema.Boolean,
-      onChange: (collected) => ProviderMessage.ChangedOpen({ open: collected.includes(true) })
+      onChange: (collected) =>
+        ProviderMessage.ChangedOpen({ open: collected.includes(true) })
     }
   }
 }).make({
@@ -68,7 +69,9 @@ const Tip = Component.define({
   init: () => ({ hovered: false }),
   update: ($) => $.send(Provider, { _tag: "Completed" }),
   view: (h) => {
-    expect(h.shared.provider).type.toBe<{ open: boolean; instant: boolean } | undefined>()
+    expect(h.shared.provider).type.toBe<
+      { open: boolean; instant: boolean } | undefined
+    >()
     return h.span()
   }
 })
@@ -122,15 +125,27 @@ describe("reports", () => {
     })
     const widened = sender.make({
       init: () => null,
-      update: ($): Component.Step<null, typeof TipMessage.Type, never, Component.Shared<"Provider">> =>
-        $.send(Provider, { _tag: "Completed" }),
+      update: (
+        $
+      ): Component.Step<
+        null,
+        typeof TipMessage.Type,
+        never,
+        Component.Shared<"Provider">
+      > => $.send(Provider, { _tag: "Completed" }),
       view: (h) => h.text("")
     })
-    expect<Component.Requirements<typeof widened>>().type.toBe<Component.Shared<"Provider">>()
-    expect<Component.Headless.Requirements<typeof sendsB>>().type.toBe<Component.Shared<"Provider">>()
+    expect<Component.Requirements<typeof widened>>().type.toBe<
+      Component.Shared<"Provider">
+    >()
+    expect<Component.Headless.Requirements<typeof sendsB>>().type.toBe<
+      Component.Shared<"Provider">
+    >()
   })
   it("keeps a supplied map with a string index", () => {
-    const reads: Readonly<Record<string, typeof Provider>> = { provider: Provider }
+    const reads: Readonly<Record<string, typeof Provider>> = {
+      provider: Provider
+    }
     const Indexed = Component.define({
       name: "Indexed",
       scoped: false,
@@ -143,11 +158,15 @@ describe("reports", () => {
         update: ($) => $.model,
         view: (h) => {
           // `| undefined` from the index signature, as for any record.
-          expect(h.shared["provider"]).type.toBe<{ open: boolean; instant: boolean } | undefined>()
+          expect(h.shared["provider"]).type.toBe<
+            { open: boolean; instant: boolean } | undefined
+          >()
           return h.text("")
         }
       })
-    expect<Component.Requirements<typeof Indexed>>().type.toBe<Component.Shared.Of<typeof Provider>>()
+    expect<Component.Requirements<typeof Indexed>>().type.toBe<
+      Component.Shared.Of<typeof Provider>
+    >()
   })
   it("keeps the required owner of a child below an optional read", () => {
     const Child = Component.define({
@@ -157,7 +176,11 @@ describe("reports", () => {
       message: Schema.Never,
       shared: { p: Provider }
     })
-      .make({ init: () => null, update: ($) => $.model, view: (h) => h.text("") })
+      .make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.text("")
+      })
     const Wrapper = Component.define({
       name: "Wrapper",
       scoped: false,
@@ -169,7 +192,9 @@ describe("reports", () => {
       update: ($) => $.send(Provider, { _tag: "Completed" }),
       view: (h) => Child(h, { key: "c" })
     })
-    expect<Component.Requirements<typeof Wrapper>>().type.toBe<Component.Shared.Of<typeof Provider>>()
+    expect<Component.Requirements<typeof Wrapper>>().type.toBe<
+      Component.Shared.Of<typeof Provider>
+    >()
   })
   it("rejects collects without its onChange", () => {
     Component.define({
@@ -238,7 +263,10 @@ describe("reports", () => {
 describe("collected", () => {
   it("takes the owner's reports in a scene of the owner", () => {
     Effect.gen(function*() {
-      const s = yield* Scene.make(Provider, {}, { elements: Html, view: (_, h) => h.div })
+      const s = yield* Scene.make(Provider, {}, {
+        elements: Html,
+        view: (_, h) => h.div
+      })
       expect(s.collected).type.toBeCallableWith([true, false])
       expect(s.collected).type.not.toBeCallableWith(["open"])
     })

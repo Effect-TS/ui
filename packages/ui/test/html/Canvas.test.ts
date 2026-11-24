@@ -9,7 +9,10 @@ const recorder = () => {
   const state: Record<string, unknown> = { globalAlpha: 1 }
   const context = new Proxy({}, {
     get: (_, name: string) =>
-      name in state ? state[name] : (...args: Array<unknown>) => void calls.push(`${name}(${args.join(",")})`),
+      name in state
+        ? state[name]
+        : (...args: Array<unknown>) =>
+          void calls.push(`${name}(${args.join(",")})`),
     set: (_, name: string, value) => {
       state[name] = value
       calls.push(`${name}=${value}`)
@@ -28,14 +31,23 @@ const Message = UiSchema.TaggedEnum({
 const Dots = Component.define({
   name: "Dots",
   scoped: false,
-  model: Schema.Struct({ dots: Schema.Array(Canvas.Point), bumps: Schema.Number }),
+  model: Schema.Struct({
+    dots: Schema.Array(Canvas.Point),
+    bumps: Schema.Number
+  }),
   message: Message,
   elements: Html
 }).make({
   init: () => ({ dots: [], bumps: 0 }),
   update: {
-    Pressed: ($, { x, y }) => ({ ...$.model, dots: [...$.model.dots, { x, y }] }),
-    Released: ($, { x, y }) => ({ ...$.model, dots: [...$.model.dots, { x, y }] }),
+    Pressed: ($, { x, y }) => ({
+      ...$.model,
+      dots: [...$.model.dots, { x, y }]
+    }),
+    Released: ($, { x, y }) => ({
+      ...$.model,
+      dots: [...$.model.dots, { x, y }]
+    }),
     Bumped: ($) => ({ ...$.model, bumps: $.model.bumps + 1 })
   },
   view: (h, model) =>
@@ -44,8 +56,11 @@ const Dots = Component.define({
         width: 300,
         height: 200,
         pixelRatio: 2,
-        shapes: model.dots.map(({ x, y }) => Canvas.Circle({ x, y, radius: 4, fill: "red" })),
-        onPointerDown: ({ pointerType, x, y }) => Message.Pressed({ x, y, pointerType }),
+        shapes: model.dots.map(({ x, y }) =>
+          Canvas.Circle({ x, y, radius: 4, fill: "red" })
+        ),
+        onPointerDown: ({ pointerType, x, y }) =>
+          Message.Pressed({ x, y, pointerType }),
         onPointerUp: ({ x, y }) => Message.Released({ x, y })
       }),
       h.output(String(model.bumps))
@@ -53,7 +68,9 @@ const Dots = Component.define({
 })
 
 describe("Canvas", { concurrent: false }, () => {
-  const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+  const tick = Effect.promise(() =>
+    new Promise<void>((resolve) => setTimeout(resolve, 30))
+  )
 
   it.effect("paints at the pixel ratio, repaints only a changed scene, and reports pointers in scene coordinates", () =>
     Effect.gen(function*() {
@@ -63,10 +80,13 @@ describe("Canvas", { concurrent: false }, () => {
         Effect.sync(() => {
           HTMLCanvasElement.prototype.getContext = (() => context) as any
         }),
-        () => Effect.sync(() => HTMLCanvasElement.prototype.getContext = getContext)
+        () =>
+          Effect.sync(() => HTMLCanvasElement.prototype.getContext = getContext)
       )
       const app = yield* Effect.acquireRelease(
-        Effect.sync(() => document.body.appendChild(document.createElement("div"))),
+        Effect.sync(() =>
+          document.body.appendChild(document.createElement("div"))
+        ),
         (element) => Effect.sync(() => element.remove())
       )
       const root = yield* BrowserHost.mountEffect(Dots, {}, app)
@@ -75,13 +95,22 @@ describe("Canvas", { concurrent: false }, () => {
       assert.deepStrictEqual([canvas.width, canvas.height], [600, 400])
       assert.strictEqual(canvas.style.width, "300px")
       assert.strictEqual(canvas.style.height, "200px")
-      assert.deepStrictEqual(calls.splice(0), ["setTransform(2,0,0,2,0,0)", "clearRect(0,0,300,200)"])
+      assert.deepStrictEqual(calls.splice(0), [
+        "setTransform(2,0,0,2,0,0)",
+        "clearRect(0,0,300,200)"
+      ])
 
       const captured: Array<number> = []
       canvas.setPointerCapture = (id) => void captured.push(id)
-      canvas.getBoundingClientRect = () => ({ left: 10, top: 20, width: 150, height: 100 }) as DOMRect
+      canvas.getBoundingClientRect = () =>
+        ({ left: 10, top: 20, width: 150, height: 100 }) as DOMRect
       canvas.dispatchEvent(
-        new PointerEvent("pointerdown", { clientX: 85, clientY: 70, pointerId: 7, pointerType: "pen" })
+        new PointerEvent("pointerdown", {
+          clientX: 85,
+          clientY: 70,
+          pointerId: 7,
+          pointerType: "pen"
+        })
       )
       yield* tick
       assert.deepStrictEqual(root.model()?.dots, [{ x: 150, y: 100 }])
@@ -102,9 +131,14 @@ describe("Canvas", { concurrent: false }, () => {
       assert.strictEqual(app.querySelector("output")!.textContent, "1")
       assert.deepStrictEqual(calls, [])
 
-      canvas.dispatchEvent(new PointerEvent("pointercancel", { clientX: 10, clientY: 20 }))
+      canvas.dispatchEvent(
+        new PointerEvent("pointercancel", { clientX: 10, clientY: 20 })
+      )
       yield* tick
-      assert.deepStrictEqual(root.model()?.dots, [{ x: 150, y: 100 }, { x: 0, y: 0 }])
+      assert.deepStrictEqual(root.model()?.dots, [{ x: 150, y: 100 }, {
+        x: 0,
+        y: 0
+      }])
     }).pipe(Effect.scoped))
 
   it("scenes are equal only when every nested shape and path command is", () => {
@@ -112,12 +146,21 @@ describe("Canvas", { concurrent: false }, () => {
     const line = (x: number) =>
       Canvas.Group({
         shapes: [
-          Canvas.Path({ commands: [Canvas.PathCommand.MoveTo({ x: 0, y: 0 }), Canvas.PathCommand.LineTo({ x, y: 1 })] })
+          Canvas.Path({
+            commands: [
+              Canvas.PathCommand.MoveTo({ x: 0, y: 0 }),
+              Canvas.PathCommand.LineTo({ x, y: 1 })
+            ]
+          })
         ]
       })
     assert.isTrue(same([line(1)], [line(1)]))
     assert.isFalse(same([line(1)], [line(2)]))
-    assert.isFalse(same([Canvas.Circle({ x: 0, y: 0, radius: 1 })], [Canvas.Rect({ x: 0, y: 0, width: 1, height: 1 })]))
+    assert.isFalse(
+      same([Canvas.Circle({ x: 0, y: 0, radius: 1 })], [
+        Canvas.Rect({ x: 0, y: 0, width: 1, height: 1 })
+      ])
+    )
   })
 
   it("paint draws paths, text and nested groups in order, each between save and restore", () => {
@@ -131,7 +174,14 @@ describe("Canvas", { concurrent: false }, () => {
             Canvas.PathCommand.MoveTo({ x: 0, y: 0 }),
             Canvas.PathCommand.LineTo({ x: 1, y: 0 }),
             Canvas.PathCommand.QuadTo({ cpx: 1, cpy: 1, x: 2, y: 2 }),
-            Canvas.PathCommand.BezierTo({ cp1x: 3, cp1y: 3, cp2x: 4, cp2y: 4, x: 5, y: 5 }),
+            Canvas.PathCommand.BezierTo({
+              cp1x: 3,
+              cp1y: 3,
+              cp2x: 4,
+              cp2y: 4,
+              x: 5,
+              y: 5
+            }),
             Canvas.PathCommand.Close()
           ],
           stroke: "blue",
@@ -144,8 +194,20 @@ describe("Canvas", { concurrent: false }, () => {
           rotate: 3,
           scale: { x: 2, y: 2 },
           shapes: [
-            Canvas.Group({ opacity: 0.5, shapes: [Canvas.Rect({ x: 0, y: 0, width: 1, height: 1, stroke: "red" })] }),
-            Canvas.Text({ x: 1, y: 1, content: "hi", font: "8px serif", align: "center", fill: "black" })
+            Canvas.Group({
+              opacity: 0.5,
+              shapes: [
+                Canvas.Rect({ x: 0, y: 0, width: 1, height: 1, stroke: "red" })
+              ]
+            }),
+            Canvas.Text({
+              x: 1,
+              y: 1,
+              content: "hi",
+              font: "8px serif",
+              align: "center",
+              fill: "black"
+            })
           ]
         })
       ]

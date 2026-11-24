@@ -18,8 +18,10 @@ const people: ReadonlyArray<Person> = [
 export const searchPeople = (searchText: string): ReadonlyArray<Person> => {
   const query = searchText.toLowerCase()
   return people.filter((person) =>
-    person.name.toLowerCase().includes(query) || person.role.toLowerCase().includes(query)
+    person.name.toLowerCase().includes(query) ||
+    person.role.toLowerCase().includes(query)
   )
 }
 
-export const findPerson = (id: number) => Array.findFirst(people, (person) => person.id === id)
+export const findPerson = (id: number) =>
+  Array.findFirst(people, (person) => person.id === id)

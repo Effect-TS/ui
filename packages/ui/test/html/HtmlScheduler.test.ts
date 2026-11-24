@@ -6,9 +6,13 @@ type Lane = "user-blocking" | "user-visible" | "background"
 
 const hostOrder = ["user-blocking", "user-visible", "background", "message"]
 
-const browser = (transport: "postTask" | "MessageChannel" | "setTimeout" = "postTask") => {
+const browser = (
+  transport: "postTask" | "MessageChannel" | "setTimeout" = "postTask"
+) => {
   let time = 0
-  const posted: Array<{ readonly run: () => void; readonly priority: Lane | "message" }> = []
+  const posted: Array<
+    { readonly run: () => void; readonly priority: Lane | "message" }
+  > = []
   vi.spyOn(performance, "now").mockImplementation(() => time)
   if (transport === "postTask") {
     vi.stubGlobal("scheduler", {
@@ -23,13 +27,22 @@ const browser = (transport: "postTask" | "MessageChannel" | "setTimeout" = "post
       "MessageChannel",
       class {
         readonly port1 = { onmessage: () => {} }
-        readonly port2 = { postMessage: () => posted.push({ run: () => this.port1.onmessage(), priority: "message" }) }
+        readonly port2 = {
+          postMessage: () =>
+            posted.push({
+              run: () => this.port1.onmessage(),
+              priority: "message"
+            })
+        }
       }
     )
   } else {
     vi.stubGlobal("scheduler", undefined)
     vi.stubGlobal("MessageChannel", undefined)
-    vi.stubGlobal("setTimeout", (run: () => void) => posted.push({ run, priority: "message" }))
+    vi.stubGlobal(
+      "setTimeout",
+      (run: () => void) => posted.push({ run, priority: "message" })
+    )
   }
   const scheduler = HtmlScheduler.make({ budget: 5 })
   return {
@@ -42,12 +55,17 @@ const browser = (transport: "postTask" | "MessageChannel" | "setTimeout" = "post
       Effect.sync(() => {
         time += ms
       }),
-    fork: <A>(effect: Effect.Effect<A>) => Effect.runFork(effect, { scheduler }),
+    fork: <A>(effect: Effect.Effect<A>) =>
+      Effect.runFork(effect, { scheduler }),
     page: (run: () => void) => posted.push({ run, priority: "user-visible" }),
     next: () => {
       const start = time
       const index = posted.reduce(
-        (best, task, i) => hostOrder.indexOf(task.priority) < hostOrder.indexOf(posted[best]!.priority) ? i : best,
+        (best, task, i) =>
+          hostOrder.indexOf(task.priority) <
+              hostOrder.indexOf(posted[best]!.priority)
+            ? i
+            : best,
         0
       )
       posted.splice(index, 1)[0]!.run()
@@ -69,12 +87,19 @@ describe("HtmlScheduler", { concurrent: false }, () => {
       const log: Array<string> = []
       fork(
         Effect.yieldNowWith(1).pipe(
-          Effect.andThen(Effect.forEach(Array.from({ length: 100 }), () => work(1), { discard: true })),
+          Effect.andThen(
+            Effect.forEach(Array.from({ length: 100 }), () => work(1), {
+              discard: true
+            })
+          ),
           Effect.andThen(Effect.sync(() => log.push("background")))
         )
       )
       fork(
-        Effect.forEach(Array.from({ length: 100 }), () => work(1), { concurrency: "unbounded", discard: true }).pipe(
+        Effect.forEach(Array.from({ length: 100 }), () => work(1), {
+          concurrency: "unbounded",
+          discard: true
+        }).pipe(
           Effect.andThen(Effect.sync(() => log.push("normal")))
         )
       )
@@ -94,17 +119,35 @@ describe("HtmlScheduler", { concurrent: false }, () => {
       for (let i = 0; i < 8; i++) yield* work(1)
       log.push("background")
     }))
-    fork(Effect.yieldNowWith(-1).pipe(Effect.andThen(Effect.sync(() => log.push("urgent")))))
+    fork(
+      Effect.yieldNowWith(-1).pipe(
+        Effect.andThen(Effect.sync(() => log.push("urgent")))
+      )
+    )
     page(() => log.push("page"))
-    fork(Effect.yieldNow.pipe(Effect.andThen(Effect.sync(() => log.push("normal")))))
-    expect(posted.map((task) => task.priority)).toEqual(["background", "user-blocking", "user-visible", "user-visible"])
+    fork(
+      Effect.yieldNow.pipe(
+        Effect.andThen(Effect.sync(() => log.push("normal")))
+      )
+    )
+    expect(posted.map((task) => task.priority)).toEqual([
+      "background",
+      "user-blocking",
+      "user-visible",
+      "user-visible"
+    ])
     next()
     next()
     next()
     next()
     expect(log).toEqual(["urgent", "page", "normal"])
-    fork(Effect.yieldNow.pipe(Effect.andThen(Effect.sync(() => log.push("later")))))
-    expect(posted.map((task) => task.priority)).toEqual(["background", "user-visible"])
+    fork(
+      Effect.yieldNow.pipe(Effect.andThen(Effect.sync(() => log.push("later"))))
+    )
+    expect(posted.map((task) => task.priority)).toEqual([
+      "background",
+      "user-visible"
+    ])
     while (posted.length > 0) next()
     expect(log).toEqual(["urgent", "page", "normal", "later", "background"])
   })
@@ -115,13 +158,26 @@ describe("HtmlScheduler", { concurrent: false }, () => {
     const woken = Deferred.makeUnsafe<void>()
     fork(
       Deferred.await(woken).pipe(
-        Effect.andThen(Effect.forEach(Array.from({ length: 10 }), () => work(1))),
+        Effect.andThen(
+          Effect.forEach(Array.from({ length: 10 }), () => work(1))
+        ),
         Effect.andThen(Effect.sync(() => log.push("woken")))
       )
     )
-    const background = (name: string, effect: Effect.Effect<unknown> = Effect.void) =>
-      fork(Effect.yieldNowWith(1).pipe(Effect.andThen(effect), Effect.andThen(Effect.sync(() => log.push(name)))))
-    background("first", Effect.forkDetach(Effect.sync(() => log.push("forked"))))
+    const background = (
+      name: string,
+      effect: Effect.Effect<unknown> = Effect.void
+    ) =>
+      fork(
+        Effect.yieldNowWith(1).pipe(
+          Effect.andThen(effect),
+          Effect.andThen(Effect.sync(() => log.push(name)))
+        )
+      )
+    background(
+      "first",
+      Effect.forkDetach(Effect.sync(() => log.push("forked")))
+    )
     background("second", Deferred.succeed(woken, undefined))
     background("third")
     expect(next()).toBe(0)
@@ -158,18 +214,28 @@ describe("HtmlScheduler", { concurrent: false }, () => {
       yield* Effect.yieldNowWith(1)
       fork(
         Effect.yieldNow.pipe(
-          Effect.andThen(Effect.forEach(Array.from({ length: 10 }), () => work(1))),
+          Effect.andThen(
+            Effect.forEach(Array.from({ length: 10 }), () => work(1))
+          ),
           Effect.andThen(Effect.sync(() => log.push("flushed-1")))
         )
       )
-      fork(Effect.yieldNow.pipe(Effect.andThen(Effect.sync(() => log.push("flushed-2")))))
+      fork(
+        Effect.yieldNow.pipe(
+          Effect.andThen(Effect.sync(() => log.push("flushed-2")))
+        )
+      )
       bg.currentDispatcher.flush()
       for (let i = 0; i < 3; i++) yield* work(1)
       log.push("background")
     }))
     next()
     expect(log).toEqual(["flushed-1", "flushed-2"])
-    fork(Effect.yieldNow.pipe(Effect.andThen(Effect.sync(() => log.push("normal")))))
+    fork(
+      Effect.yieldNow.pipe(
+        Effect.andThen(Effect.sync(() => log.push("normal")))
+      )
+    )
     while (posted.length > 0) next()
     expect(log).toEqual(["flushed-1", "flushed-2", "normal", "background"])
   })

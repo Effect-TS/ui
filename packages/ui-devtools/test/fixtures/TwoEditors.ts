@@ -3,7 +3,8 @@ import { BrowserHost, Html, HtmlSubscription } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { Effect, Redacted, Schema } from "effect"
 
-const wait = (ms: number) => Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+const wait = (ms: number) =>
+  Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, ms)))
 
 const EditorMessage = UiSchema.TaggedEnum({
   UpdatedDraft: { text: Schema.String },
@@ -18,7 +19,11 @@ const EditorMessage = UiSchema.TaggedEnum({
 class SaveNote extends Command.Service<SaveNote>()(
   "notes/SaveNote",
   {
-    args: { noteId: Schema.String, text: Schema.String, token: Schema.Redacted(Schema.String) },
+    args: {
+      noteId: Schema.String,
+      text: Schema.String,
+      token: Schema.Redacted(Schema.String)
+    },
     group: ["noteId"],
     mode: "switch"
   },
@@ -26,8 +31,13 @@ class SaveNote extends Command.Service<SaveNote>()(
     yield* wait(15)
     return ({ noteId }) =>
       Effect.gen(function*() {
-        yield* Effect.withSpan(wait(noteId === "n1" ? 40 : 100_000), "PUT /notes/" + noteId)
-        return EditorMessage.SucceededSaveNote({ savedAt: "2026-11-22T18:10:00Z" })
+        yield* Effect.withSpan(
+          wait(noteId === "n1" ? 40 : 100_000),
+          "PUT /notes/" + noteId
+        )
+        return EditorMessage.SucceededSaveNote({
+          savedAt: "2026-11-22T18:10:00Z"
+        })
       }).pipe(Effect.withSpan("Notes.save"))
   })
 ) {}
@@ -41,7 +51,10 @@ const FocusBody = Mount.make(
 const EditorNoDeps = Component.define({
   name: "Editor",
   scoped: false,
-  props: Schema.Struct({ noteId: Schema.String, token: Schema.Redacted(Schema.String) }),
+  props: Schema.Struct({
+    noteId: Schema.String,
+    token: Schema.Redacted(Schema.String)
+  }),
   model: Schema.Struct({
     draft: Schema.String,
     saved: Schema.String,
@@ -52,35 +65,60 @@ const EditorNoDeps = Component.define({
   message: EditorMessage,
   elements: Html
 }).make({
-  init: () => ({ draft: "", saved: "", status: "Clean" as const, viewers: 1, linkPickerOpen: false }),
+  init: () => ({
+    draft: "",
+    saved: "",
+    status: "Clean" as const,
+    viewers: 1,
+    linkPickerOpen: false
+  }),
   update: {
-    UpdatedDraft: ($, { text }) => $.evolve({ draft: text, status: "Dirty" as const }),
+    UpdatedDraft: ($, { text }) =>
+      $.evolve({ draft: text, status: "Dirty" as const }),
     ClickedSave: ($) =>
       $.evolve({ status: "Saving" as const }).run(
-        SaveNote.make({ noteId: $.props.noteId, text: $.model.draft, token: $.props.token })
+        SaveNote.make({
+          noteId: $.props.noteId,
+          text: $.model.draft,
+          token: $.props.token
+        })
       ),
-    SucceededSaveNote: ($) => $.evolve({ saved: $.model.draft, status: "Saved" as const }),
+    SucceededSaveNote: ($) =>
+      $.evolve({ saved: $.model.draft, status: "Saved" as const }),
     FailedSaveNote: ($) => $.evolve({ status: "Dirty" as const }),
     PressedEscape: ($) =>
-      $.evolve({ linkPickerOpen: false }).run(Command.interrupt(SaveNote, { noteId: $.props.noteId })),
+      $.evolve({ linkPickerOpen: false }).run(
+        Command.interrupt(SaveNote, { noteId: $.props.noteId })
+      ),
     ReceivedPresence: ($, { viewers }) => $.evolve({ viewers }),
     CompletedFocusBody: ($) => $.model
   },
   subscriptions: () => [
-    HtmlSubscription.onDocument("keydown", ({ key }) => key === "Escape" ? EditorMessage.PressedEscape() : undefined)
+    HtmlSubscription.onDocument(
+      "keydown",
+      ({ key }) => key === "Escape" ? EditorMessage.PressedEscape() : undefined
+    )
   ],
   view: (h, model) =>
     h.section.attr("aria-label", "Editor " + h.props.noteId).children(
       h.textarea.attr("aria-label", "Body " + h.props.noteId).value(model.draft)
         .onInput(({ value }) => EditorMessage.UpdatedDraft({ text: value }))
-        .onMount(FocusBody({ noteId: h.props.noteId }).pipe(Mount.map(() => EditorMessage.CompletedFocusBody()))),
-      h.button.onClick(EditorMessage.ClickedSave()).children("Save " + h.props.noteId),
+        .onMount(
+          FocusBody({ noteId: h.props.noteId }).pipe(
+            Mount.map(() => EditorMessage.CompletedFocusBody())
+          )
+        ),
+      h.button.onClick(EditorMessage.ClickedSave()).children(
+        "Save " + h.props.noteId
+      ),
       h.p(model.status)
     )
 })
 const Editor = EditorNoDeps.pipe(Component.provide(SaveNote.layer))
 
-const WorkspaceMessage = UiSchema.TaggedEnum({ ClickedClose: { noteId: Schema.String } })
+const WorkspaceMessage = UiSchema.TaggedEnum({
+  ClickedClose: { noteId: Schema.String }
+})
 const Workspace = Component.define({
   name: "Workspace",
   scoped: false,
@@ -90,14 +128,20 @@ const Workspace = Component.define({
 }).make({
   init: () => ({ open: ["n1", "n2"] }),
   update: {
-    ClickedClose: ($, { noteId }) => $.evolve({ open: $.model.open.filter((id) => id !== noteId) })
+    ClickedClose: ($, { noteId }) =>
+      $.evolve({ open: $.model.open.filter((id) => id !== noteId) })
   },
   view: (h, model) =>
     h.main(
       model.open.map((noteId) =>
         h.div.key(noteId).children(
-          Editor(h, { key: noteId, props: { noteId, token: Redacted.make("tok_live_9f2c") } }),
-          h.button.onClick(WorkspaceMessage.ClickedClose({ noteId })).children("Close " + noteId)
+          Editor(h, {
+            key: noteId,
+            props: { noteId, token: Redacted.make("tok_live_9f2c") }
+          }),
+          h.button.onClick(WorkspaceMessage.ClickedClose({ noteId })).children(
+            "Close " + noteId
+          )
         )
       )
     )
@@ -110,8 +154,12 @@ export const play = Effect.fnUntraced(function*(capture: Capture) {
   yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
   yield* BrowserHost.mountEffect(Workspace, {}, app)
   yield* wait(60)
-  const body = (id: string) => HtmlLocator.getByRole(app, "textbox", { name: "Body " + id }) as HTMLTextAreaElement
-  const button = (label: string) => HtmlLocator.getByRole(app, "button", { name: label })
+  const body = (id: string) =>
+    HtmlLocator.getByRole(app, "textbox", {
+      name: "Body " + id
+    }) as HTMLTextAreaElement
+  const button = (label: string) =>
+    HtmlLocator.getByRole(app, "button", { name: label })
 
   HtmlLocator.type(body("n1"), "Ship the inspector")
   yield* wait(20)

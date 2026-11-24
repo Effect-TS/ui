@@ -188,7 +188,10 @@ export type ContextMenuProps = typeof ContextMenuProps.Type
  * @category models
  * @since 0.1.0
  */
-export type ContextMenuEvents = Exclude<MenuEvents, { readonly _tag: "RequestedQuery" }>
+export type ContextMenuEvents = Exclude<
+  MenuEvents,
+  { readonly _tag: "RequestedQuery" }
+>
 
 type MenuParts = Component.Headless.Parts<typeof Menu>
 
@@ -232,7 +235,9 @@ const omittedParts = [
   "nothingMatches",
   "transitioning",
   "activationDirection"
-] as const satisfies ReadonlyArray<Exclude<keyof MenuParts, keyof ContextMenuParts> | "trigger">
+] as const satisfies ReadonlyArray<
+  Exclude<keyof MenuParts, keyof ContextMenuParts> | "trigger"
+>
 
 const handlers = <Msg>(
   onEmit: View.Child.Options<ContextMenuProps, ContextMenuEvents, Msg>["onEmit"]
@@ -272,7 +277,9 @@ export const ContextMenu = <Msg, RV = never, RF = never>(
     & {
       /** Shown if the context menu fails, until its key changes. Without it, it is blank. */
       readonly fallback?:
-        | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
+        | ((
+          result: AsyncResult.Failure<never, unknown>
+        ) => View.Content<NoInfer<Msg>, RF>)
         | undefined
       /** The context menu's whole view, from its parts. */
       readonly view: (parts: ContextMenuParts) => View.Content<NoInfer<Msg>, RV>
@@ -281,5 +288,9 @@ export const ContextMenu = <Msg, RV = never, RF = never>(
   Menu<Msg, RV, RF>(h, {
     ...options,
     onEmit: handlers(options.onEmit),
-    view: (menu) => options.view({ ...Struct.omit(menu, omittedParts), trigger: menu.contextTrigger })
+    view: (menu) =>
+      options.view({
+        ...Struct.omit(menu, omittedParts),
+        trigger: menu.contextTrigger
+      })
   })

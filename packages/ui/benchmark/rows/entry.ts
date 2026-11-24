@@ -14,7 +14,11 @@ import type { Message as TableMessage, Model as TableModel } from "./harness.ts"
 //   titled     component, with a title in the table's head: the head is folded after each render.
 
 const Row = Schema.Struct({ id: Schema.Number, label: Schema.String })
-const Model = Schema.Struct({ rows: Schema.Array(Row), selected: Schema.Number, nextId: Schema.Number })
+const Model = Schema.Struct({
+  rows: Schema.Array(Row),
+  selected: Schema.Number,
+  nextId: Schema.Number
+})
 const Message = UiSchema.TaggedEnum({
   Run: { count: Schema.Number },
   Add: { count: Schema.Number },
@@ -25,10 +29,20 @@ const Message = UiSchema.TaggedEnum({
   Remove: { id: Schema.Number }
 })
 
-const app = { name: "Table", scoped: false, model: Model, message: Message, elements: Html } as const
+const app = {
+  name: "Table",
+  scoped: false,
+  model: Model,
+  message: Message,
+  elements: Html
+} as const
 const TableDef = Component.define(app)
 
-const lazyRow = (h: Component.Helper<typeof TableDef>, row: typeof Row.Type, selected: boolean) =>
+const lazyRow = (
+  h: Component.Helper<typeof TableDef>,
+  row: typeof Row.Type,
+  selected: boolean
+) =>
   h.tr.key(String(row.id)).class(selected && "danger").children(
     h.td.class("col-md-1").children(String(row.id)),
     h.td.class("col-md-4").children(
@@ -36,7 +50,10 @@ const lazyRow = (h: Component.Helper<typeof TableDef>, row: typeof Row.Type, sel
     ),
     h.td.class("col-md-1").children(
       h.a.onClick(Message.Remove({ id: row.id })).children(
-        h.span.class("glyphicon", "glyphicon-remove").attr("aria-hidden", "true")
+        h.span.class("glyphicon", "glyphicon-remove").attr(
+          "aria-hidden",
+          "true"
+        )
       )
     ),
     h.td.class("col-md-6")
@@ -62,17 +79,25 @@ const RowView = Component.define({
   view: (h) =>
     h.tr.class(h.props.selected && "danger").children(
       h.td.class("col-md-1").children(String(h.props.row.id)),
-      h.td.class("col-md-4").children(h.a.onClick(RowMessage.Select()).children(h.props.row.label)),
+      h.td.class("col-md-4").children(
+        h.a.onClick(RowMessage.Select()).children(h.props.row.label)
+      ),
       h.td.class("col-md-1").children(
         h.a.onClick(RowMessage.Remove()).children(
-          h.span.class("glyphicon", "glyphicon-remove").attr("aria-hidden", "true")
+          h.span.class("glyphicon", "glyphicon-remove").attr(
+            "aria-hidden",
+            "true"
+          )
         )
       ),
       h.td.class("col-md-6")
     )
 })
 
-const componentRows = (h: Component.Helper<typeof TableDef>, model: TableModel) =>
+const componentRows = (
+  h: Component.Helper<typeof TableDef>,
+  model: TableModel
+) =>
   h.table.class("table").children(
     h.tbody.children(model.rows.map((row) =>
       RowView(h, {
@@ -83,7 +108,10 @@ const componentRows = (h: Component.Helper<typeof TableDef>, model: TableModel) 
     ))
   )
 
-const tableUpdate = ($: { readonly model: TableModel }, message: TableMessage) => update($.model, message)
+const tableUpdate = (
+  $: { readonly model: TableModel },
+  message: TableMessage
+) => update($.model, message)
 
 /** The variants' table components, starting from `start`'s Model. */
 const tables = (start: () => TableModel) => ({
@@ -93,18 +121,22 @@ const tables = (start: () => TableModel) => ({
     view: (h, model) =>
       h.table.class("table").children(
         h.tbody.children(model.rows.map((row) =>
-          h.tr.key(String(row.id)).class(row.id === model.selected && "danger").children(
-            h.td.class("col-md-1").children(String(row.id)),
-            h.td.class("col-md-4").children(
-              h.a.onClick(Message.Select({ id: row.id })).children(row.label)
-            ),
-            h.td.class("col-md-1").children(
-              h.a.onClick(Message.Remove({ id: row.id })).children(
-                h.span.class("glyphicon", "glyphicon-remove").attr("aria-hidden", "true")
-              )
-            ),
-            h.td.class("col-md-6")
-          )
+          h.tr.key(String(row.id)).class(row.id === model.selected && "danger")
+            .children(
+              h.td.class("col-md-1").children(String(row.id)),
+              h.td.class("col-md-4").children(
+                h.a.onClick(Message.Select({ id: row.id })).children(row.label)
+              ),
+              h.td.class("col-md-1").children(
+                h.a.onClick(Message.Remove({ id: row.id })).children(
+                  h.span.class("glyphicon", "glyphicon-remove").attr(
+                    "aria-hidden",
+                    "true"
+                  )
+                )
+              ),
+              h.td.class("col-md-6")
+            )
         ))
       )
   }),
@@ -113,18 +145,33 @@ const tables = (start: () => TableModel) => ({
     update: tableUpdate,
     view: (h, model) =>
       h.table.class("table").children(
-        h.tbody.children(model.rows.map((row) => h.lazy(lazyRow, row, row.id === model.selected)))
+        h.tbody.children(
+          model.rows.map((row) =>
+            h.lazy(lazyRow, row, row.id === model.selected)
+          )
+        )
       )
   }),
-  component: TableDef.make({ init: start, update: tableUpdate, view: componentRows }),
-  titled: TableDef.make({ init: start, update: tableUpdate, head: () => [Head.title("Rows")], view: componentRows })
+  component: TableDef.make({
+    init: start,
+    update: tableUpdate,
+    view: componentRows
+  }),
+  titled: TableDef.make({
+    init: start,
+    update: tableUpdate,
+    head: () => [Head.title("Rows")],
+    view: componentRows
+  })
 })
 
 type Table = ReturnType<typeof tables>["plain"]
 
 const mount = (component: Table) => async (container: HTMLElement) => {
   const scope = Effect.runSync(Scope.make())
-  const root = await Effect.runPromise(Scope.provide(BrowserHost.mountEffect(component, {}, container), scope))
+  const root = await Effect.runPromise(
+    Scope.provide(BrowserHost.mountEffect(component, {}, container), scope)
+  )
   return {
     send: (message: typeof Message.Type) => root.send(message),
     close: () => Effect.runPromise(Scope.close(scope, Exit.void))
@@ -152,7 +199,9 @@ const renderTable = async (name: VariantName, profile = false) => {
   const component = full[name]
   if (profile) console.profile("render")
   const start = performance.now()
-  const rendered = await Effect.runPromise(HtmlServer.renderToHtml(component, {}, { budget: 0 }))
+  const rendered = await Effect.runPromise(
+    HtmlServer.renderToHtml(component, {}, { budget: 0 })
+  )
   const json = HtmlServer.serializeState(rendered.state)
   const render = performance.now() - start
   if (profile) console.profileEnd("render")
@@ -167,18 +216,28 @@ const hydrateTable = async (
   const container = document.body.appendChild(document.createElement("div"))
   container.innerHTML = html
   const first = container.querySelector("tr")
-  check(container.querySelectorAll("tr").length === 1000, "the server rendered every row")
+  check(
+    container.querySelectorAll("tr").length === 1000,
+    "the server rendered every row"
+  )
   const state = JSON.parse(json)
   const scope = Effect.runSync(Scope.make())
   if (profile) console.profile("hydrate")
   const start = performance.now()
   const root = await Effect.runPromise(
-    Scope.provide(BrowserHost.mountEffect(component, {}, container, { state }), scope)
+    Scope.provide(
+      BrowserHost.mountEffect(component, {}, container, { state }),
+      scope
+    )
   )
   await Effect.runPromise(root.adopted)
   const hydrate = performance.now() - start
   if (profile) console.profileEnd("hydrate")
-  check(container.querySelector("tr") === first && container.querySelectorAll("tr").length === 1000, "adopted")
+  check(
+    container.querySelector("tr") === first &&
+      container.querySelectorAll("tr").length === 1000,
+    "adopted"
+  )
   await Effect.runPromise(Scope.close(scope, Exit.void))
   container.remove()
   return hydrate
@@ -187,5 +246,8 @@ const hydrateTable = async (
 ;(window as any).hydrateTable = hydrateTable
 ;(window as any).ssr = async (name: VariantName, profile = false) => {
   const fixture = await renderTable(name, profile)
-  return { render: fixture.render, hydrate: await hydrateTable(name, fixture, profile) }
+  return {
+    render: fixture.render,
+    hydrate: await hydrateTable(name, fixture, profile)
+  }
 }

@@ -163,7 +163,8 @@ export type PatchOutcome = Outcome | "stale"
  * @category utility types
  * @since 0.1.0
  */
-export type SearchPatch<R> = [R] extends [{ readonly search: infer Q }] ? { readonly [K in keyof Q]?: Q[K] | undefined }
+export type SearchPatch<R> = [R] extends [{ readonly search: infer Q }] ?
+  { readonly [K in keyof Q]?: Q[K] | undefined }
   : never
 
 /**
@@ -189,7 +190,10 @@ export interface Router {
   readonly routes: Route.AnyUnion
   readonly location: () => Location
   readonly changes: Stream.Stream<Location>
-  readonly navigate: (href: string, options?: { readonly replace?: boolean | undefined }) => Effect.Effect<Outcome>
+  readonly navigate: (
+    href: string,
+    options?: { readonly replace?: boolean | undefined }
+  ) => Effect.Effect<Outcome>
   readonly push: (route: { readonly _tag: string }) => Effect.Effect<Outcome>
   readonly replace: (route: { readonly _tag: string }) => Effect.Effect<Outcome>
   /**
@@ -229,7 +233,9 @@ export interface Router {
  * @category services
  * @since 0.1.0
  */
-export const Router: Context.Service<Router, Router> = Context.Service<Router>("@effect/ui/Router")
+export const Router: Context.Service<Router, Router> = Context.Service<Router>(
+  "@effect/ui/Router"
+)
 
 // ---------------------------------------------------------------------------
 // Commands
@@ -242,14 +248,17 @@ export const Router: Context.Service<Router, Router> = Context.Service<Router>("
  * @category models
  * @since 0.1.0
  */
-export type Routes = Route.AnyUnion & { readonly Type: { readonly _tag: string } }
+export type Routes = Route.AnyUnion & {
+  readonly Type: { readonly _tag: string }
+}
 
 /**
  * A route value of some union: the args Schema of `Push` and `Replace`. The
  * log encodes it structurally.
  */
 const RouteValue = Schema.declare(
-  (u: unknown): u is { readonly _tag: string } => Predicate.hasProperty(u, "_tag") && typeof u._tag === "string"
+  (u: unknown): u is { readonly _tag: string } =>
+    Predicate.hasProperty(u, "_tag") && typeof u._tag === "string"
 )
 
 /**
@@ -260,9 +269,17 @@ const RouteValue = Schema.declare(
  * @category commands
  * @since 0.1.0
  */
-export class Push extends Command.Service<Push>()("@effect/ui/Router/Push", {
-  args: { route: RouteValue }
-}, Effect.map(Router, (router) => ({ route }: { readonly route: { readonly _tag: string } }) => router.push(route))) {}
+export class Push extends Command.Service<Push>()(
+  "@effect/ui/Router/Push",
+  {
+    args: { route: RouteValue }
+  },
+  Effect.map(
+    Router,
+    (router) => ({ route }: { readonly route: { readonly _tag: string } }) =>
+      router.push(route)
+  )
+) {}
 
 /**
  * The Command behind `replace`. Use `replace`, which types the route value;
@@ -277,7 +294,11 @@ export class Replace extends Command.Service<Replace>()(
   {
     args: { route: RouteValue }
   },
-  Effect.map(Router, (router) => ({ route }: { readonly route: { readonly _tag: string } }) => router.replace(route))
+  Effect.map(
+    Router,
+    (router) => ({ route }: { readonly route: { readonly _tag: string } }) =>
+      router.replace(route)
+  )
 ) {}
 
 /**
@@ -320,11 +341,13 @@ export const push = <U extends Routes>(
 export const replace = <U extends Routes>(
   _routes: U,
   route: U["Type"]
-): Command.Issued<Outcome, Replace, Outcome, "Effect"> => Replace.make({ route })
+): Command.Issued<Outcome, Replace, Outcome, "Effect"> =>
+  Replace.make({ route })
 
 /** A search patch: the args Schema of `PatchSearch`. The log encodes it structurally. */
 const SearchPatchValue = Schema.declare(
-  (u: unknown): u is Readonly<Record<string, unknown>> => typeof u === "object" && u !== null && !Array.isArray(u)
+  (u: unknown): u is Readonly<Record<string, unknown>> =>
+    typeof u === "object" && u !== null && !Array.isArray(u)
 )
 
 /**
@@ -443,9 +466,11 @@ export class Back extends Command.Service<Back>()("@effect/ui/Router/Back", {
  * @category commands
  * @since 0.1.0
  */
-export class Forward extends Command.Service<Forward>()("@effect/ui/Router/Forward", {
-  args: {}
-}, Effect.map(Router, (router) => () => router.forward)) {}
+export class Forward
+  extends Command.Service<Forward>()("@effect/ui/Router/Forward", {
+    args: {}
+  }, Effect.map(Router, (router) => () => router.forward))
+{}
 
 /**
  * Loads an href with a full page load, such as an external URL.
@@ -454,9 +479,16 @@ export class Forward extends Command.Service<Forward>()("@effect/ui/Router/Forwa
  * @category commands
  * @since 0.1.0
  */
-export class Load extends Command.Service<Load>()("@effect/ui/Router/Load", {
-  args: { href: Schema.String }
-}, Effect.map(Router, (router) => ({ href }: { readonly href: string }) => router.load(href))) {}
+export class Load extends Command.Service<Load>()(
+  "@effect/ui/Router/Load",
+  {
+    args: { href: Schema.String }
+  },
+  Effect.map(
+    Router,
+    (router) => ({ href }: { readonly href: string }) => router.load(href)
+  )
+) {}
 
 /**
  * Blocks navigation under a key while the Subscription runs, such as while a
@@ -493,11 +525,16 @@ export class Load extends Command.Service<Load>()("@effect/ui/Router/Load", {
  * @category subscriptions
  * @since 0.1.0
  */
-export const blocked = (key: string): Subscription.Subscription<never, Router> =>
+export const blocked = (
+  key: string
+): Subscription.Subscription<never, Router> =>
   Subscription.make(
     "@effect/ui/Router/blocked",
     key,
-    (key) => Stream.unwrap(Router.use((router) => Effect.as(router.block(key), Stream.never)))
+    (key) =>
+      Stream.unwrap(
+        Router.use((router) => Effect.as(router.block(key), Stream.never))
+      )
   )
 
 /**
@@ -507,7 +544,14 @@ export const blocked = (key: string): Subscription.Subscription<never, Router> =
  * @category models
  * @since 0.1.0
  */
-export type Services = Router | Push | Replace | PatchSearch | Back | Forward | Load
+export type Services =
+  | Router
+  | Push
+  | Replace
+  | PatchSearch
+  | Back
+  | Forward
+  | Load
 
 // ---------------------------------------------------------------------------
 // Subscription
@@ -516,8 +560,14 @@ export type Services = Router | Push | Replace | PatchSearch | Back | Forward | 
 const engines = new WeakMap<Router, Engine>()
 
 /** A location's route as a value of `union`: the Router's own route for its union, a parse of the URL for another. */
-const routeOf = (router: Router, union: Route.AnyUnion, location: Location): Option.Option<{ readonly _tag: string }> =>
-  router.routes === union ? Option.some(location.route) : union.parse(location.url)
+const routeOf = (
+  router: Router,
+  union: Route.AnyUnion,
+  location: Location
+): Option.Option<{ readonly _tag: string }> =>
+  router.routes === union
+    ? Option.some(location.route)
+    : union.parse(location.url)
 
 /**
  * Reads the Router's current route as a value of the given union.
@@ -536,8 +586,14 @@ const routeOf = (router: Router, union: Route.AnyUnion, location: Location): Opt
  * @category accessors
  * @since 0.1.0
  */
-export const currentRoute = <U extends Routes>(routes: U): Effect.Effect<U["Type"], never, Router> =>
-  Effect.map(Router, (router) => Option.getOrThrow(routeOf(router, routes, router.location())) as U["Type"])
+export const currentRoute = <U extends Routes>(
+  routes: U
+): Effect.Effect<U["Type"], never, Router> =>
+  Effect.map(
+    Router,
+    (router) =>
+      Option.getOrThrow(routeOf(router, routes, router.location())) as U["Type"]
+  )
 
 /**
  * The props of a root whose only prop is the route: `{ route }`, read from
@@ -592,7 +648,9 @@ export const currentRoute = <U extends Routes>(routes: U): Effect.Effect<U["Type
  * @category accessors
  * @since 0.1.0
  */
-export const props = <U extends Routes>(routes: U): Effect.Effect<{ readonly route: U["Type"] }, never, Router> =>
+export const props = <U extends Routes>(
+  routes: U
+): Effect.Effect<{ readonly route: U["Type"] }, never, Router> =>
   Effect.map(currentRoute(routes), (route) => ({ route }))
 
 /**
@@ -634,7 +692,8 @@ export const subscription = <U extends Routes, Msg>(
 ): Subscription.Subscription<Msg, Router> => {
   const union: Route.AnyUnion = routes
   const have = union.print(held)
-  const same = (route: { readonly _tag: string }) => route._tag === held._tag && union.print(route) === have
+  const same = (route: { readonly _tag: string }) =>
+    route._tag === held._tag && union.print(route) === have
   /** Whether the route differs from the held one in its search only. */
   const samePath = (route: { readonly _tag: string }) =>
     route._tag === held._tag && union.printPath(route) === union.printPath(held)
@@ -690,11 +749,18 @@ export const subscription = <U extends Routes, Msg>(
   }))
   // The runtime attaches to the Router's engine instead of running the Stream, so a navigation is
   // delivered from inside the Router's `set`: in the flush whose Command made it.
-  const direct: NonNullable<services.Direct[typeof services.direct]> = (context, emit, fail) => {
+  const direct: NonNullable<services.Direct[typeof services.direct]> = (
+    context,
+    emit,
+    fail
+  ) => {
     const router = Context.get(context as Context.Context<Router>, Router)
     const engine = engines.get(router)
     if (engine === undefined) return undefined
-    const report = Context.get(context as Context.Context<any>, queryCore.Problems)
+    const report = Context.get(
+      context as Context.Context<any>,
+      queryCore.Problems
+    )
     // Read at delivery: the root attaches to the Router after its first render.
     const root = Context.get(context, services.CurrentRoot)
     let first = true
@@ -710,7 +776,9 @@ export const subscription = <U extends Routes, Msg>(
       }
       // Once the runtime takes the message, the root has the route as of this flush, which is what the
       // navigation settles from. A message it drops, as the Subscription stops, settles nothing.
-      if (Option.isSome(message)) emit(message.value, () => engine.delivered(location.seq))
+      if (Option.isSome(message)) {
+        emit(message.value, () => engine.delivered(location.seq))
+      }
     }
     return {
       initial: Effect.sync(() => {
@@ -721,11 +789,16 @@ export const subscription = <U extends Routes, Msg>(
   }
   return Object.assign(Subscription.make("@effect/ui/Router", stream), {
     [services.direct]: direct,
-    [services.onServer]: (ctx: Context.Context<never>, report: (problem: Query.Problem.Any) => void) => {
+    [services.onServer]: (
+      ctx: Context.Context<never>,
+      report: (problem: Query.Problem.Any) => void
+    ) => {
       const router = Context.getOption(ctx as Context.Context<Router>, Router)
       if (Option.isNone(router)) return
       const route = routeOf(router.value, union, router.value.location())
-      if (Option.isSome(route) && !same(route.value)) report(mismatch(route.value))
+      if (Option.isSome(route) && !same(route.value)) {
+        report(mismatch(route.value))
+      }
     }
   })
 }
@@ -758,11 +831,15 @@ export interface Page<out R = never> {
  * @category utility types
  * @since 0.1.0
  */
-export type PageRequirements<C> = C extends unknown ? Component.QueryServices<Component.Queries<C>> : never
+export type PageRequirements<C> = C extends unknown
+  ? Component.QueryServices<Component.Queries<C>>
+  : never
 
 // A `Mountable` has its Model erased, and with it the queries `Router.page` adds to the declarer. Checked
 // per member, so a union with one erased member is rejected too.
-type PageInput<C> = true extends (C extends unknown ? IsErased<Component.Model<C>> : never) ? ErasedPage : unknown
+type PageInput<C> = true extends
+  (C extends unknown ? IsErased<Component.Model<C>> : never) ? ErasedPage
+  : unknown
 
 type IsErased<M> = [M] extends [never] ? true : 0 extends (1 & M) ? true : false
 
@@ -793,8 +870,13 @@ interface ErasedPage {
  */
 export const page = <C extends Component.AnyRoot>(
   component: C & PageInput<C>,
-  ...props: {} extends Component.Props<C> ? [props?: Component.Props<C>] : [props: Component.Props<C>]
-): Page<PageRequirements<C>> => ({ [PageTypeId]: pageVariance, component, props: props[0] ?? {} })
+  ...props: {} extends Component.Props<C> ? [props?: Component.Props<C>]
+    : [props: Component.Props<C>]
+): Page<PageRequirements<C>> => ({
+  [PageTypeId]: pageVariance,
+  component,
+  props: props[0] ?? {}
+})
 
 const pageVariance = { _R: (_: never) => _ }
 
@@ -807,7 +889,9 @@ const pageVariance = { _R: (_: never) => _ }
  * @since 0.1.0
  */
 export type PrefetchMap<U extends Routes> = {
-  readonly [K in U["Type"]["_tag"]]: (route: Extract<U["Type"], { readonly _tag: K }>) => ReadonlyArray<Page<any>>
+  readonly [K in U["Type"]["_tag"]]: (
+    route: Extract<U["Type"], { readonly _tag: K }>
+  ) => ReadonlyArray<Page<any>>
 }
 
 /**
@@ -818,7 +902,9 @@ export type PrefetchMap<U extends Routes> = {
  * @since 0.1.0
  */
 export type PrefetchRequirements<M> = {
-  readonly [K in keyof M]: M[K] extends (route: any) => ReadonlyArray<infer P> ? PageRequirement<P> : never
+  readonly [K in keyof M]: M[K] extends (route: any) => ReadonlyArray<infer P>
+    ? PageRequirement<P>
+    : never
 }[keyof M]
 
 // Distributes over the pages, so a handler returning `[]` adds nothing.
@@ -908,10 +994,16 @@ export const prefetch = <U extends Routes, const M extends PrefetchMap<U>>(
   routes: U,
   map: M
 ): Subscription.Subscription<never, Router | PrefetchRequirements<M>> => {
-  const declaration: services.Prefetch = { routes, map: map as services.Prefetch["map"] }
-  return Object.assign(Subscription.make("@effect/ui/Router/prefetch", Stream.never), {
-    [services.prefetch]: declaration
-  }) as Subscription.Subscription<never, Router | PrefetchRequirements<M>>
+  const declaration: services.Prefetch = {
+    routes,
+    map: map as services.Prefetch["map"]
+  }
+  return Object.assign(
+    Subscription.make("@effect/ui/Router/prefetch", Stream.never),
+    {
+      [services.prefetch]: declaration
+    }
+  ) as Subscription.Subscription<never, Router | PrefetchRequirements<M>>
 }
 
 /**
@@ -941,15 +1033,17 @@ export class PrefetchThrew extends Data.TaggedClass("PrefetchThrew")<{
  * @category problems
  * @since 0.1.0
  */
-export class PrefetchQueryNotProvided extends Data.TaggedClass("PrefetchQueryNotProvided")<{
-  readonly message: string
-  /** The declaring instance's path. */
-  readonly path: string
-  /** The page's component name. */
-  readonly page: string
-  /** The query's name. */
-  readonly query: string
-}> {}
+export class PrefetchQueryNotProvided
+  extends Data.TaggedClass("PrefetchQueryNotProvided")<{
+    readonly message: string
+    /** The declaring instance's path. */
+    readonly path: string
+    /** The page's component name. */
+    readonly page: string
+    /** The query's name. */
+    readonly query: string
+  }>
+{}
 
 /**
  * After a push settled, a page its `Router.prefetch` declaration named has
@@ -959,13 +1053,15 @@ export class PrefetchQueryNotProvided extends Data.TaggedClass("PrefetchQueryNot
  * @category problems
  * @since 0.1.0
  */
-export class PrefetchPageNotMounted extends Data.TaggedClass("PrefetchPageNotMounted")<{
-  readonly message: string
-  /** The declaring instance's path. */
-  readonly path: string
-  /** The page's component name. */
-  readonly page: string
-}> {}
+export class PrefetchPageNotMounted
+  extends Data.TaggedClass("PrefetchPageNotMounted")<{
+    readonly message: string
+    /** The declaring instance's path. */
+    readonly path: string
+    /** The page's component name. */
+    readonly page: string
+  }>
+{}
 
 /**
  * After a push settled, the page instances created since the push never
@@ -975,17 +1071,19 @@ export class PrefetchPageNotMounted extends Data.TaggedClass("PrefetchPageNotMou
  * @category problems
  * @since 0.1.0
  */
-export class PrefetchEntryNotWatched extends Data.TaggedClass("PrefetchEntryNotWatched")<{
-  readonly message: string
-  /** The declaring instance's path. */
-  readonly path: string
-  /** The page's component name. */
-  readonly page: string
-  /** The query's name. */
-  readonly query: string
-  /** The entry's log key. */
-  readonly logKey: string
-}> {}
+export class PrefetchEntryNotWatched
+  extends Data.TaggedClass("PrefetchEntryNotWatched")<{
+    readonly message: string
+    /** The declaring instance's path. */
+    readonly path: string
+    /** The page's component name. */
+    readonly page: string
+    /** The query's name. */
+    readonly query: string
+    /** The entry's log key. */
+    readonly logKey: string
+  }>
+{}
 
 // ---------------------------------------------------------------------------
 // History and the engine
@@ -1075,7 +1173,9 @@ export interface Options {
    * index of the history entry it moved to. `onLeave` was called for the entry
    * it left, so a pop can restore that entry's scroll position.
    */
-  readonly onHash?: ((hash: string, action: "push" | "pop", index: number) => void) | undefined
+  readonly onHash?:
+    | ((hash: string, action: "push" | "pop", index: number) => void)
+    | undefined
   /** Called before the Router leaves the history entry at `index`. */
   readonly onLeave?: ((index: number) => void) | undefined
   /**
@@ -1115,11 +1215,13 @@ export class RouteMismatch extends Data.TaggedClass("RouteMismatch")<{
  * @category problems
  * @since 0.1.0
  */
-export class PatchSearchLostBlock extends Data.TaggedClass("PatchSearchLostBlock")<{
-  readonly message: string
-  /** The keys of the blocks that were released. */
-  readonly keys: ReadonlyArray<string>
-}> {}
+export class PatchSearchLostBlock
+  extends Data.TaggedClass("PatchSearchLostBlock")<{
+    readonly message: string
+    /** The keys of the blocks that were released. */
+    readonly keys: ReadonlyArray<string>
+  }>
+{}
 
 interface Engine {
   readonly delivered: (seq: number) => void
@@ -1154,7 +1256,8 @@ const stateKey = "@effect/ui"
 const readState = (state: unknown): EntryState | undefined => {
   if (typeof state !== "object" || state === null) return undefined
   const value = (state as Record<string, unknown>)[stateKey]
-  return typeof value === "object" && value !== null && typeof (value as EntryState).index === "number"
+  return typeof value === "object" && value !== null &&
+      typeof (value as EntryState).index === "number"
     ? value as EntryState
     : undefined
 }
@@ -1171,11 +1274,13 @@ const writeState = (entry: EntryState): unknown => ({ [stateKey]: entry })
  * @category problems
  * @since 0.1.0
  */
-export class SnapshotWriteFailed extends Data.TaggedClass("SnapshotWriteFailed")<{
-  readonly message: string
-  /** What the history threw. */
-  readonly error: unknown
-}> {}
+export class SnapshotWriteFailed
+  extends Data.TaggedClass("SnapshotWriteFailed")<{
+    readonly message: string
+    /** What the history threw. */
+    readonly error: unknown
+  }>
+{}
 
 const splitHash = (href: string): readonly [string, string] => {
   const at = href.indexOf("#", 1)
@@ -1289,44 +1394,69 @@ const commandLayers = Layer.mergeAll(
  * @since 0.1.0
  */
 export const make = (options: Options): Layer.Layer<Services> =>
-  Layer.provideMerge(commandLayers, Layer.effectContext(Effect.suspend(() => build(options))))
+  Layer.provideMerge(
+    commandLayers,
+    Layer.effectContext(Effect.suspend(() => build(options)))
+  )
 
-const build = (options: Options): Effect.Effect<Context.Context<Router>, never, Scope.Scope> =>
+const build = (
+  options: Options
+): Effect.Effect<Context.Context<Router>, never, Scope.Scope> =>
   Effect.gen(function*() {
     const { history, routes } = options
     // With the `#` base the URL is the fragment, so there's no in-page hash.
-    const split = (href: string): readonly [string, string] => routes.base() === "#" ? [href, ""] : splitHash(href)
+    const split = (href: string): readonly [string, string] =>
+      routes.base() === "#" ? [href, ""] : splitHash(href)
     const start = history.current()
     const [startUrl, startHash] = split(start.url)
     const resolved = routes.resolve(startUrl)
     if (Option.isNone(resolved)) {
-      return yield* Effect.die(new Error(`The Router's routes don't parse the initial URL "${start.url}"`))
+      return yield* Effect.die(
+        new Error(
+          `The Router's routes don't parse the initial URL "${start.url}"`
+        )
+      )
     }
     // The problems sink of the first mounted root, or the one where the Router is built.
     const fallbackReport = yield* queryCore.Problems
     let index = readState(start.state)?.index ?? 0
     const initialUrl = canonical(routes, resolved.value, startUrl)
-    if (resolved.value.redirected || readState(start.state) === undefined || initialUrl !== startUrl) {
+    if (
+      resolved.value.redirected || readState(start.state) === undefined ||
+      initialUrl !== startUrl
+    ) {
       history.replace(initialUrl + startHash, writeState({ index }))
     }
-    let current: Location = { route: resolved.value.route, url: initialUrl, hash: startHash, action: "initial", seq: 0 }
+    let current: Location = {
+      route: resolved.value.route,
+      url: initialUrl,
+      hash: startHash,
+      action: "initial",
+      seq: 0
+    }
     const ref = yield* SubscriptionRef.make(current)
     // Each key's holders: two instances may block under one key.
     const blocks = new Map<string, number>()
     const snapshots = new Map<number, Record<string, unknown>>()
     const roots = new Set<services.RootHandle>()
-    let restoring: Record<string, unknown> | undefined = readState(start.state)?.snapshot
+    let restoring: Record<string, unknown> | undefined = readState(start.state)
+      ?.snapshot
     restoring &&= { ...restoring }
     const forgetRestoring = (root: services.RootHandle) => {
       if (pending !== undefined) return
       root.restored()
       if (restoring === undefined) return
       for (const path in restoring) {
-        if (path === root.path || path.startsWith(root.path + "/") || path === "~kept" + root.path) {
+        if (
+          path === root.path || path.startsWith(root.path + "/") ||
+          path === "~kept" + root.path
+        ) {
           delete restoring[path]
         }
       }
-      if (Object.keys(restoring).every((key) => key === "~reported")) restoring = undefined
+      if (Object.keys(restoring).every((key) => key === "~reported")) {
+        restoring = undefined
+      }
     }
     let pending: {
       readonly location: Location
@@ -1342,9 +1472,14 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
     } | undefined
     let reverting = 0
     /** The replace queued on the entry a blocked pop left, written once the revert is back on it. */
-    let reverted: { readonly index: number; readonly url: string; readonly state: unknown } | undefined
+    let reverted: {
+      readonly index: number
+      readonly url: string
+      readonly state: unknown
+    } | undefined
 
-    const primary = (): services.RootHandle | undefined => roots.values().next().value
+    const primary = (): services.RootHandle | undefined =>
+      roots.values().next().value
     const snapshot = (): Record<string, unknown> => {
       const out: Record<string, unknown> = {}
       for (const root of roots) root.snapshot(out)
@@ -1354,7 +1489,9 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       options.onLeave?.(index)
       snapshots.set(index, snapshot())
     }
-    const report = (problem: SnapshotWriteFailed | PatchSearchLostBlock | HistoryWriteFailed) => {
+    const report = (
+      problem: SnapshotWriteFailed | PatchSearchLostBlock | HistoryWriteFailed
+    ) => {
       const root = primary()
       try {
         if (root !== undefined) root.report(problem)
@@ -1386,7 +1523,9 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
     }
     // --- throttled replaces --------------------------------------------------
     const context = yield* Effect.context<never>()
-    const interval = options.throttle === undefined ? undefined : Duration.fromInputUnsafe(options.throttle.interval)
+    const interval = options.throttle === undefined
+      ? undefined
+      : Duration.fromInputUnsafe(options.throttle.interval)
     /** The interval after a throttled write, on the Effect `Clock`. */
     let cooling: Fiber.Fiber<void> | undefined
     /** Writes the queued replace now, before the Router leaves or rewrites the entry. */
@@ -1444,13 +1583,18 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
     const declarers = new Set<services.Declarer>()
     /** Runs every declaration covering the location's route, and returns a navigation's checks. */
     const runDeclarations = (
-      location: { readonly route: { readonly _tag: string }; readonly url: string },
+      location: {
+        readonly route: { readonly _tag: string }
+        readonly url: string
+      },
       intent: boolean
     ): Array<services.PrefetchCheck> => {
       const checks: Array<services.PrefetchCheck> = []
       for (const declarer of Array.from(declarers)) {
         const union = declarer.routes()
-        const route = union === routes ? Option.some(location.route) : union.parse(location.url)
+        const route = union === routes
+          ? Option.some(location.route)
+          : union.parse(location.url)
         if (Option.isNone(route)) continue
         const check = declarer.run(route.value, intent)
         if (check !== undefined) checks.push(check)
@@ -1470,7 +1614,8 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
     }
     /** Whether a route at `url` is on the current page: the same tag and pathname. */
     const samePage = (route: { readonly _tag: string }, url: string) =>
-      route._tag === current.route._tag && pathnameOf(url) === pathnameOf(current.url)
+      route._tag === current.route._tag &&
+      pathnameOf(url) === pathnameOf(current.url)
     /**
      * Moves to `next`, which settles later. A push, a link click or a loud replace runs the
      * destination's declarations, after the hydration window closes and before the route changes.
@@ -1478,13 +1623,18 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
      */
     const set = (
       next: Location,
-      mode: { readonly quiet: boolean; readonly scroll: boolean; readonly blocks?: ReadonlyArray<string> | undefined },
+      mode: {
+        readonly quiet: boolean
+        readonly scroll: boolean
+        readonly blocks?: ReadonlyArray<string> | undefined
+      },
       saved?: Record<string, unknown> | undefined
     ) => {
       restoring = saved && { ...saved }
       // First, so whatever the navigation starts sees the cache with the hydration window closed.
       for (const root of roots) root.navigated()
-      const runs = next.action === "push" || (next.action === "replace" && !mode.quiet)
+      const runs = next.action === "push" ||
+        (next.action === "replace" && !mode.quiet)
       const checks = runs ? runDeclarations(next, false) : []
       const from = pathnameOf(current.url)
       current = next
@@ -1520,7 +1670,11 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
     const go = (
       location: Omit<Location, "action" | "seq">,
       replace: boolean,
-      mode: { readonly quiet: boolean; readonly scroll: boolean; readonly blocks?: ReadonlyArray<string> | undefined }
+      mode: {
+        readonly quiet: boolean
+        readonly scroll: boolean
+        readonly blocks?: ReadonlyArray<string> | undefined
+      }
     ) => {
       const seq = current.seq + 1
       const href = location.url + location.hash
@@ -1533,15 +1687,24 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         leave()
         // The Model snapshot also goes into the entry itself, so it survives a reload. A copy: the one in
         // memory gains the states that encode later, and a history that keeps its state by reference would too.
-        writeSnapshot(current.url + current.hash, { index, snapshot: { ...snapshots.get(index) } })
+        writeSnapshot(current.url + current.hash, {
+          index,
+          snapshot: { ...snapshots.get(index) }
+        })
         index++
-        for (const key of snapshots.keys()) if (key >= index) snapshots.delete(key)
+        for (const key of snapshots.keys()) {
+          if (key >= index) snapshots.delete(key)
+        }
         history.push(href, writeState({ index }))
       }
       set({ ...location, action: replace ? "replace" : "push", seq }, mode)
     }
 
-    const navigate = (href: string, replace: boolean, source: "href" | "route"): Outcome => {
+    const navigate = (
+      href: string,
+      replace: boolean,
+      source: "href" | "route"
+    ): Outcome => {
       if (blocks.size > 0) return "blocked"
       const [url, hash] = split(href)
       const found = routes.resolve(url)
@@ -1556,7 +1719,8 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       // params and isn't a navigation. Only the hash can change.
       if (
         printed === current.url ||
-        (route._tag === current.route._tag && routes.print(route) === routes.print(current.route))
+        (route._tag === current.route._tag &&
+          routes.print(route) === routes.print(current.route))
       ) {
         if (hash !== current.hash) {
           // A change to the hash alone: a new entry, and no route change.
@@ -1587,11 +1751,19 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       replace: boolean,
       scroll: boolean
     ): PatchOutcome => {
-      const at = current.route as { readonly _tag: string; readonly params?: unknown; readonly search?: unknown }
-      if (at._tag !== held._tag || routes.printPath(at) !== routes.printPath(held)) return "stale"
+      const at = current.route as {
+        readonly _tag: string
+        readonly params?: unknown
+        readonly search?: unknown
+      }
+      if (
+        at._tag !== held._tag || routes.printPath(at) !== routes.printPath(held)
+      ) return "stale"
       const union = routes as Route.AnyUnion & UnionInternals
       const declared = new Set(Object.keys(union.routes[at._tag]?.search ?? {}))
-      const search: Record<string, unknown> = { ...(at.search as Record<string, unknown> | undefined) }
+      const search: Record<string, unknown> = {
+        ...(at.search as Record<string, unknown> | undefined)
+      }
       for (const [key, value] of Object.entries(patch)) {
         if (!declared.has(key)) continue
         if (value === undefined) delete search[key]
@@ -1600,9 +1772,16 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       // `make` fills in the default of a param the patch removed.
       const route = union.make({ _tag: at._tag, params: at.params, search })
       // Params the route doesn't declare follow the declared ones, as written.
-      const url = withPairs(routes.print(route), pairsWithout(current.url, declared))
+      const url = withPairs(
+        routes.print(route),
+        pairsWithout(current.url, declared)
+      )
       if (url === current.url) return "navigated"
-      go({ route, url, hash: current.hash }, replace, { quiet: true, scroll, blocks: Array.from(blocks.keys()) })
+      go({ route, url, hash: current.hash }, replace, {
+        quiet: true,
+        scroll,
+        blocks: Array.from(blocks.keys())
+      })
       return "navigated"
     }
 
@@ -1624,8 +1803,11 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       }
       const [url, hash] = split(href)
       const found = routes.resolve(url)
-      const printed = Option.isSome(found) ? canonical(routes, found.value, url) : undefined
-      const quiet = Option.isSome(found) && samePage(found.value.route, printed!)
+      const printed = Option.isSome(found)
+        ? canonical(routes, found.value, url)
+        : undefined
+      const quiet = Option.isSome(found) &&
+        samePage(found.value.route, printed!)
       // Back and forward can't be blocked, only reverted. Within the page they aren't.
       if (blocks.size > 0 && !quiet) {
         if (target !== index) {
@@ -1651,7 +1833,13 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       leave()
       index = target
       const saved = snapshots.get(target) ?? entry?.snapshot
-      set({ route: found.value.route, url: printed, hash, action: "pop", seq: current.seq + 1 }, {
+      set({
+        route: found.value.route,
+        url: printed,
+        hash,
+        action: "pop",
+        seq: current.seq + 1
+      }, {
         quiet,
         scroll: true
       }, saved)
@@ -1683,27 +1871,48 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         const found = restoring?.[path]
         if (found === undefined) return undefined
         delete restoring![path]
-        return { state: found, reported: (restoring!["~reported"] as Record<string, unknown> | undefined)?.[path] }
+        return {
+          state: found,
+          reported:
+            (restoring!["~reported"] as Record<string, unknown> | undefined)
+              ?.[path]
+        }
       },
       entry: () => restoring,
-      prefetch: (runtime, inst, declared) => prefetchWalk.declare(declare, prefetchProblems, runtime, inst, declared),
+      prefetch: (runtime, inst, declared) =>
+        prefetchWalk.declare(
+          declare,
+          prefetchProblems,
+          runtime,
+          inst,
+          declared
+        ),
       afterFlush: (root, info) => {
         if (info.buildsPendingSince(0) === 0) forgetRestoring(root)
-        if (pending === undefined || pending.since === undefined || root !== primary()) return
-        if (info.flush < pending.since || info.buildsPendingSince(pending.since) > 0) return
+        if (
+          pending === undefined || pending.since === undefined ||
+          root !== primary()
+        ) return
+        if (
+          info.flush < pending.since ||
+          info.buildsPendingSince(pending.since) > 0
+        ) return
         const done = pending
         pending = undefined
         restoring = undefined
         for (const each of roots) each.restored()
         for (const check of done.checks) check.settled()
-        const lost = Array.from(new Set(done.blocks)).filter((key) => !blocks.has(key))
+        const lost = Array.from(new Set(done.blocks)).filter((key) =>
+          !blocks.has(key)
+        )
         if (lost.length > 0) {
           report(
             new PatchSearchLostBlock({
               keys: lost,
-              message: `[@effect/ui] a block held when Router.patchSearch ran is gone now it has settled: ${
-                lost.join(", ")
-              }. A page keyed by its search remounts on every patch; key it by printPath instead.`
+              message:
+                `[@effect/ui] a block held when Router.patchSearch ran is gone now it has settled: ${
+                  lost.join(", ")
+                }. A page keyed by its search remounts on every patch; key it by printPath instead.`
             })
           )
         }
@@ -1723,11 +1932,27 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       routes,
       location: () => current,
       changes: SubscriptionRef.changes(ref),
-      navigate: (href, navigateOptions) => Effect.sync(() => navigate(href, navigateOptions?.replace === true, "href")),
-      push: (route) => Effect.sync(() => navigate(routes.print(route) as string, false, "route")),
-      replace: (route) => Effect.sync(() => navigate(routes.print(route) as string, true, "route")),
+      navigate: (href, navigateOptions) =>
+        Effect.sync(() =>
+          navigate(href, navigateOptions?.replace === true, "href")
+        ),
+      push: (route) =>
+        Effect.sync(() =>
+          navigate(routes.print(route) as string, false, "route")
+        ),
+      replace: (route) =>
+        Effect.sync(() =>
+          navigate(routes.print(route) as string, true, "route")
+        ),
       patchSearch: (route, search, patchOptions) =>
-        Effect.sync(() => patch(route, search, patchOptions?.history !== "push", patchOptions?.scroll === true)),
+        Effect.sync(() =>
+          patch(
+            route,
+            search,
+            patchOptions?.history !== "push",
+            patchOptions?.scroll === true
+          )
+        ),
       back: Effect.sync(() => {
         if (blocks.size > 0) return "blocked"
         flush()
@@ -1776,7 +2001,8 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
       delivered: (seq) => {
         const root = primary()
         if (
-          pending !== undefined && pending.location.seq === seq && pending.since === undefined && root !== undefined
+          pending !== undefined && pending.location.seq === seq &&
+          pending.since === undefined && root !== undefined
         ) {
           // Delivered inside a flush, the root renders it in that flush; otherwise in the next.
           pending.since = root.flushing() ? root.flush() : root.flush() + 1
@@ -1789,7 +2015,9 @@ const build = (options: Options): Effect.Effect<Context.Context<Router>, never, 
         }
       }
     })
-    return Context.make(Router, router).pipe(Context.add(services.RootHooks, hooks)) as Context.Context<Router>
+    return Context.make(Router, router).pipe(
+      Context.add(services.RootHooks, hooks)
+    ) as Context.Context<Router>
   })
 
 /**
@@ -1809,7 +2037,10 @@ export const memoryHistory = (url: string = "/"): History & {
   readonly index: () => number
   readonly loaded: () => ReadonlyArray<string>
 } => {
-  const entries: Array<{ url: string; state: unknown }> = [{ url, state: undefined }]
+  const entries: Array<{ url: string; state: unknown }> = [{
+    url,
+    state: undefined
+  }]
   const loaded: Array<string> = []
   const listeners = new Set<(url: string, state: unknown) => void>()
   let index = 0
@@ -1864,10 +2095,17 @@ export const memory = (options: {
   readonly history?: History | undefined
 }): Layer.Layer<Services> =>
   Layer.unwrap(
-    Effect.sync(() => make({ routes: options.routes, history: options.history ?? memoryHistory(options.url ?? "/") }))
+    Effect.sync(() =>
+      make({
+        routes: options.routes,
+        history: options.history ?? memoryHistory(options.url ?? "/")
+      })
+    )
   )
 
-const static_ = (options: { readonly routes: Route.AnyUnion; readonly url: string }): Layer.Layer<Services> =>
+const static_ = (
+  options: { readonly routes: Route.AnyUnion; readonly url: string }
+): Layer.Layer<Services> =>
   Layer.provideMerge(
     commandLayers,
     Layer.effect(
@@ -1876,7 +2114,9 @@ const static_ = (options: { readonly routes: Route.AnyUnion; readonly url: strin
         const [url, hash] = splitHash(options.url)
         const found = options.routes.parse(url)
         if (Option.isNone(found)) {
-          return Effect.die(new Error(`The Router's routes don't parse "${options.url}"`))
+          return Effect.die(
+            new Error(`The Router's routes don't parse "${options.url}"`)
+          )
         }
         const location: Location = {
           route: found.value,

@@ -22,7 +22,9 @@ export const inKept = (target: Node): boolean => {
 
 export const raiseAbove = (shown: Element): void => {
   for (const element of kept) {
-    if (element.contains(shown) || shown.contains(element) || !showing(element)) continue
+    if (
+      element.contains(shown) || shown.contains(element) || !showing(element)
+    ) continue
     // Showing it again puts it last in the top layer, above `shown`. In one
     // task it keeps its animations and focus.
     element.hidePopover()

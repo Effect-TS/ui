@@ -1,5 +1,13 @@
 // @vitest-environment happy-dom
-import { Command, Component, MessageLog, Query, Route, Router, UiSchema } from "@effect/ui"
+import {
+  Command,
+  Component,
+  MessageLog,
+  Query,
+  Route,
+  Router,
+  UiSchema
+} from "@effect/ui"
 import { BrowserHost, BrowserRouter, Html, HtmlServer } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, expect, it } from "@effect/vitest"
@@ -9,7 +17,9 @@ import { describe } from "vitest"
 import { App, AppRoute, Message, People } from "./fixtures/routed.ts"
 
 const SearchRoute = Route.union({
-  Search: Route.make("/search", { search: { q: Schema.optional(Schema.String) } }),
+  Search: Route.make("/search", {
+    search: { q: Schema.optional(Schema.String) }
+  }),
   Other: Route.make("/other")
 })
 
@@ -24,7 +34,9 @@ const SearchApp = Component.define({
 }).make({
   init: ($) => $.props.route,
   update: (_, route) => route,
-  subscriptions: ({ model: route }) => [Router.subscription(SearchRoute, route, (next) => next)],
+  subscriptions: (
+    { model: route }
+  ) => [Router.subscription(SearchRoute, route, (next) => next)],
   view: (h, route) => h.h1(SearchRoute.print(route))
 })
 
@@ -39,7 +51,11 @@ const ListRoute = Route.union({
 })
 const ListOnly = ListRoute.subset(["List"])
 
-const ListMessage = UiSchema.TaggedEnum({ Typed: { value: Schema.String }, Next: {}, Patched: {} })
+const ListMessage = UiSchema.TaggedEnum({
+  Typed: { value: Schema.String },
+  Next: {},
+  Patched: {}
+})
 const patched = Command.map(() => ListMessage.Patched())
 
 /** A page whose search text and page number live in the search only. */
@@ -55,10 +71,16 @@ const ListPage = Component.define({
   update: ($, message) =>
     ListMessage.match(message, {
       Typed: ({ value }) =>
-        $.run(Router.patchSearch(ListRoute, $.props.route, { q: value || undefined }).pipe(patched)),
+        $.run(
+          Router.patchSearch(ListRoute, $.props.route, {
+            q: value || undefined
+          }).pipe(patched)
+        ),
       Next: () =>
         $.run(
-          Router.patchSearch(ListRoute, $.props.route, { page: $.props.route.search.page + 1 }, {
+          Router.patchSearch(ListRoute, $.props.route, {
+            page: $.props.route.search.page + 1
+          }, {
             history: "push",
             scroll: true
           }).pipe(patched)
@@ -68,11 +90,11 @@ const ListPage = Component.define({
   view: (h) =>
     h.div(
       h.h1(`List page ${h.props.route.search.page}`),
-      h.input.attr("aria-label", "Search").value(h.props.route.search.q ?? "").onInput(({ value }) =>
-        ListMessage.Typed({ value })
-      ),
+      h.input.attr("aria-label", "Search").value(h.props.route.search.q ?? "")
+        .onInput(({ value }) => ListMessage.Typed({ value })),
       h.button.onClick(ListMessage.Next()).children("Next"),
-      h.a.attr("href", ListRoute.print(ListRoute.List({ search: { page: 2 } }))).children("Page 2"),
+      h.a.attr("href", ListRoute.print(ListRoute.List({ search: { page: 2 } })))
+        .children("Page 2"),
       h.a.attr("href", "#results").children("Results")
     )
 })
@@ -88,16 +110,21 @@ const ListApp = Component.define({
 }).make({
   init: ($) => $.props.route,
   update: (_, route) => route,
-  subscriptions: ({ model: route }) => [Router.subscription(ListRoute, route, (next) => next)],
+  subscriptions: (
+    { model: route }
+  ) => [Router.subscription(ListRoute, route, (next) => next)],
   view: (h, route) =>
     ListRoute.match(route, {
-      List: (route) => ListPage(h, { key: ListRoute.printPath(route), props: { route } }),
+      List: (route) =>
+        ListPage(h, { key: ListRoute.printPath(route), props: { route } }),
       Other: () => h.h1("Other")
     })
 })
 
 /** Lets popstate, the render flush, Commands and the announcement frame run. */
-const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 30)))
+const tick = Effect.promise(() =>
+  new Promise<void>((resolve) => setTimeout(resolve, 30))
+)
 
 const container = Effect.acquireRelease(
   Effect.sync(() => document.body.appendChild(document.createElement("div"))),
@@ -105,22 +132,26 @@ const container = Effect.acquireRelease(
 )
 
 /** Mounts the app at `url` under a browser Router, for the life of the returned Scope. */
-const start = Effect.fnUntraced(function*(url: string, options?: Partial<BrowserRouter.Options>) {
-  window.history.replaceState(null, "", url)
-  const app = yield* container
-  const context = yield* Layer.build(BrowserRouter.layer({ routes: AppRoute, ...options }))
-  const router = Context.get(context, Router.Router)
-  const root = yield* Effect.flatMap(
-    Router.currentRoute(AppRoute),
-    (route) => BrowserHost.mountEffect(App, { route }, app)
-  )
-    .pipe(
-      Effect.provide(People.layer),
-      Effect.provideContext(context)
+const start = Effect.fnUntraced(
+  function*(url: string, options?: Partial<BrowserRouter.Options>) {
+    window.history.replaceState(null, "", url)
+    const app = yield* container
+    const context = yield* Layer.build(
+      BrowserRouter.layer({ routes: AppRoute, ...options })
     )
-  yield* tick
-  return { app, root, router }
-})
+    const router = Context.get(context, Router.Router)
+    const root = yield* Effect.flatMap(
+      Router.currentRoute(AppRoute),
+      (route) => BrowserHost.mountEffect(App, { route }, app)
+    )
+      .pipe(
+        Effect.provide(People.layer),
+        Effect.provideContext(context)
+      )
+    yield* tick
+    return { app, root, router }
+  }
+)
 
 /** The global window, with animation frames that only run when `run` is called. */
 const manualFrames = () => {
@@ -134,7 +165,9 @@ const manualFrames = () => {
           return next
         }
       }
-      if (key === "cancelAnimationFrame") return (id: number) => frames.delete(id)
+      if (key === "cancelAnimationFrame") {
+        return (id: number) => frames.delete(id)
+      }
       const value = Reflect.get(target, key)
       return typeof value === "function" ? value.bind(target) : value
     }
@@ -147,9 +180,11 @@ const manualFrames = () => {
   return { window: proxy as Window, run }
 }
 
-const link = (app: Element, name: string) => HtmlLocator.getByRole(app, "link", { name })
+const link = (app: Element, name: string) =>
+  HtmlLocator.getByRole(app, "link", { name })
 const region = () => document.querySelector("[aria-live=assertive]")
-const description = () => document.head.querySelector("meta[name=description]")?.getAttribute("content")
+const description = () =>
+  document.head.querySelector("meta[name=description]")?.getAttribute("content")
 
 /** Clicks `element`, reporting whether something prevented the browser's default. The default never runs. */
 const clickReporting = (element: Element, init?: MouseEventInit) => {
@@ -159,7 +194,14 @@ const clickReporting = (element: Element, init?: MouseEventInit) => {
     event.preventDefault()
   }
   window.addEventListener("click", record)
-  element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, ...init }))
+  element.dispatchEvent(
+    new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      ...init
+    })
+  )
   window.removeEventListener("click", record)
   return prevented
 }
@@ -170,7 +212,9 @@ const homeRoute = AppRoute.Home()
 const hashShell = Effect.fnUntraced(function*(component: typeof App) {
   AppRoute.setBase("#")
   yield* Effect.addFinalizer(() => Effect.sync(() => AppRoute.setBase("")))
-  return yield* HtmlServer.renderToHtml(component, { route: homeRoute }, { static: true }).pipe(
+  return yield* HtmlServer.renderToHtml(component, { route: homeRoute }, {
+    static: true
+  }).pipe(
     Effect.provide(Router.static({ routes: AppRoute, url: "#/" }))
   )
 })
@@ -185,23 +229,36 @@ describe("BrowserRouter", { concurrent: false }, () => {
   it.effect("hydrates a server render when both sides take their props from their own Router", () => {
     const problems: Array<Query.Problem.Any> = []
     return Effect.gen(function*() {
-      const rendered = yield* HtmlServer.renderToHtml(App, Router.props(AppRoute)).pipe(
-        Effect.provide([People.layer, Router.static({ routes: AppRoute, url: "/people/1" })])
+      const rendered = yield* HtmlServer.renderToHtml(
+        App,
+        Router.props(AppRoute)
+      ).pipe(
+        Effect.provide([
+          People.layer,
+          Router.static({ routes: AppRoute, url: "/people/1" })
+        ])
       )
       window.history.replaceState(null, "", "/people/1")
       const app = yield* container
       app.innerHTML = rendered.html
       const heading = app.querySelector("h1")
       yield* Layer.build(
-        BrowserHost.mount(App, Router.props(AppRoute), app, { state: rendered.state }).pipe(
-          Layer.provide([BrowserRouter.layer({ routes: AppRoute }), People.layer])
+        BrowserHost.mount(App, Router.props(AppRoute), app, {
+          state: rendered.state
+        }).pipe(
+          Layer.provide([
+            BrowserRouter.layer({ routes: AppRoute }),
+            People.layer
+          ])
         )
       )
       yield* tick
       assert.strictEqual(app.querySelector("h1"), heading)
       assert.strictEqual(heading?.textContent, "Person 1")
       assert.deepStrictEqual(problems, [])
-    }).pipe(Effect.provideService(Query.Problems, (problem) => problems.push(problem)))
+    }).pipe(
+      Effect.provideService(Query.Problems, (problem) => problems.push(problem))
+    )
   })
 
   it.effect("exempts hydrated hash roots, but checks client-only hash roots", () => {
@@ -214,27 +271,41 @@ describe("BrowserRouter", { concurrent: false }, () => {
       const home = hydratedContainer.querySelector("h1")
       const hydrated = yield* Effect.flatMap(
         Router.currentRoute(AppRoute),
-        (route) => BrowserHost.mountEffect(App, { route }, hydratedContainer, { state: rendered.state })
+        (route) =>
+          BrowserHost.mountEffect(App, { route }, hydratedContainer, {
+            state: rendered.state
+          })
       ).pipe(Effect.provideContext(context))
       assert.strictEqual(hydratedContainer.querySelector("h1"), home)
       yield* tick
       assert.strictEqual(hydrated.model()?.route._tag, "Person")
       assert.deepStrictEqual(problems, [])
       const clientContainer = yield* container
-      const client = yield* BrowserHost.mountEffect(App, { route: homeRoute }, clientContainer).pipe(
+      const client = yield* BrowserHost.mountEffect(
+        App,
+        { route: homeRoute },
+        clientContainer
+      ).pipe(
         Effect.provideContext(context)
       )
       yield* tick
       assert.strictEqual(client.model()?.route._tag, "Person")
       assert.strictEqual(problems.length, 1)
       assert.strictEqual(problems[0]._tag, "RouteMismatch")
-    }).pipe(Effect.provide(People.layer), Effect.provideService(Query.Problems, (problem) => problems.push(problem)))
+    }).pipe(
+      Effect.provide(People.layer),
+      Effect.provideService(Query.Problems, (problem) => problems.push(problem))
+    )
   })
 
   it.effect("exempts roots hydrated from a static render when only the search differs", () => {
     const problems: Array<Query.Problem.Any> = []
     const search = SearchRoute.Search({ search: {} })
-    const prerender = (url: string, route: typeof SearchRoute.Type, isStatic: boolean) =>
+    const prerender = (
+      url: string,
+      route: typeof SearchRoute.Type,
+      isStatic: boolean
+    ) =>
       HtmlServer.renderToHtml(SearchApp, { route }, { static: isStatic }).pipe(
         Effect.provide(Router.static({ routes: SearchRoute, url }))
       )
@@ -246,40 +317,59 @@ describe("BrowserRouter", { concurrent: false }, () => {
       element.innerHTML = rendered.html
       const root = yield* Effect.flatMap(
         Router.currentRoute(SearchRoute),
-        (route) => BrowserHost.mountEffect(SearchApp, { route }, element, { state: rendered.state })
+        (route) =>
+          BrowserHost.mountEffect(SearchApp, { route }, element, {
+            state: rendered.state
+          })
       ).pipe(Effect.provideContext(context))
       yield* tick
       return root
     })
-    const mismatches = () => problems.filter((problem) => problem._tag === "RouteMismatch").length
+    const mismatches = () =>
+      problems.filter((problem) => problem._tag === "RouteMismatch").length
     return Effect.gen(function*() {
       const prerendered = yield* prerender("/search", search, true)
       const dynamic = yield* prerender("/search", search, false)
       const other = yield* prerender("/other", SearchRoute.Other(), true)
       window.history.replaceState(null, "", "/search?q=x")
-      const context = yield* Layer.build(BrowserRouter.layer({ routes: SearchRoute }))
+      const context = yield* Layer.build(
+        BrowserRouter.layer({ routes: SearchRoute })
+      )
 
       // Static, search only: no report, and the route is delivered.
       const root = yield* hydrate(context, prerendered)
-      assert.deepStrictEqual(root.model(), SearchRoute.Search({ search: { q: "x" } }))
+      assert.deepStrictEqual(
+        root.model(),
+        SearchRoute.Search({ search: { q: "x" } })
+      )
       assert.strictEqual(mismatches(), 0)
 
       // A dynamic render with another search is the bug the check exists for.
       const fromDynamic = yield* hydrate(context, dynamic)
-      assert.deepStrictEqual(fromDynamic.model(), SearchRoute.Search({ search: { q: "x" } }))
+      assert.deepStrictEqual(
+        fromDynamic.model(),
+        SearchRoute.Search({ search: { q: "x" } })
+      )
       assert.strictEqual(mismatches(), 1)
 
       // A static render of another path still reports.
       const fromOther = yield* hydrate(context, other)
-      assert.deepStrictEqual(fromOther.model(), SearchRoute.Search({ search: { q: "x" } }))
+      assert.deepStrictEqual(
+        fromOther.model(),
+        SearchRoute.Search({ search: { q: "x" } })
+      )
       assert.strictEqual(mismatches(), 2)
-    }).pipe(Effect.provideService(Query.Problems, (problem) => problems.push(problem)))
+    }).pipe(
+      Effect.provideService(Query.Problems, (problem) => problems.push(problem))
+    )
   })
 
   it.effect("checks hash roots that cannot adopt a server Model", () => {
     const problems: Array<Query.Problem.Any> = []
     return Effect.gen(function*() {
-      const Deferred = App.pipe(Component.provide(People.layer, { server: false }))
+      const Deferred = App.pipe(
+        Component.provide(People.layer, { server: false })
+      )
       const deferred = yield* hashShell(Deferred)
       const rendered = yield* hashShell(App)
       const context = yield* hashRouter
@@ -291,15 +381,26 @@ describe("BrowserRouter", { concurrent: false }, () => {
         ] as const
       ) {
         const element = yield* container
-        const root = yield* BrowserHost.mountEffect(component, { route: homeRoute }, element, { state }).pipe(
+        const root = yield* BrowserHost.mountEffect(
+          component,
+          { route: homeRoute },
+          element,
+          { state }
+        ).pipe(
           Effect.provideContext(context)
         )
         yield* tick
         assert.strictEqual(root.model()?.route._tag, "Person")
-        assert.strictEqual(problems.filter((problem) => problem._tag === "RouteMismatch").length, 1)
+        assert.strictEqual(
+          problems.filter((problem) => problem._tag === "RouteMismatch").length,
+          1
+        )
         problems.length = 0
       }
-    }).pipe(Effect.provide(People.layer), Effect.provideService(Query.Problems, (problem) => problems.push(problem)))
+    }).pipe(
+      Effect.provide(People.layer),
+      Effect.provideService(Query.Problems, (problem) => problems.push(problem))
+    )
   })
 
   it.effect("navigates by link, back and forward, and the head and announcement follow", () =>
@@ -307,7 +408,9 @@ describe("BrowserRouter", { concurrent: false }, () => {
       const { app, root } = yield* start("/")
       expect(document.title).toBe("Home · App")
       expect(document.documentElement.getAttribute("lang")).toBe("en")
-      expect(document.documentElement.getAttribute("data-eui")).toBe("lang class")
+      expect(document.documentElement.getAttribute("data-eui")).toBe(
+        "lang class"
+      )
       expect(description()).toBe("Home page")
       // Nothing is announced on first load.
       expect(region()?.textContent).toBe("")
@@ -319,7 +422,11 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(HtmlLocator.getByRole(app, "heading").textContent).toBe("Person 1")
       expect(document.title).toBe("Person 1 · App")
       expect(description()).toBe("About person 1")
-      expect(document.head.querySelector("script[type='application/ld+json'][data-eui]")?.textContent).toBe(
+      expect(
+        document.head.querySelector(
+          "script[type='application/ld+json'][data-eui]"
+        )?.textContent
+      ).toBe(
         "{\"@type\":\"Person\",\"identifier\":1}"
       )
       expect(region()?.textContent).toBe("Person 1 · App")
@@ -329,7 +436,8 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(window.location.pathname).toBe("/")
       expect(document.title).toBe("Home · App")
       expect(description()).toBe("Home page")
-      expect(document.head.querySelector("script[type='application/ld+json']")).toBeNull()
+      expect(document.head.querySelector("script[type='application/ld+json']"))
+        .toBeNull()
       expect(region()?.textContent).toBe("Home · App")
 
       window.history.forward()
@@ -341,16 +449,24 @@ describe("BrowserRouter", { concurrent: false }, () => {
   it.effect("clicking the current route notifies subscribers without scrolling, announcing or adding history", () =>
     Effect.gen(function*() {
       const log = MessageLog.makeMemory()
-      const { app } = yield* start("/?utm_source=news").pipe(Effect.provideService(MessageLog.MessageLog, log))
+      const { app } = yield* start("/?utm_source=news").pipe(
+        Effect.provideService(MessageLog.MessageLog, log)
+      )
       const entries = window.history.length
       window.scrollTo(0, 80)
       expect(clickReporting(link(app, "Home"))).toBe(true)
       yield* tick
-      expect(window.location.pathname + window.location.search).toBe("/?utm_source=news")
+      expect(window.location.pathname + window.location.search).toBe(
+        "/?utm_source=news"
+      )
       expect(window.history.length).toBe(entries)
       expect(window.scrollY).toBe(80)
       expect(region()?.textContent).toBe("")
-      expect(log.entries().flatMap((entry) => entry._tag === "Update" ? [entry.message] : []))
+      expect(
+        log.entries().flatMap((entry) =>
+          entry._tag === "Update" ? [entry.message] : []
+        )
+      )
         .toEqual([Message.ChangedRoute({ route: homeRoute })])
     }).pipe(Effect.scoped))
 
@@ -379,8 +495,14 @@ describe("BrowserRouter", { concurrent: false }, () => {
     Effect.gen(function*() {
       const frames = manualFrames()
       const slow = AppRoute.Slow()
-      const routes = Route.union(AppRoute.routes, Route.redirect("/old-slow", () => slow))
-      const { app, router } = yield* start("/", { routes, window: frames.window })
+      const routes = Route.union(
+        AppRoute.routes,
+        Route.redirect("/old-slow", () => slow)
+      )
+      const { app, router } = yield* start("/", {
+        routes,
+        window: frames.window
+      })
 
       yield* router.navigate("/old-slow")
       yield* tick
@@ -434,7 +556,10 @@ describe("BrowserRouter", { concurrent: false }, () => {
       }).make({
         init: () => 0,
         update: ($) => $.model + 1,
-        view: (h) => h.a.attr("href", "/people/1").onClick("Peek", { preventDefault: true }).children("Person 1")
+        view: (h) =>
+          h.a.attr("href", "/people/1").onClick("Peek", {
+            preventDefault: true
+          }).children("Person 1")
       })
       const app = yield* container
       const root = yield* BrowserHost.mountEffect(Peek, {}, app)
@@ -455,8 +580,14 @@ describe("BrowserRouter", { concurrent: false }, () => {
       }
       const person = link(app, "Person 1")
       const inner = person.appendChild(document.createElement("span"))
-      const fire = (target: Element, type: string, relatedTarget: Element | null = null) =>
-        target.dispatchEvent(new MouseEvent(type, { bubbles: true, relatedTarget }))
+      const fire = (
+        target: Element,
+        type: string,
+        relatedTarget: Element | null = null
+      ) =>
+        target.dispatchEvent(
+          new MouseEvent(type, { bubbles: true, relatedTarget })
+        )
       // Hover: 50 ms on the Clock. Moving onto an element inside the anchor neither cancels nor restarts.
       fire(person, "mouseover")
       yield* TestClock.adjust("30 millis")
@@ -473,9 +604,13 @@ describe("BrowserRouter", { concurrent: false }, () => {
       yield* TestClock.adjust("1 second")
       expect(intents).toEqual(["/people/1"])
       // Focus waits too, and touch doesn't.
-      link(app, "Slow").dispatchEvent(new FocusEvent("focusin", { bubbles: true }))
+      link(app, "Slow").dispatchEvent(
+        new FocusEvent("focusin", { bubbles: true })
+      )
       yield* TestClock.adjust("50 millis")
-      link(app, "Home").dispatchEvent(new Event("touchstart", { bubbles: true }))
+      link(app, "Home").dispatchEvent(
+        new Event("touchstart", { bubbles: true })
+      )
       expect(intents).toEqual(["/people/1", "/slow", "/"])
       // The links a click leaves to the browser show no intent.
       person.setAttribute("target", "_blank")
@@ -484,7 +619,9 @@ describe("BrowserRouter", { concurrent: false }, () => {
       person.setAttribute("download", "")
       person.dispatchEvent(new Event("touchstart", { bubbles: true }))
       person.removeAttribute("download")
-      link(app, "Elsewhere").dispatchEvent(new Event("touchstart", { bubbles: true }))
+      link(app, "Elsewhere").dispatchEvent(
+        new Event("touchstart", { bubbles: true })
+      )
       expect(intents).toEqual(["/people/1", "/slow", "/"])
     }).pipe(Effect.scoped))
 
@@ -500,9 +637,13 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(window.location.pathname).toBe("/")
       submitForm("Search")
       yield* tick
-      expect(window.location.pathname + window.location.search).toBe("/search?q=ada")
+      expect(window.location.pathname + window.location.search).toBe(
+        "/search?q=ada"
+      )
       expect(root.model()?.route._tag).toBe("Search")
-      expect(HtmlLocator.getByRole(app, "heading").textContent).toBe("Search ada")
+      expect(HtmlLocator.getByRole(app, "heading").textContent).toBe(
+        "Search ada"
+      )
     }).pipe(Effect.scoped))
 
   it.effect("restores the scroll position on back and forward between #hash entries", () =>
@@ -511,7 +652,8 @@ describe("BrowserRouter", { concurrent: false }, () => {
       clickReporting(link(app, "Person 2 bio"))
       yield* tick
       // Happy DOM has no layout; make a scroll back to the anchor observable.
-      app.querySelector<HTMLElement>("#bio")!.scrollIntoView = () => window.scrollTo(0, 300)
+      app.querySelector<HTMLElement>("#bio")!.scrollIntoView = () =>
+        window.scrollTo(0, 300)
       window.scrollTo(0, 100)
       clickReporting(link(app, "Person 2 bio"))
       yield* tick
@@ -538,7 +680,9 @@ describe("BrowserRouter", { concurrent: false }, () => {
       const { app } = yield* start("/")
       clickReporting(link(app, "Person 2 bio"))
       yield* tick
-      expect(window.location.pathname + window.location.hash).toBe("/people/2#bio")
+      expect(window.location.pathname + window.location.hash).toBe(
+        "/people/2#bio"
+      )
       const bio = document.getElementById("bio")!
       expect(document.activeElement).toBe(bio)
       expect(bio.getAttribute("tabindex")).toBe("-1")
@@ -585,7 +729,9 @@ describe("BrowserRouter", { concurrent: false }, () => {
   it.effect("allows one Router per document", () =>
     Effect.gen(function*() {
       yield* Layer.build(BrowserRouter.layer({ routes: AppRoute }))
-      const second = yield* Effect.exit(Layer.build(BrowserRouter.layer({ routes: AppRoute })))
+      const second = yield* Effect.exit(
+        Layer.build(BrowserRouter.layer({ routes: AppRoute }))
+      )
       expect(Exit.isFailure(second)).toBe(true)
     }).pipe(Effect.scoped))
 
@@ -594,12 +740,19 @@ describe("BrowserRouter", { concurrent: false }, () => {
     const startList = Effect.fnUntraced(function*(url: string) {
       window.history.replaceState(null, "", url)
       const app = yield* container
-      const context = yield* Layer.build(BrowserRouter.layer({ routes: ListRoute }))
-      yield* Effect.flatMap(Router.currentRoute(ListRoute), (route) => BrowserHost.mountEffect(ListApp, { route }, app))
+      const context = yield* Layer.build(
+        BrowserRouter.layer({ routes: ListRoute })
+      )
+      yield* Effect.flatMap(
+        Router.currentRoute(ListRoute),
+        (route) => BrowserHost.mountEffect(ListApp, { route }, app)
+      )
         .pipe(Effect.provideContext(context))
       yield* tick
       region()!.textContent = "marker"
-      const field = HtmlLocator.getByRole(app, "textbox", { name: "Search" }) as HTMLInputElement
+      const field = HtmlLocator.getByRole(app, "textbox", {
+        name: "Search"
+      }) as HTMLInputElement
       return { app, field }
     })
     const url = () => window.location.pathname + window.location.search
@@ -626,19 +779,25 @@ describe("BrowserRouter", { concurrent: false }, () => {
         HtmlLocator.click(next)
         yield* tick
         expect(url()).toBe("/list?page=2")
-        expect(HtmlLocator.getByRole(app, "heading").textContent).toBe("List page 2")
+        expect(HtmlLocator.getByRole(app, "heading").textContent).toBe(
+          "List page 2"
+        )
         expect(window.scrollY).toBe(0)
         expect(document.activeElement).toBe(next)
         window.scrollTo(0, 30)
         window.history.back()
         yield* tick
         expect(url()).toBe("/list")
-        expect(HtmlLocator.getByRole(app, "heading").textContent).toBe("List page 1")
+        expect(HtmlLocator.getByRole(app, "heading").textContent).toBe(
+          "List page 1"
+        )
         expect(window.scrollY).toBe(80)
         expect(document.activeElement).toBe(next)
         expect(region()?.textContent).toBe("marker")
         // The page keyed by its path stayed mounted.
-        expect(HtmlLocator.getByRole(app, "textbox", { name: "Search" })).toBe(field)
+        expect(HtmlLocator.getByRole(app, "textbox", { name: "Search" })).toBe(
+          field
+        )
       }).pipe(Effect.scoped))
 
     it.effect("throttles the search writes of typing to one per 200 ms, writing the latest", () =>
@@ -650,7 +809,11 @@ describe("BrowserRouter", { concurrent: false }, () => {
         }
         // The page shows the latest search at once; the address bar has the first.
         expect(url()).toBe("/list?q=a")
-        expect((HtmlLocator.getByRole(app, "textbox", { name: "Search" }) as HTMLInputElement).value).toBe("abc")
+        expect(
+          (HtmlLocator.getByRole(app, "textbox", {
+            name: "Search"
+          }) as HTMLInputElement).value
+        ).toBe("abc")
         yield* TestClock.adjust("199 millis")
         expect(url()).toBe("/list?q=a")
         yield* TestClock.adjust("1 millis")
@@ -665,13 +828,21 @@ describe("BrowserRouter", { concurrent: false }, () => {
             if (key === "addEventListener") {
               return (type: string, f: EventListener, options?: unknown) => {
                 if (type === "pagehide") listening.add(f)
-                target.addEventListener(type, f, options as AddEventListenerOptions)
+                target.addEventListener(
+                  type,
+                  f,
+                  options as AddEventListenerOptions
+                )
               }
             }
             if (key === "removeEventListener") {
               return (type: string, f: EventListener, options?: unknown) => {
                 if (type === "pagehide") listening.delete(f)
-                target.removeEventListener(type, f, options as EventListenerOptions)
+                target.removeEventListener(
+                  type,
+                  f,
+                  options as EventListenerOptions
+                )
               }
             }
             const value = Reflect.get(target, key)
@@ -680,7 +851,9 @@ describe("BrowserRouter", { concurrent: false }, () => {
         }) as Window
         window.history.replaceState(null, "", "/list")
         yield* Effect.gen(function*() {
-          const context = yield* Layer.build(BrowserRouter.layer({ routes: ListRoute, window: recording }))
+          const context = yield* Layer.build(
+            BrowserRouter.layer({ routes: ListRoute, window: recording })
+          )
           const router = Context.get(context, Router.Router)
           const held = ListOnly.List()
           yield* router.patchSearch(held, { q: "a" })
@@ -705,7 +878,11 @@ describe("BrowserRouter", { concurrent: false }, () => {
         expect(clickReporting(link(app, "Results"))).toBe(true)
         yield* tick
         expect(url() + window.location.hash).toBe("/list?q=ab#results")
-        expect((HtmlLocator.getByRole(app, "textbox", { name: "Search" }) as HTMLInputElement).value).toBe("ab")
+        expect(
+          (HtmlLocator.getByRole(app, "textbox", {
+            name: "Search"
+          }) as HTMLInputElement).value
+        ).toBe("ab")
       }).pipe(Effect.scoped))
 
     it.effect("a link to its own page's search is loud", () =>
@@ -723,12 +900,23 @@ describe("BrowserRouter", { concurrent: false }, () => {
   it.effect("keeps the route in the fragment with layerHash", () =>
     Effect.gen(function*() {
       window.history.replaceState(null, "", "/")
-      const context = yield* Layer.build(BrowserRouter.layerHash({ routes: AppRoute }))
+      const context = yield* Layer.build(
+        BrowserRouter.layerHash({ routes: AppRoute })
+      )
       const router = Context.get(context, Router.Router)
       expect(window.location.hash).toBe("#/")
       expect(router.location().route._tag).toBe("Home")
-      expect(yield* router.push(AppRoute.Person({ params: { id: 3 } }))).toBe("navigated")
-      expect(window.location.pathname + window.location.hash).toBe("/#/people/3")
-      expect(Option.getOrThrow(AppRoute.parse("#/people/3"))._tag).toBe("Person")
-    }).pipe(Effect.scoped, Effect.ensuring(Effect.sync(() => AppRoute.setBase("")))))
+      expect(yield* router.push(AppRoute.Person({ params: { id: 3 } }))).toBe(
+        "navigated"
+      )
+      expect(window.location.pathname + window.location.hash).toBe(
+        "/#/people/3"
+      )
+      expect(Option.getOrThrow(AppRoute.parse("#/people/3"))._tag).toBe(
+        "Person"
+      )
+    }).pipe(
+      Effect.scoped,
+      Effect.ensuring(Effect.sync(() => AppRoute.setBase("")))
+    ))
 })

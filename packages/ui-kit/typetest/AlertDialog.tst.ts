@@ -6,12 +6,22 @@ import { expect, it } from "tstyche"
 
 class Clock extends Context.Service<Clock, {}>()("Clock") {}
 
-const NeedsClock = Mount.make("NeedsClock", { args: {} }, () => Clock.use(() => Effect.succeed(Component.noop)))
+const NeedsClock = Mount.make(
+  "NeedsClock",
+  { args: {} },
+  () => Clock.use(() => Effect.succeed(Component.noop))
+)
 
 const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 type Msg = typeof Msg.Type
 
-type DialogElement<R> = Html.Element<Msg, R, Html.EventsOf<"dialog">, HTMLDialogElement, "dialog">
+type DialogElement<R> = Html.Element<
+  Msg,
+  R,
+  Html.EventsOf<"dialog">,
+  HTMLDialogElement,
+  "dialog"
+>
 
 declare const h: View.Helper<Msg, unknown> & View.Tags<Html.Elements, Msg>
 
@@ -19,8 +29,14 @@ it("does not let the caller disable modality or enable outside dismissal", () =>
   const view = () => h.div
   expect(AlertDialog).type.toBeCallableWith(h, { props: { open: true }, view })
   expect(AlertDialog).type.not.toBeCallableWith(h, { props: {}, view })
-  expect(AlertDialog).type.not.toBeCallableWith(h, { props: { open: true, modal: false }, view })
-  expect(AlertDialog).type.not.toBeCallableWith(h, { props: { open: true, disablePointerDismissal: false }, view })
+  expect(AlertDialog).type.not.toBeCallableWith(h, {
+    props: { open: true, modal: false },
+    view
+  })
+  expect(AlertDialog).type.not.toBeCallableWith(h, {
+    props: { open: true, disablePointerDismissal: false },
+    view
+  })
 })
 
 it("wraps portal as an optional dialog builder and preserves its requirements", () => {

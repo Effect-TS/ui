@@ -20,10 +20,21 @@ const setup = (url: string) => {
   return { server, deps }
 }
 
-const run = <A, E>(deps: Layer.Layer<any>, effect: Effect.Effect<A, E, any>, flush?: TestHost.Flush) =>
-  effect.pipe(Effect.provide(deps), Effect.scoped, Effect.provide(TestHost.layer({ flush }))) as Effect.Effect<A, E>
+const run = <A, E>(
+  deps: Layer.Layer<any>,
+  effect: Effect.Effect<A, E, any>,
+  flush?: TestHost.Flush
+) =>
+  effect.pipe(
+    Effect.provide(deps),
+    Effect.scoped,
+    Effect.provide(TestHost.layer({ flush }))
+  ) as Effect.Effect<A, E>
 
-const mount = Effect.flatMap(Router.currentRoute(users.AppRoute), (route) => TestHost.mount(users.App, { route }))
+const mount = Effect.flatMap(
+  Router.currentRoute(users.AppRoute),
+  (route) => TestHost.mount(users.App, { route })
+)
 
 const navigate = Effect.fnUntraced(function*(url: string) {
   const router = yield* Router.Router
@@ -33,15 +44,18 @@ const navigate = Effect.fnUntraced(function*(url: string) {
 
 type Root = Pick<TestHost.TestRoot<any, any, any>, "get" | "fetches">
 
-const click = (root: Root, text: string) => Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
-const nameInput = (root: Root) => root.get(Locator.attr("aria-label", "Name")) as TestHost.TestElement
+const click = (root: Root, text: string) =>
+  Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
+const nameInput = (root: Root) =>
+  root.get(Locator.attr("aria-label", "Name")) as TestHost.TestElement
 const rename = (root: Root, name: string) => {
   Locator.fire(nameInput(root), "input", { value: name })
   Locator.fire(root.get(Locator.tag("form")), "submit")
 }
 /** The card's heading: the user's name as the card shows it. */
 const cardName = (root: Root) => Locator.textOf(root.get(Locator.tag("h2")))
-const fetchesOf = (root: Root, read: string) => root.fetches().filter((fetch) => fetch.query === read)
+const fetchesOf = (root: Root, read: string) =>
+  root.fetches().filter((fetch) => fetch.query === read)
 const count = (text: string, part: string) => text.split(part).length - 1
 
 /** The list page and the detail page side by side. */
@@ -79,7 +93,11 @@ describe("the worked example", () => {
         // The list row and the card heading, and the form already saving.
         assert.strictEqual(count(frames[first], "Bob"), 2)
         assert.include(frames[first], "Saving…")
-        assert.isTrue(frames.every((frame) => count(frame, "Bob") === 0 || count(frame, "Bob") === 2))
+        assert.isTrue(
+          frames.every((frame) =>
+            count(frame, "Bob") === 0 || count(frame, "Bob") === 2
+          )
+        )
         yield* TestClock.adjust("100 millis")
         yield* TestHost.settle
         assert.strictEqual(count(root.text(), "Bob"), 2)
@@ -134,7 +152,10 @@ describe("the worked example", () => {
         yield* TestHost.setVisible(false)
         yield* TestHost.setVisible(true)
         yield* TestHost.settle
-        assert.deepStrictEqual(root.entry(users.GetUser, { id: "1" })?.fetch, "held")
+        assert.deepStrictEqual(
+          root.entry(users.GetUser, { id: "1" })?.fetch,
+          "held"
+        )
         yield* TestClock.adjust("100 millis")
         yield* TestClock.adjust("10 millis")
         yield* TestHost.settle
@@ -159,10 +180,15 @@ describe("the worked example", () => {
         const before = root.frames().length
         yield* navigate("/users/1")
         // The card's watch is a zero-to-one over a stale entry.
-        assert.deepStrictEqual(fetchesOf(root, "users/GetUser").map((fetch) => fetch.trigger), ["watch", "watch"])
+        assert.deepStrictEqual(
+          fetchesOf(root, "users/GetUser").map((fetch) => fetch.trigger),
+          ["watch", "watch"]
+        )
         yield* TestClock.adjust("10 millis")
         // No "Loading" frame over a warm entry.
-        assert.isFalse(root.frames().slice(before).some((frame) => frame.includes("Loading")))
+        assert.isFalse(
+          root.frames().slice(before).some((frame) => frame.includes("Loading"))
+        )
         yield* TestClock.adjust("31 seconds")
         click(root, "Rename")
         yield* TestHost.settle
@@ -197,7 +223,10 @@ describe("the worked example", () => {
         assert.isTrue(after.some((frame) => frame.includes("Bob")))
         assert.isFalse(after.some((frame) => frame.includes("Ann")))
         // The invalidated list refetched when it was watched again.
-        assert.deepStrictEqual(fetchesOf(root, "users/ListUsers").map((fetch) => fetch.trigger), ["watch", "watch"])
+        assert.deepStrictEqual(
+          fetchesOf(root, "users/ListUsers").map((fetch) => fetch.trigger),
+          ["watch", "watch"]
+        )
       })
     )
   })
@@ -220,7 +249,10 @@ describe("the worked example", () => {
         yield* TestHost.settle
         yield* TestClock.adjust("10 millis")
         yield* TestHost.settle
-        assert.deepStrictEqual(fetchesOf(root, "users/GetUser").map((fetch) => fetch.trigger), ["watch", "visibility"])
+        assert.deepStrictEqual(
+          fetchesOf(root, "users/GetUser").map((fetch) => fetch.trigger),
+          ["watch", "visibility"]
+        )
         assert.strictEqual(nameInput(root).props.value, "Zed")
       })
     )
@@ -281,7 +313,17 @@ describe("the worked example", () => {
         assert.isAbove(mounted.length, 3)
         for (const entry of mounted) {
           const replay = Story.fromLog(
-            entry.component as Component.Component<any, any, any, any, any, any, any, any, any>,
+            entry.component as Component.Component<
+              any,
+              any,
+              any,
+              any,
+              any,
+              any,
+              any,
+              any,
+              any
+            >,
             log,
             { path: entry.path }
           )
@@ -289,7 +331,10 @@ describe("the worked example", () => {
         }
         return {
           text: root.text(),
-          timeline: TestHost.formatTimeline(log).replace(/ ?\(?(after )?#\d+\)? ?/g, " ")
+          timeline: TestHost.formatTimeline(log).replace(
+            / ?\(?(after )?#\d+\)? ?/g,
+            " "
+          )
         }
       }),
       flush
@@ -303,7 +348,11 @@ describe("the worked example", () => {
       for (const flush of ["first", "last", { seed: 1 }] as const) {
         const actual = yield* timelineOf(flush)
         assert.strictEqual(actual.text, expected.text, JSON.stringify(flush))
-        assert.strictEqual(actual.timeline, expected.timeline, JSON.stringify(flush))
+        assert.strictEqual(
+          actual.timeline,
+          expected.timeline,
+          JSON.stringify(flush)
+        )
       }
     }))
 })

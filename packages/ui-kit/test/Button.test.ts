@@ -40,13 +40,17 @@ const Card = Component.define({
 })
 
 const button = Locator.tag("button")
-const clicked = (s: { get: (l: Locator.Locator) => Locator.Node }) => s.get(Locator.tag("output")).children?.[0]?.text
+const clicked = (s: { get: (l: Locator.Locator) => Locator.Node }) =>
+  s.get(Locator.tag("output")).children?.[0]?.text
 const h = View.makeHelper<typeof CardMessage.Type, {}, Html.Elements>({}, Html)
 
 describe("Button", () => {
   it.effect("onPress sends without cancelling a reset, no onPress lets the click through, and a focusable disabled button cancels it", () =>
     Effect.gen(function*() {
-      const s = yield* Scene.make(Card, { press: true, button: { type: "reset" } })
+      const s = yield* Scene.make(Card, {
+        press: true,
+        button: { type: "reset" }
+      })
       s.fire(button, "click")
       assert.strictEqual(clicked(s), "save")
       assert.isFalse(s.defaultPrevented)
@@ -56,18 +60,32 @@ describe("Button", () => {
       assert.isFalse(s.defaultPrevented)
 
       s.props({ press: true, button: { type: "reset", disabled: true } })
-      assert.deepStrictEqual(s.get(button).attrs, { type: "reset", disabled: "", "data-disabled": "" })
+      assert.deepStrictEqual(s.get(button).attrs, {
+        type: "reset",
+        disabled: "",
+        "data-disabled": ""
+      })
 
-      s.props({ press: true, button: { type: "reset", disabled: true, focusableWhenDisabled: true } })
+      s.props({
+        press: true,
+        button: { type: "reset", disabled: true, focusableWhenDisabled: true }
+      })
         .fire(button, "click")
         .expectIgnored()
-      assert.deepStrictEqual(s.get(button).attrs, { type: "reset", "aria-disabled": "true", "data-disabled": "" })
+      assert.deepStrictEqual(s.get(button).attrs, {
+        type: "reset",
+        "aria-disabled": "true",
+        "data-disabled": ""
+      })
       assert.isTrue(s.defaultPrevented)
       assert.strictEqual(clicked(s), "card")
     }))
 
   it("the caller chains a class, attributes and children, the button's own win, and a click handler clashing with onPress throws", () => {
-    const styled = Button(h, { props: { disabled: true }, element: h.button.attr("aria-disabled", "true") })
+    const styled = Button(h, {
+      props: { disabled: true },
+      element: h.button.attr("aria-disabled", "true")
+    })
       .class("save")
       .attrs({
         "aria-label": "Save note",
@@ -91,15 +109,27 @@ describe("Button", () => {
     const clash = /already handles click/
     for (const disabled of [false, true]) {
       const props = { disabled }
-      assert.deepStrictEqual(View.build(Button(h, { props, element: own }), []).handlers, { click })
-      assert.deepStrictEqual(View.build(Button(h, { props }).onClick(click), []).handlers, { click })
+      assert.deepStrictEqual(
+        View.build(Button(h, { props, element: own }), []).handlers,
+        { click }
+      )
+      assert.deepStrictEqual(
+        View.build(Button(h, { props }).onClick(click), []).handlers,
+        { click }
+      )
       const reserving = [
         { props, onPress: CardMessage.PressedSave() },
         { props: { disabled, focusableWhenDisabled: true } }
       ]
       for (const options of reserving) {
-        assert.throws(() => View.build(Button(h, { ...options, element: own }), []), clash)
-        assert.throws(() => View.build(Button(h, options).onClick(click), []), clash)
+        assert.throws(
+          () => View.build(Button(h, { ...options, element: own }), []),
+          clash
+        )
+        assert.throws(
+          () => View.build(Button(h, options).onClick(click), []),
+          clash
+        )
       }
     }
   })

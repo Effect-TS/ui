@@ -15,7 +15,8 @@ import { segment } from "./paths.ts"
  * @internal
  */
 export const isKeyed = (view: View.Node<any, any>): boolean =>
-  view._tag === "Child" || view._tag === "Outlet" || (view._tag === "Element" && view.elementKey !== undefined)
+  view._tag === "Child" || view._tag === "Outlet" ||
+  (view._tag === "Element" && view.elementKey !== undefined)
 
 /**
  * A keyed node's key among its siblings.
@@ -27,7 +28,8 @@ export const keyOf = (view: View.Node<any, any>): string =>
     "c:" + segment(view) :
     view._tag === "Outlet" ?
     "o:" + view.name :
-    "e:" + (view as View.Element<any, any>).tag + "[" + (view as View.Element<any, any>).elementKey + "]"
+    "e:" + (view as View.Element<any, any>).tag + "[" +
+    (view as View.Element<any, any>).elementKey + "]"
 
 /**
  * Whether `view`, once matched with `old`, patches it rather than replacing
@@ -36,7 +38,10 @@ export const keyOf = (view: View.Node<any, any>): string =>
  *
  * @internal
  */
-export const same = (old: View.Node<any, any>, view: View.Node<any, any>): boolean => {
+export const same = (
+  old: View.Node<any, any>,
+  view: View.Node<any, any>
+): boolean => {
   switch (old._tag) {
     case "Child":
       return view._tag === "Child" && old.component === view.component
@@ -55,8 +60,12 @@ export const same = (old: View.Node<any, any>, view: View.Node<any, any>): boole
  *
  * @internal
  */
-export const patches = (old: View.Node<any, any>, view: View.Node<any, any>): boolean =>
-  same(old, view) && isKeyed(old) === isKeyed(view) && (!isKeyed(view) || keyOf(old) === keyOf(view))
+export const patches = (
+  old: View.Node<any, any>,
+  view: View.Node<any, any>
+): boolean =>
+  same(old, view) && isKeyed(old) === isKeyed(view) &&
+  (!isKeyed(view) || keyOf(old) === keyOf(view))
 
 /**
  * For each of `news`, the index of the old node it patches, or -1 when it's

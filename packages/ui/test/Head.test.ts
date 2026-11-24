@@ -11,12 +11,23 @@ const node = (
 
 describe("Head", () => {
   it("chains title templates outward, never on the instance's own title", () => {
-    const app = (layout: Head.Tree) => node([Head.titleTemplate((t) => `${t} · App`), Head.title("App")], layout)
+    const app = (layout: Head.Tree) =>
+      node([Head.titleTemplate((t) => `${t} · App`), Head.title("App")], layout)
     const people = (...children: ReadonlyArray<Head.Tree>) =>
-      node([Head.titleTemplate((t) => `${t} · People`), Head.title("People")], ...children)
-    assert.strictEqual(Head.merge(app(people(node([Head.title("Ada")])))).title, "Ada · People · App")
+      node(
+        [Head.titleTemplate((t) => `${t} · People`), Head.title("People")],
+        ...children
+      )
+    assert.strictEqual(
+      Head.merge(app(people(node([Head.title("Ada")])))).title,
+      "Ada · People · App"
+    )
     assert.strictEqual(Head.merge(app(people())).title, "People · App")
-    assert.strictEqual(Head.merge(node([Head.titleTemplate((t) => `${t}!`), Head.title("Root")])).title, "Root")
+    assert.strictEqual(
+      Head.merge(node([Head.titleTemplate((t) => `${t}!`), Head.title("Root")]))
+        .title,
+      "Root"
+    )
   })
 
   it("skips a throwing template and reports it to its node", () => {
@@ -30,20 +41,34 @@ describe("Head", () => {
     }
     assert.strictEqual(Head.merge(tree).title, "Ada")
     assert.strictEqual(errors.length, 1)
-    assert.throws(() => Head.merge({ ...tree, onError: undefined }), /bad template/)
+    assert.throws(
+      () => Head.merge({ ...tree, onError: undefined }),
+      /bad template/
+    )
   })
 
   it("rejects siblings without distinct paths, in either order", () => {
-    const at = (path: string | undefined, title: string): Head.Tree => ({ path, ...node([Head.title(title)]) })
-    const pairs = [[undefined, undefined], [undefined, ""], ["/App/Page", "/App/Page"]] as const
+    const at = (path: string | undefined, title: string): Head.Tree => ({
+      path,
+      ...node([Head.title(title)])
+    })
+    const pairs = [[undefined, undefined], [undefined, ""], [
+      "/App/Page",
+      "/App/Page"
+    ]] as const
     for (const [first, second] of pairs) {
       const a = at(first, "A")
       const b = at(second, "B")
-      const message = first === undefined ? /two siblings have no path/ : /two siblings share the path \/App\/Page/
+      const message = first === undefined
+        ? /two siblings have no path/
+        : /two siblings share the path \/App\/Page/
       assert.throws(() => Head.merge(node([], a, b)), message)
       assert.throws(() => Head.merge(node([], b, a)), message)
     }
-    assert.strictEqual(Head.merge(node([], at(undefined, "A"), node([]))).title, "A")
+    assert.strictEqual(
+      Head.merge(node([], at(undefined, "A"), node([]))).title,
+      "A"
+    )
   })
 
   it.effect("fails only the instance whose title template throws", () =>
@@ -83,14 +108,27 @@ describe("Head", () => {
         init: () => 0,
         update: ($) => $.model,
         head: () => [Head.title("App")],
-        view: (h) => h.el("main", Layout(h, { key: "layout", props: {}, fallback: () => h.text("down") }))
+        view: (h) =>
+          h.el(
+            "main",
+            Layout(h, {
+              key: "layout",
+              props: {},
+              fallback: () => h.text("down")
+            })
+          )
       })
       const root = yield* TestHost.mount(App, {})
       yield* TestHost.settle
       assert.strictEqual(root.text(), "down")
       assert.strictEqual(root.head().title, "App")
-      const failed = root.log().filter((entry): entry is MessageLog.Failed => entry._tag === "Failed")
-      assert.deepStrictEqual(failed.map((entry) => [entry.path, entry.in]), [["/App/Layout[layout]", "head"]])
+      const failed = root.log().filter((entry): entry is MessageLog.Failed =>
+        entry._tag === "Failed"
+      )
+      assert.deepStrictEqual(failed.map((entry) => [entry.path, entry.in]), [[
+        "/App/Layout[layout]",
+        "head"
+      ]])
     }).pipe(Effect.provide(TestHost.layer())))
 
   it.effect("clears the head when the root's title template throws", () =>
@@ -122,7 +160,9 @@ describe("Head", () => {
         ],
         view: (h) => Page(h, { key: "page", props: {} })
       })
-      const root = yield* TestHost.mount(App, {}, { fallback: (_, h) => h.text("down") })
+      const root = yield* TestHost.mount(App, {}, {
+        fallback: (_, h) => h.text("down")
+      })
       yield* TestHost.settle
       assert.deepStrictEqual(root.head() as unknown, { title: "Ada · App" })
       root.send(true)
@@ -148,7 +188,13 @@ describe("Head", () => {
       // The fold's value is the shape of the tree it was given.
       const Shaped = { ...Tiny, head: { merge: shape, title: () => undefined } }
       const leaf = (name: string, head?: ReadonlyArray<Head.Entry>) =>
-        Component.define({ name, scoped: false, model: Schema.Null, message: Schema.Never, elements: Shaped }).make({
+        Component.define({
+          name,
+          scoped: false,
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Shaped
+        }).make({
           init: () => null,
           update: ($) => $.model,
           head: head === undefined ? undefined : () => head,
@@ -157,11 +203,23 @@ describe("Head", () => {
       const Page = leaf("Page", [Head.title("Page")])
       const Aside = leaf("Aside")
       const Note = leaf("Note")
-      const holding = (name: string, ...children: ReadonlyArray<readonly [string, ReturnType<typeof leaf>]>) =>
-        Component.define({ name, scoped: false, model: Schema.Null, message: Schema.Never, elements: Shaped }).make({
+      const holding = (
+        name: string,
+        ...children: ReadonlyArray<readonly [string, ReturnType<typeof leaf>]>
+      ) =>
+        Component.define({
+          name,
+          scoped: false,
+          model: Schema.Null,
+          message: Schema.Never,
+          elements: Shaped
+        }).make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.box(...children.map(([key, child]) => child(h, { key, props: {} })))
+          view: (h) =>
+            h.box(
+              ...children.map(([key, child]) => child(h, { key, props: {} }))
+            )
         })
       // One with a child that has a head, and one with nothing that has a head anywhere below it.
       const Layout = holding("Layout", ["page", Page], ["aside", Aside])
@@ -169,7 +227,10 @@ describe("Head", () => {
       const App = holding("App", ["layout", Layout], ["footer", Footer])
       const root = yield* TestHost.mount(App, {})
       yield* TestHost.settle
-      const leafAt = (path: string, entries: ReadonlyArray<string> = []): Shape => ({ path, entries, children: [] })
+      const leafAt = (
+        path: string,
+        entries: ReadonlyArray<string> = []
+      ): Shape => ({ path, entries, children: [] })
       assert.deepStrictEqual(root.head() as unknown, {
         path: "/App",
         entries: [],
@@ -177,9 +238,16 @@ describe("Head", () => {
           {
             path: "/App/Layout[layout]",
             entries: [],
-            children: [leafAt("/App/Layout[layout]/Page[page]", ["Title"]), leafAt("/App/Layout[layout]/Aside[aside]")]
+            children: [
+              leafAt("/App/Layout[layout]/Page[page]", ["Title"]),
+              leafAt("/App/Layout[layout]/Aside[aside]")
+            ]
           },
-          { path: "/App/Footer[footer]", entries: [], children: [leafAt("/App/Footer[footer]/Note[note]")] }
+          {
+            path: "/App/Footer[footer]",
+            entries: [],
+            children: [leafAt("/App/Footer[footer]/Note[note]")]
+          }
         ]
       })
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
@@ -199,7 +267,12 @@ describe("Head", () => {
           head: ({ props }) => [Head.title(`Note ${props.id}`)],
           view: (h) => h.text(h.props.id)
         })
-      const App = Component.define({ name: "App", scoped: false, model: Schema.String, message: Schema.String }).make({
+      const App = Component.define({
+        name: "App",
+        scoped: false,
+        model: Schema.String,
+        message: Schema.String
+      }).make({
         init: () => "a",
         update: (_, id) => id,
         view: (h, id) => Page(h, { key: "page", props: { id } })
@@ -214,17 +287,28 @@ describe("Head", () => {
 
   it.effect("a component with a head that mounts after the first render sets it, and unmounting clears it", () =>
     Effect.gen(function*() {
-      const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+      const Page = Component.define({
+        name: "Page",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
         init: () => null,
         update: ($) => $.model,
         head: () => [Head.title("Page")],
         view: (h) => h.text("page")
       })
-      const App = Component.define({ name: "App", scoped: false, model: Schema.Boolean, message: Schema.Boolean }).make(
+      const App = Component.define({
+        name: "App",
+        scoped: false,
+        model: Schema.Boolean,
+        message: Schema.Boolean
+      }).make(
         {
           init: () => false,
           update: (_, shown) => shown,
-          view: (h, shown) => h.el("main", shown ? Page(h, { key: "page", props: {} }) : "none")
+          view: (h, shown) =>
+            h.el("main", shown ? Page(h, { key: "page", props: {} }) : "none")
         }
       )
       const root = yield* TestHost.mount(App, {})
@@ -243,14 +327,24 @@ describe("Head", () => {
 
   it.effect("a component placed in a child's fallback contributes its head", () =>
     Effect.gen(function*() {
-      const Notice = Component.define({ name: "Notice", scoped: false, model: Schema.Null, message: Schema.Never })
+      const Notice = Component.define({
+        name: "Notice",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never
+      })
         .make({
           init: () => null,
           update: ($) => $.model,
           head: () => [Head.title("Unavailable")],
           view: (h) => h.text("unavailable")
         })
-      const Broken = Component.define({ name: "Broken", scoped: false, model: Schema.Null, message: Schema.Never })
+      const Broken = Component.define({
+        name: "Broken",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never
+      })
         .make({
           init: () => null,
           update: ($) => $.model,
@@ -259,12 +353,24 @@ describe("Head", () => {
             throw new Error("view")
           }
         })
-      const App = Component.define({ name: "App", scoped: false, model: Schema.Null, message: Schema.Never }).make({
+      const App = Component.define({
+        name: "App",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
         init: () => null,
         update: ($) => $.model,
         head: () => [Head.titleTemplate((title) => `${title} · App`)],
         view: (h) =>
-          h.el("main", Broken(h, { key: "b", props: {}, fallback: () => Notice(h, { key: "n", props: {} }) }))
+          h.el(
+            "main",
+            Broken(h, {
+              key: "b",
+              props: {},
+              fallback: () => Notice(h, { key: "n", props: {} })
+            })
+          )
       })
       const root = yield* TestHost.mount(App, {})
       yield* TestHost.settle
@@ -284,7 +390,8 @@ describe("Head", () => {
     head: ({ props }) => [Head.title(props.title)],
     view: (h) => h.text(h.props.title)
   })
-  const ordered = <A>(swapped: boolean, a: A, b: A): readonly [A, A] => swapped ? [b, a] : [a, b]
+  const ordered = <A>(swapped: boolean, a: A, b: A): readonly [A, A] =>
+    swapped ? [b, a] : [a, b]
 
   it.effect("siblings that set different titles leave it unset and are reported, in either order", () =>
     Effect.gen(function*() {
@@ -308,11 +415,20 @@ describe("Head", () => {
             )
           )
       })
-      const roots = [yield* TestHost.mount(App, { swapped: false }), yield* TestHost.mount(App, { swapped: true })]
+      const roots = [
+        yield* TestHost.mount(App, { swapped: false }),
+        yield* TestHost.mount(App, { swapped: true })
+      ]
       const conflicts = yield* TestHost.expectProblem("HeadConflict")
       const paths = ["/App/Titled[first]", "/App/Titled[second]"]
-      assert.deepStrictEqual(conflicts.map((conflict) => (conflict as Head.Conflict).paths), [paths, paths])
+      assert.deepStrictEqual(
+        conflicts.map((conflict) => (conflict as Head.Conflict).paths),
+        [paths, paths]
+      )
       yield* TestHost.settle
-      assert.deepStrictEqual(roots.map((root) => root.head().title), [undefined, undefined])
+      assert.deepStrictEqual(roots.map((root) => root.head().title), [
+        undefined,
+        undefined
+      ])
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 })

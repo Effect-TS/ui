@@ -26,7 +26,9 @@ export const ListboxMessage = UiSchema.TaggedEnum({
 
 // What the consumer gets through `onEmit`. Typeahead on the closed trigger
 // picks too, as a native `<select>` does.
-export const ListboxEvents = UiSchema.TaggedEnum({ Picked: { id: Schema.String } })
+export const ListboxEvents = UiSchema.TaggedEnum({
+  Picked: { id: Schema.String }
+})
 
 // Refs into the consumer's elements. A part attaches them, so they belong to
 // the Listbox and its `update` can focus and scroll them. `Row.at(id)`
@@ -36,14 +38,24 @@ const Input = Html.ref("Listbox.input", "input")
 const Row = Html.ref("Listbox.option", "li")
 
 const filter = (options: ReadonlyArray<ListboxOption>, query: string) =>
-  query === "" ? options : options.filter((o) => o.label.toLowerCase().includes(query.toLowerCase()))
+  query === ""
+    ? options
+    : options.filter((o) => o.label.toLowerCase().includes(query.toLowerCase()))
 
 // The next enabled row after `from`, wrapping, or the first or last one.
-const step = (options: ReadonlyArray<ListboxOption>, from: string | null, direction: 1 | -1): string | null => {
+const step = (
+  options: ReadonlyArray<ListboxOption>,
+  from: string | null,
+  direction: 1 | -1
+): string | null => {
   const enabled = options.filter((o) => o.disabled !== true)
   if (enabled.length === 0) return null
   const index = enabled.findIndex((o) => o.id === from)
-  if (index < 0) return direction === 1 ? enabled[0]!.id : enabled[enabled.length - 1]!.id
+  if (index < 0) {
+    return direction === 1
+      ? enabled[0]!.id
+      : enabled[enabled.length - 1]!.id
+  }
   return enabled[(index + direction + enabled.length) % enabled.length]!.id
 }
 
@@ -93,8 +105,16 @@ export const Listbox = Component.define({
       // Focus moves into the popup and back to the trigger with it.
       ToggledPopup: ({ open }) =>
         $.evolve({ open, query: "", active: open ? $.props.selected : null })
-          .run(open ? HtmlCommand.focus(Input, silent) : HtmlCommand.focus(Trigger, silent)),
-      UpdatedQuery: ({ value }) => $.evolve({ query: value, active: step(filter($.props.options, value), null, 1) }),
+          .run(
+            open
+              ? HtmlCommand.focus(Input, silent)
+              : HtmlCommand.focus(Trigger, silent)
+          ),
+      UpdatedQuery: ({ value }) =>
+        $.evolve({
+          query: value,
+          active: step(filter($.props.options, value), null, 1)
+        }),
       PressedKey: ({ key }) => {
         const shown = filter($.props.options, $.model.query)
         const active = activeIn(shown, $.model.active)
@@ -107,12 +127,18 @@ export const Listbox = Component.define({
             return next === null
               ? $.evolve({ open: true })
               : $.evolve({ open: true, active: next })
-                .run(HtmlCommand.scrollIntoView(Row.at(next), silent, { block: "nearest" }))
+                .run(
+                  HtmlCommand.scrollIntoView(Row.at(next), silent, {
+                    block: "nearest"
+                  })
+                )
           }
           case "Enter":
             return active === null
               ? $.model
-              : $.evolve({ open: false }).emit(ListboxEvents.Picked({ id: active }))
+              : $.evolve({ open: false }).emit(
+                ListboxEvents.Picked({ id: active })
+              )
           case "Escape":
             return $.evolve({ open: false })
           default: {
@@ -120,9 +146,13 @@ export const Listbox = Component.define({
             // no label continues with starts over from that key, so `typed`
             // is never longer than a label and needs no timer to reset it.
             const find = (prefix: string) =>
-              $.props.options.find((o) => o.disabled !== true && o.label.toLowerCase().startsWith(prefix))
+              $.props.options.find((o) =>
+                o.disabled !== true && o.label.toLowerCase().startsWith(prefix)
+              )
             const extended = $.model.typed + key.toLowerCase()
-            const typed = find(extended) !== undefined ? extended : key.toLowerCase()
+            const typed = find(extended) !== undefined
+              ? extended
+              : key.toLowerCase()
             const hit = find(typed)
             return hit === undefined
               ? $.evolve({ typed: "" })
@@ -166,7 +196,8 @@ export const Listbox = Component.define({
           })
           .onKeyDown(
             ({ alt, ctrl, key, meta }) =>
-              key === "ArrowDown" || (key.length === 1 && key !== " " && !alt && !ctrl && !meta)
+              key === "ArrowDown" ||
+                (key.length === 1 && key !== " " && !alt && !ctrl && !meta)
                 ? ListboxMessage.PressedKey({ key })
                 : undefined,
             // Cancels the default only when a message was returned, so Tab,
@@ -185,13 +216,16 @@ export const Listbox = Component.define({
             "aria-autocomplete": "list",
             "aria-expanded": "true",
             "aria-controls": p.id("list"),
-            "aria-activedescendant": active === null ? undefined : p.id("option", active)
+            "aria-activedescendant": active === null
+              ? undefined
+              : p.id("option", active)
           })
           .value(model.query)
           .onInput(({ value }) => ListboxMessage.UpdatedQuery({ value }))
           .onKeyDown(
             ({ key }) =>
-              key === "ArrowDown" || key === "ArrowUp" || key === "Enter" || key === "Escape"
+              key === "ArrowDown" || key === "ArrowUp" || key === "Enter" ||
+                key === "Escape"
                 ? ListboxMessage.PressedKey({ key })
                 : undefined,
             { preventDefault: true }
@@ -199,17 +233,22 @@ export const Listbox = Component.define({
       list: p.part("ul", (b) => b.id(p.id("list")).attr("role", "listbox")),
       // A part takes arguments after the builder: the consumer passes the
       // row it's drawing.
-      option: p.part("li", (b, option: ListboxOption) =>
-        b.id(p.id("option", option.id))
-          .ref(Row.at(option.id))
-          .attrs({
-            role: "option",
-            "aria-selected": String(active === option.id),
-            "aria-disabled": option.disabled === true ? "true" : undefined
-          })
-          .onClick(
-            option.disabled === true ? () => undefined : ListboxMessage.ClickedOption({ id: option.id })
-          ))
+      option: p.part(
+        "li",
+        (b, option: ListboxOption) =>
+          b.id(p.id("option", option.id))
+            .ref(Row.at(option.id))
+            .attrs({
+              role: "option",
+              "aria-selected": String(active === option.id),
+              "aria-disabled": option.disabled === true ? "true" : undefined
+            })
+            .onClick(
+              option.disabled === true
+                ? () => undefined
+                : ListboxMessage.ClickedOption({ id: option.id })
+            )
+      )
     }
   }
 })

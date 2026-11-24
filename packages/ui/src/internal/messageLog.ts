@@ -9,7 +9,9 @@ import type * as Log from "../MessageLog.ts"
 export const noop: Log.MessageLog = { enabled: false, record: () => {} }
 
 /** @internal */
-export const MessageLog: Context.Reference<Log.MessageLog> = Context.Reference<Log.MessageLog>(
+export const MessageLog: Context.Reference<Log.MessageLog> = Context.Reference<
+  Log.MessageLog
+>(
   "@effect/ui/MessageLog",
   { defaultValue: () => noop }
 )

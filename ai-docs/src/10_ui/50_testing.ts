@@ -103,8 +103,13 @@ describe("NoteEditor", () => {
         // A submit button submits its form, with the fields read from the view.
         .click(HtmlLocator.role("button", { name: "Save" }))
         .expectExact(SaveNote)
-        .expect(HtmlLocator.role("button", { name: "Saving…" })).toBeDisabled(false)
-        .resolve(SaveNote, NoteEditorMessage.SucceededSaveNote({ note: edited }))
+        .expect(HtmlLocator.role("button", { name: "Saving…" })).toBeDisabled(
+          false
+        )
+        .resolve(
+          SaveNote,
+          NoteEditorMessage.SucceededSaveNote({ note: edited })
+        )
         .emitted(NoteEditorEvents.Saved({ note: edited }))
         .expect(HtmlLocator.role("button", { name: "Save" })).toBeDisabled()
     }))
@@ -117,7 +122,10 @@ describe("NoteEditor", () => {
       s.type(body, edited.body).keydown(body, "s", { ctrl: true })
       assert.isTrue(s.defaultPrevented)
       s.expectExact(SaveNote)
-        .resolve(SaveNote, NoteEditorMessage.SucceededSaveNote({ note: edited }))
+        .resolve(
+          SaveNote,
+          NoteEditorMessage.SucceededSaveNote({ note: edited })
+        )
         .emitted(NoteEditorEvents.Saved({ note: edited }))
       // Any other step resets it.
       assert.isFalse(s.defaultPrevented)
@@ -125,7 +133,9 @@ describe("NoteEditor", () => {
 
   it.effect("scene: discards from the actions menu after asking, and Escape keeps the changes", () =>
     Effect.gen(function*() {
-      const discard = HtmlLocator.role("dialog", { name: "Discard your changes?" })
+      const discard = HtmlLocator.role("dialog", {
+        name: "Discard your changes?"
+      })
       const actions = HtmlLocator.role("menu", { name: "Note actions" })
       const s = yield* HtmlScene.make(NoteEditor, { note })
       s.type(body, edited.body)
@@ -155,7 +165,10 @@ describe("NoteEditor", () => {
       const s = yield* HtmlScene.make(NoteEditor, { note })
       s.type(body, edited.body)
         .submit(body)
-        .resolve(SaveNote, NoteEditorMessage.FailedSaveNote({ reason: "You are offline" }))
+        .resolve(
+          SaveNote,
+          NoteEditorMessage.FailedSaveNote({ reason: "You are offline" })
+        )
         .expect(HtmlLocator.role("alert")).toHaveText("You are offline")
     }))
 })
@@ -198,12 +211,18 @@ describe("NotesIndex", () => {
       // A drop with a hand-written payload goes to the target the browser
       // host would pick, and throws when none accepts the payload's types,
       // as the browser refuses the drop.
-      s.loaded("notes", [note]).drop(pinned, { data: { "application/x-note": note.id } })
+      s.loaded("notes", [note]).drop(pinned, {
+        data: { "application/x-note": note.id }
+      })
       assert.isTrue(s.defaultPrevented)
       s.expect(Locator.inside(pinned, Locator.tag("li"))).toHaveText(note.title)
       // A step that throws is asserted on a `start` cursor, which has no end check.
-      const refused = HtmlScene.start(NotesIndexNoDeps, {}).loaded("notes", [note])
-      assert.throws(() => refused.drop(pinned, { files: [new File(["hello"], "notes.txt")] }))
+      const refused = HtmlScene.start(NotesIndexNoDeps, {}).loaded("notes", [
+        note
+      ])
+      assert.throws(() =>
+        refused.drop(pinned, { files: [new File(["hello"], "notes.txt")] })
+      )
     }))
 })
 
@@ -211,7 +230,9 @@ describe("NotesIndex", () => {
 // Command: its implementation against a fake of the service it captures.
 // ---------------------------------------------------------------------------
 
-it.layer(SaveNote.layer.pipe(Layer.provideMerge(Notes.layerMemory([note]))), { buildPerTest: true })(
+it.layer(SaveNote.layer.pipe(Layer.provideMerge(Notes.layerMemory([note]))), {
+  buildPerTest: true
+})(
   "SaveNote",
   (it) => {
     it.effect("writes through Notes, and turns a failure into a message", () =>
@@ -258,7 +279,9 @@ it.layer(SaveNote.layer.pipe(Layer.provideMerge(Notes.layerMemory([note]))), { b
 // Build fresh services for each test so edits cannot leak.
 const NoteEditorTest = NoteEditorNoDeps.pipe(Component.provide(SaveNote.layer))
 
-it.layer(Layer.mergeAll(Notes.layerMemory([note]), TestHost.layer()), { buildPerTest: true })(
+it.layer(Layer.mergeAll(Notes.layerMemory([note]), TestHost.layer()), {
+  buildPerTest: true
+})(
   "NoteEditor as a Play",
   (it) => {
     it.effect("autosaves an edit", () =>
@@ -271,7 +294,9 @@ it.layer(Layer.mergeAll(Notes.layerMemory([note]), TestHost.layer()), { buildPer
         yield* TestClock.adjust("2 seconds")
         yield* play.expect(body).toHaveValue(edited.body)
         assert.deepStrictEqual(yield* notes.get(note.id), edited)
-        assert.deepStrictEqual(play.root.emitted, [NoteEditorEvents.Saved({ note: edited })])
+        assert.deepStrictEqual(play.root.emitted, [
+          NoteEditorEvents.Saved({ note: edited })
+        ])
       }))
   }
 )
@@ -290,7 +315,9 @@ const ApiFake = Layer.sync(HttpClient.HttpClient, () => {
       const found = id === "" ? Array.from(notes.values()) : notes.get(id)
       return HttpClientResponse.fromWeb(
         request,
-        found === undefined ? new Response(null, { status: 404 }) : Response.json(found)
+        found === undefined
+          ? new Response(null, { status: 404 })
+          : Response.json(found)
       )
     })
   )
@@ -332,7 +359,10 @@ it.layer(AppTest, { buildPerTest: true })("App as a Play", (it) => {
       assert.include(result.html, "Milk")
       // The paths of the instances that adopted the server's state.
       // The editor sits in the Collapsible's `body` slot, under its path.
-      assert.include(result.adopted, "/App/NotePage[/notes/n1]/Collapsible[note]/[body]/NoteEditor[n1]")
+      assert.include(
+        result.adopted,
+        "/App/NotePage[/notes/n1]/Collapsible[note]/[body]/NoteEditor[n1]"
+      )
     }))
 })
 
@@ -376,7 +406,11 @@ const timelineOf = (flush: TestHost.Flush) =>
   }).pipe(
     Effect.scoped,
     Effect.provide(
-      Layer.mergeAll(Router.memory({ routes: AppRoute, url: "/notes/n1" }), ApiFake, TestHost.layer({ flush }))
+      Layer.mergeAll(
+        Router.memory({ routes: AppRoute, url: "/notes/n1" }),
+        ApiFake,
+        TestHost.layer({ flush })
+      )
     )
   )
 
@@ -386,7 +420,9 @@ describe("the App's timeline", () => {
       const { timeline } = yield* timelineOf("queued")
       // The keystroke is a fact. What followed from it is listed under it.
       assert.match(timeline, /^# \S+ Update \S+ \(dom input\)/m)
-      for (const flush of ["first", "last", { seed: 1 }, { seed: 2 }] as const) {
+      for (
+        const flush of ["first", "last", { seed: 1 }, { seed: 2 }] as const
+      ) {
         assert.strictEqual((yield* timelineOf(flush)).timeline, timeline)
       }
     }))
@@ -402,7 +438,17 @@ describe("the App's timeline", () => {
       assert.isAbove(mounted.length, 3)
       for (const entry of mounted) {
         const replay = Story.fromLog(
-          entry.component as Component.Component<any, any, any, any, any, any, any, any, any>,
+          entry.component as Component.Component<
+            any,
+            any,
+            any,
+            any,
+            any,
+            any,
+            any,
+            any,
+            any
+          >,
           log,
           {
             path: entry.path

@@ -24,7 +24,9 @@ type User = typeof User.Type
 const Users = Query.Tag("users")
 
 const flush = Effect.promise(async () => {
-  for (let i = 0; i < 4; i++) await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  for (let i = 0; i < 4; i++) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  }
 })
 const advance = (duration: Duration.Input) =>
   flush.pipe(Effect.andThen(TestClock.adjust(duration)), Effect.andThen(flush))
@@ -74,7 +76,10 @@ const cache = Query.Cache.useSync(Query.internals)
 const resultSchema = (query: Query.Query.Any, label: string) =>
   Query.snapshotSchema(query, label) as Schema.Codec<unknown, unknown>
 
-const fetchLog = Effect.map(TestQuery.fetches, (fetches) => fetches.map((fetch) => fetch.trigger))
+const fetchLog = Effect.map(
+  TestQuery.fetches,
+  (fetches) => fetches.map((fetch) => fetch.trigger)
+)
 
 describe("Query snapshots", () => {
   const { GetUser } = makeUsers()
@@ -90,20 +95,35 @@ describe("Query snapshots", () => {
       AsyncResult.success({ id: "1", name: "Ann" }, { timestamp: 5 })
     )
     const encoded = Schema.encodeUnknownSync(json)(success)
-    assert.deepStrictEqual(encoded, [`{"id":"1"}`, 0, { id: "1", name: "Ann" }, 5, false])
-    assert.isTrue(Equal.equals(Schema.decodeUnknownSync(json)(encoded), success))
+    assert.deepStrictEqual(encoded, [
+      `{"id":"1"}`,
+      0,
+      { id: "1", name: "Ann" },
+      5,
+      false
+    ])
+    assert.isTrue(
+      Equal.equals(Schema.decodeUnknownSync(json)(encoded), success)
+    )
 
     const failure = Query.makeSnapshot(
       def,
       "user",
       at,
       AsyncResult.failure(Cause.fail("nope"), {
-        previousSuccess: Option.some(AsyncResult.success({ id: "1", name: "Ann" }, { timestamp: 5 }))
+        previousSuccess: Option.some(
+          AsyncResult.success({ id: "1", name: "Ann" }, { timestamp: 5 })
+        )
       })
     )
     const failureEncoded = Schema.encodeUnknownSync(json)(failure)
-    assert.deepStrictEqual(failureEncoded, [`{"id":"1"}`, 1, ["nope"], [{ id: "1", name: "Ann" }, 5]])
-    assert.isTrue(Equal.equals(Schema.decodeUnknownSync(json)(failureEncoded), failure))
+    assert.deepStrictEqual(failureEncoded, [`{"id":"1"}`, 1, ["nope"], [{
+      id: "1",
+      name: "Ann"
+    }, 5]])
+    assert.isTrue(
+      Equal.equals(Schema.decodeUnknownSync(json)(failureEncoded), failure)
+    )
 
     const empty = Query.makeSnapshot(def, "user", undefined, undefined)
     assert.deepStrictEqual(Schema.encodeUnknownSync(json)(empty), [])
@@ -115,11 +135,20 @@ describe("Query snapshots", () => {
       def,
       "user",
       at,
-      AsyncResult.success({ id: "1", name: "Ann" }, { timestamp: 5, waiting: true }),
+      AsyncResult.success({ id: "1", name: "Ann" }, {
+        timestamp: 5,
+        waiting: true
+      }),
       true
     )
-    const decoded = Query.snapshotData(Schema.decodeUnknownSync(json)(Schema.encodeUnknownSync(json)(waiting)))
-    assert.deepStrictEqual([decoded?.result?.waiting, decoded?.patched, decoded?.argsKey], [false, true, `{"id":"1"}`])
+    const decoded = Query.snapshotData(
+      Schema.decodeUnknownSync(json)(Schema.encodeUnknownSync(json)(waiting))
+    )
+    assert.deepStrictEqual([
+      decoded?.result?.waiting,
+      decoded?.patched,
+      decoded?.argsKey
+    ], [false, true, `{"id":"1"}`])
   })
 
   it("keeps waiting in memory through the type side, so a results struct built with make carries it", () => {
@@ -127,13 +156,23 @@ describe("Query snapshots", () => {
       def,
       "user",
       at,
-      AsyncResult.success({ id: "1", name: "Ann" }, { timestamp: 5, waiting: true })
+      AsyncResult.success({ id: "1", name: "Ann" }, {
+        timestamp: 5,
+        waiting: true
+      })
     )
     const Results = Schema.Struct({ user: resultSchema(GetUser, "user") })
     const made = Results.make({ user: waiting })
     assert.isTrue(Query.snapshotData(made.user)?.result?.waiting)
-    const failing = Query.makeSnapshot(def, "user", at, AsyncResult.failure(Cause.fail("nope"), { waiting: true }))
-    const decoded = Schema.decodeUnknownSync(resultSchema(GetUser, "user"))(failing)
+    const failing = Query.makeSnapshot(
+      def,
+      "user",
+      at,
+      AsyncResult.failure(Cause.fail("nope"), { waiting: true })
+    )
+    const decoded = Schema.decodeUnknownSync(resultSchema(GetUser, "user"))(
+      failing
+    )
     assert.isTrue(Query.snapshotData(decoded)?.result?.waiting)
   })
 
@@ -146,8 +185,15 @@ describe("Query snapshots", () => {
       true
     )
     const schema = resultSchema(GetUser, "user")
-    assert.isTrue(Equal.equals(Schema.decodeUnknownSync(schema)(patched), patched))
-    const unpatched = Query.makeSnapshot(def, "user", at, AsyncResult.success({ id: "1", name: 42 }, { timestamp: 5 }))
+    assert.isTrue(
+      Equal.equals(Schema.decodeUnknownSync(schema)(patched), patched)
+    )
+    const unpatched = Query.makeSnapshot(
+      def,
+      "user",
+      at,
+      AsyncResult.success({ id: "1", name: 42 }, { timestamp: 5 })
+    )
     assert.throws(() => Schema.decodeUnknownSync(schema)(unpatched))
   })
 
@@ -183,14 +229,26 @@ describe("Query snapshots", () => {
     // The results of a component with a `secret` query, as the runtime and the log build them.
     const Results = Schema.Struct({ secret: resultSchema(GetSecret, "secret") })
     const logged = Schema.encodeUnknownSync(
-      Schema.toCodecJson(Schema.make<Schema.Codec<unknown, unknown>>(redactAST(Results.ast)))
+      Schema.toCodecJson(
+        Schema.make<Schema.Codec<unknown, unknown>>(redactAST(Results.ast))
+      )
     )({ secret: snapshot })
     assert.deepStrictEqual(logged, {
-      secret: [`{"token":{"~redacted":true}}`, 0, { value: { "~redacted": true } }, 1, false]
+      secret: [
+        `{"token":{"~redacted":true}}`,
+        0,
+        { value: { "~redacted": true } },
+        1,
+        false
+      ]
     })
     // Page state and history.state keep the real key and value.
-    const page = Schema.encodeUnknownSync(Schema.toCodecJson(Results))({ secret: snapshot })
-    assert.deepStrictEqual(page, { secret: [`{"token":"t"}`, 0, { value: "v" }, 1, false] })
+    const page = Schema.encodeUnknownSync(Schema.toCodecJson(Results))({
+      secret: snapshot
+    })
+    assert.deepStrictEqual(page, {
+      secret: [`{"token":"t"}`, 0, { value: "v" }, 1, false]
+    })
   })
 })
 
@@ -203,18 +261,35 @@ describe("Query hydration", () => {
       const missing = yield* GetUser.get({ id: "404" }).pipe(Effect.forkScoped)
       yield* advance(10)
       yield* Fiber.join(ok)
-      assert.deepStrictEqual(yield* Fiber.await(missing), Exit.fail("not found"))
+      assert.deepStrictEqual(
+        yield* Fiber.await(missing),
+        Exit.fail("not found")
+      )
       // Never stale after, and a bare Failure nobody watches is stored.
       yield* advance("2 minutes")
-      assert.deepStrictEqual(yield* Effect.exit(GetUser.get({ id: "404" })), Exit.fail("not found"))
-      assert.deepStrictEqual(yield* GetUser.get({ id: "1" }), { id: "1", name: "Ann" })
+      assert.deepStrictEqual(
+        yield* Effect.exit(GetUser.get({ id: "404" })),
+        Exit.fail("not found")
+      )
+      assert.deepStrictEqual(yield* GetUser.get({ id: "1" }), {
+        id: "1",
+        name: "Ann"
+      })
       assert.strictEqual(db.calls, 2)
       yield* GetUser.invalidate({ id: "1" })
-      assert.deepStrictEqual(problems.map((p) => [p._tag, (p as Query.InvalidateIgnored).query]), [
-        ["InvalidateIgnored", "users/GetUser"]
-      ])
+      assert.deepStrictEqual(
+        problems.map((p) => [p._tag, (p as Query.InvalidateIgnored).query]),
+        [
+          ["InvalidateIgnored", "users/GetUser"]
+        ]
+      )
       assert.deepStrictEqual((yield* cache).dehydrate(), {
-        "users/GetUser": [[`{"id":"1"}`, 0, { id: "1", name: "Ann" }, 10], [`{"id":"404"}`, 1, ["not found"], 10]]
+        "users/GetUser": [[`{"id":"1"}`, 0, { id: "1", name: "Ann" }, 10], [
+          `{"id":"404"}`,
+          1,
+          ["not found"],
+          10
+        ]]
       })
     }).pipe(Effect.provide(Layer.merge(GetUser.layer, settleOnce(problems))))
   })
@@ -231,10 +306,15 @@ describe("Query hydration", () => {
       yield* GetUser.get({ id: "1" }).pipe(Effect.forkScoped)
       yield* Dead.get({}).pipe(Effect.exit, Effect.forkScoped)
       yield* flush
-      assert.deepStrictEqual((yield* cache).misses(), [{ query: "users/GetUser", logKey: `{"id":"1"}` }])
+      assert.deepStrictEqual((yield* cache).misses(), [{
+        query: "users/GetUser",
+        logKey: `{"id":"1"}`
+      }])
       yield* advance(10)
       assert.deepStrictEqual((yield* cache).misses(), [])
-    }).pipe(Effect.provide(Layer.mergeAll(GetUser.layer, Dead.layer, settleOnce([]))))
+    }).pipe(
+      Effect.provide(Layer.mergeAll(GetUser.layer, Dead.layer, settleOnce([])))
+    )
   })
 
   it.effect("checkWire passes what dehydrate shipped, and names an entry that doesn't round-trip", () => {
@@ -245,19 +325,31 @@ describe("Query hydration", () => {
       const internals = yield* cache
       const shipped = JSON.parse(JSON.stringify(internals.dehydrate()))
       assert.deepStrictEqual(internals.checkWire(shipped), [])
-      assert.deepStrictEqual(internals.checkWire({ "users/GetUser": [[`{"id":"1"}`, 0, { id: 1 }, 10]] }), [
-        `the entry of "users/GetUser" at {"id":"1"} failed to decode or encode again`
-      ])
       assert.deepStrictEqual(
-        internals.checkWire({ "users/GetUser": [[`{ "id": "1" }`, 0, { id: "1", name: "Ann" }, 10]] }),
+        internals.checkWire({
+          "users/GetUser": [[`{"id":"1"}`, 0, { id: 1 }, 10]]
+        }),
+        [
+          `the entry of "users/GetUser" at {"id":"1"} failed to decode or encode again`
+        ]
+      )
+      assert.deepStrictEqual(
+        internals.checkWire({
+          "users/GetUser": [[`{ "id": "1" }`, 0, { id: "1", name: "Ann" }, 10]]
+        }),
         [
           `an entry of "users/GetUser" at {"id":"1"} has args that key differently once decoded`
         ]
       )
-      assert.deepStrictEqual(internals.checkWire({ Unknown: [["{}", 0, 1, 0]] }), [
-        `the query "Unknown" shipped entries, and this cache doesn't know it`
+      assert.deepStrictEqual(
+        internals.checkWire({ Unknown: [["{}", 0, 1, 0]] }),
+        [
+          `the query "Unknown" shipped entries, and this cache doesn't know it`
+        ]
+      )
+      assert.deepStrictEqual(internals.checkWire([1]), [
+        "the ~query state isn't the tuple shape"
       ])
-      assert.deepStrictEqual(internals.checkWire([1]), ["the ~query state isn't the tuple shape"])
     }).pipe(Effect.provide(Layer.merge(GetUser.layer, settleOnce([]))))
   })
 
@@ -283,7 +375,12 @@ describe("Query hydration", () => {
       yield* advance(1000)
       // Raw until the query registers.
       query.hydrate({
-        "users/GetUser": [[`{"id":"1"}`, 0, { id: "1", name: "Server" }, 7], [`{"id":"404"}`, 1, ["not found"], 7]]
+        "users/GetUser": [[`{"id":"1"}`, 0, { id: "1", name: "Server" }, 7], [
+          `{"id":"404"}`,
+          1,
+          ["not found"],
+          7
+        ]]
       })
       assert.isTrue(query.isWindowOpen())
       const seen: Array<unknown> = []
@@ -293,8 +390,13 @@ describe("Query hydration", () => {
       )
       yield* advance(10)
       // The wire timestamp is display-only: the first emission equals the server's snapshot.
-      assert.deepStrictEqual(seen, [AsyncResult.success({ id: "1", name: "Server" }, { timestamp: 7 })])
-      assert.deepStrictEqual(yield* Effect.exit(GetUser.get({ id: "404" })), Exit.fail("not found"))
+      assert.deepStrictEqual(seen, [
+        AsyncResult.success({ id: "1", name: "Server" }, { timestamp: 7 })
+      ])
+      assert.deepStrictEqual(
+        yield* Effect.exit(GetUser.get({ id: "404" })),
+        Exit.fail("not found")
+      )
       yield* GetUser.prefetch({ id: "1" })
       assert.strictEqual(db.calls, 0)
 
@@ -317,7 +419,10 @@ describe("Query hydration", () => {
         "users/GetUser": [[`{"id":"1"}`, 0, { id: "1", name: "Server" }, 7]],
         "other/Read": [["{}", 0, 1, 7]]
       })
-      const watcher = yield* GetUser.changes({ id: "1" }).pipe(runForEach(() => {}), Effect.forkScoped)
+      const watcher = yield* GetUser.changes({ id: "1" }).pipe(
+        runForEach(() => {}),
+        Effect.forkScoped
+      )
       yield* advance(1)
       query.invalidate([Users])
       yield* advance(10)
@@ -345,14 +450,21 @@ describe("Query hydration", () => {
     return Effect.gen(function*() {
       const query = yield* cache
       query.hydrate(
-        { "users/GetUser": [[`{"id":"1"}`, 0, { id: "1", name: "Server" }, 7]], "forever/Read": [["{}", 0, 1, 7]] },
+        {
+          "users/GetUser": [[`{"id":"1"}`, 0, { id: "1", name: "Server" }, 7]],
+          "forever/Read": [["{}", 0, 1, 7]]
+        },
         { static: true }
       )
       assert.isFalse(query.isWindowOpen())
       assert.isTrue((yield* TestQuery.entry(GetUser, { id: "1" }))?.stale)
       assert.isFalse((yield* TestQuery.entry(Forever, {}))?.stale)
       assert.strictEqual(yield* Forever.get({}), 1)
-    }).pipe(Effect.provide(Layer.mergeAll(GetUser.layer, Forever.layer, TestQuery.layer())))
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(GetUser.layer, Forever.layer, TestQuery.layer())
+      )
+    )
   })
 
   it.effect("a malformed payload is ignored whole, and an entry that fails to decode is cold", () => {
@@ -360,7 +472,10 @@ describe("Query hydration", () => {
     return Effect.gen(function*() {
       const query = yield* cache
       query.hydrate({ "users/GetUser": [["{}", 2, null, 0]] })
-      assert.deepStrictEqual((yield* TestQuery.expectProblem("HydrationMalformed")).length, 1)
+      assert.deepStrictEqual(
+        (yield* TestQuery.expectProblem("HydrationMalformed")).length,
+        1
+      )
       query.hydrate({
         "users/GetUser": [
           [`{"id":"1"}`, 0, { id: "1" }, 0],
@@ -405,7 +520,8 @@ describe("Query history restore", () => {
       const watcher = yield* GetUser.changes({ id: "1" }).pipe(
         runForEach((result) =>
           seen.push(
-            (AsyncResult.isSuccess(result) ? result.value.name : result._tag) + (result.waiting ? " waiting" : "")
+            (AsyncResult.isSuccess(result) ? result.value.name : result._tag) +
+              (result.waiting ? " waiting" : "")
           )
         ),
         Effect.forkScoped
@@ -422,8 +538,15 @@ describe("Query snapshot identity", () => {
   it.effect("a snapshot keeps its entry's args key through JSON text, -0 included, and seeds that entry", () => {
     class GetPoint extends Query.Service<GetPoint>()(
       "points/GetPoint",
-      { args: { n: Schema.Number }, success: Schema.String, error: Schema.Never, staleTime: "1 minute" },
-      Effect.sync(() => ({ n }) => Effect.succeed(Object.is(n, -0) ? "minus zero" : "zero"))
+      {
+        args: { n: Schema.Number },
+        success: Schema.String,
+        error: Schema.Never,
+        staleTime: "1 minute"
+      },
+      Effect.sync(() => ({ n }) =>
+        Effect.succeed(Object.is(n, -0) ? "minus zero" : "zero")
+      )
     ) {}
     const def = Query.defOf(GetPoint)
     const json = Schema.toCodecJson(resultSchema(GetPoint, "point"))
@@ -439,11 +562,18 @@ describe("Query snapshot identity", () => {
     assert.strictEqual(Query.snapshotData(decoded)?.argsKey, `{"n":-0}`)
     assert.isTrue(Equal.equals(decoded, snapshot))
     // A key that doesn't key back to itself is rejected, not seeded under another entry.
-    assert.isTrue(Exit.isFailure(Schema.decodeUnknownExit(json)([`{ "n": 0 }`, 0, "x", 1, false])))
+    assert.isTrue(
+      Exit.isFailure(
+        Schema.decodeUnknownExit(json)([`{ "n": 0 }`, 0, "x", 1, false])
+      )
+    )
     return Effect.gen(function*() {
       const query = yield* cache
       assert.isTrue(query.seed(decoded))
-      assert.strictEqual((yield* TestQuery.entry(GetPoint, { n: -0 }))?.stored?._tag, "Success")
+      assert.strictEqual(
+        (yield* TestQuery.entry(GetPoint, { n: -0 }))?.stored?._tag,
+        "Success"
+      )
       assert.isUndefined(yield* TestQuery.entry(GetPoint, { n: 0 }))
     }).pipe(Effect.provide(Layer.merge(GetPoint.layer, TestQuery.layer())))
   })
@@ -451,26 +581,52 @@ describe("Query snapshot identity", () => {
   it("a decoded snapshot's key must be the key of its args decoded all the way", () => {
     class GetTrimmed extends Query.Service<GetTrimmed>()(
       "trimmed/GetTrimmed",
-      { args: { s: Schema.Trim }, success: Schema.String, error: Schema.Never, staleTime: "1 minute" },
+      {
+        args: { s: Schema.Trim },
+        success: Schema.String,
+        error: Schema.Never,
+        staleTime: "1 minute"
+      },
       Effect.sync(() => ({ s }) => Effect.succeed(s))
     ) {}
     const def = Query.defOf(GetTrimmed)
     const json = Schema.toCodecJson(resultSchema(GetTrimmed, "trimmed"))
     // " a " decodes to "a", whose key is {"s":"a"}: the snapshot would name an entry it wasn't taken from.
-    assert.isTrue(Exit.isFailure(Schema.decodeUnknownExit(json)([`{"s":" a "}`, 0, "cached", 1, false])))
-    const decoded = Schema.decodeUnknownSync(json)([`{"s":"a"}`, 0, "cached", 1, false])
+    assert.isTrue(
+      Exit.isFailure(
+        Schema.decodeUnknownExit(json)([`{"s":" a "}`, 0, "cached", 1, false])
+      )
+    )
+    const decoded = Schema.decodeUnknownSync(json)([
+      `{"s":"a"}`,
+      0,
+      "cached",
+      1,
+      false
+    ])
     assert.deepStrictEqual(Query.snapshotData(decoded)?.args, { s: "a" })
-    assert.strictEqual(Query.snapshotData(decoded)?.argsKey, def.argsKey({ s: "a" }))
+    assert.strictEqual(
+      Query.snapshotData(decoded)?.argsKey,
+      def.argsKey({ s: "a" })
+    )
   })
 
   it("a snapshot of an entry keyed with an optional undefined dropped encodes as the key does", () => {
     // Accepts a missing page, and rejects one that is present and undefined.
-    const Args = Schema.Struct({ id: Schema.String, page: Schema.optional(Schema.Number) }).check(
+    const Args = Schema.Struct({
+      id: Schema.String,
+      page: Schema.optional(Schema.Number)
+    }).check(
       Schema.makeFilter((args) => !("page" in args) || args.page !== undefined)
     )
     class GetPage extends Query.Service<GetPage>()(
       "pages/GetPage",
-      { args: Args, success: Schema.String, error: Schema.Never, staleTime: "1 minute" },
+      {
+        args: Args,
+        success: Schema.String,
+        error: Schema.Never,
+        staleTime: "1 minute"
+      },
       Effect.sync(() => ({ id }) => Effect.succeed(id))
     ) {}
     const def = Query.defOf(GetPage)
@@ -484,12 +640,15 @@ describe("Query snapshot identity", () => {
     )
     const encoded = Schema.encodeUnknownSync(json)(snapshot)
     assert.deepStrictEqual(encoded, [`{"id":"1"}`, 0, "one", 1, false])
-    const decoded = Schema.decodeUnknownSync(json)(JSON.parse(JSON.stringify(encoded)))
+    const decoded = Schema.decodeUnknownSync(json)(
+      JSON.parse(JSON.stringify(encoded))
+    )
     assert.strictEqual(Query.snapshotData(decoded)?.argsKey, def.argsKey(args))
   })
 })
 
 // `Stream.runForEach` with a synchronous callback.
 function runForEach<A>(f: (a: A) => void) {
-  return <E, R>(self: Stream.Stream<A, E, R>) => Stream.runForEach(self, (a) => Effect.sync(() => f(a)))
+  return <E, R>(self: Stream.Stream<A, E, R>) =>
+    Stream.runForEach(self, (a) => Effect.sync(() => f(a)))
 }

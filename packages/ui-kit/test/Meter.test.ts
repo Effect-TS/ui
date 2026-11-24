@@ -23,10 +23,15 @@ const standIn = {
         "aria-valuetext": "wrong"
       })
     ).children(
-      meter.label(h.span.class("label").attrs({ id: "custom-label", role: "heading" })).children("Storage"),
+      meter.label(
+        h.span.class("label").attrs({ id: "custom-label", role: "heading" })
+      ).children("Storage"),
       meter.value(h.span.class("value").attr("aria-hidden", "false")),
       meter.track(h.div.class("track")).children(
-        meter.indicator(h.div.class("fill")).attr("style", "background:red;width:1px")
+        meter.indicator(h.div.class("fill")).attr(
+          "style",
+          "background:red;width:1px"
+        )
       )
     )
 }
@@ -38,7 +43,8 @@ const indicator = Locator.attr("class", "fill")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
 const parts = (props: MeterProps) => Story.parts(Meter, { model: {}, props })
-const built = (element: View.ElementBuilder<never, never, any, any>) => View.build(element, [])
+const built = (element: View.ElementBuilder<never, never, any, any>) =>
+  View.build(element, [])
 describe("Meter", () => {
   it.effect("the root reports the value and points at the label, and the value and indicator follow the props", () =>
     Effect.gen(function*() {
@@ -82,10 +88,18 @@ describe("Meter", () => {
   it("a value outside the range is clamped, NaN counts as min, and an empty range is 0%", () => {
     const at = (props: MeterProps) => {
       const meter = parts(props)
-      return [built(meter.root(h.div)).attrs["aria-valuenow"], meter.percentage, meter.valueText]
+      return [
+        built(meter.root(h.div)).attrs["aria-valuenow"],
+        meter.percentage,
+        meter.valueText
+      ]
     }
     assert.deepStrictEqual(at({ value: -5 }), ["0", 0, "0%"])
-    assert.deepStrictEqual(at({ value: Number.NaN, min: 10, max: 20 }), ["10", 0, "0%"])
+    assert.deepStrictEqual(at({ value: Number.NaN, min: 10, max: 20 }), [
+      "10",
+      0,
+      "0%"
+    ])
     assert.deepStrictEqual(at({ value: 5, min: 5, max: 5 }), ["5", 0, "0%"])
     assert.deepStrictEqual(at({ value: 10, min: 5, max: 5 }), ["5", 0, "0%"])
   })

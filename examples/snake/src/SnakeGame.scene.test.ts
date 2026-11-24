@@ -3,7 +3,12 @@ import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { describe, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { GenerateApplePosition, SnakeGame, SnakeGameMessage, type SnakeGameModel } from "./SnakeGame.ts"
+import {
+  GenerateApplePosition,
+  SnakeGame,
+  SnakeGameMessage,
+  type SnakeGameModel
+} from "./SnakeGame.ts"
 
 const baseModel: SnakeGameModel = {
   snake: Snake.create({ x: 10, y: 10 }),
@@ -53,7 +58,12 @@ describe("SnakeGame", () => {
   it.effect("the current and high scores reflect the Model", () =>
     Effect.gen(function*() {
       const s = yield* HtmlScene.make(SnakeGame, {})
-      s.given({ ...baseModel, gameState: "Playing", points: 120, highScore: 200 })
+      s.given({
+        ...baseModel,
+        gameState: "Playing",
+        points: 120,
+        highScore: 200
+      })
         .expect(Locator.text("Score: 120")).toExist()
         .expect(Locator.text("High Score: 200")).toExist()
     }))
@@ -71,7 +81,8 @@ describe("SnakeGame", () => {
       const s = yield* HtmlScene.make(SnakeGame, {})
       s.given({ ...baseModel, gameState: "Playing", apple: { x: 10, y: 9 } })
         .fireDocument("keydown", { key: "ArrowUp" }).expectDefaultPrevented()
-        .fireDocument("keydown", { key: "ArrowUp", repeat: true }).expectDefaultPrevented()
+        .fireDocument("keydown", { key: "ArrowUp", repeat: true })
+        .expectDefaultPrevented()
         .subscription("gameClock:150", SnakeGameMessage.TickedClock())
         .expect(Locator.text("Score: 10")).toExist()
         .resolve(GenerateApplePosition, { x: 0, y: 0 })
@@ -84,6 +95,7 @@ describe("SnakeGame", () => {
         .fireDocument("keydown", { key: "Tab" }).expectIgnored()
         .fireDocument("keydown", { key: "R" }).expectIgnored()
         .fireDocument("keydown", { key: "r", ctrl: true }).expectIgnored()
-        .fireDocument("keydown", { key: "ArrowUp", defaultPrevented: true }).expectIgnored()
+        .fireDocument("keydown", { key: "ArrowUp", defaultPrevented: true })
+        .expectIgnored()
     }))
 })

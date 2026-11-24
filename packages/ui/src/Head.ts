@@ -119,7 +119,9 @@ export const title = (text: string): Title => ({ _tag: "Title", text })
  * @category constructors
  * @since 0.1.0
  */
-export const titleTemplate = (apply: (title: string) => string): TitleTemplate => ({ _tag: "TitleTemplate", apply })
+export const titleTemplate = (
+  apply: (title: string) => string
+): TitleTemplate => ({ _tag: "TitleTemplate", apply })
 
 /**
  * Maps the folded head of the instance and everything its view placed.
@@ -231,9 +233,14 @@ export interface MergeOptions {
  * @category constructors
  * @since 0.1.0
  */
-export const conflict = (slot: string, paths: ReadonlyArray<string>): Conflict =>
+export const conflict = (
+  slot: string,
+  paths: ReadonlyArray<string>
+): Conflict =>
   new Conflict({
-    message: `Head: ${listOf(paths)} set ${slot} to different values, so it's left unset`,
+    message: `Head: ${
+      listOf(paths)
+    } set ${slot} to different values, so it's left unset`,
     slot,
     paths
   })
@@ -295,22 +302,34 @@ export const merge: <E extends { readonly _tag: string } = Entry>(
   tree: Tree<E>,
   options?: MergeOptions
 ) => Head = /* @__PURE__ */ headFold.plain((tree, options) =>
-  headFold.fold(tree, folding, options?.onConflict === undefined ? undefined : reportTo(options.onConflict))
+  headFold.fold(
+    tree,
+    folding,
+    options?.onConflict === undefined ? undefined : reportTo(options.onConflict)
+  )
 )
 
 const folding: headFold.Folding<{ readonly _tag: string }, Head> = {
   combine: (node, children, conflicted) => {
     if (conflicted.has("title")) return { title: undefined }
     let below: string | undefined
-    for (const child of children) if (child.title !== undefined) below = child.title
+    for (const child of children) {
+      if (child.title !== undefined) below = child.title
+    }
     return { title: resolveTitle(node, below) }
   },
-  slots: (head) => new Map(head.title === undefined ? [] : [["title", head.title]]),
-  reducer: (entry) => entry._tag === "Reduce" ? (entry as Reduce).apply : undefined
+  slots: (head) =>
+    new Map(head.title === undefined ? [] : [["title", head.title]]),
+  reducer: (entry) =>
+    entry._tag === "Reduce" ? (entry as Reduce).apply : undefined
 }
 
 const listOf = (paths: ReadonlyArray<string>): string =>
-  paths.length < 2 ? paths.join("") : `${paths.slice(0, -1).join(", ")} and ${paths[paths.length - 1]}`
+  paths.length < 2
+    ? paths.join("")
+    : `${paths.slice(0, -1).join(", ")} and ${paths[paths.length - 1]}`
 
-const reportTo = (onConflict: (conflict: Conflict) => void) => (slot: string, paths: ReadonlyArray<string>) =>
-  onConflict(conflict(slot, paths))
+const reportTo =
+  (onConflict: (conflict: Conflict) => void) =>
+  (slot: string, paths: ReadonlyArray<string>) =>
+    onConflict(conflict(slot, paths))

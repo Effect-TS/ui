@@ -143,7 +143,9 @@ import { Dialog, type DialogEvents, DialogProps } from "./Dialog.ts"
  * @category schemas
  * @since 0.1.0
  */
-export const AlertDialogProps = DialogProps.mapFields(Struct.omit(["modal", "disablePointerDismissal"]))
+export const AlertDialogProps = DialogProps.mapFields(
+  Struct.omit(["modal", "disablePointerDismissal"])
+)
 
 /**
  * The props of an `AlertDialog`.
@@ -163,7 +165,8 @@ export type AlertDialogProps = typeof AlertDialogProps.Type
  */
 export type AlertDialogParts = Component.Headless.Parts<typeof Dialog>
 
-const alert = (node: View.ElementBuilder<any, any, any, any>) => node.attr("role", "alertdialog")
+const alert = (node: View.ElementBuilder<any, any, any, any>) =>
+  node.attr("role", "alertdialog")
 
 /**
  * A headless alert dialog. Call it as a `Dialog`, with the consumer's `h`, a
@@ -193,7 +196,9 @@ export const AlertDialog = <Msg, RV = never, RF = never>(
     & {
       /** Shown if the alert dialog fails, until its key changes. Without it, it is blank. */
       readonly fallback?:
-        | ((result: AsyncResult.Failure<never, unknown>) => View.Content<NoInfer<Msg>, RF>)
+        | ((
+          result: AsyncResult.Failure<never, unknown>
+        ) => View.Content<NoInfer<Msg>, RF>)
         | undefined
       /** The alert dialog's whole view, from its parts. */
       readonly view: (parts: AlertDialogParts) => View.Content<NoInfer<Msg>, RV>
@@ -202,5 +207,9 @@ export const AlertDialog = <Msg, RV = never, RF = never>(
   Dialog<Msg, RV, RF>(h, {
     ...options,
     props: { ...options.props, modal: true, disablePointerDismissal: true },
-    view: (dialog) => options.view({ ...dialog, portal: (element) => dialog.portal(element)?.forward(alert) })
+    view: (dialog) =>
+      options.view({
+        ...dialog,
+        portal: (element) => dialog.portal(element)?.forward(alert)
+      })
   })

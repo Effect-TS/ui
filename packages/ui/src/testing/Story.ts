@@ -128,9 +128,13 @@ export type {
  * @category models
  * @since 0.1.0
  */
-export interface Story<Props, Model, Msg, Events, Queries = { readonly [name: string]: unknown }>
-  extends Shared.Record<Props, Model, Msg, Events>
-{
+export interface Story<
+  Props,
+  Model,
+  Msg,
+  Events,
+  Queries = { readonly [name: string]: unknown }
+> extends Shared.Record<Props, Model, Msg, Events> {
   readonly model: Model
   /**
    * The query results, beside the Model: what each query last
@@ -198,21 +202,33 @@ export interface Steps<C extends AnyComponent> extends Shared.Steps<C> {
     Component.Model<C>,
     Component.Message<C>,
     Component.Events<C>,
-    { readonly [K in keyof Component.Queries<C>]: Component.QueryResultOf<Component.Queries<C>[K]> }
+    {
+      readonly [K in keyof Component.Queries<C>]: Component.QueryResultOf<
+        Component.Queries<C>[K]
+      >
+    }
   >
 
   /**
    * Sends a message to `update`. An updater is called with the current
    * Model. A message step.
    */
-  send(message: Component.Message<C> | ((model: Component.Model<C>) => Component.Message<C>)): this
+  send(
+    message:
+      | Component.Message<C>
+      | ((model: Component.Model<C>) => Component.Message<C>)
+  ): this
 
   /** The Model after the last step. */
   readonly model: Component.Model<C>
   /** The query results after the last step, beside the Model. Opaque: `queries` opens them. */
   readonly results: Component.Results | undefined
   /** The queries' results, by name, as `h.queries` opens them for the current Model, props and results. */
-  readonly queries: { readonly [K in keyof Component.Queries<C>]: Component.QueryResultOf<Component.Queries<C>[K]> }
+  readonly queries: {
+    readonly [K in keyof Component.Queries<C>]: Component.QueryResultOf<
+      Component.Queries<C>[K]
+    >
+  }
 }
 
 /**
@@ -245,7 +261,11 @@ class StepsImpl extends cursor.Cursor {
     return this.act(
       "send",
       "message",
-      (state) => engine.dispatch(state, typeof message === "function" ? message(state.model) : message)
+      (state) =>
+        engine.dispatch(
+          state,
+          typeof message === "function" ? message(state.model) : message
+        )
     )
   }
   get model(): unknown {
@@ -283,7 +303,10 @@ export const make = <C extends AnyComponent>(
   cursor.scoped(
     make,
     () =>
-      new StepsImpl("Story", cursor.initial(component as unknown as Component.Any, props)) as unknown as
+      new StepsImpl(
+        "Story",
+        cursor.initial(component as unknown as Component.Any, props)
+      ) as unknown as
         & cursor.Cursor
         & Steps<C>
   )
@@ -296,8 +319,14 @@ export const make = <C extends AnyComponent>(
  * @category constructors
  * @since 0.1.0
  */
-export const start = <C extends AnyComponent>(component: C, props: Component.Props<C>): Steps<C> =>
-  new StepsImpl("Story", cursor.initial(component as unknown as Component.Any, props)) as unknown as Steps<C>
+export const start = <C extends AnyComponent>(
+  component: C,
+  props: Component.Props<C>
+): Steps<C> =>
+  new StepsImpl(
+    "Story",
+    cursor.initial(component as unknown as Component.Any, props)
+  ) as unknown as Steps<C>
 
 /**
  * The parts of a headless component for a Model and props: the plain values
@@ -319,10 +348,14 @@ export const start = <C extends AnyComponent>(component: C, props: Component.Pro
  */
 export const parts = <Props, Events, Parts, R, Rcv>(
   component: Component.Headless<Props, Events, Parts, R, Rcv>,
-  record: { readonly model: unknown; readonly props: Props } | { readonly props: Props }
+  record: { readonly model: unknown; readonly props: Props } | {
+    readonly props: Props
+  }
 ): Parts => {
   const state = cursor.stateOf.get(record)
-  const model = state !== undefined ? state.model : (record as { readonly model: unknown }).model
+  const model = state !== undefined
+    ? state.model
+    : (record as { readonly model: unknown }).model
   return engine.rootParts(component, model, record.props, state ?? record)
 }
 
@@ -370,15 +403,23 @@ export const head: {
     model: Model,
     ...props: {} extends Props ? [props?: Props] : [props: Props]
   ): ReadonlyArray<View.HeadEntry<V>>
-  <Props, Model, Msg, Events>(record: Shared.Record<Props, Model, Msg, Events>): ReadonlyArray<unknown>
+  <Props, Model, Msg, Events>(
+    record: Shared.Record<Props, Model, Msg, Events>
+  ): ReadonlyArray<unknown>
 } = (
   self: AnyComponent | Shared.Record<any, any, any, any>,
   model?: unknown,
   props?: unknown
 ) => {
-  if (!("pending" in self)) return self.head?.(model, props ?? {}, undefined) ?? []
+  if (!("pending" in self)) {
+    return self.head?.(model, props ?? {}, undefined) ?? []
+  }
   const state = cursor.stateOf.get(self)
-  if (state === undefined) throw new Error("Story.head: the record didn't come from a Story or a Scene")
+  if (state === undefined) {
+    throw new Error(
+      "Story.head: the record didn't come from a Story or a Scene"
+    )
+  }
   return state.component.head?.(state.model, state.props, state.results) ?? []
 }
 
@@ -491,12 +532,26 @@ export const fromLog: <C extends AnyComponent>(
   Component.Model<C>,
   Component.Message<C>,
   Component.Events<C>,
-  { readonly [K in keyof Component.Queries<C>]: Component.QueryResultOf<Component.Queries<C>[K]> },
+  {
+    readonly [K in keyof Component.Queries<C>]: Component.QueryResultOf<
+      Component.Queries<C>[K]
+    >
+  },
   Component.Props<C>
 > = (component, entries, options) =>
   replay.replayLog(
     "Story.fromLog",
-    component as Component.Component<string, any, any, any, any, any, any, any, any>,
+    component as Component.Component<
+      string,
+      any,
+      any,
+      any,
+      any,
+      any,
+      any,
+      any,
+      any
+    >,
     entries,
     options
   ) as any

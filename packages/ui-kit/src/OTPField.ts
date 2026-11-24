@@ -187,7 +187,12 @@ const Code = Schema.Redacted(Schema.String)
  * @category schemas
  * @since 0.1.0
  */
-export const OTPFieldValidationType = Schema.Literals(["numeric", "alpha", "alphanumeric", "none"])
+export const OTPFieldValidationType = Schema.Literals([
+  "numeric",
+  "alpha",
+  "alphanumeric",
+  "none"
+])
 
 /**
  * Which characters a one-time code field accepts.
@@ -295,7 +300,12 @@ export type OTPFieldProps = typeof OTPFieldProps.Type
  * @category schemas
  * @since 0.1.0
  */
-export const OTPFieldUpdateReason = Schema.Literals(["input-change", "input-clear", "input-paste", "keyboard"])
+export const OTPFieldUpdateReason = Schema.Literals([
+  "input-change",
+  "input-clear",
+  "input-paste",
+  "keyboard"
+])
 
 /**
  * How the user changed the code.
@@ -314,7 +324,10 @@ export type OTPFieldUpdateReason = typeof OTPFieldUpdateReason.Type
  * @category schemas
  * @since 0.1.0
  */
-export const OTPFieldEntryReason = Schema.Literals(["input-change", "input-paste"])
+export const OTPFieldEntryReason = Schema.Literals([
+  "input-change",
+  "input-paste"
+])
 
 /**
  * How the user entered text.
@@ -371,7 +384,11 @@ const OTPFieldMessage = UiSchema.TaggedEnum({
   UpdatedSlot: { index: Schema.Number, value: Code, composing: Schema.Boolean },
   EndedComposition: { index: Schema.Number, value: Code },
   PastedText: { index: Schema.Number, text: Code },
-  PressedKey: { index: Schema.Number, key: Schema.String, boundary: Schema.Boolean },
+  PressedKey: {
+    index: Schema.Number,
+    key: Schema.String,
+    boundary: Schema.Boolean
+  },
   PressedSlot: { index: Schema.Number },
   FocusedSlot: { index: Schema.Number },
   BlurredSlot: { index: Schema.Number },
@@ -380,7 +397,10 @@ const OTPFieldMessage = UiSchema.TaggedEnum({
   Settled: {},
   DisabledWhileFocused: {},
   CompletedSelectSlot: {},
-  CompletedInspectFirstSlot: { label: Schema.NullOr(Schema.String), android: Schema.Boolean }
+  CompletedInspectFirstSlot: {
+    label: Schema.NullOr(Schema.String),
+    android: Schema.Boolean
+  }
 })
 
 type OTPFieldMessage = typeof OTPFieldMessage.Type
@@ -405,7 +425,12 @@ const OTPFieldModel = Schema.Struct({
 
 type OTPFieldModel = typeof OTPFieldModel.Type
 
-type OTPFieldUpdate = Component.Update<OTPFieldModel, OTPFieldMessage, OTPFieldEvents, OTPFieldProps>
+type OTPFieldUpdate = Component.Update<
+  OTPFieldModel,
+  OTPFieldMessage,
+  OTPFieldEvents,
+  OTPFieldProps
+>
 
 interface Rule {
   readonly accepted: string
@@ -416,7 +441,11 @@ interface Rule {
 const rules: Record<OTPFieldValidationType, Rule | undefined> = {
   numeric: { accepted: "\\d", rejected: /[^\d]/g, inputMode: "numeric" },
   alpha: { accepted: "[a-zA-Z]", rejected: /[^a-zA-Z]/g, inputMode: "text" },
-  alphanumeric: { accepted: "[a-zA-Z0-9]", rejected: /[^a-zA-Z0-9]/g, inputMode: "text" },
+  alphanumeric: {
+    accepted: "[a-zA-Z0-9]",
+    rejected: /[^a-zA-Z0-9]/g,
+    inputMode: "text"
+  },
   none: undefined
 }
 
@@ -427,13 +456,23 @@ const normalize = (
 ): readonly [characters: ReadonlyArray<string>, rejected: boolean] => {
   const stripped = text.replace(/\s/g, "")
   const rule = rules[type]
-  const kept = rule === undefined ? stripped : stripped.replace(rule.rejected, "")
+  const kept = rule === undefined
+    ? stripped
+    : stripped.replace(rule.rejected, "")
   const characters = Array.from(kept)
-  return [characters.slice(0, length), stripped.length > kept.length || characters.length > length]
+  return [
+    characters.slice(0, length),
+    stripped.length > kept.length || characters.length > length
+  ]
 }
 
-const without = (characters: ReadonlyArray<string>, index: number): ReadonlyArray<string> =>
-  index < 0 || index >= characters.length ? characters : [...characters.slice(0, index), ...characters.slice(index + 1)]
+const without = (
+  characters: ReadonlyArray<string>,
+  index: number
+): ReadonlyArray<string> =>
+  index < 0 || index >= characters.length
+    ? characters
+    : [...characters.slice(0, index), ...characters.slice(index + 1)]
 
 interface Settings {
   readonly length: number
@@ -446,13 +485,21 @@ interface Settings {
 }
 
 const storedOf = (props: OTPFieldProps): ReadonlyArray<string> =>
-  normalize(Redacted.value(props.value), props.length, props.validationType ?? "numeric")[0]
+  normalize(
+    Redacted.value(props.value),
+    props.length,
+    props.validationType ?? "numeric"
+  )[0]
 
 type Edit = NonNullable<OTPFieldModel["edit"]>
 
-const startedFrom = (edit: Edit, stored: string): boolean => Redacted.value(edit.before) === stored
+const startedFrom = (edit: Edit, stored: string): boolean =>
+  Redacted.value(edit.before) === stored
 
-const settingsOf = (props: OTPFieldProps, edit: OTPFieldModel["edit"] = null): Settings => {
+const settingsOf = (
+  props: OTPFieldProps,
+  edit: OTPFieldModel["edit"] = null
+): Settings => {
   const characters = storedOf(props)
   const stored = characters.join("")
   const unanswered = edit !== null && !edit.settled && startedFrom(edit, stored)
@@ -468,22 +515,34 @@ const settingsOf = (props: OTPFieldProps, edit: OTPFieldModel["edit"] = null): S
   }
 }
 
-const locked = (props: OTPFieldProps): boolean => props.disabled === true || props.readOnly === true
+const locked = (props: OTPFieldProps): boolean =>
+  props.disabled === true || props.readOnly === true
 
 const completes = (edit: Edit, length: number): boolean =>
-  edit.reason === "input-paste" || Array.from(Redacted.value(edit.before)).length !== length
+  edit.reason === "input-paste" ||
+  Array.from(Redacted.value(edit.before)).length !== length
 
-const completed = (edit: OTPFieldModel["edit"], s: Settings): OTPFieldEntryReason | null =>
-  edit === null || edit.reason === null || startedFrom(edit, s.stored) || s.characters.length !== s.length
+const completed = (
+  edit: OTPFieldModel["edit"],
+  s: Settings
+): OTPFieldEntryReason | null =>
+  edit === null || edit.reason === null || startedFrom(edit, s.stored) ||
+    s.characters.length !== s.length
     ? null
-    : (edit.settled ? Redacted.value(edit.asked) === s.stored : completes(edit, s.length))
+    : (edit.settled
+        ? Redacted.value(edit.asked) === s.stored
+        : completes(edit, s.length))
     ? edit.reason
     : null
 
-const settle = (edit: OTPFieldModel["edit"], s: Settings): OTPFieldModel["edit"] => {
+const settle = (
+  edit: OTPFieldModel["edit"],
+  s: Settings
+): OTPFieldModel["edit"] => {
   if (edit === null || !startedFrom(edit, s.stored)) return null
   if (edit.settled) return edit
-  return edit.reason !== null && Array.from(Redacted.value(edit.asked)).length === s.length &&
+  return edit.reason !== null &&
+      Array.from(Redacted.value(edit.asked)).length === s.length &&
       completes(edit, s.length)
     ? UiStruct.evolve(edit, { settled: true })
     : null
@@ -492,16 +551,23 @@ const settle = (edit: OTPFieldModel["edit"], s: Settings): OTPFieldModel["edit"]
 const Slot = Html.ref("OTPFieldSlot", "input")
 const HiddenInput = Html.ref("OTPFieldHiddenInput", "input")
 
-const selectSlot = (index: number) => HtmlCommand.select(Slot.at(index), () => OTPFieldMessage.CompletedSelectSlot())
+const selectSlot = (index: number) =>
+  HtmlCommand.select(
+    Slot.at(index),
+    () => OTPFieldMessage.CompletedSelectSlot()
+  )
 
 const focusSlot = (index: number) => [
   HtmlCommand.Focus.make({ ref: Slot.at(index) }).pipe(Command.asNoop),
   selectSlot(index)
 ]
 
-const submit = HtmlCommand.RequestSubmit.make({ ref: HiddenInput }).pipe(Command.asNoop)
+const submit = HtmlCommand.RequestSubmit.make({ ref: HiddenInput }).pipe(
+  Command.asNoop
+)
 
-const firstEmpty = (s: Settings): number => Math.min(s.characters.length, s.length - 1)
+const firstEmpty = (s: Settings): number =>
+  Math.min(s.characters.length, s.length - 1)
 
 // A Command moves focus and selects a slot's text a moment after the edit that asked for it, and
 // a key pressed in between reaches the slot as it was. So the Model keeps the slot focus is on its
@@ -516,7 +582,9 @@ const reselect = (model: OTPFieldModel, $: OTPFieldUpdate, index: number) =>
   $.set(aim(model, index)).run(selectSlot(index))
 
 const aimedAt = (model: OTPFieldModel, s: Settings, index: number): number =>
-  model.target === null || model.target === index ? index : Math.min(model.target, firstEmpty(s))
+  model.target === null || model.target === index
+    ? index
+    : Math.min(model.target, firstEmpty(s))
 
 const InspectFirstSlot = Mount.make(
   "InspectFirstSlot",
@@ -526,14 +594,18 @@ const InspectFirstSlot = Mount.make(
       const label = node.labels?.[0]
       // The label is the consumer's element. The other slots can only point at it by id.
       if (label !== undefined && label.id === "") label.id = id
-      return { label: label?.id ?? null, android: isAndroid(node.ownerDocument.defaultView) }
+      return {
+        label: label?.id ?? null,
+        android: isAndroid(node.ownerDocument.defaultView)
+      }
     })
 )
 
 const settled = (model: OTPFieldModel, props: OTPFieldProps) => {
   const stored = storedOf(props)
   const edit = model.edit
-  const stale = edit !== null && edit.settled && !startedFrom(edit, stored.join(""))
+  const stale = edit !== null && edit.settled &&
+    !startedFrom(edit, stored.join(""))
   return Subscription.make(
     "settled",
     [model.edits, stored.length, stale],
@@ -561,29 +633,60 @@ const setValue = (
   }
 ) => {
   const value = characters.join("")
-  const entry = reason === "input-change" || reason === "input-paste" ? reason : null
+  const entry = reason === "input-change" || reason === "input-paste"
+    ? reason
+    : null
   const edit = model.edit
-  const unanswered = edit !== null && !edit.settled && startedFrom(edit, s.stored)
+  const unanswered = edit !== null && !edit.settled &&
+    startedFrom(edit, s.stored)
   const unchanged = value === s.value
   const earlier = completed(edit, s)
-  const again = unchanged && !unanswered && entry === "input-paste" && characters.length === s.length
-  const focus = !unchanged || options.focusWhenUnchanged === true ? options.focus : undefined
+  const again = unchanged && !unanswered && entry === "input-paste" &&
+    characters.length === s.length
+  const focus = !unchanged || options.focusWhenUnchanged === true
+    ? options.focus
+    : undefined
   return $.set(focus === undefined ? model : aim(model, focus))
     .evolve({
       edit: unchanged
-        ? (unanswered ? UiStruct.evolve(edit, { reason: entry ?? edit.reason }) : null)
-        : { before: Redacted.make(s.stored), asked: Redacted.make(value), reason: entry, settled: false },
+        ? (unanswered
+          ? UiStruct.evolve(edit, { reason: entry ?? edit.reason })
+          : null)
+        : {
+          before: Redacted.make(s.stored),
+          asked: Redacted.make(value),
+          reason: entry,
+          settled: false
+        },
       edits: unchanged ? model.edits : model.edits + 1
     })
     .run(
       ...(focus === undefined ? [] : focusSlot(focus)),
-      ...((earlier !== null || again) && $.props.autoSubmit === true ? [submit] : [])
+      ...((earlier !== null || again) && $.props.autoSubmit === true
+        ? [submit]
+        : [])
     )
     .emit(
-      ...(earlier === null ? [] : [OTPFieldEvents.Completed({ value: Redacted.make(s.stored), reason: earlier })]),
+      ...(earlier === null
+        ? []
+        : [
+          OTPFieldEvents.Completed({
+            value: Redacted.make(s.stored),
+            reason: earlier
+          })
+        ]),
       ...(options.events ?? []),
-      ...(unchanged ? [] : [OTPFieldEvents.Updated({ value: Redacted.make(value), reason })]),
-      ...(again ? [OTPFieldEvents.Completed({ value: Redacted.make(value), reason: "input-paste" })] : [])
+      ...(unchanged
+        ? []
+        : [OTPFieldEvents.Updated({ value: Redacted.make(value), reason })]),
+      ...(again
+        ? [
+          OTPFieldEvents.Completed({
+            value: Redacted.make(value),
+            reason: "input-paste"
+          })
+        ]
+        : [])
     )
 }
 
@@ -597,31 +700,65 @@ const enter = (
 ) => {
   const own = s.characters[slot] ?? ""
   // Until its text is selected, the slot shows its own character before the one just typed.
-  const unselected = reason === "input-change" && model.target !== null && shown.length > own.length &&
+  const unselected = reason === "input-change" && model.target !== null &&
+    shown.length > own.length &&
     shown.startsWith(own)
   const text = unselected ? shown.slice(own.length) : shown
   const index = text === "" ? slot : aimedAt(model, s, slot)
   const [entered, rejected] = normalize(text, s.length, s.type)
-  const events = rejected ? [OTPFieldEvents.Rejected({ value: Redacted.make(text), reason })] : []
+  const events = rejected
+    ? [OTPFieldEvents.Rejected({ value: Redacted.make(text), reason })]
+    : []
   if (entered.length === 0) {
     if (reason === "input-paste") return $.set(model).emit(...events)
-    if (text === "") return setValue(model, $, s, without(s.characters, index), "input-clear", { events })
+    if (text === "") {
+      return setValue(
+        model,
+        $,
+        s,
+        without(s.characters, index),
+        "input-clear",
+        { events }
+      )
+    }
     return reselect(model, $, index).emit(...events)
   }
-  const merged = [...s.characters.slice(0, index), ...entered, ...s.characters.slice(index + entered.length)]
-  return setValue(model, $, s, normalize(merged.join(""), s.length, s.type)[0], reason, {
-    events,
-    focus: Math.min(index + entered.length, s.length - 1),
-    focusWhenUnchanged: true
-  })
+  const merged = [
+    ...s.characters.slice(0, index),
+    ...entered,
+    ...s.characters.slice(index + entered.length)
+  ]
+  return setValue(
+    model,
+    $,
+    s,
+    normalize(merged.join(""), s.length, s.type)[0],
+    reason,
+    {
+      events,
+      focus: Math.min(index + entered.length, s.length - 1),
+      focusWhenUnchanged: true
+    }
+  )
 }
 
-const navigationKeys = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"])
+const navigationKeys = new Set([
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowUp",
+  "ArrowDown",
+  "Home",
+  "End"
+])
 const editingKeys = new Set(["Backspace", "Delete"])
 
 const pressKey = (
   $: OTPFieldUpdate,
-  message: { readonly index: number; readonly key: string; readonly boundary: boolean },
+  message: {
+    readonly index: number
+    readonly key: string
+    readonly boundary: boolean
+  },
   rtl: boolean
 ) => {
   if ($.props.disabled === true || $.model.composing !== null) return $.model
@@ -630,17 +767,27 @@ const pressKey = (
   const index = aimedAt($.model, s, message.index)
   const end = firstEmpty(s)
   const go = (target: number) => moveTo($.model, $, clamp(target, 0, end))
-  if (key === (rtl ? "ArrowRight" : "ArrowLeft")) return go(boundary ? 0 : index - 1)
-  if (key === (rtl ? "ArrowLeft" : "ArrowRight")) return go(boundary ? end : index + 1)
+  if (key === (rtl ? "ArrowRight" : "ArrowLeft")) {
+    return go(boundary ? 0 : index - 1)
+  }
+  if (key === (rtl ? "ArrowLeft" : "ArrowRight")) {
+    return go(boundary ? end : index + 1)
+  }
   if (key === "Home" || key === "ArrowUp") return go(0)
   if (key === "End" || key === "ArrowDown") return go(end)
   if (s.readOnly) return $.model
-  if (key === "Delete") return setValue($.model, $, s, without(s.characters, index), "keyboard", { focus: index })
+  if (key === "Delete") {
+    return setValue($.model, $, s, without(s.characters, index), "keyboard", {
+      focus: index
+    })
+  }
   if (key !== "Backspace") return $.model
   if (boundary) return setValue($.model, $, s, [], "keyboard", { focus: 0 })
   const target = Math.max(0, index - 1)
   const removed = index < s.characters.length ? index : target
-  return setValue($.model, $, s, without(s.characters, removed), "keyboard", { focus: target })
+  return setValue($.model, $, s, without(s.characters, removed), "keyboard", {
+    focus: target
+  })
 }
 
 type SlotOf<B extends View.PartTarget<"input">> = ReturnType<B["attr"]>
@@ -648,8 +795,13 @@ type SlotOf<B extends View.PartTarget<"input">> = ReturnType<B["attr"]>
 const isNamed = (attrs: View.Element<any, any>["attrs"]): boolean =>
   attrs["aria-label"] !== undefined || attrs["aria-labelledby"] !== undefined
 
-const named = <N extends View.Element<any, any>>(node: N, label: string | undefined): N =>
-  label === undefined || isNamed(node.attrs) ? node : { ...node, attrs: { ...node.attrs, "aria-labelledby": label } }
+const named = <N extends View.Element<any, any>>(
+  node: N,
+  label: string | undefined
+): N =>
+  label === undefined || isNamed(node.attrs)
+    ? node
+    : { ...node, attrs: { ...node.attrs, "aria-labelledby": label } }
 
 const checked = (
   node: View.Node<any, any>,
@@ -659,11 +811,17 @@ const checked = (
 ): View.Node<any, any> => {
   if (node._tag !== "Element") return node
   const index = node.owned?.reduce<number | undefined>(
-    (found, layer) => found ?? (layer.refKey === undefined ? undefined : slots.get(layer.refKey)),
+    (found, layer) =>
+      found ??
+        (layer.refKey === undefined ? undefined : slots.get(layer.refKey)),
     undefined
   )
   if (index !== undefined) {
-    if (drawn.has(index)) throw new Error("OTPField: the slot at index " + index + " was drawn twice")
+    if (drawn.has(index)) {
+      throw new Error(
+        "OTPField: the slot at index " + index + " was drawn twice"
+      )
+    }
     drawn.add(index)
     return named(node, label)
   }
@@ -750,47 +908,89 @@ export const OTPField = Component.define({
   update: {
     UpdatedSlot: ($, { composing, index, value }) => {
       if (locked($.props)) return $.model
-      if ((composing && !$.model.android) || $.model.composing === index) return $.evolve({ composing: index })
+      if ((composing && !$.model.android) || $.model.composing === index) {
+        return $.evolve({ composing: index })
+      }
       const s = settingsOf($.props, $.model.edit)
       const shown = Redacted.value(value)
-      if ($.model.composed === null) return enter($.model, $, s, index, shown, "input-change")
+      if ($.model.composed === null) {
+        return enter($.model, $, s, index, shown, "input-change")
+      }
       const next = UiStruct.evolve($.model, { composed: null })
       // Some browsers send one more `input` after `compositionend`, with the text that was just
       // entered or, once the slot is restored, the character it holds.
       const repeated = $.model.composed.index === index &&
-        (shown === Redacted.value($.model.composed.text) || shown === (s.characters[index] ?? ""))
+        (shown === Redacted.value($.model.composed.text) ||
+          shown === (s.characters[index] ?? ""))
       return repeated ? next : enter(next, $, s, index, shown, "input-change")
     },
     EndedComposition: ($, { index, value }) => {
       if ($.model.composing === null) return $.model
-      const next = UiStruct.evolve($.model, { composing: null, composed: { index, text: value } })
+      const next = UiStruct.evolve($.model, {
+        composing: null,
+        composed: { index, text: value }
+      })
       return locked($.props)
         ? next
-        : enter(next, $, settingsOf($.props, $.model.edit), index, Redacted.value(value), "input-change")
+        : enter(
+          next,
+          $,
+          settingsOf($.props, $.model.edit),
+          index,
+          Redacted.value(value),
+          "input-change"
+        )
     },
     PastedText: ($, { index, text }) =>
       locked($.props)
         ? $.model
-        : enter($.model, $, settingsOf($.props, $.model.edit), index, Redacted.value(text), "input-paste"),
-    PressedKey: ($, message) => pressKey($, message, $.shared.provider?.direction === "rtl"),
-    PressedSlot: ($, { index }) => ($.props.disabled === true ? $.model : reselect($.model, $, index)),
+        : enter(
+          $.model,
+          $,
+          settingsOf($.props, $.model.edit),
+          index,
+          Redacted.value(text),
+          "input-paste"
+        ),
+    PressedKey: ($, message) =>
+      pressKey($, message, $.shared.provider?.direction === "rtl"),
+    PressedSlot: (
+      $,
+      { index }
+    ) => ($.props.disabled === true ? $.model : reselect($.model, $, index)),
     FocusedSlot: ($, { index }) => {
       if ($.props.disabled === true) return $.model
       const s = settingsOf($.props, $.model.edit)
-      const next = UiStruct.evolve($.model, { focused: true, focusedIndex: index })
+      const next = UiStruct.evolve($.model, {
+        focused: true,
+        focusedIndex: index
+      })
       // Focus passing through on its way to `target` is left alone.
       if ($.model.target !== null && $.model.target !== index) return next
-      if (index > s.characters.length) return moveTo(UiStruct.evolve($.model, { focused: true }), $, firstEmpty(s))
+      if (index > s.characters.length) {
+        return moveTo(
+          UiStruct.evolve($.model, { focused: true }),
+          $,
+          firstEmpty(s)
+        )
+      }
       return $.model.target === null ? reselect(next, $, index) : next
     },
     BlurredSlot: ($) => $.evolve({ focused: false, composed: null }),
-    FocusedHiddenInput: ($) => $.props.disabled === true ? $.model : moveTo($.model, $, 0),
+    FocusedHiddenInput: ($) =>
+      $.props.disabled === true ? $.model : moveTo($.model, $, 0),
     UpdatedHiddenInput: ($, { value }) => {
       if (locked($.props)) return $.model
       const s = settingsOf($.props, $.model.edit)
-      const [entered, rejected] = normalize(Redacted.value(value), s.length, s.type)
+      const [entered, rejected] = normalize(
+        Redacted.value(value),
+        s.length,
+        s.type
+      )
       return setValue($.model, $, s, entered, "input-change", {
-        events: rejected ? [OTPFieldEvents.Rejected({ value, reason: "input-change" })] : [],
+        events: rejected
+          ? [OTPFieldEvents.Rejected({ value, reason: "input-change" })]
+          : [],
         focus: entered.length === 0 ? undefined : entered.length - 1
       })
     },
@@ -799,17 +999,34 @@ export const OTPField = Component.define({
       const complete = completed($.model.edit, s)
       const edit = settle($.model.edit, s)
       const next = UiStruct.evolve($.model, { edit })
-      const at = $.model.target ?? ($.model.focused ? $.model.focusedIndex : null)
+      const at = $.model.target ??
+        ($.model.focused ? $.model.focusedIndex : null)
       const back = !s.disabled && at !== null && at > s.characters.length
       if (complete === null) return back ? moveTo(next, $, firstEmpty(s)) : next
       return $.set(next)
-        .run(...($.props.autoSubmit === true && !locked($.props) ? [submit] : []))
-        .emit(OTPFieldEvents.Completed({ value: Redacted.make(s.stored), reason: complete }))
+        .run(
+          ...($.props.autoSubmit === true && !locked($.props) ? [submit] : [])
+        )
+        .emit(
+          OTPFieldEvents.Completed({
+            value: Redacted.make(s.stored),
+            reason: complete
+          })
+        )
     },
-    DisabledWhileFocused: ($) => $.evolve({ focused: false, target: null, composing: null, composed: null }),
+    DisabledWhileFocused: ($) =>
+      $.evolve({
+        focused: false,
+        target: null,
+        composing: null,
+        composed: null
+      }),
     CompletedSelectSlot: ($) =>
-      $.model.moving > 1 ? $.evolve({ moving: (moving) => moving - 1 }) : $.evolve({ moving: 0, target: null }),
-    CompletedInspectFirstSlot: ($, { android, label }) => $.evolve({ android, label })
+      $.model.moving > 1
+        ? $.evolve({ moving: (moving) => moving - 1 })
+        : $.evolve({ moving: 0, target: null }),
+    CompletedInspectFirstSlot: ($, { android, label }) =>
+      $.evolve({ android, label })
   },
   subscriptions: ({ model, props }) => [
     settled(model, props),
@@ -818,7 +1035,10 @@ export const OTPField = Component.define({
   parts: (p, model) => {
     const props = p.props
     if (!Number.isInteger(props.length) || props.length <= 0) {
-      throw new Error("OTPField: length is the number of slots, a positive whole number, and it was " + props.length)
+      throw new Error(
+        "OTPField: length is the number of slots, a positive whole number, and it was " +
+          props.length
+      )
     }
     const s = settingsOf(props)
     const { characters, disabled, length, readOnly, value } = s
@@ -831,7 +1051,9 @@ export const OTPField = Component.define({
     const active = focused ? Math.min(model.focusedIndex, last) : firstEmpty(s)
     const inputMode = props.inputMode ?? rule?.inputMode
     const autoComplete = props.autoComplete ?? "one-time-code"
-    const slots = new Map(Array.from({ length }, (_, index) => [Slot.at(index).key, index]))
+    const slots = new Map(
+      Array.from({ length }, (_, index) => [Slot.at(index).key, index])
+    )
     let inherited: string | undefined
     const state = <B extends Attributed<B>>(builder: B): B =>
       builder
@@ -846,14 +1068,18 @@ export const OTPField = Component.define({
       b.ref(HiddenInput)
         .attrs({
           type: "text",
-          id: props.id !== undefined && props.name === undefined ? props.id + "-hidden-input" : undefined,
+          id: props.id !== undefined && props.name === undefined
+            ? props.id + "-hidden-input"
+            : undefined,
           name: props.name,
           form: props.form,
           autocomplete: autoComplete,
           inputmode: inputMode,
           minlength: String(length),
           maxlength: String(length),
-          pattern: rule === undefined ? undefined : rule.accepted + "{" + length + "}",
+          pattern: rule === undefined
+            ? undefined
+            : rule.accepted + "{" + length + "}",
           readonly: flag(readOnly),
           required: flag(required),
           "aria-hidden": "true",
@@ -863,7 +1089,9 @@ export const OTPField = Component.define({
         .disabled(disabled)
         .value(value)
         .onFocus(OTPFieldMessage.FocusedHiddenInput())
-        .onInput(({ value }) => OTPFieldMessage.UpdatedHiddenInput({ value: Redacted.make(value) })))
+        .onInput(({ value }) =>
+          OTPFieldMessage.UpdatedHiddenInput({ value: Redacted.make(value) })
+        ))
     const slot = p.part("input", (b, index: number) => {
       const character = characters[index] ?? ""
       const identified = props.id === undefined
@@ -871,7 +1099,9 @@ export const OTPField = Component.define({
         : b.attr("id", index === 0 ? props.id : props.id + "-" + (index + 1))
       const first = index === 0
         ? identified.onMount(
-          InspectFirstSlot({ id: p.id("label") }).pipe(Mount.map(OTPFieldMessage.CompletedInspectFirstSlot))
+          InspectFirstSlot({ id: p.id("label") }).pipe(
+            Mount.map(OTPFieldMessage.CompletedInspectFirstSlot)
+          )
         )
         : identified
       return state(first)
@@ -899,21 +1129,40 @@ export const OTPField = Component.define({
             composing || model.composing !== null ||
               !(navigationKeys.has(key) || (!readOnly && editingKeys.has(key)))
               ? undefined
-              : OTPFieldMessage.PressedKey({ index, key, boundary: (ctrl || meta) && !alt }),
+              : OTPFieldMessage.PressedKey({
+                index,
+                key,
+                boundary: (ctrl || meta) && !alt
+              }),
           { preventDefault: true }
         )
         .onInput(({ composing, value }) =>
-          OTPFieldMessage.UpdatedSlot({ index, value: Redacted.make(value), composing })
+          OTPFieldMessage.UpdatedSlot({
+            index,
+            value: Redacted.make(value),
+            composing
+          })
         )
-        .onCompositionEnd(({ value }) => OTPFieldMessage.EndedComposition({ index, value: Redacted.make(value) }))
-        .onPaste(({ text }) => OTPFieldMessage.PastedText({ index, text: Redacted.make(text) }), {
-          preventDefault: true
-        })
+        .onCompositionEnd(({ value }) =>
+          OTPFieldMessage.EndedComposition({
+            index,
+            value: Redacted.make(value)
+          })
+        )
+        .onPaste(
+          ({ text }) =>
+            OTPFieldMessage.PastedText({ index, text: Redacted.make(text) }),
+          {
+            preventDefault: true
+          }
+        )
         // Only on the slot that has focus: a press elsewhere moves focus natively, at once, where a
         // Command would move it a moment later and lose a key typed right after the press.
         .on(
           "mousedown",
-          () => (focused && model.focusedIndex === index ? OTPFieldMessage.PressedSlot({ index }) : undefined),
+          () => (focused && model.focusedIndex === index
+            ? OTPFieldMessage.PressedSlot({ index })
+            : undefined),
           {
             preventDefault: true
           }
@@ -945,9 +1194,13 @@ export const OTPField = Component.define({
           .attrs({ role: "group", "data-filled": flag(filled) })
           .forward((node) => {
             const root = View.build(node, [hiddenInput(input())])
-            const label = root.attrs["aria-labelledby"] ?? model.label ?? undefined
+            const label = root.attrs["aria-labelledby"] ?? model.label ??
+              undefined
             inherited = label
-            return named(checked(root, label, slots, new Set()) as typeof root, label)
+            return named(
+              checked(root, label, slots, new Set()) as typeof root,
+              label
+            )
           })
       ),
       input: View.wrapPart(
@@ -956,7 +1209,10 @@ export const OTPField = Component.define({
           { element, index }: { readonly element: B; readonly index: number }
         ): SlotOf<B> => {
           if (!Number.isInteger(index) || index < 0 || index >= length) {
-            throw new Error("OTPField: no slot at index " + index + " in a field of " + length + " slots")
+            throw new Error(
+              "OTPField: no slot at index " + index + " in a field of " +
+                length + " slots"
+            )
           }
           return slot(element, index)
         }

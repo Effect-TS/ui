@@ -10,7 +10,10 @@ import { KeyValueStore } from "effect/persistence"
 // Counter
 // ---------------------------------------------------------------------------
 
-export const CounterMessage = UiSchema.TaggedEnum({ Increment: {}, Decrement: {} })
+export const CounterMessage = UiSchema.TaggedEnum({
+  Increment: {},
+  Decrement: {}
+})
 export type CounterMessage = typeof CounterMessage.Type
 
 export const Counter = Component.define({
@@ -39,7 +42,11 @@ export const Counter = Component.define({
 // TodoItem: saves through a Command service, reports a toggle to its parent
 // ---------------------------------------------------------------------------
 
-export const Todo = Schema.Struct({ id: Schema.String, title: Schema.String, done: Schema.Boolean })
+export const Todo = Schema.Struct({
+  id: Schema.String,
+  title: Schema.String,
+  done: Schema.Boolean
+})
 export type Todo = typeof Todo.Type
 
 export const TodoItemMessage = UiSchema.TaggedEnum({
@@ -50,7 +57,9 @@ export const TodoItemMessage = UiSchema.TaggedEnum({
 })
 export type TodoItemMessage = typeof TodoItemMessage.Type
 
-export const TodoItemEvents = UiSchema.TaggedEnum({ Toggled: { done: Schema.Boolean } })
+export const TodoItemEvents = UiSchema.TaggedEnum({
+  Toggled: { done: Schema.Boolean }
+})
 export type TodoItemEvents = typeof TodoItemEvents.Type
 
 const encodeTodo = Schema.encodeSync(Schema.fromJsonString(Todo))
@@ -80,7 +89,8 @@ export const TodoItem = Component.define({
   init: ($) => $.set({ saving: false }),
   update: ($, message) =>
     TodoItemMessage.match(message, {
-      Toggle: () => $.emit(TodoItemEvents.Toggled({ done: !$.props.todo.done })),
+      Toggle: () =>
+        $.emit(TodoItemEvents.Toggled({ done: !$.props.todo.done })),
       Save: () => $.set({ saving: true }).run(SaveTodo.make($.props.todo)),
       Saved: () => ({ saving: false }),
       SaveFailed: () => ({ saving: false })
@@ -88,9 +98,13 @@ export const TodoItem = Component.define({
   view: (h, model) =>
     h.el(
       "li",
-      h.el("button").on("click", TodoItemMessage.Toggle()).children(h.props.todo.done ? "[x]" : "[ ]"),
+      h.el("button").on("click", TodoItemMessage.Toggle()).children(
+        h.props.todo.done ? "[x]" : "[ ]"
+      ),
       h.el("span", h.props.todo.title),
-      h.el("button").on("click", TodoItemMessage.Save()).children(model.saving ? "saving" : "save")
+      h.el("button").on("click", TodoItemMessage.Save()).children(
+        model.saving ? "saving" : "save"
+      )
     )
 })
 
@@ -108,7 +122,10 @@ export const TodoList = Component.define({
   name: "TodoList",
   scoped: false,
   props: Schema.Struct({ initial: Schema.Array(Todo) }),
-  model: Schema.Struct({ todos: Schema.Array(Todo), failed: Schema.Array(Schema.String) }),
+  model: Schema.Struct({
+    todos: Schema.Array(Todo),
+    failed: Schema.Array(Schema.String)
+  }),
   message: TodoListMessage
 }).make({
   init: ($) => ({ todos: $.props.initial, failed: [] }),
@@ -116,7 +133,9 @@ export const TodoList = Component.define({
     TodoListMessage.match(message, {
       SetDone: ({ done, id }) => ({
         ...$.model,
-        todos: $.model.todos.map((todo) => todo.id === id ? { ...todo, done } : todo)
+        todos: $.model.todos.map((todo) =>
+          todo.id === id ? { ...todo, done } : todo
+        )
       }),
       RowFailed: ({ id }) => ({ ...$.model, failed: [...$.model.failed, id] })
     }),
@@ -127,12 +146,14 @@ export const TodoList = Component.define({
         TodoItem(h, {
           key: todo.id,
           props: { todo },
-          onEmit: (events) => TodoListMessage.SetDone({ id: todo.id, done: events.done }),
+          onEmit: (events) =>
+            TodoListMessage.SetDone({ id: todo.id, done: events.done }),
           onFailure: () => TodoListMessage.RowFailed({ id: todo.id }),
           fallback: () => h.el("li", `${todo.title} failed`)
         })
       ),
-      model.failed.length > 0 && h.el("li", `rows failed: ${model.failed.join(",")}`)
+      model.failed.length > 0 &&
+        h.el("li", `rows failed: ${model.failed.join(",")}`)
     )
 })
 
@@ -158,7 +179,12 @@ export const Search = Command.make(
 
 export const Upload = Command.make(
   "Upload",
-  { args: { name: Schema.String }, stream: true, mode: "queue", group: ["name"] },
+  {
+    args: { name: Schema.String },
+    stream: true,
+    mode: "queue",
+    group: ["name"]
+  },
   () => Stream.make(SearchMessage.Progress({ percent: 100 }))
 )
 
@@ -176,7 +202,8 @@ export const SearchBox = Component.define({
   init: () => ({ text: "", items: [], percent: 0, ticks: 0 }),
   update: ($, message) =>
     SearchMessage.match(message, {
-      Query: ({ text }) => $.set({ ...$.model, text }).run(Search.make({ text })),
+      Query: ({ text }) =>
+        $.set({ ...$.model, text }).run(Search.make({ text })),
       Results: ({ items }) => ({ ...$.model, items }),
       Start: () => $.run(Upload.make({ name: "photo.png" })),
       Cancel: () => $.run(Command.interrupt(Upload, { name: "photo.png" })),

@@ -6,35 +6,54 @@ import { Schema } from "effect"
 export const Settings = Component.define({
   name: "Settings",
   scoped: false,
-  model: Schema.Struct({ log: Schema.Array(Schema.String), agree: Schema.Boolean, zip: Schema.String }),
+  model: Schema.Struct({
+    log: Schema.Array(Schema.String),
+    agree: Schema.Boolean,
+    zip: Schema.String
+  }),
   message: Schema.String,
   elements: Html
 }).make({
   init: () => ({ log: [], agree: false, zip: "" }),
   update: ($, message) => ({
     log: [...$.model.log, message],
-    agree: message === "agree:true" ? true : message === "agree:false" ? false : $.model.agree,
+    agree: message === "agree:true"
+      ? true
+      : message === "agree:false"
+      ? false
+      : $.model.agree,
     zip: message.startsWith("zip:") ? message.slice(4) : $.model.zip
   }),
   view: (h, model) =>
     h.div(
-      h.form.onSubmit(({ entries }) => `submit:${entries.map(([name, value]) => `${name}=${value}`).join("&")}`)
+      h.form.onSubmit(({ entries }) =>
+        `submit:${entries.map(([name, value]) => `${name}=${value}`).join("&")}`
+      )
         .children(
           h.label.attr("for", "zip").children("Zip code"),
-          h.input.attrs({ id: "zip", name: "zip", placeholder: "90210" }).value(model.zip)
+          h.input.attrs({ id: "zip", name: "zip", placeholder: "90210" }).value(
+            model.zip
+          )
             .onInput(({ value }) => `zip:${value}`)
-            .onKeyDown(({ key, shift }) => `key:${key}${shift ? "+shift" : ""}`),
+            .onKeyDown(({ key, shift }) =>
+              `key:${key}${shift ? "+shift" : ""}`
+            ),
           h.label(
-            h.input.attrs({ type: "checkbox", name: "agree" }).checked(model.agree)
+            h.input.attrs({ type: "checkbox", name: "agree" }).checked(
+              model.agree
+            )
               .onChange(({ checked }) => `agree:${checked}`),
             "Agree"
           ),
-          h.input.attrs({ type: "checkbox", name: "off", "aria-label": "Off" }).disabled(true),
+          h.input.attrs({ type: "checkbox", name: "off", "aria-label": "Off" })
+            .disabled(true),
           h.button.attrs({ name: "via", value: "go" }).children("Go"),
           h.button.attr("type", "button").disabled(true).children("Later")
         ),
       h.button.attr("popovertarget", "menu").children("Menu"),
-      h.div.attrs({ id: "menu", popover: "" }).onToggle(({ newState }) => `toggle:${newState}`).children("Items"),
+      h.div.attrs({ id: "menu", popover: "" }).onToggle(({ newState }) =>
+        `toggle:${newState}`
+      ).children("Items"),
       h.output(model.log.join("|"))
     )
 })

@@ -96,7 +96,8 @@ export type MountTarget = Mount.Definition.Any | Mount.Any
  * @category utility types
  * @since 0.1.0
  */
-export type MountedResult<D> = [Mount.Result<D>] extends [Component.Noop] ? [] : [result: Mount.Result<D>]
+export type MountedResult<D> = [Mount.Result<D>] extends [Component.Noop] ? []
+  : [result: Mount.Result<D>]
 
 /**
  * The state of one instance between steps, as a scene records it: what the
@@ -112,7 +113,9 @@ export type MountedResult<D> = [Mount.Result<D>] extends [Component.Noop] ? [] :
  * @category models
  * @since 0.1.0
  */
-export interface Scene<Props, Model, Msg, Events> extends Shared.Record<Props, Model, Msg, Events> {
+export interface Scene<Props, Model, Msg, Events>
+  extends Shared.Record<Props, Model, Msg, Events>
+{
   /**
    * Whether the interaction that made this record cancelled its event's
    * default, as the browser host would: its handler was set with
@@ -163,7 +166,8 @@ export interface Expect<S> {
 /** The events a child emits: a component's, a headless component's, a lazy component's or a feature's. */
 type EventsOf<Child> = Child extends Feature.Service<any, any, infer E> ? E
   : Child extends Component.Lazy.Members<any, infer E, any, never> ? E
-  : Child extends Component.Headless<any, infer E, any, any, infer _Rcv, never> ? E
+  : Child extends
+    Component.Headless<any, infer E, any, any, infer _Rcv, never> ? E
   : Component.Events<Child>
 
 // The same union as `Steps.ts`'s, so `Scene.Steps.Any` extends `Steps.Steps.Any`.
@@ -185,7 +189,9 @@ type AnyComponent =
  * @category models
  * @since 0.1.0
  */
-export interface Steps<C extends AnyComponent, Parts = never, Report = never> extends Shared.Steps<C> {
+export interface Steps<C extends AnyComponent, Parts = never, Report = never>
+  extends Shared.Steps<C>
+{
   /** The scene after the last step. */
   readonly current: Scene<
     Component.Props<C>,
@@ -243,7 +249,13 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never> ex
    * child, or several, as two unkeyed children in different headless
    * closures would be.
    */
-  childEmit<Child extends Component.AnyRoot | Component.Headless.Any | Component.Lazy.Any | Feature.Any>(
+  childEmit<
+    Child extends
+      | Component.AnyRoot
+      | Component.Headless.Any
+      | Component.Lazy.Any
+      | Feature.Any
+  >(
     child: Child,
     event: EventsOf<Child>
   ): this
@@ -251,7 +263,13 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never> ex
    * Sends the message the parent's `onEmit` maps `event` from the child of
    * `child` at `key` to, if any. A message step.
    */
-  childEmit<Child extends Component.AnyRoot | Component.Headless.Any | Component.Lazy.Any | Feature.Any>(
+  childEmit<
+    Child extends
+      | Component.AnyRoot
+      | Component.Headless.Any
+      | Component.Lazy.Any
+      | Feature.Any
+  >(
     child: Child,
     key: string,
     event: EventsOf<Child>
@@ -264,7 +282,11 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never> ex
    * step.
    */
   childFailure(
-    child: Component.Any | Component.Headless.Any | Component.Lazy.Any | Feature.Any,
+    child:
+      | Component.Any
+      | Component.Headless.Any
+      | Component.Lazy.Any
+      | Feature.Any,
     cause: Cause.Cause<unknown>
   ): this
   /**
@@ -272,7 +294,11 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never> ex
    * does. A message step.
    */
   childFailure(
-    child: Component.Any | Component.Headless.Any | Component.Lazy.Any | Feature.Any,
+    child:
+      | Component.Any
+      | Component.Headless.Any
+      | Component.Lazy.Any
+      | Feature.Any,
     key: string,
     cause: Cause.Cause<unknown>
   ): this
@@ -287,12 +313,22 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never> ex
    * scene, until a `childFailure` step fails it. Throws when the child has no
    * `fallback`, as the runtime does for a feature slot.
    */
-  childPending(child: Component.Any | Component.Headless.Any | Component.Lazy.Any | Feature.Any): this
+  childPending(
+    child:
+      | Component.Any
+      | Component.Headless.Any
+      | Component.Lazy.Any
+      | Feature.Any
+  ): this
   /**
    * Shows the slot of the child of `child` at `key` as pending.
    */
   childPending(
-    child: Component.Any | Component.Headless.Any | Component.Lazy.Any | Feature.Any,
+    child:
+      | Component.Any
+      | Component.Headless.Any
+      | Component.Lazy.Any
+      | Feature.Any,
     key: string
   ): this
   /**
@@ -396,7 +432,10 @@ type VocabularyOf<C> = C extends { readonly "~V"?: infer V } ? V : never
  * @since 0.1.0
  */
 export const make: {
-  <C extends AnyComponent>(component: C, props: Component.Props<C>): Effect.Effect<Steps<C>, never, Scope.Scope>
+  <C extends AnyComponent>(
+    component: C,
+    props: Component.Props<C>
+  ): Effect.Effect<Steps<C>, never, Scope.Scope>
   /**
    * A scene of a component with slots: `slots` stands in for what a parent
    * passes. Its `h` has no messages of its own, as a parent's content in a
@@ -412,7 +451,9 @@ export const make: {
     options: {
       readonly elements?: View.Vocabulary<V> | undefined
       readonly slots: (
-        h: View.Helper<never, unknown> & View.Tags<[V] extends [never] ? VocabularyOf<C> : V, never>
+        h:
+          & View.Helper<never, unknown>
+          & View.Tags<[V] extends [never] ? VocabularyOf<C> : V, never>
       ) => { readonly [K in Component.Slots<C>]?: View.Input<never, any> }
     }
   ): Effect.Effect<Steps<C>, never, Scope.Scope>
@@ -425,19 +466,39 @@ export const make: {
    * order, and each layer's `preventDefault` applies to its own message.
    */
   <Props, Events, Parts, R, Rcv, V extends View.Elements = never, Rp = never>(
-    component: Component.Headless<Props, Events, Parts, R, Rcv, never, never, Rp>,
+    component: Component.Headless<
+      Props,
+      Events,
+      Parts,
+      R,
+      Rcv,
+      never,
+      never,
+      Rp
+    >,
     props: Props,
     options: {
       readonly elements?: View.Vocabulary<V> | undefined
-      readonly view: (parts: Parts, h: View.Helper<never, Props> & View.Tags<V, never>) => View.Content<never, any>
+      readonly view: (
+        parts: Parts,
+        h: View.Helper<never, Props> & View.Tags<V, never>
+      ) => View.Content<never, any>
     }
   ): Effect.Effect<
-    Steps<Component.Component<string, Props, any, any, Events, R, V>, Parts, Rp>,
+    Steps<
+      Component.Component<string, Props, any, any, Events, R, V>,
+      Parts,
+      Rp
+    >,
     never,
     Scope.Scope
   >
 } = (component: any, props: any, options?: any): any =>
-  cursor.scoped(make, () => internal.begin(internal.SceneCursor, "Scene", component, props, options))
+  cursor.scoped(
+    make,
+    () =>
+      internal.begin(internal.SceneCursor, "Scene", component, props, options)
+  )
 
 /**
  * The cursor after `init`. Its steps follow the acknowledgement rule, but
@@ -454,7 +515,10 @@ export const start: {
     props: Props,
     options: {
       readonly elements?: View.Vocabulary<V> | undefined
-      readonly view: (parts: Parts, h: View.Helper<never, Props> & View.Tags<V, never>) => View.Content<never, any>
+      readonly view: (
+        parts: Parts,
+        h: View.Helper<never, Props> & View.Tags<V, never>
+      ) => View.Content<never, any>
     }
   ): Steps<Component.Component<string, Props, any, any, Events, R, V>, Parts>
 } = (component: any, props: any, options?: any): any =>
@@ -489,22 +553,43 @@ export const children = <Msg>(
 export const fallback: {
   <Msg>(
     view: View.Node<Msg, any>,
-    child: Component.Any | Component.Headless.Any | Component.Lazy.Any | Feature.Any,
-    result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
+    child:
+      | Component.Any
+      | Component.Headless.Any
+      | Component.Lazy.Any
+      | Feature.Any,
+    result:
+      | AsyncResult.Initial<never, unknown>
+      | AsyncResult.Failure<never, unknown>
   ): View.Node<Msg, any> | undefined
   <Msg>(
     view: View.Node<Msg, any>,
-    child: Component.Any | Component.Headless.Any | Component.Lazy.Any | Feature.Any,
+    child:
+      | Component.Any
+      | Component.Headless.Any
+      | Component.Lazy.Any
+      | Feature.Any,
     key: string,
-    result: AsyncResult.Initial<never, unknown> | AsyncResult.Failure<never, unknown>
+    result:
+      | AsyncResult.Initial<never, unknown>
+      | AsyncResult.Failure<never, unknown>
   ): View.Node<Msg, any> | undefined
 } = <Msg>(
   view: View.Node<Msg, any>,
-  component: Component.AnyRoot | Component.Headless.Any | Component.Lazy.Any | Feature.Any,
+  component:
+    | Component.AnyRoot
+    | Component.Headless.Any
+    | Component.Lazy.Any
+    | Feature.Any,
   ...args: ReadonlyArray<any>
 ): View.Node<Msg, any> | undefined => {
   const [key, result] = args.length === 1 ? [undefined, args[0]] : args
-  const { child, scope } = engine.findChild(view, component, key, "Scene.fallback")
+  const { child, scope } = engine.findChild(
+    view,
+    component,
+    key,
+    "Scene.fallback"
+  )
   if (child.fallback === undefined) return undefined
   const node = View.toNode(child.fallback(result))
   // As the runtime does: the fallback's children share the paths of the view, closure or slot content

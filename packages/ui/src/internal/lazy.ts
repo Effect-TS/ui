@@ -20,13 +20,17 @@ interface Lazy extends Component.Lazy.Any {
 }
 
 /** @internal */
-export const isLazy = (u: unknown): u is Component.Lazy.Any => Predicate.hasProperty(u, TypeId)
+export const isLazy = (u: unknown): u is Component.Lazy.Any =>
+  Predicate.hasProperty(u, TypeId)
 
 /** @internal */
 export const stateOf = (lazy: Component.Lazy.Any): State => (lazy as Lazy).state
 
 /** @internal */
-export const watch = (lazy: Component.Lazy.Any, listener: () => void): () => void => {
+export const watch = (
+  lazy: Component.Lazy.Any,
+  listener: () => void
+): () => void => {
   const listeners = (lazy as Lazy).listeners
   listeners.add(listener)
   return () => listeners.delete(listener)
@@ -34,16 +38,23 @@ export const watch = (lazy: Component.Lazy.Any, listener: () => void): () => voi
 
 const ComponentTypeId: Component.TypeId = "~@effect/ui/Component"
 
-const isRenderable = (u: unknown): u is Component.Any => Predicate.hasProperty(u, ComponentTypeId)
+const isRenderable = (u: unknown): u is Component.Any =>
+  Predicate.hasProperty(u, ComponentTypeId)
 
-const pendingAlive = new WeakMap<View.Child<any, any>, NonNullable<View.Child<any, any>["alive"]>>()
+const pendingAlive = new WeakMap<
+  View.Child<any, any>,
+  NonNullable<View.Child<any, any>["alive"]>
+>()
 
 /** @internal */
-export const scopedOnceLoaded = (view: View.Child<any, any>): View.Child<any, any> => {
+export const scopedOnceLoaded = (
+  view: View.Child<any, any>
+): View.Child<any, any> => {
   if (view.alive !== undefined) return view
   const alive = pendingAlive.get(view)
   const state = stateOf(view.component as Component.Lazy.Any)
-  return alive !== undefined && state._tag === "Loaded" && state.component.definition.scoped
+  return alive !== undefined && state._tag === "Loaded" &&
+      state.component.definition.scoped
     ? { ...view, alive }
     : view
 }
@@ -56,7 +67,10 @@ const variance = {
 }
 
 /** @internal */
-export const make = (name: string, load: () => Promise<Component.Any>): Component.Lazy.Any => {
+export const make = (
+  name: string,
+  load: () => Promise<Component.Any>
+): Component.Lazy.Any => {
   const preload = (): Promise<void> => {
     const state = self.state
     if (state._tag === "Loaded") return Promise.resolve()
@@ -70,7 +84,12 @@ export const make = (name: string, load: () => Promise<Component.Any>): Componen
         settle(
           isRenderable(component)
             ? { _tag: "Loaded", component }
-            : { _tag: "Failed", error: new Error(`Component.lazy: "${name}" loaded no component that can be called`) }
+            : {
+              _tag: "Failed",
+              error: new Error(
+                `Component.lazy: "${name}" loaded no component that can be called`
+              )
+            }
         ),
       (error) => settle({ _tag: "Failed", error })
     )
@@ -80,7 +99,11 @@ export const make = (name: string, load: () => Promise<Component.Any>): Componen
   const call = (h: any, options: child.Options) => {
     const state = self.state
     if (state._tag === "Loaded") {
-      return child.make(self, options, state.component.definition.scoped ? h["~alive"] : undefined)
+      return child.make(
+        self,
+        options,
+        state.component.definition.scoped ? h["~alive"] : undefined
+      )
     }
     const made = child.make(self, options)
     const alive = h["~alive"]

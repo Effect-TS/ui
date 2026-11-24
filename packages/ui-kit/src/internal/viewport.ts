@@ -18,19 +18,31 @@ export const ViewportChange = Schema.Union([
 
 export type ViewportChange = typeof ViewportChange.Type
 
-export const ViewportTransition = Schema.Struct({ direction: Schema.NullOr(Schema.String), entered: Schema.Boolean })
+export const ViewportTransition = Schema.Struct({
+  direction: Schema.NullOr(Schema.String),
+  entered: Schema.Boolean
+})
 
 export type ViewportTransition = typeof ViewportTransition.Type
 
-export const stepViewport = <M extends { readonly transition: ViewportTransition | null }>(
+export const stepViewport = <
+  M extends { readonly transition: ViewportTransition | null }
+>(
   model: M,
   change: ViewportChange,
   open: boolean
 ): M =>
   change._tag === "Started"
-    ? open ? { ...model, transition: { direction: change.direction, entered: false } } : model
+    ? open
+      ? {
+        ...model,
+        transition: { direction: change.direction, entered: false }
+      }
+      : model
     : change._tag === "Advanced"
-    ? model.transition === null ? model : { ...model, transition: { ...model.transition, entered: true } }
+    ? model.transition === null
+      ? model
+      : { ...model, transition: { ...model.transition, entered: true } }
     : { ...model, transition: null }
 
 interface Size {
@@ -48,9 +60,19 @@ const sizeOf = (element: HTMLElement): Size => {
   }
 }
 
-const sized = (element: HTMLElement, prefix: string, size: Size | string): void => {
-  element.style.setProperty(prefix + "-width", typeof size === "string" ? size : size.width + "px")
-  element.style.setProperty(prefix + "-height", typeof size === "string" ? size : size.height + "px")
+const sized = (
+  element: HTMLElement,
+  prefix: string,
+  size: Size | string
+): void => {
+  element.style.setProperty(
+    prefix + "-width",
+    typeof size === "string" ? size : size.width + "px"
+  )
+  element.style.setProperty(
+    prefix + "-height",
+    typeof size === "string" ? size : size.height + "px"
+  )
 }
 
 const unsized = (element: HTMLElement | null, prefix: string): void => {
@@ -59,9 +81,17 @@ const unsized = (element: HTMLElement | null, prefix: string): void => {
 }
 
 const directionOf = (from: Element | null, to: Element | null): string | null =>
-  from === null || to === null ? null : activationDirection(from.getBoundingClientRect(), to.getBoundingClientRect())
+  from === null || to === null
+    ? null
+    : activationDirection(
+      from.getBoundingClientRect(),
+      to.getBoundingClientRect()
+    )
 
-const containerOf = (viewport: HTMLElement, name: string): HTMLElement | null => {
+const containerOf = (
+  viewport: HTMLElement,
+  name: string
+): HTMLElement | null => {
   for (const child of viewport.children) {
     if (child.hasAttribute(name)) return child as HTMLElement
   }
@@ -87,14 +117,21 @@ export const viewportContent = <Msg, R>(
     ...View.build(
       container
         .key("current:" + key)
-        .attrs({ "data-current": "", "data-starting-style": flag(transition !== null && !transition.entered) }),
+        .attrs({
+          "data-current": "",
+          "data-starting-style": flag(
+            transition !== null && !transition.entered
+          )
+        }),
       []
     ),
     children: built.children
   }
   return {
     ...built,
-    children: transition === null ? [current] : [transition.entered ? endingNode : previousNode, current]
+    children: transition === null
+      ? [current]
+      : [transition.entered ? endingNode : previousNode, current]
   }
 }
 
@@ -129,16 +166,24 @@ export const TrackViewport = Mount.makeStream(
       const positionerOf = () => document.getElementById(current.positionerId)
       const popupOf = (positioner: HTMLElement): HTMLElement | null => {
         let element: HTMLElement | null = node
-        while (element !== null && element.parentElement !== positioner) element = element.parentElement
+        while (element !== null && element.parentElement !== positioner) {
+          element = element.parentElement
+        }
         return element
       }
 
       const anchoring = (popup: HTMLElement): () => void => {
-        const rtl = document.defaultView?.getComputedStyle(popup).direction === "rtl"
+        const rtl =
+          document.defaultView?.getComputedStyle(popup).direction === "rtl"
         const top = current.side === "top"
-        const left = current.side === "left" || current.side === (rtl ? "inline-end" : "inline-start")
+        const left = current.side === "left" ||
+          current.side === (rtl ? "inline-end" : "inline-start")
         if (!top && !left) return () => {}
-        return override(popup, { position: "absolute", [top ? "bottom" : "top"]: "0", [left ? "right" : "left"]: "0" })
+        return override(popup, {
+          position: "absolute",
+          [top ? "bottom" : "top"]: "0",
+          [left ? "right" : "left"]: "0"
+        })
       }
 
       const resize = (): void => {
@@ -151,10 +196,21 @@ export const TrackViewport = Mount.makeStream(
         sized(popup, "--popup", "auto")
         const previous = containerOf(node, "data-previous")
         const restores = [
-          override(popup, { position: "static", transform: "none", scale: "1" }),
-          override(positioner, { "--available-width": "max-content", "--available-height": "max-content" }),
-          ...(content === null ? [] : [override(content, { animation: "none", transition: "none" })]),
-          ...(previous === null ? [] : [override(previous, { display: "none" })])
+          override(popup, {
+            position: "static",
+            transform: "none",
+            scale: "1"
+          }),
+          override(positioner, {
+            "--available-width": "max-content",
+            "--available-height": "max-content"
+          }),
+          ...(content === null
+            ? []
+            : [override(content, { animation: "none", transition: "none" })]),
+          ...(previous === null
+            ? []
+            : [override(previous, { display: "none" })])
         ]
         sized(positioner, "--positioner", "max-content")
         const before = committed
@@ -169,7 +225,12 @@ export const TrackViewport = Mount.makeStream(
         frame(() => {
           if (!live()) return
           sized(popup, "--popup", next)
-          whenFinished(() => [popup], frame, live, () => sized(popup, "--popup", "auto"))
+          whenFinished(
+            () => [popup],
+            frame,
+            live,
+            () => sized(popup, "--popup", "auto")
+          )
         })
       }
 
@@ -181,7 +242,9 @@ export const TrackViewport = Mount.makeStream(
         outgoing = null
         // The new content's style was computed when it was measured, so reaching the starting style would
         // itself transition. This computes it with no transition, for the frame below to transition out of.
-        const restore = content === null ? undefined : override(content, { transition: "none" })
+        const restore = content === null
+          ? undefined
+          : override(content, { transition: "none" })
         void node.offsetWidth
         restore?.()
         const mine = ++transition
@@ -190,7 +253,14 @@ export const TrackViewport = Mount.makeStream(
         frame(() => {
           if (!live()) return
           send({ _tag: "Advanced" })
-          frame(() => whenFinished(() => moving, frame, live, () => send({ _tag: "Ended" })))
+          frame(() =>
+            whenFinished(
+              () => moving,
+              frame,
+              live,
+              () => send({ _tag: "Ended" })
+            )
+          )
         })
       }
 
@@ -205,20 +275,29 @@ export const TrackViewport = Mount.makeStream(
           if (previous.transitioning) send({ _tag: "Ended" })
           return
         }
-        const switched = previous.open && previous.trigger !== next.trigger && leaving !== content
+        const switched = previous.open && previous.trigger !== next.trigger &&
+          leaving !== content
         if (switched) outgoing = leaving
         if (switched || previous.side !== next.side) resize()
         if (switched) {
           send({
             _tag: "Started",
-            direction: directionOf(document.querySelector(previous.trigger), document.querySelector(next.trigger))
+            direction: directionOf(
+              document.querySelector(previous.trigger),
+              document.querySelector(next.trigger)
+            )
           })
         } else if (next.transitioning) fill()
       }
 
       return Effect.acquireRelease(
         Effect.sync(resize).pipe(
-          Effect.tap(() => Effect.forkScoped(Stream.runForEach(changes, (next) => Effect.sync(() => onChange(next)))))
+          Effect.tap(() =>
+            Effect.forkScoped(
+              Stream.runForEach(changes, (next) =>
+                Effect.sync(() => onChange(next)))
+            )
+          )
         ),
         () =>
           Effect.sync(() => {

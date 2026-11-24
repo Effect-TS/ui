@@ -35,7 +35,10 @@ export const codegen = Command.make("codegen", {
   Effect.gen(function*() {
     const path = yield* Path.Path
     const generator = yield* Codegen.BarrelGenerator
-    const files = yield* generator.discoverFiles(config.pattern, path.resolve(config.cwd))
+    const files = yield* generator.discoverFiles(
+      config.pattern,
+      path.resolve(config.cwd)
+    )
 
     yield* Effect.forEach(files, (file) => generator.processFile(file), {
       concurrency: "unbounded",

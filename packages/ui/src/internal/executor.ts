@@ -25,9 +25,12 @@ export const microtask: Executor = {
 }
 
 /** @internal */
-export const CurrentExecutor = Context.Reference<Executor>("@effect/ui/internal/Executor", {
-  defaultValue: () => microtask
-})
+export const CurrentExecutor = Context.Reference<Executor>(
+  "@effect/ui/internal/Executor",
+  {
+    defaultValue: () => microtask
+  }
+)
 
 /**
  * Where a queued render flush goes among the fiber tasks: in its turn, before
@@ -45,7 +48,9 @@ export type Flush = "queued" | "first" | "last" | { readonly seed: number }
  * @internal
  */
 export class TestExecutor implements Executor, Scheduler.SchedulerDispatcher {
-  private tasks: Array<{ readonly task: () => void; readonly priority: number }> = []
+  private tasks: Array<
+    { readonly task: () => void; readonly priority: number }
+  > = []
   private random: number
   readonly flushes: Flush
   readonly scheduler: Scheduler.Scheduler
@@ -54,7 +59,8 @@ export class TestExecutor implements Executor, Scheduler.SchedulerDispatcher {
     this.random = typeof flushes === "string" ? 0 : flushes.seed >>> 0
     this.scheduler = {
       executionMode: "sync",
-      shouldYield: (fiber) => fiber.currentOpCount >= fiber.cache.maxOpsBeforeYield,
+      shouldYield: (fiber) =>
+        fiber.currentOpCount >= fiber.cache.maxOpsBeforeYield,
       makeDispatcher: () => this
     }
   }
@@ -62,8 +68,13 @@ export class TestExecutor implements Executor, Scheduler.SchedulerDispatcher {
     const flushes = this.flushes
     if (flushes === "queued") return this.scheduleTask(task, 0)
     // Outside the priorities: every task goes behind `-Infinity` and ahead of `Infinity`, whenever it's queued.
-    if (typeof flushes === "string") return this.scheduleTask(task, flushes === "first" ? -Infinity : Infinity)
-    this.tasks.splice(this.next(this.tasks.length + 1), 0, { task, priority: -Infinity })
+    if (typeof flushes === "string") {
+      return this.scheduleTask(task, flushes === "first" ? -Infinity : Infinity)
+    }
+    this.tasks.splice(this.next(this.tasks.length + 1), 0, {
+      task,
+      priority: -Infinity
+    })
   }
   /** mulberry32: the same seed gives the same places. */
   private next(below: number): number {

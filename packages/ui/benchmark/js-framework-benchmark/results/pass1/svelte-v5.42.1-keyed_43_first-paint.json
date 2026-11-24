@@ -4,6 +4,13 @@
   "benchmark": "43_first-paint",
   "type": "size",
   "values": {
-    "DEFAULT": { "min": 210.4, "max": 210.4, "median": 210.4, "mean": 210.4, "stddev": null, "values": [210.4] }
+    "DEFAULT": {
+      "min": 210.4,
+      "max": 210.4,
+      "median": 210.4,
+      "mean": 210.4,
+      "stddev": null,
+      "values": [210.4]
+    }
   }
 }

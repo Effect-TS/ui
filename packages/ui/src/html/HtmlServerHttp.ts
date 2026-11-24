@@ -123,42 +123,74 @@ export const layerHttp = <
   U extends Router.Routes
 >(
   component:
-    & Component.Members<Name, { readonly route: U["Type"] }, Model, Msg, Events, R, V, any>
+    & Component.Members<
+      Name,
+      { readonly route: U["Type"] },
+      Model,
+      Msg,
+      Events,
+      R,
+      V,
+      any
+    >
     & BrowserHost.HtmlRoot<V>,
   options: {
     readonly routes: U
     readonly document: (rendered: HtmlServer.Rendered<Model>) => string
     readonly budget?: Duration.Input | undefined
     readonly static?: boolean | undefined
-    readonly status?: ((route: U["Type"], model: Model | undefined) => number) | undefined
+    readonly status?:
+      | ((route: U["Type"], model: Model | undefined) => number)
+      | undefined
   }
-): Layer.Layer<never, never, HttpRouter.HttpRouter | Exclude<R, Html.Host | Router.Services>> =>
+): Layer.Layer<
+  never,
+  never,
+  HttpRouter.HttpRouter | Exclude<R, Html.Host | Router.Services>
+> =>
   HttpRouter.use(Effect.fnUntraced(function*(router) {
-    const services = Context.omit(Scope.Scope)(yield* Effect.context<Exclude<R, Html.Host | Router.Services>>())
-    const render = HtmlServer.renderToHtml(component, Router.props(options.routes), {
-      budget: options.budget,
-      static: options.static
-    })
+    const services = Context.omit(Scope.Scope)(
+      yield* Effect.context<Exclude<R, Html.Host | Router.Services>>()
+    )
+    const render = HtmlServer.renderToHtml(
+      component,
+      Router.props(options.routes),
+      {
+        budget: options.budget,
+        static: options.static
+      }
+    )
     yield* router.add("GET", "*", (request) => {
       const resolved = options.routes.resolve(request.url)
       if (Option.isNone(resolved)) {
-        return Effect.succeed(HttpServerResponse.text("Not found", { status: 404 }))
+        return Effect.succeed(
+          HttpServerResponse.text("Not found", { status: 404 })
+        )
       }
       const { invalid, notFound, redirected, route } = resolved.value
       if (redirected || invalid.length > 0) {
         // Temporary while params are dropped as invalid: the same params may decode later, if the routes change.
         return Effect.succeed(
-          HttpServerResponse.redirect(canonical(options.routes, resolved.value, request.url), {
-            status: invalid.length > 0 ? 302 : 301
-          })
+          HttpServerResponse.redirect(
+            canonical(options.routes, resolved.value, request.url),
+            {
+              status: invalid.length > 0 ? 302 : 301
+            }
+          )
         )
       }
       return render.pipe(
-        Effect.provide(Router.static({ routes: options.routes, url: request.url })),
+        Effect.provide(
+          Router.static({ routes: options.routes, url: request.url })
+        ),
         Effect.provideContext(services as Context.Context<any>),
         Effect.map((rendered) =>
           HttpServerResponse.text(options.document(rendered), {
-            status: options.status ? options.status(route, rendered.model) : notFound ? 404 : 200,
+            status: options.status
+              ? options.status(route, rendered.model)
+              : notFound
+              ? 404
+              : 200,
             contentType: "text/html"
           })
         )

@@ -1,7 +1,12 @@
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { CanvasArt, CanvasArtMessage, type CanvasArtModel, GenerateBall } from "./CanvasArt.ts"
+import {
+  CanvasArt,
+  CanvasArtMessage,
+  type CanvasArtModel,
+  GenerateBall
+} from "./CanvasArt.ts"
 
 const empty: CanvasArtModel = { balls: [], nextId: 0, running: true }
 
@@ -14,10 +19,27 @@ describe("CanvasArt", () => {
       s.given(empty)
         .send(CanvasArtMessage.ClickedCanvas({ x: 150, y: 200 }))
         .expectExact(GenerateBall.make({ x: 150, y: 200 }))
-        .resolve(GenerateBall, { x: 150, y: 200, vx: 10, vy: -10, radius: 12, color: "#ff2d55" })
+        .resolve(GenerateBall, {
+          x: 150,
+          y: 200,
+          vx: 10,
+          vy: -10,
+          radius: 12,
+          color: "#ff2d55"
+        })
         .send(CanvasArtMessage.ClickedCanvas({ x: 1, y: 2 }))
-        .resolve(GenerateBall, { x: 1, y: 2, vx: 0, vy: 0, radius: 8, color: "#fff" })
-      assert.deepStrictEqual(s.model.balls.map(({ id, x }) => [id, x]), [[0, 150], [1, 1]])
+        .resolve(GenerateBall, {
+          x: 1,
+          y: 2,
+          vx: 0,
+          vy: 0,
+          radius: 8,
+          color: "#fff"
+        })
+      assert.deepStrictEqual(s.model.balls.map(({ id, x }) => [id, x]), [[
+        0,
+        150
+      ], [1, 1]])
       assert.strictEqual(s.model.nextId, 2)
     }))
 
@@ -31,7 +53,11 @@ describe("CanvasArt", () => {
           { id: 1, x: 589, y: 200, vx: 100, vy: 0, radius: 10, color: "#fff" }
         ]
       }).subscription(frames, CanvasArtMessage.TickedFrame({ delta: 20 }))
-      assert.deepStrictEqual(s.model.balls.map(({ vx, x, y }) => [x, y, vx]), [[101, 101, 50], [590, 200, -100]])
+      assert.deepStrictEqual(s.model.balls.map(({ vx, x, y }) => [x, y, vx]), [[
+        101,
+        101,
+        50
+      ], [590, 200, -100]])
       s.subscription(frames, CanvasArtMessage.TickedFrame({ delta: 5000 }))
       assert.deepStrictEqual(s.model.balls.map(({ x }) => x), [103.5, 585])
     }))

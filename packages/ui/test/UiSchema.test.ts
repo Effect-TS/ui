@@ -11,7 +11,10 @@ describe("UiSchema", () => {
     }).annotate({ title: "Shape" })
 
     it("constructors only add _tag", () => {
-      assert.deepStrictEqual(Shape.Circle({ radius: -1 }), { _tag: "Circle", radius: -1 })
+      assert.deepStrictEqual(Shape.Circle({ radius: -1 }), {
+        _tag: "Circle",
+        radius: -1
+      })
       assert.deepStrictEqual(Shape.Empty(), { _tag: "Empty" })
     })
 
@@ -22,18 +25,32 @@ describe("UiSchema", () => {
     })
 
     it("match supports data-first and data-last", () => {
-      const cases = { Circle: () => "circle", Rect: () => "rect", Empty: () => "empty" }
-      assert.strictEqual(Shape.match(Shape.Rect({ width: 1, height: 2 }), cases), "rect")
+      const cases = {
+        Circle: () => "circle",
+        Rect: () => "rect",
+        Empty: () => "empty"
+      }
+      assert.strictEqual(
+        Shape.match(Shape.Rect({ width: 1, height: 2 }), cases),
+        "rect"
+      )
       assert.strictEqual(pipe(Shape.Empty(), Shape.match(cases)), "empty")
     })
 
     it("decodes as a tagged union", () => {
       assert.deepStrictEqual(
-        Schema.decodeUnknownSync(Shape)({ _tag: "Rect", width: 1, height: "2" }),
+        Schema.decodeUnknownSync(Shape)({
+          _tag: "Rect",
+          width: 1,
+          height: "2"
+        }),
         Shape.Rect({ width: 1, height: 2 })
       )
       assert.strictEqual(Shape.ast.annotations?.title, "Shape")
-      assert.strictEqual(Shape.cases.Rect.fields.height, Schema.FiniteFromString)
+      assert.strictEqual(
+        Shape.cases.Rect.fields.height,
+        Schema.FiniteFromString
+      )
     })
 
     it("throws when a case declares its own _tag", () => {
@@ -46,7 +63,9 @@ describe("UiSchema", () => {
     it("numeric keys become string tags", () => {
       const Code = UiSchema.TaggedEnum({ 404: {}, Ok: {} })
       assert.deepStrictEqual(Code[404](), { _tag: "404" })
-      assert.isTrue(Code.is("404")(Schema.decodeUnknownSync(Code)({ _tag: "404" })))
+      assert.isTrue(
+        Code.is("404")(Schema.decodeUnknownSync(Code)({ _tag: "404" }))
+      )
     })
   })
 })

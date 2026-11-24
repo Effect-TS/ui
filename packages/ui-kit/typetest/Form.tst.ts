@@ -21,7 +21,13 @@ type Element<K extends keyof HTMLElementTagNameMap, R = never> = Html.Element<
 
 describe("Form", () => {
   it("the root returns the builder it was given, with the consumer's message type and the children's requirements", () => {
-    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({
+      name: "App",
+      scoped: false,
+      model: Schema.Null,
+      message: Msg,
+      elements: Html
+    }).make({
       init: () => null,
       update: ($) => $.model,
       view: (h) =>
@@ -33,7 +39,10 @@ describe("Form", () => {
           view: (form) => {
             expect(form.root).type.not.toBeCallableWith(h.div)
             expect(form.root).type.not.toBeCallableWith({ element: h.form })
-            const root = form.root(h.form.class("signup")).children(h.input, needsClock)
+            const root = form.root(h.form.class("signup")).children(
+              h.input,
+              needsClock
+            )
             expect(root).type.toBe<Element<"form", Clock>>()
             return root
           }

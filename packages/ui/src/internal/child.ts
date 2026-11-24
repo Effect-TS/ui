@@ -12,9 +12,14 @@ import type * as View from "../View.ts"
 export interface Options {
   readonly key?: string | undefined
   readonly props?: unknown
-  readonly onEmit?: ((event: any) => unknown) | Readonly<Record<string, (event: any) => unknown>> | undefined
+  readonly onEmit?:
+    | ((event: any) => unknown)
+    | Readonly<Record<string, (event: any) => unknown>>
+    | undefined
   readonly fallback?: ((result: any) => View.Content<any, any>) | undefined
-  readonly onFailure?: ((failure: AsyncResult.Failure<never, unknown>) => unknown) | undefined
+  readonly onFailure?:
+    | ((failure: AsyncResult.Failure<never, unknown>) => unknown)
+    | undefined
   readonly view?: ((parts: any) => View.Content<any, any>) | undefined
   readonly slots?: Readonly<Record<string, View.Input<any, any>>> | undefined
 }
@@ -26,7 +31,11 @@ export interface ComposeOptions extends Options {
 
 /** @internal */
 export const make = (
-  component: Component.Any | Component.Headless.Any | Component.Lazy.Any | Feature.Any,
+  component:
+    | Component.Any
+    | Component.Headless.Any
+    | Component.Lazy.Any
+    | Feature.Any,
   options: Options,
   alive?: View.Child<any, any>["alive"],
   owner?: View.Owner
@@ -37,7 +46,9 @@ export const make = (
     component: component as Component.Any,
     key: options.key ?? "",
     props: options.props ?? {},
-    onEmit: typeof onEmit === "object" ? (event) => onEmit[event._tag](event) : onEmit ?? ignore,
+    onEmit: typeof onEmit === "object"
+      ? (event) => onEmit[event._tag](event)
+      : onEmit ?? ignore,
     fallback: options.fallback,
     onFailure: options.onFailure,
     view: options.view,
@@ -58,7 +69,8 @@ export interface Composed {
 }
 
 /** @internal */
-export const isComposed = (u: unknown): u is Composed => typeof u === "object" && u !== null && ComposedTypeId in u
+export const isComposed = (u: unknown): u is Composed =>
+  typeof u === "object" && u !== null && ComposedTypeId in u
 
 const refused = ["view", "slots", "fallback"] as const
 
@@ -70,7 +82,9 @@ export const compose = (
 ): Composed => {
   for (const name of refused) {
     if (options[name] !== undefined) {
-      throw new Error(`p.child(${component.definition.name}) takes no \`${name}\``)
+      throw new Error(
+        `p.child(${component.definition.name}) takes no \`${name}\``
+      )
     }
   }
   return {

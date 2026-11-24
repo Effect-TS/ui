@@ -7,7 +7,10 @@ import { describe, expect, it } from "tstyche"
 const NoteId = Schema.String.pipe(Schema.brand("NoteId"))
 type NoteId = typeof NoteId.Type
 
-const EditorMessage = UiSchema.TaggedEnum({ Focus: {}, Typed: { text: Schema.String } })
+const EditorMessage = UiSchema.TaggedEnum({
+  Focus: {},
+  Typed: { text: Schema.String }
+})
 const EditorEvents = UiSchema.TaggedEnum({ Saved: { id: Schema.String } })
 
 const NoteEditor = Component.define({
@@ -24,13 +27,36 @@ const NoteEditor = Component.define({
   view: (h, text) => h.textarea().value(text)
 })
 
-const ProfileForm = Component.define({ name: "ProfileForm", scoped: true, model: Schema.String, message: Schema.Never })
-  .make({ init: () => "", update: ($) => $.model, view: (h, text) => h.el("p", text) })
+const ProfileForm = Component.define({
+  name: "ProfileForm",
+  scoped: true,
+  model: Schema.String,
+  message: Schema.Never
+})
+  .make({
+    init: () => "",
+    update: ($) => $.model,
+    view: (h, text) => h.el("p", text)
+  })
 
-const BillingForm = Component.define({ name: "BillingForm", scoped: true, model: Schema.String, message: Schema.Never })
-  .make({ init: () => "", update: ($) => $.model, view: (h, text) => h.el("p", text) })
+const BillingForm = Component.define({
+  name: "BillingForm",
+  scoped: true,
+  model: Schema.String,
+  message: Schema.Never
+})
+  .make({
+    init: () => "",
+    update: ($) => $.model,
+    view: (h, text) => h.el("p", text)
+  })
 
-const Tooltip = Component.define({ name: "Tooltip", scoped: false, model: Schema.Null, message: Schema.Never })
+const Tooltip = Component.define({
+  name: "Tooltip",
+  scoped: false,
+  model: Schema.Null,
+  message: Schema.Never
+})
   .make({ init: () => null, update: ($) => $.model, view: (h) => h.el("span") })
 
 const Message = UiSchema.TaggedEnum({ Saved: { id: Schema.String } })
@@ -66,25 +92,37 @@ describe("scoped", () => {
     expect(Tooltip).type.toBeAssignableTo<Component.Any>()
     expect(NoteEditor).type.not.toBeAssignableTo<Component.Any>()
     expect(NoteEditor).type.toBeAssignableTo<Component.Scoped.Any>()
-    expect<Component.Props<typeof NoteEditor>>().type.toBe<{ readonly noteId: string }>()
+    expect<Component.Props<typeof NoteEditor>>().type.toBe<
+      { readonly noteId: string }
+    >()
     expect<Component.Model<typeof NoteEditor>>().type.toBe<string>()
   })
 
   it("keeps a provided component scoped or unscoped", () => {
     const erasedScoped: Component.Scoped.Any = ProfileForm
     const erased: Component.Any = Tooltip
-    expect(Component.provide(erasedScoped, Layer.empty)).type.toBe<Component.Scoped.Any>()
+    expect(Component.provide(erasedScoped, Layer.empty)).type.toBe<
+      Component.Scoped.Any
+    >()
     expect(Component.provide(erased, Layer.empty)).type.toBe<Component.Any>()
-    expect(Component.provide(ProfileForm, Layer.empty)).type.toBe<typeof ProfileForm>()
+    expect(Component.provide(ProfileForm, Layer.empty)).type.toBe<
+      typeof ProfileForm
+    >()
   })
 
   it("needs scoped on every definition", () => {
     // @ts-expect-error Property 'scoped' is missing
-    Component.define({ name: "Bare", model: Schema.Null, message: Schema.Never })
+    Component.define({
+      name: "Bare",
+      model: Schema.Null,
+      message: Schema.Never
+    })
   })
 
   it("writes scoped children inside h.scoped, and returns what the content returns", () => {
-    expect(h.scoped((s) => ProfileForm(s, {}))).type.toBe<View.Child<Message, never>>()
+    expect(h.scoped((s) => ProfileForm(s, {}))).type.toBe<
+      View.Child<Message, never>
+    >()
     expect(
       h.scoped((s) =>
         h.div(
@@ -96,25 +134,35 @@ describe("scoped", () => {
       )
     ).type.not.toRaiseError()
     expect(
-      h.scoped(({ model, key }) => key in model.notes, (s) =>
-        model.selected !== undefined &&
-        NoteEditor(s, {
-          key: model.selected,
-          props: { noteId: model.selected },
-          onEmit: { Saved: (e) => Message.Saved({ id: e.id }) }
-        }))
+      h.scoped(
+        ({ model, key }) => key in model.notes,
+        (s) =>
+          model.selected !== undefined &&
+          NoteEditor(s, {
+            key: model.selected,
+            props: { noteId: model.selected },
+            onEmit: { Saved: (e) => Message.Saved({ id: e.id }) }
+          })
+      )
     ).type.toBe<false | View.Child<Message, never>>()
     expect(
       h.scoped(
-        ($) => $.queries !== undefined && $.props.projectId !== "" && $.key in $.model.notes,
-        (s) => model.order.map((id) => NoteEditor(s, { key: `note-${id}`, props: { noteId: id } }))
+        ($) =>
+          $.queries !== undefined && $.props.projectId !== "" &&
+          $.key in $.model.notes,
+        (s) =>
+          model.order.map((id) =>
+            NoteEditor(s, { key: `note-${id}`, props: { noteId: id } })
+          )
       )
     ).type.not.toRaiseError()
   })
 
   it("types the predicate from the Model, props and queries of the component that writes the scope", () => {
     h.scoped(($) => {
-      expect($).type.toBe<Component.Alive<typeof Model.Type, { readonly projectId: string }, {}>>()
+      expect($).type.toBe<
+        Component.Alive<typeof Model.Type, { readonly projectId: string }, {}>
+      >()
       return true
     }, (s) => ProfileForm(s, {}))
     // @ts-expect-error Property 'nope' does not exist
@@ -128,18 +176,29 @@ describe("scoped", () => {
 
   it("needs a predicate for a key that isn't a literal", () => {
     // @ts-expect-error A scoped child whose key isn't a literal needs a predicate
-    h.scoped((s) => model.order.map((id) => NoteEditor(s, { key: id, props: { noteId: id } })))
+    h.scoped((s) =>
+      model.order.map((id) => NoteEditor(s, { key: id, props: { noteId: id } }))
+    )
     // @ts-expect-error A scoped child whose key isn't a literal needs a predicate
-    h.scoped((s) => NoteEditor(s, { key: model.selected!, props: { noteId: "a" } }))
+    h.scoped((s) =>
+      NoteEditor(s, { key: model.selected!, props: { noteId: "a" } })
+    )
     // @ts-expect-error A scoped child whose key isn't a literal needs a predicate
     h.scoped((s) => NoteEditor(s, { key: `note-${id}`, props: { noteId: id } }))
     const mixed = id as "a" | (string & {})
     // @ts-expect-error A scoped child whose key isn't a literal needs a predicate
     h.scoped((s) => NoteEditor(s, { key: mixed, props: { noteId: id } }))
     // @ts-expect-error A scoped child whose key isn't a literal needs a predicate
-    h.scoped((s) => NoteEditor(s, { key: id as "pinned" | `row-${string}`, props: { noteId: id } }))
+    h.scoped((s) =>
+      NoteEditor(s, {
+        key: id as "pinned" | `row-${string}`,
+        props: { noteId: id }
+      })
+    )
     const literal = id as "a" | "b"
-    expect(h.scoped((s) => NoteEditor(s, { key: literal, props: { noteId: id } }))).type.not.toRaiseError()
+    expect(
+      h.scoped((s) => NoteEditor(s, { key: literal, props: { noteId: id } }))
+    ).type.not.toRaiseError()
   })
 
   it("checks props", () => {
@@ -148,9 +207,15 @@ describe("scoped", () => {
   })
 
   it("types a function that takes s by the scope it needs", () => {
-    const row = (s: View.Scope<Message, true>, id: string) => NoteEditor(s, { key: id, props: { noteId: id } })
+    const row = (s: View.Scope<Message, true>, id: string) =>
+      NoteEditor(s, { key: id, props: { noteId: id } })
     const one = (s: View.Scope<Message>) => ProfileForm(s, {})
-    expect(h.scoped(({ model, key }) => key in model.notes, (s) => [model.order.map((id) => row(s, id)), one(s)]))
+    expect(
+      h.scoped(({ model, key }) => key in model.notes, (s) => [
+        model.order.map((id) => row(s, id)),
+        one(s)
+      ])
+    )
       .type.not.toRaiseError()
     expect(h.scoped((s) => one(s))).type.not.toRaiseError()
     // @ts-expect-error Type 'false' is not assignable to type 'true'
@@ -158,7 +223,9 @@ describe("scoped", () => {
     const unchecked = (s: View.Scope<Message>) =>
       // @ts-expect-error A scoped child whose key isn't a literal needs a predicate
       NoteEditor(s, { key: id, props: { noteId: id } })
-    expect(unchecked).type.toBeCallableWith(h as unknown as View.Scope<Message, false>)
+    expect(unchecked).type.toBeCallableWith(
+      h as unknown as View.Scope<Message, false>
+    )
   })
 
   it("gives s no scoped, so scopes don't nest", () => {
@@ -168,7 +235,9 @@ describe("scoped", () => {
 
   it("calls a union of scoped components", () => {
     const either = condition ? ProfileForm : BillingForm
-    expect(h.scoped((s) => either(s, {}))).type.toBe<View.Child<Message, never>>()
+    expect(h.scoped((s) => either(s, {}))).type.toBe<
+      View.Child<Message, never>
+    >()
   })
 
   it("mounts a scoped component as a root, in a Scene or as a route's page", () => {
@@ -177,7 +246,12 @@ describe("scoped", () => {
   })
 
   it("types a component whose scoped flag isn't known to be false as scoped", () => {
-    const options = { name: "Wide" as const, scoped: true, model: Schema.Null, message: Schema.Never }
+    const options = {
+      name: "Wide" as const,
+      scoped: true,
+      model: Schema.Null,
+      message: Schema.Never
+    }
     const Wide = Component.define(options).make({
       init: () => null,
       update: ($) => $.model,
@@ -186,7 +260,9 @@ describe("scoped", () => {
     // @ts-expect-error "written inside h.scoped((s) => ...)"
     Wide(h, {})
     expect(h.scoped((s) => Wide(s, {}))).type.not.toRaiseError()
-    class Notes extends Feature.Service<Notes>()("Notes", { props: Schema.Struct({}) }) {}
+    class Notes
+      extends Feature.Service<Notes>()("Notes", { props: Schema.Struct({}) })
+    {}
     // @ts-expect-error "written inside h.scoped((s) => ...)"
     Notes.toLayer(Wide)
     const found: unknown = Wide
@@ -201,13 +277,20 @@ describe("scoped", () => {
   })
 
   it("rejects scoped: true on a headless component", () => {
-    const Def = Component.define({ name: "Headless", scoped: true, model: Schema.Null, message: Schema.Never })
+    const Def = Component.define({
+      name: "Headless",
+      scoped: true,
+      model: Schema.Null,
+      message: Schema.Never
+    })
     // @ts-expect-error No overload matches this call
     Def.make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
   })
 
   it("rejects a scoped implementation of a feature", () => {
-    class Notes extends Feature.Service<Notes>()("Notes", { props: Schema.Struct({}) }) {}
+    class Notes
+      extends Feature.Service<Notes>()("Notes", { props: Schema.Struct({}) })
+    {}
     // @ts-expect-error "written inside h.scoped((s) => ...)"
     Notes.toLayer(ProfileForm)
   })

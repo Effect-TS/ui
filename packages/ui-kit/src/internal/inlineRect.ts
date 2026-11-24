@@ -6,7 +6,9 @@ export interface Lines {
 }
 
 export const linesOf = (rects: ArrayLike<Box>): Lines => {
-  const lines: Array<{ left: number; top: number; right: number; bottom: number }> = []
+  const lines: Array<
+    { left: number; top: number; right: number; bottom: number }
+  > = []
   let previous: Box | undefined
   let left = Infinity
   let top = Infinity
@@ -19,9 +21,15 @@ export const linesOf = (rects: ArrayLike<Box>): Lines => {
     bottom = Math.max(bottom, rect.bottom)
     const line = lines[lines.length - 1]
     if (
-      line === undefined || previous === undefined || rect.top - previous.top > (previous.bottom - previous.top) / 2
+      line === undefined || previous === undefined ||
+      rect.top - previous.top > (previous.bottom - previous.top) / 2
     ) {
-      lines.push({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom })
+      lines.push({
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom
+      })
     } else {
       line.left = Math.min(line.left, rect.left)
       line.right = Math.max(line.right, rect.right)
@@ -32,14 +40,21 @@ export const linesOf = (rects: ArrayLike<Box>): Lines => {
   return { lines, bounds: { left, top, right, bottom } }
 }
 
-export const lineAt = (lines: ReadonlyArray<Box>, point: Point): number | null => {
+export const lineAt = (
+  lines: ReadonlyArray<Box>,
+  point: Point
+): number | null => {
   const line = lines.findIndex((line) =>
-    point.x > line.left - 2 && point.x < line.right + 2 && point.y > line.top - 2 && point.y < line.bottom + 2
+    point.x > line.left - 2 && point.x < line.right + 2 &&
+    point.y > line.top - 2 && point.y < line.bottom + 2
   )
   return line === -1 ? null : line
 }
 
-export const lineUnder = (rects: ArrayLike<Box>, point: Point): number | null => {
+export const lineUnder = (
+  rects: ArrayLike<Box>,
+  point: Point
+): number | null => {
   if (rects.length < 2) return null
   const { lines } = linesOf(rects)
   return lines.length < 2 ? null : lineAt(lines, point)
@@ -58,7 +73,12 @@ export const inlineEdges = (
   if (lines.length === 2 && first.left > last.right && pointed) return bounds
   if (side === "top" || side === "bottom") {
     const target = side === "top" ? first : last
-    return { left: target.left, top: first.top, right: target.right, bottom: last.bottom }
+    return {
+      left: target.left,
+      top: first.top,
+      right: target.right,
+      bottom: last.bottom
+    }
   }
   const leftmost = side === "left"
   let edge = leftmost ? Infinity : -Infinity
@@ -72,5 +92,10 @@ export const inlineEdges = (
       to = line
     } else if (next === edge) to = line
   }
-  return { left: bounds.left, top: from.top, right: bounds.right, bottom: to.bottom }
+  return {
+    left: bounds.left,
+    top: from.top,
+    right: bounds.right,
+    bottom: to.bottom
+  }
 }

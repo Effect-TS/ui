@@ -1,8 +1,13 @@
 import * as View from "@effect/ui/View"
 
-export type Rewrite = (node: View.Node<any, any>) => View.Node<any, any> | undefined
+export type Rewrite = (
+  node: View.Node<any, any>
+) => View.Node<any, any> | undefined
 
-export const rewrite = <N extends View.Node<any, any>>(node: N, f: Rewrite): N => {
+export const rewrite = <N extends View.Node<any, any>>(
+  node: N,
+  f: Rewrite
+): N => {
   const replaced = f(node)
   if (replaced !== undefined) return replaced as N
   if (node._tag !== "Element") return node
@@ -25,7 +30,11 @@ export const find = (
   return undefined
 }
 
-export const withAttr = <E extends View.Element<any, any>>(element: E, name: string, value: string | undefined): E => {
+export const withAttr = <E extends View.Element<any, any>>(
+  element: E,
+  name: string,
+  value: string | undefined
+): E => {
   if (element.attrs[name] === value) return element
   const attrs = { ...element.attrs }
   if (value === undefined) delete attrs[name]
@@ -33,13 +42,16 @@ export const withAttr = <E extends View.Element<any, any>>(element: E, name: str
   return { ...element, attrs }
 }
 
-export const layerOf = (builder: { readonly owned: ReadonlyArray<View.Owned> }): View.Owned =>
-  builder.owned[builder.owned.length - 1]!
+export const layerOf = (
+  builder: { readonly owned: ReadonlyArray<View.Owned> }
+): View.Owned => builder.owned[builder.owned.length - 1]!
 
 type Layers = ReadonlySet<View.Owned> | ReadonlyMap<View.Owned, unknown>
 
-export const carries = (element: View.Element<any, any>, layers: Layers): boolean =>
-  element.owned?.some((layer) => layers.has(layer)) === true
+export const carries = (
+  element: View.Element<any, any>,
+  layers: Layers
+): boolean => element.owned?.some((layer) => layers.has(layer)) === true
 
 export const setOn = <N extends View.Node<any, any>>(
   node: N,
@@ -49,5 +61,8 @@ export const setOn = <N extends View.Node<any, any>>(
 ): N =>
   rewrite(
     node,
-    (element) => element._tag === "Element" && carries(element, layers) ? withAttr(element, name, value) : undefined
+    (element) =>
+      element._tag === "Element" && carries(element, layers)
+        ? withAttr(element, name, value)
+        : undefined
   )

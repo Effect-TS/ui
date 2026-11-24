@@ -30,7 +30,10 @@ export const Collapsible = Component.define({
       h.header(
         h.slots.summary,
         h.button
-          .attrs({ type: "button", "aria-expanded": model.open ? "true" : "false" })
+          .attrs({
+            type: "button",
+            "aria-expanded": model.open ? "true" : "false"
+          })
           .onClick(CollapsibleMessage.ClickedToggle())
           .children(model.open ? "Hide" : "Show")
       ),

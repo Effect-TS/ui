@@ -3,5 +3,14 @@
   "keyed": true,
   "benchmark": "42_size-compressed",
   "type": "size",
-  "values": { "DEFAULT": { "min": 70.3, "max": 70.3, "median": 70.3, "mean": 70.3, "stddev": null, "values": [70.3] } }
+  "values": {
+    "DEFAULT": {
+      "min": 70.3,
+      "max": 70.3,
+      "median": 70.3,
+      "mean": 70.3,
+      "stddev": null,
+      "values": [70.3]
+    }
+  }
 }

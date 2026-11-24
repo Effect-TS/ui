@@ -43,28 +43,34 @@ export const NoteBoardNoDeps = Component.define({
   update: {
     // The types tag the transition, so the stylesheet can give this
     // animation its own timing with `:active-view-transition-type(layout)`.
-    ClickedLayout: ($, { layout }) => $.evolve({ layout }).viewTransition(["layout"]),
+    ClickedLayout: ($, { layout }) =>
+      $.evolve({ layout }).viewTransition(["layout"]),
     TypedFilter: ($, { value }) => $.evolve({ filter: value })
   },
   view: (h, model) =>
     h.section(
       h.div(
-        h.input.attr("aria-label", "Filter").value(model.filter).onInput(({ value }) =>
-          NoteBoardMessage.TypedFilter({ value })
-        ),
-        h.button.onClick(NoteBoardMessage.ClickedLayout({ layout: "grid" })).children("Grid"),
-        h.button.onClick(NoteBoardMessage.ClickedLayout({ layout: "list" })).children("List")
+        h.input.attr("aria-label", "Filter").value(model.filter).onInput((
+          { value }
+        ) => NoteBoardMessage.TypedFilter({ value })),
+        h.button.onClick(NoteBoardMessage.ClickedLayout({ layout: "grid" }))
+          .children("Grid"),
+        h.button.onClick(NoteBoardMessage.ClickedLayout({ layout: "list" }))
+          .children("List")
       ),
       AsyncResult.isSuccess(h.queries.notes)
         ? h.ul.class(model.layout).children(
           h.queries.notes.value
-            .filter((note) => note.title.toLowerCase().includes(model.filter.toLowerCase()))
+            .filter((note) =>
+              note.title.toLowerCase().includes(model.filter.toLowerCase())
+            )
             .map((note) =>
               // A `viewTransitionName` makes the browser morph the card from
               // its old box to its new one instead of cross-fading the page.
               // Each name must be unique among the elements on screen, so it
               // carries the note's id.
-              h.li.key(note.id).style({ viewTransitionName: `note-${note.id}` }).children(note.title)
+              h.li.key(note.id).style({ viewTransitionName: `note-${note.id}` })
+                .children(note.title)
             )
         )
         : h.p("Loading notes…")
@@ -83,13 +89,18 @@ export const NoteBoard = NoteBoardNoDeps.pipe(
 // Model and the new one in the message, so it can name the direction. A
 // navigation that should cross-fade plainly gets no types, and one between
 // unrelated pages could skip `viewTransition` altogether.
-const directionOf = (from: typeof AppRoute.Type, to: typeof AppRoute.Type): ReadonlyArray<string> => {
+const directionOf = (
+  from: typeof AppRoute.Type,
+  to: typeof AppRoute.Type
+): ReadonlyArray<string> => {
   if (from._tag === "Index" && to._tag === "Note") return ["forward"]
   if (from._tag === "Note" && to._tag === "Index") return ["back"]
   return []
 }
 
-const TransitionAppMessage = UiSchema.TaggedEnum({ ChangedRoute: { route: AppRoute } })
+const TransitionAppMessage = UiSchema.TaggedEnum({
+  ChangedRoute: { route: AppRoute }
+})
 
 // Link clicks, back and forward, and `Router.push` from any `update` all
 // arrive here as `ChangedRoute`, so one handler animates every navigation.
@@ -104,15 +115,24 @@ export const TransitionApp = Component.define({
   elements: Html
 }).make({
   init: ($) => $.props.route,
-  update: ($, { route: next }) => $.set(next).viewTransition(directionOf($.model, next)),
+  update: ($, { route: next }) =>
+    $.set(next).viewTransition(directionOf($.model, next)),
   subscriptions: ({ model: route }) => [
-    Router.subscription(AppRoute, route, (next) => TransitionAppMessage.ChangedRoute({ route: next }))
+    Router.subscription(
+      AppRoute,
+      route,
+      (next) => TransitionAppMessage.ChangedRoute({ route: next })
+    )
   ],
   view: (h, route) =>
     h.main(
       AppRoute.match(route, {
         Index: (route) => NotesIndex(h, { key: AppRoute.printPath(route) }),
-        Note: (route) => NotePage(h, { key: AppRoute.printPath(route), props: { id: route.params.id } }),
+        Note: (route) =>
+          NotePage(h, {
+            key: AppRoute.printPath(route),
+            props: { id: route.params.id }
+          }),
         Search: () => h.h1("Search"),
         NotFound: () => h.h1("Page not found")
       })

@@ -94,7 +94,9 @@ export interface TestGlobalEvents {
    */
   readonly fireCustomEvent: (
     event: string,
-    payload?: Partial<HtmlSubscription.GlobalPayload<HtmlSubscription.CustomEventPayload>>
+    payload?: Partial<
+      HtmlSubscription.GlobalPayload<HtmlSubscription.CustomEventPayload>
+    >
   ) => boolean
 }
 
@@ -105,7 +107,10 @@ export interface TestGlobalEvents {
  * @category services
  * @since 0.1.0
  */
-export const TestGlobalEvents: Context.Service<TestGlobalEvents, TestGlobalEvents> = Context.Service<
+export const TestGlobalEvents: Context.Service<
+  TestGlobalEvents,
+  TestGlobalEvents
+> = Context.Service<
   TestGlobalEvents
 >("@effect/ui/html/testing/TestGlobalEvents")
 
@@ -130,7 +135,10 @@ export const make = (): HtmlSubscription.GlobalEvents & TestGlobalEvents => {
     fireGlobal.fire(event, payload, function*(capture) {
       // Copied as the phase starts. A listener an earlier one's message removed is skipped.
       for (const entry of Array.from(entries)) {
-        if (entry.target === target && entry.event === event && entry.capture === capture && entries.has(entry)) {
+        if (
+          entry.target === target && entry.event === event &&
+          entry.capture === capture && entries.has(entry)
+        ) {
           yield entry.listener
         }
       }
@@ -144,7 +152,8 @@ export const make = (): HtmlSubscription.GlobalEvents & TestGlobalEvents => {
       }
     },
     fire: (target, event, payload) => fire(target, event as string, payload),
-    fireCustomEvent: (event, payload) => fire("document", event, fireGlobal.custom(payload))
+    fireCustomEvent: (event, payload) =>
+      fire("document", event, fireGlobal.custom(payload))
   }
 }
 
@@ -159,7 +168,9 @@ export const make = (): HtmlSubscription.GlobalEvents & TestGlobalEvents => {
 export const layer: Layer.Layer<TestGlobalEvents> = Layer.effectContext(
   Effect.sync(() => {
     const events = make()
-    return Context.make(TestGlobalEvents, events).pipe(Context.add(HtmlSubscription.GlobalEvents, events))
+    return Context.make(TestGlobalEvents, events).pipe(
+      Context.add(HtmlSubscription.GlobalEvents, events)
+    )
   })
 )
 
@@ -188,6 +199,8 @@ export const fire = <T extends keyof Targets, K extends keyof Targets[T]>(
  */
 export const fireCustomEvent = (
   event: string,
-  payload?: Partial<HtmlSubscription.GlobalPayload<HtmlSubscription.CustomEventPayload>>
+  payload?: Partial<
+    HtmlSubscription.GlobalPayload<HtmlSubscription.CustomEventPayload>
+  >
 ): Effect.Effect<boolean, never, TestGlobalEvents> =>
   TestGlobalEvents.useSync((events) => events.fireCustomEvent(event, payload))

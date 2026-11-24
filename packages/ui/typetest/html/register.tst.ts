@@ -60,20 +60,47 @@ it("shared wrappers preserve unspread options.children requirements across compo
   const Field = <M, C extends View.Children<M>>(h: View.H<M>, options: {
     readonly label: string
     readonly children: C
-  }) => h.label.children(options.label, h.div.class("control").children(options.children))
-  const Page = Component.define({ name: "Page", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make(
+  }) =>
+    h.label.children(
+      options.label,
+      h.div.class("control").children(options.children)
+    )
+  const Page = Component.define({
+    name: "Page",
+    scoped: false,
+    model: Schema.Null,
+    message: Msg,
+    elements: Html
+  }).make(
     {
       init: () => null,
       update: ($) => $.model,
       view: (h) => {
         const clock = {} as View.Node<Msg, Clock>
         const logger = {} as View.Node<Msg, Logger>
-        type Label<R> = Html.Element<Msg, R, Html.EventsOf<"label">, HTMLLabelElement, "label">
-        expect(Field(h, { label: "Empty", children: [] })).type.toBe<Label<never>>()
-        expect(Field(h, { label: "Text", children: ["text", false, null, undefined, h.br] })).type.toBe<Label<never>>()
+        type Label<R> = Html.Element<
+          Msg,
+          R,
+          Html.EventsOf<"label">,
+          HTMLLabelElement,
+          "label"
+        >
+        expect(Field(h, { label: "Empty", children: [] })).type.toBe<
+          Label<never>
+        >()
+        expect(
+          Field(h, {
+            label: "Text",
+            children: ["text", false, null, undefined, h.br]
+          })
+        ).type.toBe<Label<never>>()
         const children = [clock, logger] as const
-        expect(Field(h, { label: "Services", children })).type.toBe<Label<Clock | Logger>>()
-        return Card(h).children(Field(h, { label: "Services", children: [clock, logger] }))
+        expect(Field(h, { label: "Services", children })).type.toBe<
+          Label<Clock | Logger>
+        >()
+        return Card(h).children(
+          Field(h, { label: "Services", children: [clock, logger] })
+        )
       }
     }
   )
@@ -89,7 +116,10 @@ it("shared wrappers preserve unspread options.children requirements across compo
     init: () => null,
     update: ($) => $.model,
     view: (h) =>
-      Field(h, { label: h.props.title, children: [h.button.onClick("clicked"), {} as View.Node<string, Logger>] })
+      Field(h, {
+        label: h.props.title,
+        children: [h.button.onClick("clicked"), {} as View.Node<string, Logger>]
+      })
   })
   expect<Component.Requirements<typeof Other>>().type.toBe<Logger>()
 })

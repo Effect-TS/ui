@@ -42,7 +42,11 @@ export class Glob extends Context.Service<Glob, {
 export const layer: Layer.Layer<Glob> = Layer.succeed(Glob, {
   glob: (pattern, options) =>
     Effect.tryPromise({
-      try: () => GlobLib.glob(pattern as string | Array<string>, options ?? {}) as Promise<Array<string>>,
+      try: () =>
+        GlobLib.glob(
+          pattern as string | Array<string>,
+          options ?? {}
+        ) as Promise<Array<string>>,
       catch: (cause) => new GlobError({ pattern, cause })
     })
 })

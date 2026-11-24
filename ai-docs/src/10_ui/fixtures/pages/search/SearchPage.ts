@@ -11,7 +11,8 @@ import { AppRoute } from "../../routes.ts"
 // `patchSearch`.
 const SearchRoute = AppRoute.subset(["Search"])
 
-const noteUrl = (id: string) => AppRoute.print(AppRoute.Note({ params: { id } }))
+const noteUrl = (id: string) =>
+  AppRoute.print(AppRoute.Note({ params: { id } }))
 
 export const SearchPageMessage = UiSchema.TaggedEnum({
   UpdatedSearch: { text: Schema.String },
@@ -54,16 +55,25 @@ export const SearchPageNoDeps = Component.define({
       // as props, through the root, so the Command sends nothing.
       UpdatedSearch: ({ text }) =>
         $.run(
-          Router.patchSearch(AppRoute, $.props.route, { q: text || undefined, page: undefined }).pipe(Command.asNoop)
+          Router.patchSearch(AppRoute, $.props.route, {
+            q: text || undefined,
+            page: undefined
+          }).pipe(Command.asNoop)
         ),
       SelectedOrder: ({ sort }) =>
-        $.run(Router.patchSearch(AppRoute, $.props.route, { sort, page: undefined }).pipe(Command.asNoop)),
+        $.run(
+          Router.patchSearch(AppRoute, $.props.route, { sort, page: undefined })
+            .pipe(Command.asNoop)
+        ),
       // A page change is worth a history entry, so it pushes, and it
       // scrolls to the top like a new page would. Unlike a link to
       // `?page=2`, it isn't announced and focus stays on the button.
       ClickedPage: ({ page }) =>
         $.run(
-          Router.patchSearch(AppRoute, $.props.route, { page }, { history: "push", scroll: true }).pipe(Command.asNoop)
+          Router.patchSearch(AppRoute, $.props.route, { page }, {
+            history: "push",
+            scroll: true
+          }).pipe(Command.asNoop)
         )
     }),
   head: () => [Head.title("Search notes")],
@@ -74,15 +84,19 @@ export const SearchPageNoDeps = Component.define({
       h.div(
         h.ul(
           results.notes.map((note) =>
-            h.li.key(note.id).children(h.a.attr("href", noteUrl(note.id)).children(note.title))
+            h.li.key(note.id).children(
+              h.a.attr("href", noteUrl(note.id)).children(note.title)
+            )
           )
         ),
         h.nav.attr("aria-label", "Pages").children(
           h.button.attr("type", "button").disabled(page <= 1)
-            .onClick(SearchPageMessage.ClickedPage({ page: page - 1 })).children("Previous"),
+            .onClick(SearchPageMessage.ClickedPage({ page: page - 1 }))
+            .children("Previous"),
           h.span(`Page ${page} of ${results.pages}`),
           h.button.attr("type", "button").disabled(page >= results.pages)
-            .onClick(SearchPageMessage.ClickedPage({ page: page + 1 })).children("Next")
+            .onClick(SearchPageMessage.ClickedPage({ page: page + 1 }))
+            .children("Next")
         )
       )
 
@@ -94,9 +108,15 @@ export const SearchPageNoDeps = Component.define({
       // most every 200 ms, to stay under the browsers' limits on history
       // calls.
       h.input.attrs({ type: "search", "aria-label": "Search" }).value(q ?? "")
-        .onInput(({ value }) => SearchPageMessage.UpdatedSearch({ text: value })),
+        .onInput(({ value }) =>
+          SearchPageMessage.UpdatedSearch({ text: value })
+        ),
       h.select.attr("aria-label", "Order").value(sort)
-        .onChange(({ value }) => SearchPageMessage.SelectedOrder({ sort: value === "desc" ? "desc" : "asc" }))
+        .onChange(({ value }) =>
+          SearchPageMessage.SelectedOrder({
+            sort: value === "desc" ? "desc" : "asc"
+          })
+        )
         .children(
           h.option.attr("value", "asc").children("A to Z"),
           h.option.attr("value", "desc").children("Z to A")

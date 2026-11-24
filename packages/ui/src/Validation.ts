@@ -92,7 +92,10 @@ export type Rule<A, Values = unknown> = readonly [
 const resolveMessage = <A>(message: RuleMessage<A>, value: A): string =>
   typeof message === "string" ? message : message(value)
 
-const pattern = (regex: RegExp, message: RuleMessage<string> = "Invalid format"): Rule<string> => {
+const pattern = (
+  regex: RegExp,
+  message: RuleMessage<string> = "Invalid format"
+): Rule<string> => {
   // A global or sticky RegExp keeps `lastIndex` between calls. A private
   // copy that starts at zero each time gives the same answer, keeps the
   // flags and leaves the caller's RegExp alone.
@@ -161,11 +164,19 @@ export const Rule = {
     message ?? `Must be at most ${max} characters`
   ],
   pattern,
-  email: (message: RuleMessage<string> = "Invalid email address"): Rule<string> => pattern(EMAIL, message),
+  email: (
+    message: RuleMessage<string> = "Invalid email address"
+  ): Rule<string> => pattern(EMAIL, message),
   url: (
-    options: { readonly message?: RuleMessage<string> | undefined; readonly requireProtocol?: boolean | undefined } = {}
+    options: {
+      readonly message?: RuleMessage<string> | undefined
+      readonly requireProtocol?: boolean | undefined
+    } = {}
   ): Rule<string> =>
-    pattern(options.requireProtocol === false ? PERMISSIVE_URL : STRICT_URL, options.message ?? "Invalid URL"),
+    pattern(
+      options.requireProtocol === false ? PERMISSIVE_URL : STRICT_URL,
+      options.message ?? "Invalid URL"
+    ),
   startsWith: (prefix: string, message?: RuleMessage<string>): Rule<string> => [
     (value) => value.startsWith(prefix),
     message ?? `Must start with ${prefix}`
@@ -174,7 +185,10 @@ export const Rule = {
     (value) => value.endsWith(suffix),
     message ?? `Must end with ${suffix}`
   ],
-  includes: (substring: string, message?: RuleMessage<string>): Rule<string> => [
+  includes: (
+    substring: string,
+    message?: RuleMessage<string>
+  ): Rule<string> => [
     (value) => value.includes(substring),
     message ?? `Must contain ${substring}`
   ],
@@ -182,19 +196,31 @@ export const Rule = {
     (value) => value === expected,
     message ?? `Must match ${expected}`
   ],
-  oneOf: (values: ReadonlyArray<string>, message?: RuleMessage<string>): Rule<string> => [
+  oneOf: (
+    values: ReadonlyArray<string>,
+    message?: RuleMessage<string>
+  ): Rule<string> => [
     (value) => values.includes(value),
     message ?? `Must be one of: ${values.join(", ")}`
   ],
-  minItems: (min: number, message?: RuleMessage<ReadonlyArray<unknown>>): Rule<ReadonlyArray<unknown>> => [
+  minItems: (
+    min: number,
+    message?: RuleMessage<ReadonlyArray<unknown>>
+  ): Rule<ReadonlyArray<unknown>> => [
     (value) => value.length >= min,
     message ?? `Must select at least ${min}`
   ],
-  maxItems: (max: number, message?: RuleMessage<ReadonlyArray<unknown>>): Rule<ReadonlyArray<unknown>> => [
+  maxItems: (
+    max: number,
+    message?: RuleMessage<ReadonlyArray<unknown>>
+  ): Rule<ReadonlyArray<unknown>> => [
     (value) => value.length <= max,
     message ?? `Must select at most ${max}`
   ],
-  fromSchema: <A, I>(schema: Schema.Codec<A, I>, message: RuleMessage<I>): Rule<I> => {
+  fromSchema: <A, I>(
+    schema: Schema.Codec<A, I>,
+    message: RuleMessage<I>
+  ): Rule<I> => {
     const decode = Schema.decodeOption(schema)
     return [(value) => Option.isSome(decode(value)), message]
   }
@@ -289,7 +315,9 @@ export interface State<Values> {
   readonly edited: ReadonlyArray<Extract<keyof Values, string>>
   readonly touched: ReadonlyArray<Extract<keyof Values, string>>
   readonly submitted: boolean
-  readonly rejected: { readonly [K in keyof Values]?: Arr.NonEmptyReadonlyArray<string> }
+  readonly rejected: {
+    readonly [K in keyof Values]?: Arr.NonEmptyReadonlyArray<string>
+  }
 }
 
 /**
@@ -420,7 +448,9 @@ export interface ChecklistItem {
  * @since 0.1.0
  */
 export type Checks<Values> = {
-  readonly [K in keyof Values]?: AsyncResult.AsyncResult<ReadonlyArray<string>, never> | undefined
+  readonly [K in keyof Values]?:
+    | AsyncResult.AsyncResult<ReadonlyArray<string>, never>
+    | undefined
 }
 
 /**
@@ -484,12 +514,16 @@ export interface Validation<Fields extends Validation.Fields> {
     Fields[keyof Fields]["DecodingServices"],
     Fields[keyof Fields]["EncodingServices"]
   >
-  readonly init: (values: Validation.Values<Fields>) => State<Validation.Values<Fields>>
+  readonly init: (
+    values: Validation.Values<Fields>
+  ) => State<Validation.Values<Fields>>
   readonly change: {
     <K extends Validation.Name<Fields>>(
       name: K,
       value: Validation.Values<Fields>[K]
-    ): (self: State<Validation.Values<Fields>>) => State<Validation.Values<Fields>>
+    ): (
+      self: State<Validation.Values<Fields>>
+    ) => State<Validation.Values<Fields>>
     <K extends Validation.Name<Fields>>(
       self: State<Validation.Values<Fields>>,
       name: K,
@@ -497,20 +531,38 @@ export interface Validation<Fields extends Validation.Fields> {
     ): State<Validation.Values<Fields>>
   }
   readonly blur: {
-    (name: Validation.Name<Fields>): (self: State<Validation.Values<Fields>>) => State<Validation.Values<Fields>>
-    (self: State<Validation.Values<Fields>>, name: Validation.Name<Fields>): State<Validation.Values<Fields>>
-  }
-  readonly submit: (self: State<Validation.Values<Fields>>) => State<Validation.Values<Fields>>
-  readonly reject: {
     (
-      errors: { readonly [K in Validation.Name<Fields>]?: ReadonlyArray<string> }
-    ): (self: State<Validation.Values<Fields>>) => State<Validation.Values<Fields>>
+      name: Validation.Name<Fields>
+    ): (
+      self: State<Validation.Values<Fields>>
+    ) => State<Validation.Values<Fields>>
     (
       self: State<Validation.Values<Fields>>,
-      errors: { readonly [K in Validation.Name<Fields>]?: ReadonlyArray<string> }
+      name: Validation.Name<Fields>
     ): State<Validation.Values<Fields>>
   }
-  readonly passes: (self: State<Validation.Values<Fields>>, name: Validation.Name<Fields>) => boolean
+  readonly submit: (
+    self: State<Validation.Values<Fields>>
+  ) => State<Validation.Values<Fields>>
+  readonly reject: {
+    (
+      errors: {
+        readonly [K in Validation.Name<Fields>]?: ReadonlyArray<string>
+      }
+    ): (
+      self: State<Validation.Values<Fields>>
+    ) => State<Validation.Values<Fields>>
+    (
+      self: State<Validation.Values<Fields>>,
+      errors: {
+        readonly [K in Validation.Name<Fields>]?: ReadonlyArray<string>
+      }
+    ): State<Validation.Values<Fields>>
+  }
+  readonly passes: (
+    self: State<Validation.Values<Fields>>,
+    name: Validation.Name<Fields>
+  ) => boolean
   readonly checklist: (
     self: State<Validation.Values<Fields>>,
     name: Validation.Name<Fields>
@@ -544,7 +596,9 @@ export declare namespace Validation {
    * @category models
    * @since 0.1.0
    */
-  export type Values<Fields extends Validation.Fields> = { readonly [K in keyof Fields]: Fields[K]["Type"] }
+  export type Values<Fields extends Validation.Fields> = {
+    readonly [K in keyof Fields]: Fields[K]["Type"]
+  }
 
   /**
    * The values of a form, encoded.
@@ -553,7 +607,9 @@ export declare namespace Validation {
    * @category models
    * @since 0.1.0
    */
-  export type Encoded<Fields extends Validation.Fields> = { readonly [K in keyof Fields]: Fields[K]["Encoded"] }
+  export type Encoded<Fields extends Validation.Fields> = {
+    readonly [K in keyof Fields]: Fields[K]["Encoded"]
+  }
 
   /**
    * The name of a field.
@@ -562,7 +618,10 @@ export declare namespace Validation {
    * @category models
    * @since 0.1.0
    */
-  export type Name<Fields extends Validation.Fields> = Extract<keyof Fields, string>
+  export type Name<Fields extends Validation.Fields> = Extract<
+    keyof Fields,
+    string
+  >
 
   /**
    * The values {@link make} infers from its fields: each field's `value`
@@ -588,7 +647,9 @@ export declare namespace Validation {
    * @since 0.1.0
    */
   export type InferFields<S, K extends string> = {
-    readonly [P in K]: P extends keyof S ? [S[P]] extends [Schema.Top] ? S[P] : Schema.String : Schema.String
+    readonly [P in K]: P extends keyof S
+      ? [S[P]] extends [Schema.Top] ? S[P] : Schema.String
+      : Schema.String
   }
 }
 
@@ -602,7 +663,8 @@ type AnyState = State<Record<string, unknown>>
 
 const isEmptyValue = (value: unknown): boolean => {
   const unwrapped = Redacted.isRedacted(value) ? Redacted.value(value) : value
-  return (typeof unwrapped === "string" || Array.isArray(unwrapped)) && unwrapped.length === 0
+  return (typeof unwrapped === "string" || Array.isArray(unwrapped)) &&
+    unwrapped.length === 0
 }
 
 const requiredMessage = (spec: Spec, values: unknown): string | undefined => {
@@ -613,7 +675,12 @@ const requiredMessage = (spec: Spec, values: unknown): string | undefined => {
   return spec.required
 }
 
-const ruleErrors = (spec: Spec, value: unknown, values: unknown, all: boolean): Array<string> => {
+const ruleErrors = (
+  spec: Spec,
+  value: unknown,
+  values: unknown,
+  all: boolean
+): Array<string> => {
   const errors: Array<string> = []
   for (const [predicate, message] of spec.rules) {
     if (!predicate(value, values)) {
@@ -624,9 +691,12 @@ const ruleErrors = (spec: Spec, value: unknown, values: unknown, all: boolean): 
   return errors
 }
 
-const isNonEmpty = <A>(errors: ReadonlyArray<A>): errors is Arr.NonEmptyReadonlyArray<A> => errors.length > 0
+const isNonEmpty = <A>(
+  errors: ReadonlyArray<A>
+): errors is Arr.NonEmptyReadonlyArray<A> => errors.length > 0
 
-const add = <A>(names: ReadonlyArray<A>, name: A): ReadonlyArray<A> => names.includes(name) ? names : [...names, name]
+const add = <A>(names: ReadonlyArray<A>, name: A): ReadonlyArray<A> =>
+  names.includes(name) ? names : [...names, name]
 
 /**
  * Builds a form's validation from its fields.
@@ -702,7 +772,9 @@ const add = <A>(names: ReadonlyArray<A>, name: A): ReadonlyArray<A> => names.inc
  */
 export const make = <S, K extends string>(
   fields:
-    & { readonly [P in keyof S]: FieldOptions<S[P], Validation.InferValues<S, K>> }
+    & {
+      readonly [P in keyof S]: FieldOptions<S[P], Validation.InferValues<S, K>>
+    }
     & { readonly [P in K]: unknown },
   options: Options = {}
 ): Validation<Validation.InferFields<S, K>> => {
@@ -725,7 +797,9 @@ export const make = <S, K extends string>(
     edited: Schema.Array(Name),
     touched: Schema.Array(Name),
     submitted: Schema.Boolean,
-    rejected: Schema.Struct(byName(() => Schema.optionalKey(Schema.NonEmptyArray(Schema.String))))
+    rejected: Schema.Struct(
+      byName(() => Schema.optionalKey(Schema.NonEmptyArray(Schema.String)))
+    )
   })
 
   const shows = (state: AnyState, name: string): boolean =>
@@ -736,10 +810,14 @@ export const make = <S, K extends string>(
   const passes = (state: AnyState, name: string): boolean => {
     const spec = specs.get(name)!
     const value = state.values[name]
-    return !spec.isEmpty(value) && spec.rules.every(([predicate]) => predicate(value, state.values))
+    return !spec.isEmpty(value) &&
+      spec.rules.every(([predicate]) => predicate(value, state.values))
   }
 
-  const checklist = (state: AnyState, name: string): ReadonlyArray<ChecklistItem> => {
+  const checklist = (
+    state: AnyState,
+    name: string
+  ): ReadonlyArray<ChecklistItem> => {
     const spec = specs.get(name)!
     const value = state.values[name]
     const empty = spec.isEmpty(value)
@@ -751,7 +829,10 @@ export const make = <S, K extends string>(
 
   const validate = (
     state: AnyState,
-    checks: Record<string, AsyncResult.AsyncResult<ReadonlyArray<string>, never> | undefined> = {}
+    checks: Record<
+      string,
+      AsyncResult.AsyncResult<ReadonlyArray<string>, never> | undefined
+    > = {}
   ) => {
     const fields: Array<[string, Field<unknown>]> = []
     let acceptable = true
@@ -762,7 +843,9 @@ export const make = <S, K extends string>(
       const empty = spec.isEmpty(value)
       const message = requiredMessage(spec, state.values)
       const shared = { value, empty, required: message !== undefined }
-      const rejected = Object.hasOwn(state.rejected, name) ? state.rejected[name] : undefined
+      const rejected = Object.hasOwn(state.rejected, name)
+        ? state.rejected[name]
+        : undefined
       // The field's result before it shows. An optional empty field is
       // acceptable and has no result to show.
       let result: Field<unknown>
@@ -812,23 +895,48 @@ export const make = <S, K extends string>(
       submitted: false,
       rejected: {}
     }),
-    change: dual(3, (self: AnyState, name: string, value: unknown): AnyState => {
-      const { [name]: _, ...rejected } = self.rejected
-      return { ...self, values: { ...self.values, [name]: value }, edited: add(self.edited, name), rejected }
-    }),
-    blur: dual(2, (self: AnyState, name: string): AnyState => ({ ...self, touched: add(self.touched, name) })),
-    submit: (self: AnyState): AnyState => self.submitted ? self : { ...self, submitted: true },
-    reject: dual(2, (self: AnyState, errors: Record<string, ReadonlyArray<string> | undefined>): AnyState => {
-      const merged = new Map<string, ReadonlyArray<string> | undefined>(Object.entries(self.rejected))
-      for (const [name, list] of Object.entries(errors)) {
-        if (list !== undefined) merged.set(name, list)
+    change: dual(
+      3,
+      (self: AnyState, name: string, value: unknown): AnyState => {
+        const { [name]: _, ...rejected } = self.rejected
+        return {
+          ...self,
+          values: { ...self.values, [name]: value },
+          edited: add(self.edited, name),
+          rejected
+        }
       }
-      // `fromEntries` keeps any field name, `__proto__` included, as an own key.
-      const kept = [...merged].filter((entry): entry is [string, Arr.NonEmptyReadonlyArray<string>] =>
-        entry[1] !== undefined && isNonEmpty(entry[1])
-      )
-      return { ...self, rejected: Object.fromEntries(kept) }
-    }),
+    ),
+    blur: dual(
+      2,
+      (self: AnyState, name: string): AnyState => ({
+        ...self,
+        touched: add(self.touched, name)
+      })
+    ),
+    submit: (self: AnyState): AnyState =>
+      self.submitted ? self : { ...self, submitted: true },
+    reject: dual(
+      2,
+      (
+        self: AnyState,
+        errors: Record<string, ReadonlyArray<string> | undefined>
+      ): AnyState => {
+        const merged = new Map<string, ReadonlyArray<string> | undefined>(
+          Object.entries(self.rejected)
+        )
+        for (const [name, list] of Object.entries(errors)) {
+          if (list !== undefined) merged.set(name, list)
+        }
+        // `fromEntries` keeps any field name, `__proto__` included, as an own key.
+        const kept = [...merged].filter((
+          entry
+        ): entry is [string, Arr.NonEmptyReadonlyArray<string>] =>
+          entry[1] !== undefined && isNonEmpty(entry[1])
+        )
+        return { ...self, rejected: Object.fromEntries(kept) }
+      }
+    ),
     passes,
     checklist,
     validate

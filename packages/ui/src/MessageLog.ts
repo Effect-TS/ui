@@ -173,7 +173,12 @@ export type Source =
   | { readonly _tag: "Emit"; readonly path: string; readonly seq: number }
   | { readonly _tag: "Failure"; readonly path: string; readonly seq: number }
   | { readonly _tag: "Send"; readonly path: string; readonly seq: number }
-  | { readonly _tag: "Shared"; readonly name: string; readonly path: string; readonly seq: number }
+  | {
+    readonly _tag: "Shared"
+    readonly name: string
+    readonly path: string
+    readonly seq: number
+  }
   | { readonly _tag: "Collected" }
   | {
     readonly _tag: "Mount"
@@ -708,7 +713,12 @@ export interface CommandInterrupted extends InstanceBase {
  * @category models
  * @since 0.1.0
  */
-export type InterruptReason = "interrupt" | "switch" | "unmount" | "layer" | "self"
+export type InterruptReason =
+  | "interrupt"
+  | "switch"
+  | "unmount"
+  | "layer"
+  | "self"
 
 /**
  * How a `Command.afterRefetch` wait ended.
@@ -717,7 +727,13 @@ export type InterruptReason = "interrupt" | "switch" | "unmount" | "layer" | "se
  * @category models
  * @since 0.1.0
  */
-export type WaitEnded = "settled" | "nothing" | "budget" | "switch" | "interrupt" | "closed"
+export type WaitEnded =
+  | "settled"
+  | "nothing"
+  | "budget"
+  | "switch"
+  | "interrupt"
+  | "closed"
 
 /**
  * An entry a `Command.afterRefetch` run waits for: the query's name and the
@@ -809,7 +825,9 @@ export interface Failed extends InstanceBase {
    * message whose `update` throws has no `Update` entry, so this is its
    * only record.
    */
-  readonly update?: { readonly message: unknown; readonly source: Source } | undefined
+  readonly update?:
+    | { readonly message: unknown; readonly source: Source }
+    | undefined
   /**
    * The run that failed the instance, when `in` is `"command"`. This entry
    * is that run's end: it has no `CommandEnded` or `CommandInterrupted`.
@@ -922,7 +940,9 @@ export interface Memory extends MessageLog {
  * @category constructors
  * @since 0.1.0
  */
-export const makeMemory = (options?: { readonly size?: number | undefined }): Memory => {
+export const makeMemory = (
+  options?: { readonly size?: number | undefined }
+): Memory => {
   const size = Math.max(1, options?.size ?? 1_000)
   const buffer: Array<Entry> = []
   let start = 0
@@ -936,7 +956,10 @@ export const makeMemory = (options?: { readonly size?: number | undefined }): Me
         start = (start + 1) % size
       }
     },
-    entries: () => buffer.length < size ? buffer.slice() : [...buffer.slice(start), ...buffer.slice(0, start)]
+    entries: () =>
+      buffer.length < size
+        ? buffer.slice()
+        : [...buffer.slice(start), ...buffer.slice(0, start)]
   }
 }
 
@@ -947,8 +970,9 @@ export const makeMemory = (options?: { readonly size?: number | undefined }): Me
  * @category layers
  * @since 0.1.0
  */
-export const memory = (options?: { readonly size?: number | undefined }): Layer.Layer<never> =>
-  Layer.succeed(MessageLog, makeMemory(options))
+export const memory = (
+  options?: { readonly size?: number | undefined }
+): Layer.Layer<never> => Layer.succeed(MessageLog, makeMemory(options))
 
 /**
  * Sends every entry to several logs. Enabled when any of them is.
@@ -985,13 +1009,23 @@ export const fanoutAll = (logs: ReadonlyArray<MessageLog>): MessageLog => {
  * @category layers
  * @since 0.1.0
  */
-export const fanout = <const Layers extends ReadonlyArray<Layer.Layer<never, any, any>>>(
+export const fanout = <
+  const Layers extends ReadonlyArray<Layer.Layer<never, any, any>>
+>(
   layers: Layers
-): Layer.Layer<never, Layer.Error<Layers[number]>, Layer.Services<Layers[number]>> =>
+): Layer.Layer<
+  never,
+  Layer.Error<Layers[number]>,
+  Layer.Services<Layers[number]>
+> =>
   Layer.effectContext(
     Effect.forEach(layers, (layer) => Layer.build(layer)).pipe(
       Effect.map((built) =>
-        Context.add(Context.mergeAll(...built), MessageLog, fanoutAll(built.map(Context.get(MessageLog))))
+        Context.add(
+          Context.mergeAll(...built),
+          MessageLog,
+          fanoutAll(built.map(Context.get(MessageLog)))
+        )
       )
     )
   ) as any
@@ -1037,8 +1071,14 @@ const CommandWire = Schema.Struct({
   group: Schema.NullOr(Schema.String),
   args: Schema.Json
 })
-const AwaitedEntryWire = Schema.Struct({ query: Schema.String, logKey: Schema.String })
-const CauseWire = Schema.Struct({ pretty: Schema.String, reasons: Schema.Array(Schema.Json) })
+const AwaitedEntryWire = Schema.Struct({
+  query: Schema.String,
+  logKey: Schema.String
+})
+const CauseWire = Schema.Struct({
+  pretty: Schema.String,
+  reasons: Schema.Array(Schema.Json)
+})
 // Deps are JSON values, not primitives, so a dep that is a struct wouldn't be a new Wire version.
 const SubscriptionWire = {
   key: Schema.String,
@@ -1058,9 +1098,17 @@ const SourceWire = Schema.Union([
   Schema.TaggedStruct("Emit", { path: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Failure", { path: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Send", { path: Schema.String, seq: Schema.Number }),
-  Schema.TaggedStruct("Shared", { name: Schema.String, path: Schema.String, seq: Schema.Number }),
+  Schema.TaggedStruct("Shared", {
+    name: Schema.String,
+    path: Schema.String,
+    seq: Schema.Number
+  }),
   Schema.TaggedStruct("Collected", {}),
-  Schema.TaggedStruct("Mount", { name: Schema.String, seq: Schema.Number, args: Schema.Json }),
+  Schema.TaggedStruct("Mount", {
+    name: Schema.String,
+    seq: Schema.Number,
+    args: Schema.Json
+  }),
   Schema.TaggedStruct("Dispatch", {})
 ])
 const RunWire = {
@@ -1110,7 +1158,10 @@ const RunWire = {
  * @since 0.1.0
  */
 export const Wire = Schema.Union([
-  Schema.TaggedStruct("Hello", { version: Schema.Number, host: Schema.Literals(["browser", "server", "test"]) }),
+  Schema.TaggedStruct("Hello", {
+    version: Schema.Number,
+    host: Schema.Literals(["browser", "server", "test"])
+  }),
   Schema.TaggedStruct("SessionStarted", { ...BaseWire, app: Schema.String }),
   Schema.TaggedStruct("FetchStarted", {
     ...BaseWire,
@@ -1160,16 +1211,29 @@ export const Wire = Schema.Union([
     shared: Schema.optionalKey(Schema.Json),
     commands: Schema.Array(CommandWire),
     events: Schema.Array(Schema.Json),
-    lists: Schema.Array(Schema.Struct({ name: Schema.String, op: Schema.Literals(["loadMore", "reset"]) })),
-    sends: Schema.Array(Schema.Struct({ owner: Schema.String, message: Schema.Json })),
+    lists: Schema.Array(
+      Schema.Struct({
+        name: Schema.String,
+        op: Schema.Literals(["loadMore", "reset"])
+      })
+    ),
+    sends: Schema.Array(
+      Schema.Struct({ owner: Schema.String, message: Schema.Json })
+    ),
     viewTransition: Schema.optionalKey(Schema.Array(Schema.String)),
     boundary: Schema.optionalKey(Schema.Number)
   }),
   Schema.TaggedStruct("PropsChanged", { ...InstanceWire, props: Schema.Json }),
-  Schema.TaggedStruct("QueryChanged", { ...InstanceWire, name: Schema.String, result: Schema.Json }),
+  Schema.TaggedStruct("QueryChanged", {
+    ...InstanceWire,
+    name: Schema.String,
+    result: Schema.Json
+  }),
   Schema.TaggedStruct("LayerPending", {
     ...InstanceWire,
-    status: Schema.optionalKey(Schema.Literals(["Pending", "Rebuilding", "Awaiting"]))
+    status: Schema.optionalKey(
+      Schema.Literals(["Pending", "Rebuilding", "Awaiting"])
+    )
   }),
   Schema.TaggedStruct("LayerReady", InstanceWire),
   Schema.TaggedStruct("LayerFailed", {
@@ -1183,13 +1247,19 @@ export const Wire = Schema.Union([
     in: Schema.String,
     name: Schema.NullOr(Schema.String),
     cause: CauseWire,
-    update: Schema.optionalKey(Schema.Struct({ message: Schema.Json, source: SourceWire })),
+    update: Schema.optionalKey(
+      Schema.Struct({ message: Schema.Json, source: SourceWire })
+    ),
     issued: Schema.optionalKey(IssuedWire)
   }),
   Schema.TaggedStruct("Unmounted", InstanceWire),
   Schema.TaggedStruct("Kept", InstanceWire),
   Schema.TaggedStruct("Drawn", InstanceWire),
-  Schema.TaggedStruct("MountStarted", { ...InstanceWire, name: Schema.String, args: Schema.Json }),
+  Schema.TaggedStruct("MountStarted", {
+    ...InstanceWire,
+    name: Schema.String,
+    args: Schema.Json
+  }),
   Schema.TaggedStruct("MountEnded", {
     ...InstanceWire,
     name: Schema.String,
@@ -1213,7 +1283,16 @@ export const Wire = Schema.Union([
   Schema.TaggedStruct("CommandEnded", {
     ...RunWire,
     silent: Schema.Boolean,
-    waitEnded: Schema.optionalKey(Schema.Literals(["settled", "nothing", "budget", "switch", "interrupt", "closed"])),
+    waitEnded: Schema.optionalKey(
+      Schema.Literals([
+        "settled",
+        "nothing",
+        "budget",
+        "switch",
+        "interrupt",
+        "closed"
+      ])
+    ),
     outstanding: Schema.optionalKey(Schema.Array(AwaitedEntryWire))
   }),
   Schema.TaggedStruct("CommandInterrupted", {
@@ -1231,8 +1310,14 @@ export const Wire = Schema.Union([
     owner: Schema.String,
     issued: IssuedWire
   }),
-  Schema.TaggedStruct("SubscriptionStarted", { ...InstanceWire, ...SubscriptionWire }),
-  Schema.TaggedStruct("SubscriptionStopped", { ...InstanceWire, ...SubscriptionWire })
+  Schema.TaggedStruct("SubscriptionStarted", {
+    ...InstanceWire,
+    ...SubscriptionWire
+  }),
+  Schema.TaggedStruct("SubscriptionStopped", {
+    ...InstanceWire,
+    ...SubscriptionWire
+  })
 ])
 
 /**
@@ -1281,7 +1366,9 @@ const placeholderChecks: Record<string, (value: unknown) => boolean> = {
  * @since 0.1.0
  */
 export const isPlaceholder = (value: unknown): value is Placeholder => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false
+  }
   const keys = Object.keys(value)
   return keys.length === 1 && Object.hasOwn(placeholderChecks, keys[0]) &&
     placeholderChecks[keys[0]]((value as Record<string, unknown>)[keys[0]])
@@ -1314,8 +1401,16 @@ export const makeEncoder = (options?: {
   const maxEntryBytes = options?.maxEntryBytes ?? Infinity
   const warned = new Set<string>()
   const encoders = new WeakMap<Schema.Top, (value: unknown) => unknown>()
-  const through = (component: Component.Any, field: "props" | "model" | "message" | "events", value: unknown) =>
-    encodeWith(component[field] as Schema.Top, `${component.definition.name}.${field}`, value)
+  const through = (
+    component: Component.Any,
+    field: "props" | "model" | "message" | "events",
+    value: unknown
+  ) =>
+    encodeWith(
+      component[field] as Schema.Top,
+      `${component.definition.name}.${field}`,
+      value
+    )
   const encodeWith = (schema: Schema.Top, id: string, value: unknown) => {
     if (holdsRedactedOverlap(schema.ast)) {
       let rejected = false
@@ -1335,7 +1430,9 @@ export const makeEncoder = (options?: {
     let encode = encoders.get(schema)
     if (encode === undefined) {
       encode = Schema.encodeUnknownSync(
-        Schema.toCodecJson(Schema.make<Schema.Codec<unknown, unknown>>(redactAST(schema.ast)))
+        Schema.toCodecJson(
+          Schema.make<Schema.Codec<unknown, unknown>>(redactAST(schema.ast))
+        )
       )
       encoders.set(schema, encode)
     }
@@ -1349,18 +1446,27 @@ export const makeEncoder = (options?: {
   const warn = (id: string, error: string) => {
     if (warned.has(id)) return
     warned.add(id)
-    options?.onWarning?.(`MessageLog: ${id} failed to encode, so it's sent as a placeholder: ${error}`)
+    options?.onWarning?.(
+      `MessageLog: ${id} failed to encode, so it's sent as a placeholder: ${error}`
+    )
   }
   const encodeQueries = (
     component: Component.Any,
     results: Component.Results | undefined
   ): { readonly queries?: Schema.Json } => {
     if (results === undefined) return {}
-    const schema = (component["~queries"] as componentQueries.Bound | undefined)?.logSchema
+    const schema = (component["~queries"] as componentQueries.Bound | undefined)
+      ?.logSchema
     return {
       queries: schema === undefined
         ? { "~unserialisable": "encode" }
-        : cap(encodeWith(schema, `${component.definition.name}.queries`, results) as Schema.Json)
+        : cap(
+          encodeWith(
+            schema,
+            `${component.definition.name}.queries`,
+            results
+          ) as Schema.Json
+        )
     }
   }
   const encodeShared = (
@@ -1375,22 +1481,37 @@ export const makeEncoder = (options?: {
       const schema = read.owner.definition.sharesSchema
       out[read.name] = schema === undefined
         ? structural(value)
-        : encodeWith(schema, `${read.owner.definition.name}.shares`, value) as Schema.Json
+        : encodeWith(
+          schema,
+          `${read.owner.definition.name}.shares`,
+          value
+        ) as Schema.Json
     }
     return { shared: cap(out) }
   }
   // A message can carry a query's whole result, so messages are capped like Models and query results.
-  const capped = (component: Component.Any, field: "model" | "message", value: unknown): Schema.Json =>
-    cap(through(component, field, value) as Schema.Json)
+  const capped = (
+    component: Component.Any,
+    field: "model" | "message",
+    value: unknown
+  ): Schema.Json => cap(through(component, field, value) as Schema.Json)
   const cap = (encoded: Schema.Json): Schema.Json => {
     if (maxEntryBytes === Infinity) return encoded
     const bytes = utf8Length(JSON.stringify(encoded))
     return bytes > maxEntryBytes ? { "~truncated": bytes } : encoded
   }
-  const props = (entry: { readonly component: Component.Any; readonly props: unknown }) =>
-    through(entry.component, "props", entry.props) as Schema.Json
-  const events = (entry: { readonly component: Component.Any; readonly events: ReadonlyArray<unknown> }) =>
-    entry.events.map((emitted) => through(entry.component, "events", emitted) as Schema.Json)
+  const props = (
+    entry: { readonly component: Component.Any; readonly props: unknown }
+  ) => through(entry.component, "props", entry.props) as Schema.Json
+  const events = (
+    entry: {
+      readonly component: Component.Any
+      readonly events: ReadonlyArray<unknown>
+    }
+  ) =>
+    entry.events.map((emitted) =>
+      through(entry.component, "events", emitted) as Schema.Json
+    )
   const run = (entry: CommandEnded | CommandInterrupted) => ({
     ...instanceBase(entry),
     name: entry.name,
@@ -1414,7 +1535,9 @@ export const makeEncoder = (options?: {
             inWindow: entry.inWindow,
             stored: entry.stored,
             ...(entry.page === undefined ? undefined : { page: entry.page }),
-            ...(entry.cursor === undefined ? undefined : { cursor: entry.cursor })
+            ...(entry.cursor === undefined
+              ? undefined
+              : { cursor: entry.cursor })
           }
         case "Waiting":
           return {
@@ -1454,14 +1577,22 @@ export const makeEncoder = (options?: {
               const encoded = encodeSend(send)
               return { ...encoded, message: cap(encoded.message) }
             }),
-            ...(entry.viewTransition === undefined ? undefined : { viewTransition: entry.viewTransition }),
+            ...(entry.viewTransition === undefined
+              ? undefined
+              : { viewTransition: entry.viewTransition }),
             ...boundaryOf(entry)
           }
         case "PropsChanged":
-          return { _tag: "PropsChanged", ...instanceBase(entry), props: props(entry) }
+          return {
+            _tag: "PropsChanged",
+            ...instanceBase(entry),
+            props: props(entry)
+          }
         case "QueryChanged": {
-          const schema = (entry.component["~queries"] as componentQueries.Bound | undefined)?.logSchema
-            .fields[entry.name]
+          const schema =
+            (entry.component["~queries"] as componentQueries.Bound | undefined)
+              ?.logSchema
+              .fields[entry.name]
           return {
             _tag: "QueryChanged",
             ...instanceBase(entry),
@@ -1478,7 +1609,11 @@ export const makeEncoder = (options?: {
           }
         }
         case "LayerPending":
-          return { _tag: "LayerPending", ...instanceBase(entry), status: entry.status }
+          return {
+            _tag: "LayerPending",
+            ...instanceBase(entry),
+            status: entry.status
+          }
         case "LayerReady":
         case "Unmounted":
         case "Kept":
@@ -1501,11 +1636,17 @@ export const makeEncoder = (options?: {
             cause: encodeCause(entry.cause),
             ...(entry.update === undefined ? undefined : {
               update: {
-                message: capped(entry.component, "message", entry.update.message),
+                message: capped(
+                  entry.component,
+                  "message",
+                  entry.update.message
+                ),
                 source: encodeSource(entry.update.source)
               }
             }),
-            ...(entry.issued === undefined ? undefined : { issued: entry.issued })
+            ...(entry.issued === undefined
+              ? undefined
+              : { issued: entry.issued })
           }
         case "MountStarted":
           return {
@@ -1545,11 +1686,19 @@ export const makeEncoder = (options?: {
             _tag: "CommandEnded",
             ...run(entry),
             silent: entry.silent,
-            ...(entry.waitEnded === undefined ? undefined : { waitEnded: entry.waitEnded }),
-            ...(entry.outstanding === undefined ? undefined : { outstanding: entry.outstanding })
+            ...(entry.waitEnded === undefined
+              ? undefined
+              : { waitEnded: entry.waitEnded }),
+            ...(entry.outstanding === undefined
+              ? undefined
+              : { outstanding: entry.outstanding })
           }
         case "CommandInterrupted":
-          return { _tag: "CommandInterrupted", ...run(entry), reason: entry.reason }
+          return {
+            _tag: "CommandInterrupted",
+            ...run(entry),
+            reason: entry.reason
+          }
         case "CommandDropped":
           return {
             _tag: "CommandDropped",
@@ -1567,7 +1716,11 @@ export const makeEncoder = (options?: {
           }
         case "SubscriptionStarted":
         case "SubscriptionStopped":
-          return { _tag: entry._tag, ...instanceBase(entry), ...encodeSubscription(entry) }
+          return {
+            _tag: entry._tag,
+            ...instanceBase(entry),
+            ...encodeSubscription(entry)
+          }
       }
     }
   }
@@ -1599,15 +1752,26 @@ const encodeSubscription = (
 ) => ({
   key: subscription.key,
   name: subscription.name,
-  deps: subscription.deps === undefined ? null : subscription.deps.map((dep) => dep === 0 ? 0 : structural(dep))
+  deps: subscription.deps === undefined
+    ? null
+    : subscription.deps.map((dep) => dep === 0 ? 0 : structural(dep))
 })
 
 const encodeSource = (source: Source): typeof SourceWire.Type => {
   switch (source._tag) {
     case "Command":
-      return { ...source, spanId: source.spanId ?? null, traceId: source.traceId ?? null }
+      return {
+        ...source,
+        spanId: source.spanId ?? null,
+        traceId: source.traceId ?? null
+      }
     case "Mount":
-      return { _tag: "Mount", name: source.name, seq: source.seq, args: encodeArgs(source.argsSchema, source.args) }
+      return {
+        _tag: "Mount",
+        name: source.name,
+        seq: source.seq,
+        args: encodeArgs(source.argsSchema, source.args)
+      }
     case "Subscription":
       return { _tag: "Subscription", ...encodeSubscription(source) }
     default:
@@ -1625,17 +1789,24 @@ const encodeSource = (source: Source): typeof SourceWire.Type => {
  * @category Wire
  * @since 0.1.0
  */
-export const encodeCommand = (command: Command.Command<any, any>): typeof CommandWire.Type => ({
+export const encodeCommand = (
+  command: Command.Command<any, any>
+): typeof CommandWire.Type => ({
   _tag: command._tag,
   name: command.name,
   group: encodeGroup(command),
-  args: command._tag === "Interrupt" ? null : encodeArgs(command.argsSchema, command.args)
+  args: command._tag === "Interrupt"
+    ? null
+    : encodeArgs(command.argsSchema, command.args)
 })
 
 // The scheduling key holds the group fields' real encoding, so the log re-encodes them redacted.
 const encodeGroup = (command: Command.Command<any, any>): string | null => {
   if (command.groupKey === undefined) return null
-  const source = (command as { readonly "~group"?: Command.GroupSource | undefined })["~group"]
+  const source =
+    (command as { readonly "~group"?: Command.GroupSource | undefined })[
+      "~group"
+    ]
   return source === undefined
     ? JSON.stringify({ "~redacted": true })
     : canonical(encodeArgs(source.schema, source.picked))
@@ -1659,15 +1830,19 @@ export const encodeSend = (
 })
 
 /** The redacting codec of `ast`, or `null` when it has none. */
-const encoderOf = memoize((ast: SchemaAST.AST): ((value: unknown) => unknown) | null => {
-  try {
-    return Schema.encodeUnknownSync(
-      Schema.toCodecJson(Schema.make<Schema.Codec<unknown, unknown>>(redactAST(ast)))
-    )
-  } catch {
-    return null
+const encoderOf = memoize(
+  (ast: SchemaAST.AST): ((value: unknown) => unknown) | null => {
+    try {
+      return Schema.encodeUnknownSync(
+        Schema.toCodecJson(
+          Schema.make<Schema.Codec<unknown, unknown>>(redactAST(ast))
+        )
+      )
+    } catch {
+      return null
+    }
   }
-})
+)
 const guardOf = memoize((ast: SchemaAST.AST): (value: unknown) => boolean => {
   const is = Schema.is(Schema.make<Schema.Top>(ast))
   return (value) => {
@@ -1679,7 +1854,8 @@ const guardOf = memoize((ast: SchemaAST.AST): (value: unknown) => boolean => {
   }
 })
 const isPlainRecord = (value: unknown): value is Record<PropertyKey, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value) && !Redacted.isRedacted(value)
+  typeof value === "object" && value !== null && !Array.isArray(value) &&
+  !Redacted.isRedacted(value)
 
 /**
  * Detects objects anywhere in `ast` with a redacted index signature beside
@@ -1693,10 +1869,14 @@ const holdsRedactedOverlap = memoize((ast: SchemaAST.AST): boolean => {
   const visit = (node: SchemaAST.AST): boolean => {
     if (seen.has(node)) return false
     seen.add(node)
-    if (node.encoding !== undefined && node.encoding.some((link) => visit(link.to))) return true
+    if (
+      node.encoding !== undefined &&
+      node.encoding.some((link) => visit(link.to))
+    ) return true
     switch (node._tag) {
       case "Objects":
-        return (node.indexSignatures.length + node.propertySignatures.length > 1 &&
+        return (node.indexSignatures.length + node.propertySignatures.length >
+            1 &&
           node.indexSignatures.some((index) => holdsRedacted(index.type))) ||
           node.propertySignatures.some((property) => visit(property.type)) ||
           node.indexSignatures.some((index) => visit(index.type))
@@ -1742,8 +1922,14 @@ interface Walk {
  * cyclic value makes the codec overflow the stack, which is a failure like
  * any other: the walk goes on part by part, and the repeat is a placeholder.
  */
-const encodeAt = (ast: SchemaAST.AST, value: unknown, walk: Walk): Schema.Json => {
-  if (typeof value === "object" && value !== null && walk.path.has(value)) return { "~unserialisable": "cycle" }
+const encodeAt = (
+  ast: SchemaAST.AST,
+  value: unknown,
+  walk: Walk
+): Schema.Json => {
+  if (typeof value === "object" && value !== null && walk.path.has(value)) {
+    return { "~unserialisable": "cycle" }
+  }
   const overlap = holdsRedactedOverlap(ast)
   const encode = overlap ? null : encoderOf(ast)
   if (encode !== null) {
@@ -1754,16 +1940,23 @@ const encodeAt = (ast: SchemaAST.AST, value: unknown, walk: Walk): Schema.Json =
       // Encoded part by part below.
     }
   }
-  if (walk.strict && (!overlap || (ast.checks !== undefined && !guardOf(ast)(value)))) return walk.leaf(ast, value)
+  if (
+    walk.strict &&
+    (!overlap || (ast.checks !== undefined && !guardOf(ast)(value)))
+  ) return walk.leaf(ast, value)
   if (ast.encoding === undefined) {
     switch (ast._tag) {
       case "Suspend":
         return encodeAt(ast.thunk(), value, walk)
       case "Objects":
-        if (isPlainRecord(value)) return within(walk.path, value, () => encodeObject(ast, value, walk))
+        if (isPlainRecord(value)) {
+          return within(walk.path, value, () => encodeObject(ast, value, walk))
+        }
         break
       case "Arrays":
-        if (Array.isArray(value)) return within(walk.path, value, () => encodeArray(ast, value, walk))
+        if (Array.isArray(value)) {
+          return within(walk.path, value, () => encodeArray(ast, value, walk))
+        }
         break
       case "Union": {
         const member = ast.types.find((type) => guardOf(type)(value))
@@ -1789,10 +1982,16 @@ const within = <A>(path: Set<object>, value: object, f: () => A): A => {
  * redaction counts. A key that matches nothing is left out. Only keys are read
  * here, never values.
  */
-const encodeObject = (ast: SchemaAST.Objects, value: Record<PropertyKey, unknown>, walk: Walk): Schema.Json => {
+const encodeObject = (
+  ast: SchemaAST.Objects,
+  value: Record<PropertyKey, unknown>,
+  walk: Walk
+): Schema.Json => {
   const applies = new Map<string, Array<SchemaAST.AST>>()
   for (const property of ast.propertySignatures) {
-    if (typeof property.name === "string" && Object.hasOwn(value, property.name)) {
+    if (
+      typeof property.name === "string" && Object.hasOwn(value, property.name)
+    ) {
       applies.set(property.name, [property.type])
     }
   }
@@ -1817,7 +2016,11 @@ const encodeObject = (ast: SchemaAST.Objects, value: Record<PropertyKey, unknown
   return out
 }
 /** Elements, then the rest, then the trailing elements, which take the last positions. */
-const encodeArray = (ast: SchemaAST.Arrays, value: ReadonlyArray<unknown>, walk: Walk): Schema.Json => {
+const encodeArray = (
+  ast: SchemaAST.Arrays,
+  value: ReadonlyArray<unknown>,
+  walk: Walk
+): Schema.Json => {
   const [rest, ...tail] = ast.rest
   const tailStart = Math.max(ast.elements.length, value.length - tail.length)
   return value.map((item, i) => {
@@ -1828,7 +2031,9 @@ const encodeArray = (ast: SchemaAST.Arrays, value: ReadonlyArray<unknown>, walk:
       : i >= tailStart
       ? tail[i - tailStart]
       : rest
-    return element === undefined ? walk.leaf(ast, item) : encodeAt(element, item, walk)
+    return element === undefined
+      ? walk.leaf(ast, item)
+      : encodeAt(element, item, walk)
   })
 }
 const fallback = (ast: SchemaAST.AST, value: unknown): Schema.Json =>
@@ -1851,7 +2056,9 @@ export const encodeArgs = (schema: Schema.Top, value: unknown): Schema.Json => {
       const out: Record<string, Schema.Json> = {}
       for (const key of Object.keys(fields)) {
         if (!Object.hasOwn(value, key)) continue
-        out[key] = guarded(() => encodeAt((fields[key] as Schema.Top).ast, value[key], walk))
+        out[key] = guarded(() =>
+          encodeAt((fields[key] as Schema.Top).ast, value[key], walk)
+        )
       }
       return out
     })
@@ -1878,7 +2085,10 @@ const encodeCause = (cause: Cause.Cause<unknown>): typeof CauseWire.Type => ({
  * @category Wire
  * @since 0.1.0
  */
-export const structural = (value: unknown, seen: Set<unknown> = new Set()): Schema.Json => {
+export const structural = (
+  value: unknown,
+  seen: Set<unknown> = new Set()
+): Schema.Json => {
   switch (typeof value) {
     case "string":
     case "boolean":
@@ -1895,20 +2105,33 @@ export const structural = (value: unknown, seen: Set<unknown> = new Set()): Sche
   if (value === null) return null
   if (Redacted.isRedacted(value)) return { "~redacted": true }
   if (seen.has(value)) return { "~unserialisable": "cycle" }
-  if (value instanceof Date) return Number.isNaN(value.getTime()) ? { "~unserialisable": "Date" } : value.toISOString()
-  if (value instanceof Error) return { name: value.name, message: value.message }
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime())
+      ? { "~unserialisable": "Date" }
+      : value.toISOString()
+  }
+  if (value instanceof Error) {
+    return { name: value.name, message: value.message }
+  }
   seen.add(value)
   try {
     if (Array.isArray(value)) return value.map((item) => structural(item, seen))
     const proto = Object.getPrototypeOf(value as object)
     if (proto !== Object.prototype && proto !== null) {
-      if (typeof (value as any).toJSON === "function") return structural((value as any).toJSON(), seen)
-      if (value instanceof Map || value instanceof Set || ArrayBuffer.isView(value)) {
+      if (typeof (value as any).toJSON === "function") {
+        return structural((value as any).toJSON(), seen)
+      }
+      if (
+        value instanceof Map || value instanceof Set ||
+        ArrayBuffer.isView(value)
+      ) {
         return { "~unserialisable": value.constructor.name }
       }
     }
     const out: Record<string, Schema.Json> = {}
-    for (const key of Object.keys(value as object)) out[key] = structural((value as any)[key], seen)
+    for (const key of Object.keys(value as object)) {
+      out[key] = structural((value as any)[key], seen)
+    }
     return out
   } finally {
     seen.delete(value)
@@ -1981,9 +2204,15 @@ export const makeEncoded = (
           return Effect.andThen(
             Effect.catchCause(
               Effect.suspend(() => onBatch(frames)),
-              (cause) => Effect.logError("MessageLog: onBatch failed, and its batch was dropped", cause)
+              (cause) =>
+                Effect.logError(
+                  "MessageLog: onBatch failed, and its batch was dropped",
+                  cause
+                )
             ),
-            logged.length === 0 ? Effect.void : Effect.forEach(logged, (message) => Effect.logWarning(message))
+            logged.length === 0
+              ? Effect.void
+              : Effect.forEach(logged, (message) => Effect.logWarning(message))
           )
         })
       ),
@@ -2025,7 +2254,11 @@ export const socket = (url: string, options?: {
       const size = Math.max(1, options?.buffer ?? 1_000)
       const outbox = yield* Queue.unbounded<string>()
       const replay: Array<string> = []
-      const hello = JSON.stringify({ _tag: "Hello", version: wireVersion, host: options?.host ?? "browser" })
+      const hello = JSON.stringify({
+        _tag: "Hello",
+        version: wireVersion,
+        host: options?.host ?? "browser"
+      })
 
       const log = yield* makeEncoded(
         (batch) =>
@@ -2045,10 +2278,17 @@ export const socket = (url: string, options?: {
         const writer = yield* ws.writer
         const reader = yield* ws.reader
         // What's queued is already in the replay buffer, so it's sent from there.
-        const backlog = yield* Effect.map(Queue.clear(outbox), () => [hello, ...replay])
-        yield* Effect.forEach(backlog, (frame) => writer.write(frame), { discard: true })
+        const backlog = yield* Effect.map(
+          Queue.clear(outbox),
+          () => [hello, ...replay]
+        )
+        yield* Effect.forEach(backlog, (frame) => writer.write(frame), {
+          discard: true
+        })
         return yield* Effect.raceFirst(
-          Effect.forever(Effect.flatMap(Queue.take(outbox), (frame) => writer.write(frame))),
+          Effect.forever(
+            Effect.flatMap(Queue.take(outbox), (frame) => writer.write(frame))
+          ),
           Effect.forever(reader.pull)
         )
       }).pipe(Effect.scoped)
@@ -2058,10 +2298,18 @@ export const socket = (url: string, options?: {
         Effect.tapCause((cause) =>
           warned ? Effect.void : Effect.suspend(() => {
             warned = true
-            return Effect.logWarning(`MessageLog: lost the connection to ${url}, retrying`, cause)
+            return Effect.logWarning(
+              `MessageLog: lost the connection to ${url}, retrying`,
+              cause
+            )
           })
         ),
-        Effect.retry(Schedule.min([Schedule.exponential("200 millis"), Schedule.spaced("10 seconds")])),
+        Effect.retry(
+          Schedule.min([
+            Schedule.exponential("200 millis"),
+            Schedule.spaced("10 seconds")
+          ])
+        ),
         Effect.forever,
         Effect.forkScoped
       )

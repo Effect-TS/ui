@@ -7,14 +7,17 @@ import { afterEach, assert, describe, it } from "@effect/vitest"
 import { Effect, Exit, Layer, Schema, Scope } from "effect"
 import { type Capture, play } from "./fixtures/TwoEditors.ts"
 
-const wait = (ms: number) => Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+const wait = (ms: number) =>
+  Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, ms)))
 const settle = wait(10)
 const token = "tok_live_9f2c"
 
-const text = (node: Element | null | undefined) => (node?.textContent ?? "").replace(/\s+/g, " ").trim()
+const text = (node: Element | null | undefined) =>
+  (node?.textContent ?? "").replace(/\s+/g, " ").trim()
 
 const overlay = () =>
-  document.querySelector<HTMLIFrameElement>("iframe[data-effect-ui-devtools]")!.contentDocument!.body
+  document.querySelector<HTMLIFrameElement>("iframe[data-effect-ui-devtools]")!
+    .contentDocument!.body
 
 const mount = Effect.fnUntraced(function*(capture: Capture, size?: number) {
   localStorage.clear()
@@ -33,10 +36,12 @@ const mount = Effect.fnUntraced(function*(capture: Capture, size?: number) {
 const sized = (root: HTMLElement) => {
   const view = root.ownerDocument.defaultView!
   const prototype = view.HTMLElement.prototype
-  const clientHeight = Object.getOwnPropertyDescriptor(prototype, "clientHeight") ??
-    Object.getOwnPropertyDescriptor(view.Element.prototype, "clientHeight")
+  const clientHeight =
+    Object.getOwnPropertyDescriptor(prototype, "clientHeight") ??
+      Object.getOwnPropertyDescriptor(view.Element.prototype, "clientHeight")
   const rect = view.Element.prototype.getBoundingClientRect
-  const timeline = (element: Element) => element.matches(".timeline, .timeline > .rows")
+  const timeline = (element: Element) =>
+    element.matches(".timeline, .timeline > .rows")
   Object.defineProperty(prototype, "clientHeight", {
     configurable: true,
     get(this: HTMLElement) {
@@ -50,8 +55,16 @@ const sized = (root: HTMLElement) => {
 
 const open = Effect.fnUntraced(function*(root: HTMLElement) {
   sized(root)
-  HtmlLocator.click(HtmlLocator.getByRole(root, "button", { name: "Open the Effect UI inspector" }))
-  for (let tries = 0; tries < 50 && root.querySelectorAll(".row").length <= 4; tries++) yield* settle
+  HtmlLocator.click(
+    HtmlLocator.getByRole(root, "button", {
+      name: "Open the Effect UI inspector"
+    })
+  )
+  for (
+    let tries = 0;
+    tries < 50 && root.querySelectorAll(".row").length <= 4;
+    tries++
+  ) yield* settle
 })
 
 const click = Effect.fnUntraced(function*(element: Element) {
@@ -59,12 +72,13 @@ const click = Effect.fnUntraced(function*(element: Element) {
   yield* settle
 })
 
-const instance = (root: HTMLElement, name: string) => root.querySelector(`[data-instance="${name}"]`)!
+const instance = (root: HTMLElement, name: string) =>
+  root.querySelector(`[data-instance="${name}"]`)!
 
 const entry = (root: HTMLElement, name: RegExp) => {
-  const found = HtmlLocator.queryAllByRole(root, "button", { name }).filter((node) =>
-    node.classList.contains("row-button")
-  )
+  const found = HtmlLocator.queryAllByRole(root, "button", { name }).filter((
+    node
+  ) => node.classList.contains("row-button"))
   assert.isAbove(found.length, 0, "no timeline entry named " + name)
   return found
 }
@@ -75,32 +89,41 @@ const steps = (root: HTMLElement) =>
   Array.from(root.querySelectorAll(".chain .step")).map((step) => ({
     step,
     kind: step.getAttribute("data-step")! +
-      (step.hasAttribute("data-index") ? " " + step.getAttribute("data-index") : ""),
+      (step.hasAttribute("data-index")
+        ? " " + step.getAttribute("data-index")
+        : ""),
     what: text(step.querySelector(".what")),
     args: text(step.querySelector(".args"))
   }))
 
 const step = (root: HTMLElement, kind: string, what?: RegExp) => {
-  const found = steps(root).find((step) => step.kind === kind && (what === undefined || what.test(step.what)))
+  const found = steps(root).find((step) =>
+    step.kind === kind && (what === undefined || what.test(step.what))
+  )
   assert.isDefined(
     found,
-    "no chain step " + kind + " in " + JSON.stringify(steps(root).map((step) => step.kind + ": " + step.what))
+    "no chain step " + kind + " in " +
+      JSON.stringify(steps(root).map((step) => step.kind + ": " + step.what))
   )
   return found!
 }
 
-const headline = (root: HTMLElement) => text(root.querySelector(".ehead .headline"))
+const headline = (root: HTMLElement) =>
+  text(root.querySelector(".ehead .headline"))
 const subtitle = (root: HTMLElement) => text(root.querySelector(".ehead .sub"))
 
 const follow = (root: HTMLElement, kind: string, selector = "button.ref") =>
   click(step(root, kind).step.querySelector(selector)!)
 
-const tab = (root: HTMLElement, name: RegExp) => click(HtmlLocator.getByRole(root, "tab", { name }))
+const tab = (root: HTMLElement, name: RegExp) =>
+  click(HtmlLocator.getByRole(root, "tab", { name }))
 
-const selectClickedSave = Effect.fnUntraced(function*(root: HTMLElement, pick = oldest) {
-  yield* click(instance(root, "Editor[n2]"))
-  yield* click(pick(root, /Update ClickedSave$/))
-})
+const selectClickedSave = Effect.fnUntraced(
+  function*(root: HTMLElement, pick = oldest) {
+    yield* click(instance(root, "Editor[n2]"))
+    yield* click(pick(root, /Update ClickedSave$/))
+  }
+)
 
 const commonChecks = Effect.fnUntraced(function*(root: HTMLElement) {
   const changed = root.querySelectorAll(".tree .tl[data-change=changed]")
@@ -108,14 +131,23 @@ const commonChecks = Effect.fnUntraced(function*(root: HTMLElement) {
   assert.strictEqual(changed[0].querySelector(".k")?.textContent, "status")
   assert.strictEqual(changed[0].querySelector("del")?.textContent, "\"Dirty\"")
   assert.strictEqual(changed[0].querySelector("ins")?.textContent, "\"Saving\"")
-  assert.include(text(HtmlLocator.getByRole(root, "tab", { name: /Model/ })), "1 change")
+  assert.include(
+    text(HtmlLocator.getByRole(root, "tab", { name: /Model/ })),
+    "1 change"
+  )
 
   yield* tab(root, /Raw/)
   const copied: Array<string> = []
-  Object.defineProperty(root.ownerDocument.defaultView!.navigator, "clipboard", {
-    configurable: true,
-    value: { writeText: (value: string) => Promise.resolve(void copied.push(value)) }
-  })
+  Object.defineProperty(
+    root.ownerDocument.defaultView!.navigator,
+    "clipboard",
+    {
+      configurable: true,
+      value: {
+        writeText: (value: string) => Promise.resolve(void copied.push(value))
+      }
+    }
+  )
   yield* click(HtmlLocator.getByRole(root, "button", { name: "Copy frame" }))
   assert.strictEqual(copied.length, 1)
   assert.include(copied[0], "\"~redacted\": true")
@@ -126,11 +158,15 @@ const commonChecks = Effect.fnUntraced(function*(root: HTMLElement) {
 })
 
 const lifecycle = (root: HTMLElement, kind: string) =>
-  Array.from(root.querySelectorAll(`.life tr[data-kind=${kind}] > *`)).map((cell) => text(cell))
+  Array.from(root.querySelectorAll(`.life tr[data-kind=${kind}] > *`)).map((
+    cell
+  ) => text(cell))
 
 const PairMessage = UiSchema.TaggedEnum({ ClickedAdd: {} })
 
-class Slot extends Feature.Service<Slot>()("test/Slot", { props: Schema.Struct({}) }) {}
+class Slot
+  extends Feature.Service<Slot>()("test/Slot", { props: Schema.Struct({}) })
+{}
 
 const SlotView = Component.define({
   name: "SlotView",
@@ -138,7 +174,11 @@ const SlotView = Component.define({
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
-}).make({ init: () => null, update: ($) => $.model, view: (h) => h.strong("ready") })
+}).make({
+  init: () => null,
+  update: ($) => $.model,
+  view: (h) => h.strong("ready")
+})
 
 const Shown = Component.define({
   name: "Shown",
@@ -147,7 +187,11 @@ const Shown = Component.define({
   model: Schema.Null,
   message: Schema.Never,
   elements: Html
-}).make({ init: () => null, update: ($) => $.model, view: (h) => h.span.children(String(h.props.n)) })
+}).make({
+  init: () => null,
+  update: ($) => $.model,
+  view: (h) => h.span.children(String(h.props.n))
+})
 
 const Pair = Component.define({
   name: "Pair",
@@ -175,8 +219,12 @@ describe("DevTools overlay", { concurrent: false }, () => {
   it.live("aligns exclusion across encodeKeys, disables paint on excluded links, and keeps evicted baselines", () =>
     Effect.gen(function*() {
       const EncodedMessage = Schema.Union([
-        Schema.Struct({ _tag: Schema.Literal("Move") }).pipe(Schema.encodeKeys({ _tag: "kind" })),
-        Schema.Struct({ _tag: Schema.Literal("Commit") }).pipe(Schema.encodeKeys({ _tag: "kind" }))
+        Schema.Struct({ _tag: Schema.Literal("Move") }).pipe(
+          Schema.encodeKeys({ _tag: "kind" })
+        ),
+        Schema.Struct({ _tag: Schema.Literal("Commit") }).pipe(
+          Schema.encodeKeys({ _tag: "kind" })
+        )
       ])
       const Encoded = Component.define({
         name: "Encoded",
@@ -201,7 +249,11 @@ describe("DevTools overlay", { concurrent: false }, () => {
         const app = document.body.appendChild(document.createElement("div"))
         yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
         yield* Layer.build(DevTools.layer({ exclude: ["Move"] })).pipe(
-          Effect.flatMap((services) => BrowserHost.mountEffect(Encoded, {}, app).pipe(Effect.provide(services)))
+          Effect.flatMap((services) =>
+            BrowserHost.mountEffect(Encoded, {}, app).pipe(
+              Effect.provide(services)
+            )
+          )
         )
         yield* settle
         const root = overlay()
@@ -213,14 +265,29 @@ describe("DevTools overlay", { concurrent: false }, () => {
         assert.strictEqual(root.querySelectorAll(".row").length, 1)
         yield* click(commit)
         assert.strictEqual(root.querySelectorAll(".row").length, 2)
-        const clear = () => HtmlLocator.getByRole(root, "button", { name: "Clear" }) as HTMLButtonElement
+        const clear = () =>
+          HtmlLocator.getByRole(root, "button", {
+            name: "Clear"
+          }) as HTMLButtonElement
         yield* click(oldest(root, /Mounted$/))
-        yield* click(HtmlLocator.getByRole(root, "button", { name: "Time travel" }))
-        assert.strictEqual(app.nextElementSibling?.querySelector("output")?.textContent, "0:0")
+        yield* click(
+          HtmlLocator.getByRole(root, "button", { name: "Time travel" })
+        )
+        assert.strictEqual(
+          app.nextElementSibling?.querySelector("output")?.textContent,
+          "0:0"
+        )
         assert.isTrue(clear().disabled)
         yield* click(root.querySelector(".row-button")!)
-        assert.strictEqual(app.nextElementSibling?.querySelector("output")?.textContent, "2:1")
-        yield* click(HtmlLocator.getByRole(root, "button", { name: "Resume the live page" }))
+        assert.strictEqual(
+          app.nextElementSibling?.querySelector("output")?.textContent,
+          "2:1"
+        )
+        yield* click(
+          HtmlLocator.getByRole(root, "button", {
+            name: "Resume the live page"
+          })
+        )
         assert.isFalse(clear().disabled)
       }))
       localStorage.clear()
@@ -242,8 +309,12 @@ describe("DevTools overlay", { concurrent: false }, () => {
         view: (h, model) =>
           h.div(
             h.output.attr("data-peer", h.props.label).children(String(model.v)),
-            h.button.onClick(PairMoveMessage.Move()).children("Move " + h.props.label),
-            h.button.onClick(PairMoveMessage.Commit()).children("Commit " + h.props.label)
+            h.button.onClick(PairMoveMessage.Move()).children(
+              "Move " + h.props.label
+            ),
+            h.button.onClick(PairMoveMessage.Commit()).children(
+              "Commit " + h.props.label
+            )
           )
       })
       const Two = Component.define({
@@ -255,21 +326,31 @@ describe("DevTools overlay", { concurrent: false }, () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) => h.main(Peer(h, { key: "a", props: { label: "A" } }), Peer(h, { key: "b", props: { label: "B" } }))
+        view: (h) =>
+          h.main(
+            Peer(h, { key: "a", props: { label: "A" } }),
+            Peer(h, { key: "b", props: { label: "B" } })
+          )
       })
       yield* Effect.scoped(Effect.gen(function*() {
         const app = document.body.appendChild(document.createElement("div"))
         yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
         yield* Layer.build(DevTools.layer({ size: 2, exclude: ["Move"] })).pipe(
-          Effect.flatMap((services) => BrowserHost.mountEffect(Two, {}, app).pipe(Effect.provide(services)))
+          Effect.flatMap((services) =>
+            BrowserHost.mountEffect(Two, {}, app).pipe(Effect.provide(services))
+          )
         )
         yield* settle
         const root = overlay()
         yield* open(root)
         const moveA = HtmlLocator.getByRole(app, "button", { name: "Move A" })
         const moveB = HtmlLocator.getByRole(app, "button", { name: "Move B" })
-        const commitA = HtmlLocator.getByRole(app, "button", { name: "Commit A" })
-        const commitB = HtmlLocator.getByRole(app, "button", { name: "Commit B" })
+        const commitA = HtmlLocator.getByRole(app, "button", {
+          name: "Commit A"
+        })
+        const commitB = HtmlLocator.getByRole(app, "button", {
+          name: "Commit B"
+        })
 
         yield* click(moveA)
         yield* click(moveB)
@@ -279,7 +360,9 @@ describe("DevTools overlay", { concurrent: false }, () => {
         assert.isNotNull(prevLink)
         yield* click(prevLink)
         assert.strictEqual(headline(root), "Move")
-        const travel = HtmlLocator.getByRole(root, "button", { name: "Time travel" }) as HTMLButtonElement
+        const travel = HtmlLocator.getByRole(root, "button", {
+          name: "Time travel"
+        }) as HTMLButtonElement
         assert.isTrue(travel.disabled)
 
         yield* click(commitB)
@@ -294,10 +377,22 @@ describe("DevTools overlay", { concurrent: false }, () => {
         assert.strictEqual(changed[0].querySelector(".k")?.textContent, "v")
         assert.strictEqual(changed[0].querySelector("del")?.textContent, "2")
         assert.strictEqual(changed[0].querySelector("ins")?.textContent, "12")
-        yield* click(HtmlLocator.getByRole(root, "button", { name: "Time travel" }))
-        assert.strictEqual(app.nextElementSibling?.querySelector("[data-peer=A]")?.textContent, "12")
-        assert.strictEqual(app.nextElementSibling?.querySelector("[data-peer=B]")?.textContent, "31")
-        yield* click(HtmlLocator.getByRole(root, "button", { name: "Resume the live page" }))
+        yield* click(
+          HtmlLocator.getByRole(root, "button", { name: "Time travel" })
+        )
+        assert.strictEqual(
+          app.nextElementSibling?.querySelector("[data-peer=A]")?.textContent,
+          "12"
+        )
+        assert.strictEqual(
+          app.nextElementSibling?.querySelector("[data-peer=B]")?.textContent,
+          "31"
+        )
+        yield* click(
+          HtmlLocator.getByRole(root, "button", {
+            name: "Resume the live page"
+          })
+        )
       }))
     }))
 
@@ -305,30 +400,51 @@ describe("DevTools overlay", { concurrent: false }, () => {
     Effect.gen(function*() {
       const { app, root } = yield* mount("closed")
       yield* open(root)
-      const copy = () => app.nextElementSibling?.hasAttribute("inert") === true ? app.nextElementSibling : null
-      const show = () => HtmlLocator.getByRole(root, "button", { name: "Time travel" })
+      const copy = () =>
+        app.nextElementSibling?.hasAttribute("inert") === true
+          ? app.nextElementSibling
+          : null
+      const show = () =>
+        HtmlLocator.getByRole(root, "button", { name: "Time travel" })
 
       yield* selectClickedSave(root)
       yield* click(show())
       assert.strictEqual(show().getAttribute("aria-pressed"), "true")
-      assert.match(text(root.querySelector(".paused-label")), /^Paused at #\d+$/)
+      assert.match(
+        text(root.querySelector(".paused-label")),
+        /^Paused at #\d+$/
+      )
       assert.strictEqual(app.style.getPropertyValue("display"), "none")
       assert.strictEqual(
-        Array.from(copy()!.querySelectorAll("p")).map((status) => status.textContent).join(),
+        Array.from(copy()!.querySelectorAll("p")).map((status) =>
+          status.textContent
+        ).join(),
         "Saving,Saving"
       )
-      assert.lengthOf(HtmlLocator.queryAllByRole(copy() as HTMLElement, "button", { name: "Close n2" }), 1)
-      assert.lengthOf(HtmlLocator.queryAllByRole(app, "button", { name: "Close n2" }), 0)
+      assert.lengthOf(
+        HtmlLocator.queryAllByRole(copy() as HTMLElement, "button", {
+          name: "Close n2"
+        }),
+        1
+      )
+      assert.lengthOf(
+        HtmlLocator.queryAllByRole(app, "button", { name: "Close n2" }),
+        0
+      )
       assert.isNull(root.querySelector(".pause-note"))
 
       yield* click(oldest(root, /Update UpdatedDraft$/))
       assert.strictEqual(document.querySelectorAll("[inert]").length, 1)
       assert.strictEqual(
-        Array.from(copy()!.querySelectorAll("p")).map((status) => status.textContent).join(),
+        Array.from(copy()!.querySelectorAll("p")).map((status) =>
+          status.textContent
+        ).join(),
         "Saving,Dirty"
       )
 
-      yield* click(HtmlLocator.getByRole(root, "button", { name: "Resume the live page" }))
+      yield* click(
+        HtmlLocator.getByRole(root, "button", { name: "Resume the live page" })
+      )
       assert.isNull(copy())
       assert.isNull(root.querySelector(".paused"))
       assert.strictEqual(app.style.getPropertyValue("display"), "")
@@ -340,22 +456,31 @@ describe("DevTools overlay", { concurrent: false }, () => {
       yield* open(root)
       const inert = () => document.querySelectorAll("[inert]").length
       yield* selectClickedSave(root)
-      yield* click(HtmlLocator.getByRole(root, "button", { name: "Time travel" }))
+      yield* click(
+        HtmlLocator.getByRole(root, "button", { name: "Time travel" })
+      )
       assert.strictEqual(app.style.getPropertyValue("display"), "none")
 
       const scope = yield* Scope.make()
-      const other = yield* play("closed").pipe(Effect.provide(services), Scope.provide(scope))
+      const other = yield* play("closed").pipe(
+        Effect.provide(services),
+        Scope.provide(scope)
+      )
       yield* settle
       yield* click(oldest(root, /Update UpdatedDraft$/))
       assert.strictEqual(app.style.getPropertyValue("display"), "")
       assert.strictEqual(other.style.getPropertyValue("display"), "none")
       assert.strictEqual(inert(), 1)
 
-      yield* click(HtmlLocator.getByRole(root, "button", { name: "Resume the live page" }))
+      yield* click(
+        HtmlLocator.getByRole(root, "button", { name: "Resume the live page" })
+      )
       assert.strictEqual(other.style.getPropertyValue("display"), "")
       assert.strictEqual(inert(), 0)
 
-      yield* click(HtmlLocator.getByRole(root, "button", { name: "Time travel" }))
+      yield* click(
+        HtmlLocator.getByRole(root, "button", { name: "Time travel" })
+      )
       assert.strictEqual(inert(), 1)
       yield* Scope.close(scope, Exit.void)
       yield* settle
@@ -367,30 +492,59 @@ describe("DevTools overlay", { concurrent: false }, () => {
     Effect.gen(function*() {
       const memory = MessageLog.makeMemory({ size: 500 })
       const services = yield* Layer.build(
-        MessageLog.fanout([DevTools.layer({ size: 2 }), Layer.succeed(MessageLog.MessageLog, memory)])
+        MessageLog.fanout([
+          DevTools.layer({ size: 2 }),
+          Layer.succeed(MessageLog.MessageLog, memory)
+        ])
       )
       const app = document.body.appendChild(document.createElement("div"))
       yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
-      yield* BrowserHost.mountEffect(Pair, {}, app).pipe(Effect.provide(services))
+      yield* BrowserHost.mountEffect(Pair, {}, app).pipe(
+        Effect.provide(services)
+      )
       yield* settle
       yield* click(HtmlLocator.getByRole(app, "button", { name: "Add" }))
-      const changed = memory.entries().filter((entry) => entry._tag === "PropsChanged")
-      assert.deepStrictEqual(changed.map((entry) => entry.path), ["/Pair/Shown[a]", "/Pair/Shown[b]"])
+      const changed = memory.entries().filter((entry) =>
+        entry._tag === "PropsChanged"
+      )
+      assert.deepStrictEqual(changed.map((entry) => entry.path), [
+        "/Pair/Shown[a]",
+        "/Pair/Shown[b]"
+      ])
       assert.strictEqual(memory.entries().at(-1), changed[1])
 
       const root = overlay()
       sized(root)
-      yield* click(HtmlLocator.getByRole(root, "button", { name: "Open the Effect UI inspector" }))
-      yield* click(HtmlLocator.getByRole(root, "button", { name: "Everything" }))
+      yield* click(
+        HtmlLocator.getByRole(root, "button", {
+          name: "Open the Effect UI inspector"
+        })
+      )
+      yield* click(
+        HtmlLocator.getByRole(root, "button", { name: "Everything" })
+      )
       yield* click(entry(root, new RegExp("^#" + changed[0].seq + " "))[0]!)
-      yield* click(HtmlLocator.getByRole(root, "button", { name: "Time travel" }))
+      yield* click(
+        HtmlLocator.getByRole(root, "button", { name: "Time travel" })
+      )
       const copy = app.nextElementSibling!
       assert.isTrue(copy.hasAttribute("inert"))
-      assert.strictEqual(Array.from(copy.querySelectorAll("span"), (node) => node.textContent).join(), "1,0")
-      assert.strictEqual(Array.from(app.querySelectorAll("span"), (node) => node.textContent).join(), "1,1")
+      assert.strictEqual(
+        Array.from(copy.querySelectorAll("span"), (node) => node.textContent)
+          .join(),
+        "1,0"
+      )
+      assert.strictEqual(
+        Array.from(app.querySelectorAll("span"), (node) => node.textContent)
+          .join(),
+        "1,1"
+      )
       assert.strictEqual(copy.querySelector("em")?.textContent, "fallback")
       assert.strictEqual(app.querySelector("strong")?.textContent, "ready")
-      const notes = Array.from(root.querySelectorAll(".pause-note"), (node) => text(node))
+      const notes = Array.from(
+        root.querySelectorAll(".pause-note"),
+        (node) => text(node)
+      )
       assert.strictEqual(notes.length, 1)
       assert.include(notes[0], "fallback")
       assert.isTrue(notes[0].endsWith(": /Pair"))
@@ -401,19 +555,36 @@ describe("DevTools overlay", { concurrent: false }, () => {
       const { memory, root } = yield* mount("interrupted")
       yield* open(root)
 
-      assert.strictEqual(text(instance(root, "Editor[n1]")), "Editor[n1]1 ended")
-      assert.strictEqual(text(instance(root, "Editor[n2]")), "Editor[n2]1 interrupted, unmounted")
-      assert.isNotNull(instance(root, "Editor[n2]").querySelector(".status .tone-bad"))
-      assert.isNull(instance(root, "Editor[n1]").querySelector(".status .tone-bad"))
+      assert.strictEqual(
+        text(instance(root, "Editor[n1]")),
+        "Editor[n1]1 ended"
+      )
+      assert.strictEqual(
+        text(instance(root, "Editor[n2]")),
+        "Editor[n2]1 interrupted, unmounted"
+      )
+      assert.isNotNull(
+        instance(root, "Editor[n2]").querySelector(".status .tone-bad")
+      )
+      assert.isNull(
+        instance(root, "Editor[n1]").querySelector(".status .tone-bad")
+      )
 
-      const rows = () => Array.from(root.querySelectorAll(".row")).map((row) => row.getAttribute("data-tag"))
+      const rows = () =>
+        Array.from(root.querySelectorAll(".row")).map((row) =>
+          row.getAttribute("data-tag")
+        )
       assert.notInclude(rows(), "SubscriptionStarted")
       assert.include(rows(), "CommandStarted")
       assert.include(rows(), "Update")
-      assert.match(text(root.querySelector(".hidden-note")), /^\d+ lifecycle entries hidden\. Show them$/)
+      assert.match(
+        text(root.querySelector(".hidden-note")),
+        /^\d+ lifecycle entries hidden\. Show them$/
+      )
       yield* click(root.querySelector(".hidden-note button")!)
       assert.strictEqual(
-        HtmlLocator.getByRole(root, "button", { name: "Everything" }).getAttribute("aria-pressed"),
+        HtmlLocator.getByRole(root, "button", { name: "Everything" })
+          .getAttribute("aria-pressed"),
         "true"
       )
       assert.include(rows(), "SubscriptionStarted")
@@ -422,21 +593,39 @@ describe("DevTools overlay", { concurrent: false }, () => {
       yield* selectClickedSave(root)
       yield* click(instance(root, "Editor[n2]"))
       assert.isFalse(instance(root, "Editor[n2]").classList.contains("on"))
-      assert.strictEqual(instance(root, "Editor[n2]").getAttribute("aria-current"), "true")
+      assert.strictEqual(
+        instance(root, "Editor[n2]").getAttribute("aria-current"),
+        "true"
+      )
       assert.isNull(instance(root, "Editor[n1]").getAttribute("aria-current"))
       yield* click(instance(root, "Editor[n2]"))
       assert.isTrue(instance(root, "Editor[n2]").classList.contains("on"))
 
       assert.strictEqual(headline(root), "ClickedSave")
-      assert.match(subtitle(root), /^Update #\d+ on Editor\[n2\], \d+ ms after start$/)
+      assert.match(
+        subtitle(root),
+        /^Update #\d+ on Editor\[n2\], \d+ ms after start$/
+      )
       const chain = steps(root)
-      assert.deepStrictEqual(chain.map((step) => step.kind), ["Source", "Entry", "Command 0", "Started", "End"])
+      assert.deepStrictEqual(chain.map((step) => step.kind), [
+        "Source",
+        "Entry",
+        "Command 0",
+        "Started",
+        "End"
+      ])
       assert.strictEqual(chain[0].what, "\"click\" event")
       assert.strictEqual(chain[1].what, "ClickedSave this entry")
       assert.strictEqual(chain[2].what, "Issued notes/SaveNote")
-      assert.strictEqual(chain[2].args, "{ noteId: \"n2\", text: \"Follow the command\", token: redacted }")
+      assert.strictEqual(
+        chain[2].args,
+        "{ noteId: \"n2\", text: \"Follow the command\", token: redacted }"
+      )
       assert.match(chain[3].what, /^Started #\d+$/)
-      assert.match(chain[4].what, /^Interrupted after \d+ ms #\d+ by PressedEscape #\d+$/)
+      assert.match(
+        chain[4].what,
+        /^Interrupted after \d+ ms #\d+ by PressedEscape #\d+$/
+      )
       assert.isTrue(chain[4].step.classList.contains("step-bad"))
       const clickedSave = subtitle(root)
       yield* commonChecks(root)
@@ -444,9 +633,15 @@ describe("DevTools overlay", { concurrent: false }, () => {
       yield* follow(root, "End", ".cause button.ref")
       assert.strictEqual(headline(root), "PressedEscape")
       assert.include(subtitle(root), "on Editor[n2]")
-      assert.match(step(root, "Command 0").what, /^Interrupt notes\/SaveNote \{"noteId":"n2"\}, stopped #\d+$/)
+      assert.match(
+        step(root, "Command 0").what,
+        /^Interrupt notes\/SaveNote \{"noteId":"n2"\}, stopped #\d+$/
+      )
       const source = step(root, "Source")
-      assert.match(source.what, /^Subscription @effect\/ui\/html\/document \["keydown"\] #\d+$/)
+      assert.match(
+        source.what,
+        /^Subscription @effect\/ui\/html\/document \["keydown"\] #\d+$/
+      )
       yield* click(source.step.querySelector("button.ref")!)
       assert.include(headline(root), "SubscriptionStarted")
       assert.include(subtitle(root), "on Editor[n2]")
@@ -463,18 +658,30 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.strictEqual(path, "/Workspace/Editor[n2]")
       assert.match(mounted, /^mounted #\d+$/)
       assert.match(unmounted, /^unmounted #\d+ by ClickedClose$/)
-      assert.match(lifecycle(root, "command")[3], /^interrupted after \d+ ms #\d+$/)
-      assert.match(lifecycle(root, "subscription")[3], /^closed by unmount #\d+$/)
+      assert.match(
+        lifecycle(root, "command")[3],
+        /^interrupted after \d+ ms #\d+$/
+      )
+      assert.match(
+        lifecycle(root, "subscription")[3],
+        /^closed by unmount #\d+$/
+      )
 
       const count = text(root.querySelector(".bar .count"))
-      const followLatest = HtmlLocator.getByRole(root, "button", { name: "Follow latest" })
+      const followLatest = HtmlLocator.getByRole(root, "button", {
+        name: "Follow latest"
+      })
       assert.strictEqual(followLatest.getAttribute("aria-pressed"), "false")
       yield* click(followLatest)
       assert.strictEqual(followLatest.getAttribute("aria-pressed"), "true")
       assert.strictEqual(headline(root), "Unmounted")
       assert.strictEqual(text(root.querySelector(".bar .count")), count)
       assert.notInclude(root.textContent, "DevToolsOverlay")
-      assert.isFalse(memory.entries().some((entry) => "path" in entry && entry.path.includes("DevToolsOverlay")))
+      assert.isFalse(
+        memory.entries().some((entry) =>
+          "path" in entry && entry.path.includes("DevToolsOverlay")
+        )
+      )
     }))
 
   it.live("reads the other captures as unmount, switch and still running", () =>
@@ -482,30 +689,50 @@ describe("DevTools overlay", { concurrent: false }, () => {
       yield* Effect.scoped(Effect.gen(function*() {
         const { root } = yield* mount("closed")
         yield* open(root)
-        assert.strictEqual(text(instance(root, "Editor[n2]")), "Editor[n2]1 interrupted (unmount), unmounted")
+        assert.strictEqual(
+          text(instance(root, "Editor[n2]")),
+          "Editor[n2]1 interrupted (unmount), unmounted"
+        )
         yield* selectClickedSave(root)
-        assert.match(step(root, "End").what, /^Interrupted \(unmount\) after \d+ ms #\d+ by ClickedClose #\d+$/)
+        assert.match(
+          step(root, "End").what,
+          /^Interrupted \(unmount\) after \d+ ms #\d+ by ClickedClose #\d+$/
+        )
         yield* commonChecks(root)
       }))
 
       yield* Effect.scoped(Effect.gen(function*() {
         const { root } = yield* mount("switched")
         yield* open(root)
-        assert.strictEqual(text(instance(root, "Editor[n2]")), "Editor[n2]1 interrupted (switch), 1 running")
-        assert.isNotNull(instance(root, "Editor[n2]").querySelector(".status .tone-open"))
+        assert.strictEqual(
+          text(instance(root, "Editor[n2]")),
+          "Editor[n2]1 interrupted (switch), 1 running"
+        )
+        assert.isNotNull(
+          instance(root, "Editor[n2]").querySelector(".status .tone-open")
+        )
         yield* selectClickedSave(root)
-        assert.match(step(root, "End").what, /^Interrupted \(switch\) after \d+ ms #\d+ by ClickedSave #\d+$/)
+        assert.match(
+          step(root, "End").what,
+          /^Interrupted \(switch\) after \d+ ms #\d+ by ClickedSave #\d+$/
+        )
         yield* commonChecks(root)
       }))
 
       yield* Effect.scoped(Effect.gen(function*() {
         const { root } = yield* mount("open")
         yield* open(root)
-        assert.strictEqual(text(instance(root, "Editor[n1]")), "Editor[n1]1 ended")
-        assert.strictEqual(text(instance(root, "Editor[n2]")), "Editor[n2]1 running")
-        const running = Array.from(root.querySelectorAll(".row")).filter((row) =>
-          text(row.querySelector(".label")) === "notes/SaveNote running"
+        assert.strictEqual(
+          text(instance(root, "Editor[n1]")),
+          "Editor[n1]1 ended"
         )
+        assert.strictEqual(
+          text(instance(root, "Editor[n2]")),
+          "Editor[n2]1 running"
+        )
+        const running = Array.from(root.querySelectorAll(".row")).filter((
+          row
+        ) => text(row.querySelector(".label")) === "notes/SaveNote running")
         assert.strictEqual(running.length, 1)
         assert.strictEqual(text(running[0].querySelector(".mark")), "◌")
         yield* selectClickedSave(root)
@@ -550,7 +777,9 @@ describe("DevTools overlay", { concurrent: false }, () => {
       const app = document.body.appendChild(document.createElement("div"))
       yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
       yield* Layer.build(DevTools.layer()).pipe(
-        Effect.flatMap((services) => BrowserHost.mountEffect(Form, {}, app).pipe(Effect.provide(services)))
+        Effect.flatMap((services) =>
+          BrowserHost.mountEffect(Form, {}, app).pipe(Effect.provide(services))
+        )
       )
       yield* settle
       yield* click(HtmlLocator.getByRole(app, "button", { name: "Type" }))
@@ -558,35 +787,70 @@ describe("DevTools overlay", { concurrent: false }, () => {
       yield* open(root)
       yield* click(oldest(root, /Update Typed$/))
 
-      const toggle = (name: string) => HtmlLocator.getByRole(root, "button", { name })
+      const toggle = (name: string) =>
+        HtmlLocator.getByRole(root, "button", { name })
       assert.isNull(root.querySelector(".tree .tl[data-change]"))
-      assert.strictEqual(toggle("form, 1 change").getAttribute("aria-expanded"), "false")
-      assert.strictEqual(text(toggle("form, 1 change").closest(".tl")), "▸form{ name } 1 change")
+      assert.strictEqual(
+        toggle("form, 1 change").getAttribute("aria-expanded"),
+        "false"
+      )
+      assert.strictEqual(
+        text(toggle("form, 1 change").closest(".tl")),
+        "▸form{ name } 1 change"
+      )
       assert.strictEqual(text(toggle("lists").closest(".tl")), "▸lists{ old }")
 
       yield* click(toggle("form, 1 change"))
       assert.strictEqual(toggle("form").getAttribute("aria-expanded"), "true")
       yield* click(toggle("name, 1 change"))
-      assert.strictEqual(text(root.querySelector(".tree .tl[data-change=changed]")), "value\"\" → \"Ada\"")
+      assert.strictEqual(
+        text(root.querySelector(".tree .tl[data-change=changed]")),
+        "value\"\" → \"Ada\""
+      )
 
       yield* click(HtmlLocator.getByRole(app, "button", { name: "Replace" }))
       yield* click(oldest(root, /Update Replaced$/))
       assert.strictEqual(toggle("name").getAttribute("aria-expanded"), "true")
 
       yield* click(toggle("lists, 2 changes"))
-      const rows = () => Array.from(root.querySelectorAll(".tree .tl"), (row) => text(row))
+      const rows = () =>
+        Array.from(root.querySelectorAll(".tree .tl"), (row) => text(row))
       const lists = () => rows().slice(rows().indexOf("▾lists{"))
-      assert.deepStrictEqual(lists(), ["▾lists{", "▸fresh[ 2 items ] added", "▸old[ 1 item ] removed", "}"])
+      assert.deepStrictEqual(lists(), [
+        "▾lists{",
+        "▸fresh[ 2 items ] added",
+        "▸old[ 1 item ] removed",
+        "}"
+      ])
       yield* click(toggle("fresh, added"))
-      assert.deepStrictEqual(lists(), ["▾lists{", "▾fresh[ added", "02", "13", "]", "▸old[ 1 item ] removed", "}"])
+      assert.deepStrictEqual(lists(), [
+        "▾lists{",
+        "▾fresh[ added",
+        "02",
+        "13",
+        "]",
+        "▸old[ 1 item ] removed",
+        "}"
+      ])
       yield* click(toggle("fresh, added"))
       yield* click(toggle("old, removed"))
-      assert.deepStrictEqual(lists(), ["▾lists{", "▸fresh[ 2 items ] added", "▾old[ removed", "01", "]", "}"])
+      assert.deepStrictEqual(lists(), [
+        "▾lists{",
+        "▸fresh[ 2 items ] added",
+        "▾old[ removed",
+        "01",
+        "]",
+        "}"
+      ])
     }))
 
   it.live("reads a run whose defect failed its instance as failed, not running", () =>
     Effect.gen(function*() {
-      const Upload = Command.make("files/Upload", { args: {} }, () => Effect.die("disk full"))
+      const Upload = Command.make(
+        "files/Upload",
+        { args: {} },
+        () => Effect.die("disk full")
+      )
       const UploaderMessage = UiSchema.TaggedEnum({ ClickedUpload: {} })
       const Uploader = Component.define({
         name: "Uploader",
@@ -597,7 +861,8 @@ describe("DevTools overlay", { concurrent: false }, () => {
       }).make({
         init: () => ({}),
         update: { ClickedUpload: ($) => $.run(Upload.make()) },
-        view: (h) => h.button.onClick(UploaderMessage.ClickedUpload()).children("Upload")
+        view: (h) =>
+          h.button.onClick(UploaderMessage.ClickedUpload()).children("Upload")
       })
       const Page = Component.define({
         name: "Page",
@@ -613,19 +878,29 @@ describe("DevTools overlay", { concurrent: false }, () => {
       const app = document.body.appendChild(document.createElement("div"))
       yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
       yield* Layer.build(DevTools.layer()).pipe(
-        Effect.flatMap((services) => BrowserHost.mountEffect(Page, {}, app).pipe(Effect.provide(services)))
+        Effect.flatMap((services) =>
+          BrowserHost.mountEffect(Page, {}, app).pipe(Effect.provide(services))
+        )
       )
       yield* settle
-      HtmlLocator.click(HtmlLocator.getByRole(app, "button", { name: "Upload" }))
+      HtmlLocator.click(
+        HtmlLocator.getByRole(app, "button", { name: "Upload" })
+      )
       yield* wait(30)
       const root = overlay()
       yield* open(root)
 
-      assert.strictEqual(text(instance(root, "Uploader[uploader]")), "Uploader[uploader]1 failed, unmounted")
+      assert.strictEqual(
+        text(instance(root, "Uploader[uploader]")),
+        "Uploader[uploader]1 failed, unmounted"
+      )
       yield* click(instance(root, "Uploader[uploader]"))
       yield* click(oldest(root, /Update ClickedUpload$/))
       const end = step(root, "End")
-      assert.match(end.what, /^Failed in command( after \d+ ms)? #\d+, which failed its instance$/)
+      assert.match(
+        end.what,
+        /^Failed in command( after \d+ ms)? #\d+, which failed its instance$/
+      )
       assert.isTrue(end.step.classList.contains("step-bad"))
       assert.isFalse(steps(root).some((step) => step.kind === "Running"))
       yield* tab(root, /Lifecycle/)
@@ -637,14 +912,21 @@ describe("DevTools overlay", { concurrent: false }, () => {
       yield* follow(root, "End")
       assert.strictEqual(headline(root), "Failed command files/Upload")
       assert.isFalse(step(root, "End").step.classList.contains("step-this"))
-      assert.strictEqual(step(root, "Entry").what.replace(/ #\d+$/, ""), "ClickedUpload")
+      assert.strictEqual(
+        step(root, "Entry").what.replace(/ #\d+$/, ""),
+        "ClickedUpload"
+      )
     }))
 
   it.live("credits each interrupt with the run of its own group", () =>
     Effect.gen(function*() {
       const Message = UiSchema.TaggedEnum({ Escaped: {}, Saved: {} })
-      const Save = Command.make("test/Save", { args: { id: Schema.String }, group: ["id"] }, () => Effect.never)
-      const save = (id: string) => Save.make({ id }).pipe(Command.map(() => Message.Saved()))
+      const Save = Command.make("test/Save", {
+        args: { id: Schema.String },
+        group: ["id"]
+      }, () => Effect.never)
+      const save = (id: string) =>
+        Save.make({ id }).pipe(Command.map(() => Message.Saved()))
       const Editor = Component.define({
         name: "Editor",
         scoped: false,
@@ -655,7 +937,9 @@ describe("DevTools overlay", { concurrent: false }, () => {
         init: ($) => $.set(null).run(save("a")).run(save("b")),
         update: {
           Escaped: ($) =>
-            $.set($.model).run(Command.interrupt(Save, { id: "b" })).run(Command.interrupt(Save, { id: "a" })),
+            $.set($.model).run(Command.interrupt(Save, { id: "b" })).run(
+              Command.interrupt(Save, { id: "a" })
+            ),
           Saved: ($) => $.model
         },
         view: (h) => h.button.onClick(Message.Escaped()).children("Escape")
@@ -663,7 +947,11 @@ describe("DevTools overlay", { concurrent: false }, () => {
       const app = document.body.appendChild(document.createElement("div"))
       yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
       yield* Layer.build(DevTools.layer()).pipe(
-        Effect.flatMap((services) => BrowserHost.mountEffect(Editor, {}, app).pipe(Effect.provide(services)))
+        Effect.flatMap((services) =>
+          BrowserHost.mountEffect(Editor, {}, app).pipe(
+            Effect.provide(services)
+          )
+        )
       )
       yield* settle
       yield* click(HtmlLocator.getByRole(app, "button", { name: "Escape" }))
@@ -671,7 +959,8 @@ describe("DevTools overlay", { concurrent: false }, () => {
       yield* open(root)
       yield* click(oldest(root, /Update Escaped$/))
       assert.strictEqual(step(root, "Entry").what, "Escaped this entry")
-      const stopped = (kind: string) => step(root, kind).what.match(/stopped (#\d+)$/)?.[1]
+      const stopped = (kind: string) =>
+        step(root, kind).what.match(/stopped (#\d+)$/)?.[1]
       assert.isDefined(stopped("Command 0"))
       assert.isDefined(stopped("Command 1"))
       assert.notStrictEqual(stopped("Command 0"), stopped("Command 1"))
@@ -691,9 +980,17 @@ describe("DevTools overlay", { concurrent: false }, () => {
       const copy = HtmlLocator.getByRole(root, "button", { name: "Copy frame" })
       copy.focus()
       const view = root.ownerDocument.defaultView!
-      copy.dispatchEvent(new view.KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }))
+      copy.dispatchEvent(
+        new view.KeyboardEvent("keydown", {
+          key: "Escape",
+          bubbles: true,
+          composed: true
+        })
+      )
       yield* wait(30)
-      const interrupted = () => memory.entries().filter((entry) => entry._tag === "CommandInterrupted").length
+      const interrupted = () =>
+        memory.entries().filter((entry) => entry._tag === "CommandInterrupted")
+          .length
       assert.strictEqual(interrupted(), 0)
       assert.include(text(instance(root, "Editor[n2]")), "1 running")
 
@@ -711,12 +1008,20 @@ describe("DevTools overlay", { concurrent: false }, () => {
       const issuedBy = step(root, "Link", /^Issued by/)
       assert.isNotNull(issuedBy.step.querySelector(".ref.outside"))
       assert.isNull(issuedBy.step.querySelector("button.ref"))
-      yield* click(step(root, "Link", /^Caused by/).step.querySelector("button.ref")!)
+      yield* click(
+        step(root, "Link", /^Caused by/).step.querySelector("button.ref")!
+      )
       assert.strictEqual(headline(root), "PressedEscape")
       const saved = oldest(root, /Update SucceededSaveNote$/)
       yield* click(saved)
-      assert.include(text(HtmlLocator.getByRole(root, "tab", { name: /Model/ })), "no diff")
-      assert.match(text(root.querySelector(".pane.model .note")), /^Changed since #\d+, which is outside the buffer$/)
+      assert.include(
+        text(HtmlLocator.getByRole(root, "tab", { name: /Model/ })),
+        "no diff"
+      )
+      assert.match(
+        text(root.querySelector(".pane.model .note")),
+        /^Changed since #\d+, which is outside the buffer$/
+      )
       assert.isNull(root.querySelector(".tree .tl[data-change]"))
     }))
 
@@ -725,20 +1030,36 @@ describe("DevTools overlay", { concurrent: false }, () => {
       const models = (entries: ReadonlyArray<MessageLog.Wire>) => {
         const paths: { [path: string]: Array<unknown> } = {}
         for (const entry of entries) {
-          if (entry._tag === "Update") (paths[entry.path] ??= []).push([entry.message, entry.model])
+          if (entry._tag === "Update") {
+            ;(paths[entry.path] ??= []).push([entry.message, entry.model])
+          }
         }
         return paths
       }
       const encoder = MessageLog.makeEncoder()
-      for (const capture of ["interrupted", "open", "closed", "switched"] as const) {
+      for (
+        const capture of ["interrupted", "open", "closed", "switched"] as const
+      ) {
         const without = yield* Effect.scoped(Effect.gen(function*() {
           const memory = MessageLog.makeMemory({ size: 500 })
-          const app = yield* play(capture).pipe(Effect.provideService(MessageLog.MessageLog, memory))
-          return { html: app.innerHTML, models: models(memory.entries().map((entry) => encoder.encode(entry))) }
+          const app = yield* play(capture).pipe(
+            Effect.provideService(MessageLog.MessageLog, memory)
+          )
+          return {
+            html: app.innerHTML,
+            models: models(
+              memory.entries().map((entry) => encoder.encode(entry))
+            )
+          }
         }))
         const within = yield* Effect.scoped(Effect.gen(function*() {
           const { app, memory } = yield* mount(capture)
-          return { html: app.innerHTML, models: models(memory.entries().map((entry) => encoder.encode(entry))) }
+          return {
+            html: app.innerHTML,
+            models: models(
+              memory.entries().map((entry) => encoder.encode(entry))
+            )
+          }
         }))
         assert.strictEqual(within.html, without.html)
         assert.deepStrictEqual(within.models, without.models)

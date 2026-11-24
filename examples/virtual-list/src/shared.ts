@@ -7,6 +7,8 @@ const words = [
   "The new dashboard loads in under a second now, even with the full year of data selected."
 ]
 
-export const textOf = (index: number): string => words[(index * 7) % words.length]!
+export const textOf = (index: number): string =>
+  words[(index * 7) % words.length]!
 
-export const demoName = (): string => new URLSearchParams(window.location.search).get("demo") ?? ""
+export const demoName = (): string =>
+  new URLSearchParams(window.location.search).get("demo") ?? ""

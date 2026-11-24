@@ -41,7 +41,10 @@ export abstract class Cursor {
    * Runs once a step has settled, so a kind that renders fails the step on a defect in `view`, and
    * records what it follows in the view.
    */
-  protected settled(state: engine.State<any, any, any, any>, _step: string): engine.State<any, any, any, any> {
+  protected settled(
+    state: engine.State<any, any, any, any>,
+    _step: string
+  ): engine.State<any, any, any, any> {
     return state
   }
 
@@ -87,14 +90,20 @@ export abstract class Cursor {
   protected act(
     step: string,
     kind: Kind,
-    f: (state: engine.State<any, any, any, any>) => engine.State<any, any, any, any>,
-    after: () => { readonly interaction?: "handled" | "ignored" | undefined; readonly defaultPrevented?: boolean } =
-      () => ({})
+    f: (
+      state: engine.State<any, any, any, any>
+    ) => engine.State<any, any, any, any>,
+    after: () => {
+      readonly interaction?: "handled" | "ignored" | undefined
+      readonly defaultPrevented?: boolean
+    } = () => ({})
   ): this {
     engine.checkBefore(this.state, this.name(step), kind)
     const next = f(this.state)
     const { defaultPrevented = false, interaction } = after()
-    const pruned = next === this.state ? next : engine.pruneKeyed(next, this.module)
+    const pruned = next === this.state
+      ? next
+      : engine.pruneKeyed(next, this.module)
     const ack = pruned.ack
     // Read only when a mark could end: reading the queries runs each one's args.
     const missing = ack.keptQueries.length === 0 ? [] : engine.unloaded(pruned)
@@ -104,7 +113,9 @@ export abstract class Cursor {
         ...ack,
         // A query's mark ends once its entry holds a result or its args moved on.
         keptQueries: ack.keptQueries.filter((kept) =>
-          missing.some((entry) => entry.name === kept.name && entry.argsKey === kept.argsKey)
+          missing.some((entry) =>
+            entry.name === kept.name && entry.argsKey === kept.argsKey
+          )
         ),
         kept: ack.kept.filter((entry) => pruned.pending.includes(entry)),
         interaction,
@@ -116,7 +127,10 @@ export abstract class Cursor {
   }
   /** The end of `make`: the end check, after the kind's own render. */
   finish(): void {
-    engine.checkEnd(this.settled(this.state, this.name("make")), this.name("make"))
+    engine.checkEnd(
+      this.settled(this.state, this.name("make")),
+      this.name("make")
+    )
   }
 
   given(
@@ -139,7 +153,9 @@ export abstract class Cursor {
     })
     // Settled here, with no onChange message: the step's own prune then has nothing to write.
     const state = engine.pruneKeyed(
-      engine.update(out, { results: engine.givenResults(out, queries ?? {}, step) }),
+      engine.update(out, {
+        results: engine.givenResults(out, queries ?? {}, step)
+      }),
       this.module
     )
     if (this.state.ack.acted) engine.checkGivenQueries(this.state, state, step)
@@ -148,26 +164,39 @@ export abstract class Cursor {
   shared(owner: Component.Headless.Any, value: unknown): this {
     const step = this.name("shared")
     const given = (state: engine.State<any, any, any, any>) =>
-      engine.update(state, { shared: engine.withShared(state, [[owner, value]], step) })
+      engine.update(state, {
+        shared: engine.withShared(state, [[owner, value]], step)
+      })
     const messages = engine.sharedMessages(this.state, owner, value)
     // Only what readers see changes: nothing to settle or check.
-    if (messages.length === 0) return this.replace(this.givenShared(given(this.state), step))
+    if (messages.length === 0) {
+      return this.replace(this.givenShared(given(this.state), step))
+    }
     return this.act(
       "shared",
       "message",
       (state) =>
-        messages.reduce<engine.State<any, any, any, any>>((out, message) => engine.dispatch(out, message), given(state))
+        messages.reduce<engine.State<any, any, any, any>>(
+          (out, message) => engine.dispatch(out, message),
+          given(state)
+        )
     )
   }
   /** A `shared` step that sent nothing: a kind that renders renders the new value, when it can. */
-  protected givenShared(state: engine.State<any, any, any, any>, _step: string): engine.State<any, any, any, any> {
+  protected givenShared(
+    state: engine.State<any, any, any, any>,
+    _step: string
+  ): engine.State<any, any, any, any> {
     return state
   }
   props(next: unknown): this {
     return this.act(
       "props",
       "acting",
-      (state) => engine.update(state, { props: typeof next === "function" ? next(state.props) : next })
+      (state) =>
+        engine.update(state, {
+          props: typeof next === "function" ? next(state.props) : next
+        })
     )
   }
   subscription(key: string, message: unknown): this {
@@ -175,10 +204,16 @@ export abstract class Cursor {
     if (isWatchKey(key) || !keys.includes(key)) {
       const reason = isWatchKey(key) ? "is a query watch" : "is inactive"
       throw new Error(
-        `${this.name("subscription")}: ${JSON.stringify(key)} ${reason}; active keys: ${JSON.stringify(keys)}`
+        `${this.name("subscription")}: ${
+          JSON.stringify(key)
+        } ${reason}; active keys: ${JSON.stringify(keys)}`
       )
     }
-    return this.act("subscription", "message", (state) => engine.dispatch(state, message))
+    return this.act(
+      "subscription",
+      "message",
+      (state) => engine.dispatch(state, message)
+    )
   }
   layerFailed(failure: AsyncResult.Failure<never, any>): this {
     return this.act(
@@ -190,37 +225,61 @@ export abstract class Cursor {
 
   resolve(target: Steps.Target, result: unknown): this {
     const entry = engine.findRunning(this.state, target, this.name("resolve"))
-    return this.act("resolve", "acting", (state) =>
-      engine.exited(state, entry, {
-        message: engine.resolveWith(entry, result),
-        awaiting: engine.awaitedLoaders(state, entry.command, result)
-      }))
+    return this.act(
+      "resolve",
+      "acting",
+      (state) =>
+        engine.exited(state, entry, {
+          message: engine.resolveWith(entry, result),
+          awaiting: engine.awaitedLoaders(state, entry.command, result)
+        })
+    )
   }
   fail(target: Steps.Target, error: unknown): this {
     const entry = engine.findRunning(this.state, target, this.name("fail"))
-    const reject = entry.command.reject as ((error: unknown) => unknown) | undefined
+    const reject = entry.command.reject as
+      | ((error: unknown) => unknown)
+      | undefined
     if (reject === undefined) {
       throw new Error(
-        `${this.name("fail")}: ${engine.describe(entry.command)} has no typed failure mapped by Command.match`
+        `${this.name("fail")}: ${
+          engine.describe(entry.command)
+        } has no typed failure mapped by Command.match`
       )
     }
-    return this.act("fail", "acting", (state) => engine.exited(state, entry, { message: reject(error), awaiting: [] }))
+    return this.act(
+      "fail",
+      "acting",
+      (state) =>
+        engine.exited(state, entry, { message: reject(error), awaiting: [] })
+    )
   }
   next(target: Steps.StreamTarget, result: unknown): this {
     const entry = engine.findStream(this.state, target, this.name("next"))
-    return this.act("next", "acting", (state) => engine.dispatch(state, engine.resolveWith(entry, result)))
+    return this.act(
+      "next",
+      "acting",
+      (state) => engine.dispatch(state, engine.resolveWith(entry, result))
+    )
   }
   end(target: Steps.StreamTarget): this {
     const entry = engine.findStream(this.state, target, this.name("end"))
-    return this.act("end", "acting", (state) => engine.exited(state, entry, undefined))
+    return this.act(
+      "end",
+      "acting",
+      (state) => engine.exited(state, entry, undefined)
+    )
   }
   waitExpired(target: Steps.Target): this {
     const entry = this.state.pending.find((entry) =>
-      entry.awaiting !== undefined && entry.awaiting.length > 0 && engine.matches(target, entry)
+      entry.awaiting !== undefined && entry.awaiting.length > 0 &&
+      engine.matches(target, entry)
     )
     if (entry === undefined) {
       throw new Error(
-        `${this.name("waitExpired")}: no ${engine.describeTarget(target)} is waiting on refetches; pending: ${
+        `${this.name("waitExpired")}: no ${
+          engine.describeTarget(target)
+        } is waiting on refetches; pending: ${
           engine.describePending(this.state.pending)
         }`
       )
@@ -228,7 +287,11 @@ export abstract class Cursor {
     return this.act(
       "waitExpired",
       "acting",
-      (state) => engine.settleWaits(state, (awaited) => entry.awaiting!.includes(awaited))
+      (state) =>
+        engine.settleWaits(
+          state,
+          (awaited) => entry.awaiting!.includes(awaited)
+        )
     )
   }
   loaded(name: string, ...rest: Array<any>): this {
@@ -238,12 +301,16 @@ export abstract class Cursor {
       return this.act(
         "loaded",
         "acting",
-        (state) => engine.loadKeyedStep(state, step, name, [{ args, value, ...options }])
+        (state) =>
+          engine.loadKeyedStep(state, step, name, [{ args, value, ...options }])
       )
     }
     const [value, options] = rest as [
       unknown,
-      { readonly waiting?: boolean | undefined; readonly patched?: boolean | undefined } | undefined
+      {
+        readonly waiting?: boolean | undefined
+        readonly patched?: boolean | undefined
+      } | undefined
     ]
     return this.act("loaded", "acting", (state) =>
       engine.settleStep(
@@ -252,14 +319,24 @@ export abstract class Cursor {
         name,
         options?.patched === true,
         options?.waiting === true,
-        () => AsyncResult.success(value, { waiting: options?.waiting, timestamp: 0 })
+        () =>
+          AsyncResult.success(value, {
+            waiting: options?.waiting,
+            timestamp: 0
+          })
       ))
   }
   loadedMore(name: string, page: unknown): this {
     return this.act(
       "loadedMore",
       "acting",
-      (state) => engine.settleMore(state, this.name("loadedMore"), name, (pages) => [...pages, page])
+      (state) =>
+        engine.settleMore(
+          state,
+          this.name("loadedMore"),
+          name,
+          (pages) => [...pages, page]
+        )
     )
   }
   loadMoreFailed(name: string, error: unknown): this {
@@ -267,7 +344,13 @@ export abstract class Cursor {
       "loadMoreFailed",
       "acting",
       (state) =>
-        engine.settleMore(state, this.name("loadMoreFailed"), name, (pages) => pages, { _tag: "Failed", error })
+        engine.settleMore(
+          state,
+          this.name("loadMoreFailed"),
+          name,
+          (pages) => pages,
+          { _tag: "Failed", error }
+        )
     )
   }
   loadFailed(name: string, ...rest: Array<any>): this {
@@ -277,10 +360,18 @@ export abstract class Cursor {
       return this.act(
         "loadFailed",
         "acting",
-        (state) => engine.loadKeyedStep(state, step, name, [{ args, error, waiting: options?.waiting }])
+        (state) =>
+          engine.loadKeyedStep(state, step, name, [{
+            args,
+            error,
+            waiting: options?.waiting
+          }])
       )
     }
-    const [error, options] = rest as [unknown, { readonly waiting?: boolean | undefined } | undefined]
+    const [error, options] = rest as [
+      unknown,
+      { readonly waiting?: boolean | undefined } | undefined
+    ]
     return this.act("loadFailed", "acting", (state) =>
       engine.settleStep(
         state,
@@ -288,25 +379,36 @@ export abstract class Cursor {
         name,
         false,
         options?.waiting === true,
-        (previousSuccess) => AsyncResult.failure(Cause.fail(error), { previousSuccess, waiting: options?.waiting })
+        (previousSuccess) =>
+          AsyncResult.failure(Cause.fail(error), {
+            previousSuccess,
+            waiting: options?.waiting
+          })
       ))
   }
   loadedMany(name: string, entries: ReadonlyArray<Steps.KeyedLoad<any>>): this {
     return this.act(
       "loadedMany",
       "acting",
-      (state) => engine.loadKeyedStep(state, this.name("loadedMany"), name, entries)
+      (state) =>
+        engine.loadKeyedStep(state, this.name("loadedMany"), name, entries)
     )
   }
 
   emitted(...events: ReadonlyArray<unknown>): this {
-    return this.replace(engine.acknowledgeEmitted(this.state, events, this.name("emitted")))
+    return this.replace(
+      engine.acknowledgeEmitted(this.state, events, this.name("emitted"))
+    )
   }
   sent(owner: Component.Headless.Any, message: unknown): this {
-    return this.replace(engine.acknowledgeSent(this.state, owner, message, this.name("sent")))
+    return this.replace(
+      engine.acknowledgeSent(this.state, owner, message, this.name("sent"))
+    )
   }
   keepPending(target: Steps.Target | string): this {
-    return this.replace(engine.keep(this.state, target, this.name("keepPending")))
+    return this.replace(
+      engine.keep(this.state, target, this.name("keepPending"))
+    )
   }
   check(f: (current: any) => void): this {
     f(this.current)
@@ -316,11 +418,14 @@ export abstract class Cursor {
   expectExact(...targets: ReadonlyArray<Steps.Target>): this {
     const pending = this.state.pending
     if (
-      pending.length !== targets.length || !targets.every((target, index) => engine.matches(target, pending[index]))
+      pending.length !== targets.length ||
+      !targets.every((target, index) => engine.matches(target, pending[index]))
     ) {
       throw new Error(
         `${this.name("expectExact")}: expected ${
-          targets.length === 0 ? "nothing" : targets.map(engine.describeTarget).join(", ")
+          targets.length === 0
+            ? "nothing"
+            : targets.map(engine.describeTarget).join(", ")
         }; pending: ${engine.describePending(pending)}`
       )
     }
@@ -330,16 +435,20 @@ export abstract class Cursor {
     const pending = this.state.pending
     if (!pending.some((entry) => engine.matches(target, entry))) {
       throw new Error(
-        `${this.name("expectHas")}: ${engine.describeTarget(target)} is not pending; pending: ${
-          engine.describePending(pending)
-        }`
+        `${this.name("expectHas")}: ${
+          engine.describeTarget(target)
+        } is not pending; pending: ${engine.describePending(pending)}`
       )
     }
     return this
   }
   expectNone(): this {
     if (this.state.pending.length > 0) {
-      throw new Error(`${this.name("expectNone")}: pending: ${engine.describePending(this.state.pending)}`)
+      throw new Error(
+        `${this.name("expectNone")}: pending: ${
+          engine.describePending(this.state.pending)
+        }`
+      )
     }
     return this
   }
@@ -353,18 +462,25 @@ export abstract class Cursor {
  *
  * @internal
  */
-export const scoped = <S extends Cursor>(make: Function, begin: () => S): Effect.Effect<S, never, Scope.Scope> => {
+export const scoped = <S extends Cursor>(
+  make: Function,
+  begin: () => S
+): Effect.Effect<S, never, Scope.Scope> => {
   const site = callSite(make)
   return Effect.acquireRelease(
     Effect.sync(begin),
-    (steps, exit) => Exit.isSuccess(exit) ? Effect.sync(() => atSite(site, () => steps.finish())) : Effect.void
+    (steps, exit) =>
+      Exit.isSuccess(exit)
+        ? Effect.sync(() => atSite(site, () => steps.finish()))
+        : Effect.void
   )
 }
 
 /** @internal */
 export const callSite = (fn: Function): Error => {
   const site = new Error()
-  ;(Error as { captureStackTrace?: (target: object, fn: Function) => void }).captureStackTrace?.(site, fn)
+  ;(Error as { captureStackTrace?: (target: object, fn: Function) => void })
+    .captureStackTrace?.(site, fn)
   return site
 }
 
@@ -374,7 +490,9 @@ export const atSite = <A>(site: Error, f: () => A): A => {
     return f()
   } catch (error) {
     if (error instanceof Error && site.stack !== undefined) {
-      error.stack = `${error.name}: ${error.message}\n${site.stack.split("\n").slice(1).join("\n")}`
+      error.stack = `${error.name}: ${error.message}\n${
+        site.stack.split("\n").slice(1).join("\n")
+      }`
     }
     throw error
   }
@@ -405,11 +523,24 @@ export const baseRecord = (state: engine.State<any, any, any, any>) => ({
  *
  * @internal
  */
-export const initial = (component: Component.Any, props: unknown): engine.State<any, any, any, any> => {
+export const initial = (
+  component: Component.Any,
+  props: unknown
+): engine.State<any, any, any, any> => {
   const first = component.init(props)
   const fields: engine.Fields<any, any, any, any> = {
     // The record is stored with its types erased; each kind's cursor restores them.
-    component: component as Component.Component<any, any, any, any, any, any, any, any, never>,
+    component: component as Component.Component<
+      any,
+      any,
+      any,
+      any,
+      any,
+      any,
+      any,
+      any,
+      never
+    >,
     props,
     model: first.model,
     results: undefined,

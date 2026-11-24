@@ -7,17 +7,31 @@ import { describe, expect, it } from "tstyche"
 const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 type Msg = typeof Msg.Type
 
-type Button = Html.Element<Msg, never, Html.EventsOf<"button">, HTMLButtonElement, "button">
+type Button = Html.Element<
+  Msg,
+  never,
+  Html.EventsOf<"button">,
+  HTMLButtonElement,
+  "button"
+>
 type Div = Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
 
 describe("Tooltip", () => {
   it("needs no provider: its read of a TooltipProvider is optional", () => {
     expect<Component.Headless.Requirements<typeof Tooltip>>().type.toBe<never>()
-    expect<Component.Headless.Requirements<typeof TooltipProvider>>().type.toBe<never>()
+    expect<Component.Headless.Requirements<typeof TooltipProvider>>().type.toBe<
+      never
+    >()
   })
 
   it("each part returns the builder it was given, with the consumer's message type", () => {
-    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({
+      name: "App",
+      scoped: false,
+      model: Schema.Null,
+      message: Msg,
+      elements: Html
+    }).make({
       init: () => null,
       update: ($) => $.model,
       view: (h) =>
@@ -25,14 +39,18 @@ describe("Tooltip", () => {
           key: "t",
           props: { open: false },
           view: (tooltip) => {
-            const trigger = tooltip.trigger(h.button.class("tool").onClick(Msg.Clicked()))
+            const trigger = tooltip.trigger(
+              h.button.class("tool").onClick(Msg.Clicked())
+            )
             expect(trigger).type.toBe<Button>()
             expect(tooltip.positioner(h.div)).type.toBe<Div>()
             expect(tooltip.popup(h.div)).type.toBe<Div>()
             expect(tooltip.arrow(h.div)).type.toBe<Div>()
             return h.span(
               trigger.children("B"),
-              tooltip.positioner(h.div).children(tooltip.popup(h.div).children("Bold"))
+              tooltip.positioner(h.div).children(
+                tooltip.popup(h.div).children("Bold")
+              )
             )
           }
         })
@@ -40,7 +58,13 @@ describe("Tooltip", () => {
   })
 
   it("the trigger takes only a button, and the other parts only a div", () => {
-    Component.define({ name: "App", scoped: false, model: Schema.Null, message: Msg, elements: Html }).make({
+    Component.define({
+      name: "App",
+      scoped: false,
+      model: Schema.Null,
+      message: Msg,
+      elements: Html
+    }).make({
       init: () => null,
       update: ($) => $.model,
       view: (h) =>

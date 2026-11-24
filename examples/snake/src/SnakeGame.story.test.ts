@@ -3,7 +3,12 @@ import { Head } from "@effect/ui"
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { GenerateApplePosition, SnakeGame, SnakeGameMessage, type SnakeGameModel } from "./SnakeGame.ts"
+import {
+  GenerateApplePosition,
+  SnakeGame,
+  SnakeGameMessage,
+  type SnakeGameModel
+} from "./SnakeGame.ts"
 
 const initialSnake = Snake.create({ x: 10, y: 10 })
 
@@ -17,7 +22,10 @@ const playingModel: SnakeGameModel = {
   highScore: 0
 }
 
-const notStartedModel: SnakeGameModel = { ...playingModel, gameState: "NotStarted" }
+const notStartedModel: SnakeGameModel = {
+  ...playingModel,
+  gameState: "NotStarted"
+}
 
 const keyboard = "@effect/ui/html/document:\"keydown\""
 const gameClock = "gameClock:150"
@@ -79,7 +87,9 @@ describe("SnakeGame", () => {
     it.effect("arrow keys are ignored while the game is paused", () =>
       Effect.gen(function*() {
         const s = yield* Story.make(SnakeGame, {})
-        s.given({ ...playingModel, gameState: "Paused" }).send(pressedKey("ArrowDown"))
+        s.given({ ...playingModel, gameState: "Paused" }).send(
+          pressedKey("ArrowDown")
+        )
         assert.strictEqual(s.model.nextDirection, "Right")
       }))
   })
@@ -102,7 +112,9 @@ describe("SnakeGame", () => {
     it.effect("SPACE on GameOver does nothing", () =>
       Effect.gen(function*() {
         const s = yield* Story.make(SnakeGame, {})
-        s.given({ ...playingModel, gameState: "GameOver" }).send(pressedKey(" "))
+        s.given({ ...playingModel, gameState: "GameOver" }).send(
+          pressedKey(" ")
+        )
         assert.strictEqual(s.model.gameState, "GameOver")
       }))
   })
@@ -125,7 +137,10 @@ describe("SnakeGame", () => {
     it.effect("moves the snake one cell while Playing", () =>
       Effect.gen(function*() {
         const s = yield* Story.make(SnakeGame, {})
-        s.given(playingModel).subscription(gameClock, SnakeGameMessage.TickedClock())
+        s.given(playingModel).subscription(
+          gameClock,
+          SnakeGameMessage.TickedClock()
+        )
         assert.deepStrictEqual(s.model.snake[0], { x: 11, y: 10 })
       }))
 
@@ -138,12 +153,18 @@ describe("SnakeGame", () => {
 
     it.effect("eating an apple grows the snake, adds points, and requests a new apple", () =>
       Effect.gen(function*() {
-        const aboutToEatModel: SnakeGameModel = { ...playingModel, apple: { x: 11, y: 10 } }
+        const aboutToEatModel: SnakeGameModel = {
+          ...playingModel,
+          apple: { x: 11, y: 10 }
+        }
         const s = yield* Story.make(SnakeGame, {})
         s.given(aboutToEatModel)
           .subscription(gameClock, SnakeGameMessage.TickedClock())
           .resolve(GenerateApplePosition, { x: 5, y: 5 })
-        assert.strictEqual(s.model.snake.length, aboutToEatModel.snake.length + 1)
+        assert.strictEqual(
+          s.model.snake.length,
+          aboutToEatModel.snake.length + 1
+        )
         assert.strictEqual(s.model.points, 10)
         assert.deepStrictEqual(s.model.apple, { x: 5, y: 5 })
       }))
@@ -154,7 +175,9 @@ describe("SnakeGame", () => {
       Effect.gen(function*() {
         const s = yield* Story.make(SnakeGame, {})
         s.given({ ...playingModel, points: 40 })
-        assert.deepStrictEqual(Story.head(s.current), [Head.title("Snake | 40 pts")])
+        assert.deepStrictEqual(Story.head(s.current), [
+          Head.title("Snake | 40 pts")
+        ])
       }))
   })
 })

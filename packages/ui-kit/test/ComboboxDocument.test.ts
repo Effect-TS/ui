@@ -4,11 +4,29 @@ import { Combobox, Dialog, Field } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { byId, click, container, holdExits, popovers, press, tick } from "./utils/document.ts"
+import {
+  byId,
+  click,
+  container,
+  holdExits,
+  popovers,
+  press,
+  tick
+} from "./utils/document.ts"
 
-type Rect = { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
+type Rect = {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
 
-const rects = new Map<string, Rect>([["group", { x: 100, y: 300, width: 160, height: 30 }]])
+const rects = new Map<string, Rect>([["group", {
+  x: 100,
+  y: 300,
+  width: 160,
+  height: 30
+}]])
 
 class StillResizeObserver {
   observe() {}
@@ -20,14 +38,33 @@ const geometry = Effect.acquireRelease(
   Effect.sync(() => {
     const element = window.Element.prototype as any
     const root = document.documentElement as any
-    const saved = { rect: element.getBoundingClientRect, ResizeObserver: (window as any).ResizeObserver }
+    const saved = {
+      rect: element.getBoundingClientRect,
+      ResizeObserver: (window as any).ResizeObserver
+    }
     ;(window as any).ResizeObserver = StillResizeObserver
     element.getBoundingClientRect = function(this: Element) {
-      const { height, width, x, y } = rects.get(this.id) ?? { x: 0, y: 0, width: 0, height: 0 }
-      return { x, y, width, height, left: x, top: y, right: x + width, bottom: y + height }
+      const { height, width, x, y } = rects.get(this.id) ??
+        { x: 0, y: 0, width: 0, height: 0 }
+      return {
+        x,
+        y,
+        width,
+        height,
+        left: x,
+        top: y,
+        right: x + width,
+        bottom: y + height
+      }
     }
-    Object.defineProperty(root, "clientWidth", { configurable: true, value: 1000 })
-    Object.defineProperty(root, "clientHeight", { configurable: true, value: 800 })
+    Object.defineProperty(root, "clientWidth", {
+      configurable: true,
+      value: 1000
+    })
+    Object.defineProperty(root, "clientHeight", {
+      configurable: true,
+      value: 800
+    })
     return () => {
       element.getBoundingClientRect = saved.rect
       ;(window as any).ResizeObserver = saved.ResizeObserver
@@ -76,15 +113,33 @@ const Page = Component.define({
 }).make({
   init: () => ({ open: false, value: [], inputValue: "", log: [] }),
   update: {
-    RequestedOpen: ($, { reason }) => ({ ...$.model, open: true, log: [...$.model.log, "RequestedOpen " + reason] }),
-    RequestedClose: ($, { reason }) => ({ ...$.model, open: false, log: [...$.model.log, "RequestedClose " + reason] }),
-    Picked: ($, { value }) => ({ ...$.model, value, log: [...$.model.log, "Picked " + value.join(",")] }),
+    RequestedOpen: ($, { reason }) => ({
+      ...$.model,
+      open: true,
+      log: [...$.model.log, "RequestedOpen " + reason]
+    }),
+    RequestedClose: ($, { reason }) => ({
+      ...$.model,
+      open: false,
+      log: [...$.model.log, "RequestedClose " + reason]
+    }),
+    Picked: ($, { value }) => ({
+      ...$.model,
+      value,
+      log: [...$.model.log, "Picked " + value.join(",")]
+    }),
     RequestedInputValue: ($, { inputValue, reason }) => ({
       ...$.model,
       inputValue,
-      log: [...$.model.log, "RequestedInputValue " + JSON.stringify(inputValue) + " " + reason]
+      log: [
+        ...$.model.log,
+        "RequestedInputValue " + JSON.stringify(inputValue) + " " + reason
+      ]
     }),
-    RequestedCloseDialog: ($, { reason }) => ({ ...$.model, log: [...$.model.log, "RequestedCloseDialog " + reason] })
+    RequestedCloseDialog: ($, { reason }) => ({
+      ...$.model,
+      log: [...$.model.log, "RequestedCloseDialog " + reason]
+    })
   },
   view: (h, model) => {
     const multiple = h.props.multiple
@@ -108,19 +163,29 @@ const Page = Component.define({
             RequestedClose: ({ reason }) => Message.RequestedClose({ reason }),
             Picked: ({ reason, value }) =>
               reason === "none" && value === null ? undefined : Message.Picked({
-                value: value === null ? [] : typeof value === "string" ? [value] : value
+                value: value === null
+                  ? []
+                  : typeof value === "string"
+                  ? [value]
+                  : value
               }),
-            RequestedInputValue: ({ inputValue, reason }) => Message.RequestedInputValue({ inputValue, reason }),
+            RequestedInputValue: ({ inputValue, reason }) =>
+              Message.RequestedInputValue({ inputValue, reason }),
             Highlighted: () => undefined,
             Settled: () => undefined
           },
           view: (combobox) => {
             const input = combobox.input(
-              inPopup ? h.input.class("input") : field.control(h.input.class("input"))
+              inPopup
+                ? h.input.class("input")
+                : field.control(h.input.class("input"))
             )
             const list = combobox.list(h.div.attr("id", "list")).children(
               ...combobox.items.map(({ label, value }) =>
-                combobox.item({ element: h.div.attr("data-testid", value), value }).children(label)
+                combobox.item({
+                  element: h.div.attr("data-testid", value),
+                  value
+                }).children(label)
               )
             )
             return field.root(h.div.attr("id", "field")).children(
@@ -128,11 +193,16 @@ const Page = Component.define({
                 ? combobox.label(h.div.class("label")).children("Fruit")
                 : field.label(h.label.attr("id", "label")).children("Fruit"),
               inPopup
-                ? combobox.trigger(h.button.attr("id", "trigger")).children(combobox.value(h.span))
+                ? combobox.trigger(h.button.attr("id", "trigger")).children(
+                  combobox.value(h.span)
+                )
                 : multiple
                 ? combobox.chips(h.div.attr("id", "group")).children(
                   ...combobox.selectedItems.map(({ label, value }) =>
-                    combobox.chip({ element: h.div.attr("data-testid", "chip-" + value), value }).children(label)
+                    combobox.chip({
+                      element: h.div.attr("data-testid", "chip-" + value),
+                      value
+                    }).children(label)
                   ),
                   input
                 )
@@ -141,7 +211,10 @@ const Page = Component.define({
                   combobox.trigger(h.button.attr("id", "trigger")).children("▾")
                 ),
               combobox.positioner(h.div.attr("id", "positioner")).children(
-                combobox.popup(h.div.attr("id", "popup")).children(...(inPopup ? [input] : []), list)
+                combobox.popup(h.div.attr("id", "popup")).children(
+                  ...(inPopup ? [input] : []),
+                  list
+                )
               )
             )
           }
@@ -157,10 +230,16 @@ const Page = Component.define({
         props: { open: true },
         onEmit: {
           RequestedOpen: () => undefined,
-          RequestedClose: ({ reason }) => Message.RequestedCloseDialog({ reason }),
+          RequestedClose: ({ reason }) =>
+            Message.RequestedCloseDialog({ reason }),
           Settled: () => undefined
         },
-        view: (dialog) => h.div(dialog.portal(h.dialog)?.children(dialog.popup(h.div).children(form)))
+        view: (dialog) =>
+          h.div(
+            dialog.portal(h.dialog)?.children(
+              dialog.popup(h.div).children(form)
+            )
+          )
       })
       : form
   }
@@ -172,7 +251,13 @@ const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
   const app = yield* container
   const root = yield* BrowserHost.mountEffect(
     Page,
-    { multiple: false, inputInPopup: false, required: false, dialog: false, ...config },
+    {
+      multiple: false,
+      inputInPopup: false,
+      required: false,
+      dialog: false,
+      ...config
+    },
     app
   )
   yield* tick
@@ -180,16 +265,33 @@ const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
 })
 
 const input = () => document.querySelector<HTMLInputElement>(".input")!
-const item = (value: string) => document.querySelector<HTMLElement>("[data-testid=" + value + "]")!
+const item = (value: string) =>
+  document.querySelector<HTMLElement>("[data-testid=" + value + "]")!
 const shown = () => byId("positioner").matches(":popover-open")
-const drawn = () => Array.from(document.querySelectorAll("[role=option]")).map((option) => option.textContent)
-const keydown = (target: Element, key: string, init: KeyboardEventInit = {}) => {
-  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init })
+const drawn = () =>
+  Array.from(document.querySelectorAll("[role=option]")).map((option) =>
+    option.textContent
+  )
+const keydown = (
+  target: Element,
+  key: string,
+  init: KeyboardEventInit = {}
+) => {
+  const event = new KeyboardEvent("keydown", {
+    key,
+    bubbles: true,
+    cancelable: true,
+    ...init
+  })
   target.dispatchEvent(event)
   return event
 }
 const mousedown = (target: Element) => {
-  const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 })
+  const event = new MouseEvent("mousedown", {
+    bubbles: true,
+    cancelable: true,
+    button: 0
+  })
   target.dispatchEvent(event)
   return event
 }
@@ -197,7 +299,13 @@ const type = (value: string) => {
   const target = input()
   target.focus()
   target.value = value
-  target.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }))
+  target.dispatchEvent(
+    new InputEvent("input", {
+      bubbles: true,
+      inputType: "insertText",
+      data: value
+    })
+  )
 }
 
 describe("Combobox in a document", { concurrent: false }, () => {
@@ -208,13 +316,19 @@ describe("Combobox in a document", { concurrent: false }, () => {
       yield* tick
       assert.isTrue(shown())
       assert.deepStrictEqual(drawn(), ["Apple", "Apricot", "Grape"])
-      assert.strictEqual(byId("positioner").style.getPropertyValue("top"), "330px")
+      assert.strictEqual(
+        byId("positioner").style.getPropertyValue("top"),
+        "330px"
+      )
       assert.strictEqual(byId("positioner").getAttribute("data-side"), "bottom")
       assert.strictEqual(document.activeElement, input())
       keydown(input(), "ArrowDown")
       keydown(input(), "ArrowDown")
       yield* tick
-      assert.strictEqual(input().getAttribute("aria-activedescendant"), item("apricot").id)
+      assert.strictEqual(
+        input().getAttribute("aria-activedescendant"),
+        item("apricot").id
+      )
       assert.strictEqual(document.activeElement, input())
       keydown(input(), "Enter")
       yield* tick
@@ -227,7 +341,13 @@ describe("Combobox in a document", { concurrent: false }, () => {
       assert.isTrue(shown())
       assert.strictEqual(document.activeElement, input())
       assert.isTrue(mousedown(item("banana")).defaultPrevented)
-      item("banana").dispatchEvent(new PointerEvent("click", { bubbles: true, detail: 1, pointerType: "mouse" }))
+      item("banana").dispatchEvent(
+        new PointerEvent("click", {
+          bubbles: true,
+          detail: 1,
+          pointerType: "mouse"
+        })
+      )
       yield* tick
       assert.isFalse(shown())
       assert.strictEqual(input().value, "Banana")
@@ -249,7 +369,9 @@ describe("Combobox in a document", { concurrent: false }, () => {
     Effect.gen(function*() {
       const { log, root } = yield* mountPage()
       root.send(Message.Picked({ value: ["banana"] }))
-      root.send(Message.RequestedInputValue({ inputValue: "Banana", reason: "test" }))
+      root.send(
+        Message.RequestedInputValue({ inputValue: "Banana", reason: "test" })
+      )
       type("gr")
       yield* tick
       assert.deepStrictEqual(drawn(), ["Grape"])
@@ -268,7 +390,9 @@ describe("Combobox in a document", { concurrent: false }, () => {
       yield* tick
       assert.isFalse(shown())
       assert.deepStrictEqual(
-        log().filter((line) => !line.startsWith("RequestedInputValue") && !line.startsWith("Picked")),
+        log().filter((line) =>
+          !line.startsWith("RequestedInputValue") && !line.startsWith("Picked")
+        ),
         [
           "RequestedOpen input-change",
           "RequestedClose outside-press",
@@ -296,7 +420,9 @@ describe("Combobox in a document", { concurrent: false }, () => {
       root.send(Message.Picked({ value: ["apple", "banana", "grape"] }))
       yield* tick
       assert.deepStrictEqual(
-        Array.from(new FormData(byId("form") as HTMLFormElement).getAll("fruit")),
+        Array.from(
+          new FormData(byId("form") as HTMLFormElement).getAll("fruit")
+        ),
         ["apple", "banana", "grape"]
       )
       input().focus()
@@ -314,13 +440,20 @@ describe("Combobox in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement, input())
       keydown(input(), "Backspace")
       yield* tick
-      assert.deepStrictEqual(log(), ["Picked apple,banana,grape", "Picked apple,grape", "Picked apple"])
+      assert.deepStrictEqual(log(), [
+        "Picked apple,banana,grape",
+        "Picked apple,grape",
+        "Picked apple"
+      ])
     }).pipe(Effect.scoped))
 
   it.effect("with the input in the popup, opening moves focus into it and closing returns it to the trigger", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage({ inputInPopup: true })
-      assert.strictEqual(byId("trigger").getAttribute("aria-labelledby"), document.querySelector(".label")!.id)
+      assert.strictEqual(
+        byId("trigger").getAttribute("aria-labelledby"),
+        document.querySelector(".label")!.id
+      )
       byId("trigger").focus()
       keydown(byId("trigger"), "ArrowDown")
       yield* tick
@@ -373,7 +506,10 @@ describe("Combobox in a document", { concurrent: false }, () => {
       assert.isTrue(escape.defaultPrevented)
       yield* tick
       assert.isFalse(shown())
-      assert.deepStrictEqual(log(), ["RequestedOpen trigger-press", "RequestedClose escape-key"])
+      assert.deepStrictEqual(log(), [
+        "RequestedOpen trigger-press",
+        "RequestedClose escape-key"
+      ])
     }).pipe(Effect.scoped))
 
   it.effect("in a modal dialog, Escape closes only the combobox", () =>

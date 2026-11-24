@@ -113,8 +113,11 @@ export class ProblemsError extends Data.TaggedError("ProblemsError")<{
   readonly problems: ReadonlyArray<Query.Problem.Any>
 }> {
   override get message(): string {
-    return "The cache reported " + this.problems.length + " problem(s) the test didn't expect:\n" +
-      this.problems.map((problem) => "  " + problem._tag + ": " + problem.message).join("\n")
+    return "The cache reported " + this.problems.length +
+      " problem(s) the test didn't expect:\n" +
+      this.problems.map((problem) =>
+        "  " + problem._tag + ": " + problem.message
+      ).join("\n")
   }
 }
 
@@ -141,7 +144,8 @@ export interface TestQuery {
   readonly problems: () => ReadonlyArray<Query.Problem.Any>
   /** Takes every reported problem with this tag. Throws when there is none. */
   readonly expectProblem: <Tag extends string>(tag: Tag) => ReadonlyArray<
-    [Extract<Query.Problem, { readonly _tag: Tag }>] extends [never] ? Query.Problem.Any
+    [Extract<Query.Problem, { readonly _tag: Tag }>] extends [never] ?
+      Query.Problem.Any
       : Extract<Query.Problem, { readonly _tag: Tag }>
   >
 }
@@ -153,7 +157,9 @@ export interface TestQuery {
  * @category services
  * @since 0.1.0
  */
-export const TestQuery: Context.Service<TestQuery, TestQuery> = Context.Service<TestQuery>(
+export const TestQuery: Context.Service<TestQuery, TestQuery> = Context.Service<
+  TestQuery
+>(
   "@effect/ui/testing/TestQuery"
 )
 
@@ -205,21 +211,27 @@ export const layer = (options?: {
         yield* Effect.addFinalizer(() =>
           Effect.suspend(() => {
             off()
-            return problems.length === 0 ? Effect.void : Effect.die(new ProblemsError({ problems }))
+            return problems.length === 0
+              ? Effect.void
+              : Effect.die(new ProblemsError({ problems }))
           })
         )
         return {
           setVisible: visibility.set,
           setOnline: connectivity.set,
           fetches: () => fetches.slice(),
-          entry: (read: Query.Query.Any, args: unknown) => cache.inspect(Query.defOf(read), args),
+          entry: (read: Query.Query.Any, args: unknown) =>
+            cache.inspect(Query.defOf(read), args),
           problems: () => problems.slice(),
           expectProblem: (tag: string) => {
             const matched = problems.filter((problem) => problem._tag === tag)
             if (matched.length === 0) {
               throw new Error(
-                "[TestQuery] expected a " + tag + " problem, and the cache reported " +
-                  (problems.length === 0 ? "none" : problems.map((problem) => problem._tag).join(", "))
+                "[TestQuery] expected a " + tag +
+                  " problem, and the cache reported " +
+                  (problems.length === 0
+                    ? "none"
+                    : problems.map((problem) => problem._tag).join(", "))
               )
             }
             problems = problems.filter((problem) => problem._tag !== tag)
@@ -252,7 +264,9 @@ export const layer = (options?: {
  * @category testing
  * @since 0.1.0
  */
-export const setVisible = (visible: boolean): Effect.Effect<void, never, TestQuery> =>
+export const setVisible = (
+  visible: boolean
+): Effect.Effect<void, never, TestQuery> =>
   TestQuery.useSync((query) => query.setVisible(visible))
 
 /**
@@ -267,7 +281,9 @@ export const setVisible = (visible: boolean): Effect.Effect<void, never, TestQue
  * @category testing
  * @since 0.1.0
  */
-export const setOnline = (online: boolean): Effect.Effect<void, never, TestQuery> =>
+export const setOnline = (
+  online: boolean
+): Effect.Effect<void, never, TestQuery> =>
   TestQuery.useSync((query) => query.setOnline(online))
 
 /**
@@ -277,9 +293,10 @@ export const setOnline = (online: boolean): Effect.Effect<void, never, TestQuery
  * @category testing
  * @since 0.1.0
  */
-export const fetches: Effect.Effect<ReadonlyArray<Fetch>, never, TestQuery> = TestQuery.useSync(
-  (query) => query.fetches()
-)
+export const fetches: Effect.Effect<ReadonlyArray<Fetch>, never, TestQuery> =
+  TestQuery.useSync(
+    (query) => query.fetches()
+  )
 
 /**
  * Returns a query-only view of one entry, or `undefined` when the cache has no
@@ -293,8 +310,11 @@ export const fetches: Effect.Effect<ReadonlyArray<Fetch>, never, TestQuery> = Te
 export const entry = <R extends Query.Query.Any>(
   read: R,
   args: Query.Query.Args<R>
-): Effect.Effect<Entry<Query.Query.Success<R>, Query.Query.Error<R>> | undefined, never, TestQuery> =>
-  TestQuery.useSync((query) => query.entry(read, args))
+): Effect.Effect<
+  Entry<Query.Query.Success<R>, Query.Query.Error<R>> | undefined,
+  never,
+  TestQuery
+> => TestQuery.useSync((query) => query.entry(read, args))
 
 /**
  * Returns reported problems not yet consumed by `expectProblem`.
@@ -303,7 +323,11 @@ export const entry = <R extends Query.Query.Any>(
  * @category testing
  * @since 0.1.0
  */
-export const problems: Effect.Effect<ReadonlyArray<Query.Problem.Any>, never, TestQuery> = TestQuery.useSync(
+export const problems: Effect.Effect<
+  ReadonlyArray<Query.Problem.Any>,
+  never,
+  TestQuery
+> = TestQuery.useSync(
   (query) => query.problems()
 )
 
@@ -321,7 +345,8 @@ export const problems: Effect.Effect<ReadonlyArray<Query.Problem.Any>, never, Te
  */
 export const expectProblem = <Tag extends string>(tag: Tag): Effect.Effect<
   ReadonlyArray<
-    [Extract<Query.Problem, { readonly _tag: Tag }>] extends [never] ? Query.Problem.Any
+    [Extract<Query.Problem, { readonly _tag: Tag }>] extends [never] ?
+      Query.Problem.Any
       : Extract<Query.Problem, { readonly _tag: Tag }>
   >,
   never,
