@@ -2415,29 +2415,18 @@ type UpdateRecord<Model, Msg, Events, Props, L, SR, UR> = {
     : UnknownTag<T>
 }
 
-type IsKnownTag<Msg, T extends string> = T extends unknown
-  ? [{}] extends [{ readonly [K in T]: unknown }] ? false
-  : [Tagged<Msg, T>] extends [never] ? false
-  : true
+type IsKnownTag<T extends string> = T extends unknown
+  ? [{}] extends [{ readonly [K in T]: unknown }] ? false : true
   : never
 
 type CanUseUpdateRecord<Msg> = [Msg] extends [never] ? false
   : [Msg] extends [{ readonly _tag: string }]
-    ? [IsKnownTag<Msg, TagOf<Msg>>] extends [true] ? true : false
+    ? [IsKnownTag<TagOf<Msg>>] extends [true] ? true : false
   : false
 
 type NonCallable = {
   readonly [Symbol.hasInstance]?: never
 }
-
-type UninferredUpdate = {
-  readonly _UninferredUpdate: unique symbol
-}
-
-type UpdateResult<U, UR> = 0 extends 1 & U ? U
-  : [U] extends [UninferredUpdate]
-    ? [UninferredUpdate] extends [U] ? UR[keyof UR] : U
-  : U
 
 /**
  * What `define` returns: a component's name, Schemas, queries and
@@ -2515,28 +2504,26 @@ export interface Definition<
     $: Update<Model, Msg, Events, Props, L, Msg, SR>,
     msg: Tagged<Msg, Tag>
   ) => U
+  /** An update function over the whole message type. */
+  update<U extends Model | Step<Model, Msg, Events, any, L>>(
+    update: ($: Update<Model, Msg, Events, Props, L, Msg, SR>, msg: Msg) => U
+  ): ($: Update<Model, Msg, Events, Props, L, Msg, SR>, msg: Msg) => U
   /**
-   * An update function over the whole message type, written either as a
-   * function or as a record with a handler for every `_tag` of the message.
+   * An update function over the whole message type, built from a record with a
+   * handler for every `_tag` of the message.
    */
   update<
-    U extends Model | Step<Model, Msg, Events, any, L> | UninferredUpdate =
-      UninferredUpdate,
     UR extends {
       readonly [T in TagOf<Msg>]: Model | Step<Model, Msg, Events, any, L>
-    } = {
-      readonly [T in TagOf<Msg>]: never
     }
   >(
-    update:
-      | (($: Update<Model, Msg, Events, Props, L, Msg, SR>, msg: Msg) => U)
-      | (CanUseUpdateRecord<Msg> extends true
-        ? UpdateRecord<Model, Msg, Events, Props, L, SR, UR> & NonCallable
-        : never)
+    update: CanUseUpdateRecord<Msg> extends true
+      ? UpdateRecord<Model, Msg, Events, Props, L, SR, UR> & NonCallable
+      : never
   ): (
     $: Update<Model, Msg, Events, Props, L, Msg, SR>,
     msg: Msg
-  ) => UpdateResult<U, UR>
+  ) => UR[keyof UR]
   /** A view, to pass as `view` or call from another view. */
   view<UV extends View.Content<Msg, any>>(
     view: (

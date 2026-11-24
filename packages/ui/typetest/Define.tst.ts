@@ -343,6 +343,22 @@ describe("Component.define", () => {
     expect<Component.Requirements<typeof Combined>>().type.toBe<
       GetUser | Save | Audit
     >()
+
+    // @ts-expect-error is missing the following properties
+    const narrowFromHandlers: typeof touch = NoteDef.update({
+      Edited: save,
+      SaveClicked: save,
+      Saved: save
+    })
+    void narrowFromHandlers
+
+    // @ts-expect-error is missing the following properties
+    const narrowFromInline: typeof touch = NoteDef.update({
+      Edited: ($) => $.run(Save.make()),
+      SaveClicked: touch,
+      Saved: touch
+    })
+    void narrowFromInline
   })
 
   it("enforces exhaustiveness and rejects unknown keys on an extracted record update", () => {
@@ -351,13 +367,9 @@ describe("Component.define", () => {
       SaveClicked: touch
     })
 
-    NoteDef.update({
-      Edited: touch,
-      SaveClicked: touch,
-      Saved: touch,
-      // @ts-expect-error 'Deleted' is not a tag of this component's message
-      Deleted: touch
-    })
+    const u = touch
+    // @ts-expect-error 'Deleted' is not a tag of this component's message
+    NoteDef.update({ Edited: u, SaveClicked: u, Saved: u, Deleted: u })
 
     expect(NoteDef.update).type.not.toBeCallableWith({
       Edited: touch,
@@ -457,6 +469,25 @@ describe("Component.define", () => {
     })
     TemplateTagDef.update(($) => $.model + 1)
     expect(TemplateTagDef.update).type.not.toBeCallableWith({})
+
+    const UnionTagStructDef = Html.component({
+      name: "UnionTagStruct",
+      model: Schema.Number,
+      message: Schema.Struct({
+        _tag: Schema.Literals(["Inc", "Dec"])
+      })
+    })
+    const handlers = { Inc: () => 1, Dec: () => -1 }
+    UnionTagStructDef.make({
+      init: () => 0,
+      update: handlers,
+      view: (h) => h.p()
+    })
+    UnionTagStructDef.make({
+      init: () => 0,
+      update: UnionTagStructDef.update(handlers),
+      view: (h) => h.p()
+    })
   })
 
   it("fragment types h from the definition, with its queries and elements, and infers the other arguments", () => {
