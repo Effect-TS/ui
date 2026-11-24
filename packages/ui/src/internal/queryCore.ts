@@ -64,7 +64,6 @@ export interface Loaded extends
     options: CacheOptions
   ) => { readonly cache: Cache; readonly dispose: Effect.Effect<void> }
   readonly bind: typeof componentQueries.bind
-  /** What runs a component's queries on the kernel. */
   readonly run: typeof queryRun
 }
 

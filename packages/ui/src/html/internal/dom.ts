@@ -1,8 +1,3 @@
-/**
- * The DOM host `BrowserHost` mounts on.
- *
- * @internal
- */
 import * as Cause from "effect/Cause"
 import * as Kernel from "../../internal/kernel.ts"
 import * as transitionRun from "../../internal/transitionRun.ts"
@@ -111,11 +106,7 @@ const ignore = () => {}
 
 type Node = globalThis.Node & { $r?: Kernel.Rec }
 
-/**
- * The controlled values each host wrote, by node, for `HtmlCommand.select`. A host reads only its own.
- *
- * @internal
- */
+/** @internal */
 export const written = new WeakMap<globalThis.Node, Map<string, unknown>>()
 
 /** @internal */
@@ -129,7 +120,6 @@ export interface HostOptions {
   readonly head?: HeadSync | undefined
   readonly viewTransitions?: boolean | undefined
   readonly warn?: ((message: string) => void) | undefined
-  /** @internal */
   readonly step?: ((f: () => boolean) => boolean) | undefined
 }
 
@@ -139,7 +129,6 @@ export const makeHost = (
   options?: HostOptions
 ): Kernel.Host<globalThis.Node> & {
   readonly dispose: () => void
-  /** @internal */
   readonly pause: (on: boolean) => void
 } => {
   const document = container.ownerDocument
@@ -269,9 +258,6 @@ export const makeHost = (
   }
 
   const popoversToShow = new Set<HTMLElement>()
-  // While a tool pauses the root, its modal dialogs and auto popovers are closed, and shown again after.
-  // A node it closed reports its next toggle only if that ends in a state other than the one the Model
-  // last heard; one the Model changes meanwhile is released, as closed.
   let held = false
   const heldNodes = new Set<globalThis.Node>()
   const reported = new WeakMap<globalThis.Node, { state: string | undefined }>()

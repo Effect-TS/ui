@@ -97,15 +97,9 @@ export interface PaintState {
   readonly props?: unknown
 }
 
-/** @internal */
 export { stateCodecOf } from "./stateCodec.ts"
 
-/**
- * For each event a part handles, the paths of the instances that get it, deepest owner first and the
- * view's author last.
- *
- * @internal
- */
+/** @internal */
 export const eventOwners = (
   handlers: Readonly<Record<string, unknown>>
 ): Readonly<Record<string, ReadonlyArray<string>>> => {
@@ -127,8 +121,6 @@ const noCommands: ReadonlyArray<unknown> = []
 
 const unchanged: Dispatched = { _tag: "Ignored", reason: "unchanged" }
 
-// What `Head.merge` folds a tree with no entries to: without a fold of its own, a root's head before its
-// first fold, or with `Head` never loaded.
 const noHead = { title: undefined }
 
 let sessions = 0
@@ -140,7 +132,6 @@ const bridge = (
 ): Kernel.Host => ({
   createElement: (tag) => {
     const node = host.createElement(tag)
-    // An entry marks a form as the app's, so its submission is prevented without a handler.
     if (node?.nodeName === "FORM") {
       host.setEvents(node, View.noFields, () => false, View.noFields)
     }
@@ -163,7 +154,6 @@ const bridge = (
         step(() => {
           const inst = rec.inst
           if (inst.closed) return false
-          // A part's layers, fired each in its owner.
           if (
             (handler as partsRun.Layered | undefined)?.["~fire"] !== undefined
           ) {
@@ -210,7 +200,6 @@ const bridge = (
     : transitionRun.make(host.viewTransition)
 })
 
-/** What a server render adds to a mount: `prerender` makes it, so an app that renders none doesn't carry it. */
 interface Server {
   readonly host: Renderer.Host<any>
   readonly fetches: boolean
@@ -218,7 +207,6 @@ interface Server {
   readonly idle: typeof idleOf
 }
 
-/** What the kernel calls on the server: a Command an update issued is dropped, and reported. */
 const serverHooks = (
   ctx: Context.Context<any>,
   record: Kernel.Recorder,
@@ -229,7 +217,6 @@ const serverHooks = (
     try {
       problems(problem as never)
     } catch {
-      // A sink can't change what the runtime does.
     }
   }
   return {
@@ -259,7 +246,6 @@ const serverHooks = (
   }
 }
 
-/** Runs what waits for the tree to be idle: nothing to render, fetch or load. */
 const idleOf = (
   executor: Executor.Executor,
   root: () => Kernel.Instance | undefined,
@@ -306,7 +292,6 @@ interface Options {
   readonly adoptionHead?: boolean | undefined
 }
 
-/** The root's query cache, made once `Query` is loaded, and disposed with the root. */
 const makeCell = (
   ctx: Context.Context<any>,
   options: Options | undefined,
@@ -353,9 +338,7 @@ const withProps = <A, E, R>(
     ? Effect.flatMap(rootProps as Effect.Effect<unknown>, f)
     : f(rootProps)
 
-/**
- * @internal
- */
+/** @internal */
 export const mount = (
   component: Component.Any,
   rootProps: unknown,
@@ -401,7 +384,6 @@ export const mount = (
           }
         )
       )
-    // A root whose state decodes asynchronously mounts once it has, and adopts with it.
     const hydrate = options?.hydrate
     const decoded = hydrate === undefined
       ? undefined
@@ -434,9 +416,7 @@ const start = (
   }`
   const emitted: Array<unknown> = []
   let flushes = 0
-  // A build that begins between flushes belongs to the next one, which commits what began it.
   let inFlush = true
-  // Without `MessageLog` loaded nothing can be logged, so nothing needs building.
   const recording = messageLog.recorder === undefined
     ? messageLog.silent
     : messageLog.recorder(log, clock, session, component.definition.name)
@@ -444,7 +424,6 @@ const start = (
   const hydrate = options?.hydrate
   const state = hydrate?.state
   const fromStatic = state?.["~static"] === true
-  // Made before the hydration it serves, which checks adoption against it.
   const waits = hydrate === undefined
     ? undefined
     : new hydrate.Waits(recording.record, () => checkAdopted(), state!)
@@ -479,7 +458,6 @@ const start = (
     }
     return seq
   }
-  // A tool's dispatch: the instance it went to, and the first entry its update logged for it.
   let dispatching: Kernel.Instance | undefined
   let outcome: Dispatched | undefined
   const dispatchTo = (
@@ -699,7 +677,6 @@ const start = (
       Effect.callback<Dispatched>((resume) => {
         const target = inst as unknown as Kernel.Instance
         const go = () => resume(Effect.succeed(dispatchTo(target, message)))
-        // A message that waits for a view transition is dispatched once it starts.
         if (tree.transitions?.waits(target)) tree.transitions.wait(go)
         else go()
       }),
@@ -736,7 +713,6 @@ const start = (
   if (firstHeld === 0) adoptionHead = root.head()
   started = true
   checkAdopted()
-  // Waits until every fiber the tree forked has exited, stopped runs included.
   const awaitOwned: Effect.Effect<void> = Effect.suspend(() =>
     tree.owned === undefined || tree.owned.size === 0
       ? Effect.void
@@ -756,7 +732,6 @@ const start = (
   }
 }
 
-/** The open instance numbered `born`: `inst`, one it shows, or a kept child it holds off the page. */
 const findIn = (
   inst: Kernel.Instance,
   born: number,
@@ -783,7 +758,6 @@ const findInRec = (
   born: number,
   numberOf: (inst: Kernel.Instance) => number | undefined
 ): Kernel.Instance | undefined => {
-  // A slot that shows its fallback holds its owner, at another Rec.
   if (rec.v._tag === "Child" && rec.inst.at === rec) {
     return findIn(rec.inst, born, numberOf)
   }
@@ -796,23 +770,14 @@ const findInRec = (
   return undefined
 }
 
-/**
- * The runs of a root and of the instances it shows, parents first.
- *
- * @internal
- */
+/** @internal */
 export const pending = (root: Root): ReadonlyArray<Pending> =>
   pendingOf(root.instance as unknown as Kernel.Instance)
 
-/**
- * The slots of a root and of the instances it shows that wait for a lazy component's load.
- *
- * @internal
- */
+/** @internal */
 export const loads = (root: Root): ReadonlyArray<Load> =>
   loadsOf(root.instance as unknown as Kernel.Instance)
 
-/** The runs of `inst` and of the instances it shows, parents first. */
 const pendingOf = (
   inst: Kernel.Instance,
   out: Array<Pending> = []
@@ -833,7 +798,6 @@ const pendingIn = (rec: Kernel.Rec, out: Array<Pending>): void => {
   else if (rec.v._tag === "Child" && !rec.inst.closed) pendingOf(rec.inst, out)
 }
 
-/** The slots of `inst` and of the instances it shows that wait for a lazy component's load. */
 const loadsOf = (
   inst: Kernel.Instance,
   out: Array<Load> = []
@@ -880,9 +844,9 @@ const onScheduler = (ctx: Context.Context<any>): Context.Context<any> => {
 }
 
 /**
- * Renders a tree on the server: on a host that only keeps the node tree, waiting for provided Layers
- * and the per-request cache's fetches until nothing is in flight or the budget runs out, then writing
- * it once.
+ * Renders a tree on the server: on a host that only keeps the node tree,
+ * waiting for provided Layers and the per-request cache's fetches until
+ * nothing is in flight or the budget runs out, then serialising it once.
  *
  * @internal
  */
@@ -947,7 +911,6 @@ export const prerender = (
       (scope, exit) => Scope.close(scope, exit)
     ))
 
-// Every message waits for a view transition that never starts: the painted tree takes none.
 const unmoved: Kernel.Transitions = {
   request: () => {},
   waits: () => true,
@@ -958,13 +921,7 @@ const unmoved: Kernel.Transitions = {
 
 const noFacts = <A>(f: () => A): A => f()
 
-/**
- * Paints the tree at a recorded state: each instance takes its Model, query results and props by path,
- * and one with none starts from `init`. Nothing it does runs: no Command, Subscription, query or provided
- * Layer, and no event or message reaches it. It closes with the Scope.
- *
- * @internal
- */
+/** @internal */
 export const paint = (
   component: Component.Any,
   rootProps: unknown,
@@ -985,7 +942,6 @@ export const paint = (
       const fellBack: Array<string> = []
       let broke: { readonly error: unknown } | undefined
       const host = Context.get(ctx, services.Renderer).host
-      // A DOM host made for the copy, so its listeners stay on the copy.
       const dom = domHost.doms.get(host)?.make(container, {
         head: false,
         step: noFacts
@@ -1051,7 +1007,6 @@ export const paint = (
     }
   )
 
-/** The paths of the instances whose view shows a feature slot's fallback, in `inst` and what it shows. */
 const fallbacksIn = (inst: Kernel.Instance, out: Set<string>): void => {
   if (!inst.closed && inst.rendered !== undefined) {
     fallbacksInRec(inst.rendered, out)

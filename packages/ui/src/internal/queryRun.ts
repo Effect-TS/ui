@@ -1,10 +1,3 @@
-/**
- * Runs the queries of the kernel's instances: their watches, the results they write, and `$.loadMore` and
- * `$.reset`. `Query` hands it to `queryCore.ts` when an app imports it, and a component with `queries`
- * calls it from there, so the kernel never imports it, and an app with no query doesn't carry it.
- *
- * @internal
- */
 import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
 import * as Duration from "effect/Duration"
@@ -95,11 +88,7 @@ const rootOf = (inst: Kernel.Instance): Root => {
   return root
 }
 
-/**
- * The cache of the tree `inst` is in.
- *
- * @internal
- */
+/** @internal */
 // oxlint-disable-next-line effect/no-unused-internal
 export const cacheOf = (inst: Kernel.Instance): Cache => rootOf(inst).cache
 
@@ -206,12 +195,7 @@ const against = (
   if (ctx !== undefined) go(ctx)
 }
 
-/**
- * Follows the instance's state: its watches, then its Subscriptions, then the list operations `next`
- * issued. The component's `~sync`.
- *
- * @internal
- */
+/** @internal */
 // oxlint-disable-next-line effect/no-unused-internal
 export const sync = (inst: Kernel.Instance, next?: Kernel.Next): void => {
   if (inst.closed || inst.tree.host.inert) return
@@ -241,12 +225,7 @@ const follows = (
   if (state.keyed.size > 0) requestKeyed(inst, state)
 }
 
-/**
- * Registers the instance's watches before its first view, so it shows what the cache holds. The
- * component's `~first`.
- *
- * @internal
- */
+/** @internal */
 // oxlint-disable-next-line effect/no-unused-internal
 export const first = (inst: Kernel.Instance): void => {
   if (inst.tree.host.inert) return
@@ -263,7 +242,6 @@ const watch = (
   state: State
 ): ReadonlyArray<() => void> => {
   const bound = boundOf(inst)
-  // Before a query writes, every result is empty, as a kept child's predicate reads it.
   inst.results ??= bound.empty
   let declared: ReadonlyArray<object & { readonly key: string }>
   try {
@@ -457,11 +435,7 @@ const requestKeyed = (inst: Kernel.Instance, state: State): void => {
   })
 }
 
-/**
- * Writes the keyed results still due, so they hold only the declared keys.
- *
- * @internal
- */
+/** @internal */
 // oxlint-disable-next-line effect/no-unused-internal
 export const drain = (inst: Kernel.Instance): void => {
   const state = states.get(inst)

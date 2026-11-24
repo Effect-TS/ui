@@ -1,9 +1,3 @@
-/**
- * The plain data a handler of a DOM event gets, read from the event and the elements involved. Shared by
- * the browser hosts.
- *
- * @internal
- */
 import type * as Html from "../Html.ts"
 import { nonTextInputTypes } from "./editable.ts"
 import { modifiers, pointerTypeOf } from "./pointer.ts"

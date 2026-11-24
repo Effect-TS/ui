@@ -87,7 +87,6 @@ export const noop: MessageLog = messageLog.noop
  */
 export const MessageLog: Context.Reference<MessageLog> = messageLog.MessageLog
 
-// A mount builds entries with the recorder once this module is loaded, as any log is made here.
 messageLog.load(Recorder.make)
 
 /**

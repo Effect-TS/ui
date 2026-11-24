@@ -60,7 +60,6 @@ const isRadio = (node: Node): node is HTMLInputElement =>
   (node as Element).localName === "input" &&
   (node as HTMLInputElement).type === "radio"
 
-/** The radio buttons checking `radio` unchecks, itself included: those with its name and form owner. */
 const radioGroup = (radio: HTMLInputElement): ReadonlyArray<HTMLInputElement> =>
   radio.name === ""
     ? [radio]
@@ -90,7 +89,6 @@ const optionDisabled = (option: HTMLOptionElement): boolean =>
   (option.parentElement?.localName === "optgroup" &&
     option.parentElement.hasAttribute("disabled"))
 
-/** Whether a `select`'s options differ from those its HTML selects, as a browser picks them. */
 const selectionChanged = (select: HTMLSelectElement): boolean => {
   const options = Array.from(select.options)
   const marked = options.map((option) => option.hasAttribute("selected"))
@@ -112,13 +110,6 @@ const controlOf = (node: Node): Element =>
     ? (node as Element).closest("select") ?? (node as Element)
     : node as Element
 
-/**
- * A server-rendered control the user changed before its instance adopted, or before its events went
- * live, keeps what it shows, and the change is reported to its `onInput` and `onChange` as if the
- * events had just fired. A change is told from an untouched control by its state differing from the
- * server's default, read before adoption writes to it: a radio group as one, and a textarea as it's
- * taken, as adoption drops its text.
- */
 class Edits {
   readonly adopted = new WeakSet<Node>()
   readonly defaults = new WeakMap<Node, string>()
@@ -155,7 +146,6 @@ class Edits {
     }
     return changed
   }
-  /** Whether adoption keeps what `node` shows for `name`, where the view writes `value`. */
   keeps(node: Node, name: string, value: unknown): boolean {
     if (name !== userProp(node)) return false
     const control = controlOf(node)
@@ -166,7 +156,6 @@ class Edits {
     ) this.edited.add(control)
     return this.edited.has(control)
   }
-  /** Sends each held control's state as its `input` and `change`, a radio group by its checked button. */
   report(): void {
     this.changedBefore.clear()
     const controls = Array.from(this.edited)
@@ -185,7 +174,6 @@ class Edits {
   }
 }
 
-/** Writes `value` to `node` as the view's, but leaves what it shows: the write sees it's already there. */
 const keeping = (
   node: Node,
   name: string,
@@ -240,10 +228,8 @@ const between = (
   const kept = new WeakSet<Node>()
   let freshDepth = 0
   let holding: Held | undefined
-  // The element a child the server rendered without markers starts at: it's that child's, matched or not.
   let bare: Node | undefined
   const missed = new WeakSet<Node>()
-  // What the client made here: inserted among the server's nodes, it's none of theirs.
   const ours = new WeakSet<Node>()
 
   const scopeOf = (node: Node): Node => {
@@ -320,7 +306,6 @@ const between = (
     return null
   }
 
-  /** Drops a marker-free child's element its view doesn't match, and goes on after it. */
   const drop = (node: Node): void => {
     at = node.nextSibling
     node.parentNode!.removeChild(node)
@@ -437,7 +422,6 @@ const between = (
         names.add(normalized)
         const served = element.getAttribute(normalized)
         if (value === undefined ? served === null : served === value) return
-        // The server's text is what the host replaces: a style mismatch keeps none of its properties.
         return base.setAttr(node, name, value, served ?? undefined)
       }
       base.setAttr(node, name, value)
@@ -448,8 +432,6 @@ const between = (
       if (edits.keeps(node, name, value)) {
         return keeping(node, name, value, () => base.setProp(node, name, value))
       }
-      // A controlled property goes to the host, which writes no value already there: it keeps what the
-      // view wants, and an adopted dialog's showing.
       if (
         names !== undefined && (node as any)[name] === value &&
         base.controlled?.has(name) !== true
@@ -491,13 +473,11 @@ const between = (
         node = node.nextSibling
       }
       if (node === null || node === end || node.nodeType !== ELEMENT) return
-      // A stray element before the child's markers isn't the child's.
       for (
         let after = node.nextSibling;
         after !== null && after.nodeType === COMMENT;
         after = after.nextSibling
       ) if (isOpen(after, path)) return
-      // One the server didn't render: from here on, its list is built fresh.
       const scope = scopeOf(node)
       if (!served) missed.add(scope)
       else if (!missed.has(scope)) bare = node
@@ -547,12 +527,7 @@ const between = (
   }
 }
 
-/**
- * What a hydrating mount adopts with on a DOM host: the server's nodes between the markers of `path` in
- * `container`, and those of each child held until its state decodes.
- *
- * @internal
- */
+/** @internal */
 export const adopt: hydrateRun.Adopt<Node> = (base, container, path) => {
   const holds = new Map<Node, Held>()
   const edits = new Edits()
@@ -576,7 +551,6 @@ export const adopt: hydrateRun.Adopt<Node> = (base, container, path) => {
       if (held === undefined) return undefined
       holds.delete(placeholder)
       const list = held.first.parentNode
-      // Gone with what held them: nothing's left to adopt.
       if (list === null) return undefined
       return held.first === held.last
         ? between(

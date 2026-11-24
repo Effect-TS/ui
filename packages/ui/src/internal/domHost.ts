@@ -1,6 +1,3 @@
-/**
- * @internal
- */
 import type * as Renderer from "../Renderer.ts"
 import type * as Kernel from "./kernel.ts"
 

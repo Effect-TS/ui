@@ -1,9 +1,3 @@
-/**
- * The document head sync the browser hosts share: one per document, not per host. `HtmlHead` loads
- * the full sync, which owns marked tags and the `<html>` / `<body>` attributes. Until it does, the
- * only head entry an app can make is `Head.title`, so only `<title>` is synced, and an app that
- * writes no head carries neither.
- */
 import { marker } from "./headAttributes.ts"
 
 /** @internal */
@@ -12,7 +6,6 @@ export type HeadSync = (
   warn: (message: string) => void
 ) => { readonly sync: (head: never) => void; readonly release: () => void }
 
-/** A document's sync: `restore` puts the shell's values back, if it has synced. */
 interface Sync {
   readonly sync: (head: never) => void
   readonly restore: () => void

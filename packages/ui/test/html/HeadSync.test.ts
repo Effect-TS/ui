@@ -15,7 +15,6 @@ afterEach(() => {
   }
 })
 
-/** A host from modules loaded fresh, by an app that imports HtmlHead or nothing from it. */
 const freshHost = async (options?: { readonly htmlHead?: boolean }) => {
   vi.resetModules()
   if (options?.htmlHead === true) await import("@effect/ui/html/HtmlHead")

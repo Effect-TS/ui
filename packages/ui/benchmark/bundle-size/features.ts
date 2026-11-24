@@ -73,7 +73,6 @@ const App = Component.define({
     })
 })
 
-// The Layer builds a tick late, so the badge's fallback shows first.
 const badge = Badge.toLayer(BadgeView).pipe(
   Layer.provide(Layer.effectDiscard(Effect.yieldNow))
 )

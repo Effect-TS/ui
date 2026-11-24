@@ -1,9 +1,3 @@
-/**
- * Runs the mounts of the elements the kernel renders. A mount carries it as its `~attach` and `~detach`,
- * so the kernel never imports it, and an app that renders no mount doesn't carry it.
- *
- * @internal
- */
 import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"

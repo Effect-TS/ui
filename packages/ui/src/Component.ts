@@ -2301,14 +2301,12 @@ const Proto = Object.assign(Object.create(Function.prototype), {
   pipe() {
     return Pipeable.pipeArguments(this, arguments)
   },
-  // The kernel calls it as the instance's Model or props change.
   "~sync"(this: Any, inst: unknown, next: unknown, seq: unknown) {
     if (this["~queries"] !== undefined) {
       queryCore.loaded!.run.sync(inst as never, next as never)
     } else if (this.subscriptions !== undefined) {
       subscriptionCore.loaded?.(inst as never)
     }
-    // A component sends to an owner it doesn't read too.
     if (sharing(this) || (next as Next<any, any, any, any>)?.sends?.length) {
       sharedRun.sync(inst as never, next as never, seq as never)
     }
@@ -2342,7 +2340,6 @@ const HeadlessProto = Object.assign(Object.create(Function.prototype), {
   "~first": Proto["~first"],
   "~kept": keeper,
   "~owned": owned,
-  // The kernel's view of a headless instance: the closure its declarer wrote, given its parts.
   "~content"(
     this: Headless.Any,
     model: unknown,
@@ -4306,7 +4303,6 @@ export const provide: {
       sharedLayer,
       // Nested provides are built as one Layer, so one opt-out keeps all of them off the server.
       layerOnServer: component.layerOnServer && options?.server !== false,
-      // What builds it on the kernel, which never imports Layers.
       boot: layerRun.boot,
       "~render": layerKeys === undefined ? undefined : layerRun.reselect
     })

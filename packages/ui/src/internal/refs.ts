@@ -1,19 +1,9 @@
-/**
- * How a Command or a mount on the kernel reaches the elements of its instance. What runs them carries it,
- * so an app that issues neither doesn't.
- *
- * @internal
- */
 import * as Effect from "effect/Effect"
 import * as Option from "effect/Option"
 import type * as Renderer from "../Renderer.ts"
 import type * as Kernel from "./kernel.ts"
 
-/**
- * Runs `f` once the flush running or scheduled commits, or at once when none is.
- *
- * @internal
- */
+/** @internal */
 export const afterCommit = (tree: Kernel.Tree, f: () => void): void => {
   if (tree.scheduled) (tree.committed ??= []).push(f)
   else f()
@@ -59,11 +49,7 @@ const findIn = (
   return undefined
 }
 
-/**
- * The refs `inst` put on the elements it renders, read once the render the caller follows from commits.
- *
- * @internal
- */
+/** @internal */
 export const refsOf = (inst: Kernel.Instance): Renderer.Refs => ({
   lookup: <Node>(ref: Renderer.Ref<Node>) =>
     Effect.callback<Option.Option<Node>>((resume) =>

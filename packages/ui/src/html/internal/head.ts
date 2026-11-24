@@ -1,7 +1,7 @@
 /**
- * The browser host's full head sync: it diffs each folded `HtmlHead.HtmlHead` against the
+ * The browser host's head sync: it diffs each folded `HtmlHead.HtmlHead` against the
  * document, owning only marked tags plus `<title>` and `lang` / `dir`. Every host on one
- * document shares one sync, through `documentHead`, so they share the shell's baseline.
+ * document shares one sync, so they share the shell's baseline.
  */
 import type * as Head from "../HtmlHead.ts"
 import * as headAttributes from "./headAttributes.ts"
@@ -85,11 +85,7 @@ interface Shared {
   hosts: number
 }
 
-/**
- * The sync of one document, which `documentHead` shares between its hosts. `HtmlHead` loads it.
- *
- * @internal
- */
+/** @internal */
 export const makeSync = (
   document: Document,
   warn: Warn

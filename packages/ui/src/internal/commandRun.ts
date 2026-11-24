@@ -1,12 +1,3 @@
-/**
- * Runs the Commands an instance of the kernel issues. A Command carries it as its `~run`, so the kernel
- * never imports it, and an app that issues no Command doesn't carry it.
- *
- * Its rules are today's runtime's: `schedule` decides what a run does to its group, a stopped run holds
- * its group until its fiber exits, and a closed instance's runs are interrupted and logged as they end.
- *
- * @internal
- */
 import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
 import * as Duration from "effect/Duration"
@@ -39,22 +30,16 @@ interface Run {
   status: schedule.Status
   fiber: Fiber.Fiber<unknown, unknown> | undefined
   done: boolean
-  /** From fiber exit until delivery: the result an awaiting run holds, and its source. */
   held:
     | { readonly message: unknown; readonly source: MessageLog.Source }
     | undefined
-  /** Whether every result the run has had so far was `Component.noop`. `undefined` until the first. */
   silent: boolean | undefined
   spanId: string | undefined
   traceId: string | undefined
-  /** What the `CommandInterrupted` of a run stopped with its fiber going follows from, and why. */
   cut: (<A>(f: () => A) => A) | undefined
   reason: MessageLog.InterruptReason | undefined
-  /** Its start waits for the next read of a keyed provide's keys: a change keeps it. */
   gated: boolean
-  /** What the query cache knows of it, for a Command service once `Query` is loaded. */
   handle: Query.RunHandle | undefined
-  /** Under `Command.afterRefetch`: holding its result until its refetches settle. */
   waiting: boolean
   waited:
     | {
@@ -82,11 +67,6 @@ class Runs implements Kernel.Runs {
     ;(inst.closers ??= []).push(() => this.close())
     ;(inst.swaps ??= []).push((waits) => this.swap(waits))
   }
-  /**
-   * Its descendants have closed, and it has logged `Unmounted`. Its runs stop once the runs its
-   * descendants stopped have exited, as an instance's close waits for theirs, and its ancestors' closes
-   * wait for its own.
-   */
   close(): void {
     const inst = this.inst
     queryCore.loaded?.run.closing(inst)
@@ -107,13 +87,8 @@ class Runs implements Kernel.Runs {
     }
     hold(inst, waits)
   }
-  /**
-   * A keyed provide selected new services: every run but those waiting for the selection stops, and
-   * an awaiting run's message is dropped. The fibers still exiting go in `waits`.
-   */
   swap(waits: Array<Fiber.Fiber<unknown, unknown>>): void {
     const stopped = this.list.filter((run) => !run.gated)
-    // Queued and awaiting runs first, so stopping a running one promotes only a kept run.
     for (const run of stopped) if (run.status !== "running") this.drop(run)
     for (const run of stopped) if (!run.done) this.drop(run)
     for (const run of this.list) {
@@ -140,7 +115,6 @@ class Runs implements Kernel.Runs {
     const index = this.list.indexOf(run)
     if (index >= 0) this.list.splice(index, 1)
   }
-  /** Starts the next queued run of `run`'s group, once nothing in it runs. A closed instance starts nothing. */
   promote(run: Run): void {
     for (;;) {
       const next = schedule.next(entriesOf(this), entryOf(run))
@@ -154,11 +128,6 @@ class Runs implements Kernel.Runs {
       return
     }
   }
-  /**
-   * Asks a run to stop: it delivers nothing from now on. A run whose fiber is going is interrupted, and
-   * holds its group as `stopping` until the fiber exits. An awaiting run delivers at once, unless its
-   * instance is gone.
-   */
   stop(run: Run, reason: MessageLog.InterruptReason): void {
     if (run.done) return
     const inst = this.inst
@@ -205,21 +174,17 @@ class Runs implements Kernel.Runs {
     const env = inst.env
     let ctx = env.ctx
     if (ctx === undefined) {
-      // Its services are still building: it starts once they're there, and is stopped if they fail.
       if (env.cause === undefined) {
         env.waiting.push(() =>
           env.cause === undefined ? this.start(run) : this.stop(run, "layer")
         )
         return
       }
-      // Issued after a handled failure: it runs against the services above.
       ctx = servicesOf(env)
       if (ctx === undefined) return this.stop(run, "layer")
     }
     const command = run.command
     const tree = inst.tree
-    // Every run gets a Scope of its own, closed with the run's exit, so what the body acquires is
-    // released when the run ends.
     const scope = Scope.makeUnsafe("sequential")
     let source: MessageLog.Source = {
       _tag: "Command",
@@ -228,7 +193,6 @@ class Runs implements Kernel.Runs {
       spanId: undefined,
       traceId: undefined
     }
-    // A Stream element: `Component.noop` sends nothing, and the Stream carries on.
     const send = (message: unknown) => {
       if (run.done) return
       const silent = isNoop(message)
@@ -239,7 +203,6 @@ class Runs implements Kernel.Runs {
       command.name,
       { attributes: { path: inst.path, mode: command.mode } },
       (span): Effect.Effect<unknown, unknown, any> => {
-        // Stopped before its first step, or its instance closed meanwhile: the work never begins.
         if (run.done || inst.closed) return Effect.interrupt
         run.spanId = span.spanId
         run.traceId = span.traceId
@@ -322,7 +285,6 @@ class Runs implements Kernel.Runs {
     if (routed.has(tree) && isNavigation(command)) defer(tree, () => go(true))
     else go()
   }
-  /** A run's fiber exited: its result is sent, unless the run was stopped or its instance is gone. */
   exited(
     run: Run,
     exit: Exit.Exit<unknown, unknown>,
@@ -332,8 +294,6 @@ class Runs implements Kernel.Runs {
     const command = run.command
     run.handle?.finish({ _tag: "Stopped" })
     if (run.status === "stopping") {
-      // A stopped run sends nothing. A defect in its cleanup can't fail the run that replaced it: it's
-      // reported.
       this.remove(run)
       run.cut!(() => interrupted(inst, run, run.reason!))
       if (Exit.isFailure(exit) && Cause.hasDies(exit.cause)) {
@@ -346,7 +306,6 @@ class Runs implements Kernel.Runs {
             this.cleanupFailed(inst.path, command.name, exit.cause) as never
           )
         } catch {
-          // A sink can't change what the runtime does.
         }
       }
       redraw(inst)
@@ -359,7 +318,6 @@ class Runs implements Kernel.Runs {
     const waits = command._tag === "Effect" &&
       command.afterRefetch !== undefined && Exit.isSuccess(exit)
     if (inst.closed || stopped) {
-      // It ended while its instance closes, before the close stopped it: its message is dropped.
       this.remove(run)
       if (stopped) {
         if (!inst.closed || run.spanId !== undefined) {
@@ -393,7 +351,6 @@ class Runs implements Kernel.Runs {
       Exit.isFailure(exit) &&
       (Cause.hasDies(exit.cause) || reject === undefined)
     ) {
-      // A typed failure nothing maps is a defect too: an unmatched Command got past the types.
       this.remove(run)
       inst.tree.ops.fail(
         inst,
@@ -434,18 +391,12 @@ class Runs implements Kernel.Runs {
       return
     }
     run.silent = isNoop(message) && run.silent !== false
-    // Awaiting until delivery: under `queue`, behind an earlier result of its group. The next queued run
-    // starts first, so an `update` this delivers can't start another run of the group ahead of it.
     run.status = "awaiting"
     run.held = { message, source }
     this.promote(run)
     if (waits) this.wait(run)
     this.release(run)
   }
-  /**
-   * At fiber exit of a run issued with `Command.afterRefetch`: its result waits for the refetches the
-   * cache fixed when it applied the invalidation, or for the budget.
-   */
   wait(run: Run): void {
     const inst = this.inst
     const handle = run.handle
@@ -489,7 +440,6 @@ class Runs implements Kernel.Runs {
       timer?.interruptUnsafe()
     }
   }
-  /** Delivers the results of `run`'s group that can go now, in issue order under `queue`. */
   release(run: Run): void {
     for (;;) {
       if (run.command.mode !== "queue" && run.done) return
@@ -505,7 +455,6 @@ class Runs implements Kernel.Runs {
       this.deliver(next.value)
     }
   }
-  /** Sends an awaiting run's message, or nothing for `Component.noop`. The run is still listed while `update` handles it. */
   deliver(run: Run): void {
     const inst = this.inst
     const held = run.held!
@@ -532,7 +481,6 @@ const endWait = (run: Run, by: MessageLog.WaitEnded): void => {
   cancel?.()
 }
 
-/** Renders the instance again, for `h.isRunning`. */
 const redraw = (inst: Kernel.Instance): void => {
   if (!inst.closed) inst.tree.ops.markDirty(inst)
 }
@@ -547,11 +495,6 @@ const entryOf = (run: Run): schedule.Entry<Run> => ({
 
 const entriesOf = (runs: Runs) => runs.list.map(entryOf)
 
-/**
- * Issues `command` from `inst`. `cleanupFailed` makes the problem a stopped run's defect is reported as.
- *
- * @internal
- */
 const early = new WeakMap<Kernel.Tree, Map<Run, Kernel.Instance>>()
 
 const begin = (inst: Kernel.Instance, command: Issued): Query.RunHandle =>
@@ -642,7 +585,6 @@ export const issue = (
     waiting.set(run, inst)
   }
   if (run.status === "running") runs.start(run)
-  // Queued behind the runs `switch` cut, it starts now if none of them had a fiber to wait for.
   else runs.promote(run)
   redraw(inst)
 }

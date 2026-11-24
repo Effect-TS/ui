@@ -1,10 +1,3 @@
-/**
- * Runs the view transitions an update asks for with `$.viewTransition` on a kernel tree: the next flush
- * waits for the host to call back before it renders. A host that offers transitions makes it, so a host
- * without them doesn't carry it.
- *
- * @internal
- */
 import { defer } from "./due.ts"
 import type * as Kernel from "./kernel.ts"
 

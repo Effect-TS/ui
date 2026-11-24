@@ -1,7 +1,3 @@
-/**
- * The checks that only catch an author's mistake, and their messages. The package's `#dev` import
- * resolves here unless the `production` condition is set, which resolves it to `devOff.ts`.
- */
 import type * as View from "../View.ts"
 import type { Instance, Rec } from "./kernel.ts"
 import {
@@ -11,10 +7,8 @@ import {
   type ChildPaths
 } from "./paths.ts"
 
-/** Whether the checks run. A bundler that folds constants drops every `if (dev)` under `production`. */
 export const dev: boolean = true
 
-/** Throws for two sibling elements of one tag and key, as the diff would give one of them the other's node. */
 export const checkKeys = (
   path: string,
   views: ReadonlyArray<View.Node<any, any>>
@@ -31,10 +25,6 @@ export const checkKeys = (
   }
 }
 
-/**
- * Throws for two children of one view, at any depth, at one path: they would share a log path. Returns
- * the author of a headless child's closure, the first time since its placed slots were last checked.
- */
 export const checkPaths = (
   inst: Instance,
   tree: View.Node<any, any>
@@ -55,10 +45,6 @@ export const checkPaths = (
 const placedBy = new WeakMap<Instance, ReadonlySet<string>>()
 const authors = new Set<Instance>()
 
-/**
- * Throws when two trees of `author`'s, its view and the closures it gave headless children, place one of
- * its slots. Run once all of them are current.
- */
 export const checkPlaced = (author: Instance): void => {
   authors.delete(author)
   if (author.closed || author.rendered === undefined) return
@@ -85,7 +71,6 @@ export const checkPlaced = (author: Instance): void => {
   visit(author.rendered)
 }
 
-/** `checkKeys` and `checkPaths` for the content a slot places, at the slot's path. */
 export const checkContent = (
   path: string,
   views: ReadonlyArray<View.Node<any, any>>
@@ -94,10 +79,6 @@ export const checkContent = (
   checkContentPaths(path, views)
 }
 
-/**
- * Throws for a child a fallback shows at a path another child of the same tree holds: one of the view's,
- * or one another fallback shows. Only the path of the child a fallback stands in for is free.
- */
 export const checkShown = (path: string, recs: ReadonlyArray<Rec>): void => {
   const paths = checkContentPaths(path, recs.map((rec) => rec.v))
   for (let index = 0; index < recs.length; index++) shownIn(paths, recs[index]!)
@@ -115,10 +96,6 @@ const shownIn = (paths: ChildPaths, rec: Rec): void => {
     }}
 }
 
-/**
- * Throws for a part applied where its owner has closed, outside the view it was made for, and for two
- * layers of one element that set one option of an event other than `preventDefault`.
- */
 export const checkLayers = (
   inst: Instance,
   layers: ReadonlyArray<
@@ -154,7 +131,6 @@ export const checkLayers = (
   }
 }
 
-/** Throws for a feature child that has no `fallback` to show while the services it reads aren't there. */
 export const checkFallback = (
   path: string,
   view: View.Child<any, any>
@@ -167,7 +143,6 @@ export const checkFallback = (
   }
 }
 
-/** Throws for a slot a root places: a root has no parent to fill it. */
 export const checkDeclarer = (inst: Instance, view: View.Outlet): void => {
   if (inst.parent === undefined) {
     throw new Error(

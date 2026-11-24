@@ -1,9 +1,3 @@
-/**
- * Builds the message log's entries from what the kernel records: their numbers, the session, and the
- * fact each one follows from. The kernel doesn't import it, so an app that makes no log doesn't carry it.
- *
- * @internal
- */
 import type * as Clock from "effect/Clock"
 import type * as MessageLog from "../MessageLog.ts"
 import * as Kernel from "./kernel.ts"
@@ -13,17 +7,12 @@ import { record as sharedRecord } from "./shared.ts"
 /** @internal */
 export interface Recording {
   readonly record: Kernel.Recorder
-  /** Runs something that reached the tree from outside it, and what follows from it before it returns. */
   readonly step: <A>(f: () => A) => A
-  /** Runs `f` as what follows from the session's start. */
   readonly session: <A>(f: () => A) => A
-  /** Runs a function later as what follows from the fact running now, or as a fact of its own. */
   readonly follow: NonNullable<Kernel.Tree["follow"]>
-  /** Logs an entry about the tree, such as a fetch that started. */
   readonly tree: (
     draft: { readonly _tag: string; readonly [field: string]: unknown }
   ) => void
-  /** The number an instance's entries carry, once one was logged. */
   readonly numberOf: (inst: Kernel.Instance) => number | undefined
 }
 
@@ -96,10 +85,6 @@ export const make = (
         seq: seqs.get(source) ?? -1
       }
       : (source as MessageLog.Source | undefined) ?? dispatched
-  /**
-   * The provider whose Layer entries the feature slots in `inst`'s view read: the one above, `inst`
-   * included, whose own Env is the one `inst` renders with. None for an Env that is always ready.
-   */
   const boundaryOf = (inst: Kernel.Instance): number | undefined => {
     for (
       let at: Kernel.Instance | undefined = inst;

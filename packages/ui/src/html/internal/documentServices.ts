@@ -1,9 +1,3 @@
-/**
- * What a browser host provides besides itself: the document's `Query.Visibility` and
- * `Query.Connectivity`, its events, its window's frames, and images and file pickers over it.
- *
- * @internal
- */
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as queryCore from "../../internal/queryCore.ts"

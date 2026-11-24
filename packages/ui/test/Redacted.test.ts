@@ -202,7 +202,6 @@ const historyHooks = (stored: Record<string, unknown> = {}) => {
         : undefined,
     entry: () => stored,
     prefetch: () => () => {},
-    // What the Router passes, for a root on the kernel.
     kernel: routeRun.make
   }
   return {

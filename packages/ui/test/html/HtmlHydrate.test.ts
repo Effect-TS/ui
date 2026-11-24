@@ -113,7 +113,6 @@ const Page = Component.define({
     )
 })
 
-/** Fails unless `app` holds exactly the elements `server` held, the same nodes in the same order. */
 const sameElements = (app: Element, server: ReadonlyArray<Element>) => {
   const now = [...app.querySelectorAll("*")]
   assert.strictEqual(now.length, server.length)
@@ -291,7 +290,6 @@ describe("HtmlHydrate", () => {
       )
       const rendered = yield* HtmlServer.renderToHtml(Shell, {})
       assert.include(rendered.html, "<p>loading</p>")
-      // Kept off the server, so today defers it too: its Model comes from init.
       assert.deepStrictEqual(rendered.state["~deferred"], ["/Shell"])
       const app = yield* container(rendered.html)
       const server = [...app.querySelectorAll("*")]

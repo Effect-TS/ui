@@ -1,6 +1,3 @@
-/**
- * @internal
- */
 import * as Cause from "effect/Cause"
 import type * as Component from "../Component.ts"
 import * as View from "../View.ts"
@@ -16,7 +13,6 @@ interface Owning {
   seq: number | undefined | void
   round: boolean
   collected: { readonly message: unknown } | undefined
-  /** Set while hydration may still adopt a reader: the first comparison with what the server collected waits. */
   held: boolean
 }
 
@@ -28,7 +24,6 @@ interface Reading {
 interface Shared {
   readonly owners: Set<Inst>
   readonly readers: Set<Inst>
-  /** The readers in kept children off the page: they report nothing. */
   readonly hidden: WeakSet<Inst>
   readonly rounds: Array<Inst>
   readonly due: Set<Inst>
@@ -103,7 +98,6 @@ const within = (inst: Inst, top: Inst): boolean => {
   return false
 }
 
-/** The nearest owner above where `inst` is drawn: a kept child's path is under its author, not there. */
 const above = (
   inst: Inst,
   test: (owner: Inst) => boolean
@@ -139,10 +133,6 @@ const absent = (inst: Inst, definition: Component.Definition.Any): string => {
       other.path
 }
 
-/**
- * Binds each read of a reader to the nearest owner above where it's drawn, as it mounts and as a kept
- * child it's in is drawn again. A read that moves takes the owner's value as seen, and moves its report.
- */
 const bindAll = (inst: Inst): boolean => {
   const reading = inst.reading as Reading
   for (const read of readsOf(definitionOf(inst))) {
@@ -191,7 +181,6 @@ export const first = (inst: Inst): void => {
         ?.value
   }
   if (definition.shares !== undefined) {
-    // Hydration may have given it what its reports last sent on the server.
     const saved = inst.owning as Partial<Owning> | undefined
     inst.owning = {
       value: undefined,
@@ -203,19 +192,13 @@ export const first = (inst: Inst): void => {
     } satisfies Owning
     sharedOf(inst.tree).owners.add(inst)
     refresh(inst, undefined)
-    // Restored from history: compared once the pass settles, readers or none.
     if (saved?.collected !== undefined && !saved.held) due(inst)
   }
   report(inst)
   ;(inst.closers ??= []).push(() => leave(inst))
 }
 
-/**
- * Compares an owner's reports with what they sent on the server, once hydration adopted everything
- * below it: an owner whose readers are gone on the client is compared too.
- *
- * @internal
- */
+/** @internal */
 export const restored = (owner: Inst): void => {
   const owning = owner.owning as Owning | undefined
   if (owning === undefined || owner.closed) return

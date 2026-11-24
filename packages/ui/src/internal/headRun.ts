@@ -1,9 +1,3 @@
-/**
- * Folds the head of a kernel tree once nothing is left to render in a flush, and gives it to the host.
- * `Head` loads it, so an app that declares no head doesn't carry it.
- *
- * @internal
- */
 import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
 import type * as Component from "../Component.ts"
@@ -104,7 +98,6 @@ class Folding {
       try {
         report(conflict as never)
       } catch {
-        // A sink can't change what the runtime does.
       }
     }
     const give = tree.host.head
@@ -119,12 +112,7 @@ class Folding {
   }
 }
 
-/**
- * Starts folding the head of `inst`'s tree, if nothing does yet. `neutral` is the fold of a tree whose
- * vocabularies have none.
- *
- * @internal
- */
+/** @internal */
 export const make =
   (neutral: View.HeadFold) => (inst: Kernel.Instance): void => {
     const tree = inst.tree
@@ -134,8 +122,6 @@ export const make =
     const folding = new Folding(root, neutral)
     tree.head = { value: undefined, title: undefined }
     const work = tree.work
-    // Folded again only once something rendered, mounted or closed since: a flush that drew nothing
-    // keeps the head it had, and evaluates no head.
     tree.work = (idle) =>
       work?.(idle) === true ||
       (idle && tree.drew === true && !(tree.drew = false) && folding.run())

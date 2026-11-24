@@ -850,7 +850,6 @@ function pipe(this: unknown) {
   return Pipeable.pipeArguments(this, arguments)
 }
 
-// What runs it on the kernel, so an app that issues no Command doesn't carry the runner.
 function run(
   this: Command<any, any>,
   inst: Kernel.Instance,

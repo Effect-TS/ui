@@ -7,12 +7,7 @@
 import type * as Subscription from "../Subscription.ts"
 import type * as Kernel from "./kernel.ts"
 
-/**
- * What starts and stops an instance's Streams on the kernel, once `Subscription` is loaded: every value
- * a `subscriptions` result holds is made there, so before then there's nothing to run.
- *
- * @internal
- */
+/** @internal */
 export let loaded: ((inst: Kernel.Instance) => void) | undefined
 
 /** @internal */
@@ -44,12 +39,7 @@ const encodeDep = (dep: Subscription.Dep): string =>
 // A colon separates the name from the deps, so a colon in a name is doubled.
 const encodeName = (name: string): string => name.replaceAll(":", "::")
 
-/**
- * `Subscription.keyOf`, here so the runtime builds keys without importing `Subscription`, which loads
- * what runs Subscriptions on the kernel.
- *
- * @internal
- */
+/** @internal */
 export const keyOf = (name: string, deps?: Subscription.Deps): string =>
   deps === undefined
     ? encodeName(name)

@@ -1,9 +1,6 @@
 /**
  * The `MessageLog` service and its no-op default, apart from `MessageLog`: a runtime reads the service
  * from here, so an app that provides no log doesn't ship that module's wire schema and encoder.
- *
- * The recorder that builds entries is loaded by `MessageLog` too, so an app that never imports it
- * doesn't carry the recorder either: until then a mount records nothing.
  */
 import type * as Clock from "effect/Clock"
 import * as Context from "effect/Context"

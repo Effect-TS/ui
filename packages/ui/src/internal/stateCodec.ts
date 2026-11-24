@@ -1,8 +1,3 @@
-/**
- * An instance's state as JSON, for page state and history restore.
- *
- * @internal
- */
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import * as SchemaIssue from "effect/SchemaIssue"
@@ -12,11 +7,7 @@ import type * as componentQueries from "./queries.ts"
 import * as queryCore from "./queryCore.ts"
 import { holdsRedacted } from "./schemaRedact.ts"
 
-/**
- * A Schema as JSON.
- *
- * @internal
- */
+/** @internal */
 export interface JsonCodec {
   readonly encode: (value: unknown) => Effect.Effect<unknown, SchemaIssue.Issue>
   readonly decode: (
@@ -24,7 +15,6 @@ export interface JsonCodec {
   ) => Effect.Effect<unknown, SchemaIssue.Issue>
 }
 const jsonCodecs = new WeakMap<object, JsonCodec>()
-/** @internal */
 const jsonCodecOf = (schema: Schema.Codec<any, any>): JsonCodec => {
   let found = jsonCodecs.get(schema)
   if (found === undefined) {
@@ -38,14 +28,6 @@ const jsonCodecOf = (schema: Schema.Codec<any, any>): JsonCodec => {
   return found
 }
 
-/**
- * An instance's state as JSON, for page state and history restore: its Model, and for a component
- * with queries, `{ model, queries }` with the query results.
- *
- * A state whose Schema holds a `Schema.Redacted` anywhere is never serialised: JSON would hold the
- * secret. Its codec encodes and decodes nothing, so the server defers the instance and history keeps
- * no entry for it, and state an older build wrote isn't adopted either.
- */
 const stateCodecs = new WeakMap<object, StateCodec>()
 /** @internal */
 export interface StateCodec {
@@ -67,7 +49,6 @@ export interface Decoded {
 export const redactedIssue = new SchemaIssue.Forbidden({
   message: "the Schema holds a Schema.Redacted"
 })
-/** @internal */
 const failRedacted = Effect.fail(redactedIssue)
 const redactedState: StateCodec = {
   redacted: true,
@@ -118,13 +99,7 @@ export const stateCodecOf = (component: Component.Any): StateCodec => {
   return found
 }
 
-/**
- * An instance's page state: its state, and for an owner whose reports sent a message the last one, which
- * the instance that takes the state compares its reports with. An owner whose message can't be shipped
- * isn't saved, as one built from its state alone would get that message again.
- *
- * @internal
- */
+/** @internal */
 export const encodePage = (
   component: Component.Any,
   model: unknown,
@@ -150,12 +125,7 @@ export const encodePage = (
   )
 }
 
-/**
- * What an owner taking saved state is given of its reports' last message: `held` until hydration has
- * adopted everything below it. `undefined` for no message, or one that doesn't decode.
- *
- * @internal
- */
+/** @internal */
 export const reportedOf = (
   component: Component.Any,
   reported: unknown,

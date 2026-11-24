@@ -911,6 +911,4 @@ export const vocabulary: View.Vocabulary<Elements> = {
   head
 }
 
-// A browser host syncs every head entry once this module is loaded, as only it makes them besides
-// `Head.title`.
 documentHead.load(headSync.makeSync)

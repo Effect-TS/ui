@@ -1,6 +1,3 @@
-/**
- * @internal
- */
 import {
   checkContent,
   checkDeclarer,
@@ -41,26 +38,20 @@ export interface Host<N = any> {
     ) => Readonly<Record<string, string>>)
     | undefined
   readonly setProp: (node: N, name: string, value: unknown) => void
-  /** Called once an element and its children are made: a hydrating host goes on past what it built fresh. */
   readonly made?: ((node: N) => void) | undefined
   readonly setEvents: (node: N, record: Rec, first: boolean) => void
   readonly insert: (parent: N, node: N, before: N | null) => void
   readonly remove: (parent: N, node: N) => void
   readonly clear?: ((parent: N) => void) | undefined
-  /** Makes a node that holds a kept child's nodes out of the document. Without it, keeping one fails its author. */
   readonly createContainer?: (() => N) | undefined
   readonly parentOf: (node: N) => N
   readonly nextOf: (node: N) => N | null
   readonly commit?: (() => void) | undefined
-  /** The properties a patch sets again even when the view's value is the same: the user may have changed them. */
   readonly controlled?: ReadonlySet<string> | undefined
   readonly runsMounts?: boolean | undefined
-  /** Given the tree's folded head, when it changed. */
   readonly head?: ((head: unknown) => void) | undefined
-  /** Makes what runs the view transitions updates ask for. Without it, they're ignored. */
   readonly transitions?: ((tree: Tree) => Transitions) | undefined
   readonly server?: Server | undefined
-  /** Paints a recorded state: what runs a feature starts nothing. */
   readonly inert?: boolean | undefined
 }
 
@@ -78,20 +69,13 @@ export interface Server {
 /** @internal */
 export interface Transitions {
   readonly request: (types: ReadonlyArray<string>) => void
-  /** Whether a message to `inst` waits for a transition, to read the props it gives. */
   readonly waits: (inst: Instance) => boolean
   readonly wait: (f: () => void) => void
-  /** At the start of a flush: whether it waits for a transition to start. */
   readonly hold: () => boolean
   readonly settle: () => void
 }
 
-/**
- * What an element's mount carries to run itself on the element's record, so the kernel runs one without
- * importing what runs it. `~attach` is called as the element is made, and with each new mount a patch gives it.
- *
- * @internal
- */
+/** @internal */
 export interface Attachable {
   readonly "~attach": (rec: Rec) => void
   readonly "~detach": (rec: Rec) => void
@@ -109,30 +93,18 @@ export interface Runnable {
     shared?: unknown
   ) => Next | undefined
   readonly view: Function
-  /** Set by `Component.provide`: the kernel never reads it. */
   readonly layer?: unknown
-  /** Called once `Mounted` is logged, before the first view: a provided Layer starts building. */
   readonly boot?: ((inst: Instance) => void) | undefined
-  /** Called after each Model or props change the instance takes, and once it first rendered, with the Next it applied. */
   readonly "~sync"?:
     | ((inst: Instance, next?: Next, seq?: number | undefined | void) => void)
     | undefined
-  /** A headless component's view: its parts, given to the closure whoever declared the instance wrote. */
   readonly "~content"?: Function | undefined
-  /** A headless component's: the element `inst` renders, with the layers its parts added merged in. */
   readonly "~owned"?:
     | ((inst: Instance, view: View.Element<any, any>) => View.Element<any, any>)
     | undefined
-  /** Called once `init`'s Commands are issued, before the first view. */
   readonly "~first"?: ((inst: Instance) => void) | undefined
-  /** Called before each view after the first. */
   readonly "~render"?: ((inst: Instance) => void) | undefined
-  /** What runs the component's children written inside `h.keepAlive`, when it's a keep-alive component. */
   readonly "~kept"?: Keeper | undefined
-  /**
-   * A lazy component's: the component it loaded, or `undefined` while it loads or once it failed, when
-   * the slot shows its fallback and `settle` is called for it once the load ends.
-   */
   readonly "~load"?:
     | ((
       owner: Instance,
@@ -140,18 +112,10 @@ export interface Runnable {
       at: string | undefined
     ) => Runnable | undefined)
     | undefined
-  /** A lazy component's: why its load failed. */
   readonly "~cause"?: (() => Cause.Cause<unknown> | undefined) | undefined
 }
 
-/**
- * Runs the keep-alive children of a tree, carried by a keep-alive component so the kernel never imports
- * it. `mount` makes or takes the child a Rec writes, with the path of the slot it's drawn in, `patch` returns the Rec a kept one is patched to,
- * or `undefined` to patch it as any child, and `release` returns whether it kept or dropped the Rec's
- * child itself.
- *
- * @internal
- */
+/** @internal */
 export interface Keeper {
   readonly mount: (author: Instance, rec: Rec, slot: string | undefined) => void
   readonly patch: (
@@ -195,39 +159,23 @@ export interface Env {
   ctx: Context.Context<any> | undefined
   cause: Cause.Cause<unknown> | undefined
   readonly waiting: Array<() => void>
-  /** The Env whose services work runs against once this one's Layer failed and the failure was handled. */
   readonly parent?: Env | undefined
 }
 
-/**
- * What a mount records into, if it was given one: a draft per entry, and `rendering` and `rendered`
- * around each dirty instance's render, which are not entries. Returns the entry's number, if it has one.
- *
- * @internal
- */
+/** @internal */
 export type Recorder = (
   inst: Instance,
   draft: { readonly _tag: string; readonly [field: string]: unknown }
 ) => number | undefined | void
 
-/**
- * Where an issued Command, or a Command of `init`, came from: the number of the entry that logged it,
- * and its index there.
- *
- * @internal
- */
+/** @internal */
 export interface Issued {
   readonly seq: number
   readonly index: number
 }
 
-/**
- * What a Command carries to run itself, so the kernel runs one without importing what runs it.
- *
- * @internal
- */
+/** @internal */
 export interface Issuable {
-  /** `seq` is the number of the entry that logged it, if the tree records a log, and `index` its index there. */
   readonly "~run": (
     inst: Instance,
     seq: number | undefined | void,
@@ -235,11 +183,7 @@ export interface Issuable {
   ) => void
 }
 
-/**
- * An instance's Command runs, once it has issued one: what `h.isRunning` and a root's `pending` read.
- *
- * @internal
- */
+/** @internal */
 export interface Runs {
   readonly running: (name: string, groupKey: string | undefined) => boolean
   readonly pending: () => ReadonlyArray<
@@ -247,12 +191,7 @@ export interface Runs {
   >
 }
 
-/**
- * The kernel's functions a Command's runner and a Subscription's call, reached through the tree so they
- * never import the kernel: an app on another runtime that makes a Command doesn't carry the kernel.
- *
- * @internal
- */
+/** @internal */
 export interface Ops {
   readonly send: typeof send
   readonly fail: typeof fail
@@ -287,53 +226,30 @@ export interface Tree {
     | ((cause: Cause.Cause<unknown>) => View.Node<any, any>)
     | undefined
   readonly schedule: (task: () => void) => void
-  /**
-   * Returns how to run something later as what follows from the fact running now, or, outside one, as a
-   * fact of its own: for what reaches the tree from a fiber. Without it, it runs as it is. `late`: a step
-   * that has no entry yet follows from its first.
-   */
   readonly follow?: ((late?: boolean) => <A>(f: () => A) => A) | undefined
-  /** The fibers the tree's close waits for, until they exit, once a feature has started one. */
   owned?: Set<Fiber.Fiber<unknown, unknown>> | undefined
-  /** The provided Layer builds still pending, each with the flush it began in. */
   building?: Set<{ readonly flush: number }> | undefined
-  /** The flush a build that begins now belongs to. Without it, the first. */
   flush?: (() => number) | undefined
-  /** How many provided Layer builds have begun, and the number of the last one that failed. */
   builds?: number | undefined
   failedBuild?: number | undefined
-  /** Called once the tree's query cache is made. */
   cached?: (() => void) | undefined
-  /** Told of each watch an instance registers, while something records them. */
   watched?:
     | ((inst: Instance, query: string, argsKey: string) => void)
     | undefined
-  /** What the server shipped for an instance that adopts its state: its Layer's status there, or `Ready`. */
   served?: ((inst: Instance) => string | undefined) | undefined
-  /** Told of each kept child as it's kept off the page, and as it's drawn again, wherever that is. */
   drawn?: ((inst: Instance, drawn: boolean) => void) | undefined
-  /** Told of each kept child an `h.keepAlive` predicate ends, by its author and its path. */
   ended?: ((author: Instance, path: string) => void) | undefined
-  /**
-   * A feature's work in a flush, called before each render pass, and with `idle` once nothing is left to
-   * render. Returns whether it did something, which may have more to render.
-   */
   work?: ((idle: boolean) => boolean) | undefined
-  /** Called once the flush running or scheduled commits, or at once when none is. */
   committed?: Array<() => void> | undefined
-  /** The folded head and its title, once an instance that declares a head has mounted. */
   head?:
     | { readonly value: unknown; readonly title: string | undefined }
     | undefined
   transitions?: Transitions | undefined
   shared?: unknown
-  /** Set as an instance renders, mounts or closes: a head fold clears it. */
   drew?: boolean | undefined
-  /** Whether a child keeps the placement it has, taking `view`, which `inst` drew, later. */
   holds?:
     | ((child: Instance, inst: Instance, view: View.Child<any, any>) => boolean)
     | undefined
-  /** Whether a placement is held over `at`, a slot's path: what's drawn there takes its author's latest write later. */
   held?: ((at: string) => boolean) | undefined
   dirty: Array<Instance>
   scheduled: boolean
@@ -366,7 +282,6 @@ export class Instance {
   declare readonly component: Runnable
   declare readonly parent: Instance | undefined
   declare readonly at: Rec | undefined
-  /** The path of the slot or headless view it's drawn in, if any: a kept child's changes as it's drawn again. */
   declare under: string | undefined
   declare readonly depth: number
   declare props: unknown
@@ -380,22 +295,16 @@ export class Instance {
   lazy: unknown = undefined
   placed: Map<string, Placed> | undefined = undefined
   closers: Array<() => void> | undefined = undefined
-  // Set by what runs its Commands, once it issues one.
   declare runs: Runs | undefined
-  /** The query results, set by what runs its queries. */
   declare results: unknown
-  /** Set by a keyed provide: takes `go` and returns `true` when work must wait for the next read of its keys. */
   declare hold: ((go: () => void) => boolean) | undefined
-  /** What stops the work started against `env`, when a keyed provide replaces it, adding the fibers still exiting. */
   declare swaps:
     | Array<(waits: Array<Fiber.Fiber<unknown, unknown>>) => void>
     | undefined
   declare look: ((owner: any, optional?: boolean) => unknown) | undefined
   declare owning: unknown
   declare reading: unknown
-  /** The keep-alive children the instance's views wrote, once they wrote one: told once each view is patched. */
   declare kept: { readonly done: () => void } | undefined
-  /** How many of the views it authors are being made or patched now. */
   writing = 0
   named: string | undefined = undefined
   constructor(
@@ -422,7 +331,6 @@ export class Instance {
       return this.named = "/" + this.component.definition.name
     }
     const view = at.v as View.Child<any, any>
-    // A keep-alive child's path is under its author, wherever it's drawn.
     return this.named =
       (view.alive === undefined && this.under || this.parent!.path) + "/" +
       segmentOf(view.component, view.key)
@@ -459,14 +367,12 @@ let busy = 0
 let receiving: Instance | undefined
 let shown = 0
 const born: Array<Instance | Rec> = []
-// The instance whose feature slot's fallback is being made: what it places resolves from the nearest Env
-// with services.
 let fallen: Instance | undefined
 
-/** Recorded before a dirty instance renders, so a log can name what made it dirty. @internal */
+/** @internal */
 export const rendering = { _tag: "Render" } as const
 
-/** Recorded after it rendered. @internal */
+/** @internal */
 export const rendered = { _tag: "Rendered" } as const
 
 const emptyText = View.text("")
@@ -493,7 +399,6 @@ const fallbackOf = (
   }
 }
 
-/** Makes a feature slot's fallback. One that throws fails an instance, so `fallen` needs no restoring then. */
 const inFallback = <A>(owner: Instance, f: () => A): A => {
   const outer = fallen
   fallen = owner
@@ -654,7 +559,6 @@ export const send = (
     return fail(inst, "update", Cause.die(error), { message, source })
   }
   if (next === undefined) return
-  // Without a log, the draft isn't built.
   const seq = inst.tree.log?.(inst, {
     _tag: "Update",
     source,
@@ -690,7 +594,6 @@ const issueAll = (
   }
 }
 
-/** What follows a Next once its Commands are issued: Subscriptions follow it, and its events are emitted. */
 const applied = (
   inst: Instance,
   next: Next,
@@ -741,14 +644,12 @@ const renderAbove = (inst: Instance): void => {
     if (at.under !== undefined) drawn = true
   }
   if (drawn) {
-    // Drawn in a slot or a headless view: what draws it is above it too, and its path holds theirs.
     const path = inst.path
     above.length = 0
     for (let index = 0; index < dirty.length; index++) {
       const at = dirty[index]!
       if (at.dirty && path.startsWith(at.path + "/")) above.push(at)
     }
-    // Nearest first, as the walk up the parents lists them.
     above.sort(byPathLength)
     top = above.length - 1
   }
@@ -867,8 +768,6 @@ const start = (inst: Instance): Rec | undefined => {
       adopted: false
     })
     component.boot?.(inst)
-    // `init`'s Commands are issued before the first view, so it shows them running: the redraw they
-    // ask for is already done by it.
     issueAll(inst, first, seq)
     component["~first"]?.(inst)
     if (inst.closed) return undefined
@@ -976,7 +875,6 @@ const release = (owner: Instance, rec: Rec): void => {
     }
     owner = owner.parent!
   }
-  // Newest first, as siblings close.
   if (kids !== undefined) {
     for (let index = kids.length - 1; index >= 0; index--) {
       release(owner, kids[index]!)
@@ -1016,10 +914,6 @@ const place = (
     }}
 }
 
-/**
- * Releases `rec`, then takes its nodes out: a handler the removal sets off, as a focusout, finds the
- * instances it closed closed. The nodes are read first, as a release can change the Recs.
- */
 const remove = (inst: Instance, parent: unknown, rec: Rec): void => {
   const nodes = nodesOf(rec, [])
   release(inst, rec)
@@ -1498,7 +1392,6 @@ const patchElement = (
 ): void => {
   const host = inst.tree.host
   const node = rec.node
-  // A part's layers dropped since the last render still have their owner's mounts to stop.
   const layers = view.owned?.length ? view.owned : prev.owned
   if (layers?.length) view = owned(inst, view, layers)
   rec.v = view
@@ -1546,7 +1439,6 @@ const patchElement = (
   ) {
     patchProps(host, node, prev.props, view.props)
   }
-  // After the children too, so a mount given new args finds the elements this patch made below it.
   const mount = view.mount as unknown as Attachable | undefined
   const was = prev.mount as unknown as Attachable | undefined
   if (mount !== was) {
@@ -1592,8 +1484,6 @@ const patchList = (
     out[start] = patch(inst, olds[start]!, views[start]!)
     start++
   }
-  // An unkeyed node matches by its position from the start, so the end pairs by position only when the
-  // count stays.
   while (
     start <= oldEnd && start <= end &&
     (olds.length === views.length || keyOf(views[end]!) !== undefined) &&
@@ -1604,8 +1494,6 @@ const patchList = (
   }
   const count = end - start + 1
   const sources = new Int32Array(count)
-  // Each key's first view, and after each view the next with its key: an element's key can be a child's,
-  // or another tag's.
   let byKey: Map<unknown, number> | undefined
   let same: Int32Array | undefined
   for (let index = end; index >= start; index--) {

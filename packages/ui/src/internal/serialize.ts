@@ -1,4 +1,3 @@
-/** @internal */
 import * as Cause from "effect/Cause"
 import type * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
@@ -42,7 +41,6 @@ type Snap =
     readonly status: Status
     readonly bare: boolean
     readonly kids: ReadonlyArray<Snap>
-    /** Its kept children off the page: their state goes in its `~kept` notes, with no nodes. */
     readonly kept: ReadonlyArray<Snap>
   }
   | {
@@ -103,7 +101,6 @@ export const snapshot = (
         ? runCodec(encodePage(component, inst.model, inst.results, inst.owning))
         : undefined,
       status: component.layer === undefined ? undefined : statusOf(inst.env),
-      // A kept child has its markers, which say where the server drew it.
       bare: inst.parent !== undefined && component.layer === undefined &&
         (inst.at!.v as View.Child<any, any>).alive === undefined &&
         rendered?.v._tag === "Element",
@@ -249,7 +246,6 @@ export const write = (
   Effect.map(awaitEncoded(snap), () => {
     const state: Record<string, unknown> = {}
     const kept: Record<string, unknown> = {}
-    // Where states go: `state`, or the notes of a kept child off the page, whose nodes go nowhere.
     let into = state
     let sink = to
     const deferredPaths: Array<string> = []

@@ -1,9 +1,3 @@
-/**
- * What Commands and Subscriptions share on the kernel: forking their fibers, which the tree's close waits
- * for, and running what a fiber brings back as what follows from the fact that started it.
- *
- * @internal
- */
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import type * as Fiber from "effect/Fiber"
@@ -13,23 +7,13 @@ import type * as Kernel from "./kernel.ts"
 
 const now = <A>(f: () => A): A => f()
 
-/**
- * How to run something later as what follows from the fact running now: as it is, for a tree that
- * records no log. `late`: from a step's first entry, if it has none yet.
- *
- * @internal
- */
+/** @internal */
 export const follow = (
   tree: Kernel.Tree,
   late?: boolean
 ): <A>(f: () => A) => A => tree.follow === undefined ? now : tree.follow(late)
 
-/**
- * Forks `effect` on the Scheduler the mount's Executor gives, as a fiber the tree's close waits for. Unless
- * `now`, it never runs inside the step that started it.
- *
- * @internal
- */
+/** @internal */
 export const fork = <A, E>(
   tree: Kernel.Tree,
   context: Context.Context<any>,
@@ -43,11 +27,7 @@ export const fork = <A, E>(
     )
   )
 
-/**
- * `context` with the Scheduler the mount's Executor gives, if it gives one.
- *
- * @internal
- */
+/** @internal */
 export const withScheduler = (
   context: Context.Context<any>
 ): Context.Context<any> => {
@@ -57,11 +37,7 @@ export const withScheduler = (
     : Context.add(context, Scheduler.Scheduler, scheduler)
 }
 
-/**
- * Makes the tree's close wait for `fiber`, until it exits.
- *
- * @internal
- */
+/** @internal */
 export const owned = <A, E>(
   tree: Kernel.Tree,
   fiber: Fiber.Fiber<A, E>
@@ -72,12 +48,7 @@ export const owned = <A, E>(
   return fiber
 }
 
-/**
- * The services of `env`, or of the nearest Env above it that has them: what work runs against once a
- * provided Layer's failure was handled.
- *
- * @internal
- */
+/** @internal */
 export const servicesOf = (
   env: Kernel.Env | undefined
 ): Context.Context<any> | undefined => {

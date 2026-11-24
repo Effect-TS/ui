@@ -1,10 +1,3 @@
-/**
- * The Router's side of a kernel root: the handle the Router attaches, the state history restore gives a new
- * instance, and the snapshot of every instance's state. `Router` hands it over with its hooks, so neither
- * the kernel nor an app without a Router carries it.
- *
- * @internal
- */
 import * as Cause from "effect/Cause"
 import * as Clock from "effect/Clock"
 import * as Context from "effect/Context"
@@ -31,11 +24,7 @@ import {
   stateCodecOf
 } from "./stateCodec.ts"
 
-/**
- * What the runtime tells it of the root it serves.
- *
- * @internal
- */
+/** @internal */
 export interface Root {
   readonly path: string
   readonly container: unknown
@@ -48,44 +37,31 @@ export interface Root {
   readonly navigated?: (() => void) | undefined
 }
 
-/** A child held until its state decodes, and what it would start from. */
 interface Held {
   readonly owner: Kernel.Instance
   readonly rec: Kernel.Rec
   readonly path: string
-  /** Its state, the states below it and their `~reported`, as saved. */
   readonly saved: Saved
-  /** The notes of the kept children below it, by author. */
   readonly notes: Saved | undefined
 }
 
-/**
- * A root's part in history restore and navigation.
- *
- * @internal
- */
+/** @internal */
 export interface Routed {
   readonly handle: services.RootHandle
-  /** What a new instance starts from: `first`, or the Model history saved for its path, with `init`'s Commands. */
   readonly init: (
     inst: Kernel.Instance,
     first: Kernel.Next,
     adopted?: boolean
   ) => Kernel.Next
-  /** Whether the instance started from what history saved. */
   readonly restored: (inst: Kernel.Instance) => boolean
-  /** Holds a child whose saved state decodes asynchronously, until it has. */
   readonly hold: NonNullable<Kernel.Host["hold"]>
-  /** Saves what a child held elsewhere would start from, until the returned function is called. */
   readonly heldFor: (
     owner: Kernel.Instance,
     rec: Kernel.Rec,
     path: string,
     found: services.PageState
   ) => () => void
-  /** Attaches the root to the Router, once it has rendered. */
   readonly attach: (instance: Kernel.Instance) => void
-  /** Tells the Router a flush committed. */
   readonly flushed: () => void
   readonly detach: () => void
 }
@@ -181,11 +157,7 @@ const restoreQueries = (
   return out
 }
 
-/**
- * The root's handle and hooks for the Router whose `hooks` its context holds.
- *
- * @internal
- */
+/** @internal */
 export const make = (hooks: services.RootHooks, root: Root): Routed => {
   const ctx = root.context
   const report = Context.get(ctx, queryCore.Problems)
@@ -252,8 +224,6 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
     )
     encoded.addObserver((exit) => write(inst, out, exit))
   }
-  // What a kept child's subtree saves goes in its author's `~kept` notes, keyed by the author's path
-  // and its own: `~kept` and the root's path in the entry, `~kept` in a kept child's own notes.
   const keptIn = (out: Saved, top: Saved, author: string): Saved =>
     (((out[out === top ? "~kept" + root.path : "~kept"] ??= {}) as Saved)[
       author
@@ -262,7 +232,6 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
     queryCore.loaded?.run.drain(inst)
     if (inst.closed || inst.failure !== undefined) return
     save(inst, out)
-    // Below one whose Layer is building, what's drawn holds the server's state, which isn't saved.
     if (inst.env.ctx === undefined && inst.env.cause === undefined) return
     for (const held of waitingFor.values()) {
       if (held.owner === inst) keepHeld(held, out, top)
@@ -282,14 +251,11 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
       visit(entry.inst, notes[entry.inst.path] = {}, top)
     }
   }
-  // The kept notes of the entry being restored, until the Router has restored the root, by author.
   let popped: Saved | undefined
   const pop = () => {
     const left = hooks.entry()
     popped = left && { ...left["~kept" + root.path] as Saved | undefined }
   }
-  // Each author's notes no kept child has claimed yet, and the notes a restored kept child's subtree
-  // restores from.
   const waits = new WeakMap<Kernel.Instance, Saved>()
   const supplies = new WeakMap<Kernel.Instance, Saved>()
   const claim = (inst: Kernel.Instance, from: Saved | undefined) => {
@@ -298,7 +264,6 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
     delete from![inst.path]
     waits.set(inst, { ...notes })
   }
-  /** The notes `inst` restores from, when it's in a restored kept child's subtree. */
   const supplyOf = (inst: Kernel.Instance): Saved | undefined => {
     if ((inst.at?.v as View.Child<any, any> | undefined)?.alive !== undefined) {
       const author = waits.get(inst.parent!)
@@ -315,9 +280,7 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
     }
     return undefined
   }
-  // What each held child would restore, under the instance that draws it.
   const waitingFor = new Map<Kernel.Rec, Held>()
-  /** Saves a held child as it would start: its own state through its `restore`, and what's below it. */
   const keepHeld = (held: Held, out: Saved, top: Saved) => {
     const { path, saved } = held
     const view = held.rec.v as View.Child<any, any>
@@ -363,7 +326,6 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
     })
     return () => waitingFor.delete(rec)
   }
-  // The saved state a hold took for each path, decoded, for the instance that starts there.
   const taken = new Map<
     string,
     readonly [services.PageState, Exit.Exit<Decoded, unknown>]
@@ -374,8 +336,6 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
     if (component.definition?.restore === false) return false
     const path = (view.alive === undefined && at || owner.path) + "/" +
       segmentOf(view.component, view.key)
-    // Where it restores from, as `init` finds it: a kept child's notes, those of a kept child above, or
-    // the entry.
     let own: Saved | undefined
     if (view.alive !== undefined) own = waits.get(owner)?.[path] as Saved
     for (
@@ -396,10 +356,7 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
       taken.set(path, [found, decoded])
       return false
     }
-    // Until it starts, a snapshot saves what it would restore: what's saved at and below it, and the
-    // notes of the kept children below it, by author.
     const entry = own ?? hooks.entry() as Saved | undefined
-    // Restoring took its own state out of the entry.
     const saved: Saved = { [path]: found.state }
     for (const key in entry) {
       if (key.startsWith(path + "/")) saved[key] = entry[key]
@@ -469,7 +426,6 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
         try {
           report(problem as never)
         } catch {
-          // A sink can't change what the runtime does.
         }
       },
       cache: () => queryCore.loaded!.run.cacheOf(instance!),
@@ -582,7 +538,6 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
       instance = inst
       inst.tree.watched = (at, query, argsKey) =>
         views.get(at)?.watched?.add(entryKey(query, argsKey))
-      // A kept child its predicate ends starts fresh: what history saved of it goes.
       const ended = inst.tree.ended
       inst.tree.ended = (author, path) => {
         ended?.(author, path)

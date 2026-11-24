@@ -61,14 +61,8 @@ const keepAliveOnceLoaded = (
     : view
 }
 
-/** The slots waiting on a load, each with its listener's removal. */
 const watched = new WeakMap<Kernel.Rec, () => void>()
 
-/**
- * The kernel's `~load`: the component once loaded. Until then the slot shows its fallback, and is
- * settled when the load ends: to the component, or to the fallback's Failure branch, where it waits on
- * a retry another slot starts. A slot new to the load starts one when the last failed.
- */
 function loaded(
   this: Lazy,
   owner: Kernel.Instance,
@@ -87,7 +81,6 @@ function loaded(
     if (rec.inst !== owner || owner.closed) return
     if (loaded) rec.v = keepAliveOnceLoaded(rec.v as View.Child<any, any>)
     Kernel.settle(owner, rec, at)
-    // A flush commits what it changed, and a server waiting for its loads checks again.
     const tree = owner.tree
     if (!tree.flushing && !tree.scheduled) {
       tree.scheduled = true
@@ -99,7 +92,6 @@ function loaded(
   return undefined
 }
 
-/** The kernel's `~cause`: why the load failed. */
 function failure(this: Lazy): Cause.Cause<unknown> | undefined {
   const state = this.state
   return state._tag === "Failed" ? Cause.die(state.error) : undefined
@@ -164,7 +156,6 @@ export const make = (
     "~load": loaded,
     "~cause": failure
   }) as any
-  // A child written with `alive`, once the component it loaded is a keep-alive one, is kept by it.
   Object.defineProperty(self, "~kept", {
     get: () =>
       self.state._tag === "Loaded"

@@ -1,4 +1,3 @@
-/** @internal */
 import * as Cause from "effect/Cause"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
@@ -17,9 +16,7 @@ import { type Decoded, reportedOf, stateCodecOf } from "./stateCodec.ts"
 export interface Adopting<N = any> {
   readonly host: Kernel.Host<N>
   readonly hold: (path: string) => void
-  /** A child starts at `path`: `served` when the server's state has it. */
   readonly child: (path: string, served: boolean) => void
-  /** Whether the server drew the kept child at `path` here. */
   readonly has: (path: string) => boolean
   readonly done: () => void
 }
@@ -28,7 +25,6 @@ export interface Adopting<N = any> {
 export interface Adoption<N = any> {
   readonly root: Adopting<N> | undefined
   readonly resume: (placeholder: N) => Adopting<N> | undefined
-  /** Given the nodes an instance adopted before its Layer was ready, as their events go live. */
   readonly live?:
     | ((nodes: ReadonlyArray<readonly [N, Kernel.Rec]>) => void)
     | undefined
@@ -48,7 +44,6 @@ export interface Hydration {
     first: Kernel.Next
   ) => Kernel.Next | undefined
   readonly adopts: (inst: Kernel.Instance) => boolean
-  /** Whether it's in a kept child off the page: adoption doesn't wait for it. */
   readonly parked: (inst: Kernel.Instance) => boolean
   readonly held: () => ReadonlyArray<string>
   readonly end: () => void
@@ -84,12 +79,7 @@ const decode = (
   return exit
 }
 
-/**
- * The decode of the root's state from the server, which the mount waits for when it's asynchronous, as
- * the root holds the server's nodes until it adopts with it.
- *
- * @internal
- */
+/** @internal */
 export const decodeRoot = (
   component: Kernel.Runnable,
   state: Renderer.State,
@@ -125,20 +115,13 @@ export const make = (
     decoded.set(root[0], Exit.isSuccess(root[1]) ? root[1].value : undefined)
   }
   const resumed = new WeakSet<Kernel.Rec>()
-  // The instances that adopt the server's nodes, by path, as receivers of the slots kept children are
-  // drawn in.
   const started = new Map<string, Kernel.Instance>()
   const held = new Map<Kernel.Rec, string>()
-  // How each held child stops waiting once it's no longer drawn, by its owner.
   const drops = new Map<Kernel.Rec, readonly [Kernel.Instance, () => void]>()
-  // Owners that adopted what their reports sent on the server, compared once nothing below waits to adopt.
   const owners: Array<Kernel.Instance> = []
-  // The state each instance that started from the server's without its nodes gives its children: a kept
-  // child the client writes after the pass, or in its notes, and what's under it. Each kept path once.
   const supplies = new WeakMap<Kernel.Instance, Saved>()
   const claimed = new Set<string>()
   const parked = new Set<Kernel.Instance>()
-  // What each child that starts from a supply was given, by path, from its hold to its init.
   const given = new Map<string, Saved>()
   const supplyOf = (
     parent: Kernel.Instance,
@@ -202,23 +185,18 @@ export const make = (
     started.clear()
     settled()
   }
-  // A child the server's state doesn't have is held as history restore holds it.
   const fallback = host.hold
   ;(host as { hold: Kernel.Host["hold"] }).hold = (owner, rec, at) => {
     const view = rec.v as View.Child<any, any>
-    // A kept child's path is under its author's, wherever it's drawn.
     const path = (view.alive === undefined && at || owner.path) + "/" +
       segmentOf(view.component, view.key)
     if (resumed.delete(rec)) return false
     const served = serves(owner, path)
     if (view.alive === undefined) active?.child(path, served)
-    // One that starts from what its parent was given decodes it as one the server drew decodes its own.
     const from = served
       ? state as Saved
       : supplyOf(owner, path, view.alive !== undefined)
     if (from?.[path] === undefined) return fallback?.(owner, rec, at) === true
-    // A kept child drawn in a receiver whose Layer builds, below its author, starts once it has, with
-    // what its author last wrote: until then it holds the server's nodes, and its state isn't decoded.
     let receiver: Kernel.Instance | undefined
     for (
       let above = view.alive === undefined ? undefined : at;
@@ -235,7 +213,6 @@ export const make = (
     }
     const env = receiver?.env
     const behind = receiver !== undefined
-    // One the server drew elsewhere starts once the pass ends, from its state, with nodes of its own.
     const away = served && view.alive !== undefined &&
       active?.has(path) === false
     const exit = behind
@@ -251,7 +228,6 @@ export const make = (
     }
     if (served && !away) active?.hold(path)
     held.set(rec, path)
-    // Until it starts, history saves the server's state for it.
     const unwait = waits?.(owner, rec, path, {
       state: from[path],
       reported: from["~reported"]?.[path]
@@ -261,7 +237,6 @@ export const make = (
       drops.delete(rec)
       tree.schedule(() => {
         unwait?.()
-        // One no longer drawn leaves the server's nodes it held.
         const placeholder = rec.kids?.[0]!.node
         const range = adoption?.resume(placeholder)
         if (rec.inst === owner && !owner.closed && !tree.closed) {
@@ -284,7 +259,6 @@ export const make = (
         }
         range?.done()
         Kernel.flush(tree)
-        // Only now, as what settling draws can ask whether adoption has.
         held.delete(rec)
         finish()
       })
@@ -298,13 +272,11 @@ export const make = (
       const wake = () => {
         if (!waiting) return
         waiting = false
-        // One no longer drawn, or in a receiver that closed, isn't decoded.
         if (rec.inst !== owner || receiver!.closed) return go(Exit.interrupt())
         const exit = decode(view.component as never, from[path])
         if (Exit.isExit(exit)) go(exit)
         else exit.addObserver(go)
       }
-      // Once the receiver has taken its author's latest write.
       env!.waiting.push(() => owner.tree.schedule(wake))
       ;(receiver!.closers ??= []).push(wake)
       drops.set(rec, [owner, wake])
@@ -337,7 +309,6 @@ export const make = (
         const drawn = tree.drawn
         tree.drawn = (kept, on) => {
           drawn?.(kept, on)
-          // One moved before its Layer builds, as it waits to adopt, leaves the server's nodes behind.
           const old = kept.rendered
           const env = kept.env
           if (
@@ -407,7 +378,6 @@ export const make = (
     },
     adopts: (inst) => adopting.has(inst),
     parked(inst) {
-      // Where it's drawn: a kept child's path is under its author, and the slot it's in under the receiver.
       const paths = [inst.path + "/"]
       for (let at: Kernel.Instance | undefined = inst; at; at = at.parent) {
         if (at.under !== undefined) paths.push(at.under + "/")
@@ -432,23 +402,13 @@ export const make = (
 
 type Draft = Parameters<Kernel.Recorder>[1]
 
-/**
- * The instances that adopt once what they wait on is ready, the env a provided Layer builds or the
- * waiting instance they adopt after, and log `Waiting` until then.
- *
- * @internal
- */
+/** @internal */
 export class Waits {
   readonly waiting = new Map<Kernel.Instance, Draft>()
-  /**
-   * The latest placement of each waiting instance that kept the one it had, the server's, which it
-   * adopts with: this one is applied once it has.
-   */
   readonly held = new Map<
     Kernel.Instance,
     readonly [Kernel.Instance, View.Child<any, any>]
   >()
-  /** The seq of the entry `step` logged itself. */
   seq: ReturnType<Kernel.Recorder> = undefined
   readonly log: Kernel.Recorder
   readonly checkAdopted: () => void
@@ -471,7 +431,6 @@ export class Waits {
     }
     return false
   }
-  /** The waiting instance it adopts after: its parent, or the receiver whose slot it's drawn in. */
   behindOf(inst: Kernel.Instance): Kernel.Instance | undefined {
     const parent = inst.parent
     if (parent !== undefined && this.waiting.has(parent)) return parent
@@ -483,7 +442,6 @@ export class Waits {
   mount(inst: Kernel.Instance): void {
     const draft = this.waiting.get(inst)
     if (draft === undefined) return
-    // The parent that provides the env it waited on mounted first.
     const parent = inst.parent
     if (parent?.env.ctx !== undefined) this.mount(parent)
     const behind = this.behindOf(inst)
@@ -497,15 +455,10 @@ export class Waits {
     if (!inst.closed) this.log(inst, { ...draft, model: inst.model })
     this.checkAdopted()
     if (latest !== undefined && !inst.closed && !latest[0].closed) {
-      // Applied now, as `adopted` resolves: the render it asks for folds the head again.
       inst.tree.ops.patchChild(latest[0], inst.at!, latest[1])
       inst.tree.ops.markDirty(latest[0])
     }
   }
-  /**
-   * The draft to log for `inst`, or `undefined` when it logged one itself, as an instance starts or
-   * stops waiting, with its seq in `seq`.
-   */
   step(
     inst: Kernel.Instance,
     draft: Draft,
@@ -518,7 +471,6 @@ export class Waits {
         (inst.component as unknown as Component.Any).layer !== undefined &&
         (this.state["~status"] as Record<string, unknown> | undefined)
             ?.[inst.path] === undefined
-      // A child adopts after the parent that waits to: its Model is reported first.
       const behind = this.behindOf(inst) !== undefined
       if (
         layered || behind ||
@@ -538,7 +490,6 @@ export class Waits {
         return undefined
       }
     } else if (draft._tag === "LayerPending" && this.waiting.has(inst)) {
-      // Before the children that wait on the env it provides: it mounted before them.
       inst.env.waiting.push(() => this.mount(inst))
     } else if (draft._tag === "Unmounted" && this.waiting.delete(inst)) {
       this.held.delete(inst)
@@ -548,7 +499,6 @@ export class Waits {
     }
     return draft
   }
-  /** Mounts the instances whose env is ready, or failed, as a flush commits. */
   commit(): void {
     for (const inst of this.waiting.keys()) {
       if (inst.env.ctx !== undefined || inst.env.cause !== undefined) {
@@ -556,14 +506,12 @@ export class Waits {
       }
     }
   }
-  /** Whether every instance left waiting is in a kept child off the page. */
   parked(hydration: Hydration): boolean {
     for (const inst of this.waiting.keys()) {
       if (!hydration.parked(inst)) return false
     }
     return true
   }
-  /** The paths of the open instances that still wait. */
   paths(): Array<string> {
     const out: Array<string> = []
     for (const inst of this.waiting.keys()) {

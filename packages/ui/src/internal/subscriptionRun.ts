@@ -1,10 +1,3 @@
-/**
- * Starts and stops the Streams an instance of the kernel subscribes to. `Subscription` hands it to
- * `subscriptions.ts` when an app imports it, and a component with `subscriptions` calls it from there,
- * so the kernel never imports it, and an app with no Subscription doesn't carry it.
- *
- * @internal
- */
 import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
@@ -21,10 +14,8 @@ import * as services from "./services.ts"
 import { duplicateKey } from "./subscriptions.ts"
 
 interface Running {
-  /** The name and deps its key was built from, for the entry that logs its stop. */
   readonly name: string
   readonly deps: ReadonlyArray<Subscription.Dep> | undefined
-  /** The declaration from the latest `subscriptions` result that listed the key. */
   latest: Subscription.Subscription<any, any>
   fiber: Fiber.Fiber<unknown, unknown> | undefined
   detach: (() => void) | undefined
@@ -37,12 +28,7 @@ const stop = (running: Running): void => {
   running.fiber?.interruptUnsafe(Fiber.getCurrent()?.id)
 }
 
-/**
- * Follows the instance's `subscriptions` result: a key that left closes, before a new key starts, so
- * `room:1` and `room:2` are never both connected. A key that stays keeps its Stream.
- *
- * @internal
- */
+/** @internal */
 export const sync = (inst: Kernel.Instance): void => {
   if (inst.closed || inst.tree.host.inert) return
   const server = inst.tree.host.server
@@ -88,7 +74,6 @@ export const sync = (inst: Kernel.Instance): void => {
       declaration = declared
       continue
     }
-    // A key runs one Stream, so the second entry would never start, and nothing would say so.
     if (byKey.has(subscription.key)) {
       return inst.tree.ops.fail(
         inst,
@@ -142,7 +127,6 @@ export const sync = (inst: Kernel.Instance): void => {
       deps: running.deps
     })
     stop(running)
-    // Its cleanup may use the instance's services: they're released once it has run.
     if (running.fiber !== undefined && going(running.fiber)) {
       hold(inst, [running.fiber])
     }
@@ -210,13 +194,10 @@ const start = (
   const env = inst.env
   let ctx = env.ctx
   if (ctx === undefined) {
-    // Its services are still building: it starts once they're there.
     if (env.cause === undefined) {
       env.waiting.push(() => env.ctx !== undefined && again())
       return
     }
-    // After a handled failure it runs against the services above, but under a keyed provide it waits
-    // for the next selection.
     ctx = inst.hold === undefined ? servicesOf(env) : undefined
     if (ctx === undefined) return
   }
@@ -230,7 +211,6 @@ const start = (
   }
   const scope = Scope.makeUnsafe("sequential")
   const context = Context.add(ctx, Scope.Scope, scope)
-  // Rendering the ancestors may stop this key, or change its declaration.
   const enter = (f: (latest: Subscription.Subscription<any, any>) => void) =>
     follow(tree)(() => {
       inst.tree.ops.renderAbove(inst)
@@ -245,7 +225,6 @@ const start = (
     follow(tree)(() =>
       inst.tree.ops.fail(inst, "subscription", cause, undefined, undefined, key)
     )
-  // Attached to its source, it dispatches synchronously, and only its first check waits.
   const attached = (subscription as services.Direct)[services.direct]?.(
     context,
     (message, accepted) => {
@@ -271,7 +250,6 @@ const start = (
     )
   )
   running.fiber = fiber
-  // A Stream that ends stays stopped until its key leaves and comes back.
   fiber.addObserver((exit) => {
     if (
       Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause) && current()

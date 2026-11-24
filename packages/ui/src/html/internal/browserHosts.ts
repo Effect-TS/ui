@@ -1,7 +1,3 @@
-/**
- * @internal
- */
-
 /** @internal */
 export interface Holding {
   readonly held: () => boolean

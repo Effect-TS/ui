@@ -40,8 +40,6 @@ import * as Stream from "effect/Stream"
 import * as subscriptionRun from "./internal/subscriptionRun.ts"
 import * as subscriptions from "./internal/subscriptions.ts"
 
-// Every Subscription is made here, so a component's `subscriptions` reaches what runs them once one is.
-// Nothing an app imports anyway may import this module, or every app carries what runs them.
 subscriptions.load(subscriptionRun.sync)
 
 /**

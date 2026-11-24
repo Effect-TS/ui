@@ -783,7 +783,6 @@ export const Controllables: Context.Reference<Controllables> = Context
 // `showModal()` makes everything outside the dialog inert, DevTools included, while the copy's own `inert`
 // leaves the dialog unusable, and an auto popover shown in the copy would close the live page's. Both are
 // shown as manual popovers: in the top layer, with no effect on the rest of the page.
-// A copy shows its popovers and modal dialogs as manual popovers, which take no focus and block nothing.
 const painting = <
   H extends Pick<Renderer.Host<globalThis.Node>, "setAttr" | "setProp">
 >(host: H): H => ({
