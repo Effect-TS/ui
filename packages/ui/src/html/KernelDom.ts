@@ -232,7 +232,6 @@ export const makeHost = (
       const edit = pending = state === undefined
         ? undefined
         : { node: target, state, event }
-      // An edit's `input` comes in the same task as its `beforeinput`, and a cancelled edit has none.
       if (edit !== undefined) {
         setTimeout(() => pending === edit && (pending = undefined), 0)
       }
@@ -307,7 +306,6 @@ export const makeHost = (
   const listen = (name: string) => {
     if (listening.has(name)) return
     listening.add(name)
-    // Capturing, so an event that doesn't bubble is seen too.
     container.addEventListener(name, listener, true)
   }
 
@@ -344,7 +342,6 @@ export const makeHost = (
   return {
     createElement(tag) {
       if (svgTags.has(tag)) return document.createElementNS(SVG, tag)
-      // A form is the app's: its submission is prevented, handled or not.
       const element = document.createElement(tag)
       if (element.localName === "form") {
         forms.add(element)
@@ -378,7 +375,6 @@ export const makeHost = (
         else element.setAttribute(normalized, value)
         return
       }
-      // Declarations written outside the view, as a mount does, are kept, and win over the view's.
       const style = element.style
       const before = scratch ??= document.createElement("div").style
       before.cssText = previous ?? ""
@@ -456,7 +452,6 @@ export const makeHost = (
       transition?.skipTransition()
       transition = undefined
       sync?.release()
-      // A node the page keeps doesn't keep the tree alive.
       for (const node of container.querySelectorAll("*")) {
         delete (node as Node).$r
       }
@@ -479,7 +474,6 @@ export interface Root<Model, Msg> {
   readonly send: (message: Msg) => void
 }
 
-// A test DOM can lack `reportError`. Every browser has it.
 const report: Kernel.Tree["report"] = (path, where, cause) =>
   globalThis.reportError?.(
     new Error("[@effect/ui] " + path + " failed in " + where, { cause })
