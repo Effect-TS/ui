@@ -1,19 +1,3 @@
-// Bundle sizes of small @effect/ui clients, bundled with Vite against the packed @effect/ui and
-// @effect/ui-kit as an external consumer would. Run from the repository root, after `pnpm build`:
-//
-//   pnpm bundle-size [--app <name>]... [--development] [--vocabulary] [--json <file>] [--base <file>]
-//
-// Apps: `counter` (counter.ts), `features` (features.ts: a Layer, a slot, a failure fallback and the
-// message log) and `routing` (examples/routing). Every app is measured unless --app picks some. Each
-// bundle runs in happy-dom before it counts. Added gzip bytes are an app's total minus a separately
-// bundled effect-only client.
-//
-//   --development  bundle without the `production` export condition, keeping development-only checks
-//   --vocabulary   the counter with `elements: Html.vocabulary`
-//   --json         write the result to a file
-//   --base         add deltas against an earlier --json file; an older single-app file compares the counter only
-//
-// The table is also appended to $GITHUB_STEP_SUMMARY when that is set.
 import { Window } from "happy-dom"
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
@@ -34,7 +18,6 @@ const { values: { app: only, base, development, json, vocabulary } } =
       json: { type: "string" }
     }
   })
-// Vite resolves the `production` export condition when this is "production", whatever the mode.
 process.env.NODE_ENV = development ? "development" : "production"
 const repo = path.resolve(import.meta.dirname, "../../../..")
 const ui = path.join(repo, "packages/ui")
@@ -161,7 +144,6 @@ async function checkRouting(chunks, entry) {
         [...document.querySelectorAll("#root nav a")].find((a) =>
           a.textContent === name
         )
-      // Not the lazy People page: happy-dom fails to link a chunk that imports the entry back.
       link("Nested").click()
       await window.happyDOM.waitUntilComplete()
       assert.equal(
@@ -301,7 +283,6 @@ async function measure() {
   }
   const root = fs.mkdtempSync(path.join(tmpdir(), "ui-bundle-size-"))
   try {
-    // Bundle as an external consumer: the workspace manifests export src, not dist.
     install(root, pack(ui, root), "@effect/ui")
     install(root, pack(uiKit, root), "@effect/ui-kit")
     fs.symlinkSync(effectDir, path.join(root, "node_modules/effect"))
@@ -332,7 +313,6 @@ async function measure() {
   }
 }
 
-// Files written before per-app results hold the counter alone, with `elements` naming its variant.
 function previousApps(previous) {
   if (Array.isArray(previous.apps)) return previous
   const variant =
