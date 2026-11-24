@@ -381,6 +381,84 @@ describe("Component.define", () => {
     })
   })
 
+  it("treats callables with handler properties as functions only", () => {
+    const callableWithHandlers = Object.assign(save, {
+      Edited: audit,
+      SaveClicked: touch,
+      Saved: touch
+    })
+    const Note = NoteDef.make({
+      init: () => ({ body: "", edits: 0 }),
+      update: NoteDef.update(callableWithHandlers),
+      view: (h) => h.p()
+    })
+    expect<Component.Requirements<typeof Note>>().type.toBe<GetUser | Save>()
+
+    const invalidCallable = Object.assign(() => 123, {
+      Edited: touch,
+      SaveClicked: touch,
+      Saved: touch
+    })
+    expect(NoteDef.update).type.not.toBeCallableWith(invalidCallable)
+
+    const callableInterface = invalidCallable as {
+      (): number
+      readonly Edited: typeof touch
+      readonly SaveClicked: typeof touch
+      readonly Saved: typeof touch
+    }
+    expect(NoteDef.update).type.not.toBeCallableWith(callableInterface)
+
+    const neverCallable = Object.assign(
+      (): never => {
+        throw new Error()
+      },
+      {
+        Edited: audit,
+        SaveClicked: touch,
+        Saved: touch
+      }
+    )
+    const NeverNote = NoteDef.make({
+      init: () => ({ body: "", edits: 0 }),
+      update: NoteDef.update(neverCallable),
+      view: (h) => h.p()
+    })
+    expect<Component.Requirements<typeof NeverNote>>().type.toBe<GetUser>()
+  })
+
+  it("rejects record updates when a message union lacks finite known tags", () => {
+    const MixedDef = Html.component({
+      name: "Mixed",
+      model: Schema.Number,
+      message: Schema.Union([
+        Schema.Literal("Reset"),
+        Schema.Struct({ _tag: Schema.Literal("Inc") })
+      ])
+    })
+    MixedDef.update(($, msg) => (msg === "Reset" ? 0 : $.model + 1))
+    expect(MixedDef.update).type.not.toBeCallableWith({ Inc: () => 1 })
+
+    const WideTagDef = Html.component({
+      name: "WideTag",
+      model: Schema.Number,
+      message: Schema.Struct({ _tag: Schema.String })
+    })
+    WideTagDef.update(($) => $.model + 1)
+    expect(WideTagDef.update).type.not.toBeCallableWith({})
+    expect(WideTagDef.update).type.not.toBeCallableWith({ Inc: () => 1 })
+
+    const TemplateTagDef = Html.component({
+      name: "TemplateTag",
+      model: Schema.Number,
+      message: Schema.Struct({
+        _tag: Schema.TemplateLiteral(["evt_", Schema.String])
+      })
+    })
+    TemplateTagDef.update(($) => $.model + 1)
+    expect(TemplateTagDef.update).type.not.toBeCallableWith({})
+  })
+
   it("fragment types h from the definition, with its queries and elements, and infers the other arguments", () => {
     const row = NoteDef.fragment((h, label: string, count: number) => {
       expect(h).type.toBe<Component.Helper<typeof NoteDef>>()

@@ -2415,6 +2415,30 @@ type UpdateRecord<Model, Msg, Events, Props, L, SR, UR> = {
     : UnknownTag<T>
 }
 
+type IsKnownTag<Msg, T extends string> = T extends unknown
+  ? [{}] extends [{ readonly [K in T]: unknown }] ? false
+  : [Tagged<Msg, T>] extends [never] ? false
+  : true
+  : never
+
+type CanUseUpdateRecord<Msg> = [Msg] extends [never] ? false
+  : [Msg] extends [{ readonly _tag: string }]
+    ? [IsKnownTag<Msg, TagOf<Msg>>] extends [true] ? true : false
+  : false
+
+type NonCallable = {
+  readonly [Symbol.hasInstance]?: never
+}
+
+type UninferredUpdate = {
+  readonly _UninferredUpdate: unique symbol
+}
+
+type UpdateResult<U, UR> = 0 extends 1 & U ? U
+  : [U] extends [UninferredUpdate]
+    ? [UninferredUpdate] extends [U] ? UR[keyof UR] : U
+  : U
+
 /**
  * What `define` returns: a component's name, Schemas, queries and
  * vocabulary. `update`, `view` and `fragment` written in pieces are typed
@@ -2496,7 +2520,8 @@ export interface Definition<
    * function or as a record with a handler for every `_tag` of the message.
    */
   update<
-    U extends Model | Step<Model, Msg, Events, any, L> = never,
+    U extends Model | Step<Model, Msg, Events, any, L> | UninferredUpdate =
+      UninferredUpdate,
     UR extends {
       readonly [T in TagOf<Msg>]: Model | Step<Model, Msg, Events, any, L>
     } = {
@@ -2505,12 +2530,13 @@ export interface Definition<
   >(
     update:
       | (($: Update<Model, Msg, Events, Props, L, Msg, SR>, msg: Msg) => U)
-      | ([TagOf<Msg>] extends [never] ? never
-        : UpdateRecord<Model, Msg, Events, Props, L, SR, UR>)
+      | (CanUseUpdateRecord<Msg> extends true
+        ? UpdateRecord<Model, Msg, Events, Props, L, SR, UR> & NonCallable
+        : never)
   ): (
     $: Update<Model, Msg, Events, Props, L, Msg, SR>,
     msg: Msg
-  ) => U | UR[keyof UR]
+  ) => UpdateResult<U, UR>
   /** A view, to pass as `view` or call from another view. */
   view<UV extends View.Content<Msg, any>>(
     view: (
