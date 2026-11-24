@@ -1,40 +1,33 @@
 /**
- * SPIKE (EFF-4218), not for release. The DOM host for `Kernel`: nodes, attributes under their HTML or SVG
- * names, properties, and one listener for each event name on the container, which gives a handler the
- * event's typed payload. Controlled form properties are put back after an event the Model didn't follow,
- * keeping a focused field's selection. Updates that ask for a view transition run in one. The document head
- * follows the tree's folded head when the mount is given `head: KernelDom.syncHead`, so an app without a
- * head doesn't carry what writes one. Dialogs, popovers and drag and drop work as `BrowserHost`'s do.
+ * The DOM host `BrowserHost` mounts on, and what `HtmlHydrate` mounts with.
  *
- * Left out, to arrive with what uses it: hydration.
+ * @internal
  */
 import * as Cause from "effect/Cause"
 import * as Effect from "effect/Effect"
-import * as Layer from "effect/Layer"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Scope from "effect/Scope"
-import type * as Component from "../Component.ts"
-import * as Kernel from "../internal/kernel.ts"
-import * as transitionRun from "../internal/transitionRun.ts"
-import * as View from "../View.ts"
-import * as BrowserHost from "./BrowserHost.ts"
-import type * as Html from "./Html.ts"
-import * as documentServices from "./internal/documentServices.ts"
-import { attributeName, svgTags } from "./internal/elements.ts"
-import * as headSync from "./internal/head.ts"
-import { ownEvents } from "./internal/ownEvents.ts"
+import type * as Component from "../../Component.ts"
+import * as Kernel from "../../internal/kernel.ts"
+import * as transitionRun from "../../internal/transitionRun.ts"
+import * as View from "../../View.ts"
+import type * as Html from "../Html.ts"
+import { attributeName, svgTags } from "./elements.ts"
+import * as headSync from "./head.ts"
+import { ownEvents } from "./ownEvents.ts"
 import {
   type FieldState,
   fieldStateOf,
   offsetIn,
   payloadOf
-} from "./internal/payload.ts"
-import { pointerTypeOf } from "./internal/pointer.ts"
-import * as submit from "./internal/submit.ts"
+} from "./payload.ts"
+import { pointerTypeOf } from "./pointer.ts"
+import * as submit from "./submit.ts"
 
 const SVG = "http://www.w3.org/2000/svg"
 
-const controlled: ReadonlySet<string> = new Set([
+/** @internal */
+export const controlled: ReadonlySet<string> = new Set([
   "value",
   "checked",
   "selected",
@@ -123,30 +116,22 @@ const ignore = () => {}
 type Node = globalThis.Node & { $r?: Kernel.Rec }
 
 /**
- * Keeps a document's head in sync with a tree's folded head. `warn` reports a shell that conflicts with
- * the head.
+ * The controlled values each host wrote, by node, for `HtmlCommand.select`. A host reads only its own.
  *
- * @stability experimental
+ * @internal
  */
+export const written = new WeakMap<globalThis.Node, Map<string, unknown>>()
+
+/** @internal */
 export type HeadSync = (
   document: Document,
   warn: (message: string) => void
 ) => { readonly sync: (head: never) => void; readonly release: () => void }
 
-/**
- * The head sync of `BrowserHost`, for `HostOptions.head`.
- *
- * @stability experimental
- */
+/** @internal */
 export const syncHead: HeadSync = headSync.make
 
-/**
- * What `makeHost` takes: `head` writes the document head, which is otherwise left alone, and
- * `viewTransitions: false` runs the updates that ask for a view transition without one. `warn` reports a
- * shell that conflicts with the head, and defaults to `console.warn`.
- *
- * @stability experimental
- */
+/** @internal */
 export interface HostOptions {
   readonly head?: HeadSync | undefined
   readonly viewTransitions?: boolean | undefined
@@ -155,11 +140,7 @@ export interface HostOptions {
   readonly step?: ((f: () => boolean) => boolean) | undefined
 }
 
-/**
- * A kernel host over `container`'s document, and what removes its listeners.
- *
- * @stability experimental
- */
+/** @internal */
 export const makeHost = (
   container: globalThis.Element,
   options?: HostOptions
@@ -296,7 +277,22 @@ export const makeHost = (
 
   const popoversToShow = new Set<HTMLElement>()
   // While a tool pauses the root, its modal dialogs and auto popovers are closed, and shown again after.
+  // A node it closed reports its next toggle only if that ends in a state other than the one the Model
+  // last heard; one the Model changes meanwhile is released, as closed.
   let held = false
+  const heldNodes = new Set<globalThis.Node>()
+  const reported = new WeakMap<globalThis.Node, { state: string | undefined }>()
+  const holdNode = (node: globalThis.Node) => {
+    heldNodes.add(node)
+    if (listening.has("toggle") && !reported.has(node)) {
+      reported.set(node, { state: undefined })
+    }
+  }
+  const releaseNode = (node: globalThis.Node) => {
+    if (!heldNodes.delete(node)) return
+    const entry = reported.get(node)
+    if (entry !== undefined) entry.state = "closed"
+  }
   const manualPopovers = new Set<HTMLElement>()
   const popoverModes = new WeakMap<globalThis.Node, string | null>()
   const applyPopover = (element: HTMLElement, want: unknown, now?: boolean) => {
@@ -532,10 +528,13 @@ export const makeHost = (
       return onDropTarget(name, event as DragEvent, path)
     }
     const target = path[0] ?? event.target as Node
-    if (
-      held && name === "toggle" &&
-      (modalWanted.has(target as never) || popoversToShow.has(target as never))
-    ) return
+    const entry = name === "toggle" ? reported.get(target) : undefined
+    if (entry !== undefined) {
+      entry.state ??= (event as ToggleEvent).oldState
+      if (heldNodes.has(target)) return
+      reported.delete(target)
+      if ((event as ToggleEvent).newState === entry.state) return
+    }
     const composed = (event as InputEvent).isComposing === true
     if (isDialog(target)) {
       if (name === "cancel") {
@@ -721,7 +720,10 @@ export const makeHost = (
           values?.delete(name)
           value = name === "value" ? "" : false
         } else {
-          if (values === undefined) wanted.set(node, values = new Map())
+          if (values === undefined) {
+            wanted.set(node, values = new Map())
+            written.set(node, values)
+          }
           for (const event of restoring) listen(event)
           listen("compositionstart")
           listen("beforeinput")
@@ -733,11 +735,15 @@ export const makeHost = (
             values.set(name, value)
             popoverModes.set(node, mode)
             manualPopovers[mode === "manual" ? "add" : "delete"](element)
-            if (mode !== "auto" || !same) applyPopover(element, value)
+            if (mode !== "auto" || !same) {
+              releaseNode(node)
+              applyPopover(element, value)
+            }
             return
           }
           if (dialog) {
             value = value === "modal" ? value : value === true
+            if (values.get(name) !== value) releaseNode(node)
             values.set(name, value)
             if (value === "modal") {
               modalWanted.add(node)
@@ -819,21 +825,27 @@ export const makeHost = (
     },
     pause(on) {
       held = on
-      if (!on) return this.commit!()
-      for (const dialog of [...shown].reverse()) {
-        if (modals.has(dialog)) closeDialog(dialog, true)
+      if (!on) {
+        this.commit!()
+        heldNodes.clear()
+        return
       }
-      for (
-        const element of container.querySelectorAll<HTMLElement>("[popover]")
-      ) {
-        if (
-          !manualPopovers.has(element) &&
-          wanted.get(element)?.get("popoverOpen") === true &&
-          matches(element, ":popover-open")
-        ) {
-          element.hidePopover()
-          popoversToShow.add(element)
-        }
+      const popovers = Array.from(
+        container.querySelectorAll<HTMLElement>("[popover]")
+      ).filter((element) =>
+        !manualPopovers.has(element) &&
+        wanted.get(element)?.get("popoverOpen") === true &&
+        matches(element, ":popover-open")
+      )
+      for (const dialog of [...shown].reverse()) {
+        if (!modals.has(dialog)) continue
+        closeDialog(dialog, true)
+        holdNode(dialog)
+      }
+      for (const element of popovers.reverse()) {
+        if (matches(element, ":popover-open")) element.hidePopover()
+        popoversToShow.add(element)
+        holdNode(element)
       }
     },
     head: sync === undefined ? undefined : (head) => sync.sync(head as never),
@@ -856,11 +868,7 @@ export const makeHost = (
   }
 }
 
-/**
- * What `mountEffect` returns.
- *
- * @stability experimental
- */
+/** @internal */
 export interface Root<Model, Msg> {
   readonly path: string
   readonly model: () => Model | undefined
@@ -872,12 +880,7 @@ const report: Kernel.Tree["report"] = (path, where, cause) =>
     new Error("[@effect/ui] " + path + " failed in " + where, { cause })
   )
 
-/**
- * What a mount takes besides its component: a message log's `record`, what a failed root shows, and the
- * host's options.
- *
- * @stability experimental
- */
+/** @internal */
 export interface Options extends HostOptions {
   // oxlint-disable-next-line effect/no-unused-internal
   readonly log?: Kernel.Recorder | undefined
@@ -889,11 +892,7 @@ export interface Options extends HostOptions {
     | undefined
 }
 
-/**
- * `mountEffect` with the kernel's mount given: hydration's, which lives in a module of its own.
- *
- * @stability experimental
- */
+/** @internal */
 export const mountWith = <Props, Model, Msg, R = never>(
   component: Component.Members<any, Props, Model, Msg, any, R, any, any>,
   container: globalThis.Element,
@@ -935,60 +934,4 @@ export const mountWith = <Props, Model, Msg, R = never>(
       model: () => root.instance.model as Model | undefined,
       send: root.send
     })
-  )
-
-/**
- * Mounts `component` into `container` until the Scope closes.
- *
- * @stability experimental
- */
-export const mountEffect = <Props, Model, Msg, R = never>(
-  component: Component.Members<any, Props, Model, Msg, any, R, any, any>,
-  props: Props,
-  container: globalThis.Element,
-  options?: Options
-): Effect.Effect<Root<Model, Msg>, never, R | Scope.Scope> =>
-  mountWith(
-    component,
-    container,
-    options,
-    (host, kernel) =>
-      Kernel.mount(
-        component as unknown as Kernel.Runnable,
-        props,
-        container,
-        host,
-        kernel
-      )
-  )
-
-/**
- * Mounts `component` into `container` for as long as the Layer is built.
- *
- * @stability experimental
- */
-export const mount = <Props, Model, Msg, R = never>(
-  component: Component.Members<any, Props, Model, Msg, any, R, any, any>,
-  props: Props,
-  container: globalThis.Element,
-  options?: Options
-): Layer.Layer<never, never, R> =>
-  Layer.effectDiscard(mountEffect(component, props, container, options))
-
-/**
- * What `BrowserHost.layer` provides besides the host: `Html.Host`, which the ref Commands use, the
- * document's `Query.Visibility` and `Query.Connectivity`, `HtmlSubscription.GlobalEvents` and
- * `HtmlSubscription.AnimationFrames`, and `HtmlImages.Images` and `HtmlFiles.Files`, for the life of the
- * Layer. A mount needs it only when what it shows uses one of them.
- *
- * @stability experimental
- */
-export const layer = (
-  options?: { readonly document?: Document | undefined }
-): Layer.Layer<Html.Host> =>
-  Layer.effectContext(
-    documentServices.make(
-      options?.document ?? globalThis.document,
-      BrowserHost.htmlHost
-    )
   )

@@ -12,9 +12,9 @@ import * as hydrateRun from "../internal/hydrateRun.ts"
 import * as Kernel from "../internal/kernel.ts"
 import type * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
+import * as dom from "./internal/dom.ts"
 import { attributeName } from "./internal/elements.ts"
 import * as markers from "./internal/markers.ts"
-import * as KernelDom from "./KernelDom.ts"
 
 const SVG = "http://www.w3.org/2000/svg"
 const ELEMENT = 1
@@ -623,9 +623,9 @@ export const hydrateEffect = <Props, Model, Msg, R = never>(
   props: Props,
   container: globalThis.Element,
   state: Renderer.State,
-  options?: KernelDom.Options
-): Effect.Effect<KernelDom.Root<Model, Msg>, never, R | Scope.Scope> =>
-  KernelDom.mountWith(component, container, options, (base, kernel) => {
+  options?: dom.Options
+): Effect.Effect<dom.Root<Model, Msg>, never, R | Scope.Scope> =>
+  dom.mountWith(component, container, options, (base, kernel) => {
     const runnable = component as unknown as Kernel.Runnable
     const host = { ...base }
     const hydration = hydrateRun.make(
@@ -658,7 +658,7 @@ export const hydrate = <Props, Model, Msg, R = never>(
   props: Props,
   container: globalThis.Element,
   state: Renderer.State,
-  options?: KernelDom.Options
+  options?: dom.Options
 ): Layer.Layer<never, never, R> =>
   Layer.effectDiscard(
     hydrateEffect(component, props, container, state, options)
