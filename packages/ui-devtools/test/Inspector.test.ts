@@ -389,6 +389,14 @@ describe("Inspector", () => {
       model: { a: 0 },
       props: {}
     })
+
+    const late = Inspector.make({ exclude: ["Moved"] })
+    late.ingest([
+      update(10, 1, "/A", "A", "Moved", { a: 1 }),
+      update(11, 2, "/B", "B", "Moved", { b: 1 }),
+      update(12, 1, "/A", "A", "Moved", { a: 2 })
+    ])
+    assert.deepStrictEqual(late.sessions()[0].instances().map((instance) => instance.path), ["/A", "/B"])
   })
 
   it("diffs nested values by key and by index", () => {

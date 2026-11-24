@@ -279,7 +279,7 @@ const makeSession = (id: string, size: number, isExcluded: (entry: Entry) => boo
     }
   }
 
-  const evict = (seq: number, entry: Entry) => {
+  const evict = (seq: number, entry: Entry, prune = true) => {
     entries.delete(seq)
     hidden.delete(seq)
     previous.delete(seq)
@@ -300,7 +300,7 @@ const makeSession = (id: string, size: number, isExcluded: (entry: Entry) => boo
     const inst = instances.get(entry.instance)!
     inst.buffered--
     if (
-      inst.buffered === 0 && inst.records.length === 0 &&
+      prune && inst.buffered === 0 && inst.records.length === 0 &&
       (inst.info.unmounted !== undefined || inst.info.mounted === undefined)
     ) instances.delete(entry.instance)
   }
@@ -344,7 +344,7 @@ const makeSession = (id: string, size: number, isExcluded: (entry: Entry) => boo
         if (replaced !== undefined) {
           const inst = instances.get(entry.instance)
           if (inst?.state === replaced.seq) inst.state = previous.get(replaced.seq)?.seq
-          evict(replaced.seq, replaced)
+          evict(replaced.seq, replaced, false)
         }
         hidden.add(entry.seq)
         coalesced.set(entry.instance, entry)
