@@ -622,8 +622,8 @@ describe("Html", () => {
     div.onMount(Void())
     // @ts-expect-error or end its body with Effect.as(Component.noop)
     input.onMount(Void())
-    // @ts-expect-error Map its result with Mount.map
     new Html.Element<Msg, never, Record<string, unknown>, HTMLDivElement>("div")
+      // @ts-expect-error Map its result with Mount.map
       .onMount(Measure())
   })
 

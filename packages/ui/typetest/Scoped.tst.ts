@@ -175,12 +175,12 @@ describe("scoped", () => {
   })
 
   it("needs a predicate for a key that isn't a literal", () => {
-    // @ts-expect-error A scoped child whose key isn't a literal needs a predicate
     h.scoped((s) =>
+      // @ts-expect-error A scoped child whose key isn't a literal needs a predicate
       model.order.map((id) => NoteEditor(s, { key: id, props: { noteId: id } }))
     )
-    // @ts-expect-error A scoped child whose key isn't a literal needs a predicate
     h.scoped((s) =>
+      // @ts-expect-error A scoped child whose key isn't a literal needs a predicate
       NoteEditor(s, { key: model.selected!, props: { noteId: "a" } })
     )
     // @ts-expect-error A scoped child whose key isn't a literal needs a predicate
@@ -188,9 +188,9 @@ describe("scoped", () => {
     const mixed = id as "a" | (string & {})
     // @ts-expect-error A scoped child whose key isn't a literal needs a predicate
     h.scoped((s) => NoteEditor(s, { key: mixed, props: { noteId: id } }))
-    // @ts-expect-error A scoped child whose key isn't a literal needs a predicate
     h.scoped((s) =>
       NoteEditor(s, {
+        // @ts-expect-error A scoped child whose key isn't a literal needs a predicate
         key: id as "pinned" | `row-${string}`,
         props: { noteId: id }
       })

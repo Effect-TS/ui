@@ -154,9 +154,9 @@ describe("Select", () => {
       init: () => null,
       update: ($) => $.model,
       view: (h) => {
-        // @ts-expect-error Property 'items' is missing
         Select(h, {
           key: "s",
+          // @ts-expect-error Property 'items' is missing
           props: { open: false },
           view: (select) => select.trigger(h.button)
         })
