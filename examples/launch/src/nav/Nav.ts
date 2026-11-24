@@ -93,13 +93,14 @@ export const Nav = Component.define({
             "sticky top-0 z-10 leading-[1.4]",
             "rail:max-h-screen rail:w-(--nav-rail) rail:self-start",
             "rail:justify-self-end rail:overflow-y-auto",
-            "rail:pt-[clamp(56px,12vh,128px)] rail:pb-6 rail:pl-5"
+            "rail:pt-12 rail:pb-6 rail:pl-5"
           ).attr("aria-label", "On this page")
         )
           .children(
             h.p.class(
               "text-sm max-rail:hidden",
-              "rail:mb-3 rail:text-[0.8125rem] rail:font-semibold"
+              "rail:mb-5 rail:font-mono rail:text-[0.625rem]",
+              "rail:tracking-[0.1em] rail:uppercase rail:text-muted-foreground"
             ).attr("aria-hidden", "true")
               .children("On this page"),
             Button(h, {
@@ -148,8 +149,8 @@ export const Nav = Component.define({
                     element: h.a.class(
                       "block border-s-2 border-border text-sm",
                       "text-muted-foreground hover:text-foreground",
-                      "aria-[current]:border-foreground",
-                      "aria-[current]:text-foreground",
+                      "aria-[current]:border-foreground aria-[current]:bg-muted",
+                      "aria-[current]:text-foreground aria-[current]:font-medium",
                       "max-rail:py-2.5 max-rail:pe-3.5",
                       "rail:py-[5px] rail:text-[0.8125rem]",
                       isNested

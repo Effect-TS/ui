@@ -14,13 +14,19 @@ const Line = <M>(
   )
 
 export const Code = <M>(h: View.H<M>, snippet: Snippet) =>
-  h.div.class("overflow-hidden rounded-lg border border-border")
+  h.div.class(
+    "code-window overflow-hidden rounded-lg border border-border"
+  )
     .children(
       h.p.class(
-        "border-b border-border bg-muted px-3.5 py-[7px]",
+        "flex items-center justify-between gap-3 border-b border-border bg-muted px-3.5 py-2.5",
         "font-mono text-[12px]/[normal] text-pretty",
         "text-muted-foreground font-features-[normal]"
-      ).children(snippet.name),
+      ).children(
+        h.span.class("text-foreground").children(snippet.name),
+        h.span.class("text-[10px] tracking-widest uppercase")
+          .children("TypeScript")
+      ),
       h.pre.class(
         "py-3 text-code wrap-anywhere whitespace-pre-wrap",
         "[font-variant-ligatures:none]"

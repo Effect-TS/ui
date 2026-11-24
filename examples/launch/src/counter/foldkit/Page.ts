@@ -43,7 +43,7 @@ export const update = (
   })
 
 export const view = (model: Model, h: HtmlBuilder<Message>): Html =>
-  h.div([h.Class("grid justify-items-start gap-3")], [
+  h.div([h.Class("counter-page")], [
     h.button([h.OnClick(Message.ClickedToggleCounter())], [
       model.isCounterShown ? "Hide counter" : "Show counter"
     ]),

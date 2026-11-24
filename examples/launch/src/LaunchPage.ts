@@ -78,14 +78,35 @@ export const LaunchPage = Component.define({
     ).children(
       Nav(h, { props: { sections } }),
       h.main.class(
-        "px-[clamp(20px,5vw,48px)] pt-[clamp(56px,12vh,128px)] pb-24",
+        "article-main px-[clamp(20px,5vw,48px)] pt-10 pb-24",
         "[--column:68ch] [--wide:1180px] rail:px-(--nav-gutter)"
       ).children(
-        h.h1.class(
-          block,
-          "text-[clamp(2.2rem,5.2vw,3.6rem)]/[1.05] font-[650]",
-          "tracking-[-0.035em] text-balance"
-        ).children(title),
+        h.div.class("article-masthead").children(
+          h.a.class("article-brand").attr(
+            "href",
+            "https://effect.website/"
+          )
+            .children(
+              h.img.attr("src", "/effect-mark.svg").attr("alt", "")
+                .attr("width", "24").attr("height", "24"),
+              "Effect UI"
+            ),
+          h.div.class("article-links").children(
+            h.a.attr("href", "https://effect.website/docs/v4")
+              .children("Effect docs"),
+            h.a.attr("href", "https://github.com/Effect-TS/ui")
+              .children("GitHub ↗")
+          )
+        ),
+        h.header.class("article-header").children(
+          h.p.class("article-eyebrow").children(
+            "// FROM FOLDKIT TO EFFECT UI"
+          ),
+          h.h1.class(
+            "text-[clamp(2.2rem,5.2vw,3.6rem)]/[1.08] font-bold",
+            "tracking-[-0.035em] text-balance"
+          ).children(title)
+        ),
         Markdown.viewBlocks(h, article, {
           views: {
             Heading: (h, node, content) => {
@@ -97,14 +118,14 @@ export const LaunchPage = Component.define({
                 ).children(content)
                 : h.h2.id(id).class(
                   heading,
-                  "mt-18 text-[1.375rem]/[1.3] tracking-[-0.015em]"
+                  "article-section mt-18 text-[1.5rem]/[1.3] tracking-[-0.02em]"
                 ).children(content)
             },
             Paragraph: (h, _paragraph, content) =>
               h.p.class(
                 "[main>&]:mx-auto [main>&]:max-w-(--column)",
                 "mt-[1.1em] text-pretty first:mt-0",
-                "[h1+&]:mt-7 [h1+&]:text-[1.1875rem]/[1.55]"
+                "[header+&]:mt-7 [header+&]:text-[1.1875rem]/[1.55]"
               ).children(content),
             List: (h, list, items) =>
               list.isOrdered
@@ -177,8 +198,8 @@ export const LaunchPage = Component.define({
                     ...Files(h, snippets[code])
                   ),
                   h.div.class(
-                    "sticky top-[calc(var(--nav-bar)+24px)] rounded-lg",
-                    "border border-border bg-muted p-5",
+                    "live-demo sticky top-[calc(var(--nav-bar)+24px)] rounded-lg",
+                    "border border-border bg-card p-5",
                     "stacked:static stacked:-order-1 compact:p-3.5",
                     "[&>div]:grid [&>div]:grid-cols-1",
                     "[&_output]:text-start [&_output]:text-[2rem]/[normal]",
@@ -186,6 +207,9 @@ export const LaunchPage = Component.define({
                     "[&_button]:font-features-[normal]"
                   ).attr("role", "group")
                     .attr("aria-label", label).children(
+                      h.p.class("article-eyebrow mb-5").children(
+                        "// LIVE EXAMPLE"
+                      ),
                       Counter(h, { key: `counter-${occurrence}` })
                     )
                 ),

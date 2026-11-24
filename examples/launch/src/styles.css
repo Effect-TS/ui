@@ -54,12 +54,125 @@
   --default-transition-timing-function: ease;
 
   --icon-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --icon-copy: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='9' width='13' height='13' rx='2'/%3E%3Cpath d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'/%3E%3C/svg%3E");
+  --icon-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 4 4L19 6'/%3E%3C/svg%3E");
 }
 
 @property --column {
   syntax: "<length>";
   inherits: true;
   initial-value: 0px;
+}
+
+@layer components {
+  .article-masthead {
+    @apply mx-auto mb-9 flex max-w-(--column) items-center justify-between gap-4;
+  }
+
+  .article-brand {
+    @apply inline-flex items-center gap-2.5 text-lg font-bold tracking-tight;
+  }
+
+  .article-links {
+    @apply flex items-center gap-5 text-xs text-muted-foreground;
+
+    a:hover {
+      color: var(--color-foreground);
+    }
+  }
+
+  .article-header {
+    @apply relative mx-auto max-w-(--column) border-y border-border py-9;
+    background-image: linear-gradient(to right, var(--color-border) 1px, transparent 1px);
+    background-size: calc(100% / 6) 100%;
+    background-position: center;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(to bottom, var(--color-background), transparent 50%, var(--color-background));
+    }
+
+    > * {
+      position: relative;
+    }
+
+    .article-eyebrow {
+      @apply mb-5;
+    }
+  }
+
+  .article-eyebrow {
+    @apply font-mono text-[10px] font-medium tracking-[0.1em] text-muted-foreground;
+  }
+
+  .article-section {
+    @apply border-t border-border pt-7;
+  }
+
+  .code-window,
+  .live-demo {
+    box-shadow: 0 2px 3px -2px var(--color-ring);
+  }
+
+  .code-window {
+    @apply bg-card;
+  }
+
+  .counter {
+    @apply inline-flex flex-wrap items-center gap-2;
+  }
+
+  .counter-label {
+    @apply font-medium;
+  }
+
+  .counter-value {
+    @apply min-w-[3ch] text-center font-mono text-lg font-semibold tabular-nums;
+  }
+
+  .counter-button {
+    @apply min-w-9 cursor-pointer rounded-md border border-border-strong bg-background px-3 py-1.5 text-control font-medium;
+    transition: border-color 150ms, background-color 150ms;
+
+    &:hover {
+      @apply border-foreground bg-muted;
+    }
+  }
+
+  .counter-page {
+    @apply grid justify-items-start gap-3;
+  }
+
+  .live-demo .counter-button:first-of-type {
+    @apply border-foreground bg-foreground text-background;
+
+    &:hover {
+      opacity: 0.85;
+    }
+  }
+
+  @media (width <= 520px) {
+    .article-masthead {
+      @apply mb-6;
+    }
+
+    .article-header {
+      @apply py-7;
+    }
+
+    .article-links {
+      @apply gap-3;
+    }
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .article-brand img {
+      filter: invert(1);
+    }
+  }
 }
 
 @layer base {

@@ -25,29 +25,18 @@ export const update = (
 
 export type ViewInputs = Readonly<{ label: string }>
 
-const button = [
-  "min-w-9 cursor-pointer rounded-md border border-border-strong",
-  "bg-background px-3 py-1.5 text-control font-medium",
-  "transition-[border-color] hover:border-foreground"
-].join(" ")
-
-const count = [
-  "min-w-[3ch] text-center font-mono text-lg",
-  "font-semibold tabular-nums"
-].join(" ")
-
 export const view = defineView<Model, Message, ViewInputs>(
   (model, viewInputs, h) =>
-    h.div([h.Class("inline-flex flex-wrap items-center gap-2")], [
-      h.span([h.Class("font-medium")], [viewInputs.label]),
+    h.div([h.Class("counter")], [
+      h.span([h.Class("counter-label")], [viewInputs.label]),
       h.button([
-        h.Class(button),
+        h.Class("counter-button"),
         h.AriaLabel("Decrement"),
         h.OnClick(Message.ClickedDecrement())
       ], ["-"]),
-      h.output([h.Class(count)], [String(model.count)]),
+      h.output([h.Class("counter-value")], [String(model.count)]),
       h.button([
-        h.Class(button),
+        h.Class("counter-button"),
         h.AriaLabel("Increment"),
         h.OnClick(Message.ClickedIncrement())
       ], ["+"])

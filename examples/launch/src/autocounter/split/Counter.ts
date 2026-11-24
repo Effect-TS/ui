@@ -2,7 +2,7 @@ import { Component, Subscription } from "@effect/ui"
 import { Button } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema, Stream } from "effect"
-import { button, CounterMessage, DelayReset } from "../Counter.ts"
+import { CounterMessage, DelayReset } from "../Counter.ts"
 
 const CounterDef = Component.define({
   name: "Counter",
@@ -44,19 +44,16 @@ const subscriptions = CounterDef.subscriptions(({ model }) => [
 ])
 
 const view = CounterDef.view((h, model) =>
-  h.div.class("inline-flex flex-wrap items-center gap-2").children(
-    h.output.class(
-      "min-w-[3ch] text-center font-mono text-lg",
-      "font-semibold tabular-nums"
-    ).children(String(model.count)),
+  h.div.class("counter").children(
+    h.output.class("counter-value").children(String(model.count)),
     Button(h, { onPress: CounterMessage.ClickedIncrement() })
-      .class(button).children("Increment"),
+      .class("counter-button").children("Increment"),
     Button(h, { onPress: CounterMessage.ClickedResetAfterDelay() })
-      .class(button).children(
+      .class("counter-button").children(
         h.isRunning(DelayReset) ? "Resetting" : "Reset in 1 second"
       ),
     Button(h, { onPress: CounterMessage.ClickedToggleAutoCount() })
-      .class(button).children(
+      .class("counter-button").children(
         model.isAutoCounting ? "Stop" : "Auto-count"
       )
   )

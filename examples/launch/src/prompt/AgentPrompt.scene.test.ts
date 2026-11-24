@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import {
   AgentPrompt,
   AgentPromptMessage,
+  ClearCopyFeedback,
   CopyPrompt
 } from "./AgentPrompt.ts"
 
@@ -21,7 +22,14 @@ describe("AgentPrompt", () => {
           })
         )
         .resolve(CopyPrompt, AgentPromptMessage.SucceededCopyPrompt())
+        .expectExact(ClearCopyFeedback.make({}))
         .expect(HtmlLocator.role("button", { name: "Copied" }))
+        .toExist()
+        .resolve(
+          ClearCopyFeedback,
+          AgentPromptMessage.ClearedCopyFeedback()
+        )
+        .expect(HtmlLocator.role("button", { name: "Copy prompt" }))
         .toExist()
     }))
 })

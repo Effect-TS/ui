@@ -6,7 +6,8 @@ import { Effect, Schema } from "effect"
 export const AgentPromptMessage = UiSchema.TaggedEnum({
   ClickedCopy: {},
   SucceededCopyPrompt: {},
-  FailedCopyPrompt: {}
+  FailedCopyPrompt: {},
+  ClearedCopyFeedback: {}
 })
 
 export const CopyPrompt = Command.make(
@@ -18,6 +19,15 @@ export const CopyPrompt = Command.make(
       Effect.orElseSucceed(() =>
         AgentPromptMessage.FailedCopyPrompt()
       )
+    )
+)
+
+export const ClearCopyFeedback = Command.make(
+  "ClearCopyFeedback",
+  { args: {} },
+  () =>
+    Effect.sleep("2 seconds").pipe(
+      Effect.as(AgentPromptMessage.ClearedCopyFeedback())
     )
 )
 
@@ -43,27 +53,50 @@ export const AgentPrompt = Component.define({
   update: {
     ClickedCopy: ($) =>
       $.run(CopyPrompt.make({ text: $.props.prompt })),
-    SucceededCopyPrompt: ($) => $.evolve({ status: "Copied" }),
-    FailedCopyPrompt: ($) => $.evolve({ status: "Failed" })
+    SucceededCopyPrompt: ($) =>
+      $.evolve({ status: "Copied" }).run(ClearCopyFeedback.make({})),
+    FailedCopyPrompt: ($) =>
+      $.evolve({ status: "Failed" }).run(ClearCopyFeedback.make({})),
+    ClearedCopyFeedback: ($) => $.evolve({ status: "Idle" })
   },
   view: (h, model) =>
     h.aside.class(
       "mx-auto mt-[1.1em] max-w-(--column) rounded-lg border",
-      "border-border bg-muted p-4"
+      "border-border bg-muted px-4 py-3"
     ).attr("aria-label", h.props.title).children(
       h.div.class("flex items-center justify-between gap-3")
         .children(
           h.p.class("text-sm font-semibold").children(h.props.title),
-          Button(h, { onPress: AgentPromptMessage.ClickedCopy() })
-            .class(
-              "min-w-[7.5rem] cursor-pointer rounded-md border",
-              "border-border-strong bg-background px-3 py-1.5",
-              "text-control font-medium transition-[border-color]",
-              "hover:border-foreground"
+          h.div.class("group relative shrink-0").children(
+            Button(h, { onPress: AgentPromptMessage.ClickedCopy() })
+              .attr("aria-label", labels[model.status])
+              .class(
+                "flex size-8 cursor-pointer items-center justify-center",
+                "rounded-sm text-muted-foreground transition-colors",
+                "hover:bg-wash hover:text-foreground"
+              ).children(
+                h.span.attr("aria-hidden", "true").class(
+                  "block size-4 bg-current",
+                  model.status === "Copied"
+                    ? "mask-(--icon-check)"
+                    : "mask-(--icon-copy)"
+                )
+              ),
+            h.span.attr("aria-hidden", "true").class(
+              "pointer-events-none absolute right-0 bottom-full mb-1",
+              "rounded-sm bg-foreground px-2 py-1 text-xs",
+              "whitespace-nowrap text-background transition-opacity",
+              model.status === "Idle"
+                ? "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+                : "opacity-100"
             ).children(labels[model.status])
+          )
         ),
-      h.p.class("mt-3 font-mono text-code wrap-anywhere").children(
+      h.p.class("mt-1 font-mono text-code wrap-anywhere").children(
         h.props.prompt
+      ),
+      h.span.class("sr-only").attr("role", "status").children(
+        model.status === "Idle" ? "" : labels[model.status]
       )
     )
 })

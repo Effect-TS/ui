@@ -39,7 +39,7 @@ A Component is self-contained. Its parent doesn't store its state or forward its
 
 ### A complete Component
 
-This counter is a complete Component. One definition holds its Model, Messages, init, update, subscriptions and view, with a delayed reset Command and an auto-count Subscription. It runs live next to its code.
+This counter is a complete Component. One definition holds its Model, Messages, init, update, subscriptions and view, with a delayed reset Command and an auto-count Subscription.
 
 :::Counter{code="intro" label="Live auto-counter"}
 Click "Increment", then turn "Auto-count" on and off.
