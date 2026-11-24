@@ -94,17 +94,9 @@ export const pending: {
       "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it",
     "keep-alive children in a receiver that waits for its Layer > don't start when their author last wrote them out of a slot nobody places, as the receiver resumes":
       "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it",
-    "keep-alive children in a receiver that waits for its Layer > keep what the user typed into a field its author writes again, bare, while the receiver waits":
-      "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it",
-    "keep-alive children in a receiver that waits for its Layer > keep what the user typed into a field its author writes again, by a forwarded builder, while the receiver waits":
-      "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it",
-    "keep-alive children in a receiver that waits for its Layer > keep what the user typed into a field its author writes again, by a headless child's view, while the receiver waits":
-      "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it",
     "keep-alive children in a receiver that waits for its Layer > take the server's Model and new nodes when moved out of the receiver while it waits":
       "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it",
     "keep-alive children in a receiver that waits for its Layer > that wait for their own Layer in the slot keep the server's Model when next placed in the aside":
-      "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it",
-    "keep-alive children in a receiver that waits for its Layer > keep what the user typed, when the one drawn before them leaves the slot":
       "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it",
     "keep-alive children in a receiver that waits for its Layer > leave the one field drawn after them, which takes an edit once, when moved out of the slot":
       "hydration (step 7, unfinished): a kept child drawn in a receiver that waits for its Layer starts as hydration draws it, where it should hold the server's nodes until the receiver resumes and start as its author last wrote it",
@@ -176,32 +168,8 @@ export const pending: {
       "hydration (step 7, unfinished): a server-rendered receiver waiting for its client Layer reports Pending, where today's reports Awaiting"
   },
   "html/HtmlServer.test.ts": {
-    "HtmlServer > renders a modal dialog closed, with no open attribute, and hydration shows it":
-      "modal dialogs and popovers on KernelDom (blocked seam)",
     "HtmlServer > a hydrated open dialog's close belongs to that showing, not to a modal shown since":
-      "modal dialogs and popovers on KernelDom (blocked seam)",
-    "HtmlServer > renders a popover closed with its mode, and hydration shows it":
-      "modal dialogs and popovers on KernelDom (blocked seam)",
-    "HtmlServer > keeps what the user changed before adoption > reports an edit made while the instance waits for its Layer":
-      "hydration (step 7, unfinished): form edits made before adoption (value, checked, radios) aren't kept or reported",
-    "HtmlServer > keeps what the user changed before adoption > reports edits made before the client mounts: a checkbox and a focused field":
-      "hydration (step 7, unfinished): form edits made before adoption (value, checked, radios) aren't kept or reported",
-    "HtmlServer > keeps what the user changed before adoption > keeps a radio picked outside its form":
-      "hydration (step 7, unfinished): form edits made before adoption (value, checked, radios) aren't kept or reported",
-    "HtmlServer > places what a child builds fresh among the server's nodes":
-      "hydration (step 7, unfinished): a child built fresh among the server's nodes keeps a stray server node (`[\"go\",\"tail\"]` where today's has `[\"go\"]`; cause not investigated)",
-    "HtmlServer > places what the root's child builds fresh among the server's nodes":
-      "hydration (step 7, unfinished): a child built fresh among the server's nodes keeps a stray server node (`[\"go\",\"tail\"]` where today's has `[\"go\"]`; cause not investigated)",
-    "HtmlServer > places what a child that waited for its Layer builds fresh among the server's nodes":
-      "hydration (step 7, unfinished): a child built fresh among the server's nodes keeps a stray server node (`[\"go\",\"tail\"]` where today's has `[\"go\"]`; cause not investigated)",
-    "HtmlServer > compares the head a waiting child's subtree had with the props it was placed with":
-      "hydration (step 7, unfinished): a child waiting for its Layer adopts with its parent's current props and slots, not those it was placed with (seen in the 'panel b' case; the other two not investigated)",
-    "HtmlServer > adopts a waiting child with the slots it was placed with, and applies the new ones after":
-      "hydration (step 7, unfinished): a child waiting for its Layer adopts with its parent's current props and slots, not those it was placed with (seen in the 'panel b' case; the other two not investigated)",
-    "HtmlServer > drops the placement held for a waiting instance its parent removes, and never applies it":
-      "hydration (step 7, unfinished): a child waiting for its Layer adopts with its parent's current props and slots, not those it was placed with (seen in the 'panel b' case; the other two not investigated)",
-    "HtmlServer > recovers from mismatches on marker-free single-element children":
-      "hydration (step 7, unfinished): a mismatch on a marker-free single-element child replaces a different node than today's (cause not investigated)"
+      "modal dialogs and popovers on KernelDom (blocked seam)"
   },
   "html/ViewTransition.test.ts": {
     "view transitions > a mid-flush route transition commits once across callback, freeze, and close":

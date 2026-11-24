@@ -134,5 +134,9 @@ export const make =
     const folding = new Folding(root, neutral)
     tree.head = { value: undefined, title: undefined }
     const work = tree.work
-    tree.work = (idle) => work?.(idle) === true || (idle && folding.run())
+    // Folded again only once something rendered, mounted or closed since: a flush that drew nothing
+    // keeps the head it had, and evaluates no head.
+    tree.work = (idle) =>
+      work?.(idle) === true ||
+      (idle && tree.drew === true && !(tree.drew = false) && folding.run())
   }

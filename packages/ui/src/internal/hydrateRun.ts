@@ -16,6 +16,8 @@ import { type Decoded, reportedOf, stateCodecOf } from "./stateCodec.ts"
 export interface Adopting<N = any> {
   readonly host: Kernel.Host<N>
   readonly hold: (path: string) => void
+  /** A child starts at `path`: `served` when the server's state has it. */
+  readonly child: (path: string, served: boolean) => void
   readonly done: () => void
 }
 
@@ -23,6 +25,10 @@ export interface Adopting<N = any> {
 export interface Adoption<N = any> {
   readonly root: Adopting<N> | undefined
   readonly resume: (placeholder: N) => Adopting<N> | undefined
+  /** Given the nodes an instance adopted before its Layer was ready, as their events go live. */
+  readonly live?:
+    | ((nodes: ReadonlyArray<readonly [N, Kernel.Rec]>) => void)
+    | undefined
 }
 
 /** @internal */
@@ -51,6 +57,7 @@ const methods = [
   "createText",
   "setAttr",
   "setProp",
+  "made",
   "insert"
 ] as const
 
@@ -141,9 +148,13 @@ export const make = (
       inert.set(env, wanted)
       env.waiting.push(() => {
         inert.delete(env)
+        const live: Array<readonly [unknown, Kernel.Rec]> = []
         for (const [node, [rec, first]] of wanted) {
-          if (!rec.inst.closed) setEvents(node, rec, first)
+          if (rec.inst.closed) continue
+          setEvents(node, rec, first)
+          live.push([node, rec])
         }
+        adoption?.live?.(live)
       })
     }
     queued.set(node, [rec, queued.get(node)?.[1] ?? first])
@@ -156,7 +167,10 @@ export const make = (
   ;(host as { hold: Kernel.Host["hold"] }).hold = (owner, rec, at) => {
     const view = rec.v as View.Child<any, any>
     const path = (at ?? owner.path) + "/" + segmentOf(view.component, view.key)
-    if (resumed.delete(rec) || !serves(owner, path)) return false
+    if (resumed.delete(rec)) return false
+    const served = serves(owner, path)
+    if (view.alive === undefined) active?.child(path, served)
+    if (!served) return false
     const exit = decode(view.component as never, state[path])
     if (Exit.isExit(exit)) {
       decoded.set(path, Exit.isSuccess(exit) ? exit.value : undefined)

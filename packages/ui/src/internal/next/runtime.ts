@@ -301,15 +301,50 @@ const start = (
   const state = options?.state
   const fromStatic = state?.["~static"] === true
   const waiting = new Map<Kernel.Instance, Parameters<Kernel.Recorder>[1]>()
+  // The latest placement of each waiting instance that kept the one it had, the server's, which it
+  // adopts with: this one is applied once it has.
+  const held = new Map<
+    Kernel.Instance,
+    readonly [Kernel.Instance, View.Child<any, any>]
+  >()
+  const holds: Kernel.Tree["holds"] = (child, inst, view) =>
+    waiting.has(child) && held.set(child, [inst, view]) !== undefined
+  const heldAt = (at: string): boolean => {
+    for (const inst of held.keys()) {
+      if (at.startsWith(inst.path + "/")) return true
+    }
+    return false
+  }
+  /** The waiting instance it adopts after: its parent, or the receiver whose slot it's drawn in. */
+  const behindOf = (inst: Kernel.Instance): Kernel.Instance | undefined => {
+    const parent = inst.parent
+    if (parent !== undefined && waiting.has(parent)) return parent
+    for (const at of waiting.keys()) {
+      if (at !== inst && inst.path.startsWith(at.path + "/")) return at
+    }
+    return undefined
+  }
   const mountWaiting = (inst: Kernel.Instance): void => {
     const draft = waiting.get(inst)
     if (draft === undefined) return
     // The parent that provides the env it waited on mounted first.
     const parent = inst.parent
     if (parent?.env.ctx !== undefined) mountWaiting(parent)
+    const behind = behindOf(inst)
+    if (behind !== undefined) {
+      if (behind.env.ctx !== undefined) mountWaiting(behind)
+      if (waiting.has(behind)) return
+    }
     waiting.delete(inst)
+    const latest = held.get(inst)
+    held.delete(inst)
     if (!inst.closed) recording.record(inst, { ...draft, model: inst.model })
     checkAdopted()
+    if (latest !== undefined && !inst.closed && !latest[0].closed) {
+      // Applied now, as `adopted` resolves: the render it asks for folds the head again.
+      inst.tree.ops.patchChild(latest[0], inst.at!, latest[1])
+      inst.tree.ops.markDirty(latest[0])
+    }
   }
   const record: Kernel.Recorder = (inst, draft) => {
     if (initCommands !== undefined && draft._tag === "Mounted") {
@@ -325,7 +360,7 @@ const start = (
           (state!["~status"] as Record<string, unknown> | undefined)
               ?.[inst.path] === undefined
         // A child adopts after the parent that waits to: its Model is reported first.
-        const behind = inst.parent !== undefined && waiting.has(inst.parent)
+        const behind = behindOf(inst) !== undefined
         if (
           layered || behind ||
           (env.ctx === undefined && env.cause === undefined)
@@ -349,6 +384,7 @@ const start = (
         // Before the children that wait on the env it provides: it mounted before them.
         inst.env.waiting.push(() => mountWaiting(inst))
       } else if (draft._tag === "Unmounted" && waiting.delete(inst)) {
+        held.delete(inst)
         const seq = recording.record(inst, draft)
         checkAdopted()
         return seq
@@ -562,6 +598,10 @@ const start = (
             )
           }
           const first = inst.component.init(inst.props)
+          if (hydration !== undefined && inst.tree.holds === undefined) {
+            inst.tree.holds = holds
+            inst.tree.held = heldAt
+          }
           const adopted = hydration?.init(inst, first)
           if (adopted !== undefined) {
             return routing === undefined

@@ -39,6 +39,8 @@ export interface Host<N = any> {
     ) => Readonly<Record<string, string>>)
     | undefined
   readonly setProp: (node: N, name: string, value: unknown) => void
+  /** Called once an element and its children are made: a hydrating host goes on past what it built fresh. */
+  readonly made?: ((node: N) => void) | undefined
   readonly setEvents: (node: N, record: Rec, first: boolean) => void
   readonly insert: (parent: N, node: N, before: N | null) => void
   readonly remove: (parent: N, node: N) => void
@@ -321,6 +323,14 @@ export interface Tree {
     | undefined
   transitions?: Transitions | undefined
   shared?: unknown
+  /** Set as an instance renders, mounts or closes: a head fold clears it. */
+  drew?: boolean | undefined
+  /** Whether a child keeps the placement it has, taking `view`, which `inst` drew, later. */
+  holds?:
+    | ((child: Instance, inst: Instance, view: View.Child<any, any>) => boolean)
+    | undefined
+  /** Whether a placement is held over `at`, a slot's path: what's drawn there takes its author's latest write later. */
+  held?: ((at: string) => boolean) | undefined
   dirty: Array<Instance>
   scheduled: boolean
   flushing: boolean
@@ -752,6 +762,7 @@ const renderAbove = (inst: Instance): void => {
 
 const renderDirty = (inst: Instance): void => {
   const log = inst.tree.log
+  inst.tree.drew = true
   if (log !== undefined) log(inst, rendering)
   render(inst)
   if (log !== undefined) log(inst, rendered)
@@ -836,6 +847,7 @@ const start = (inst: Instance): Rec | undefined => {
   try {
     try {
       check(component)
+      inst.tree.drew = true
       first = inst.tree.init(inst)
     } catch (error) {
       fail(inst, "init", Cause.die(error))
@@ -918,6 +930,7 @@ const clear = (inst: Instance): void => {
 const close = (inst: Instance): void => {
   if (inst.closed) return
   inst.closed = true
+  inst.tree.drew = true
   inst.lazy = undefined
   if (inst.parent !== undefined) inst.parent.live--
   const by = authorOf(inst)
@@ -1245,6 +1258,7 @@ const create = (inst: Instance, view: View.Node<any, any>): Rec => {
         }
       }
       if (view.props !== View.noFields) setProps(host, node, view.props)
+      host.made?.(node)
       const rec = new Rec(view, node, kids, inst)
       if (
         view.handlers !== View.noFields || view.eventOptions !== View.noFields
@@ -1357,8 +1371,11 @@ const patchChild = (
   view: View.Child<any, any>
 ): Rec => {
   const child = old.inst
-  old.v = view
   const shown = old.kids
+  if (shown === undefined && inst.tree.holds?.(child, inst, view) === true) {
+    return old
+  }
+  old.v = view
   if (shown !== undefined) {
     shown[0] = child === inst
       ? inFallback(

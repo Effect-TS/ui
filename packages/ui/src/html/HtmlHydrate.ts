@@ -11,6 +11,7 @@ import type * as Component from "../Component.ts"
 import * as hydrateRun from "../internal/hydrateRun.ts"
 import * as Kernel from "../internal/kernel.ts"
 import type * as Renderer from "../Renderer.ts"
+import type * as View from "../View.ts"
 import { attributeName } from "./internal/elements.ts"
 import * as markers from "./internal/markers.ts"
 import * as KernelDom from "./KernelDom.ts"
@@ -39,6 +40,166 @@ const closeOf = (open: Node, path: string): Node | null => {
 
 const isText = (node: Node): boolean => node.nodeType === 3
 
+const emptyValue = (name: string): unknown => name === "value" ? "" : false
+
+/** Input types whose `change` the browser fires when the field loses focus, not when the value changes. */
+const changeOnBlur: ReadonlySet<string> = new Set([
+  "text",
+  "search",
+  "url",
+  "tel",
+  "email",
+  "password",
+  "number"
+])
+
+const isRadio = (node: Node): node is HTMLInputElement =>
+  (node as Element).localName === "input" &&
+  (node as HTMLInputElement).type === "radio"
+
+/** The radio buttons checking `radio` unchecks, itself included: those with its name and form owner. */
+const radioGroup = (radio: HTMLInputElement): ReadonlyArray<HTMLInputElement> =>
+  radio.name === ""
+    ? [radio]
+    : Array.from(
+      (radio.getRootNode() as Document).querySelectorAll<HTMLInputElement>(
+        `input[type="radio"]`
+      )
+    ).filter((other) => other.name === radio.name && other.form === radio.form)
+
+/** The property the user changes on `node`, if it's a control. */
+const userProp = (node: Node): string | undefined => {
+  switch ((node as Element).localName) {
+    case "input": {
+      const type = (node as HTMLInputElement).type
+      return type === "checkbox" || type === "radio" ? "checked" : "value"
+    }
+    case "textarea":
+    case "select":
+      return "value"
+    case "option":
+      return "selected"
+  }
+}
+
+const optionDisabled = (option: HTMLOptionElement): boolean =>
+  option.disabled ||
+  (option.parentElement?.localName === "optgroup" &&
+    option.parentElement.hasAttribute("disabled"))
+
+/** Whether a `select`'s options differ from those its HTML selects, as a browser picks them. */
+const selectionChanged = (select: HTMLSelectElement): boolean => {
+  const options = Array.from(select.options)
+  const marked = options.map((option) => option.hasAttribute("selected"))
+  if (select.multiple) {
+    return options.some((option, i) => option.selected !== marked[i])
+  }
+  const last = marked.lastIndexOf(true)
+  const index = last !== -1
+    ? last
+    : select.size > 1
+    ? -1
+    : options.findIndex((option) => !optionDisabled(option))
+  return options.some((option, i) => option.selected !== (i === index))
+}
+
+/** The control an option's change is reported on and held for: its `select`, if it has one. */
+const controlOf = (node: Node): Element =>
+  (node as Element).localName === "option"
+    ? (node as Element).closest("select") ?? (node as Element)
+    : node as Element
+
+/**
+ * A server-rendered control the user changed before its instance adopted, or before its events went
+ * live, keeps what it shows, and the change is reported to its `onInput` and `onChange` as if the
+ * events had just fired. A change is told from an untouched control by its state differing from the
+ * server's default, read before adoption writes to it: a radio group as one, and a textarea as it's
+ * taken, as adoption drops its text.
+ */
+class Edits {
+  readonly adopted = new WeakSet<Node>()
+  readonly defaults = new WeakMap<Node, string>()
+  readonly edited = new Set<Element>()
+  readonly changedBefore = new Map<Node, boolean>()
+  take(node: Node): void {
+    this.adopted.add(node)
+    if ((node as Element).localName === "textarea") {
+      this.defaults.set(node, (node as HTMLTextAreaElement).defaultValue)
+      this.changedBefore.set(node, this.changed(node as Element))
+    }
+  }
+  changed(control: Element): boolean {
+    switch (control.localName) {
+      case "input":
+      case "textarea": {
+        const field = control as HTMLInputElement
+        return userProp(field) === "checked"
+          ? field.checked !== field.defaultChecked
+          : field.value !== (this.defaults.get(field) ?? field.defaultValue)
+      }
+      case "select":
+        return selectionChanged(control as HTMLSelectElement)
+      default:
+        return false
+    }
+  }
+  wasChanged(control: Element): boolean {
+    let changed = this.changedBefore.get(control)
+    if (changed === undefined) {
+      const group = isRadio(control) ? radioGroup(control) : [control]
+      changed = group.some((member) => this.changed(member))
+      for (const member of group) this.changedBefore.set(member, changed)
+    }
+    return changed
+  }
+  /** Whether adoption keeps what `node` shows for `name`, where the view writes `value`. */
+  keeps(node: Node, name: string, value: unknown): boolean {
+    if (name !== userProp(node)) return false
+    const control = controlOf(node)
+    if (
+      !this.edited.has(control) && this.adopted.has(control) &&
+      this.wasChanged(control) &&
+      (node as any)[name] !== (value === undefined ? emptyValue(name) : value)
+    ) this.edited.add(control)
+    return this.edited.has(control)
+  }
+  /** Sends each held control's state as its `input` and `change`, a radio group by its checked button. */
+  report(): void {
+    this.changedBefore.clear()
+    const controls = Array.from(this.edited)
+    this.edited.clear()
+    for (const control of controls) {
+      const field = control as HTMLInputElement
+      if (!field.isConnected || (isRadio(field) && !field.checked)) continue
+      field.dispatchEvent(new Event("input", { bubbles: true }))
+      // A focused text field gets no `change`: the browser fires it when focus leaves.
+      const typing = field.localName === "textarea" ||
+        (field.localName === "input" && changeOnBlur.has(field.type))
+      if (!typing || field.ownerDocument.activeElement !== field) {
+        field.dispatchEvent(new Event("change", { bubbles: true }))
+      }
+    }
+  }
+}
+
+/** Writes `value` to `node` as the view's, but leaves what it shows: the write sees it's already there. */
+const keeping = (
+  node: Node,
+  name: string,
+  value: unknown,
+  write: () => void
+) => {
+  Object.defineProperty(node, name, {
+    value: value === undefined ? emptyValue(name) : value,
+    configurable: true
+  })
+  try {
+    write()
+  } finally {
+    delete (node as any)[name]
+  }
+}
+
 interface Opened {
   readonly path: string
   readonly open: Node
@@ -55,7 +216,8 @@ const between = (
   start: Node | null,
   end: Node | null,
   edges: ReadonlyArray<Node>,
-  holds: Map<Node, Held>
+  holds: Map<Node, Held>,
+  edits: Edits
 ): hydrateRun.Adopting<Node> => {
   let at = start
   let parent = container
@@ -75,6 +237,8 @@ const between = (
   const kept = new WeakSet<Node>()
   let freshDepth = 0
   let holding: Held | undefined
+  // The element a child the server rendered without markers starts at: it's that child's, matched or not.
+  let bare: Node | undefined
   const missed = new WeakSet<Node>()
 
   const scopeOf = (node: Node): Node => {
@@ -149,10 +313,25 @@ const between = (
     return null
   }
 
+  /** Drops a marker-free child's element its view doesn't match, and goes on after it. */
+  const drop = (node: Node): void => {
+    at = node.nextSibling
+    node.parentNode!.removeChild(node)
+  }
+
   const take = (matches: (node: Node) => boolean): Node | null => {
     if (freshDepth > 0) return null
     let node = next()
     if (node === null) return null
+    if (node === bare) {
+      bare = undefined
+      if (!matches(node)) {
+        drop(node)
+        return null
+      }
+      taken.add(node)
+      return node
+    }
     const scope = scopeOf(node)
     if (missed.has(scope) || !matches(node)) {
       node = resync(node, matches)
@@ -207,6 +386,7 @@ const between = (
         return made
       }
       written.set(node, new Set())
+      edits.take(node)
       parent = node
       at = node.firstChild
       return node
@@ -218,6 +398,8 @@ const between = (
         holding = undefined
         return node
       }
+      if (bare !== undefined && next() === bare) drop(bare)
+      bare = undefined
       const node = text === "" ? null : take(isText) as Text | null
       if (node === null) return base.createText(text)
       const data = node.data
@@ -245,11 +427,15 @@ const between = (
     },
     setProp(node, name, value) {
       const names = written.get(node)
-      if (names !== undefined) {
-        names.add(name.toLowerCase())
-        if ((node as any)[name] === value) return
+      if (names !== undefined) names.add(name.toLowerCase())
+      if (edits.keeps(node, name, value)) {
+        return keeping(node, name, value, () => base.setProp(node, name, value))
       }
+      if (names !== undefined && (node as any)[name] === value) return
       base.setProp(node, name, value)
+    },
+    made(node) {
+      if (fresh.delete(node)) freshDepth--
     },
     insert(into, node, before) {
       if (before !== null) return base.insert(into, node, before)
@@ -266,16 +452,33 @@ const between = (
       }
       if (ref !== node) into.insertBefore(node, ref)
       last.set(into, node)
-      if (fresh.delete(node)) freshDepth--
-      else {
-        const names = written.get(node)
-        if (names !== undefined) complete(node as Element, names)
-      }
+      const names = written.get(node)
+      if (names !== undefined) complete(node as Element, names)
     }
   }
 
   return {
     host,
+    child(path, served) {
+      bare = undefined
+      if (freshDepth > 0) return
+      let node = at
+      while (node !== null && node !== end && node.nodeType === COMMENT) {
+        if (isOpen(node, path)) return
+        node = node.nextSibling
+      }
+      if (node === null || node === end || node.nodeType !== ELEMENT) return
+      // A stray element before the child's markers isn't the child's.
+      for (
+        let after = node.nextSibling;
+        after !== null && after.nodeType === COMMENT;
+        after = after.nextSibling
+      ) if (isOpen(after, path)) return
+      // One the server didn't render: from here on, its list is built fresh.
+      const scope = scopeOf(node)
+      if (!served) missed.add(scope)
+      else if (!missed.has(scope)) bare = node
+    },
     hold(path) {
       holding = undefined
       if (freshDepth > 0) return
@@ -308,6 +511,7 @@ const between = (
         }
       }
       for (const node of passed) node.parentNode?.removeChild(node)
+      edits.report()
     }
   }
 }
@@ -320,24 +524,57 @@ const between = (
  */
 export const adopt: hydrateRun.Adopt<Node> = (base, container, path) => {
   const holds = new Map<Node, Held>()
+  const edits = new Edits()
   let open = container.firstChild
   while (open !== null && !isOpen(open, path)) open = open.nextSibling
   const close = open === null ? null : closeOf(open, path)
   return {
     root: open === null || close === null
       ? undefined
-      : between(base, container, open.nextSibling, close, [open, close], holds),
+      : between(
+        base,
+        container,
+        open.nextSibling,
+        close,
+        [open, close],
+        holds,
+        edits
+      ),
     resume(placeholder) {
       const held = holds.get(placeholder)
       if (held === undefined) return undefined
       holds.delete(placeholder)
       const list = held.first.parentNode!
       return held.first === held.last
-        ? between(base, list, held.first, held.last.nextSibling, [], holds)
-        : between(base, list, held.first.nextSibling, held.last, [
+        ? between(
+          base,
+          list,
           held.first,
-          held.last
-        ], holds)
+          held.last.nextSibling,
+          [],
+          holds,
+          edits
+        )
+        : between(
+          base,
+          list,
+          held.first.nextSibling,
+          held.last,
+          [
+            held.first,
+            held.last
+          ],
+          holds,
+          edits
+        )
+    },
+    live(nodes) {
+      for (const [node, rec] of nodes) {
+        const name = userProp(node)
+        if (name === undefined || !edits.adopted.has(node)) continue
+        edits.keeps(node, name, (rec.v as View.Element<any, any>).props[name])
+      }
+      edits.report()
     }
   }
 }

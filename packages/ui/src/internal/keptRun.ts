@@ -51,7 +51,8 @@ export class Table {
   }
   /**
    * Once the author's view is patched: fails it when an ordinary child of its view has the path of a
-   * kept one it wrote, and asks the predicate of each kept one it didn't write.
+   * kept one it wrote, and asks the predicate of each kept one it didn't write, unless it's drawn where a
+   * placement is held.
    */
   done(): void {
     const author = this.author
@@ -60,7 +61,11 @@ export class Table {
     for (const [named, entry] of this.kids) {
       if (entry.round === this.round) {
         if (plain.has(named)) failTwice(author, named)
-      } else if (entry.alive !== undefined) {
+      } else if (
+        entry.alive !== undefined &&
+        (entry.inst.under === undefined ||
+          author.tree.held?.(entry.inst.under) !== true)
+      ) {
         this.ask(entry.alive, entry.inst.at!.v as View.Child<any, any>, entry)
       }
     }
