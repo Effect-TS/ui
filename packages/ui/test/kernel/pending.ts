@@ -171,5 +171,227 @@ export const pending: {
       "refs and mounts (step 6)",
     "HtmlFiles > without showPicker, HtmlCommand.showPicker falls back to click only on an enabled file input and never submits a form":
       "refs and mounts (step 6)"
+  },
+  "Scoped.test.ts": {
+    "scoped children > a hidden tab keeps its draft and its save, gets messages, and emits through the last onEmit":
+      "kept children (step 4, blocked on a seam), head (step 6)",
+    "scoped children > an event on a node of a kept child reaches the child":
+      "kept children (step 4, blocked on a seam)",
+    "scoped lists > ends a row once its item is deleted, and keeps one the view filters out":
+      "kept children (step 4, blocked on a seam)",
+    "scope predicates > fails the author when it reads nothing from its argument":
+      "kept children (step 4, blocked on a seam)",
+    "scope predicates > fails the author when it reads only the key":
+      "kept children (step 4, blocked on a seam)",
+    "scope predicates > fails the author when it throws (for a child that render writes: true)":
+      "kept children (step 4, blocked on a seam)",
+    "scope predicates > fails the author when it throws (for a child that render writes: false)":
+      "kept children (step 4, blocked on a seam)",
+    "scoped lifetimes > ends kept children with their author":
+      "kept children (step 4, blocked on a seam)",
+    "scoped lifetimes > shows a child that failed while kept as its fallback once drawn":
+      "kept children (step 4, blocked on a seam)",
+    "scoped lifetimes > fails the author on a host that can't hold kept nodes":
+      "kept children (step 4, blocked on a seam)",
+    "scoped lifetimes > stops a kept child's mounts and starts them again once it's drawn":
+      "kept children (step 4, blocked on a seam)",
+    "scoped lifetimes > starts a mount under a handle the host recycled from a removed author's container":
+      "kept children (step 4, blocked on a seam)",
+    "saved state of scoped children > a router restore keeps the state of a kept child until it's written again":
+      "kept children (step 4, blocked on a seam), router and history restore (step 5)",
+    "saved state of scoped children > the Router is asked for it once at mount and once per navigation":
+      "kept children (step 4, blocked on a seam), router and history restore (step 5)",
+    "EFF-4038 probes, scoped > P1: wrapping a child in a slot component keeps it":
+      "kept children (step 4, blocked on a seam)",
+    "EFF-4038 probes, scoped > P2: moving a child between two elements of one view keeps it":
+      "kept children (step 4, blocked on a seam)",
+    "EFF-4038 probes, scoped > P8: a receiver that stops placing a slot keeps the child in it":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children of a headless child > a headless child's closure writes them with its author's scope, and a kept one leaves collects":
+      "kept children (step 4, blocked on a seam), headless components (step 8)",
+    "scoped children of a headless child > headless owners in a scoped child moved up a level get an event deepest first":
+      "kept children (step 4, blocked on a seam), headless components (step 8)",
+    "scoped children drawn by other children > are drawn again once their own keyed Layer builds again":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children drawn by other children > keeps a child drawn in a receiver that fails, and draws it elsewhere after":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children drawn by other children > keeps a child its receiver stops placing as its Layer builds again":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children drawn by other children > shows the fallback of a child that failed as it mounted wherever it's drawn, until its predicate ends it":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children drawn by other children > keeps a child drawn in a receiver whose own scope ends":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children drawn by other children > a child drawn in a kept receiver keeps its Model, and its mounts follow it out":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children drawn by other children > shows the fallback of a drawn child that fails in its place":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children that read shared state > read the owner above where they're drawn (an optional read: true)":
+      "kept children (step 4, blocked on a seam), shared state (step 4, blocked on a seam)",
+    "scoped children that read shared state > read the owner above where they're drawn (an optional read: false)":
+      "kept children (step 4, blocked on a seam), shared state (step 4, blocked on a seam)",
+    "scoped children across a router restore > keeps a draft and its subtree that were drawn when saved and are hidden when restored":
+      "kept children (step 4, blocked on a seam), router and history restore (step 5)",
+    "scoped children across a router restore > keeps a kept draft that a restore didn't claim, for the next one after a reload":
+      "kept children (step 4, blocked on a seam), router and history restore (step 5)",
+    "scoped children across a router restore > starts fresh a draft whose saved state a false predicate ended":
+      "kept children (step 4, blocked on a seam), router and history restore (step 5)",
+    "scoped children across a router restore > starts a fresh push blank after a restore that didn't claim the draft, and Back still restores it":
+      "kept children (step 4, blocked on a seam), router and history restore (step 5)",
+    "scoped children across a router restore > starts blank the subtree of a restored child that ended before drawing it":
+      "kept children (step 4, blocked on a seam), router and history restore (step 5)",
+    "scoped children across a router restore > keeps the kept drafts of each root on one router":
+      "kept children (step 4, blocked on a seam), router and history restore (step 5)",
+    "scoped children across a router restore > keeps a draft a Back restores when the page it leaves has one at the same path":
+      "kept children (step 4, blocked on a seam), router and history restore (step 5)",
+    "scoped children across a router restore > drops a draft a Back restores once the page that stayed through it is removed":
+      "kept children (step 4, blocked on a seam), router and history restore (step 5)",
+    "scoped children whose state encodes after the push that left them > start fresh after a reload, when a sibling's state was written into the entry":
+      "kept children (step 4, blocked on a seam), router and history restore (step 5)",
+    "scoped children whose state encodes after the push that left them > start fresh after a reload, when edited again after a Back and left before that encodes":
+      "kept children (step 4, blocked on a seam), router and history restore (step 5)",
+    "scoped children whose state encodes after the push that left them > start fresh in an entry that never drew them, after a Back from one that did":
+      "kept children (step 4, blocked on a seam), router and history restore (step 5)",
+    "scoped children written into closed slots > run no mounts and report nothing while the slot is closed":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children written into closed slots > start when a slot first places them":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children written into closed slots > keep the props and onEmit of the last render that placed them":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children written into closed slots > a receiver that redraws an old write leaves the child where the author wrote it last":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children written into closed slots > keeps a child whose headless writer is replaced by another that writes it":
+      "kept children (step 4, blocked on a seam), headless components (step 8)",
+    "scoped children written into closed slots > a receiver that redraws an old write doesn't start a child that ended while its author left it out":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children written into closed slots > fails the author that writes two components of one name and key":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children written into closed slots > an ordinary child and a scoped one of the same name and key, the scoped one in its own view":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children written into closed slots > an ordinary child and a scoped one of the same name and key, the scoped one in a slot after it":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children written into closed slots > an ordinary child and a scoped one of the same name and key, the scoped one in a slot before it":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children written into closed slots > an ordinary child and a scoped one of the same name and key, the scoped one in the author's view beside its slot":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children written into closed slots > a scoped child takes the path of an ordinary one of its name and key that the same render ends":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children written into closed slots > draws a child its author returns again without writing it again":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children written into closed slots > draws a child a failed child's fallback writes":
+      "kept children (step 4, blocked on a seam)",
+    "scoped children that report to shared state > move their report to the owner above where they're drawn":
+      "kept children (step 4, blocked on a seam), shared state (step 4, blocked on a seam)"
+  },
+  "Shared.test.ts": {
+    "shared state > a reader reads its owner's value, and its send reaches the owner as a logged update":
+      "shared state (step 4, blocked on a seam)",
+    "shared state > re-renders the readers when the owner's props change what it shares":
+      "shared state (step 4, blocked on a seam)",
+    "shared state > re-renders the readers only when the shared value changes":
+      "shared state (step 4, blocked on a seam)",
+    "shared state > fails an owner whose shares throws, with source shares":
+      "shared state (step 4, blocked on a seam)",
+    "optional owners, reports and onChange > an optional reader with no owner reads undefined, and its send to the owner is dropped":
+      "shared state (step 4, blocked on a seam)",
+    "optional owners, reports and onChange > an owner reads its readers' reports once the pass settles: a swap in one render sends nothing, an unmount does":
+      "shared state (step 4, blocked on a seam)",
+    "optional owners, reports and onChange > a report's id is the reader's own, in an app and in a Scene":
+      "shared state (step 4, blocked on a seam)",
+    "optional owners, reports and onChange > a reader's onChange gets the new value, pointing at the owner's entry that changed it":
+      "shared state (step 4, blocked on a seam)",
+    "optional owners, reports and onChange > a report and a shared value that answer each other fail the owner":
+      "shared state (step 4, blocked on a seam)",
+    "optional owners, reports and onChange > 150 changes before a render are one onChange message with the last value":
+      "shared state (step 4, blocked on a seam)",
+    "shared state in update > reads the owner's value as update runs, logs it, and replays it from entries and Wire frames":
+      "shared state (step 4, blocked on a seam)",
+    "onChange rounds and declarations > a reader that changes the owner mid-round leaves the next reader's message pointing at its value's entry":
+      "shared state (step 4, blocked on a seam)",
+    "a component that reads its own kind > reads the nearest instance of its own kind above it, and reports to it":
+      "shared state (step 4, blocked on a seam)",
+    "a component that reads its own kind > sends to the nearest instance of its own kind above it, and the outermost one's send is dropped":
+      "shared state (step 4, blocked on a seam)"
+  },
+  "html/Scoped.test.ts": {
+    "scoped children on the server > writes no nodes for a kept child, and the client takes its state once it's written":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children on the server > lists a child whose Model doesn't encode as deferred where it's drawn, and sends a kept one no state":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children on the client after hydration > keep the server's Model when the client draws them somewhere new":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children on the client after hydration > keep the server's Model when the client first hides them":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > keep the server's nodes once the receiver adopts them":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > keep what the user typed into a field its author writes again, bare, while the receiver waits":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > keep what the user typed into a field its author writes again, by a forwarded builder, while the receiver waits":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > keep what the user typed into a field its author writes again, by a headless child's view, while the receiver waits":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7), headless components (step 8)",
+    "scoped children in a receiver that waits for its Layer > take the server's Model and new nodes when moved out of the receiver while it waits":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > keep the nodes they got outside the receiver when moved back in before it resumes":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > left out of the slot as the receiver resumes (none), start as the server's when written again":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > left out of the slot as the receiver resumes (ended), start as the client's when written again":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > that wait for their own Layer in the slot keep the server's Model when next placed in the aside":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > that wait for their own Layer in the slot keep the server's Model when next placed in the slot":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > keep what the user typed, when the one drawn before them leaves the slot":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > leave the one field drawn after them, which takes an edit once, when moved out of the slot":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > keep the server's nodes of a receiver they draw, when taken out of the document and drawn again while it waits":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > release a receiver that adopted them and was removed, while another still waits":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > let adoption finish when their receiver is removed as they wait for their own Layer in the slot of a scoped child there":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > keep the server's nodes under the predicate their author last wrote them with, when the receiver resumes":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > start what's below a child of theirs whose state decodes late from the server":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > start what's below a child of theirs whose state fails to decode late from the client":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > start what's below them when their own state fails to decode late from the client":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > stop decoding their state when they're no longer written as it decodes":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > leave with an author removed before it drew them, while another component waits: one made at its key starts them afresh":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > start with the props their author last wrote them with, when the receiver resumes (drawn by the server: true)":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > start with the key their author last wrote them with, when the receiver resumes (drawn by the server: true)":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > start with the order their author last wrote them with, when the receiver resumes (drawn by the server: false)":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > don't start when their author last wrote them out of a headless child's view, as the receiver resumes":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7), headless components (step 8)",
+    "scoped children in a receiver that waits for its Layer > don't start when their author last wrote them out of a slot nobody places, as the receiver resumes":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > start in the order drawn, and only where placed, when the receiver resumes placing neither slot":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > start in the order drawn, and only where placed, when the receiver resumes placing a slot that holds one more":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > start in the order drawn, and only where placed, when the receiver resumes placing its slots the other way around":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > keep the server's Model when first written out of a slot the receiver resumes without":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > are built where the client last drew them, when their state decodes after the receiver resumes":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > don't start when the receiver resumes after a render that wasn't their author's and the predicate is false":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > start from what's left of their state when one made at its key replaces Author, removed as it waited for its Layer":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children in a receiver that waits for its Layer > start from what's left of their state when one made at its key replaces Outer, removed as it waited for its Layer":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7)",
+    "scoped children of a headless child > a kept one doesn't keep alive the closure's nodes once the headless child is removed":
+      "kept children (step 4, blocked on a seam), headless components (step 8)",
+    "scoped children of a headless child > a waiting receiver doesn't keep alive the writes its author replaced":
+      "kept children (step 4, blocked on a seam), server rendering and hydration (step 7), headless components (step 8)"
   }
 }
