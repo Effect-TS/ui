@@ -37,7 +37,11 @@ The overlay keeps the raw entries, alongside the Wire frames, to paint from. The
 
 ### Other details
 
-It follows the latest entry until one is selected. It is mounted in an iframe with `MessageLog.noop`, so the page's styles don't reach it, a key pressed or a click in it never reaches the app's document and window listeners, and it never logs its own updates. Its theme follows `prefers-color-scheme`. It keeps the last 1,000 entries of each session.
+It follows the latest entry until one is selected, and remembers whether the panel is open and its size in `localStorage`. **Clear** empties the timeline while keeping mounted instances, the next entry's diff, and Time travel accurate (disabled while the page is paused).
+
+`DevTools.layer` accepts `position`, `size` (1,000 shown entries by default) and `exclude` (message `_tag` values matched across every component). Excluded updates add no rows and coalesce per instance between shown entries so high-frequency bursts do not evict the buffer, while keeping the next shown entry's Model diff and Time travel state accurate. `exclude` is not a way to hide sensitive data: later entries still carry whatever an excluded message changed in the Model — use `Schema.Redacted` for sensitive values.
+
+It is mounted in an iframe with `MessageLog.noop`, so the page's styles don't reach it, a key pressed or a click in it never reaches the app's document and window listeners, and it never logs its own updates. Its theme follows `prefers-color-scheme`.
 
 ## The core
 

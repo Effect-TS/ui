@@ -69,20 +69,34 @@ export type Position = internal.Position
  * **Details**
  *
  * The overlay starts closed, as a button at `position` (`"BottomRight"` by
- * default) that opens it. It's mounted in an iframe added to the end of
+ * default) that opens it, and remembers its open state and size in
+ * `localStorage`. It's mounted in an iframe added to the end of
  * `document.body` and removed when the Layer closes, so the app's DOM is
  * left as it is. The iframe takes the size and shape of the launcher or the
  * open panel, so the page around them still gets its clicks, and its theme
  * follows `prefers-color-scheme`.
  *
  * Entries are queued by `record` and encoded off the app's update path by
- * `MessageLog.makeEncoded`. The inspector keeps the last 1,000 entries of
- * each session. To send entries to another sink as well, combine both with
- * `MessageLog.fanout`.
+ * `MessageLog.makeEncoded`. The inspector keeps the last `size` shown entries
+ * of each session (1,000 by default). To send entries to another sink as
+ * well, combine both with `MessageLog.fanout`.
+ *
+ * `exclude` lists message `_tag` values, matched across every component, to
+ * keep noisy updates such as pointer moves out of the timeline. An excluded
+ * `Update` gets no row and replaces the instance's earlier excluded entry
+ * when no shown entry sits between them, so a burst takes one slot per
+ * instance and does not evict shown entries while still keeping Model diffs
+ * and Time travel accurate. `exclude` is not a way to hide sensitive data:
+ * later entries still carry whatever an excluded message changed in the
+ * Model. Use `Schema.Redacted` for sensitive values.
+ *
+ * Clear empties the timeline while keeping mounted instances and each
+ * instance's pre-clear state for the next entry's diff and Time travel. Clear
+ * is disabled while the page is paused.
  *
  * The Layer also provides `BrowserHost.Pausables`, so each root mounted
- * with `BrowserHost.mount` or `mountEffect` under it can be paused. Show
- * on page, on a selected entry, hides the root's container and paints an
+ * with `BrowserHost.mount` or `mountEffect` under it can be paused. Time
+ * travel, on a selected entry, hides the root's container and paints an
  * `inert` copy from each instance's state at that entry, folded from the
  * raw entries the overlay keeps beside the frames. Resume removes it. While
  * the copy is shown, the overlay's iframe is in the top layer, so the
@@ -94,5 +108,9 @@ export type Position = internal.Position
  * @category layers
  * @since 0.1.0
  */
-export const layer = (options?: { readonly position?: Position | undefined }): Layer.Layer<never> =>
-  internal.make({ position: options?.position })
+export const layer = (options?: {
+  readonly position?: Position | undefined
+  readonly size?: number | undefined
+  readonly exclude?: ReadonlyArray<string> | undefined
+}): Layer.Layer<never> =>
+  internal.make({ position: options?.position, size: options?.size, exclude: options?.exclude })

@@ -7,12 +7,13 @@ import * as PubSub from "effect/PubSub"
 import * as Stream from "effect/Stream"
 import * as Inspector from "../Inspector.ts"
 import * as History from "./history.ts"
-import { type Feed, Overlay, Pages, Paint } from "./overlay.ts"
+import { Clear, type Feed, Overlay, Pages, Paint, SaveOpen } from "./overlay.ts"
 import { styles } from "./styles.ts"
 
 export type Position = "TopLeft" | "TopRight" | "BottomLeft" | "BottomRight"
 
 const sizeKey = "@effect/ui-devtools/size"
+const openKey = "@effect/ui-devtools/open"
 
 const corners: { readonly [P in Position]: string } = {
   TopLeft: "top:12px;left:12px",
@@ -38,23 +39,35 @@ const lower = (frame: HTMLIFrameElement) => {
 
 export const make = (options: {
   readonly position?: Position | undefined
-  readonly buffer?: number | undefined
+  readonly size?: number | undefined
+  readonly exclude?: ReadonlyArray<string> | undefined
 }): Layer.Layer<never> =>
   Layer.effectContext(
     Effect.gen(function*() {
-      const size = Math.max(1, options.buffer ?? 1_000)
-      const inspector = Inspector.make({ size })
-      const history = History.make(size)
+      const size = Math.max(1, options.size ?? 1_000)
+      const exclude = new Set(options.exclude)
+      const inspector = Inspector.make({ size, exclude: options.exclude })
+      const history = History.make(size, exclude)
       const roots = new Map<string, BrowserHost.Pausable>()
       let paused: BrowserHost.Pausable | undefined
       const origins = new Map<string, number>()
+      const latest = new Map<string, number>()
       const changes = yield* PubSub.sliding<void>(1)
+      const view = document.defaultView
+      const open = ((): boolean => {
+        try {
+          return view?.localStorage.getItem(openKey) === "true"
+        } catch {
+          return false
+        }
+      })()
       const feed: Feed = {
         inspector,
         origin: (session) => origins.get(session),
         changes: Stream.fromPubSub(changes),
         paintable: (session, seq) => roots.has(session) && history.holds(session, seq),
-        pausing: () => paused !== undefined
+        pausing: () => paused !== undefined,
+        open
       }
       const resume: Effect.Effect<void> = Effect.suspend(() => {
         const root = paused
@@ -77,7 +90,21 @@ export const make = (options: {
               })
             )
           }),
-        resume
+        resume,
+        clear: (sessionId) =>
+          Effect.sync(() => {
+            if (paused !== undefined) return
+            inspector.sessions().find((session) => session.id === sessionId)?.clear()
+            history.clear(sessionId, latest.get(sessionId))
+          }),
+        setOpen: (next) =>
+          Effect.sync(() => {
+            try {
+              view?.localStorage.setItem(openKey, String(next))
+            } catch {
+              return
+            }
+          })
       })
       const pausables: BrowserHost.Pausables = {
         register: (root) => {
@@ -113,7 +140,6 @@ export const make = (options: {
       const inner = frame.contentDocument!
       const container = inner.getElementById("root")!
 
-      const view = document.defaultView
       const root = inner.documentElement
       root.setAttribute("data-position", position)
       const resize = (width: number, height: number) => {
@@ -178,13 +204,16 @@ export const make = (options: {
 
       yield* BrowserHost.mountEffect(Overlay, { feed }, container, { head: false }).pipe(
         Effect.provideService(MessageLog.MessageLog, MessageLog.noop),
-        Effect.provide(Paint.layer.pipe(Layer.provide(Layer.succeed(Pages, pages))))
+        Effect.provide(
+          Layer.mergeAll(Paint.layer, Clear.layer, SaveOpen.layer).pipe(Layer.provide(Layer.succeed(Pages, pages)))
+        )
       )
 
       const encoded = yield* MessageLog.makeEncoded((batch) =>
         Effect.suspend(() => {
           for (const entry of batch) {
             if (!origins.has(entry.session)) origins.set(entry.session, entry.at)
+            latest.set(entry.session, entry.seq)
           }
           inspector.ingest(batch)
           return PubSub.publish(changes, undefined)

@@ -1,10 +1,9 @@
 // @vitest-environment happy-dom
 import { Command, Component, Feature, MessageLog, UiSchema } from "@effect/ui"
 import { DevTools } from "@effect/ui-devtools"
-import * as DevToolsLayer from "@effect/ui-devtools/internal/layer"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
-import { assert, describe, it } from "@effect/vitest"
+import { afterEach, assert, describe, it } from "@effect/vitest"
 import { Effect, Exit, Layer, Schema, Scope } from "effect"
 import { type Capture, play } from "./fixtures/TwoEditors.ts"
 
@@ -17,11 +16,12 @@ const text = (node: Element | null | undefined) => (node?.textContent ?? "").rep
 const overlay = () =>
   document.querySelector<HTMLIFrameElement>("iframe[data-effect-ui-devtools]")!.contentDocument!.body
 
-const mount = Effect.fnUntraced(function*(capture: Capture, buffer?: number) {
+const mount = Effect.fnUntraced(function*(capture: Capture, size?: number) {
+  localStorage.clear()
   const memory = MessageLog.makeMemory({ size: 500 })
   const services = yield* Layer.build(
     MessageLog.fanout([
-      buffer === undefined ? DevTools.layer() : DevToolsLayer.make({ buffer }),
+      size === undefined ? DevTools.layer() : DevTools.layer({ size }),
       Layer.succeed(MessageLog.MessageLog, memory)
     ])
   )
@@ -168,6 +168,125 @@ const Pair = Component.define({
 }).pipe(Component.provide(Slot.toLayer(SlotView)))
 
 describe("DevTools overlay", { concurrent: false }, () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  it.live("clears with pre-clear diff and time travel, excludes noisy tags, and remembers open state", () =>
+    Effect.gen(function*() {
+      const CounterMessage = UiSchema.TaggedEnum({ Moved: {}, Clicked: {} })
+      const Counter = Component.define({
+        name: "Counter",
+        scoped: false,
+        model: Schema.Struct({ x: Schema.Number, count: Schema.Number }),
+        message: CounterMessage,
+        elements: Html
+      }).make({
+        init: () => ({ x: 0, count: 0 }),
+        update: {
+          Moved: ($) => $.evolve({ x: $.model.x + 1 }),
+          Clicked: ($) => $.evolve({ count: $.model.count + 1 })
+        },
+        view: (h, model) =>
+          h.div(
+            h.output.children(`${model.x}:${model.count}`),
+            h.button.onClick(CounterMessage.Moved()).children("Move"),
+            h.button.onClick(CounterMessage.Clicked()).children("Count")
+          )
+      })
+      const Side = Component.define({
+        name: "Side",
+        scoped: false,
+        model: Schema.Struct({ n: Schema.Number }),
+        message: PairMessage,
+        elements: Html
+      }).make({
+        init: () => ({ n: 0 }),
+        update: { ClickedAdd: ($) => $.evolve({ n: $.model.n + 1 }) },
+        view: (h, model) =>
+          h.div(
+            h.span.children("side=" + model.n),
+            h.button.onClick(PairMessage.ClickedAdd()).children("Side")
+          )
+      })
+      const Host = Component.define({
+        name: "Host",
+        scoped: false,
+        model: Schema.Null,
+        message: Schema.Never,
+        elements: Html
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.main(Counter(h, { key: "c", props: {} }), Side(h, { key: "s", props: {} }))
+      })
+
+      const app = document.body.appendChild(document.createElement("div"))
+      yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+      yield* Layer.build(DevTools.layer({ size: 50, exclude: ["Moved"] })).pipe(
+        Effect.flatMap((services) => BrowserHost.mountEffect(Host, {}, app).pipe(Effect.provide(services)))
+      )
+      yield* settle
+      const root = overlay()
+      yield* open(root)
+
+      const countBtn = HtmlLocator.getByRole(app, "button", { name: "Count" })
+      const moveBtn = HtmlLocator.getByRole(app, "button", { name: "Move" })
+      const sideBtn = HtmlLocator.getByRole(app, "button", { name: "Side" })
+      yield* click(sideBtn)
+      yield* click(countBtn)
+
+      const beforeSeqs = Array.from(root.querySelectorAll(".row"), (row) => row.getAttribute("data-seq"))
+      for (let i = 0; i < 60; i++) HtmlLocator.click(moveBtn)
+      yield* wait(30)
+      assert.deepStrictEqual(
+        Array.from(root.querySelectorAll(".row"), (row) => row.getAttribute("data-seq")),
+        beforeSeqs
+      )
+
+      yield* click(countBtn)
+      const changed = root.querySelectorAll(".tree .tl[data-change=changed]")
+      assert.strictEqual(changed.length, 1)
+      assert.strictEqual(changed[0].querySelector(".k")?.textContent, "count")
+      assert.strictEqual(changed[0].querySelector("del")?.textContent, "1")
+      assert.strictEqual(changed[0].querySelector("ins")?.textContent, "2")
+      assert.include(text(root.querySelector(".tree")), "x60")
+
+      const travel = () => HtmlLocator.getByRole(root, "button", { name: "Time travel" })
+      const clear = () => HtmlLocator.getByRole(root, "button", { name: "Clear" }) as HTMLButtonElement
+      yield* click(oldest(root, /Update Clicked$/))
+      yield* click(travel())
+      assert.strictEqual(app.nextElementSibling?.querySelector("output")?.textContent, "0:1")
+      assert.isTrue(clear().disabled)
+      yield* click(HtmlLocator.getByRole(root, "button", { name: "Resume the live page" }))
+      assert.isFalse(clear().disabled)
+
+      yield* click(clear())
+      assert.strictEqual(root.querySelectorAll(".row").length, 0)
+      assert.isNotNull(instance(root, "Counter[c]"))
+      assert.isNotNull(instance(root, "Side[s]"))
+
+      yield* click(countBtn)
+      const afterClearChanged = root.querySelectorAll(".tree .tl[data-change=changed]")
+      assert.strictEqual(afterClearChanged.length, 1)
+      assert.strictEqual(afterClearChanged[0].querySelector(".k")?.textContent, "count")
+      assert.strictEqual(afterClearChanged[0].querySelector("del")?.textContent, "2")
+      assert.strictEqual(afterClearChanged[0].querySelector("ins")?.textContent, "3")
+      yield* click(travel())
+      assert.strictEqual(app.nextElementSibling?.querySelector("output")?.textContent, "60:3")
+      assert.strictEqual(app.nextElementSibling?.querySelector("span")?.textContent, "side=1")
+      yield* click(HtmlLocator.getByRole(root, "button", { name: "Resume the live page" }))
+
+      const second = yield* Effect.scoped(Effect.gen(function*() {
+        yield* Layer.build(DevTools.layer())
+        yield* settle
+        const frames = document.querySelectorAll<HTMLIFrameElement>("iframe[data-effect-ui-devtools]")
+        const body = frames[frames.length - 1]!.contentDocument!.body
+        return body.querySelector("[role=dialog]") !== null
+      }))
+      assert.isTrue(second)
+    }))
+
   it.live("shows the page at an earlier entry beside the live tree, and Resume brings the live tree back", () =>
     Effect.gen(function*() {
       const { app, root } = yield* mount("closed")
@@ -234,7 +353,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
     Effect.gen(function*() {
       const memory = MessageLog.makeMemory({ size: 500 })
       const services = yield* Layer.build(
-        MessageLog.fanout([DevToolsLayer.make({ buffer: 2 }), Layer.succeed(MessageLog.MessageLog, memory)])
+        MessageLog.fanout([DevTools.layer({ size: 2 }), Layer.succeed(MessageLog.MessageLog, memory)])
       )
       const app = document.body.appendChild(document.createElement("div"))
       yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))

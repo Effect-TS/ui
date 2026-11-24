@@ -208,6 +208,11 @@ export interface Link {
  * nothing says whether it differed. An answer already there stays when the
  * earlier entry leaves the buffer after it.
  *
+ * When the earlier entry left through `Session.clear`, the mounted instance
+ * kept its last Wire Model and props as a baseline, so `changed`, `model`
+ * and `props` are present even though `Session.resolve` returns `Outside`
+ * for `seq`.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
@@ -215,6 +220,8 @@ export interface Link {
 export interface Previous {
   readonly seq: number
   readonly changed?: boolean | "unknown"
+  readonly model?: Schema.Json
+  readonly props?: Schema.Json
 }
 
 /**
@@ -271,9 +278,10 @@ export interface Session {
   /** For a `Waiting`, `Mounted` or `Update`: the instance's state entry before it, when there is one. */
   readonly previous: (seq: number) => Previous | undefined
   /**
-   * Empties the buffer, as if every entry had been dropped from the ring.
-   * Open records and mounted instances stay, and no entry does: a mounted
-   * instance keeps the `seq` of its last state entry, not its Model.
+   * Empties the buffer. Open records and mounted instances stay, and no entry
+   * remains in `entries` or `resolve`. Each mounted instance keeps the `seq`,
+   * Model and props of its last held state entry as a baseline so the next
+   * entry can still be diffed against the state before the clear.
    */
   readonly clear: () => void
 }
@@ -301,12 +309,19 @@ type InstanceEntry = Exclude<Entry, { readonly _tag: "SessionStarted" | "FetchSt
 type Source = Extract<Entry, { readonly _tag: "Update" }>["source"]
 type Mutable<A> = { -readonly [K in keyof A]: A[K] }
 
+interface Baseline {
+  readonly seq: number
+  readonly model: Schema.Json
+  readonly props: Schema.Json
+}
+
 interface InstanceState {
   readonly info: Mutable<Instance>
   readonly records: Array<Mutable<Record>>
   readonly subscriptions: Map<string, Mutable<Record>>
   layer: Mutable<Record> | undefined
   state: number | undefined
+  baseline: Baseline | undefined
   buffered: number
 }
 
@@ -418,8 +433,19 @@ const push = <K, V>(map: Map<K, Array<V>>, key: K, value: V) => {
   else list.push(value)
 }
 
-const makeSession = (id: string, size: number) => {
+const isExcluded = (entry: Entry, exclude: ReadonlySet<string>): boolean =>
+  exclude.size > 0 &&
+  entry._tag === "Update" &&
+  typeof entry.message === "object" &&
+  entry.message !== null &&
+  "_tag" in entry.message &&
+  typeof (entry.message as { readonly _tag?: unknown })._tag === "string" &&
+  exclude.has((entry.message as { readonly _tag: string })._tag)
+
+const makeSession = (id: string, size: number, exclude: ReadonlySet<string>) => {
   const entries = new Map<number, Entry>()
+  const hidden = new Set<number>()
+  const run = new Map<number, Entry>()
   const instances = new Map<number, InstanceState>()
   const runs = new Map<string, Mutable<Record>>()
   const mounts = new Map<number, Mutable<Record>>()
@@ -429,6 +455,7 @@ const makeSession = (id: string, size: number) => {
   const ended = new Map<number, Array<Mutable<Record>>>()
   let app: string | undefined
   let last = -Infinity
+  let shown = 0
 
   const link = (from: number, rel: Link["rel"], seq: number, index?: number) => {
     push(back, from, index === undefined ? { rel, seq } : { rel, seq, index })
@@ -479,6 +506,7 @@ const makeSession = (id: string, size: number) => {
         subscriptions: new Map(),
         layer: undefined,
         state: undefined,
+        baseline: undefined,
         buffered: 0
       }
       instances.set(entry.instance, inst)
@@ -491,14 +519,21 @@ const makeSession = (id: string, size: number) => {
       case "Update": {
         if (inst.state !== undefined) {
           const before = entries.get(inst.state)
-          previous.set(
-            seq,
-            before !== undefined && "model" in before
-              ? { seq: inst.state, changed: compare(before.model, entry.model) }
-              : { seq: inst.state }
-          )
+          if (before !== undefined && "model" in before) {
+            previous.set(seq, { seq: inst.state, changed: compare(before.model, entry.model) })
+          } else if (inst.baseline !== undefined && inst.baseline.seq === inst.state) {
+            previous.set(seq, {
+              seq: inst.state,
+              changed: compare(inst.baseline.model, entry.model),
+              model: inst.baseline.model,
+              props: inst.baseline.props
+            })
+          } else {
+            previous.set(seq, { seq: inst.state })
+          }
         }
         inst.state = seq
+        inst.baseline = undefined
         if (entry._tag === "Waiting") return
         if (entry._tag === "Mounted") inst.info.mounted = seq
         else linkSource(inst, seq, entry.source)
@@ -580,6 +615,9 @@ const makeSession = (id: string, size: number) => {
 
   const evict = (seq: number, entry: Entry) => {
     entries.delete(seq)
+    const wasHidden = hidden.delete(seq)
+    if (!wasHidden) shown--
+    if (wasHidden && "instance" in entry && run.get(entry.instance)?.seq === seq) run.delete(entry.instance)
     previous.delete(seq)
     for (const named of back.get(seq) ?? []) {
       const kept = forward.get(named.seq)?.filter((naming) => naming.seq !== seq)
@@ -608,7 +646,14 @@ const makeSession = (id: string, size: number) => {
     get app() {
       return app
     },
-    entries: () => Array.from(entries.values()),
+    entries: () => {
+      if (hidden.size === 0) return Array.from(entries.values())
+      const result: Array<Entry> = []
+      for (const entry of entries.values()) {
+        if (!hidden.has(entry.seq)) result.push(entry)
+      }
+      return result
+    },
     resolve: (seq) => entries.get(seq) ?? { _tag: "Outside", seq },
     instances: () => Array.from(instances.values(), (inst) => ({ ...inst.info })),
     records: (instance) =>
@@ -623,7 +668,15 @@ const makeSession = (id: string, size: number) => {
     forward: (seq) => forward.get(seq)?.slice() ?? [],
     previous: (seq) => previous.get(seq),
     clear: () => {
+      for (const inst of instances.values()) {
+        if (inst.info.unmounted !== undefined || inst.state === undefined) continue
+        const state = entries.get(inst.state)
+        if (state !== undefined && "model" in state) {
+          inst.baseline = { seq: inst.state, model: state.model, props: state.props }
+        }
+      }
       for (const [seq, entry] of Array.from(entries)) evict(seq, entry)
+      run.clear()
     }
   }
 
@@ -632,35 +685,75 @@ const makeSession = (id: string, size: number) => {
     ingest: (entry: Entry) => {
       if (entry.seq <= last) return
       last = entry.seq
-      entries.set(entry.seq, entry)
+      if (isExcluded(entry, exclude)) {
+        const instId = (entry as InstanceEntry).instance
+        const replaced = run.get(instId)
+        if (replaced !== undefined) {
+          const inst = instances.get(instId)
+          const prev = previous.get(replaced.seq)
+          if (inst !== undefined && inst.state === replaced.seq) {
+            inst.state = prev?.seq
+            inst.baseline = prev !== undefined && prev.model !== undefined && prev.props !== undefined
+              ? { seq: prev.seq, model: prev.model, props: prev.props }
+              : undefined
+          }
+          evict(replaced.seq, replaced)
+        }
+        entries.set(entry.seq, entry)
+        hidden.add(entry.seq)
+        run.set(instId, entry)
+      } else {
+        run.clear()
+        entries.set(entry.seq, entry)
+        shown++
+      }
       if (entry.causedBy !== undefined) link(entry.seq, "causedBy", entry.causedBy)
       if (entry._tag === "SessionStarted") app = entry.app
       else if (entry._tag !== "FetchStarted") track(entry)
-      for (const [seq, oldest] of entries) {
-        if (entries.size <= size) break
-        evict(seq, oldest)
+      if (shown > size) {
+        for (const [seq, oldest] of entries) {
+          evict(seq, oldest)
+          if (shown <= size) break
+        }
       }
     }
   }
 }
 
 /**
- * Makes an inspector whose sessions each hold their last `size` entries
+ * Makes an inspector whose sessions each hold their last `size` shown entries
  * (1,000 by default).
+ *
+ * **Details**
+ *
+ * `exclude` lists message `_tag` values, matched across every component. An
+ * `Update` whose message has one of those tags is omitted from `entries`, and
+ * a run of them takes one slot per instance: each replaces the instance's
+ * earlier excluded entry while no shown entry of any instance sits between
+ * them. Links to a replaced entry resolve to `Outside`. The next shown entry
+ * is still compared with the latest excluded state.
+ *
+ * `exclude` is not a way to hide sensitive data: later entries still carry
+ * whatever an excluded message changed in the Model. Use `Schema.Redacted`
+ * for sensitive values.
  *
  * @stability experimental
  * @category constructors
  * @since 0.1.0
  */
-export const make = (options?: { readonly size?: number | undefined }): Inspector => {
+export const make = (options?: {
+  readonly size?: number | undefined
+  readonly exclude?: ReadonlyArray<string> | undefined
+}): Inspector => {
   const size = Math.max(1, options?.size ?? 1_000)
+  const exclude = new Set(options?.exclude)
   const sessions = new Map<string, ReturnType<typeof makeSession>>()
   return {
     ingest: (batch) => {
       for (const entry of batch) {
         let state = sessions.get(entry.session)
         if (state === undefined) {
-          state = makeSession(entry.session, size)
+          state = makeSession(entry.session, size, exclude)
           sessions.set(entry.session, state)
         }
         state.ingest(entry)

@@ -9,9 +9,19 @@ type State = (path: string) => BrowserHost.Recorded | undefined
 
 export interface History {
   readonly record: (entry: MessageLog.Entry) => void
+  readonly clear: (session: string, upTo?: number) => void
   readonly holds: (session: string, seq: number) => boolean
   readonly at: (session: string, seq: number) => State | undefined
 }
+
+const isExcluded = (entry: MessageLog.Entry, exclude: ReadonlySet<string>): boolean =>
+  exclude.size > 0 &&
+  entry._tag === "Update" &&
+  typeof entry.message === "object" &&
+  entry.message !== null &&
+  "_tag" in entry.message &&
+  typeof (entry.message as { readonly _tag?: unknown })._tag === "string" &&
+  exclude.has((entry.message as { readonly _tag: string })._tag)
 
 const apply = (states: Map<number, Held>, entry: MessageLog.Entry) => {
   switch (entry._tag) {
@@ -43,16 +53,60 @@ const apply = (states: Map<number, Held>, entry: MessageLog.Entry) => {
   }
 }
 
-const makeSession = (size: number) => {
+const makeSession = (size: number, exclude: ReadonlySet<string>) => {
   const base = new Map<number, Held>()
   const entries: Array<MessageLog.Entry> = []
+  const hidden = new Set<number>()
+  const run = new Map<number, MessageLog.Entry>()
+  let shown = 0
   let evicted = false
   return {
     record: (entry: MessageLog.Entry) => {
+      if (isExcluded(entry, exclude)) {
+        const update = entry as MessageLog.Update
+        const replaced = run.get(update.instance)
+        let merged: MessageLog.Entry = entry
+        if (replaced !== undefined) {
+          const at = entries.lastIndexOf(replaced)
+          if (at >= 0) entries.splice(at, 1)
+          hidden.delete(replaced.seq)
+          if (update.queries === undefined && (replaced as MessageLog.Update).queries !== undefined) {
+            merged = { ...update, queries: (replaced as MessageLog.Update).queries }
+          }
+        }
+        entries.push(merged)
+        hidden.add(entry.seq)
+        run.set(update.instance, merged)
+        return
+      }
+      run.clear()
       entries.push(entry)
-      if (entries.length <= size) return
-      apply(base, entries.shift()!)
-      evicted = true
+      shown++
+      while (shown > size && entries.length > 0) {
+        const oldest = entries.shift()!
+        if (!hidden.delete(oldest.seq)) shown--
+        if ("instance" in oldest && run.get(oldest.instance) === oldest) run.delete(oldest.instance)
+        apply(base, oldest)
+        evicted = true
+      }
+    },
+    clear: (upTo?: number) => {
+      if (upTo === undefined) {
+        for (const entry of entries) apply(base, entry)
+        entries.length = 0
+        hidden.clear()
+        run.clear()
+        shown = 0
+        evicted = true
+        return
+      }
+      while (entries.length > 0 && entries[0]!.seq <= upTo) {
+        const oldest = entries.shift()!
+        if (!hidden.delete(oldest.seq)) shown--
+        if ("instance" in oldest && run.get(oldest.instance) === oldest) run.delete(oldest.instance)
+        apply(base, oldest)
+        evicted = true
+      }
     },
     holds: (seq: number) => entries.length > 0 && (!evicted || seq >= entries[0]!.seq),
     at: (seq: number): State => {
@@ -71,13 +125,16 @@ const makeSession = (size: number) => {
   }
 }
 
-export const make = (size: number): History => {
+export const make = (size: number, exclude: ReadonlySet<string> = new Set()): History => {
   const sessions = new Map<string, ReturnType<typeof makeSession>>()
   return {
     record: (entry) => {
       let session = sessions.get(entry.session)
-      if (session === undefined) sessions.set(entry.session, session = makeSession(size))
+      if (session === undefined) sessions.set(entry.session, session = makeSession(size, exclude))
       session.record(entry)
+    },
+    clear: (session, upTo) => {
+      sessions.get(session)?.clear(upTo)
     },
     holds: (session, seq) => sessions.get(session)?.holds(seq) ?? false,
     at: (session, seq) => {
