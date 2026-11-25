@@ -140,3 +140,8 @@ export const layer = (options?: {
   readonly server?: string | undefined
   readonly webMcp?: boolean | WebMcpOptions | undefined
 }): Layer.Layer<never> => internal.make(options ?? {})
+
+/** @internal */
+// oxlint-disable-next-line effect/no-unused-internal
+export const attach: (options?: internal.Options) => () => void =
+  internal.attach

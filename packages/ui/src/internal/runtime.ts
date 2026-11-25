@@ -277,6 +277,23 @@ const idleOf = (
   }
 }
 
+/** @internal */
+export interface HotSession {
+  readonly hasSnapshot: boolean
+  readonly init: (
+    inst: Kernel.Instance,
+    first: Kernel.Next
+  ) => Kernel.Next | undefined
+  readonly restored: (inst: Kernel.Instance) => boolean
+  readonly hold: (
+    ...args: Parameters<NonNullable<Kernel.Host["hold"]>>
+  ) => boolean | undefined
+  readonly attach: (inst: Kernel.Instance) => void
+  readonly flushed: (buildsPendingSince: (flush: number) => number) => void
+  readonly clear: () => void
+  readonly detach: () => void
+}
+
 interface Options {
   readonly fallback?:
     | ((
@@ -285,6 +302,7 @@ interface Options {
     ) => View.Content<never, any>)
     | undefined
   readonly hydrate?: hydrateRun.Hydrating | undefined
+  readonly hot?: HotSession | undefined
   readonly query?: Renderer.QueryOptions | undefined
   readonly head?: boolean | undefined
   readonly adoptionHead?: boolean | undefined
@@ -501,6 +519,7 @@ const start = (
     : messageLog.recorder(logService, clock, session, component.definition.name)
   let initCommands: ReadonlyArray<unknown> | undefined
   const hydrate = options?.hydrate
+  const hot = options?.hot
   const record: Kernel.Recorder = (inst, draft) => {
     if (initCommands !== undefined && draft._tag === "Mounted") {
       draft = { ...draft, commands: initCommands }
@@ -517,7 +536,10 @@ const start = (
     ) {
       emitted.push(...(draft.events as ReadonlyArray<unknown>))
     }
-    if (draft._tag === "Mounted" && routing?.restored(inst) === true) {
+    if (
+      draft._tag === "Mounted" &&
+      (routing?.restored(inst) === true || hot?.restored(inst) === true)
+    ) {
       draft = { ...draft, adopted: true }
     }
     const seq = recording.record(inst, draft)
@@ -578,15 +600,22 @@ const start = (
       kernelRoot !== undefined &&
       hydrating?.adopts(kernelRoot.instance) === true,
     static: hydrate?.static === true,
-    navigated: () => hydrating?.closeWindow()
+    navigated: () => {
+      hydrating?.closeWindow()
+      hot?.clear()
+    }
   })
   const bridged: Kernel.Host = {
     ...base,
-    hold: routing?.hold,
+    hold: hot === undefined
+      ? routing?.hold
+      : (owner, rec, at) =>
+        hot.hold(owner, rec, at) ?? routing?.hold(owner, rec, at) ?? false,
     commit: () => {
       base.commit?.()
       hydrating?.commit()
       routing?.flushed()
+      hot?.flushed(building)
       idle?.check()
     },
     server: server?.hooks(ctx, record, deferred)
@@ -645,7 +674,8 @@ const start = (
             )
           }
           const first = inst.component.init(inst.props)
-          const adopted = hydrating?.init(inst, first)
+          const adopted = hydrating?.init(inst, first) ??
+            hot?.init(inst, first)
           if (adopted !== undefined) {
             return routing === undefined
               ? adopted
@@ -699,6 +729,10 @@ const start = (
   if (routing !== undefined) {
     routing.attach(instance)
     routing.flushed()
+  }
+  if (hot !== undefined) {
+    hot.attach(instance)
+    hot.flushed(building)
   }
   tree.flush = since
   const head = () =>
@@ -760,6 +794,7 @@ const start = (
     idle,
     close: Effect.suspend(() => {
       routing?.detach()
+      hot?.detach()
       dom?.dispose()
       if (frozen) tree.closed = false
       mounted.close()

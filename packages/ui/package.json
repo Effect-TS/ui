@@ -32,6 +32,10 @@
     "#dev": {
       "production": "./src/internal/devOff.ts",
       "default": "./src/internal/devOn.ts"
+    },
+    "#hot": {
+      "production": "./src/html/internal/hotOff.ts",
+      "default": "./src/html/internal/hotOn.ts"
     }
   },
   "exports": {
@@ -66,6 +70,10 @@
       "#dev": {
         "production": "./dist/internal/devOff.js",
         "default": "./dist/internal/devOn.js"
+      },
+      "#hot": {
+        "production": "./dist/html/internal/hotOff.js",
+        "default": "./dist/html/internal/hotOn.js"
       }
     },
     "exports": {
