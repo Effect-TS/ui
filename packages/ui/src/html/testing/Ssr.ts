@@ -543,7 +543,8 @@ export const ssr = <
     const mounted = yield* runtime.mount(component as any, props, container, {
       hydrate: hydrateRun.hydrating(state, HtmlHydrate.adopt),
       query: options?.query,
-      adoptionHead: true
+      adoptionHead: true,
+      recordEmitted: true
     }).pipe(
       Effect.provideContext(
         Context.make(Renderer.Renderer, { host }).pipe(

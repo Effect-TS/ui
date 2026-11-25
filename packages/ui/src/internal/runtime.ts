@@ -307,6 +307,7 @@ interface Options {
   readonly head?: boolean | undefined
   readonly adoptionHead?: boolean | undefined
   readonly scheduler?: Scheduler.Scheduler | undefined
+  readonly recordEmitted?: boolean | undefined
 }
 
 const makeCell = (
@@ -510,7 +511,9 @@ const start = (
   const session = `${clock.currentTimeMillisUnsafe().toString(36)}-k${
     (sessions++).toString(36)
   }`
-  const emitted: Array<unknown> = []
+  const emitted: Array<unknown> | undefined = options?.recordEmitted === true
+    ? []
+    : undefined
   let flushes = 0
   let inFlush = true
   const since = () => inFlush ? flushes : flushes + 1
@@ -531,6 +534,7 @@ const start = (
       draft = next
     }
     if (
+      emitted !== undefined &&
       inst.parent === undefined &&
       (draft._tag === "Update" || draft._tag === "Mounted")
     ) {
@@ -743,7 +747,7 @@ const start = (
     path: instance.path,
     session,
     instance: instance as unknown as Instance,
-    emitted,
+    emitted: emitted ?? noCommands,
     model: () => instance.failure === undefined ? instance.model : undefined,
     send: (message: unknown) => recording.step(() => mounted.send(message)),
     find: (born: number) =>

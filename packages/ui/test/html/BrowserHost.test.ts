@@ -3771,6 +3771,49 @@ describe("BrowserHost", { concurrent: false }, () => {
         }).pipe(Effect.scoped)
     )
 
+    it.effect.skipIf(
+      process.versions.bun !== undefined || process.versions.deno !== undefined
+    )(
+      "a mounted root doesn't retain events it emitted",
+      () =>
+        Effect.gen(function*() {
+          const refs: Array<WeakRef<object>> = []
+          const Events = UiSchema.TaggedEnum({
+            Emitted: { payload: Schema.Array(Schema.Number) }
+          })
+          const Message = UiSchema.TaggedEnum({ Pressed: {} })
+          const Emitter = Html.component({
+            name: "Emitter",
+            model: Schema.Number,
+            message: Message,
+            events: Events
+          }).make({
+            init: ($) => {
+              const payload = [0]
+              refs.push(new WeakRef(payload))
+              return $.set(0).emit(Events.Emitted({ payload }))
+            },
+            update: ($) => {
+              const payload = [$.model + 1]
+              refs.push(new WeakRef(payload))
+              return $.set($.model + 1).emit(Events.Emitted({ payload }))
+            },
+            view: (h, n) =>
+              h.button.onClick(Message.Pressed()).children(String(n))
+          })
+          const app = yield* container
+          const root = yield* BrowserHost.mountEffect(Emitter, {}, app)
+          const button = HtmlLocator.getByRole(app, "button")
+          for (let i = 0; i < 3; i++) {
+            HtmlLocator.click(button)
+            yield* tick
+          }
+          expect(root.model()).toBe(3)
+          yield* collectGarbage
+          expect(refs.filter((ref) => ref.deref() !== undefined)).toEqual([])
+        }).pipe(Effect.scoped)
+    )
+
     it.effect("mount is a Layer: the tree is live while it is built, and closing it removes the nodes", () =>
       Effect.gen(function*() {
         const app = yield* container
