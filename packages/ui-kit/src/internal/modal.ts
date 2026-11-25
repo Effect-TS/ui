@@ -29,8 +29,7 @@ const liveRegions =
 const hide = ({ also, inside }: Layer): () => void => {
   const body = inside.ownerDocument.body
   if (body === null) return () => {}
-  // The shadow roots on the way up, whose own children are the dialog's
-  // neighbours too.
+  // Walking body does not enter shadow roots, so walk each ancestor root too.
   const roots: Array<ParentNode> = [body]
   const keep = new Set<Node>()
   const keepPath = (element: Node) => {

@@ -2,4 +2,4 @@
 "@effect/ui-kit": patch
 ---
 
-`Dialog`, `AlertDialog`, `Drawer` and `Popover` fix several focus and screen-reader issues. A non-modal dialog now sets `aria-modal="false"`, so Chromium no longer reports it as modal. The focus ring now shows after the Tab trap wraps or a keyboard open. Focus no longer lands on `<body>` when the trigger is disabled, inert or hidden. The Tab trap now reaches editing hosts, `<details>` and media controls. A modal dialog inside a shadow root now hides the page around it and keeps Tab inside it.
+Fix focus handling in `Dialog`, `AlertDialog`, `Drawer` and `Popover`: preserve keyboard focus rings, skip disabled, inert or hidden focus-return targets, and include editing hosts, media controls and `<details>` without a summary in the Tab order. Non-modal dialogs no longer report as modal in Chromium, and modal dialogs inside shadow roots hide surrounding content from screen readers and keep Tab navigation inside.

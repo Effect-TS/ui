@@ -510,7 +510,8 @@ const radioOut = (element: HTMLElement): boolean => {
   return group.some((other) => other.checked) || group[0] !== radio
 }
 
-// Chromium gives what a closed `<details>` hides a box, though Tab skips it.
+// Chromium reports layout boxes for content hidden by closed `<details>`,
+// even though Tab skips that content.
 const collapsed = "details:not([open]) > :not(summary:first-of-type)"
 
 const focusable = (element: HTMLElement): boolean =>
@@ -645,7 +646,6 @@ const TrackDialog = Mount.makeStream(
       const stack = stackOf(document)
       let current: TrackDialogArgs = args
       const send = (message: DialogMessage) => Queue.offerUnsafe(queue, message)
-      // The dialog's own root, a shadow root when it's in one.
       const scope = (): Document | ShadowRoot =>
         node.isConnected
           ? node.getRootNode() as Document | ShadowRoot
@@ -805,7 +805,7 @@ const TrackDialog = Mount.makeStream(
           const to = event.shiftKey ? last : first
           if (takes(to, true)) return event.preventDefault()
           // Chromium can't focus a `<details>` without a summary from script,
-          // only with Tab, so the key goes on from a stop next to it.
+          // only with Tab. Focus an adjacent stop and let the browser handle Tab.
           const stop = document.createElement("span")
           stop.tabIndex = -1
           to[event.shiftKey ? "after" : "before"](stop)
@@ -1269,9 +1269,10 @@ export const DialogTrigger = <Msg, R = never>(
  * it passes in, including the ones a state leaves absent: on the trigger
  * `type`, `aria-haspopup`, `aria-expanded`, `aria-controls`, `data-popup-open`,
  * and `data-dialog-trigger`, which the dialog tells its triggers by; on the
- * portal `id`, `popover`, `open` and `aria-modal`; `role` on the backdrop and the viewport; the
- * data attributes on the backdrop (including `data-dialog-backdrop`), viewport
- * and popup; `id`, `tabindex` and `inert` on the popup; `type` on the close part; `autofocus` on `initialFocus`; and
+ * portal `id`, `popover`, `open` and `aria-modal`; `role` on the backdrop and
+ * the viewport; the data attributes on the backdrop (including
+ * `data-dialog-backdrop`), viewport and popup; `id`, `tabindex` and `inert` on
+ * the popup; `type` on the close part; `autofocus` on `initialFocus`; and
  * `data-final-focus`, which the dialog finds the element by, on `finalFocus`.
  * The title and description keep an `id` the consumer gives them, and get a
  * generated one otherwise. The portal's `aria-labelledby` and `aria-describedby`
