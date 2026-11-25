@@ -149,29 +149,9 @@ const fieldOf = (
 
 /**
  * Builds the payload a handler gets: plain data, read from the event and the
- * elements involved. A `CustomEvent`'s payload is its `detail`, whatever its
- * name.
+ * elements involved.
  */
 export const payloadOf = (
-  name: string,
-  event: Event,
-  target: EventTarget | null,
-  element: globalThis.Element,
-  pointer: Html.PointerType | undefined
-): unknown =>
-  isCustomEvent(event)
-    ? { detail: event.detail }
-    : htmlPayloadOf(name, event, target, element, pointer)
-
-/** @internal */
-export const isCustomEvent = (event: Event): event is CustomEvent => {
-  const view = (event.target as globalThis.Node | null)?.ownerDocument
-    ?.defaultView
-  return view !== null && view !== undefined &&
-    event instanceof view.CustomEvent
-}
-
-const htmlPayloadOf = (
   name: string,
   event: Event,
   target: EventTarget | null,

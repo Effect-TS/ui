@@ -103,7 +103,6 @@
  * @since 0.1.0
  */
 import * as Context from "effect/Context"
-import type * as Exit from "effect/Exit"
 import * as Schema from "effect/Schema"
 import * as Component from "../Component.ts"
 import { handle } from "../internal/handler.ts"
@@ -1255,6 +1254,15 @@ export interface VoidElement<
   ): this
 }
 
+const eventSugar = (event: string) =>
+  function(
+    this: VoidElement<any>,
+    handler: any,
+    options?: View.EventOptions
+  ) {
+    return this.on(event, handler, options)
+  }
+
 for (
   const pair
     of "Click DoubleClick:dblclick KeyDown KeyUp Focus Blur Paste DragEnd DragEnter DragLeave DragOver Input Change CompositionEnd Submit Toggle Cancel Close"
@@ -1262,14 +1270,7 @@ for (
 ) {
   const [name, event] = pair.split(":")
   const method = "on" + name
-  const type = event ?? name!.toLowerCase()
-  const fn = function(
-    this: VoidElement<any>,
-    handler: any,
-    options?: View.EventOptions
-  ) {
-    return this.on(type, handler, options)
-  }
+  const fn = eventSugar(event ?? name!.toLowerCase())
   Object.defineProperty(fn, "name", { value: method, configurable: true })
   Object.defineProperty(VoidElement.prototype, method, {
     value: fn,
@@ -1763,9 +1764,9 @@ export const ref = <K extends keyof HTMLElementTagNameMap>(
 // custom elements
 // ---------------------------------------------------------------------------
 
-type CamelCase<S extends string> = S extends `${infer Head}-${infer Tail}`
-  ? `${Head}${Capitalize<CamelCase<Tail>>}`
-  : S
+type PascalCase<S extends string> = S extends `${infer Head}-${infer Tail}`
+  ? `${Capitalize<Head>}${PascalCase<Tail>}`
+  : Capitalize<S>
 
 /**
  * The method a custom element's event gets: `on` and the event's name in
@@ -1776,9 +1777,7 @@ type CamelCase<S extends string> = S extends `${infer Head}-${infer Tail}`
  * @category custom elements
  * @since 0.1.0
  */
-export type CustomEventMethod<K extends string> = `on${Capitalize<
-  CamelCase<K>
->}`
+export type CustomEventMethod<K extends string> = `on${PascalCase<K>}`
 
 /**
  * The names that get no generated method on a custom element, because the
@@ -1869,7 +1868,7 @@ export class CustomElementBuilder<
   override children<const C extends ReadonlyArray<View.Input<Msg, any>>>(
     ...inputs: C
   ): CustomElement<Msg, R | View.Requirements<C[number]>, P, E, Tag> {
-    return super.children(...inputs) as any
+    return View.withContent(this, inputs) as any
   }
   /**
    * Like `Element.onMount`, keeping the generated methods.
@@ -1978,10 +1977,6 @@ export interface CustomElementBinding<Tag extends string, P, E> {
   readonly events: E
 }
 
-const camelCase = (name: string): string =>
-  name.split("-").map((part, index) => index === 0 ? part : capitalize(part))
-    .join("")
-
 const capitalize = (name: string): string =>
   name.charAt(0).toUpperCase() + name.slice(1)
 
@@ -2079,22 +2074,18 @@ export const customElement = <
   }
   const properties = config.properties ?? ({} as P)
   const events = config.events ?? ({} as E)
-  const decoders: Record<
-    string,
-    (input: unknown) => Exit.Exit<unknown, Schema.SchemaError>
-  > = {}
-  for (const event in events) {
-    decoders[event] = Schema.decodeUnknownExit(events[event]!)
-  }
+  const decoders = new Map(
+    Object.entries(events).map((
+      [event, schema]
+    ) => [event, Schema.decodeUnknownExit(schema)])
+  )
   class Bound extends CustomElementBuilder<any, any, any, any, any> {
     override on(
       event: string,
       handler: View.Handler<unknown, unknown>,
       options?: View.EventOptions | undefined
     ): this {
-      const decode = Object.hasOwn(decoders, event)
-        ? decoders[event]
-        : undefined
+      const decode = decoders.get(event)
       return super.on(
         event as never,
         decode === undefined ? handler : (payload: unknown) => {
@@ -2135,14 +2126,8 @@ export const customElement = <
   }
   for (const event in events) {
     define(
-      "on" + capitalize(camelCase(event)),
-      function(
-        this: Bound,
-        handler: View.Handler<unknown, unknown>,
-        options?: View.EventOptions
-      ) {
-        return this.on(event, handler, options)
-      }
+      "on" + event.split("-").map(capitalize).join(""),
+      eventSugar(event)
     )
   }
   const root = View.shorthand(new Bound(tag))

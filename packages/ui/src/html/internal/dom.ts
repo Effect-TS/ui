@@ -4,12 +4,11 @@ import * as transitionRun from "../../internal/transitionRun.ts"
 import type * as View from "../../View.ts"
 import type * as Html from "../Html.ts"
 import * as documentHead from "./documentHead.ts"
-import { attributeName, svgTags } from "./elements.ts"
+import { attributeName, isCustomTag, svgTags } from "./elements.ts"
 import { bubblingEvents, ownEvents } from "./ownEvents.ts"
 import {
   type FieldState,
   fieldStateOf,
-  isCustomEvent,
   offsetIn,
   payloadOf
 } from "./payload.ts"
@@ -125,9 +124,6 @@ type Node = globalThis.Node & { $r?: Kernel.Rec }
 export const written = new WeakMap<globalThis.Node, Map<string, unknown>>()
 
 const plain = new WeakMap<globalThis.Node, Map<string, unknown>>()
-
-const isCustom = (node: globalThis.Node): boolean =>
-  (node as globalThis.Element).localName.includes("-")
 
 interface HostOptions {
   readonly head?: boolean | undefined
@@ -511,11 +507,37 @@ export const makeHost = (
     }
   }
 
+  const deliver = (
+    event: Event,
+    path: ReadonlyArray<Node>,
+    own: boolean,
+    payloadFor: (node: Node) => unknown
+  ): boolean => {
+    let node: Node
+    const payload = () => payloadFor(node)
+    const from = own ? Math.max(path.indexOf(event.target as Node), 0) : 0
+    for (let index = from; index < path.length; index++) {
+      node = path[index]!
+      if (node === container) break
+      if (dispatch(node, event.type, payload, event)) return true
+      if (own) break
+    }
+    return false
+  }
+
   const listener = (event: Event): void => {
     const name = event.type
     const path = event.composedPath() as Array<Node>
-    const custom = isCustomEvent(event)
-    if (!custom && dropTargetEvents.has(name)) {
+    if (view !== null && event instanceof view.CustomEvent) {
+      deliver(
+        event,
+        path,
+        !event.bubbles || ownEvents.has(name),
+        () => ({ detail: event.detail })
+      )
+      return
+    }
+    if (dropTargetEvents.has(name)) {
       return onDropTarget(name, event as DragEvent, path)
     }
     const target = path[0] ?? event.target as Node
@@ -571,34 +593,28 @@ export const makeHost = (
       event.preventDefault()
       submit.ownedUnhandled.add(event)
     }
-    if (!custom && name === "dragstart") startDrag(event as DragEvent, path)
-    const own = ownEvents.has(name) ||
-      (!event.bubbles && (custom || !bubblingEvents.has(name)))
-    let node: Node
-    const payload = () =>
-      !custom && name === "dragend"
-        ? {
-          dropped: droppedHere ||
-            ((event as DragEvent).dataTransfer?.dropEffect ?? "none") !== "none"
-        }
-        : payloadOf(
-          name,
-          event,
-          target,
-          node as globalThis.Element,
-          lastPointer
-        )
-    const from = own ? Math.max(path.indexOf(event.target as Node), 0) : 0
-    for (let index = from; index < path.length; index++) {
-      node = path[index]!
-      if (node === container) break
-      if (dispatch(node, name, payload, event)) {
-        if (owned) submit.ownedUnhandled.delete(event)
-        break
-      }
-      if (own) break
-    }
-    if (!custom && name === "dragend") endTargets()
+    if (name === "dragstart") startDrag(event as DragEvent, path)
+    const handled = deliver(
+      event,
+      path,
+      ownEvents.has(name) || (!event.bubbles && !bubblingEvents.has(name)),
+      (node) =>
+        name === "dragend"
+          ? {
+            dropped: droppedHere ||
+              ((event as DragEvent).dataTransfer?.dropEffect ?? "none") !==
+                "none"
+          }
+          : payloadOf(
+            name,
+            event,
+            target,
+            node as globalThis.Element,
+            lastPointer
+          )
+    )
+    if (owned && handled) submit.ownedUnhandled.delete(event)
+    if (name === "dragend") endTargets()
     if (restoring.has(name) && target !== undefined && target !== null) {
       restoreSoon(target)
     }
@@ -706,12 +722,13 @@ export const makeHost = (
     },
     setProp(node, name, value) {
       const element = node as any
-      if (controlled.has(name) && isCustom(node) && name !== "popoverOpen") {
+      const control = controlled.has(name)
+      if (control && name !== "popoverOpen" && isCustomTag(element.localName)) {
         let values = plain.get(node)
         if (values === undefined) plain.set(node, values = new Map())
         if (values.has(name) && values.get(name) === value) return
         values.set(name, value)
-      } else if (controlled.has(name)) {
+      } else if (control) {
         let values = written.get(node)
         const dialog = name === "open" && isDialog(node)
         const popover = name === "popoverOpen"
