@@ -1,0 +1,138 @@
+<!doctype html>
+<!--
+  The source of public/og.png, the picture a link to the page unfurls
+  with. It's the page's masthead in the dark theme, at the 1200 by 630
+  that Open Graph asks for. After a change, draw it again from this
+  directory with Chromium:
+
+    chromium --headless --hide-scrollbars --window-size=1200,630 \
+      --screenshot=public/og.png og.html
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Introducing Effect UI</title>
+    <style>
+      @font-face {
+        font-family: "Inter Variable";
+        font-weight: 100 900;
+        src: url("node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2")
+          format("woff2-variations");
+      }
+
+      @font-face {
+        font-family: "JetBrains Mono Variable";
+        font-weight: 100 800;
+        src: url("node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2")
+          format("woff2-variations");
+      }
+
+      /* The dark theme's colors, from src/styles.css. */
+      :root {
+        --background: oklch(14.1% 0.005 285.823);
+        --foreground: oklch(98.5% 0 0);
+        --muted-foreground: oklch(70.5% 0.015 286.067);
+        --prose-foreground: oklch(87.1% 0.006 286.286);
+        --border: oklch(27.4% 0.006 286.033);
+        --accent-text: oklch(74% 0.14 270);
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+      }
+
+      body {
+        width: 1200px;
+        height: 630px;
+        padding: 60px 72px 0;
+        overflow: hidden;
+        background: var(--background);
+        color: var(--foreground);
+        font-family: "Inter Variable", sans-serif;
+        font-feature-settings: "cv11", "ss01";
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .masthead {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .masthead img {
+        display: block;
+        height: 46px;
+      }
+
+      .mono {
+        font-family: "JetBrains Mono Variable", monospace;
+        font-size: 19px;
+        font-weight: 500;
+        letter-spacing: 0.1em;
+        color: var(--muted-foreground);
+      }
+
+      .accent {
+        color: var(--accent-text);
+      }
+
+      /* The page's header: six lines down it that fade out at the top
+         and the bottom, with a stroke of the accent on three of them. */
+      header {
+        --pulse: linear-gradient(to bottom, transparent, var(--accent-text) 70%, transparent);
+        position: relative;
+        margin-top: 44px;
+        padding: 52px 0 58px;
+        border-block: 1px solid var(--border);
+        background: linear-gradient(to right, var(--border) 1px, transparent 1px) center / calc(100% / 6) 100%;
+      }
+
+      header::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          var(--pulse) calc(100% * 7 / 12) 82% / 2px 140px no-repeat,
+          var(--pulse) calc(100% * 3 / 12) 10% / 2px 140px no-repeat,
+          var(--pulse) calc(100% * 9 / 12) 40% / 2px 140px no-repeat,
+          linear-gradient(to bottom, var(--background), transparent 50%, var(--background));
+      }
+
+      header > * {
+        position: relative;
+      }
+
+      h1 {
+        margin-top: 26px;
+        font-size: 104px;
+        font-weight: 700;
+        line-height: 1.08;
+        letter-spacing: -0.035em;
+      }
+
+      .lede {
+        margin-top: 40px;
+        max-width: 880px;
+        text-wrap: balance;
+        font-size: 35px;
+        line-height: 1.4;
+        letter-spacing: -0.011em;
+        color: var(--prose-foreground);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="masthead">
+      <img src="public/effect-ui-white.svg" alt="Effect UI" />
+      <span class="mono">ui.effect.website</span>
+    </div>
+    <header>
+      <p class="mono"><span class="accent">//</span> PUBLIC PREVIEW</p>
+      <h1>Introducing Effect UI</h1>
+    </header>
+    <p class="lede">
+      The new frontend library that continues the work of Foldkit 0.x.
+    </p>
+  </body>
+</html>

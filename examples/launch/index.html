@@ -4,8 +4,58 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
+    <meta
+      name="theme-color"
+      content="#ffffff"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#09090b"
+      media="(prefers-color-scheme: dark)"
+    />
     <link href="/src/styles.css" rel="stylesheet" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- A crawler reads these without running the page, so they are
+         written here and not in LaunchPage's head. The URLs are
+         absolute because Open Graph takes no others. -->
     <title>Introducing Effect UI</title>
+    <meta
+      name="description"
+      content="Effect UI is the new frontend library that continues the work of Foldkit 0.x. Now in public preview: see what changes and what stays the same."
+    />
+    <link rel="canonical" href="https://ui.effect.website/" />
+    <link
+      rel="alternate"
+      type="text/markdown"
+      href="https://ui.effect.website/article.md"
+      title="Introducing Effect UI, as Markdown"
+    />
+
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Effect UI" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:url" content="https://ui.effect.website/" />
+    <meta property="og:title" content="Introducing Effect UI" />
+    <meta
+      property="og:description"
+      content="Effect UI is the new frontend library that continues the work of Foldkit 0.x. Now in public preview: see what changes and what stays the same."
+    />
+    <!-- Drawn from og.html. -->
+    <meta property="og:image" content="https://ui.effect.website/og.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Introducing Effect UI. The new frontend library that continues the work of Foldkit 0.x."
+    />
+
+    <!-- X takes the title, description and image from the Open Graph
+         tags above. -->
+    <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
     <div id="root"></div>

@@ -2,6 +2,10 @@
 @import "@fontsource-variable/jetbrains-mono";
 @import "tailwindcss";
 
+/* The Open Graph picture's source is drawn on its own, with its own
+   styles, so none of its words become utilities here. */
+@source not "../og.html";
+
 @custom-variant hover (&:hover);
 @custom-variant stacked (@media (width <= 960px));
 @custom-variant compact (@media (width <= 520px));
