@@ -133,9 +133,18 @@ const container = Effect.acquireRelease(
 
 /** Mounts the app at `url` under a browser Router, for the life of the returned Scope. */
 const start = Effect.fnUntraced(
-  function*(url: string, options?: Partial<BrowserRouter.Options>) {
+  function*(
+    url: string,
+    options?: Partial<BrowserRouter.Options>,
+    shadow?: ShadowRootMode
+  ) {
     window.history.replaceState(null, "", url)
-    const app = yield* container
+    const host = yield* container
+    const app = shadow === undefined
+      ? host
+      : host.attachShadow({ mode: shadow }).appendChild(
+        document.createElement("div")
+      )
     const context = yield* Layer.build(
       BrowserRouter.layer({ routes: AppRoute, ...options })
     )
@@ -647,6 +656,34 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(HtmlLocator.getByRole(app, "heading").textContent).toBe(
         "Search ada"
       )
+    }).pipe(Effect.scoped))
+
+  it.effect("follows links, GET forms and link intent in a mount inside a closed shadow root", () =>
+    Effect.gen(function*() {
+      const { app, root, router } = yield* start("/", {}, "closed")
+      const intents: Array<string> = []
+      const intent = router.intent
+      ;(router as { intent: Router.Router["intent"] }).intent = (href) => {
+        intents.push(href)
+        return intent(href)
+      }
+      link(app, "Person 1").dispatchEvent(
+        new Event("touchstart", { bubbles: true, composed: true })
+      )
+      expect(intents).toEqual(["/people/1"])
+      expect(clickReporting(link(app, "Person 1"), { composed: true })).toBe(
+        true
+      )
+      yield* tick
+      expect(window.location.pathname).toBe("/people/1")
+      HtmlLocator.getByRole(app, "form", { name: "Search" }).dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true })
+      )
+      yield* tick
+      expect(window.location.pathname + window.location.search).toBe(
+        "/search?q=ada"
+      )
+      expect(root.model()?.route._tag).toBe("Search")
     }).pipe(Effect.scoped))
 
   it.effect("restores the scroll position on back and forward between #hash entries", () =>
