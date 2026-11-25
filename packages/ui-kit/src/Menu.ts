@@ -2391,7 +2391,8 @@ export const MenuTrigger = <Msg, R = never>(
         button,
         (pointerType) =>
           message(onPress, methodOf(pointerType), "trigger-press")
-      ).onKeyDown(
+      ).on(
+        "keydown",
         ({ composing, key }) =>
           !open && !composing && (key === "ArrowDown" || key === "ArrowUp")
             ? message(onPress, "keyboard", "trigger-press")
@@ -3143,7 +3144,8 @@ export const Menu = Html.component({
         if (disabled) return marked
         return marked
           .forward((node) => defaults(node, { tabindex: "0" }))
-          .onKeyDown(
+          .on(
+            "keydown",
             (payload) =>
               contextKey(payload)
                 ? MenuMessage.PressedContextKey({ key, triggerId })
