@@ -1839,6 +1839,7 @@ type TypesOf<S> = {
  * @category custom elements
  * @since 0.1.0
  */
+// oxlint-disable-next-line typescript/no-unsafe-declaration-merging
 export class CustomElementBuilder<
   out Msg,
   out R = never,
@@ -1903,6 +1904,99 @@ export class CustomElementBuilder<
   ): CustomElement<Msg, R | R2, P, E, Tag> {
     return View.withForward(this, place as any) as any
   }
+}
+
+type Undeclared<P, E, K extends string> = K extends
+  keyof P | CustomEventMethod<keyof E & string> ? never : unknown
+
+/**
+ * The HTML methods a declared property or event can share a name with. Once
+ * a declaration takes the name, the HTML method can't be called, so the
+ * generated method is the only signature left.
+ *
+ * @stability experimental
+ * @category custom elements
+ * @since 0.1.0
+ */
+export interface CustomElementBuilder<
+  out Msg,
+  out R = never,
+  in out P = {},
+  in out E = {},
+  out Tag extends string = string
+> {
+  disabled(
+    this: Undeclared<P, E, "disabled">,
+    disabled: boolean
+  ): this
+  popover(
+    this: Undeclared<P, E, "popover">,
+    mode: PopoverMode,
+    open: boolean
+  ): this
+  draggable(
+    this: Undeclared<P, E, "draggable">,
+    data: Readonly<Record<string, string>>,
+    options?: { readonly effectAllowed?: EffectAllowed | undefined } | undefined
+  ): this
+  onDragStart(
+    this: Undeclared<P, E, "onDragStart">,
+    handler: View.Handler<Msg, {}>
+  ): this
+  onDrop(
+    this: Undeclared<P, E, "onDrop">,
+    handler: View.Handler<Msg, DropPayload>,
+    options: Omit<DropTargetOptions, "preventDefault">
+  ): this
+  onClick(
+    this: Undeclared<P, E, "onClick">,
+    handler: View.Handler<Msg, PointerPayload>,
+    options?: View.EventOptions | undefined
+  ): this
+  onDoubleClick(
+    this: Undeclared<P, E, "onDoubleClick">,
+    handler: View.Handler<Msg, PointerPayload>,
+    options?: View.EventOptions | undefined
+  ): this
+  onKeyDown(
+    this: Undeclared<P, E, "onKeyDown">,
+    handler: View.Handler<Msg, KeyPayload>,
+    options?: View.EventOptions | undefined
+  ): this
+  onKeyUp(
+    this: Undeclared<P, E, "onKeyUp">,
+    handler: View.Handler<Msg, KeyPayload>,
+    options?: View.EventOptions | undefined
+  ): this
+  onFocus(
+    this: Undeclared<P, E, "onFocus">,
+    handler: View.Handler<Msg, FocusPayload>
+  ): this
+  onBlur(
+    this: Undeclared<P, E, "onBlur">,
+    handler: View.Handler<Msg, BlurPayload>
+  ): this
+  onPaste(
+    this: Undeclared<P, E, "onPaste">,
+    handler: View.Handler<Msg, PastePayload>,
+    options?: View.EventOptions | undefined
+  ): this
+  onDragEnd(
+    this: Undeclared<P, E, "onDragEnd">,
+    handler: View.Handler<Msg, DragEndPayload>
+  ): this
+  onDragEnter(
+    this: Undeclared<P, E, "onDragEnter">,
+    handler: View.Handler<Msg, {}>
+  ): this
+  onDragLeave(
+    this: Undeclared<P, E, "onDragLeave">,
+    handler: View.Handler<Msg, {}>
+  ): this
+  onDragOver(
+    this: Undeclared<P, E, "onDragOver">,
+    handler: View.Handler<Msg, DragOverPayload>
+  ): this
 }
 
 /**

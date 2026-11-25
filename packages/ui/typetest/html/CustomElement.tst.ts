@@ -10,11 +10,13 @@ const Picker = Html.customElement({
   properties: {
     color: Schema.String,
     value: Schema.Array(Schema.Number),
-    content: Schema.String
+    content: Schema.String,
+    disabled: Schema.String
   },
   events: {
     "color-changed": Schema.Struct({ value: Schema.String }),
-    change: Schema.Struct({ n: Schema.Number })
+    change: Schema.Struct({ n: Schema.Number }),
+    click: Schema.Struct({ x: Schema.Number })
   }
 })
 
@@ -42,7 +44,8 @@ describe("Html.customElement", () => {
             .onColorChanged(({ value }) =>
               Message.ChangedColor({ color: value })
             )
-            .onClick(Message.Cleared())
+            .onClick(({ x }) => x > 0 ? Message.Cleared() : undefined)
+            .disabled("yes")
             .value([1, 2])
             .onChange(({ n }) => n > 0 ? Message.Cleared() : undefined)
             .prop("content", "tip")
@@ -54,6 +57,11 @@ describe("Html.customElement", () => {
             .color(color)
           expect(picker.color).type.not.toBeCallableWith(1)
           expect(picker.value).type.not.toBeCallableWith("x")
+          expect(picker.disabled).type.not.toBeCallableWith(true)
+          expect(picker.onClick).type.not.toBeCallableWith(
+            ({ button }: { readonly button: number }) =>
+              button > 0 ? Message.Cleared() : undefined
+          )
           expect(picker.prop).type.not.toBeCallableWith("color", 1)
           expect(picker.prop).type.not.toBeCallableWith("nope", "x")
           expect(picker.on).type.not.toBeCallableWith("nope", Message.Cleared())

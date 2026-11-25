@@ -528,7 +528,10 @@ export const makeHost = (
   const listener = (event: Event): void => {
     const name = event.type
     const path = event.composedPath() as Array<Node>
-    if (view !== null && event instanceof view.CustomEvent) {
+    if (
+      view !== null && event instanceof view.CustomEvent &&
+      isCustomTag((event.target as globalThis.Element).localName ?? "")
+    ) {
       deliver(
         event,
         path,

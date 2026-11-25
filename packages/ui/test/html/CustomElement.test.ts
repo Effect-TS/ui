@@ -73,6 +73,9 @@ const Swatch = Html.component({
         .onSubmit(({ color }) => Message.ChangedColor({ color }))
         .onCleared(Message.Cleared())
         .onInput(() => undefined),
+      h.input.value(color).onInput(({ value }) =>
+        Message.ChangedColor({ color: value })
+      ),
       h.output(`${color} ${cleared}`)
     )
 })
@@ -155,7 +158,7 @@ describe("Html.customElement", () => {
       expect(app.querySelector("output")!.textContent).toBe("#f00,#0f0")
     }).pipe(Effect.scoped))
 
-  it.effect("SSR omits properties, hydration adopts the element, events decode details, and value stays plain", () =>
+  it.effect("SSR omits properties, hydration adopts the element, events decode details, a native input keeps its payload, and value stays plain", () =>
     Effect.gen(function*() {
       const error = vi.spyOn(console, "error").mockImplementation(() => {})
       yield* Effect.addFinalizer(() => Effect.sync(() => error.mockRestore()))
@@ -172,6 +175,12 @@ describe("Html.customElement", () => {
       expect(server.color).toBe("#000")
       expect(server.value).toEqual([1, 2])
       server.value = [3]
+
+      const field = app.querySelector("input")!
+      field.value = "#abc"
+      send(field, "input", { bubbles: true })
+      yield* tick
+      expect(server.color).toBe("#abc")
 
       send(server, "color-changed", { detail: { value: 1 }, bubbles: true })
       send(server, "cleared", { bubbles: true })

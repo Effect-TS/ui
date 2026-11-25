@@ -80,8 +80,8 @@ const escapeAttribute = (value: string): string =>
 
 /**
  * An element's attributes, with its controlled properties written as the
- * attributes that give the same initial state. Other properties, and all of a
- * custom element's, are set when the client adopts the element.
+ * attributes that give the same initial state. Other properties are set when
+ * the client adopts the element.
  */
 const elementAttributes = (
   tag: string,
