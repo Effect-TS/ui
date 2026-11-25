@@ -281,11 +281,12 @@ describe("ToastProvider", { concurrent: false }, () => {
       t1.focus()
       assert.strictEqual(document.activeElement, post)
 
-      // An exit inside a toast that shows isn't the toast's.
-      const inner = byId("t3")!.appendChild(document.createElement("div"))
-        .appendChild(document.createElement("button"))
+      // An exit inside a toast that shows isn't the toast's, even on a dialog.
+      const nested = byId("t3")!.appendChild(document.createElement("div"))
+      nested.setAttribute("role", "dialog")
+      const inner = nested.appendChild(document.createElement("button"))
       inner.focus()
-      inner.parentElement!.setAttribute("data-ending-style", "")
+      nested.setAttribute("data-ending-style", "")
       yield* tick
       assert.strictEqual(document.activeElement, inner)
       post.focus()

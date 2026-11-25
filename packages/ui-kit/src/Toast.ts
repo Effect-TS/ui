@@ -177,7 +177,12 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { flag, visuallyHidden, withStyle } from "./internal/attributes.ts"
+import {
+  attrSelector,
+  flag,
+  visuallyHidden,
+  withStyle
+} from "./internal/attributes.ts"
 import { activeOf, focusVisible } from "./internal/dom.ts"
 import { keepOnTop } from "./internal/topLayer.ts"
 
@@ -420,18 +425,9 @@ const TrackToast = Mount.makeStream(
 
 type ViewportFact = "FocusedViewport" | "BlurredViewport" | "LeftViewport"
 
-// The roots in a viewport that can take focus: not closing, not limited.
-const focusable =
-  "[role=dialog]:not([data-ending-style]):not([inert]),[role=alertdialog]:not([data-ending-style]):not([inert])"
-
-// The toast root in `viewport` that holds `element`, if it's closing.
-const closingRoot = (viewport: Element, element: Element) => {
-  const root = element.closest("[role=dialog],[role=alertdialog]")
-  return root !== null && viewport.contains(root) &&
-      root.hasAttribute("data-ending-style")
-    ? root
-    : null
-}
+// Marks a provider's toast roots with its id, so a dialog of the consumer's
+// inside a toast, or another provider's toast, isn't taken for one.
+const rootAttr = "data-toast-root"
 
 // What the viewport needs from its document: F6 into the viewport and back,
 // keyboard focus inside it, a pointer that left while the toast under it was
@@ -440,13 +436,27 @@ const closingRoot = (viewport: Element, element: Element) => {
 // about the pointer.
 const TrackViewport = Mount.makeStream(
   "TrackViewport",
-  { args: { empty: Schema.Boolean, hovering: Schema.Boolean } },
+  {
+    args: {
+      id: Schema.String,
+      empty: Schema.Boolean,
+      hovering: Schema.Boolean
+    }
+  },
   (node: HTMLElement, args, changes) =>
     Stream.callback<ViewportFact>((queue) =>
       Effect.gen(function*() {
         const document = node.ownerDocument
         let { empty, hovering } = args
         let focused = false
+        const toastRoot = attrSelector(rootAttr, args.id)
+        // The roots that can take focus: not closing, not limited.
+        const focusable = `${toastRoot}:not([data-ending-style]):not([inert])`
+        // The toast root that holds `element`, if it's closing.
+        const closingRoot = (element: Element) => {
+          const root = element.closest(toastRoot)
+          return root?.hasAttribute("data-ending-style") ? root : null
+        }
         // The active element of the viewport's own root, so a focused
         // control in a shadow root inside a toast counts as inside.
         const root = node.getRootNode() as Document | ShadowRoot
@@ -526,7 +536,7 @@ const TrackViewport = Mount.makeStream(
           if (
             previous === null && from !== null && !node.contains(from)
           ) previous = from
-          const closing = closingRoot(node, event.target as Element)
+          const closing = closingRoot(event.target as Element)
           if (closing !== null) {
             passOn(
               closing,
@@ -566,7 +576,7 @@ const TrackViewport = Mount.makeStream(
           const focus = active()
           if (!node.contains(focus)) return
           const closing = records.some(({ target }) => target.contains(focus))
-            ? closingRoot(node, focus!)
+            ? closingRoot(focus!)
             : null
           if (node.querySelector(focusable) === null) leave()
           else if (closing !== null) passOn(closing, false, false)
@@ -904,7 +914,11 @@ export const ToastProvider = Html.component({
         .on("mouseleave", ToastProviderMessage.LeftViewport())
         .popover("manual", true)
         .onMount(
-          TrackViewport({ empty, hovering: model.hovering }).pipe(
+          TrackViewport({
+            id: p.id("viewport"),
+            empty,
+            hovering: model.hovering
+          }).pipe(
             Mount.map((fact) => ToastProviderMessage[fact]())
           )
         )
@@ -935,6 +949,7 @@ export const ToastProvider = Html.component({
       ].filter((declaration) => declaration !== undefined).join(";")
       return b.attrs({
         role: high ? "alertdialog" : "dialog",
+        [rootAttr]: p.id("viewport"),
         tabindex: "0",
         "aria-modal": "false",
         "aria-labelledby": toast.title !== undefined
