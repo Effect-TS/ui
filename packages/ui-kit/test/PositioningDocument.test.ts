@@ -13,6 +13,11 @@ type Rect = {
 
 const rects = new Map<string, Rect>()
 const lines = new Map<string, ReadonlyArray<Rect>>()
+const resizers = new Map<Element, Set<() => void>>()
+
+const triggerResize = (element: Element) => {
+  for (const notify of resizers.get(element) ?? []) notify()
+}
 
 const edgesOf = ({ height, width, x, y }: Rect) => ({
   x,
@@ -35,9 +40,30 @@ const geometry = Effect.acquireRelease(
       ResizeObserver: (window as any).ResizeObserver
     }
     ;(window as any).ResizeObserver = class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
+      readonly #callback: ResizeObserverCallback
+      readonly #observed = new Set<Element>()
+      constructor(callback: ResizeObserverCallback) {
+        this.#callback = callback
+      }
+      observe(target: Element) {
+        if (this.#observed.has(target)) return
+        this.#observed.add(target)
+        const set = resizers.get(target) ?? new Set()
+        set.add(() =>
+          this.#callback(
+            [{ target } as ResizeObserverEntry],
+            this as unknown as ResizeObserver
+          )
+        )
+        resizers.set(target, set)
+      }
+      unobserve(target: Element) {
+        this.#observed.delete(target)
+      }
+      disconnect() {
+        for (const target of this.#observed) resizers.delete(target)
+        this.#observed.clear()
+      }
     }
     element.getBoundingClientRect = function(this: Element) {
       return edgesOf(rects.get(this.id) ?? { x: 0, y: 0, width: 0, height: 0 })
@@ -64,6 +90,7 @@ const geometry = Effect.acquireRelease(
       delete root.clientHeight
       rects.clear()
       lines.clear()
+      resizers.clear()
     }
   }),
   (restore) => Effect.sync(restore)
@@ -114,17 +141,41 @@ const sized = (element: Element, width: number, height: number) => {
   }
 }
 
-// A card at (50, 20), 300 by 130, holds the anchor near its bottom edge and
-// a 120 by 60 positioner drawn in place.
+// A card at (50, 20), 300 by `cardHeight`, holds the anchor near its bottom
+// edge and a 120 by 60 positioner drawn in place.
 const trackInCard = Effect.fnUntraced(
-  function*(props: Positioning.PositionerOptions) {
+  function*(
+    props: Positioning.PositionerOptions,
+    options: {
+      readonly scale?: number
+      readonly cardHeight?: number
+    } = {}
+  ) {
     yield* geometry
+    const scale = options.scale ?? 1
+    const cardHeight = options.cardHeight ?? 130
     document.body.innerHTML =
       `<div id="card" style="position:relative;overflow:hidden"><button id="anchor"></button><div id="positioner" style="position:absolute"></div></div>`
-    rects.set("card", { x: 50, y: 20, width: 300, height: 130 })
-    rects.set("anchor", { x: 100, y: 110, width: 80, height: 20 })
-    rects.set("positioner", { x: 0, y: 0, width: 120, height: 60 })
-    sized(document.getElementById("card")!, 300, 130)
+    rects.set("card", {
+      x: 50,
+      y: 20,
+      width: 300 * scale,
+      height: cardHeight * scale
+    })
+    rects.set("anchor", {
+      x: 50 + 50 * scale,
+      y: 20 + 90 * scale,
+      width: 80 * scale,
+      height: 20 * scale
+    })
+    rects.set("positioner", {
+      x: 0,
+      y: 0,
+      width: 120 * scale,
+      height: 60 * scale
+    })
+    const card = document.getElementById("card")!
+    sized(card, 300, cardHeight)
     const node = document.getElementById("positioner")!
     sized(node, 120, 60)
     const args = Positioning.trackArgs(props, {
@@ -139,20 +190,51 @@ const trackInCard = Effect.fnUntraced(
       Effect.forkScoped
     )
     yield* tick
-    return { node, placements }
+    return { card, node, placements }
   }
 )
 
 describe("trackPosition in a document", { concurrent: false }, () => {
-  it.effect("in place, it measures from the containing block and keeps the popup inside its clipping ancestors", () =>
+  it.effect("in place, it measures from the containing block, keeps local alignment under scale, and re-places when the clipping card resizes", () =>
     Effect.gen(function*() {
-      const { node, placements } = yield* trackInCard({ topLayer: false })
-      // Below the anchor it would leave the card, so it flips above it, and
-      // left and top are measured from the card's corner.
-      assert.strictEqual(placements[0]?.side, "top")
-      assert.strictEqual(node.style.left, "30px")
-      assert.strictEqual(node.style.top, "30px")
-    }).pipe(Effect.scoped))
+      for (const scale of [1, 2]) {
+        yield* Effect.scoped(Effect.gen(function*() {
+          const { node, placements } = yield* trackInCard(
+            { topLayer: false },
+            { scale }
+          )
+          // Below the anchor it would leave the card, so it flips above it, and
+          // left, top and size variables stay in the card's local coordinates.
+          assert.strictEqual(placements[0]?.side, "top", String(scale))
+          assert.strictEqual(node.style.left, "30px", String(scale))
+          assert.strictEqual(node.style.top, "30px", String(scale))
+          assert.strictEqual(
+            node.style.getPropertyValue("--anchor-width"),
+            "80px",
+            String(scale)
+          )
+          assert.strictEqual(
+            node.style.getPropertyValue("--available-height"),
+            "85px",
+            String(scale)
+          )
+        }))
+      }
+      // Shrinking the clipping card flips the popup without a scroll or window resize.
+      yield* Effect.scoped(Effect.gen(function*() {
+        const { card, node, placements } = yield* trackInCard(
+          { topLayer: false },
+          { cardHeight: 200 }
+        )
+        assert.strictEqual(placements.at(-1)?.side, "bottom")
+        rects.set("card", { x: 50, y: 20, width: 300, height: 130 })
+        sized(card, 300, 130)
+        triggerResize(card)
+        yield* tick
+        assert.strictEqual(placements.at(-1)?.side, "top")
+        assert.strictEqual(node.style.top, "30px")
+      }))
+    }))
 
   it.effect("in the top layer, the same popup fits below the anchor in the viewport", () =>
     Effect.gen(function*() {

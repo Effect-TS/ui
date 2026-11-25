@@ -1393,10 +1393,10 @@ const inTopLayer = (element: Element): boolean =>
     }
   })
 
-const clipOf = (element: Element, viewport: Rect): Rect => {
+const clippersOf = (element: Element): Array<Element> => {
   const view = element.ownerDocument.defaultView!
   const root = element.ownerDocument.documentElement
-  let clip = viewport
+  const clippers: Array<Element> = []
   let position = view.getComputedStyle(element).position
   for (
     let current = inTopLayer(element) ? null : element.parentElement;
@@ -1410,26 +1410,40 @@ const clipOf = (element: Element, viewport: Rect): Rect => {
         clipping.test(style.overflow + style.overflowX + style.overflowY) ||
         paintContained(style)
       ) {
-        clip = intersect(clip, innerRect(current))
+        clippers.push(current)
       }
       position = style.position
     }
     if (inTopLayer(current)) break
   }
+  return clippers
+}
+
+const clipOf = (element: Element, viewport: Rect): Rect => {
+  let clip = viewport
+  for (const clipper of clippersOf(element)) {
+    clip = intersect(clip, innerRect(clipper))
+  }
   return clip
 }
+
+interface Origin {
+  readonly x: number
+  readonly y: number
+  readonly scale: { readonly x: number; readonly y: number }
+}
+
+const toLocal = (rect: Rect, origin: Origin): Rect => ({
+  x: (rect.x - origin.x) / origin.scale.x,
+  y: (rect.y - origin.y) / origin.scale.y,
+  width: rect.width / origin.scale.x,
+  height: rect.height / origin.scale.y
+})
 
 // The viewport point that `left: 0; top: 0` puts a positioner at, and the
 // scale of the box it is measured in: the padding box of its containing
 // block, less that block's scroll.
-const originOf = (
-  element: Element,
-  position: string
-): {
-  readonly x: number
-  readonly y: number
-  readonly scale: { readonly x: number; readonly y: number }
-} => {
+const originOf = (element: Element, position: string): Origin => {
   const document = element.ownerDocument
   const view = document.defaultView!
   for (
@@ -1627,33 +1641,6 @@ export const trackPosition = (
       const viewport = viewportOf()
       const rtl = view.getComputedStyle(node).direction === "rtl"
       const lines = anchor === null ? null : inlineLines(anchor)
-      const input = {
-        popup,
-        arrow: arrow === null
-          ? null
-          : { width: arrow.offsetWidth, height: arrow.offsetHeight },
-        boundary: boundaryOf(viewport),
-        anchorClip: anchor === null ? viewport : clipOf(anchor, viewport),
-        rtl,
-        options: current.options
-      }
-      const requested = physicalSide(current.options.side, rtl)
-      let anchorRect = virtual ??
-        (anchor === null
-          ? zero
-          : lines === null
-          ? clientRect(anchor)
-          : lineRect(lines, requested))
-      let placed = place({ ...input, anchor: anchorRect })
-      const flipped = physicalSide(placed.side, rtl)
-      if (lines !== null && flipped !== requested) {
-        anchorRect = lineRect(lines, flipped)
-        placed = place({ ...input, anchor: anchorRect })
-      }
-      const side = physicalSide(placed.side, rtl)
-      const bridge = current.offsetAsPadding
-        ? Math.max(0, current.options.sideOffset)
-        : 0
       // Fixed positioning uses layout coordinates; add back WebKit's visual offset.
       const visual = webkit ? view.visualViewport : null
       const origin = current.topLayer === false
@@ -1665,19 +1652,49 @@ export const trackPosition = (
           y: -(visual?.offsetTop ?? 0),
           scale: { x: 1, y: 1 }
         }
+      const input = {
+        popup,
+        arrow: arrow === null
+          ? null
+          : { width: arrow.offsetWidth, height: arrow.offsetHeight },
+        boundary: toLocal(boundaryOf(viewport), origin),
+        anchorClip: toLocal(
+          anchor === null ? viewport : clipOf(anchor, viewport),
+          origin
+        ),
+        rtl,
+        options: current.options
+      }
+      const requested = physicalSide(current.options.side, rtl)
+      let rawAnchor = virtual ??
+        (anchor === null
+          ? zero
+          : lines === null
+          ? clientRect(anchor)
+          : lineRect(lines, requested))
+      let anchorRect = toLocal(rawAnchor, origin)
+      let placed = place({ ...input, anchor: anchorRect })
+      const flipped = physicalSide(placed.side, rtl)
+      if (lines !== null && flipped !== requested) {
+        rawAnchor = lineRect(lines, flipped)
+        anchorRect = toLocal(rawAnchor, origin)
+        placed = place({ ...input, anchor: anchorRect })
+      }
+      const side = physicalSide(placed.side, rtl)
+      const bridge = current.offsetAsPadding
+        ? Math.max(0, current.options.sideOffset)
+        : 0
       const dpr = view.devicePixelRatio || 1
       const snap = (start: number, length: number) =>
         (Math.round((start + length) * dpr) - Math.round(start * dpr)) / dpr
       const next = new Map<string, string>([
         [
           "left",
-          ((placed.x - origin.x) / origin.scale.x -
-            (side === "right" ? bridge : 0)) + "px"
+          (placed.x - (side === "right" ? bridge : 0)) + "px"
         ],
         [
           "top",
-          ((placed.y - origin.y) / origin.scale.y -
-            (side === "bottom" ? bridge : 0)) + "px"
+          (placed.y - (side === "bottom" ? bridge : 0)) + "px"
         ],
         ["--anchor-width", snap(anchorRect.x, anchorRect.width) + "px"],
         ["--anchor-height", snap(anchorRect.y, anchorRect.height) + "px"],
@@ -1704,7 +1721,7 @@ export const trackPosition = (
         side: placed.side,
         align: placed.align,
         anchorHidden: placed.anchorHidden ||
-          (virtual === null && sameRect(anchorRect, zero)),
+          (virtual === null && sameRect(rawAnchor, zero)),
         arrowUncentered: placed.arrow?.uncentered ?? false
       }
       if (reported === null || !sameReport(reported, report)) {
@@ -1746,8 +1763,8 @@ export const trackPosition = (
       const watch = () => sizes?.observe(node, { box: "border-box" })
       const sizes = typeof view.ResizeObserver === "function"
         ? new view.ResizeObserver((entries) => {
-          if (entries[0]?.target === anchor) {
-            // A size the update gives the popup after the anchor resized would be reported as a loop.
+          if (entries.some((entry) => entry.target !== node)) {
+            // A size the update gives the popup after an observed element resized would be reported as a loop.
             sizes?.unobserve(node)
             view.cancelAnimationFrame(frame)
             frame = view.requestAnimationFrame(watch)
@@ -1756,6 +1773,15 @@ export const trackPosition = (
         })
         : null
       if (anchor !== null) sizes?.observe(anchor)
+      const boundary = current.collisionBoundary
+      if (boundary === "clipping-ancestors") {
+        if (current.topLayer === false) {
+          for (const clipper of clippersOf(node)) sizes?.observe(clipper)
+        }
+      } else if ("id" in boundary) {
+        const element = document.getElementById(boundary.id)
+        if (element !== null) sizes?.observe(element)
+      }
       watch()
       const moves = anchor === null ? () => {} : observeMove(anchor, update)
       return () => {

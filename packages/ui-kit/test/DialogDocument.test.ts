@@ -922,6 +922,52 @@ describe("Dialog in a document", { concurrent: false }, () => {
       }))
     }))
 
+  it.effect("opening an inline dialog programmatically with initialFocus: false preserves outside focus and page scroll", () =>
+    Effect.gen(function*() {
+      // Simulate the browser's `dialog.show()` focusing and scroll steps, which
+      // happy-dom omits, so calling `.open(true)` would steal focus and scroll.
+      const proto = window.HTMLDialogElement.prototype
+      const originalShow = proto.show
+      const originalScrollY = Object.getOwnPropertyDescriptor(window, "scrollY")
+      let scrollY = 240
+      Object.defineProperty(window, "scrollY", {
+        configurable: true,
+        get: () => scrollY
+      })
+      proto.show = function(this: HTMLDialogElement) {
+        originalShow.call(this)
+        scrollY = 0
+        const target = this.closest("[inert]") === null
+          ? this.querySelector<HTMLElement>("input,button,[tabindex]")
+          : null
+        if (target !== null) target.focus()
+        else (document.activeElement as HTMLElement | null)?.blur()
+      }
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          proto.show = originalShow
+          if (originalScrollY !== undefined) {
+            Object.defineProperty(window, "scrollY", originalScrollY)
+          } else delete (window as { scrollY?: unknown }).scrollY
+        })
+      )
+      const { app, send } = yield* mountPage({
+        a: false,
+        topLayer: false,
+        initialFocus: false,
+        finalFocus: false
+      })
+      const page = byId("page")
+      page.focus()
+      assert.strictEqual(document.activeElement, page)
+      send(Message.RequestedOpen({ which: "a", triggerId: null, method: null }))
+      yield* tick
+      const dialog = app.querySelector("dialog")!
+      assert.isTrue(dialog.open)
+      assert.strictEqual(document.activeElement, page)
+      assert.strictEqual(window.scrollY, 240)
+    }))
+
   it.effect("drawn in place, it is an open dialog that leaves the page alone, whatever modal says", () =>
     Effect.gen(function*() {
       const { app, log } = yield* mountPage({ modal: true, topLayer: false })

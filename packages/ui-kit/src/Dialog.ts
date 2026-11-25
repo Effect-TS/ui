@@ -1496,9 +1496,11 @@ export const Dialog = Html.component({
         .attr("id", portalId)
         .attr("aria-modal", modal === false ? "false" : undefined)
       // Shown once TrackDialog has started, so it sees what had focus before the browser moves it in.
+      // In place, set the `open` attribute directly rather than `.open()` so the
+      // host doesn't call `dialog.show()`, whose focusing steps override `initialFocus: false`.
       const placed = topLayer
         ? identified.open(false).popover("manual", model.mounted)
-        : identified.open(model.mounted)
+        : identified.attr("open", model.mounted ? "" : undefined)
       const dialog = placed
         .forward((node) =>
           node

@@ -208,7 +208,12 @@ export const AlertDialog = <Msg, RV = never, RF = never>(
 ): ReturnType<typeof Dialog<Msg, RV, RF>> =>
   Dialog<Msg, RV, RF>(h, {
     ...options,
-    props: { ...options.props, modal: true, disablePointerDismissal: true },
+    props: {
+      ...options.props,
+      modal: true,
+      disablePointerDismissal: true,
+      topLayer: true
+    },
     view: (dialog) =>
       options.view({
         ...dialog,
