@@ -13,7 +13,7 @@
  * | Part | Element |
  * | :-- | :-- |
  * | `viewport` | `<div>`, `<ul>` or `<ol>`: the element that scrolls. Leave it out and the list scrolls with `scrollContainer` or the page |
- * | `table` | `<table>`, for a list that is a `<tbody>`: `aria-rowcount` |
+ * | `table` | `<table>`, for a list that is a `<tbody>`, or a `<div>` with `role="grid"` or `role="table"`: `aria-rowcount` |
  * | `list` | `<div>`, `<ul>`, `<ol>` or `<tbody>`, `role="list"` unless another role is set or it's a `<tbody>` |
  * | `item` | `<div>`, `<li>` or `<tr>`, `role="listitem"` unless another role is set or it's a `<tr>` |
  *
@@ -31,13 +31,22 @@
  * **Keyboard**
  *
  * Every item says where it is in the whole set with `aria-posinset` and
- * `aria-setsize`, or a `<tr>` with `aria-rowindex` and the `table` part
- * with `aria-rowcount`. They count from `firstPosition` out of `setSize`, so
- * a page of a longer set or one whose size isn't known says so. In a table,
- * the header row takes a row index too: pass `firstPosition: 2` for one
- * header row, and count it in `setSize`. The item that has the focus, or holds the element that has
- * it, stays rendered with the rows next to it wherever the list scrolls, so
- * Tab and Shift+Tab go where they would if every item were rendered.
+ * `aria-setsize`, or a `<tr>` or `role="row"` item with `aria-rowindex` and
+ * the `table` part with `aria-rowcount`. They count from `firstPosition` out
+ * of `setSize`, so a page of a longer set or one whose size isn't known says
+ * so. In a table, the header row takes a row index too: pass
+ * `firstPosition: 2` for one header row, and count it in `setSize`. The item
+ * that has the focus, or holds the element that has it, stays rendered with
+ * the rows next to it wherever the list scrolls, so Tab and Shift+Tab go where
+ * they would if every item were rendered.
+ *
+ * `viewport` takes `tabindex="0"` while its content overflows, and
+ * `tabindex="-1"` otherwise, so the arrow keys and Page Up and Page Down
+ * scroll a list with nothing focusable in it. When the focused item is
+ * removed, the focus moves to the item that takes its index, or the one
+ * before it: to the item itself when it takes the focus, and otherwise to the
+ * first element in it that does. It moves to `viewport` when the list is
+ * left empty.
  *
  * **Layout**
  *
@@ -189,6 +198,8 @@ const defaultOverscan = 3
 const defaultEndThreshold = 1
 const scrollEndDelay = 100
 const layoutAttributes = ["class", "style", "hidden", "open"]
+const focusableSelector =
+  "a[href],button,input,select,textarea,summary,iframe,[tabindex],[contenteditable]:not([contenteditable=\"false\"])"
 
 /**
  * Where `scrollTo` goes: an item by index or by key, a distance in pixels
@@ -365,7 +376,7 @@ export const VirtualListProps = Schema.Struct({
   setSize: Schema.optional(Schema.Number),
   /**
    * The position of the first item in the whole set, from 1, for
-   * `aria-posinset`, or `aria-rowindex` in a table. 1 when omitted.
+   * `aria-posinset`, or `aria-rowindex` for a row. 1 when omitted.
    */
   firstPosition: Schema.optional(Schema.Number),
   /**
@@ -459,6 +470,7 @@ const VirtualListModel = Schema.Struct({
   height: Schema.Number,
   atStart: Schema.Boolean,
   atEnd: Schema.Boolean,
+  overflowing: Schema.Boolean,
   lanes: Schema.Number,
   gap: Schema.Number,
   width: Schema.Number,
@@ -494,6 +506,7 @@ const VirtualListMessage = UiSchema.TaggedEnum({
     anchor: Schema.NullOr(Position),
     atStart: Schema.Boolean,
     atEnd: Schema.Boolean,
+    overflowing: Schema.Boolean,
     length: Schema.Number,
     scrolled: Schema.NullOr(VirtualListScrollTo)
   },
@@ -799,9 +812,11 @@ const windowOf = (
   startRow = Math.min(startRow, endRow)
 
   const rows: Array<[number, number]> = [[startRow, endRow]]
+  // A focused key that's gone was removed with the focus on it: the rows at its
+  // index stay so the mount can move the focus to the item that took its place.
   const focused = model.focused === null
     ? null
-    : resolve(props, model.focused, false)
+    : resolve(props, model.focused, true)
   if (focused !== null) {
     const row = rowOf(layout, focused)
     const kept: [number, number] = [
@@ -971,11 +986,13 @@ const TrackVirtualList = Mount.makeStream(
           readonly height: number
           readonly atStart: boolean
           readonly atEnd: boolean
+          readonly overflowing: boolean
         } | null = null
         let applied: VirtualListScrollTo | null = null
         let pinned: typeof ScrollRequest.Type | null = null
         let seen = 0
         let focused: string | null = null
+        let focusedItem: Element | null = null
         let focusTimer: ReturnType<typeof setTimeout> | undefined
         let sent = ""
         let tracked: Tracked = { offset: 0, height: 0, length: 0 }
@@ -1116,9 +1133,12 @@ const TrackVirtualList = Mount.makeStream(
           const { height, length, offset: start } = next
           const atStart = start <= defaultEndThreshold
           atEnd = toEnd() <= (args.threshold ?? defaultEndThreshold)
+          const overflowing = viewport !== null &&
+            (viewport.scrollHeight - viewport.clientHeight > 0.5 ||
+              viewport.scrollWidth - viewport.clientWidth > 0.5)
           const unchanged = reported !== null &&
             same(height, reported.height) && atStart === reported.atStart &&
-            atEnd === reported.atEnd
+            atEnd === reported.atEnd && overflowing === reported.overflowing
           if (
             scrolled === null && unchanged &&
             (same(start, reported!.start) ||
@@ -1127,7 +1147,7 @@ const TrackVirtualList = Mount.makeStream(
             if (args.track && !sameTracked(next, tracked)) sendMetrics(next)
             return
           }
-          reported = { start, height, atStart, atEnd }
+          reported = { start, height, atStart, atEnd, overflowing }
           tracked = next
           send(
             VirtualListMessage.MovedViewport({
@@ -1135,6 +1155,7 @@ const TrackVirtualList = Mount.makeStream(
               height,
               atStart,
               atEnd,
+              overflowing,
               length,
               anchor: anchorAt(start),
               scrolled
@@ -1340,6 +1361,7 @@ const TrackVirtualList = Mount.makeStream(
         const sync = () => {
           if (disposed) return
           bind()
+          refocus()
           const request = args.request
           const fresh = args.fresh
           if (request === null) applied = null
@@ -1392,12 +1414,44 @@ const TrackVirtualList = Mount.makeStream(
           else scrollBy(toEnd())
         }
 
+        // Removing the focused item drops the focus to the body, so it moves to
+        // the item now at that index, or the one before it, or to the viewport.
+        const refocus = () => {
+          const lost = focusedItem
+          if (lost === null || lost.isConnected) return
+          focusedItem = null
+          const active = activeOf(document)
+          if (
+            active !== null && active !== document.body &&
+            active !== document.documentElement
+          ) return onFocus()
+          const index = Number(lost.getAttribute("data-index"))
+          const items = itemsOf()
+          const item = items.find((item) =>
+            Number(item.getAttribute("data-index")) >= index
+          ) ?? items.at(-1)
+          const candidates = item === undefined
+            ? []
+            : [item, ...item.querySelectorAll<HTMLElement>(focusableSelector)]
+          if (viewport !== null) {
+            candidates.push(viewport)
+          }
+          candidates.find((candidate) => {
+            candidate.focus({ preventScroll: true })
+            return activeOf(document) === candidate
+          })
+          onFocus()
+        }
+
         const onFocus = () => {
           const item =
             activeOf(document)?.closest(attrSelector(itemAttr, args.id)) ?? null
           const next = item !== null && list.contains(item) ? item : null
+          focusedItem = next
           const id = next === null ? null : identity(next)
-          if (id === focused) return
+          if (id === focused) {
+            return
+          }
           focused = id
           send(
             next === null
@@ -1506,7 +1560,8 @@ type Div = Html.Element<
  * `item({ element, index })` returns `element`. `list` and `item` write
  * `role` only when no other role is set on the element, so a `role="feed"`
  * or another kit part's role stays. `item` owns `aria-posinset`,
- * `aria-setsize`, `data-index` and `data-key`. The list's padding and an
+ * `aria-setsize`, `aria-rowindex`, `data-index` and `data-key`, and
+ * `viewport` owns `tabindex`. The list's padding and an
  * item's top margin are added after the consumer's inline style.
  *
  * It emits `Scrolled` when the visible items, an edge or `scrolling`
@@ -1536,6 +1591,7 @@ export const VirtualList = Html.component({
     height: 0,
     atStart: false,
     atEnd: false,
+    overflowing: false,
     lanes: 1,
     gap: 0,
     width: 0,
@@ -1555,7 +1611,7 @@ export const VirtualList = Html.component({
   update: {
     MovedViewport: (
       $,
-      { anchor, atEnd, atStart, height, length, scrolled, start }
+      { anchor, atEnd, atStart, height, length, overflowing, scrolled, start }
     ) => {
       const model = current($.model, $.props)
       const layout = layoutOf(model, $.props)
@@ -1577,6 +1633,7 @@ export const VirtualList = Html.component({
           height,
           atStart,
           atEnd,
+          overflowing,
           offset: start,
           length,
           lead,
@@ -1645,7 +1702,7 @@ export const VirtualList = Html.component({
     const setSize = String(props.setSize ?? layout.count)
 
     const itemPart = p.part(["div", "li", "tr"], (b, index: number) => {
-      const row = b.tag === "tr"
+      const tr = b.tag === "tr"
       const style = [
         props.measure === false
           ? `box-sizing:border-box;block-size:${
@@ -1657,7 +1714,7 @@ export const VirtualList = Html.component({
             inset + layout.offsets[rowOf(layout, index)]!
           }px)`
           : "",
-        !absolute && !row && pushed !== undefined && index >= pushed &&
+        !absolute && !tr && pushed !== undefined && index >= pushed &&
           index < pushed + layout.lanes
           ? `margin-block-start:${between}px`
           : ""
@@ -1666,13 +1723,17 @@ export const VirtualList = Html.component({
         .attrs({
           [itemAttr]: id,
           "data-index": String(index),
-          "data-key": keyOf(props, index) ?? undefined,
-          "aria-posinset": row ? undefined : String(first + index),
-          "aria-setsize": row ? undefined : setSize,
-          "aria-rowindex": row ? String(first + index) : undefined
+          "data-key": keyOf(props, index) ?? undefined
         })
         .forward((node) => {
-          const item = row ? node : defaults(node, { role: "listitem" })
+          const row = tr || node.elementAttrs.role === "row"
+          const position = String(first + index)
+          const item = (tr ? node : defaults(node, { role: "listitem" }))
+            .attrs({
+              "aria-posinset": row ? undefined : position,
+              "aria-setsize": row ? undefined : setSize,
+              "aria-rowindex": row ? position : undefined
+            })
           return style === "" ? item : ownStyle(style)(item)
         })
     })
@@ -1713,9 +1774,13 @@ export const VirtualList = Html.component({
       atStart: model.position !== null && model.atStart,
       atEnd: model.position !== null && model.atEnd,
       scrolling: model.scrolling,
-      viewport: p.part(["div", "ul", "ol"], (b) => b.attr(viewportAttr, id)),
+      viewport: p.part(["div", "ul", "ol"], (b) =>
+        b.attrs({
+          [viewportAttr]: id,
+          tabindex: model.overflowing ? "0" : "-1"
+        })),
       table: p.part(
-        ["table"],
+        ["table", "div"],
         (b) =>
           b.attr(
             "aria-rowcount",
