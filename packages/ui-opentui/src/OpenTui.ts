@@ -155,7 +155,8 @@ export interface ValuePayload {
 }
 
 /**
- * Plain-data payload for `select` events (`selectionChanged`, `itemSelected`).
+ * Plain-data payload for `select` and `tabSelect` events (`selectionChanged`,
+ * `itemSelected`).
  *
  * @stability experimental
  * @category events
@@ -164,6 +165,17 @@ export interface ValuePayload {
 export interface SelectPayload {
   readonly index: number
   readonly option: OT.SelectOption | null
+}
+
+/**
+ * Plain-data payload for `slider` `change` events.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface SliderPayload {
+  readonly value: number
 }
 
 /**
@@ -224,11 +236,16 @@ export type EventsOf<K extends string> = K extends "input" ?
         readonly input: ValuePayload
         readonly submit: ValuePayload
       }
-  : K extends "select" ?
+  : K extends "select" | "tabSelect" ?
       & Events
       & {
         readonly selectionChanged: SelectPayload
         readonly itemSelected: SelectPayload
+      }
+  : K extends "slider" ?
+      & Events
+      & {
+        readonly change: SliderPayload
       }
   : K extends TextModifierTag | "br" ? {}
   : Events
@@ -241,6 +258,7 @@ type OmittedOptionKeys =
   | "content"
   | "renderBefore"
   | "renderAfter"
+  | "onChange"
   | "onMouse"
   | "onMouseDown"
   | "onMouseUp"
@@ -280,6 +298,10 @@ export type StyleOf<O> = {
 export interface TagStyleMap {
   readonly box: StyleOf<OT.BoxOptions>
   readonly scrollbox: StyleOf<OT.ScrollBoxOptions>
+  readonly lineNumber: Omit<
+    StyleOf<OT.LineNumberOptions>,
+    "target" | "minWidth" | "paddingRight"
+  >
   readonly text: StyleOf<OT.TextOptions>
   readonly span: StyleOf<OT.TextNodeOptions>
   readonly b: StyleOf<OT.TextNodeOptions>
@@ -290,6 +312,16 @@ export interface TagStyleMap {
   readonly input: StyleOf<OT.InputRenderableOptions>
   readonly textarea: StyleOf<OT.TextareaOptions>
   readonly select: StyleOf<OT.SelectRenderableOptions>
+  readonly tabSelect: StyleOf<OT.TabSelectRenderableOptions>
+  readonly slider: StyleOf<OT.SliderOptions>
+  readonly code: StyleOf<OT.CodeOptions> & {
+    readonly content?: string | undefined
+  }
+  readonly diff: StyleOf<OT.DiffRenderableOptions>
+  readonly markdown: StyleOf<OT.MarkdownOptions> & {
+    readonly content?: string | undefined
+  }
+  readonly asciiFont: StyleOf<OT.ASCIIFontOptions>
 }
 
 /**
@@ -302,6 +334,7 @@ export interface TagStyleMap {
 export interface TagNodeMap {
   readonly box: OT.BoxRenderable
   readonly scrollbox: OT.ScrollBoxRenderable
+  readonly lineNumber: OT.LineNumberRenderable
   readonly text: OT.TextRenderable
   readonly span: OT.TextNodeRenderable
   readonly b: OT.TextNodeRenderable
@@ -312,6 +345,12 @@ export interface TagNodeMap {
   readonly input: OT.InputRenderable
   readonly textarea: OT.TextareaRenderable
   readonly select: OT.SelectRenderable
+  readonly tabSelect: OT.TabSelectRenderable
+  readonly slider: OT.SliderRenderable
+  readonly code: OT.CodeRenderable
+  readonly diff: OT.DiffRenderable
+  readonly markdown: OT.MarkdownRenderable
+  readonly asciiFont: OT.ASCIIFontRenderable
 }
 
 /**
@@ -455,13 +494,15 @@ export class VoidElement<
   }
 
   /**
-   * Sets the controlled text value of an `input` or `textarea`.
+   * Sets the controlled value of an `input`, `textarea`, or `slider`.
    *
    * @since 0.1.0
    */
-  value<N extends OT.InputRenderable | OT.TextareaRenderable>(
+  value<
+    N extends OT.InputRenderable | OT.TextareaRenderable | OT.SliderRenderable
+  >(
     this: VoidElement<Msg, R, E, N, Tag, Options>,
-    value: string
+    value: N extends OT.SliderRenderable ? number : string
   ): this {
     return this.prop("value", value) as any
   }
@@ -479,24 +520,26 @@ export class VoidElement<
   }
 
   /**
-   * Sets the items displayed by a `select`.
+   * Sets the items displayed by a `select` or `tabSelect`.
    *
    * @since 0.1.0
    */
-  options(
-    this: VoidElement<Msg, R, E, OT.SelectRenderable, Tag, Options>,
-    options: ReadonlyArray<OT.SelectOption>
+  options<N extends OT.SelectRenderable | OT.TabSelectRenderable>(
+    this: VoidElement<Msg, R, E, N, Tag, Options>,
+    options: ReadonlyArray<
+      N extends OT.TabSelectRenderable ? OT.TabSelectOption : OT.SelectOption
+    >
   ): this {
     return this.prop("options", options) as any
   }
 
   /**
-   * Sets the controlled selected index of a `select`.
+   * Sets the controlled selected index of a `select` or `tabSelect`.
    *
    * @since 0.1.0
    */
-  selectedIndex(
-    this: VoidElement<Msg, R, E, OT.SelectRenderable, Tag, Options>,
+  selectedIndex<N extends OT.SelectRenderable | OT.TabSelectRenderable>(
+    this: VoidElement<Msg, R, E, N, Tag, Options>,
     index: number
   ): this {
     return this.prop("selectedIndex", index) as any
@@ -667,13 +710,13 @@ export class VoidElement<
   }
 
   /**
-   * Sugar for `on("change", handler)` on `input`.
+   * Sugar for `on("change", handler)` on `input` and `slider`.
    *
    * @since 0.1.0
    */
-  onChange<E2 extends E & { readonly change: ValuePayload }>(
+  onChange<E2 extends E & { readonly change: ValuePayload | SliderPayload }>(
     this: VoidElement<Msg, R, E2, Node, Tag, Options>,
-    handler: View.Handler<Msg, ValuePayload>
+    handler: View.Handler<Msg, E2["change"]>
   ): this {
     return this.on("change", handler) as any
   }
@@ -703,7 +746,7 @@ export class VoidElement<
   }
 
   /**
-   * Sugar for `on("selectionChanged", handler)` on `select`.
+   * Sugar for `on("selectionChanged", handler)` on `select` and `tabSelect`.
    *
    * @since 0.1.0
    */
@@ -717,7 +760,7 @@ export class VoidElement<
   }
 
   /**
-   * Sugar for `on("itemSelected", handler)` on `select`.
+   * Sugar for `on("itemSelected", handler)` on `select` and `tabSelect`.
    *
    * @since 0.1.0
    */
@@ -870,7 +913,7 @@ export class TextElement<
  * @category vocabulary
  * @since 0.1.0
  */
-export const layoutTags = ["box", "scrollbox"] as const
+export const layoutTags = ["box", "scrollbox", "lineNumber"] as const
 
 /**
  * Inline text modifier tags that live inside `text`.
@@ -897,7 +940,18 @@ export const textParents = ["text", ...textModifierTags] as const
  * @category vocabulary
  * @since 0.1.0
  */
-export const voidTags = ["input", "textarea", "select", "br"] as const
+export const voidTags = [
+  "input",
+  "textarea",
+  "select",
+  "tabSelect",
+  "slider",
+  "code",
+  "diff",
+  "markdown",
+  "asciiFont",
+  "br"
+] as const
 
 /**
  * A layout container tag name.

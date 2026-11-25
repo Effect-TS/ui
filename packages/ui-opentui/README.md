@@ -9,7 +9,7 @@ OpenTUI vocabulary, terminal host, global Subscriptions, imperative Commands, an
 
 ## Modules
 
-- `OpenTui`: `OpenTui.component`, `OpenTui.H`, element vocabulary (`box`, `scrollbox`, `text`, `span`, `b`, `i`, `u`, `a`, `br`, `input`, `textarea`, `select`), plain-data event payloads, `OpenTui.Host`, and `OpenTui.ref`
+- `OpenTui`: `OpenTui.component`, `OpenTui.H`, element vocabulary (`box`, `scrollbox`, `lineNumber`, `text`, `span`, `b`, `i`, `u`, `a`, `br`, `input`, `textarea`, `select`, `tabSelect`, `slider`, `code`, `diff`, `markdown`, `asciiFont`), plain-data event payloads, `OpenTui.Host`, and `OpenTui.ref`
 - `OpenTuiHost`: `makeHost`, `layer`, `layerFromRenderer`, `mount`, `mountEffect`, and `run`
 - `OpenTuiSubscription`: global `onKeyPress`, `onKeyRelease`, `shortcuts`, `onPaste`, and `onResize`
 - `OpenTuiKeyboard`: pure shortcut table matcher over `OpenTui.KeyPayload`
