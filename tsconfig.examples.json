@@ -13,6 +13,7 @@
     { "path": "examples/routing" },
     { "path": "examples/snake" },
     { "path": "examples/snake-tui" },
-    { "path": "examples/virtual-list" }
+    { "path": "examples/virtual-list" },
+    { "path": "examples/web-components" }
   ]
 }

@@ -4,9 +4,9 @@ import { Collapsible } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 import {
+  columns,
   format,
   type Framework,
-  frameworks,
   links,
   load,
   names,
@@ -72,8 +72,8 @@ export const PerformanceChart = <M>(h: Html.H<M>) =>
               ),
               " ",
               h.span.class(
-                "h-2.5 rounded-[3px]",
-                isEffect ? "bg-foreground" : "bg-border-strong"
+                "chart-bar h-2.5 rounded-[3px]",
+                isEffect ? "bg-accent" : "bg-border-strong"
               ).attr("aria-hidden", "true")
                 .style({
                   width: `${(entry.multiple / slowest) * 100}%`
@@ -127,7 +127,7 @@ const Full = <M>(
           h.th.class(label, header).attr("scope", "col").children(
             "Workload"
           ),
-          frameworks.map((framework) =>
+          columns.map((framework) =>
             h.th.class(amount, header).attr("scope", "col").children(
               names[framework]
             )
@@ -140,7 +140,7 @@ const Full = <M>(
             "not-first:*:border-t not-first:*:border-border"
           ).children(
             Label(h, row),
-            frameworks.map((framework) =>
+            columns.map((framework) =>
               h.td.class(
                 amount,
                 framework === "effect-ui" && "font-semibold"

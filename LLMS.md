@@ -1103,6 +1103,10 @@ Known limits:
   and tell it when they're focused, and a scene of one tooltip with no
   provider mounted. Then an optional owner, the reports readers give it, a
   reader's `onChange`, and a component that reads and sends to its own kind.
+- **[Custom elements](./ai-docs/src/10_ui/24_custom-elements.ts)**:
+  Use web components from other libraries in an HTML view: bind each tag
+  with its properties and events once, set them with typed methods, and fire
+  an element's event in a scene.
 - **[Mounts](./ai-docs/src/10_ui/24_mounts.ts)**:
   Start work with an element's host node: a mount that measures a box once,
   a mount that attaches a third-party editor and reports each change, and a

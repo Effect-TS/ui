@@ -1,0 +1,21 @@
+{
+  "name": "web-components",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "vite"
+  },
+  "dependencies": {
+    "@effect/ui": "workspace:*",
+    "@shoelace-style/shoelace": "^2.20.1",
+    "effect": "^4.1.4",
+    "vanilla-colorful": "^0.7.2"
+  },
+  "devDependencies": {
+    "@effect/vitest": "^4.1.4",
+    "@tailwindcss/vite": "^4.3.5",
+    "tailwindcss": "^4.3.5",
+    "vite": "^8.3.6"
+  }
+}

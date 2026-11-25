@@ -8,6 +8,7 @@
   },
   "exports": {
     "./constants": "./src/constants.ts",
+    "./SnakeGame": "./src/SnakeGame.ts",
     "./domain/*": "./src/domain/*.ts"
   },
   "scripts": {

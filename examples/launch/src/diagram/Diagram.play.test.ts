@@ -39,7 +39,7 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
         yield* play.expect(progress("Foldkit 0.x")).toHaveText("Done")
         yield* play.expect(progress("Effect UI")).toHaveText("1/4")
         yield* play.expect(announced).toHaveText(
-          "Effect UI, step 1 of 4: A2's view sends a Message."
+          "Effect UI, step 1 of 4: A click in A2's view produces a Message."
         )
         yield* TestClock.adjust("10 seconds")
         yield* play.expect(playing).toHaveCount(0)
@@ -66,7 +66,7 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
         })
         yield* play.click(button("Next step"))
         yield* play.expect(announced).toHaveText(
-          "Foldkit 0.x, step 1 of 8: A1's view sends a Message."
+          "Foldkit 0.x, step 1 of 8: A click in A1's view produces a Message."
         )
         yield* play.click(button("Next step"))
         yield* play.expect(announced).toHaveText(
@@ -78,7 +78,7 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
         yield* play.click(choice("Root"))
         yield* play.type(HtmlLocator.role("slider"), "4")
         yield* play.expect(announced).toHaveText(
-          "Effect UI, step 1 of 3: Root's view sends a Message."
+          "Effect UI, step 1 of 3: A click in Root's view produces a Message."
         )
       }))
   }

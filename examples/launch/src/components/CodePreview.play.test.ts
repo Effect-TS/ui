@@ -1,11 +1,12 @@
 import type { Snippet } from "#domain/Snippet"
 import { Html } from "@effect/ui/html"
 import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing"
-import { Locator, TestHost } from "@effect/ui/testing"
+import { Locator } from "@effect/ui/testing"
 import { assert, it } from "@effect/vitest"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Code } from "./Code.ts"
 import { CodeGroup } from "./CodeGroup.ts"
+import { scrolls, TestLayer } from "./testing.ts"
 
 const file = (id: string): Snippet => ({
   id,
@@ -59,33 +60,6 @@ const Alone = Html.component({
       )
     )
 })
-
-// The test host has no page to scroll, so the test stands in for the
-// element operations and records each scroll.
-const scrolls: Array<Html.ScrollOptions> = []
-const TestLayer = Layer.merge(
-  TestHost.layer(),
-  Layer.succeed(Html.Host, {
-    focus: () => {},
-    blur: () => {},
-    scrollIntoView: (_element, options) => {
-      scrolls.push(options)
-    },
-    measure: () => ({
-      x: 0,
-      y: 0,
-      width: 0,
-      height: 0,
-      top: 0,
-      right: 0,
-      bottom: 0,
-      left: 0
-    }),
-    select: () => {},
-    requestSubmit: () => false,
-    showPicker: () => false
-  })
-)
 
 const inside = (id: string, locator: Locator.Locator) =>
   Locator.inside(HtmlLocator.role("region", { name: id }), locator)

@@ -6,7 +6,13 @@ import * as path from "node:path"
 import { codeToTokens } from "shiki"
 import { defineConfig, type Plugin } from "vite"
 import { toMarkdown } from "./src/domain/ArticleText.ts"
-import { type Excerpt, test, whole } from "./src/domain/Excerpt.ts"
+import {
+  all,
+  declaration,
+  type Excerpt,
+  test,
+  whole
+} from "./src/domain/Excerpt.ts"
 import { bodies, type Folds, none } from "./src/domain/Fold.ts"
 import { Frontmatter, Islands } from "./src/domain/Island.ts"
 import { type Snippet, Snippets } from "./src/domain/Snippet.ts"
@@ -48,6 +54,22 @@ const sources: {
   play: [[
     "src/autocounter/Counter.play.test.ts",
     test("resets one second after the click")
+  ]],
+  playSignIn: [[
+    "../auth/src/App.play.test.ts",
+    all(
+      declaration("AppTest"),
+      test(
+        "a successful login saves the session and lands on the dashboard"
+      )
+    )
+  ]],
+  playSnake: [[
+    "../snake/src/SnakeGame.play.test.ts",
+    all(
+      declaration("press"),
+      test("steers to the apple, eats it and pauses")
+    )
   ]],
   partsUse: [["src/parts/Details.ts", whole]],
   partsDefine: [["src/parts/Disclosure.ts", whole]],

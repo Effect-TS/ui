@@ -69,17 +69,21 @@
  * @since 0.1.0
  */
 import * as Effect from "effect/Effect"
+import type * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
+import * as controlled from "../../internal/controlled.ts"
 import * as internal from "../../internal/play.ts"
 import * as scene from "../../internal/scene.ts"
 import { atSite, callSite } from "../../internal/steps.ts"
+import * as Renderer from "../../Renderer.ts"
 import * as Locator from "../../testing/Locator.ts"
 import type * as Play from "../../testing/Play.ts"
-import type * as TestHost from "../../testing/TestHost.ts"
+import * as TestHost from "../../testing/TestHost.ts"
 import type * as View from "../../View.ts"
 import type * as Html from "../Html.ts"
 import * as defaults from "../internal/defaults.ts"
+import { isCustomTag } from "../internal/elements.ts"
 import { ownEvents } from "../internal/ownEvents.ts"
 import type * as HtmlScene from "./HtmlScene.ts"
 
@@ -163,6 +167,21 @@ export interface HtmlPlay<Model, Msg, Events>
   drop(
     locator: Locator.Locator,
     payload?: Partial<Html.DropPayload>
+  ): Effect.Effect<void, Play.StepError>
+  /**
+   * Sends an event `element` declares, from the element `locator` matches,
+   * with `detail` as the element would send it, to the innermost element
+   * with a handler for it, as `HtmlScene.fireElement` does. Throws when
+   * nothing handles `event` there or above.
+   */
+  fireElement<
+    E extends { readonly [event: string]: Schema.Decoder<unknown> },
+    K extends keyof E & string
+  >(
+    element: Html.CustomElementBinding<any, any, E>,
+    locator: Locator.Locator,
+    event: K,
+    detail: E[K]["Encoded"]
   ): Effect.Effect<void, Play.StepError>
 
   /** Asserts on the elements `locator` matches, once the tree has settled. */
@@ -319,6 +338,14 @@ class HtmlPlayCursor extends internal.PlayCursor {
   blur(locator: Locator.Locator): Effect.Effect<void, Play.StepError> {
     return this.one("blur", locator, "blur", () => ({}))
   }
+  fireElement(
+    _element: unknown,
+    locator: Locator.Locator,
+    event: string,
+    detail: unknown
+  ): Effect.Effect<void, Play.StepError> {
+    return this.one("fireElement", locator, event, () => ({ detail }))
+  }
   drop(
     locator: Locator.Locator,
     payload?: Partial<Html.DropPayload>
@@ -343,6 +370,31 @@ class HtmlPlayCursor extends internal.PlayCursor {
   }
   override expect(locator: Locator.Locator): object {
     return this.expectation(locator, defaults.matchers)
+  }
+}
+
+const htmlHost = (
+  base: Renderer.Host<TestHost.TestNode>
+): Renderer.Host<TestHost.TestNode> => {
+  const plain = new WeakMap<TestHost.TestElement, Map<string, unknown>>()
+  return {
+    ...base,
+    setProp(node, name, value) {
+      const element = node as TestHost.TestElement
+      if (
+        base.controlled.has(name) && name !== "popoverOpen" &&
+        isCustomTag(element.tag)
+      ) {
+        let values = plain.get(element)
+        if (values === undefined) plain.set(element, values = new Map())
+        if (values.has(name) && values.get(name) === value) return
+        values.set(name, value)
+        base.setProp(node, name, value)
+        controlled.want(element, name, undefined)
+        return
+      }
+      base.setProp(node, name, value)
+    }
   }
 }
 
@@ -371,4 +423,18 @@ export const make = <
   HtmlPlay<Model, Msg, Events>,
   Play.StepError,
   R | RP | TestHost.TestHost | Scope.Scope
-> => internal.begin(HtmlPlayCursor, "HtmlPlay", make, component, props) as any
+> => {
+  const started = internal.begin(
+    HtmlPlayCursor,
+    "HtmlPlay",
+    make,
+    component,
+    props
+  )
+  return Effect.gen(function*() {
+    const { host } = yield* TestHost.TestHost
+    return yield* Effect.provideService(started, Renderer.Renderer, {
+      host: htmlHost(host)
+    })
+  }) as any
+}

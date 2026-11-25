@@ -99,6 +99,7 @@ export default defineConfig({
       ...example("launch"),
       ...example("routing"),
       ...example("snake"),
+      ...example("web-components"),
       ...project("snake-tui", path.join("examples", "snake-tui"), true, {
         test: {
           include: ["src/**/*.test.ts"],
