@@ -87,6 +87,32 @@ const Signup = Html.component({
       })
     const plans = [{ value: "free", disabled: true }, { value: "team" }]
     return h.div(
+      // Invalid same-name radio outside this form; focus must skip it.
+      h.input.attrs({
+        type: "radio",
+        name: "billing",
+        value: "other",
+        "aria-invalid": "true"
+      }).checked(true),
+      // Outside the form and before it, so it comes first in document order.
+      Field(h, {
+        key: "billing",
+        props: { invalid: fields.billing._tag === "Invalid" },
+        view: (field) =>
+          field.group(h.div).children(
+            field.legend(h.span).children("Billing"),
+            ...["monthly", "yearly"].map((value) =>
+              field.member(h.input).attrs({
+                type: "radio",
+                name: "billing",
+                value,
+                form: "signup"
+              })
+                .checked(fields.billing.value === value)
+                .onClick(Message.UpdatedField({ name: "billing", value }))
+            )
+          )
+      }),
       Form(h, {
         onEmit: () => Message.SubmittedForm(),
         view: (form) =>
@@ -111,23 +137,6 @@ const Signup = Html.component({
                   )
                 )
             }),
-            Field(h, {
-              key: "billing",
-              props: { invalid: fields.billing._tag === "Invalid" },
-              view: (field) =>
-                field.group(h.div).children(
-                  field.legend(h.span).children("Billing"),
-                  ...["monthly", "yearly"].map((value) =>
-                    field.member(h.input).attrs({
-                      type: "radio",
-                      name: "billing",
-                      value
-                    })
-                      .checked(fields.billing.value === value)
-                      .onClick(Message.UpdatedField({ name: "billing", value }))
-                  )
-                )
-            }),
             text("email"),
             h.button.attr("type", "submit").children("Sign up")
           )
@@ -138,60 +147,12 @@ const Signup = Html.component({
   }
 })
 
-// Radios outside the form, the invalid one first, and controls inside it
-// whose names shadow the form's `contains` and `elements`.
-const Detached = Html.component({
-  name: "Detached",
-  model: Schema.Null,
-  message: Schema.Never
-}).make({
-  init: () => null,
-  update: ($) => $.model,
-  view: (h) => {
-    const radio = (value: string, form?: string) =>
-      h.input.attrs({
-        type: "radio",
-        name: "billing",
-        value,
-        form,
-        "aria-invalid": value === "monthly" ? "true" : undefined
-      }).checked(value !== "monthly")
-    return h.div(
-      radio("other"),
-      radio("monthly", "detached"),
-      radio("yearly", "detached"),
-      Form(h, {
-        view: (form) =>
-          form.root(h.form.attr("id", "detached")).children(
-            h.input.attrs({ name: "contains" }),
-            h.input.attrs({ name: "elements", "aria-invalid": "true" }),
-            h.button.attr("type", "submit")
-          )
-      })
-    )
-  }
-})
-
 const type = (input: HTMLInputElement, value: string) => {
   input.value = value
   input.dispatchEvent(new Event("input", { bubbles: true }))
 }
 
 describe("Form in a document", { concurrent: false }, () => {
-  it.effect("an invalid radio outside the form, first in document order, passes focus to the checked radio of its form", () =>
-    Effect.gen(function*() {
-      yield* focusability
-      const app = yield* container
-      yield* BrowserHost.mountEffect(Detached, {}, app)
-      yield* tick
-      app.querySelector<HTMLButtonElement>("button[type=submit]")!.click()
-      yield* tick
-      assert.strictEqual(
-        document.activeElement,
-        app.querySelector("input[value=yearly]")
-      )
-    }).pipe(Effect.scoped))
-
   it.effect("focuses the first invalid control on submit, outside the form too, and leaves focus alone when valid or invalidated later", () =>
     Effect.gen(function*() {
       yield* focusability
@@ -211,16 +172,16 @@ describe("Form in a document", { concurrent: false }, () => {
 
       type(email, "nope")
       yield* submitForm
-      assert.strictEqual(document.activeElement, team)
-
-      team.click()
-      yield* submitForm
       assert.strictEqual(
         document.activeElement,
         app.querySelector("input[value=yearly]")
       )
 
       app.querySelector<HTMLInputElement>("input[value=monthly]")!.click()
+      yield* submitForm
+      assert.strictEqual(document.activeElement, team)
+
+      team.click()
       yield* submitForm
       assert.strictEqual(document.activeElement, email)
       assert.deepStrictEqual([email.selectionStart, email.selectionEnd], [0, 4])

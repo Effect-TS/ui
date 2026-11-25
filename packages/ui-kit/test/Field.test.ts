@@ -61,8 +61,10 @@ describe("Field", () => {
       )
       assert.strictEqual(scene.get(control).attrs?.["aria-invalid"], "true")
 
-      scene.props({ described: true, invalid: false })
+      scene.props({ id: "name", described: true, invalid: false })
         .expect(error).toBeAbsent()
+      assert.strictEqual(scene.get(control).attrs?.id, "name")
+      assert.strictEqual(scene.get(label).attrs?.for, "name")
       assert.strictEqual(
         scene.get(control).attrs?.["aria-describedby"],
         `hint ${ids[0]}`

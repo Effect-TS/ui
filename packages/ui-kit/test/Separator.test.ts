@@ -27,6 +27,7 @@ describe("Separator", () => {
       .class("rule")
       .attrs({
         "aria-label": "Section divider",
+        role: "region",
         "aria-orientation": "horizontal",
         "data-orientation": "horizontal"
       })
@@ -43,19 +44,20 @@ describe("Separator", () => {
   })
 
   it("keeps a decorative role, set before or after the call, and drops aria-orientation", () => {
-    for (
-      const built of [
-        Separator(h, { element: h.div.attr("role", "none") }),
+    assert.deepStrictEqual(
+      View.build(Separator(h, { element: h.div.attr("role", "none") }), [])
+        .attrs,
+      { role: "none", "data-orientation": "horizontal" }
+    )
+    assert.deepStrictEqual(
+      View.build(
         Separator(h, { props: { orientation: "vertical" } }).attrs({
           role: "presentation",
           "aria-orientation": "vertical"
-        })
-      ]
-    ) {
-      const { attrs } = View.build(built, [])
-      assert.oneOf(attrs?.role, ["none", "presentation"])
-      assert.isUndefined(attrs?.["aria-orientation"])
-      assert.isDefined(attrs?.["data-orientation"])
-    }
+        }),
+        []
+      ).attrs,
+      { role: "presentation", "data-orientation": "vertical" }
+    )
   })
 })

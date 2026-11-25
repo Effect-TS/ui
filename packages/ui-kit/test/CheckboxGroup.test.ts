@@ -227,7 +227,7 @@ describe("CheckboxGroup", { concurrent: false }, () => {
         app.querySelector(".all")!.getAttribute("aria-controls")!.split(" "),
         "apple"
       )
-    }))
+    }).pipe(Effect.scoped))
 
   it.effect("members tick the group's value, and the parent cycles mix, all, none and back, leaving a disabled member alone", () =>
     Effect.gen(function*() {
