@@ -69,13 +69,16 @@
  *
  * **Keyboard**
  *
- * F6 moves focus into the viewport while it holds a toast, and F6 again,
- * Shift+Tab or Escape from the viewport returns it to where it was. Tab moves
- * through the toasts, which are focusable, and their buttons. Escape closes
- * the toast that has focus. When a focused toast closes, or focus lands on a
- * closing one, focus moves to the next toast, else back to where it was
- * before it entered the viewport, by F6, Tab or a press. Failing both, focus
- * leaves the viewport, so the stack collapses.
+ * F6 enters the viewport while it holds a toast. F6 again returns focus to
+ * the page. Shift+Tab or Escape does the same when the viewport itself has
+ * focus. Tab moves through toast roots and buttons; Escape closes the
+ * focused toast.
+ *
+ * When a focused toast closes, focus moves to the next toast, or the
+ * previous toast if none follows. Tab and Shift+Tab skip closing toasts in
+ * the direction of travel. With no toast to move to, focus returns to its
+ * previous position on the page. If that position is unavailable, focus
+ * leaves the viewport so the stack can collapse.
  *
  * **Timers**
  *
@@ -425,8 +428,7 @@ const TrackToast = Mount.makeStream(
 
 type ViewportFact = "FocusedViewport" | "BlurredViewport" | "LeftViewport"
 
-// Marks a provider's toast roots with its id, so a dialog of the consumer's
-// inside a toast, or another provider's toast, isn't taken for one.
+// Distinguishes this provider's toast roots from nested dialogs and other providers.
 const rootAttr = "data-toast-root"
 
 // What the viewport needs from its document: F6 into the viewport and back,
@@ -450,9 +452,7 @@ const TrackViewport = Mount.makeStream(
         let { empty, hovering } = args
         let focused = false
         const toastRoot = attrSelector(rootAttr, args.id)
-        // The roots that can take focus: not closing, not limited.
         const focusable = `${toastRoot}:not([data-ending-style]):not([inert])`
-        // The toast root that holds `element`, if it's closing.
         const closingRoot = (element: Element) => {
           const root = element.closest(toastRoot)
           return root?.hasAttribute("data-ending-style") ? root : null
@@ -478,24 +478,17 @@ const TrackViewport = Mount.makeStream(
           if (restored) previous = null
           return restored
         }
-        // Back to where focus was, else out of the viewport, so the stack
-        // collapses.
         const leave = () => {
           if (!restore()) focusedElement()?.blur()
         }
-        // Whether `b` comes after `a` in the document.
         const follows = (a: Node, b: Node) =>
           (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) > 0
-        // Focus moves off a closing toast. Focus that entered it by Tab, or
-        // by Shift+Tab when `back`, goes to the next toast that way, and
-        // leaves the viewport when there's none, so it can't loop. Focus that
-        // was on it already, with `back` unset, goes to the toast after it,
-        // else the one before.
+        // Preserve Tab direction to avoid looping back into a closing toast.
+        // With no direction, prefer the next toast, then the previous one.
         const passOn = (closing: Node, back?: boolean) => {
           const roots = Array.from(
             node.querySelectorAll<HTMLElement>(focusable)
           )
-          // `closing` isn't one of them, so they split around it.
           const split = roots.findIndex((root) => follows(closing, root))
           const at = split === -1 ? roots.length : split
           const after = roots[at]
@@ -532,8 +525,7 @@ const TrackViewport = Mount.makeStream(
           }
         }
         // Only keyboard focus expands the stack, so a click on a toast
-        // doesn't hold it open after the pointer leaves. Focus that lands on
-        // a closing toast, by Tab or a press, moves on, the way it came.
+        // doesn't hold it open after the pointer leaves.
         const onFocusIn = (event: FocusEvent) => {
           const from = event.relatedTarget as HTMLElement | null
           if (
@@ -563,11 +555,6 @@ const TrackViewport = Mount.makeStream(
             Queue.offerUnsafe(queue, "LeftViewport")
           }
         }
-        // Focus never stays on a toast that closes, nor in a viewport with no
-        // toast to take it. It moves to the next toast. With none left, it
-        // goes back to where it was before it entered the viewport, or else
-        // it's blurred, so the stack collapses and the timers of later toasts
-        // run.
         const handOff = (records: ReadonlyArray<MutationRecord>) => {
           const focus = active()
           if (!node.contains(focus)) return
@@ -879,9 +866,8 @@ export const ToastProvider = Html.component({
     const empty = !model.toasts.some((toast) => toast.transition !== "ending")
     const frontmost = model.toasts[0]?.height ?? 0
     const owner = p.id("viewport")
-    // A high-priority toast is announced at once by an alert copy of its
-    // text. Its root is `aria-live="off"`, so the polite viewport doesn't
-    // read it again.
+    // The alert copy announces high-priority text. Its toast root uses
+    // aria-live="off" to avoid a second announcement from the polite viewport.
     const urgent = model.toasts.filter((toast) =>
       toast.priority === "high" && toast.transition !== "ending"
     )
