@@ -21,7 +21,7 @@
  * | `popup`        | `<div>` with the drawer's content, which a swipe moves   |
  * | `content`      | `<div>` inside the popup where a mouse drag selects text |
  * | `snapTrigger`  | `<button>` that moves the drawer to its next snap point |
- * | `snapStatus`   | `<div>` live region that names the snap point it rests at |
+ * | `snapStatus`   | `<div>` live region for the current snap point           |
  * | `title`, `description`, `close`, `initialFocus`, `finalFocus` | as for a `Dialog` |
  *
  * Each part takes the consumer's builder and returns it, as a `Dialog`'s do:
@@ -95,17 +95,17 @@
  * the keyboard leaves, and a modal drawer keeps the page from scrolling
  * under it.
  *
- * With `snapPoints`, `snapTrigger` changes the snap point without a drag:
- * Enter, Space, a click or a tap emits `Snapped` with the next taller snap
- * point, and from the tallest the lowest. It never closes the drawer. It is
- * disabled while fewer than two snap points apply: fewer than two given, a
- * drawer that swipes `left` or `right`, or points that resolve to the same
- * height. `snapStatus` is a polite `role="status"` live region, so a screen
- * reader announces its children when they change, after a press or a swipe.
- * The kit writes no text: name the trigger, and put the name of the snap
- * point the drawer rests at in the status. Point the trigger's
- * `aria-describedby` at the status's `id` to read it when the trigger is
- * focused.
+ * With `snapPoints`, `snapTrigger` emits `Snapped` on Enter, Space, click or
+ * tap. It cycles through distinct snap points in height order, wrapping from
+ * tallest to lowest without closing the drawer. Before measurement, it uses
+ * the order of `snapPoints` instead. The button is disabled for horizontal
+ * drawers or when fewer than two distinct snap points are available.
+ *
+ * Give `snapTrigger` an accessible name and render the current position as
+ * `snapStatus`'s children. This polite live region announces text changes
+ * after a press or swipe; the kit supplies no text. To also describe the
+ * position when the button receives focus, set its `aria-describedby` to
+ * the status's `id`.
  *
  * **Limits**
  *
@@ -171,7 +171,6 @@
  *     })
  * })
  *
- * // The sheet swipes down, keeps the consumer's class, and announces its height.
  * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(Page, {}))
  * if (!html.includes(`data-swipe-direction="down"`) || !html.includes(`class="sheet"`)) {
  *   throw new Error("the sheet isn't a drawer")
@@ -335,8 +334,8 @@ export type DrawerOpenReason = typeof DrawerOpenReason.Type
  * `null`. `RequestedClose` asks for it to close, with the reason.
  * `Settled` reports that the transitions of an open or a close finished, as
  * a `Dialog`'s does. `Snapped` asks for the drawer to rest at another snap
- * point, after a swipe or a press on `snapTrigger`. The consumer decides whether to change `open` and
- * `snapPoint`.
+ * point after a swipe or a press on `snapTrigger`. The consumer decides
+ * whether to change `open` and `snapPoint`.
  *
  * @stability experimental
  * @category schemas
@@ -526,9 +525,6 @@ const snappingOf = (props: DrawerProps, sizes: Sizes): Snapping | null => {
   }
 }
 
-// The snap point `snapTrigger` moves to: the next taller one, and from the
-// tallest the lowest. Before the popup is measured, the distinct `snapPoints`
-// in order.
 const nextSnapPoint = (
   props: DrawerProps,
   sizes: Sizes,
@@ -1844,7 +1840,8 @@ const dialogPropsOf = Struct.omit([
  * The parts stack on the `Dialog`'s: `drawer.popup`, `drawer.backdrop` and
  * `drawer.viewport` add the drawer's attributes and mounts to the
  * `Dialog`'s, and `drawer.content`, `drawer.swipeArea`, `drawer.snapTrigger`
- * and `drawer.snapStatus` are its own. The popup carries the swipe's mount, so it can't take one of the consumer's.
+ * and `drawer.snapStatus` are its own. The popup carries the swipe's mount,
+ * so it can't take one of the consumer's.
  *
  * The drawer owns its `Dialog` and emits what it emits, so a `Scene` of the
  * consumer gives `childEmit(Drawer, event)` every event. A `Scene` of the
