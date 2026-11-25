@@ -16,13 +16,12 @@
  * cancelled, with or without a handler. Nothing stops an event's propagation:
  * only the innermost element with a handler for an event gets it.
  *
- * Drag and drop is declared, not handled: `draggable(data)` makes a drag
- * source and `dropTarget({ accepts })` a drop target, whose `drop` handler
- * gets the drop, and the host does the browser's part. Enter and leave go to
- * the active drop target only, not to every element the pointer crosses as
- * `mouseenter` does. Drag and drop
- * needs a pointer, so give every drag a button or menu that sends the same
- * message.
+ * Use `draggable(data)` for a drag source and
+ * `dropTarget({ accepts }).on("drop", handler)` for a drop target. The host
+ * transfers the data and cancels browser defaults to allow accepted drops.
+ * `dragenter` and `dragleave` go to the active drop target only, not to every
+ * element the pointer crosses. Drag and drop needs a pointer, so provide a
+ * button or menu that sends the same message.
  *
  * `value`, `checked`, `selected` and `open` are controlled: the host puts the
  * Model's value back after every patch and after every event that could have
@@ -1012,7 +1011,8 @@ export class VoidElement<
    * Makes this element a drag source carrying `data`, strings by type such
    * as `{ "application/x-todo": id }`, and sets `draggable="true"`. The host
    * puts the data on the drag when it starts. Calling it again replaces the
-   * data; it keeps a `dragstart` handler, in either order.
+   * data. Pair it with `on("dragstart", handler)` without options in either
+   * order to keep both the data and the handler.
    *
    * @since 0.1.0
    */
@@ -1032,10 +1032,10 @@ export class VoidElement<
     )
   }
   /**
-   * Like `View.ElementBuilder.on`, except that a `dragstart` or `drop`
-   * handler set without options keeps the options `draggable` or
-   * `dropTarget` set, so they can be called in either order. Options set
-   * by an earlier `on` are replaced as usual.
+   * Registers an event handler. Without options, `on("dragstart", handler)`
+   * preserves `draggable` options and `on("drop", handler)` preserves
+   * `dropTarget` options. Explicit options replace them; options from an
+   * earlier `on` call are replaced even when options are omitted.
    *
    * @since 0.1.0
    */
@@ -1045,7 +1045,6 @@ export class VoidElement<
     options?: View.EventOptions | undefined
   ): this {
     if (options === undefined && (event === "dragstart" || event === "drop")) {
-      // `draggable` sets `data`, and `dropTarget` sets `accepts`.
       const set = this.eventOptions[event]
       const key = event === "dragstart" ? "data" : "accepts"
       if (set !== undefined && key in set) options = set
@@ -1054,9 +1053,9 @@ export class VoidElement<
   }
   /**
    * Makes this element a drop target for drags carrying one of the
-   * `accepts` types. Pair it with `on("drop", handler)`, which gets the
-   * drop: neither does anything without the other. Calling it again
-   * replaces the options; it keeps the `drop` handler, in either order.
+   * `accepts` types. Requires `on("drop", handler)` without options; call
+   * them in either order. Calling `dropTarget` again replaces its options
+   * and keeps the handler.
    *
    * **Details**
    *
@@ -1834,9 +1833,9 @@ export interface CustomElementBinding<Tag extends string, P, E> {
  * The server renders none of them: the browser host sets them when it adopts
  * the element.
  *
- * `on` takes each declared event, and its handler receives the event's
- * `detail` decoded by its Schema. A `detail` the Schema
- * rejects is logged with `console.error` and sends no message. A missing or
+ * Use `on(event, handler)` for declared events. The handler receives
+ * `detail` decoded by the event's Schema. Invalid `detail` is logged with
+ * `console.error` and sends no message. A missing or
  * `null` `detail` that the Schema rejects is decoded again as `{}`, so
  * `Schema.Struct({})` declares an event without a payload. An event that
  * doesn't bubble reaches the element's own handler only.

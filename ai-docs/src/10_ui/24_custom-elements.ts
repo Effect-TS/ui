@@ -26,9 +26,8 @@ export const ColorPicker = Html.customElement({
   // its Schema can describe any value: a string here, an array or an object
   // elsewhere. The binding gets a `.color(value)` method typed by it.
   properties: { color: Schema.String },
-  // Each event's Schema decodes the CustomEvent's `detail`, which the
-  // handler of `.on("color-changed", handler)` gets. A detail the Schema
-  // rejects is logged with `console.error` and sends no message.
+  // The handler receives `detail` decoded by the event's Schema. Invalid
+  // `detail` is logged with `console.error` and sends no message.
   events: { "color-changed": Schema.Struct({ value: Schema.String }) }
 })
 
