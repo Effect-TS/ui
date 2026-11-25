@@ -495,5 +495,43 @@ describe("HtmlPlay", () => {
           /nothing listens for "keydown" on the document/
         )
       }))
+
+      // A custom source without the bundled fake's dispatch tracking still gets one key and a settle.
+      const target = new EventTarget()
+      let dispatched = 0
+      const custom:
+        & HtmlSubscription.GlobalEvents
+        & TestGlobalEvents.TestGlobalEvents = {
+          listen: (on, event, { capture }, listener) => {
+            const type = `${on}:${event}`
+            const handle = (e: Event) =>
+              listener((e as CustomEvent).detail, () => e.preventDefault())
+            target.addEventListener(type, handle, { capture })
+            return () => target.removeEventListener(type, handle, { capture })
+          },
+          fire: (on, event, payload) => {
+            dispatched++
+            return !target.dispatchEvent(
+              new CustomEvent(`${on}:${String(event)}`, {
+                cancelable: true,
+                detail: { shift: false, defaultPrevented: false, ...payload }
+              })
+            )
+          },
+          fireCustomEvent: () => false
+        }
+      yield* play(
+        Effect.gen(function*() {
+          const p = yield* HtmlPlay.make(Shortcuts, {})
+          yield* p.keydown("document", "x")
+          assert.strictEqual(dispatched, 1)
+          assert.strictEqual(p.root.text(), "0:x:false:false")
+          yield* p.keydown("document", "Escape")
+          yield* p.expectIgnored()
+        }).pipe(
+          Effect.provideService(HtmlSubscription.GlobalEvents, custom),
+          Effect.provideService(TestGlobalEvents.TestGlobalEvents, custom)
+        )
+      )
     }))
 })

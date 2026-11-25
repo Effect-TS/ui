@@ -160,7 +160,9 @@ export interface HtmlPlay<Model, Msg, Events>
    * Presses `key` on the document: delivers `keydown` to the tree's document
    * listeners and settles the resulting UI work without advancing `TestClock`.
    * Missing payload fields default as for an element keydown with `editable`
-   * and `defaultPrevented` false.
+   * and `defaultPrevented` false. With `TestGlobalEvents` provided, the key
+   * goes through it once, to every root on that document. It fails when
+   * nothing listens, which only `TestGlobalEvents.make`'s fake can report.
    */
   keydown(
     target: "document",
@@ -418,7 +420,8 @@ interface DocumentKeys {
   /**
    * Fires `keydown` on the shared `TestGlobalEvents` document if there is
    * one, else at the listeners added through `source`. Returns whether a
-   * listener produced a message, or `undefined` when none heard it.
+   * listener produced a message, or `undefined` when the source reports that
+   * none heard it. A custom source that doesn't report counts as heard.
    */
   readonly down: (
     payload: Partial<HtmlSubscription.GlobalPayload<Html.KeyPayload>>
@@ -447,7 +450,7 @@ const documentKeys = (
       const result = globalEvents.observe(() => {
         document.fire("document", "keydown", payload)
       })
-      return result?.heard ? result.handled : undefined
+      return result.heard === false ? undefined : result.handled
     }
   }
 }
