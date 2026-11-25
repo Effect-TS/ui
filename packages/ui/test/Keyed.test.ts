@@ -97,8 +97,8 @@ const makeApp = (options?: {
       ) => [GetUser.patch({ id }, (user) => ({ ...user, name }))]
     }
   ) {
-    static readonly layer = this.toLayer(({ id, name }) =>
-      Effect.gen(function*() {
+    static readonly layer = this.toLayer(
+      Effect.fnUntraced(function*({ id, name }) {
         yield* Effect.sleep("10 millis")
         db.names.set(id, name)
       })

@@ -58,14 +58,12 @@ const makeUsers = (staleTime: Duration.Input = "30 seconds") => {
       staleTime
     }
   ) {
-    static readonly layer = this.toLayer(({ id }) =>
-      Effect.gen(function*() {
-        db.calls++
-        yield* Effect.sleep(10)
-        if (db.fail) return yield* Effect.fail("nope")
-        return { id, name: db.name }
-      })
-    )
+    static readonly layer = this.toLayer(Effect.fnUntraced(function*({ id }) {
+      db.calls++
+      yield* Effect.sleep(10)
+      if (db.fail) return yield* Effect.fail("nope")
+      return { id, name: db.name }
+    }))
   }
   return {
     db,
@@ -85,13 +83,11 @@ const makeCount = (staleTime: Duration.Input = "30 seconds") => {
       staleTime
     }
   ) {
-    static readonly layer = this.toLayer(() =>
-      Effect.gen(function*() {
-        db.calls++
-        yield* Effect.sleep(10)
-        return db.count
-      })
-    )
+    static readonly layer = this.toLayer(Effect.fnUntraced(function*() {
+      db.calls++
+      yield* Effect.sleep(10)
+      return db.count
+    }))
   }
   return {
     db,

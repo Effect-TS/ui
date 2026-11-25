@@ -65,8 +65,8 @@ const makeList = (options: {
       refetchInterval: options.refetchInterval
     }
   ) {
-    static readonly layer = this.toLayer((_args, cursor) =>
-      Effect.gen(function*() {
+    static readonly layer = this.toLayer(
+      Effect.fnUntraced(function*(_args, cursor) {
         const index = Option.getOrElse(cursor, () => 0)
         const page = {
           messages: db.page(index),

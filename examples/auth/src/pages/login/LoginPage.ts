@@ -31,26 +31,6 @@ export const LoginPageEvents = UiSchema.TaggedEnum({
   SignedIn: { session: Session }
 })
 
-const runSimulateAuthRequest = Effect.fn("auth/SimulateAuthRequest")(
-  function*(
-    { email, password }: {
-      readonly email: string
-      readonly password: Redacted.Redacted<string>
-    }
-  ): Effect.fn.Return<LoginPageMessage> {
-    yield* Effect.sleep(Duration.seconds(1))
-    if (Redacted.value(password) !== "password") {
-      return LoginPageMessage.FailedSimulateAuthRequest({
-        error: "Invalid credentials"
-      })
-    }
-    const [name] = email.split("@")
-    return LoginPageMessage.SucceededSimulateAuthRequest({
-      session: { userId: "1", email, name: name === "" ? email : name }
-    })
-  }
-)
-
 export class SimulateAuthRequest extends Command.Service<SimulateAuthRequest>()(
   "auth/SimulateAuthRequest",
   {
@@ -58,7 +38,20 @@ export class SimulateAuthRequest extends Command.Service<SimulateAuthRequest>()(
     success: LoginPageMessage
   }
 ) {
-  static readonly layer = this.toLayer((args) => runSimulateAuthRequest(args))
+  static readonly layer = this.toLayer(
+    Effect.fn("auth/SimulateAuthRequest")(function*({ email, password }) {
+      yield* Effect.sleep(Duration.seconds(1))
+      if (Redacted.value(password) !== "password") {
+        return LoginPageMessage.FailedSimulateAuthRequest({
+          error: "Invalid credentials"
+        })
+      }
+      const [name] = email.split("@")
+      return LoginPageMessage.SucceededSimulateAuthRequest({
+        session: { userId: "1", email, name: name === "" ? email : name }
+      })
+    })
+  )
 }
 
 const FormField = <M>(h: Html.H<M>, options: {

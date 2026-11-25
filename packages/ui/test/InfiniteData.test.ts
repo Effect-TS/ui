@@ -37,8 +37,8 @@ const makeApp = () => {
       staleTime: "30 seconds"
     }
   ) {
-    static readonly layer = this.toLayer(({ room }, cursor) =>
-      Effect.gen(function*() {
+    static readonly layer = this.toLayer(
+      Effect.fnUntraced(function*({ room }, cursor) {
         const index = Option.getOrElse(cursor, () => 0)
         if (db.delay > 0) yield* Effect.sleep(db.delay)
         if (db.fail.has(index)) return yield* Effect.fail("nope")
