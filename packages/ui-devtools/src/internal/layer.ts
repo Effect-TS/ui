@@ -81,6 +81,8 @@ const socketUrl = (server: string, path: string) => {
   return url.href
 }
 
+let explicit = 0
+
 export const make = (options: Options): Layer.Layer<never> =>
   makeInternal(options, false)
 
@@ -88,6 +90,10 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
   Layer.effectContext(
     Effect.gen(function*() {
       if (!auto) {
+        explicit++
+        yield* Effect.addFinalizer(() => Effect.sync(() => {
+          explicit--
+        }))
         ;(globalThis as unknown as Record<symbol, Attached | undefined>)[
           devToolsKey
         ]?.takeOver()
@@ -417,6 +423,7 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
   )
 
 export const attach = (options: Options = {}): () => void => {
+  if (explicit > 0) return () => {}
   const host = globalThis as unknown as Record<symbol, Attached | undefined>
   host[devToolsKey]?.takeOver()
   let active = true

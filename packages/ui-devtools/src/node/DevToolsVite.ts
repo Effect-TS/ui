@@ -114,7 +114,7 @@ export interface DevServer {
 export interface HtmlTag {
   readonly tag: string
   readonly attrs: Readonly<Record<string, string>>
-  readonly injectTo: "head"
+  readonly injectTo: "head" | "head-prepend"
 }
 
 const hotId = "/@effect-ui/hot"
@@ -242,7 +242,7 @@ export const plugin = (options?: Options): Plugin => {
         tags.push({
           tag: "script",
           attrs: { type: "module", src: devToolsId },
-          injectTo: "head"
+          injectTo: "head-prepend"
         })
       }
       if (hot) {

@@ -10,7 +10,7 @@ const write = (name, source) =>
   fs.writeFileSync(path.join(root, name), source, "utf8")
 
 const html = (script) =>
-  `<!doctype html><html><head><meta charset="utf-8"><link rel="icon" href="data:,"></head><body><div id="root"></div><script type="module" src="/${script}"></script></body></html>`
+  `<!doctype html><html><head><meta charset="utf-8"><link rel="icon" href="data:,"><script type="module" src="/${script}"></script></head><body><div id="root"></div></body></html>`
 
 const routedSource = (label) => `
 import { Route, Router, UiSchema } from "@effect/ui"
@@ -135,6 +135,27 @@ try {
     const page = await browser.newPage()
     const warnings = []
     let expectingError = false
+    const sockets = new Set()
+    const logTags = []
+    page.on("websocket", (ws) => {
+      if (!ws.url().includes(":47769/")) return
+      sockets.add(ws)
+      ws.on("close", () => sockets.delete(ws))
+      if (ws.url().endsWith("/log")) {
+        ws.on("framesent", ({ payload }) => {
+          if (typeof payload !== "string") return
+          try {
+            const parsed = JSON.parse(payload)
+            if (typeof parsed?._tag === "string") logTags.push(parsed._tag)
+          } catch {
+            return
+          }
+        })
+      }
+    })
+    const liveSockets = (suffix) =>
+      [...sockets].filter((ws) => !ws.isClosed() && ws.url().endsWith(suffix))
+        .length
     page.on("console", (msg) => {
       if (msg.type() === "warning") warnings.push(msg.text())
       if (msg.type() === "error" && !expectingError) {
@@ -165,6 +186,7 @@ try {
 
     await page.goto(url)
     await counted()
+    await page.waitForTimeout(100)
     const explicitFrames = await page.locator(
       "iframe[data-effect-ui-devtools]"
     ).count()
@@ -172,6 +194,11 @@ try {
       explicitFrames === 1,
       "explicit DevTools.layer takes over with one overlay",
       { explicitFrames }
+    )
+    expect(
+      liveSockets("/log") === 1 && liveSockets("/control") === 1,
+      "explicit DevTools.layer keeps one /log and one /control socket",
+      { log: liveSockets("/log"), control: liveSockets("/control") }
     )
     const beforeEdit1 = await count()
     expect(
@@ -237,8 +264,30 @@ try {
       afterManualReload
     })
 
+    sockets.clear()
+    logTags.length = 0
     await page.goto(url + "routed.html")
     await shows("[data-routed-label]", "r1")
+    await page.waitForTimeout(150)
+    const sessionStarted = logTags.filter((t) => t === "SessionStarted").length
+    const mounted = logTags.filter((t) => t === "Mounted").length
+    expect(
+      sessionStarted === 1 && mounted === 1,
+      "plain head-entry mount sends SessionStarted and Mounted once",
+      { sessionStarted, mounted, logTags }
+    )
+    const plainFrames = await page.locator("iframe[data-effect-ui-devtools]")
+      .count()
+    expect(
+      plainFrames === 1 && liveSockets("/log") === 1 &&
+        liveSockets("/control") === 1,
+      "plain head-entry mount has one overlay and one socket pair",
+      {
+        plainFrames,
+        log: liveSockets("/log"),
+        control: liveSockets("/control")
+      }
+    )
     const autoFrame = page.frameLocator("iframe[data-effect-ui-devtools]")
     await autoFrame.getByRole("button", {
       name: "Open the Effect UI inspector"

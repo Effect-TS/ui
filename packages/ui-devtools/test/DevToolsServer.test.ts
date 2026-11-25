@@ -657,7 +657,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
           {
             tag: "script",
             attrs: { type: "module", src: "/@effect-ui/devtools" },
-            injectTo: "head"
+            injectTo: "head-prepend"
           },
           {
             tag: "script",
