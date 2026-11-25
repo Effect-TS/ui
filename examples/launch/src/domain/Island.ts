@@ -5,8 +5,12 @@ import { Snippets } from "./Snippet.ts"
 const Code = Schema.Literals(Struct.keys(Snippets.fields))
 
 export const Islands = {
+  // Holds the article's AgentPrompt islands, and draws them as tabs.
+  AgentPrompts: Schema.Struct({}),
+  // `label` names its tab, and `about` says where to paste it.
   AgentPrompt: Schema.Struct({
-    title: Schema.String,
+    label: Schema.String,
+    about: Schema.String,
     prompt: Schema.String
   }),
   // Text for the page that the Markdown copy of the article leaves
@@ -17,6 +21,8 @@ export const Islands = {
     label: Schema.String,
     items: Schema.String
   }),
+  // A still picture of one app in each architecture.
+  Architecture: Schema.Struct({}),
   Diagram: Schema.Struct({ scenario: ScenarioName }),
   Compare: Schema.Struct({
     foldkit: Code,

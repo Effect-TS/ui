@@ -7,17 +7,40 @@ import { TestClock } from "effect/testing"
 import { readFileSync } from "node:fs"
 import { PlayTest } from "./PlayTest.ts"
 
-const snippet = {
-  id: "play",
-  name: "Counter.play.test.ts",
-  lines: test("resets one second after the click")(
-    readFileSync(
-      new URL("../autocounter/Counter.play.test.ts", import.meta.url),
-      "utf8"
-    )
-  ).split("\n").map((text) => [{ text, color: "" }]),
+const read = (path: string) =>
+  readFileSync(new URL(path, import.meta.url), "utf8")
+
+const snippet = (id: string, name: string, code: string) => ({
+  id,
+  name,
+  lines: code.split("\n").map((text) => [{ text, color: "" }]),
   folds: []
-}
+})
+
+const tests = [
+  {
+    id: "counter" as const,
+    snippet: snippet(
+      "play",
+      "Counter.play.test.ts",
+      test("resets one second after the click")(
+        read("../autocounter/Counter.play.test.ts")
+      )
+    )
+  },
+  {
+    id: "signIn" as const,
+    snippet: snippet(
+      "playSignIn",
+      "App.play.test.ts",
+      test(
+        "a successful login saves the session and lands on the dashboard"
+      )(
+        read("../../../auth/src/App.play.test.ts")
+      )
+    )
+  }
+]
 
 const slider = HtmlLocator.role("slider")
 const play = HtmlLocator.role("button", { name: "Play" })
@@ -26,17 +49,35 @@ const count = Locator.attr("data-part", "count")
 const clock = Locator.attr("data-part", "clock")
 const command = Locator.attr("data-part", "command")
 const current = Locator.attr("data-current")
+const signInTab = HtmlLocator.role("tab", { name: "Sign in" })
+// Inside the Sign in panel: the panel a tab leaves is removed once
+// its exit has played, which needs a browser.
+const inSignIn = (part: string) =>
+  Locator.inside(
+    HtmlLocator.role("tabpanel", { name: "Sign in" }),
+    Locator.attr("data-part", part)
+  )
+const url = inSignIn("url")
+const session = inSignIn("session")
 
-// The figure's Command runs the whole Counter test on a TestHost of its
-// own, which finishes on a later task than this host's settle waits
-// for. Yield to real time until it hands its frames in.
-const mount = Effect.gen(function*() {
-  const view = yield* HtmlPlay.make(PlayTest, { snippet })
+// The figure's Command runs a whole test on a TestHost of its own,
+// which finishes on a later task than this host's settle waits for.
+// Yield to real time until it hands its frames in.
+const loaded = Effect.fnUntraced(function*(
+  view: Effect.Success<typeof mounted>
+) {
   for (let tries = 0; tries < 20; tries++) {
     if ((view.root.model()?.frames.length ?? 0) > 0) break
     yield* TestClock.withLive(Effect.sleep("0 millis"))
     yield* TestHost.settle
   }
+})
+
+const mounted = HtmlPlay.make(PlayTest, { tests })
+
+const mount = Effect.gen(function*() {
+  const view = yield* mounted
+  yield* loaded(view)
   return view
 })
 
@@ -71,6 +112,22 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
         yield* view.type(slider, "0")
         yield* view.expect(current).toBeAbsent()
         yield* view.expect(clock).toHaveText("0 ms")
+      }))
+
+    it.effect("runs another test from its tab", () =>
+      Effect.gen(function*() {
+        const view = yield* mount
+        yield* view.type(slider, "3")
+        yield* view.click(signInTab)
+        yield* loaded(view)
+        // The new test starts before its first line.
+        yield* view.expect(url).toHaveText("/login")
+        yield* view.expect(session).toHaveText("None")
+        yield* view.type(slider, "4")
+        yield* view.expect(url).toHaveText("/login")
+        yield* view.type(slider, "5")
+        yield* view.expect(url).toHaveText("/dashboard")
+        yield* view.expect(session).toHaveText("alice")
       }))
 
     it.effect("plays to the end on its own", () =>

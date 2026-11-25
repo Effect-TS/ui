@@ -86,7 +86,7 @@
   }
 
   .article-brand {
-    @apply inline-flex items-center gap-2.5 text-lg font-bold tracking-tight;
+    @apply inline-flex items-center;
   }
 
   .article-links {
@@ -103,12 +103,35 @@
     background-size: calc(100% / 6) 100%;
     background-position: center;
 
+    /* A fade over the lines at the top and the bottom, and over it
+       three short strokes in the color the diagrams give a Message.
+       Each runs down a line of its own, one after another. */
     &::before {
+      --pulse: linear-gradient(to bottom, transparent, var(--color-accent-text) 70%, transparent);
+      --pulse-length: 96px;
+      --pulse-start: calc(var(--pulse-length) * -1);
+      --pulse-end: calc(100% + var(--pulse-length));
       content: "";
       position: absolute;
       inset: 0;
+      overflow: hidden;
       pointer-events: none;
-      background: linear-gradient(to bottom, var(--color-background), transparent 50%, var(--color-background));
+      background-image:
+        var(--pulse), var(--pulse), var(--pulse),
+        linear-gradient(to bottom, var(--color-background), transparent 50%, var(--color-background));
+      background-repeat: no-repeat;
+      background-size: 1px var(--pulse-length), 1px var(--pulse-length), 1px var(--pulse-length), 100% 100%;
+      background-position:
+        calc(100% * 7 / 12) var(--pulse-start),
+        calc(100% * 3 / 12) var(--pulse-start),
+        calc(100% * 9 / 12) var(--pulse-start),
+        0 0;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      &::before {
+        animation: header-pulses 14s ease-in-out infinite;
+      }
     }
 
     > * {
@@ -127,38 +150,6 @@
   .code-window {
     @apply bg-card;
     box-shadow: 0 2px 3px -2px var(--color-ring);
-  }
-
-  .code-comparison {
-    container-type: inline-size;
-  }
-
-  .comparison-columns {
-    @apply grid grid-cols-2 gap-x-6 gap-y-3;
-  }
-
-  .comparison-side {
-    @apply grid min-w-0 grid-rows-subgrid;
-    grid-row: span var(--comparison-rows);
-
-    > * {
-      @apply min-w-0;
-    }
-  }
-
-  @container (width < 1134px) {
-    .comparison-columns {
-      @apply mx-auto w-full max-w-(--column) grid-cols-1 gap-y-6;
-    }
-
-    .comparison-side {
-      @apply flex flex-col gap-y-3;
-      grid-row: auto;
-    }
-
-    .code-comparison > figcaption {
-      @apply mx-auto;
-    }
   }
 
   .counter {
@@ -252,12 +243,6 @@
       @apply gap-3;
     }
   }
-
-  @media (prefers-color-scheme: dark) {
-    .article-brand img {
-      filter: invert(1);
-    }
-  }
 }
 
 @layer base {
@@ -282,6 +267,10 @@
       --color-wash: color-mix(in oklab, var(--color-foreground) 9%, transparent);
       --color-accent-text: oklch(74% 0.14 270);
     }
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent) 28%, transparent);
   }
 
   html {
@@ -350,5 +339,64 @@
   }
   to {
     stroke-dashoffset: 0;
+  }
+}
+
+/* A bar of the performance chart grows from the left as it scrolls up
+   through the bottom fifth of the window. The scroll position drives
+   it, so the bars are drawn in full wherever a browser can't do that. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .chart-bar {
+      animation: chart-bar-grow linear both;
+      animation-timeline: view();
+      animation-range: entry 100% cover 20%;
+    }
+  }
+}
+
+@keyframes chart-bar-grow {
+  from {
+    clip-path: inset(0 100% 0 0 round 3px);
+  }
+
+  to {
+    clip-path: inset(0 0 0 0 round 3px);
+  }
+}
+
+/* One stroke at a time: each waits at the top, out of sight, runs to
+   the bottom and stays there until the cycle starts over. */
+@keyframes header-pulses {
+  0%, 8% {
+    background-position:
+      calc(100% * 7 / 12) var(--pulse-start),
+      calc(100% * 3 / 12) var(--pulse-start),
+      calc(100% * 9 / 12) var(--pulse-start),
+      0 0;
+  }
+
+  28%, 40% {
+    background-position:
+      calc(100% * 7 / 12) var(--pulse-end),
+      calc(100% * 3 / 12) var(--pulse-start),
+      calc(100% * 9 / 12) var(--pulse-start),
+      0 0;
+  }
+
+  60%, 72% {
+    background-position:
+      calc(100% * 7 / 12) var(--pulse-end),
+      calc(100% * 3 / 12) var(--pulse-end),
+      calc(100% * 9 / 12) var(--pulse-start),
+      0 0;
+  }
+
+  92%, 100% {
+    background-position:
+      calc(100% * 7 / 12) var(--pulse-end),
+      calc(100% * 3 / 12) var(--pulse-end),
+      calc(100% * 9 / 12) var(--pulse-end),
+      0 0;
   }
 }

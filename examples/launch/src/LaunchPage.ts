@@ -1,27 +1,31 @@
 /// <reference types="@effect/ui/html/MarkdownContent" />
-import { caption, wide } from "#components/Classes"
+import { caption } from "#components/Classes"
 import { Code } from "#components/Code"
-import { CodeGroup } from "#components/CodeGroup"
+import { Comparison } from "#components/Comparison"
 import { Icon } from "#components/Icon"
 import { type Feature, fromItem, type Layout } from "#domain/Feature"
 import { Islands } from "#domain/Island"
 import * as Preview from "#domain/Preview"
+import * as Prompt from "#domain/Prompt"
 import { fromDocument, fromHeading } from "#domain/Section"
-import { type Snippet, Snippets } from "#domain/Snippet"
+import { type Snippet, Snippets, textOf } from "#domain/Snippet"
 import { Head, type View } from "@effect/ui"
 import { Html, Markdown } from "@effect/ui/html"
 import { Option, Schema } from "effect"
 import source, { frontmatter } from "./article.md"
 import { Counter } from "./autocounter/Counter.ts"
+import { Architecture } from "./diagram/Architecture.ts"
 import { Diagram } from "./diagram/Diagram.ts"
 import { Nav } from "./nav/Nav.ts"
 import { AllResults, PerformanceChart } from "./performance/Chart.ts"
 import { PlayTest } from "./playtest/PlayTest.ts"
-import { AgentPrompt } from "./prompt/AgentPrompt.ts"
+import { AgentPrompts } from "./prompt/AgentPrompts.ts"
 
 const article = Markdown.decodeDocument(source)
 
 const sections = fromDocument(article)
+
+const prompts = Prompt.fromDocument(article)
 
 const title = frontmatter?.title ?? ""
 
@@ -32,35 +36,38 @@ const listing = [
   "my-10 flex flex-col gap-3 [p+&]:mt-[1.1em]"
 ].join(" ")
 
-const heading = [
-  block,
-  "scroll-mt-[calc(var(--nav-bar)+24px)] text-balance font-[620]"
-].join(" ")
+const heading =
+  "min-w-0 scroll-mt-[calc(var(--nav-bar)+24px)] text-balance"
 
-const textOf = (snippet: Snippet) =>
-  snippet.lines.map((line) =>
-    line.map((token) => token.text).join("")
-  )
+// A link to a heading's own section, as on effect.website. It sits
+// before the heading, and from 64rem in the margin beside it. Where a
+// pointer can hover it shows only while the heading is hovered or the
+// link has the focus.
+const Permalink = <M>(h: Html.H<M>, id: string, label: string) =>
+  h.a.class(
+    "mr-[0.35em] inline-flex size-[0.75em] flex-none translate-y-[0.06em]",
+    "rounded-sm text-subtle-foreground hover:text-foreground",
+    "focus-visible:text-foreground focus-visible:outline-accent",
+    "[@media(hover:hover)]:opacity-0",
+    "[@media(hover:hover)]:group-hover:opacity-100",
+    "[@media(hover:hover)]:focus-visible:opacity-100",
+    "motion-safe:transition-[color,opacity] motion-safe:duration-150",
+    "min-[64rem]:absolute min-[64rem]:top-[0.3em]",
+    "min-[64rem]:right-full min-[64rem]:translate-y-0"
+  ).attrs({ href: `#${id}`, "aria-label": `Link to ${label}` })
+    .children(
+      Icon(h, "link", { class: "size-full" })
+    )
+
+// A side of a comparison, from a title such as "Effect UI: Page
+// renders Counter": the name before the colon goes on the side's tab.
+const side = (title: string, files: ReadonlyArray<Snippet>) => {
+  const [label = title, ...about] = title.split(": ")
+  return { label, about: about.join(": "), files }
+}
 
 // A long file starts collapsed to a preview.
 const previewOf = (snippet: Snippet) => Preview.of(textOf(snippet))
-
-// In a comparison, a row of files collapses when either side's file
-// is long, so the two stay level. The shorter one then collapses
-// whenever that hides anything.
-const rowPreviews = (
-  sides: ReadonlyArray<ReadonlyArray<Snippet>>
-): ReadonlyArray<ReadonlyArray<Preview.Preview | undefined>> =>
-  sides.map((files) =>
-    files.map((snippet, row) =>
-      sides.some((side) =>
-          side[row] !== undefined &&
-          previewOf(side[row]) !== undefined
-        )
-        ? Preview.of(textOf(snippet), 1)
-        : undefined
-    )
-  )
 
 const Files = <M>(
   h: Html.H<M>,
@@ -74,19 +81,6 @@ const Files = <M>(
       Code(h, snippet, { preview: previews[row], row })
     )
   )
-
-const Example = <M>(
-  h: Html.H<M>,
-  title: string,
-  files: ReadonlyArray<Snippet>,
-  previews: ReadonlyArray<Preview.Preview | undefined>
-) =>
-  h.section.class("comparison-side").attr("aria-label", title)
-    .children(
-      h.p.class("text-[0.9375rem]/[1.4] font-semibold text-pretty")
-        .children(title),
-      Files(h, files, previews)
-    )
 
 const Caption = <M>(
   h: Html.H<M>,
@@ -107,7 +101,7 @@ const inline: Pick<
   Link: (h, { title, url }, content) =>
     h.a.class(
       "underline decoration-border-strong underline-offset-3",
-      "hover:decoration-current"
+      "hover:decoration-accent-text"
     ).attr("href", url).attr("title", Option.getOrUndefined(title))
       .children(content),
   Strong: (h, _strong, content) =>
@@ -126,7 +120,8 @@ const Card = (h: Html.H<never>, feature: Feature) =>
   h.li.class("grid grid-cols-[2.25rem_minmax(0,1fr)] gap-x-4")
     .children(
       h.span.class(
-        "grid size-9 place-items-center rounded-lg bg-muted"
+        "grid size-9 place-items-center rounded-lg text-accent-text",
+        "bg-[color-mix(in_oklab,var(--color-accent)_10%,var(--color-background))]"
       ).children(Icon(h, feature.icon, { class: "size-[1.125rem]" })),
       h.div.children(
         // Level with the middle of the icon.
@@ -161,7 +156,9 @@ const Kept = (h: Html.H<never>, feature: Feature) =>
     "grid grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-3"
   ).children(
     // Level with the first line of the statement.
-    Icon(h, feature.icon, { class: "mt-[0.1875rem] size-5" }),
+    Icon(h, feature.icon, {
+      class: "mt-[0.1875rem] size-5 text-accent-text"
+    }),
     h.p.class("font-medium text-pretty").children(feature.title)
   )
 
@@ -203,9 +200,18 @@ export const LaunchPage = Html.component({
             "https://effect.website/"
           )
             .children(
-              h.img.attr("src", "/effect-mark.svg").attr("alt", "")
-                .attr("width", "24").attr("height", "24"),
-              "Effect UI"
+              // The logo comes in black and in white, so the browser
+              // picks the file that suits the color scheme.
+              h.picture.children(
+                h.source.attr("srcset", "/effect-ui-white.svg").attr(
+                  "media",
+                  "(prefers-color-scheme: dark)"
+                ),
+                h.img.attr("src", "/effect-ui-black.svg").attr(
+                  "alt",
+                  "Effect UI"
+                ).attr("width", "122").attr("height", "28")
+              )
             ),
           h.div.class("article-links").children(
             h.a.attr("href", "https://effect.website/docs/v4")
@@ -219,7 +225,8 @@ export const LaunchPage = Html.component({
         ),
         h.header.class("article-header").children(
           h.p.class("article-eyebrow").children(
-            "// PUBLIC PREVIEW"
+            h.span.class("text-accent-text").children("//"),
+            " PUBLIC PREVIEW"
           ),
           h.h1.class(
             "text-[clamp(2.2rem,5.2vw,3.6rem)]/[1.08] font-bold",
@@ -229,16 +236,21 @@ export const LaunchPage = Html.component({
         Markdown.viewBlocks(h, article, {
           views: {
             Heading: (h, node, content) => {
-              const { id, isNested } = fromHeading(node)
-              return isNested
-                ? h.h3.id(id).class(
-                  heading,
-                  "mt-12 text-lg/[1.35] tracking-[-0.01em]"
-                ).children(content)
-                : h.h2.id(id).class(
-                  heading,
-                  "mt-18 text-[1.5rem]/[1.3] tracking-[-0.02em]"
-                ).children(content)
+              const { id, isNested, label } = fromHeading(node)
+              // The link is beside the heading, not inside it, so the
+              // heading's name stays its own text.
+              return h.div.class(
+                block,
+                "group relative flex items-baseline font-[620]",
+                isNested
+                  ? "mt-12 text-lg/[1.35] tracking-[-0.01em]"
+                  : "mt-18 text-[1.5rem]/[1.3] tracking-[-0.02em]"
+              ).children(
+                Permalink(h, id, label),
+                isNested
+                  ? h.h3.id(id).class(heading).children(content)
+                  : h.h2.id(id).class(heading).children(content)
+              )
             },
             Paragraph: (h, _paragraph, content) =>
               h.p.class(
@@ -316,14 +328,18 @@ export const LaunchPage = Html.component({
             ...inline
           },
           islands: Markdown.islandsFor(Islands, {
-            AgentPrompt: (h, { prompt, title }) =>
-              AgentPrompt(h, {
-                key: title,
+            AgentPrompts: (h) =>
+              AgentPrompts(h, {
                 props: {
-                  title,
-                  prompt: prompt.replace("$URL", articleUrl)
+                  prompts: prompts.map((prompt) => ({
+                    ...prompt,
+                    prompt: prompt.prompt.replace("$URL", articleUrl)
+                  }))
                 }
               }),
+            // AgentPrompts reads these from the document and draws
+            // them itself, so what this returns is never shown.
+            AgentPrompt: (h) => h.span,
             Chips: (h, { items, label }) =>
               h.div.class(block, "mt-6").children(
                 h.p.class(
@@ -344,44 +360,28 @@ export const LaunchPage = Html.component({
             PageOnly: (h, _attributes, content) =>
               h.div.class("mx-auto mt-[1.1em] max-w-(--column)")
                 .children(content),
+            Architecture: (h) => Architecture(h),
             Diagram: (h, { scenario }) =>
               Diagram(h, { key: scenario, props: { scenario } }),
-            Compare: (h, attributes, caption) => {
-              const foldkit = snippets[attributes.foldkit]
-              const effect = snippets[attributes.effect]
-              const [foldkitPreviews = [], effectPreviews = []] =
-                rowPreviews([foldkit, effect])
-              // The files inside the CodeGroup share which rows are
-              // open.
-              return CodeGroup(h, {
-                key: attributes.foldkit,
-                view: () =>
-                  h.figure.class(wide, "code-comparison").children(
-                    // One row for the titles and one per file,
-                    // shared by both sides, so the n-th file starts
-                    // level on each.
-                    h.div.class("comparison-columns").style({
-                      "--comparison-rows": String(
-                        1 + Math.max(foldkit.length, effect.length)
-                      )
-                    }).children(
-                      Example(
-                        h,
+            Compare: (h, attributes, caption) =>
+              h.figure.class(listing).children(
+                Comparison(h, {
+                  key: attributes.foldkit,
+                  props: {
+                    sides: [
+                      side(
                         attributes.foldkitTitle,
-                        foldkit,
-                        foldkitPreviews
+                        snippets[attributes.foldkit]
                       ),
-                      Example(
-                        h,
+                      side(
                         attributes.effectTitle,
-                        effect,
-                        effectPreviews
+                        snippets[attributes.effect]
                       )
-                    ),
-                    Caption(h, caption)
-                  )
-              })
-            },
+                    ]
+                  }
+                }),
+                Caption(h, caption)
+              ),
             Counter: (h, { code, label }, caption, occurrence) =>
               h.figure.class(listing).children(
                 snippets[code].map((snippet, index) =>
@@ -429,7 +429,15 @@ export const LaunchPage = Html.component({
                 Caption(h, caption)
               ),
             PlayTest: (h) =>
-              PlayTest(h, { props: { snippet: snippets.play[0] } }),
+              PlayTest(h, {
+                props: {
+                  tests: [
+                    { id: "counter", snippet: snippets.play[0] },
+                    { id: "signIn", snippet: snippets.playSignIn[0] },
+                    { id: "snake", snippet: snippets.playSnake[0] }
+                  ]
+                }
+              }),
             PerformanceChart: (h) => PerformanceChart(h),
             AllResults: (h) => AllResults(h, {}),
             Footer: (h, _attributes, content) =>

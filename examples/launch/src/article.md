@@ -4,19 +4,21 @@ title: Introducing Effect UI
 
 Effect UI is the new frontend library that continues the work of Foldkit 0.x, the framework at [foldkit.dev](https://foldkit.dev). We announced it as the "new frontend foundation" in [Foldkit Joins Effect](https://foldkit.dev/blog/foldkit-joins-effect).
 
-Effect UI is in public preview: it isn't on npm yet and doesn't have everything Foldkit 0.x has. If you're building with Foldkit 0.x today, we encourage you to continue. The migration to Effect UI will be an upgrade, not a rewrite. Feature work on Foldkit 0.x has moved to Effect UI.
+Effect UI is in public preview: it isn't on npm yet and doesn't have everything Foldkit 0.x has. If you're building with Foldkit 0.x today, we encourage you to continue. **The migration to Effect UI will be an upgrade, not a rewrite.** Feature work on Foldkit 0.x has moved to Effect UI.
 
 This page is built with Effect UI. You can [read its source](https://github.com/Effect-TS/ui/tree/main/examples/launch) on GitHub.
 
 ## Explore with an AI agent
 
 :::PageOnly
-Copy a prompt to explore this article with an AI agent. The first asks for a short summary. The second asks an agent that can see your Foldkit 0.x project to identify where Effect UI would simplify it most and to sketch one of those places as a Component.
+Not reading all that? Copy a prompt to explore it with an AI agent.
 :::
 
-::AgentPrompt{title="TL;DR agent prompt" prompt="Read $URL. In under 200 words, say what Effect UI is and how it relates to Foldkit 0.x. Then list the main changes for someone with a Foldkit 0.x app, one line each, followed by what stays the same. Use only what the page says, and say so when it doesn't cover something."}
+:::AgentPrompts
+::AgentPrompt{label="TL;DR" about="Paste into any AI agent that can read a web page." prompt="Read $URL. In under 200 words, say what Effect UI is and how it relates to Foldkit 0.x. Then list the main changes for someone with a Foldkit 0.x app, one line each, followed by what stays the same. Use only what the page says, and say so when it doesn't cover something."}
 
-::AgentPrompt{title="Agent prompt for your Foldkit 0.x app" prompt="Read $URL. Then look at this Foldkit 0.x project and find the three places where Effect UI would simplify the code most. For each, name the files and say what would go away. Then sketch the smallest one as an Effect UI Component, using only APIs the page shows. Don't edit any files: Effect UI is in public preview and has no upgrade guide yet."}
+::AgentPrompt{label="Your Foldkit 0.x app" about="Paste into a coding agent that is open in your Foldkit 0.x project." prompt="Read $URL. Then look at this Foldkit 0.x project and find the three places where Effect UI would simplify the code most. For each, name the files and say what would go away. Then sketch the smallest one as an Effect UI Component, using only APIs the page shows. Don't edit any files: Effect UI is in public preview and has no upgrade guide yet."}
+:::
 
 ## What this article covers
 
@@ -37,9 +39,11 @@ This article isn't a complete list of what changes from Foldkit 0.x to Effect UI
 
 ## Components
 
-Foldkit 0.x used the Elm Architecture. The architecture has many benefits, but it also has meaningful drawbacks in performance, code splitting and scalability.
+Foldkit 0.x used the Elm Architecture, with the whole app as one program: one Model, one update and one view. That made every state change easy to follow, but it had costs as an app grew. Every Message ran the view from the root, every parent stored state and forwarded Messages for its children, and the routes of an app couldn't be split into separate chunks.
 
-Effect UI addresses these drawbacks with Components. Each Component is an Elm Architecture program of its own, and you build an app by composing Components.
+Effect UI keeps the architecture and applies it to each Component. **A Component is an Elm Architecture program of its own, and you build an app by composing Components.**
+
+::Architecture
 
 A Component is self-contained. Its parent doesn't store its state or forward its Messages, so you can write, test and reuse it on its own. A Component can also bring its own services, load from a chunk of its own and fail while the rest of the app keeps running.
 
@@ -49,7 +53,7 @@ This counter is a complete Component. One definition holds its Model, Messages, 
 
 ::Counter{code="intro" label="Live auto-counter"}
 
-Click "+1", then click the Effect UI button in the bottom-right corner. The [DevTools](#devtools) list the Message you sent and what it changed.
+Click "+1", then click the Effect UI button in the bottom-right corner. [DevTools](#devtools) lists the Message you sent and what it changed.
 
 ### How Messages travel in Foldkit 0.x vs. Effect UI
 
@@ -63,9 +67,11 @@ The diagram below illustrates how each architecture handles a Message.
 
 ### Foldkit 0.x vs. Effect UI code comparison
 
-To render a child Component, the parent calls it in its view and passes props. The child declares its props with a Schema and reads them in init, update and view.
+Here is the same small app in both: a Page that shows or hides a Counter.
 
-When the parent's view runs, the child's view runs again only if its props changed.
+In Foldkit 0.x, Page keeps the Counter's Model inside its own, wraps each of the Counter's Messages in a Message of its own and passes it on to the Counter's update. In Effect UI, Page calls Counter in its view and passes it props. **Page no longer stores, wraps or forwards anything for Counter, and it is about half as long.**
+
+When Page's view runs, Counter's view runs again only if its props changed.
 
 ::Compare{foldkit="counterFoldkit" foldkitTitle="Foldkit 0.x: Page stores and forwards for Counter" effect="counterEffect" effectTitle="Effect UI: Page renders Counter"}
 
@@ -81,7 +87,7 @@ As a Component grows, you can still move init, update, subscriptions and view in
 
 In Foldkit 0.x, state that several Submodels needed lived in the Model of a parent they shared. Each level passed it down, and a Submodel communicated back up the tree with an OutMessage, which each parent forwarded until it reached the owner.
 
-A Provider shares part of its Model with Components inside it, at any depth. In this example, CartProvider holds the cart count. CartCount reads that count, and AddToCart sends CartProvider a Message to change it. Product sits between CartProvider and AddToCart but passes no cart value or Message. Only CartProvider's update changes the count.
+In Effect UI, a Provider shares part of its Model with Components inside it, at any depth. In this example, CartProvider holds the cart count. CartCount reads that count, and AddToCart sends CartProvider a Message to change it. Product sits between CartProvider and AddToCart but passes no cart value or Message. Only CartProvider's update changes the count.
 
 ::Listing{code="provider"}
 
@@ -89,7 +95,7 @@ A Provider shares part of its Model with Components inside it, at any depth. In 
 
 ### Data fetching with queries
 
-In Foldkit 0.x, fetched data lived in the Model, and the parent drove the experimental `Query`: it stored it, forwarded its Messages and decided when to load or refresh. In Effect UI, you define a query once, a Component lists the queries it needs, and the runtime does the rest.
+In Foldkit 0.x, fetched data lived in the Model, and the parent drove the experimental `Query`: it stored it, forwarded its Messages and decided when to load or refresh. In Effect UI, **you define a query once, a Component lists the queries it needs, and the runtime fetches and caches the data.**
 
 - **Fetching:** When the Component is rendered, and again when the query's arguments change. `debounce` waits until they settle.
 - **Caching:** One result per query and arguments, kept by the runtime. Components that ask for the same data share one fetch.
@@ -98,7 +104,7 @@ In Foldkit 0.x, fetched data lived in the Model, and the parent drove the experi
 
 ::Chips{label="Also built in" items="polling, refetch on focus and reconnect, load more, invalidation from Commands, optimistic updates, prefetch on link hover, server rendering, restore on Back and forward"}
 
-::Compare{foldkit="queryFoldkit" foldkitTitle="Foldkit 0.x: the parent stores and drives the Query" effect="queryEffect" effectTitle="Effect UI: the Component lists its query"}
+::Compare{foldkit="queryFoldkit" foldkitTitle="Foldkit 0.x: The parent stores and drives the Query" effect="queryEffect" effectTitle="Effect UI: The Component lists its query"}
 
 ### Where state lives
 
@@ -135,7 +141,7 @@ In Foldkit 0.x, the runtime rendered a view by patching the browser DOM directly
 
 Effect UI renders through a host rather than updating the DOM directly. The browser host creates DOM nodes, the server host writes HTML and the test host creates plain objects, so the same Components run in all three.
 
-This doesn't mean you write one app and run it anywhere. A view is written with one host's elements: a view built from HTML elements needs a host that renders HTML, and a terminal app, with `@effect/ui-opentui`, writes its views with terminal elements. The runtime and the rest of a Component work the same on every host: its Model, Messages, update, Commands, Subscriptions and queries.
+Only the view is tied to a host. A web app's views use HTML elements, and a terminal app's views, with `@effect/ui-opentui`, use terminal elements. Everything else in a Component works the same on both: its Model, Messages, update, Commands, Subscriptions and queries.
 
 You choose the host when mounting the app. The entry point below uses `BrowserHost.mount`. The host interface is public, so you can also implement your own.
 
@@ -155,9 +161,13 @@ A test can also stand in for everything around the Component: a query's result, 
 
 Play is a new kind of test in Effect UI. In Story and Scene tests, you resolve each Command by hand, so the Command itself never runs. A Play test mounts the Component with its children on the [test host](#host-agnostic-rendering) and runs their Commands, Subscriptions and query fetches for real, against the Layers the test provides.
 
-One test can now cover a whole flow. It clicks a button, lets the real Command run and checks what is on screen afterwards, with no browser and no DOM.
+**A Play test can cover a whole flow.** It clicks a button, lets the real Command run and checks what is on screen afterwards, with no browser and no DOM.
 
 `TestClock` controls time, so the delayed-reset Play test can check that the count is 1 at 999 ms and changes to 0 at 1,000 ms.
+
+Step through that test below, then open the other tabs. "Sign in" tests a whole flow from the [auth example](https://github.com/Effect-TS/ui/tree/main/examples/auth): a form, a request that takes a second, a session store and a router. "Snake" tests the [Snake example](https://github.com/Effect-TS/ui/tree/main/examples/snake): it presses keys and moves the clock.
+
+The figure runs each test in your browser, on the test host. The panel beside the code is a sketch that this page draws from the tree the test host holds after each line. A Play test itself draws nothing.
 
 ::PlayTest
 
@@ -212,7 +222,7 @@ The [examples](https://github.com/Effect-TS/ui/tree/main/examples) in the reposi
 
 We're making Effect UI public before it's finished so that you can help shape it. It doesn't have everything Foldkit 0.x has yet, but there is enough here to try it, get a feel for the new APIs and tell us what you think.
 
-If you're building with Foldkit 0.x, keep going! It will receive critical bug fixes at least until Effect UI ships with an upgrade guide, and moving over will be an upgrade, not a rewrite.
+**If you're building with Foldkit 0.x, keep going!** It will receive critical bug fixes at least until Effect UI ships with an upgrade guide, and moving over will be an upgrade, not a rewrite.
 
 Effect UI is developed in [Effect-TS/ui](https://github.com/Effect-TS/ui). Applicable Foldkit issues and pull requests will be transferred there, so you don't need to open them again.
 

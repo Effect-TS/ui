@@ -9,6 +9,18 @@ export const frameworks = [
 ] as const
 export type Framework = typeof frameworks[number]
 
+// The order the tables show them in: the baseline, then Effect UI
+// beside the two a reader is likeliest to compare it with.
+export const columns: ReadonlyArray<Framework> = [
+  "vanillajs",
+  "effect-ui",
+  "react-hooks",
+  "foldkit",
+  "vue",
+  "svelte",
+  "solid"
+]
+
 export const names: Record<Framework, string> = {
   vanillajs: "Vanilla JS",
   "effect-ui": "Effect UI",
