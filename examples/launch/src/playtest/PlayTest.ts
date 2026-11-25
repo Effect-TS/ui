@@ -174,7 +174,10 @@ const Controls = (
     // the page's bar while the figure scrolls by.
     "@max-[939px]/playtest:sticky @max-[939px]/playtest:top-(--nav-bar)",
     "@max-[939px]/playtest:z-1 @max-[939px]/playtest:order-1",
-    "@max-[939px]/playtest:border-t-0 @max-[939px]/playtest:border-b"
+    "@max-[939px]/playtest:border-t-0 @max-[939px]/playtest:border-b",
+    // There it's right under the tabs, so it has the active tab's
+    // background and the two read as one sheet.
+    "@max-[939px]/playtest:bg-card"
   ).children(
     Button(h, {
       onPress: model.isPlaying

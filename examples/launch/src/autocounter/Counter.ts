@@ -73,12 +73,14 @@ export const Counter = Html.component({
       h.output.class("counter-value").children(String(model.count)),
       // Button is a view function from the UI kit, not a Component.
       // It returns a <button> builder, and a press sends onPress.
+      Button(h, {
+        onPress: CounterMessage.ClickedAdd({ amount: -1 })
+      })
+        .class("counter-button counter-add")
+        .children("−1"),
       Button(h, { onPress: CounterMessage.ClickedAdd({ amount: 1 }) })
         .class("counter-button counter-add")
         .children("+1"),
-      Button(h, { onPress: CounterMessage.ClickedAdd({ amount: 5 }) })
-        .class("counter-button counter-add")
-        .children("+5"),
       Button(h, {
         props: {
           // h.isRunning is true while a DelayReset Command is

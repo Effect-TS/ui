@@ -8,7 +8,7 @@ import { Counter as SplitCounter } from "./split/Counter.ts"
 
 const count = HtmlLocator.role("status")
 const addOne = HtmlLocator.role("button", { name: "+1" })
-const addFive = HtmlLocator.role("button", { name: "+5" })
+const subtractOne = HtmlLocator.role("button", { name: "−1" })
 const reset = HtmlLocator.role("button", {
   name: "Reset in 1 second"
 })
@@ -46,10 +46,10 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
     it.effect("behaves the same written in pieces", () =>
       Effect.gen(function*() {
         const play = yield* HtmlPlay.make(SplitCounter, {})
-        yield* play.click(addFive)
+        yield* play.click(subtractOne)
         yield* play.click(autoCount)
         yield* TestClock.adjust("2 seconds")
-        yield* play.expect(count).toHaveText("7")
+        yield* play.expect(count).toHaveText("1")
         yield* play.click(stop)
         yield* play.click(reset)
         yield* TestClock.adjust("1 second")

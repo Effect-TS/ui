@@ -55,6 +55,8 @@ This counter is a complete Component. One definition holds its Model, Messages, 
 
 Click "+1", then click the Effect UI button in the bottom-right corner. [DevTools](#devtools) lists the Message you sent and what it changed.
 
+`Html.component` defines a Component whose view builds HTML elements. Each platform has its own set of elements, called a vocabulary. `OpenTui.component`, from `@effect/ui-opentui`, defines a Component whose view builds terminal elements. **The view is the only part of a Component that depends on the platform.** Its Model, Messages, update, Commands, Subscriptions and queries are written the same way on every platform.
+
 ### How Messages travel in Foldkit 0.x vs. Effect UI
 
 In Foldkit 0.x, the root update handled every Message. When a Message belonged to a Submodel, the root update passed it down to that Submodel's update, which returned the next state. That state was put back into the single application Model, and the view ran from the root with the new Model.
@@ -73,7 +75,7 @@ In Foldkit 0.x, Page keeps the Counter's Model inside its own, wraps each of the
 
 When Page's view runs, Counter's view runs again only if its props changed.
 
-::Compare{foldkit="counterFoldkit" foldkitTitle="Foldkit 0.x: Page stores and forwards for Counter" effect="counterEffect" effectTitle="Effect UI: Page renders Counter"}
+::Compare{foldkit="counterFoldkit" foldkitTitle="Foldkit 0.x: Page stores and forwards for Counter" effect="counterEffect" effectTitle="Effect UI: Page renders Counter" example="counter"}
 
 ### Organizing larger Components
 
@@ -135,13 +137,19 @@ To write a headless Component, you define `parts` instead of a view. The Compone
 
 This means a Component can own the behavior, keyboard handling and ARIA, while you decide every element and class. You can also package behavior of your own this way and reuse it.
 
+### The UI kit
+
+`@effect/ui-kit` has every component in [Base UI](https://base-ui.com/), 37 in all, plus a virtual list and three utilities.
+
+::Kit
+
 ### Host-agnostic rendering
 
 In Foldkit 0.x, the runtime rendered a view by patching the browser DOM directly.
 
 Effect UI renders through a host rather than updating the DOM directly. The browser host creates DOM nodes, the server host writes HTML and the test host creates plain objects, so the same Components run in all three.
 
-Only the view is tied to a host. A web app's views use HTML elements, and a terminal app's views, with `@effect/ui-opentui`, use terminal elements. Everything else in a Component works the same on both: its Model, Messages, update, Commands, Subscriptions and queries.
+A host renders one vocabulary. The browser and server hosts render HTML elements, and the terminal host in `@effect/ui-opentui` renders terminal elements. The test host accepts either.
 
 You choose the host when mounting the app. The entry point below uses `BrowserHost.mount`. The host interface is public, so you can also implement your own.
 
@@ -173,12 +181,15 @@ The figure runs each test in your browser, on the test host. The panel beside th
 
 ## DevTools
 
+:::LauncherPointer
 Effect UI has an inspector that you add with one Layer, `DevTools.layer`. It's running on this page, behind the Effect UI button in the bottom-right corner.
 
 - **Timeline:** Every Message from every Component in one list, each with the Model after it and what changed.
 - **Cause and effect:** For any entry, the chain from what sent the Message to the Commands it issued and how each one ended.
 - **Time travel:** Shows the page as it was at an earlier entry. The app keeps running underneath, and Resume returns to it.
 - **For agents:** An MCP server gives an agent the same view. It can read the log, inspect a Component's state, show the page at an entry and, if you allow it, send Messages.
+
+:::
 
 ## Performance
 

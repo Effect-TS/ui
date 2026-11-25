@@ -3,6 +3,7 @@ import { caption } from "#components/Classes"
 import { Code } from "#components/Code"
 import { Comparison } from "#components/Comparison"
 import { Icon } from "#components/Icon"
+import { LauncherPointer } from "#components/LauncherPointer"
 import { type Feature, fromItem, type Layout } from "#domain/Feature"
 import { Islands } from "#domain/Island"
 import * as Preview from "#domain/Preview"
@@ -14,8 +15,10 @@ import { Html, Markdown } from "@effect/ui/html"
 import { Option, Schema } from "effect"
 import source, { frontmatter } from "./article.md"
 import { Counter } from "./autocounter/Counter.ts"
+import { Page } from "./counter/effect/Page.ts"
 import { Architecture } from "./diagram/Architecture.ts"
 import { Diagram } from "./diagram/Diagram.ts"
+import { Kit } from "./kit/Kit.ts"
 import { Nav } from "./nav/Nav.ts"
 import { AllResults, PerformanceChart } from "./performance/Chart.ts"
 import { PlayTest } from "./playtest/PlayTest.ts"
@@ -40,18 +43,13 @@ const heading =
   "min-w-0 scroll-mt-[calc(var(--nav-bar)+24px)] text-balance"
 
 // A link to a heading's own section, as on effect.website. It sits
-// before the heading, and from 64rem in the margin beside it. Where a
-// pointer can hover it shows only while the heading is hovered or the
-// link has the focus.
+// before the heading, and from 64rem in the margin beside it.
 const Permalink = <M>(h: Html.H<M>, id: string, label: string) =>
   h.a.class(
     "mr-[0.35em] inline-flex size-[0.75em] flex-none translate-y-[0.06em]",
     "rounded-sm text-subtle-foreground hover:text-foreground",
     "focus-visible:text-foreground focus-visible:outline-accent",
-    "[@media(hover:hover)]:opacity-0",
-    "[@media(hover:hover)]:group-hover:opacity-100",
-    "[@media(hover:hover)]:focus-visible:opacity-100",
-    "motion-safe:transition-[color,opacity] motion-safe:duration-150",
+    "motion-safe:transition-colors motion-safe:duration-150",
     "min-[64rem]:absolute min-[64rem]:top-[0.3em]",
     "min-[64rem]:right-full min-[64rem]:translate-y-0"
   ).attrs({ href: `#${id}`, "aria-label": `Link to ${label}` })
@@ -80,6 +78,26 @@ const Files = <M>(
     h.div.key(snippet.name).children(
       Code(h, snippet, { preview: previews[row], row })
     )
+  )
+
+// The app a comparison's code builds, running above the code.
+const Example = <M>(h: Html.H<M>, app: View.Content<M>) =>
+  h.div.class("border-b border-border").attrs({
+    role: "group",
+    "aria-label": "The app, running"
+  }).children(
+    h.p.class(
+      "flex items-center justify-between gap-3 border-b",
+      "border-border bg-muted px-3.5 py-2 font-mono",
+      "text-[12px]/[normal] text-muted-foreground",
+      "font-features-[normal]"
+    ).children(
+      h.span.class("text-foreground").children("The app"),
+      h.span.class("text-[10px] tracking-widest uppercase").children(
+        "Live"
+      )
+    ),
+    h.div.class("live-demo bg-background px-4 py-4").children(app)
   )
 
 const Caption = <M>(
@@ -182,7 +200,10 @@ export const LaunchPage = Html.component({
       "rail:grid rail:[--nav-bar:0px] rail:[--nav-rail:12rem]",
       "rail:[--nav-gutter:48px]",
       "rail:[--nav-article:calc(1180px+2*var(--nav-gutter))]",
-      "rail:grid-cols-[minmax(var(--nav-rail),1fr)_minmax(0,var(--nav-article))_minmax(0,1fr)]"
+      // The rail and the article are centered together, so the
+      // margins beside them are equal.
+      "rail:grid-cols-[var(--nav-rail)_minmax(0,var(--nav-article))]",
+      "rail:justify-center"
     ).children(
       h.a.class("skip-link").attr("href", "#content").children(
         "Skip to content"
@@ -367,6 +388,10 @@ export const LaunchPage = Html.component({
               h.figure.class(listing).children(
                 Comparison(h, {
                   key: attributes.foldkit,
+                  slots: {
+                    example: attributes.example === "counter" &&
+                      Example(h, Page(h, { key: "example" }))
+                  },
                   props: {
                     sides: [
                       side(
@@ -438,6 +463,9 @@ export const LaunchPage = Html.component({
                   ]
                 }
               }),
+            Kit: (h) => Kit(h),
+            LauncherPointer: (h, _attributes, content) =>
+              LauncherPointer(h, content),
             PerformanceChart: (h) => PerformanceChart(h),
             AllResults: (h) => AllResults(h, {}),
             Footer: (h, _attributes, content) =>

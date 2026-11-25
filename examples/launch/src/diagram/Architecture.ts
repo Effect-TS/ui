@@ -1,4 +1,4 @@
-import { wide } from "#components/Classes"
+import { srOnly, wide } from "#components/Classes"
 import type { View } from "@effect/ui"
 import type { Html } from "@effect/ui/html"
 import { panel } from "./controls.ts"
@@ -102,7 +102,7 @@ const Side = <M>(
   h: Html.H<M>,
   options: {
     readonly title: string
-    readonly caption: string
+    readonly description: string
     readonly tree: View.Content<M>
   }
 ) =>
@@ -120,10 +120,8 @@ const Side = <M>(
         options.tree
       )
     ),
-    h.p.class("text-[0.8125rem]/[1.5] text-muted-foreground")
-      .children(
-        options.caption
-      )
+    // The picture says this to a reader who can see it.
+    h.p.class(srOnly).children(options.description)
   )
 
 /**
@@ -140,7 +138,7 @@ export const Architecture = <M>(h: Html.H<M>) =>
       .children(
         Side(h, {
           title: "Foldkit 0.x",
-          caption:
+          description:
             "One Model, one update and one view for the whole app. A, A1 and A2 are Submodels inside them.",
           // Root's box goes around the Submodels: they are parts of
           // its Model, update and view.
@@ -161,7 +159,7 @@ export const Architecture = <M>(h: Html.H<M>) =>
         }),
         Side(h, {
           title: "Effect UI",
-          caption:
+          description:
             "Every Component has a Model, an update and a view of its own. Root renders A, and A renders A1 and A2.",
           tree: h.div.class("flex flex-col").children(
             h.div.class("mx-auto w-1/2 min-w-[9.5rem]").children(

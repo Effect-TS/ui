@@ -50,12 +50,12 @@ const subscriptions = CounterDef.subscriptions(({ model }) => [
 const view = CounterDef.view((h, model) =>
   h.div.class("counter").children(
     h.output.class("counter-value").children(String(model.count)),
+    Button(h, { onPress: CounterMessage.ClickedAdd({ amount: -1 }) })
+      .class("counter-button counter-add")
+      .children("−1"),
     Button(h, { onPress: CounterMessage.ClickedAdd({ amount: 1 }) })
       .class("counter-button counter-add")
       .children("+1"),
-    Button(h, { onPress: CounterMessage.ClickedAdd({ amount: 5 }) })
-      .class("counter-button counter-add")
-      .children("+5"),
     Button(h, {
       props: {
         disabled: h.isRunning(DelayReset),

@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import { scenarios } from "../diagram/scenarios.ts"
+import { components, extras } from "../kit/components.ts"
 import {
   columns,
   format,
@@ -107,6 +108,11 @@ export const toMarkdown = (source: string, snippets: Snippets) => {
           files(snippets.playSnake),
           "A third tab runs this test of the Snake game in `examples/snake`. A seed fixes where the apple appears. The test presses Space to start the game and the up arrow to turn, then moves the TestClock 150 ms, which is one move. It presses the right arrow and moves the clock 900 ms, which is six moves: the snake reaches the apple and the score is 10. It presses Space to pause and moves the clock ten seconds, and the snake doesn't move."
         ].join("\n\n")
+      case "Kit":
+        return [
+          `Components: ${components.join(", ")}.`,
+          `Also in the kit: ${extras.join(", ")}.`
+        ].join("\n\n")
       case "PerformanceChart":
         return [
           "| Library | JavaScript time, as a multiple of vanilla JS |",
@@ -126,6 +132,7 @@ export const toMarkdown = (source: string, snippets: Snippets) => {
           table("Page load and memory", load)
         ].join("\n\n")
       case "Footer":
+      case "LauncherPointer":
         return body
       case "AgentPrompts":
       case "PageOnly":

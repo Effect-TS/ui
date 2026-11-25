@@ -168,7 +168,10 @@
     @apply min-w-[3ch] text-center font-mono text-lg font-semibold tabular-nums;
   }
 
-  .counter-button {
+  /* Page's own button has no class. :where keeps this selector as
+     weak as .counter-button, so the colored buttons' hover still wins. */
+  .counter-button,
+  :where(.counter-page) > button {
     @apply inline-flex min-w-9 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-border-strong bg-background px-3 py-1.5 text-control font-medium;
     transition: border-color 150ms, background-color 150ms, opacity 150ms;
 
@@ -230,8 +233,9 @@
     }
   }
 
+  /* In a row, so hiding the Counter doesn't change the height. */
   .counter-page {
-    @apply grid justify-items-start gap-3;
+    @apply flex flex-wrap items-center gap-x-5 gap-y-3;
   }
 
   @media (width <= 520px) {
@@ -356,6 +360,92 @@
       animation-timeline: view();
       animation-range: entry 100% cover 20%;
     }
+  }
+}
+
+/* The arrow to the DevTools button. It is drawn as its part of the
+   article scrolls up from the arrow's top edge, and fades as the end
+   of that part passes the upper half of the window. It is large where
+   the window has a margin beside the text and small where it hasn't.
+   It needs a browser that can tie an animation to the scroll
+   position. */
+.launcher-pointer {
+  display: none;
+}
+
+@supports (animation-timeline: view()) {
+  .launcher-section {
+    --pointer-size: clamp(72px, (100vw - 1280px) * 0.6 + 110px, 300px);
+    view-timeline: --launcher-section block;
+    view-timeline-inset: 40% calc(var(--pointer-size) * 0.9 - 48px);
+
+    /* Without a margin the arrow is over the text, so it goes as soon
+       as the end of its part is above it. */
+    @media (width < 960px) {
+      view-timeline-inset: 78% calc(var(--pointer-size) * 0.9 - 48px);
+    }
+  }
+
+  /* The tip of the arrow is 10px above the middle of the button,
+     which is 87px by 34px and 12px from the corner. */
+  .launcher-pointer {
+    @apply pointer-events-none fixed z-5 block size-(--pointer-size) text-accent;
+    right: calc(55.5px - var(--pointer-size) * 0.14);
+    bottom: calc(56px - var(--pointer-size) * 0.09);
+    animation: launcher-pointer-show linear both;
+    animation-timeline: --launcher-section;
+  }
+
+  /* As thick on the small arrow as a line this size needs to show. */
+  .launcher-pointer path {
+    vector-effect: non-scaling-stroke;
+    stroke-width: clamp(2.5px, var(--pointer-size) * 0.022, 6.6px);
+  }
+
+  .launcher-pointer-line {
+    stroke-dasharray: 1;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .launcher-pointer-line {
+      animation: launcher-pointer-line linear both;
+      animation-timeline: --launcher-section;
+    }
+
+    .launcher-pointer-head {
+      animation: launcher-pointer-head linear both;
+      animation-timeline: --launcher-section;
+    }
+  }
+}
+
+@keyframes launcher-pointer-show {
+  0%, 100% {
+    opacity: 0;
+  }
+
+  4%, 86% {
+    opacity: 1;
+  }
+}
+
+@keyframes launcher-pointer-line {
+  0% {
+    stroke-dashoffset: 1;
+  }
+
+  32%, 100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes launcher-pointer-head {
+  0%, 30% {
+    opacity: 0;
+  }
+
+  36%, 100% {
+    opacity: 1;
   }
 }
 
