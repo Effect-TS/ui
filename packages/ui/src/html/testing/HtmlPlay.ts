@@ -4,10 +4,11 @@
  *
  * `HtmlPlay.HtmlPlay` extends `Play.Play`, so every Play step works here.
  * Each step is the `HtmlScene` step of the same name, sent to the tree on
- * `TestHost`. `click` runs the browser's defaults as `HtmlScene.click`
- * does: it throws on a disabled control, a submit button submits its form
- * with the fields read from the tree, a checkbox or radio button fires
- * `input` and `change`, and a `popovertarget` button toggles its popover.
+ * `TestHost`. `click` sends `pointerdown`, `mousedown`, `mouseup` and `click`,
+ * then runs the browser's defaults as `HtmlScene.click` does: it throws on a
+ * disabled control, a submit button submits its form with the fields read from
+ * the tree, a checkbox or radio button fires `input` and `change`, and a
+ * `popovertarget` button toggles its popover.
  *
  * Some things differ from a Scene, as they do in a browser. `type` and
  * `change` write the field's `value`, and a click on a checkbox or radio
@@ -15,10 +16,11 @@
  * event, so an uncontrolled field keeps what the user entered. A controlled
  * field goes back to what the view set once the step settles, unless the
  * Model took the edit. A `popovertarget` click opens or closes the popover,
- * so the next click sees it. The events of one click run with no render
- * between them, so a submit reads the fields as they were before the
- * click's own message. And `focus`, `blur` and the browser's other events
- * that don't bubble go to the matched element only.
+ * so the next click sees it. `click` settles between the press (`pointerdown`,
+ * `mousedown`) and the release (`mouseup`, `click`, defaults), while the
+ * release events run with no render between them, so a submit reads the fields
+ * as they were before the click's own message. And `focus`, `blur` and the
+ * browser's other events that don't bubble go to the matched element only.
  *
  * **Example** (Signing in)
  *
@@ -66,10 +68,12 @@
  * @stability experimental
  * @since 0.1.0
  */
-import type * as Effect from "effect/Effect"
+import * as Effect from "effect/Effect"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
 import * as internal from "../../internal/play.ts"
+import * as scene from "../../internal/scene.ts"
+import { atSite, callSite } from "../../internal/steps.ts"
 import * as Locator from "../../testing/Locator.ts"
 import type * as Play from "../../testing/Play.ts"
 import type * as TestHost from "../../testing/TestHost.ts"
@@ -104,11 +108,13 @@ export interface HtmlPlay<Model, Msg, Events>
   extends Play.Play<Model, Msg, Events>
 {
   /**
-   * Clicks the one element `target` matches, as a browser does: the `click`
-   * goes to the innermost element that handles it, then the defaults run,
-   * unless a handler cancelled the click. A string means
-   * `Locator.text(target)`. Throws on a disabled control, and when nothing
-   * handles the click or any of its defaults.
+   * Clicks the one element `target` matches, as a browser does: `pointerdown`
+   * and `mousedown` run, the tree settles, then `mouseup`, `click` and the
+   * defaults run unless the press removed or disabled the element. Cancelling
+   * `pointerdown` skips `mousedown` and `mouseup` (not `click`); cancelling
+   * `mousedown` or `mouseup` skips nothing; only a cancelled `click` skips the
+   * defaults. A string means `Locator.text(target)`. Throws on a disabled
+   * control, and when nothing handles any event of the click.
    */
   click(target: string | Locator.Locator): Effect.Effect<void, Play.StepError>
   /**
@@ -171,38 +177,79 @@ class HtmlPlayCursor extends internal.PlayCursor {
     target: string | Locator.Locator
   ): Effect.Effect<void, Play.StepError> {
     const locator = typeof target === "string" ? Locator.text(target) : target
-    return this.interact("click", () => {
-      const node = this.findOne(locator, "click")
-      const container = this.root.container
-      return defaults.planClick(
-        container,
-        node,
-        internal.ancestors(node),
-        locator.description,
-        this.name("click")
+    const site = callSite(this.click)
+    const name = this.name("click")
+    return Effect.gen({ self: this }, function*() {
+      let reached = false
+      let handled = false
+      const send = (
+        node: TestHost.TestElement,
+        event: string,
+        payload: () => unknown = () => scene.pointer
+      ): boolean => {
+        const fired = this.dispatchEvent(node, event, payload)
+        if (fired === undefined) return false
+        reached = true
+        handled ||= fired.handled
+        return fired.prevented
+      }
+      yield* this.settle
+      const [node, skipMouse] = yield* Effect.sync(() =>
+        atSite(site, () => {
+          this.checkReady(name)
+          const node = this.findOne(locator, "click")
+          if (defaults.isClickDisabled(internal.ancestors(node))) {
+            throw new Error(`${name}: ${locator.description} is disabled`)
+          }
+          const skipMouse = send(node, "pointerdown")
+          if (!skipMouse) send(node, "mousedown")
+          return [node, skipMouse] as const
+        })
       )
-        .map(({ checks, description, event, isDefault, node, payload }) => ({
-          node: node as TestHost.TestElement,
-          description,
-          event,
-          payload: () => payload(container, (node) => node),
-          isDefault,
-          edit: checks
-            ? () =>
-              checks().map(([node, checked]) => {
+      if (handled) yield* this.settle
+      const edited = yield* Effect.sync(() =>
+        atSite(site, () => {
+          const edited: Array<TestHost.TestElement> = []
+          const container = this.root.container
+          const path = internal.ancestors(node)
+          if (path.includes(container) && !defaults.isClickDisabled(path)) {
+            const plan = defaults.planClickDefaults(
+              container,
+              node,
+              path,
+              locator.description
+            )
+            if (!skipMouse) send(node, "mouseup")
+            if (!send(node, "click")) {
+              for (const { checks, event, node, payload } of plan) {
                 const element = node as TestHost.TestElement
-                element.props.checked = checked
-                return element
-              })
-            : event === "toggle"
-            ? () => {
-              const element = node as TestHost.TestElement
-              element.props.popoverOpen = (payload(container, (node) =>
-                node) as Html.PopoverTogglePayload).open
-              return [element]
+                const sent = () => payload(container, (node) => node)
+                if (checks !== undefined) {
+                  for (const [other, checked] of checks()) {
+                    const control = other as TestHost.TestElement
+                    control.props.checked = checked
+                    edited.push(control)
+                  }
+                } else if (event === "toggle") {
+                  element.props.popoverOpen =
+                    (sent() as Html.PopoverTogglePayload).open
+                  edited.push(element)
+                }
+                send(element, event, sent)
+              }
             }
-            : undefined
-        }))
+          }
+          if (!reached) {
+            throw new Error(
+              `${name}: nothing handles "click" at ${locator.description}`
+            )
+          }
+          this.recordInteraction("click", handled)
+          return edited
+        })
+      )
+      yield* this.settle
+      this.restoreControlled(edited)
     })
   }
   type(

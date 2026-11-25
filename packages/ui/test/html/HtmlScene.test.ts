@@ -26,7 +26,7 @@ const Board = Html.component({
         .onDrop(() => "inner", { accepts: ["text/uri-list"] }).children(
           h.p("Inner child")
         ),
-      h.p("Plain"),
+      h.p.onClick(() => undefined).children("Plain"),
       h.output(log.join("|"))
     )
 })
@@ -444,5 +444,222 @@ describe("HtmlScene", () => {
         /^HtmlScene\.click: text "In body" is disabled/
       )
     })
+
+    it.effect("sends pointerdown, mousedown, mouseup, click in order, follows cancel rules, and stops when press removes or disables the element", () =>
+      Effect.gen(function*() {
+        const Sequence = Html.component({
+          name: "Sequence",
+          model: Schema.Struct({
+            log: Schema.Array(Schema.String),
+            gone: Schema.Boolean,
+            off: Schema.Boolean
+          }),
+          message: Schema.String
+        }).make({
+          init: () => ({ log: [], gone: false, off: false }),
+          update: ($, message) => ({
+            log: [...$.model.log, message],
+            gone: $.model.gone || message === "remove-down",
+            off: $.model.off || message === "disable-pd"
+          }),
+          view: (h, model) =>
+            h.div(
+              h.form.onSubmit("submit").children(
+                h.button.on("pointerdown", "pd")
+                  .on("mousedown", "md")
+                  .on("mouseup", "mu")
+                  .onClick("ck")
+                  .children("All")
+              ),
+              h.input.attrs({ type: "checkbox", "aria-label": "CancelPD" })
+                .on("pointerdown", "pd-cancel", { preventDefault: true })
+                .on("mousedown", "md")
+                .on("mouseup", "mu")
+                .onClick("ck")
+                .onChange("ch"),
+              h.input.attrs({ type: "checkbox", "aria-label": "CancelMouse" })
+                .on("pointerdown", "pd")
+                .on("mousedown", "md-cancel", { preventDefault: "always" })
+                .on("mouseup", "mu-cancel", { preventDefault: "always" })
+                .onClick("ck")
+                .onChange("ch"),
+              model.gone
+                ? undefined
+                : h.button.key("remove").attr("type", "button")
+                  .on("mousedown", "remove-down")
+                  .on("mouseup", "remove-up")
+                  .onClick("remove-click")
+                  .children("Remove"),
+              h.button.attr("type", "button")
+                .disabled(model.off)
+                .on("pointerdown", "disable-pd")
+                .on("mousedown", "disable-md")
+                .on("mouseup", "disable-mu")
+                .onClick("disable-click")
+                .children("Disable"),
+              h.span("Unhandled"),
+              h.output(model.log.join("|"))
+            )
+        })
+        const scene = yield* HtmlScene.make(Sequence, {})
+        scene.click("All")
+          .expectDefaultPrevented()
+          .expect(log).toHaveText("pd|md|mu|ck|submit")
+          .click(HtmlLocator.label("CancelPD"))
+          .expectDefaultPrevented(false)
+          .expect(log).toHaveText("pd|md|mu|ck|submit|pd-cancel|ck|ch")
+          .click(HtmlLocator.label("CancelMouse"))
+          .expectDefaultPrevented(false)
+          .expect(log).toHaveText(
+            "pd|md|mu|ck|submit|pd-cancel|ck|ch|pd|md-cancel|mu-cancel|ck|ch"
+          )
+          .click("Remove")
+          .expect(log).toHaveText(/\|remove-down$/)
+          .click("Disable")
+          .expect(log).toHaveText(/\|disable-pd$/)
+        assert.throws(
+          () => scene.click("Unhandled"),
+          /^HtmlScene\.click: nothing handles "click" at text "Unhandled"/
+        )
+      }))
+
+    it.effect("skips child-only press handlers when the parent handles click, and honors unconditional child cancellation", () =>
+      Effect.gen(function*() {
+        const TooltipLike = Html.component({
+          name: "TooltipLike",
+          model: Schema.Boolean,
+          message: Schema.Literal("Pressed")
+        }).make({
+          init: () => false,
+          update: () => true,
+          parts: (p) => ({
+            trigger: p.part("button", (b) => b.on("mousedown", "Pressed")),
+            cancelPointer: p.part(
+              "button",
+              (b) =>
+                b.on("pointerdown", "Pressed", { preventDefault: "always" })
+            ),
+            cancelClick: p.part(
+              "button",
+              (b) => b.onClick("Pressed", { preventDefault: "always" })
+            )
+          })
+        })
+        const Parent = Html.component({
+          name: "Parent",
+          model: Schema.Array(Schema.String),
+          message: Schema.String
+        }).make({
+          init: (): ReadonlyArray<string> => [],
+          update: ($, message) => [...$.model, message],
+          view: (h, entries) =>
+            h.div(
+              TooltipLike(h, {
+                view: (tip) =>
+                  h.div(
+                    tip.trigger(h.button.onClick("saved")).children("Save"),
+                    tip.trigger(h.button).children("ChildOnly"),
+                    tip.cancelPointer(
+                      h.button.on("mousedown", "md")
+                        .on("mouseup", "mu")
+                        .onClick("ck")
+                    ).children("ChildPD"),
+                    h.form.onSubmit("submitted").children(
+                      tip.cancelClick(
+                        h.button.on("mousedown", "form-md")
+                      ).children("ChildClick")
+                    )
+                  )
+              }),
+              h.output(entries.join("|"))
+            )
+        })
+        const scene = yield* HtmlScene.make(Parent, {})
+        scene.click("Save").expect(log).toHaveText("saved")
+        scene.click("ChildPD").expect(log).toHaveText("saved|ck")
+        scene.click("ChildClick")
+          .expectDefaultPrevented()
+          .expect(log).toHaveText("saved|ck|form-md")
+        assert.throws(
+          () => scene.click("ChildOnly"),
+          /only \/Parent\/TooltipLike\[\] handles "mousedown"/
+        )
+      }))
+
+    it.effect("drops release when a headless root replaces its keyed button or a button moves across slots", () =>
+      Effect.gen(function*() {
+        const Shell = Html.component({
+          name: "Shell",
+          model: Schema.Null,
+          message: Schema.Never
+        }).make({
+          init: () => null,
+          update: ($) => $.model,
+          parts: () => ({})
+        })
+        const RootSwap = Html.component({
+          name: "RootSwap",
+          model: Schema.Array(Schema.String),
+          message: Schema.String
+        }).make({
+          init: (): ReadonlyArray<string> => [],
+          update: ($, message) => [...$.model, message],
+          view: (h, entries) =>
+            Shell(h, {
+              view: () =>
+                entries.length === 0
+                  ? h.button.key("first")
+                    .on("mousedown", "first-md")
+                    .onClick("first-ck")
+                    .children("Go")
+                  : h.button.key("second")
+                    .onClick("second-ck")
+                    .children(entries.join("|"))
+            })
+        })
+        const rootScene = yield* HtmlScene.make(RootSwap, {})
+        rootScene.click("Go")
+          .expect(Locator.tag("button")).toHaveText("first-md")
+
+        const TwoSlots = Html.component({
+          name: "TwoSlots",
+          model: Schema.Null,
+          message: Schema.Never,
+          slots: ["first", "second"] as const
+        }).make({
+          init: () => null,
+          update: ($) => $.model,
+          view: (h) => h.div(h.slots.first, h.slots.second)
+        })
+        const SlotSwap = Html.component({
+          name: "SlotSwap",
+          model: Schema.Array(Schema.String),
+          message: Schema.String
+        }).make({
+          init: (): ReadonlyArray<string> => [],
+          update: ($, message) => [...$.model, message],
+          view: (h, entries) =>
+            h.div(
+              TwoSlots(h, {
+                slots: {
+                  first: entries.length === 0
+                    ? h.button.key("same")
+                      .on("mousedown", "slot1-md")
+                      .onClick("slot1-ck")
+                      .children("Move")
+                    : undefined,
+                  second: entries.length > 0
+                    ? h.button.key("same")
+                      .onClick("slot2-ck")
+                      .children("Moved")
+                    : undefined
+                }
+              }),
+              h.output(entries.join("|"))
+            )
+        })
+        const slotScene = yield* HtmlScene.make(SlotSwap, {})
+        slotScene.click("Move").expect(log).toHaveText("slot1-md")
+      }))
   })
 })

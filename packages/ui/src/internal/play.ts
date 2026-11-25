@@ -16,7 +16,6 @@ export interface PlannedEvent {
   readonly description: string
   readonly event: string
   readonly payload: () => unknown
-  readonly isDefault?: boolean | undefined
   readonly edit?: (() => ReadonlyArray<TestHost.TestElement>) | undefined
 }
 
@@ -99,12 +98,56 @@ export class PlayCursor {
         atSite(site, () => this.run(step, plan))
       )
       yield* this.settle
-      for (const node of edited) {
-        for (const [name, value] of controlled.wantedOf(node) ?? []) {
-          node.props[name] = value
-        }
-      }
+      this.restoreControlled(edited)
     })
+  }
+
+  protected checkReady(name: string): void {
+    if (this.ignored !== undefined) {
+      throw new Error(
+        `${name}: the ${this.ignored} before it produced no message: acknowledge it with expectIgnored()`
+      )
+    }
+  }
+
+  protected dispatchEvent(
+    node: TestHost.TestNode,
+    event: string,
+    payload: () => unknown
+  ):
+    | { readonly handled: boolean; readonly prevented: boolean }
+    | undefined
+  {
+    const target = this.handlerOn(node, event)
+    if (target === undefined) return undefined
+    const preventDefault = target.eventOptions[event]?.preventDefault
+    let prevented = event === "submit" || preventDefault === "always"
+    const handled = target.dispatch!(
+      event,
+      target.handlers[event]!,
+      payload(),
+      preventDefault === true
+        ? () => {
+          prevented = true
+        }
+        : undefined
+    )
+    return { handled, prevented }
+  }
+
+  protected recordInteraction(step: string, handled: boolean): void {
+    this.interaction = handled ? "handled" : "ignored"
+    this.ignored = handled ? undefined : step
+  }
+
+  protected restoreControlled(
+    edited: ReadonlyArray<TestHost.TestElement>
+  ): void {
+    for (const node of edited) {
+      for (const [name, value] of controlled.wantedOf(node) ?? []) {
+        node.props[name] = value
+      }
+    }
   }
 
   private run(
@@ -112,36 +155,17 @@ export class PlayCursor {
     plan: () => ReadonlyArray<PlannedEvent>
   ): ReadonlyArray<TestHost.TestElement> {
     const name = this.name(step)
-    if (this.ignored !== undefined) {
-      throw new Error(
-        `${name}: the ${this.ignored} before it produced no message: acknowledge it with expectIgnored()`
-      )
-    }
+    this.checkReady(name)
     let reached = false
     let handled = false
-    let cancelled = false
     const edited: Array<TestHost.TestElement> = []
     const events = plan()
-    for (const { edit, event, isDefault, node, payload } of events) {
-      if (isDefault === true && cancelled) continue
+    for (const { edit, event, node, payload } of events) {
       if (edit !== undefined) edited.push(...edit())
-      const target = this.handlerOn(node, event)
-      if (target === undefined) continue
+      const fired = this.dispatchEvent(node, event, payload)
+      if (fired === undefined) continue
       reached = true
-      const preventDefault = target.eventOptions[event]?.preventDefault
-      let prevented = event === "submit" || preventDefault === "always"
-      const sent = target.dispatch!(
-        event,
-        target.handlers[event]!,
-        payload(),
-        preventDefault === true ?
-          () => {
-            prevented = true
-          } :
-          undefined
-      )
-      handled ||= sent
-      if (isDefault !== true) cancelled ||= prevented
+      handled ||= fired.handled
     }
     if (!reached) {
       throw new Error(
@@ -150,8 +174,7 @@ export class PlayCursor {
         }`
       )
     }
-    this.interaction = handled ? "handled" : "ignored"
-    this.ignored = handled ? undefined : step
+    this.recordInteraction(step, handled)
     return edited
   }
 

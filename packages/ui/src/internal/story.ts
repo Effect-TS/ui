@@ -1823,22 +1823,66 @@ const handlerOn = (
       (node.owned ?? []).some((layer) => Object.hasOwn(layer.handlers, event)))
   )
 
-/**
- * Whether anything on `node`'s path, it or an ancestor, has a layer for `event`.
- *
- * @internal
- */
-export const handles = (
-  story: State<any, any, any, any>,
-  node: Locator.Node,
-  event: string
-): boolean => handlerOn(ancestry(story, node), event) !== undefined
-
 /** What one event did: the record after it, whether its default was cancelled, and whether a layer sent a message. */
 export interface Fired<Props, Model, Msg, Events> {
   readonly story: State<Props, Model, Msg, Events>
   readonly prevented: boolean
   readonly handled: boolean
+}
+
+/** @internal */
+export interface ChildOnly {
+  readonly error: string
+  readonly prevented: boolean
+}
+
+/** @internal */
+export const tryFireNode = <Props, Model, Msg, Events>(
+  story: State<Props, Model, Msg, Events>,
+  node: Locator.Node,
+  event: string,
+  payload: unknown,
+  step: string,
+  description: string
+): Fired<Props, Model, Msg, Events> | ChildOnly | undefined => {
+  const handler = handlerOn(ancestry(story, node), event)
+  if (handler === undefined) return undefined
+  // A scene runs its own component's layers: the element's handlers, and in an author's scene the
+  // parts' layers it owns, wherever its view applied them. A headless child's layer needs the child's `update`.
+  const own = "/" + story.component.definition.name
+  const owned = handler.owned ?? []
+  const layers = [...owned.filter((layer) => layer.owner.path === own), handler]
+    .filter((layer) => Object.hasOwn(layer.handlers, event))
+  // `"always"` from any layer cancels, a child's included.
+  const always = [...owned, handler].some((layer) =>
+    layer.eventOptions[event]?.preventDefault === "always"
+  )
+  if (layers.length === 0) {
+    const owners = owned.filter((layer) => Object.hasOwn(layer.handlers, event))
+      .map((layer) => layer.owner.path)
+    return {
+      error:
+        `${step}: only ${
+          owners.join(" and ")
+        } handles "${event}" at ${description}. ` +
+        "A scene doesn't run a child's update: use givenChild for its Model, or a Play.",
+      prevented: always
+    }
+  }
+  // Each layer runs once, in the runtime's order: its message decides whether its own
+  // `preventDefault: true` cancels, then it's sent.
+  let prevented = event === "submit" || always
+  let handled = false
+  let out = story
+  for (const layer of layers) {
+    const message = handle(layer.handlers[event]!, payload)
+    if (message === undefined) continue
+    handled = true
+    if (layer.eventOptions[event]?.preventDefault === true) prevented = true
+    // Every layer here is the scene's own component's, so each message is the scene's.
+    out = dispatch(out, message as Msg)
+  }
+  return { story: out, prevented, handled }
 }
 
 /**
@@ -1856,43 +1900,12 @@ export const fireNode = <Props, Model, Msg, Events>(
   step: string,
   description: string
 ): Fired<Props, Model, Msg, Events> => {
-  const handler = handlerOn(ancestry(story, node), event)
-  if (handler === undefined) {
+  const fired = tryFireNode(story, node, event, payload, step, description)
+  if (fired === undefined) {
     throw new Error(`${step}: nothing handles "${event}" at ${description}`)
   }
-  // A scene runs its own component's layers: the element's handlers, and in an author's scene the
-  // parts' layers it owns, wherever its view applied them. A headless child's layer needs the child's `update`.
-  const own = "/" + story.component.definition.name
-  const owned = handler.owned ?? []
-  const layers = [...owned.filter((layer) => layer.owner.path === own), handler]
-    .filter((layer) => Object.hasOwn(layer.handlers, event))
-  if (layers.length === 0) {
-    const owners = owned.filter((layer) => Object.hasOwn(layer.handlers, event))
-      .map((layer) => layer.owner.path)
-    throw new Error(
-      `${step}: only ${
-        owners.join(" and ")
-      } handles "${event}" at ${description}. ` +
-        "A scene doesn't run a child's update: use givenChild for its Model, or a Play."
-    )
-  }
-  // `"always"` from any layer cancels, a child's included. Then each layer runs once, in the runtime's
-  // order: its message decides whether its own `preventDefault: true` cancels, then it's sent.
-  let prevented = event === "submit" ||
-    [...owned, handler].some((layer) =>
-      layer.eventOptions[event]?.preventDefault === "always"
-    )
-  let handled = false
-  let out = story
-  for (const layer of layers) {
-    const message = handle(layer.handlers[event]!, payload)
-    if (message === undefined) continue
-    handled = true
-    if (layer.eventOptions[event]?.preventDefault === true) prevented = true
-    // Every layer here is the scene's own component's, so each message is the scene's.
-    out = dispatch(out, message as Msg)
-  }
-  return { story: out, prevented, handled }
+  if ("error" in fired) throw new Error(fired.error)
+  return fired
 }
 
 // ---------------------------------------------------------------------------

@@ -191,6 +191,49 @@ const groups = (
   return out
 }
 
+const nodePath = (
+  root: View.Node<any, any>,
+  target: View.Node<any, any>
+): ReadonlyArray<readonly [slot: string, index: number]> | undefined => {
+  if (root === target) return []
+  for (const [name, list] of groups(root)) {
+    for (let index = 0; index < list.length; index++) {
+      const rest = nodePath(list[index]!, target)
+      if (rest !== undefined) return [[name, index], ...rest]
+    }
+  }
+  return undefined
+}
+
+/** @internal */
+export const followNode = (
+  oldRoot: View.Node<any, any>,
+  node: View.Node<any, any>,
+  newRoot: View.Node<any, any>
+): View.Node<any, any> | undefined => {
+  if (oldRoot === newRoot) return node
+  const path = nodePath(oldRoot, node)
+  if (path === undefined || !continues(oldRoot, newRoot)) return undefined
+  let oldAt = oldRoot
+  let newAt = newRoot
+  for (const [slot, oldIndex] of path) {
+    const olds = groups(oldAt).get(slot) ?? []
+    const news = groups(newAt).get(slot) ?? []
+    const paired = match.matchSiblings(
+      olds.map(asSibling),
+      news.map(asSibling)
+    )
+    const newIndex = paired.indexOf(oldIndex)
+    if (newIndex < 0) return undefined
+    const oldChild = olds[oldIndex]!
+    const newChild = news[newIndex]!
+    if (!continues(oldChild, newChild)) return undefined
+    oldAt = oldChild
+    newAt = newChild
+  }
+  return newAt
+}
+
 /**
  * The scene's mounts in `tree`, each followed from the render before as the runtime keeps a mount
  * running: on an element the runtime patched, an element's own mount for the same definition, and a
@@ -352,10 +395,6 @@ export interface PlannedEvent {
     state: engine.State<any, any, any, any>,
     node: Locator.Node
   ) => unknown
-  /** Skipped when nothing handles it, rather than a failure. */
-  readonly optional?: boolean | undefined
-  /** A default action of the events before it, which a cancelled one skips. */
-  readonly isDefault?: boolean | undefined
 }
 
 const withMount = (
@@ -416,11 +455,10 @@ export class SceneCursor extends Cursor {
   }
 
   /**
-   * Runs one interaction made of several events on elements of the view, in order, as a browser runs a
-   * click's defaults. `events` plans them from the view the interaction starts on. Each event goes to
-   * the view as it is after the one before, and an `isDefault` one runs only when no event before it
-   * that isn't one was cancelled. The interaction is ignored only when none of them produced a message,
-   * and its default is cancelled when any was.
+   * Runs one interaction made of several events on elements of the view, in order. `events` plans them
+   * from the view the interaction starts on. Each event goes to the view as it is after the one before.
+   * The interaction is ignored only when none of them produced a message, and its default is cancelled
+   * when any was.
    */
   protected interact(
     step: string,
@@ -435,14 +473,8 @@ export class SceneCursor extends Cursor {
       "message",
       (state) => {
         let out = state
-        let cancelled = false
-        for (
-          const { description, event, isDefault, node, optional, payload }
-            of events(state)
-        ) {
-          if (isDefault === true && cancelled) continue
+        for (const { description, event, node, payload } of events(state)) {
           const target = node(out)
-          if (optional === true && !engine.handles(out, target, event)) continue
           const fired = engine.fireNode(
             out,
             target,
@@ -452,7 +484,6 @@ export class SceneCursor extends Cursor {
             description
           )
           prevented ||= fired.prevented
-          if (isDefault !== true) cancelled ||= fired.prevented
           handled ||= fired.handled
           out = fired.story
         }

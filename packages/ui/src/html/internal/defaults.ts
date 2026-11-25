@@ -247,44 +247,34 @@ export interface ClickEvent {
     root: Locator.Node,
     at: (node: Locator.Node, description: string) => Locator.Node
   ) => unknown
-  readonly isDefault: boolean
   readonly checks?:
     | (() => ReadonlyArray<readonly [node: Locator.Node, checked: boolean]>)
     | undefined
 }
 
 /** @internal */
-export const planClick = (
+export const isClickDisabled = (
+  path: ReadonlyArray<Locator.Node>
+): boolean =>
+  // A disabled fieldset disables the controls in it, not itself as a target.
+  path.some((at, index) =>
+    at.tag !== "fieldset" && isDisabled(at, path.slice(index))
+  )
+
+/** @internal */
+export const planClickDefaults = (
   root: Locator.Node,
   node: Locator.Node,
   path: ReadonlyArray<Locator.Node>,
-  description: string,
-  step: string
+  description: string
 ): ReadonlyArray<ClickEvent> => {
-  // A disabled fieldset disables the controls in it, not itself as a target.
-  if (
-    path.some((at) =>
-      at.tag !== "fieldset" && isDisabled(at, path.slice(path.indexOf(at)))
-    )
-  ) {
-    throw new Error(`${step}: ${description} is disabled`)
-  }
-  const events: Array<ClickEvent> = [
-    {
-      node,
-      description,
-      event: "click",
-      payload: () => scene.pointer,
-      isDefault: false
-    }
-  ]
+  const events: Array<ClickEvent> = []
   const later = (
     other: Locator.Node,
     description: string,
     event: string,
     payload: ClickEvent["payload"]
-  ) =>
-    events.push({ node: other, description, event, payload, isDefault: true })
+  ) => events.push({ node: other, description, event, payload })
   const type = node.tag === "input" ? inputType(node) : undefined
   const submitter = submitterIn(path)
   if (
@@ -303,7 +293,6 @@ export const planClick = (
       description,
       event: "input",
       payload: () => payload,
-      isDefault: true,
       checks: () => [
         ...(type === "radio" ? radioGroup(root, node, path) : []).map((other) =>
           [other, false] as const
