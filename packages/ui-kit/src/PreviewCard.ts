@@ -220,10 +220,10 @@ import {
 } from "./internal/attributes.ts"
 import { detachedChannel } from "./internal/detached.ts"
 import { elementOf, focusVisible } from "./internal/dom.ts"
+import { watchHoverArea } from "./internal/hoverArea.ts"
 import { lineUnder } from "./internal/inlineRect.ts"
 import { onEscape, Point, pointOf } from "./internal/interaction.ts"
 import { listenOutside } from "./internal/outside.ts"
-import { watchHoverArea } from "./internal/safeArea.ts"
 import { atDocumentOrigin, portalBox, raiseAbove } from "./internal/topLayer.ts"
 import {
   frameOf,

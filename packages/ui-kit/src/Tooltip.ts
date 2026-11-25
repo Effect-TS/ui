@@ -172,9 +172,14 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { type Attributed, flag, withStyle } from "./internal/attributes.ts"
+import {
+  type Attributed,
+  attrSelector,
+  flag,
+  withStyle
+} from "./internal/attributes.ts"
+import { watchHoverArea } from "./internal/hoverArea.ts"
 import { onEscape } from "./internal/interaction.ts"
-import { watchHoverArea } from "./internal/safeArea.ts"
 import * as Positioning from "./Positioning.ts"
 
 /**
@@ -394,25 +399,29 @@ const TrackTooltip = Mount.makeStream(
   },
   (node: HTMLElement, args, changes) =>
     Stream.merge(
-      Stream.callback<typeof TooltipMessage.Type>((queue) => {
-        const controller = new AbortController()
-        const report = (away: boolean) => {
-          Queue.offerUnsafe(
-            queue,
-            away
-              ? TooltipMessage.LeftHoverArea()
-              : TooltipMessage.ReturnedToHoverArea()
-          )
-        }
-        const trigger = () => args.trigger
-        return Effect.acquireRelease(
+      Stream.callback<typeof TooltipMessage.Type>((queue) =>
+        Effect.acquireRelease(
           Effect.sync(() => {
+            const controller = new AbortController()
             Queue.offerUnsafe(queue, TooltipMessage.ShowedPositioner())
-            watchHoverArea(node, controller.signal, trigger, report)
+            watchHoverArea(
+              node,
+              controller.signal,
+              () => args.trigger,
+              (away) => {
+                Queue.offerUnsafe(
+                  queue,
+                  away
+                    ? TooltipMessage.LeftHoverArea()
+                    : TooltipMessage.ReturnedToHoverArea()
+                )
+              }
+            )
+            return controller
           }),
-          () => Effect.sync(() => controller.abort())
+          (controller) => Effect.sync(() => controller.abort())
         )
-      }),
+      ),
       Positioning.trackPosition(
         node,
         args.position,
@@ -832,14 +841,13 @@ export const Tooltip = Html.component({
     const shown = shownBy(p.props)
     const placement = model.placement
     const triggerId = p.id("trigger")
-    const triggerSelector = `[data-tooltip-trigger="${triggerId}"]`
+    const triggerSelector = attrSelector("data-tooltip-trigger", triggerId)
     const arrowId = p.id("arrow")
     // The popup is the trigger's accessible description.
     const popupId =
       p.props.describesTrigger === true && p.props.disabled !== true
         ? p.id("popup")
         : null
-    const hoverable = p.props.disableHoverablePopup !== true
     const tracked = Positioning.trackArgs(p.props, {
       side: "top",
       anchorSelector: triggerSelector,
@@ -882,7 +890,7 @@ export const Tooltip = Html.component({
           .attr("data-tooltip-trigger", triggerId)
     )
     const style = Positioning.positionerStyle(tracked.positionMethod) +
-      (hoverable ? "" : ";pointer-events:none")
+      (p.props.disableHoverablePopup === true ? ";pointer-events:none" : "")
     const positioner = p.part("div", (b) => {
       const decorated = placed(b)
         .attrs({
@@ -893,16 +901,14 @@ export const Tooltip = Html.component({
         .forward((node) =>
           node.attr("style", withStyle(node.elementAttrs.style, style))
         )
-      if (!shown) return decorated
-      const tracking = decorated.onMount(
-        TrackTooltip({ position: tracked, trigger: triggerSelector })
-      )
-      return hoverable
-        ? tracking.on("mouseenter", TooltipMessage.EnteredPositioner()).on(
-          "mouseleave",
-          TooltipMessage.LeftPositioner()
-        )
-        : tracking
+      return shown
+        ? decorated
+          .on("mouseenter", TooltipMessage.EnteredPositioner())
+          .on("mouseleave", TooltipMessage.LeftPositioner())
+          .onMount(
+            TrackTooltip({ position: tracked, trigger: triggerSelector })
+          )
+        : decorated
     })
     const popup = p.part("div", (b) =>
       popupId === null
