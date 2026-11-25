@@ -352,6 +352,10 @@ describe("HtmlPlay", () => {
               source.fire("window", "blur")
               return undefined
             }
+            if (event.key === "o") {
+              source.fire("document", "keydown", { key: "i" })
+              return undefined
+            }
             return `${event.key}:${event.shift}:${event.defaultPrevented}`
           }),
           HtmlSubscription.onWindow("blur", "blur")
@@ -408,6 +412,17 @@ describe("HtmlPlay", () => {
         Effect.provide(Layer.merge(TestHost.layer(), TestGlobalEvents.layer))
       )
 
+      // A root TestHost.mount mounted on the shared document hears the key, and the step settles it.
+      yield* Effect.gen(function*() {
+        const quiet = yield* HtmlPlay.make(Checkout, {})
+        const mounted = yield* TestHost.mount(Shortcuts, {})
+        yield* quiet.keydown("document", "c")
+        assert.deepStrictEqual(mounted.model()?.entries, ["c:false:false"])
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(Layer.merge(TestHost.layer(), TestGlobalEvents.layer))
+      )
+
       // Preserves a caller-supplied HtmlSubscription.GlobalEvents without TestGlobalEvents.
       yield* Effect.gen(function*() {
         const p = yield* HtmlPlay.make(Shortcuts, {})
@@ -424,6 +439,13 @@ describe("HtmlPlay", () => {
         assert.strictEqual(
           p.root.text(),
           "0:a:false:false,b:false:false,blur,blur"
+        )
+        // Nor does one from a nested keydown.
+        yield* p.keydown("document", "o")
+        yield* p.expectIgnored()
+        assert.strictEqual(
+          p.root.text(),
+          "0:a:false:false,b:false:false,blur,blur,i:false:false"
         )
       }).pipe(
         Effect.scoped,

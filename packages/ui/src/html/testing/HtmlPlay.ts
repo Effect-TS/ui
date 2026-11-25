@@ -417,17 +417,13 @@ interface DocumentKeys {
   readonly source: HtmlSubscription.GlobalEvents
   /**
    * Fires `keydown` on the shared `TestGlobalEvents` document if there is
-   * one, else at the listeners added through `source`. Returns whether an
-   * `HtmlPlay` tree's listener produced a message, or `undefined` when none
-   * heard it.
+   * one, else at the listeners added through `source`. Returns whether a
+   * listener produced a message, or `undefined` when none heard it.
    */
   readonly down: (
     payload: Partial<HtmlSubscription.GlobalPayload<Html.KeyPayload>>
   ) => boolean | undefined
 }
-
-// The document keydown being pressed, which every HtmlPlay tree's listeners report to.
-let pressing: { heard: boolean; handled: boolean } | undefined
 
 // A listener is added to `upstream` too, so the events a test fires there still arrive.
 const documentKeys = (
@@ -435,20 +431,12 @@ const documentKeys = (
   shared: TestGlobalEvents.TestGlobalEvents | undefined
 ): DocumentKeys => {
   const own = TestGlobalEvents.make()
+  const document = shared ?? own
   return {
     source: {
       listen: (target, event, options, listener) => {
-        const key = target === "document" && event === "keydown"
-        const tracked: typeof listener = (...args) => {
-          const press = key ? pressing : undefined
-          const handled = globalEvents.emits(() => listener(...args))
-          if (press !== undefined) {
-            press.heard = true
-            press.handled ||= handled
-          }
-        }
-        const offUpstream = upstream.listen(target, event, options, tracked)
-        const offOwn = own.listen(target, event, options, tracked)
+        const offUpstream = upstream.listen(target, event, options, listener)
+        const offOwn = own.listen(target, event, options, listener)
         return () => {
           offOwn()
           offUpstream()
@@ -456,15 +444,10 @@ const documentKeys = (
       }
     },
     down: (payload) => {
-      const document = shared ?? own
-      const outer = pressing
-      const press = pressing = { heard: false, handled: false }
-      try {
+      const result = globalEvents.observe(() => {
         document.fire("document", "keydown", payload)
-      } finally {
-        pressing = outer
-      }
-      return press.heard ? press.handled : undefined
+      })
+      return result?.heard ? result.handled : undefined
     }
   }
 }

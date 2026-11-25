@@ -44,25 +44,50 @@ export interface Listener {
 export const listenerOf = (subscription: object): Listener | undefined =>
   (subscription as { readonly [listener]?: Listener })[listener]
 
-let frame: { emitted: boolean } | undefined
-
 /**
- * Runs `listener` and returns whether a `run` it made produced a message, so
- * `HtmlPlay` can tell a handled event from an ignored one. A `run` inside a
- * nested `emits` counts for that one only.
+ * What one event's dispatch did: whether a listener heard it, and whether a
+ * `run` in it produced a message.
  *
  * @internal
  */
-export const emits = (listener: () => void): boolean => {
-  const outer = frame
-  const own = { emitted: false }
-  frame = own
+export interface Dispatch {
+  heard: boolean
+  handled: boolean
+}
+
+let current: Dispatch | undefined
+let last: Dispatch | undefined
+
+/**
+ * Runs a test source's dispatch of one event. `fire` calls `heard` for
+ * each listener it invokes. A `run` counts for the innermost dispatch only,
+ * so an event a handler fires reports its own result.
+ *
+ * @internal
+ */
+export const dispatch = <A>(fire: (heard: () => void) => A): A => {
+  const outer = current
+  const own: Dispatch = current = { heard: false, handled: false }
   try {
-    listener()
+    return fire(() => {
+      own.heard = true
+    })
   } finally {
-    frame = outer
+    current = outer
+    last = own
   }
-  return own.emitted
+}
+
+/**
+ * Runs `fire` and returns the last dispatch to finish in it, the outermost,
+ * or `undefined` when none ran.
+ *
+ * @internal
+ */
+export const observe = (fire: () => void): Dispatch | undefined => {
+  last = undefined
+  fire()
+  return last
 }
 
 /**
@@ -82,7 +107,7 @@ export const run = (
   if (declared.preventDefault === "always") preventDefault()
   const message = handle(declared.handler, payload)
   if (message !== undefined) {
-    if (frame !== undefined) frame.emitted = true
+    if (current !== undefined) current.handled = true
     onMessage(message, declared.preventDefault === true ? preventDefault : noop)
   }
 }
