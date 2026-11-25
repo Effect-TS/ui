@@ -102,10 +102,8 @@ const resolvedHotId = "\0effect-ui-hot"
 const hotClient = [
   "if (import.meta.hot) {",
   "  const key = Symbol.for(\"@effect/ui/hot\");",
-  "  const slot = globalThis[key] ?? (globalThis[key] = { active: false, save: null });",
-  "  slot.active = true;",
   "  import.meta.hot.on(\"vite:beforeFullReload\", () => {",
-  "    slot.save?.();",
+  "    globalThis[key]?.();",
   "  });",
   "}",
   ""
@@ -151,7 +149,7 @@ export const plugin = (options?: Options): Plugin => {
       env.command === "serve" && env.isPreview !== true &&
       !("VITEST" in process.env),
     resolveId: (id) => hot && id === hotId ? resolvedHotId : undefined,
-    load: (id) => hot && id === resolvedHotId ? hotClient : undefined,
+    load: (id) => id === resolvedHotId ? hotClient : undefined,
     configureServer: (server) => {
       const { logger } = server.config
       let settle: (ok: boolean) => void = () => {}

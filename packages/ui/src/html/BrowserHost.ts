@@ -558,14 +558,9 @@ export const mountRoot = (
       { host }
     )
     const outer = yield* Effect.context<Scope.Scope>()
-    const hotSession = hot.open(component, container, outer)
-    let activeHydrate = hydrate
-    if (hotSession?.hasSnapshot === true && activeHydrate !== undefined) {
-      while (container.firstChild !== null) {
-        container.removeChild(container.firstChild)
-      }
-      activeHydrate = undefined
-    }
+    const hotSession = hot.open(component, container)
+    const hydrating = hotSession?.hasSnapshot === true ? undefined : hydrate
+    if (hydrating !== hydrate) container.textContent = ""
     const scheduler =
       Context.getOrUndefined(outer, Scheduler.Scheduler) === undefined
         ? (defaultScheduler ??= HtmlScheduler.makeDefault())
@@ -580,7 +575,7 @@ export const mountRoot = (
         container,
         make,
         [Html.name],
-        { ...options, hydrate: activeHydrate, hot: hotSession, scheduler }
+        { ...options, hydrate: hydrating, hot: hotSession, scheduler }
       ),
       context
     )

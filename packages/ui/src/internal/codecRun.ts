@@ -43,14 +43,28 @@ export const warnOnce = (
   )
 }
 
+const formatIssue = SchemaIssue.makeFormatterDefault()
+
+/** @internal */
+export const isRedacted = (cause: Cause.Cause<SchemaIssue.Issue>): boolean => {
+  const error = Cause.findErrorOption(cause)
+  return Option.isSome(error) && error.value === redactedIssue
+}
+
+/** @internal */
+export const formatCause = (cause: Cause.Cause<SchemaIssue.Issue>): string =>
+  Option.match(Cause.findErrorOption(cause), {
+    onNone: () => Cause.pretty(cause),
+    onSome: formatIssue
+  })
+
 /** @internal */
 export const warnUnencoded = (
   inst: Kernel.Instance,
   ctx: Context.Context<any>,
   cause: Cause.Cause<SchemaIssue.Issue>
 ): void => {
-  const error = Cause.findErrorOption(cause)
-  if (Option.isSome(error) && error.value === redactedIssue) return
+  if (isRedacted(cause)) return
   warnOnce(
     "unencoded",
     inst,
@@ -58,9 +72,6 @@ export const warnUnencoded = (
     () =>
       "its state doesn't encode as JSON, so the server sends no state for it and the client builds it and " +
       "everything under it fresh, without hydration, and history doesn't restore it. " +
-      Option.match(error, {
-        onNone: () => Cause.pretty(cause),
-        onSome: SchemaIssue.makeFormatterDefault()
-      })
+      formatCause(cause)
   )
 }

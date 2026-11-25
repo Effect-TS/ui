@@ -64,7 +64,6 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
   let detach: (() => void) | undefined
   const state = stateRestore.make({
     rootPath: root.path,
-    ctx,
     entry: hooks.entry,
     restore: hooks.restore,
     onEncodeFailure: (inst, cause) => warnUnencoded(inst, ctx, cause),
@@ -205,11 +204,7 @@ export const make = (hooks: services.RootHooks, root: Root): Routed => {
       routed.add(inst.tree)
       inst.tree.watched = (at, query, argsKey) =>
         views.get(at)?.watched?.add(entryKey(query, argsKey))
-      const ended = inst.tree.ended
-      inst.tree.ended = (author, path) => {
-        ended?.(author, path)
-        state.ended(author, path)
-      }
+      state.watch(inst.tree)
       detach = hooks.attach(handle)
     },
     flushed: () => {

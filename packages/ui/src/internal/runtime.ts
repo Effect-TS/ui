@@ -285,9 +285,11 @@ export interface HotSession {
     first: Kernel.Next
   ) => Kernel.Next | undefined
   readonly restored: (inst: Kernel.Instance) => boolean
-  readonly hold: NonNullable<Kernel.Host["hold"]>
+  readonly hold: (
+    ...args: Parameters<NonNullable<Kernel.Host["hold"]>>
+  ) => boolean | undefined
   readonly attach: (inst: Kernel.Instance) => void
-  readonly flushed: (buildsPending: number) => void
+  readonly flushed: (buildsPendingSince: (flush: number) => number) => void
   readonly clear: () => void
   readonly detach: () => void
 }
@@ -607,17 +609,13 @@ const start = (
     ...base,
     hold: hot === undefined
       ? routing?.hold
-      : routing === undefined
-      ? hot.hold
       : (owner, rec, at) =>
-        hot.hasSnapshot
-          ? hot.hold(owner, rec, at)
-          : routing.hold(owner, rec, at),
+        hot.hold(owner, rec, at) ?? routing?.hold(owner, rec, at) ?? false,
     commit: () => {
       base.commit?.()
       hydrating?.commit()
       routing?.flushed()
-      hot?.flushed(building(0))
+      hot?.flushed(building)
       idle?.check()
     },
     server: server?.hooks(ctx, record, deferred)
@@ -676,17 +674,12 @@ const start = (
             )
           }
           const first = inst.component.init(inst.props)
-          const adopted = hydrating?.init(inst, first)
+          const adopted = hydrating?.init(inst, first) ??
+            hot?.init(inst, first)
           if (adopted !== undefined) {
             return routing === undefined
               ? adopted
               : routing.init(inst, adopted, true)
-          }
-          const hotNext = hot?.init(inst, first)
-          if (hotNext !== undefined) {
-            return routing === undefined
-              ? hotNext
-              : routing.init(inst, hotNext, true)
           }
           if (server !== undefined && first.commands.length > 0) {
             initCommands = first.commands
@@ -739,7 +732,7 @@ const start = (
   }
   if (hot !== undefined) {
     hot.attach(instance)
-    hot.flushed(building(0))
+    hot.flushed(building)
   }
   tree.flush = since
   const head = () =>

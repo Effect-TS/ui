@@ -12,13 +12,8 @@ import { Deferred, Effect, Redacted, Schema, SchemaGetter } from "effect"
 
 const hotKey = Symbol.for("@effect/ui/hot")
 
-const triggerHotSave = () => {
-  const slot = (window as unknown as Record<
-    symbol,
-    { readonly save?: (() => void) | null } | undefined
-  >)[hotKey]
-  slot?.save?.()
-}
+const triggerHotSave = () =>
+  (window as unknown as Record<symbol, (() => void) | undefined>)[hotKey]?.()
 
 const makeContainer = (id?: string) => {
   const div = document.createElement("div")
@@ -350,7 +345,9 @@ describe("hot reload", { concurrent: false }, () => {
         })
         const LazyChild = Component.lazy("LazyTarget", () =>
           Promise.resolve(Target))
-        yield* Effect.promise(() => LazyChild.preload())
+        yield* Effect.promise(() =>
+          LazyChild.preload()
+        )
         const Host = Html.component({
           name: "LazyHost",
           model: Schema.Null,

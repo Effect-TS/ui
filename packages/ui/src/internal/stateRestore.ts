@@ -1,7 +1,7 @@
 import type * as Cause from "effect/Cause"
-import type * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
+import type * as Fiber from "effect/Fiber"
 import type * as SchemaIssue from "effect/SchemaIssue"
 import type * as Component from "../Component.ts"
 import type * as View from "../View.ts"
@@ -32,16 +32,8 @@ interface Held {
 }
 
 /** @internal */
-export interface PendingCommand {
-  readonly path: string
-  readonly name: string
-  readonly status: string
-}
-
-/** @internal */
 export interface Options {
   readonly rootPath: string
-  readonly ctx: Context.Context<any>
   readonly entry: () => Saved | undefined
   readonly restore: (path: string) => services.PageState | undefined
   readonly onEncodeFailure?:
@@ -54,7 +46,7 @@ export interface Options {
     | ((inst: Kernel.Instance, error: unknown) => void)
     | undefined
   readonly onDecodeFailure?:
-    | ((inst: Kernel.Instance, cause: Cause.Cause<unknown>) => void)
+    | ((inst: Kernel.Instance, cause: Cause.Cause<SchemaIssue.Issue>) => void)
     | undefined
 }
 
@@ -77,7 +69,7 @@ export interface StateRestore {
   ) => () => void
   readonly pop: () => void
   readonly clear: () => void
-  readonly ended: (author: Kernel.Instance, path: string) => void
+  readonly watch: (tree: Kernel.Instance["tree"]) => void
 }
 
 /** @internal */
@@ -93,31 +85,14 @@ export const childrenOf = (
 }
 
 /** @internal */
-export const pendingOf = (
-  inst: Kernel.Instance,
-  out: Array<PendingCommand> = []
-): Array<PendingCommand> => {
-  const runs = inst.runs
-  if (runs !== undefined) {
-    for (const run of runs.pending()) {
-      out.push({ path: inst.path, ...run })
-    }
+export const pageAt = (
+  from: Saved,
+  path: string
+): services.PageState | undefined =>
+  from[path] === undefined ? undefined : {
+    state: from[path],
+    reported: (from["~reported"] as Saved | undefined)?.[path]
   }
-  if (inst.rendered !== undefined) pendingIn(inst.rendered, out)
-  const kept = inst.kept as keptRun.Table | undefined
-  if (kept !== undefined) {
-    for (const entry of kept.kids.values()) {
-      if (!entry.inst.closed) pendingOf(entry.inst, out)
-    }
-  }
-  return out
-}
-
-const pendingIn = (rec: Kernel.Rec, out: Array<PendingCommand>): void => {
-  const kids = rec.kids
-  if (kids !== undefined) { for (const kid of kids) pendingIn(kid, out) }
-  else if (rec.v._tag === "Child" && !rec.inst.closed) pendingOf(rec.inst, out)
-}
 
 /** @internal */
 export const restoreQueries = (
@@ -187,6 +162,18 @@ export const make = (options: Options): StateRestore => {
     }
     onEncodeFailure?.(inst, exit.cause)
   }
+  const settle = (
+    inst: Kernel.Instance,
+    out: Saved,
+    encoded:
+      | Exit.Exit<services.PageState, SchemaIssue.Issue>
+      | Fiber.Fiber<services.PageState, SchemaIssue.Issue>
+  ) => {
+    if (Exit.isExit(encoded)) return write(inst, out, encoded)
+    if (onAsyncEncode?.(inst) !== false) {
+      encoded.addObserver((exit) => write(inst, out, exit))
+    }
+  }
   const save = (inst: Kernel.Instance, out: Saved) => {
     const component = inst.component as unknown as Component.Any
     const restore = component.definition.restore
@@ -200,13 +187,11 @@ export const make = (options: Options): StateRestore => {
         return
       }
     }
-    const encoded = runCodec(
-      encodePage(component, model, inst.results, inst.owning)
+    settle(
+      inst,
+      out,
+      runCodec(encodePage(component, model, inst.results, inst.owning))
     )
-    if (Exit.isExit(encoded)) return write(inst, out, encoded)
-    if (onAsyncEncode?.(inst) !== false) {
-      encoded.addObserver((exit) => write(inst, out, exit))
-    }
   }
   const keptIn = (out: Saved, top: Saved, author: string): Saved =>
     (((out[out === top ? "~kept" + rootPath : "~kept"] ??= {}) as Saved)[
@@ -292,17 +277,17 @@ export const make = (options: Options): StateRestore => {
     const inst = { path, component } as unknown as Kernel.Instance
     if (restore === undefined) return write(inst, to, Exit.succeed(found))
     const codec = stateCodecOf(component)
-    const encoded = runCodec(
-      Effect.flatMapEager(codec.decode(state), (decoded) =>
-        Effect.mapEager(
-          codec.encode(restore(decoded.model, view.props), decoded.results),
-          (state) => ({ state, reported: found.reported })
-        ))
+    settle(
+      inst,
+      to,
+      runCodec(
+        Effect.flatMapEager(codec.decode(state), (decoded) =>
+          Effect.mapEager(
+            codec.encode(restore(decoded.model, view.props), decoded.results),
+            (state) => ({ state, reported: found.reported })
+          ))
+      ) as never
     )
-    if (Exit.isExit(encoded)) return write(inst, to, encoded as never)
-    if (onAsyncEncode?.(inst) !== false) {
-      encoded.addObserver((exit) => write(inst, to, exit as never))
-    }
   }
   const heldFor: StateRestore["heldFor"] = (owner, rec, path, found) => {
     waitingFor.set(rec, {
@@ -316,7 +301,7 @@ export const make = (options: Options): StateRestore => {
   }
   const taken = new Map<
     string,
-    readonly [services.PageState, Exit.Exit<Decoded, unknown>]
+    readonly [services.PageState, Exit.Exit<Decoded, SchemaIssue.Issue>]
   >()
   const hold: StateRestore["hold"] = (owner, rec, at) => {
     const view = rec.v as View.Child<any, any>
@@ -335,11 +320,7 @@ export const make = (options: Options): StateRestore => {
     ) {
       own = supplies.get(up)
     }
-    const found = own === undefined
-      ? restoreAt(path)
-      : own[path] === undefined
-      ? undefined
-      : { state: own[path], reported: (own["~reported"] as Saved)?.[path] }
+    const found = own === undefined ? restoreAt(path) : pageAt(own, path)
     if (found === undefined) return false
     const decoded = runCodec(stateCodecOf(component).decode(found.state))
     if (Exit.isExit(decoded)) {
@@ -387,16 +368,11 @@ export const make = (options: Options): StateRestore => {
       if (adopted === true || component.definition.restore === false) {
         return first
       }
-      const found: services.PageState | undefined = held !== undefined
+      const found = held !== undefined
         ? held[0]
         : own === undefined
         ? restoreAt(inst.path)
-        : own[inst.path] === undefined
-        ? undefined
-        : {
-          state: own[inst.path],
-          reported: (own["~reported"] as Saved | undefined)?.[inst.path]
-        }
+        : pageAt(own, inst.path)
       if (found === undefined) return first
       const exit = held?.[1] ?? Effect.runSyncExit(
         stateCodecOf(component).decode(found.state)
@@ -425,8 +401,12 @@ export const make = (options: Options): StateRestore => {
       popped = undefined
       taken.clear()
     },
-    ended: (author, path) => {
-      delete waits.get(author)?.[path]
+    watch: (tree) => {
+      const ended = tree.ended
+      tree.ended = (author, path) => {
+        ended?.(author, path)
+        delete waits.get(author)?.[path]
+      }
     }
   }
 }

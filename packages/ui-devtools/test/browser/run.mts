@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url"
 import { type Browser, chromium } from "playwright"
-import { createServer } from "vite"
+import { createServer, type InlineConfig, mergeConfig } from "vite"
 
 export interface Context {
   readonly browser: Browser
@@ -11,12 +11,13 @@ export interface Context {
 
 export const run = async (
   name: string,
-  body: (context: Context) => Promise<void>
+  body: (context: Context) => Promise<void>,
+  config: InlineConfig = {}
 ): Promise<void> => {
   const at = process.argv.indexOf("--executable")
   const executablePath = at >= 0 ? process.argv[at + 1] : process.env.CHROMIUM
 
-  const server = await createServer({
+  const server = await createServer(mergeConfig({
     root: import.meta.dirname,
     configFile: false,
     logLevel: "silent",
@@ -28,7 +29,7 @@ export const run = async (
       }
     },
     server: { port: 0, strictPort: false }
-  })
+  }, config))
   await server.listen()
   const url = server.resolvedUrls!.local[0]
   const browser = await chromium.launch({
