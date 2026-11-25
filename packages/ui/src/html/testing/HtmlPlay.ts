@@ -482,6 +482,7 @@ export const make = <
   )
   return Effect.gen(function*() {
     const { host } = yield* TestHost.TestHost
+    const upstream = yield* HtmlSubscription.GlobalEvents
     const existing = yield* Effect.serviceOption(
       TestGlobalEvents.TestGlobalEvents
     )
@@ -489,34 +490,39 @@ export const make = <
       host: htmlHost(host)
     })
     let events: TestGlobalEvents.TestGlobalEvents
-    let play: HtmlPlayCursor
+    let globalSource: HtmlSubscription.GlobalEvents
     if (Option.isSome(existing)) {
       events = existing.value
-      play = yield* mounted
+      globalSource = {
+        listen: (target, event, options, listener) =>
+          upstream.listen(target, event, options, (payload, preventDefault) => {
+            globalEvents.markHeard(target, event)
+            listener(payload, preventDefault)
+          })
+      }
     } else {
-      const upstream = yield* HtmlSubscription.GlobalEvents
       const local = TestGlobalEvents.make()
       events = local
-      play = yield* Effect.provideService(
-        mounted,
-        HtmlSubscription.GlobalEvents,
-        {
-          listen: (target, event, options, listener) => {
-            const offUpstream = upstream.listen(
-              target,
-              event,
-              options,
-              listener
-            )
-            const offLocal = local.listen(target, event, options, listener)
-            return () => {
-              offLocal()
-              offUpstream()
-            }
+      globalSource = {
+        listen: (target, event, options, listener) => {
+          const wrapped: typeof listener = (payload, preventDefault) => {
+            globalEvents.markHeard(target, event)
+            listener(payload, preventDefault)
+          }
+          const offUpstream = upstream.listen(target, event, options, wrapped)
+          const offLocal = local.listen(target, event, options, wrapped)
+          return () => {
+            offLocal()
+            offUpstream()
           }
         }
-      )
+      }
     }
+    const play = yield* Effect.provideService(
+      mounted,
+      HtmlSubscription.GlobalEvents,
+      globalSource
+    )
     play.globalEvents = events
     return play
   }) as any

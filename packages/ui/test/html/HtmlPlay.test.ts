@@ -436,5 +436,48 @@ describe("HtmlPlay", () => {
         Effect.provideService(TestGlobalEvents.TestGlobalEvents, wrapper),
         Effect.provide(TestHost.layer())
       )
+
+      // Direct HtmlSubscription.GlobalEvents.listen callback counts as heard (ignored), then missing after unsubscribe.
+      let hits = 0
+      let detach: (() => void) | undefined
+      const Direct = Html.component({
+        name: "Direct",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.p("direct"),
+        subscriptions: () => [
+          Subscription.make(
+            "direct",
+            Stream.unwrap(
+              Effect.map(HtmlSubscription.GlobalEvents, (events) => {
+                detach = events.listen(
+                  "document",
+                  "keydown",
+                  { capture: false },
+                  () => {
+                    hits++
+                  }
+                )
+                return Stream.never
+              })
+            )
+          )
+        ]
+      })
+      yield* play(Effect.gen(function*() {
+        const p = yield* HtmlPlay.make(Direct, {})
+        yield* p.keydown("document", "a")
+        assert.strictEqual(hits, 1)
+        yield* p.expectIgnored()
+        detach?.()
+        const missing = yield* Effect.exit(p.keydown("document", "a"))
+        assert.match(
+          Exit.isFailure(missing) ? Cause.pretty(missing.cause) : "",
+          /nothing listens for "keydown" on the document/
+        )
+      }))
     }))
 })

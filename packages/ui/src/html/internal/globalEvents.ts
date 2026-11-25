@@ -54,8 +54,27 @@ interface Tracked {
 let tracked: Tracked | undefined
 
 /**
- * Runs `f` and reports whether any matching `globalEvents.run` call inside it
- * was invoked (`heard`) and whether one produced a message (`handled`).
+ * Records that a listener for `(target, event)` was invoked during the active
+ * `track` call.
+ *
+ * @internal
+ */
+export const markHeard = (
+  target: "document" | "window",
+  event: string
+): void => {
+  if (
+    tracked !== undefined &&
+    tracked.target === target &&
+    tracked.event === event
+  ) {
+    tracked.heard = true
+  }
+}
+
+/**
+ * Runs `f` and reports whether any matching listener was invoked (`heard`) and
+ * whether any matching `globalEvents.run` call produced a message (`handled`).
  *
  * @internal
  */
