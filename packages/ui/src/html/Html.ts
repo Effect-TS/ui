@@ -103,7 +103,10 @@
  * @since 0.1.0
  */
 import * as Context from "effect/Context"
+import type * as Exit from "effect/Exit"
+import * as Schema from "effect/Schema"
 import * as Component from "../Component.ts"
+import { handle } from "../internal/handler.ts"
 import type * as Mount from "../Mount.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
@@ -1755,3 +1758,352 @@ export const ref = <K extends keyof HTMLElementTagNameMap>(
   _tag: K
 ): Renderer.Ref<HTMLElementTagNameMap[K]> =>
   Renderer.ref<HTMLElementTagNameMap[K]>(name)
+
+// ---------------------------------------------------------------------------
+// custom elements
+// ---------------------------------------------------------------------------
+
+type CamelCase<S extends string> = S extends `${infer Head}-${infer Tail}`
+  ? `${Head}${Capitalize<CamelCase<Tail>>}`
+  : S
+
+/**
+ * The method a custom element's event gets: `on` and the event's name in
+ * camelCase, so `color-changed` is `onColorChanged` and `sl-change` is
+ * `onSlChange`.
+ *
+ * @stability experimental
+ * @category custom elements
+ * @since 0.1.0
+ */
+export type CustomEventMethod<K extends string> = `on${Capitalize<
+  CamelCase<K>
+>}`
+
+/**
+ * The names that get no generated method on a custom element, because the
+ * builder already uses them: its own fields and core methods, such as
+ * `content`, `key`, `ref`, `children` and `onMount`, plus `id`, `class`
+ * and `style`. Set a property with one of these names with `prop`.
+ *
+ * @stability experimental
+ * @category custom elements
+ * @since 0.1.0
+ */
+export type CustomElementReserved =
+  | keyof View.ContainerBuilder<any>
+  | keyof object
+  | "id"
+  | "class"
+  | "style"
+
+type PropertyMethods<P> = {
+  readonly [
+    K in keyof P & string as K extends CustomElementReserved ? never : K
+  ]: <
+    Self
+  >(
+    this: Self,
+    value: P[K]
+  ) => Self
+}
+
+type EventMethods<Msg, E> = {
+  readonly [
+    K in keyof E & string as CustomEventMethod<K> extends CustomElementReserved
+      ? never
+      : CustomEventMethod<K>
+  ]: {
+    // Method syntax keeps the handler bivariant, as on `Element`, so the builder stays covariant in `Msg`.
+    method<Self>(
+      this: Self,
+      handler: View.Handler<Msg, E[K]>,
+      options?: View.EventOptions | undefined
+    ): Self
+  }["method"]
+}
+
+type TypesOf<S> = {
+  readonly [K in keyof S]: S[K] extends Schema.Top ? S[K]["Type"] : never
+}
+
+/**
+ * The builder under a custom element's generated methods: an `Element` whose
+ * `prop` takes only the declared properties, each typed by its Schema, and
+ * whose `on` adds the declared events, each with its decoded `detail` as
+ * the payload.
+ *
+ * **Details**
+ *
+ * `P` maps each declared property to its value type and `E` each declared
+ * event to its `detail`. A declared event replaces an HTML event of the same
+ * name. `CustomElement` adds a method per declaration.
+ *
+ * @stability experimental
+ * @category custom elements
+ * @since 0.1.0
+ */
+export class CustomElementBuilder<
+  out Msg,
+  out R = never,
+  in out P = {},
+  in out E = {},
+  out Tag extends string = string
+> extends Element<Msg, R, Omit<Events, keyof E> & E, HTMLElement, Tag> {
+  /**
+   * Writes the declared property `name` on the element as a JavaScript
+   * property, typed by its Schema. The browser host writes it when its value
+   * changes, and resets it when a render leaves it out.
+   *
+   * @since 0.1.0
+   */
+  override prop<K extends keyof P & string>(name: K, value: P[K]): this {
+    return super.prop(name, value)
+  }
+  /**
+   * Like `Element.children`, keeping the generated methods.
+   *
+   * @since 0.1.0
+   */
+  override children<const C extends ReadonlyArray<View.Input<Msg, any>>>(
+    ...inputs: C
+  ): CustomElement<Msg, R | View.Requirements<C[number]>, P, E, Tag> {
+    return super.children(...inputs) as any
+  }
+}
+
+/**
+ * The builder of a custom element: `CustomElementBuilder` plus a method per
+ * declared property, named after it, and one per declared event, named
+ * `CustomEventMethod`.
+ *
+ * **Details**
+ *
+ * A declared name wins over the HTML method of the same name, such as
+ * `value`, `disabled` or `onChange`, and is typed by its Schema. A wrong
+ * value for one of those reports "No overload matches this call", with the
+ * declared signature as the first overload. A name in
+ * `CustomElementReserved` gets no method.
+ *
+ * @stability experimental
+ * @category custom elements
+ * @since 0.1.0
+ */
+export type CustomElement<
+  Msg,
+  R = never,
+  P = {},
+  E = {},
+  Tag extends string = string
+> =
+  & PropertyMethods<P>
+  & EventMethods<Msg, E>
+  & CustomElementBuilder<Msg, R, P, E, Tag>
+
+/**
+ * What `customElement` takes: the element's `tag`, its JavaScript
+ * `properties` and its `events`, each described by a Schema. An event's
+ * Schema decodes its `detail`.
+ *
+ * @stability experimental
+ * @category custom elements
+ * @since 0.1.0
+ */
+export interface CustomElementConfig<Tag extends string, P, E> {
+  readonly tag: Tag
+  readonly properties?: P | undefined
+  readonly events?: E | undefined
+}
+
+/**
+ * A custom element bound with `customElement`. Call it with a view's `h` to
+ * get the element's root builder, which, like `h.div`, is also callable as
+ * shorthand for `children`.
+ *
+ * **Details**
+ *
+ * It takes an `Html.H`, so only an HTML view can use it. `tag`,
+ * `properties` and `events` are what it was defined with.
+ *
+ * @stability experimental
+ * @category custom elements
+ * @since 0.1.0
+ */
+export interface CustomElementBinding<Tag extends string, P, E> {
+  <Msg>(
+    h: H<Msg>
+  ): View.Shorthand<
+    CustomElement<Msg, never, TypesOf<P>, TypesOf<E>, Tag>
+  >
+  readonly tag: Tag
+  readonly properties: P
+  readonly events: E
+}
+
+const camelCase = (name: string): string =>
+  name.split("-").map((part, index) => index === 0 ? part : capitalize(part))
+    .join("")
+
+const capitalize = (name: string): string =>
+  name.charAt(0).toUpperCase() + name.slice(1)
+
+/**
+ * Binds a custom element, a web component another library or your own code
+ * defines, to the HTML vocabulary, with typed properties and events.
+ *
+ * **When to use**
+ *
+ * Use when an element's contract is declarative: JavaScript properties go
+ * in and `CustomEvent`s come out, as with most Lit, Stencil or Shoelace
+ * components. For an imperative API, such as a map or an editor you call
+ * methods on, use `onMount`.
+ *
+ * **Details**
+ *
+ * Each declared property gets a method that writes it as a JavaScript
+ * property, not an attribute, so arrays and objects work. The browser host
+ * writes it when its value changes, and resets it to `""`, `false` or
+ * `null` when a render leaves it out. `value`, `checked` and `open` are
+ * plain properties on a custom element, not controlled as on an `input`.
+ * The server renders none of them: the browser host sets them when it adopts
+ * the element.
+ *
+ * Each declared event gets a method named `CustomEventMethod`, whose handler
+ * receives the event's `detail` decoded by its Schema. A `detail` the Schema
+ * rejects is logged with `console.error` and sends no message. A missing or
+ * `null` `detail` that the Schema rejects is decoded again as `{}`, so
+ * `Schema.Struct({})` declares an event without a payload. An event that
+ * doesn't bubble reaches the element's own handler only.
+ *
+ * `prop` and `on` take the same declarations, typed the same way, and set
+ * a property whose name has no method (see `CustomElementReserved`). The
+ * HTML methods, such as `class`, `style` and `onClick`, work as on any
+ * element. Registering the element with `customElements.define`, often by
+ * importing its package, is still the app's job.
+ *
+ * Throws when `tag` isn't a custom element name, lowercase with a hyphen,
+ * or when two declarations get the same method name.
+ *
+ * In a test, `HtmlScene.fireElement` and `HtmlPlay.fireElement` send a
+ * declared event with a typed `detail`.
+ *
+ * **Example** (A color picker web component)
+ *
+ * ```ts import.meta.vitest
+ * import { UiSchema } from "@effect/ui"
+ * import { Html } from "@effect/ui/html"
+ * import { Schema } from "effect"
+ *
+ * const ColorPicker = Html.customElement({
+ *   tag: "hex-color-picker",
+ *   properties: { color: Schema.String },
+ *   events: { "color-changed": Schema.Struct({ value: Schema.String }) }
+ * })
+ *
+ * const Message = UiSchema.TaggedEnum({ ChangedColor: { color: Schema.String } })
+ *
+ * const Swatch = Html.component({
+ *   name: "Swatch",
+ *   model: Schema.String,
+ *   message: Message
+ * }).make({
+ *   init: () => "#1e1b4b",
+ *   update: { ChangedColor: (_, { color }) => color },
+ *   view: (h, color) =>
+ *     ColorPicker(h)
+ *       .class("swatch")
+ *       .color(color)
+ *       .onColorChanged(({ value }) => Message.ChangedColor({ color: value }))
+ * })
+ * ```
+ *
+ * @stability experimental
+ * @category custom elements
+ * @since 0.1.0
+ */
+export const customElement = <
+  const Tag extends string,
+  const P extends { readonly [name: string]: Schema.Top } = {},
+  const E extends {
+    readonly [event: string]: Schema.Decoder<unknown>
+  } = {}
+>(
+  config: CustomElementConfig<Tag, P, E>
+): CustomElementBinding<Tag, P, E> => {
+  const { tag } = config
+  if (!/^[a-z][^A-Z\s]*-[^A-Z\s]*$/.test(tag)) {
+    throw new Error(
+      `Html.customElement: "${tag}" isn't a custom element name, which starts with a lowercase letter and holds a hyphen and no uppercase letter`
+    )
+  }
+  const properties = config.properties ?? ({} as P)
+  const events = config.events ?? ({} as E)
+  const decoders: Record<
+    string,
+    (input: unknown) => Exit.Exit<unknown, Schema.SchemaError>
+  > = {}
+  for (const event in events) {
+    decoders[event] = Schema.decodeUnknownExit(events[event]!)
+  }
+  class Bound extends CustomElementBuilder<any, any, any, any, any> {
+    override on(
+      event: string,
+      handler: View.Handler<unknown, unknown>,
+      options?: View.EventOptions | undefined
+    ): this {
+      const decode = Object.hasOwn(decoders, event)
+        ? decoders[event]
+        : undefined
+      return super.on(
+        event as never,
+        decode === undefined ? handler : (payload: unknown) => {
+          const detail = (payload as { readonly detail?: unknown }).detail
+          let exit = decode(detail)
+          if (exit._tag === "Failure" && detail == null) exit = decode({})
+          if (exit._tag === "Success") return handle(handler, exit.value)
+          // oxlint-disable-next-line no-console
+          console.error(
+            `[@effect/ui/html/Html] <${tag}> sent "${event}" with a detail its Schema rejects, so it sends no message. ${exit.cause}`
+          )
+          return undefined
+        },
+        options
+      )
+    }
+  }
+  const core = new View.ContainerBuilder("")
+  const define = (name: string, method: Function) => {
+    if (name in core || name === "id" || name === "class" || name === "style") {
+      return
+    }
+    if (Object.hasOwn(Bound.prototype, name)) {
+      throw new Error(
+        `Html.customElement: two declarations of <${tag}> get the method ${name}`
+      )
+    }
+    Object.defineProperty(Bound.prototype, name, {
+      value: method,
+      writable: true,
+      configurable: true
+    })
+  }
+  for (const name in properties) {
+    define(name, function(this: Bound, value: unknown) {
+      return this.prop(name, value)
+    })
+  }
+  for (const event in events) {
+    define(
+      "on" + capitalize(camelCase(event)),
+      function(
+        this: Bound,
+        handler: View.Handler<unknown, unknown>,
+        options?: View.EventOptions
+      ) {
+        return this.on(event, handler, options)
+      }
+    )
+  }
+  const root = View.shorthand(new Bound(tag))
+  return Object.assign(() => root, { tag, properties, events }) as any
+}

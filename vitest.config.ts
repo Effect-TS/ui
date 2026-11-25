@@ -98,6 +98,7 @@ export default defineConfig({
       ...example("interrupting-commands"),
       ...example("routing"),
       ...example("snake"),
+      ...example("web-components"),
       ...project("snake-tui", path.join("examples", "snake-tui"), true, {
         test: {
           include: ["src/**/*.test.ts"],

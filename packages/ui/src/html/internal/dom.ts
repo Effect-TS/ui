@@ -5,7 +5,7 @@ import type * as View from "../../View.ts"
 import type * as Html from "../Html.ts"
 import * as documentHead from "./documentHead.ts"
 import { attributeName, svgTags } from "./elements.ts"
-import { ownEvents } from "./ownEvents.ts"
+import { bubblingEvents, ownEvents } from "./ownEvents.ts"
 import {
   type FieldState,
   fieldStateOf,
@@ -122,6 +122,11 @@ type Node = globalThis.Node & { $r?: Kernel.Rec }
 
 /** @internal */
 export const written = new WeakMap<globalThis.Node, Map<string, unknown>>()
+
+const plain = new WeakMap<globalThis.Node, Map<string, unknown>>()
+
+const isCustom = (node: globalThis.Node): boolean =>
+  (node as globalThis.Element).localName.includes("-")
 
 interface HostOptions {
   readonly head?: boolean | undefined
@@ -565,7 +570,8 @@ export const makeHost = (
       submit.ownedUnhandled.add(event)
     }
     if (name === "dragstart") startDrag(event as DragEvent, path)
-    const own = ownEvents.has(name)
+    const own = ownEvents.has(name) ||
+      (!event.bubbles && !bubblingEvents.has(name))
     let node: Node
     const payload = () =>
       name === "dragend"
@@ -697,7 +703,12 @@ export const makeHost = (
     },
     setProp(node, name, value) {
       const element = node as any
-      if (controlled.has(name)) {
+      if (controlled.has(name) && isCustom(node) && name !== "popoverOpen") {
+        let values = plain.get(node)
+        if (values === undefined) plain.set(node, values = new Map())
+        if (values.has(name) && values.get(name) === value) return
+        values.set(name, value)
+      } else if (controlled.has(name)) {
         let values = written.get(node)
         const dialog = name === "open" && isDialog(node)
         const popover = name === "popoverOpen"

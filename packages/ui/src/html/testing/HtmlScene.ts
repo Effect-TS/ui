@@ -70,6 +70,7 @@
  * @since 0.1.0
  */
 import type * as Effect from "effect/Effect"
+import type * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
 import { handle } from "../../internal/handler.ts"
@@ -211,6 +212,25 @@ export interface Steps<C extends AnyComponent, Parts = never>
    * always cancels a drop on a target, so the default is cancelled.
    */
   drop(locator: Locator.Locator, payload?: Partial<Html.DropPayload>): this
+  /**
+   * Sends an event `element` declares, from the element `locator` matches,
+   * with `detail` as the element would send it.
+   *
+   * **Details**
+   *
+   * The handler gets `detail` decoded by the event's Schema, as in the
+   * browser host. The step throws when nothing handles `event` there or
+   * above, and is ignored when the handler returns `undefined`.
+   */
+  fireElement<
+    E extends { readonly [event: string]: Schema.Decoder<unknown> },
+    K extends keyof E & string
+  >(
+    element: Html.CustomElementBinding<any, any, E>,
+    locator: Locator.Locator,
+    event: K,
+    detail: E[K]["Encoded"]
+  ): this
   /**
    * Fires `event` on the document, as the browser host delivers it to the
    * component's `HtmlSubscription.onDocument` listeners. Missing payload
@@ -493,6 +513,14 @@ class StepsImpl extends internal.SceneCursor {
   /** A drop on a target is always cancelled by the host. */
   private markPrevented(): this {
     return this.replace(engine.update(this.state, { defaultPrevented: true }))
+  }
+  fireElement(
+    _element: unknown,
+    locator: Locator.Locator,
+    event: string,
+    detail: unknown
+  ): this {
+    return this.one("fireElement", locator, event, () => ({ detail }))
   }
   fireDocument(event: string, payload?: object): this {
     return this.fireGlobal("fireDocument", "document", event, payload)

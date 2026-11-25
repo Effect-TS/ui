@@ -69,6 +69,7 @@
  * @since 0.1.0
  */
 import * as Effect from "effect/Effect"
+import type * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
 import * as internal from "../../internal/play.ts"
@@ -163,6 +164,20 @@ export interface HtmlPlay<Model, Msg, Events>
   drop(
     locator: Locator.Locator,
     payload?: Partial<Html.DropPayload>
+  ): Effect.Effect<void, Play.StepError>
+  /**
+   * Sends an event `element` declares, from the element `locator` matches,
+   * with `detail` as the element would send it, as `HtmlScene.fireElement`
+   * does. Throws when nothing handles `event` there or above.
+   */
+  fireElement<
+    E extends { readonly [event: string]: Schema.Decoder<unknown> },
+    K extends keyof E & string
+  >(
+    element: Html.CustomElementBinding<any, any, E>,
+    locator: Locator.Locator,
+    event: K,
+    detail: E[K]["Encoded"]
   ): Effect.Effect<void, Play.StepError>
 
   /** Asserts on the elements `locator` matches, once the tree has settled. */
@@ -318,6 +333,14 @@ class HtmlPlayCursor extends internal.PlayCursor {
   }
   blur(locator: Locator.Locator): Effect.Effect<void, Play.StepError> {
     return this.one("blur", locator, "blur", () => ({}))
+  }
+  fireElement(
+    _element: unknown,
+    locator: Locator.Locator,
+    event: string,
+    detail: unknown
+  ): Effect.Effect<void, Play.StepError> {
+    return this.one("fireElement", locator, event, () => ({ detail }))
   }
   drop(
     locator: Locator.Locator,

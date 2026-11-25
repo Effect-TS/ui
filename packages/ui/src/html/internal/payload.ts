@@ -247,8 +247,12 @@ export const payloadOf = (
         within: containsTarget(element, (event as FocusEvent).relatedTarget),
         disabled: isDisabled(target)
       }
-    default:
-      return {}
+    default: {
+      const Custom = element.ownerDocument?.defaultView?.CustomEvent
+      return Custom !== undefined && event instanceof Custom
+        ? { detail: event.detail }
+        : {}
+    }
   }
 }
 
