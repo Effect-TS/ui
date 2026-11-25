@@ -46,7 +46,7 @@
  * removed, the focus moves to the item that takes its index, or the one
  * before it: to the item itself when it takes the focus, and otherwise to the
  * first element in it that does. It moves to `viewport` when the list is
- * left empty.
+ * left empty, or to the list itself without a `viewport` part.
  *
  * **Layout**
  *
@@ -1414,17 +1414,33 @@ const TrackVirtualList = Mount.makeStream(
           else scrollBy(toEnd())
         }
 
+        // The list takes the focus only from `refocus`, and gives back its
+        // `tabindex` once it loses it, so it never becomes a tab stop.
+        const focusList = () => {
+          if (list.hasAttribute("tabindex")) {
+            return list.focus({ preventScroll: true })
+          }
+          list.setAttribute("tabindex", "-1")
+          const release = () => list.removeAttribute("tabindex")
+          list.addEventListener("blur", release, { once: true })
+          list.focus({ preventScroll: true })
+          if (activeOf(document) !== list) {
+            list.removeEventListener("blur", release)
+            release()
+          }
+        }
+
         // Removing the focused item drops the focus to the body, so it moves to
-        // the item now at that index, or the one before it, or to the viewport.
+        // the item now at that index, or the one before it, or to the viewport,
+        // or to the list. An item that's still there may have a new index.
         const refocus = () => {
           const lost = focusedItem
-          if (lost === null || lost.isConnected) return
-          focusedItem = null
+          if (lost === null) return
           const active = activeOf(document)
-          if (
-            active !== null && active !== document.body &&
-            active !== document.documentElement
-          ) return onFocus()
+          const dropped = active === null || active === document.body ||
+            active === document.documentElement
+          if (lost.isConnected || !dropped) return onFocus()
+          focusedItem = null
           const index = Number(lost.getAttribute("data-index"))
           const items = itemsOf()
           const item = items.find((item) =>
@@ -1433,13 +1449,17 @@ const TrackVirtualList = Mount.makeStream(
           const candidates = item === undefined
             ? []
             : [item, ...item.querySelectorAll<HTMLElement>(focusableSelector)]
-          if (viewport !== null) {
-            candidates.push(viewport)
+          const own = viewport?.getAttribute(viewportAttr) === args.id
+          if (own) {
+            candidates.push(viewport!)
           }
-          candidates.find((candidate) => {
+          const moved = candidates.some((candidate) => {
             candidate.focus({ preventScroll: true })
             return activeOf(document) === candidate
           })
+          if (!moved) {
+            focusList()
+          }
           onFocus()
         }
 
@@ -1448,7 +1468,9 @@ const TrackVirtualList = Mount.makeStream(
             activeOf(document)?.closest(attrSelector(itemAttr, args.id)) ?? null
           const next = item !== null && list.contains(item) ? item : null
           focusedItem = next
-          const id = next === null ? null : identity(next)
+          const id = next === null
+            ? null
+            : identity(next) + "@" + next.getAttribute("data-index")
           if (id === focused) {
             return
           }

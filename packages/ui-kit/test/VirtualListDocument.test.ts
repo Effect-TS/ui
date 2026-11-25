@@ -186,9 +186,11 @@ describe("VirtualList in a document", { concurrent: false }, () => {
   it.effect("moves the focus from a removed item to the next one, the one before, then the viewport", () =>
     Effect.gen(function*() {
       const keys = Array.from({ length: 1000 }, (_, i) => "k" + i)
+      const added = [...Array.from({ length: 100 }, (_, i) => "n" + i), ...keys]
       const { item, next, scrollTo } = yield* Steps([
         { keys },
-        { keys: keys.filter((key) => key !== "k1") },
+        { keys: added },
+        { keys: added.filter((key) => key !== "k1") },
         { keys: ["k0", "k2"] },
         { keys: ["k0"] },
         { keys: [] }
@@ -197,7 +199,8 @@ describe("VirtualList in a document", { concurrent: false }, () => {
         document.activeElement?.closest(".item")?.getAttribute("data-key")
       item(1).querySelector("button")!.focus()
       yield* tick
-      scrollTo(1000)
+      yield* next
+      scrollTo(10000)
       yield* tick
       yield* next
       assert.strictEqual(focusedKey(), "k2")
@@ -209,6 +212,20 @@ describe("VirtualList in a document", { concurrent: false }, () => {
         document.activeElement,
         document.querySelector(".viewport")
       )
+    }))
+
+  it.effect("moves the focus from the last item to the list without a viewport", () =>
+    Effect.gen(function*() {
+      const { item, next } = yield* Steps([{ count: 1 }, { count: 0 }], {
+        ownViewport: true
+      })
+      item(0).querySelector("button")!.focus()
+      yield* tick
+      yield* next
+      const list = document.querySelector<HTMLElement>(".list")!
+      assert.strictEqual(document.activeElement, list)
+      list.blur()
+      assert.strictEqual(list.getAttribute("tabindex"), null)
     }))
 
   it.effect("scrolls with the nearest element that scrolls, once it starts to after the list mounts", () =>
