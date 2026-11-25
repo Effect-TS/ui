@@ -9,6 +9,33 @@ const root = fs.mkdtempSync(path.join(import.meta.dirname, ".hot-tmp-"))
 const write = (name, source) =>
   fs.writeFileSync(path.join(root, name), source, "utf8")
 
+const on = (page) => ({
+  text: (selector) => page.locator(selector).textContent(),
+  shows: (selector, value) =>
+    page.waitForFunction(
+      ([selector, value]) =>
+        document.querySelector(selector)?.textContent === value,
+      [selector, value]
+    ),
+  edit: (name, source) => {
+    write(name, source)
+    // Saves a few milliseconds apart can reach the page as one update.
+    return page.waitForTimeout(700)
+  }
+})
+
+// Collects the tag of each message a `/log` socket sends.
+const collectTags = (ws, logTags) =>
+  ws.on("framesent", ({ payload }) => {
+    if (typeof payload !== "string") return
+    try {
+      const parsed = JSON.parse(payload)
+      if (typeof parsed?._tag === "string") logTags.push(parsed._tag)
+    } catch {
+      return
+    }
+  })
+
 const html = (script) =>
   `<!doctype html><html><head><meta charset="utf-8"><link rel="icon" href="data:,"><script type="module" src="/${script}"></script></head><body><div id="root"></div></body></html>`
 
@@ -324,17 +351,7 @@ try {
       if (!ws.url().includes(":47769/")) return
       sockets.add(ws)
       ws.on("close", () => sockets.delete(ws))
-      if (ws.url().endsWith("/log")) {
-        ws.on("framesent", ({ payload }) => {
-          if (typeof payload !== "string") return
-          try {
-            const parsed = JSON.parse(payload)
-            if (typeof parsed?._tag === "string") logTags.push(parsed._tag)
-          } catch {
-            return
-          }
-        })
-      }
+      if (ws.url().endsWith("/log")) collectTags(ws, logTags)
     })
     const liveSockets = (suffix) =>
       [...sockets].filter((ws) => !ws.isClosed() && ws.url().endsWith(suffix))
@@ -349,14 +366,8 @@ try {
       failures.push("pageerror: " + String(error))
     })
 
-    const text = (selector) => page.locator(selector).textContent()
+    const { shows, text } = on(page)
     const count = async () => Number(await text("[data-count]"))
-    const shows = (selector, value) =>
-      page.waitForFunction(
-        ([selector, value]) =>
-          document.querySelector(selector)?.textContent === value,
-        [selector, value]
-      )
     const counted = () =>
       page.waitForFunction(
         () => Number(document.querySelector("[data-count]")?.textContent) >= 3
@@ -513,16 +524,7 @@ try {
     let loads = 0
     page.on("load", () => loads++)
     page.on("websocket", (ws) => {
-      if (!ws.url().endsWith(":47770/log")) return
-      ws.on("framesent", ({ payload }) => {
-        if (typeof payload !== "string") return
-        try {
-          const parsed = JSON.parse(payload)
-          if (typeof parsed?._tag === "string") logTags.push(parsed._tag)
-        } catch {
-          return
-        }
-      })
+      if (ws.url().endsWith(":47770/log")) collectTags(ws, logTags)
     })
     page.on("console", (msg) => {
       if (msg.type() === "warning") warnings.push(msg.text())
@@ -532,22 +534,13 @@ try {
       failures.push("pageerror: " + String(error))
     })
 
-    const title = () => page.locator("h1").textContent()
     const cells = () =>
       page.evaluate(() =>
         [...document.querySelectorAll(".w-6")].map((cell) => cell.className)
           .join("|")
       )
-    const titled = (text) =>
-      page.waitForFunction(
-        (text) => document.querySelector("h1")?.textContent === text,
-        text
-      )
-    const edit = (name, source) => {
-      fs.writeFileSync(path.join(snakeDir, name), source, "utf8")
-      // Saves a few milliseconds apart can reach the page as one update.
-      return page.waitForTimeout(700)
-    }
+    const { edit, shows } = on(page)
+    const titled = (text) => shows("h1", text)
     const reloadWith = (name, source) =>
       Promise.all([page.waitForEvent("load"), edit(name, source)])
 
@@ -571,7 +564,7 @@ try {
     logTags.length = 0
 
     await edit(
-      "src/SnakeGame.ts",
+      "snake/src/SnakeGame.ts",
       snakeGame.replace("\"Snake Game\"", "\"Snake Edited\"")
     )
     await titled("Snake Edited")
@@ -615,7 +608,7 @@ try {
         "highScore: Schema.Number,\n  level: Schema.Number"
       )
       .replace("highScore: 0 })", "highScore: 0, level: 1 })")
-    await reloadWith("src/SnakeGame.ts", withLevel)
+    await reloadWith("snake/src/SnakeGame.ts", withLevel)
     await titled("Snake Level")
     expect(
       warnings.some((text) =>
@@ -628,7 +621,7 @@ try {
 
     const fresh = await cells()
     await reloadWith(
-      "src/main.ts",
+      "snake/src/main.ts",
       snakeMain.replace(
         "import { SnakeGame } from \"./SnakeGame.ts\"",
         "import { SnakeGame, SnakeGameModel } from \"./SnakeGame.ts\"\nvoid SnakeGameModel"
@@ -637,7 +630,7 @@ try {
     await titled("Snake Level")
     loads = 0
     await reloadWith(
-      "src/SnakeGame.ts",
+      "snake/src/SnakeGame.ts",
       withLevel.replace("\"Snake Level\"", "\"Snake Mixed\"")
     )
     await titled("Snake Mixed")
@@ -670,20 +663,10 @@ try {
       failures.push("pageerror: " + String(error))
     })
 
-    const text = (selector) => page.locator(selector).textContent()
-    const shows = (selector, value) =>
-      page.waitForFunction(
-        ([selector, value]) =>
-          document.querySelector(selector)?.textContent === value,
-        [selector, value]
-      )
+    const { edit, shows, text } = on(page)
     const click = async (selector, value) => {
       await page.locator(selector).click()
       await shows(selector, value)
-    }
-    const edit = (name, source) => {
-      write(name, source)
-      return page.waitForTimeout(700)
     }
     const mark = () =>
       page.evaluate(() => {

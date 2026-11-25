@@ -294,6 +294,9 @@ export class Instance {
     | {
       readonly done: () => void
       readonly parked: () => ReadonlyArray<Rec>
+      readonly children: () => ReadonlyArray<
+        { readonly inst: Instance; readonly rec: Rec | undefined }
+      >
     }
     | undefined
   writing = 0
@@ -730,21 +733,34 @@ export const flush = (tree: Tree): void => {
 // A view is called through this, as it may have a `call` of its own.
 const callView = Function.prototype.call
 
-const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
-  const component = inst.component
+/**
+ * Calls `component`'s view with the state of `inst`. `store` is where
+ * `h.lazy` keeps its nodes.
+ *
+ * @internal
+ */
+export const draw = (
+  inst: Instance,
+  component: Runnable,
+  store: Instance | undefined
+): View.Node<any, any> | undefined => {
   const view = component.view ?? component["~content"]!
+  return callView.call(
+    view,
+    component,
+    inst.model,
+    inst.props,
+    inst.runs?.running,
+    inst.results,
+    View.takesPathSource(view) ? inst : inst.path,
+    inst.look,
+    store
+  )
+}
+
+const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
   try {
-    const tree: View.Node<any, any> | undefined = callView.call(
-      view,
-      component,
-      inst.model,
-      inst.props,
-      inst.runs?.running,
-      inst.results,
-      View.takesPathSource(view) ? inst : inst.path,
-      inst.look,
-      inst
-    )
+    const tree = draw(inst, inst.component, inst)
     if (dev && tree !== undefined) {
       const author = checkPaths(inst, tree)
       if (author !== undefined) inst.tree.schedule(() => recheckPlaced(author))
@@ -1237,7 +1253,8 @@ const createOutlet = (inst: Instance, view: View.Outlet): Rec => {
   return rec
 }
 
-const pairs = (
+/** @internal */
+export const pairs = (
   old: View.Node<any, any>,
   view: View.Node<any, any>
 ): boolean => {
