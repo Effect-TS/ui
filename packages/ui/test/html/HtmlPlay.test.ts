@@ -346,7 +346,8 @@ describe("HtmlPlay", () => {
             if (event.key === "Escape") return undefined
             if (event.key === "q") return "stop"
             return `${event.key}:${event.shift}:${event.defaultPrevented}`
-          })
+          }),
+          HtmlSubscription.onWindow("blur", "blur")
         ]
       })
 
@@ -395,6 +396,45 @@ describe("HtmlPlay", () => {
       }).pipe(
         Effect.scoped,
         Effect.provide(Layer.merge(TestHost.layer(), TestGlobalEvents.layer))
+      )
+
+      // Preserves a caller-supplied HtmlSubscription.GlobalEvents without TestGlobalEvents.
+      const source = TestGlobalEvents.make()
+      yield* Effect.gen(function*() {
+        const p = yield* HtmlPlay.make(Shortcuts, {})
+        yield* p.keydown("document", "a")
+        assert.strictEqual(p.root.text(), "0:a:false:false")
+        source.fire("document", "keydown", { key: "b" })
+        source.fire("window", "blur")
+        assert.strictEqual(p.root.text(), "0:a:false:false")
+        yield* TestHost.settle
+        assert.strictEqual(p.root.text(), "0:a:false:false,b:false:false,blur")
+      }).pipe(
+        Effect.scoped,
+        Effect.provideService(HtmlSubscription.GlobalEvents, source),
+        Effect.provide(TestHost.layer())
+      )
+
+      // Distinguishes a missing listener from an ignored one even through a plain TestGlobalEvents wrapper.
+      const backed = TestGlobalEvents.make()
+      const wrapper: TestGlobalEvents.TestGlobalEvents = {
+        fire: (target, event, payload) => backed.fire(target, event, payload),
+        fireCustomEvent: (event, payload) =>
+          backed.fireCustomEvent(event, payload)
+      }
+      yield* Effect.gen(function*() {
+        const p = yield* HtmlPlay.make(Shortcuts, {})
+        yield* p.keydown("document", "q")
+        const missing = yield* Effect.exit(p.keydown("document", "ArrowUp"))
+        assert.match(
+          Exit.isFailure(missing) ? Cause.pretty(missing.cause) : "",
+          /nothing listens for "keydown" on the document/
+        )
+      }).pipe(
+        Effect.scoped,
+        Effect.provideService(HtmlSubscription.GlobalEvents, backed),
+        Effect.provideService(TestGlobalEvents.TestGlobalEvents, wrapper),
+        Effect.provide(TestHost.layer())
       )
     }))
 })

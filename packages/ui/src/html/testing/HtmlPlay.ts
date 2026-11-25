@@ -86,7 +86,6 @@ import type * as Html from "../Html.ts"
 import * as HtmlSubscription from "../HtmlSubscription.ts"
 import * as defaults from "../internal/defaults.ts"
 import { isCustomTag } from "../internal/elements.ts"
-import * as fireGlobal from "../internal/fireGlobal.ts"
 import * as globalEvents from "../internal/globalEvents.ts"
 import { ownEvents } from "../internal/ownEvents.ts"
 import type * as HtmlScene from "./HtmlScene.ts"
@@ -337,15 +336,14 @@ class HtmlPlayCursor extends internal.PlayCursor {
               ...defaults.keyPayload(key, details),
               defaultPrevented: details?.defaultPrevented === true
             }
-            const [result, handled] = globalEvents.trackHandled(() =>
-              fireGlobal.fireOn(
-                this.globalEvents,
-                "document",
-                "keydown",
-                payload
-              )
+            const { handled, heard } = globalEvents.track(
+              "document",
+              "keydown",
+              () => {
+                this.globalEvents.fire("document", "keydown", payload)
+              }
             )
-            if (!result.heard) {
+            if (!heard) {
               throw new Error(
                 `${name}: nothing listens for "keydown" on the document`
               )
@@ -496,12 +494,27 @@ export const make = <
       events = existing.value
       play = yield* mounted
     } else {
-      const created = TestGlobalEvents.make()
-      events = created
+      const upstream = yield* HtmlSubscription.GlobalEvents
+      const local = TestGlobalEvents.make()
+      events = local
       play = yield* Effect.provideService(
         mounted,
         HtmlSubscription.GlobalEvents,
-        created
+        {
+          listen: (target, event, options, listener) => {
+            const offUpstream = upstream.listen(
+              target,
+              event,
+              options,
+              listener
+            )
+            const offLocal = local.listen(target, event, options, listener)
+            return () => {
+              offLocal()
+              offUpstream()
+            }
+          }
+        }
       )
     }
     play.globalEvents = events

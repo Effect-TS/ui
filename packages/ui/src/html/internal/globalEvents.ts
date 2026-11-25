@@ -44,25 +44,42 @@ export interface Listener {
 export const listenerOf = (subscription: object): Listener | undefined =>
   (subscription as { readonly [listener]?: Listener })[listener]
 
-let onHandled: (() => void) | undefined
+interface Tracked {
+  readonly target: "document" | "window"
+  readonly event: string
+  heard: boolean
+  handled: boolean
+}
+
+let tracked: Tracked | undefined
 
 /**
- * Runs `f` and reports whether any `globalEvents.run` call inside it produced
- * a message.
+ * Runs `f` and reports whether any matching `globalEvents.run` call inside it
+ * was invoked (`heard`) and whether one produced a message (`handled`).
  *
  * @internal
  */
-export const trackHandled = <A>(f: () => A): readonly [A, boolean] => {
-  let handled = false
-  const previous = onHandled
-  onHandled = () => {
-    handled = true
-    previous?.()
-  }
+export const track = (
+  target: "document" | "window",
+  event: string,
+  f: () => void
+): { readonly heard: boolean; readonly handled: boolean } => {
+  const current: Tracked = { target, event, heard: false, handled: false }
+  const previous = tracked
+  tracked = current
   try {
-    return [f(), handled] as const
+    f()
+    return current
   } finally {
-    onHandled = previous
+    if (
+      previous !== undefined &&
+      previous.target === target &&
+      previous.event === event
+    ) {
+      previous.heard ||= current.heard
+      previous.handled ||= current.handled
+    }
+    tracked = previous
   }
 }
 
@@ -80,10 +97,16 @@ export const run = (
   preventDefault: () => void,
   onMessage: (message: unknown, cancel: () => void) => void
 ): void => {
+  const current = tracked !== undefined &&
+      declared.target === tracked.target &&
+      declared.event === tracked.event
+    ? tracked
+    : undefined
+  if (current !== undefined) current.heard = true
   if (declared.preventDefault === "always") preventDefault()
   const message = handle(declared.handler, payload)
   if (message !== undefined) {
-    onHandled?.()
+    if (current !== undefined) current.handled = true
     onMessage(message, declared.preventDefault === true ? preventDefault : noop)
   }
 }
