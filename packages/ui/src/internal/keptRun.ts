@@ -18,6 +18,20 @@ export interface Entry {
   round: number
 }
 
+/**
+ * The entries of the children `inst` keeps. A lazy child that is still
+ * loading is left out: its entry holds `inst` itself.
+ *
+ * @internal
+ */
+export const childEntries = (inst: Inst): Array<Entry> => {
+  const out: Array<Entry> = []
+  for (const entry of (inst.kept as Table | undefined)?.kids.values() ?? []) {
+    if (entry.loading === undefined) out.push(entry)
+  }
+  return out
+}
+
 const atOf = (entry: Entry): Rec => entry.loading ?? entry.inst.at!
 
 const underOf = (entry: Entry): string | undefined =>

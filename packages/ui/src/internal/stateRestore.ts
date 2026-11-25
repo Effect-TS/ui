@@ -6,7 +6,7 @@ import type * as SchemaIssue from "effect/SchemaIssue"
 import type * as Component from "../Component.ts"
 import type * as View from "../View.ts"
 import { runCodec } from "./codecRun.ts"
-import type * as keptRun from "./keptRun.ts"
+import * as keptRun from "./keptRun.ts"
 import * as Kernel from "./kernel.ts"
 import * as lazy from "./lazy.ts"
 import { segmentOf } from "./paths.ts"
@@ -216,7 +216,7 @@ export const make = (options: Options): StateRestore => {
     const notes = keptIn(out, top, inst.path)
     for (const path in unclaimed) notes[path] = unclaimed[path]
     if (table === undefined) return
-    for (const entry of table.kids.values()) {
+    for (const entry of keptRun.childEntries(inst)) {
       visit(entry.inst, notes[entry.inst.path] = {}, top)
     }
   }

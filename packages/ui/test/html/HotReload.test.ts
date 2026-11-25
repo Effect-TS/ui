@@ -15,20 +15,11 @@ const swapKey = Symbol.for("@effect/ui/hot/swap")
 
 type Exports = Record<string, unknown>
 
-const hotSwap = (
-  first: Exports,
-  next: Exports,
-  locals: ReadonlyArray<unknown> = []
-): boolean =>
+const hotSwap = (first: Exports, next: Exports): boolean =>
   (window as unknown as Record<
     symbol,
-    (
-      first: Exports,
-      next: Exports,
-      names: ReadonlyArray<string>,
-      locals: ReadonlyArray<unknown>
-    ) => boolean
-  >)[swapKey](first, next, Object.keys(next), locals)
+    (first: Exports, next: Exports, names: ReadonlyArray<string>) => boolean
+  >)[swapKey](first, next, Object.keys(next))
 
 const triggerHotSave = () =>
   (window as unknown as Record<symbol, (() => void) | undefined>)[hotKey]?.()
@@ -572,8 +563,15 @@ describe("hot reload", { concurrent: false }, () => {
           view: (h) => h.i(text())
         })
       const Row = fixed("Row", () => "row")
+      const Broken = fixed("Broken", () => {
+        throw new Error("broken")
+      })
+      const Pending = Component.lazy(
+        "Pending",
+        () => new Promise<typeof Row>(() => {})
+      )
       const Counter = counter("a")
-      const app = (label: string, child: typeof Counter) =>
+      const app = (label: string, child: typeof Counter, row = Row) =>
         Html.component({ name: "App", model: Schema.Number, message: Msg })
           .make({
             init: () => 0,
@@ -582,7 +580,11 @@ describe("hot reload", { concurrent: false }, () => {
               h.div(
                 h.span(`${label}=${count}`),
                 child(h, { key: "c" }),
-                Row(h, { key: "r" })
+                row(h, { key: "r" }),
+                Broken(h, { key: "b", fallback: () => h.i("failed") }),
+                h.keepAlive((s) =>
+                  Pending(s, { key: "p", fallback: () => s.i("loading") })
+                )
               )
           })
       const first = { App: app("app", Counter), Counter }
@@ -594,18 +596,18 @@ describe("hot reload", { concurrent: false }, () => {
           const button = el.querySelector("button")!
           button.click()
           yield* tick
-          assert.strictEqual(el.textContent, "app=1a=1row")
+          assert.strictEqual(el.textContent, "app=1a=1rowfailedloading")
 
           const Edited = counter("b")
           assert.isTrue(
             hotSwap(first, { App: app("edited", Edited), Counter: Edited })
           )
           yield* tick
-          assert.strictEqual(el.textContent, "edited=1b=1row")
+          assert.strictEqual(el.textContent, "edited=1b=1rowfailedloading")
           assert.strictEqual(el.querySelector("button"), button)
           button.click()
           yield* tick
-          assert.strictEqual(el.textContent, "edited=1b=2row")
+          assert.strictEqual(el.textContent, "edited=1b=2rowfailedloading")
 
           const Text = Html.component({
             name: "Counter",
@@ -622,20 +624,24 @@ describe("hot reload", { concurrent: false }, () => {
               Counter: counter("c").pipe(Component.provide(Layer.empty))
             })
           )
-          assert.isFalse(hotSwap(first, { App: app("c", Counter) }, [Row]))
+          // A re-run module makes its unexported Row again.
+          assert.isFalse(
+            hotSwap(first, { App: app("c", Counter, fixed("Row", () => "")) })
+          )
+          // A failed child takes its fix by reload.
+          assert.isFalse(
+            hotSwap({ Broken }, { Broken: fixed("Broken", () => "fixed") })
+          )
           yield* tick
-          assert.strictEqual(el.textContent, "edited=1b=2row")
-        }))
+          assert.strictEqual(el.textContent, "edited=1b=2rowfailedloading")
 
-      const Broken = fixed("Broken", () => {
-        throw new Error("broken")
-      })
-      const Fixed = fixed("Broken", () => "fixed")
-      yield* inContainer("swap-failed", (el) =>
-        Effect.gen(function*() {
-          yield* BrowserHost.mountEffect(Broken, {}, el).pipe(Effect.ignore)
-          yield* tick
-          assert.isFalse(hotSwap({ Broken }, { Broken: Fixed }))
+          // The save skips the kept lazy child that is still loading.
+          triggerHotSave()
+          assert.include(
+            sessionStorage.getItem("@effect/ui/hot") ?? "",
+            "/App/Counter[c]\":2"
+          )
+          sessionStorage.clear()
         }))
     }))
 })

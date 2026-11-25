@@ -28,7 +28,6 @@ describe("DevToolsVite", () => {
       plugin.transform.call({ parse: parseAst }, code, id)
     const footer = transform(source, "/src/a.ts")!.code.slice(source.length)
     assert.include(footer, "acceptExports([\"A\",\"Bee\",\"C\"]")
-    assert.include(footer, "[\"A\",\"Bee\",\"C\"], [Row])")
     assert.isUndefined(transform(source, "/node_modules/a/a.js"))
     assert.isUndefined(transform("export const Model = 1", "/src/b.ts"))
   })

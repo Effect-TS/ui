@@ -232,7 +232,8 @@ const reasonOf = (error: unknown): string =>
  * falls back to the reload above. That includes a Model or props that no
  * longer fit their new Schema, a component with queries, shared state, parts,
  * slots or a Layer, a module whose importers also use its other exports, and
- * a component that draws one the module doesn't export.
+ * an edit that would replace a child an instance draws, such as one whose
+ * component the module makes again.
  *
  * @stability experimental
  * @category constructors
@@ -278,7 +279,7 @@ export const plugin = (options?: Options): Plugin => {
       const program = programOf(this, code, id)
       if (program === undefined) return undefined
       const found = hotExports.find(program as never)
-      if (found.exported.length === 0) return undefined
+      if (found.length === 0) return undefined
       return { code: code + hotExports.footer(found), map: null }
     },
     configureServer: (server) => {

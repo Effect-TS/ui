@@ -3,13 +3,13 @@ import * as Schema from "effect/Schema"
 import * as Component from "../../Component.ts"
 import { replace } from "../../internal/child.ts"
 import { formatCause, isRedacted } from "../../internal/codecRun.ts"
-import type * as keptRun from "../../internal/keptRun.ts"
+import * as keptRun from "../../internal/keptRun.ts"
 import * as Kernel from "../../internal/kernel.ts"
 import type * as runtime from "../../internal/runtime.ts"
 import { forgetStateCodec } from "../../internal/stateCodec.ts"
 import * as stateRestore from "../../internal/stateRestore.ts"
 import type * as MessageLog from "../../MessageLog.ts"
-import type * as View from "../../View.ts"
+import * as View from "../../View.ts"
 import type * as BrowserHost from "../BrowserHost.ts"
 
 const hotKey = Symbol.for("@effect/ui/hot")
@@ -133,9 +133,8 @@ const stateOf = (view: Window): WindowState => {
     hooks[swapKey] ??= (
       first: Exports,
       next: Exports,
-      names: ReadonlyArray<string>,
-      locals: ReadonlyArray<unknown>
-    ) => swap(made, first, next, names, locals)
+      names: ReadonlyArray<string>
+    ) => swap(made, first, next, names)
   }
   return state
 }
@@ -184,8 +183,7 @@ const interruptedIn = (
   for (const child of stateRestore.childrenOf(inst.rendered)) {
     interruptedIn(child, out)
   }
-  const kept = inst.kept as keptRun.Table | undefined
-  for (const entry of kept?.kids.values() ?? []) {
+  for (const entry of keptRun.childEntries(inst)) {
     if (!entry.inst.closed) interruptedIn(entry.inst, out)
   }
   return out
@@ -232,67 +230,132 @@ const fits = (schema: Schema.Top | undefined, value: unknown): boolean => {
   }
 }
 
+// Visits each instance under `root`, failed and parked ones included, until
+// `f` returns `false`.
 const eachInstance = (
-  inst: Kernel.Instance,
+  root: Kernel.Instance,
   f: (inst: Kernel.Instance) => boolean
 ): boolean => {
-  if (!f(inst)) return false
-  if (inst.closed) return true
-  for (const child of stateRestore.childrenOf(inst.rendered)) {
-    if (!eachInstance(child, f)) return false
+  const seen = new Set<Kernel.Instance>()
+  const visit = (inst: Kernel.Instance): boolean => {
+    if (seen.has(inst)) return true
+    seen.add(inst)
+    if (!f(inst)) return false
+    if (inst.closed) return true
+    if (inst.rendered !== undefined && !inRec(inst.rendered)) return false
+    for (const entry of keptRun.childEntries(inst)) {
+      if (!visit(entry.inst)) return false
+    }
+    return true
   }
-  const kept = inst.kept as keptRun.Table | undefined
-  for (const entry of kept?.kids.values() ?? []) {
-    if (!entry.inst.closed && !eachInstance(entry.inst, f)) return false
+  const inRec = (rec: Kernel.Rec): boolean => {
+    const inst = rec.inst as Kernel.Instance | undefined
+    if (rec.v._tag === "Child" && inst !== undefined) {
+      // A child's own instance, or one that failed and shows its fallback.
+      if (rec.kids === undefined || inst.failure !== undefined) {
+        if (!visit(inst)) return false
+      }
+    }
+    for (const kid of rec.kids ?? []) {
+      if (!inRec(kid)) return false
+    }
+    return true
   }
-  return true
+  return visit(root)
 }
 
-// Whether a record draws one of `components`, which a re-run makes anew.
-const drawsAny = (
-  rec: Kernel.Rec | undefined,
-  components: ReadonlySet<unknown>
-): boolean => {
-  if (rec === undefined) return false
-  if (
-    rec.v._tag === "Child" &&
-    components.has((rec.v as View.Child<any, any>).component)
-  ) return true
-  if (rec.v._tag === "Child" && rec.kids === undefined) return false
-  for (const kid of rec.kids ?? []) {
-    if (drawsAny(kid, components)) return true
+// The components a record declares as children, not entering them.
+const declared = (rec: Kernel.Rec, out: Set<unknown>): Set<unknown> => {
+  if (rec.v._tag === "Child") {
+    out.add((rec.v as View.Child<any, any>).component)
+    if (rec.kids === undefined) return out
   }
-  return false
+  for (const kid of rec.kids ?? []) declared(kid, out)
+  return out
+}
+
+// The components a view declares as children, or `undefined` when it passes
+// content a child draws, which can't be read here.
+const declares = (
+  node: View.Node<any, any>,
+  resolve: (component: unknown) => unknown,
+  out: Set<unknown>
+): Set<unknown> | undefined => {
+  if (node._tag === "Child") {
+    if (node.view !== undefined || node.slots !== undefined) return undefined
+    out.add(resolve(node.component))
+  } else if (node._tag === "Element") {
+    for (const child of node.children) {
+      if (declares(child, resolve, out) === undefined) return undefined
+    }
+  }
+  return out
+}
+
+// Whether the new view, drawn now, keeps every child the instance draws. A
+// component made again by a re-run module is a new object, and patching to it
+// would remount the child, so that edit reloads instead.
+const keepsChildren = (
+  inst: Kernel.Instance,
+  to: Fields,
+  resolve: (component: unknown) => unknown
+): boolean => {
+  const kept = inst.kept as keptRun.Table | undefined
+  for (const entry of kept?.kids.values() ?? []) {
+    // A parked child isn't drawn now, so its identity can't be checked.
+    if (entry.rec === undefined) return false
+  }
+  const view = to.view as Function
+  let node: View.Node<any, any> | undefined
+  try {
+    node = Reflect.apply(view, to, [
+      inst.model,
+      inst.props,
+      inst.runs?.running,
+      inst.results,
+      View.takesPathSource(view) ? inst : inst.path,
+      inst.look,
+      undefined
+    ])
+  } catch {
+    return false
+  }
+  if (node === undefined) return false
+  const next = declares(node, resolve, new Set())
+  if (next === undefined) return false
+  if (inst.rendered === undefined) return true
+  for (const component of declared(inst.rendered, new Set())) {
+    if (!next.has(component)) return false
+  }
+  return true
 }
 
 const swap = (
   state: WindowState,
   first: Exports,
   next: Exports,
-  names: ReadonlyArray<string>,
-  locals: ReadonlyArray<unknown>
+  names: ReadonlyArray<string>
 ): boolean => {
   const pairs = new Map<unknown, Fields>()
+  const firstOf = new Map<unknown, unknown>()
   for (const name of names) {
     const from = first[name]
     const to = next[name]
     if (from === to) continue
     if (!swappable(from, to)) return false
     pairs.set(from, to)
+    firstOf.set(to, from)
   }
-  const volatile = new Set(locals)
+  const resolve = (component: unknown) => firstOf.get(component) ?? component
   const found: Array<Kernel.Instance> = []
   for (const root of state.mounted) {
     const ok = eachInstance(root, (inst) => {
       const to = pairs.get(inst.component)
       if (to === undefined) return true
       found.push(inst)
-      const parked = (inst.kept as keptRun.Table | undefined)?.kids.values()
       return inst.failure === undefined && fits(to.model, inst.model) &&
         fits(to.definition.props, inst.props) &&
-        !drawsAny(inst.rendered, volatile) &&
-        !Array.from(parked ?? [], (entry) => entry.inst.component)
-          .some((component) => volatile.has(component))
+        keepsChildren(inst, to, resolve)
     })
     if (!ok) return false
   }

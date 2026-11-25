@@ -32,16 +32,10 @@ const isComponent = (
     (target.type === "Identifier" && isDefinition(consts.get(target.name)))
 }
 
-/** @internal */
-export interface Found {
-  // Export name and local name of each exported component.
-  readonly exported: ReadonlyArray<readonly [string, string]>
-  // Top-level components the module doesn't export.
-  readonly locals: ReadonlyArray<string>
-}
-
-/** @internal */
-export const find = (program: Node): Found => {
+/** @internal The export and local name of each exported component. */
+export const find = (
+  program: Node
+): ReadonlyArray<readonly [string, string]> => {
   const consts = new Map<string, Node>()
   const exportedLocals = new Map<string, string>()
   for (const statement of program.body as ReadonlyArray<Node>) {
@@ -70,21 +64,16 @@ export const find = (program: Node): Found => {
     }
   }
   const exported: Array<readonly [string, string]> = []
-  const shown = new Set<string>()
   for (const [name, local] of exportedLocals) {
-    if (!isComponent(consts.get(local), consts)) continue
-    exported.push([name, local])
-    shown.add(local)
+    if (isComponent(consts.get(local), consts)) exported.push([name, local])
   }
-  const locals: Array<string> = []
-  for (const [local, init] of consts) {
-    if (!shown.has(local) && isComponent(init, consts)) locals.push(local)
-  }
-  return { exported, locals }
+  return exported
 }
 
 /** @internal */
-export const footer = ({ exported, locals }: Found): string => {
+export const footer = (
+  exported: ReadonlyArray<readonly [string, string]>
+): string => {
   const names = JSON.stringify(exported.map(([name]) => name))
   return [
     "",
@@ -96,9 +85,7 @@ export const footer = ({ exported, locals }: Found): string => {
     `  import.meta.hot.acceptExports(${names}, (next) => {`,
     "    if (next === undefined) return;",
     "    const swap = globalThis[Symbol.for(\"@effect/ui/hot/swap\")];",
-    `    if (swap?.(__effectUiFirst, next, ${names}, [${
-      locals.join(", ")
-    }]) === true) return;`,
+    `    if (swap?.(__effectUiFirst, next, ${names}) === true) return;`,
     "    globalThis[Symbol.for(\"@effect/ui/hot\")]?.();",
     "    location.reload();",
     "  });",
