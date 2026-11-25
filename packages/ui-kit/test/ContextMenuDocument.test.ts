@@ -259,6 +259,7 @@ describe("ContextMenu in a document", { concurrent: false }, () => {
       yield* tick
       assert.isTrue(shown("outer-positioner"))
       assert.isTrue(shown("outer-backdrop"))
+      assert.strictEqual(byId("before").getAttribute("aria-hidden"), "true")
       assert.notInclude(
         byId("outer-backdrop").getAttribute("style"),
         "pointer-events:none"
@@ -279,6 +280,7 @@ describe("ContextMenu in a document", { concurrent: false }, () => {
       yield* tick
       assert.isFalse(shown("outer-positioner"))
       assert.strictEqual(document.activeElement, byId("before"))
+      assert.isNull(byId("before").getAttribute("aria-hidden"))
       assert.deepStrictEqual(log(), [
         "outer RequestedOpen trigger-press",
         "outer RequestedClose focus-out"

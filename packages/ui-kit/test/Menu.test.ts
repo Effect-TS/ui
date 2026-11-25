@@ -406,7 +406,8 @@ describe("Menu", () => {
           ?.id
       })
       assert.deepInclude(scene.get(Locator.attr("class", "separator")).attrs, {
-        role: "separator"
+        role: "separator",
+        "aria-orientation": "horizontal"
       })
       assert.deepInclude(scene.get(Locator.attr("class", "arrow")).attrs, {
         "aria-hidden": "true",
@@ -568,6 +569,9 @@ describe("Menu", () => {
         role: "menu",
         "aria-orientation": "horizontal"
       })
+      assert.deepInclude(scene.get(Locator.attr("class", "separator")).attrs, {
+        "aria-orientation": "vertical"
+      })
       step("ArrowRight", "undo")
       step("ArrowRight", "copy")
       scene.fire(popup, "keydown", key("ArrowDown"))
@@ -728,6 +732,19 @@ describe("Menu", () => {
       const scene = yield* open({ query: "", autoHighlight: true })
       const listId = scene.get(Locator.attr("class", "list")).attrs?.id
       assert.deepInclude(scene.get(popup).attrs, { role: "presentation" })
+      assert.strictEqual(scene.get(trigger).attrs?.["aria-controls"], listId)
+      const helper = View.makeHelper<never, {}, Html.Elements>({}, Html)
+      const detached = View.build(
+        MenuTrigger(helper, {
+          props: {
+            open: true,
+            popupId: scene.get(popup).attrs!.id!,
+            filtered: true
+          }
+        }),
+        []
+      )
+      assert.strictEqual(detached.attrs["aria-controls"], listId)
       assert.deepInclude(scene.get(Locator.attr("class", "list")).attrs, {
         role: "menu",
         "aria-labelledby": "edit"
@@ -769,6 +786,39 @@ describe("Menu", () => {
       const accents = menuFilter({ locale: "en", sensitivity: "accent" })
       assert.isTrue(menuFilter({ locale: "en" }).contains("Crème", "creme"))
       assert.isFalse(accents.contains("Crème", "creme"))
+    }))
+
+  it.effect("a MenuTrigger opens the menu from the keyboard with ArrowDown or ArrowUp, on its first enabled item", () =>
+    Effect.gen(function*() {
+      const Pressed = UiSchema.TaggedEnum({
+        Pressed: { method: Schema.String }
+      })
+      const Detached = Html.component({
+        name: "Detached",
+        model: Schema.Struct({ method: Schema.String }),
+        message: Pressed
+      }).make({
+        init: () => ({ method: "" }),
+        update: { Pressed: ($, { method }) => $.evolve({ method }) },
+        view: (h, model) =>
+          MenuTrigger(h, {
+            element: h.button.class("trigger"),
+            props: { open: false, popupId: "menu" },
+            onPress: ({ method }) => Pressed.Pressed({ method })
+          }).children(model.method)
+      })
+      const buttons = yield* HtmlScene.make(Detached, {})
+      for (const arrow of ["ArrowDown", "ArrowUp"]) {
+        buttons.fire(trigger, "keydown", key(arrow)).expectDefaultPrevented()
+          .expect(trigger).toHaveText("keyboard")
+      }
+      buttons.fire(trigger, "keydown", key("Tab")).expectIgnored()
+
+      const scene = yield* HtmlScene.make(Menu, { open: false, items }, standIn)
+      scene.props({ open: true, items, openMethod: "keyboard" }).mounted(
+        tracked(scene),
+        sent("ShowedPopup")
+      ).emitted(highlighted("copy", "none"))
     }))
 
   it.effect("trigger reads its options from the object it's given, getters included", () =>

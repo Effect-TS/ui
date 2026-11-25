@@ -4,7 +4,8 @@
  *
  * `ContextMenu` is a function over a headless `Menu`: the parts, the
  * events, the items, submenus, focus and transitions are the `Menu`'s.
- * Its `trigger` is the area that opens it, and it is always modal. The
+ * Its `trigger` is the area that opens it, and it is always modal: while
+ * open, the rest of the page is hidden from assistive technology. The
  * consumer owns whether it is open, passes it as `open`, and stores what
  * `RequestedOpen` and `RequestedClose` ask for.
  *
@@ -41,7 +42,9 @@
  * **Keyboard**
  *
  * The Menu key and Shift+F10 open it from the keyboard, placed against the
- * trigger, with the first enabled item highlighted. In the popup the keys
+ * trigger, with the first enabled item highlighted. The trigger gets
+ * `tabindex="0"` so the keyboard can reach it, unless the builder sets
+ * its own `tabindex`. In the popup the keys
  * are the `Menu`'s. Escape and Tab close it, and focus goes back to the
  * element that had it before the menu opened.
  *

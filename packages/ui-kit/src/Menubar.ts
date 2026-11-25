@@ -327,6 +327,7 @@ export const Menubar = Html.component({
       rtl: model.rtl,
       current: model.current,
       tabStop: tabStopOf(model),
+      firstMenu: model.menus.find((menu) => menu.menu !== null)?.menu ?? null,
       opening: model.opening
     }),
     schema: MenubarShared,

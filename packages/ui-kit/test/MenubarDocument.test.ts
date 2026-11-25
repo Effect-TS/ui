@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { UiSchema } from "@effect/ui"
 import { Menu, Menubar, type MenuItem } from "@effect/ui-kit"
-import { BrowserHost, Html } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { byId, container, popovers, tick } from "./utils/document.ts"
@@ -556,8 +556,26 @@ describe("Menubar in a document", { concurrent: false }, () => {
       assert.notStrictEqual(blocker.style.getPropertyValue("clip-path"), "")
     }))
 
-  it.effect("a disabled first menu hands the Tab stop to the next trigger", () =>
+  it.effect("a disabled first menu hands the Tab stop to the next trigger, on the server too", () =>
     Effect.gen(function*() {
+      const { html } = yield* HtmlServer.renderToHtml(Page, {
+        orientation: "horizontal",
+        disabled: false,
+        fileDisabled: true,
+        independent: false,
+        rtl: false,
+        initial: [],
+        twin: false
+      })
+      assert.deepStrictEqual(
+        Array.from(
+          html.matchAll(
+            /<button id="(?:file|edit|view)"[^>]*?tabindex="([^"]*)"/g
+          ),
+          (match) => match[1]
+        ),
+        ["-1", "0", "-1"]
+      )
       yield* mountPage({ fileDisabled: true })
       assert.isTrue(byId("file").hasAttribute("disabled"))
       assert.deepStrictEqual(tabindexes(), ["-1", "0", "-1"])

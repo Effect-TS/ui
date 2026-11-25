@@ -79,7 +79,8 @@ const Config = Schema.Struct({
   filter: Schema.Boolean,
   viewport: Schema.Boolean,
   closeParentOnEsc: Schema.Boolean,
-  refuseClose: Schema.Boolean
+  refuseClose: Schema.Boolean,
+  shareDisabled: Schema.Boolean
 })
 type Config = typeof Config.Type
 
@@ -146,7 +147,11 @@ const Page = Html.component({
     Menu(h, {
       props: {
         open: model.open,
-        items,
+        items: h.props.shareDisabled
+          ? items.map((item) =>
+            item.value === "share" ? { ...item, disabled: true } : item
+          )
+          : items,
         id: "menu",
         modal: model.modal,
         triggerId: h.props.viewport ? model.triggerId : undefined,
@@ -274,6 +279,7 @@ const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
     viewport: false,
     closeParentOnEsc: false,
     refuseClose: false,
+    shareDisabled: false,
     ...config
   }, app)
   yield* tick
@@ -500,6 +506,27 @@ describe("Menu in a document", { concurrent: false }, () => {
       ])
     }))
 
+  it.effect("a disabled submenu trigger opens its submenu with no key, press or hover", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage({ shareDisabled: true })
+      keydown(byId("trigger"), "ArrowDown")
+      yield* tick
+      keydown(item("copy"), "End")
+      yield* tick
+      const share = item("share")
+      assert.strictEqual(document.activeElement, share)
+      for (const key of ["ArrowRight", "Enter", " "]) keydown(share, key)
+      mousedown(share)
+      share.click()
+      share.dispatchEvent(new MouseEvent("mouseenter"))
+      yield* Effect.promise(() =>
+        new Promise((resolve) => setTimeout(resolve, 150))
+      )
+      yield* tick
+      assert.isFalse(shown("share-positioner"))
+      assert.deepStrictEqual(log(), ["root RequestedOpen list-navigation"])
+    }))
+
   it.effect("Escape in a submenu with closeParentOnEsc closes the whole menu and returns focus to the trigger", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage({ closeParentOnEsc: true })
@@ -605,7 +632,7 @@ describe("Menu in a document", { concurrent: false }, () => {
       ])
     }))
 
-  it.effect("a modal menu blocks the page behind it but for a cut-out around the trigger, once it is cut", () =>
+  it.effect("a modal menu blocks and hides the page behind it but for the trigger, once it is cut", () =>
     Effect.gen(function*() {
       yield* mountPage()
       mousedown(byId("trigger"))
@@ -617,10 +644,14 @@ describe("Menu in a document", { concurrent: false }, () => {
       assert.include(blocker.style.getPropertyValue("clip-path"), "100px 100px")
       assert.isFalse(blocker.inert)
       assert.strictEqual(document.body.style.overflowY, "hidden")
+      assert.strictEqual(byId("before").getAttribute("aria-hidden"), "true")
+      assert.isNull(byId("trigger").closest("[aria-hidden]"))
+      assert.isNull(byId("positioner").closest("[aria-hidden]"))
       keydown(item("copy"), "Escape")
       yield* tick
       assert.strictEqual(document.body.style.overflowY, "")
       assert.isTrue(blocker.inert)
+      assert.isNull(byId("before").getAttribute("aria-hidden"))
     }))
 
   it.effect("the positioner lets the pointer through until its first frames, before it may be placed", () =>
