@@ -143,6 +143,7 @@ Tests need no Vitest config: `pnpm vitest` runs Stories, Scenes and Plays in Nod
 | [`canvas-art`](examples/canvas-art)                       | Interactive `<canvas>` animation using `Canvas` and `HtmlSubscription`                       |
 | [`counter`](examples/counter)                             | The quick start above, with ui-kit `Button`s, `Head` updates and a `Story` test              |
 | [`counters`](examples/counters)                           | Dynamic keyed list of child `Counter` components                                             |
+| [`domains`](examples/domains)                             | Port of Foldkit's domain search, server-rendered with a shared `HttpApi` and ui-kit popups   |
 | [`file-preview`](examples/file-preview)                   | File picker reading local files with `HtmlFiles` and switch-mode `Command`s                  |
 | [`interrupting-commands`](examples/interrupting-commands) | Concurrent uploads demonstrating `Command` interruption and `@effect/ui-devtools`            |
 | [`launch`](examples/launch)                               | The launch site deployed to [ui.effect.website](https://ui.effect.website)                   |
