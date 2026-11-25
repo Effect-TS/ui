@@ -2084,7 +2084,7 @@ export const Drawer = Html.component({
           "data-disabled": flag(disabled)
         })
         .disabled(disabled)
-        .onClick(DrawerMessage.PressedSnapTrigger())
+        .on("click", DrawerMessage.PressedSnapTrigger())
     })
     const snapStatus = p.part("div", (b) =>
       b.attrs({
