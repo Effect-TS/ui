@@ -313,6 +313,7 @@ describe("HtmlPlay", () => {
 
   it.effect("keydown on document settles UI work without advancing TestClock, checks ignored/missing listeners, and keeps TestGlobalEvents.fire non-settling", () =>
     Effect.gen(function*() {
+      const source = TestGlobalEvents.make()
       const Shortcuts = Html.component({
         name: "Shortcuts",
         model: Schema.Struct({
@@ -347,6 +348,10 @@ describe("HtmlPlay", () => {
           HtmlSubscription.onDocument("keydown", (event) => {
             if (event.key === "Escape") return undefined
             if (event.key === "q") return "stop"
+            if (event.key === "n") {
+              source.fire("window", "blur")
+              return undefined
+            }
             return `${event.key}:${event.shift}:${event.defaultPrevented}`
           }),
           HtmlSubscription.onWindow("blur", "blur")
@@ -389,19 +394,21 @@ describe("HtmlPlay", () => {
       // Shares TestGlobalEvents.layer when provided, while TestGlobalEvents.fire stays non-settling.
       yield* Effect.gen(function*() {
         const p = yield* HtmlPlay.make(Shortcuts, {})
+        const other = yield* HtmlPlay.make(Shortcuts, {})
         yield* p.keydown("document", "a")
         assert.strictEqual(p.root.text(), "0:a:false:false")
+        assert.strictEqual(other.root.text(), "0:a:false:false")
         yield* TestGlobalEvents.fire("document", "keydown", { key: "b" })
         assert.strictEqual(p.root.text(), "0:a:false:false")
         yield* TestHost.settle
         assert.strictEqual(p.root.text(), "0:a:false:false,b:false:false")
+        assert.strictEqual(other.root.text(), "0:a:false:false,b:false:false")
       }).pipe(
         Effect.scoped,
         Effect.provide(Layer.merge(TestHost.layer(), TestGlobalEvents.layer))
       )
 
       // Preserves a caller-supplied HtmlSubscription.GlobalEvents without TestGlobalEvents.
-      const source = TestGlobalEvents.make()
       yield* Effect.gen(function*() {
         const p = yield* HtmlPlay.make(Shortcuts, {})
         yield* p.keydown("document", "a")
@@ -411,6 +418,13 @@ describe("HtmlPlay", () => {
         assert.strictEqual(p.root.text(), "0:a:false:false")
         yield* TestHost.settle
         assert.strictEqual(p.root.text(), "0:a:false:false,b:false:false,blur")
+        // A message from an event the key handler fires doesn't count as the key's.
+        yield* p.keydown("document", "n")
+        yield* p.expectIgnored()
+        assert.strictEqual(
+          p.root.text(),
+          "0:a:false:false,b:false:false,blur,blur"
+        )
       }).pipe(
         Effect.scoped,
         Effect.provideService(HtmlSubscription.GlobalEvents, source),

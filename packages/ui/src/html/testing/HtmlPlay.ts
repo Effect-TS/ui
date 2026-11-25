@@ -69,6 +69,7 @@
  * @since 0.1.0
  */
 import * as Effect from "effect/Effect"
+import * as Option from "effect/Option"
 import type * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
@@ -415,28 +416,39 @@ class HtmlPlayCursor extends internal.PlayCursor {
 interface DocumentKeys {
   readonly source: HtmlSubscription.GlobalEvents
   /**
-   * Fires `keydown` at the document listeners added through `source`.
-   * Returns whether one produced a message, or `undefined` when none heard it.
+   * Fires `keydown` on the shared `TestGlobalEvents` document if there is
+   * one, else at the listeners added through `source`. Returns whether an
+   * `HtmlPlay` tree's listener produced a message, or `undefined` when none
+   * heard it.
    */
   readonly down: (
     payload: Partial<HtmlSubscription.GlobalPayload<Html.KeyPayload>>
   ) => boolean | undefined
 }
 
+// The document keydown being pressed, which every HtmlPlay tree's listeners report to.
+let pressing: { heard: boolean; handled: boolean } | undefined
+
 // A listener is added to `upstream` too, so the events a test fires there still arrive.
 const documentKeys = (
-  upstream: HtmlSubscription.GlobalEvents
+  upstream: HtmlSubscription.GlobalEvents,
+  shared: TestGlobalEvents.TestGlobalEvents | undefined
 ): DocumentKeys => {
   const own = TestGlobalEvents.make()
-  let heard = false
   return {
     source: {
       listen: (target, event, options, listener) => {
-        const offUpstream = upstream.listen(target, event, options, listener)
-        const offOwn = own.listen(target, event, options, (...args) => {
-          heard = true
-          listener(...args)
-        })
+        const key = target === "document" && event === "keydown"
+        const tracked: typeof listener = (...args) => {
+          const press = key ? pressing : undefined
+          const handled = globalEvents.emits(() => listener(...args))
+          if (press !== undefined) {
+            press.heard = true
+            press.handled ||= handled
+          }
+        }
+        const offUpstream = upstream.listen(target, event, options, tracked)
+        const offOwn = own.listen(target, event, options, tracked)
         return () => {
           offOwn()
           offUpstream()
@@ -444,11 +456,15 @@ const documentKeys = (
       }
     },
     down: (payload) => {
-      heard = false
-      const handled = globalEvents.emits(() => {
-        own.fire("document", "keydown", payload)
-      })
-      return heard ? handled : undefined
+      const document = shared ?? own
+      const outer = pressing
+      const press = pressing = { heard: false, handled: false }
+      try {
+        document.fire("document", "keydown", payload)
+      } finally {
+        pressing = outer
+      }
+      return press.heard ? press.handled : undefined
     }
   }
 }
@@ -513,7 +529,12 @@ export const make = <
   )
   return Effect.gen(function*() {
     const { host } = yield* TestHost.TestHost
-    const keys = documentKeys(yield* HtmlSubscription.GlobalEvents)
+    const keys = documentKeys(
+      yield* HtmlSubscription.GlobalEvents,
+      Option.getOrUndefined(
+        yield* Effect.serviceOption(TestGlobalEvents.TestGlobalEvents)
+      )
+    )
     const play = yield* started.pipe(
       Effect.provideService(Renderer.Renderer, { host: htmlHost(host) }),
       Effect.provideService(HtmlSubscription.GlobalEvents, keys.source)

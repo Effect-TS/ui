@@ -44,18 +44,25 @@ export interface Listener {
 export const listenerOf = (subscription: object): Listener | undefined =>
   (subscription as { readonly [listener]?: Listener })[listener]
 
-let emitted = false
+let frame: { emitted: boolean } | undefined
 
 /**
- * Runs `fire` and returns whether a `run` inside it produced a message, so
- * `HtmlPlay` can tell a handled event from an ignored one.
+ * Runs `listener` and returns whether a `run` it made produced a message, so
+ * `HtmlPlay` can tell a handled event from an ignored one. A `run` inside a
+ * nested `emits` counts for that one only.
  *
  * @internal
  */
-export const emits = (fire: () => void): boolean => {
-  emitted = false
-  fire()
-  return emitted
+export const emits = (listener: () => void): boolean => {
+  const outer = frame
+  const own = { emitted: false }
+  frame = own
+  try {
+    listener()
+  } finally {
+    frame = outer
+  }
+  return own.emitted
 }
 
 /**
@@ -75,7 +82,7 @@ export const run = (
   if (declared.preventDefault === "always") preventDefault()
   const message = handle(declared.handler, payload)
   if (message !== undefined) {
-    emitted = true
+    if (frame !== undefined) frame.emitted = true
     onMessage(message, declared.preventDefault === true ? preventDefault : noop)
   }
 }
