@@ -58,7 +58,7 @@ describe("Slider", () => {
               Span<never>
             >()
             const thumb = slider.thumb({
-              element: h.span.onClick(Msg.Clicked()),
+              element: h.span.on("click", Msg.Clicked()),
               input: field.control(h.input.onMount(NeedsClock()))
             })
             expect(thumb).type.toBe<Span<Clock>>()

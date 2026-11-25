@@ -106,10 +106,10 @@ describe("OpenTui vocabulary types", () => {
       view: (h) => {
         const tabs = h.tabSelect.ref(TabsRef).options([
           { name: "One", description: "first" }
-        ]).selectedIndex(0).onSelectionChanged(({ index }) => {
+        ]).selectedIndex(0).on("selectionChanged", ({ index }) => {
           expect(index).type.toBe<number>()
           return "Changed" as const
-        }).onItemSelected(({ index }) => {
+        }).on("itemSelected", ({ index }) => {
           expect(index).type.toBe<number>()
           return "Picked" as const
         })
@@ -118,14 +118,14 @@ describe("OpenTui vocabulary types", () => {
           orientation: "vertical",
           min: 0,
           max: 100
-        }).value(50).onChange(({ value }) => {
+        }).value(50).on("change", ({ value }) => {
           expect(value).type.toBe<number>()
           return "Changed" as const
         })
 
         expect(h.slider.value).type.not.toBeCallableWith("50")
         expect(h.input.value).type.not.toBeCallableWith(50)
-        h.input.onChange(({ value }) => {
+        h.input.on("change", ({ value }) => {
           expect(value).type.toBe<string>()
           return "Changed" as const
         })

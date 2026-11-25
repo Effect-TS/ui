@@ -272,7 +272,7 @@ export const Switch = <Msg, A extends View.Content<Msg, any>>(
           })
           .disabled(props.disabled === true)
         return interactive && onToggle !== undefined
-          ? root.onClick(() => onToggle({ checked: !props.checked }))
+          ? root.on("click", () => onToggle({ checked: !props.checked }))
           : root
       }),
     thumb: (element) => element.forward((node) => state(node, props))

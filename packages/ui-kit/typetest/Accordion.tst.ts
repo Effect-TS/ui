@@ -47,7 +47,7 @@ describe("Accordion", () => {
             key: "a",
             props: { value: "a" },
             view: (item) => {
-              const trigger = item.trigger(h.button.onClick(Msg.Clicked()))
+              const trigger = item.trigger(h.button.on("click", Msg.Clicked()))
               expect(trigger).type.toBe<Button>()
               expect(item.root(h.div)).type.toBe<Div>()
               expect(item.header(h.h2)).type.toBe<H2>()

@@ -72,7 +72,8 @@ describe("Autocomplete", () => {
           props: { open: false, value: "", items },
           view: (autocomplete) => {
             expect(autocomplete.input(h.input)).type.toBe<Input>()
-            expect(autocomplete.trigger(h.button.onClick(Msg.Clicked()))).type
+            expect(autocomplete.trigger(h.button.on("click", Msg.Clicked())))
+              .type
               .toBe<Button>()
             expect(autocomplete.inputGroup(h.div)).type.toBe<Div>()
             expect(autocomplete.value(h.span)).type.toBe<Span>()

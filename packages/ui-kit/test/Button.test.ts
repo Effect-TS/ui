@@ -28,7 +28,7 @@ const Card = Html.component({
     ClickedCard: () => ({ clicked: "card" })
   },
   view: (h, model) =>
-    h.div.onClick(CardMessage.ClickedCard()).children(
+    h.div.on("click", CardMessage.ClickedCard()).children(
       Button(h, {
         props: h.props.button,
         onPress: h.props.press ? CardMessage.PressedSave() : undefined
@@ -106,7 +106,7 @@ describe("Button", () => {
     assert.deepStrictEqual(node.children, [{ _tag: "Text", text: "Save" }])
 
     const click = CardMessage.ClickedCard()
-    const own = h.button.onClick(click)
+    const own = h.button.on("click", click)
     const clash = /already handles click/
     for (const disabled of [false, true]) {
       const props = { disabled }
@@ -115,7 +115,7 @@ describe("Button", () => {
         { click }
       )
       assert.deepStrictEqual(
-        View.build(Button(h, { props }).onClick(click), []).handlers,
+        View.build(Button(h, { props }).on("click", click), []).handlers,
         { click }
       )
       const reserving = [
@@ -128,7 +128,7 @@ describe("Button", () => {
           clash
         )
         assert.throws(
-          () => View.build(Button(h, options).onClick(click), []),
+          () => View.build(Button(h, options).on("click", click), []),
           clash
         )
       }

@@ -20,10 +20,12 @@ export const BigDemo = Html.component({
   view: (h, model) =>
     h.div.class("page").children(
       h.div.class("toolbar").children(
-        h.button.attr("id", "middle").onClick(
+        h.button.attr("id", "middle").on(
+          "click",
           BigMessage.ClickedJump({ index: 50_000 })
         ).children("Jump to 50,000"),
-        h.button.attr("id", "end").onClick(
+        h.button.attr("id", "end").on(
+          "click",
           BigMessage.ClickedJump({ index: 99_999 })
         ).children("Jump to the end")
       ),

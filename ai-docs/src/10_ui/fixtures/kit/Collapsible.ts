@@ -33,7 +33,7 @@ export const Collapsible = Html.component({
             type: "button",
             "aria-expanded": model.open ? "true" : "false"
           })
-          .onClick(CollapsibleMessage.ClickedToggle())
+          .on("click", CollapsibleMessage.ClickedToggle())
           .children(model.open ? "Hide" : "Show")
       ),
       model.open && h.slots.body

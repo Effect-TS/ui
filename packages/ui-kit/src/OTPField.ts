@@ -1084,10 +1084,9 @@ export const OTPField = Html.component({
         })
         .disabled(disabled)
         .value(value)
-        .onFocus(OTPFieldMessage.FocusedHiddenInput())
-        .onInput(({ value }) =>
-          OTPFieldMessage.UpdatedHiddenInput({ value: Redacted.make(value) })
-        ))
+        .on("focus", OTPFieldMessage.FocusedHiddenInput())
+        .on("input", ({ value }) =>
+          OTPFieldMessage.UpdatedHiddenInput({ value: Redacted.make(value) })))
     const slot = p.part("input", (b, index: number) => {
       const character = characters[index] ?? ""
       const identified = props.id === undefined
@@ -1120,7 +1119,8 @@ export const OTPField = Html.component({
         })
         .disabled(disabled)
         .value(character)
-        .onKeyDown(
+        .on(
+          "keydown",
           ({ alt, composing, ctrl, key, meta }) =>
             composing || model.composing !== null ||
               !(navigationKeys.has(key) || (!readOnly && editingKeys.has(key)))
@@ -1132,20 +1132,19 @@ export const OTPField = Html.component({
               }),
           { preventDefault: true }
         )
-        .onInput(({ composing, value }) =>
+        .on("input", ({ composing, value }) =>
           OTPFieldMessage.UpdatedSlot({
             index,
             value: Redacted.make(value),
             composing
-          })
-        )
-        .onCompositionEnd(({ value }) =>
+          }))
+        .on("compositionend", ({ value }) =>
           OTPFieldMessage.EndedComposition({
             index,
             value: Redacted.make(value)
-          })
-        )
-        .onPaste(
+          }))
+        .on(
+          "paste",
           ({ text }) =>
             OTPFieldMessage.PastedText({ index, text: Redacted.make(text) }),
           {
@@ -1163,8 +1162,8 @@ export const OTPField = Html.component({
             preventDefault: true
           }
         )
-        .onFocus(OTPFieldMessage.FocusedSlot({ index }))
-        .onBlur(OTPFieldMessage.BlurredSlot({ index }))
+        .on("focus", OTPFieldMessage.FocusedSlot({ index }))
+        .on("blur", OTPFieldMessage.BlurredSlot({ index }))
         .forward((node) => {
           const typed = node.elementAttrs.type === undefined
             ? node.attr("type", props.mask === true ? "password" : "text")

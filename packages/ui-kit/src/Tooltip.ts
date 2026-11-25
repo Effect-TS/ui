@@ -751,9 +751,9 @@ export const Tooltip = Html.component({
           .on("mouseenter", TooltipMessage.EnteredTrigger())
           .on("mouseleave", TooltipMessage.LeftTrigger())
           .on("mousedown", TooltipMessage.PressedTrigger())
-          .onClick(TooltipMessage.ClickedTrigger())
-          .onFocus(TooltipMessage.FocusedTrigger())
-          .onBlur(TooltipMessage.BlurredTrigger())
+          .on("click", TooltipMessage.ClickedTrigger())
+          .on("focus", TooltipMessage.FocusedTrigger())
+          .on("blur", TooltipMessage.BlurredTrigger())
           .attr("data-tooltip-trigger", triggerId)
     )
     const style = Positioning.positionerStyle(tracked.positionMethod) +

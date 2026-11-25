@@ -498,7 +498,7 @@ describe("DialogTrigger", () => {
   })
 
   it("rejects a click handler of the caller's own only with onPress", () => {
-    const own = h.button.onClick("mine")
+    const own = h.button.on("click", "mine")
     const clash = /DialogTrigger: the element already handles click/
     for (const open of [false, true]) {
       const props = { open }
@@ -513,7 +513,7 @@ describe("DialogTrigger", () => {
       assert.throws(
         () =>
           View.build(
-            DialogTrigger(h, { props, onPress: "open" }).onClick("mine"),
+            DialogTrigger(h, { props, onPress: "open" }).on("click", "mine"),
             []
           ),
         clash
@@ -524,7 +524,7 @@ describe("DialogTrigger", () => {
         "mine"
       )
       assert.strictEqual(
-        View.build(DialogTrigger(h, { props }).onClick("mine"), []).handlers
+        View.build(DialogTrigger(h, { props }).on("click", "mine"), []).handlers
           .click,
         "mine"
       )

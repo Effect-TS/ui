@@ -101,7 +101,7 @@ describe("Menu", () => {
       onEmit,
       view: (menu) => {
         const trigger = menu.trigger({
-          element: h.button.onClick(Msg.Clicked()).onMount(NeedsClock())
+          element: h.button.on("click", Msg.Clicked()).onMount(NeedsClock())
         })
         expect(trigger).type.toBe<Button<Clock>>()
         expect(

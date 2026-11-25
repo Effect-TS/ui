@@ -52,8 +52,8 @@ describe("Html", () => {
 
     it("builds the tree a chain describes", () => {
       const h = helper()
-      const tree = View.build(h.form.onSubmit(add), [
-        h.input.ref(NewTodo).value("draft").onInput(onInput),
+      const tree = View.build(h.form.on("submit", add), [
+        h.input.ref(NewTodo).value("draft").on("input", onInput),
         h.button.attr("type", "submit").children("Add"),
         h.span("Todos"),
         todos.map((title) => Item(h, { key: title, props: { title } }))
@@ -84,15 +84,15 @@ describe("Html", () => {
           init: () => "draft",
           update: ($) => $.model,
           view: (h, draft) =>
-            h.form.onSubmit(add).children(
-              h.input.ref(NewTodo).value(draft).onInput(onInput),
+            h.form.on("submit", add).children(
+              h.input.ref(NewTodo).value(draft).on("input", onInput),
               h.button.attr("type", "submit").children("Add"),
               h.span("Todos"),
               todos.map((title) => Item(h, { key: title, props: { title } }))
             )
         })
         const rendered = yield* HtmlServer.renderToHtml(Todos, {})
-        // The markup the children-first form, h.form(...children).onSubmit(add), rendered.
+        // The markup the children-first form, h.form(...children).on("submit", add), rendered.
         assert.strictEqual(
           rendered.html,
           "<!--[/Todos--><form><input value=\"draft\"><button type=\"submit\">Add</button><span>Todos</span>" +
@@ -289,6 +289,10 @@ describe("Html", () => {
       assert.strictEqual(
         h.button.on("click", add).eventOptions,
         h.button.eventOptions
+      )
+      assert.isUndefined(
+        h.img.on("dragstart", add, { preventDefault: "always" })
+          .on("dragstart", add).eventOptions.dragstart
       )
     })
 
@@ -559,45 +563,5 @@ describe("Html", () => {
         )
         assert.include(rendered.html, "<p>Idle</p>")
       }))
-
-    it("defines event sugar methods with non-enumerable class-method descriptors", () => {
-      const methods = [
-        "onClick",
-        "onDoubleClick",
-        "onKeyDown",
-        "onKeyUp",
-        "onFocus",
-        "onBlur",
-        "onPaste",
-        "onDragEnd",
-        "onDragEnter",
-        "onDragLeave",
-        "onDragOver",
-        "onInput",
-        "onChange",
-        "onCompositionEnd",
-        "onSubmit",
-        "onToggle",
-        "onCancel",
-        "onClose"
-      ] as const
-      for (const name of methods) {
-        const descriptor = Object.getOwnPropertyDescriptor(
-          Html.VoidElement.prototype,
-          name
-        )
-        assert.isDefined(descriptor)
-        assert.strictEqual(descriptor.enumerable, false)
-        assert.strictEqual(descriptor.writable, true)
-        assert.strictEqual(descriptor.configurable, true)
-        assert.strictEqual((descriptor.value as Function).name, name)
-      }
-      const view = button()
-      const enumerableKeys: Array<string> = []
-      for (const key in view) enumerableKeys.push(key)
-      for (const name of methods) {
-        assert.notInclude(enumerableKeys, name)
-      }
-    })
   })
 })

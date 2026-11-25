@@ -17,15 +17,18 @@ export const PagedDemo = Html.component({
   view: (h, model) =>
     h.div.class("page").children(
       h.div.class("toolbar").children(
-        h.button.attr("id", "known").onClick(
+        h.button.attr("id", "known").on(
+          "click",
           PagedMessage.PickedTotal({ total: "known" })
         ).children("10,000 results"),
-        h.button.attr("id", "unknown").onClick(
+        h.button.attr("id", "unknown").on(
+          "click",
           PagedMessage.PickedTotal({ total: "unknown" })
         ).children(
           "Unknown total"
         ),
-        h.button.attr("id", "none").onClick(
+        h.button.attr("id", "none").on(
+          "click",
           PagedMessage.PickedTotal({ total: "none" })
         ).children("Neither prop")
       ),

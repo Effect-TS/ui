@@ -68,7 +68,7 @@ const Page = Html.component({
           collapsible.trigger(h.button.attr("id", "trigger")).children(
             "Details"
           ),
-          h.button.attr("id", "release").onClick(PageMessage.ReleaseHold())
+          h.button.attr("id", "release").on("click", PageMessage.ReleaseHold())
             .children("Release"),
           collapsible.panel(
             h.div.attr("id", "panel").attr("style", model.config.style)

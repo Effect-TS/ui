@@ -32,11 +32,17 @@ const Row = Html.component({
   },
   view: (h, model) =>
     h.span(
-      h.button.attr("data-row", h.props.id).onClick(RowMessage.ClickedRow())
+      h.button.attr("data-row", h.props.id).on("click", RowMessage.ClickedRow())
         .children(h.props.id + " " + model.count),
-      h.button.attr("data-fail", h.props.id).onClick(RowMessage.ClickedFail())
+      h.button.attr("data-fail", h.props.id).on(
+        "click",
+        RowMessage.ClickedFail()
+      )
         .children("!"),
-      h.button.attr("data-hold", h.props.id).onClick(RowMessage.ClickedHold())
+      h.button.attr("data-hold", h.props.id).on(
+        "click",
+        RowMessage.ClickedHold()
+      )
         .children("~")
     )
 })
@@ -80,9 +86,10 @@ const App = Html.component({
   update: { ClickedDrop: ($) => $.evolve({ drop: true }) },
   view: (h, model) =>
     h.main(
-      h.button.attr("data-drop", "").onClick(AppMessage.ClickedDrop()).children(
-        "Drop"
-      ),
+      h.button.attr("data-drop", "").on("click", AppMessage.ClickedDrop())
+        .children(
+          "Drop"
+        ),
       Array.from({ length: sections }, (_, i) =>
         Section(h, { key: "s" + i, props: { id: "s" + i, drop: model.drop } }))
     )

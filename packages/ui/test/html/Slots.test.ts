@@ -25,7 +25,7 @@ const Counter = Html.component({
 }).make({
   init: () => 0,
   update: ($) => $.set($.model + 1).emit({ _tag: "Added", count: $.model + 1 }),
-  view: (h, n) => h.button.onClick(CounterMsg.Add()).children("add " + n)
+  view: (h, n) => h.button.on("click", CounterMsg.Add()).children("add " + n)
 })
 
 const Card = Html.component({

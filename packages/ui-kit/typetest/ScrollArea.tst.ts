@@ -51,7 +51,7 @@ describe("ScrollArea", () => {
           .toBe<Div<never> | undefined>()
 
         const bar = scrollArea.scrollbar({
-          element: h.div.onClick(Msg.Clicked()),
+          element: h.div.on("click", Msg.Clicked()),
           thumb: h.div.onMount(NeedsClock()),
           orientation: "horizontal",
           keepMounted: true

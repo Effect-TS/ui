@@ -57,9 +57,10 @@ const ChatDemoNoDeps = Html.component({
     )
     return h.div.class("page").children(
       h.div.class("toolbar").children(
-        h.button.attr("id", "send").onClick(ChatMessage.ClickedSend()).children(
-          "Send a message"
-        ),
+        h.button.attr("id", "send").on("click", ChatMessage.ClickedSend())
+          .children(
+            "Send a message"
+          ),
         h.span.attr("id", "status").attr("data-start", String(model.start))
           .attr(
             "data-loading",

@@ -35,15 +35,15 @@ const Keys = Html.component({
   },
   view: (h, model) =>
     h.div(
-      h.input.attr("id", "field").onKeyDown(
-        ({ key }) =>
-          key === "Enter" ? Message.Renamed({ prefix: "field" }) : undefined,
-        {
-          preventDefault: true
-        }
+      h.input.attr("id", "field").on("keydown", ({ key }) =>
+        key === "Enter" ? Message.Renamed({ prefix: "field" }) : undefined, {
+        preventDefault: true
+      }),
+      h.button.attr("id", "rename").on(
+        "click",
+        Message.Renamed({ prefix: "b" })
       ),
-      h.button.attr("id", "rename").onClick(Message.Renamed({ prefix: "b" })),
-      h.button.attr("id", "stop").onClick(Message.Stopped()),
+      h.button.attr("id", "stop").on("click", Message.Stopped()),
       h.output(model.log.join(","))
     ),
   subscriptions: ({ model }) => [

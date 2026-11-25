@@ -70,9 +70,10 @@ describe("Combobox", () => {
           props: { open: false, inputValue: "", items },
           view: (combobox) => {
             expect(combobox.input(h.input)).type.toBe<Input>()
-            expect(combobox.trigger(h.button.onClick(Msg.Clicked()))).type.toBe<
-              Button
-            >()
+            expect(combobox.trigger(h.button.on("click", Msg.Clicked()))).type
+              .toBe<
+                Button
+              >()
             expect(combobox.inputGroup(h.div)).type.toBe<Div>()
             expect(combobox.value(h.span)).type.toBe<Span>()
             expect(combobox.positioner(h.div)).type.toBe<Div>()

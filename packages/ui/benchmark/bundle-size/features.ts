@@ -39,7 +39,7 @@ const Breaker = Html.component({
   update: () => {
     throw new Error("broke")
   },
-  view: (h) => h.button.onClick(BreakerMessage.Break()).children("break")
+  view: (h) => h.button.on("click", BreakerMessage.Break()).children("break")
 })
 
 const AppMessage = UiSchema.TaggedEnum({ Failed: {} })

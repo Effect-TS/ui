@@ -153,13 +153,15 @@ const Page = Html.component({
           h.div(
             model.late ? h.button.attr("id", "late").children("Late") : null
           ),
-          h.button.attr("id", "shut").onClick(Message.Closed()).children(
+          h.button.attr("id", "shut").on("click", Message.Closed()).children(
             "Shut"
           ),
-          h.button.attr("id", "switch").onClick(Message.Switched()).children(
-            "Switch"
-          ),
-          h.button.attr("id", "reopen").onClick(
+          h.button.attr("id", "switch").on("click", Message.Switched())
+            .children(
+              "Switch"
+            ),
+          h.button.attr("id", "reopen").on(
+            "click",
             Message.RequestedOpen({ which: "a", triggerId: null, method: null })
           )
             .children(
@@ -217,7 +219,8 @@ const Page = Html.component({
                     ? dialog.initialFocus(h.input.attr("id", "second"))
                     : h.input.attr("id", "second"),
                   props.siblings
-                    ? h.button.attr("id", "open-b").onClick(
+                    ? h.button.attr("id", "open-b").on(
+                      "click",
                       Message.RequestedOpen({
                         which: "b",
                         triggerId: null,

@@ -24,7 +24,7 @@ const form = (name: string, restore?: false | ((model: string) => string)) =>
     {
       init: () => inits++ === 0 ? "server" : "client",
       update: (_, text) => text,
-      view: (h, text) => h.input.value(text).onInput(({ value }) => value)
+      view: (h, text) => h.input.value(text).on("input", ({ value }) => value)
     }
   )
 const Form = form("Form")
@@ -88,7 +88,7 @@ const LateForm = Html.component({
 }).make({
   init: () => "client",
   update: (_, text) => text,
-  view: (h, text) => h.input.value(text).onInput(({ value }) => value)
+  view: (h, text) => h.input.value(text).on("input", ({ value }) => value)
 })
 const keepAliveForm = (
   name: string,
@@ -156,7 +156,7 @@ const lateSettings = (child: typeof Draft) =>
     update: (_, shown) => shown,
     view: (h, shown) =>
       h.div(
-        h.button.onClick("shown").children("show"),
+        h.button.on("click", "shown").children("show"),
         shown !== "" || !AsyncResult.isSuccess(h.queries.tab)
           ? h.keepAlive(
             ({ queries }) => !AsyncResult.isFailure(queries.tab),
@@ -202,7 +202,7 @@ const Field = Html.component({
 }).make({
   init: () => "client",
   update: (_, text) => text,
-  view: (h, text) => h.input.value(text).onInput(({ value }) => value)
+  view: (h, text) => h.input.value(text).on("input", ({ value }) => value)
 })
 const Group = Html.component({
   name: "Group",
@@ -382,10 +382,13 @@ const editor = (name: string) =>
     update: (_, subject) => subject,
     view: (h, subject) =>
       h.section(
-        h.input.value(subject ?? "").onInput(({ value }) =>
-          value === "" ? null : value
+        h.input.value(subject ?? "").on(
+          "input",
+          ({ value }) => value === "" ? null : value
         ),
-        h.props.open ? h.keepAlive((s) => Draft(s, { key: "d" })) : null
+        h.props.open
+          ? h.keepAlive((s) => Draft(s, { key: "d" }))
+          : null
       )
   })
 const Editor = editor("Editor")

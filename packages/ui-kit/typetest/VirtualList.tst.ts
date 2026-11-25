@@ -88,7 +88,10 @@ describe("VirtualList", () => {
         >()
         expect(virtualList.list(h.ul)).type.toBe<Ul<never>>()
         expect(
-          virtualList.item({ element: h.li.onClick(Msg.Clicked()), index: 0 })
+          virtualList.item({
+            element: h.li.on("click", Msg.Clicked()),
+            index: 0
+          })
         ).type.toBe<Li<never>>()
 
         const item = virtualList.item({

@@ -39,7 +39,9 @@ const Card = Html.component({
   init: () => ({ likes: 0 }),
   update: { ClickedLike: ($) => $.evolve({ likes: $.model.likes + 1 }) },
   view: (h, model) =>
-    h.button.onClick(CardMessage.ClickedLike()).children(`Like ${model.likes}`)
+    h.button.on("click", CardMessage.ClickedLike()).children(
+      `Like ${model.likes}`
+    )
 })
 
 const Gallery = Html.component({
@@ -74,16 +76,15 @@ const Gallery = Html.component({
   view: (h, model) =>
     h.main(
       h.p(`${model.route._tag} ${model.layout} ${model.filter}`),
-      h.button.onClick(Message.ClickedLayout({ layout: "grid" })).children(
+      h.button.on("click", Message.ClickedLayout({ layout: "grid" })).children(
         "Grid"
       ),
-      h.button.onClick(Message.ClickedLayout({ layout: "list" })).children(
+      h.button.on("click", Message.ClickedLayout({ layout: "list" })).children(
         "List"
       ),
-      h.button.onClick(Message.ClickedOpen()).children("Open"),
-      h.input.attr("aria-label", "Filter").onInput(({ value }) =>
-        Message.TypedFilter({ value })
-      ),
+      h.button.on("click", Message.ClickedOpen()).children("Open"),
+      h.input.attr("aria-label", "Filter").on("input", ({ value }) =>
+        Message.TypedFilter({ value })),
       Card(h, { props: { layout: model.layout } })
     )
 })

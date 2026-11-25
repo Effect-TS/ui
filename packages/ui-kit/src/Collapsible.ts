@@ -569,7 +569,7 @@ export const Collapsible = Html.component({
           "aria-disabled": undefined
         })
         .disabled(disabled)
-        .onClick(CollapsibleMessage.ClickedTrigger())
+        .on("click", CollapsibleMessage.ClickedTrigger())
         .forward((node) => {
           if (!open) return node
           const { built, own } = buildOwn(node)

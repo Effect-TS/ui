@@ -15,20 +15,23 @@ const Board = Html.component({
   init: (): ReadonlyArray<string> => [],
   update: ($, message) => [...$.model, message],
   view: (h, log) =>
-    h.section.onDrop(
-      ({ data, files }) =>
-        `outer ${
-          data["application/x-todo"] ?? files.map((file) => file.name).join(",")
-        }`,
-      { accepts: ["application/x-todo", "Files"] }
-    ).children(
-      h.div.attr("aria-label", "Inner")
-        .onDrop(() => "inner", { accepts: ["text/uri-list"] }).children(
-          h.p("Inner child")
-        ),
-      h.p.onClick(() => undefined).children("Plain"),
-      h.output(log.join("|"))
-    )
+    h.section.dropTarget({ accepts: ["application/x-todo", "Files"] })
+      .on(
+        "drop",
+        ({ data, files }) =>
+          `outer ${
+            data["application/x-todo"] ??
+              files.map((file) => file.name).join(",")
+          }`
+      ).children(
+        h.div.attr("aria-label", "Inner")
+          .dropTarget({ accepts: ["text/uri-list"] }).on("drop", () => "inner")
+          .children(
+            h.p("Inner child")
+          ),
+        h.p.on("click", () => undefined).children("Plain"),
+        h.output(log.join("|"))
+      )
 })
 
 const log = Locator.tag("output")
@@ -128,7 +131,7 @@ describe("HtmlScene", () => {
                 Mount.map((width) => Message.Drawn({ width }))
               )
             ),
-            h.button.onClick(Message.Add({ point: 3 })).children("Add"),
+            h.button.on("click", Message.Add({ point: 3 })).children("Add"),
             h.p(`width ${model.width}`)
           )
       })
@@ -167,12 +170,18 @@ describe("HtmlScene", () => {
         const saw = (event: string) => (payload: object) =>
           `${event} ${JSON.stringify(payload)}`
         return h.div(
-          h.input.attr("aria-label", "Name").value("Ada").onInput(saw("input"))
-            .onChange(saw("change"))
-            .onCompositionEnd(saw("compositionend")).onKeyDown(saw("keydown")),
+          h.input.attr("aria-label", "Name").value("Ada").on(
+            "input",
+            saw("input")
+          )
+            .on("change", saw("change"))
+            .on("compositionend", saw("compositionend")).on(
+              "keydown",
+              saw("keydown")
+            ),
           h.input.prop("type", "checkbox").attr("aria-label", "PropBox")
-            .onKeyDown(saw("keydown")),
-          h.div.attr("contenteditable", "true").onKeyDown(saw("keydown"))
+            .on("keydown", saw("keydown")),
+          h.div.attr("contenteditable", "true").on("keydown", saw("keydown"))
             .children(
               h.span.attr("id", "ce-child").children("Edit"),
               h.div.attr("contenteditable", "false").children(
@@ -236,12 +245,12 @@ describe("HtmlScene", () => {
         view: (h, log) =>
           h.div(
             h.input.attrs({ type: "file", "aria-label": "File" }).value("")
-              .onChange(({ files }) =>
-                Message.Changed({ names: files.map((file) => file.name) })
-              ),
-            h.input.attr("aria-label", "Name").onChange(({ files }) =>
-              Message.Changed({ names: [`${files.length}`] })
-            ),
+              .on("change", ({ files }) =>
+                Message.Changed({
+                  names: files.map((file) => file.name)
+                })),
+            h.input.attr("aria-label", "Name").on("change", ({ files }) =>
+              Message.Changed({ names: [`${files.length}`] })),
             h.output(log.join(" | "))
           )
       })
@@ -382,39 +391,44 @@ describe("HtmlScene", () => {
       }),
       view: (h, model) =>
         h.div(
-          h.form.attr("id", "f").onSubmit(({ entries }) =>
+          h.form.attr("id", "f").on("submit", ({ entries }) =>
             `submit:${
-              entries.map(([name, value]) => `${name}=${value}`).join("&")
-            }`
-          ).children(
-            h.input.attrs({ name: "zip", "aria-label": "Zip" }).value(
-              model.zip
+              entries.map(([name, value]) =>
+                `${name}=${value}`
+              ).join("&")
+            }`).children(
+              h.input.attrs({ name: "zip", "aria-label": "Zip" }).value(
+                model.zip
+              ),
+              // Inside the form, but owned by another one.
+              h.input.attrs({ name: "elsewhere", form: "other" }).value("x"),
+              h.button.on("click", "fill").children("Fill"),
+              h.button.on("click", "stopped", { preventDefault: true })
+                .children(
+                  "Stop"
+                ),
+              h.input.attrs({ type: "checkbox", "aria-label": "Agree" })
+                .on("click", "checked?", { preventDefault: true })
+                .on("change", ({ checked }) => `agree:${checked}`)
             ),
-            // Inside the form, but owned by another one.
-            h.input.attrs({ name: "elsewhere", form: "other" }).value("x"),
-            h.button.onClick("fill").children("Fill"),
-            h.button.onClick("stopped", { preventDefault: true }).children(
-              "Stop"
-            ),
-            h.input.attrs({ type: "checkbox", "aria-label": "Agree" })
-              .onClick("checked?", { preventDefault: true })
-              .onChange(({ checked }) => `agree:${checked}`)
-          ),
           // Outside the form, owned by it through its form attribute.
           h.input.attrs({ name: "note", form: "f" }).value("hi"),
-          h.button.attr("popovertarget", "menu").onClick("menu?", {
+          h.button.attr("popovertarget", "menu").on("click", "menu?", {
             preventDefault: true
           }).children("Menu"),
-          h.div.attrs({ id: "menu", popover: "" }).onToggle(({ newState }) =>
-            `toggle:${newState}`
+          h.div.attrs({ id: "menu", popover: "" }).on(
+            "toggle",
+            ({ newState }) => `toggle:${newState}`
           ),
           h.fieldset.attr("disabled", "").children(
             h.legend(
-              h.button.attr("type", "button").onClick("legend").children(
+              h.button.attr("type", "button").on("click", "legend").children(
                 "In legend"
               )
             ),
-            h.button.attr("type", "button").onClick("body").children("In body")
+            h.button.attr("type", "button").on("click", "body").children(
+              "In body"
+            )
           ),
           h.output(model.log.join("|"))
         )
@@ -464,38 +478,38 @@ describe("HtmlScene", () => {
           }),
           view: (h, model) =>
             h.div(
-              h.form.onSubmit("submit").children(
+              h.form.on("submit", "submit").children(
                 h.button.on("pointerdown", "pd")
                   .on("mousedown", "md")
                   .on("mouseup", "mu")
-                  .onClick("ck")
+                  .on("click", "ck")
                   .children("All")
               ),
               h.input.attrs({ type: "checkbox", "aria-label": "CancelPD" })
                 .on("pointerdown", "pd-cancel", { preventDefault: true })
                 .on("mousedown", "md")
                 .on("mouseup", "mu")
-                .onClick("ck")
-                .onChange("ch"),
+                .on("click", "ck")
+                .on("change", "ch"),
               h.input.attrs({ type: "checkbox", "aria-label": "CancelMouse" })
                 .on("pointerdown", "pd")
                 .on("mousedown", "md-cancel", { preventDefault: "always" })
                 .on("mouseup", "mu-cancel", { preventDefault: "always" })
-                .onClick("ck")
-                .onChange("ch"),
+                .on("click", "ck")
+                .on("change", "ch"),
               model.gone
                 ? undefined
                 : h.button.key("remove").attr("type", "button")
                   .on("mousedown", "remove-down")
                   .on("mouseup", "remove-up")
-                  .onClick("remove-click")
+                  .on("click", "remove-click")
                   .children("Remove"),
               h.button.attr("type", "button")
                 .disabled(model.off)
                 .on("pointerdown", "disable-pd")
                 .on("mousedown", "disable-md")
                 .on("mouseup", "disable-mu")
-                .onClick("disable-click")
+                .on("click", "disable-click")
                 .children("Disable"),
               h.span("Unhandled"),
               h.output(model.log.join("|"))
@@ -541,7 +555,7 @@ describe("HtmlScene", () => {
             ),
             cancelClick: p.part(
               "button",
-              (b) => b.onClick("Pressed", { preventDefault: "always" })
+              (b) => b.on("click", "Pressed", { preventDefault: "always" })
             )
           })
         })
@@ -557,14 +571,14 @@ describe("HtmlScene", () => {
               TooltipLike(h, {
                 view: (tip) =>
                   h.div(
-                    tip.trigger(h.button.onClick("saved")).children("Save"),
+                    tip.trigger(h.button.on("click", "saved")).children("Save"),
                     tip.trigger(h.button).children("ChildOnly"),
                     tip.cancelPointer(
                       h.button.on("mousedown", "md")
                         .on("mouseup", "mu")
-                        .onClick("ck")
+                        .on("click", "ck")
                     ).children("ChildPD"),
-                    h.form.onSubmit("submitted").children(
+                    h.form.on("submit", "submitted").children(
                       tip.cancelClick(
                         h.button.on("mousedown", "form-md")
                       ).children("ChildClick")
@@ -610,10 +624,10 @@ describe("HtmlScene", () => {
                 entries.length === 0
                   ? h.button.key("first")
                     .on("mousedown", "first-md")
-                    .onClick("first-ck")
+                    .on("click", "first-ck")
                     .children("Go")
                   : h.button.key("second")
-                    .onClick("second-ck")
+                    .on("click", "second-ck")
                     .children(entries.join("|"))
             })
         })
@@ -645,12 +659,12 @@ describe("HtmlScene", () => {
                   first: entries.length === 0
                     ? h.button.key("same")
                       .on("mousedown", "slot1-md")
-                      .onClick("slot1-ck")
+                      .on("click", "slot1-ck")
                       .children("Move")
                     : undefined,
                   second: entries.length > 0
                     ? h.button.key("same")
-                      .onClick("slot2-ck")
+                      .on("click", "slot2-ck")
                       .children("Moved")
                     : undefined
                 }

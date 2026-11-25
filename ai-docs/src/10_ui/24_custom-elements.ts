@@ -26,10 +26,8 @@ export const ColorPicker = Html.customElement({
   // its Schema can describe any value: a string here, an array or an object
   // elsewhere. The binding gets a `.color(value)` method typed by it.
   properties: { color: Schema.String },
-  // Each event's Schema decodes the CustomEvent's `detail`. The binding gets
-  // a method named `on` plus the event's name in camelCase, so
-  // `color-changed` becomes `.onColorChanged(handler)`. A detail the Schema
-  // rejects is logged with `console.error` and sends no message.
+  // The handler receives `detail` decoded by the event's Schema. Invalid
+  // `detail` is logged with `console.error` and sends no message.
   events: { "color-changed": Schema.Struct({ value: Schema.String }) }
 })
 
@@ -58,7 +56,7 @@ const BrandMessage = UiSchema.TaggedEnum({
 // `ColorPicker(h)` takes the view's `h`, which fixes the handler's message
 // type, and only compiles in an HTML view. It returns an HTML element
 // builder, so `.class`, `.attr`, `.children` and the native events chain
-// with the generated methods.
+// with the property methods.
 export const BrandColor = Html.component({
   name: "BrandColor",
   model: Schema.Struct({ color: Schema.String }),
@@ -82,9 +80,8 @@ export const BrandColor = Html.component({
           ColorPicker(h)
             .attr("aria-label", "Brand color")
             .color(model.color)
-            .onColorChanged(({ value }) =>
-              BrandMessage.PickedColor({ color: value })
-            )
+            .on("color-changed", ({ value }) =>
+              BrandMessage.PickedColor({ color: value }))
         ),
       h.output(model.color)
     )

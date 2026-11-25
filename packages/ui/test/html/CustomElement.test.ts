@@ -69,13 +69,14 @@ const Swatch = Html.component({
         .class("swatch")
         .color(color)
         .value(stops)
-        .onColorChanged(({ value }) => Message.ChangedColor({ color: value }))
-        .onSubmit(({ color }) => Message.ChangedColor({ color }))
-        .onCleared(Message.Cleared())
-        .onInput(() => undefined),
-      h.input.value(color).onInput(({ value }) =>
-        Message.ChangedColor({ color: value })
-      ),
+        .on("color-changed", ({ value }) =>
+          Message.ChangedColor({ color: value }))
+        .on("submit", ({ color }) =>
+          Message.ChangedColor({ color }))
+        .on("cleared", Message.Cleared())
+        .on("input", () => undefined),
+      h.input.value(color).on("input", ({ value }) =>
+        Message.ChangedColor({ color: value })),
       h.output(`${color} ${cleared}`)
     )
 })
@@ -114,14 +115,13 @@ describe("Html.customElement", () => {
         },
         view: (h, { color, saved, shown }) =>
           h.div(
-            h.button.onClick(Message.Toggled()).children("Toggle"),
+            h.button.on("click", Message.Toggled()).children("Toggle"),
             shown &&
               Picker(h)
                 .attr("aria-label", "Color")
                 .color(color)
-                .onColorChanged(({ value }) =>
-                  Message.ChangedColor({ color: value })
-                ),
+                .on("color-changed", ({ value }) =>
+                  Message.ChangedColor({ color: value })),
             h.output(saved.join(","))
           )
       }).pipe(Component.provide(Save.layer))
@@ -203,10 +203,9 @@ describe("Html.customElement", () => {
         init: () => 0,
         update: ($) => $.model + 1,
         view: (h, cleared) =>
-          Picker(h).onCleared(Message.Cleared())
-            .onColorChanged(({ value }) =>
-              Message.ChangedColor({ color: value })
-            )
+          Picker(h).on("cleared", Message.Cleared())
+            .on("color-changed", ({ value }) =>
+              Message.ChangedColor({ color: value }))
             .children(
               Picker(h).attr("id", "inner"),
               h.span("send"),
@@ -235,17 +234,8 @@ describe("Html.customElement", () => {
       expect(app.querySelector("output")!.textContent).toBe("3")
     }).pipe(Effect.scoped))
 
-  it("throws for a tag that isn't a custom element name, and for two events with one method name", () => {
+  it("throws for a tag that isn't a custom element name", () => {
     expect(() => Html.customElement({ tag: "picker" })).toThrow()
-    expect(() =>
-      Html.customElement({
-        tag: "test-twin",
-        events: {
-          "color-changed": Schema.Struct({}),
-          colorChanged: Schema.Struct({})
-        }
-      })
-    ).toThrow()
   })
 
   it.effect("HtmlPlay.fireElement sends a declared event, and custom element value stays plain across edits and re-renders", () =>

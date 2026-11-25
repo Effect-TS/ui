@@ -311,7 +311,7 @@ const Counter = Html.component({
   view: (h, model) =>
     h.div.children(
       h.span.attr("role", "status").children(String(model.count)),
-      h.button.onClick(CounterMessage.Incremented()).children("Increment")
+      h.button.on("click", CounterMessage.Incremented()).children("Increment")
     )
 })
 
@@ -353,7 +353,7 @@ const Post = Html.component({
   update: { ClickedRefresh: ($) => ({ renders: $.model.renders + 1 }) },
   view: (h, model) =>
     h.article.children(
-      h.button.onClick(PostMessage.ClickedRefresh()).children(
+      h.button.on("click", PostMessage.ClickedRefresh()).children(
         `Refresh ${model.renders}`
       ),
       Markdown.view(h, post, {

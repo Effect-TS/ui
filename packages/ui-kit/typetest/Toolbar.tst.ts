@@ -58,7 +58,7 @@ describe("Toolbar", () => {
               .toBe<Button<never>>()
             expect(
               toolbar.button({
-                element: h.button.onClick(Msg.Clicked()),
+                element: h.button.on("click", Msg.Clicked()),
                 value: "bold"
               }).children(needsClock)
             )

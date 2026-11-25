@@ -36,7 +36,7 @@
  * `"button"`. Sending `onPress` does not cancel an enabled button's
  * native submit or reset action.
  *
- * With `onPress` or `focusableWhenDisabled: true`, a caller's `.onClick(...)`
+ * With `onPress` or `focusableWhenDisabled: true`, a caller's `.on("click", ...)`
  * on `element` or chained after `Button(...)` throws at render in every state.
  * A stacked headless part, such as a tooltip trigger, handles the same click
  * on its own layer without clashing.
@@ -187,9 +187,9 @@ export const Button = <Msg, R = never>(
     // disabled one receives none. `onPress` only sends: an enabled reset
     // button resets.
     return focusable
-      ? button.onClick(() => undefined, { preventDefault: "always" })
+      ? button.on("click", () => undefined, { preventDefault: "always" })
       : !disabled && onPress !== undefined
-      ? button.onClick(onPress)
+      ? button.on("click", onPress)
       : button
   })
 }

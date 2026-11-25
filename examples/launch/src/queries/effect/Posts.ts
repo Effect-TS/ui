@@ -47,13 +47,13 @@ export const Posts = Html.component({
   view: (h, model) =>
     h.div.children(
       h.input.attr("aria-label", "Search posts").value(model.search)
-        .onInput(({ value }) =>
-          PostsMessage.UpdatedSearch({ search: value })
-        ),
+        .on("input", ({ value }) =>
+          PostsMessage.UpdatedSearch({ search: value })),
       // The result for the current args, as an AsyncResult.
       AsyncResult.match(h.queries.posts, {
         // No result yet: the wait or the first fetch is running.
-        onInitial: () => h.p.children("Loading posts"),
+        onInitial: () =>
+          h.p.children("Loading posts"),
         onFailure: () => h.p.children("Could not load posts"),
         // waiting is true while a stale result is being refetched.
         onSuccess: ({ value, waiting }) =>

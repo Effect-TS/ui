@@ -161,7 +161,7 @@ const button = (h: H, id: string, title: string, message: Message) =>
       "btn",
       "btn-primary",
       "btn-block"
-    ).onClick(message)
+    ).on("click", message)
       .children(title)
   )
 
@@ -187,10 +187,10 @@ const row = (h: H, row: Row, selected: boolean) =>
   h.tr.key(String(row.id)).class(selected && "danger").children(
     h.td.class("col-md-1").children(String(row.id)),
     h.td.class("col-md-4").children(
-      h.a.onClick(Message.Select({ id: row.id })).children(row.label)
+      h.a.on("click", Message.Select({ id: row.id })).children(row.label)
     ),
     h.td.class("col-md-1").children(
-      h.a.onClick(Message.Remove({ id: row.id })).children(
+      h.a.on("click", Message.Remove({ id: row.id })).children(
         h.span.class("glyphicon", "glyphicon-remove").attr(
           "aria-hidden",
           "true"

@@ -91,8 +91,9 @@
  *
  * The input's `keydown` handler cancels the default of the stepping keys
  * and of a character that may not be typed, so the input gets every
- * `keydown` while it has focus, and an ancestor's `onKeyDown` never sees
- * them. To handle them, add `onKeyDown` to the input's builder.
+ * `keydown` while it has focus, and an ancestor's `keydown` handler never
+ * sees them. To handle them, add a `keydown` handler to the input's
+ * builder.
  *
  * **Pointer**
  *
@@ -1656,25 +1657,21 @@ export const NumberField = Html.component({
         })
         .disabled(disabled)
         .value(text)
-        .onInput(({ value }) => NumberFieldMessage.UpdatedInput({ value }))
-        .onBlur((payload) =>
+        .on("input", ({ value }) => NumberFieldMessage.UpdatedInput({ value }))
+        .on("blur", (payload) =>
           NumberFieldMessage.BlurredInput({
             disabled: payload.disabled === true
-          })
-        )
-        .onKeyDown(
-          ({ alt, composing, ctrl, key, meta, shift }) => {
-            if (s.locked || composing || ctrl || meta) return undefined
-            const steps = key === "ArrowUp" || key === "ArrowDown"
-            const bounds = !alt &&
-              ((key === "Home" && s.min !== undefined) ||
-                (key === "End" && s.max !== undefined))
-            return steps || bounds
-              ? NumberFieldMessage.PressedKey({ key, shift, alt })
-              : undefined
-          },
-          { preventDefault: true }
-        )
+          }))
+        .on("keydown", ({ alt, composing, ctrl, key, meta, shift }) => {
+          if (s.locked || composing || ctrl || meta) return undefined
+          const steps = key === "ArrowUp" || key === "ArrowDown"
+          const bounds = !alt &&
+            ((key === "Home" && s.min !== undefined) ||
+              (key === "End" && s.max !== undefined))
+          return steps || bounds
+            ? NumberFieldMessage.PressedKey({ key, shift, alt })
+            : undefined
+        }, { preventDefault: true })
         .onMount(
           TrackInput({
             locked: s.locked,

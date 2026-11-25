@@ -108,9 +108,9 @@ const lateSave = Effect.gen(function*() {
         }),
       view: (h, shown) =>
         h.div.children(
-          h.button.onClick(Message.Save()).children("Save"),
-          h.button.onClick(Message.Replace()).children("Replace"),
-          h.button.onClick(Message.Show()).children("Show"),
+          h.button.on("click", Message.Save()).children("Save"),
+          h.button.on("click", Message.Replace()).children("Replace"),
+          h.button.on("click", Message.Show()).children("Show"),
           shown && child !== undefined ? child(h) : h.p.children("hidden")
         )
     }).pipe(Component.provide(Save.layer), Component.provide(Replace.layer))
@@ -170,7 +170,8 @@ const savedWith = Effect.fnUntraced(
           Clicked: () => $.run(Save.make({}).pipe(Command.as(Message.Saved()))),
           Saved: () => "saved"
         }),
-      view: (h, model) => h.button.onClick(Message.Clicked()).children(model)
+      view: (h, model) =>
+        h.button.on("click", Message.Clicked()).children(model)
     }).pipe(Component.provide(Save.layer))
     const App = Html.component({
       name: "App",
@@ -215,7 +216,7 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
         update: () => true,
         view: (h, open) =>
           h.div.children(
-            h.button.onClick(Message.Opened()).children("Open"),
+            h.button.on("click", Message.Opened()).children("Open"),
             open && child !== undefined ? child(h) : h.p.children("closed")
           )
       })
@@ -343,7 +344,7 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
           }),
         view: (h, saved) =>
           h.div.children(
-            h.button.onClick(Message.Clicked()).children("Save"),
+            h.button.on("click", Message.Clicked()).children("Save"),
             saved && child !== undefined ? child(h) : h.p.children("unsaved")
           )
       }).pipe(Component.provide(Save.layer))

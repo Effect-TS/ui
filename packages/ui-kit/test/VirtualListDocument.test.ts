@@ -97,7 +97,7 @@ const Steps = Effect.fnUntraced(function*(
     update: { Advanced: ($) => ({ step: $.model.step + 1 }) },
     view: (h, model) =>
       h.div.children(
-        h.button.class("next").onClick(Message.Advanced()).children("Next"),
+        h.button.class("next").on("click", Message.Advanced()).children("Next"),
         VirtualList(h, {
           props: { count: 1000, itemSize, ...steps[model.step] },
           onEmit: (event) => {

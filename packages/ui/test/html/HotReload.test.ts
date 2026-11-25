@@ -77,7 +77,7 @@ describe("hot reload", { concurrent: false }, () => {
           init: () => ({ email: "", password: "" }),
           update: () => ({ email: "ada@example.com", password: "secret" }),
           view: (h, model) =>
-            h.button.onClick(Msg.Fill()).children(
+            h.button.on("click", Msg.Fill()).children(
               `${model.email}|${model.password}`
             )
         })
@@ -91,7 +91,7 @@ describe("hot reload", { concurrent: false }, () => {
             init: () => 0,
             update: ($) => $.model + 1,
             view: (h, count) =>
-              h.button.onClick(Msg.Inc()).children(`${name}=${count}`)
+              h.button.on("click", Msg.Inc()).children(`${name}=${count}`)
           })
         const Ephemeral = counter("ephemeral", false)
         const Kept = counter("kept")
@@ -327,7 +327,7 @@ describe("hot reload", { concurrent: false }, () => {
           init: () => "init-field",
           update: (_, msg) => msg.text,
           view: (h, text) =>
-            h.button.onClick(Msg.Set({ text: "typed" })).children(
+            h.button.on("click", Msg.Set({ text: "typed" })).children(
               `field=${text}`
             )
         })
@@ -426,10 +426,10 @@ describe("hot reload", { concurrent: false }, () => {
           view: (h, text) =>
             h.div(
               h.span(`draft=${text}`),
-              h.button.onClick(ChildMsg.Set({ text: "history" })).children(
+              h.button.on("click", ChildMsg.Set({ text: "history" })).children(
                 "set-history"
               ),
-              h.button.onClick(ChildMsg.Set({ text: "hot" })).children(
+              h.button.on("click", ChildMsg.Set({ text: "hot" })).children(
                 "set-hot"
               )
             )
@@ -555,7 +555,7 @@ describe("hot reload", { concurrent: false }, () => {
             init: () => 0,
             update: ($) => $.model + 1,
             view: (h, count) =>
-              h.button.onClick(Msg.Inc()).children(`${label}=${count}`)
+              h.button.on("click", Msg.Inc()).children(`${label}=${count}`)
           })
       const fixed = (name: string, text: () => string) =>
         Html.component({ name, model: Schema.Number, message: Msg }).make({

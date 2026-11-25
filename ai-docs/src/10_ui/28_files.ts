@@ -115,14 +115,16 @@ export const CsvImport = Html.component({
         h.input.attrs({ type: "file", accept: ".csv,text/csv" }).class(
           "visually-hidden"
         ).value("")
-          .onChange(({ files }) => ImportMessage.ChoseFiles({ files }))
+          .on("change", ({ files }) => ImportMessage.ChoseFiles({ files }))
       ),
       ImportModel.match(model, {
         Idle: () => null,
         Reading: ({ name }) =>
           h.p(
             `Reading ${name}…`,
-            h.button.onClick(ImportMessage.ClickedCancel()).children("Cancel")
+            h.button.on("click", ImportMessage.ClickedCancel()).children(
+              "Cancel"
+            )
           ),
         Imported: ({ name, rows }) =>
           h.p(`Imported ${rows} rows from ${name}.`),

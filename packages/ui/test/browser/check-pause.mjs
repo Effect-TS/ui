@@ -131,7 +131,7 @@ try {
   const dialogOpen = await scene(page)
   expect(
     dialogOpen.model.dialog && dialogOpen.liveModal,
-    "the live modal opens, with onToggle",
+    "the live modal opens, with toggle",
     dialogOpen
   )
   await page.evaluate(() => globalThis.check.pause())

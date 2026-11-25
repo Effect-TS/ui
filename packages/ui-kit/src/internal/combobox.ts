@@ -1435,11 +1435,11 @@ export const make = <P, E>(
           hidden: flag(!open),
           style: visuallyHidden
         })
-        .onClick(Message.PressedDismiss()))
+        .on("click", Message.PressedDismiss()))
 
     const label = p.part("div", (b) => {
       labelled = true
-      return b.attr("id", labelId).onClick(Message.ClickedLabel())
+      return b.attr("id", labelId).on("click", Message.ClickedLabel())
     })
 
     const value = p.part(
@@ -1541,7 +1541,8 @@ export const make = <P, E>(
               composing: false
             })
         )
-        .onKeyDown(
+        .on(
+          "keydown",
           ({ alt, composing, ctrl, key, meta, selectionStart, shift }) =>
             composing || alt || ctrl || meta || shift || disabled ||
               !keyHandled(key, selectionStart)
@@ -1606,12 +1607,15 @@ export const make = <P, E>(
           { preventDefault: !inPopup }
         )
         .on("mouseup", Message.ReleasedTrigger())
-        .onClick(({ pointerType }) =>
-          pointerType === "" || pointerType === "touch"
-            ? Message.ClickedTrigger({ pointerType })
-            : undefined
+        .on(
+          "click",
+          ({ pointerType }) =>
+            pointerType === "" || pointerType === "touch"
+              ? Message.ClickedTrigger({ pointerType })
+              : undefined
         )
-        .onKeyDown(
+        .on(
+          "keydown",
           ({ alt, composing, ctrl, key, meta }) =>
             composing
               ? undefined
@@ -1659,7 +1663,7 @@ export const make = <P, E>(
         })
         .disabled(disabled)
         .on("mousedown", () => undefined, { preventDefault: "always" })
-        .onClick(Message.PressedClear()))
+        .on("click", Message.PressedClear()))
     const clearButton = View.wrapPart(
       clearPart,
       <B extends View.PartTarget<"button">>(
@@ -1711,7 +1715,8 @@ export const make = <P, E>(
         })
         .disabled(disabled)
         .on("mousedown", () => undefined, { preventDefault: "always" })
-        .onClick(
+        .on(
+          "click",
           Message.RequestedChipRemoval({ value, reason: "chip-remove-press" })
         ))
     const chipRemove = View.wrapPart(
@@ -1800,7 +1805,8 @@ export const make = <P, E>(
           "data-anchor-hidden": flag(shown && model.placement?.anchorHidden),
           "data-empty": flag(listEmpty)
         })
-        .onKeyDown(
+        .on(
+          "keydown",
           ({ composing, key }) =>
             key === "Escape" && open && !composing
               ? Message.PressedInputKey({ key, chips: chipsDrawn })
@@ -1879,8 +1885,10 @@ export const make = <P, E>(
               ? undefined
               : Message.ReleasedItem({ value, button })
         )
-        .onClick(({ pointerType }) =>
-          off ? undefined : Message.ClickedItem({ value, pointerType })
+        .on(
+          "click",
+          ({ pointerType }) =>
+            off ? undefined : Message.ClickedItem({ value, pointerType })
         )
     })
     const item = valued(itemPart)

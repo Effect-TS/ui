@@ -67,7 +67,7 @@
  * `update` that records the rejection.
  *
  * To send focus somewhere else after a failed submit, such as to an error
- * summary, draw a plain `h.form` with `novalidate` and `onSubmit`.
+ * summary, draw a plain `h.form` with `novalidate` and a `submit` handler.
  *
  * **Example** (A sign-up form whose email field is invalid)
  *
@@ -204,7 +204,7 @@ const FocusInvalid = Command.make(
  * before the part. The part writes it when it is applied, so an attribute the
  * consumer chains after `form.root(...)` is the consumer's to answer for.
  *
- * `root` handles `submit` on a layer of its own, so an `onSubmit` the
+ * `root` handles `submit` on a layer of its own, so a `submit` handler the
  * consumer adds to the form still runs, after the form's.
  *
  * Every submit emits `Submitted`, and then, once the render is committed,
@@ -227,8 +227,7 @@ export const Form = Html.component({
     root: p.part("form", (b) =>
       b.ref(Root)
         .attr("novalidate", "")
-        .onSubmit(({ entries, fields }) =>
-          FormMessage.SubmittedRoot({ fields, entries })
-        ))
+        .on("submit", ({ entries, fields }) =>
+          FormMessage.SubmittedRoot({ fields, entries })))
   })
 })

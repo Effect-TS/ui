@@ -46,7 +46,7 @@ describe("ToggleGroup", () => {
               .toBe<Button<never>>()
             expect(
               toggleGroup.item({
-                element: h.button.onClick(Msg.Clicked()),
+                element: h.button.on("click", Msg.Clicked()),
                 value: "right"
               }).children(needsClock)
             )

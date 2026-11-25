@@ -13,13 +13,13 @@
  * after it's in the document, and closed with `close()`. Dialogs shown in
  * the same commit open in document order, so one nested in another is on
  * top; one shown later is on top of those already open. The host cancels a
- * modal's `cancel` and sends it to `onCancel`, so the Model decides. When
+ * modal's `cancel` and sends it to the `cancel` handler, so the Model decides. When
  * the browser closes it anyway, as Chromium does after repeated cancelled
  * requests, the host shows it again on the next frame while the Model still
  * wants it, which moves focus to its first focusable element. Browsers
  * report each close a task later, so the host keeps one record per time it
  * showed the dialog, and each `close` event ends the oldest: it reaches
- * `onClose` only for the latest showing, and not for a close the host made
+ * the `close` handler only for the latest showing, and not for a close the host made
  * itself. Before removing a dialog it showed that is still open, or an
  * element containing one, the host closes it, the latest shown first, so
  * focus goes back to where it was before each one opened, as it does when
@@ -55,13 +55,13 @@
  * The host does the drag and drop work a handler can't. On `dragstart` it puts
  * the innermost drag source's `draggable` data on the drag. While a drag is
  * over the app it works out the active drop target, the innermost element
- * whose `onDrop` accepts the drag's types, on every `dragenter` and
+ * whose `dropTarget` accepts the drag's types, on every `dragenter` and
  * `dragover`, cancels those events there so the browser allows the drop, and
  * sends the target's enter and leave when it changes, never for its
  * children. A drag that leaves the window, or is cancelled, leaves the
  * target: a `dragleave` from the latest `dragenter`'s element with no enter
  * by the next task means the pointer left, whichever order the browser fires
- * them in. `onDragOver` is sent at most once per animation frame. A drop on a
+ * them in. `dragover` is sent at most once per animation frame. A drop on a
  * target is always cancelled, and its strings and files are read then.
  *
  * `value`, `checked`, `selected` and `open` are controlled. The host sets them
@@ -82,7 +82,7 @@
  *
  * Under `HtmlHydrate.hydrate`, a server-rendered control the user changed
  * before its instance adopted keeps what it shows, and the host sends its state to the element's
- * `onInput` and `onChange` as if the events had just fired, then puts the
+ * `input` and `change` handlers as if the events had just fired, then puts the
  * Model's value back as above if `update` didn't take it. A control counts as
  * changed when it differs from both the server's HTML and the Model's value,
  * so a field the browser filled in, by autofill or by restoring a form, is
@@ -106,7 +106,7 @@
  * }).make({
  *   init: () => 0,
  *   update: ($) => $.model + 1,
- *   view: (h, count) => h.button.onClick(Message.ClickedIncrement()).children(String(count))
+ *   view: (h, count) => h.button.on("click", Message.ClickedIncrement()).children(String(count))
  * })
  *
  * // The tree is mounted for as long as the Layer is built.

@@ -23,13 +23,14 @@ const Checkout = Html.component({
   }),
   view: (h, model) =>
     h.div(
-      h.form.onFocus("form focus").onSubmit(({ entries }) =>
-        `submit:${entries.map(([name, value]) => `${name}=${value}`).join("&")}`
-      )
+      h.form.on("focus", "form focus").on("submit", ({ entries }) =>
+        `submit:${
+          entries.map(([name, value]) => `${name}=${value}`).join("&")
+        }`)
         .children(
           h.input.attr("name", "zip").attr("aria-label", "Zip").value(model.zip)
-            .onInput(() => undefined),
-          h.input.attr("name", "note").attr("aria-label", "Note").onInput((
+            .on("input", () => undefined),
+          h.input.attr("name", "note").attr("aria-label", "Note").on("input", (
             { value }
           ) => `note:${value}`),
           h.input.attr("type", "radio").attr("name", "size").attr("value", "s")
@@ -39,9 +40,11 @@ const Checkout = Html.component({
             ),
           h.input.attr("type", "radio").attr("name", "size").attr("value", "m")
             .attr("aria-label", "M")
-            .onChange(({ value }) => `size:${value}`),
-          h.button.onClick("fill").children("Fill"),
-          h.button.onClick("stopped", { preventDefault: true }).children("Stop")
+            .on("change", ({ value }) => `size:${value}`),
+          h.button.on("click", "fill").children("Fill"),
+          h.button.on("click", "stopped", { preventDefault: true }).children(
+            "Stop"
+          )
         ),
       h.output(model.log.join("|"))
     )
@@ -199,8 +202,9 @@ describe("HtmlPlay", () => {
         init: (): ReadonlyArray<string> => [],
         update: ($, entry) => [...$.model, entry],
         view: (h, entries) =>
-          h.div.onKeyDown(({ editable, key, repeat }) =>
-            `${key}:${editable}:${repeat}`
+          h.div.on(
+            "keydown",
+            ({ editable, key, repeat }) => `${key}:${editable}:${repeat}`
           ).children(
             h.div.prop("contentEditable", "true").children(
               h.span.attr("id", "play-ce-child").children("Edit")
@@ -238,21 +242,21 @@ describe("HtmlPlay", () => {
         }),
         view: (h, model) =>
           h.div(
-            h.form.onSubmit("submit").children(
+            h.form.on("submit", "submit").children(
               h.button.on("pointerdown", "pd")
                 .on("mousedown", "md")
                 .on("mouseup", "mu")
-                .onClick(model.pressed ? "ck-down" : "ck-up")
+                .on("click", model.pressed ? "ck-down" : "ck-up")
                 .children(model.pressed ? "AllDown" : "All"),
               h.button.on("pointerdown", "pd-cancel", { preventDefault: true })
                 .on("mousedown", "md")
                 .on("mouseup", "mu")
-                .onClick("ck")
+                .on("click", "ck")
                 .children("CancelPD"),
               h.button.on("pointerdown", "pd")
                 .on("mousedown", "md-cancel", { preventDefault: "always" })
                 .on("mouseup", "mu-cancel", { preventDefault: "always" })
-                .onClick("ck")
+                .on("click", "ck")
                 .children("CancelMouse")
             ),
             model.gone
@@ -261,14 +265,14 @@ describe("HtmlPlay", () => {
                 h.button.attr("type", "button")
                   .on("mousedown", "remove-down")
                   .on("mouseup", "remove-up")
-                  .onClick("remove-click")
+                  .on("click", "remove-click")
                   .children("Remove")
               ),
             h.button.attr("type", "button")
               .disabled(model.off)
               .on("mousedown", "disable-down")
               .on("mouseup", "disable-up")
-              .onClick("disable-click")
+              .on("click", "disable-click")
               .children("Disable"),
             h.span("Unhandled"),
             h.output(model.log.join("|"))

@@ -53,7 +53,7 @@ const targetButton = (
         ? "flex-1 bg-black text-white px-3 py-2"
         : "flex-1 border border-gray-300 text-gray-700 px-3 py-2"
     )
-    .onClick(QrDesignerMessage.ChoseTarget({ target }))
+    .on("click", QrDesignerMessage.ChoseTarget({ target }))
     .children(label)
 
 export const QrDesigner = Html.component({
@@ -85,9 +85,8 @@ export const QrDesigner = Html.component({
           h.input
             .class("border border-gray-300 bg-white px-3 py-2")
             .value(model.text)
-            .onInput(({ value }) =>
-              QrDesignerMessage.ChangedText({ text: value })
-            )
+            .on("input", ({ value }) =>
+              QrDesignerMessage.ChangedText({ text: value }))
         ),
         h.div.class("flex gap-2").children(
           targetButton(h, model.editing, "fill", "Foreground"),
@@ -96,9 +95,8 @@ export const QrDesigner = Html.component({
         HexColorPicker(h)
           .attr("aria-label", "Color")
           .color(model[model.editing])
-          .onColorChanged(({ value }) =>
-            QrDesignerMessage.PickedColor({ color: value })
-          ),
+          .on("color-changed", ({ value }) =>
+            QrDesignerMessage.PickedColor({ color: value })),
         h.label.class(LABEL_CLASS).children(
           "Corner radius",
           h.input
@@ -107,9 +105,8 @@ export const QrDesigner = Html.component({
             .attr("max", "0.5")
             .attr("step", "0.05")
             .value(String(model.radius))
-            .onInput(({ value }) =>
-              QrDesignerMessage.ChangedRadius({ radius: Number(value) })
-            )
+            .on("input", ({ value }) =>
+              QrDesignerMessage.ChangedRadius({ radius: Number(value) }))
         )
       ),
       h.figure.class("bg-white p-6 shadow").children(

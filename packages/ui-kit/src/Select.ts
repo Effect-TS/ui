@@ -1607,7 +1607,7 @@ export const Select = Html.component({
 
     const label = p.part("div", (b) => {
       labelled = true
-      return b.attr("id", labelId).onClick(SelectMessage.ClickedLabel())
+      return b.attr("id", labelId).on("click", SelectMessage.ClickedLabel())
     })
 
     const trigger = p.part("button", (b) =>
@@ -1635,12 +1635,12 @@ export const Select = Html.component({
             ? SelectMessage.PressedTrigger({ pointerType })
             : undefined)
         .on("mouseup", SelectMessage.ReleasedTrigger())
-        .onClick(({ pointerType }) =>
+        .on("click", ({ pointerType }) =>
           pointerType === "" || pointerType === "touch"
             ? SelectMessage.ClickedTrigger({ pointerType })
-            : undefined
-        )
-        .onKeyDown(
+            : undefined)
+        .on(
+          "keydown",
           ({ alt, composing, ctrl, key, meta }) =>
             composing
               ? undefined
@@ -1750,7 +1750,8 @@ export const Select = Html.component({
     const popup = p.part("div", (b) =>
       placed(b)
         .attrs({ id: popupId, tabindex: "-1" })
-        .onKeyDown(
+        .on(
+          "keydown",
           ({ alt, composing, ctrl, key, meta, shift }) =>
             composing
               ? undefined
@@ -1762,9 +1763,8 @@ export const Select = Html.component({
               : undefined,
           { preventDefault: true }
         )
-        .onKeyUp(({ key }) =>
-          key === " " ? SelectMessage.ReleasedSpace() : undefined
-        )
+        .on("keyup", ({ key }) =>
+          key === " " ? SelectMessage.ReleasedSpace() : undefined)
         .forward((node) => {
           const own = listed ? node.attr("role", "presentation") : listbox(node)
           return aligned && !listed
@@ -1832,8 +1832,9 @@ export const Select = Html.component({
               ? undefined
               : SelectMessage.ReleasedItem({ value, pointerType })
         )
-        .onClick(({ pointerType }) =>
-          SelectMessage.ClickedItem({ value, pointerType })
+        .on(
+          "click",
+          ({ pointerType }) => SelectMessage.ClickedItem({ value, pointerType })
         )
     })
     const item = valued(itemPart)

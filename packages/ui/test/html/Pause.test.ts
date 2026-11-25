@@ -25,7 +25,7 @@ const Counter = Html.component({
   init: () => 0,
   update: ($) => $.model + 1,
   view: (h, count) =>
-    h.button.onClick(CounterMessage.Clicked()).onMount(
+    h.button.on("click", CounterMessage.Clicked()).onMount(
       Seen().pipe(Mount.map(() => Component.noop))
     )
       .children(`clicked ${count}`)
@@ -90,7 +90,10 @@ const Field = Html.component({
   init: () => ({ value: "", typed: 0 }),
   update: ($, { value }) => ({ value, typed: $.model.typed + 1 }),
   view: (h, { value }) =>
-    h.input.value(value).onInput(({ value }) => FieldMessage.Typed({ value }))
+    h.input.value(value).on(
+      "input",
+      ({ value }) => FieldMessage.Typed({ value })
+    )
 })
 
 it.effect("the copy's host listens only on the copy, so a live event while paused is reported once", () =>
@@ -211,7 +214,9 @@ const Settings = Html.component({
   init: () => false,
   update: (_, message) => message._tag === "Opened",
   view: (h, open) =>
-    h.dialog.modal(open).onCancel(DialogMessage.Closed()).children("settings")
+    h.dialog.modal(open).on("cancel", DialogMessage.Closed()).children(
+      "settings"
+    )
 })
 
 it.effect("the live root's modal dialogs are closed while it's paused and shown again on resume", () =>

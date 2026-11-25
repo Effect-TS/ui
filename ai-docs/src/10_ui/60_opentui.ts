@@ -93,16 +93,15 @@ export const TaskBoard = OpenTui.component({
       // focuses) so the Model owns the terminal focus ring cleanly.
       h.input.style({ width: 44 }).placeholder("New task...").value(model.draft)
         .focused(model.focus === "input")
-        .onInput(({ value }) => TaskMessage.UpdatedDraft({ value }))
-        .onEnter(TaskMessage.SubmittedDraft()),
+        .on("input", ({ value }) => TaskMessage.UpdatedDraft({ value }))
+        .on("enter", TaskMessage.SubmittedDraft()),
       // Inline option arrays are compared structurally by `OpenTuiHost`, so
       // passing fresh arrays on re-render does not reset the select widget.
       h.select.style({ width: 44, height: 6 }).options(
         model.items.map((name) => ({ name, description: "" }))
       ).selectedIndex(model.selectedIndex).focused(model.focus === "list")
-        .onSelectionChanged(({ index }) =>
-          TaskMessage.ChangedSelection({ index })
-        ),
+        .on("selectionChanged", ({ index }) =>
+          TaskMessage.ChangedSelection({ index })),
       h.text.style({ fg: "#9ca3af" }).children(
         h.b("Tab"),
         ": switch focus  ",

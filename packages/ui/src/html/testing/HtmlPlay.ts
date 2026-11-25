@@ -50,9 +50,9 @@
  *   view: (h, model) =>
  *     model.signedIn
  *       ? h.p(`Welcome, ${model.email}`)
- *       : h.form.onSubmit(Message.SubmittedForm()).children(
+ *       : h.form.on("submit", Message.SubmittedForm()).children(
  *         h.label.attr("for", "email").children("Email"),
- *         h.input.attr("id", "email").value(model.email).onInput(({ value }) => Message.ChangedEmail({ value })),
+ *         h.input.attr("id", "email").value(model.email).on("input", ({ value }) => Message.ChangedEmail({ value })),
  *         h.button.children("Sign In")
  *       )
  * })
@@ -162,7 +162,7 @@ export interface HtmlPlay<Model, Msg, Events>
   /**
    * Drops `payload` on the element `locator` matches, as `HtmlScene.drop`
    * does: to the innermost element, the matched one or an ancestor, whose
-   * `onDrop` accepts one of the drag's types. Throws when none does.
+   * `dropTarget` accepts one of the drag's types. Throws when none does.
    */
   drop(
     locator: Locator.Locator,

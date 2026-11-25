@@ -262,7 +262,7 @@ const Page = Html.component({
   ],
   view: (h, model) =>
     h.div(
-      h.a.onClick(PageMessage.Left()).children("Away"),
+      h.a.on("click", PageMessage.Left()).children("Away"),
       model.route._tag === "Edit"
         ? Menu(h, {
           key: "menu",

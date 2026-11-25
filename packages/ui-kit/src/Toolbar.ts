@@ -303,14 +303,15 @@ const FocusItem = Command.make(
 
 const cancelClick = <
   N extends {
-    readonly onClick: (
+    readonly on: (
+      event: "click",
       handler: () => undefined,
       options: View.EventOptions
     ) => N
   }
 >(
   node: N
-): N => node.onClick(() => undefined, { preventDefault: "always" })
+): N => node.on("click", () => undefined, { preventDefault: "always" })
 
 const groupOf = (
   props: ToolbarProps,
@@ -521,7 +522,7 @@ export const Toolbar = Html.component({
         tabindex: value === tabStop ? "0" : "-1"
       })
         .ref(Item.at(value) as never)
-        .onFocus(ToolbarMessage.FocusedItem({ value }))
+        .on("focus", ToolbarMessage.FocusedItem({ value }))
 
     const disabledAttrs = <
       N extends Attributed<N> & { readonly disabled: (disabled: boolean) => N }
@@ -547,7 +548,8 @@ export const Toolbar = Html.component({
       node: N,
       value: string
     ): N =>
-      roving(node, value).onKeyDown(
+      roving(node, value).on(
+        "keydown",
         (key) =>
           moves(key)
             ? ToolbarMessage.PressedItemKey({ value, key: key.key })
@@ -584,7 +586,7 @@ export const Toolbar = Html.component({
       const focusable = entry.focusableWhenDisabled !== false
       const own = disabledAttrs(roving(b, value), off, focusable)
         .attr("data-focusable", flag(focusable))
-        .onKeyDown((
+        .on("keydown", (
           {
             alt,
             composing,
@@ -604,8 +606,7 @@ export const Toolbar = Html.component({
               value,
               key,
               caret: selectionEnd
-            })
-        )
+            }))
       const readOnly = <N extends Attributed<N>>(node: N): N =>
         off && focusable ? node.attr("readonly", "") : node
       return readOnly(own).forward((node) =>
