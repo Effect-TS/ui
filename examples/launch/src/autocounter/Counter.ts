@@ -44,6 +44,8 @@ export const Counter = Html.component({
     // The Message's payload is the handler's second argument.
     ClickedAdd: ($, { amount }) =>
       $.evolve({ count: (count) => count + amount }),
+    // $.run keeps the Model as it is and runs the Command. In
+    // Foldkit 0.x, update returned { model, commands } instead.
     ClickedResetAfterDelay: ($) => $.run(DelayReset.make({})),
     CompletedDelayReset: ($) => $.evolve({ count: 0 }),
     ClickedToggleAutoCount: ($) =>

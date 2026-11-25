@@ -148,7 +148,7 @@ export const Nav = Html.component({
                     element: h.a.class(
                       "block border-s-2 border-border text-sm",
                       "text-muted-foreground hover:text-foreground",
-                      "aria-[current]:border-foreground aria-[current]:bg-muted",
+                      "aria-[current]:border-accent-text aria-[current]:bg-muted",
                       // The same weight as the others: a heavier label is
                       // wider, and wrapping it moved every item below.
                       "aria-[current]:text-foreground",

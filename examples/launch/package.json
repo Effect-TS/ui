@@ -18,8 +18,10 @@
     "@effect/ui-kit": "workspace:*",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
+    "auth": "workspace:*",
     "effect": "^4.1.4",
-    "lucide": "^1.78.0"
+    "lucide": "^1.78.0",
+    "snake": "workspace:*"
   },
   "devDependencies": {
     "@effect/vitest": "^4.1.4",

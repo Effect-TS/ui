@@ -294,12 +294,18 @@ importers:
       '@fontsource-variable/jetbrains-mono':
         specifier: ^5.2.8
         version: 5.3.0
+      auth:
+        specifier: workspace:*
+        version: link:../auth
       effect:
         specifier: ^4.1.4
         version: 4.1.4
       lucide:
         specifier: ^1.78.0
         version: 1.78.0
+      snake:
+        specifier: workspace:*
+        version: link:../snake
     devDependencies:
       '@effect/vitest':
         specifier: ^4.1.4

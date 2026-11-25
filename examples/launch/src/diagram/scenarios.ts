@@ -100,8 +100,8 @@ const got = (name: Name) => `Got${name}`
 const sent = (sender: Name, payload: Payload): Step =>
   step({
     nodes: [sender],
-    text: `${sender}'s view sends a Message.`,
-    label: "Send",
+    text: `A click in ${sender}'s view produces a Message.`,
+    label: "Click",
     payload
   })
 
@@ -149,7 +149,7 @@ const messages: Scenario = {
               step({
                 nodes: ["Root"],
                 text:
-                  "The root update receives it and returns a new Model.",
+                  "The runtime delivers it to the root update, which returns a new Model.",
                 label: "Update",
                 updates: ["Root"],
                 payload: message(clicked)
@@ -162,7 +162,7 @@ const messages: Scenario = {
               step({
                 nodes: ["Root"],
                 text:
-                  "Root wraps it in a Message of its own, and the root update receives it.",
+                  "Root wraps it in a Message of its own, and the runtime delivers it to the root update.",
                 label: "Wrap",
                 moves: [go("A", "Root")],
                 updates: ["Root"],
@@ -200,7 +200,7 @@ const messages: Scenario = {
               step({
                 nodes: ["Root"],
                 text:
-                  "Root wraps it again, and the root update receives it.",
+                  "Root wraps it again, and the runtime delivers it to the root update.",
                 label: "Wrap",
                 moves: [go("A", "Root")],
                 updates: ["Root"],
@@ -302,7 +302,7 @@ const sharedState: Scenario = {
         step({
           nodes: ["A", "Root"],
           text:
-            "A and Root wrap it, and the root update receives it.",
+            "A and Root wrap it, and the runtime delivers it to the root update.",
           label: "Wrap",
           moves: [go(reader, "A"), go("A", "Root")],
           updates: ["Root"],

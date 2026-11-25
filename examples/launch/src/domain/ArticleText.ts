@@ -1,8 +1,8 @@
 import { Schema } from "effect"
 import { scenarios } from "../diagram/scenarios.ts"
 import {
+  columns,
   format,
-  frameworks,
   load,
   names,
   type Row,
@@ -46,13 +46,11 @@ const table = (title: string, rows: ReadonlyArray<Row>) =>
   [
     `**${title}**`,
     "",
-    `| Workload | ${frameworks.map((id) => names[id]).join(" | ")} |`,
-    `| --- |${frameworks.map(() => " ---: |").join("")}`,
+    `| Workload | ${columns.map((id) => names[id]).join(" | ")} |`,
+    `| --- |${columns.map(() => " ---: |").join("")}`,
     ...rows.map((row) =>
       `| ${row.label} | ${
-        frameworks.map((id) =>
-          `${format(value(row, id))} ${row.unit}`
-        )
+        columns.map((id) => `${format(value(row, id))} ${row.unit}`)
           .join(" | ")
       } |`
     )
@@ -75,6 +73,11 @@ const diagram = (name: keyof typeof scenarios) => {
 export const toMarkdown = (source: string, snippets: Snippets) => {
   const island = (name: string, text = "", body = ""): string => {
     switch (name) {
+      case "Architecture":
+        return [
+          "**Foldkit 0.x.** One Model, one update and one view for the whole app. A, A1 and A2 are Submodels inside them.",
+          "**Effect UI.** Every Component has a Model, an update and a view of its own. Root renders A, and A renders A1 and A2."
+        ].join("\n\n")
       case "Diagram":
         return diagram(decode.Diagram(attributes(text)).scenario)
       case "Compare": {
@@ -98,7 +101,11 @@ export const toMarkdown = (source: string, snippets: Snippets) => {
       case "PlayTest":
         return [
           files(snippets.play),
-          "An interactive figure runs this test in the browser, on the test host with a TestClock. A slider steps through it one line at a time and shows the count, the TestClock and whether DelayReset is running. After the two clicks the count is 1 and DelayReset is asleep. At 999 ms the count is still 1. One more millisecond wakes DelayReset, the runtime delivers CompletedDelayReset, and the count is 0."
+          "An interactive figure runs this test in the browser, on the test host with a TestClock. A slider steps through it one line at a time and shows the app as the test host holds it, the TestClock and whether DelayReset is running. The test clicks +1 and Reset: the count is 1 and DelayReset is asleep. It moves the clock to 999 ms, and the count is still 1. It moves the clock one more millisecond: DelayReset finishes, the runtime delivers CompletedDelayReset, and the count is 0.",
+          files(snippets.playSignIn),
+          "A second tab runs this test of the sign-in flow in `examples/auth`. The router and the session store keep their data in memory. The test types an email and a password, and the form enables its button. It clicks Sign In: the real sign-in Command starts a request that takes one second, and the button reads \"Signing in...\". It moves the clock one second: the app shows the dashboard, the session is in the store and the URL is /dashboard.",
+          files(snippets.playSnake),
+          "A third tab runs this test of the Snake game in `examples/snake`. A seed fixes where the apple appears. The test presses Space to start the game and the up arrow to turn, then moves the TestClock 150 ms, which is one move. It presses the right arrow and moves the clock 900 ms, which is six moves: the snake reaches the apple and the score is 10. It presses Space to pause and moves the clock ten seconds, and the snake doesn't move."
         ].join("\n\n")
       case "PerformanceChart":
         return [
@@ -120,7 +127,7 @@ export const toMarkdown = (source: string, snippets: Snippets) => {
         ].join("\n\n")
       case "Footer":
         return body
-      case "AgentPrompt":
+      case "AgentPrompts":
       case "PageOnly":
         return ""
       case "Chips": {

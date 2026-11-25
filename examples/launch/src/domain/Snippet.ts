@@ -21,6 +21,12 @@ export const Snippet = Schema.Struct({
 })
 export type Snippet = typeof Snippet.Type
 
+// A snippet's lines as plain text.
+export const textOf = (snippet: Snippet): ReadonlyArray<string> =>
+  snippet.lines.map((line) =>
+    line.map((token) => token.text).join("")
+  )
+
 const Files = Schema.Array(Snippet)
 
 export const Snippets = Schema.Struct({
@@ -32,6 +38,8 @@ export const Snippets = Schema.Struct({
   queryEffect: Files,
   tests: Files,
   play: Files,
+  playSignIn: Files,
+  playSnake: Files,
   partsUse: Files,
   partsDefine: Files,
   mount: Files,
