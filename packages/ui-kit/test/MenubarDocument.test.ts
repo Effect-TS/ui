@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { UiSchema } from "@effect/ui"
 import { Menu, Menubar, type MenuItem } from "@effect/ui-kit"
-import { BrowserHost, Html } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlHydrate, HtmlServer } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { byId, container, popovers, tick } from "./utils/document.ts"
@@ -554,6 +554,38 @@ describe("Menubar in a document", { concurrent: false }, () => {
       )!
       assert.isFalse(blocker.inert)
       assert.notStrictEqual(blocker.style.getPropertyValue("clip-path"), "")
+    }))
+
+  it.effect("server HTML has the root as its one Tab stop, which hands focus to the first enabled trigger once hydrated", () =>
+    Effect.gen(function*() {
+      yield* popovers
+      yield* geometry
+      const props = {
+        orientation: "horizontal",
+        disabled: false,
+        fileDisabled: true,
+        independent: false,
+        rtl: false,
+        initial: [],
+        twin: false
+      } as const
+      const rendered = yield* HtmlServer.renderToHtml(Page, props)
+      const app = yield* container
+      app.innerHTML = rendered.html
+      assert.strictEqual(byId("bar").getAttribute("tabindex"), "0")
+      assert.deepStrictEqual(tabindexes(), ["-1", "-1", "-1"])
+      byId("bar").focus()
+      const root = yield* HtmlHydrate.hydrateEffect(
+        Page,
+        props,
+        app,
+        rendered.state
+      )
+      yield* root.adopted
+      yield* tick
+      assert.isFalse(byId("bar").hasAttribute("tabindex"))
+      assert.deepStrictEqual(tabindexes(), ["-1", "0", "-1"])
+      assert.strictEqual(document.activeElement, byId("edit"))
     }))
 
   it.effect("a disabled first menu hands the Tab stop to the next trigger", () =>

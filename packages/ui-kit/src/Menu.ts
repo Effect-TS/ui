@@ -129,15 +129,17 @@
  * Hovering another trigger of an open menu moves the popup to it at once.
  * A trigger's own options override the menu's. A press within 500ms of a
  * hover open keeps it open. A `modal` menu, the default for a
- * root menu not opened by hovering, locks the page's scroll and blocks
- * presses outside, except on the trigger.
+ * root menu not opened by hovering, locks the page's scroll, blocks
+ * presses outside, except on the trigger, and hides the rest of the page
+ * from assistive technology with `aria-hidden`.
  *
  * A right click on a `contextTrigger` opens the popup at the pointer, and a
  * touch held still on it for 500ms opens it under the finger, as a
  * `ContextMenu` does. A menu opened that way is modal, blocks the whole
  * page, closes on Tab and gives focus back to the element that had it, and
  * a menu opened from its `trigger` behaves as above. The Menu key and
- * Shift+F10 open it against the `contextTrigger`.
+ * Shift+F10 open it against the `contextTrigger`, which defaults to
+ * `tabindex="0"`.
  *
  * **Limits**
  *
@@ -258,12 +260,14 @@ import * as Stream from "effect/Stream"
 import {
   type Attributed,
   attrSelector,
+  defaults,
   flag,
   idOf,
   type Keyed,
   ownStyle,
   separatorAttrs,
-  withStyle
+  withStyle,
+  withTokens
 } from "./internal/attributes.ts"
 import { backdropBox, blockers, cutPath } from "./internal/blocker.ts"
 import { focusFinal, override } from "./internal/dom.ts"
@@ -284,7 +288,7 @@ import {
   MenubarShared,
   triggerAttribute
 } from "./internal/menubar.ts"
-import { holdScroll } from "./internal/modal.ts"
+import { hideOthers, holdScroll, nextLayerOrder } from "./internal/modal.ts"
 import { listenOutside, releasedOutside } from "./internal/outside.ts"
 import { isMac } from "./internal/platform.ts"
 import {
@@ -488,11 +492,13 @@ export type MenuFilterMode = typeof MenuFilterMode.Type
  * - `open`: whether the popup shows. The menu only asks, with `RequestedOpen`
  *   and `RequestedClose`.
  * - `items`: every item, link, checkbox, radio and submenu trigger, in the
- *   order they're drawn. Navigation, typeahead and filtering read them.
+ *   order they're drawn. Navigation, typeahead and filtering read them. A
+ *   disabled submenu trigger doesn't open its submenu.
  * - `disabled`: the trigger and the items ignore the user.
- * - `modal`: while open, the page doesn't scroll and a press outside only
- *   closes the menu. True when left out. A submenu and a menu opened by
- *   hovering are never modal.
+ * - `modal`: while open, the page doesn't scroll, a press outside only
+ *   closes the menu, and content outside the popup and trigger is hidden
+ *   from assistive technology. True when left out. A submenu and a
+ *   menu opened by hovering are never modal.
  * - `loopFocus`: the arrow keys wrap from the last item to the first. True
  *   when left out.
  * - `orientation`: `"vertical"`, the default, moves with ArrowDown and
@@ -663,7 +669,8 @@ const ParentState = Schema.Struct({
   reason: Schema.NullOr(MenuChangeReason),
   rtl: Schema.Boolean,
   orientation: Orientation,
-  disabled: Schema.Boolean
+  disabled: Schema.Boolean,
+  disabledItems: Schema.Array(Schema.String)
 })
 
 type ParentState = typeof ParentState.Type
@@ -685,6 +692,10 @@ const MenuMessage = UiSchema.TaggedEnum({
     x: Schema.Number,
     y: Schema.Number,
     pointerType: Schema.String
+  },
+  PressedContextKey: {
+    key: Schema.String,
+    triggerId: Schema.NullOr(Schema.String)
   },
   TouchedContextTrigger: {
     key: Schema.String,
@@ -866,9 +877,12 @@ const parentOf = ({ props, reads }: Reads): ParentState | undefined =>
 const barOf = ({ props, reads }: Reads): MenubarShared | undefined =>
   props.parentItem === undefined ? reads.menubar : undefined
 
-const disabledOf = (input: Reads): boolean =>
-  input.props.disabled === true || parentOf(input)?.disabled === true ||
-  barOf(input)?.disabled === true
+const disabledOf = (input: Reads): boolean => {
+  const parent = parentOf(input)
+  return input.props.disabled === true || parent?.disabled === true ||
+    parent?.disabledItems.includes(input.props.parentItem!) === true ||
+    barOf(input)?.disabled === true
+}
 
 const hoverOf = (props: MenuProps, nested: boolean): boolean =>
   props.openOnHover ?? nested
@@ -1327,7 +1341,10 @@ const shares = (model: MenuModel, props: MenuProps): ParentState => ({
   reason: model.closeReason,
   rtl: model.rtl,
   orientation: props.orientation ?? "vertical",
-  disabled: props.disabled === true
+  disabled: props.disabled === true,
+  disabledItems: props.items.filter((item) => item.disabled === true).map((
+    item
+  ) => item.value)
 })
 
 const TrackMenuArgs = {
@@ -1422,12 +1439,22 @@ const watch = (
       (node.contains(target) && !blocker.is(target)) ||
       (target instanceof Element && target.closest(selectors.any) !== null)
 
+    const areaOf = (anchor: HTMLElement | null): Element | null =>
+      anchor === null || current.context
+        ? null
+        : current.menubar
+        ? menubarOf(anchor) ?? anchor
+        : anchor
+
     let cutUndo: (() => void) | undefined
+    let shown: (() => void) | undefined
     const layerOf = () =>
       Array.from(node.children).find(blocker.is) as HTMLElement | undefined
     const uncut = () => {
       cutUndo?.()
       cutUndo = undefined
+      shown?.()
+      shown = undefined
       const layer = layerOf()
       if (layer !== undefined) layer.inert = true
     }
@@ -1435,10 +1462,11 @@ const watch = (
       uncut()
       const layer = layerOf()
       if (layer === undefined) return
-      if (anchor !== null && !current.context) {
-        const area = current.menubar ? menubarOf(anchor) ?? anchor : anchor
+      const area = areaOf(anchor)
+      if (area !== null) {
         cutUndo = override(layer, { "clip-path": cutPath([boxOf(area)]) })
       }
+      shown = hideOthers(node, nextLayerOrder(), area === null ? [] : [area])
       layer.inert = false
     }
 
@@ -2149,6 +2177,19 @@ const hiddenBox = "display:none"
 
 const MenuTriggerHoverDefault = 100
 
+const listIdOf = (popupId: string) => popupId + "-list"
+
+const contextKey = ({ composing, key, shift }: Html.KeyPayload) =>
+  !composing && (key === "ContextMenu" || (key === "F10" && shift))
+
+// Run in `forward` to preserve the caller's `aria-controls` tokens.
+const controlling = <
+  B extends Attributed<B> & {
+    readonly elementAttrs: Readonly<Record<string, string>>
+  }
+>(node: B, id: string | undefined): B =>
+  node.attr("aria-controls", withTokens(node.elementAttrs["aria-controls"], id))
+
 const triggerAttrs = <B extends Attributed<B>>(
   builder: B,
   popupId: string,
@@ -2159,7 +2200,6 @@ const triggerAttrs = <B extends Attributed<B>>(
     .attrs({
       "aria-haspopup": "menu",
       "aria-expanded": String(open),
-      "aria-controls": open ? popupId : undefined,
       "data-popup-open": flag(open),
       "data-menu-trigger": popupId,
       "data-menu-active": flag(active)
@@ -2247,6 +2287,8 @@ export interface MenuTriggerProps {
   readonly popupId: string
   /** The trigger takes no press and no hover. */
   readonly disabled?: boolean | undefined
+  /** Point `aria-controls` at the `list` part when the menu uses a filter. */
+  readonly filtered?: boolean | undefined
   /** How long the pointer rests on the trigger before `onHover`, in milliseconds. */
   readonly delay?: number | undefined
 }
@@ -2259,25 +2301,28 @@ export interface MenuTriggerProps {
  *
  * **Details**
  *
- * It sets `aria-haspopup="menu"`, `aria-expanded`, `data-popup-open`,
- * `data-pressed`, and `aria-controls` while the menu is open, in
- * `forward`, so they win over the caller's. Give the menu the same `id`,
- * and the trigger's `id` as the menu's `triggerId`: the menu then places
+ * It sets `aria-haspopup="menu"`, `aria-expanded`, `data-popup-open` and
+ * `data-pressed` in `forward`, so they win over the caller's, and adds the
+ * menu's `id` to the caller's `aria-controls` while the menu is open. With
+ * `filtered: true`, it adds the `list` part's `id` instead. Give the menu
+ * the same `id`, and the trigger's `id` as the menu's `triggerId`: it places
  * its popup against the trigger, a press on it isn't a press outside, and
  * focus goes back to it when the menu closes.
  *
  * A mouse press sends `onPress` on `mousedown`, as the menu's own trigger
- * does, and a touch, Enter or Space on `click`. `onHover` is sent once the
- * pointer has rested on the trigger for `delay` milliseconds, 100 when left
- * out. Each is a message or a function of the press, which carries the
+ * does, a touch, Enter or Space on `click`, and ArrowDown or ArrowUp on
+ * `keydown` while the menu is closed. Opened with `openMethod`
+ * `"keyboard"`, the menu highlights its first enabled item. `onHover` is
+ * sent once the pointer has rested on the trigger for `delay` milliseconds,
+ * 100 when left out. Each is a message or a function of the press, which carries the
  * trigger's `id`, how the user pressed it and why. Pass the method and the
  * reason to the menu as `openMethod` and `openReason`: a menu opened with
  * `"trigger-hover"` closes when the pointer leaves it and the trigger.
  *
- * Given `onPress`, a `mousedown` or `click` handler of the caller's own
- * throws at render: pass the message as `onPress`. Given `onHover`, it
- * reserves the element's mount slot, so the caller can't set another mount
- * on it.
+ * Given `onPress`, a `mousedown`, `click` or `keydown` handler of the
+ * caller's own throws at render: pass the message as `onPress`. Given
+ * `onHover`, it reserves the element's mount slot, so the caller can't set
+ * another mount on it.
  *
  * @stability experimental
  * @category components
@@ -2308,10 +2353,11 @@ export const MenuTrigger = <Msg, R = never>(
     if (
       onPress !== undefined &&
       (node.handlers.click !== undefined ||
-        node.handlers.mousedown !== undefined)
+        node.handlers.mousedown !== undefined ||
+        node.handlers.keydown !== undefined)
     ) {
       throw new Error(
-        "MenuTrigger: the element already handles mousedown or click, which MenuTrigger would replace. Send the message from onPress"
+        "MenuTrigger: the element already handles mousedown, click or keydown, which MenuTrigger would replace. Send the message from onPress"
       )
     }
     const triggerId = idOf(node)
@@ -2327,11 +2373,11 @@ export const MenuTrigger = <Msg, R = never>(
           reason
         })
         : handler
-    const button = triggerAttrs(
-      node.attr("type", "button"),
-      popupId,
-      open,
+    const button = controlling(
+      triggerAttrs(node.attr("type", "button"), popupId, open, open),
       open
+        ? options.props.filtered === true ? listIdOf(popupId) : popupId
+        : undefined
     )
       .attrs({
         "data-pressed": flag(open),
@@ -2345,6 +2391,13 @@ export const MenuTrigger = <Msg, R = never>(
         button,
         (pointerType) =>
           message(onPress, methodOf(pointerType), "trigger-press")
+      ).on(
+        "keydown",
+        ({ composing, key }) =>
+          !open && !composing && (key === "ArrowDown" || key === "ArrowUp")
+            ? message(onPress, "keyboard", "trigger-press")
+            : undefined,
+        { preventDefault: true }
       )
     return onHover === undefined || disabled === true || open
       ? pressed
@@ -2415,7 +2468,10 @@ export const menuFilter = (
  *
  * - `trigger`: `id`, the one on the builder or a generated one,
  *   `type="button"`, `aria-haspopup="menu"`, `aria-expanded`,
- *   `aria-controls` while open, and `disabled`
+ *   `aria-controls` while open, pointing at the element with the menu
+ *   role, and `disabled`
+ * - `contextTrigger`: `tabindex="0"` unless the builder has one, so the
+ *   keyboard can reach it
  * - `submenuTrigger`: `aria-haspopup="menu"`, `aria-expanded`, and
  *   `aria-controls` while open
  * - `backdrop`, `positioner`: `role="presentation"` and
@@ -2439,7 +2495,8 @@ export const menuFilter = (
  * - `groupLabel`: `id`
  * - `arrow`, the indicators: `aria-hidden="true"`, and `id` on the
  *   arrow
- * - `separator`: `role="separator"`, `aria-orientation="horizontal"`
+ * - `separator`: `role="separator"`, with `aria-orientation="vertical"`
+ *   in a horizontal menu and `"horizontal"` otherwise
  * - `input`: `id`, `type="text"`, `role="searchbox"`,
  *   `inputmode="search"`, `aria-activedescendant`, `aria-controls`
  *   pointing at the list, `value`, `disabled`, and `autocomplete="off"`,
@@ -2454,7 +2511,8 @@ export const menuFilter = (
  * - `trigger`: `mousedown`, `mouseup`, `click` and `keydown`, and
  *   `mouseenter` and `mouseleave` when hovering opens it. A trigger with
  *   the `disabled` option handles none.
- * - `contextTrigger`: `contextmenu`, and touches through its mount
+ * - `contextTrigger`: `contextmenu`, `keydown`, and touches through its
+ *   mount
  * - `submenuTrigger`: `mousedown`, `click` and `keydown`, and
  *   `mouseenter` and `mouseleave` when hovering opens it
  * - `backdrop`: `contextmenu`, in a menu opened from a `contextTrigger`
@@ -2567,15 +2625,17 @@ export const Menu = Html.component({
     PressedTrigger: ($, { key, pointerType, triggerId }) =>
       pressTrigger($, methodOf(pointerType), key, triggerId),
     ReleasedTrigger: ($) => $.evolve({ pressing: false }),
-    PressedContextTrigger: ($, { key, pointerType, triggerId, x, y }) =>
-      openAt(
-        $,
-        key,
-        triggerId,
-        contextPoint(x, y, pointerType),
-        methodOf(pointerType),
-        true
-      ),
+    PressedContextTrigger: ($, { key, pointerType, triggerId, x, y }) => {
+      const point = contextPoint(x, y, pointerType)
+      const { justOpened, openMethod, trigger } = $.model
+      // Ignore a browser-generated `contextmenu` after the keydown already opened the menu.
+      return point === null && justOpened && openMethod === "keyboard" &&
+          trigger === key
+        ? $.model
+        : openAt($, key, triggerId, point, methodOf(pointerType), true)
+    },
+    PressedContextKey: ($, { key, triggerId }) =>
+      openAt($, key, triggerId, null, "keyboard", false),
     TouchedContextTrigger: ($, { key, triggerId, x, y }) =>
       disabledOf($)
         ? $.model
@@ -2689,12 +2749,26 @@ export const Menu = Html.component({
     ClickedItem: ($, { action, pointerType }) =>
       activate($.model, $, action, methodOf(pointerType)),
     CompletedWaitBeforeResetTyping: ($) => $.evolve({ typed: "" }),
-    ShowedPopup: ($) =>
-      $.evolve(
-        $.props.open
-          ? { mounted: true, closeMethod: null, focusLeft: false }
-          : { mounted: true }
-      ),
+    ShowedPopup: ($) => {
+      const props = $.props
+      if (!props.open) return $.evolve({ mounted: true })
+      const next = UiStruct.evolve($.model, {
+        mounted: true,
+        closeMethod: null,
+        focusLeft: false
+      })
+      // A detached `MenuTrigger` bypasses the menu's own opening logic.
+      if (props.openMethod !== "keyboard" || $.model.active !== null) {
+        return $.set(next)
+      }
+      const active = firstEnabled(visibleOf(props))?.value ?? null
+      return commit(
+        $,
+        $.model,
+        UiStruct.evolve(next, { active, activeByKey: true }),
+        "none"
+      )
+    },
     RenderedFirstFrame: ($) =>
       $.props.open ? $.evolve({ started: true }) : $.model,
     FinishedTransition: ($, { open }) => {
@@ -2867,7 +2941,7 @@ export const Menu = Html.component({
       (context ||
         (bar === undefined ? props.modal !== false && !hovered : bar.modal))
     const popupId = props.id ?? p.id("popup")
-    const listId = p.id("list")
+    const listId = listIdOf(popupId)
     const inputId = p.id("input")
     const arrowId = p.id("arrow")
     const itemId = (value: string) => p.id("item", value)
@@ -2924,6 +2998,9 @@ export const Menu = Html.component({
       : props.triggerId ?? model.triggerElement ?? undefined
     let listed = false
     let inputDrawn = false
+    // Resolve in `forward`: the view must finish drawing before we know whether it includes a `list`.
+    const menuId = (expanded: boolean) =>
+      expanded ? listed ? listId : popupId : undefined
 
     const states = <B extends Attributed<B>>(builder: B): B =>
       transitionAttrs(builder, open, transitionStatus)
@@ -2991,6 +3068,7 @@ export const Menu = Html.component({
           open && active,
           shown && active
         )
+          .forward((node) => controlling(node, menuId(open && active)))
           .attrs({
             "data-pressed": flag(open && active),
             "data-disabled": flag(off),
@@ -3001,9 +3079,7 @@ export const Menu = Html.component({
           ? attributed
           : attributed.attrs({
             role: "menuitem",
-            tabindex: !off && (bar.tabStop === null || bar.tabStop === key)
-              ? "0"
-              : "-1",
+            tabindex: !off && bar.tabStop === key ? "0" : "-1",
             [triggerAttribute]: ""
           })
         if (options.disabled === true) return item
@@ -3067,6 +3143,15 @@ export const Menu = Html.component({
           .forward(ownStyle("-webkit-touch-callout:none"))
         if (disabled) return marked
         return marked
+          .forward((node) => defaults(node, { tabindex: "0" }))
+          .on(
+            "keydown",
+            (payload) =>
+              contextKey(payload)
+                ? MenuMessage.PressedContextKey({ key, triggerId })
+                : undefined,
+            { preventDefault: true }
+          )
           .on(
             "contextmenu",
             ({ pointerType, x, y }) =>
@@ -3114,7 +3199,7 @@ export const Menu = Html.component({
         triggerAttrs(b, popupId, open, shown).attr(
           "data-disabled",
           flag(disabled)
-        ),
+        ).forward((node) => controlling(node, menuId(open))),
         (pointerType) => MenuMessage.PressedSubmenuTrigger({ pointerType }),
         (pointerType) => MenuMessage.ClickedSubmenuTrigger({ pointerType })
       )
@@ -3528,7 +3613,14 @@ export const Menu = Html.component({
     const groupLabel = grouped(
       p.part("div", (b, key: string) => b.attr("id", groupLabelId(key)))
     )
-    const separator = p.part("div", (b) => separatorAttrs(b, "horizontal"))
+    const separator = p.part(
+      "div",
+      (b) =>
+        separatorAttrs(
+          b,
+          orientation === "horizontal" ? "vertical" : "horizontal"
+        )
+    )
 
     const input = p.part("input", (b) => {
       inputDrawn = true

@@ -36,7 +36,10 @@
  * **Keyboard**
  *
  * One trigger is in the page's Tab order: the one that last had focus, or
- * the first enabled one. On a trigger, ArrowRight and ArrowLeft, or
+ * the first enabled one. Before mounting, including in server-rendered
+ * HTML, an enabled menubar uses the root as its Tab stop instead. On mount,
+ * focus on the root moves to the first enabled trigger. On a trigger,
+ * ArrowRight and ArrowLeft, or
  * ArrowDown and ArrowUp in a vertical menubar, move focus to the next and
  * the previous trigger, and Home and End to the first and the last.
  * Focusing a trigger opens nothing. Enter and Space open its menu, and so
@@ -201,7 +204,8 @@ const MenubarModel = Schema.Struct({
   highlighted: Schema.NullOr(Schema.String),
   current: Schema.NullOr(Schema.String),
   opening: Schema.NullOr(Schema.String),
-  moves: Schema.Number
+  moves: Schema.Number,
+  tracked: Schema.Boolean
 })
 
 type MenubarModel = typeof MenubarModel.Type
@@ -233,12 +237,12 @@ const TrackMenubar = Mount.makeStream(
         const document = node.ownerDocument
         const view = document.defaultView
         let found = ""
+        const enabled = () =>
+          barTriggers(node).filter((trigger) =>
+            trigger.id !== "" && !trigger.hasAttribute("disabled")
+          )
         const scan = () => {
-          const triggers = barTriggers(node)
-            .filter((trigger) =>
-              trigger.id !== "" && !trigger.hasAttribute("disabled")
-            )
-            .map((trigger) => trigger.id)
+          const triggers = enabled().map((trigger) => trigger.id)
           const rtl = view?.getComputedStyle(node).direction === "rtl"
           const next = JSON.stringify([triggers, rtl])
           if (next === found) return
@@ -272,6 +276,8 @@ const TrackMenubar = Mount.makeStream(
           attributeFilter: ["id", "disabled", triggerAttribute]
         })
         scan()
+        // Preserve keyboard focus when replacing the server-rendered root Tab stop.
+        if (document.activeElement === node) enabled()[0]?.focus()
         yield* Effect.addFinalizer(() =>
           Effect.sync(() => observer?.disconnect())
         )
@@ -301,7 +307,8 @@ const TrackMenubar = Mount.makeStream(
  * depends on them.
  *
  * The root writes `role="menubar"`, `aria-orientation` and its data
- * attributes over what the consumer set on the builder before the part.
+ * attributes over what the consumer set on the builder before the part,
+ * and `tabindex="0"` until it has found its triggers, unless it's disabled.
  * A trigger in the menubar writes `role="menuitem"` and `tabindex` over
  * the consumer's, besides what a `Menu` trigger writes.
  *
@@ -345,7 +352,8 @@ export const Menubar = Html.component({
     highlighted: null,
     current: null,
     opening: null,
-    moves: 0
+    moves: 0,
+    tracked: false
   }),
   update: {
     ChangedMenus: ($, { menus }) => {
@@ -364,7 +372,12 @@ export const Menubar = Html.component({
         }
         : { ...$.model, menus }
     },
-    FoundTriggers: ($, { rtl, triggers }) => ({ ...$.model, triggers, rtl }),
+    FoundTriggers: ($, { rtl, triggers }) => ({
+      ...$.model,
+      triggers,
+      rtl,
+      tracked: true
+    }),
     Navigated: ($, { from, key, open }) => {
       const props = $.props
       if (props.disabled === true) return $.model
@@ -402,21 +415,27 @@ export const Menubar = Html.component({
   },
   parts: (p, model) => {
     const state = stateOf(model, p.props)
-    const { hasSubmenuOpen, modal, orientation } = state
+    const { disabled, hasSubmenuOpen, modal, orientation } = state
     return {
       ...state,
-      root: p.part("div", (b) =>
-        b
-          .attrs({
-            role: "menubar",
-            "aria-orientation": orientation,
-            "data-orientation": orientation,
-            "data-modal": flag(modal),
-            "data-has-submenu-open": flag(hasSubmenuOpen)
-          })
-          .onMount(
-            TrackMenubar({ highlighted: model.highlighted, moves: model.moves })
-          ))
+      root: p.part(
+        "div",
+        (b) =>
+          (model.tracked || disabled ? b : b.attr("tabindex", "0"))
+            .attrs({
+              role: "menubar",
+              "aria-orientation": orientation,
+              "data-orientation": orientation,
+              "data-modal": flag(modal),
+              "data-has-submenu-open": flag(hasSubmenuOpen)
+            })
+            .onMount(
+              TrackMenubar({
+                highlighted: model.highlighted,
+                moves: model.moves
+              })
+            )
+      )
     }
   }
 })
