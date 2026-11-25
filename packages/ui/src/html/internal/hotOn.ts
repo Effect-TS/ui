@@ -200,6 +200,7 @@ export const open = (
   const restore = stateRestore.make({
     rootPath: path,
     entry: () => restoring,
+    replayInit: false,
     restore: (at) => {
       const found = restoring && stateRestore.pageAt(restoring, at)
       if (found !== undefined) delete restoring![at]

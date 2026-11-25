@@ -492,4 +492,90 @@ describe("hot reload", { concurrent: false }, () => {
           }).pipe(Effect.provide(BrowserRouter.layer({ routes: AppRoute }))))
       })
   )
+
+  it.live(
+    "does not replay init Commands on hot reload adoption while still running them on incompatible resets",
+    () =>
+      Effect.gen(function*() {
+        sessionStorage.clear()
+        let runs = 0
+        const PickApple = Command.make(
+          "test/PickApple",
+          { args: {} },
+          () => Effect.sync(() => ++runs * 10)
+        )
+        const Msg = UiSchema.TaggedEnum({
+          Picked: { apple: Schema.Number },
+          Bump: {}
+        })
+        const GameV1 = Html.component({
+          name: "InitCommandGame",
+          model: Schema.Struct({ apple: Schema.Number, score: Schema.Number }),
+          message: Msg
+        }).make({
+          init: ($) =>
+            $.set({ apple: 0, score: 0 }).run(
+              PickApple.make({}).pipe(
+                Command.map((apple) => Msg.Picked({ apple }))
+              )
+            ),
+          update: ($, msg) =>
+            Msg.match(msg, {
+              Picked: ({ apple }) => ({ ...$.model, apple }),
+              Bump: () => ({ ...$.model, score: $.model.score + 1 })
+            }),
+          view: (h, model) =>
+            h.span(`apple=${model.apple}|score=${model.score}`)
+        })
+        const GameV2 = Html.component({
+          name: "InitCommandGame",
+          model: Schema.Struct({ apple: Schema.String, score: Schema.Number }),
+          message: Msg
+        }).make({
+          init: ($) =>
+            $.set({ apple: "none", score: 0 }).run(
+              PickApple.make({}).pipe(
+                Command.map((apple) => Msg.Picked({ apple }))
+              )
+            ),
+          update: ($, msg) =>
+            Msg.match(msg, {
+              Picked: ({ apple }) => ({ ...$.model, apple: `v2-${apple}` }),
+              Bump: () => ({ ...$.model, score: $.model.score + 1 })
+            }),
+          view: (h, model) =>
+            h.span(`apple=${model.apple}|score=${model.score}`)
+        })
+
+        yield* inContainer("init-cmd", (el) =>
+          Effect.gen(function*() {
+            const root = yield* BrowserHost.mountEffect(GameV1, {}, el)
+            yield* tick
+            root.send(Msg.Bump())
+            yield* tick
+            assert.strictEqual(runs, 1)
+            assert.strictEqual(el.textContent, "apple=10|score=1")
+            triggerHotSave()
+          }))
+
+        yield* inContainer("init-cmd", (el) =>
+          Effect.gen(function*() {
+            yield* BrowserHost.mountEffect(GameV1, {}, el)
+            yield* tick
+            assert.strictEqual(runs, 1)
+            assert.strictEqual(el.textContent, "apple=10|score=1")
+            triggerHotSave()
+          }))
+
+        yield* captureWarnings(
+          inContainer("init-cmd", (el) =>
+            Effect.gen(function*() {
+              yield* BrowserHost.mountEffect(GameV2, {}, el)
+              yield* tick
+              assert.strictEqual(runs, 2)
+              assert.strictEqual(el.textContent, "apple=v2-20|score=0")
+            }))
+        )
+      })
+  )
 })
