@@ -116,6 +116,7 @@
  * @stability experimental
  * @since 0.1.0
  */
+import * as hot from "#hot"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
@@ -557,6 +558,14 @@ export const mountRoot = (
       { host }
     )
     const outer = yield* Effect.context<Scope.Scope>()
+    const hotSession = hot.open(component, container, outer)
+    let activeHydrate = hydrate
+    if (hotSession?.hasSnapshot === true && activeHydrate !== undefined) {
+      while (container.firstChild !== null) {
+        container.removeChild(container.firstChild)
+      }
+      activeHydrate = undefined
+    }
     const scheduler =
       Context.getOrUndefined(outer, Scheduler.Scheduler) === undefined
         ? (defaultScheduler ??= HtmlScheduler.makeDefault())
@@ -571,7 +580,7 @@ export const mountRoot = (
         container,
         make,
         [Html.name],
-        { ...options, hydrate, scheduler }
+        { ...options, hydrate: activeHydrate, hot: hotSession, scheduler }
       ),
       context
     )

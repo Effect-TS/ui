@@ -1,6 +1,7 @@
 /**
- * A Vite plugin that runs the DevTools server beside `vite dev` and tells
- * the page where it is.
+ * A Vite plugin that runs the DevTools server beside `vite dev`, tells
+ * the page where it is, and preserves compatible component state across
+ * Vite reloads.
  *
  * **Example** (Adding the plugin)
  *
@@ -29,6 +30,21 @@ import { metaName } from "../internal/control.ts"
 import * as DevToolsServer from "./DevToolsServer.ts"
 
 /**
+ * Options for `plugin`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface Options extends DevToolsServer.Options {
+  /**
+   * Preserves compatible component Models and query results across Vite full
+   * reloads during development. `true` by default; pass `false` to disable.
+   */
+  readonly hot?: boolean | undefined
+}
+
+/**
  * The parts of a Vite plugin that `plugin` returns, typed without
  * importing `vite`.
  *
@@ -42,6 +58,8 @@ export interface Plugin {
     config: unknown,
     env: { readonly command: string; readonly isPreview?: boolean }
   ) => boolean
+  readonly resolveId: (id: string) => string | undefined
+  readonly load: (id: string) => string | undefined
   readonly configureServer: (server: DevServer) => void
   readonly transformIndexHtml: () => Promise<ReadonlyArray<HtmlTag>>
 }
@@ -78,14 +96,29 @@ export interface HtmlTag {
   readonly injectTo: "head"
 }
 
+const hotId = "/@effect-ui/hot"
+const resolvedHotId = "\0effect-ui-hot"
+
+const hotClient = [
+  "if (import.meta.hot) {",
+  "  const key = Symbol.for(\"@effect/ui/hot\");",
+  "  const slot = globalThis[key] ?? (globalThis[key] = { active: false, save: null });",
+  "  slot.active = true;",
+  "  import.meta.hot.on(\"vite:beforeFullReload\", () => {",
+  "    slot.save?.();",
+  "  });",
+  "}",
+  ""
+].join("\n")
+
 const reasonOf = (error: unknown): string =>
   Predicate.hasProperty(error, "cause") && error.cause instanceof Error
     ? error.cause.message
     : String(error)
 
 /**
- * Starts the DevTools server when `vite dev` starts, and stops it with the
- * dev server.
+ * Starts the DevTools server when `vite dev` starts, stops it with the
+ * dev server, and turns on hot state preservation across Vite reloads.
  *
  * **Details**
  *
@@ -93,23 +126,32 @@ const reasonOf = (error: unknown): string =>
  * It adds a `<meta>` tag with the server's URL and `size` to each HTML page
  * Vite serves, and `DevTools.layer` reads it, so the page sends its frames
  * there and takes the server's requests. Without `DevTools.layer` on the
- * page the plugin does nothing more. When the port is taken the plugin
- * warns, adds no tag, and `vite dev` runs on without the server, so a page
- * never connects to a server another project started.
+ * page the server side does nothing more. When the port is taken the plugin
+ * warns, adds no `<meta>` tag, and `vite dev` runs on without the server, so
+ * a page never connects to a server another project started.
+ *
+ * Unless `hot: false` is passed, the plugin also injects a small client
+ * module that listens for Vite's `vite:beforeFullReload` event so mounted
+ * `@effect/ui` roots save each instance's encoded Model and query results to
+ * `sessionStorage` and adopt them after the reload. Instances whose saved
+ * state no longer decodes restart from `init` with a console warning.
  *
  * @stability experimental
  * @category constructors
  * @since 0.1.0
  */
-export const plugin = (options?: DevToolsServer.Options): Plugin => {
+export const plugin = (options?: Options): Plugin => {
   const url = DevToolsServer.url(options)
   const size = Math.max(1, options?.size ?? 1_000)
+  const hot = options?.hot !== false
   let bound = Promise.resolve(false)
   return {
     name: "effect-ui-devtools",
     apply: (_, env) =>
       env.command === "serve" && env.isPreview !== true &&
       !("VITEST" in process.env),
+    resolveId: (id) => hot && id === hotId ? resolvedHotId : undefined,
+    load: (id) => hot && id === resolvedHotId ? hotClient : undefined,
     configureServer: (server) => {
       const { logger } = server.config
       let settle: (ok: boolean) => void = () => {}
@@ -138,13 +180,23 @@ export const plugin = (options?: DevToolsServer.Options): Plugin => {
         Effect.runFork(Fiber.interrupt(fiber))
       })
     },
-    transformIndexHtml: async () =>
-      (await bound)
-        ? [{
+    transformIndexHtml: async () => {
+      const tags: Array<HtmlTag> = []
+      if (await bound) {
+        tags.push({
           tag: "meta",
           attrs: { name: metaName, content: JSON.stringify({ url, size }) },
           injectTo: "head"
-        }]
-        : []
+        })
+      }
+      if (hot) {
+        tags.push({
+          tag: "script",
+          attrs: { type: "module", src: hotId },
+          injectTo: "head"
+        })
+      }
+      return tags
+    }
   }
 }

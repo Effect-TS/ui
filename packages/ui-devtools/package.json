@@ -67,6 +67,7 @@
   "scripts": {
     "codegen": "effect-utils codegen",
     "check-hit-testing": "node test/browser/check-hit-testing.mjs",
+    "check-hot": "node test/browser/check-hot.mjs",
     "check-panel": "node test/browser/check-panel.mjs",
     "check-parity": "node test/browser/check-parity.mjs",
     "check-pause": "node test/browser/check-pause.mjs",

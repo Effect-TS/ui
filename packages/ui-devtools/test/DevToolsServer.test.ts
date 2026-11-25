@@ -630,14 +630,14 @@ describe("DevToolsServer", { concurrent: false }, () => {
   )
 
   it.live(
-    "adds no meta tag when the plugin's port is taken",
+    "adds no meta tag when the plugin's port is taken, and injects the hot module unless hot is false",
     () =>
       Effect.gen(function*() {
         yield* serve({ port: 47749 })
-        const start = (port: number) => {
+        const start = (options: DevToolsVite.Options) => {
           let close = () => {}
           const warnings: Array<string> = []
-          const plugin = DevToolsVite.plugin({ port })
+          const plugin = DevToolsVite.plugin(options)
           plugin.configureServer({
             config: {
               logger: {
@@ -649,16 +649,32 @@ describe("DevToolsServer", { concurrent: false }, () => {
           })
           return { plugin, warnings, close: () => close() }
         }
-        const taken = start(47749)
-        assert.deepStrictEqual(
-          yield* Effect.promise(() => taken.plugin.transformIndexHtml()),
-          []
+        const taken = start({ port: 47749 })
+        const takenTags = yield* Effect.promise(() =>
+          taken.plugin.transformIndexHtml()
+        )
+        assert.deepStrictEqual(takenTags, [{
+          tag: "script",
+          attrs: { type: "module", src: "/@effect-ui/hot" },
+          injectTo: "head"
+        }])
+        const resolved = taken.plugin.resolveId("/@effect-ui/hot")
+        assert.isDefined(resolved)
+        assert.include(
+          taken.plugin.load(resolved!)!,
+          "vite:beforeFullReload"
         )
         assert.match(
           taken.warnings[0]!,
           /could not start on http:\/\/127\.0\.0\.1:47749/
         )
-        const free = start(47750)
+        const off = start({ port: 47749, hot: false })
+        assert.deepStrictEqual(
+          yield* Effect.promise(() => off.plugin.transformIndexHtml()),
+          []
+        )
+        assert.isUndefined(off.plugin.resolveId("/@effect-ui/hot"))
+        const free = start({ port: 47750 })
         const tags = yield* Effect.promise(() =>
           free.plugin.transformIndexHtml()
         )
@@ -666,6 +682,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
           JSON.parse(tags[0]!.attrs.content!).url,
           "http://127.0.0.1:47750"
         )
+        assert.strictEqual(tags[1]!.attrs.src, "/@effect-ui/hot")
         free.close()
       }).pipe(Effect.scoped),
     30_000
