@@ -526,9 +526,7 @@ export class VoidElement<
    */
   options<N extends OT.SelectRenderable | OT.TabSelectRenderable>(
     this: VoidElement<Msg, R, E, N, Tag, Options>,
-    options: ReadonlyArray<
-      N extends OT.TabSelectRenderable ? OT.TabSelectOption : OT.SelectOption
-    >
+    options: ReadonlyArray<OT.SelectOption>
   ): this {
     return this.prop("options", options) as any
   }

@@ -141,8 +141,6 @@ const resettableProps: ReadonlySet<string> = new Set([
   "tabWidth",
   "wrapSelection",
   "orientation",
-  "min",
-  "max",
   "viewPortSize",
   "conceal",
   "concealCode",
@@ -198,15 +196,15 @@ const isControlled = (
       node instanceof OT.SliderRenderable
     : name === "selectedIndex" && isSelectable(node)
 
-const removeChild = (
-  parent: OT.BaseRenderable,
-  child: OT.BaseRenderable
-): void => {
-  if (parent instanceof OT.LineNumberRenderable) {
-    parent.clearTarget()
-  } else {
-    parent.remove(child)
+const syntaxStyles = new WeakMap<OT.CliRenderer, OT.SyntaxStyle>()
+
+const defaultSyntaxStyle = (renderer: OT.CliRenderer): OT.SyntaxStyle => {
+  let style = syntaxStyles.get(renderer)
+  if (style === undefined) {
+    style = OT.SyntaxStyle.create(renderer.nativeScene)
+    syntaxStyles.set(renderer, style)
   }
+  return style
 }
 
 const destroyRenderable = (node: OT.BaseRenderable | undefined): void => {
@@ -231,6 +229,13 @@ const realParent = (node: OT.BaseRenderable): OT.BaseRenderable | undefined => {
   const parent = node.parent ?? undefined
   if (parent instanceof OT.RootTextNodeRenderable) return parent.textParent
   return parent
+}
+
+const detach = (child: OT.BaseRenderable): void => {
+  const parent = realParent(child)
+  // `LineNumberRenderable.remove` throws for a live target.
+  if (parent instanceof OT.LineNumberRenderable) parent.clearTarget()
+  else parent?.remove(child)
 }
 
 const childrenOf = (
@@ -389,9 +394,6 @@ export const makeHost = (
   const renderCtx = renderer as unknown as OT.RenderContext
   let nextId = 0
   let lastTitle: string | undefined
-  let defaultSyntaxStyle: OT.SyntaxStyle | undefined
-  const getSyntaxStyle = (): OT.SyntaxStyle =>
-    defaultSyntaxStyle ??= OT.SyntaxStyle.create(renderer.nativeScene)
 
   const slots = new WeakMap<OT.BaseRenderable, Slot>()
   const containerParent = new WeakMap<HostNode, Container>()
@@ -440,38 +442,27 @@ export const makeHost = (
   }
 
   const write = (node: Controlled, value: string | number): boolean => {
-    if (isSelectable(node)) {
-      if (node.getSelectedIndex() === value) return false
-      suppressing = true
-      try {
-        node.setSelectedIndex(value as number)
-      } finally {
-        suppressing = false
-      }
-      return true
-    }
-    if (node instanceof OT.SliderRenderable) {
-      const next = value as number
-      if (node.value === next) return false
-      suppressing = true
-      try {
-        node.value = next
-      } finally {
-        suppressing = false
-      }
-      return true
-    }
-    const current = node.plainText
+    const current = node instanceof OT.TextareaRenderable
+      ? node.plainText
+      : node instanceof OT.SliderRenderable
+      ? node.value
+      : node.getSelectedIndex()
     if (current === value) return false
     suppressing = true
     try {
-      const text = value as string
-      const cursor = node.cursorOffset
-      if (node instanceof OT.InputRenderable) node.value = text
-      else node.setText(text)
-      node.cursorOffset = cursor >= current.length
-        ? text.length
-        : Math.min(cursor, text.length)
+      if (node instanceof OT.TextareaRenderable) {
+        const text = value as string
+        const cursor = node.cursorOffset
+        if (node instanceof OT.InputRenderable) node.value = text
+        else node.setText(text)
+        node.cursorOffset = cursor >= (current as string).length
+          ? text.length
+          : Math.min(cursor, text.length)
+      } else if (node instanceof OT.SliderRenderable) {
+        node.value = value as number
+      } else {
+        node.setSelectedIndex(value as number)
+      }
     } finally {
       suppressing = false
     }
@@ -545,12 +536,9 @@ export const makeHost = (
         }
       )
     } else if (node instanceof OT.SliderRenderable) {
-      node.on("change", (event?: { readonly value?: number } | number) => {
+      node.on("change", () => {
         if (suppressing) return
-        const value = typeof event === "number"
-          ? event
-          : (event?.value ?? node.value)
-        afterEdit(node, fire(node, "change", { value }))
+        afterEdit(node, fire(node, "change", { value: node.value }))
       })
     }
   }
@@ -606,7 +594,10 @@ export const makeHost = (
         })
       }
       if (Ctor === OT.CodeRenderable || Ctor === OT.MarkdownRenderable) {
-        return new Ctor(renderCtx, { id, syntaxStyle: getSyntaxStyle() })
+        return new Ctor(renderCtx, {
+          id,
+          syntaxStyle: defaultSyntaxStyle(renderer)
+        })
       }
       return new Ctor(renderCtx, { id })
     },
@@ -640,8 +631,9 @@ export const makeHost = (
         return
       }
       if (
-        node instanceof OT.LineNumberRenderable && name === "showLineNumbers"
+        name === "showLineNumbers" && node instanceof OT.LineNumberRenderable
       ) {
+        // The gutter is rebuilt for each child, so `insertBefore` reapplies this.
         const show = value === undefined ? true : Boolean(value)
         lineNumberVisibility.set(node, show)
         node.showLineNumbers = show
@@ -652,10 +644,9 @@ export const makeHost = (
         if (value === undefined) {
           wanted.delete(node)
         } else {
-          const coerced =
-            name === "value" && !(node instanceof OT.SliderRenderable)
-              ? String(value)
-              : Number(value)
+          const coerced = node instanceof OT.TextareaRenderable
+            ? String(value)
+            : Number(value)
           wanted.set(node, coerced)
           write(node, coerced)
         }
@@ -681,21 +672,18 @@ export const makeHost = (
         }
       }
       if (
-        node instanceof OT.SliderRenderable &&
-        (name === "min" || name === "max")
+        (name === "options" && isSelectable(node)) ||
+        ((name === "min" || name === "max") &&
+          node instanceof OT.SliderRenderable)
       ) {
+        // These setters clamp the current value, so reassert the controlled one.
         suppressing = true
         try {
           target[name] = next
         } finally {
           suppressing = false
         }
-        const want = wanted.get(node)
-        if (want !== undefined) write(node, want)
-      } else if (isSelectable(node) && name === "options") {
-        target[name] = next
-        const want = wanted.get(node)
-        if (want !== undefined) write(node, want)
+        revertNode(node)
       } else {
         target[name] = next
       }
@@ -705,9 +693,7 @@ export const makeHost = (
       detached.delete(node)
       detachFromContainer(node)
       if (parent instanceof Container) {
-        const child = real(node)
-        const currentParent = realParent(child)
-        if (currentParent !== undefined) removeChild(currentParent, child)
+        detach(real(node))
         if (node instanceof Slot) node.parent = parent
         containerParent.set(node, parent)
         const index = ref === undefined ? -1 : parent.children.indexOf(ref)
@@ -735,9 +721,7 @@ export const makeHost = (
       if (containerParent.has(node)) {
         detachFromContainer(node)
       } else {
-        const child = real(node)
-        const currentParent = realParent(child)
-        if (currentParent !== undefined) removeChild(currentParent, child)
+        detach(real(node))
       }
       if (node instanceof Slot) node.parent = undefined
       detached.add(node)
@@ -799,9 +783,11 @@ export const makeHost = (
           node.on(OT.RenderableEvents.BLURRED, () => {
             fire(node, "blur", {})
           })
-        } else if (name === "input" || name === "selectionChanged") {
-          ensureControlledListener(node)
-        } else if (name === "change" && node instanceof OT.SliderRenderable) {
+        } else if (
+          name === "input" ||
+          name === "selectionChanged" ||
+          (name === "change" && node instanceof OT.SliderRenderable)
+        ) {
           ensureControlledListener(node)
         } else if (name === "change" || name === "enter") {
           node.on(name, (value?: string) => {
