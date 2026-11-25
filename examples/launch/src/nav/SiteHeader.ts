@@ -195,9 +195,14 @@ export const SiteHeader = Html.component({
   view: (h, model) => {
     const menuId = h.id("menu")
     return h.header.class(
-      "sticky top-0 z-30 h-(--site-header) border-b border-border",
-      "bg-background/85 backdrop-blur-sm"
+      "sticky top-0 z-30 h-(--site-header) border-b border-border"
     ).children(
+      // Kept on a sibling layer so backdrop-filter doesn't trap the
+      // fixed menu backdrop inside the 64px header.
+      h.div.class(
+        "pointer-events-none absolute inset-0 bg-background/85",
+        "backdrop-blur-sm"
+      ).attr("aria-hidden", "true"),
       NavigationMenu(h, {
         view: (menu) =>
           menu.root(
