@@ -84,6 +84,41 @@ const readable = (frame, selector) =>
   })
 
 await run("panel", async ({ browser, expect, failures, url }) => {
+  const lifecycleOk = async (frame, label) => {
+    const row = await frame.locator(".life tr[data-kind=instance]").evaluate(
+      (tr) => {
+        const right = tr.closest(".right").getBoundingClientRect().right
+        const [kind, path, mounted, status] = Array.from(
+          tr.children,
+          (node) => node.getBoundingClientRect()
+        )
+        const overlap = path.right > mounted.left + 0.5 &&
+          mounted.right > path.left + 0.5 &&
+          path.bottom > mounted.top + 0.5 &&
+          mounted.bottom > path.top + 0.5
+        return {
+          ok: path.width >= 100 && path.height < 60 &&
+            mounted.width >= 80 && status.width >= 80 &&
+            status.right <= right + 0.5 &&
+            kind.right <= path.left + 0.5 && !overlap,
+          right: Math.round(right),
+          cells: [kind, path, mounted, status].map((b) => ({
+            left: Math.round(b.left),
+            right: Math.round(b.right),
+            width: Math.round(b.width),
+            height: Math.round(b.height)
+          }))
+        }
+      }
+    )
+    expect(
+      row.ok,
+      label +
+        ": Lifecycle instance path is readable without overlapping mount link",
+      row
+    )
+  }
+
   const setup = async (context, query = "") => {
     const page = await context.newPage()
     page.on(
@@ -135,6 +170,28 @@ await run("panel", async ({ browser, expect, failures, url }) => {
       state
     )
 
+    const gutter = await frame.locator(".timeline-box").evaluate((node) => {
+      const box = node.getBoundingClientRect()
+      const scroller = node.querySelector(".timeline")
+      const scroll = scroller.getBoundingClientRect()
+      const strip = node.querySelector(".gutter")?.getBoundingClientRect()
+      return {
+        ok: scroller.scrollHeight > scroller.clientHeight &&
+          strip !== undefined && strip.width > 0 &&
+          strip.left >= scroll.right - 0.5 && strip.right <= box.right + 0.5,
+        boxRight: Math.round(box.right),
+        scrollRight: Math.round(scroll.right),
+        gutterLeft: strip ? Math.round(strip.left) : null,
+        gutterRight: strip ? Math.round(strip.right) : null,
+        gutterWidth: strip ? Math.round(strip.width) : 0
+      }
+    })
+    expect(
+      gutter.ok,
+      "the timeline marker gutter sits outside the native scrollbar",
+      gutter
+    )
+
     await frame.locator(".row-button").nth(3).click()
     const heading = await readable(frame, ".ehead .headline")
     expect(
@@ -142,6 +199,15 @@ await run("panel", async ({ browser, expect, failures, url }) => {
       "selecting an entry shows its heading alongside the timeline",
       heading
     )
+
+    await frame.getByRole("tab", { name: "Lifecycle" }).click()
+    await lifecycleOk(frame, "920px two-pane")
+    await page.setViewportSize({ width: 744, height: 800 })
+    await page.waitForTimeout(100)
+    await lifecycleOk(frame, "720px two-pane")
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.waitForTimeout(100)
+    await frame.getByRole("tab", { name: /^Model/ }).click()
     await type(page, "klm")
     state = await timeline(page)
     expect(atTop(state), "selecting an entry keeps the timeline pinned", state)
@@ -247,6 +313,9 @@ await run("panel", async ({ browser, expect, failures, url }) => {
       seen = await readable(frame, ".tabs .tab:has-text('" + tab + "')")
       expect(seen.ok, "390x844: the " + tab + " tab is readable", seen)
     }
+    await frame.getByRole("tab", { name: "Lifecycle" }).click()
+    await lifecycleOk(frame, "390x844")
+    await frame.getByRole("tab", { name: /^Model/ }).click()
     const escape = ".step[data-step=End] .cause button.ref"
     seen = await readable(frame, escape)
     expect(seen.ok, "390x844: the PressedEscape link is readable", seen)

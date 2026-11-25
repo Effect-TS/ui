@@ -306,12 +306,6 @@ const PausedBadge = (h: H, seq: number) =>
       .children("Resume")
   )
 
-const paths = (h: H, list: ReadonlyArray<string>) =>
-  list.flatMap((
-    path,
-    at
-  ) => [at === 0 ? null : ", ", h.code.class("path").children(path)])
-
 const PausedBar = (
   h: H,
   page: typeof Page.Type,
@@ -323,18 +317,19 @@ const PausedBar = (
     .reverse()
   const at = stops.findIndex((entry) => entry.seq === page.seq)
   const notes = paused === null ? [] : ([
-    ["No state at #" + paused.seq + ", shown from init: ", paused.fellBack],
+    ["init", " shown from init, no state at #" + paused.seq, paused.fellBack],
     [
-      "A feature slot shows its fallback, since its Layer isn't built on the painted page, in: ",
+      "fallback",
+      " showing a feature slot fallback, Layer not built on the painted page",
       paused.fallbacks
     ]
-  ] as const).filter(([, list]) => list.length > 0)
+  ] as const).filter(([, , list]) => list.length > 0)
   return h.section.class("pausebar").attr(
     "aria-label",
     "Page shown at an earlier entry"
   ).children(
     h.div.class("scrub").children(
-      h.span.class("muted").children("Page at"),
+      h.span.class("muted").children("Time travel"),
       h.input.attr("type", "range").attr(
         "aria-label",
         "Entry shown on the page"
@@ -352,15 +347,17 @@ const PausedBar = (
         }),
       h.span.class("at").children("#" + page.seq)
     ),
-    h.p.class("pause-notes", "tone-open").attr(
-      "title",
-      notes.length === 0
-        ? undefined
-        : notes.map(([lead, list]) => lead + list.join(", ")).join("\n")
-    ).children(
-      notes.map(([lead, list]) =>
-        h.span.class("pause-note").children(lead, paths(h, list))
-      )
+    h.div.class("pause-notes", "tone-open").children(
+      notes.map(([key, tail, list]) => {
+        const summary =
+          (list.length === 1 ? "1 instance" : list.length + " instances") + tail
+        return h.details.key(key).class("pause-note").children(
+          h.summary.attr("title", summary).children(summary),
+          h.ul.class("pause-paths").children(
+            list.map((path) => h.li.children(path))
+          )
+        )
+      })
     )
   )
 }

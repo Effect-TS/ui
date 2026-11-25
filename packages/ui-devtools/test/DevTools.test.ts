@@ -415,6 +415,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
         text(root.querySelector(".paused-label")),
         /^Paused at #\d+$/
       )
+      assert.match(text(root.querySelector(".scrub")), /^Time travel\s*#\d+$/)
       assert.strictEqual(app.style.getPropertyValue("display"), "none")
       assert.strictEqual(
         Array.from(copy()!.querySelectorAll("p")).map((status) =>
@@ -546,12 +547,133 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.strictEqual(copy.querySelector("em")?.textContent, "fallback")
       assert.strictEqual(app.querySelector("strong")?.textContent, "ready")
       const notes = Array.from(
-        root.querySelectorAll(".pause-note"),
-        (node) => text(node)
+        root.querySelectorAll<HTMLDetailsElement>("details.pause-note")
       )
       assert.strictEqual(notes.length, 1)
-      assert.include(notes[0], "fallback")
-      assert.isTrue(notes[0].endsWith(": /Pair"))
+      assert.isFalse(notes[0].open)
+      assert.include(text(notes[0].querySelector("summary")), "fallback")
+      assert.deepStrictEqual(
+        Array.from(notes[0].querySelectorAll("li"), (node) => text(node)),
+        ["/Pair"]
+      )
+    }))
+
+  it.live("uses same-cause mount state without borrowing past a superseding parent update", () =>
+    Effect.gen(function*() {
+      let inits = 0
+      const Row = Html.component({
+        name: "Row",
+        props: Schema.Struct({ n: Schema.Number }),
+        model: Schema.Number,
+        message: Schema.Never
+      }).make({
+        init: () => ++inits,
+        update: ($) => $.model,
+        view: (h, init) => h.li.children(`${h.props.n}:${init}`)
+      })
+      const TriggerMessage = UiSchema.TaggedEnum({ Clicked: {} })
+      const TriggerEvents = UiSchema.TaggedEnum({ Set: { n: Schema.Number } })
+      const Trigger = Html.component({
+        name: "Trigger",
+        model: Schema.Null,
+        message: TriggerMessage,
+        events: TriggerEvents
+      }).make({
+        init: () => null,
+        update: {
+          Clicked: ($) =>
+            $.set(null).emit(TriggerEvents.Set({ n: 2 })).emit(
+              TriggerEvents.Set({ n: 3 })
+            )
+        },
+        view: (h) => h.button.onClick(TriggerMessage.Clicked()).children("Go")
+      })
+      const ListMessage = UiSchema.TaggedEnum({ Set: { n: Schema.Number } })
+      const List = Html.component({
+        name: "List",
+        model: Schema.Number,
+        message: ListMessage
+      }).make({
+        init: () => 0,
+        update: { Set: (_, { n }) => n },
+        view: (h, n) =>
+          h.div(
+            h.button.onClick(ListMessage.Set({ n: 1 })).children("One"),
+            Trigger(h, {
+              key: "t",
+              onEmit: { Set: ({ n }) => ListMessage.Set({ n }) }
+            }),
+            h.ul(
+              Row(h, { key: "a", props: { n: 0 } }),
+              Row(h, { key: "b", props: { n: 0 } }),
+              n >= 1 ? Row(h, { key: "one", props: { n: 1 } }) : null,
+              n >= 2 ? Row(h, { key: "two", props: { n } }) : null
+            )
+          )
+      })
+      const memory = MessageLog.makeMemory({ size: 500 })
+      const services = yield* Layer.build(
+        MessageLog.fanout([
+          DevTools.layer(),
+          Layer.succeed(MessageLog.MessageLog, memory)
+        ])
+      )
+      const app = document.body.appendChild(document.createElement("div"))
+      yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+      yield* BrowserHost.mountEffect(List, {}, app).pipe(
+        Effect.provide(services)
+      )
+      yield* settle
+      yield* click(HtmlLocator.getByRole(app, "button", { name: "One" }))
+      yield* click(HtmlLocator.getByRole(app, "button", { name: "Go" }))
+
+      const rowA = memory.entries().find((entry) =>
+        entry._tag === "Mounted" && entry.path === "/List/Row[a]"
+      )!
+      const [one, first, second] = memory.entries().filter((entry) =>
+        entry._tag === "Update" && entry.path === "/List"
+      )
+      const root = overlay()
+      yield* open(root)
+      yield* click(
+        HtmlLocator.getByRole(root, "button", { name: "Everything" })
+      )
+      const items = () =>
+        Array.from(
+          app.nextElementSibling!.querySelectorAll("li"),
+          (node) => node.textContent
+        )
+      const select = (seq: number) =>
+        click(entry(root, new RegExp("^#" + seq + " "))[0]!)
+
+      yield* select(rowA.seq)
+      yield* click(
+        HtmlLocator.getByRole(root, "button", { name: "Time travel" })
+      )
+      assert.isNull(root.querySelector(".pause-note"))
+      assert.deepStrictEqual(items(), ["0:1", "0:2"])
+
+      yield* select(one.seq)
+      assert.isNull(root.querySelector(".pause-note"))
+      assert.deepStrictEqual(items(), ["0:1", "0:2", "1:3"])
+
+      yield* select(first.seq)
+      assert.deepStrictEqual(items(), ["0:1", "0:2", "1:3", "2:5"])
+      const note = root.querySelector<HTMLDetailsElement>("details.pause-note")!
+      assert.isNotNull(note)
+      assert.isFalse(note.open)
+      assert.include(
+        text(note.querySelector("summary")),
+        "1 instance shown from init"
+      )
+      assert.deepStrictEqual(
+        Array.from(note.querySelectorAll("li"), (node) => text(node)),
+        ["/List/Row[two]"]
+      )
+
+      yield* select(second.seq)
+      assert.isNull(root.querySelector(".pause-note"))
+      assert.deepStrictEqual(items(), ["0:1", "0:2", "1:3", "3:4"])
     }))
 
   it.live("finds Editor[n2]'s Save, follows it to its interruption and back", () =>

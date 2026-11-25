@@ -74,6 +74,14 @@ const apply = (
   }
 }
 
+const isDirty = (dirty: ReadonlySet<string>, path: string) => {
+  if (dirty.has(path)) return true
+  for (const ancestor of dirty) {
+    if (path.startsWith(ancestor + "/")) return true
+  }
+  return false
+}
+
 const makeSession = (size: number) => {
   const base = new Map<number, Held>()
   const entries: Array<Entry> = []
@@ -133,6 +141,33 @@ const makeSession = (size: number) => {
         const { path, unmounted, ...recorded } = states.get(instance)!
         if (unmounted === undefined) {
           byPath.set(path, recorded as BrowserHost.Recorded)
+        }
+      }
+      // A render can log child mounts after the selected entry, even when their
+      // cause is at or before it. Changes to a path or ancestor block reuse.
+      const dirty = new Set<string>()
+      for (const entry of entries) {
+        if (entry.seq <= seq) continue
+        switch (entry._tag) {
+          case "Mounted":
+          case "Waiting":
+            if (
+              entry.causedBy !== undefined && entry.causedBy <= seq &&
+              !byPath.has(entry.path) && !isDirty(dirty, entry.path)
+            ) {
+              byPath.set(entry.path, {
+                props: entry.props,
+                model: entry.model,
+                queries: entry.queries
+              } as BrowserHost.Recorded)
+            }
+            break
+          case "Update":
+          case "PropsChanged":
+          case "QueryChanged":
+          case "Unmounted":
+            dirty.add(entry.path)
+            break
         }
       }
       return (path) => byPath.get(path)
