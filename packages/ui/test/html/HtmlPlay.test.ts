@@ -232,7 +232,7 @@ describe("HtmlPlay", () => {
         init: () => ({ log: [], pressed: false, gone: false, off: false }),
         update: ($, message) => ({
           log: [...$.model.log, message],
-          pressed: $.model.pressed || message === "phase-down",
+          pressed: $.model.pressed || message === "md",
           gone: $.model.gone || message === "remove-down",
           off: $.model.off || message === "disable-down"
         }),
@@ -242,8 +242,8 @@ describe("HtmlPlay", () => {
               h.button.on("pointerdown", "pd")
                 .on("mousedown", "md")
                 .on("mouseup", "mu")
-                .onClick("ck")
-                .children("All"),
+                .onClick(model.pressed ? "ck-down" : "ck-up")
+                .children(model.pressed ? "AllDown" : "All"),
               h.button.on("pointerdown", "pd-cancel", { preventDefault: true })
                 .on("mousedown", "md")
                 .on("mouseup", "mu")
@@ -255,10 +255,6 @@ describe("HtmlPlay", () => {
                 .onClick("ck")
                 .children("CancelMouse")
             ),
-            h.button.attr("type", "button")
-              .on("mousedown", "phase-down")
-              .onClick(model.pressed ? "phase-click-down" : "phase-click-up")
-              .children(model.pressed ? "Pressed" : "Press"),
             model.gone
               ? undefined
               : h.div(
@@ -280,15 +276,15 @@ describe("HtmlPlay", () => {
       })
       const p = yield* HtmlPlay.make(Sequence, {})
       yield* p.click("All")
-      yield* p.expect(log).toHaveText("pd|md|mu|ck|submit")
+      yield* p.expect(log).toHaveText("pd|md|mu|ck-down|submit")
       yield* p.click("CancelPD")
-      yield* p.expect(log).toHaveText("pd|md|mu|ck|submit|pd-cancel|ck|submit")
+      yield* p.expect(log).toHaveText(
+        "pd|md|mu|ck-down|submit|pd-cancel|ck|submit"
+      )
       yield* p.click("CancelMouse")
       yield* p.expect(log).toHaveText(
-        "pd|md|mu|ck|submit|pd-cancel|ck|submit|pd|md-cancel|mu-cancel|ck|submit"
+        "pd|md|mu|ck-down|submit|pd-cancel|ck|submit|pd|md-cancel|mu-cancel|ck|submit"
       )
-      yield* p.click("Press")
-      yield* p.expect(log).toHaveText(/\|phase-down\|phase-click-down$/)
       yield* p.click("Remove")
       yield* p.expect(log).toHaveText(/\|remove-down$/)
       yield* p.click("Disable")

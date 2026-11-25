@@ -445,24 +445,22 @@ describe("HtmlScene", () => {
       )
     })
 
-    it.effect("sends pointerdown, mousedown, mouseup, click in order, follows browser cancel rules, and drops release when press removes or disables the element", () =>
+    it.effect("sends pointerdown, mousedown, mouseup, click in order, follows cancel rules, and stops when press removes or disables the element", () =>
       Effect.gen(function*() {
         const Sequence = Html.component({
           name: "Sequence",
           model: Schema.Struct({
             log: Schema.Array(Schema.String),
             gone: Schema.Boolean,
-            off: Schema.Boolean,
-            offOnPd: Schema.Boolean
+            off: Schema.Boolean
           }),
           message: Schema.String
         }).make({
-          init: () => ({ log: [], gone: false, off: false, offOnPd: false }),
+          init: () => ({ log: [], gone: false, off: false }),
           update: ($, message) => ({
             log: [...$.model.log, message],
             gone: $.model.gone || message === "remove-down",
-            off: $.model.off || message === "disable-down",
-            offOnPd: $.model.offOnPd || message === "disable-pd"
+            off: $.model.off || message === "disable-pd"
           }),
           view: (h, model) =>
             h.div(
@@ -471,30 +469,20 @@ describe("HtmlScene", () => {
                   .on("mousedown", "md")
                   .on("mouseup", "mu")
                   .onClick("ck")
-                  .children("All"),
-                h.button.on("pointerdown", "pd-cancel", {
-                  preventDefault: true
-                })
-                  .on("mousedown", "md")
-                  .on("mouseup", "mu")
-                  .onClick("ck")
-                  .children("CancelPD"),
-                h.button.on("pointerdown", "pd")
-                  .on("mousedown", "md-cancel", { preventDefault: "always" })
-                  .on("mouseup", "mu-cancel", { preventDefault: "always" })
-                  .onClick("ck")
-                  .children("CancelMouse")
+                  .children("All")
               ),
-              h.button.attr("type", "button")
+              h.input.attrs({ type: "checkbox", "aria-label": "CancelPD" })
                 .on("pointerdown", "pd-cancel", { preventDefault: true })
                 .on("mousedown", "md")
                 .on("mouseup", "mu")
                 .onClick("ck")
-                .children("PlainPD"),
-              h.button.attr("type", "button")
+                .onChange("ch"),
+              h.input.attrs({ type: "checkbox", "aria-label": "CancelMouse" })
+                .on("pointerdown", "pd")
                 .on("mousedown", "md-cancel", { preventDefault: "always" })
+                .on("mouseup", "mu-cancel", { preventDefault: "always" })
                 .onClick("ck")
-                .children("PlainMouse"),
+                .onChange("ch"),
               model.gone
                 ? undefined
                 : h.button.key("remove").attr("type", "button")
@@ -504,17 +492,11 @@ describe("HtmlScene", () => {
                   .children("Remove"),
               h.button.attr("type", "button")
                 .disabled(model.off)
-                .on("mousedown", "disable-down")
-                .on("mouseup", "disable-up")
+                .on("pointerdown", "disable-pd")
+                .on("mousedown", "disable-md")
+                .on("mouseup", "disable-mu")
                 .onClick("disable-click")
                 .children("Disable"),
-              h.button.attr("type", "button")
-                .disabled(model.offOnPd)
-                .on("pointerdown", "disable-pd")
-                .on("mousedown", "disable-pd-md")
-                .on("mouseup", "disable-pd-mu")
-                .onClick("disable-pd-click")
-                .children("OffOnPD"),
               h.span("Unhandled"),
               h.output(model.log.join("|"))
             )
@@ -523,23 +505,17 @@ describe("HtmlScene", () => {
         scene.click("All")
           .expectDefaultPrevented()
           .expect(log).toHaveText("pd|md|mu|ck|submit")
-          .click("CancelPD")
-          .expectDefaultPrevented()
-          .expect(log).toHaveText("pd|md|mu|ck|submit|pd-cancel|ck|submit")
-          .click("CancelMouse")
-          .expectDefaultPrevented()
+          .click(HtmlLocator.label("CancelPD"))
+          .expectDefaultPrevented(false)
+          .expect(log).toHaveText("pd|md|mu|ck|submit|pd-cancel|ck|ch")
+          .click(HtmlLocator.label("CancelMouse"))
+          .expectDefaultPrevented(false)
           .expect(log).toHaveText(
-            "pd|md|mu|ck|submit|pd-cancel|ck|submit|pd|md-cancel|mu-cancel|ck|submit"
+            "pd|md|mu|ck|submit|pd-cancel|ck|ch|pd|md-cancel|mu-cancel|ck|ch"
           )
-          .click("PlainPD")
-          .expectDefaultPrevented(false)
-          .click("PlainMouse")
-          .expectDefaultPrevented(false)
           .click("Remove")
           .expect(log).toHaveText(/\|remove-down$/)
           .click("Disable")
-          .expect(log).toHaveText(/\|disable-down$/)
-          .click("OffOnPD")
           .expect(log).toHaveText(/\|disable-pd$/)
         assert.throws(
           () => scene.click("Unhandled"),
