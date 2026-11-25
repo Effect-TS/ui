@@ -492,4 +492,46 @@ describe("hot reload", { concurrent: false }, () => {
           }).pipe(Effect.provide(BrowserRouter.layer({ routes: AppRoute }))))
       })
   )
+
+  it.live("does not replay init Commands on hot reload adoption", () =>
+    Effect.gen(function*() {
+      sessionStorage.clear()
+      let runs = 0
+      const PickApple = Command.make(
+        "test/PickApple",
+        { args: {} },
+        () => Effect.sync(() => ++runs * 10)
+      )
+      const Msg = UiSchema.TaggedEnum({ Picked: { apple: Schema.Number } })
+      const Game = Html.component({
+        name: "InitCommandGame",
+        model: Schema.Number,
+        message: Msg
+      }).make({
+        init: ($) =>
+          $.set(0).run(
+            PickApple.make({}).pipe(
+              Command.map((apple) => Msg.Picked({ apple }))
+            )
+          ),
+        update: (_, { apple }) => apple,
+        view: (h, apple) => h.span(`apple=${apple}`)
+      })
+
+      yield* inContainer("init-cmd", (el) =>
+        Effect.gen(function*() {
+          yield* BrowserHost.mountEffect(Game, {}, el)
+          yield* tick
+          assert.strictEqual(el.textContent, "apple=10")
+          triggerHotSave()
+        }))
+
+      yield* inContainer("init-cmd", (el) =>
+        Effect.gen(function*() {
+          yield* BrowserHost.mountEffect(Game, {}, el)
+          yield* tick
+          assert.strictEqual(runs, 1)
+          assert.strictEqual(el.textContent, "apple=10")
+        }))
+    }))
 })
