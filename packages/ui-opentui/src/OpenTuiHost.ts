@@ -152,6 +152,9 @@ const resettableProps: ReadonlySet<string> = new Set([
   "view",
   "showLineNumbers",
   "lineNumberOffset",
+  "content",
+  "diff",
+  "text",
   "font",
   "selectable",
   "stickyScroll",
@@ -396,6 +399,7 @@ export const makeHost = (
   const wanted = new WeakMap<Controlled, string | number>()
   const initialProps = new WeakMap<OT.BaseRenderable, Map<string, unknown>>()
   const lastProps = new WeakMap<OT.BaseRenderable, Map<string, unknown>>()
+  const lineNumberVisibility = new WeakMap<OT.LineNumberRenderable, boolean>()
   const controlledWired = new WeakSet<OT.BaseRenderable>()
   let suppressing = false
 
@@ -635,6 +639,14 @@ export const makeHost = (
         }
         return
       }
+      if (
+        node instanceof OT.LineNumberRenderable && name === "showLineNumbers"
+      ) {
+        const show = value === undefined ? true : Boolean(value)
+        lineNumberVisibility.set(node, show)
+        node.showLineNumbers = show
+        return
+      }
       if (isControlled(node, name)) {
         ensureControlledListener(node)
         if (value === undefined) {
@@ -707,7 +719,11 @@ export const makeHost = (
       const child = real(node, parent)
       const target = parent as OT.BaseRenderable
       if (target instanceof OT.LineNumberRenderable) {
-        if (child instanceof OT.Renderable) target.add(child)
+        if (child instanceof OT.Renderable) {
+          target.add(child)
+          const show = lineNumberVisibility.get(target)
+          if (show !== undefined) target.showLineNumbers = show
+        }
       } else if (ref === undefined) {
         target.add(child)
       } else {

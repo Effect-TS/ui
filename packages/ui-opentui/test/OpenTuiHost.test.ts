@@ -888,9 +888,13 @@ describe("OpenTuiHost", () => {
       expect(uncontrolledNode.value).toBe(movedValue)
     }))
 
-  it.effect("renders code, lineNumber, diff, markdown, and asciiFont, and cleanly unmounts lineNumber target", () =>
+  it.effect("renders code, lineNumber, diff, markdown, and asciiFont, clears removed code content, and preserves hidden line numbers across remount", () =>
     Effect.gen(function*() {
-      const Message = UiSchema.TaggedEnum({ ToggledCode: {} })
+      const Message = UiSchema.TaggedEnum({
+        ToggledCode: {},
+        ClearedContent: {},
+        HidLineNumbers: {}
+      })
       const sampleDiff = [
         "--- a/demo.ts",
         "+++ b/demo.ts",
@@ -901,20 +905,36 @@ describe("OpenTuiHost", () => {
 
       const App = OpenTui.component({
         name: "DisplayTags",
-        model: Schema.Struct({ showCode: Schema.Boolean }),
+        model: Schema.Struct({
+          showCode: Schema.Boolean,
+          hasContent: Schema.Boolean,
+          showLineNumbers: Schema.Boolean
+        }),
         message: Message
       }).make({
-        init: () => ({ showCode: true }),
+        init: () => ({
+          showCode: true,
+          hasContent: true,
+          showLineNumbers: true
+        }),
         update: {
-          ToggledCode: ($) => $.evolve({ showCode: (b) => !b })
+          ToggledCode: ($) => $.evolve({ showCode: (b) => !b }),
+          ClearedContent: ($) => $.evolve({ hasContent: false }),
+          HidLineNumbers: ($) => $.evolve({ showLineNumbers: false })
         },
         view: (h, model) =>
           h.box.style({ flexDirection: "column", width: 50, height: 22 })
             .children(
-              h.lineNumber.style({ width: 40, height: 2 }).children(
+              h.lineNumber.style({
+                width: 40,
+                height: 2,
+                showLineNumbers: model.showLineNumbers
+              }).children(
                 model.showCode
                   ? h.code.style({
-                    content: "const a = 1\nconst b = 2",
+                    ...(model.hasContent
+                      ? { content: "const a = 1\nconst b = 2" }
+                      : {}),
                     filetype: "typescript",
                     width: 34,
                     height: 2
@@ -937,8 +957,7 @@ describe("OpenTuiHost", () => {
 
       const app = yield* OpenTuiTest.mount(App, {}, { width: 54, height: 24 })
       const frame = app.captureFrame()
-      expect(frame).toContain("1")
-      expect(frame).toContain("const a = 1")
+      expect(frame.split("\n")[0]!.trimEnd()).toBe(" 1 const a = 1")
       expect(frame).toContain("const b = 2")
       expect(frame).toContain("oldVal")
       expect(frame).toContain("newVal")
@@ -946,8 +965,21 @@ describe("OpenTuiHost", () => {
       expect(frame).toContain("bullet item")
       expect(frame).toContain("█▀█ █")
 
-      // Removing a lineNumber target uses clearTarget() without throwing
+      // Hiding line numbers persists when the code child unmounts and remounts
+      app.root.send(Message.HidLineNumbers())
+      yield* app.settle
+      expect(app.captureFrame().split("\n")[0]!.trimEnd()).toBe("const a = 1")
+
       app.root.send(Message.ToggledCode())
+      yield* app.settle
+      expect(app.captureFrame()).not.toContain("const a = 1")
+
+      app.root.send(Message.ToggledCode())
+      yield* app.settle
+      expect(app.captureFrame().split("\n")[0]!.trimEnd()).toBe("const a = 1")
+
+      // Omitting code content restores empty string without throwing
+      app.root.send(Message.ClearedContent())
       yield* app.settle
       expect(app.captureFrame()).not.toContain("const a = 1")
     }))
