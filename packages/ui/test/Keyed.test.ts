@@ -79,28 +79,31 @@ const makeApp = (options?: {
       error: Schema.String,
       staleTime: "30 seconds",
       refetchInterval: options?.interval === true ? "5 seconds" : undefined
-    },
-    Effect.succeed(({ id }) => Effect.request(FetchUser({ id }), resolver))
-  ) {}
+    }
+  ) {
+    static readonly layer = this.toLayer(({ id }) =>
+      Effect.request(FetchUser({ id }), resolver)
+    )
+  }
 
   class RenameUser extends Command.Service<RenameUser>()(
     "users/RenameUser",
     {
       args: { id: Schema.String, name: Schema.String },
+      success: Schema.Void,
       invalidates: ({ id }) => [GetUser.entry({ id })],
       optimistic: (
         { id, name }
       ) => [GetUser.patch({ id }, (user) => ({ ...user, name }))]
-    },
-    Effect.succeed((
-      { id, name }: { readonly id: string; readonly name: string }
-    ) =>
+    }
+  ) {
+    static readonly layer = this.toLayer(({ id, name }) =>
       Effect.gen(function*() {
         yield* Effect.sleep("10 millis")
         db.names.set(id, name)
       })
     )
-  ) {}
+  }
 
   const BoardMessage = UiSchema.TaggedEnum({
     Show: { ids: Schema.Array(Schema.String) },
@@ -1081,13 +1084,14 @@ describe("Keyed redaction", () => {
         success: Account,
         error: Schema.Never,
         staleTime: "30 seconds"
-      },
-      Effect.succeed(({ token }) =>
+      }
+    ) {
+      static readonly layer = this.toLayer(({ token }) =>
         Effect.succeed({
           secret: Redacted.make(`secret-of-${Redacted.value(token)}`)
         })
       )
-    ) {}
+    }
     const Page = Component.define({
       name: "Page",
       props: Schema.Struct({

@@ -1,5 +1,5 @@
 import { Command, Component, Renderer, UiSchema } from "@effect/ui"
-import { Context, Data, Effect, Schema, Stream } from "effect"
+import { Context, Effect, type Layer, Schema, type Scope, Stream } from "effect"
 import { describe, expect, it } from "tstyche"
 
 const Message = UiSchema.TaggedEnum({ Got: { n: Schema.Number } })
@@ -12,30 +12,25 @@ const St = Command.make(
 )
 class SA extends Command.Service<SA>()(
   "SA",
-  { args: {}, invalidates: () => [] },
-  Effect.succeed(() => Effect.succeed("a"))
+  { args: {}, success: Schema.String, invalidates: () => [] }
 ) {}
 class SB extends Command.Service<SB>()(
   "SB",
-  { args: {}, stream: true, invalidates: () => [] },
-  Effect.succeed(() => Stream.fromIterable([1]))
+  { args: {}, success: Schema.Number, stream: true, invalidates: () => [] }
 ) {}
-class SaveFailed
-  extends Data.TaggedError("SaveFailed")<{ readonly reason: string }>
-{}
+class SaveFailed extends Schema.TaggedError<SaveFailed>()("SaveFailed", {
+  reason: Schema.String
+}) {}
 class Save extends Command.Service<Save>()(
   "Save",
   {
     args: { id: Schema.String, title: Schema.String },
+    success: Schema.String,
+    error: SaveFailed,
     group: ["id"],
     mode: "queue",
     invalidates: () => []
-  },
-  Effect.succeed(({ title }) =>
-    title === ""
-      ? Effect.fail(new SaveFailed({ reason: "empty" }))
-      : Effect.succeed(title)
-  )
+  }
 ) {}
 declare const condition: boolean
 declare const $: Component.Update<{}, typeof Message.Type, never, {}>
@@ -175,34 +170,36 @@ describe("Command", () => {
   describe("Service", () => {
     it("has no server option: no Command runs on the server", () => {
       const service = Command.Service<"Load">()
-      expect(service).type.not.toBeCallableWith(
-        "Load",
-        { args: {}, invalidates: () => [], server: true },
-        Effect.succeed(() => Effect.succeed(1))
-      )
-      expect(service).type.not.toBeCallableWith(
-        "Load",
-        { args: {}, invalidates: () => [], stream: true, server: true },
-        Effect.succeed(() => Stream.fromIterable([1]))
-      )
+      expect(service).type.not.toBeCallableWith("Load", {
+        args: {},
+        success: Schema.Number,
+        invalidates: () => [],
+        server: true
+      })
+      expect(service).type.not.toBeCallableWith("Load", {
+        args: {},
+        success: Schema.Number,
+        invalidates: () => [],
+        stream: true,
+        server: true
+      })
       expect(Command.make).type.not.toBeCallableWith("Load", {
         args: {},
         server: true
       }, () => Effect.succeed(1))
     })
 
-    it("requires args but allows omitted invalidates", () => {
+    it("requires args and success, allows omitted invalidates", () => {
       const service = Command.Service<"Load">()
-      expect(service).type.toBeCallableWith(
-        "Load",
-        { args: {} },
-        Effect.succeed(() => Effect.succeed(1))
-      )
-      expect(service).type.not.toBeCallableWith(
-        "Load",
-        { invalidates: () => [] },
-        Effect.succeed(() => Effect.succeed(1))
-      )
+      expect(service).type.toBeCallableWith("Load", {
+        args: {},
+        success: Schema.Number
+      })
+      expect(service).type.not.toBeCallableWith("Load", { args: {} })
+      expect(service).type.not.toBeCallableWith("Load", {
+        success: Schema.Number,
+        invalidates: () => []
+      })
       expect(Command.make).type.not.toBeCallableWith(
         "Fx",
         {},
@@ -210,23 +207,73 @@ describe("Command", () => {
       )
     })
 
-    it("types the body's args, and make takes them", () => {
+    it("types the body's args and writes from the Schemas, and make takes them", () => {
       expect(Save.make).type.toBeCallableWith({ id: "t1", title: "milk" })
       expect(Save.make).type.not.toBeCallableWith({ id: "t1" })
       expect(SA.make).type.toBeCallableWith()
+      Command.Service<"WithWrites">()("WithWrites", {
+        args: { id: Schema.String },
+        success: Schema.Number,
+        writes: (count, args) => {
+          expect(count).type.toBe<number>()
+          expect(args).type.toBe<{ readonly id: string }>()
+          return []
+        }
+      })
     })
 
-    it("a body that captures a service it should have taken at build time is rejected", () => {
+    it("toLayer infers live Layers, fakes, failures and rejects mismatched bodies", () => {
       class Db
-        extends Context.Service<Db, { readonly save: Effect.Effect<void> }>()(
+        extends Context.Service<Db, { readonly save: Effect.Effect<string> }>()(
           "Db"
         )
       {}
-      expect(Command.Service<"Bad">()).type.not.toBeCallableWith(
-        "Bad",
-        { args: {}, invalidates: () => [] },
-        Effect.succeed(() => Db.use((db) => db.save))
+      const failingBuild = null as unknown as Effect.Effect<
+        () => Effect.Effect<string>,
+        "boom",
+        Db | Scope.Scope
+      >
+      expect(
+        SA.toLayer(Effect.gen(function*() {
+          const db = yield* Db
+          return () => db.save
+        }))
+      ).type.toBe<Layer.Layer<SA, never, Db>>()
+      expect(SA.toLayer(() => Effect.succeed("ok"))).type.toBe<
+        Layer.Layer<SA>
+      >()
+      expect(
+        SA.toLayer(() => Renderer.Refs.use(() => Effect.succeed("ok")))
+      ).type.toBe<Layer.Layer<SA>>()
+      expect(SA.toLayer(failingBuild)).type.toBe<Layer.Layer<SA, "boom", Db>>()
+      expect(SB.toLayer(() => Stream.fromIterable([1]))).type.toBe<
+        Layer.Layer<SB>
+      >()
+      expect(SA.toLayer).type.not.toBeCallableWith(() => Effect.succeed(1))
+      expect(SA.toLayer).type.not.toBeCallableWith(() => Effect.fail("boom"))
+      expect(SA.toLayer).type.not.toBeCallableWith(() =>
+        Stream.fromIterable(["a"])
       )
+      expect(SA.toLayer).type.not.toBeCallableWith(() =>
+        Db.use((db) => db.save)
+      )
+    })
+
+    it("preserves success and error Schema types on the class", () => {
+      expect(SB.success).type.toBe<typeof Schema.Number>()
+      expect(SB.error).type.toBe<typeof Schema.Never>()
+      expect(Save.error).type.toBe<typeof SaveFailed>()
+
+      class Copy extends Command.Service<Copy>()("Copy", {
+        args: {},
+        success: SA.success,
+        error: SA.error
+      }) {}
+      expect(Copy.toLayer(() => Effect.succeed("ok"))).type.toBe<
+        Layer.Layer<Copy>
+      >()
+      expect(Copy.toLayer).type.not.toBeCallableWith(() => Effect.succeed(123))
+      expect(Copy.toLayer).type.not.toBeCallableWith(() => Effect.fail("boom"))
     })
   })
 

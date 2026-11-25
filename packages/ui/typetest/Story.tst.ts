@@ -1,7 +1,7 @@
 import { Command, Component, type Query, UiSchema, type View } from "@effect/ui"
 import type { Steps } from "@effect/ui/testing"
 import { Scene, Story } from "@effect/ui/testing"
-import { Data, Effect, Schema, type Scope, Stream } from "effect"
+import { Effect, Schema, type Scope, Stream } from "effect"
 import { describe, expect, it } from "tstyche"
 import type { SearchBox } from "../test/fixtures/components.ts"
 import {
@@ -253,13 +253,17 @@ describe("Story", () => {
   })
 
   it("fail takes the typed failure of a Command whose body can fail", () => {
-    class SaveFailed
-      extends Data.TaggedError("SaveFailed")<{ readonly reason: string }>
-    {}
+    class SaveFailed extends Schema.TaggedError<SaveFailed>()("SaveFailed", {
+      reason: Schema.String
+    }) {}
     class Save extends Command.Service<Save>()(
       "Save",
-      { args: {}, invalidates: () => [] },
-      Effect.succeed(() => Effect.fail(new SaveFailed({ reason: "x" })))
+      {
+        args: {},
+        success: Schema.Never,
+        error: SaveFailed,
+        invalidates: () => []
+      }
     ) {}
     const matched = Save.make().pipe(
       Command.match({ onSuccess: () => 1, onFailure: () => 2 })

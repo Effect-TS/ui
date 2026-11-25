@@ -390,25 +390,21 @@ describe("Validation", () => {
         success: Schema.Boolean,
         error: Schema.Never,
         staleTime: "30 seconds"
-      },
-      Effect.succeed(({ username }: { readonly username: string }) =>
-        Effect.succeed(username === "ada")
-      )
+      }
     ) {}
+    const Message = UiSchema.TaggedEnum({
+      UpdatedUsername: { value: Schema.String },
+      ClickedSubmit: {},
+      CreatedAccount: {}
+    })
     class CreateAccount extends Command.Service<CreateAccount>()(
       "accounts/CreateAccount",
-      { args: { username: Schema.String } },
-      Effect.succeed(() => Effect.succeed(Message.CreatedAccount()))
+      { args: { username: Schema.String }, success: Message }
     ) {}
     const Account = Validation.make({
       username: { required: "Pick a username", rules: [Rule.minLength(3)] }
     }, {
       mode: "onChange"
-    })
-    const Message = UiSchema.TaggedEnum({
-      UpdatedUsername: { value: Schema.String },
-      ClickedSubmit: {},
-      CreatedAccount: {}
     })
     const taken = (result: AsyncResult.AsyncResult<boolean>) =>
       AsyncResult.map(

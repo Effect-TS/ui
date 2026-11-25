@@ -66,8 +66,9 @@ export class GetPerson extends Query.Service<GetPerson>()(
     success: Schema.String,
     error: Schema.String,
     staleTime: "30 seconds"
-  },
-  Effect.succeed(({ id }) =>
+  }
+) {
+  static readonly layer = this.toLayer(({ id }) =>
     Effect.suspend(() => {
       personFetches.count++
       const result = personFetches.fail
@@ -78,16 +79,19 @@ export class GetPerson extends Query.Service<GetPerson>()(
         : result
     })
   )
-) {}
+}
 
 /** Renames optimistically, and never finishes: the patch stays live. */
 export class RenamePerson
   extends Command.Service<RenamePerson>()("RenamePerson", {
     args: { id: Schema.Number },
+    success: Schema.Never,
     invalidates: () => [],
     optimistic: ({ id }) => [GetPerson.patch({ id }, () => "Renamed")]
-  }, Effect.succeed(() => Effect.never))
-{}
+  })
+{
+  static readonly layer = this.toLayer(() => Effect.never)
+}
 
 export const PersonMessage = UiSchema.TaggedEnum({
   Loaded: { name: Schema.String },

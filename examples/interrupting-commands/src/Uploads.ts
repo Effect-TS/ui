@@ -57,17 +57,18 @@ export class UploadFile extends Command.Service<UploadFile>()(
   "uploads/UploadFile",
   {
     args: { uploadId: Schema.Number, sizeMegabytes: Schema.Number },
+    success: UploadsMessage,
     group: ["uploadId"],
     mode: "switch"
-  },
-  Effect.gen(function*() {
-    return ({ uploadId, sizeMegabytes }) =>
-      Effect.sleep(Duration.millis(sizeMegabytes * MILLISECONDS_PER_MEGABYTE))
-        .pipe(
-          Effect.as(UploadsMessage.CompletedUploadFile({ uploadId }))
-        )
-  })
-) {}
+  }
+) {
+  static readonly layer = this.toLayer(({ uploadId, sizeMegabytes }) =>
+    Effect.sleep(Duration.millis(sizeMegabytes * MILLISECONDS_PER_MEGABYTE))
+      .pipe(
+        Effect.as(UploadsMessage.CompletedUploadFile({ uploadId }))
+      )
+  )
+}
 
 const BADGE_CLASS: Record<UploadStatus, string> = {
   Uploading: "bg-blue-100 text-blue-700",

@@ -105,12 +105,15 @@ export class IsUsernameTaken extends Query.Service<IsUsernameTaken>()(
     success: Schema.Boolean,
     error: Schema.Never,
     staleTime: "30 seconds"
-  },
-  Effect.gen(function*() {
-    const accounts = yield* Accounts
-    return ({ username }) => accounts.isTaken(username)
-  })
-) {}
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.gen(function*() {
+      const accounts = yield* Accounts
+      return ({ username }) => accounts.isTaken(username)
+    })
+  )
+}
 
 const TextFieldName = Schema.Literals(["username", "email"])
 const SecretFieldName = Schema.Literals(["password", "confirm"])
@@ -143,20 +146,24 @@ export class CreateAccount extends Command.Service<CreateAccount>()(
       username: Schema.String,
       email: Schema.String,
       password: Schema.Redacted(Schema.String)
-    }
-  },
-  Effect.gen(function*() {
-    const accounts = yield* Accounts
-    return (account) =>
-      accounts.create(account).pipe(
-        Effect.match({
-          onSuccess: () => SignupFormMessage.SucceededCreateAccount(),
-          onFailure: ({ field, message }) =>
-            SignupFormMessage.FailedCreateAccount({ field, message })
-        })
-      )
-  })
-) {}
+    },
+    success: SignupFormMessage
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.gen(function*() {
+      const accounts = yield* Accounts
+      return (account) =>
+        accounts.create(account).pipe(
+          Effect.match({
+            onSuccess: () => SignupFormMessage.SucceededCreateAccount(),
+            onFailure: ({ field, message }) =>
+              SignupFormMessage.FailedCreateAccount({ field, message })
+          })
+        )
+    })
+  )
+}
 
 // The form's fields, derived. The view, `update` and the tests all call it,
 // so they agree on what the form shows. The query's answer becomes the

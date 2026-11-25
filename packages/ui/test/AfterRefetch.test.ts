@@ -40,21 +40,24 @@ const makeApp = (options?: {
       success: User,
       error: Schema.String,
       staleTime: "30 seconds"
-    },
-    Effect.succeed(({ id }) =>
+    }
+  ) {
+    static readonly layer = this.toLayer(({ id }) =>
       Effect.gen(function*() {
         yield* Effect.sleep(db.delay.get(id) ?? 10)
         if (db.fail.has(id)) return yield* Effect.fail("down")
         return { id, name: db.names.get(id) ?? "?" }
       })
     )
-  ) {}
+  }
 
   const invalidates = options?.invalidates ?? "self"
   class RenameUser extends Command.Service<RenameUser>()(
     "users/RenameUser",
     {
       args: { id: Schema.String, name: Schema.String },
+      success: Schema.String,
+      error: Schema.String,
       mode: options?.mode,
       invalidates: ({ id }) =>
         invalidates === "all"
@@ -66,10 +69,9 @@ const makeApp = (options?: {
         invalidates === "unwatched"
           ? []
           : [GetUser.patch({ id }, (user) => ({ ...user, name }))]
-    },
-    Effect.succeed((
-      { id, name }: { readonly id: string; readonly name: string }
-    ) =>
+    }
+  ) {
+    static readonly layer = this.toLayer(({ id, name }) =>
       Effect.gen(function*() {
         order.push(`body ${name}`)
         const cleanup = options?.cleanup
@@ -82,7 +84,7 @@ const makeApp = (options?: {
         return name
       })
     )
-  ) {}
+  }
 
   const CardMessage = UiSchema.TaggedEnum({
     UserChanged: {},
@@ -891,8 +893,9 @@ describe("Command.afterRefetch", () => {
         cursor: Schema.Number,
         next: (lastPage) => Option.fromNullishOr(lastPage.next),
         staleTime: "30 seconds"
-      },
-      Effect.succeed((_args, cursor) =>
+      }
+    ) {
+      static readonly layer = this.toLayer((_args, cursor) =>
         Effect.gen(function*() {
           const index = Option.getOrElse(cursor, () => 0)
           yield* Effect.sleep("10 millis")
@@ -902,16 +905,17 @@ describe("Command.afterRefetch", () => {
           }
         })
       )
-    ) {}
+    }
     class Touch extends Command.Service<Touch>()(
       "items/Touch",
-      { args: {}, invalidates: () => [ListItems] },
-      Effect.succeed(() =>
+      { args: {}, success: Schema.Void, invalidates: () => [ListItems] }
+    ) {
+      static readonly layer = this.toLayer(() =>
         Effect.sleep("10 millis").pipe(Effect.andThen(Effect.sync(() => {
           db.version++
         })))
       )
-    ) {}
+    }
     const ItemsMessage = UiSchema.TaggedEnum({
       More: {},
       Touch: {},

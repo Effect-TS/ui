@@ -41,8 +41,9 @@ const lateSave = Effect.gen(function*() {
   let write: ((saved: string) => any) | undefined
   class Save extends Command.Service<Save>()(
     "lazy/LateSave",
-    { args: {}, writes: (saved: string) => [write!(saved)] },
-    Effect.succeed(() =>
+    { args: {}, success: Schema.String, writes: (saved) => [write!(saved)] }
+  ) {
+    static readonly layer = this.toLayer(() =>
       Effect.promise(async () => {
         const Query = await import("@effect/ui/Query")
         class GetNote extends Query.Service<GetNote>()(
@@ -52,9 +53,10 @@ const lateSave = Effect.gen(function*() {
             success: Schema.String,
             error: Schema.Never,
             staleTime: "30 seconds"
-          },
-          Effect.succeed(() => Effect.never)
-        ) {}
+          }
+        ) {
+          static readonly layer = this.toLayer(() => Effect.never)
+        }
         const Note = Html.component({
           name: "Note",
           model: Schema.Null,
@@ -76,12 +78,13 @@ const lateSave = Effect.gen(function*() {
         return "old"
       })
     )
-  ) {}
+  }
   class Replace extends Command.Service<Replace>()(
     "lazy/Replace",
-    { args: {}, writes: (saved: string) => [write!(saved)] },
-    Effect.succeed(() => Effect.succeed("new"))
-  ) {}
+    { args: {}, success: Schema.String, writes: (saved) => [write!(saved)] }
+  ) {
+    static readonly layer = this.toLayer(() => Effect.succeed("new"))
+  }
   const Message = UiSchema.TaggedEnum({
     Save: {},
     Replace: {},
@@ -151,9 +154,10 @@ const savedWith = Effect.fnUntraced(
       )
     class Save extends Command.Service<Save>()(
       "lazy/PlainSave",
-      { args: {}, writes },
-      Effect.succeed(() => Effect.succeed("saved"))
-    ) {}
+      { args: {}, success: Schema.String, writes }
+    ) {
+      static readonly layer = this.toLayer(() => Effect.succeed("saved"))
+    }
     const Message = UiSchema.TaggedEnum({ Clicked: {}, Saved: {} })
     const Saver = Html.component({
       name: "Saver",
@@ -228,9 +232,12 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
           success: Schema.String,
           error: Schema.Never,
           staleTime: "30 seconds"
-        },
-        Effect.succeed(({ id }) => Effect.succeed(`Note ${id}`))
-      ) {}
+        }
+      ) {
+        static readonly layer = this.toLayer(({ id }) =>
+          Effect.succeed(`Note ${id}`)
+        )
+      }
       const Note = Html.component({
         name: "Note",
         model: Schema.Null,
@@ -274,12 +281,14 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
         "lazy/Save",
         {
           args: {},
-          writes: (saved: string) => {
+          success: Schema.String,
+          writes: (saved) => {
             calls.writes++
             return [write!(saved)]
           }
-        },
-        Effect.succeed(() =>
+        }
+      ) {
+        static readonly layer = this.toLayer(() =>
           Effect.promise(async () => {
             const Query = await import("@effect/ui/Query")
             class GetNote extends Query.Service<GetNote>()(
@@ -289,14 +298,15 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
                 success: Schema.String,
                 error: Schema.Never,
                 staleTime: "30 seconds"
-              },
-              Effect.succeed(() =>
+              }
+            ) {
+              static readonly layer = this.toLayer(() =>
                 Effect.sync(() => {
                   calls.fetches++
                   return "fetched"
                 })
               )
-            ) {}
+            }
             const Note = Html.component({
               name: "Note",
               model: Schema.Null,
@@ -317,7 +327,7 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
             return "saved"
           })
         )
-      ) {}
+      }
       const Message = UiSchema.TaggedEnum({ Clicked: {}, Saved: {} })
       const App = Html.component({
         name: "App",

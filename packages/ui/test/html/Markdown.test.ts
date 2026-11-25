@@ -389,12 +389,19 @@ class Greeter extends Context.Service<
 
 class Greet extends Command.Service<Greet>()(
   "test/MarkdownGreet",
-  { args: { name: Schema.String }, invalidates: () => [] },
-  Effect.gen(function*() {
-    const greeter = yield* Greeter
-    return ({ name }) => Effect.succeed(greeter.greet(name))
-  })
-) {}
+  {
+    args: { name: Schema.String },
+    success: Schema.String,
+    invalidates: () => []
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.gen(function*() {
+      const greeter = yield* Greeter
+      return ({ name }) => Effect.succeed(greeter.greet(name))
+    })
+  )
+}
 
 const Greeting = Html.component({
   name: "Greeting",

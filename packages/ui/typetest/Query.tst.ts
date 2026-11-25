@@ -1,5 +1,13 @@
 import { Query } from "@effect/ui"
-import { Context, Effect, Layer, Option, Schema, type Stream } from "effect"
+import {
+  Context,
+  Effect,
+  Layer,
+  Option,
+  Schema,
+  type Scope,
+  type Stream
+} from "effect"
 import type { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
 
@@ -27,23 +35,34 @@ class GetUser extends Query.Service<GetUser>()(
       expect(args).type.toBe<{ readonly id: string }>()
       return undefined
     }
-  },
-  Effect.gen(function*() {
-    const api = yield* Api
-    return ({ id }) => Effect.map(api.name(id), (name) => ({ id, name }))
-  })
-) {}
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.gen(function*() {
+      const api = yield* Api
+      return ({ id }) => Effect.map(api.name(id), (name) => ({ id, name }))
+    })
+  )
+}
 
 class Count extends Query.Service<Count>()("Count", {
   args: Schema.String,
   success: Schema.Number,
   error: Schema.Never,
   staleTime: 0
-}, Effect.succeed((prefix) => Effect.succeed(prefix.length))) {}
+}) {}
 
-declare const fetcher: Effect.Effect<(args: {}) => Effect.Effect<string>>
-declare const needsApi: Effect.Effect<
-  (args: {}) => Effect.Effect<string, never, Api>
+declare const failingBuild: Effect.Effect<
+  (args: string) => Effect.Effect<number>,
+  "boom",
+  Api | Scope.Scope
+>
+declare const wrongResult: (args: string) => Effect.Effect<string>
+declare const needsApiPerCall: (
+  args: string
+) => Effect.Effect<number, never, Api>
+declare const needsApiPerCallEffect: Effect.Effect<
+  (args: string) => Effect.Effect<number, never, Api>
 >
 
 describe("Query", () => {
@@ -78,25 +97,22 @@ describe("Query", () => {
     expect(GetUser.get).type.not.toBeCallableWith()
   })
 
-  it("a fake is a plain function", () => {
+  it("toLayer infers fakes and failures, rejects mismatched fetchers, and Layer.succeed still works", () => {
+    expect(
+      GetUser.toLayer(({ id }) => {
+        expect(id).type.toBe<string>()
+        return Effect.succeed({ id, name: "Ann" })
+      })
+    ).type.toBe<Layer.Layer<GetUser>>()
     expect(
       Layer.succeed(GetUser, ({ id }) => Effect.succeed({ id, name: "Ann" }))
     ).type.toBe<Layer.Layer<GetUser>>()
-  })
-
-  it("a fetcher can't keep a requirement of its own", () => {
-    const options = {
-      args: {},
-      success: Schema.String,
-      error: Schema.Never,
-      staleTime: 0
-    } as const
-    expect(Query.Service<any>()).type.toBeCallableWith("Ok", options, fetcher)
-    expect(Query.Service<any>()).type.not.toBeCallableWith(
-      "Bad",
-      options,
-      needsApi
-    )
+    expect(Count.toLayer(failingBuild)).type.toBe<
+      Layer.Layer<Count, "boom", Api>
+    >()
+    expect(Count.toLayer).type.not.toBeCallableWith(wrongResult)
+    expect(Count.toLayer).type.not.toBeCallableWith(needsApiPerCall)
+    expect(Count.toLayer).type.not.toBeCallableWith(needsApiPerCallEffect)
   })
 
   it("patches and writes are typed by their read", () => {
@@ -162,8 +178,7 @@ class ListUsers extends Query.InfiniteService<ListUsers>()(
     next: (lastPage) =>
       lastPage.next === null ? Option.none() : Option.some(lastPage.next),
     staleTime: "1 minute"
-  },
-  Effect.succeed((_args, _cursor) => Effect.succeed({ users: [], next: null }))
+  }
 ) {}
 
 describe("InfiniteService", () => {
@@ -179,24 +194,13 @@ describe("InfiniteService", () => {
     expect(ListUsers.items([])).type.toBe<ReadonlyArray<User>>()
   })
 
-  it("types the fetcher's cursor by the cursor Schema", () => {
-    Query.InfiniteService<"Fetcher">()(
-      "Fetcher",
-      {
-        args: { team: Schema.String },
-        page: Page,
-        items: (page) => page.users,
-        key: (user) => user.id,
-        error: Schema.Never,
-        cursor: Schema.Number,
-        next: () => Option.none(),
-        staleTime: 0
-      },
-      Effect.succeed((_args, cursor) => {
+  it("types the fetcher's cursor by the cursor Schema in toLayer", () => {
+    expect(
+      ListUsers.toLayer((_args, cursor) => {
         expect(cursor).type.toBe<Option.Option<number>>()
         return Effect.succeed({ users: [], next: null })
       })
-    )
+    ).type.toBe<Layer.Layer<ListUsers>>()
   })
 
   // The documented gotcha: inference reads the object in order, so `key` written before `items` sees no item type.
@@ -213,7 +217,7 @@ describe("InfiniteService", () => {
       cursor: Schema.Number,
       next: () => Option.none(),
       staleTime: 0
-    }, Effect.succeed(() => Effect.succeed({ users: [], next: null })))
+    })
   })
 
   it("is a target and a patch target", () => {

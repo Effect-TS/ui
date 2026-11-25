@@ -19,9 +19,12 @@ class GetToken extends Query.Service<GetToken>()(
     success: Schema.Redacted(Schema.String),
     error: Schema.Never,
     staleTime: "1 minute"
-  },
-  Effect.succeed(() => Effect.succeed(Redacted.make("loaded-secret")))
-) {}
+  }
+) {
+  static readonly layer = this.toLayer(() =>
+    Effect.succeed(Redacted.make("loaded-secret"))
+  )
+}
 
 class GetByKey extends Query.Service<GetByKey>()(
   "test/GetByKey",
@@ -30,9 +33,10 @@ class GetByKey extends Query.Service<GetByKey>()(
     success: Schema.String,
     error: Schema.Never,
     staleTime: "1 minute"
-  },
-  Effect.succeed(() => Effect.succeed("ok"))
-) {}
+  }
+) {
+  static readonly layer = this.toLayer(() => Effect.succeed("ok"))
+}
 
 class GetFailing extends Query.Service<GetFailing>()(
   "test/GetFailing",
@@ -41,9 +45,12 @@ class GetFailing extends Query.Service<GetFailing>()(
     success: Schema.String,
     error: Schema.Redacted(Schema.String),
     staleTime: "1 minute"
-  },
-  Effect.succeed(() => Effect.fail(Redacted.make("error-secret")))
-) {}
+  }
+) {
+  static readonly layer = this.toLayer(() =>
+    Effect.fail(Redacted.make("error-secret"))
+  )
+}
 
 /** A Redacted in a query's args, in its error, and in a keyed query's args. */
 const ByArgs = Component.define({

@@ -7,8 +7,12 @@ and Subscriptions that the runtime runs for you, and data comes from queries,
 built with `Query`, also in `@effect/ui`. `@effect/ui/html` adds the HTML elements, the
 browser host and router, and server rendering.
 
-A `Command.Service` may omit `invalidates` when it invalidates no queries.
-Provide a feature implementation with `NoteActivity.toLayer(ActivityLog)`.
+`Query.Service`, `Query.InfiniteService`, and `Command.Service` declare only
+their Schemas and options (`Command.Service` requires `success`, defaults
+`error` to `Schema.Never`, may omit `invalidates`, and uses `Component.Noop`
+for silent results). Attach implementations with `toLayer` (e.g.
+`static readonly layer = this.toLayer(...)`, or `GetNote.toLayer(fn)` in
+tests). Provide a feature implementation with `NoteActivity.toLayer(ActivityLog)`.
 Declare a child component by calling it with the parent's `h`:
 `NoteEditor(h, { key, props, onEmit })`. Render a feature service with its
 `render`, `NoteActivity.render(h, { key, fallback })`, and include a
@@ -268,19 +272,27 @@ a typed failure into a message as well:
 ```ts
 export class SaveNote extends Command.Service<SaveNote>()(
   "notes/SaveNote",
-  { args: { note: Note }, mode: "queue", invalidates: () => [NotesTag] },
-  Effect.gen(function*() {
-    const notes = yield* Notes
-    return ({ note }) =>
-      notes.save(note).pipe(
-        Effect.match({
-          onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
-          onFailure: (error) =>
-            NoteEditorMessage.FailedSaveNote({ reason: error.reason })
-        })
-      )
-  })
-) {}
+  {
+    args: { note: Note },
+    success: NoteEditorMessage,
+    mode: "queue",
+    invalidates: () => [NotesTag]
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.gen(function*() {
+      const notes = yield* Notes
+      return ({ note }) =>
+        notes.save(note).pipe(
+          Effect.match({
+            onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
+            onFailure: (error) =>
+              NoteEditorMessage.FailedSaveNote({ reason: error.reason })
+          })
+        )
+    })
+  )
+}
 ```
 
 A body that leaves a typed error gives an unmatched Command, which `$.run`

@@ -31,24 +31,27 @@ const makeApp = () => {
       success: Schema.String,
       error: Schema.Never,
       staleTime: "30 seconds"
-    },
-    Effect.succeed(({ id }) =>
+    }
+  ) {
+    static readonly layer = this.toLayer(({ id }) =>
       Effect.sleep("10 millis").pipe(Effect.map(() => {
         server.calls++
         return `Note ${id}`
       }))
     )
-  ) {}
+  }
 
   // Invalidates the note, so the query refetches it while it keeps the old value.
   class Touch extends Command.Service<Touch>()(
     "notes/Touch",
     {
       args: { id: Schema.String },
+      success: Schema.Void,
       invalidates: ({ id }) => [GetNote.entry({ id })]
-    },
-    Effect.succeed(() => Effect.void)
-  ) {}
+    }
+  ) {
+    static readonly layer = this.toLayer(() => Effect.void)
+  }
 
   const NoteMessage = UiSchema.TaggedEnum({ Click: {}, Touch: {}, Touched: {} })
   const touched = NoteMessage.Touched()

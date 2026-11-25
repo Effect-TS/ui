@@ -238,9 +238,10 @@ describe("Component.noop", () => {
     run(Effect.gen(function*() {
       class Slow extends Command.Service<Slow>()(
         "test/Slow",
-        { args: {}, invalidates: () => [] },
-        Effect.succeed(() => Effect.sleep("1 second"))
-      ) {}
+        { args: {}, success: Schema.Void, invalidates: () => [] }
+      ) {
+        static readonly layer = this.toLayer(() => Effect.sleep("1 second"))
+      }
       let mapped = 0
       const Child = Component.define({
         name: "Child",

@@ -236,9 +236,12 @@ class GetPerson extends Query.Service<GetPerson>()(
     success: Schema.String,
     error: Schema.Never,
     staleTime: "1 minute"
-  },
-  Effect.succeed(({ id }) => Effect.succeed(`Person ${id}`))
-) {}
+  }
+) {
+  static readonly layer = this.toLayer(({ id }) =>
+    Effect.succeed(`Person ${id}`)
+  )
+}
 
 const PersonPage = Component.define({
   name: "PersonPage",

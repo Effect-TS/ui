@@ -7,18 +7,16 @@
  * Command with nothing to tell the component ends with `Component.noop`, or
  * is piped through `Command.asNoop`, and sends nothing.
  *
- * Both constructors take a name, options with a required `args` Schema, and
- * a body that receives the args as one struct:
+ * Both constructors take a name and options with a required `args` Schema:
  *
  * - `Command.make(name, { args }, body)` for Commands that need nothing beyond
  *   the framework services. Issue one with `RollDie.make({ sides: 6 })`. Its
  *   body can't fail.
- * - `Command.Service<Self>()(key, { args, invalidates }, implementation)` for
- *   Commands that reach any other service. The implementation runs once per
- *   Layer build and captures the services it uses, so a component's
- *   requirements name the Command service, never what its implementation
- *   uses. Issue one with `DeleteTodo.make({ id })` and fake it with
- *   `Layer.succeed(DeleteTodo, ({ id }) => ...)`.
+ * - `Command.Service<Self>()(key, { args, success, error, invalidates })` for
+ *   Commands that reach other services. Attach the implementation with
+ *   `toLayer` (a function, or an Effect that builds one and captures its
+ *   dependencies), so a component only requires the Command service. Issue
+ *   with `DeleteTodo.make({ id })`; fake with `DeleteTodo.toLayer(fn)`.
  *
  * A `Command.Service` declares what it does to the query cache:
  * `invalidates`, `optimistic` and `writes` are optional. Omitting
@@ -48,16 +46,19 @@
  *
  * class DeleteTodo extends Command.Service<DeleteTodo>()("todos/DeleteTodo", {
  *   args: { id: Schema.String },
- * }, Effect.gen(function*() {
- *   const kv = yield* KeyValueStore.KeyValueStore
- *   return ({ id }) =>
- *     kv.remove(`todo/${id}`).pipe(
- *       Effect.match({
- *         onSuccess: () => Message.SucceededDeleteTodo(),
- *         onFailure: () => Message.FailedDeleteTodo()
- *       })
- *     )
- * })) {}
+ *   success: Message
+ * }) {
+ *   static readonly layer = this.toLayer(Effect.gen(function*() {
+ *     const kv = yield* KeyValueStore.KeyValueStore
+ *     return ({ id }) =>
+ *       kv.remove(`todo/${id}`).pipe(
+ *         Effect.match({
+ *           onSuccess: () => Message.SucceededDeleteTodo(),
+ *           onFailure: () => Message.FailedDeleteTodo()
+ *         })
+ *       )
+ *   }))
+ * }
  *
  * // `update` issues `DeleteTodo.make({ id })`, and the component requires `DeleteTodo`.
  * // The live wiring provides `DeleteTodo.layer`, which requires `KeyValueStore`.
@@ -317,22 +318,6 @@ export interface FrameworkServices {
  * @since 0.1.0
  */
 export type FrameworkService = FrameworkServices[keyof FrameworkServices]
-
-/**
- * Passes when a `Service` implementation's function holds only framework
- * services, and otherwise names what it should have captured when its Layer
- * was built.
- *
- * @stability experimental
- * @category utility types
- * @since 0.1.0
- */
-export type CapturesServices<R> = [Exclude<R, FrameworkService>] extends
-  [never] ? unknown
-  : {
-    readonly "A Command.Service captures its services when its Layer is built. Its function may only require framework services; it needs":
-      Exclude<R, FrameworkService>
-  }
 
 /**
  * What a Command declares about the query cache, computed from its args when
@@ -740,10 +725,8 @@ export interface Factory<
  *
  * **Details**
  *
- * It's a `Context.Service` whose value is the Command's implementation: a
- * function of the args struct returning an `Effect` (or a `Stream`).
- * `layer` builds that implementation, and `make` issues a Command that
- * requires the service. A fake is `Layer.succeed(X, (args) => ...)`.
+ * A `Context.Service` holding the Command's implementation. Attach one with
+ * `toLayer` (or fake with `X.toLayer(fn)`), and issue Commands with `make`.
  *
  * @stability experimental
  * @category models
@@ -753,36 +736,50 @@ export interface Service<
   in out Self,
   in out Key extends string,
   in out Args,
-  in out A,
+  in out Success extends Schema.Top,
   out IsStream extends boolean,
-  out E,
-  out R,
-  in out Err = never,
+  in out Error extends Schema.Top = Schema.Never,
   out G extends string = never
 > extends
   Context.ServiceClass<
     Self,
     Key,
-    Service.Implementation<Args, A, IsStream, Err>
+    Service.Implementation<Args, Success["Type"], IsStream, Error["Type"]>
   >,
-  Definition<Args, A, IsStream, Err, G>
+  Definition<Args, Success["Type"], IsStream, Error["Type"], G>
 {
-  /** The implementation's Layer. It requires what the implementation captured. */
-  readonly layer: Layer.Layer<Self, E, R>
-  /** The args Schema. */
+  /** Builds a Layer providing this Command's implementation. */
+  toLayer<LE = never, LR = never>(
+    build:
+      | Service.Implementation<Args, Success["Type"], IsStream, Error["Type"]>
+      | Effect.Effect<
+        Service.Implementation<Args, Success["Type"], IsStream, Error["Type"]>,
+        LE,
+        LR
+      >
+  ): Layer.Layer<Self, LE, Exclude<LR, Scope.Scope>>
   readonly args: Schema.Top
+  readonly success: Success
+  /** Defaults to `Schema.Never`. */
+  readonly error: Error
   /**
    * Issues the Command. The component requires `Self`. When the body can
-   * fail (`Err` isn't `never`) the result is `Unmatched`, which `$.run`
-   * rejects: handle the failure in the body, or map both channels with
+   * fail (`Error["Type"]` isn't `never`) the result is `Unmatched`, which
+   * `$.run` rejects: handle the failure in the body, or map both channels with
    * `Command.match`.
    */
   make(
     ...args: MakeArgs<Args>
-  ): [Err] extends [never] ?
-    (IsStream extends true ? Issued<A, Self, A, "Stream">
-      : Issued<A, Self, A, "Effect">)
-    : Unmatched<A, Err, Self, IsStream extends true ? "Stream" : "Effect">
+  ): [Error["Type"]] extends [never] ?
+    (IsStream extends true ?
+      Issued<Success["Type"], Self, Success["Type"], "Stream">
+      : Issued<Success["Type"], Self, Success["Type"], "Effect">)
+    : Unmatched<
+      Success["Type"],
+      Error["Type"],
+      Self,
+      IsStream extends true ? "Stream" : "Effect"
+    >
 }
 
 /**
@@ -811,6 +808,8 @@ export declare namespace Service {
    *
    * On top of `Options`:
    *
+   * - `success`: Schema for the body's result.
+   * - `error`: optional failure Schema; defaults to `Schema.Never`.
    * - `invalidates` is optional: what a run invalidates, from the args
    *   only, so it's known at issue. It's applied on every exit of a started
    *   run. Omitting it invalidates nothing.
@@ -820,9 +819,14 @@ export declare namespace Service {
    * @category models
    * @since 0.1.0
    */
-  export interface Options<In extends ArgsInput, A, G extends string>
-    extends CommandOptions<In, G>
-  {
+  export interface Options<
+    In extends ArgsInput,
+    Success extends Schema.Top,
+    Error extends Schema.Top,
+    G extends string
+  > extends CommandOptions<In, G> {
+    readonly success: Success
+    readonly error?: Error | undefined
     readonly invalidates?:
       | ((args: ArgsOf<In>) => ReadonlyArray<Query.Target>)
       | undefined
@@ -830,7 +834,10 @@ export declare namespace Service {
       | ((args: ArgsOf<In>) => ReadonlyArray<Query.Patch>)
       | undefined
     readonly writes?:
-      | ((success: A, args: ArgsOf<In>) => ReadonlyArray<Query.Write>)
+      | ((
+        success: NoInfer<Success["Type"]>,
+        args: ArgsOf<In>
+      ) => ReadonlyArray<Query.Write>)
       | undefined
   }
 }
@@ -1158,22 +1165,19 @@ export const make: {
  *
  * **Details**
  *
- * The arguments are the key, the options and the implementation. The
- * implementation is an Effect that runs once per Layer build and returns the
- * body, a function of the args struct, so it captures the services it uses
- * then. The resulting class has `layer`, the implementation's Layer, and
- * `make(args)`, which issues a Command that requires the class. A
- * component's requirements therefore name the Command service, never what its
- * implementation uses, and a fake is `Layer.succeed(X, (args) => ...)`. The
- * key is the Command's name in the log and in story tests.
+ * Takes a key (the Command's name in logs and stories) and options (`args`,
+ * `success`, optional `error` defaulting to `Schema.Never`). Attach the body
+ * with `toLayer`, passing a function or an Effect that runs once per Layer
+ * build to capture its dependencies; components then require only this class,
+ * and tests can fake it with `X.toLayer(fn)`.
  *
  * The body may use framework services on each call without them appearing in
- * `layer`'s requirements. When one component consumes the result, the body
+ * the Layer's requirements. When one component consumes the result, the body
  * returns that component's message and handles a typed failure with
  * `Effect.match`. A library or shared Command returns its own result
- * instead, and the issue site maps it: `Command.match` when the body can
- * fail, since `make` then issues an `Unmatched` Command, and `Command.map`
- * or `Command.asNoop` when it can't.
+ * instead, and the issue site maps it: `Command.match` when `error` isn't
+ * `Schema.Never`, since `make` then issues an `Unmatched` Command, and
+ * `Command.map` or `Command.asNoop` when it can't fail.
  *
  * The options declare what a run does to the query cache, from the args:
  * `invalidates` (optional), `optimistic` patches, live from issue, and
@@ -1189,7 +1193,7 @@ export const make: {
  *
  * ```ts import.meta.vitest
  * import { Command, UiSchema } from "@effect/ui"
- * import { Effect, Layer, Schema } from "effect"
+ * import { Effect, Schema } from "effect"
  * import { KeyValueStore } from "effect/persistence"
  *
  * const Message = UiSchema.TaggedEnum({
@@ -1200,24 +1204,27 @@ export const make: {
  *
  * class SaveTodo extends Command.Service<SaveTodo>()("todos/SaveTodo", {
  *   args: { id: Schema.String, title: Schema.String },
+ *   success: Message,
  *   mode: "queue",
- *   group: ["id"],
- * }, Effect.gen(function*() {
- *   const kv = yield* KeyValueStore.KeyValueStore
- *   return ({ id, title }) =>
- *     kv.set(`todo/${id}`, title).pipe(
- *       Effect.match({
- *         onSuccess: () => Message.SucceededSaveTodo(),
- *         onFailure: (e) => Message.FailedSaveTodo({ reason: e.message })
- *       })
- *     )
- * })) {}
+ *   group: ["id"]
+ * }) {
+ *   static readonly layer = this.toLayer(Effect.gen(function*() {
+ *     const kv = yield* KeyValueStore.KeyValueStore
+ *     return ({ id, title }) =>
+ *       kv.set(`todo/${id}`, title).pipe(
+ *         Effect.match({
+ *           onSuccess: () => Message.SucceededSaveTodo(),
+ *           onFailure: (e) => Message.FailedSaveTodo({ reason: e.message })
+ *         })
+ *       )
+ *   }))
+ * }
  *
  * // Issue: `$.run` takes the Command as is
  * const command = SaveTodo.make({ id: "1", title: "Buy milk" })
  * // Live: provide `SaveTodo.layer`, which requires `KeyValueStore`
  * // Test: a fake that needs nothing
- * const Fake = Layer.succeed(SaveTodo, () => Effect.succeed(Message.SucceededSaveTodo()))
+ * const Fake = SaveTodo.toLayer(() => Effect.succeed(Message.SucceededSaveTodo()))
  * ```
  *
  * @stability experimental
@@ -1228,61 +1235,62 @@ export const Service: <Self>() => {
   <
     const Key extends string,
     const In extends ArgsInput,
-    A,
-    Err,
-    RInner,
-    E,
-    R,
+    Success extends Schema.Top,
+    Error extends Schema.Top = Schema.Never,
     const G extends GroupField<In> = never
   >(
     key: Key,
-    options: Service.Options<In, A, G> & {
+    options: Service.Options<In, Success, Error, G> & {
       readonly stream?: false | undefined
-    },
-    implementation:
-      & Effect.Effect<(args: ArgsOf<In>) => Effect.Effect<A, Err, RInner>, E, R>
-      & CapturesServices<RInner>
+    }
   ): Service<
     Self,
     Key,
     ArgsOf<In>,
-    A,
+    Success,
     false,
-    E,
-    Exclude<R, Scope.Scope>,
-    Err,
+    Error,
     G
   >
   <
     const Key extends string,
     const In extends ArgsInput,
-    A,
-    Err,
-    RInner,
-    E,
-    R,
+    Success extends Schema.Top,
+    Error extends Schema.Top = Schema.Never,
     const G extends GroupField<In> = never
   >(
     key: Key,
-    options: Service.Options<In, A, G> & {
+    options: Service.Options<In, Success, Error, G> & {
       readonly stream: true
       readonly writes?: undefined
-    },
-    implementation:
-      & Effect.Effect<(args: ArgsOf<In>) => Stream.Stream<A, Err, RInner>, E, R>
-      & CapturesServices<RInner>
-  ): Service<Self, Key, ArgsOf<In>, A, true, E, Exclude<R, Scope.Scope>, Err, G>
+    }
+  ): Service<
+    Self,
+    Key,
+    ArgsOf<In>,
+    Success,
+    true,
+    Error,
+    G
+  >
 } = () =>
 (
   key: string,
-  options: Service.Options<ArgsInput, any, string>,
-  implementation: Effect.Effect<(args: any) => any, any, any>
+  options: Service.Options<ArgsInput, Schema.Top, Schema.Top, string>
 ): any => {
   const Base = Context.Service<any, any>()(key)
-  const { invalidates, optimistic, stream, writes } = options
+  const { error, invalidates, optimistic, stream, success, writes } = options
   const service = Base as Effect.Effect<(args: unknown) => any, never, any>
   class CommandService extends Base {
-    static readonly layer = Layer.effect(Base, implementation)
+    static readonly success = success
+    static readonly error = error ?? Schema.Never
+    static toLayer(
+      build: ((args: any) => any) | Effect.Effect<(args: any) => any, any, any>
+    ): Layer.Layer<any, any, any> {
+      return Effect.isEffect(build)
+        ? Layer.effect(Base, build)
+        : Layer.succeed(Base, build)
+    }
   }
   return Object.assign(
     CommandService,
@@ -1292,7 +1300,7 @@ export const Service: <Self>() => {
       optimistic: optimistic?.(args) ?? noTargets,
       writes: writes === undefined
         ? undefined
-        : (success) => writes(success, args),
+        : (value) => writes(value, args),
       work: stream
         ? Stream.unwrap(Effect.map(service, (run) => run(args)))
         : Effect.flatMap(service, (run) => run(args))
@@ -1470,17 +1478,21 @@ export const asNoop = <C extends Command<any, any>>(
  *
  * ```ts import.meta.vitest
  * import { Command, UiSchema } from "@effect/ui"
- * import { Data, Effect, Schema } from "effect"
+ * import { Effect, Schema } from "effect"
  *
- * class SaveFailed extends Data.TaggedError("SaveFailed")<{ readonly reason: string }> {}
+ * class SaveFailed extends Schema.TaggedError<SaveFailed>()("SaveFailed", { reason: Schema.String }) {}
  *
  * const Message = UiSchema.TaggedEnum({ SucceededSaveTodo: {}, FailedSaveTodo: { reason: Schema.String } })
  *
  * class SaveTodo extends Command.Service<SaveTodo>()("todos/SaveTodo", {
  *   args: { title: Schema.String },
- * }, Effect.succeed(({ title }: { readonly title: string }) =>
- *   title === "" ? Effect.fail(new SaveFailed({ reason: "empty" })) : Effect.void
- * )) {}
+ *   success: Schema.Void,
+ *   error: SaveFailed
+ * }) {
+ *   static readonly layer = this.toLayer(({ title }) =>
+ *     title === "" ? Effect.fail(new SaveFailed({ reason: "empty" })) : Effect.void
+ *   )
+ * }
  *
  * const saveTodo = (title: string) =>
  *   SaveTodo.make({ title }).pipe(Command.match({
@@ -1586,13 +1598,14 @@ type AwaitsRefetchOf<R, K> = [K] extends ["Effect"] ? [R] extends [never] ? {
  *
  * ```ts import.meta.vitest
  * import { Command, UiSchema } from "@effect/ui"
- * import { Effect, Schema } from "effect"
+ * import { Schema } from "effect"
  *
  * const Message = UiSchema.TaggedEnum({ CompletedRenameUser: {} })
  *
  * class RenameUser extends Command.Service<RenameUser>()("RenameUser", {
  *   args: { id: Schema.String, name: Schema.String },
- * }, Effect.succeed(() => Effect.void)) {}
+ *   success: Schema.Void
+ * }) {}
  *
  * const rename = RenameUser.make({ id: "1", name: "Ada" }).pipe(
  *   Command.map(() => Message.CompletedRenameUser()),

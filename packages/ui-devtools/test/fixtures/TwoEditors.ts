@@ -24,23 +24,27 @@ class SaveNote extends Command.Service<SaveNote>()(
       text: Schema.String,
       token: Schema.Redacted(Schema.String)
     },
+    success: EditorMessage,
     group: ["noteId"],
     mode: "switch"
-  },
-  Effect.gen(function*() {
-    yield* wait(15)
-    return ({ noteId }) =>
-      Effect.gen(function*() {
-        yield* Effect.withSpan(
-          wait(noteId === "n1" ? 40 : 100_000),
-          "PUT /notes/" + noteId
-        )
-        return EditorMessage.SucceededSaveNote({
-          savedAt: "2026-11-22T18:10:00Z"
-        })
-      }).pipe(Effect.withSpan("Notes.save"))
-  })
-) {}
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.gen(function*() {
+      yield* wait(15)
+      return ({ noteId }) =>
+        Effect.gen(function*() {
+          yield* Effect.withSpan(
+            wait(noteId === "n1" ? 40 : 100_000),
+            "PUT /notes/" + noteId
+          )
+          return EditorMessage.SucceededSaveNote({
+            savedAt: "2026-11-22T18:10:00Z"
+          })
+        }).pipe(Effect.withSpan("Notes.save"))
+    })
+  )
+}
 
 const FocusBody = Mount.make(
   "FocusBody",

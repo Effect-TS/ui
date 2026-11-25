@@ -34,9 +34,10 @@
  *
  * class Save extends Command.Service<Save>()(
  *   "todos/Save",
- *   { args: {} },
- *   Effect.succeed(() => Effect.succeed(Message.CompletedSave()))
- * ) {}
+ *   { args: {}, success: Message }
+ * ) {
+ *   static readonly layer = this.toLayer(() => Effect.succeed(Message.CompletedSave()))
+ * }
  *
  * const Todo = Component.define({
  *   name: "Todo",

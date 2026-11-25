@@ -158,51 +158,64 @@ export class Paint extends Command.Service<Paint>()(
   "devtools/Paint",
   {
     args: { session: Schema.String, seq: Schema.NullOr(Schema.Number) },
+    success: Schema.Union([OverlayMessage, Component.Noop]),
     mode: "switch"
-  },
-  Effect.gen(function*() {
-    const pages = yield* Pages
-    return ({ seq, session }): Effect.Effect<OverlayMessage | Component.Noop> =>
-      seq === null
-        ? Effect.as(pages.resume, Component.noop)
-        : Effect.map(
-          pages.paint(session, seq),
-          (painted) =>
-            painted === undefined
-              ? OverlayMessage.FailedPaint({ session, seq })
-              : OverlayMessage.Painted({ session, seq, ...painted })
-        )
-  })
-) {}
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.gen(function*() {
+      const pages = yield* Pages
+      return ({ seq, session }) =>
+        seq === null
+          ? Effect.as(pages.resume, Component.noop)
+          : Effect.map(
+            pages.paint(session, seq),
+            (painted) =>
+              painted === undefined
+                ? OverlayMessage.FailedPaint({ session, seq })
+                : OverlayMessage.Painted({ session, seq, ...painted })
+          )
+    })
+  )
+}
 
 export class Clear extends Command.Service<Clear>()(
   "devtools/Clear",
-  { args: { session: Schema.String } },
-  Effect.gen(function*() {
-    const pages = yield* Pages
-    return ({ session }) =>
-      Effect.as(pages.clear(session), OverlayMessage.Cleared())
-  })
-) {}
+  { args: { session: Schema.String }, success: OverlayMessage }
+) {
+  static readonly layer = this.toLayer(
+    Effect.gen(function*() {
+      const pages = yield* Pages
+      return ({ session }) =>
+        Effect.as(pages.clear(session), OverlayMessage.Cleared())
+    })
+  )
+}
 
 export class SaveOpen extends Command.Service<SaveOpen>()(
   "devtools/SaveOpen",
-  { args: { open: Schema.Boolean } },
-  Effect.gen(function*() {
-    const pages = yield* Pages
-    return ({ open }) => Effect.as(pages.setOpen(open), Component.noop)
-  })
-) {}
+  { args: { open: Schema.Boolean }, success: Component.Noop }
+) {
+  static readonly layer = this.toLayer(
+    Effect.gen(function*() {
+      const pages = yield* Pages
+      return ({ open }) => Effect.as(pages.setOpen(open), Component.noop)
+    })
+  )
+}
 
 export class SavePosition extends Command.Service<SavePosition>()(
   "devtools/SavePosition",
-  { args: { position: Position } },
-  Effect.gen(function*() {
-    const pages = yield* Pages
-    return ({ position }) =>
-      Effect.as(pages.setPosition(position), Component.noop)
-  })
-) {}
+  { args: { position: Position }, success: Component.Noop }
+) {
+  static readonly layer = this.toLayer(
+    Effect.gen(function*() {
+      const pages = yield* Pages
+      return ({ position }) =>
+        Effect.as(pages.setPosition(position), Component.noop)
+    })
+  )
+}
 
 type Children = View.Children<OverlayMessage, never>
 type H =

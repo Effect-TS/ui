@@ -27,8 +27,7 @@
  *
  * class FetchWeather extends Command.Service<FetchWeather>()(
  *   "weather/FetchWeather",
- *   { args: { zip: Schema.String } },
- *   Effect.succeed(() => Effect.succeed(Message.CompletedFetchWeather({ forecast: "sun" })))
+ *   { args: { zip: Schema.String }, success: Message }
  * ) {}
  *
  * const Weather = Html.component({

@@ -114,7 +114,11 @@ export class ListUsers extends Query.Service<ListUsers>()("users/ListUsers", {
   error: Schema.Never,
   staleTime: "30 seconds",
   tags: [Users]
-}, Effect.map(UsersApi, (api) => ({ page }) => api.list(page))) {}
+}) {
+  static readonly layer = this.toLayer(
+    Effect.map(UsersApi, (api) => ({ page }) => api.list(page))
+  )
+}
 
 export class GetUser extends Query.Service<GetUser>()("users/GetUser", {
   args: { id: Schema.String },
@@ -122,13 +126,19 @@ export class GetUser extends Query.Service<GetUser>()("users/GetUser", {
   error: UserNotFound,
   staleTime: "30 seconds",
   tags: [Users]
-}, Effect.map(UsersApi, (api) => ({ id }) => api.get(id))) {}
+}) {
+  static readonly layer = this.toLayer(
+    Effect.map(UsersApi, (api) => ({ id }) => api.get(id))
+  )
+}
 
 // Mutations
 
 export class RenameUser
   extends Command.Service<RenameUser>()("users/RenameUser", {
     args: { id: Schema.String, name: Schema.String },
+    success: User,
+    error: RenameFailed,
     mode: "queue",
     group: ["id"],
     invalidates: () => [ListUsers],
@@ -141,18 +151,27 @@ export class RenameUser
         )
       }))
     ],
-    // Options come before the body, so the success type is written out.
-    writes: (user: User) => [GetUser.set({ id: user.id }, user)]
-  }, Effect.map(UsersApi, (api) => ({ id, name }) => api.rename(id, name)))
-{}
+    writes: (user) => [GetUser.set({ id: user.id }, user)]
+  })
+{
+  static readonly layer = this.toLayer(
+    Effect.map(UsersApi, (api) => ({ id, name }) => api.rename(id, name))
+  )
+}
 
 export class LikeUser extends Command.Service<LikeUser>()("users/LikeUser", {
   args: { id: Schema.String },
+  success: User,
+  error: UserNotFound,
   invalidates: () => [Users],
   optimistic: (
     { id }
   ) => [GetUser.patch({ id }, (user) => ({ ...user, likes: user.likes + 1 }))]
-}, Effect.map(UsersApi, (api) => ({ id }) => api.like(id))) {}
+}) {
+  static readonly layer = this.toLayer(
+    Effect.map(UsersApi, (api) => ({ id }) => api.like(id))
+  )
+}
 
 export const layer = Layer.mergeAll(
   ListUsers.layer,

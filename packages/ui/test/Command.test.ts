@@ -1,7 +1,7 @@
 import { Command, Component, Query, UiSchema } from "@effect/ui"
 import * as schedule from "@effect/ui/internal/schedule"
 import { assert, describe, it } from "@effect/vitest"
-import { Data, Effect, Exit, Layer, Schema, Stream } from "effect"
+import { Effect, Exit, Layer, Schema, Stream } from "effect"
 import { KeyValueStore } from "effect/persistence"
 import {
   SaveTodo,
@@ -14,25 +14,37 @@ const todo = { id: "t1", title: "buy milk", done: false }
 
 class Ticks extends Command.Service<Ticks>()(
   "Ticks",
-  { args: { n: Schema.Number }, stream: true, invalidates: () => [] },
-  Effect.succeed(({ n }) =>
+  {
+    args: { n: Schema.Number },
+    success: Schema.Number,
+    stream: true,
+    invalidates: () => []
+  }
+) {
+  static readonly layer = this.toLayer(({ n }) =>
     Stream.fromIterable(Array.from({ length: n }, (_, i) => i))
   )
-) {}
+}
 
-class SaveFailed
-  extends Data.TaggedError("SaveFailed")<{ readonly reason: string }>
-{}
+class SaveFailed extends Schema.TaggedError<SaveFailed>()("SaveFailed", {
+  reason: Schema.String
+}) {}
 
 class Save extends Command.Service<Save>()(
   "Save",
-  { args: { title: Schema.String }, invalidates: () => [] },
-  Effect.succeed(({ title }) =>
+  {
+    args: { title: Schema.String },
+    success: Schema.String,
+    error: SaveFailed,
+    invalidates: () => []
+  }
+) {
+  static readonly layer = this.toLayer(({ title }) =>
     title === ""
       ? Effect.fail(new SaveFailed({ reason: "empty" }))
       : Effect.succeed(title)
   )
-) {}
+}
 
 const failingKv = Layer.succeed(
   KeyValueStore.KeyValueStore,
@@ -86,13 +98,16 @@ describe("Command", () => {
       assert.strictEqual(command.groupKey, undefined)
     })
 
-    it("defaults omitted invalidates to no targets", () => {
+    it("defaults omitted invalidates to no targets and exposes success and error Schemas", () => {
       class NoInvalidation extends Command.Service<NoInvalidation>()(
         "NoInvalidation",
-        { args: {} },
-        Effect.succeed(() => Effect.void)
+        { args: {}, success: Schema.Void }
       ) {}
       assert.deepStrictEqual(NoInvalidation.make().invalidates, [])
+      assert.strictEqual(NoInvalidation.success, Schema.Void)
+      assert.strictEqual(NoInvalidation.error, Schema.Never)
+      assert.strictEqual(Save.success, Schema.String)
+      assert.strictEqual(Save.error, SaveFailed)
     })
 
     it("computes invalidates and optimistic from the args at issue, and writes from the success", () => {
@@ -100,13 +115,11 @@ describe("Command", () => {
         "Rename",
         {
           args: { id: Schema.String, name: Schema.String },
+          success: Schema.String,
           invalidates: ({ id }) => [Query.Tag(`user:${id}`)],
           optimistic: ({ id, name }) => [{ id, name }] as any,
-          writes: (success: string, { id }) => [{ id, success }] as any
-        },
-        Effect.succeed(({ name }: { readonly name: string }) =>
-          Effect.succeed(name.toUpperCase())
-        )
+          writes: (success, { id }) => [{ id, success }] as any
+        }
       ) {}
       const command = Rename.make({ id: "u1", name: "ada" })
       assert.deepStrictEqual(command.invalidates, [Query.Tag("user:u1")])
@@ -141,12 +154,25 @@ describe("Command", () => {
         )
       }).pipe(Effect.provide(SaveTodo.layer.pipe(Layer.provide(failingKv)))))
 
-    it.effect("a fake is a plain Layer.succeed", () =>
+    it.effect("a fake is toLayer or Layer.succeed", () =>
       Effect.gen(function*() {
-        const message = yield* SaveTodo.make(todo).effect
-        assert.deepStrictEqual(message, TodoItemMessage.Saved())
-      }).pipe(Effect.provide(Layer.succeed(SaveTodo, () =>
-        Effect.succeed(TodoItemMessage.Saved())))))
+        assert.deepStrictEqual(
+          yield* SaveTodo.make(todo).effect.pipe(
+            Effect.provide(SaveTodo.toLayer(() =>
+              Effect.succeed(TodoItemMessage.SaveFailed({ reason: "mocked" }))
+            ))
+          ),
+          TodoItemMessage.SaveFailed({ reason: "mocked" })
+        )
+        assert.deepStrictEqual(
+          yield* SaveTodo.make(todo).effect.pipe(
+            Effect.provide(Layer.succeed(SaveTodo, () =>
+              Effect.succeed(TodoItemMessage.Saved())
+            ))
+          ),
+          TodoItemMessage.Saved()
+        )
+      }))
 
     it.effect("a stream service runs its Stream", () =>
       Effect.gen(function*() {

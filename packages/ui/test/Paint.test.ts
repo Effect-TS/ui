@@ -23,14 +23,15 @@ const makeApp = () => {
       success: Schema.String,
       error: Schema.Never,
       staleTime: 0
-    },
-    Effect.succeed(({ id }) =>
+    }
+  ) {
+    static readonly layer = this.toLayer(({ id }) =>
       Effect.sync(() => {
         ran.fetches++
         return id.toUpperCase()
       }).pipe(Effect.delay("10 millis"))
     )
-  ) {}
+  }
 
   const RowMessage = UiSchema.TaggedEnum({ Clicked: {}, Ticked: {} })
   const Ping = Command.make("Ping", { args: {} }, () =>

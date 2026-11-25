@@ -63,8 +63,9 @@ const makeList = (options: {
       next: options.next ?? ((lastPage) => Option.fromNullishOr(lastPage.next)),
       staleTime: options.staleTime ?? "30 seconds",
       refetchInterval: options.refetchInterval
-    },
-    Effect.sync(() => (_args, cursor) =>
+    }
+  ) {
+    static readonly layer = this.toLayer((_args, cursor) =>
       Effect.gen(function*() {
         const index = Option.getOrElse(cursor, () => 0)
         const page = {
@@ -76,7 +77,7 @@ const makeList = (options: {
         return page
       })
     )
-  ) {}
+  }
   return {
     db,
     ListMessages,
@@ -620,11 +621,12 @@ describe("Query lists", () => {
         success: Schema.NullOr(Schema.Array(Schema.String)),
         error: Schema.Never,
         staleTime: 0
-      },
-      Effect.succeed(({ id }) =>
+      }
+    ) {
+      static readonly layer = this.toLayer(({ id }) =>
         Effect.sync(() => (calls++, id === "none" ? null : ["a"]))
       )
-    ) {}
+    }
     return Effect.gen(function*() {
       for (const id of ["some", "none"]) {
         yield* GetTags.get({ id })

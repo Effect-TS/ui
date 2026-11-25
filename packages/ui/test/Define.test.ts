@@ -8,8 +8,7 @@ const Events = UiSchema.TaggedEnum({ Stepped: { n: Schema.Number } })
 
 class Log extends Command.Service<Log>()(
   "test/define/Log",
-  { args: { n: Schema.Number }, invalidates: () => [] },
-  Effect.succeed(({ n }) => Effect.succeed(Message.Logged({ n })))
+  { args: { n: Schema.Number }, success: Message, invalidates: () => [] }
 ) {}
 
 const CounterDef = Component.define({

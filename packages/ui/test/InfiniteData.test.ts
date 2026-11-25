@@ -35,8 +35,9 @@ const makeApp = () => {
       cursor: Schema.Number,
       next: (lastPage) => Option.fromNullishOr(lastPage.next),
       staleTime: "30 seconds"
-    },
-    Effect.succeed(({ room }, cursor) =>
+    }
+  ) {
+    static readonly layer = this.toLayer(({ room }, cursor) =>
       Effect.gen(function*() {
         const index = Option.getOrElse(cursor, () => 0)
         if (db.delay > 0) yield* Effect.sleep(db.delay)
@@ -50,7 +51,7 @@ const makeApp = () => {
         }
       })
     )
-  ) {}
+  }
 
   const ChatMessage = UiSchema.TaggedEnum({
     Changed: {},
@@ -193,13 +194,14 @@ describe("Infinite queries", () => {
         cursor: Schema.Number,
         next: () => Option.some(1),
         staleTime: "30 seconds"
-      },
-      Effect.succeed((_args, cursor) =>
+      }
+    ) {
+      static readonly layer = this.toLayer((_args, cursor) =>
         Option.isSome(cursor)
           ? Effect.fail(42)
           : Effect.sleep("10 millis").pipe(Effect.as(["a"]))
       )
-    ) {}
+    }
     const CodesMessage = UiSchema.TaggedEnum({ More: {}, Look: {} })
     const Codes = Html.component({
       name: "Codes",

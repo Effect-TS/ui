@@ -179,9 +179,10 @@ describe("hot reload", { concurrent: false }, () => {
         const gate = yield* Deferred.make<void>()
         class SlowWork extends Command.Service<SlowWork>()(
           "test/SlowWork",
-          { args: {} },
-          Effect.succeed(() => Deferred.await(gate))
-        ) {}
+          { args: {}, success: Schema.Void }
+        ) {
+          static readonly layer = this.toLayer(() => Deferred.await(gate))
+        }
         const Msg = UiSchema.TaggedEnum({ Bump: {}, Start: {}, Done: {} })
         const makeParent = <M, E>(
           childModel: Schema.Codec<M, E>,
