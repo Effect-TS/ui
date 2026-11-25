@@ -36,9 +36,10 @@
  * **Keyboard**
  *
  * One trigger is in the page's Tab order: the one that last had focus, or
- * the first enabled one. Until the menubar has found its triggers, as in
- * server-rendered HTML, the root is in the Tab order instead, and focus on
- * it moves to the first enabled trigger once the menubar has found it. On a trigger, ArrowRight and ArrowLeft, or
+ * the first enabled one. Before mounting, including in server-rendered
+ * HTML, an enabled menubar uses the root as its Tab stop instead. On mount,
+ * focus on the root moves to the first enabled trigger. On a trigger,
+ * ArrowRight and ArrowLeft, or
  * ArrowDown and ArrowUp in a vertical menubar, move focus to the next and
  * the previous trigger, and Home and End to the first and the last.
  * Focusing a trigger opens nothing. Enter and Space open its menu, and so
@@ -204,7 +205,6 @@ const MenubarModel = Schema.Struct({
   current: Schema.NullOr(Schema.String),
   opening: Schema.NullOr(Schema.String),
   moves: Schema.Number,
-  // Whether TrackMenubar has looked for the triggers, which the server never does.
   tracked: Schema.Boolean
 })
 
@@ -276,7 +276,7 @@ const TrackMenubar = Mount.makeStream(
           attributeFilter: ["id", "disabled", triggerAttribute]
         })
         scan()
-        // The root was the Tab stop until now, as in server-rendered HTML: focus on it goes to the first trigger.
+        // Preserve keyboard focus when replacing the server-rendered root Tab stop.
         if (document.activeElement === node) enabled()[0]?.focus()
         yield* Effect.addFinalizer(() =>
           Effect.sync(() => observer?.disconnect())

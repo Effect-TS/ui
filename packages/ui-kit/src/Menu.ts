@@ -138,8 +138,8 @@
  * `ContextMenu` does. A menu opened that way is modal, blocks the whole
  * page, closes on Tab and gives focus back to the element that had it, and
  * a menu opened from its `trigger` behaves as above. The Menu key and
- * Shift+F10 open it against the `contextTrigger`, which is focusable for
- * them.
+ * Shift+F10 open it against the `contextTrigger`, which defaults to
+ * `tabindex="0"`.
  *
  * **Limits**
  *
@@ -496,8 +496,8 @@ export type MenuFilterMode = typeof MenuFilterMode.Type
  *   disabled submenu trigger doesn't open its submenu.
  * - `disabled`: the trigger and the items ignore the user.
  * - `modal`: while open, the page doesn't scroll, a press outside only
- *   closes the menu, and the rest of the page, but for the trigger, is
- *   hidden from assistive technology. True when left out. A submenu and a
+ *   closes the menu, and content outside the popup and trigger is hidden
+ *   from assistive technology. True when left out. A submenu and a
  *   menu opened by hovering are never modal.
  * - `loopFocus`: the arrow keys wrap from the last item to the first. True
  *   when left out.
@@ -1439,7 +1439,6 @@ const watch = (
       (node.contains(target) && !blocker.is(target)) ||
       (target instanceof Element && target.closest(selectors.any) !== null)
 
-    // What stays usable beside the popup of a modal menu: its trigger, or the whole menubar.
     const areaOf = (anchor: HTMLElement | null): Element | null =>
       anchor === null || current.context
         ? null
@@ -2183,7 +2182,7 @@ const listIdOf = (popupId: string) => popupId + "-list"
 const contextKey = ({ composing, key, shift }: Html.KeyPayload) =>
   !composing && (key === "ContextMenu" || (key === "F10" && shift))
 
-// For a `forward` hook, which sees the caller's attributes: `aria-controls` is a token list, so the menu's `id` joins the caller's.
+// Run in `forward` to preserve the caller's `aria-controls` tokens.
 const controlling = <
   B extends Attributed<B> & {
     readonly elementAttrs: Readonly<Record<string, string>>
@@ -2289,7 +2288,7 @@ export interface MenuTriggerProps {
   readonly popupId: string
   /** The trigger takes no press and no hover. */
   readonly disabled?: boolean | undefined
-  /** The menu has a filter, so its `list` part, which `aria-controls` points at instead, has the menu role. */
+  /** Point `aria-controls` at the `list` part when the menu uses a filter. */
   readonly filtered?: boolean | undefined
   /** How long the pointer rests on the trigger before `onHover`, in milliseconds. */
   readonly delay?: number | undefined
@@ -2305,8 +2304,9 @@ export interface MenuTriggerProps {
  *
  * It sets `aria-haspopup="menu"`, `aria-expanded`, `data-popup-open` and
  * `data-pressed` in `forward`, so they win over the caller's, and adds the
- * menu's `id` to the caller's `aria-controls` while the menu is open. Give the menu the same `id`,
- * and the trigger's `id` as the menu's `triggerId`: the menu then places
+ * menu's `id` to the caller's `aria-controls` while the menu is open. With
+ * `filtered: true`, it adds the `list` part's `id` instead. Give the menu
+ * the same `id`, and the trigger's `id` as the menu's `triggerId`: it places
  * its popup against the trigger, a press on it isn't a press outside, and
  * focus goes back to it when the menu closes.
  *
@@ -2495,8 +2495,8 @@ export const menuFilter = (
  * - `groupLabel`: `id`
  * - `arrow`, the indicators: `aria-hidden="true"`, and `id` on the
  *   arrow
- * - `separator`: `role="separator"`, and `aria-orientation` across the
- *   menu's: `"vertical"` in a horizontal menu, `"horizontal"` otherwise
+ * - `separator`: `role="separator"`, with `aria-orientation="vertical"`
+ *   in a horizontal menu and `"horizontal"` otherwise
  * - `input`: `id`, `type="text"`, `role="searchbox"`,
  *   `inputmode="search"`, `aria-activedescendant`, `aria-controls`
  *   pointing at the list, `value`, `disabled`, and `autocomplete="off"`,
@@ -2628,7 +2628,7 @@ export const Menu = Html.component({
     PressedContextTrigger: ($, { key, pointerType, triggerId, x, y }) => {
       const point = contextPoint(x, y, pointerType)
       const { justOpened, openMethod, trigger } = $.model
-      // Off macOS, the browser follows the Menu key or Shift+F10 the trigger handled with a `contextmenu` of its own.
+      // Ignore a browser-generated `contextmenu` after the keydown already opened the menu.
       return point === null && justOpened && openMethod === "keyboard" &&
           trigger === key
         ? $.model
@@ -2757,7 +2757,7 @@ export const Menu = Html.component({
         closeMethod: null,
         focusLeft: false
       })
-      // A `MenuTrigger` opened it from the keyboard, so the menu's own `open` didn't highlight an item.
+      // A detached `MenuTrigger` bypasses the menu's own opening logic.
       if (props.openMethod !== "keyboard" || $.model.active !== null) {
         return $.set(next)
       }
@@ -2998,7 +2998,7 @@ export const Menu = Html.component({
       : props.triggerId ?? model.triggerElement ?? undefined
     let listed = false
     let inputDrawn = false
-    // Read in a `forward` hook, once the view is drawn: with a `list` part, it has the menu role and not the popup.
+    // Resolve in `forward`: the view must finish drawing before we know whether it includes a `list`.
     const menuId = (expanded: boolean) =>
       expanded ? listed ? listId : popupId : undefined
 
