@@ -82,12 +82,12 @@ ${markRules}
 .tone-bad { color: var(--bad); }
 .tone-open { color: var(--open); }
 .launch { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); }
-.launcher { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; font-weight: 500; }
+.launcher { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 999px; font-weight: 500; }
 .launch .paused { padding: 0 4px 0 10px; border-left: 1px solid var(--line); }
 .lockup { flex: none; width: 36px; height: 18px; background: currentColor; -webkit-mask: ${lockup} center / contain no-repeat; mask: ${lockup} center / contain no-repeat; }
 @media (forced-colors: active) { .lockup { forced-color-adjust: none; background: ButtonText; } }
 .alert { display: flex; align-items: center; gap: 5px; align-self: stretch; padding: 0 12px 0 10px; border-left: 1px solid var(--line); color: var(--bad); font-weight: 500; font-variant-numeric: tabular-nums; }
-.launcher-count { color: var(--muted); font-variant-numeric: tabular-nums; }
+.launcher-count { color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1; text-box: trim-both cap alphabetic; }
 .panel { position: relative; width: min(var(--panel-w, 920px), calc(var(--vw, 100vw) - 24px)); height: min(var(--panel-h, 560px), calc(var(--vh, 100vh) - 24px)); display: grid; grid-template-rows: 44px minmax(0, 1fr); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); container: panel / inline-size; }
 .panel.empty { grid-template-rows: 44px 1fr; }
 .panel.pausing { grid-template-rows: 44px auto minmax(0, 1fr); }
