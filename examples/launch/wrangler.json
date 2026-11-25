@@ -1,0 +1,10 @@
+{
+  "name": "effect-ui-launch",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./dist"
+  },
+  "routes": [
+    { "pattern": "ui.effect.website", "custom_domain": true }
+  ]
+}

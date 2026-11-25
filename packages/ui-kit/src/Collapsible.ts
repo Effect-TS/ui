@@ -9,11 +9,11 @@
  *
  * **Anatomy**
  *
- * | Part      | Element                                |
- * | :-------- | :------------------------------------- |
- * | `root`    | `<div>` around the trigger and the panel |
- * | `trigger` | `<button>` that opens and closes the panel |
- * | `panel`   | `<div>` with the content                 |
+ * | Part      | Element                                       |
+ * | :-------- | :-------------------------------------------- |
+ * | `root`    | any element, around the trigger and the panel |
+ * | `trigger` | `<button>` that opens and closes the panel    |
+ * | `panel`   | any element, with the content                 |
  *
  * Each part takes the consumer's builder and returns it with the part
  * applied, and the consumer adds the children:
@@ -40,6 +40,10 @@
  * `overflow: hidden` and a `transition` on `height`, and `height: 0` under
  * `[data-starting-style]` and `[data-ending-style]`.
  *
+ * The size is read from `scrollHeight` and `scrollWidth`, which report `0` on
+ * an inline box, so an inline panel such as a `<span>` needs `display: block`
+ * to animate with `--collapsible-panel-height`.
+ *
  * A keyframe animation works too, from or to `var(--collapsible-panel-height)`.
  * The panel stays in the page until its own transitions and animations finish,
  * then the collapsible emits `Settled`. One that loops doesn't count. For an
@@ -60,7 +64,25 @@
  * without `until-found` keeps the panel hidden, and find-in-page skips it. A
  * panel hidden until found isn't `display: none`, so a panel styled with its
  * own `display` needs `.panel[hidden]:not([hidden="until-found"]) { display: none }`
- * to hide when it is closed with `keepMounted`.
+ * to hide when it is closed with `keepMounted: true`.
+ *
+ * **Collapsing below a breakpoint**
+ *
+ * Pass `keepMounted: "css"` for a panel that collapses below a breakpoint and
+ * stays open above it, such as a section list that toggles behind a button
+ * below `1200px` and always shows from `1200px` up. The closed panel stays in
+ * the page with `data-closed` and no `hidden` attribute, so CSS decides
+ * whether it shows on the first paint without a viewport subscription:
+ *
+ * - Hide the closed panel below the breakpoint with `display: none` or
+ *   `visibility: hidden`, so its links leave the tab order; `height: 0` or
+ *   `opacity: 0` alone leaves them focusable.
+ * - Hide the trigger wherever the panel always shows (`>= 1200px`), so it
+ *   doesn't report `aria-expanded="false"` beside a visible panel.
+ * - For a panel with an exit transition, key the hiding class on
+ *   `collapsible.mounted` rather than `[data-closed]`: `data-closed` appears
+ *   two frames before `data-ending-style`, so hiding on `[data-closed]` hides
+ *   the panel before its exit transition starts.
  *
  * **Example** (A section whose open state lives in the consumer's Model)
  *
@@ -122,7 +144,7 @@ import {
   ownStyle,
   withTokens
 } from "./internal/attributes.ts"
-import { override } from "./internal/dom.ts"
+import { isHTMLElement, override } from "./internal/dom.ts"
 import {
   frameOf,
   settling,
@@ -140,7 +162,9 @@ import { layerOf, rewrite, withAttr } from "./internal/tree.ts"
  * - `open`: whether the panel shows. Required: the consumer owns it.
  * - `disabled`: the trigger gets the native `disabled`, and neither a press
  *   nor a find-in-page match emits `Toggled`.
- * - `keepMounted`: the closed panel stays in the page, with `hidden`.
+ * - `keepMounted`: `true` keeps the closed panel in the page with `hidden`.
+ *   `"css"` keeps it in the page with `data-closed` and no `hidden`, so CSS
+ *   decides whether it shows.
  * - `hiddenUntilFound`: the closed panel stays in the page as
  *   `hidden="until-found"`, so find-in-page can reveal it. It wins over
  *   `keepMounted`.
@@ -156,7 +180,9 @@ import { layerOf, rewrite, withAttr } from "./internal/tree.ts"
 export const CollapsibleProps = Schema.Struct({
   open: Schema.Boolean,
   disabled: Schema.optional(Schema.Boolean),
-  keepMounted: Schema.optional(Schema.Boolean),
+  keepMounted: Schema.optional(
+    Schema.Union([Schema.Boolean, Schema.Literal("css")])
+  ),
   hiddenUntilFound: Schema.optional(Schema.Boolean),
   holdExit: Schema.optional(Schema.Boolean)
 })
@@ -296,8 +322,9 @@ type TrackPanelArgs = Schema.Struct<typeof TrackPanelArgs>["Type"]
 const TrackPanel = Mount.makeStream(
   "TrackPanel",
   { args: TrackPanelArgs },
-  (node: HTMLElement, args, changes) =>
+  (node: unknown, args, changes) =>
     Stream.callback<CollapsibleMessage>((queue) => {
+      if (!isHTMLElement(node)) return Effect.void
       const frame = frameOf(node.ownerDocument.defaultView)
       let step = 0
       const twoFrames = (f: () => void) => {
@@ -524,7 +551,7 @@ export const Collapsible = Html.component({
         readonly consumer: string | undefined
       }
     >()
-    const root = p.part("div", (b) =>
+    const root = p.part((b) =>
       states(b).forward((node) => {
         const target = open ? panelId : undefined
         if (
@@ -541,7 +568,8 @@ export const Collapsible = Html.component({
               withTokens(triggers.get(layer)!.consumer, target)
             )
         })
-      }))
+      })
+    )
 
     const trigger = p.part("button", (b) =>
       b
@@ -563,11 +591,15 @@ export const Collapsible = Html.component({
           return node.attr("aria-controls", withTokens(consumer, controls))
         }))
 
-    const panelPart = p.part("div", (b, id: string) =>
+    const panelPart = p.part((b, id: string) =>
       states(b)
         .attrs({
           id,
-          hidden: mounted ? undefined : hiddenUntilFound ? "until-found" : "",
+          hidden: mounted
+            ? undefined
+            : hiddenUntilFound
+            ? "until-found"
+            : flag(props.keepMounted !== "css"),
           "data-starting-style": flag(
             transitionStatus === "starting" || (!mounted && hiddenUntilFound)
           )
@@ -584,15 +616,16 @@ export const Collapsible = Html.component({
             holdExit: props.holdExit === true,
             hiddenUntilFound
           })
-        ))
+        )
+    )
     const panel = View.wrapPart(
       panelPart,
-      <B extends View.PartTarget<"div">>(
+      <B extends View.PartTarget<string>>(
         element: B
       ): ReturnType<B["attr"]> | undefined => {
         panelId = idOf(element) ?? panelId
         const out = panelPart(element, panelId)
-        return mounted || hiddenUntilFound || props.keepMounted === true
+        return mounted || hiddenUntilFound || props.keepMounted
           ? out
           : undefined
       }

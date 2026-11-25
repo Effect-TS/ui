@@ -87,8 +87,8 @@ ${markRules}
 .scrub { display: flex; align-items: center; gap: 12px; }
 .scrub input { flex: 1; min-width: 0; margin: 0; accent-color: var(--ink); }
 .scrub .at { min-width: 48px; text-align: right; font-variant-numeric: tabular-nums; }
-.pause-note { font-size: 12px; color: var(--muted); }
-.pause-note.tone-open { color: var(--open); }
+.pause-notes { height: 18px; font-size: 12px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pause-note + .pause-note::before { content: " · "; }
 .pause-note .path { font: 12px var(--mono); }
 .empty-note { padding: 20px; color: var(--muted); }
 .grip { position: absolute; width: 16px; height: 16px; z-index: 1; cursor: nwse-resize; touch-action: none; }
@@ -123,7 +123,7 @@ ${markRules}
 .find { flex: 1; min-width: 0; height: 24px; margin-left: 6px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: 12px var(--sans); }
 .find::placeholder { color: var(--faint); }
 .find:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; }
-.ilist { max-height: calc(var(--vh, 100vh) * .25); overflow: auto; overscroll-behavior: contain; }
+.ilist { --cap: calc(var(--vh, 100vh) * .25); max-height: var(--cap); min-height: min(var(--slots, 0) * 26px, var(--cap)); overflow: auto; overscroll-behavior: contain; }
 .iitem { display: flex; align-items: center; height: 26px; }
 .iitem.split { border-top: 1px solid var(--line); }
 .irow { display: flex; align-items: center; flex: 1; min-width: 0; height: 26px; padding: 0 20px 0 14px; white-space: nowrap; }
@@ -253,7 +253,7 @@ ${markRules}
   .left { border-right: 0; }
   [data-pane=timeline] > .body > .right, [data-pane=entry] > .body > .left { display: none; }
   .back { display: block; }
-  .ilist { max-height: calc(var(--vh, 100vh) * .2); }
+  .ilist { --cap: calc(var(--vh, 100vh) * .2); }
   .ehead { padding: 8px 16px 4px; }
   .tabs { column-gap: 12px; flex-wrap: wrap; padding: 0 16px; }
   .tab { flex: none; }

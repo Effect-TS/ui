@@ -87,7 +87,7 @@
  *       onEmit: { Picked: ({ value }) => PickerMessage.PickedStorage({ value }) },
  *       view: (radioGroup) =>
  *         radioGroup.root(h.div.class("group").attr("aria-label", "Storage")).children(
- *           ...storage.map(({ label, value }) =>
+ *           storage.map(({ label, value }) =>
  *             h.label.children(
  *               radioGroup.radio({ element: h.button.class("radio"), value }).children(
  *                 radioGroup.indicator({ element: h.span.class("dot"), value })

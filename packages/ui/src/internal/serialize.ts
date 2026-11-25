@@ -7,7 +7,6 @@ import type * as Component from "../Component.ts"
 import type * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
 import { runCodec, warnOnce, warnUnencoded } from "./codecRun.ts"
-import type * as keptRun from "./keptRun.ts"
 import type * as Kernel from "./kernel.ts"
 import { segment, slotSegment } from "./paths.ts"
 import type * as services from "./services.ts"
@@ -79,12 +78,9 @@ export const snapshot = (
     const shipped = inst.failure === undefined && !deferred.has(inst)
     const rendered = inst.rendered
     let kept: Array<Snap> | undefined
-    const table = inst.kept as keptRun.Table | undefined
-    if (table !== undefined) {
-      for (const entry of table.kids.values()) {
-        if (entry.rec === undefined && !entry.inst.closed) {
-          ;(kept ??= []).push(instance(entry.inst))
-        }
+    for (const entry of inst.kept?.children() ?? []) {
+      if (entry.rec === undefined && !entry.inst.closed) {
+        ;(kept ??= []).push(instance(entry.inst))
       }
     }
     const encoded = shipped

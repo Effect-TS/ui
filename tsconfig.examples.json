@@ -9,6 +9,7 @@
     { "path": "examples/counters" },
     { "path": "examples/file-preview" },
     { "path": "examples/interrupting-commands" },
+    { "path": "examples/launch" },
     { "path": "examples/routing" },
     { "path": "examples/snake" },
     { "path": "examples/snake-tui" },

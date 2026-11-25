@@ -116,6 +116,7 @@
  * @stability experimental
  * @since 0.1.0
  */
+import * as hot from "#hot"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
@@ -128,6 +129,7 @@ import type * as Component from "../Component.ts"
 import * as domHost from "../internal/domHost.ts"
 import type * as hydrateRun from "../internal/hydrateRun.ts"
 import type * as Kernel from "../internal/kernel.ts"
+import * as messageLog from "../internal/messageLog.ts"
 import * as runtime from "../internal/runtime.ts"
 import * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
@@ -557,6 +559,10 @@ export const mountRoot = (
       { host }
     )
     const outer = yield* Effect.context<Scope.Scope>()
+    const attached = hot.devTools(container)
+    const hotSession = hot.open(component, container)
+    const hydrating = hotSession?.hasSnapshot === true ? undefined : hydrate
+    if (hydrating !== hydrate) container.textContent = ""
     const scheduler =
       Context.getOrUndefined(outer, Scheduler.Scheduler) === undefined
         ? (defaultScheduler ??= HtmlScheduler.makeDefault())
@@ -564,6 +570,10 @@ export const mountRoot = (
     const scheduled = scheduler === undefined
       ? context
       : Context.add(context, Scheduler.Scheduler, scheduler)
+    const mountContext = attached !== undefined &&
+        Context.get(outer, messageLog.MessageLog) === messageLog.noop
+      ? Context.add(context, messageLog.MessageLog, attached.messageLog)
+      : context
     const root = yield* Effect.provideContext(
       runtime.mountDom(
         component,
@@ -571,9 +581,9 @@ export const mountRoot = (
         container,
         make,
         [Html.name],
-        { ...options, hydrate, scheduler }
+        { ...options, hydrate: hydrating, hot: hotSession, scheduler }
       ),
-      context
+      mountContext
     )
     const controlled = controllable(
       component,
@@ -584,7 +594,12 @@ export const mountRoot = (
       () => hold(container, true),
       () => hold(container, false)
     )
-    const unregister = Context.get(outer, Controllables).register(controlled)
+    const currentControllables = Context.get(outer, Controllables)
+    const activeControllables =
+      attached !== undefined && currentControllables === defaultControllables
+        ? attached.controllables
+        : currentControllables
+    const unregister = activeControllables.register(controlled)
     yield* Effect.addFinalizer(() =>
       Effect.andThen(Effect.sync(unregister), controlled.resume)
     )
@@ -772,6 +787,8 @@ export interface Controllables {
 
 const unregistered = () => {}
 
+const defaultControllables: Controllables = { register: () => unregistered }
+
 /**
  * The `Controllables` service, read by `mount`, `mountEffect` and
  * `HtmlHydrate.hydrate`.
@@ -783,7 +800,7 @@ const unregistered = () => {}
 export const Controllables: Context.Reference<Controllables> = Context
   .Reference<Controllables>(
     "@effect/ui/html/BrowserHost/Controllables",
-    { defaultValue: () => ({ register: () => unregistered }) }
+    { defaultValue: () => defaultControllables }
   )
 
 // `showModal()` makes everything outside the dialog inert, DevTools included, while the copy's own `inert`

@@ -20,7 +20,6 @@ import * as domHost from "./domHost.ts"
 import * as Executor from "./executor.ts"
 import * as heads from "./heads.ts"
 import type * as hydrateRun from "./hydrateRun.ts"
-import type * as keptRun from "./keptRun.ts"
 import * as Kernel from "./kernel.ts"
 import * as lazy from "./lazy.ts"
 import * as messageLog from "./messageLog.ts"
@@ -277,6 +276,23 @@ const idleOf = (
   }
 }
 
+/** @internal */
+export interface HotSession {
+  readonly hasSnapshot: boolean
+  readonly init: (
+    inst: Kernel.Instance,
+    first: Kernel.Next
+  ) => Kernel.Next | undefined
+  readonly restored: (inst: Kernel.Instance) => boolean
+  readonly hold: (
+    ...args: Parameters<NonNullable<Kernel.Host["hold"]>>
+  ) => boolean | undefined
+  readonly attach: (inst: Kernel.Instance) => void
+  readonly flushed: (buildsPendingSince: (flush: number) => number) => void
+  readonly clear: () => void
+  readonly detach: () => void
+}
+
 interface Options {
   readonly fallback?:
     | ((
@@ -285,10 +301,12 @@ interface Options {
     ) => View.Content<never, any>)
     | undefined
   readonly hydrate?: hydrateRun.Hydrating | undefined
+  readonly hot?: HotSession | undefined
   readonly query?: Renderer.QueryOptions | undefined
   readonly head?: boolean | undefined
   readonly adoptionHead?: boolean | undefined
   readonly scheduler?: Scheduler.Scheduler | undefined
+  readonly recordEmitted?: boolean | undefined
 }
 
 const makeCell = (
@@ -492,7 +510,9 @@ const start = (
   const session = `${clock.currentTimeMillisUnsafe().toString(36)}-k${
     (sessions++).toString(36)
   }`
-  const emitted: Array<unknown> = []
+  const emitted: Array<unknown> | undefined = options?.recordEmitted === true
+    ? []
+    : undefined
   let flushes = 0
   let inFlush = true
   const since = () => inFlush ? flushes : flushes + 1
@@ -501,6 +521,7 @@ const start = (
     : messageLog.recorder(logService, clock, session, component.definition.name)
   let initCommands: ReadonlyArray<unknown> | undefined
   const hydrate = options?.hydrate
+  const hot = options?.hot
   const record: Kernel.Recorder = (inst, draft) => {
     if (initCommands !== undefined && draft._tag === "Mounted") {
       draft = { ...draft, commands: initCommands }
@@ -512,12 +533,16 @@ const start = (
       draft = next
     }
     if (
+      emitted !== undefined &&
       inst.parent === undefined &&
       (draft._tag === "Update" || draft._tag === "Mounted")
     ) {
       emitted.push(...(draft.events as ReadonlyArray<unknown>))
     }
-    if (draft._tag === "Mounted" && routing?.restored(inst) === true) {
+    if (
+      draft._tag === "Mounted" &&
+      (routing?.restored(inst) === true || hot?.restored(inst) === true)
+    ) {
       draft = { ...draft, adopted: true }
     }
     const seq = recording.record(inst, draft)
@@ -578,15 +603,22 @@ const start = (
       kernelRoot !== undefined &&
       hydrating?.adopts(kernelRoot.instance) === true,
     static: hydrate?.static === true,
-    navigated: () => hydrating?.closeWindow()
+    navigated: () => {
+      hydrating?.closeWindow()
+      hot?.clear()
+    }
   })
   const bridged: Kernel.Host = {
     ...base,
-    hold: routing?.hold,
+    hold: hot === undefined
+      ? routing?.hold
+      : (owner, rec, at) =>
+        hot.hold(owner, rec, at) ?? routing?.hold(owner, rec, at) ?? false,
     commit: () => {
       base.commit?.()
       hydrating?.commit()
       routing?.flushed()
+      hot?.flushed(building)
       idle?.check()
     },
     server: server?.hooks(ctx, record, deferred)
@@ -645,7 +677,8 @@ const start = (
             )
           }
           const first = inst.component.init(inst.props)
-          const adopted = hydrating?.init(inst, first)
+          const adopted = hydrating?.init(inst, first) ??
+            hot?.init(inst, first)
           if (adopted !== undefined) {
             return routing === undefined
               ? adopted
@@ -700,6 +733,10 @@ const start = (
     routing.attach(instance)
     routing.flushed()
   }
+  if (hot !== undefined) {
+    hot.attach(instance)
+    hot.flushed(building)
+  }
   tree.flush = since
   const head = () =>
     tree.head?.value ??
@@ -709,7 +746,7 @@ const start = (
     path: instance.path,
     session,
     instance: instance as unknown as Instance,
-    emitted,
+    emitted: emitted ?? noCommands,
     model: () => instance.failure === undefined ? instance.model : undefined,
     send: (message: unknown) => recording.step(() => mounted.send(message)),
     find: (born: number) =>
@@ -760,6 +797,7 @@ const start = (
     idle,
     close: Effect.suspend(() => {
       routing?.detach()
+      hot?.detach()
       dom?.dispose()
       if (frozen) tree.closed = false
       mounted.close()
@@ -779,12 +817,9 @@ const findIn = (
     ? undefined
     : findInRec(inst.rendered, born, numberOf)
   if (found !== undefined) return found
-  const kept = inst.kept as keptRun.Table | undefined
-  if (kept !== undefined) {
-    for (const entry of kept.kids.values()) {
-      const found = findIn(entry.inst, born, numberOf)
-      if (found !== undefined) return found
-    }
+  for (const entry of inst.kept?.children() ?? []) {
+    const found = findIn(entry.inst, born, numberOf)
+    if (found !== undefined) return found
   }
   return undefined
 }

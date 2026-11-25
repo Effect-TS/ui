@@ -13,7 +13,20 @@ type Button = Html.Element<
   HTMLButtonElement,
   "button"
 >
-type Div = Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
+type Section = Html.Element<
+  Msg,
+  never,
+  Html.EventsOf<"section">,
+  HTMLElement,
+  "section"
+>
+type Span = Html.Element<
+  Msg,
+  never,
+  Html.EventsOf<"span">,
+  HTMLSpanElement,
+  "span"
+>
 
 declare const h: View.Helper<Msg, unknown> & View.Tags<Html.Elements, Msg>
 
@@ -32,17 +45,15 @@ describe("Collapsible", () => {
           h.button.class("trigger").onClick(Msg.Clicked())
         )
         expect(trigger).type.toBe<Button>()
-        expect(collapsible.root(h.div)).type.toBe<Div>()
-        expect(collapsible.panel(h.div)).type.toBe<Div | undefined>()
+        expect(collapsible.root(h.section)).type.toBe<Section>()
+        expect(collapsible.panel(h.span)).type.toBe<Span | undefined>()
         expect(collapsible.open).type.toBe<boolean>()
         expect(collapsible.mounted).type.toBe<boolean>()
         expect(collapsible.transitionStatus).type.toBe<
           "starting" | "ending" | null
         >()
 
-        expect(collapsible.root).type.not.toBeCallableWith(h.span)
         expect(collapsible.trigger).type.not.toBeCallableWith(h.div)
-        expect(collapsible.panel).type.not.toBeCallableWith(h.section)
         return collapsible.root(h.div).children(
           trigger,
           collapsible.panel(h.div)?.children("Content")
@@ -56,6 +67,10 @@ describe("Collapsible", () => {
     expect(Collapsible).type.not.toBeCallableWith(h, { props: {}, view })
     expect(Collapsible).type.not.toBeCallableWith(h, {
       props: { open: true, keepMounted: "yes" },
+      view
+    })
+    Collapsible(h, {
+      props: { open: false, keepMounted: "css" },
       view
     })
     Collapsible(h, {

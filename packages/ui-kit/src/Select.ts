@@ -173,7 +173,7 @@
  *                 select.trigger(field.member(h.button)).children(select.value(h.span), select.icon(h.span).children("▾")),
  *                 select.positioner(h.div).children(
  *                   select.popup(h.div).children(
- *                     ...themes.map(({ label, value }) =>
+ *                     themes.map(({ label, value }) =>
  *                       select.item({ element: h.div, value }).children(
  *                         select.itemText(h.div).children(label),
  *                         select.itemIndicator({ element: h.span, value })?.children("✓")
