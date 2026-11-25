@@ -576,7 +576,7 @@ describe("Select in a document", { concurrent: false }, () => {
           keydown(item("light"), "Escape")
           yield* tick
           yield* reopenAndClose
-          assert.deepStrictEqual(visible, [false, true, false])
+          assert.deepStrictEqual(visible, [undefined, true, undefined])
         }))
         yield* Effect.scoped(Effect.gen(function*() {
           const { log, root } = yield* mountPage({

@@ -70,7 +70,10 @@ export const focusFinal = (
   const marked = byAttribute(document, "data-final-focus", popupId)
   const back = marked ?? fallback
   if (back !== null && (marked !== null || lost)) {
-    back.focus({ preventScroll: true, focusVisible: keyboard } as FocusOptions)
+    back.focus({
+      preventScroll: true,
+      focusVisible: keyboard ? true : undefined
+    } as FocusOptions)
   }
 }
 
