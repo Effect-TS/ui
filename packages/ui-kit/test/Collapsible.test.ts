@@ -98,6 +98,16 @@ describe("Collapsible", () => {
       disabled.click(trigger)
       assert.deepStrictEqual(disabled.current.emitted, [])
 
+      const css = yield* Scene.make(
+        Collapsible,
+        { open: false, keepMounted: "css" },
+        standIn
+      )
+      css.expectMount(tracked(css))
+      assert.deepInclude(css.get(panel).attrs, { "data-closed": "" })
+      assert.isUndefined(css.get(panel).attrs?.hidden)
+      assert.isUndefined(css.get(panel).attrs?.["data-starting-style"])
+
       const untilFound = yield* Scene.make(
         Collapsible,
         { open: false, keepMounted: true, hiddenUntilFound: true },
@@ -108,6 +118,12 @@ describe("Collapsible", () => {
         hidden: "until-found",
         "data-starting-style": ""
       })
+      untilFound.props({
+        open: false,
+        keepMounted: "css",
+        hiddenUntilFound: true
+      })
+      assert.strictEqual(untilFound.get(panel).attrs?.hidden, "until-found")
     }))
 
   it("the root repoints a trigger built before the panel to the consumer's panel id, on the button itself and not another element", () => {
@@ -142,24 +158,16 @@ describe("Collapsible", () => {
     )
   })
 
-  it("each part rejects another tag", () => {
+  it("root and panel accept any element while trigger requires button", () => {
     const collapsible = parts({ open: true })
-    assert.strictEqual(View.build(collapsible.root(h.div), []).tag, "div")
-    assert.throws(
-      () => collapsible.root(h.span as any),
-      /a part for <div> was given <span>/
+    assert.strictEqual(
+      View.build(collapsible.root(h.section), []).tag,
+      "section"
     )
+    assert.strictEqual(View.build(collapsible.panel(h.span)!, []).tag, "span")
     assert.throws(
       () => collapsible.trigger(h.div as any),
       /a part for <button> was given <div>/
-    )
-    assert.throws(
-      () => collapsible.panel(h.section as any),
-      /a part for <div> was given <section>/
-    )
-    assert.throws(
-      () => parts({ open: false }).panel(h.section as any),
-      /a part for <div> was given <section>/
     )
   })
 
