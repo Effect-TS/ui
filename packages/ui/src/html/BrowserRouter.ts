@@ -14,7 +14,8 @@
  * `download`. Anything else is a full page load. `<form method="get">` is
  * intercepted by the same test. Following either to the current route sends a
  * message without scrolling to the top, announcing or moving focus. A change
- * to the hash still scrolls as usual.
+ * to the hash still scrolls as usual. Both work the same in a root mounted
+ * inside a shadow root, open or closed.
  *
  * Once a navigation settles (the first flush after the root received it in
  * which no Layer build begun since is still pending), the router scrolls,
@@ -85,6 +86,7 @@ import * as Effect from "effect/Effect"
 import type * as Fiber from "effect/Fiber"
 import * as Layer from "effect/Layer"
 import * as Option from "effect/Option"
+import * as services from "../internal/services.ts"
 import type * as Route from "../Route.ts"
 import * as Router from "../Router.ts"
 import * as submit from "./internal/submit.ts"
@@ -419,7 +421,7 @@ const make = (
     // --- intent ------------------------------------------------------------
     // Hover and focus count after 50 ms on the Effect Clock, touch at once. Moving between elements
     // inside one anchor neither cancels nor restarts the wait.
-    const services = yield* Effect.context<never>()
+    const intentContext = yield* Effect.context<never>()
     let intended: Element | undefined
     let waiting: Fiber.Fiber<void> | undefined
     const cancelIntent = () => {
@@ -435,7 +437,7 @@ const make = (
       intended = anchor
       const href = hrefOf(anchor)
       if (href === undefined) return
-      waiting = Effect.runForkWith(services)(
+      waiting = Effect.runForkWith(intentContext)(
         Effect.andThen(
           Effect.sleep(intentDelay),
           Effect.suspend(() => {
@@ -499,24 +501,68 @@ const make = (
         )
       } else follow(event, href)
     }
-    document.addEventListener("click", onClick)
-    document.addEventListener("submit", onSubmit)
-    document.addEventListener("mouseover", onEnter)
-    document.addEventListener("focusin", onEnter)
-    document.addEventListener("mouseout", onLeave)
-    document.addEventListener("focusout", onLeave)
-    document.addEventListener("touchstart", onTouch, { passive: true })
+    const handled = new WeakSet<Event>()
+    const begin = (event: Event) => {
+      handled.delete(event)
+    }
+    const once = <E extends Event>(f: (event: E) => void) => (event: E) => {
+      if (handled.has(event)) return
+      handled.add(event)
+      f(event)
+    }
+    const listeners: ReadonlyArray<
+      readonly [string, (event: any) => void, AddEventListenerOptions?]
+    > = [
+      ["click", once(onClick)],
+      ["submit", once(onSubmit)],
+      ["mouseover", once(onEnter)],
+      ["focusin", once(onEnter)],
+      ["mouseout", once(onLeave)],
+      ["focusout", once(onLeave)],
+      ["touchstart", once(onTouch), { passive: true }]
+    ]
+    const listen = (target: EventTarget) => {
+      for (const [type, f, options] of listeners) {
+        target.addEventListener(type, begin, { capture: true, passive: true })
+        target.addEventListener(type, f, options)
+      }
+    }
+    const unlisten = (target: EventTarget) => {
+      for (const [type, f] of listeners) {
+        target.removeEventListener(type, begin, true)
+        target.removeEventListener(type, f)
+      }
+    }
+    const shadows = new Map<ShadowRoot, number>()
+    listen(document)
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         cancelIntent()
-        document.removeEventListener("click", onClick)
-        document.removeEventListener("submit", onSubmit)
-        document.removeEventListener("mouseover", onEnter)
-        document.removeEventListener("focusin", onEnter)
-        document.removeEventListener("mouseout", onLeave)
-        document.removeEventListener("focusout", onLeave)
-        document.removeEventListener("touchstart", onTouch)
+        unlisten(document)
+        for (const shadow of shadows.keys()) unlisten(shadow)
       })
     )
-    return context
+
+    const hooks = Context.getUnsafe(context, services.RootHooks)
+    return Context.add(context, services.RootHooks, {
+      ...hooks,
+      attach: (root) => {
+        const detach = hooks.attach(root)
+        const node = (root.container as Partial<Node>).getRootNode?.()
+        if (node === undefined || !("host" in node)) return detach
+        const shadow = node as ShadowRoot
+        const count = shadows.get(shadow) ?? 0
+        if (count === 0) listen(shadow)
+        shadows.set(shadow, count + 1)
+        return () => {
+          detach()
+          const count = shadows.get(shadow)!
+          if (count > 1) shadows.set(shadow, count - 1)
+          else {
+            shadows.delete(shadow)
+            unlisten(shadow)
+          }
+        }
+      }
+    })
   }))
