@@ -15,11 +15,12 @@ import {
   type Attributed,
   attrSelector,
   flag,
+  ownStyle,
   separatorAttrs,
   visuallyHidden,
   withStyle
 } from "./attributes.ts"
-import { backdropBox, blockers, cutPath, inPlaceBackdrop } from "./blocker.ts"
+import { backdropStyle, blockers, cutPath } from "./blocker.ts"
 import {
   type Directed,
   isRtl,
@@ -1038,7 +1039,7 @@ const watch = (
         node.addEventListener("focusin", onFocusIn, { signal })
         node.addEventListener("mousedown", onMouseDown, { signal })
         hold()
-        if (current.position.topLayer !== false) raiseAbove(node)
+        raiseAbove(node)
         if (current.open) opening()
         else node.inert = true
         follow(current.open ? current.list : null)
@@ -1784,20 +1785,11 @@ export const make = <P, E>(
       ) => chipRemovePart(element, value)
     )
 
-    const backdropStyle = topLayer ? backdropBox : inPlaceBackdrop
     const backdrop = p.part(
       "div",
       (b) =>
         layered(states(b).attr("role", "presentation"), topLayer, shown)
-          .forward((node) =>
-            node.attr(
-              "style",
-              withStyle(
-                node.elementAttrs.style,
-                open ? backdropStyle : backdropStyle + ";pointer-events:none"
-              )
-            )
-          )
+          .forward(ownStyle(backdropStyle(topLayer, open)))
     )
 
     const positionerStyle = Positioning.positionerStyle(tracked.positionMethod)

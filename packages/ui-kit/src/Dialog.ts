@@ -261,7 +261,12 @@ import {
   radioGroup
 } from "./internal/dom.ts"
 import { methodOf, onScrollbar } from "./internal/interaction.ts"
-import { hideOthers, lockScroll, nextLayerOrder } from "./internal/modal.ts"
+import {
+  hideOthers,
+  lockScroll,
+  modalOf,
+  nextLayerOrder
+} from "./internal/modal.ts"
 import { isAndroid } from "./internal/platform.ts"
 import {
   inKept,
@@ -492,10 +497,6 @@ type DialogUpdate = Component.Update<
 
 const topmost = (model: DialogModel): boolean => model.nestedOpen === 0
 
-// A dialog drawn in place is never modal.
-const modalOf = (props: DialogProps): DialogModal =>
-  props.topLayer === false ? false : props.modal ?? true
-
 const dismiss = (
   $: DialogUpdate,
   reason: DialogDismissReason,
@@ -596,7 +597,6 @@ const TrackDialogArgs = {
   closedByOutsidePress: Schema.Boolean,
   triggerId: Schema.NullOr(Schema.String),
   holdExit: Schema.Boolean,
-  topLayer: Schema.Boolean,
   portalId: Schema.String,
   popupId: Schema.String
 }
@@ -929,11 +929,7 @@ const TrackDialog = Mount.makeStream(
           event.pointerType === "touch" ||
           (current.modal === "trap-focus" && !hasBackdrop())
         ) {
-          if (
-            event.pointerType === "touch" &&
-            (current.modal === true ||
-              (target !== null && node.contains(target)))
-          ) {
+          if (event.pointerType === "touch" && node.contains(target)) {
             swallowClick(event)
           }
           dismissing = event.pointerId
@@ -1107,7 +1103,7 @@ const TrackDialog = Mount.makeStream(
       const shows = () => {
         if (showed || signal.aborted) return
         showed = true
-        if (current.topLayer) raiseAbove(node)
+        raiseAbove(node)
         opening(active)
       }
 
@@ -1500,7 +1496,7 @@ export const Dialog = Html.component({
       // host doesn't call `dialog.show()`, whose focusing steps override `initialFocus: false`.
       const placed = topLayer
         ? identified.open(false).popover("manual", model.mounted)
-        : identified.attr("open", model.mounted ? "" : undefined)
+        : identified.attr("open", flag(model.mounted))
       const dialog = placed
         .forward((node) =>
           node
@@ -1537,7 +1533,6 @@ export const Dialog = Html.component({
           closedByOutsidePress: model.reason === "outside-press",
           triggerId: activeTrigger,
           holdExit: props.holdExit === true,
-          topLayer,
           portalId,
           popupId
         })

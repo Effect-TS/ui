@@ -1,5 +1,12 @@
 import { perDocument, saved } from "./dom.ts"
 
+// A dialog drawn in place, with `topLayer: false`, is never modal.
+export const modalOf = (props: {
+  readonly modal?: boolean | "trap-focus" | undefined
+  readonly topLayer?: boolean | undefined
+}): boolean | "trap-focus" =>
+  props.topLayer === false ? false : props.modal ?? true
+
 interface Layer {
   readonly inside: Element
   readonly also: ReadonlyArray<Element>

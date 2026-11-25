@@ -286,12 +286,7 @@ import {
   withStyle,
   withTokens
 } from "./internal/attributes.ts"
-import {
-  backdropBox,
-  blockers,
-  cutPath,
-  inPlaceBackdrop
-} from "./internal/blocker.ts"
+import { backdropStyle, blockers, cutPath } from "./internal/blocker.ts"
 import { isRtl, provided, rightToLeft } from "./internal/direction.ts"
 import { focusFinal, override } from "./internal/dom.ts"
 import { type TextFilter, textFilter } from "./internal/filter.ts"
@@ -2086,7 +2081,7 @@ const watch = (
           send(MenuMessage.ChangedProvider({ rtl: current.provider }))
         }
         hold()
-        if (current.position.topLayer !== false) raiseAbove(node)
+        raiseAbove(node)
         if (current.open) {
           opening()
           remember(false)
@@ -3315,16 +3310,7 @@ export const Menu = Html.component({
         topLayer,
         shown && !nested
       )
-        .forward((node) =>
-          node.attr(
-            "style",
-            withStyle(
-              node.elementAttrs.style,
-              (topLayer ? backdropBox : inPlaceBackdrop) +
-                (open && !hovered ? "" : ";pointer-events:none")
-            )
-          )
-        ))
+        .forward(ownStyle(backdropStyle(topLayer, open && !hovered))))
 
     const positionerStyle = Positioning.positionerStyle(tracked.positionMethod)
     const positioner = p.part("div", (b) => {

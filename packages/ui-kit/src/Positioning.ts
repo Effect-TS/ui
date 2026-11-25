@@ -1440,10 +1440,33 @@ const toLocal = (rect: Rect, origin: Origin): Rect => ({
   height: rect.height / origin.scale.y
 })
 
+// Where the top layer puts `left: 0; top: 0`, and a positioner in place
+// without a containing block of its own. Fixed positioning uses layout
+// coordinates, but WebKit's client rects are relative to the visual viewport.
+const pageOrigin = (
+  view: Window,
+  position: string,
+  webkit: boolean
+): Origin => {
+  if (position !== "fixed") {
+    return { x: -view.scrollX, y: -view.scrollY, scale: { x: 1, y: 1 } }
+  }
+  const visual = webkit ? view.visualViewport : null
+  return {
+    x: -(visual?.offsetLeft ?? 0),
+    y: -(visual?.offsetTop ?? 0),
+    scale: { x: 1, y: 1 }
+  }
+}
+
 // The viewport point that `left: 0; top: 0` puts a positioner at, and the
 // scale of the box it is measured in: the padding box of its containing
 // block, less that block's scroll.
-const originOf = (element: Element, position: string): Origin => {
+const originOf = (
+  element: Element,
+  position: string,
+  webkit: boolean
+): Origin => {
   const document = element.ownerDocument
   const view = document.defaultView!
   for (
@@ -1461,10 +1484,7 @@ const originOf = (element: Element, position: string): Origin => {
       scale
     }
   }
-  const unscaled = { x: 1, y: 1 }
-  return position === "fixed"
-    ? { x: 0, y: 0, scale: unscaled }
-    : { x: -view.scrollX, y: -view.scrollY, scale: unscaled }
+  return pageOrigin(view, position, webkit)
 }
 
 const sameRect = (a: Rect, b: Rect): boolean =>
@@ -1641,17 +1661,9 @@ export const trackPosition = (
       const viewport = viewportOf()
       const rtl = view.getComputedStyle(node).direction === "rtl"
       const lines = anchor === null ? null : inlineLines(anchor)
-      // Fixed positioning uses layout coordinates; add back WebKit's visual offset.
-      const visual = webkit ? view.visualViewport : null
       const origin = current.topLayer === false
-        ? originOf(node, current.positionMethod)
-        : current.positionMethod === "absolute"
-        ? { x: -view.scrollX, y: -view.scrollY, scale: { x: 1, y: 1 } }
-        : {
-          x: -(visual?.offsetLeft ?? 0),
-          y: -(visual?.offsetTop ?? 0),
-          scale: { x: 1, y: 1 }
-        }
+        ? originOf(node, current.positionMethod, webkit)
+        : pageOrigin(view, current.positionMethod, webkit)
       const input = {
         popup,
         arrow: arrow === null

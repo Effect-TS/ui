@@ -200,6 +200,7 @@ import {
   trackKeyboard,
   TrackKeyboardArgs
 } from "./internal/drawerKeyboard.ts"
+import { modalOf } from "./internal/modal.ts"
 import { clamp } from "./internal/range.ts"
 
 /**
@@ -2071,7 +2072,7 @@ export const Drawer = Html.component({
         ? b.onMount(
           TrackDrawerKeyboard({
             open,
-            modal: props.topLayer === false ? false : props.modal ?? true,
+            modal: modalOf(props),
             popupId: drawerId
           })
         )

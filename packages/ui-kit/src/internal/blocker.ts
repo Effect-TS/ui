@@ -20,15 +20,11 @@ export const blockers = (attribute: string) => {
   }
 }
 
-export const backdropBox =
-  "position:fixed;inset:0;width:auto;height:auto;max-width:none;max-height:none;margin:0;" +
-  noSelect
-
 // A backdrop drawn in place covers its containing block, not the viewport.
-export const inPlaceBackdrop = backdropBox.replace(
-  "position:fixed",
-  "position:absolute"
-)
+export const backdropStyle = (topLayer: boolean, pressable: boolean): string =>
+  "position:" + (topLayer ? "fixed" : "absolute") +
+  ";inset:0;width:auto;height:auto;max-width:none;max-height:none;margin:0;" +
+  noSelect + (pressable ? "" : ";pointer-events:none")
 
 export const cutPath = (holes: ReadonlyArray<DOMRect>): string =>
   "polygon(0% 0%,100% 0%,100% 100%,0% 100%,0% 0%," +

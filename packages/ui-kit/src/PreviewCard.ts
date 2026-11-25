@@ -871,7 +871,6 @@ const TrackPreviewCardPresence = Mount.makeStream(
       mounted: Schema.Boolean,
       started: Schema.Boolean,
       holdExit: Schema.Boolean,
-      topLayer: Schema.Boolean,
       popupId: Schema.String,
       trigger: Schema.String
     }
@@ -912,7 +911,7 @@ const TrackPreviewCardPresence = Mount.makeStream(
         if (previous.open && !next.open) closing()
         if (!previous.open && next.open) {
           node.inert = false
-          if (current.topLayer) raiseAbove(node)
+          raiseAbove(node)
           send(PreviewCardMessage.ShowedPortal())
           opening()
         }
@@ -920,7 +919,7 @@ const TrackPreviewCardPresence = Mount.makeStream(
       }
       return Effect.acquireRelease(
         Effect.sync(() => {
-          if (current.topLayer) raiseAbove(node)
+          raiseAbove(node)
           node.inert = !current.open
           if (!current.mounted) send(PreviewCardMessage.ShowedPortal())
           if (current.open) opening()
@@ -1364,7 +1363,6 @@ export const PreviewCard = Html.component({
             mounted: model.mounted,
             started: model.started,
             holdExit: props.holdExit === true,
-            topLayer,
             popupId,
             trigger: triggerSelector
           })

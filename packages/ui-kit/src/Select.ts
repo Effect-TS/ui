@@ -226,15 +226,11 @@ import {
   type Attributed,
   flag,
   idSelector,
+  ownStyle,
   separatorAttrs,
   withStyle
 } from "./internal/attributes.ts"
-import {
-  backdropBox,
-  blockers,
-  cutPath,
-  inPlaceBackdrop
-} from "./internal/blocker.ts"
+import { backdropStyle, blockers, cutPath } from "./internal/blocker.ts"
 import { focusFinal, override } from "./internal/dom.ts"
 import {
   autofillMatch,
@@ -1268,7 +1264,7 @@ const watch = (
         })
         view?.addEventListener("resize", onResize, { signal })
         hold()
-        if (current.position.topLayer !== false) raiseAbove(node)
+        raiseAbove(node)
         if (current.open) opening()
         else node.inert = true
       }).pipe(
@@ -1697,20 +1693,11 @@ export const Select = Html.component({
       (b) => b.attrs({ "aria-hidden": "true", "data-popup-open": flag(open) })
     )
 
-    const backdropStyle = topLayer ? backdropBox : inPlaceBackdrop
     const backdrop = p.part(
       "div",
       (b) =>
         layered(states(b).attr("role", "presentation"), topLayer, shown)
-          .forward((node) =>
-            node.attr(
-              "style",
-              withStyle(
-                node.elementAttrs.style,
-                open ? backdropStyle : backdropStyle + ";pointer-events:none"
-              )
-            )
-          )
+          .forward(ownStyle(backdropStyle(topLayer, open)))
     )
 
     const positionerStyle = aligned
