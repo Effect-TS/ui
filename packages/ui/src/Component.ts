@@ -2224,6 +2224,7 @@ const Proto = Object.assign(Object.create(Function.prototype), {
       queryCore.loaded!.run.first(inst as never)
     }
     if (this.head !== undefined) heads.loaded?.(inst as never)
+    if (this.elements?.head !== undefined) heads.trackFold(inst as never)
   },
   "~kept": keeper
 })

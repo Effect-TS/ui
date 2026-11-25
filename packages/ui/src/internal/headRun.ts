@@ -46,14 +46,10 @@ class Folding {
     const tree = this.root.tree
     const failed: Array<Kernel.Instance | unknown> = []
     let fold = foldOf(this.root) ?? this.neutral
-    // A neutral fold gives way to the first one found below, which may not
-    // skip empty nodes. An `html` root is taken to hold only `html`, so none
-    // is found below it.
-    const skip = (fold !== this.neutral ||
-      (this.root.component as unknown as Component.Any).elements?.name ===
-        "html") &&
-      skipsEmpty(fold.merge)
-    // The tree below the root is walked only when something in it has a head.
+    const skip = skipsEmpty(fold.merge) && (
+      fold !== this.neutral ||
+      (heads.html === undefined && !heads.hasCustomFold(tree))
+    )
     const walk = !skip || this.active.size > 1 ||
       (this.active.size === 1 && !this.active.has(this.root))
     const node = (inst: Kernel.Instance): Head.Tree<unknown> | undefined => {
