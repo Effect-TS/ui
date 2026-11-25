@@ -464,8 +464,8 @@ const TrackViewport = Mount.makeStream(
     Stream.callback<ViewportFact>((queue) =>
       Effect.gen(function*() {
         const document = node.ownerDocument
-        let { empty, hovering } = args
-        const { topLayer } = args
+        let { empty, hovering, topLayer } = args
+        let unkeep = () => {}
         let focused = false
         const toastRoot = attrSelector(rootAttr, args.id)
         const focusable = `${toastRoot}:not([data-ending-style]):not([inert])`
@@ -582,7 +582,7 @@ const TrackViewport = Mount.makeStream(
         }
         yield* Effect.acquireRelease(
           Effect.sync(() => {
-            const unkeep = topLayer ? keepOnTop(node) : () => {}
+            unkeep = topLayer ? keepOnTop(node) : () => {}
             const observer = new MutationObserver(handOff)
             observer.observe(node, {
               subtree: true,
@@ -610,6 +610,11 @@ const TrackViewport = Mount.makeStream(
           Effect.sync(() => {
             empty = next.empty
             hovering = next.hovering
+            if (next.topLayer !== topLayer) {
+              topLayer = next.topLayer
+              unkeep()
+              unkeep = topLayer ? keepOnTop(node) : () => {}
+            }
           })).pipe(Effect.forkScoped)
       })
     )

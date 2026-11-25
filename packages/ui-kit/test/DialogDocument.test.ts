@@ -56,6 +56,7 @@ const Config = Schema.Struct({
   toast: Schema.Boolean,
   nested: Schema.Boolean,
   viewport: Schema.Boolean,
+  backdrop: Schema.Boolean,
   finalMark: Schema.Boolean,
   initialFocus: Schema.optional(Schema.Boolean),
   skips: Schema.Boolean,
@@ -76,6 +77,7 @@ const config = (overrides: Partial<Config>): Config => ({
   toast: false,
   nested: false,
   viewport: false,
+  backdrop: false,
   finalMark: false,
   skips: false,
   ...overrides
@@ -277,6 +279,9 @@ const Page = Html.component({
                   String(dialog.closeMethod)
                 ),
                 dialog.portal(h.dialog)?.children(
+                  props.backdrop
+                    ? dialog.backdrop(h.div.attr("id", "backdrop"))
+                    : null,
                   props.viewport
                     ? dialog.viewport(h.div.attr("id", "viewport")).children(
                       popup
@@ -872,6 +877,49 @@ describe("Dialog in a document", { concurrent: false }, () => {
           assert.strictEqual(clicks, tapped + 1, String(modal))
         }))
       }
+    }))
+
+  it.effect("a touch on a non-modal dialog's backdrop drops its click, while a touch outside it reaches the page", () =>
+    Effect.gen(function*() {
+      for (const modal of ["trap-focus", false] as const) {
+        yield* Effect.scoped(Effect.gen(function*() {
+          const { log } = yield* mountPage({ modal, backdrop: true })
+          const page = byId("page")
+          let clicks = 0
+          page.addEventListener("click", () => clicks++)
+          press(byId("backdrop"), "touch")
+          yield* tick
+          assert.deepStrictEqual(dismissals(log()), [
+            "RequestedClose a outside-press"
+          ], String(modal))
+          page.dispatchEvent(
+            new PointerEvent("pointerup", {
+              bubbles: true,
+              pointerType: "touch"
+            })
+          )
+          page.dispatchEvent(
+            new PointerEvent("click", {
+              bubbles: true,
+              detail: 1,
+              pointerType: "touch"
+            })
+          )
+          assert.strictEqual(clicks, 0, String(modal))
+        }))
+      }
+      yield* Effect.scoped(Effect.gen(function*() {
+        const { log } = yield* mountPage({ modal: false, backdrop: true })
+        const page = byId("page")
+        let clicks = 0
+        page.addEventListener("click", () => clicks++)
+        click(page, "touch")
+        yield* tick
+        assert.deepStrictEqual(dismissals(log()), [
+          "RequestedClose a outside-press"
+        ])
+        assert.strictEqual(clicks, 1)
+      }))
     }))
 
   it.effect("drawn in place, it is an open dialog that leaves the page alone, whatever modal says", () =>

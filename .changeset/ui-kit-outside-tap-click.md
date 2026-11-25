@@ -2,4 +2,4 @@
 "@effect/ui-kit": patch
 ---
 
-`Dialog`, and so `Popover` and `Drawer`, no longer drop the click of a tap outside that closes them, unless the dialog has `modal: true`. With `modal: false` or `modal: "trap-focus"`, a tap on a button of the page closes the dialog and presses the button, as a mouse click already did and as Base UI does. A modal still drops it, so the tap doesn't land on the page under its layer.
+`Dialog`, and so `Popover` and `Drawer`, no longer drop the click of a tap directly on the page that closes them when `modal` is `false` or `"trap-focus"`. Taps on a `modal: true` dialog, or on a non-modal dialog's own backdrop or viewport, still drop the click so it doesn't land on the page behind it.

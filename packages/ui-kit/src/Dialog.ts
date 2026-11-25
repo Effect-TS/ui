@@ -125,11 +125,12 @@
  * with the keyboard does. `disablePointerDismissal` turns that off, and the
  * close on focus leaving with it.
  *
- * In the modes other than `modal: true`, the press that closes the dialog
- * still reaches what it landed on, as in Base UI: a tap or a click on a
- * button of the page closes the dialog and presses the button. With
- * `modal: true`, a finger closes the dialog as it touches, and the tap's
- * click is dropped, so it doesn't land on the page under the kit's layer.
+ * In the modes other than `modal: true`, a press directly on the page that
+ * closes the dialog still reaches what it landed on, as in Base UI: a tap or
+ * a click on a button of the page closes the dialog and presses the button.
+ * With `modal: true`, or when a tap lands on the dialog's own backdrop or
+ * viewport, a finger closes the dialog as it touches and the tap's click is
+ * dropped, so it doesn't land on the page behind it.
  *
  * The modal is the kit's, not the browser's: find-in-page and a script's
  * `focus()` still reach the page behind it. On Android, in a browser with
@@ -881,10 +882,10 @@ const TrackDialog = Mount.makeStream(
       let ignored: Node | null = null
       const listens = (): boolean =>
         current.open && current.dismissible && topmost()
-      // A touch dismisses on pointerdown, so a modal has left the top layer
-      // before the tap's click, which would land on the page its layer
-      // covered. Without the layer the tap was meant for the page, so its
-      // click goes through, as a mouse's does.
+      // A touch dismisses on pointerdown, so the dialog's layer, backdrop or
+      // viewport has left or stopped taking events before the tap's click,
+      // which would land on the page behind it. When the tap landed directly
+      // on the page, its click goes through, as a mouse's does.
       const swallowClick = (press: PointerEvent) => {
         const done = new AbortController()
         const options = { capture: true, signal: done.signal }
@@ -928,7 +929,11 @@ const TrackDialog = Mount.makeStream(
           event.pointerType === "touch" ||
           (current.modal === "trap-focus" && !hasBackdrop())
         ) {
-          if (event.pointerType === "touch" && current.modal === true) {
+          if (
+            event.pointerType === "touch" &&
+            (current.modal === true ||
+              (target !== null && node.contains(target)))
+          ) {
             swallowClick(event)
           }
           dismissing = event.pointerId
