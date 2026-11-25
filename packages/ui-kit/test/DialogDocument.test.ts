@@ -8,6 +8,7 @@ import {
   byId,
   click,
   container,
+  focusability,
   focusVisibility,
   holdExits,
   popovers,
@@ -320,9 +321,10 @@ const escape = (init: KeyboardEventInit = {}, target: EventTarget = document) =>
       ...init
     })
   )
-const tab = () => {
+const tab = (shiftKey = false) => {
   const event = new KeyboardEvent("keydown", {
     key: "Tab",
+    shiftKey,
     bubbles: true,
     cancelable: true
   })
@@ -795,6 +797,21 @@ describe("Dialog in a document", { concurrent: false }, () => {
         if (wraps) assert.strictEqual(document.activeElement?.id, "first", html)
         last.remove()
       }
+    }))
+
+  it.effect("Shift+Tab to a details without a summary, which takes no focus from script, leaves the move to the browser", () =>
+    Effect.gen(function*() {
+      yield* focusability
+      yield* mountPage({})
+      const details = document.querySelector(".popup-a")!.appendChild(
+        document.createElement("details")
+      )
+      byId("first").focus()
+      assert.isFalse(tab(true))
+      assert.strictEqual(
+        document.activeElement?.previousElementSibling,
+        details
+      )
     }))
 
   it.effect("a kept-mounted modal keeps its popup element as it opens, closes and reopens", () =>

@@ -648,6 +648,10 @@ const TrackDialog = Mount.makeStream(
         scope().activeElement ?? document.activeElement
       const popup = (): HTMLElement =>
         (scope().getElementById(current.popupId) as HTMLElement | null) ?? node
+      const takes = (element: HTMLElement, visible?: boolean): boolean => {
+        handOff(element, visible)
+        return element.contains(focusedNow())
+      }
       const topmost = () => current.topmost && onTop(stack, node)
       const Watcher = closeWatcherOf(view)
       const entry: Showing = {
@@ -730,13 +734,13 @@ const TrackDialog = Mount.makeStream(
         const marked = Array.from(
           node.querySelectorAll<HTMLElement>("[autofocus]")
         ).find((element) => !inNested(node, element))
-        handOff(
-          marked ?? (current.openMethod === "touch"
-            ? undefined
-            : tabbables(node, root)[0]) ??
-            root,
-          current.openMethod === "keyboard" ? true : undefined
-        )
+        const visible = current.openMethod === "keyboard" ? true : undefined
+        if (marked !== undefined) return handOff(marked, visible)
+        if (
+          current.openMethod !== "touch" &&
+          tabbables(node, root).some((element) => takes(element, visible))
+        ) return
+        handOff(root, visible)
       }
 
       let release: (() => void) | undefined
@@ -792,8 +796,15 @@ const TrackDialog = Mount.makeStream(
             ? focused === first || focused === root
             : focused === last)
         ) {
-          event.preventDefault()
-          handOff(event.shiftKey ? last : first, true)
+          const to = event.shiftKey ? last : first
+          if (takes(to, true)) return event.preventDefault()
+          // Chromium can't focus a `<details>` without a summary from script,
+          // only with Tab, so the key goes on from a stop next to it.
+          const stop = to.ownerDocument.createElement("span")
+          stop.tabIndex = -1
+          to[event.shiftKey ? "after" : "before"](stop)
+          stop.addEventListener("blur", () => stop.remove(), { once: true })
+          handOff(stop)
         }
       }
 
