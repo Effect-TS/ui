@@ -6,13 +6,14 @@ import { Counter, CounterMessage, DelayReset } from "./Counter.ts"
 describe("Counter", () => {
   it.effect("resets after the delay", () =>
     Effect.gen(function*() {
-      // {} is Counter's props. Each step on story runs when it is
-      // called, and story.model is the Model after the last one.
+      // {} is Counter's props. Each step runs when it is called and
+      // returns story, so the steps chain. story.model is the Model
+      // after the last one.
       const story = yield* Story.make(Counter, {})
       story.given({ count: 5, isAutoCounting: false })
-      story.send(CounterMessage.ClickedResetAfterDelay())
+        .send(CounterMessage.ClickedResetAfterDelay())
         .expectExact(DelayReset)
-      story.resolve(DelayReset, CounterMessage.CompletedDelayReset())
+        .resolve(DelayReset, CounterMessage.CompletedDelayReset())
       assert.strictEqual(story.model.count, 0)
     }))
 
