@@ -84,6 +84,41 @@ const readable = (frame, selector) =>
   })
 
 await run("panel", async ({ browser, expect, failures, url }) => {
+  const lifecycleOk = async (frame, label) => {
+    const row = await frame.locator(".life tr[data-kind=instance]").evaluate(
+      (tr) => {
+        const right = tr.closest(".right").getBoundingClientRect().right
+        const [kind, path, mounted, status] = Array.from(
+          tr.children,
+          (node) => node.getBoundingClientRect()
+        )
+        const overlap = path.right > mounted.left + 0.5 &&
+          mounted.right > path.left + 0.5 &&
+          path.bottom > mounted.top + 0.5 &&
+          mounted.bottom > path.top + 0.5
+        return {
+          ok: path.width >= 100 && path.height < 60 &&
+            mounted.width >= 80 && status.width >= 80 &&
+            status.right <= right + 0.5 &&
+            kind.right <= path.left + 0.5 && !overlap,
+          right: Math.round(right),
+          cells: [kind, path, mounted, status].map((b) => ({
+            left: Math.round(b.left),
+            right: Math.round(b.right),
+            width: Math.round(b.width),
+            height: Math.round(b.height)
+          }))
+        }
+      }
+    )
+    expect(
+      row.ok,
+      label +
+        ": Lifecycle instance path is readable without overlapping mount link",
+      row
+    )
+  }
+
   const setup = async (context, query = "") => {
     const page = await context.newPage()
     page.on(
@@ -135,6 +170,28 @@ await run("panel", async ({ browser, expect, failures, url }) => {
       state
     )
 
+    const gutter = await frame.locator(".timeline-box").evaluate((node) => {
+      const box = node.getBoundingClientRect()
+      const scroller = node.querySelector(".timeline")
+      const scroll = scroller.getBoundingClientRect()
+      const strip = node.querySelector(".gutter")?.getBoundingClientRect()
+      return {
+        ok: scroller.scrollHeight > scroller.clientHeight &&
+          strip !== undefined && strip.width > 0 &&
+          strip.left >= scroll.right - 0.5 && strip.right <= box.right + 0.5,
+        boxRight: Math.round(box.right),
+        scrollRight: Math.round(scroll.right),
+        gutterLeft: strip ? Math.round(strip.left) : null,
+        gutterRight: strip ? Math.round(strip.right) : null,
+        gutterWidth: strip ? Math.round(strip.width) : 0
+      }
+    })
+    expect(
+      gutter.ok,
+      "the timeline marker gutter sits outside the native scrollbar",
+      gutter
+    )
+
     await frame.locator(".row-button").nth(3).click()
     const heading = await readable(frame, ".ehead .headline")
     expect(
@@ -142,6 +199,15 @@ await run("panel", async ({ browser, expect, failures, url }) => {
       "selecting an entry shows its heading alongside the timeline",
       heading
     )
+
+    await frame.getByRole("tab", { name: "Lifecycle" }).click()
+    await lifecycleOk(frame, "920px two-pane")
+    await page.setViewportSize({ width: 744, height: 800 })
+    await page.waitForTimeout(100)
+    await lifecycleOk(frame, "720px two-pane")
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.waitForTimeout(100)
+    await frame.getByRole("tab", { name: /^Model/ }).click()
     await type(page, "klm")
     state = await timeline(page)
     expect(atTop(state), "selecting an entry keeps the timeline pinned", state)
@@ -247,6 +313,9 @@ await run("panel", async ({ browser, expect, failures, url }) => {
       seen = await readable(frame, ".tabs .tab:has-text('" + tab + "')")
       expect(seen.ok, "390x844: the " + tab + " tab is readable", seen)
     }
+    await frame.getByRole("tab", { name: "Lifecycle" }).click()
+    await lifecycleOk(frame, "390x844")
+    await frame.getByRole("tab", { name: /^Model/ }).click()
     const escape = ".step[data-step=End] .cause button.ref"
     seen = await readable(frame, escape)
     expect(seen.ok, "390x844: the PressedEscape link is readable", seen)
@@ -297,6 +366,109 @@ await run("panel", async ({ browser, expect, failures, url }) => {
     await context.close()
   }
 
+  const corner = async () => {
+    const context = await browser.newContext({
+      viewport: { width: 1440, height: 900 }
+    })
+    const page = await context.newPage()
+    page.on(
+      "pageerror",
+      (error) => failures.push("page error " + String(error))
+    )
+    await page.goto(url)
+    await page.waitForSelector("body[data-ready]", { state: "attached" })
+    const frame = page.frameLocator("iframe[data-effect-ui-devtools]")
+    const launcher = frame.getByRole("button", {
+      name: "Open the Effect UI inspector"
+    })
+    const panel = frame.getByRole("dialog", { name: "Effect UI inspector" })
+    await launcher.waitFor()
+    await page.waitForTimeout(100)
+
+    const initial = await launcher.boundingBox()
+    expect(
+      initial.x + initial.width > 1400 && initial.y + initial.height > 860,
+      "the launcher starts in the bottom-right corner",
+      initial
+    )
+
+    await page.mouse.move(
+      initial.x + initial.width / 2,
+      initial.y + initial.height / 2
+    )
+    await page.mouse.down()
+    await page.mouse.move(100, 80, { steps: 10 })
+    await page.mouse.up()
+    await page.waitForTimeout(150)
+    const dragged = await launcher.boundingBox()
+    expect(
+      dragged.x <= 20 && dragged.y <= 20 && !(await panel.isVisible()),
+      "dragging the launcher moves it to the top-left corner without opening the panel",
+      dragged
+    )
+
+    await page.reload()
+    await page.waitForSelector("body[data-ready]", { state: "attached" })
+    await launcher.waitFor()
+    await page.waitForTimeout(100)
+    const remembered = await launcher.boundingBox()
+    expect(
+      remembered.x <= 20 && remembered.y <= 20,
+      "reloading remembers the launcher's saved corner",
+      remembered
+    )
+
+    await launcher.click()
+    await panel.waitFor()
+    await page.waitForTimeout(100)
+    const openedTopLeft = await panel.boundingBox()
+    expect(
+      openedTopLeft.x <= 20 && openedTopLeft.y <= 20,
+      "clicking the moved launcher opens the panel in that corner",
+      openedTopLeft
+    )
+
+    const picker = frame.getByRole("button", {
+      name: "Move inspector to another corner"
+    })
+    await picker.focus()
+    await page.keyboard.press("Enter")
+    await frame.getByRole("button", { name: "Top right" }).waitFor()
+    await page.keyboard.press("Escape")
+    expect(
+      !(await frame.locator(".corner-menu").isVisible()),
+      "Escape closes the corner picker",
+      {}
+    )
+    await picker.focus()
+    await page.keyboard.press("Enter")
+    await page.keyboard.press("Tab")
+    await page.keyboard.press("Tab")
+    await page.keyboard.press("Enter")
+    await page.waitForTimeout(100)
+    const pickedTopRight = await panel.boundingBox()
+    expect(
+      pickedTopRight.x + pickedTopRight.width > 1400 && pickedTopRight.y <= 20,
+      "the keyboard corner picker moves the inspector to the chosen corner",
+      pickedTopRight
+    )
+
+    await frame.getByRole("button", { name: "Close the inspector" }).click()
+    await launcher.waitFor()
+    await launcher.focus()
+    await page.keyboard.press("ArrowDown")
+    await page.waitForTimeout(100)
+    const arrowMoved = await launcher.boundingBox()
+    expect(
+      arrowMoved.x + arrowMoved.width > 1400 &&
+        arrowMoved.y + arrowMoved.height > 860 && !(await panel.isVisible()),
+      "arrow keys on the focused launcher move it to another corner without opening the panel",
+      arrowMoved
+    )
+    await context.close()
+  }
+
   await desktop()
+  await corner()
   await narrow()
 })
