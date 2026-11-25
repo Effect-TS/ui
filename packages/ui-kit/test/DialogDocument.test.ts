@@ -775,7 +775,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement, app.querySelector(".popup-a"))
     }))
 
-  it.effect("Tab reaches an editing host, a details without a summary and media controls, but not a details with a summary", () =>
+  it.effect("Tab reaches editing hosts, media controls and a details without a summary, skipping a details with a summary or what a closed details hides", () =>
     Effect.gen(function*() {
       yield* mountPage({})
       const popup = document.querySelector(".popup-a")!
@@ -797,15 +797,9 @@ describe("Dialog in a document", { concurrent: false }, () => {
         if (wraps) assert.strictEqual(document.activeElement?.id, "first", html)
         last.remove()
       }
-    }))
-
-  it.effect("Tab to a details without a summary, which takes no focus from script, leaves the move to the browser, and skips what the closed details hides", () =>
-    Effect.gen(function*() {
+      // When script can't focus the disclosure, the wrap leaves the move to the browser.
       yield* focusability
-      yield* mountPage({})
-      const details = document.querySelector(".popup-a")!.appendChild(
-        document.createElement("details")
-      )
+      const details = popup.appendChild(document.createElement("details"))
       details.appendChild(document.createElement("button")).id = "inner"
       byId("first").focus()
       assert.isFalse(tab(true))
@@ -813,7 +807,6 @@ describe("Dialog in a document", { concurrent: false }, () => {
         document.activeElement?.previousElementSibling,
         details
       )
-      // Open around the dialog's controls, from its last one back to it.
       details.open = true
       details.prepend(byId("first"), byId("second"))
       byId("inner").focus()
@@ -1053,13 +1046,17 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement?.id, "first")
     }))
 
-  it.effect("Escape gives focus back to the trigger with a focus ring as the close starts, and the popup is inert", () =>
+  it.effect("keyboard open, Tab wrap and Escape ask for a focus ring as the popup goes inert, while an external close leaves it to the browser", () =>
     Effect.gen(function*() {
       yield* holdExits
       const { calls } = yield* focusVisibility
-      const { app, log } = yield* mountPage({})
+      const { app, log } = yield* mountPage({ openMethod: "keyboard" })
       const popup = app.querySelector(".popup-a")!
+      assert.deepStrictEqual(calls.at(-1), ["first", true])
       assert.isNull(popup.getAttribute("inert"))
+      byId("second").focus()
+      assert.isTrue(tab())
+      assert.deepStrictEqual(calls.at(-1), ["first", true])
       escape()
       yield* tick
       assert.notInclude(log(), "Settled a false")
@@ -1067,16 +1064,8 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.strictEqual(popup.getAttribute("inert"), "")
       assert.strictEqual(document.activeElement?.id, "trigger")
       assert.deepStrictEqual(calls.at(-1), ["trigger", true])
-    }))
-
-  it.effect("a keyboard open and the Tab wrap ask for a focus ring, and a close the dialog didn't ask for leaves it to the browser", () =>
-    Effect.gen(function*() {
-      const { calls } = yield* focusVisibility
-      yield* mountPage({ openMethod: "keyboard" })
-      assert.deepStrictEqual(calls.at(-1), ["first", true])
-      byId("second").focus()
-      assert.isTrue(tab())
-      assert.deepStrictEqual(calls.at(-1), ["first", true])
+      byId("reopen").click()
+      yield* tick
       byId("shut").click()
       yield* tick
       assert.deepStrictEqual(calls.at(-1), ["trigger", undefined])
@@ -1187,28 +1176,23 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement?.id, "trigger-b")
     }))
 
-  it.effect("with the trigger gone, focus goes back to what had it before the open, over what had it since", () =>
+  it.effect("with the trigger disabled or gone, focus goes back to what had it before the open, over what had it since", () =>
     Effect.gen(function*() {
       yield* mountPage({ detached: true, a: false })
       byId("page").focus()
       byId("detached").click()
       yield* tick
-      byId("detached").remove()
+      byId("detached").setAttribute("disabled", "")
       byId("shut").focus()
       byId("first").focus()
       escape()
       yield* tick
       yield* tick
       assert.strictEqual(document.activeElement?.id, "page")
-    }))
-
-  it.effect("with the trigger disabled, focus goes back to what had it before the open", () =>
-    Effect.gen(function*() {
-      yield* mountPage({ a: false })
-      byId("page").focus()
-      byId("trigger").click()
+      byId("detached").removeAttribute("disabled")
+      byId("detached").click()
       yield* tick
-      byId("trigger").setAttribute("disabled", "")
+      byId("detached").remove()
       escape()
       yield* tick
       yield* tick
