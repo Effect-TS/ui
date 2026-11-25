@@ -36,7 +36,6 @@ export interface Options {
   readonly rootPath: string
   readonly entry: () => Saved | undefined
   readonly restore: (path: string) => services.PageState | undefined
-  readonly replayInit?: boolean | undefined
   readonly onEncodeFailure?:
     | ((inst: Kernel.Instance, cause: Cause.Cause<SchemaIssue.Issue>) => void)
     | undefined
@@ -137,8 +136,6 @@ const resolveComponent = (component: unknown): Component.Any | undefined => {
   return component as Component.Any
 }
 
-const noEffects: ReadonlyArray<never> = []
-
 /** @internal */
 export const make = (options: Options): StateRestore => {
   const {
@@ -147,7 +144,6 @@ export const make = (options: Options): StateRestore => {
     onDecodeFailure,
     onEncodeFailure,
     onRestoreThrow,
-    replayInit = true,
     restore: restoreAt,
     rootPath
   } = options
@@ -390,10 +386,10 @@ export const make = (options: Options): StateRestore => {
       inst.owning = reportedOf(component, found.reported, false)
       return {
         model: exit.value.model,
-        commands: replayInit ? first.commands : noEffects,
-        events: noEffects,
-        lists: replayInit ? first.lists : noEffects,
-        sends: replayInit ? first.sends : noEffects
+        commands: first.commands,
+        events: [],
+        lists: first.lists,
+        sends: first.sends
       }
     },
     restored: (inst) => restored.has(inst),

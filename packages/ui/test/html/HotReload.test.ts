@@ -508,44 +508,32 @@ describe("hot reload", { concurrent: false }, () => {
           Picked: { apple: Schema.Number },
           Bump: {}
         })
-        const GameV1 = Html.component({
-          name: "InitCommandGame",
-          model: Schema.Struct({ apple: Schema.Number, score: Schema.Number }),
-          message: Msg
-        }).make({
-          init: ($) =>
-            $.set({ apple: 0, score: 0 }).run(
-              PickApple.make({}).pipe(
-                Command.map((apple) => Msg.Picked({ apple }))
-              )
-            ),
-          update: ($, msg) =>
-            Msg.match(msg, {
-              Picked: ({ apple }) => ({ ...$.model, apple }),
-              Bump: () => ({ ...$.model, score: $.model.score + 1 })
-            }),
-          view: (h, model) =>
-            h.span(`apple=${model.apple}|score=${model.score}`)
-        })
-        const GameV2 = Html.component({
-          name: "InitCommandGame",
-          model: Schema.Struct({ apple: Schema.String, score: Schema.Number }),
-          message: Msg
-        }).make({
-          init: ($) =>
-            $.set({ apple: "none", score: 0 }).run(
-              PickApple.make({}).pipe(
-                Command.map((apple) => Msg.Picked({ apple }))
-              )
-            ),
-          update: ($, msg) =>
-            Msg.match(msg, {
-              Picked: ({ apple }) => ({ ...$.model, apple: `v2-${apple}` }),
-              Bump: () => ({ ...$.model, score: $.model.score + 1 })
-            }),
-          view: (h, model) =>
-            h.span(`apple=${model.apple}|score=${model.score}`)
-        })
+        const makeGame = <M, E>(
+          apple: Schema.Codec<M, E>,
+          initial: M,
+          picked: (apple: number) => M
+        ) =>
+          Html.component({
+            name: "InitCommandGame",
+            model: Schema.Struct({ apple, score: Schema.Number }),
+            message: Msg
+          }).make({
+            init: ($) =>
+              $.set({ apple: initial, score: 0 }).run(
+                PickApple.make({}).pipe(
+                  Command.map((apple) => Msg.Picked({ apple }))
+                )
+              ),
+            update: ($, msg) =>
+              Msg.match(msg, {
+                Picked: ({ apple }) => ({ ...$.model, apple: picked(apple) }),
+                Bump: () => ({ ...$.model, score: $.model.score + 1 })
+              }),
+            view: (h, model) =>
+              h.span(`apple=${model.apple}|score=${model.score}`)
+          })
+        const GameV1 = makeGame(Schema.Number, 0, (apple) => apple)
+        const GameV2 = makeGame(Schema.String, "none", (apple) => `v2-${apple}`)
 
         yield* inContainer("init-cmd", (el) =>
           Effect.gen(function*() {

@@ -200,7 +200,6 @@ export const open = (
   const restore = stateRestore.make({
     rootPath: path,
     entry: () => restoring,
-    replayInit: false,
     restore: (at) => {
       const found = restoring && stateRestore.pageAt(restoring, at)
       if (found !== undefined) delete restoring![at]
@@ -251,7 +250,13 @@ export const open = (
     get hasSnapshot() {
       return active
     },
-    init: (inst, first) => active ? restore.init(inst, first) : undefined,
+    init: (inst, first) => {
+      if (!active) return undefined
+      const next = restore.init(inst, first)
+      return restore.restored(inst)
+        ? { model: next.model, commands: [], events: [] }
+        : next
+    },
     restored: restore.restored,
     hold: (owner, rec, at) => active ? restore.hold(owner, rec, at) : undefined,
     attach: (inst) => {
