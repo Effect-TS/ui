@@ -89,10 +89,11 @@ export const Nav = Html.component({
       view: (menu) =>
         menu.root(
           h.nav.class(
-            "sticky top-0 z-10 leading-[1.4]",
-            "rail:max-h-screen rail:w-(--nav-rail) rail:self-start",
+            "sticky top-(--site-header) z-20 leading-[1.4]",
+            "rail:max-h-[calc(100dvh-var(--site-header))]",
+            "rail:w-(--nav-rail) rail:self-start",
             "rail:justify-self-end rail:overflow-y-auto",
-            "rail:pt-12 rail:pb-6 rail:pl-5"
+            "rail:pt-10 rail:pb-6 rail:pl-5"
           ).attr("aria-label", "On this page")
         )
           .children(
@@ -106,7 +107,7 @@ export const Nav = Html.component({
               element: h.button.ref(Toggle),
               onPress: NavMessage.ClickedToggle()
             }).class(
-              "peer flex h-(--nav-bar) w-full cursor-pointer",
+              "peer flex h-(--toc-bar) w-full cursor-pointer",
               "items-center gap-2.5 border-b border-border",
               "bg-background px-(--nav-inset) text-start",
               "text-muted-foreground rail:hidden",

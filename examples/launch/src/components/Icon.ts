@@ -15,12 +15,16 @@ import {
   Layers,
   ListOrdered,
   Loader,
+  Menu,
+  Moon,
   Pause,
   Play,
   Plug,
   RotateCcw,
   Split,
-  Workflow
+  Sun,
+  Workflow,
+  X
 } from "lucide"
 
 // The Lucide icons the article draws, by the name it uses for each.
@@ -29,6 +33,7 @@ const icons = {
   bot: Bot,
   check: Check,
   clock: Clock,
+  close: X,
   copy: Copy,
   database: Database,
   download: Download,
@@ -38,12 +43,15 @@ const icons = {
   layers: Layers,
   list: ListOrdered,
   loader: Loader,
+  menu: Menu,
+  moon: Moon,
   next: ArrowRight,
   pause: Pause,
   play: Play,
   plug: Plug,
   reset: RotateCcw,
   split: Split,
+  sun: Sun,
   workflow: Workflow
 } satisfies Record<string, IconNode>
 

@@ -10,20 +10,27 @@
 
 @theme {
   --color-*: initial;
-  --color-background: oklch(100% 0 0);
-  --color-foreground: oklch(21% 0.006 285.885);
-  --color-muted: oklch(96.7% 0.001 286.375);
-  --color-muted-foreground: oklch(44.2% 0.017 285.786);
-  --color-subtle-foreground: oklch(70.5% 0.015 286.067);
-  --color-prose-foreground: oklch(37% 0.013 285.805);
-  --color-card: oklch(98.5% 0 0);
-  --color-border: oklch(92% 0.004 286.32);
-  --color-border-strong: oklch(87.1% 0.006 286.286);
-  --color-ring: color-mix(in oklab, var(--color-foreground) 14%, transparent);
-  --color-wash: color-mix(in oklab, var(--color-foreground) 7%, transparent);
+  --color-background: light-dark(oklch(100% 0 0), oklch(14.1% 0.005 285.823));
+  --color-foreground: light-dark(oklch(21% 0.006 285.885), oklch(98.5% 0 0));
+  --color-muted: light-dark(oklch(96.7% 0.001 286.375), oklch(21% 0.006 285.885));
+  --color-muted-foreground: light-dark(oklch(44.2% 0.017 285.786), oklch(70.5% 0.015 286.067));
+  --color-subtle-foreground: light-dark(oklch(70.5% 0.015 286.067), oklch(55.2% 0.016 285.938));
+  --color-prose-foreground: light-dark(oklch(37% 0.013 285.805), oklch(87.1% 0.006 286.286));
+  /* Between the page and muted, so a muted strip on a card shows in both themes. */
+  --color-card: light-dark(oklch(98.5% 0 0), oklch(17.5% 0.005 285.85));
+  --color-border: light-dark(oklch(92% 0.004 286.32), oklch(27.4% 0.006 286.033));
+  --color-border-strong: light-dark(oklch(87.1% 0.006 286.286), oklch(37% 0.013 285.805));
+  --color-ring: light-dark(
+    color-mix(in oklab, var(--color-foreground) 14%, transparent),
+    color-mix(in oklab, var(--color-foreground) 22%, transparent)
+  );
+  --color-wash: light-dark(
+    color-mix(in oklab, var(--color-foreground) 7%, transparent),
+    color-mix(in oklab, var(--color-foreground) 9%, transparent)
+  );
   --color-accent: oklch(55% 0.2 270);
   --color-accent-foreground: oklch(100% 0 0);
-  --color-accent-text: oklch(55% 0.2 270);
+  --color-accent-text: light-dark(oklch(55% 0.2 270), oklch(74% 0.14 270));
   --color-white: oklch(100% 0 0);
   --color-positive: oklch(50% 0.14 150);
   --color-negative: oklch(53% 0.2 27);
@@ -73,27 +80,11 @@
 @layer components {
   /* Off screen until the keyboard reaches it. */
   .skip-link {
-    @apply absolute top-2 left-2 z-20 rounded-md bg-foreground px-3 py-2 text-sm font-medium text-background;
+    @apply fixed top-2 left-2 z-50 rounded-md bg-foreground px-3 py-2 text-sm font-medium text-background;
     transform: translateY(-200%);
 
     &:focus {
       transform: none;
-    }
-  }
-
-  .article-masthead {
-    @apply mx-auto mb-9 flex max-w-(--column) items-center justify-between gap-4;
-  }
-
-  .article-brand {
-    @apply inline-flex items-center gap-2.5 text-lg font-bold tracking-tight;
-  }
-
-  .article-links {
-    @apply flex items-center gap-5 text-xs text-muted-foreground;
-
-    a:hover {
-      color: var(--color-foreground);
     }
   }
 
@@ -240,22 +231,8 @@
   }
 
   @media (width <= 520px) {
-    .article-masthead {
-      @apply mb-6;
-    }
-
     .article-header {
       @apply py-7;
-    }
-
-    .article-links {
-      @apply gap-3;
-    }
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .article-brand img {
-      filter: invert(1);
     }
   }
 }
@@ -265,23 +242,12 @@
     color-scheme: light dark;
   }
 
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --color-background: oklch(14.1% 0.005 285.823);
-      --color-foreground: oklch(98.5% 0 0);
-      --color-muted: oklch(21% 0.006 285.885);
-      --color-muted-foreground: oklch(70.5% 0.015 286.067);
-      --color-subtle-foreground: oklch(55.2% 0.016 285.938);
-      --color-prose-foreground: oklch(87.1% 0.006 286.286);
-      /* Between the page and muted, as in the light theme, so a muted
-         strip on a card shows. */
-      --color-card: oklch(17.5% 0.005 285.85);
-      --color-border: oklch(27.4% 0.006 286.033);
-      --color-border-strong: oklch(37% 0.013 285.805);
-      --color-ring: color-mix(in oklab, var(--color-foreground) 22%, transparent);
-      --color-wash: color-mix(in oklab, var(--color-foreground) 9%, transparent);
-      --color-accent-text: oklch(74% 0.14 270);
-    }
+  :root[data-theme="light"] {
+    color-scheme: light;
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
   }
 
   html {
