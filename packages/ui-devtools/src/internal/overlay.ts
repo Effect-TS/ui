@@ -306,8 +306,6 @@ const PausedBadge = (h: H, seq: number) =>
       .children("Resume")
   )
 
-const instances = (n: number) => n === 1 ? "1 instance" : n + " instances"
-
 const PausedBar = (
   h: H,
   page: typeof Page.Type,
@@ -319,18 +317,10 @@ const PausedBar = (
     .reverse()
   const at = stops.findIndex((entry) => entry.seq === page.seq)
   const notes = paused === null ? [] : ([
-    [
-      "init",
-      instances(paused.fellBack.length) + " shown from init, no state at #" +
-        paused.seq,
-      paused.fellBack
-    ],
+    ["init", " shown from init, no state at #" + paused.seq, paused.fellBack],
     [
       "fallback",
-      (paused.fallbacks.length === 1
-        ? "1 instance shows"
-        : paused.fallbacks.length + " instances show") +
-        " a feature slot fallback, Layer not built on the painted page",
+      " showing a feature slot fallback, Layer not built on the painted page",
       paused.fallbacks
     ]
   ] as const).filter(([, , list]) => list.length > 0)
@@ -358,18 +348,16 @@ const PausedBar = (
       h.span.class("at").children("#" + page.seq)
     ),
     h.div.class("pause-notes", "tone-open").children(
-      notes.map(([key, summary, list]) =>
-        h.details.key(key).class("pause-note").children(
+      notes.map(([key, tail, list]) => {
+        const summary =
+          (list.length === 1 ? "1 instance" : list.length + " instances") + tail
+        return h.details.key(key).class("pause-note").children(
           h.summary.attr("title", summary).children(summary),
           h.ul.class("pause-paths").children(
-            list.map((path, index) =>
-              h.li.key(index + ":" + path).children(
-                h.code.class("path").children(path)
-              )
-            )
+            list.map((path) => h.li.children(path))
           )
         )
-      )
+      })
     )
   )
 }

@@ -558,7 +558,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.include(text(notes[0].querySelector("summary")), "fallback")
       assert.deepStrictEqual(
         Array.from(
-          notes[0].querySelectorAll(".pause-paths .path"),
+          notes[0].querySelectorAll(".pause-paths li"),
           (node) => text(node)
         ),
         ["/Pair"]
@@ -687,7 +687,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.isFalse(fellBack[0].open)
       assert.deepStrictEqual(
         Array.from(
-          fellBack[0].querySelectorAll(".pause-paths .path"),
+          fellBack[0].querySelectorAll(".pause-paths li"),
           (node) => text(node)
         ),
         ["/List/Row[same]"]

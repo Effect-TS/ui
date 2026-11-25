@@ -55,7 +55,7 @@ export const styles = `
 }
 *, *::before, *::after { box-sizing: border-box; }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; text-align: inherit; }
-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; border-radius: 4px; }
+button:focus-visible, summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; border-radius: 4px; }
 h2, h3, h4, p, ol, ul { margin: 0; padding: 0; font-size: inherit; font-weight: inherit; }
 ol, ul { list-style: none; }
 html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
@@ -85,15 +85,12 @@ ${markRules}
 .resume { padding: 2px 10px; border-radius: 999px; background: var(--ink); color: var(--bg); font-weight: 500; }
 .pausebar { display: grid; gap: 2px; padding: 8px 20px; border-bottom: 1px solid var(--line); background: var(--sel); }
 .scrub { display: flex; align-items: center; gap: 12px; }
-.scrub .muted { white-space: nowrap; }
 .scrub input { flex: 1; min-width: 0; margin: 0; accent-color: var(--ink); }
 .scrub .at { min-width: 48px; text-align: right; font-variant-numeric: tabular-nums; }
 .pause-notes { display: grid; gap: 4px; min-height: 18px; font-size: 12px; line-height: 18px; }
 .pause-note { min-width: 0; }
-.pause-note summary { cursor: pointer; list-style-position: inside; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pause-note summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; border-radius: 4px; }
-.pause-paths { margin-top: 4px; padding: 4px 8px; max-height: 96px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
-.pause-paths .path { display: block; font: 12px/18px var(--mono); overflow-wrap: anywhere; }
+.pause-note summary { cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pause-paths { margin-top: 4px; padding: 4px 8px; max-height: 96px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font-family: var(--mono); overflow-wrap: anywhere; }
 .empty-note { padding: 20px; color: var(--muted); }
 .grip { position: absolute; width: 16px; height: 16px; z-index: 1; cursor: nwse-resize; touch-action: none; }
 .grip::before { content: ""; position: absolute; inset: 4px; border: 0 solid var(--faint); border-radius: 2px; }
@@ -239,11 +236,11 @@ ${markRules}
 .copy { padding: 3px 10px; border-radius: 6px; background: var(--sel); white-space: nowrap; }
 .raw { font: 12px/18px var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
 .life { width: 100%; border-collapse: collapse; table-layout: fixed; }
-.life th, .life td { padding: 7px 14px 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; text-align: left; font-weight: 400; }
-.life th { color: var(--muted); white-space: nowrap; width: 96px; }
-.life td:nth-child(2) { overflow-wrap: anywhere; }
-.life td:nth-child(3) { width: 22%; overflow-wrap: break-word; }
-.life td:nth-child(4) { width: 28%; overflow-wrap: break-word; }
+.life th, .life td { padding: 7px 16px 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; text-align: left; font-weight: 400; }
+.life th { color: var(--muted); white-space: nowrap; width: 104px; }
+.life td { overflow-wrap: anywhere; }
+.life td:nth-child(3) { width: 22%; }
+.life td:nth-child(4) { width: 28%; }
 .life td:last-child { padding-right: 0; }
 .life tr:last-child > * { border-bottom: 0; }
 @container detail (max-width: 499px) {
@@ -254,10 +251,9 @@ ${markRules}
   .life tr { display: grid; grid-template-columns: 88px minmax(0, 1fr) minmax(0, 1fr); column-gap: 12px; row-gap: 2px; padding: 7px 0; border-bottom: 1px solid var(--line); }
   .life tr:last-child { border-bottom: 0; }
   .life th, .life td { padding: 0; border-bottom: 0; }
-  .life th { width: auto; grid-column: 1; grid-row: 1 / span 2; }
-  .life td:nth-child(2) { grid-column: 2 / -1; grid-row: 1; }
-  .life td:nth-child(3) { width: auto; grid-column: 2; grid-row: 2; }
-  .life td:nth-child(4) { width: auto; grid-column: 3; grid-row: 2; }
+  .life th { width: auto; grid-row: span 2; }
+  .life td:nth-child(2) { grid-column: span 2; }
+  .life td:nth-child(3), .life td:nth-child(4) { width: auto; }
 }
 .back { display: none; align-self: flex-start; margin: 10px 0 0 10px; padding: 3px 10px; border-radius: 6px; color: var(--muted); white-space: nowrap; }
 @container panel (max-width: 719px) {

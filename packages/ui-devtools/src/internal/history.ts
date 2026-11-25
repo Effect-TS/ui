@@ -149,9 +149,10 @@ const makeSession = (size: number) => {
         switch (entry._tag) {
           case "Mounted":
           case "Waiting":
-            if (entry.causedBy === undefined || entry.causedBy > seq) {
-              dirty.add(entry.path)
-            } else if (!byPath.has(entry.path) && !isDirty(dirty, entry.path)) {
+            if (
+              entry.causedBy !== undefined && entry.causedBy <= seq &&
+              !byPath.has(entry.path) && !isDirty(dirty, entry.path)
+            ) {
               byPath.set(entry.path, {
                 props: entry.props,
                 model: entry.model,
