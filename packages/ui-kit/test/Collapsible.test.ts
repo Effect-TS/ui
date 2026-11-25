@@ -144,20 +144,41 @@ describe("Collapsible", () => {
   it("repoints a trigger built before the panel to the consumer's panel id, with or without root, on the button itself", () => {
     const generated = View.build(parts({ open: true }).panel(h.div)!, []).attrs
       .id!
-    for (const withRoot of [true, false]) {
+    for (
+      const [withRoot, id, makePanel] of [
+        [
+          true,
+          "shipping",
+          (c: Parts) => c.panel(h.div.attr("id", "shipping"))
+        ],
+        [
+          false,
+          "shipping-after",
+          (c: Parts) => c.panel(h.div)?.attr("id", "shipping-after")
+        ],
+        [
+          false,
+          "shipping-hook",
+          (c: Parts) =>
+            c.panel(h.div.forward((panel) => panel.attr("id", "shipping-hook")))
+        ]
+      ] as const
+    ) {
       const collapsible = parts({ open: true })
       const container = withRoot ? collapsible.root(h.div) : h.section
       const node = View.build(
         container.children(
           h.h3.children(
             collapsible.trigger(
-              h.button
-                .attr("aria-controls", "elsewhere")
-                .forward((button) => h.span.class("wrapper").children(button))
+              h.button.forward((button) =>
+                h.span
+                  .class("wrapper")
+                  .children(button.attr("aria-controls", "elsewhere"))
+              )
             )
           ),
           h.button.attr("aria-controls", generated),
-          collapsible.panel(h.div.attr("id", "shipping"))
+          makePanel(collapsible)
         ),
         []
       )
@@ -167,48 +188,14 @@ describe("Collapsible", () => {
       assert.isUndefined(wrapper.attrs["aria-controls"])
       assert.strictEqual(
         (wrapper.children[0] as View.Element<never>).attrs["aria-controls"],
-        "elsewhere shipping"
+        `elsewhere ${id}`
       )
       assert.strictEqual(
         (node.children[1] as View.Element<never>).attrs["aria-controls"],
         generated
       )
-    }
-
-    for (
-      const [id, makePanel] of [
-        [
-          "shipping-after",
-          (c: Parts) => c.panel(h.div)?.attr("id", "shipping-after")
-        ],
-        [
-          "shipping-hook",
-          (c: Parts) =>
-            c.panel(h.div.forward((panel) => panel.attr("id", "shipping-hook")))
-        ]
-      ] as const
-    ) {
-      const rootless = parts({ open: true })
-      const rootlessNode = View.build(
-        h.section.children(
-          h.h3.children(
-            rootless.trigger(
-              h.button.forward((button) =>
-                button.attr("aria-controls", "extra")
-              )
-            )
-          ),
-          makePanel(rootless)
-        ),
-        []
-      )
       assert.strictEqual(
-        ((rootlessNode.children[0] as View.Element<never>)
-          .children[0] as View.Element<never>).attrs["aria-controls"],
-        `extra ${id}`
-      )
-      assert.strictEqual(
-        (rootlessNode.children[1] as View.Element<never>).attrs.id,
+        (node.children[2] as View.Element<never>).attrs.id,
         id
       )
     }

@@ -99,11 +99,7 @@ describe("Accordion", () => {
         open: true
       })
 
-      const closing = yield* itemScene(
-        { value: "a", holdExit: true },
-        { value: ["a"] }
-      )
-      closing.givenChild(Collapsible, {
+      scene.givenChild(Collapsible, {
         mounted: true,
         started: true,
         ending: true,
@@ -111,12 +107,12 @@ describe("Accordion", () => {
         instant: false,
         openOnLoad: false
       })
-      assert.isUndefined(closing.get(panel).attrs?.inert)
-      closing.shared(Accordion, shared({ value: [] }))
-      assert.strictEqual(closing.get(panel).attrs?.inert, "")
-      assert.isUndefined(closing.get(panel).attrs?.hidden)
-      closing.shared(Accordion, shared({ value: ["a"] }))
-      assert.isUndefined(closing.get(panel).attrs?.inert)
+      assert.isUndefined(scene.get(panel).attrs?.inert)
+      scene.shared(Accordion, shared({ value: [] }))
+      assert.strictEqual(scene.get(panel).attrs?.inert, "")
+      assert.isUndefined(scene.get(panel).attrs?.hidden)
+      scene.shared(Accordion, shared({ value: ["a"] }))
+      assert.isUndefined(scene.get(panel).attrs?.inert)
     }))
 
   it.effect("a disabled item or accordion asks for nothing, and the accordion's mount options reach the panel", () =>
