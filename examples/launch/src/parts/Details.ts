@@ -12,6 +12,9 @@ export const Details = Html.component({
   update: ($) => $.model,
   view: (h) =>
     Disclosure(h, {
+      // disclosure holds what Disclosure's parts returns. Each part
+      // takes an element written here and returns it with the
+      // attributes and handlers it needs.
       view: (disclosure) =>
         h.section.class("details").children(
           disclosure.trigger(h.button).children("Shipping"),

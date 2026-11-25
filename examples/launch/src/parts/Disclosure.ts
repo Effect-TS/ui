@@ -13,13 +13,14 @@ export const Disclosure = Html.component({
   update: {
     ClickedTrigger: ($) => $.evolve({ isOpen: !$.model.isOpen })
   },
-  // What parts returns is what the consumer's view receives: plain
-  // values such as isOpen, and parts. p builds the parts, as h
-  // builds elements in a view.
+  // parts takes p, the helper that builds parts, as a view takes h,
+  // the helper that builds elements. What it returns is what the
+  // consumer's view receives: plain values such as isOpen, and parts.
   parts: (p, model) => ({
     isOpen: model.isOpen,
-    // A part decorates a <button> that the consumer supplies. The
-    // click sends Disclosure's own Message to Disclosure's update.
+    // p.part makes a part. This one decorates a <button> that the
+    // consumer supplies. The click sends Disclosure's own Message to
+    // Disclosure's update.
     trigger: p.part("button", (button) =>
       button.attrs({
         type: "button",

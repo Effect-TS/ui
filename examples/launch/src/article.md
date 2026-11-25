@@ -87,7 +87,7 @@ A Provider shares part of its Model with Components inside it, at any depth. In 
 
 ::Diagram{scenario="sharedState"}
 
-### Built-in queries
+### Data fetching with queries
 
 In Foldkit 0.x, fetched data lived in the Model, and the parent drove the experimental `Query`: it stored it, forwarded its Messages and decided when to load or refresh. In Effect UI, you define a query once, a Component lists the queries it needs, and the runtime does the rest.
 
@@ -108,7 +108,7 @@ In Foldkit 0.x, all of an app's state lived in its one Model. In Effect UI, stat
 | ----------------------------------------------------------------- | ------------------------- |
 | A Component's own state                                           | Its own Model             |
 | State a parent or a [Provider](#shared-state-with-providers) owns | Another Component's Model |
-| Data a [query](#built-in-queries) fetched                         | The runtime's query cache |
+| Data a [query](#data-fetching-with-queries) fetched               | The runtime's query cache |
 | Which Commands are running                                        | The runtime               |
 
 So a Model holds only the state that its own update changes, not everything the view shows. With logging enabled, you can still replay a Component's recorded state, because the log includes what update read from props, queries and Providers.
@@ -119,13 +119,15 @@ So a Model holds only the state that its own update changes, not everything the 
 
 The components in Foldkit UI were headless: each one managed behavior, keyboard handling and ARIA, and you wrote the markup. Your `toView` callback received bundles of attributes, and you spread each bundle onto the element it belonged to.
 
-In Effect UI, a headless Component gives your view parts instead. You apply each part to an element you write, then add your own classes and children.
+In Effect UI, a headless Component gives your view parts instead. You apply each part to an element you write, then add your own classes and children. Here, `Details` draws a `Disclosure`:
 
-::Listing{code="parts" whole="true"}
+::Listing{code="partsUse"}
 
-A headless Component defines `parts` instead of a view. It has its own Model, Messages and update, so it can keep its own state, such as whether it is open.
+To write a headless Component, you define `parts` instead of a view. It has its own Model, Messages and update, so it can keep its own state. This is the `Disclosure` that `Details` draws, with its open state in its own Model:
 
-::Listing{code="partsOwn" whole="true"}
+::Listing{code="partsDefine" whole="true"}
+
+This means a Component can own the behavior, keyboard handling and ARIA, while you decide every element and class. You can also package behavior of your own this way and reuse it.
 
 ### Host-agnostic rendering
 

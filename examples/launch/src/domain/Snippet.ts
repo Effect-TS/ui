@@ -32,8 +32,8 @@ export const Snippets = Schema.Struct({
   queryEffect: Files,
   tests: Files,
   play: Files,
-  parts: Files,
-  partsOwn: Files,
+  partsUse: Files,
+  partsDefine: Files,
   mount: Files,
   provider: Files
 })

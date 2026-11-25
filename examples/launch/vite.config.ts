@@ -49,11 +49,8 @@ const sources: {
     "src/autocounter/Counter.play.test.ts",
     test("resets one second after the click")
   ]],
-  parts: [["src/parts/Faq.ts", whole]],
-  partsOwn: [["src/parts/Disclosure.ts", whole], [
-    "src/parts/Details.ts",
-    whole
-  ]],
+  partsUse: [["src/parts/Details.ts", whole]],
+  partsDefine: [["src/parts/Disclosure.ts", whole]],
   mount: [["src/main.ts", whole]],
   provider: [["src/provider/CartProvider.ts", whole], [
     "src/provider/Shop.ts",
