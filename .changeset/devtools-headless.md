@@ -3,4 +3,4 @@
 "@effect/ui": minor
 ---
 
-Add `DevToolsHeadless.layer`, which sends a terminal app's log to the DevTools server, and a page at the server's URL that shows the newest session and follows it live. Inspect an OpenTUI app by running `effect-ui-devtools` and opening the URL it prints. `MessageLog.WireHost` gains `"terminal"`.
+Use `DevToolsHeadless.layer` to send an OpenTUI app's log to the DevTools server without loading the browser overlay. Run `effect-ui-devtools` and open the URL it prints to inspect the newest session and follow live updates in a read-only browser page.

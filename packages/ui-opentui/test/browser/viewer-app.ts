@@ -1,5 +1,4 @@
-// A terminal app for check-viewer.mjs: a Greeter on OpenTUI's test renderer that sends its log to the
-// DevTools server at argv[2]. Each line on stdin is typed into its input, and the frame's first line printed.
+// Uses OpenTUI's test renderer so check-viewer.mjs can drive input without a terminal.
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
 import * as DevToolsHeadless from "@effect/ui-devtools/DevToolsHeadless"
 import { OpenTuiTest } from "@effect/ui-opentui/testing"

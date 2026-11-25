@@ -71,7 +71,6 @@ export const decodeToServer = Schema.decodeUnknownOption(
 
 export const metaName = "effect-ui-devtools"
 
-// What the server that serves a page wrote into its meta tag.
 export const fromPage = (): {
   readonly url?: unknown
   readonly size?: unknown
@@ -86,7 +85,7 @@ export const fromPage = (): {
   }
 }
 
-// What `/watch` sends: Wire frames, and the sessions the server holds, on connect and whenever it drops one.
+// Sent on /watch at connection and after eviction so viewers can remove dropped sessions.
 export const Held = Schema.TaggedStruct("Held", {
   sessions: Schema.Array(Schema.String)
 })

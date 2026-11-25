@@ -1,6 +1,5 @@
-// The DevTools page, by hand: run the effect-ui-devtools bin, start a terminal app that sends it its log,
-// type into the app, open the URL the bin prints in Chromium, and see the app's state, then each new
-// keystroke without a reload. Needs the page built: `pnpm --filter @effect/ui-devtools build-viewer`.
+// Checks replay and live updates through the packaged CLI and Chromium.
+// Build the page first: `pnpm --filter @effect/ui-devtools build-viewer`.
 import { spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import { chromium } from "playwright"
@@ -17,7 +16,6 @@ const expect = (ok, what, detail) => {
   if (!ok) failures.push(what + " " + JSON.stringify(detail))
 }
 
-// Resolves with the first stdout line that matches, as the child prints it.
 const line = (child, pattern) =>
   new Promise((resolve, reject) => {
     let out = ""

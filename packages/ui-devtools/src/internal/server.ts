@@ -229,9 +229,8 @@ export const make = (options: Options) => {
     }))
   )
 
-  // Sends the sessions the server holds and their frames, then each new frame. A session's SessionStarted
-  // goes first even after it has rolled out, so a late reader has its app name. A frame seen twice, as after
-  // an app reconnects, is ignored by the reader's Inspector.
+  // Replay SessionStarted even after eviction so late viewers have the app name.
+  // The viewer's Inspector ignores duplicate frames.
   const watch = HttpRouter.add(
     "GET",
     "/watch",

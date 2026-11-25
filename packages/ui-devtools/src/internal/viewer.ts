@@ -9,7 +9,6 @@ import * as InspectorInternal from "./inspector.ts"
 import { type Feed, mountOverlay, Pages } from "./overlay.ts"
 import { styles } from "./styles.ts"
 
-// The panel fills the tab, without the controls that close it, move it around or paint an app.
 const pageStyles = `
 html, body, #root, .overlay { height: 100%; }
 body { background: var(--bg); }
@@ -18,7 +17,6 @@ body { background: var(--bg); }
 .grip, .corner-wrap, .close, .show { display: none; }
 `
 
-// The DevTools server's page: the overlay's panel, filling the tab, fed by the frames the server holds on `/watch`.
 export const mount = (
   container: HTMLElement,
   options: { readonly server: string; readonly size: number }

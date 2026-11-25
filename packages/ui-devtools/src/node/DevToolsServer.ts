@@ -12,9 +12,8 @@
  * its copy of the log: they keep working after the tab reloads or closes, and
  * cover server-rendered sessions. The control tools go to the page.
  *
- * The server's URL opens a page that shows the newest session it holds and
- * follows it live, with the overlay's panel. It's read-only, and is how a
- * terminal app that uses `DevToolsHeadless.layer` is inspected.
+ * Open the server's URL to inspect the newest session and follow live updates.
+ * This read-only page also supports terminal apps using `DevToolsHeadless.layer`.
  *
  * | Tool | Does |
  * | --- | --- |
@@ -60,7 +59,7 @@ import * as Control from "../internal/control.ts"
 import * as Mcp from "../internal/mcp.ts"
 import * as Server from "../internal/server.ts"
 
-// Built by the package's build-viewer script. src and dist sit side by side, so the path holds from either.
+// This path resolves from both src/node and dist/node.
 const viewerFile = new URL("../../dist/viewer.html", import.meta.url)
 
 const viewer = (size: number) =>

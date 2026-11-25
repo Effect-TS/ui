@@ -2,13 +2,9 @@
  * Sends an `@effect/ui` app's log to a DevTools server from a host with no
  * DOM, such as an OpenTUI app in a terminal.
  *
- * The server shows every session it holds on a page at its URL, so the app
- * can be inspected in a browser while it runs in the terminal. Start the
- * server with the `effect-ui-devtools` bin, or `DevToolsServer.layer` from
- * `@effect/ui-devtools/node`, and open the URL it prints.
- *
- * This module isn't in the package's index, so an app that imports it never
- * loads the browser overlay.
+ * Run `effect-ui-devtools` and open the URL it prints to inspect the newest
+ * session in a read-only browser page. This entry point does not load the
+ * browser overlay in the app.
  *
  * **Example** (Inspecting an OpenTUI app)
  *
@@ -43,19 +39,12 @@ import * as Socket from "effect/socket/Socket"
 import * as Control from "./internal/control.ts"
 
 /**
- * Provides the `MessageLog` with one that sends the app's entries to the
- * DevTools server at `server`, `http://127.0.0.1:4774` by default.
+ * Provides a `MessageLog` that sends entries to `server`
+ * (`http://127.0.0.1:4774` by default), using the global `WebSocket`.
+ * The session's `host` defaults to `"terminal"`; inspection is read-only.
  *
- * **Details**
- *
- * It's `MessageLog.socket` on the server's `/log` route, with the global
- * `WebSocket`, so it runs on Node 22 and later, Bun and Deno. The session is
- * listed with `host`, `"terminal"` by default. The server and its page can
- * read the session, but not pause it or dispatch to it.
- *
- * The Layer keeps the last `size` entries (1,000 by default) and sends them
- * when it connects, so the server can start after the app. A lost
- * connection is retried with backoff, and one warning is logged.
+ * Retains the last `size` entries (1,000 by default) for replay on connection,
+ * so the server can start after the app. Retries lost connections with backoff.
  *
  * @stability experimental
  * @category layers
