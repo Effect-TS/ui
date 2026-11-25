@@ -25,13 +25,13 @@ const CartCount = Html.component({
   name: "CartCount",
   model: Schema.Null,
   message: Schema.Never,
-  // Lists the Provider to read. Its value is h.shared.cart, and
+  // Lists the Provider to read. Its value is h.reads.cart, and
   // CartCount renders again when that value changes.
-  shared: { cart: CartProvider }
+  reads: { cart: CartProvider }
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.output(`${h.shared.cart.count} in cart`)
+  view: (h) => h.output(`${h.reads.cart.count} in cart`)
 })
 
 const Product = Html.component({
@@ -54,7 +54,7 @@ const AddToCart = Html.component({
   init: () => null,
   update: {
     // Sends the Message to the nearest CartProvider above. Sending
-    // needs no shared entry.
+    // needs no reads entry.
     ClickedAdd: ($) =>
       $.send(CartProvider, CartMessage.RequestedAddItem())
   },
