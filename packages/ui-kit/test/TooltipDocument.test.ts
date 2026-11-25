@@ -281,11 +281,30 @@ describe("Tooltip in a document", { concurrent: false }, () => {
       assert.isFalse(open())
     }).pipe(Effect.scoped))
 
-  it.effect("a tooltip the consumer opened stays open as the pointer moves elsewhere, until a press", () =>
+  it.effect("a tooltip the consumer opened stays open as the pointer moves elsewhere, until a press, whatever an earlier visit's pointer did", () =>
     Effect.gen(function*() {
+      rects.set("trigger", { x: 400, y: 300, width: 40, height: 20 })
       const root = yield* mountPage()
       const open = () => root.model()!.open
+      rects.set("positioner", { x: 320, y: 320, width: 200, height: 108 })
       mouse(document.body, "mousemove", 10, 10)
+      yield* tick
+      assert.isTrue(open())
+
+      // Escape with the pointer in the triangle, which no leave follows.
+      const trigger = byId("trigger")
+      mouse(trigger, "mouseenter", 430, 310)
+      mouse(trigger, "mouseleave", 440.5, 315)
+      mouse(document.body, "mousemove", 450, 318)
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+      )
+      yield* tick
+      assert.isFalse(open())
+      mouse(document.body, "mousemove", 10, 10)
+      root.send(Message.RequestedOpen())
+      yield* tick
+      mouse(document.body, "mousemove", 11, 10)
       yield* tick
       assert.isTrue(open())
       document.body.dispatchEvent(

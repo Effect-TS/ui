@@ -314,7 +314,7 @@ export type TooltipEvents = typeof TooltipEvents.Type
 // document, and the ends of the two timers. `visible`: the focus shows a
 // focus ring. The positioner's mount reports the pointer leaving and coming
 // back to the hover area: the trigger, the positioner and the triangle
-// between them.
+// between them, and that it started, as the tooltip shows.
 const TooltipMessage = UiSchema.TaggedEnum({
   EnteredTrigger: {},
   LeftTrigger: {},
@@ -326,6 +326,7 @@ const TooltipMessage = UiSchema.TaggedEnum({
   LeftPositioner: {},
   LeftHoverArea: {},
   ReturnedToHoverArea: {},
+  ShowedPositioner: {},
   PressedEscape: {},
   PressedDocument: {},
   CompletedWaitBeforeOpening: {},
@@ -340,8 +341,8 @@ const TooltipMessage = UiSchema.TaggedEnum({
 // `onTrigger`, `onPositioner`: the pointer is on that part. `inArea`: the
 // pointer came into the hover area of a hoverable tooltip that shows and
 // hasn't left it. A hidden positioner hears no leave, so both positioner
-// flags are dropped when a closed tooltip is hovered or focused again.
-// `focused`: the trigger has focus that shows a focus ring.
+// flags start over when it shows again, and are kept when the consumer
+// declines a close. `focused`: the trigger has focus that shows a focus ring.
 // `instant` is why the last change skips its transition, as
 // `data-instant` reports it: `delay` when a TooltipProvider let it skip the
 // hover delay. `turn` orders the shown tooltips of a provider's group: the
@@ -405,9 +406,10 @@ const TrackTooltip = Mount.makeStream(
         }
         const trigger = () => args.trigger
         return Effect.acquireRelease(
-          Effect.sync(() =>
+          Effect.sync(() => {
+            Queue.offerUnsafe(queue, TooltipMessage.ShowedPositioner())
             watchHoverArea(node, controller.signal, trigger, report)
-          ),
+          }),
           () => Effect.sync(() => controller.abort())
         )
       }),
@@ -470,10 +472,6 @@ const onPartsBy = (
 ): boolean =>
   model.onTrigger ||
   (props.disableHoverablePopup !== true && model.onPositioner)
-
-// The positioner flags left over from the last time the tooltip showed.
-const stale = (props: TooltipProps) =>
-  shownBy(props) ? {} : { onPositioner: false, inArea: false }
 
 // `$` in any handler of the Tooltip's `update`: a tag's `$` fits the one
 // over the whole message type.
@@ -740,7 +738,7 @@ export const Tooltip = Html.component({
   }),
   update: {
     EnteredTrigger: ($) => {
-      const entered = $.evolve({ onTrigger: true, ...stale($.props) })
+      const entered = $.evolve({ onTrigger: true })
       if ($.props.disabled === true) return entered
       if (shownBy($.props)) {
         return entered.run(Command.interrupt(WaitBeforeClosing))
@@ -771,6 +769,7 @@ export const Tooltip = Html.component({
       hoverableBy($.props) && $.model.inArea
         ? left($, { inArea: false })
         : $.model,
+    ShowedPositioner: ($) => $.evolve({ onPositioner: false, inArea: false }),
     ReturnedToHoverArea: ($) =>
       hoverableBy($.props)
         ? $.evolve({ inArea: true }).run(Command.interrupt(WaitBeforeClosing))
@@ -780,7 +779,7 @@ export const Tooltip = Html.component({
     // nor holds it open.
     FocusedTrigger: ($, { visible }) => {
       if (!visible) return $.model
-      const focused = $.evolve({ focused: true, ...stale($.props) })
+      const focused = $.evolve({ focused: true })
       if ($.props.disabled === true || shownBy($.props)) return focused
       return focused.evolve({ instant: "focus" }).run(
         Command.interrupt(WaitBeforeOpening)

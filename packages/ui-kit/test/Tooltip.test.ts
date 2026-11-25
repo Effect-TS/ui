@@ -385,6 +385,9 @@ describe("Tooltip", () => {
       assert.deepStrictEqual(scene.current.interrupted.map((c) => c.name), [
         "WaitBeforeClosing"
       ])
+      // A close the consumer declines keeps the pointer in the hover area.
+      scene.fireDocument("keydown", { key: "Escape" })
+        .emitted({ _tag: "RequestedClose" })
       scene.mounted(tracking(scene), sent("LeftHoverArea"))
       scene.resolve(
         scene.current.pending[0]!.command,
