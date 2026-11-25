@@ -565,31 +565,71 @@ describe("DevTools overlay", { concurrent: false }, () => {
       )
     }))
 
-  it.live("uses same-cause mount state when time travelling mid-mount or to an Update that mounts a child", () =>
+  it.live("uses same-cause mount state without borrowing past a superseding parent update", () =>
     Effect.gen(function*() {
       let inits = 0
       const Row = Html.component({
         name: "Row",
-        props: Schema.Struct({ id: Schema.String }),
+        props: Schema.Struct({ id: Schema.String, seed: Schema.Number }),
         model: Schema.Number,
         message: Schema.Never
       }).make({
-        init: () => ++inits,
+        init: ($) => $.props.seed > 0 ? $.props.seed : ++inits,
         update: ($) => $.model,
         view: (h, n) => h.li.children(`${h.props.id}:${n}`)
       })
-      const ListMessage = UiSchema.TaggedEnum({ ClickedAdd: {} })
+      const TriggerMessage = UiSchema.TaggedEnum({ Clicked: {} })
+      const TriggerEvents = UiSchema.TaggedEnum({ Set: { n: Schema.Number } })
+      const Trigger = Html.component({
+        name: "Trigger",
+        model: Schema.Null,
+        message: TriggerMessage,
+        events: TriggerEvents
+      }).make({
+        init: () => null,
+        update: {
+          Clicked: ($) =>
+            $.set(null).emit(TriggerEvents.Set({ n: 1 })).emit(
+              TriggerEvents.Set({ n: 2 })
+            )
+        },
+        view: (h) => h.button.onClick(TriggerMessage.Clicked()).children("Go")
+      })
+      const ListMessage = UiSchema.TaggedEnum({
+        ClickedAdd: {},
+        SetSame: { n: Schema.Number }
+      })
       const List = Html.component({
         name: "List",
-        model: Schema.Array(Schema.String),
+        model: Schema.Struct({
+          rows: Schema.Array(Schema.String),
+          same: Schema.Number
+        }),
         message: ListMessage
       }).make({
-        init: () => ["a", "b", "c"],
-        update: { ClickedAdd: ($) => [...$.model, "d"] },
-        view: (h, rows) =>
+        init: () => ({ rows: ["a", "b", "c"], same: 0 }),
+        update: {
+          ClickedAdd: ($) => $.evolve({ rows: [...$.model.rows, "d"] }),
+          SetSame: ($, { n }) => $.evolve({ same: n })
+        },
+        view: (h, model) =>
           h.div(
             h.button.onClick(ListMessage.ClickedAdd()).children("Add"),
-            h.ul(rows.map((id) => Row(h, { key: id, props: { id } })))
+            Trigger(h, {
+              key: "t",
+              onEmit: { Set: ({ n }) => ListMessage.SetSame({ n }) }
+            }),
+            h.ul(
+              model.rows.map((id) =>
+                Row(h, { key: id, props: { id, seed: 0 } })
+              ),
+              model.same > 0
+                ? Row(h, {
+                  key: "same",
+                  props: { id: "same", seed: model.same }
+                })
+                : null
+            )
           )
       })
       const memory = MessageLog.makeMemory({ size: 500 })
@@ -606,11 +646,15 @@ describe("DevTools overlay", { concurrent: false }, () => {
       )
       yield* settle
       yield* click(HtmlLocator.getByRole(app, "button", { name: "Add" }))
+      yield* click(HtmlLocator.getByRole(app, "button", { name: "Go" }))
 
       const rowA = memory.entries().find((entry) =>
         entry._tag === "Mounted" && entry.path === "/List/Row[a]"
       )!
-      const added = memory.entries().find((entry) => entry._tag === "Update")!
+      const updates = memory.entries().filter((entry) =>
+        entry._tag === "Update" && entry.path === "/List"
+      )
+      const [added, firstSame, secondSame] = updates
       const root = overlay()
       yield* open(root)
       yield* click(
@@ -633,6 +677,25 @@ describe("DevTools overlay", { concurrent: false }, () => {
       yield* click(entry(root, new RegExp("^#" + added.seq + " "))[0]!)
       assert.isNull(root.querySelector(".pause-note"))
       assert.deepStrictEqual(items(), ["a:1", "b:2", "c:3", "d:4"])
+
+      yield* click(entry(root, new RegExp("^#" + firstSame.seq + " "))[0]!)
+      assert.deepStrictEqual(items(), ["a:1", "b:2", "c:3", "d:4", "same:1"])
+      const fellBack = Array.from(
+        root.querySelectorAll<HTMLDetailsElement>("details.pause-note")
+      )
+      assert.strictEqual(fellBack.length, 1)
+      assert.isFalse(fellBack[0].open)
+      assert.deepStrictEqual(
+        Array.from(
+          fellBack[0].querySelectorAll(".pause-paths .path"),
+          (node) => text(node)
+        ),
+        ["/List/Row[same]"]
+      )
+
+      yield* click(entry(root, new RegExp("^#" + secondSame.seq + " "))[0]!)
+      assert.isNull(root.querySelector(".pause-note"))
+      assert.deepStrictEqual(items(), ["a:1", "b:2", "c:3", "d:4", "same:2"])
     }))
 
   it.live("finds Editor[n2]'s Save, follows it to its interruption and back", () =>

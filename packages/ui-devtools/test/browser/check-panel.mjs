@@ -172,6 +172,30 @@ await run("panel", async ({ browser, expect, failures, url }) => {
       state
     )
 
+    const gutter = await page.evaluate(() => {
+      const doc = document.querySelector("iframe[data-effect-ui-devtools]")
+        .contentDocument
+      const box = doc.querySelector(".timeline-box").getBoundingClientRect()
+      const scroller = doc.querySelector(".timeline")
+      const scrollRect = scroller.getBoundingClientRect()
+      const strip = doc.querySelector(".gutter")?.getBoundingClientRect()
+      return {
+        scrolls: scroller.scrollHeight > scroller.clientHeight,
+        boxRight: Math.round(box.right),
+        scrollRight: Math.round(scrollRect.right),
+        gutterLeft: strip === undefined ? null : Math.round(strip.left),
+        gutterRight: strip === undefined ? null : Math.round(strip.right),
+        gutterWidth: strip === undefined ? 0 : Math.round(strip.width)
+      }
+    })
+    expect(
+      gutter.scrolls && gutter.gutterWidth > 0 &&
+        gutter.gutterLeft >= gutter.scrollRight - 0.5 &&
+        gutter.gutterRight <= gutter.boxRight + 0.5,
+      "the timeline marker gutter sits outside the native scrollbar",
+      gutter
+    )
+
     await frame.locator(".row-button").nth(3).click()
     const heading = await readable(frame, ".ehead .headline")
     expect(

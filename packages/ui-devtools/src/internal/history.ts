@@ -74,6 +74,14 @@ const apply = (
   }
 }
 
+const isDirty = (dirty: ReadonlySet<string>, path: string) => {
+  if (dirty.has(path)) return true
+  for (const ancestor of dirty) {
+    if (path.startsWith(ancestor + "/")) return true
+  }
+  return false
+}
+
 const makeSession = (size: number) => {
   const base = new Map<number, Held>()
   const entries: Array<Entry> = []
@@ -135,19 +143,28 @@ const makeSession = (size: number) => {
           byPath.set(path, recorded as BrowserHost.Recorded)
         }
       }
+      const dirty = new Set<string>()
       for (const entry of entries) {
         if (entry.seq <= seq) continue
-        if (
-          (entry._tag === "Mounted" || entry._tag === "Waiting") &&
-          entry.causedBy !== undefined &&
-          entry.causedBy <= seq &&
-          !byPath.has(entry.path)
-        ) {
-          byPath.set(entry.path, {
-            props: entry.props,
-            model: entry.model,
-            queries: entry.queries
-          } as BrowserHost.Recorded)
+        switch (entry._tag) {
+          case "Mounted":
+          case "Waiting":
+            if (entry.causedBy === undefined || entry.causedBy > seq) {
+              dirty.add(entry.path)
+            } else if (!byPath.has(entry.path) && !isDirty(dirty, entry.path)) {
+              byPath.set(entry.path, {
+                props: entry.props,
+                model: entry.model,
+                queries: entry.queries
+              } as BrowserHost.Recorded)
+            }
+            break
+          case "Update":
+          case "PropsChanged":
+          case "QueryChanged":
+          case "Unmounted":
+            dirty.add(entry.path)
+            break
         }
       }
       return (path) => byPath.get(path)
