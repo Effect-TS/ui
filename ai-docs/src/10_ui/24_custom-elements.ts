@@ -76,7 +76,7 @@ export const BrandColor = Html.component({
         .children(
           // The picker gets the Model's color on every render, but the host
           // writes the property only when it changes, so dragging the picker
-          // isn't interrupted. `value`, `checked` and `open` are plain
+          // isn't interrupted. `value`, `checked`, `selected` and `open` are plain
           // properties on a custom element too: the host doesn't hold them to
           // the view's value as it does on an `<input>`.
           ColorPicker(h)

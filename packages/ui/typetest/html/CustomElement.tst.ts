@@ -1,8 +1,8 @@
-import { Component, UiSchema, type View } from "@effect/ui"
+import { Component, Mount, UiSchema, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import type { HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
 
 const Picker = Html.customElement({
@@ -69,6 +69,13 @@ describe("Html.customElement", () => {
           expect(picker.onColorChanged).type.not.toBeCallableWith({
             _tag: "Other" as const
           })
+          const Attach = Mount.make(
+            "Attach",
+            { args: {} },
+            (_: HTMLElement) => Effect.succeed(Component.noop)
+          )
+          expect(Picker(h).onMount(Attach()).forward((node) => h.div(node)))
+            .type.toHaveProperty("onColorChanged")
           return Picker(h)(h.span("shorthand")).color(color)
         }
       })

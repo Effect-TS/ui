@@ -218,9 +218,11 @@ export interface Steps<C extends AnyComponent, Parts = never>
    *
    * **Details**
    *
-   * The handler gets `detail` decoded by the event's Schema, as in the
-   * browser host. The step throws when nothing handles `event` there or
-   * above, and is ignored when the handler returns `undefined`.
+   * The innermost element with a handler for `event`, the matched one or an
+   * ancestor, gets it, as a bubbling event does. The handler gets `detail`
+   * decoded by the event's Schema, as in the browser host. The step throws
+   * when nothing handles `event` there or above, and is ignored when the
+   * handler returns `undefined`.
    */
   fireElement<
     E extends { readonly [event: string]: Schema.Decoder<unknown> },

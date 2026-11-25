@@ -1783,8 +1783,8 @@ export type CustomEventMethod<K extends string> = `on${Capitalize<
 /**
  * The names that get no generated method on a custom element, because the
  * builder already uses them: its own fields and core methods, such as
- * `content`, `key`, `ref`, `children` and `onMount`, plus `id`, `class`
- * and `style`. Set a property with one of these names with `prop`.
+ * `content`, `key`, `ref`, `children` and `onMount`, the names every
+ * object has, such as `toString`, plus `id`, `class` and `style`. Set a property with one of these names with `prop`.
  *
  * @stability experimental
  * @category custom elements
@@ -1792,7 +1792,7 @@ export type CustomEventMethod<K extends string> = `on${Capitalize<
  */
 export type CustomElementReserved =
   | keyof View.ContainerBuilder<any>
-  | keyof object
+  | keyof typeof Object.prototype
   | "id"
   | "class"
   | "style"
@@ -1869,6 +1869,43 @@ export class CustomElementBuilder<
     ...inputs: C
   ): CustomElement<Msg, R | View.Requirements<C[number]>, P, E, Tag> {
     return super.children(...inputs) as any
+  }
+  /**
+   * Like `Element.onMount`, keeping the generated methods.
+   *
+   * @since 0.1.0
+   */
+  override onMount<R2>(
+    mount: Mount.Issued<Msg | Component.Noop, R2, HTMLElement, never>
+  ): CustomElement<Msg, R | R2, P, E, Tag>
+  /**
+   * Rejects any other mount result, with a type error that says what to end
+   * it with.
+   *
+   * @since 0.1.0
+   */
+  override onMount(
+    mount: Mount.Issued<
+      Msg | Component.Noop | View.MountHint,
+      any,
+      HTMLElement,
+      never
+    >
+  ): never
+  override onMount(mount: View.Mount<Msg>): any {
+    return (super.onMount as any)(mount)
+  }
+  /**
+   * Like `Element.forward`, keeping the generated methods.
+   *
+   * @since 0.1.0
+   */
+  override forward<R2 = never>(
+    place: (
+      node: CustomElement<Msg, R, P, E, Tag>
+    ) => View.Element<Msg, R2> | View.ElementBuilder<Msg, R2, any, any>
+  ): CustomElement<Msg, R | R2, P, E, Tag> {
+    return View.withForward(this, place as any) as any
   }
 }
 
@@ -1961,10 +1998,13 @@ const capitalize = (name: string): string =>
  * **Details**
  *
  * Each declared property gets a method that writes it as a JavaScript
- * property, not an attribute, so arrays and objects work. The browser host
- * writes it when its value changes, and resets it to `""`, `false` or
- * `null` when a render leaves it out. `value`, `checked` and `open` are
- * plain properties on a custom element, not controlled as on an `input`.
+ * property, not an attribute, so arrays and objects work. The value is
+ * written as given: the Schema types it but doesn't encode it. The browser
+ * host writes it when it isn't `===` to the last one written, so a new array
+ * on every render is written on every render, and resets it to `""`,
+ * `false` or `null` when a render leaves it out. `value`, `checked`,
+ * `selected` and `open` are plain properties on a custom element, not
+ * controlled as on an `input`.
  * The server renders none of them: the browser host sets them when it adopts
  * the element.
  *

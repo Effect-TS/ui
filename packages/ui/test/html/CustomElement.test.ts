@@ -9,7 +9,6 @@ import { describe, vi } from "vitest"
 
 class TestPicker extends HTMLElement {
   color = ""
-  stops: ReadonlyArray<number> = []
   value: unknown = undefined
 }
 customElements.define("test-picker", TestPicker)
@@ -22,6 +21,7 @@ const Picker = Html.customElement({
   },
   events: {
     "color-changed": Schema.Struct({ value: Schema.String }),
+    change: Schema.Struct({ color: Schema.String }),
     cleared: Schema.Struct({})
   }
 })
@@ -69,6 +69,7 @@ const Swatch = Html.component({
         .color(color)
         .value(stops)
         .onColorChanged(({ value }) => Message.ChangedColor({ color: value }))
+        .onChange(({ color }) => Message.ChangedColor({ color }))
         .onCleared(Message.Cleared()),
       h.output(`${color} ${cleared}`)
     )
@@ -152,7 +153,7 @@ describe("Html.customElement", () => {
       expect(app.querySelector("output")!.textContent).toBe("#f00,#0f0")
     }).pipe(Effect.scoped))
 
-  it.effect("a detail the Schema rejects logs and sends nothing, and a missing one decodes as {}", () =>
+  it.effect("decodes each event's detail, also for an HTML event name, logs one its Schema rejects, and decodes a missing one as {}", () =>
     Effect.gen(function*() {
       const error = vi.spyOn(console, "error").mockImplementation(() => {})
       yield* Effect.addFinalizer(() => Effect.sync(() => error.mockRestore()))
@@ -164,8 +165,12 @@ describe("Html.customElement", () => {
         bubbles: true
       })
       send(picker(app)!, "cleared", { bubbles: true })
+      send(picker(app)!, "change", {
+        detail: { color: "#abc" },
+        bubbles: true
+      })
       yield* tick
-      expect(app.querySelector("output")!.textContent).toBe("#000 1")
+      expect(app.querySelector("output")!.textContent).toBe("#abc 1")
       expect(error).toHaveBeenCalledOnce()
     }).pipe(Effect.scoped))
 

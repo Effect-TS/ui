@@ -167,8 +167,9 @@ export interface HtmlPlay<Model, Msg, Events>
   ): Effect.Effect<void, Play.StepError>
   /**
    * Sends an event `element` declares, from the element `locator` matches,
-   * with `detail` as the element would send it, as `HtmlScene.fireElement`
-   * does. Throws when nothing handles `event` there or above.
+   * with `detail` as the element would send it, to the innermost element
+   * with a handler for it, as `HtmlScene.fireElement` does. Throws when
+   * nothing handles `event` there or above.
    */
   fireElement<
     E extends { readonly [event: string]: Schema.Decoder<unknown> },

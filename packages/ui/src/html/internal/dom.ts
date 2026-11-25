@@ -9,6 +9,7 @@ import { bubblingEvents, ownEvents } from "./ownEvents.ts"
 import {
   type FieldState,
   fieldStateOf,
+  isCustomEvent,
   offsetIn,
   payloadOf
 } from "./payload.ts"
@@ -571,7 +572,7 @@ export const makeHost = (
     }
     if (name === "dragstart") startDrag(event as DragEvent, path)
     const own = ownEvents.has(name) ||
-      (!event.bubbles && !bubblingEvents.has(name))
+      (!event.bubbles && (isCustomEvent(event) || !bubblingEvents.has(name)))
     let node: Node
     const payload = () =>
       name === "dragend"
@@ -586,7 +587,8 @@ export const makeHost = (
           node as globalThis.Element,
           lastPointer
         )
-    for (let index = 0; index < path.length; index++) {
+    const from = own ? Math.max(path.indexOf(event.target as Node), 0) : 0
+    for (let index = from; index < path.length; index++) {
       node = path[index]!
       if (node === container) break
       if (dispatch(node, name, payload, event)) {
