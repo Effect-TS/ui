@@ -98,6 +98,11 @@ export const stateCodecOf = (component: Component.Any): StateCodec => {
 }
 
 /** @internal */
+export const forgetStateCodec = (component: Component.Any): void => {
+  stateCodecs.delete(component)
+}
+
+/** @internal */
 export const encodePage = (
   component: Component.Any,
   model: unknown,

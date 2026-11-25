@@ -1,14 +1,19 @@
 import * as Cause from "effect/Cause"
-import type * as Component from "../../Component.ts"
+import * as Schema from "effect/Schema"
+import * as Component from "../../Component.ts"
+import { replace } from "../../internal/child.ts"
 import { formatCause, isRedacted } from "../../internal/codecRun.ts"
 import type * as keptRun from "../../internal/keptRun.ts"
-import type * as Kernel from "../../internal/kernel.ts"
+import * as Kernel from "../../internal/kernel.ts"
 import type * as runtime from "../../internal/runtime.ts"
+import { forgetStateCodec } from "../../internal/stateCodec.ts"
 import * as stateRestore from "../../internal/stateRestore.ts"
 import type * as MessageLog from "../../MessageLog.ts"
+import type * as View from "../../View.ts"
 import type * as BrowserHost from "../BrowserHost.ts"
 
 const hotKey = Symbol.for("@effect/ui/hot")
+const swapKey = Symbol.for("@effect/ui/hot/swap")
 const devToolsKey = Symbol.for("@effect/ui/devtools")
 const storageKey = "@effect/ui/hot"
 
@@ -44,6 +49,7 @@ interface HotPayload {
 
 interface WindowState {
   readonly roots: Set<() => SavedRoot | undefined>
+  readonly mounted: Set<Kernel.Instance>
   pending: HotPayload | undefined
   scroll: HotPayload["scroll"]
 }
@@ -117,12 +123,19 @@ const stateOf = (view: Window): WindowState => {
   if (state === undefined) {
     const made: WindowState = {
       roots: new Set(),
+      mounted: new Set(),
       pending: undefined,
       scroll: undefined
     }
     states.set(view, state = made)
-    ;(view as unknown as Record<symbol, (() => void) | undefined>)[hotKey] ??=
-      () => saveWindow(view, made)
+    const hooks = view as unknown as Record<symbol, unknown>
+    hooks[hotKey] ??= () => saveWindow(view, made)
+    hooks[swapKey] ??= (
+      first: Exports,
+      next: Exports,
+      names: ReadonlyArray<string>,
+      locals: ReadonlyArray<unknown>
+    ) => swap(made, first, next, names, locals)
   }
   return state
 }
@@ -176,6 +189,125 @@ const interruptedIn = (
     if (!entry.inst.closed) interruptedIn(entry.inst, out)
   }
   return out
+}
+
+type Exports = Readonly<Record<string, unknown>>
+
+type Fields = Component.Any & {
+  readonly view?: unknown
+  readonly layer?: unknown
+  readonly parts?: unknown
+  readonly head?: unknown
+  readonly subscriptions?: unknown
+  readonly "~load"?: unknown
+  readonly "~queries"?: unknown
+}
+
+// Only a component whose state lives in its Model can take new code in place.
+const plain = (component: Fields): boolean => {
+  const definition = component.definition
+  return component.view !== undefined && component.layer === undefined &&
+    component.parts === undefined && component["~load"] === undefined &&
+    component["~queries"] === undefined &&
+    definition.shares === undefined && definition.reads === undefined &&
+    definition.slots.length === 0
+}
+
+const swappable = (from: unknown, to: unknown): to is Fields =>
+  Component.isComponent(from) && Component.isComponent(to) &&
+  plain(from) && plain(to) &&
+  from.definition.name === to.definition.name &&
+  from.elements === to.elements &&
+  ((from as Fields).head === undefined) ===
+    ((to as Fields).head === undefined) &&
+  ((from as Fields).subscriptions === undefined) ===
+    ((to as Fields).subscriptions === undefined)
+
+const fits = (schema: Schema.Top | undefined, value: unknown): boolean => {
+  if (schema === undefined) return true
+  try {
+    return Schema.is(schema)(value)
+  } catch {
+    return false
+  }
+}
+
+const eachInstance = (
+  inst: Kernel.Instance,
+  f: (inst: Kernel.Instance) => boolean
+): boolean => {
+  if (!f(inst)) return false
+  if (inst.closed) return true
+  for (const child of stateRestore.childrenOf(inst.rendered)) {
+    if (!eachInstance(child, f)) return false
+  }
+  const kept = inst.kept as keptRun.Table | undefined
+  for (const entry of kept?.kids.values() ?? []) {
+    if (!entry.inst.closed && !eachInstance(entry.inst, f)) return false
+  }
+  return true
+}
+
+// Whether a record draws one of `components`, which a re-run makes anew.
+const drawsAny = (
+  rec: Kernel.Rec | undefined,
+  components: ReadonlySet<unknown>
+): boolean => {
+  if (rec === undefined) return false
+  if (
+    rec.v._tag === "Child" &&
+    components.has((rec.v as View.Child<any, any>).component)
+  ) return true
+  if (rec.v._tag === "Child" && rec.kids === undefined) return false
+  for (const kid of rec.kids ?? []) {
+    if (drawsAny(kid, components)) return true
+  }
+  return false
+}
+
+const swap = (
+  state: WindowState,
+  first: Exports,
+  next: Exports,
+  names: ReadonlyArray<string>,
+  locals: ReadonlyArray<unknown>
+): boolean => {
+  const pairs = new Map<unknown, Fields>()
+  for (const name of names) {
+    const from = first[name]
+    const to = next[name]
+    if (from === to) continue
+    if (!swappable(from, to)) return false
+    pairs.set(from, to)
+  }
+  const volatile = new Set(locals)
+  const found: Array<Kernel.Instance> = []
+  for (const root of state.mounted) {
+    const ok = eachInstance(root, (inst) => {
+      const to = pairs.get(inst.component)
+      if (to === undefined) return true
+      found.push(inst)
+      const parked = (inst.kept as keptRun.Table | undefined)?.kids.values()
+      return inst.failure === undefined && fits(to.model, inst.model) &&
+        fits(to.definition.props, inst.props) &&
+        !drawsAny(inst.rendered, volatile) &&
+        !Array.from(parked ?? [], (entry) => entry.inst.component)
+          .some((component) => volatile.has(component))
+    })
+    if (!ok) return false
+  }
+  // Every importer holds the first object, so the new code goes onto it.
+  for (const [from, to] of pairs) {
+    Object.assign(from as Component.Any, to)
+    replace(from as Component.Any, to)
+    forgetStateCodec(from as Component.Any)
+  }
+  for (const inst of found) {
+    if (inst.closed) continue
+    Kernel.markDirty(inst)
+    inst.component["~sync"]?.(inst)
+  }
+  return true
 }
 
 const restarted = (inst: Kernel.Instance, why: string): string =>
@@ -263,6 +395,7 @@ export const open = (
       instance = inst
       restore.watch(inst.tree)
       windowState.roots.add(capture)
+      windowState.mounted.add(inst)
     },
     flushed: (buildsPendingSince) => {
       if (
@@ -279,6 +412,7 @@ export const open = (
       restore.clear()
     },
     detach: () => {
+      if (instance !== undefined) windowState.mounted.delete(instance)
       instance = undefined
       windowState.roots.delete(capture)
     }

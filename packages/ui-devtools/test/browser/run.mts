@@ -53,5 +53,5 @@ export const run = async (
       ? name + ": ok"
       : name + ": " + failures.length + " failed"
   )
-  process.exitCode = failures.length === 0 ? 0 : 1
+  if (failures.length > 0) process.exitCode = 1
 }

@@ -8,9 +8,27 @@ import {
   HtmlServer
 } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
-import { Deferred, Effect, Redacted, Schema, SchemaGetter } from "effect"
+import { Deferred, Effect, Layer, Redacted, Schema, SchemaGetter } from "effect"
 
 const hotKey = Symbol.for("@effect/ui/hot")
+const swapKey = Symbol.for("@effect/ui/hot/swap")
+
+type Exports = Record<string, unknown>
+
+const hotSwap = (
+  first: Exports,
+  next: Exports,
+  locals: ReadonlyArray<unknown> = []
+): boolean =>
+  (window as unknown as Record<
+    symbol,
+    (
+      first: Exports,
+      next: Exports,
+      names: ReadonlyArray<string>,
+      locals: ReadonlyArray<unknown>
+    ) => boolean
+  >)[swapKey](first, next, Object.keys(next), locals)
 
 const triggerHotSave = () =>
   (window as unknown as Record<symbol, (() => void) | undefined>)[hotKey]?.()
@@ -532,6 +550,92 @@ describe("hot reload", { concurrent: false }, () => {
           yield* tick
           assert.strictEqual(runs, 1)
           assert.strictEqual(el.textContent, "apple=10")
+        }))
+    }))
+
+  it.live("updates mounted components in place, or refuses", () =>
+    Effect.gen(function*() {
+      sessionStorage.clear()
+      const Msg = UiSchema.TaggedEnum({ Inc: {} })
+      const counter = (label: string) =>
+        Html.component({ name: "Counter", model: Schema.Number, message: Msg })
+          .make({
+            init: () => 0,
+            update: ($) => $.model + 1,
+            view: (h, count) =>
+              h.button.onClick(Msg.Inc()).children(`${label}=${count}`)
+          })
+      const fixed = (name: string, text: () => string) =>
+        Html.component({ name, model: Schema.Number, message: Msg }).make({
+          init: () => 0,
+          update: ($) => $.model,
+          view: (h) => h.i(text())
+        })
+      const Row = fixed("Row", () => "row")
+      const Counter = counter("a")
+      const app = (label: string, child: typeof Counter) =>
+        Html.component({ name: "App", model: Schema.Number, message: Msg })
+          .make({
+            init: () => 0,
+            update: ($) => $.model + 1,
+            view: (h, count) =>
+              h.div(
+                h.span(`${label}=${count}`),
+                child(h, { key: "c" }),
+                Row(h, { key: "r" })
+              )
+          })
+      const first = { App: app("app", Counter), Counter }
+
+      yield* inContainer("swap", (el) =>
+        Effect.gen(function*() {
+          const root = yield* BrowserHost.mountEffect(first.App, {}, el)
+          root.send(Msg.Inc())
+          const button = el.querySelector("button")!
+          button.click()
+          yield* tick
+          assert.strictEqual(el.textContent, "app=1a=1row")
+
+          const Edited = counter("b")
+          assert.isTrue(
+            hotSwap(first, { App: app("edited", Edited), Counter: Edited })
+          )
+          yield* tick
+          assert.strictEqual(el.textContent, "edited=1b=1row")
+          assert.strictEqual(el.querySelector("button"), button)
+          button.click()
+          yield* tick
+          assert.strictEqual(el.textContent, "edited=1b=2row")
+
+          const Text = Html.component({
+            name: "Counter",
+            model: Schema.String,
+            message: Msg
+          }).make({
+            init: () => "",
+            update: ($) => $.model,
+            view: (h) => h.b()
+          })
+          assert.isFalse(hotSwap(first, { Counter: Text }))
+          assert.isFalse(
+            hotSwap(first, {
+              Counter: counter("c").pipe(Component.provide(Layer.empty))
+            })
+          )
+          assert.isFalse(hotSwap(first, { App: app("c", Counter) }, [Row]))
+          yield* tick
+          assert.strictEqual(el.textContent, "edited=1b=2row")
+        }))
+
+      const Broken = fixed("Broken", () => {
+        throw new Error("broken")
+      })
+      const Fixed = fixed("Broken", () => "fixed")
+      yield* inContainer("swap-failed", (el) =>
+        Effect.gen(function*() {
+          yield* BrowserHost.mountEffect(Broken, {}, el).pipe(Effect.ignore)
+          yield* tick
+          assert.isFalse(hotSwap({ Broken }, { Broken: Fixed }))
         }))
     }))
 })

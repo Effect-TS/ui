@@ -31,6 +31,15 @@ export interface ComposeOptions extends Options {
 
 const noProps: Readonly<Record<string, never>> = Object.freeze({})
 
+// Components a hot update copied onto an older object, mapped to that object,
+// so a re-run module's view keeps its children mounted.
+let replaced: WeakMap<object, Component.Any> | undefined
+
+/** @internal */
+export const replace = (from: Component.Any, to: object): void => {
+  ;(replaced ??= new WeakMap()).set(to, from)
+}
+
 /** @internal */
 export const make = (
   component:
@@ -45,7 +54,7 @@ export const make = (
   const { onEmit } = options
   return {
     _tag: "Child",
-    component: component as Component.Any,
+    component: replaced?.get(component) ?? component as Component.Any,
     key: options.key ?? "",
     props: options.props ?? noProps,
     onEmit: typeof onEmit === "object"

@@ -130,6 +130,22 @@ Layer.launch(Main).pipe(Effect.runFork)
 )
 write("routed.ts", routedSource("r1"))
 
+const snakeDir = path.join(root, "snake")
+fs.cpSync(path.join(repo, "examples/snake/src"), path.join(snakeDir, "src"), {
+  recursive: true,
+  filter: (from) => !from.endsWith(".test.ts")
+})
+write(
+  "snake/package.json",
+  JSON.stringify({ imports: { "#domain/*": "./src/domain/*.ts" } })
+)
+write("snake.html", html("snake/src/main.ts"))
+const snakeGame = fs.readFileSync(
+  path.join(snakeDir, "src/SnakeGame.ts"),
+  "utf8"
+)
+const snakeMain = fs.readFileSync(path.join(snakeDir, "src/main.ts"), "utf8")
+
 try {
   await run("hot reload", async ({ browser, expect, failures, url }) => {
     const page = await browser.newPage()
@@ -319,6 +335,158 @@ try {
   }, {
     root,
     plugins: [DevToolsVite.plugin({ port: 47769 })],
+    experimental: { hmrPartialAccept: false },
+    server: { fs: { allow: [root, repo] } }
+  })
+
+  await run("hot update", async ({ browser, expect, failures, url }) => {
+    const page = await browser.newPage()
+    const warnings = []
+    const logTags = []
+    let loads = 0
+    page.on("load", () => loads++)
+    page.on("websocket", (ws) => {
+      if (!ws.url().endsWith(":47770/log")) return
+      ws.on("framesent", ({ payload }) => {
+        if (typeof payload !== "string") return
+        try {
+          const parsed = JSON.parse(payload)
+          if (typeof parsed?._tag === "string") logTags.push(parsed._tag)
+        } catch {
+          return
+        }
+      })
+    })
+    page.on("console", (msg) => {
+      if (msg.type() === "warning") warnings.push(msg.text())
+      if (msg.type() === "error") failures.push("console error: " + msg.text())
+    })
+    page.on("pageerror", (error) => {
+      failures.push("pageerror: " + String(error))
+    })
+
+    const title = () => page.locator("h1").textContent()
+    const cells = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll(".w-6")].map((cell) => cell.className)
+          .join("|")
+      )
+    const titled = (text) =>
+      page.waitForFunction(
+        (text) => document.querySelector("h1")?.textContent === text,
+        text
+      )
+    const edit = (name, source) => {
+      fs.writeFileSync(path.join(snakeDir, name), source, "utf8")
+      // Saves a few milliseconds apart can reach the page as one update.
+      return page.waitForTimeout(700)
+    }
+    const reloadWith = (name, source) =>
+      Promise.all([page.waitForEvent("load"), edit(name, source)])
+
+    await page.goto(url + "snake.html")
+    await titled("Snake Game")
+    await page.keyboard.press(" ")
+    await page.waitForFunction(() =>
+      document.body.textContent?.includes("Playing")
+    )
+    await page.waitForTimeout(400)
+    await page.keyboard.press(" ")
+    await page.waitForFunction(() =>
+      document.body.textContent?.includes("Paused")
+    )
+    const paused = await cells()
+    const documentTitle = await page.title()
+    await page.evaluate(() => {
+      window.hotH1 = document.querySelector("h1")
+    })
+    loads = 0
+    logTags.length = 0
+
+    await edit(
+      "src/SnakeGame.ts",
+      snakeGame.replace("\"Snake Game\"", "\"Snake Edited\"")
+    )
+    await titled("Snake Edited")
+    await page.waitForTimeout(200)
+    expect(loads === 0, "title edit loaded no page", { loads })
+    expect(
+      await page.evaluate(() => document.querySelector("h1") === window.hotH1),
+      "title edit kept the h1 node",
+      {}
+    )
+    const edited = await cells()
+    expect(edited === paused, "title edit kept the snake and apple", {})
+    expect(
+      (await page.title()) === documentTitle,
+      "title edit kept the head",
+      { before: documentTitle, after: await page.title() }
+    )
+    const replayed = logTags.filter((tag) =>
+      tag === "Mounted" || tag.startsWith("Command")
+    )
+    expect(replayed.length === 0, "title edit ran no init or Command", {
+      logTags
+    })
+    await page.keyboard.press(" ")
+    await page.waitForFunction(
+      (paused) =>
+        [...document.querySelectorAll(".w-6")].map((cell) => cell.className)
+          .join("|") !== paused,
+      paused
+    )
+    await page.keyboard.press(" ")
+    await page.waitForFunction(() =>
+      document.body.textContent?.includes("Paused")
+    )
+
+    warnings.length = 0
+    const withLevel = snakeGame
+      .replace("\"Snake Game\"", "\"Snake Level\"")
+      .replace(
+        "highScore: Schema.Number",
+        "highScore: Schema.Number,\n  level: Schema.Number"
+      )
+      .replace("highScore: 0 })", "highScore: 0, level: 1 })")
+    await reloadWith("src/SnakeGame.ts", withLevel)
+    await titled("Snake Level")
+    expect(
+      warnings.some((text) =>
+        text.includes("/SnakeGame restarted from init") &&
+        text.includes("no longer decodes")
+      ),
+      "new required Model field reloaded and restarted from init",
+      warnings
+    )
+
+    const fresh = await cells()
+    await reloadWith(
+      "src/main.ts",
+      snakeMain.replace(
+        "import { SnakeGame } from \"./SnakeGame.ts\"",
+        "import { SnakeGame, SnakeGameModel } from \"./SnakeGame.ts\"\nvoid SnakeGameModel"
+      )
+    )
+    await titled("Snake Level")
+    loads = 0
+    await reloadWith(
+      "src/SnakeGame.ts",
+      withLevel.replace("\"Snake Level\"", "\"Snake Mixed\"")
+    )
+    await titled("Snake Mixed")
+    expect(loads === 1, "edit under a mixed import reloaded the page", {
+      loads
+    })
+    expect(
+      (await cells()) === fresh,
+      "edit under a mixed import kept the snake and apple",
+      {}
+    )
+
+    await page.close()
+  }, {
+    root,
+    plugins: [DevToolsVite.plugin({ port: 47770 })],
     server: { fs: { allow: [root, repo] } }
   })
 } finally {

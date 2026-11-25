@@ -30,6 +30,7 @@ import * as Predicate from "effect/Predicate"
 import type * as DevTools from "../DevTools.ts"
 import { metaName } from "../internal/control.ts"
 import * as DevToolsServer from "./DevToolsServer.ts"
+import * as hotExports from "./internal/hotExports.ts"
 
 /**
  * Options for the DevTools overlay mounted by `plugin`.
@@ -53,8 +54,9 @@ export interface OverlayOptions {
  */
 export interface Options extends DevToolsServer.Options {
   /**
-   * Preserves compatible component Models and query results across Vite full
-   * reloads during development. `true` by default; pass `false` to disable.
+   * Updates edited components in place and preserves compatible component
+   * Models and query results across Vite full reloads during development.
+   * `true` by default; pass `false` to disable.
    */
   readonly hot?: boolean | undefined
   /**
@@ -79,10 +81,42 @@ export interface Plugin {
     config: unknown,
     env: { readonly command: string; readonly isPreview?: boolean }
   ) => boolean
+  readonly config: (config: ViteConfig) => ViteConfig | undefined
+  readonly configResolved: (config: ViteConfig) => void
   readonly resolveId: (id: string) => string | undefined
   readonly load: (id: string) => string | undefined
+  readonly transform: (
+    this: TransformContext,
+    code: string,
+    id: string,
+    options?: { readonly ssr?: boolean | undefined }
+  ) => { readonly code: string; readonly map: null } | undefined
   readonly configureServer: (server: DevServer) => void
   readonly transformIndexHtml: () => Promise<ReadonlyArray<HtmlTag>>
+}
+
+/**
+ * The part of Vite's config that `plugin` reads and sets.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface ViteConfig {
+  readonly experimental?:
+    | { readonly hmrPartialAccept?: boolean | undefined }
+    | undefined
+}
+
+/**
+ * The part of a Vite plugin's `transform` context that `plugin` uses.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface TransformContext {
+  readonly parse: (code: string) => unknown
 }
 
 /**
@@ -139,6 +173,26 @@ const devToolsClient = (options: OverlayOptions): string =>
     ""
   ].join("\n")
 
+const scriptRE = /\.[cm]?[jt]sx?$/
+
+// The source parsed, or `undefined` when it isn't a script this can read.
+const programOf = (
+  context: TransformContext,
+  code: string,
+  id: string
+): unknown => {
+  if (
+    id.startsWith("\0") || id.includes("/node_modules/") ||
+    id.includes("?") || !scriptRE.test(id) ||
+    code.includes("import.meta.hot")
+  ) return undefined
+  try {
+    return context.parse(code)
+  } catch {
+    return undefined
+  }
+}
+
 const reasonOf = (error: unknown): string =>
   Predicate.hasProperty(error, "cause") && error.cause instanceof Error
     ? error.cause.message
@@ -170,6 +224,16 @@ const reasonOf = (error: unknown): string =>
  * `sessionStorage` and adopt them after the reload. Instances whose saved
  * state no longer decodes restart from `init` with a console warning.
  *
+ * It also turns on Vite's `experimental.hmrPartialAccept`, unless the config
+ * sets it to `false`, and has each module that exports components accept
+ * updates to those exports. An edit to such a module updates its mounted
+ * instances in place: each keeps its DOM, Model and running subscriptions,
+ * and draws again with the new code. An edit that can't be applied that way
+ * falls back to the reload above. That includes a Model or props that no
+ * longer fit their new Schema, a component with queries, shared state, parts,
+ * slots or a Layer, a module whose importers also use its other exports, and
+ * a component that draws one the module doesn't export.
+ *
  * @stability experimental
  * @category constructors
  * @since 0.1.0
@@ -184,11 +248,19 @@ export const plugin = (options?: Options): Plugin => {
     : {}
   const devToolsSource = overlay ? devToolsClient(overlayOptions) : undefined
   let bound = Promise.resolve(false)
+  let partial = false
   return {
     name: "effect-ui-devtools",
     apply: (_, env) =>
       env.command === "serve" && env.isPreview !== true &&
       !("VITEST" in process.env),
+    config: (config) =>
+      hot && config.experimental?.hmrPartialAccept === undefined
+        ? { experimental: { hmrPartialAccept: true } }
+        : undefined,
+    configResolved: (config) => {
+      partial = hot && config.experimental?.hmrPartialAccept === true
+    },
     resolveId: (id) =>
       hot && id === hotId
         ? resolvedHotId
@@ -201,6 +273,14 @@ export const plugin = (options?: Options): Plugin => {
         : id === resolvedDevToolsId
         ? devToolsSource
         : undefined,
+    transform(code, id, options) {
+      if (!partial || options?.ssr === true) return undefined
+      const program = programOf(this, code, id)
+      if (program === undefined) return undefined
+      const found = hotExports.find(program as never)
+      if (found.exported.length === 0) return undefined
+      return { code: code + hotExports.footer(found), map: null }
+    },
     configureServer: (server) => {
       const { logger } = server.config
       let settle: (ok: boolean) => void = () => {}
