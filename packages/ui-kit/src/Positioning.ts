@@ -51,11 +51,11 @@
  * and stay after the mount ends, so a closing popup keeps its place through
  * an exit transition.
  *
- * While it runs, the mount places the popup again when the window or the
- * visual viewport resizes or the visual viewport scrolls, when the positioner
- * changes size, and, unless `disableAnchorTracking` is set, when anything
- * outside the positioner scrolls or the anchor changes size or moves.
- * Scrolling inside the positioner, such as a long list, doesn't move it.
+ * While it runs, the mount places the popup again when the window resizes,
+ * when the visual viewport resizes or scrolls, when the positioner changes
+ * size, and, unless `disableAnchorTracking` is set, when anything outside
+ * the positioner scrolls or the anchor changes size or moves. Scrolling
+ * inside the positioner, such as a long list, doesn't move it.
  *
  * **Gotchas**
  *
@@ -63,9 +63,8 @@
  *   for `"absolute"`. So the positioner has to be positioned against the
  *   viewport, as a popover or a modal dialog in the top layer is. Inside a
  *   transformed or positioned ancestor it lands in the wrong place.
- * - The viewport the popup keeps inside is the visual viewport: the part of
- *   the page on screen, which a pinch-zoom or a software keyboard makes
- *   smaller than the layout viewport.
+ * - Collisions use the visual viewport (the visible area under pinch-zoom or
+ *   a software keyboard), not the layout viewport.
  * - The positioner has to be laid out while the mount runs, so issue the
  *   mount only while the popup shows.
  * - The anchor is the first element in the document that matches
@@ -1488,8 +1487,7 @@ export const trackPosition = (
     let reported: Placement | null = null
     let owned = written.get(node) ?? new Map<string, string>()
 
-    // WebKit measures client rects from the visual viewport, other engines
-    // from the layout viewport.
+    // WebKit client rects are relative to the visual viewport.
     const webkit = isWebKit(view)
 
     const viewportOf = (): Rect => {
@@ -1596,8 +1594,7 @@ export const trackPosition = (
         ? Math.max(0, current.options.sideOffset)
         : 0
       const scrolled = current.positionMethod === "absolute"
-      // A fixed box is placed from the layout viewport, which WebKit's client
-      // rects aren't measured from.
+      // Fixed positioning uses layout coordinates; add back WebKit's visual offset.
       const visual = webkit ? view.visualViewport : null
       const offsetX = scrolled ? view.scrollX : visual?.offsetLeft ?? 0
       const offsetY = scrolled ? view.scrollY : visual?.offsetTop ?? 0

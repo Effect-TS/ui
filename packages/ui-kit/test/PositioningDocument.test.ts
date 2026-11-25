@@ -150,15 +150,12 @@ describe("trackPosition in a document", { concurrent: false }, () => {
   it.effect("keeps the popup inside the visual viewport as it resizes and scrolls", () =>
     Effect.gen(function*() {
       const { visual } = yield* visualViewport
-      // Chromium and Gecko, which measure from the layout viewport.
       yield* notWebKit
       const { node } = yield* track(false)
       assert.strictEqual(node.style.top, "120px")
-      // A keyboard leaves 150px on screen: no room below the anchor.
       visual.move({ height: 150 }, "resize")
       yield* tick
       assert.strictEqual(node.style.top, "40px")
-      // Panned down by 90px: no room above it.
       visual.move({ offsetTop: 90 }, "scroll")
       yield* tick
       assert.strictEqual(node.style.top, "120px")

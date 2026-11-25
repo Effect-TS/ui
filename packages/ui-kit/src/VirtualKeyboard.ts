@@ -46,9 +46,8 @@
  *
  * **Gotchas**
  *
- * - While the page is pinch-zoomed, the band is the part of the layout
- *   viewport on screen above the keyboard, so content fixed to the bottom
- *   moves up into view, even while the layout viewport follows the keyboard.
+ * - Under pinch-zoom, the band covers the visible strip above the keyboard,
+ *   even when the layout viewport follows it.
  * - Without `visualViewport`, the Stream reports `null` once and ends.
  * - While a text field has focus, `watch` keeps a hidden element in
  *   `<body>` to measure `100svh`.
@@ -132,14 +131,11 @@ export type Band = typeof Band.Type
  *
  * **Details**
  *
- * - `layoutWidth`, `layoutHeight`: the layout viewport, the root element's
- *   `clientWidth` and `innerHeight`. WebKit shrinks `innerHeight` to the
- *   visual viewport while the page is pinch-zoomed, so `watch` scales it
- *   back up there.
- * - `visualWidth`, `visualHeight`, `visualTop`, `scale`:
- *   `visualViewport`'s `width`, `height`, `offsetTop` and `scale`.
- *   Without `visualWidth`, `step` takes the visual viewport to be as wide
- *   as the layout viewport, and reports no band while `scale` isn't 1.
+ * - `layoutWidth`, `layoutHeight`: the layout viewport (`clientWidth` and
+ *   `innerHeight`; `watch` scales WebKit's zoomed `innerHeight` back up).
+ * - `visualWidth`, `visualHeight`, `visualTop`, `scale`: `visualViewport`'s
+ *   `width`, `height`, `offsetTop` and `scale`. Omitting `visualWidth`
+ *   assumes full layout width and returns no band when `scale !== 1`.
  * - `smallViewportHeight`: the height of `100svh`.
  * - `android`: the browser runs on Android.
  * - `focused`: a text field has focus.
@@ -169,8 +165,8 @@ export interface Sample {
  *   to.
  * - `tallestLayoutHeight`: the tallest layout viewport seen at that width,
  *   kept on Android only.
- * - `keyboardHeight`: the visual viewport's height on screen, times
- *   `scale`, when the keyboard was last seen, or `null` while none is.
+ * - `keyboardHeight`: `visualHeight * scale` when the keyboard was last
+ *   seen, or `null` while none is.
  *
  * @stability experimental
  * @category models
@@ -231,8 +227,7 @@ export const step = (state: State, sample: Sample): Step => {
   }
   const visualWidth = sample.visualWidth ?? sample.layoutWidth
   const zoomed = sample.layoutWidth - visualWidth >= 1
-  // The share of the layout viewport the visual one shows: all of it, unless
-  // pinch-zoomed in. A keyboard leaves the width alone.
+  // Share of the layout width visible (unaffected by the keyboard).
   const fit = Math.min(1, visualWidth / sample.layoutWidth)
   // Heights on screen, so a zoom changes none of the comparisons below.
   const layout = layoutHeight * fit * scale
@@ -365,8 +360,7 @@ export const watch = (node: Node): Stream.Stream<Band | null> =>
         const width = document.documentElement.clientWidth || innerWidth
         return {
           layoutWidth: width,
-          // Under pinch-zoom, WebKit shrinks innerWidth and innerHeight to
-          // the visual viewport; the root element keeps the layout width.
+          // Scale back up when WebKit shrinks innerWidth/innerHeight under zoom.
           layoutHeight: innerHeight * Math.max(1, width / innerWidth)
         }
       }

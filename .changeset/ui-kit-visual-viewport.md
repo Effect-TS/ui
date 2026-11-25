@@ -2,4 +2,4 @@
 "@effect/ui-kit": patch
 ---
 
-`Positioning` keeps popups inside the visual viewport, so a software keyboard or pinch-zoom no longer hides them, and `VirtualKeyboard` now reports the keyboard while the page is pinch-zoomed.
+`Positioning` now keeps popups inside the visual viewport under pinch-zoom and software keyboards. `VirtualKeyboard` now tracks the keyboard while pinch-zoomed.

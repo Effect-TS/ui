@@ -235,8 +235,7 @@ describe("VirtualKeyboard.TrackKeyboard", { concurrent: false }, () => {
     Effect.gen(function*() {
       const { visual } = yield* visualViewport
       const app = yield* container
-      // WebKit at scale 2 reports the 400x800 layout viewport as 200x400,
-      // and the root element's clientWidth as 400.
+      // At 2x zoom, WebKit halves innerWidth/innerHeight while clientWidth stays 400.
       const root = document.documentElement as { clientWidth?: number }
       Object.defineProperty(root, "clientWidth", {
         configurable: true,
