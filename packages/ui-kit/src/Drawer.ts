@@ -527,7 +527,7 @@ const snappingOf = (props: DrawerProps, sizes: Sizes): Snapping | null => {
 }
 
 // The snap points `snapTrigger` cycles through, from the lowest to the
-// tallest. Before the popup is measured, the order of `snapPoints`.
+// tallest. Before the popup is measured, the distinct `snapPoints` in order.
 const snapCycleOf = (
   props: DrawerProps,
   sizes: Sizes
@@ -536,7 +536,11 @@ const snapCycleOf = (
     isHorizontal(props.swipeDirection ?? "down") ||
     props.snapPoints === undefined
   ) return []
-  if (sizes.height <= 0 || sizes.viewport <= 0) return props.snapPoints
+  if (sizes.height <= 0 || sizes.viewport <= 0) {
+    return props.snapPoints.filter((point, i, all) =>
+      all.findIndex((other) => Object.is(other, point)) === i
+    )
+  }
   return [...snapsOf(props.snapPoints, sizes)]
     .sort((a, b) => a.height - b.height)
     .map((snap) => snap.value)

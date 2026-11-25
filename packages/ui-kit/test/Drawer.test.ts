@@ -74,7 +74,7 @@ const opened = {
   triggerId: null,
   reason: "swipe"
 } as DrawerEvents
-const snapped = (snapPoint: number) =>
+const snapped = (snapPoint: number | string) =>
   ({ _tag: "Snapped", snapPoint }) as DrawerEvents
 const measured = sent("Measured", { height: 800, viewport: 800, fontSize: 16 })
 
@@ -215,10 +215,11 @@ describe("Drawer", () => {
             drawer.snapStatus(h.div.class("status"))
           )
       }
-      const snapPoints = [0.25, 0.5, 1]
+      // Before measurement the order given, without the repeat. After, by height.
+      const snapPoints = [0.5, 0.5, "240px", 1]
       const scene = yield* Scene.make(
         Drawer,
-        { open: true, snapPoints },
+        { open: true, snapPoints, snapPoint: 0.5 },
         snapStandIn
       )
       scene.expectMount(tracked(scene))
@@ -229,17 +230,18 @@ describe("Drawer", () => {
       })
       assert.strictEqual(scene.get(snapTrigger).attrs?.type, "button")
       assert.isUndefined(scene.get(snapTrigger).attrs?.disabled)
-      scene.click(snapTrigger).emitted(snapped(0.5))
-        .props({ open: true, snapPoints, snapPoint: 0.5 })
+      scene.click(snapTrigger).emitted(snapped("240px"))
+        .mounted(tracked(scene), measured)
         .expectMount(tracked(scene))
         .click(snapTrigger).emitted(snapped(1))
         .props({ open: true, snapPoints, snapPoint: 1 })
         .expectMount(tracked(scene))
-        .click(snapTrigger).emitted(snapped(0.25))
+        .click(snapTrigger).emitted(snapped("240px"))
 
       for (
         const props of [
           { open: true, snapPoints: [1] },
+          { open: true, snapPoints: [0.5, 0.5] },
           { open: true, snapPoints, swipeDirection: "left" as const }
         ]
       ) {
