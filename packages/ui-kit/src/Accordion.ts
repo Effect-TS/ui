@@ -128,7 +128,13 @@ import {
   type CollapsibleTransitionStatus
 } from "./Collapsible.ts"
 import { type Attributed, flag, idOf, ownStyle } from "./internal/attributes.ts"
-import { carries, find, layerOf, rewrite, setOn } from "./internal/tree.ts"
+import {
+  buildOwn,
+  carries,
+  find,
+  rewrite,
+  setTokensOn
+} from "./internal/tree.ts"
 
 /**
  * The axis an accordion's items are laid out along.
@@ -434,13 +440,13 @@ const headings = ["h1", "h2", "h3", "h4", "h5", "h6"] as const
  * passes in, including the ones a state leaves absent: the data attributes on
  * every part; on the trigger `id`, `type`, `disabled`, `aria-disabled`,
  * which it removes, `aria-expanded` and `aria-controls`, which it sets only
- * while the panel is open; on the panel `role="region"`, `aria-labelledby`,
- * which names it by the trigger, and `hidden`. The item's root names the
- * panel by the trigger it holds, whichever of the two was built first, and
- * leaves `aria-labelledby` off when it holds no trigger. The trigger and the panel keep
- * an `id` the consumer gives them, and get a generated one otherwise. The
- * panel's CSS variables are added after the consumer's inline style. A
- * handler the consumer adds to a part runs after the item's own.
+ * while the panel is open; on the panel `role="region"`, `aria-labelledby`
+ * (merging the trigger's `id` with any the consumer set), `hidden`, and
+ * `inert` while closing. The item's root links whichever trigger it holds
+ * regardless of build order, and adds no label when it holds none. The
+ * trigger and the panel keep a consumer `id` and get a generated one
+ * otherwise. The panel's CSS variables are added after the consumer's inline
+ * style. A handler the consumer adds to a part runs after the item's own.
  *
  * On the server and on a host that doesn't run mounts, a panel that opens
  * stays at `data-starting-style`, and one that closes stays in the page.
@@ -482,7 +488,7 @@ export const AccordionItem = Html.component({
     const index = props.index
     let triggerId: string | undefined
     const triggers = new Set<View.Owned>()
-    const panels = new Set<View.Owned>()
+    const panels = new Map<View.Owned, string | undefined>()
     const states = <B extends Attributed<B>>(builder: B): B =>
       builder.attrs({
         "data-orientation": orientation,
@@ -493,7 +499,7 @@ export const AccordionItem = Html.component({
       states(b).forward((node) => {
         if (panels.size === 0) return node
         const root = View.build(node, [])
-        return setOn(
+        return setTokensOn(
           root,
           panels,
           "aria-labelledby",
@@ -510,18 +516,23 @@ export const AccordionItem = Html.component({
       states(b)
         .attr("id", id)
         .forward((node) => {
-          triggerId = node.elementAttrs.id ?? id
-          triggers.add(layerOf(node))
-          return node
+          const { built, layer, own } = buildOwn(node)
+          triggers.add(layer)
+          triggerId = own?.attrs.id || id
+          return built
         }))
     const panelPart = p.part("div", (b) =>
       states(b)
         .attr("role", "region")
         .forward((node) => {
-          panels.add(layerOf(node))
-          return ownStyle(
-            "--accordion-panel-height:var(--collapsible-panel-height);--accordion-panel-width:var(--collapsible-panel-width)"
-          )(node.attr("aria-labelledby", triggerId))
+          const { built, layer, own } = buildOwn(
+            ownStyle(
+              "--accordion-panel-height:var(--collapsible-panel-height);--accordion-panel-width:var(--collapsible-panel-width)"
+            )(node)
+          )
+          if (own === undefined) return built
+          panels.set(layer, own.attrs["aria-labelledby"])
+          return setTokensOn(built, panels, "aria-labelledby", triggerId)
         }))
 
     return p.child(Collapsible, {

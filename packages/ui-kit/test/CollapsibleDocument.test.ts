@@ -226,6 +226,7 @@ describe("Collapsible in a document", { concurrent: false }, () => {
       yield* tick
       yield* tick
       assert.deepStrictEqual(seen, ["auto", "120px", "ending 120px"])
+      assert.isTrue(byId("panel").hasAttribute("inert"))
       assert.isTrue(byId("root").hasAttribute("data-ending-style"))
       assert.isTrue(byId("trigger").hasAttribute("data-ending-style"))
 

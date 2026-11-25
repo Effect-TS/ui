@@ -1,4 +1,5 @@
 import * as View from "@effect/ui/View"
+import { withTokens } from "./attributes.ts"
 
 export type Rewrite = (
   node: View.Node<any, any>
@@ -30,7 +31,7 @@ export const find = (
   return undefined
 }
 
-export const withAttr = <E extends View.Element<any, any>>(
+const withAttr = <E extends View.Element<any, any>>(
   element: E,
   name: string,
   value: string | undefined
@@ -42,27 +43,45 @@ export const withAttr = <E extends View.Element<any, any>>(
   return { ...element, attrs }
 }
 
-export const layerOf = (
+const layerOf = (
   builder: { readonly owned: ReadonlyArray<View.Owned> }
 ): View.Owned => builder.owned[builder.owned.length - 1]!
 
-type Layers = ReadonlySet<View.Owned> | ReadonlyMap<View.Owned, unknown>
+// Build a part and find its element even when a `forward` hook wraps it.
+export const buildOwn = <Msg, R>(
+  node: View.ElementBuilder<Msg, R, any, any>
+): {
+  readonly layer: View.Owned
+  readonly built: View.Element<Msg, R>
+  readonly own: View.Element<any, any> | undefined
+} => {
+  const layer = layerOf(node)
+  const built = View.build(node, [])
+  return {
+    layer,
+    built,
+    own: find(built, (element) => element.owned?.includes(layer) === true)
+  }
+}
 
 export const carries = (
   element: View.Element<any, any>,
-  layers: Layers
+  layers: ReadonlySet<View.Owned>
 ): boolean => element.owned?.some((layer) => layers.has(layer)) === true
 
-export const setOn = <N extends View.Node<any, any>>(
+export const setTokensOn = <N extends View.Node<any, any>>(
   node: N,
-  layers: Layers,
+  layers: ReadonlyMap<View.Owned, string | undefined>,
   name: string,
   value: string | undefined
 ): N =>
   rewrite(
     node,
-    (element) =>
-      element._tag === "Element" && carries(element, layers)
-        ? withAttr(element, name, value)
-        : undefined
+    (element) => {
+      if (element._tag !== "Element") return undefined
+      const layer = element.owned?.find((l) => layers.has(l))
+      return layer === undefined
+        ? undefined
+        : withAttr(element, name, withTokens(layers.get(layer), value))
+    }
   )

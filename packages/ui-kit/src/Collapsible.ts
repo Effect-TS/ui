@@ -151,7 +151,7 @@ import {
   statusOf,
   transitionAttrs
 } from "./internal/transition.ts"
-import { layerOf, rewrite, withAttr } from "./internal/tree.ts"
+import { buildOwn } from "./internal/tree.ts"
 
 /**
  * Controls whether the panel is open and how it stays in the page while
@@ -437,16 +437,13 @@ const TrackPanel = Mount.makeStream(
  * passes in, including the ones a state leaves absent: the data attributes on
  * every part; on the trigger `type`, `disabled`, `aria-disabled`, which it
  * removes, `aria-expanded` and `aria-controls`, which it sets only while the
- * panel is open; on the panel `hidden`. The panel keeps an `id` the consumer
- * gives it, and gets a generated one otherwise. A trigger inside another
- * element, such as a heading, is built before the panel's `id` is known, so
- * the root points that trigger's `aria-controls` at the consumer's `id`, on
- * the button even when the consumer wraps it with `forward`, and leaves every
- * other element's alone: draw the root around both when the
- * panel has an `id` of its own. The panel's CSS variables, and
- * the `animation-name` and durations it overrides to skip an animation, are
- * added after the consumer's inline style. A handler the consumer adds to a
- * part runs after the collapsible's own.
+ * panel is open; on the panel `hidden`, and `inert` while closing. The panel
+ * keeps a consumer `id` and gets a generated one otherwise; the trigger's
+ * `aria-controls` always points at the panel's final `id`, even when built
+ * before the panel, wrapped with `forward`, or rendered without `root`. The
+ * panel's CSS variables, and the `animation-name` and durations it overrides
+ * to skip an animation, are added after the consumer's inline style. A
+ * handler the consumer adds to a part runs after the collapsible's own.
  *
  * On the server and on a host that doesn't run mounts, a panel that opens
  * stays at `data-starting-style`, and one that closes stays in the page.
@@ -544,32 +541,21 @@ export const Collapsible = Html.component({
         flag(disabled)
       )
 
-    const triggers = new Map<
-      View.Owned,
-      {
-        readonly controls: string | undefined
-        readonly consumer: string | undefined
+    // The open triggers built so far: each one's own copy of its attributes,
+    // rewritten in place when the panel's id turns out to be another.
+    const triggers: Array<{
+      readonly attrs: Record<string, string>
+      readonly consumer: string | undefined
+    }> = []
+    const setPanelId = (id: string) => {
+      if (id === panelId) return
+      panelId = id
+      for (const { attrs, consumer } of triggers) {
+        attrs["aria-controls"] = withTokens(consumer, id)!
       }
-    >()
-    const root = p.part((b) =>
-      states(b).forward((node) => {
-        const target = open ? panelId : undefined
-        if (
-          ![...triggers.values()].some(({ controls }) => controls !== target)
-        ) return node
-        return rewrite(View.build(node, []), (element) => {
-          if (element._tag !== "Element") return undefined
-          const layer = element.owned?.find((l) => triggers.has(l))
-          return layer === undefined
-            ? undefined
-            : withAttr(
-              element,
-              "aria-controls",
-              withTokens(triggers.get(layer)!.consumer, target)
-            )
-        })
-      })
-    )
+    }
+
+    const root = p.part(states)
 
     const trigger = p.part("button", (b) =>
       b
@@ -585,10 +571,17 @@ export const Collapsible = Html.component({
         .disabled(disabled)
         .onClick(CollapsibleMessage.ClickedTrigger())
         .forward((node) => {
-          const consumer = node.elementAttrs["aria-controls"]
-          const controls = open ? panelId : undefined
-          triggers.set(layerOf(node), { controls, consumer })
-          return node.attr("aria-controls", withTokens(consumer, controls))
+          if (!open) return node
+          const { built, own } = buildOwn(node)
+          if (own === undefined) return built
+          const consumer = own.attrs["aria-controls"]
+          const attrs = {
+            ...own.attrs,
+            "aria-controls": withTokens(consumer, panelId)!
+          }
+          ;(own as { attrs: Readonly<Record<string, string>> }).attrs = attrs
+          triggers.push({ attrs, consumer })
+          return built
         }))
 
     const panelPart = p.part((b, id: string) =>
@@ -600,13 +593,17 @@ export const Collapsible = Html.component({
             : hiddenUntilFound
             ? "until-found"
             : flag(props.keepMounted !== "css"),
+          inert: flag(!open && model.mounted),
           "data-starting-style": flag(
             transitionStatus === "starting" || (!mounted && hiddenUntilFound)
           )
         })
         .forward((node) => {
-          panelId = node.elementAttrs.id ?? id
-          return ownStyle(panelStyle(model, open))(node)
+          const { built, own } = buildOwn(
+            ownStyle(panelStyle(model, open))(node)
+          )
+          setPanelId(own?.attrs.id || id)
+          return built
         })
         .onMount(
           TrackPanel({
@@ -623,7 +620,8 @@ export const Collapsible = Html.component({
       <B extends View.PartTarget<string>>(
         element: B
       ): ReturnType<B["attr"]> | undefined => {
-        panelId = idOf(element) ?? panelId
+        const id = idOf(element)
+        if (id !== null) setPanelId(id)
         const out = panelPart(element, panelId)
         return mounted || hiddenUntilFound || props.keepMounted
           ? out
