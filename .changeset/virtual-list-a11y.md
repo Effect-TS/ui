@@ -2,4 +2,4 @@
 "@effect/ui-kit": patch
 ---
 
-`VirtualList`'s `viewport` takes `tabindex="0"` while its content overflows, so the keyboard can scroll a list with nothing focusable in it, and removing the focused item moves the focus to the item that takes its place instead of the page. An item with `role="row"` gets `aria-rowindex` instead of `aria-posinset` and `aria-setsize`, and `table` also takes a `<div>` for a grid built from `role="row"` items.
+Enable keyboard scrolling for overflowing `VirtualList` viewports and retain focus within the list when the focused item is removed. Use `aria-rowindex` for `role="row"` items and allow the `table` part to wrap a `<div>` grid or table.

@@ -40,13 +40,13 @@
  * the rows next to it wherever the list scrolls, so Tab and Shift+Tab go where
  * they would if every item were rendered.
  *
- * `viewport` takes `tabindex="0"` while its content overflows, and
- * `tabindex="-1"` otherwise, so the arrow keys and Page Up and Page Down
- * scroll a list with nothing focusable in it. When the focused item is
- * removed, the focus moves to the item that takes its index, or the one
- * before it: to the item itself when it takes the focus, and otherwise to the
- * first element in it that does. It moves to `viewport` when the list is
- * left empty, or to the list itself without a `viewport` part.
+ * `viewport` sets `tabindex="0"` while its content overflows and
+ * `tabindex="-1"` otherwise, allowing keyboard scrolling even without
+ * focusable items. Removing the focused item moves focus to the item now at
+ * its index, or the previous item if it was last. Focus goes to the item
+ * itself or its first focusable descendant. If neither can receive focus,
+ * including when the list is empty, focus moves to `viewport` or, without
+ * that part, to the list.
  *
  * **Layout**
  *
@@ -812,8 +812,7 @@ const windowOf = (
   startRow = Math.min(startRow, endRow)
 
   const rows: Array<[number, number]> = [[startRow, endRow]]
-  // A focused key that's gone was removed with the focus on it: the rows at its
-  // index stay so the mount can move the focus to the item that took its place.
+  // Keep the removed item's replacement rendered so the mount can focus it.
   const focused = model.focused === null
     ? null
     : resolve(props, model.focused, true)
@@ -1421,8 +1420,8 @@ const TrackVirtualList = Mount.makeStream(
           return activeOf(document) === element
         }
 
-        // The list takes the focus only from `refocus`: it borrows a
-        // `tabindex` for that, and gives it back once it loses the focus.
+        // Make the fallback focusable without adding a Tab stop or replacing
+        // a consumer-provided tabindex.
         const focusList = () => {
           if (list.hasAttribute("tabindex")) {
             return list.focus({ preventScroll: true })
@@ -1437,9 +1436,7 @@ const TrackVirtualList = Mount.makeStream(
           else release()
         }
 
-        // Removing the focused item drops the focus to the body, so it moves to
-        // the item now at that index, or the one before it, or to the viewport,
-        // or to the list. An item that's still there may have a new index.
+        // Restore focus after removal only if it hasn't moved to another element.
         const refocus = () => {
           if (focused === null) return
           const active = activeOf(document)
