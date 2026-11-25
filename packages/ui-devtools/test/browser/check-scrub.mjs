@@ -50,30 +50,57 @@ await run("scrub", async ({ browser, expect, failures, url }) => {
   const xOf = (stop) => box.x + 8 + (box.width - 16) * stop / max
   const y = box.y + box.height / 2
   let x = xOf(max)
-  await watch(page)
-  await page.mouse.move(x, y)
-  await page.mouse.down()
-  for (const [to, steps] of [[xOf(8), 30], [xOf(max), 30], [xOf(max - 6), 6]]) {
-    const from = x
-    for (let step = 1; step <= steps; step++) {
-      x = from + (to - from) * step / steps
-      await page.mouse.move(x, y)
-      await page.waitForTimeout(16)
+  const drag = async (moves) => {
+    await page.mouse.move(x, y)
+    await page.mouse.down()
+    for (const [to, steps] of moves) {
+      const from = x
+      for (let step = 1; step <= steps; step++) {
+        x = from + (xOf(to) - from) * step / steps
+        await page.mouse.move(x, y)
+        await page.waitForTimeout(16)
+      }
     }
+    await page.mouse.up()
+    await page.waitForTimeout(200)
   }
-  await page.mouse.up()
-  await page.waitForTimeout(200)
+  const onTop = () =>
+    page.evaluate(() => {
+      const held = document.getElementById("held")
+      const box = held.getBoundingClientRect()
+      return held.matches(":popover-open") &&
+        document.elementFromPoint(box.left + 4, box.top + 4)
+            ?.hasAttribute("data-effect-ui-devtools") === true
+    })
+  const toggles = () => page.evaluate(() => window.__scrub.toggles)
 
-  const seen = await page.evaluate(() => {
-    window.__scrub.done = true
-    const held = document.getElementById("held").getBoundingClientRect()
-    const top = document.elementFromPoint(held.left + 4, held.top + 4)
-    return {
-      ...window.__scrub,
-      held: document.getElementById("held").matches(":popover-open"),
-      onTop: top?.hasAttribute("data-effect-ui-devtools") === true
-    }
+  await watch(page)
+  await drag([[8, 30], [max, 30], [max - 6, 6]])
+  const seen = {
+    ...await page.evaluate(() => window.__scrub),
+    onTop: await onTop()
+  }
+
+  await page.evaluate(() => {
+    const held = document.getElementById("held")
+    held.hidePopover()
+    held.showPopover()
   })
+  const reopened = await onTop()
+  await drag([[max - 7, 2]])
+  const restored = await onTop()
+  const before = await toggles()
+  await drag([[max - 2, 10], [max - 5, 6]])
+  expect(
+    !reopened && restored,
+    "the next paint raises the panel above a popover reopened over it",
+    { reopened, restored }
+  )
+  expect(
+    (await toggles()) === before && (await onTop()),
+    "reversing after that leaves the panel in place, above the popover",
+    { before, after: await toggles() }
+  )
   const shown = new Set(seen.frames.map((frame) => frame.slider))
   expect(shown.size > 20, "the scrub went through the entries", [...shown])
   expect(
@@ -82,9 +109,9 @@ await run("scrub", async ({ browser, expect, failures, url }) => {
     seen.toggles
   )
   expect(
-    seen.held && seen.onTop,
+    seen.onTop,
     "the panel stays above a popover held open under it",
-    { held: seen.held, onTop: seen.onTop }
+    seen.onTop
   )
   const torn = seen.frames.filter((frame) =>
     frame.badge !== frame.slider || frame.entry !== frame.slider ||

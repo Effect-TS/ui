@@ -49,26 +49,17 @@ const corners: { readonly [P in Position]: string } = {
   BottomRight: "bottom:12px;right:12px"
 }
 
-const inTopLayer = ":popover-open:not([data-effect-ui-devtools]), :modal"
-
-const beneath = new WeakMap<HTMLIFrameElement, WeakSet<Element>>()
-
 // A painted copy's dialogs and popovers sit in the top layer, above any z-index. While paused the frame
 // joins the top layer after them, so the copy never covers the panel. Leaving the top layer takes the frame
 // out of the page for a moment, so it only re-joins when something opened since it last joined.
-const raise = (frame: HTMLIFrameElement) => {
+const raise = (frame: HTMLIFrameElement, covered: boolean) => {
   if (typeof frame.showPopover !== "function") return
-  const open = Array.from(frame.ownerDocument.querySelectorAll(inTopLayer))
   if (frame.matches(":popover-open")) {
-    const below = beneath.get(frame)
-    if (below !== undefined && open.every((element) => below.has(element))) {
-      return
-    }
+    if (!covered) return
     frame.hidePopover()
   }
   frame.setAttribute("popover", "manual")
   frame.showPopover()
-  beneath.set(frame, new WeakSet(open))
 }
 
 const lower = (frame: HTMLIFrameElement) => {
@@ -207,7 +198,8 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
                     fallbacks: painted.fallbacks
                   }
                 }
-                raise(frame)
+                raise(frame, covered)
+                covered = false
                 changed()
                 return painted
               })
@@ -264,6 +256,20 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         })
         document.body.appendChild(frame)
       })
+      let covered = true
+      const opened = (event: Event) => {
+        if (
+          event.target !== frame && (event as ToggleEvent).newState === "open"
+        ) {
+          covered = true
+        }
+      }
+      document.addEventListener("beforetoggle", opened, true)
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() =>
+          document.removeEventListener("beforetoggle", opened, true)
+        )
+      )
       const inner = frame.contentDocument!
       const container = inner.getElementById("root")!
 
