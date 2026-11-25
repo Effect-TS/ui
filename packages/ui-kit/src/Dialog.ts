@@ -508,8 +508,23 @@ const radioOut = (element: HTMLElement): boolean => {
   return group.some((other) => other.checked) || group[0] !== radio
 }
 
+// Chromium gives what a closed `<details>` hides a box, though Tab skips it.
+const collapsed = (element: Element): boolean => {
+  for (
+    let details = element.parentElement?.closest("details:not([open])");
+    details != null;
+    details = details.parentElement?.closest("details:not([open])")
+  ) {
+    if (details.querySelector(":scope > summary")?.contains(element) !== true) {
+      return true
+    }
+  }
+  return false
+}
+
 const focusable = (element: HTMLElement): boolean =>
   element.isConnected && element.getClientRects().length > 0 &&
+  !collapsed(element) &&
   !element.matches(":disabled") && element.closest("[inert]") === null &&
   element.ownerDocument.defaultView?.getComputedStyle(element).visibility !==
     "hidden"
@@ -650,7 +665,7 @@ const TrackDialog = Mount.makeStream(
         (scope().getElementById(current.popupId) as HTMLElement | null) ?? node
       const takes = (element: HTMLElement, visible?: boolean): boolean => {
         handOff(element, visible)
-        return element.contains(focusedNow())
+        return focusedNow() === element
       }
       const topmost = () => current.topmost && onTop(stack, node)
       const Watcher = closeWatcherOf(view)
@@ -804,7 +819,10 @@ const TrackDialog = Mount.makeStream(
           stop.tabIndex = -1
           to[event.shiftKey ? "after" : "before"](stop)
           stop.addEventListener("blur", () => stop.remove(), { once: true })
-          handOff(stop)
+          if (!takes(stop)) {
+            stop.remove()
+            event.preventDefault()
+          }
         }
       }
 

@@ -799,19 +799,26 @@ describe("Dialog in a document", { concurrent: false }, () => {
       }
     }))
 
-  it.effect("Shift+Tab to a details without a summary, which takes no focus from script, leaves the move to the browser", () =>
+  it.effect("Tab to a details without a summary, which takes no focus from script, leaves the move to the browser, and skips what the closed details hides", () =>
     Effect.gen(function*() {
       yield* focusability
       yield* mountPage({})
       const details = document.querySelector(".popup-a")!.appendChild(
         document.createElement("details")
       )
+      details.appendChild(document.createElement("button")).id = "inner"
       byId("first").focus()
       assert.isFalse(tab(true))
       assert.strictEqual(
         document.activeElement?.previousElementSibling,
         details
       )
+      // Open around the dialog's controls, from its last one back to it.
+      details.open = true
+      details.prepend(byId("first"), byId("second"))
+      byId("inner").focus()
+      assert.isFalse(tab())
+      assert.strictEqual(document.activeElement?.nextElementSibling, details)
     }))
 
   it.effect("a kept-mounted modal keeps its popup element as it opens, closes and reopens", () =>
