@@ -2834,7 +2834,7 @@ export declare namespace Definition {
  * export const NoteList = NoteListDef.make({
  *   init: () => ({ notes: [] }),
  *   update: ($) => $.model,
- *   view: (h, model) => h.el("ul", ...model.notes.map((note) => noteRow(h, note)))
+ *   view: (h, model) => h.el("ul", model.notes.map((note) => noteRow(h, note)))
  * })
  * ```
  *

@@ -48,7 +48,7 @@ const Run = <M>(
 const Window = <M>(
   h: Html.H<M>,
   name: string,
-  demo: ReadonlyArray<View.Content<M>>,
+  demo: View.Input<M>,
   body: View.Content<M>
 ) =>
   h.div.class(
@@ -284,7 +284,7 @@ export const Code = <M>(
   h: Html.H<M>,
   snippet: Snippet,
   options: {
-    readonly demo?: ReadonlyArray<View.Content<M>> | undefined
+    readonly demo?: View.Input<M>
     readonly preview?: Preview | undefined
     readonly row?: number | undefined
   } = {}
@@ -292,7 +292,7 @@ export const Code = <M>(
   Window(
     h,
     snippet.name,
-    options.demo ?? [],
+    options.demo,
     snippet.folds.length > 0
       ? CodeWindow(h, { key: snippet.id, props: { snippet } })
       : options.preview === undefined

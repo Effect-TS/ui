@@ -391,32 +391,29 @@ export const LaunchPage = Html.component({
                       // The Counter's grid tracks are sized by the
                       // panel, never by a label, so a changing label
                       // or count can't move them.
-                      demo: index === 0
-                        ? [
-                          h.div.class(
-                            "live-demo @container border-b border-border",
-                            "bg-background px-3.5 py-4",
-                            "[&>div]:grid [&>div]:grid-cols-2",
-                            "[&>div]:items-center",
-                            // The two add buttons share the width
-                            // one of the others takes.
-                            "[&>div>:not(.counter-add)]:col-span-2",
-                            "@min-[312px]:[&>div]:grid-cols-4",
-                            "@min-[560px]:[&>div]:grid-cols-[minmax(0,2fr)_repeat(2,minmax(0,1.5fr))_repeat(2,minmax(0,3fr))]",
-                            "@min-[560px]:[&>div>:not(.counter-add)]:col-span-1",
-                            "[&_output]:text-center",
-                            "[&_output]:text-[2rem]/[normal]",
-                            "[&_output]:font-features-[normal]",
-                            "[&_button]:font-features-[normal]",
-                            "[&_button]:whitespace-nowrap"
-                          ).attr("role", "group")
-                            .attr("aria-label", label).children(
-                              Counter(h, {
-                                key: `counter-${occurrence}`
-                              })
-                            )
-                        ]
-                        : []
+                      demo: index === 0 &&
+                        h.div.class(
+                          "live-demo @container border-b border-border",
+                          "bg-background px-3.5 py-4",
+                          "[&>div]:grid [&>div]:grid-cols-2",
+                          "[&>div]:items-center",
+                          // The two add buttons share the width
+                          // one of the others takes.
+                          "[&>div>:not(.counter-add)]:col-span-2",
+                          "@min-[312px]:[&>div]:grid-cols-4",
+                          "@min-[560px]:[&>div]:grid-cols-[minmax(0,2fr)_repeat(2,minmax(0,1.5fr))_repeat(2,minmax(0,3fr))]",
+                          "@min-[560px]:[&>div>:not(.counter-add)]:col-span-1",
+                          "[&_output]:text-center",
+                          "[&_output]:text-[2rem]/[normal]",
+                          "[&_output]:font-features-[normal]",
+                          "[&_button]:font-features-[normal]",
+                          "[&_button]:whitespace-nowrap"
+                        ).attr("role", "group")
+                          .attr("aria-label", label).children(
+                            Counter(h, {
+                              key: `counter-${occurrence}`
+                            })
+                          )
                     })
                   )
                 ),

@@ -301,7 +301,7 @@ export const Tree = <M>(h: Html.H<M>, options: TreeOptions<M>) => {
           ).attr("stroke-width", "2.5")
         )
       ),
-      (moving?.moves ?? []).map((move, j) =>
+      moving?.moves.map((move, j) =>
         Link(
           h,
           path(move),
