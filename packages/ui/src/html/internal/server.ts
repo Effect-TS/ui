@@ -94,6 +94,7 @@ const elementAttributes = (
     const normalized = elements.attributeName(name, svg)
     if (normalized !== undefined) out.set(normalized, value)
   }
+  if (elements.isCustomTag(tag)) return out
   for (const [name, value] of Object.entries(props)) {
     switch (name) {
       case "value":
