@@ -14,7 +14,8 @@ export const Disclosure = Html.component({
     ClickedTrigger: ($) => $.evolve({ isOpen: !$.model.isOpen })
   },
   // What parts returns is what the consumer's view receives: plain
-  // values such as isOpen, and parts.
+  // values such as isOpen, and parts. p builds the parts, as h
+  // builds elements in a view.
   parts: (p, model) => ({
     isOpen: model.isOpen,
     // A part decorates a <button> that the consumer supplies. The

@@ -2,7 +2,7 @@ import { type Markdown, MarkdownParser } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Array, Order } from "effect"
 import { readFileSync } from "node:fs"
-import { fromItem, icons } from "./Feature.ts"
+import { fromItem, labels } from "./Feature.ts"
 import { Frontmatter, Islands } from "./Island.ts"
 
 const { document } = MarkdownParser.parseMarkdownWithFrontmatter(
@@ -15,6 +15,14 @@ const lists = document.blocks.filter(
 )
 
 describe("Feature", () => {
+  it("lays every bullet of a list out the same way", () => {
+    const mixed = lists.filter((list) =>
+      new Set(list.items.map((item) => fromItem(item)?.layout)).size >
+        1
+    )
+    assert.deepStrictEqual(mixed, [])
+  })
+
   it("draws a list with icons only when every bullet has one", () => {
     const mixed = lists.filter((list) => {
       const cards = list.items.filter((item) =>
@@ -31,7 +39,7 @@ describe("Feature", () => {
     )
     assert.deepStrictEqual(
       Array.sort(titles, Order.String),
-      Array.sort(Object.keys(icons), Order.String)
+      Array.sort(labels, Order.String)
     )
   })
 

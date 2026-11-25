@@ -3,32 +3,48 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUpRight,
+  Bot,
   Check,
   CircleCheck,
+  Clock,
   Copy,
+  Database,
+  Download,
+  History,
   type IconNode,
   Layers,
+  ListOrdered,
+  Loader,
   Pause,
   Play,
   Plug,
   RotateCcw,
-  Split
+  Split,
+  Workflow
 } from "lucide"
 
 // The Lucide icons the article draws, by the name it uses for each.
 const icons = {
   back: ArrowLeft,
+  bot: Bot,
   check: Check,
+  clock: Clock,
   copy: Copy,
+  database: Database,
+  download: Download,
   external: ArrowUpRight,
+  history: History,
   kept: CircleCheck,
   layers: Layers,
+  list: ListOrdered,
+  loader: Loader,
   next: ArrowRight,
   pause: Pause,
   play: Play,
   plug: Plug,
   reset: RotateCcw,
-  split: Split
+  split: Split,
+  workflow: Workflow
 } satisfies Record<string, IconNode>
 
 export type IconName = keyof typeof icons

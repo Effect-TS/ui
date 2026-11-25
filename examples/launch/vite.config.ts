@@ -35,28 +35,21 @@ const sources: {
   ]],
   queryFoldkit: [["src/queries/foldkit/posts.ts", whole]],
   queryEffect: [["src/queries/effect/Posts.ts", whole]],
-  storyFoldkit: [[
-    "src/autocounter/foldkit/counter.story.test.ts",
-    test("resets after the delay")
-  ]],
-  storyEffect: [[
-    "src/autocounter/Counter.story.test.ts",
-    test("resets after the delay")
-  ]],
-  sceneFoldkit: [[
-    "src/autocounter/foldkit/counter.scene.test.ts",
-    test("resets after the delay")
-  ]],
-  sceneEffect: [[
-    "src/autocounter/Counter.scene.test.ts",
-    test("resets after the delay")
-  ]],
+  tests: [
+    [
+      "src/autocounter/Counter.story.test.ts",
+      test("resets after the delay")
+    ],
+    [
+      "src/autocounter/Counter.scene.test.ts",
+      test("resets after the delay")
+    ]
+  ],
   play: [[
     "src/autocounter/Counter.play.test.ts",
     test("resets one second after the click")
   ]],
-  partsFoldkit: [["src/parts/foldkit/Faq.ts", whole]],
-  partsEffect: [["src/parts/effect/Faq.ts", whole]],
+  parts: [["src/parts/Faq.ts", whole]],
   partsOwn: [["src/parts/Disclosure.ts", whole], [
     "src/parts/Details.ts",
     whole

@@ -124,11 +124,6 @@
     @apply font-mono text-[10px] font-medium tracking-[0.1em] text-muted-foreground;
   }
 
-  /* The same space above the rule as below it. */
-  .article-section {
-    @apply border-t border-border pt-10;
-  }
-
   .code-window {
     @apply bg-card;
     box-shadow: 0 2px 3px -2px var(--color-ring);

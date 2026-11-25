@@ -3,7 +3,7 @@ import { Locator, TestHost } from "@effect/ui/testing"
 import { it } from "@effect/vitest"
 import { Effect } from "effect"
 import { Details } from "./Details.ts"
-import { Faq } from "./effect/Faq.ts"
+import { Faq } from "./Faq.ts"
 
 it.layer(TestHost.layer(), { buildPerTest: true })("parts", (it) => {
   it.effect("shows the answer once the question is clicked", () =>

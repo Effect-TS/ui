@@ -3,7 +3,7 @@ import { caption, wide } from "#components/Classes"
 import { Code } from "#components/Code"
 import { CodeGroup } from "#components/CodeGroup"
 import { Icon } from "#components/Icon"
-import { type Feature, fromItem } from "#domain/Feature"
+import { type Feature, fromItem, type Layout } from "#domain/Feature"
 import { Islands } from "#domain/Island"
 import * as Preview from "#domain/Preview"
 import { fromDocument, fromHeading } from "#domain/Section"
@@ -114,6 +114,12 @@ const inline: Pick<
     h.strong.class("font-semibold").children(content)
 }
 
+const layouts = {
+  rows: "mt-[1.6em] grid gap-7",
+  grid: "mt-[1.4em] grid gap-x-8 gap-y-6 min-[700px]:grid-cols-2",
+  checklist: "mt-[1.1em] grid gap-3"
+} satisfies Record<Layout, string>
+
 // A bullet with an icon: a row with the icon in a column of its
 // own, so the label and the description under it share a left edge.
 const Card = (h: Html.H<never>, feature: Feature) =>
@@ -149,37 +155,15 @@ const Card = (h: Html.H<never>, feature: Feature) =>
     )
 
 // Something that carries over from Foldkit 0.x: an entry of a
-// checklist, with the label as a heading over its description.
+// checklist, a statement that stands on its own.
 const Kept = (h: Html.H<never>, feature: Feature) =>
-  h.li.class("grid grid-cols-[1.25rem_minmax(0,1fr)] gap-x-3")
-    .children(
-      // Level with the label.
-      Icon(h, feature.icon, { class: "mt-[0.0625rem] size-5" }),
-      h.div.children(
-        h.p.class("text-base/[1.4] font-semibold").children(
-          feature.title
-        ),
-        Markdown.viewBlocks(
-          h,
-          {
-            blocks: [{
-              _tag: "Paragraph",
-              content: feature.description
-            }]
-          },
-          {
-            views: {
-              ...inline,
-              Paragraph: (h, _paragraph, content) =>
-                h.p.class(
-                  "mt-1 text-[0.9375rem]/[1.6] text-pretty",
-                  "text-prose-foreground"
-                ).children(content)
-            }
-          }
-        )
-      )
-    )
+  h.li.class(
+    "grid grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-3"
+  ).children(
+    // Level with the first line of the statement.
+    Icon(h, feature.icon, { class: "mt-[0.1875rem] size-5" }),
+    h.p.class("font-medium text-pretty").children(feature.title)
+  )
 
 export const LaunchPage = Html.component({
   name: "LaunchPage",
@@ -253,7 +237,7 @@ export const LaunchPage = Html.component({
                 ).children(content)
                 : h.h2.id(id).class(
                   heading,
-                  "article-section mt-10 text-[1.5rem]/[1.3] tracking-[-0.02em]"
+                  "mt-18 text-[1.5rem]/[1.3] tracking-[-0.02em]"
                 ).children(content)
             },
             Paragraph: (h, _paragraph, content) =>
@@ -276,11 +260,11 @@ export const LaunchPage = Html.component({
                   )
                 ? h.ul.class(
                   block,
-                  list.items.every((item) =>
-                      fromItem(item)?.icon === "kept"
-                    )
-                    ? "mt-[1.4em] grid gap-6"
-                    : "mt-[1.6em] grid gap-7"
+                  layouts[
+                    list.items.flatMap((item) =>
+                      fromItem(item)?.layout ?? []
+                    )[0] ?? "rows"
+                  ]
                 ).children(items)
                 : h.ul.class(
                   block,
@@ -291,10 +275,37 @@ export const LaunchPage = Html.component({
               const feature = fromItem(item)
               return feature === undefined
                 ? Markdown.defaultViews.ListItem(h, item, blocks)
-                : feature.icon === "kept"
+                : feature.layout === "checklist"
                 ? Kept(h, feature)
                 : Card(h, feature)
             },
+            Table: (h, _table, headerRow, bodyRows) =>
+              h.div.class(block, "mt-[1.4em] overflow-x-auto")
+                .children(
+                  h.table.class(
+                    "w-full border-collapse text-[0.9375rem]/[1.5]",
+                    "compact:text-[0.875rem]/[1.5]"
+                  ).children(
+                    h.thead.children(headerRow),
+                    h.tbody.children(bodyRows)
+                  )
+                ),
+            TableCell: (h, _cell, content, _alignment, isHeader) =>
+              isHeader
+                ? h.th.attr("scope", "col").class(
+                  "border-b border-border-strong pe-5 pb-2 text-start",
+                  "font-mono text-[0.6875rem] font-medium",
+                  "tracking-[0.08em] uppercase text-muted-foreground",
+                  "font-features-[normal] last:pe-0 compact:pe-3"
+                ).children(content)
+                : h.td.class(
+                  "border-b border-border py-3 pe-5 align-top",
+                  "text-prose-foreground last:pe-0 compact:pe-3",
+                  // A name in code stays in one piece.
+                  "[&_code]:whitespace-nowrap",
+                  "min-[521px]:last:whitespace-nowrap",
+                  "[tr:last-child>&]:border-b-0"
+                ).children(content),
             CodeBlock: (h, { value }) =>
               h.pre.class(
                 block,
@@ -313,6 +324,23 @@ export const LaunchPage = Html.component({
                   prompt: prompt.replace("$URL", articleUrl)
                 }
               }),
+            Chips: (h, { items, label }) =>
+              h.div.class(block, "mt-6").children(
+                h.p.class(
+                  "font-mono text-[0.6875rem] tracking-[0.08em]",
+                  "uppercase text-muted-foreground",
+                  "font-features-[normal]"
+                ).children(label),
+                h.ul.class("mt-2.5 flex flex-wrap gap-2").children(
+                  ...items.split(",").map((item) =>
+                    h.li.key(item.trim()).class(
+                      "rounded-full border border-border bg-muted",
+                      "px-3 py-1 text-[0.8125rem]/[1.4]",
+                      "text-prose-foreground first-letter:uppercase"
+                    ).children(item.trim())
+                  )
+                )
+              ),
             PageOnly: (h, _attributes, content) =>
               h.div.class("mx-auto mt-[1.1em] max-w-(--column)")
                 .children(content),
@@ -394,9 +422,13 @@ export const LaunchPage = Html.component({
                 ),
                 Caption(h, caption)
               ),
-            Listing: (h, { code }, caption) =>
+            Listing: (h, { code, whole }, caption) =>
               h.figure.class(listing).children(
-                ...Files(h, snippets[code]),
+                ...Files(
+                  h,
+                  snippets[code],
+                  whole === "true" ? [] : undefined
+                ),
                 Caption(h, caption)
               ),
             PlayTest: (h) =>

@@ -123,6 +123,10 @@ export const toMarkdown = (source: string, snippets: Snippets) => {
       case "AgentPrompt":
       case "PageOnly":
         return ""
+      case "Chips": {
+        const { items, label } = attributes(text)
+        return `${label}: ${items}.`
+      }
       default:
         throw new Error(`No text for the island "${name}"`)
     }

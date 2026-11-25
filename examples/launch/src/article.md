@@ -6,6 +6,8 @@ Effect UI is the new frontend library that continues the work of Foldkit 0.x, th
 
 Effect UI is in public preview: it isn't on npm yet and doesn't have everything Foldkit 0.x has. If you're building with Foldkit 0.x today, we encourage you to continue. The migration to Effect UI will be an upgrade, not a rewrite. Feature work on Foldkit 0.x has moved to Effect UI.
 
+This page is built with Effect UI. You can [read its source](https://github.com/Effect-TS/ui/tree/main/examples/launch) on GitHub.
+
 ## Explore with an AI agent
 
 :::PageOnly
@@ -87,16 +89,14 @@ A Provider shares part of its Model with Components inside it, at any depth. In 
 
 ### Built-in queries
 
-In Foldkit 0.x, fetched data lived in the Model. The experimental `Query` handled loading, success and failure, but it was a Submodel: the parent stored it, forwarded its Messages and decided when to load or refresh.
-
-In Effect UI, you define a query once, and a Component lists the queries it needs. The runtime does the rest:
+In Foldkit 0.x, fetched data lived in the Model, and the parent drove the experimental `Query`: it stored it, forwarded its Messages and decided when to load or refresh. In Effect UI, you define a query once, a Component lists the queries it needs, and the runtime does the rest.
 
 - **Fetching:** When the Component is rendered, and again when the query's arguments change. `debounce` waits until they settle.
 - **Caching:** One result per query and arguments, kept by the runtime. Components that ask for the same data share one fetch.
 - **Freshness:** A result older than `staleTime` stays on screen while the runtime refetches it.
-- **States:** Each result is an `AsyncResult`: no result yet, failure or success.
+- **States:** Each result is an `AsyncResult` in one of three states: no result yet, failure or success.
 
-Also built in: polling, refetching on focus and reconnect, load more, invalidation and optimistic updates from Commands, prefetching on link hover, server rendering, and restoring results on Back and forward.
+::Chips{label="Also built in" items="polling, refetch on focus and reconnect, load more, invalidation from Commands, optimistic updates, prefetch on link hover, server rendering, restore on Back and forward"}
 
 :::Compare{foldkit="queryFoldkit" foldkitTitle="Foldkit 0.x: the parent stores and drives the Query" effect="queryEffect" effectTitle="Effect UI: the Component lists its query"}
 Both search the same posts as you type, 300 ms after the last keystroke. In Foldkit 0.x, the wait was a version counter in the Model and a `DelaySearch` Command. In Effect UI, it is the `debounce` option, and only this version refetches a result older than a minute.
@@ -104,17 +104,16 @@ Both search the same posts as you type, 300 ms after the last keystroke. In Fold
 
 ### Where state lives
 
-In Foldkit 0.x, all of an app's state lived in its one Model. In Effect UI, each Component has its own Model, and a Component can read state that is owned elsewhere:
+In Foldkit 0.x, all of an app's state lived in its one Model. In Effect UI, state lives in four places, and a view reads each one its own way:
 
-- **Its own Model:** State the Component changes in its update, such as a form draft or whether a dialog is open.
-- **Another Component's Model:** A parent passes state down as props, and a [Provider](#shared-state-with-providers) shares state with every Component inside it.
-- **The query cache:** The runtime keeps the data a [query](#built-in-queries) fetches, with its loading and failure states.
+| State                                                            | Where it lives            | A view reads         |
+| ---------------------------------------------------------------- | ------------------------- | -------------------- |
+| What the Component changes, such as a form draft                 | Its own Model             | `model`              |
+| What a parent or a [Provider](#shared-state-with-providers) owns | Another Component's Model | `h.props`, `h.reads` |
+| Data a [query](#built-in-queries) fetched                        | The runtime's query cache | `h.queries`          |
+| Which Commands are running                                       | The runtime               | `h.isRunning`        |
 
-The runtime also tracks which Commands are running, and a view can check with `h.isRunning`. The auto-counter in [A complete Component](#a-complete-component) shows "Resetting" this way, so its Model needs no flag for a reset in progress.
-
-A Component's Model holds the state it changes through update. It no longer has to hold everything its view shows.
-
-With logging enabled, you can still replay a Component's recorded Model without rerunning side effects. The log includes the Messages and the values update read from props, queries and Providers.
+So a Model holds only the state its Component changes through update, not everything its view shows. With logging enabled, you can still replay a Component's recorded state, because the log includes what update read from props, queries and Providers.
 
 ## Views and rendering
 
@@ -124,11 +123,11 @@ The components in Foldkit UI were headless: each one managed behavior, keyboard 
 
 In Effect UI, a headless Component gives your view parts instead. You apply each part to an element you write, then add your own classes and children.
 
-::Compare{foldkit="partsFoldkit" foldkitTitle="Foldkit 0.x: spread the attribute bundles from toView" effect="partsEffect" effectTitle="Effect UI: apply each part to an element"}
+::Listing{code="parts" whole="true"}
 
 A headless Component defines `parts` instead of a view. It has its own Model, Messages and update, so it can keep its own state, such as whether it is open.
 
-::Listing{code="partsOwn"}
+::Listing{code="partsOwn" whole="true"}
 
 ### Host-agnostic rendering
 
@@ -148,9 +147,7 @@ You choose the host when mounting the app. The entry point below uses `BrowserHo
 
 A Story test sends Messages to update, and a Scene test does the same through the view. In Foldkit 0.x, you passed those functions and a starting Model with `given`. In Effect UI, you pass the Component, and the test starts from the Model its init returns. To start from a different state, you may replace that Model with `given`.
 
-::Compare{foldkit="storyFoldkit" foldkitTitle="Foldkit 0.x Story: update and a given Model" effect="storyEffect" effectTitle="Effect UI Story: the Component itself"}
-
-::Compare{foldkit="sceneFoldkit" foldkitTitle="Foldkit 0.x Scene: update, view and a given Model" effect="sceneEffect" effectTitle="Effect UI Scene: the Component itself"}
+::Listing{code="tests"}
 
 A test can also stand in for everything around the Component: a query's result, a Subscription's value, an event from a child, a Provider's value or new props from the parent. `Story.fromLog` replays a recorded message log against update and reports the first step that doesn't reproduce.
 
@@ -191,11 +188,11 @@ In [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark),
 
 What people value in Foldkit 0.x carries over to Effect UI.
 
-- **The same structure everywhere:** Every Component has a Model, Messages, init and update, with a view or, for a headless Component, parts. You, a new teammate or an AI agent always know where to look.
-- **Explicit state transitions:** Once a Component is running, its Model changes only in its update, in response to a Message.
-- **Side effects as values:** Commands, Subscriptions and Mounts describe work for the runtime to run. update and view don't perform it themselves.
-- **Tests that declare what happened:** Tests read as steps you can follow. Story and Scene let you supply Command results, and fail if a Command is left unresolved; Play runs the work against the Layers you provide.
-- **A record of what happened:** Enable message logging to record Messages, Model changes and query results. You can inspect that history in the [DevTools](#devtools) and replay a Component's recorded state without rerunning side effects.
+- **The same structure in every Component**
+- **State that changes only in update, in response to a Message**
+- **Side effects as values that the runtime runs**
+- **Tests that account for every Command**
+- **A message log you can inspect and replay**
 
 ## Try a snapshot build
 
@@ -222,5 +219,5 @@ Effect UI is developed in [Effect-TS/ui](https://github.com/Effect-TS/ui). Appli
 Thank you to everyone building with Foldkit 0.x. What you've made with it, and what you've told us along the way, is what Effect UI is built on.
 
 :::Footer
-This article is built with Effect UI. Browse the source in `examples/launch` in Effect-TS/ui.
+This article is built with Effect UI. [Browse the source](https://github.com/Effect-TS/ui/tree/main/examples/launch) in `examples/launch` in Effect-TS/ui.
 :::
