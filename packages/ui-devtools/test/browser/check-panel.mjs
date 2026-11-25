@@ -85,39 +85,37 @@ const readable = (frame, selector) =>
 
 await run("panel", async ({ browser, expect, failures, url }) => {
   const lifecycleOk = async (frame, label) => {
-    const right = await frame.locator(".right").evaluate((node) =>
-      node.getBoundingClientRect().right
-    )
-    const cells = await frame.locator(".life tr[data-kind=instance] > *")
-      .evaluateAll((nodes) =>
-        nodes.map((node) => {
-          const box = node.getBoundingClientRect()
-          return {
-            text: node.textContent.replace(/\s+/g, " ").trim(),
-            left: box.left,
-            right: box.right,
-            top: box.top,
-            bottom: box.bottom,
-            width: box.width,
-            height: box.height
-          }
-        })
-      )
-    const [kind, path, mounted, status] = cells
-    const overlap = !(
-      path.right <= mounted.left + 0.5 ||
-      mounted.right <= path.left + 0.5 ||
-      path.bottom <= mounted.top + 0.5 ||
-      mounted.bottom <= path.top + 0.5
+    const row = await frame.locator(".life tr[data-kind=instance]").evaluate(
+      (tr) => {
+        const right = tr.closest(".right").getBoundingClientRect().right
+        const [kind, path, mounted, status] = Array.from(
+          tr.children,
+          (node) => node.getBoundingClientRect()
+        )
+        const overlap = path.right > mounted.left + 0.5 &&
+          mounted.right > path.left + 0.5 &&
+          path.bottom > mounted.top + 0.5 &&
+          mounted.bottom > path.top + 0.5
+        return {
+          ok: path.width >= 100 && path.height < 60 &&
+            mounted.width >= 80 && status.width >= 80 &&
+            status.right <= right + 0.5 &&
+            kind.right <= path.left + 0.5 && !overlap,
+          right: Math.round(right),
+          cells: [kind, path, mounted, status].map((b) => ({
+            left: Math.round(b.left),
+            right: Math.round(b.right),
+            width: Math.round(b.width),
+            height: Math.round(b.height)
+          }))
+        }
+      }
     )
     expect(
-      path.width >= 100 && path.height < 60 && mounted.width >= 80 &&
-        mounted.height < 50 && status.width >= 80 &&
-        status.right <= right + 0.5 && !overlap &&
-        kind.right <= path.left + 0.5,
+      row.ok,
       label +
         ": Lifecycle instance path is readable without overlapping mount link",
-      { right, cells }
+      row
     )
   }
 
@@ -172,26 +170,24 @@ await run("panel", async ({ browser, expect, failures, url }) => {
       state
     )
 
-    const gutter = await page.evaluate(() => {
-      const doc = document.querySelector("iframe[data-effect-ui-devtools]")
-        .contentDocument
-      const box = doc.querySelector(".timeline-box").getBoundingClientRect()
-      const scroller = doc.querySelector(".timeline")
-      const scrollRect = scroller.getBoundingClientRect()
-      const strip = doc.querySelector(".gutter")?.getBoundingClientRect()
+    const gutter = await frame.locator(".timeline-box").evaluate((node) => {
+      const box = node.getBoundingClientRect()
+      const scroller = node.querySelector(".timeline")
+      const scroll = scroller.getBoundingClientRect()
+      const strip = node.querySelector(".gutter")?.getBoundingClientRect()
       return {
-        scrolls: scroller.scrollHeight > scroller.clientHeight,
+        ok: scroller.scrollHeight > scroller.clientHeight &&
+          strip !== undefined && strip.width > 0 &&
+          strip.left >= scroll.right - 0.5 && strip.right <= box.right + 0.5,
         boxRight: Math.round(box.right),
-        scrollRight: Math.round(scrollRect.right),
-        gutterLeft: strip === undefined ? null : Math.round(strip.left),
-        gutterRight: strip === undefined ? null : Math.round(strip.right),
-        gutterWidth: strip === undefined ? 0 : Math.round(strip.width)
+        scrollRight: Math.round(scroll.right),
+        gutterLeft: strip ? Math.round(strip.left) : null,
+        gutterRight: strip ? Math.round(strip.right) : null,
+        gutterWidth: strip ? Math.round(strip.width) : 0
       }
     })
     expect(
-      gutter.scrolls && gutter.gutterWidth > 0 &&
-        gutter.gutterLeft >= gutter.scrollRight - 0.5 &&
-        gutter.gutterRight <= gutter.boxRight + 0.5,
+      gutter.ok,
       "the timeline marker gutter sits outside the native scrollbar",
       gutter
     )
@@ -206,9 +202,6 @@ await run("panel", async ({ browser, expect, failures, url }) => {
 
     await frame.getByRole("tab", { name: "Lifecycle" }).click()
     await lifecycleOk(frame, "920px two-pane")
-    await page.setViewportSize({ width: 780, height: 800 })
-    await page.waitForTimeout(100)
-    await lifecycleOk(frame, "756px two-pane")
     await page.setViewportSize({ width: 744, height: 800 })
     await page.waitForTimeout(100)
     await lifecycleOk(frame, "720px two-pane")

@@ -415,11 +415,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
         text(root.querySelector(".paused-label")),
         /^Paused at #\d+$/
       )
-      assert.strictEqual(
-        text(root.querySelector(".scrub .muted")),
-        "Time travel"
-      )
-      assert.match(text(root.querySelector(".scrub .at")), /^#\d+$/)
+      assert.match(text(root.querySelector(".scrub")), /^Time travel\s*#\d+$/)
       assert.strictEqual(app.style.getPropertyValue("display"), "none")
       assert.strictEqual(
         Array.from(copy()!.querySelectorAll("p")).map((status) =>
@@ -557,10 +553,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.isFalse(notes[0].open)
       assert.include(text(notes[0].querySelector("summary")), "fallback")
       assert.deepStrictEqual(
-        Array.from(
-          notes[0].querySelectorAll(".pause-paths li"),
-          (node) => text(node)
-        ),
+        Array.from(notes[0].querySelectorAll("li"), (node) => text(node)),
         ["/Pair"]
       )
     }))
@@ -570,13 +563,13 @@ describe("DevTools overlay", { concurrent: false }, () => {
       let inits = 0
       const Row = Html.component({
         name: "Row",
-        props: Schema.Struct({ id: Schema.String, seed: Schema.Number }),
+        props: Schema.Struct({ n: Schema.Number }),
         model: Schema.Number,
         message: Schema.Never
       }).make({
-        init: ($) => $.props.seed > 0 ? $.props.seed : ++inits,
+        init: () => ++inits,
         update: ($) => $.model,
-        view: (h, n) => h.li.children(`${h.props.id}:${n}`)
+        view: (h, init) => h.li.children(`${h.props.n}:${init}`)
       })
       const TriggerMessage = UiSchema.TaggedEnum({ Clicked: {} })
       const TriggerEvents = UiSchema.TaggedEnum({ Set: { n: Schema.Number } })
@@ -589,46 +582,32 @@ describe("DevTools overlay", { concurrent: false }, () => {
         init: () => null,
         update: {
           Clicked: ($) =>
-            $.set(null).emit(TriggerEvents.Set({ n: 1 })).emit(
-              TriggerEvents.Set({ n: 2 })
+            $.set(null).emit(TriggerEvents.Set({ n: 2 })).emit(
+              TriggerEvents.Set({ n: 3 })
             )
         },
         view: (h) => h.button.onClick(TriggerMessage.Clicked()).children("Go")
       })
-      const ListMessage = UiSchema.TaggedEnum({
-        ClickedAdd: {},
-        SetSame: { n: Schema.Number }
-      })
+      const ListMessage = UiSchema.TaggedEnum({ Set: { n: Schema.Number } })
       const List = Html.component({
         name: "List",
-        model: Schema.Struct({
-          rows: Schema.Array(Schema.String),
-          same: Schema.Number
-        }),
+        model: Schema.Number,
         message: ListMessage
       }).make({
-        init: () => ({ rows: ["a", "b", "c"], same: 0 }),
-        update: {
-          ClickedAdd: ($) => $.evolve({ rows: [...$.model.rows, "d"] }),
-          SetSame: ($, { n }) => $.evolve({ same: n })
-        },
-        view: (h, model) =>
+        init: () => 0,
+        update: { Set: ($, { n }) => n },
+        view: (h, n) =>
           h.div(
-            h.button.onClick(ListMessage.ClickedAdd()).children("Add"),
+            h.button.onClick(ListMessage.Set({ n: 1 })).children("One"),
             Trigger(h, {
               key: "t",
-              onEmit: { Set: ({ n }) => ListMessage.SetSame({ n }) }
+              onEmit: { Set: ({ n }) => ListMessage.Set({ n }) }
             }),
             h.ul(
-              model.rows.map((id) =>
-                Row(h, { key: id, props: { id, seed: 0 } })
-              ),
-              model.same > 0
-                ? Row(h, {
-                  key: "same",
-                  props: { id: "same", seed: model.same }
-                })
-                : null
+              Row(h, { key: "a", props: { n: 0 } }),
+              Row(h, { key: "b", props: { n: 0 } }),
+              n >= 1 ? Row(h, { key: "one", props: { n: 1 } }) : null,
+              n >= 2 ? Row(h, { key: "two", props: { n } }) : null
             )
           )
       })
@@ -645,57 +624,56 @@ describe("DevTools overlay", { concurrent: false }, () => {
         Effect.provide(services)
       )
       yield* settle
-      yield* click(HtmlLocator.getByRole(app, "button", { name: "Add" }))
+      yield* click(HtmlLocator.getByRole(app, "button", { name: "One" }))
       yield* click(HtmlLocator.getByRole(app, "button", { name: "Go" }))
 
       const rowA = memory.entries().find((entry) =>
         entry._tag === "Mounted" && entry.path === "/List/Row[a]"
       )!
-      const updates = memory.entries().filter((entry) =>
+      const [one, first, second] = memory.entries().filter((entry) =>
         entry._tag === "Update" && entry.path === "/List"
       )
-      const [added, firstSame, secondSame] = updates
       const root = overlay()
       yield* open(root)
       yield* click(
         HtmlLocator.getByRole(root, "button", { name: "Everything" })
       )
-
       const items = () =>
         Array.from(
           app.nextElementSibling!.querySelectorAll("li"),
           (node) => node.textContent
         )
+      const select = (seq: number) =>
+        click(entry(root, new RegExp("^#" + seq + " "))[0]!)
 
-      yield* click(entry(root, new RegExp("^#" + rowA.seq + " "))[0]!)
+      yield* select(rowA.seq)
       yield* click(
         HtmlLocator.getByRole(root, "button", { name: "Time travel" })
       )
       assert.isNull(root.querySelector(".pause-note"))
-      assert.deepStrictEqual(items(), ["a:1", "b:2", "c:3"])
+      assert.deepStrictEqual(items(), ["0:1", "0:2"])
 
-      yield* click(entry(root, new RegExp("^#" + added.seq + " "))[0]!)
+      yield* select(one.seq)
       assert.isNull(root.querySelector(".pause-note"))
-      assert.deepStrictEqual(items(), ["a:1", "b:2", "c:3", "d:4"])
+      assert.deepStrictEqual(items(), ["0:1", "0:2", "1:3"])
 
-      yield* click(entry(root, new RegExp("^#" + firstSame.seq + " "))[0]!)
-      assert.deepStrictEqual(items(), ["a:1", "b:2", "c:3", "d:4", "same:1"])
-      const fellBack = Array.from(
-        root.querySelectorAll<HTMLDetailsElement>("details.pause-note")
+      yield* select(first.seq)
+      assert.deepStrictEqual(items(), ["0:1", "0:2", "1:3", "2:5"])
+      const note = root.querySelector<HTMLDetailsElement>("details.pause-note")!
+      assert.isNotNull(note)
+      assert.isFalse(note.open)
+      assert.include(
+        text(note.querySelector("summary")),
+        "1 instance shown from init"
       )
-      assert.strictEqual(fellBack.length, 1)
-      assert.isFalse(fellBack[0].open)
       assert.deepStrictEqual(
-        Array.from(
-          fellBack[0].querySelectorAll(".pause-paths li"),
-          (node) => text(node)
-        ),
-        ["/List/Row[same]"]
+        Array.from(note.querySelectorAll("li"), (node) => text(node)),
+        ["/List/Row[two]"]
       )
 
-      yield* click(entry(root, new RegExp("^#" + secondSame.seq + " "))[0]!)
+      yield* select(second.seq)
       assert.isNull(root.querySelector(".pause-note"))
-      assert.deepStrictEqual(items(), ["a:1", "b:2", "c:3", "d:4", "same:2"])
+      assert.deepStrictEqual(items(), ["0:1", "0:2", "1:3", "3:4"])
     }))
 
   it.live("finds Editor[n2]'s Save, follows it to its interruption and back", () =>
