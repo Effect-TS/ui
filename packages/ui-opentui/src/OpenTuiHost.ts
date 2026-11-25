@@ -97,10 +97,17 @@ export interface MountOptions<V extends View.Elements, RF = never> {
 const builtInCatalogue: Readonly<Record<string, RenderableConstructor>> = {
   box: OT.BoxRenderable,
   scrollbox: OT.ScrollBoxRenderable,
+  lineNumber: OT.LineNumberRenderable,
   text: OT.TextRenderable,
   input: OT.InputRenderable,
   textarea: OT.TextareaRenderable,
-  select: OT.SelectRenderable
+  select: OT.SelectRenderable,
+  tabSelect: OT.TabSelectRenderable,
+  slider: OT.SliderRenderable,
+  code: OT.CodeRenderable,
+  diff: OT.DiffRenderable,
+  markdown: OT.MarkdownRenderable,
+  asciiFont: OT.ASCIIFontRenderable
 }
 
 const textTagAttributes: Readonly<Record<string, number>> = {
@@ -129,7 +136,25 @@ const resettableProps: ReadonlySet<string> = new Set([
   "showDescription",
   "showSelectionIndicator",
   "showScrollIndicator",
+  "showScrollArrows",
+  "showUnderline",
+  "tabWidth",
   "wrapSelection",
+  "orientation",
+  "viewPortSize",
+  "conceal",
+  "concealCode",
+  "drawUnstyledText",
+  "streaming",
+  "syncScroll",
+  "view",
+  "showLineNumbers",
+  "lineNumberOffset",
+  "content",
+  "diff",
+  "text",
+  "font",
+  "selectable",
   "stickyScroll",
   "scrollX",
   "scrollY",
@@ -155,15 +180,32 @@ class Container {
 
 type HostNode = OT.BaseRenderable | Slot | Container
 
-type Controlled = OT.TextareaRenderable | OT.SelectRenderable
+type Selectable = OT.SelectRenderable | OT.TabSelectRenderable
+
+type Controlled = OT.TextareaRenderable | Selectable | OT.SliderRenderable
+
+const isSelectable = (node: OT.BaseRenderable): node is Selectable =>
+  node instanceof OT.SelectRenderable || node instanceof OT.TabSelectRenderable
 
 const isControlled = (
   node: OT.BaseRenderable,
   name: string
 ): node is Controlled =>
   name === "value"
-    ? node instanceof OT.TextareaRenderable
-    : name === "selectedIndex" && node instanceof OT.SelectRenderable
+    ? node instanceof OT.TextareaRenderable ||
+      node instanceof OT.SliderRenderable
+    : name === "selectedIndex" && isSelectable(node)
+
+const syntaxStyles = new WeakMap<OT.CliRenderer, OT.SyntaxStyle>()
+
+const defaultSyntaxStyle = (renderer: OT.CliRenderer): OT.SyntaxStyle => {
+  let style = syntaxStyles.get(renderer)
+  if (style === undefined) {
+    style = OT.SyntaxStyle.create(renderer.nativeScene)
+    syntaxStyles.set(renderer, style)
+  }
+  return style
+}
 
 const destroyRenderable = (node: OT.BaseRenderable | undefined): void => {
   if (node === undefined) return
@@ -187,6 +229,13 @@ const realParent = (node: OT.BaseRenderable): OT.BaseRenderable | undefined => {
   const parent = node.parent ?? undefined
   if (parent instanceof OT.RootTextNodeRenderable) return parent.textParent
   return parent
+}
+
+const detach = (child: OT.BaseRenderable): void => {
+  const parent = realParent(child)
+  // `LineNumberRenderable.remove` throws for a live target.
+  if (parent instanceof OT.LineNumberRenderable) parent.clearTarget()
+  else parent?.remove(child)
 }
 
 const childrenOf = (
@@ -352,6 +401,7 @@ export const makeHost = (
   const wanted = new WeakMap<Controlled, string | number>()
   const initialProps = new WeakMap<OT.BaseRenderable, Map<string, unknown>>()
   const lastProps = new WeakMap<OT.BaseRenderable, Map<string, unknown>>()
+  const lineNumberVisibility = new WeakMap<OT.LineNumberRenderable, boolean>()
   const controlledWired = new WeakSet<OT.BaseRenderable>()
   let suppressing = false
 
@@ -392,14 +442,15 @@ export const makeHost = (
   }
 
   const write = (node: Controlled, value: string | number): boolean => {
-    const select = node instanceof OT.SelectRenderable
-    const current = select ? node.getSelectedIndex() : node.plainText
+    const current = node instanceof OT.TextareaRenderable
+      ? node.plainText
+      : node instanceof OT.SliderRenderable
+      ? node.value
+      : node.getSelectedIndex()
     if (current === value) return false
     suppressing = true
     try {
-      if (select) {
-        node.setSelectedIndex(value as number)
-      } else {
+      if (node instanceof OT.TextareaRenderable) {
         const text = value as string
         const cursor = node.cursorOffset
         if (node instanceof OT.InputRenderable) node.value = text
@@ -407,6 +458,10 @@ export const makeHost = (
         node.cursorOffset = cursor >= (current as string).length
           ? text.length
           : Math.min(cursor, text.length)
+      } else if (node instanceof OT.SliderRenderable) {
+        node.value = value as number
+      } else {
+        node.setSelectedIndex(value as number)
       }
     } finally {
       suppressing = false
@@ -469,7 +524,7 @@ export const makeHost = (
         if (suppressing) return
         afterEdit(node, fire(node, "input", { value: node.plainText }))
       }
-    } else if (node instanceof OT.SelectRenderable) {
+    } else if (isSelectable(node)) {
       node.on(
         OT.SelectRenderableEvents.SELECTION_CHANGED,
         (index: number, option: OT.SelectOption | null) => {
@@ -480,6 +535,11 @@ export const makeHost = (
           )
         }
       )
+    } else if (node instanceof OT.SliderRenderable) {
+      node.on("change", () => {
+        if (suppressing) return
+        afterEdit(node, fire(node, "change", { value: node.value }))
+      })
     }
   }
 
@@ -526,7 +586,20 @@ export const makeHost = (
       if (Ctor === undefined) {
         throw new Error(`Unknown OpenTUI tag: <${tag}>`)
       }
-      return new Ctor(renderCtx, { id: `${tag}-${nextId++}` })
+      const id = `${tag}-${nextId++}`
+      if (Ctor === OT.SliderRenderable) {
+        return new OT.SliderRenderable(renderCtx, {
+          id,
+          orientation: "horizontal"
+        })
+      }
+      if (Ctor === OT.CodeRenderable || Ctor === OT.MarkdownRenderable) {
+        return new Ctor(renderCtx, {
+          id,
+          syntaxStyle: defaultSyntaxStyle(renderer)
+        })
+      }
+      return new Ctor(renderCtx, { id })
     },
 
     createText(text) {
@@ -557,12 +630,23 @@ export const makeHost = (
         }
         return
       }
+      if (
+        name === "showLineNumbers" && node instanceof OT.LineNumberRenderable
+      ) {
+        // The gutter is rebuilt for each child, so `insertBefore` reapplies this.
+        const show = value === undefined ? true : Boolean(value)
+        lineNumberVisibility.set(node, show)
+        node.showLineNumbers = show
+        return
+      }
       if (isControlled(node, name)) {
         ensureControlledListener(node)
         if (value === undefined) {
           wanted.delete(node)
         } else {
-          const coerced = name === "value" ? String(value) : Number(value)
+          const coerced = node instanceof OT.TextareaRenderable
+            ? String(value)
+            : Number(value)
           wanted.set(node, coerced)
           write(node, coerced)
         }
@@ -587,15 +671,29 @@ export const makeHost = (
             (typeof value === "number" ? value : 0)
         }
       }
-      target[name] = next
+      if (
+        (name === "options" && isSelectable(node)) ||
+        ((name === "min" || name === "max") &&
+          node instanceof OT.SliderRenderable)
+      ) {
+        // These setters clamp the current value, so reassert the controlled one.
+        suppressing = true
+        try {
+          target[name] = next
+        } finally {
+          suppressing = false
+        }
+        revertNode(node)
+      } else {
+        target[name] = next
+      }
     },
 
     insertBefore(parent, node, ref) {
       detached.delete(node)
       detachFromContainer(node)
       if (parent instanceof Container) {
-        const child = real(node)
-        realParent(child)?.remove(child)
+        detach(real(node))
         if (node instanceof Slot) node.parent = parent
         containerParent.set(node, parent)
         const index = ref === undefined ? -1 : parent.children.indexOf(ref)
@@ -606,16 +704,24 @@ export const makeHost = (
       if (node instanceof Slot) node.parent = parent
       const child = real(node, parent)
       const target = parent as OT.BaseRenderable
-      if (ref === undefined) target.add(child)
-      else target.insertBefore(child, real(ref, parent))
+      if (target instanceof OT.LineNumberRenderable) {
+        if (child instanceof OT.Renderable) {
+          target.add(child)
+          const show = lineNumberVisibility.get(target)
+          if (show !== undefined) target.showLineNumbers = show
+        }
+      } else if (ref === undefined) {
+        target.add(child)
+      } else {
+        target.insertBefore(child, real(ref, parent))
+      }
     },
 
     remove(node) {
       if (containerParent.has(node)) {
         detachFromContainer(node)
       } else {
-        const child = real(node)
-        realParent(child)?.remove(child)
+        detach(real(node))
       }
       if (node instanceof Slot) node.parent = undefined
       detached.add(node)
@@ -677,7 +783,11 @@ export const makeHost = (
           node.on(OT.RenderableEvents.BLURRED, () => {
             fire(node, "blur", {})
           })
-        } else if (name === "input" || name === "selectionChanged") {
+        } else if (
+          name === "input" ||
+          name === "selectionChanged" ||
+          (name === "change" && node instanceof OT.SliderRenderable)
+        ) {
           ensureControlledListener(node)
         } else if (name === "change" || name === "enter") {
           node.on(name, (value?: string) => {

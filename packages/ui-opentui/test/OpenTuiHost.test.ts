@@ -718,4 +718,241 @@ describe("OpenTuiHost", () => {
       expect(frame).toContain("CustomTag")
       expect(frame).toContain("custom!")
     }))
+
+  it.effect("supports controlled and uncontrolled tabSelect and slider", () =>
+    Effect.gen(function*() {
+      const FocusTarget = Schema.Literals(["controlled", "uncontrolled"])
+      const Message = UiSchema.TaggedEnum({
+        ChangedTab: { index: Schema.Number },
+        ChangedSlider: { value: Schema.Number },
+        Logged: { entry: Schema.String },
+        Updated: {
+          focus: Schema.optional(FocusTarget),
+          vertical: Schema.optional(Schema.Boolean),
+          tick: Schema.optional(Schema.Number)
+        }
+      })
+
+      const App = OpenTui.component({
+        name: "TabSelectAndSlider",
+        model: Schema.Struct({
+          tab: Schema.Number,
+          slider: Schema.Number,
+          focus: FocusTarget,
+          vertical: Schema.Boolean,
+          tick: Schema.Number,
+          log: Schema.Array(Schema.String)
+        }),
+        message: Message
+      }).make({
+        init: () => ({
+          tab: 1,
+          slider: 20,
+          focus: "controlled" as const,
+          vertical: false,
+          tick: 0,
+          log: []
+        }),
+        update: {
+          ChangedTab: ($, { index }) =>
+            index === 2 ? $.model : $.evolve({ tab: index }),
+          ChangedSlider: ($, { value }) =>
+            $.evolve({
+              slider: value > 50 ? $.model.slider : value,
+              log: (xs) => [...xs, `slider:${value}`]
+            }),
+          Logged: ($, { entry }) => $.evolve({ log: (xs) => [...xs, entry] }),
+          Updated: ($, patch) =>
+            $.evolve({
+              focus: patch.focus ?? $.model.focus,
+              vertical: patch.vertical ?? $.model.vertical,
+              tick: patch.tick ?? $.model.tick
+            })
+        },
+        view: (h, model) =>
+          h.box.style({ flexDirection: "column", width: 44, height: 14 })
+            .children(
+              h.tabSelect.style({ width: 40, tabWidth: 12 }).selectedIndex(
+                model.tab
+              ).options([
+                { name: "Home", description: "home tab" },
+                { name: "Logs", description: "logs tab" },
+                { name: "Locked", description: "rejected tab" }
+              ]).focused(model.focus === "controlled")
+                .onSelectionChanged(({ index }) =>
+                  Message.ChangedTab({ index })
+                )
+                .onItemSelected(({ index }) =>
+                  Message.Logged({ entry: `tab:${index}` })
+                ),
+              h.tabSelect.style({ width: 40, tabWidth: 12 }).options([
+                { name: "Alpha", description: "alpha tab" },
+                { name: "Beta", description: "beta tab" }
+              ]).focused(model.focus === "uncontrolled")
+                .onSelectionChanged(({ index }) =>
+                  Message.Logged({ entry: `utab-change:${index}` })
+                )
+                .onItemSelected(({ index }) =>
+                  Message.Logged({ entry: `utab-pick:${index}` })
+                ),
+              h.slider.style({
+                orientation: model.vertical ? "vertical" : "horizontal",
+                width: model.vertical ? 2 : 20,
+                height: model.vertical ? 5 : 1,
+                min: 0,
+                max: 100
+              }).value(model.slider).onChange(({ value }) =>
+                Message.ChangedSlider({ value })
+              ),
+              h.slider.style({
+                width: 20,
+                height: 1,
+                min: 0,
+                max: 100
+              }).onChange(({ value }) =>
+                Message.Logged({ entry: `uslider:${value}` })
+              ),
+              h.text(`tick=${model.tick}`)
+            )
+      })
+
+      const app = yield* OpenTuiTest.mount(App, {}, { width: 48, height: 16 })
+      const frame = app.captureFrame()
+      expect(frame).toContain("Home")
+      expect(frame).toContain("logs tab")
+
+      yield* app.pressArrow("right")
+      yield* app.pressEnter
+      yield* app.pressArrow("left")
+      yield* app.pressEnter
+      expect(app.root.model()?.tab).toBe(0)
+
+      app.root.send(Message.Updated({ focus: "uncontrolled" }))
+      yield* app.settle
+      yield* app.pressArrow("right")
+      app.root.send(Message.Updated({ tick: 1 }))
+      yield* app.settle
+      yield* app.pressEnter
+
+      const children = app.setup.renderer.root.getChildren()[0]!.getChildren()
+      const controlledSlider = children[2] as OT.SliderRenderable
+      const uncontrolledSlider = children[3] as OT.SliderRenderable
+
+      expect(controlledSlider.value).toBe(20)
+      yield* app.click(controlledSlider.x + 16, controlledSlider.y)
+      expect(controlledSlider.value).toBe(20)
+      yield* app.click(controlledSlider.x + 8, controlledSlider.y)
+      expect(controlledSlider.value).toBe(40)
+      app.root.send(Message.Updated({ vertical: true }))
+      yield* app.settle
+      expect(controlledSlider.orientation).toBe("vertical")
+
+      yield* app.click(uncontrolledSlider.x + 12, uncontrolledSlider.y)
+      app.root.send(Message.Updated({ tick: 2 }))
+      yield* app.settle
+      expect(uncontrolledSlider.value).toBe(60)
+
+      expect(app.root.model()?.log).toEqual([
+        "tab:1",
+        "tab:0",
+        "utab-change:1",
+        "utab-pick:1",
+        "slider:80",
+        "slider:40",
+        "uslider:60"
+      ])
+    }))
+
+  it.effect("renders code, lineNumber, diff, markdown, and asciiFont, clears removed code content, and preserves hidden line numbers across remount", () =>
+    Effect.gen(function*() {
+      const Message = UiSchema.TaggedEnum({
+        ToggledCode: {},
+        ClearedContent: {},
+        HidLineNumbers: {}
+      })
+      const sampleDiff = [
+        "--- a/demo.ts",
+        "+++ b/demo.ts",
+        "@@ -1,1 +1,1 @@",
+        "-const oldVal = 1",
+        "+const newVal = 2"
+      ].join("\n")
+
+      const App = OpenTui.component({
+        name: "DisplayTags",
+        model: Schema.Struct({
+          showCode: Schema.Boolean,
+          hasContent: Schema.Boolean,
+          showLineNumbers: Schema.Boolean
+        }),
+        message: Message
+      }).make({
+        init: () => ({
+          showCode: true,
+          hasContent: true,
+          showLineNumbers: true
+        }),
+        update: {
+          ToggledCode: ($) => $.evolve({ showCode: (b) => !b }),
+          ClearedContent: ($) => $.evolve({ hasContent: false }),
+          HidLineNumbers: ($) => $.evolve({ showLineNumbers: false })
+        },
+        view: (h, model) =>
+          h.box.style({ flexDirection: "column", width: 50, height: 22 })
+            .children(
+              h.lineNumber.style({
+                width: 40,
+                height: 2,
+                showLineNumbers: model.showLineNumbers
+              }).children(
+                model.showCode
+                  ? h.code.style({
+                    ...(model.hasContent
+                      ? { content: "const a = 1\nconst b = 2" }
+                      : {}),
+                    width: 34,
+                    height: 2
+                  })
+                  : false
+              ),
+              h.diff.style({
+                diff: sampleDiff,
+                view: "unified",
+                width: 40,
+                height: 3
+              }),
+              h.markdown.style({
+                content: "# Title\n\n- bullet item",
+                width: 40
+              }),
+              h.asciiFont.style({ text: "HI", font: "tiny" })
+            )
+      })
+
+      const app = yield* OpenTuiTest.mount(App, {}, { width: 54, height: 24 })
+      const frame = app.captureFrame()
+      expect(frame.split("\n")[0]!.trimEnd()).toBe(" 1 const a = 1")
+      expect(frame).toContain("const b = 2")
+      expect(frame).toContain("oldVal")
+      expect(frame).toContain("newVal")
+      expect(frame).toContain("Title")
+      expect(frame).toContain("bullet item")
+      expect(frame).toContain("█▀█ █")
+
+      app.root.send(Message.HidLineNumbers())
+      yield* app.settle
+      expect(app.captureFrame().split("\n")[0]!.trimEnd()).toBe("const a = 1")
+
+      app.root.send(Message.ToggledCode())
+      yield* app.settle
+      expect(app.captureFrame()).not.toContain("const a = 1")
+
+      app.root.send(Message.ToggledCode())
+      yield* app.settle
+      expect(app.captureFrame().split("\n")[0]!.trimEnd()).toBe("const a = 1")
+
+      app.root.send(Message.ClearedContent())
+      yield* app.settle
+      expect(app.captureFrame()).not.toContain("const a = 1")
+    }))
 })

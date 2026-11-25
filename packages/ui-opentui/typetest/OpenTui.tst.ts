@@ -89,4 +89,62 @@ describe("OpenTui vocabulary types", () => {
       >
     >()
   })
+
+  it("types tabSelect, slider, code, diff, markdown, asciiFont, and lineNumber tags", () => {
+    const TabsRef = OpenTui.ref("Tabs", "tabSelect")
+    const SliderRef = OpenTui.ref("Slider", "slider")
+    const CodeRef = OpenTui.ref("Code", "code")
+    const LineNumRef = OpenTui.ref("LineNum", "lineNumber")
+
+    OpenTui.component({
+      name: "NewTags",
+      model: Schema.Void,
+      message: Schema.Literals(["Changed", "Picked"])
+    }).make({
+      init: () => undefined,
+      update: () => undefined,
+      view: (h) => {
+        const tabs = h.tabSelect.ref(TabsRef).options([
+          { name: "One", description: "first" }
+        ]).selectedIndex(0).onSelectionChanged(({ index }) => {
+          expect(index).type.toBe<number>()
+          return "Changed" as const
+        }).onItemSelected(({ index }) => {
+          expect(index).type.toBe<number>()
+          return "Picked" as const
+        })
+
+        const slider = h.slider.ref(SliderRef).style({
+          orientation: "vertical",
+          min: 0,
+          max: 100
+        }).value(50).onChange(({ value }) => {
+          expect(value).type.toBe<number>()
+          return "Changed" as const
+        })
+
+        expect(h.slider.value).type.not.toBeCallableWith("50")
+        expect(h.input.value).type.not.toBeCallableWith(50)
+        h.input.onChange(({ value }) => {
+          expect(value).type.toBe<string>()
+          return "Changed" as const
+        })
+
+        const code = h.code.ref(CodeRef).style({
+          content: "const x = 1",
+          filetype: "typescript"
+        })
+        const numbered = h.lineNumber.ref(LineNumRef).style({
+          showLineNumbers: true
+        }).children(code)
+        expect(h.lineNumber).type.not.toBeCallableWith("stray")
+
+        const diff = h.diff.style({ diff: "", view: "split" })
+        const md = h.markdown.style({ content: "# Hello" })
+        const font = h.asciiFont.style({ text: "HI", font: "tiny" })
+
+        return h.box.children(tabs, slider, numbered, diff, md, font)
+      }
+    })
+  })
 })
