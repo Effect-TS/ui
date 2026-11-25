@@ -424,6 +424,15 @@ type ViewportFact = "FocusedViewport" | "BlurredViewport" | "LeftViewport"
 const focusable =
   "[role=dialog]:not([data-ending-style]):not([inert]),[role=alertdialog]:not([data-ending-style]):not([inert])"
 
+// The toast root in `viewport` that holds `element`, if it's closing.
+const closingRoot = (viewport: Element, element: Element) => {
+  const root = element.closest("[role=dialog],[role=alertdialog]")
+  return root !== null && viewport.contains(root) &&
+      root.hasAttribute("data-ending-style")
+    ? root
+    : null
+}
+
 // What the viewport needs from its document: F6 into the viewport and back,
 // keyboard focus inside it, a pointer that left while the toast under it was
 // removed, and focus that a closing toast left with nowhere to stay. `empty`:
@@ -440,16 +449,20 @@ const TrackViewport = Mount.makeStream(
         let focused = false
         // The active element of the viewport's own root, so a focused
         // control in a shadow root inside a toast counts as inside.
-        const active = () =>
-          (node.getRootNode() as Document | ShadowRoot).activeElement
+        const root = node.getRootNode() as Document | ShadowRoot
+        const active = () => root.activeElement
         const inside = () => node.contains(active())
+        // The focused element, as deep as it can be seen from the viewport's
+        // root, which may be a closed shadow root.
+        const focusedElement = () =>
+          (activeOf(root) ?? activeOf(document)) as HTMLElement | null
         // Where focus was before it entered the viewport, by F6, Tab or a
         // press, while it's still in the page.
         let previous: HTMLElement | null = null
         const restore = (): boolean => {
           if (previous === null || !previous.isConnected) return false
           if (previous === document.body) {
-            ;(activeOf(document) as HTMLElement | null)?.blur()
+            focusedElement()?.blur()
           } else previous.focus({ preventScroll: true })
           const restored = !inside()
           if (restored) previous = null
@@ -458,11 +471,13 @@ const TrackViewport = Mount.makeStream(
         // Back to where focus was, else out of the viewport, so the stack
         // collapses.
         const leave = () => {
-          if (!restore()) (activeOf(document) as HTMLElement | null)?.blur()
+          if (!restore()) focusedElement()?.blur()
         }
         // Focus moves off a closing toast, to the toast after it, or before
-        // it when `back`, else to the other side, else out of the viewport.
-        const passOn = (closing: Node, back: boolean) => {
+        // it when `back`. Focus that `entered` it by Tab or Shift+Tab leaves
+        // the viewport when there's none that way, so it can't loop. Focus
+        // that was on it already goes to the other side first.
+        const passOn = (closing: Node, back: boolean, entered: boolean) => {
           const roots = Array.from(
             node.querySelectorAll<HTMLElement>(focusable)
           )
@@ -474,19 +489,22 @@ const TrackViewport = Mount.makeStream(
           const at = split === -1 ? roots.length : split
           const after = roots[at]
           const before = roots[at - 1]
-          const next = back ? before ?? after : after ?? before
+          const ahead = back ? before : after
+          const next = entered ? ahead : ahead ?? (back ? after : before)
           if (next === undefined) leave()
           else next.focus()
         }
         const onKeyDown = (event: KeyboardEvent) => {
           if (event.defaultPrevented) return
-          const onViewport = event.composedPath()[0] === node
+          // Not `event.target`, which is the host when the viewport is in a
+          // closed shadow root.
+          const onViewport = active() === node
           if (event.key === "F6") {
             if (inside()) {
               if (restore()) event.preventDefault()
             } else if (!empty) {
               event.preventDefault()
-              previous = activeOf(document) as HTMLElement | null
+              previous = focusedElement()
               node.focus(
                 { preventScroll: true, focusVisible: true } as FocusOptions
               )
@@ -508,14 +526,14 @@ const TrackViewport = Mount.makeStream(
           if (
             previous === null && from !== null && !node.contains(from)
           ) previous = from
-          const target = event.target as Element
-          const closing = target.closest("[data-ending-style]")
-          if (closing !== null && node.contains(closing)) {
+          const closing = closingRoot(node, event.target as Element)
+          if (closing !== null) {
             passOn(
               closing,
               from !== null &&
                 (closing.compareDocumentPosition(from) &
-                    Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+                    Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+              true
             )
             return
           }
@@ -547,12 +565,11 @@ const TrackViewport = Mount.makeStream(
         const handOff = (records: ReadonlyArray<MutationRecord>) => {
           const focus = active()
           if (!node.contains(focus)) return
-          const closing = records.find(({ target }) =>
-            (target as Element).hasAttribute("data-ending-style") &&
-            target.contains(focus)
-          )?.target
+          const closing = records.some(({ target }) => target.contains(focus))
+            ? closingRoot(node, focus!)
+            : null
           if (node.querySelector(focusable) === null) leave()
-          else if (closing !== undefined) passOn(closing, false)
+          else if (closing !== null) passOn(closing, false, false)
         }
         yield* Effect.acquireRelease(
           Effect.sync(() => {

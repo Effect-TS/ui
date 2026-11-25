@@ -108,7 +108,7 @@ const mountPage = Effect.fnUntraced(function*(
     (element) => Effect.sync(() => element.remove())
   )
   const container = options?.shadow
-    ? host.attachShadow({ mode: "open" }).appendChild(
+    ? host.attachShadow({ mode: "closed" }).appendChild(
       document.createElement("div")
     )
     : host
@@ -253,9 +253,12 @@ describe("ToastProvider", { concurrent: false }, () => {
       yield* tick
 
       // Newest first: t3, t2, t1. t2's exit transition never ends.
+      const hold = (toast: HTMLElement) => {
+        toast.getAnimations =
+          () => [{ finished: new Promise(() => {}) } as Animation]
+      }
       const t2 = byId("t2")!
-      t2.getAnimations =
-        () => [{ finished: new Promise(() => {}) } as Animation]
+      hold(t2)
       t2.focus()
       press(t2, "Escape")
       yield* tick
@@ -267,9 +270,30 @@ describe("ToastProvider", { concurrent: false }, () => {
       post.focus()
       t2.focus()
       assert.strictEqual(document.activeElement, byId("t1"))
+
+      // t1 closes while focused: back to t3. Tab from t3 into the closing
+      // t1, with no toast after it, leaves the stack.
+      const t1 = byId("t1")!
+      hold(t1)
+      press(t1, "Escape")
+      yield* tick
+      assert.strictEqual(document.activeElement, byId("t3"))
+      t1.focus()
+      assert.strictEqual(document.activeElement, post)
+
+      // An exit inside a toast that shows isn't the toast's.
+      const inner = byId("t3")!.appendChild(document.createElement("div"))
+        .appendChild(document.createElement("button"))
+      inner.focus()
+      inner.parentElement!.setAttribute("data-ending-style", "")
+      yield* tick
+      assert.strictEqual(document.activeElement, inner)
+      post.focus()
+      inner.focus()
+      assert.strictEqual(document.activeElement, inner)
     }))
 
-  it.effect("F6 moves focus into the stack and back inside a shadow root", () =>
+  it.effect("F6 and Escape move focus into the stack and back inside a closed shadow root", () =>
     Effect.gen(function*() {
       const { byId, region } = yield* mountPage(0, { shadow: true })
       const post = byId("post")!
@@ -281,6 +305,9 @@ describe("ToastProvider", { concurrent: false }, () => {
       assert.isTrue(press(post, "F6"))
       assert.strictEqual(shadow.activeElement, region)
       assert.isTrue(press(region, "F6"))
+      assert.strictEqual(shadow.activeElement, post)
+      press(post, "F6")
+      assert.isTrue(press(region, "Escape"))
       assert.strictEqual(shadow.activeElement, post)
     }))
 
