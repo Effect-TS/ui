@@ -32,6 +32,7 @@ const moved = (start: number, height = 100, fields: object = {}) =>
     anchor: null,
     atStart: start <= 0,
     atEnd: false,
+    overflowing: false,
     scrolled: null,
     ...fields
   })
@@ -65,7 +66,10 @@ const makeStandIn = (snapshot: (parts: Parts) => void = () => {}) => ({
   view: (virtualList: Parts, h: H) => {
     snapshot(virtualList)
     return virtualList.viewport(
-      h.div.class("viewport").attr("data-virtual-list-viewport", "wrong")
+      h.div.class("viewport").attrs({
+        "data-virtual-list-viewport": "wrong",
+        tabindex: "3"
+      })
     ).children(
       virtualList.list(h.ul.class("list").attr("style", "color:red")).children(
         virtualList.items.map((index) =>
@@ -110,6 +114,10 @@ describe("VirtualList", () => {
         ?.["data-virtual-list-viewport"]
       assert.isString(viewportId)
       assert.notStrictEqual(viewportId, "wrong")
+      assert.strictEqual(
+        scene.get(Locator.attr("class", "viewport")).attrs?.tabindex,
+        "-1"
+      )
       const first = scene.all(itemLoc)[0]!
       assert.strictEqual(first.attrs?.role, "listitem")
       assert.strictEqual(first.attrs?.["aria-posinset"], "1")
@@ -142,6 +150,39 @@ describe("VirtualList", () => {
       scene.expectMount(tracked(scene))
       assert.strictEqual(scene.get(listLoc).attrs?.role, "feed")
       assert.strictEqual(scene.get(itemLoc).attrs?.role, "article")
+    }))
+
+  it.effect("gives a role=\"row\" item a row index in place of a set position", () =>
+    Effect.gen(function*() {
+      const scene = yield* Scene.make(
+        VirtualList,
+        { ...base, initialCount: 1, firstPosition: 2 },
+        {
+          elements: Html,
+          view: (virtualList: Parts, h: H) =>
+            virtualList.table(h.div.class("grid").attr("role", "grid"))
+              .children(
+                virtualList.list(h.div.class("list").attr("role", "rowgroup"))
+                  .children(
+                    virtualList.items.map((index) =>
+                      virtualList.item({
+                        element: h.div.class("item").attr("aria-posinset", "9"),
+                        index
+                      }).attr("role", "row")
+                    )
+                  )
+              )
+        }
+      )
+      scene.expectMount(tracked(scene))
+      const row = scene.get(itemLoc).attrs
+      assert.strictEqual(row?.["aria-rowindex"], "2")
+      assert.strictEqual(row?.["aria-posinset"], undefined)
+      assert.strictEqual(row?.["aria-setsize"], undefined)
+      assert.strictEqual(
+        scene.get(Locator.attr("class", "grid")).attrs?.["aria-rowcount"],
+        "1001"
+      )
     }))
 
   it.effect("renders the rows around the viewport and reports the visible items", () =>

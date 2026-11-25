@@ -111,7 +111,9 @@ const Steps = Effect.fnUntraced(function*(
                 virtualList.list(h.ul.class("list")).children(
                   virtualList.items.map((index) =>
                     virtualList.item({
-                      element: h.li.class("item").key(String(index)),
+                      element: h.li.class("item").key(
+                        steps[model.step]?.keys?.[index] ?? String(index)
+                      ),
                       index
                     }).children(
                       h.button.children("Item " + index)
@@ -170,6 +172,60 @@ describe("VirtualList in a document", { concurrent: false }, () => {
       button.blur()
       yield* tick
       assert.deepStrictEqual(indices(), span(47, 57))
+    }))
+
+  it.effect("lets the keyboard reach the viewport while its content overflows", () =>
+    Effect.gen(function*() {
+      const { next } = yield* Steps([{}, { count: 2 }])
+      const viewport = document.querySelector(".viewport")!
+      assert.strictEqual(viewport.getAttribute("tabindex"), "0")
+      yield* next
+      assert.strictEqual(viewport.getAttribute("tabindex"), "-1")
+    }))
+
+  it.effect("moves the focus from a removed item to the next one, the one before, then the viewport", () =>
+    Effect.gen(function*() {
+      const keys = Array.from({ length: 1000 }, (_, i) => "k" + i)
+      const added = [...Array.from({ length: 100 }, (_, i) => "n" + i), ...keys]
+      const { item, next, scrollTo } = yield* Steps([
+        { keys },
+        { keys: added },
+        { keys: added.filter((key) => key !== "k1") },
+        { keys: ["k0", "k2"] },
+        { keys: ["k0"] },
+        { keys: [] }
+      ])
+      const focusedKey = () =>
+        document.activeElement?.closest(".item")?.getAttribute("data-key")
+      item(1).querySelector("button")!.focus()
+      yield* tick
+      yield* next
+      scrollTo(10000)
+      yield* tick
+      yield* next
+      assert.strictEqual(focusedKey(), "k2")
+      yield* next
+      yield* next
+      assert.strictEqual(focusedKey(), "k0")
+      yield* next
+      assert.strictEqual(
+        document.activeElement,
+        document.querySelector(".viewport")
+      )
+    }))
+
+  it.effect("moves the focus from the last item to the list without a viewport", () =>
+    Effect.gen(function*() {
+      const { item, next } = yield* Steps([{ count: 1 }, { count: 0 }], {
+        ownViewport: true
+      })
+      item(0).querySelector("button")!.focus()
+      yield* tick
+      yield* next
+      const list = document.querySelector<HTMLElement>(".list")!
+      assert.strictEqual(document.activeElement, list)
+      list.blur()
+      assert.strictEqual(list.getAttribute("tabindex"), null)
     }))
 
   it.effect("scrolls with the nearest element that scrolls, once it starts to after the list mounts", () =>
