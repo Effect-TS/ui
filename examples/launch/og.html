@@ -34,7 +34,6 @@
         --muted-foreground: oklch(70.5% 0.015 286.067);
         --prose-foreground: oklch(87.1% 0.006 286.286);
         --border: oklch(27.4% 0.006 286.033);
-        --accent-text: oklch(74% 0.14 270);
       }
 
       * {
@@ -73,14 +72,12 @@
         color: var(--muted-foreground);
       }
 
-      .accent {
-        color: var(--accent-text);
-      }
-
       /* The page's header: six lines down it that fade out at the top
-         and the bottom, with a stroke of the accent on three of them. */
+         and the bottom, with a brighter stroke on three of them. The
+         picture is in one color, so the strokes and the slashes leave
+         out the page's accent. */
       header {
-        --pulse: linear-gradient(to bottom, transparent, var(--accent-text) 70%, transparent);
+        --pulse: linear-gradient(to bottom, transparent, var(--foreground) 70%, transparent);
         position: relative;
         margin-top: 44px;
         padding: 52px 0 58px;
@@ -128,7 +125,7 @@
       <span class="mono">ui.effect.website</span>
     </div>
     <header>
-      <p class="mono"><span class="accent">//</span> PUBLIC PREVIEW</p>
+      <p class="mono">// PUBLIC PREVIEW</p>
       <h1>Introducing Effect UI</h1>
     </header>
     <p class="lede">
