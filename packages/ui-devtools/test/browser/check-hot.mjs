@@ -165,6 +165,14 @@ try {
 
     await page.goto(url)
     await counted()
+    const explicitFrames = await page.locator(
+      "iframe[data-effect-ui-devtools]"
+    ).count()
+    expect(
+      explicitFrames === 1,
+      "explicit DevTools.layer takes over with one overlay",
+      { explicitFrames }
+    )
     const beforeEdit1 = await count()
     expect(
       (await text("[data-label]")) === "v1",
@@ -231,6 +239,21 @@ try {
 
     await page.goto(url + "routed.html")
     await shows("[data-routed-label]", "r1")
+    const autoFrame = page.frameLocator("iframe[data-effect-ui-devtools]")
+    await autoFrame.getByRole("button", {
+      name: "Open the Effect UI inspector"
+    }).click()
+    await autoFrame.getByRole("dialog", { name: "Effect UI inspector" })
+      .waitFor()
+    const inspectorText = await autoFrame.locator("body").textContent()
+    expect(
+      inspectorText?.includes("RoutedPage"),
+      "auto-mounted DevTools captured RoutedPage without DevTools.layer",
+      { inspectorText: inspectorText?.slice(0, 120) }
+    )
+    await autoFrame.getByRole("button", {
+      name: "Close the inspector"
+    }).click()
     await page.evaluate(() => window.scrollTo(0, 1500))
     await page.waitForFunction(() => window.scrollY === 1500)
     await reloadWith("routed.ts", routedSource("r2"))

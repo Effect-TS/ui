@@ -2,6 +2,7 @@ import * as BrowserHost from "@effect/ui/html/BrowserHost"
 import * as MessageLog from "@effect/ui/MessageLog"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
+import * as Fiber from "effect/Fiber"
 import * as Layer from "effect/Layer"
 import * as PubSub from "effect/PubSub"
 import * as Semaphore from "effect/Semaphore"
@@ -25,6 +26,21 @@ export interface WebMcpOptions {
 
 const sizeKey = "@effect/ui-devtools/size"
 const openKey = "@effect/ui-devtools/open"
+const devToolsKey = Symbol.for("@effect/ui/devtools")
+
+interface Attached {
+  readonly messageLog: MessageLog.MessageLog
+  readonly controllables: BrowserHost.Controllables
+  readonly takeOver: () => void
+}
+
+export interface Options {
+  readonly position?: Position | undefined
+  readonly size?: number | undefined
+  readonly exclude?: ReadonlyArray<string> | undefined
+  readonly server?: string | undefined
+  readonly webMcp?: boolean | WebMcpOptions | undefined
+}
 
 const corners: { readonly [P in Position]: string } = {
   TopLeft: "top:12px;left:12px",
@@ -65,15 +81,17 @@ const socketUrl = (server: string, path: string) => {
   return url.href
 }
 
-export const make = (options: {
-  readonly position?: Position | undefined
-  readonly size?: number | undefined
-  readonly exclude?: ReadonlyArray<string> | undefined
-  readonly server?: string | undefined
-  readonly webMcp?: boolean | WebMcpOptions | undefined
-}): Layer.Layer<never> =>
+export const make = (options: Options): Layer.Layer<never> =>
+  makeInternal(options, false)
+
+const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
   Layer.effectContext(
     Effect.gen(function*() {
+      if (!auto) {
+        ;(globalThis as unknown as Record<symbol, Attached | undefined>)[
+          devToolsKey
+        ]?.takeOver()
+      }
       const page = fromPage()
       const server = options.server ??
         (typeof page.url === "string" ? page.url : undefined)
@@ -220,13 +238,13 @@ export const make = (options: {
       frame.srcdoc =
         "<!doctype html><html><head><meta charset=\"utf-8\"><style>" + styles +
         "</style></head><body><div id=\"root\"></div></body></html>"
+      yield* Effect.addFinalizer(() => Effect.sync(() => frame.remove()))
       yield* Effect.callback<void>((resume) => {
         frame.addEventListener("load", () => resume(Effect.void), {
           once: true
         })
         document.body.appendChild(frame)
       })
-      yield* Effect.addFinalizer(() => Effect.sync(() => frame.remove()))
       const inner = frame.contentDocument!
       const container = inner.getElementById("root")!
 
@@ -397,3 +415,84 @@ export const make = (options: {
         )
     }).pipe(Effect.provide(Socket.layerWebSocketConstructorGlobal))
   )
+
+export const attach = (options: Options = {}): () => void => {
+  const host = globalThis as unknown as Record<symbol, Attached | undefined>
+  host[devToolsKey]?.takeOver()
+  let active = true
+  let targetLog: MessageLog.MessageLog | undefined
+  let targetControllables: BrowserHost.Controllables | undefined
+  const buffered: Array<MessageLog.Entry> = []
+  const roots = new Set<BrowserHost.Controllable>()
+  const unregisters = new Map<BrowserHost.Controllable, () => void>()
+  let fiber: Fiber.Fiber<void, never> | undefined
+
+  const takeOver = () => {
+    if (!active) return
+    active = false
+    if (host[devToolsKey]?.takeOver === takeOver) delete host[devToolsKey]
+    buffered.length = 0
+    for (const unregister of unregisters.values()) unregister()
+    unregisters.clear()
+    roots.clear()
+    if (fiber !== undefined) {
+      const running = fiber
+      fiber = undefined
+      Effect.runFork(Fiber.interrupt(running))
+    }
+  }
+
+  host[devToolsKey] = {
+    messageLog: {
+      enabled: true,
+      record: (entry) => {
+        if (!active) return
+        if (targetLog !== undefined) targetLog.record(entry)
+        else buffered.push(entry)
+      }
+    },
+    controllables: {
+      register: (root) => {
+        if (!active) return () => {}
+        if (targetControllables !== undefined) {
+          return targetControllables.register(root)
+        }
+        roots.add(root)
+        return () => {
+          roots.delete(root)
+          unregisters.get(root)?.()
+          unregisters.delete(root)
+        }
+      }
+    },
+    takeOver
+  }
+
+  const bodyReady = document.body !== null
+    ? Effect.void
+    : Effect.callback<void>((resume) => {
+      const done = () => resume(Effect.void)
+      document.addEventListener("DOMContentLoaded", done, { once: true })
+      return Effect.sync(() =>
+        document.removeEventListener("DOMContentLoaded", done)
+      )
+    })
+
+  fiber = Effect.gen(function*() {
+    yield* bodyReady
+    if (!active) return
+    const ctx = yield* Layer.build(makeInternal(options, true))
+    if (!active) return
+    const realLog = Context.get(ctx, MessageLog.MessageLog)
+    const realControllables = Context.get(ctx, BrowserHost.Controllables)
+    targetLog = realLog
+    targetControllables = realControllables
+    for (const entry of buffered.splice(0)) realLog.record(entry)
+    for (const root of roots) {
+      unregisters.set(root, realControllables.register(root))
+    }
+    return yield* Effect.never
+  }).pipe(Effect.scoped, Effect.runFork)
+
+  return takeOver
+}

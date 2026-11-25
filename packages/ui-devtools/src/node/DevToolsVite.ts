@@ -1,7 +1,7 @@
 /**
- * A Vite plugin that runs the DevTools server beside `vite dev`, tells
- * the page where it is, and preserves compatible component state across
- * Vite reloads.
+ * A Vite plugin that runs the DevTools server beside `vite dev`, mounts the
+ * DevTools inspector overlay automatically, and preserves compatible component
+ * state across Vite reloads.
  *
  * **Example** (Adding the plugin)
  *
@@ -14,8 +14,9 @@
  * })
  * ```
  *
- * The app keeps `DevTools.layer()` in development. An agent connects to
- * `http://127.0.0.1:4774/mcp` over Streamable HTTP, which in a `.mcp.json` is
+ * No changes to the app's entry module are needed in development. An agent
+ * connects to `http://127.0.0.1:4774/mcp` over Streamable HTTP, which in a
+ * `.mcp.json` is
  * `{ "mcpServers": { "effect-ui": { "type": "http", "url": "http://127.0.0.1:4774/mcp" } } }`.
  *
  * @stability experimental
@@ -26,8 +27,22 @@ import * as Effect from "effect/Effect"
 import * as Fiber from "effect/Fiber"
 import * as Layer from "effect/Layer"
 import * as Predicate from "effect/Predicate"
+import type * as DevTools from "../DevTools.ts"
 import { metaName } from "../internal/control.ts"
 import * as DevToolsServer from "./DevToolsServer.ts"
+
+/**
+ * Options for the DevTools overlay mounted by `plugin`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface OverlayOptions {
+  readonly position?: DevTools.Position | undefined
+  readonly exclude?: ReadonlyArray<string> | undefined
+  readonly webMcp?: boolean | DevTools.WebMcpOptions | undefined
+}
 
 /**
  * Options for `plugin`.
@@ -42,6 +57,12 @@ export interface Options extends DevToolsServer.Options {
    * reloads during development. `true` by default; pass `false` to disable.
    */
   readonly hot?: boolean | undefined
+  /**
+   * Mounts the DevTools inspector overlay automatically in development without
+   * needing `DevTools.layer()` in the entry module. `true` by default; pass
+   * `false` to disable, or pass `OverlayOptions`.
+   */
+  readonly overlay?: boolean | OverlayOptions | undefined
 }
 
 /**
@@ -98,6 +119,8 @@ export interface HtmlTag {
 
 const hotId = "/@effect-ui/hot"
 const resolvedHotId = "\0effect-ui-hot"
+const devToolsId = "/@effect-ui/devtools"
+const resolvedDevToolsId = "\0effect-ui-devtools"
 
 const hotClient = [
   "if (import.meta.hot) {",
@@ -109,6 +132,13 @@ const hotClient = [
   ""
 ].join("\n")
 
+const devToolsClient = (options: OverlayOptions): string =>
+  [
+    "import { DevTools } from \"@effect/ui-devtools\";",
+    `DevTools.attach(${JSON.stringify(options)});`,
+    ""
+  ].join("\n")
+
 const reasonOf = (error: unknown): string =>
   Predicate.hasProperty(error, "cause") && error.cause instanceof Error
     ? error.cause.message
@@ -116,17 +146,23 @@ const reasonOf = (error: unknown): string =>
 
 /**
  * Starts the DevTools server when `vite dev` starts, stops it with the
- * dev server, and turns on hot state preservation across Vite reloads.
+ * dev server, mounts the DevTools overlay by default, and turns on hot state
+ * preservation across Vite reloads.
  *
  * **Details**
  *
  * The plugin applies to `vite dev` only, not to builds, previews or Vitest.
  * It adds a `<meta>` tag with the server's URL and `size` to each HTML page
- * Vite serves, and `DevTools.layer` reads it, so the page sends its frames
- * there and takes the server's requests. Without `DevTools.layer` on the
- * page the server side does nothing more. When the port is taken the plugin
- * warns, adds no `<meta>` tag, and `vite dev` runs on without the server, so
- * a page never connects to a server another project started.
+ * Vite serves, and `DevTools` reads it so the page sends its frames there and
+ * takes the server's requests. When the port is taken the plugin warns, adds
+ * no `<meta>` tag, and `vite dev` runs on without the server, so a page never
+ * connects to a server another project started.
+ *
+ * Unless `overlay: false` is passed, the plugin injects a small client module
+ * that attaches the DevTools inspector overlay automatically for roots mounted
+ * with `BrowserHost.mount` or `HtmlHydrate.hydrate`. If the app also provides
+ * `DevTools.layer()` explicitly, that layer takes over so only one overlay
+ * mounts.
  *
  * Unless `hot: false` is passed, the plugin also injects a small client
  * module that listens for Vite's `vite:beforeFullReload` event so mounted
@@ -142,14 +178,29 @@ export const plugin = (options?: Options): Plugin => {
   const url = DevToolsServer.url(options)
   const size = Math.max(1, options?.size ?? 1_000)
   const hot = options?.hot !== false
+  const overlay = options?.overlay !== false
+  const overlayOptions: OverlayOptions = typeof options?.overlay === "object"
+    ? options.overlay
+    : {}
+  const devToolsSource = overlay ? devToolsClient(overlayOptions) : undefined
   let bound = Promise.resolve(false)
   return {
     name: "effect-ui-devtools",
     apply: (_, env) =>
       env.command === "serve" && env.isPreview !== true &&
       !("VITEST" in process.env),
-    resolveId: (id) => hot && id === hotId ? resolvedHotId : undefined,
-    load: (id) => id === resolvedHotId ? hotClient : undefined,
+    resolveId: (id) =>
+      hot && id === hotId
+        ? resolvedHotId
+        : overlay && id === devToolsId
+        ? resolvedDevToolsId
+        : undefined,
+    load: (id) =>
+      id === resolvedHotId
+        ? hotClient
+        : id === resolvedDevToolsId
+        ? devToolsSource
+        : undefined,
     configureServer: (server) => {
       const { logger } = server.config
       let settle: (ok: boolean) => void = () => {}
@@ -184,6 +235,13 @@ export const plugin = (options?: Options): Plugin => {
         tags.push({
           tag: "meta",
           attrs: { name: metaName, content: JSON.stringify({ url, size }) },
+          injectTo: "head"
+        })
+      }
+      if (overlay) {
+        tags.push({
+          tag: "script",
+          attrs: { type: "module", src: devToolsId },
           injectTo: "head"
         })
       }

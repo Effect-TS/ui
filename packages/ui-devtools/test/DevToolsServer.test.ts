@@ -630,7 +630,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
   )
 
   it.live(
-    "adds no meta tag when the plugin's port is taken, and injects the hot module unless hot is false",
+    "adds no meta tag when the plugin's port is taken, and injects overlay and hot modules unless disabled",
     () =>
       Effect.gen(function*() {
         yield* serve({ port: 47749 })
@@ -649,31 +649,45 @@ describe("DevToolsServer", { concurrent: false }, () => {
           })
           return { plugin, warnings, close: () => close() }
         }
-        const taken = start({ port: 47749 })
+        const taken = start({ port: 47749, overlay: { position: "TopLeft" } })
         const takenTags = yield* Effect.promise(() =>
           taken.plugin.transformIndexHtml()
         )
-        assert.deepStrictEqual(takenTags, [{
-          tag: "script",
-          attrs: { type: "module", src: "/@effect-ui/hot" },
-          injectTo: "head"
-        }])
-        const resolved = taken.plugin.resolveId("/@effect-ui/hot")
-        assert.isDefined(resolved)
+        assert.deepStrictEqual(takenTags, [
+          {
+            tag: "script",
+            attrs: { type: "module", src: "/@effect-ui/devtools" },
+            injectTo: "head"
+          },
+          {
+            tag: "script",
+            attrs: { type: "module", src: "/@effect-ui/hot" },
+            injectTo: "head"
+          }
+        ])
+        const resolvedHot = taken.plugin.resolveId("/@effect-ui/hot")
+        assert.isDefined(resolvedHot)
         assert.include(
-          taken.plugin.load(resolved!)!,
+          taken.plugin.load(resolvedHot!)!,
           "vite:beforeFullReload"
+        )
+        const resolvedDevTools = taken.plugin.resolveId("/@effect-ui/devtools")
+        assert.isDefined(resolvedDevTools)
+        assert.include(
+          taken.plugin.load(resolvedDevTools!)!,
+          "DevTools.attach({\"position\":\"TopLeft\"})"
         )
         assert.match(
           taken.warnings[0]!,
           /could not start on http:\/\/127\.0\.0\.1:47749/
         )
-        const off = start({ port: 47749, hot: false })
+        const off = start({ port: 47749, hot: false, overlay: false })
         assert.deepStrictEqual(
           yield* Effect.promise(() => off.plugin.transformIndexHtml()),
           []
         )
         assert.isUndefined(off.plugin.resolveId("/@effect-ui/hot"))
+        assert.isUndefined(off.plugin.resolveId("/@effect-ui/devtools"))
         const free = start({ port: 47750 })
         const tags = yield* Effect.promise(() =>
           free.plugin.transformIndexHtml()
@@ -682,8 +696,43 @@ describe("DevToolsServer", { concurrent: false }, () => {
           JSON.parse(tags[0]!.attrs.content!).url,
           "http://127.0.0.1:47750"
         )
-        assert.strictEqual(tags[1]!.attrs.src, "/@effect-ui/hot")
+        assert.strictEqual(tags[1]!.attrs.src, "/@effect-ui/devtools")
+        assert.strictEqual(tags[2]!.attrs.src, "/@effect-ui/hot")
         free.close()
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
+    "auto-attached DevTools captures initial mount before iframe load and yields to explicit DevTools.layer",
+    () =>
+      Effect.gen(function*() {
+        localStorage.clear()
+        const dispose = DevTools.attach()
+        yield* Effect.addFinalizer(() => Effect.sync(dispose))
+        yield* play("open")
+        yield* until(() =>
+          document.querySelectorAll("iframe[data-effect-ui-devtools]")
+            .length === 1 &&
+          overlay().querySelector("button") !== null
+        )
+        const root = overlay()
+        HtmlLocator.click(
+          HtmlLocator.getByRole(root, "button", {
+            name: "Open the Effect UI inspector"
+          })
+        )
+        yield* until(() => text(root).includes("Workspace"))
+        assert.strictEqual(
+          document.querySelectorAll("iframe[data-effect-ui-devtools]").length,
+          1
+        )
+        yield* Layer.build(DevTools.layer())
+        yield* wait(20)
+        assert.strictEqual(
+          document.querySelectorAll("iframe[data-effect-ui-devtools]").length,
+          1
+        )
       }).pipe(Effect.scoped),
     30_000
   )

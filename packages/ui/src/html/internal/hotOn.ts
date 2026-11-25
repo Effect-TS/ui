@@ -5,9 +5,27 @@ import type * as keptRun from "../../internal/keptRun.ts"
 import type * as Kernel from "../../internal/kernel.ts"
 import type * as runtime from "../../internal/runtime.ts"
 import * as stateRestore from "../../internal/stateRestore.ts"
+import type * as MessageLog from "../../MessageLog.ts"
+import type * as BrowserHost from "../BrowserHost.ts"
 
 const hotKey = Symbol.for("@effect/ui/hot")
+const devToolsKey = Symbol.for("@effect/ui/devtools")
 const storageKey = "@effect/ui/hot"
+
+export interface DevToolsHook {
+  readonly messageLog: MessageLog.MessageLog
+  readonly controllables: BrowserHost.Controllables
+}
+
+export const devTools = (
+  container: globalThis.Element
+): DevToolsHook | undefined => {
+  const view = container.ownerDocument.defaultView
+  if (view === null || view !== globalThis.window) return undefined
+  return (view as unknown as Record<symbol, DevToolsHook | undefined>)[
+    devToolsKey
+  ]
+}
 
 interface SavedRoot {
   readonly path: string
