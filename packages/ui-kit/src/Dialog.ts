@@ -123,6 +123,12 @@
  * with the keyboard does. `disablePointerDismissal` turns that off, and the
  * close on focus leaving with it.
  *
+ * In the modes other than `modal: true`, the press that closes the dialog
+ * still reaches what it landed on, as in Base UI: a tap or a click on a
+ * button of the page closes the dialog and presses the button. With
+ * `modal: true`, a finger closes the dialog as it touches, and the tap's
+ * click is dropped, so it doesn't land on the page under the kit's layer.
+ *
  * The modal is the kit's, not the browser's: find-in-page and a script's
  * `focus()` still reach the page behind it. On Android, in a browser with
  * `CloseWatcher` such as Chrome, the back gesture asks the topmost open
@@ -838,8 +844,10 @@ const TrackDialog = Mount.makeStream(
       let ignored: Node | null = null
       const listens = (): boolean =>
         current.open && current.dismissible && topmost()
-      // A touch dismisses on pointerdown, so the dialog has left the top
-      // layer before the tap's click, which would land on the page below.
+      // A touch dismisses on pointerdown, so a modal has left the top layer
+      // before the tap's click, which would land on the page its layer
+      // covered. Without the layer the tap was meant for the page, so its
+      // click goes through, as a mouse's does.
       const swallowClick = (press: PointerEvent) => {
         const done = new AbortController()
         const options = { capture: true, signal: done.signal }
@@ -883,7 +891,9 @@ const TrackDialog = Mount.makeStream(
           event.pointerType === "touch" ||
           (current.modal === "trap-focus" && !hasBackdrop())
         ) {
-          if (event.pointerType === "touch") swallowClick(event)
+          if (event.pointerType === "touch" && current.modal === true) {
+            swallowClick(event)
+          }
           dismissing = event.pointerId
           send(DialogMessage.PressedOutside({ pointerType: event.pointerType }))
         } else {

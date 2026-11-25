@@ -180,6 +180,23 @@ const containers = () =>
   )
 
 describe("Popover in a document", { concurrent: false }, () => {
+  it.effect("a tap outside closes the popover and its click reaches what it landed on", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage()
+      click(byId("a"))
+      yield* tick
+      const outside = byId("anchor")
+      let clicks = 0
+      outside.addEventListener("click", () => clicks++)
+      click(outside, "touch")
+      yield* tick
+      assert.deepStrictEqual(log(), [
+        "RequestedOpen a trigger-press",
+        "RequestedClose outside-press"
+      ])
+      assert.strictEqual(clicks, 1)
+    }))
+
   it.effect("a trigger drawn elsewhere opens the popover it names, is its anchor, and closes it", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage()

@@ -835,16 +835,16 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.strictEqual(app.querySelector(".popup-a"), popup)
     }))
 
-  it.effect("a touch outside dismisses on its press, and its click doesn't reach the page", () =>
+  it.effect("a touch outside dismisses on its press, and its click reaches the page unless the dialog is modal", () =>
     Effect.gen(function*() {
-      for (const modal of [true, false] as const) {
+      for (const modal of [true, false, "trap-focus"] as const) {
         yield* Effect.scoped(Effect.gen(function*() {
           const { log } = yield* mountPage({ modal })
           const page = byId("page")
           let clicks = 0
           page.addEventListener("click", () => clicks++)
           press(
-            modal ? layerOf(document.querySelector("dialog")!) : page,
+            modal === true ? layerOf(document.querySelector("dialog")!) : page,
             "touch"
           )
           yield* tick
@@ -864,9 +864,10 @@ describe("Dialog in a document", { concurrent: false }, () => {
               pointerType: "touch"
             })
           )
-          assert.strictEqual(clicks, 0, String(modal))
+          const tapped = modal === true ? 0 : 1
+          assert.strictEqual(clicks, tapped, String(modal))
           click(page)
-          assert.strictEqual(clicks, 1, String(modal))
+          assert.strictEqual(clicks, tapped + 1, String(modal))
         }))
       }
     }))
