@@ -191,6 +191,19 @@ const manualFrames = () => {
 
 const link = (app: Element, name: string) =>
   HtmlLocator.getByRole(app, "link", { name })
+const submitForm = (app: Element, name: string) =>
+  HtmlLocator.getByRole(app, "form", { name }).dispatchEvent(
+    new Event("submit", { bubbles: true, cancelable: true })
+  )
+const intentsOf = (router: Router.Router) => {
+  const intents: Array<string> = []
+  const intent = router.intent
+  ;(router as { intent: Router.Router["intent"] }).intent = (href) => {
+    intents.push(href)
+    return intent(href)
+  }
+  return intents
+}
 const region = () => document.querySelector("[aria-live=assertive]")
 const description = () =>
   document.head.querySelector("meta[name=description]")?.getAttribute("content")
@@ -584,12 +597,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
   it.effect("reports link intent after 50 ms of hover or focus, at once on touch, for the links a click follows", () =>
     Effect.gen(function*() {
       const { app, router } = yield* start("/")
-      const intents: Array<string> = []
-      const intent = router.intent
-      ;(router as { intent: Router.Router["intent"] }).intent = (href) => {
-        intents.push(href)
-        return intent(href)
-      }
+      const intents = intentsOf(router)
       const person = link(app, "Person 1")
       const inner = person.appendChild(document.createElement("span"))
       const fire = (
@@ -640,14 +648,10 @@ describe("BrowserRouter", { concurrent: false }, () => {
   it.effect("follows a GET form the app has no submit handler for, and leaves a handled one alone", () =>
     Effect.gen(function*() {
       const { app, root } = yield* start("/")
-      const submitForm = (name: string) =>
-        HtmlLocator.getByRole(app, "form", { name }).dispatchEvent(
-          new Event("submit", { bubbles: true, cancelable: true })
-        )
-      submitForm("Filter")
+      submitForm(app, "Filter")
       yield* tick
       expect(window.location.pathname).toBe("/")
-      submitForm("Search")
+      submitForm(app, "Search")
       yield* tick
       expect(window.location.pathname + window.location.search).toBe(
         "/search?q=ada"
@@ -661,12 +665,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
   it.effect("follows links, GET forms and link intent in a mount inside a closed shadow root", () =>
     Effect.gen(function*() {
       const { app, root, router } = yield* start("/", {}, "closed")
-      const intents: Array<string> = []
-      const intent = router.intent
-      ;(router as { intent: Router.Router["intent"] }).intent = (href) => {
-        intents.push(href)
-        return intent(href)
-      }
+      const intents = intentsOf(router)
       const touch = new Event("touchstart", { bubbles: true, composed: true })
       link(app, "Person 1").dispatchEvent(touch)
       expect(intents).toEqual(["/people/1"])
@@ -677,9 +676,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
       )
       yield* tick
       expect(window.location.pathname).toBe("/people/1")
-      HtmlLocator.getByRole(app, "form", { name: "Search" }).dispatchEvent(
-        new Event("submit", { bubbles: true, cancelable: true })
-      )
+      submitForm(app, "Search")
       yield* tick
       expect(window.location.pathname + window.location.search).toBe(
         "/search?q=ada"

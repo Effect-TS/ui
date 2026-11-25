@@ -540,7 +540,6 @@ const make = (
         cancelIntent()
         unlisten(document)
         for (const shadow of shadows.keys()) unlisten(shadow)
-        shadows.clear()
       })
     )
 
@@ -557,8 +556,7 @@ const make = (
         shadows.set(shadow, count + 1)
         return () => {
           detach()
-          const count = shadows.get(shadow)
-          if (count === undefined) return
+          const count = shadows.get(shadow)!
           if (count > 1) shadows.set(shadow, count - 1)
           else {
             shadows.delete(shadow)
