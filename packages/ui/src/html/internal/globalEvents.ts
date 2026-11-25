@@ -44,62 +44,18 @@ export interface Listener {
 export const listenerOf = (subscription: object): Listener | undefined =>
   (subscription as { readonly [listener]?: Listener })[listener]
 
-interface Tracked {
-  readonly target: "document" | "window"
-  readonly event: string
-  heard: boolean
-  handled: boolean
-}
-
-let tracked: Tracked | undefined
+let emitted = false
 
 /**
- * Records that a listener for `(target, event)` was invoked during the active
- * `track` call.
+ * Runs `fire` and returns whether a `run` inside it produced a message, so
+ * `HtmlPlay` can tell a handled event from an ignored one.
  *
  * @internal
  */
-export const markHeard = (
-  target: "document" | "window",
-  event: string
-): void => {
-  if (
-    tracked !== undefined &&
-    tracked.target === target &&
-    tracked.event === event
-  ) {
-    tracked.heard = true
-  }
-}
-
-/**
- * Runs `f` and reports whether any matching listener was invoked (`heard`) and
- * whether any matching `globalEvents.run` call produced a message (`handled`).
- *
- * @internal
- */
-export const track = (
-  target: "document" | "window",
-  event: string,
-  f: () => void
-): { readonly heard: boolean; readonly handled: boolean } => {
-  const current: Tracked = { target, event, heard: false, handled: false }
-  const previous = tracked
-  tracked = current
-  try {
-    f()
-    return current
-  } finally {
-    if (
-      previous !== undefined &&
-      previous.target === target &&
-      previous.event === event
-    ) {
-      previous.heard ||= current.heard
-      previous.handled ||= current.handled
-    }
-    tracked = previous
-  }
+export const emits = (fire: () => void): boolean => {
+  emitted = false
+  fire()
+  return emitted
 }
 
 /**
@@ -116,16 +72,10 @@ export const run = (
   preventDefault: () => void,
   onMessage: (message: unknown, cancel: () => void) => void
 ): void => {
-  const current = tracked !== undefined &&
-      declared.target === tracked.target &&
-      declared.event === tracked.event
-    ? tracked
-    : undefined
-  if (current !== undefined) current.heard = true
   if (declared.preventDefault === "always") preventDefault()
   const message = handle(declared.handler, payload)
   if (message !== undefined) {
-    if (current !== undefined) current.handled = true
+    emitted = true
     onMessage(message, declared.preventDefault === true ? preventDefault : noop)
   }
 }

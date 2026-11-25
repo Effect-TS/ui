@@ -69,7 +69,6 @@
  * @since 0.1.0
  */
 import * as Effect from "effect/Effect"
-import * as Option from "effect/Option"
 import type * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
@@ -157,7 +156,7 @@ export interface HtmlPlay<Model, Msg, Events>
     details?: KeyDetails
   ): Effect.Effect<void, Play.StepError>
   /**
-   * Presses `key` on the document: delivers `keydown` to active document
+   * Presses `key` on the document: delivers `keydown` to the tree's document
    * listeners and settles the resulting UI work without advancing `TestClock`.
    * Missing payload fields default as for an element keydown with `editable`
    * and `defaultPrevented` false.
@@ -207,7 +206,8 @@ export interface HtmlPlay<Model, Msg, Events>
 }
 
 class HtmlPlayCursor extends internal.PlayCursor {
-  globalEvents!: TestGlobalEvents.TestGlobalEvents
+  /** `make` sets it once the tree is mounted. */
+  documentKeys!: DocumentKeys
   protected override bubbles(event: string): boolean {
     return !ownEvents.has(event)
   }
@@ -332,18 +332,8 @@ class HtmlPlayCursor extends internal.PlayCursor {
         yield* Effect.sync(() =>
           atSite(site, () => {
             this.checkReady(name)
-            const payload = {
-              ...defaults.keyPayload(key, details),
-              defaultPrevented: details?.defaultPrevented === true
-            }
-            const { handled, heard } = globalEvents.track(
-              "document",
-              "keydown",
-              () => {
-                this.globalEvents.fire("document", "keydown", payload)
-              }
-            )
-            if (!heard) {
+            const handled = this.documentKeys.down({ ...details, key })
+            if (handled === undefined) {
               throw new Error(
                 `${name}: nothing listens for "keydown" on the document`
               )
@@ -422,6 +412,47 @@ class HtmlPlayCursor extends internal.PlayCursor {
   }
 }
 
+interface DocumentKeys {
+  readonly source: HtmlSubscription.GlobalEvents
+  /**
+   * Fires `keydown` at the document listeners added through `source`.
+   * Returns whether one produced a message, or `undefined` when none heard it.
+   */
+  readonly down: (
+    payload: Partial<HtmlSubscription.GlobalPayload<Html.KeyPayload>>
+  ) => boolean | undefined
+}
+
+// A listener is added to `upstream` too, so the events a test fires there still arrive.
+const documentKeys = (
+  upstream: HtmlSubscription.GlobalEvents
+): DocumentKeys => {
+  const own = TestGlobalEvents.make()
+  let heard = false
+  return {
+    source: {
+      listen: (target, event, options, listener) => {
+        const offUpstream = upstream.listen(target, event, options, listener)
+        const offOwn = own.listen(target, event, options, (...args) => {
+          heard = true
+          listener(...args)
+        })
+        return () => {
+          offOwn()
+          offUpstream()
+        }
+      }
+    },
+    down: (payload) => {
+      heard = false
+      const handled = globalEvents.emits(() => {
+        own.fire("document", "keydown", payload)
+      })
+      return heard ? handled : undefined
+    }
+  }
+}
+
 const htmlHost = (
   base: Renderer.Host<TestHost.TestNode>
 ): Renderer.Host<TestHost.TestNode> => {
@@ -482,48 +513,12 @@ export const make = <
   )
   return Effect.gen(function*() {
     const { host } = yield* TestHost.TestHost
-    const upstream = yield* HtmlSubscription.GlobalEvents
-    const existing = yield* Effect.serviceOption(
-      TestGlobalEvents.TestGlobalEvents
+    const keys = documentKeys(yield* HtmlSubscription.GlobalEvents)
+    const play = yield* started.pipe(
+      Effect.provideService(Renderer.Renderer, { host: htmlHost(host) }),
+      Effect.provideService(HtmlSubscription.GlobalEvents, keys.source)
     )
-    const mounted = Effect.provideService(started, Renderer.Renderer, {
-      host: htmlHost(host)
-    })
-    let events: TestGlobalEvents.TestGlobalEvents
-    let globalSource: HtmlSubscription.GlobalEvents
-    if (Option.isSome(existing)) {
-      events = existing.value
-      globalSource = {
-        listen: (target, event, options, listener) =>
-          upstream.listen(target, event, options, (payload, preventDefault) => {
-            globalEvents.markHeard(target, event)
-            listener(payload, preventDefault)
-          })
-      }
-    } else {
-      const local = TestGlobalEvents.make()
-      events = local
-      globalSource = {
-        listen: (target, event, options, listener) => {
-          const wrapped: typeof listener = (payload, preventDefault) => {
-            globalEvents.markHeard(target, event)
-            listener(payload, preventDefault)
-          }
-          const offUpstream = upstream.listen(target, event, options, wrapped)
-          const offLocal = local.listen(target, event, options, wrapped)
-          return () => {
-            offLocal()
-            offUpstream()
-          }
-        }
-      }
-    }
-    const play = yield* Effect.provideService(
-      mounted,
-      HtmlSubscription.GlobalEvents,
-      globalSource
-    )
-    play.globalEvents = events
+    play.documentKeys = keys
     return play
   }) as any
 }

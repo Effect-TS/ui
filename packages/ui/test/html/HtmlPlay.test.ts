@@ -324,7 +324,9 @@ describe("HtmlPlay", () => {
       }).make({
         init: () => ({ listening: true, ticks: 0, entries: [] }),
         update: ($, message) => {
-          if (message === "tick") return { ...$.model, ticks: $.model.ticks + 1 }
+          if (message === "tick") {
+            return { ...$.model, ticks: $.model.ticks + 1 }
+          }
           if (message === "stop") return { ...$.model, listening: false }
           return { ...$.model, entries: [...$.model.entries, message] }
         },
@@ -412,28 +414,6 @@ describe("HtmlPlay", () => {
       }).pipe(
         Effect.scoped,
         Effect.provideService(HtmlSubscription.GlobalEvents, source),
-        Effect.provide(TestHost.layer())
-      )
-
-      // Distinguishes a missing listener from an ignored one even through a plain TestGlobalEvents wrapper.
-      const backed = TestGlobalEvents.make()
-      const wrapper: TestGlobalEvents.TestGlobalEvents = {
-        fire: (target, event, payload) => backed.fire(target, event, payload),
-        fireCustomEvent: (event, payload) =>
-          backed.fireCustomEvent(event, payload)
-      }
-      yield* Effect.gen(function*() {
-        const p = yield* HtmlPlay.make(Shortcuts, {})
-        yield* p.keydown("document", "q")
-        const missing = yield* Effect.exit(p.keydown("document", "ArrowUp"))
-        assert.match(
-          Exit.isFailure(missing) ? Cause.pretty(missing.cause) : "",
-          /nothing listens for "keydown" on the document/
-        )
-      }).pipe(
-        Effect.scoped,
-        Effect.provideService(HtmlSubscription.GlobalEvents, backed),
-        Effect.provideService(TestGlobalEvents.TestGlobalEvents, wrapper),
         Effect.provide(TestHost.layer())
       )
 
