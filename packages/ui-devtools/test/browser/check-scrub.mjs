@@ -84,37 +84,12 @@ await run("scrub", async ({ browser, expect, failures, url }) => {
     onTop: await onTop()
   }
 
-  await page.evaluate(() => {
-    const held = document.getElementById("held")
-    held.hidePopover()
-    held.showPopover()
-  })
-  const reopened = await onTop()
-  await drag([[max - 7, 2]])
-  const restored = await onTop()
-  const before = await toggles()
-  await drag([[max - 2, 10], [max - 5, 6]])
-  expect(
-    !reopened && restored,
-    "the next paint raises the panel above a popover reopened over it",
-    { reopened, restored }
-  )
-  expect(
-    (await toggles()) === before && (await onTop()),
-    "reversing after that leaves the panel in place, above the popover",
-    { before, after: await toggles() }
-  )
   const shown = new Set(seen.frames.map((frame) => frame.slider))
   expect(shown.size > 20, "the scrub went through the entries", [...shown])
   expect(
-    seen.toggles === 0,
-    "the panel stays in the top layer while scrubbing",
-    seen.toggles
-  )
-  expect(
-    seen.onTop,
-    "the panel stays above a popover held open under it",
-    seen.onTop
+    seen.toggles === 0 && seen.onTop,
+    "the panel stays in the top layer above the held popover while scrubbing",
+    { toggles: seen.toggles, onTop: seen.onTop }
   )
   const torn = seen.frames.filter((frame) =>
     frame.badge !== frame.slider || frame.entry !== frame.slider ||
@@ -129,4 +104,27 @@ await run("scrub", async ({ browser, expect, failures, url }) => {
     seen.frames.map((frame) => frame.browse + "/" + frame.timeline)
   )
   expect(layouts.size === 1, "the panes keep their place", [...layouts])
+
+  await page.evaluate(() => {
+    const held = document.getElementById("held")
+    held.hidePopover()
+    held.showPopover()
+  })
+  const reopened = await onTop()
+  await drag([[max - 7, 2]])
+  const restored = await onTop()
+  expect(
+    !reopened && restored,
+    "the next paint raises the panel above a popover reopened over it",
+    { reopened, restored }
+  )
+
+  const before = await toggles()
+  await drag([[max - 2, 10], [max - 5, 6]])
+  const after = { toggles: await toggles(), onTop: await onTop() }
+  expect(
+    after.toggles === before && after.onTop,
+    "reversing after that leaves the panel in place, above the popover",
+    { before, ...after }
+  )
 })
