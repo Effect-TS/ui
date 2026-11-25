@@ -23,23 +23,24 @@ export const Settings = Html.component({
   }),
   view: (h, model) =>
     h.div(
-      h.form.onSubmit(({ entries }) =>
-        `submit:${entries.map(([name, value]) => `${name}=${value}`).join("&")}`
-      )
+      h.form.on("submit", ({ entries }) =>
+        `submit:${
+          entries.map(([name, value]) => `${name}=${value}`).join("&")
+        }`)
         .children(
           h.label.attr("for", "zip").children("Zip code"),
           h.input.attrs({ id: "zip", name: "zip", placeholder: "90210" }).value(
             model.zip
           )
-            .onInput(({ value }) => `zip:${value}`)
-            .onKeyDown(({ key, shift }) =>
-              `key:${key}${shift ? "+shift" : ""}`
-            ),
+            .on("input", ({ value }) => `zip:${value}`)
+            .on("keydown", ({ key, shift }) =>
+              `key:${key}${shift ? "+shift" : ""}`),
           h.label(
             h.input.attrs({ type: "checkbox", name: "agree" }).checked(
               model.agree
             )
-              .onChange(({ checked }) => `agree:${checked}`),
+              .on("change", ({ checked }) =>
+                `agree:${checked}`),
             "Agree"
           ),
           h.input.attrs({ type: "checkbox", name: "off", "aria-label": "Off" })
@@ -48,9 +49,8 @@ export const Settings = Html.component({
           h.button.attr("type", "button").disabled(true).children("Later")
         ),
       h.button.attr("popovertarget", "menu").children("Menu"),
-      h.div.attrs({ id: "menu", popover: "" }).onToggle(({ newState }) =>
-        `toggle:${newState}`
-      ).children("Items"),
+      h.div.attrs({ id: "menu", popover: "" }).on("toggle", ({ newState }) =>
+        `toggle:${newState}`).children("Items"),
       h.output(model.log.join("|"))
     )
 })

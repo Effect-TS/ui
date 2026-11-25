@@ -91,7 +91,7 @@ export const TagPicker = Html.component({
           "button",
           (b, tag: ListboxOption) =>
             b.attrs({ type: "button", "aria-label": `Remove ${tag.label}` })
-              .onClick(TagPickerMessage.ClickedRemove({ id: tag.id }))
+              .on("click", TagPickerMessage.ClickedRemove({ id: tag.id }))
         ),
         status: p.part("div", (b) => b.attr("role", "status"))
       })

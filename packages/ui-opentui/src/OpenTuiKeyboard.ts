@@ -1,7 +1,7 @@
 /**
  * Pure keyboard shortcut matcher over `OpenTui.KeyPayload`: turns a table of
  * single-key shortcuts into a handler for `OpenTuiSubscription.onKeyPress` or
- * element `onKeyDown`.
+ * an element's `keydown` handler.
  *
  * @stability experimental
  * @since 0.1.0

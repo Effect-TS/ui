@@ -43,7 +43,7 @@
  * pass over them.
  *
  * An arrow key pressed with Shift, Control, Alt or Meta is left alone, and
- * so is one whose default the consumer's own `onKeyDown` cancelled. The
+ * so is one whose default the consumer's own `keydown` handler cancelled. The
  * menu cancels the key's default only when focus moves, so an arrow key on
  * the last link still scrolls the page.
  *

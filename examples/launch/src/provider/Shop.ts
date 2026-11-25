@@ -59,6 +59,6 @@ const AddToCart = Html.component({
       $.send(CartProvider, CartMessage.RequestedAddItem())
   },
   view: (h) =>
-    h.button.onClick(AddToCartMessage.ClickedAdd())
+    h.button.on("click", AddToCartMessage.ClickedAdd())
       .children("Add to cart")
 })

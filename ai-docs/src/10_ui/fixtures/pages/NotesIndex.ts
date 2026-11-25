@@ -66,7 +66,7 @@ export const NotesIndexNoDeps = Html.component({
                 // Drag and drop needs a pointer, so every drag has a button
                 // that sends the same message, for the keyboard and touch.
                 h.button.attr("aria-label", `Pin ${note.title}`)
-                  .onClick(NotesIndexMessage.PinnedNote({ id: note.id }))
+                  .on("click", NotesIndexMessage.PinnedNote({ id: note.id }))
                   .children("Pin")
               )
           )),
@@ -77,13 +77,14 @@ export const NotesIndexNoDeps = Html.component({
             "pins",
             model.over && "drop-here"
           )
-            .onDrop(
+            .dropTarget({ accepts: [NoteType], dropEffect: "link" })
+            .on(
+              "drop",
               ({ data }) =>
-                NotesIndexMessage.PinnedNote({ id: data[NoteType] ?? "" }),
-              { accepts: [NoteType], dropEffect: "link" }
+                NotesIndexMessage.PinnedNote({ id: data[NoteType] ?? "" })
             )
-            .onDragEnter(NotesIndexMessage.DraggedIntoPins())
-            .onDragLeave(NotesIndexMessage.DraggedOutOfPins()).children(
+            .on("dragenter", NotesIndexMessage.DraggedIntoPins())
+            .on("dragleave", NotesIndexMessage.DraggedOutOfPins()).children(
               h.h2("Pinned"),
               h.ul(model.pinned.map((id) =>
                 h.li.key(id).children(

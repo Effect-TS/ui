@@ -1607,7 +1607,7 @@ export const Select = Html.component({
 
     const label = p.part("div", (b) => {
       labelled = true
-      return b.attr("id", labelId).onClick(SelectMessage.ClickedLabel())
+      return b.attr("id", labelId).on("click", SelectMessage.ClickedLabel())
     })
 
     const trigger = p.part("button", (b) =>
@@ -1635,22 +1635,18 @@ export const Select = Html.component({
             ? SelectMessage.PressedTrigger({ pointerType })
             : undefined)
         .on("mouseup", SelectMessage.ReleasedTrigger())
-        .onClick(({ pointerType }) =>
+        .on("click", ({ pointerType }) =>
           pointerType === "" || pointerType === "touch"
             ? SelectMessage.ClickedTrigger({ pointerType })
-            : undefined
-        )
-        .onKeyDown(
-          ({ alt, composing, ctrl, key, meta }) =>
-            composing
-              ? undefined
-              : (arrowsOpen && (key === "ArrowDown" || key === "ArrowUp")) ||
-                  (printable(key, alt, ctrl, meta) &&
-                    (key !== " " || typing(model)))
-              ? SelectMessage.PressedTriggerKey({ key })
-              : undefined,
-          { preventDefault: true }
-        )
+            : undefined)
+        .on("keydown", ({ alt, composing, ctrl, key, meta }) =>
+          composing
+            ? undefined
+            : (arrowsOpen && (key === "ArrowDown" || key === "ArrowUp")) ||
+                (printable(key, alt, ctrl, meta) &&
+                  (key !== " " || typing(model)))
+            ? SelectMessage.PressedTriggerKey({ key })
+            : undefined, { preventDefault: true })
         .forward((node) => {
           const named = node
             .attrs({
@@ -1750,21 +1746,17 @@ export const Select = Html.component({
     const popup = p.part("div", (b) =>
       placed(b)
         .attrs({ id: popupId, tabindex: "-1" })
-        .onKeyDown(
-          ({ alt, composing, ctrl, key, meta, shift }) =>
-            composing
-              ? undefined
-              : key === "ArrowDown" || key === "ArrowUp" || key === "Home" ||
-                  key === "End" ||
-                  key === "Enter" || key === "Escape" ||
-                  (key === "Tab" && shift) || printable(key, alt, ctrl, meta)
-              ? SelectMessage.PressedPopupKey({ key })
-              : undefined,
-          { preventDefault: true }
-        )
-        .onKeyUp(({ key }) =>
-          key === " " ? SelectMessage.ReleasedSpace() : undefined
-        )
+        .on("keydown", ({ alt, composing, ctrl, key, meta, shift }) =>
+          composing
+            ? undefined
+            : key === "ArrowDown" || key === "ArrowUp" || key === "Home" ||
+                key === "End" ||
+                key === "Enter" || key === "Escape" ||
+                (key === "Tab" && shift) || printable(key, alt, ctrl, meta)
+            ? SelectMessage.PressedPopupKey({ key })
+            : undefined, { preventDefault: true })
+        .on("keyup", ({ key }) =>
+          key === " " ? SelectMessage.ReleasedSpace() : undefined)
         .forward((node) => {
           const own = listed ? node.attr("role", "presentation") : listbox(node)
           return aligned && !listed
@@ -1832,8 +1824,9 @@ export const Select = Html.component({
               ? undefined
               : SelectMessage.ReleasedItem({ value, pointerType })
         )
-        .onClick(({ pointerType }) =>
-          SelectMessage.ClickedItem({ value, pointerType })
+        .on(
+          "click",
+          ({ pointerType }) => SelectMessage.ClickedItem({ value, pointerType })
         )
     })
     const item = valued(itemPart)

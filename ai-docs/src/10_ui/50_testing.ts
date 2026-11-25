@@ -144,7 +144,7 @@ describe("NoteEditor", () => {
         // hidden from role queries, as it is from the accessibility tree.
         .expect(actions).toBeAbsent()
         .expect(discard).toExist()
-        // Escape is a close request, sent to `onCancel`. Here `update` closes
+        // Escape is a close request, sent to `cancel`. Here `update` closes
         // the dialog and keeps the draft.
         .fire(discard, "cancel")
         .expect(discard).toBeAbsent()

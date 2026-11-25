@@ -62,7 +62,7 @@ const Page = Html.component({
   },
   view: (h, model) =>
     h.div(
-      h.button.attr("id", "show").onClick(Message.Shown()).children("Show"),
+      h.button.attr("id", "show").on("click", Message.Shown()).children("Show"),
       h.span.attr("id", "anchor"),
       Popover(h, {
         props: {

@@ -106,7 +106,8 @@ describe("headless components", () => {
                 menu.visible.length === 0 && h.p("No actions found."),
                 h.ul.children(menu.visible.map((item) => {
                   expect(item).type.toBe<Item>()
-                  return menu.item(h.li.key(item.id), item).onClick(
+                  return menu.item(h.li.key(item.id), item).on(
+                    "click",
                     Msg.Clicked()
                   ).children(item.label)
                 }))

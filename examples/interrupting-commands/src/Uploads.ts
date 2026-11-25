@@ -88,7 +88,8 @@ const UploadsDef = Html.component({
 const UploadAction = UploadsDef.fragment((h, upload: Upload) => {
   switch (upload.status) {
     case "Uploading":
-      return h.button.onClick(
+      return h.button.on(
+        "click",
         UploadsMessage.ClickedCancelUpload({ uploadId: upload.id })
       )
         .attr("aria-label", `Cancel upload ${upload.id}`)
@@ -98,7 +99,8 @@ const UploadAction = UploadsDef.fragment((h, upload: Upload) => {
         )
         .children("Cancel")
     case "Cancelled":
-      return h.button.onClick(
+      return h.button.on(
+        "click",
         UploadsMessage.ClickedRestartUpload({ uploadId: upload.id })
       )
         .attr("aria-label", `Restart upload ${upload.id}`)
@@ -202,13 +204,13 @@ export const UploadsNoDeps = UploadsDef.make({
           "File Uploads"
         ),
         h.div.class("flex justify-center gap-3").children(
-          h.button.onClick(UploadsMessage.ClickedStartUpload())
+          h.button.on("click", UploadsMessage.ClickedStartUpload())
             .class(
               "px-4 py-2 rounded-md bg-blue-500 text-white font-medium hover:bg-blue-600 transition"
             )
             .children("Upload a file"),
           model.uploads.some(isUploading) &&
-            h.button.onClick(UploadsMessage.ClickedCancelAllUploads())
+            h.button.on("click", UploadsMessage.ClickedCancelAllUploads())
               .class(
                 "px-4 py-2 rounded-md border border-red-300 text-red-600 font-medium hover:bg-red-50 transition"
               )

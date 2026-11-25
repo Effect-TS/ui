@@ -285,7 +285,7 @@ export const SignupForm = Html.component({
           })
             .value(value)
             .disabled(model.submitting)
-            .onInput(({ value }) => onInput(value))
+            .on("input", ({ value }) => onInput(value))
         ),
         field._tag === "Validating" ? h.span.children("Checking…") : null,
         field._tag === "Invalid"
@@ -322,7 +322,8 @@ export const SignupForm = Html.component({
 
     // `novalidate` turns the browser's own checks off. The rules above are
     // the only ones, and they run the same in a test and on the server.
-    return h.form.attr("novalidate", "").onSubmit(
+    return h.form.attr("novalidate", "").on(
+      "submit",
       SignupFormMessage.SubmittedForm()
     ).children(
       text("username", "Username", "text"),

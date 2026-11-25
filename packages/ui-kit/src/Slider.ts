@@ -81,8 +81,9 @@
  *
  * The arrows assume left-to-right text. The input's `keydown` handler
  * cancels the default of these keys only, so the input gets every
- * `keydown` while it has focus, and an ancestor's `onKeyDown` never sees
- * them. To handle them, add `onKeyDown` to the input's builder.
+ * `keydown` while it has focus, and an ancestor's `keydown` handler never
+ * sees them. To handle them, add a `keydown` handler to the input's
+ * builder.
  *
  * **Pointer**
  *
@@ -954,18 +955,21 @@ export const Slider = Html.component({
       })
         .disabled(s.disabled)
         .value(String(value))
-        .onKeyDown(
+        .on(
+          "keydown",
           ({ key, shift }) =>
             sliderKeys.has(key)
               ? SliderMessage.PressedKey({ index, key, shift })
-              : undefined,
-          // Only for the keys the slider handles: a key it doesn't keeps its
+              : undefined, // Only for the keys the slider handles: a key it doesn't keeps its
           // default, such as Tab.
           { preventDefault: true }
         )
-        .onInput(({ value }) => SliderMessage.UpdatedThumb({ index, value }))
-        .onFocus(SliderMessage.FocusedThumb({ index }))
-        .onBlur(SliderMessage.BlurredThumb({ index }))
+        .on(
+          "input",
+          ({ value }) => SliderMessage.UpdatedThumb({ index, value })
+        )
+        .on("focus", SliderMessage.FocusedThumb({ index }))
+        .on("blur", SliderMessage.BlurredThumb({ index }))
         .forward(ownStyle(
           hidden + (s.vertical ? ";writing-mode:vertical-lr" : "")
         ))

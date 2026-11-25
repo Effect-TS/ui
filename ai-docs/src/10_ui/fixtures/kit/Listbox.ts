@@ -195,13 +195,13 @@ export const Listbox = Html.component({
             // click on the trigger while it's open closes it.
             popovertarget: p.id("popup")
           })
-          .onKeyDown(
+          .on(
+            "keydown",
             ({ alt, ctrl, key, meta }) =>
               key === "ArrowDown" ||
                 (key.length === 1 && key !== " " && !alt && !ctrl && !meta)
                 ? ListboxMessage.PressedKey({ key })
-                : undefined,
-            // Cancels the default only when a message was returned, so Tab,
+                : undefined, // Cancels the default only when a message was returned, so Tab,
             // Space and Enter keep working.
             { preventDefault: true }
           )),
@@ -209,7 +209,7 @@ export const Listbox = Html.component({
         b.id(p.id("popup"))
           .attr("role", "dialog")
           .popover("auto", model.open)
-          .onToggle(({ open }) => ListboxMessage.ToggledPopup({ open }))),
+          .on("toggle", ({ open }) => ListboxMessage.ToggledPopup({ open }))),
       input: p.part("input", (b) =>
         b.ref(Input)
           .attrs({
@@ -222,15 +222,12 @@ export const Listbox = Html.component({
               : p.id("option", active)
           })
           .value(model.query)
-          .onInput(({ value }) => ListboxMessage.UpdatedQuery({ value }))
-          .onKeyDown(
-            ({ key }) =>
-              key === "ArrowDown" || key === "ArrowUp" || key === "Enter" ||
-                key === "Escape"
-                ? ListboxMessage.PressedKey({ key })
-                : undefined,
-            { preventDefault: true }
-          )),
+          .on("input", ({ value }) => ListboxMessage.UpdatedQuery({ value }))
+          .on("keydown", ({ key }) =>
+            key === "ArrowDown" || key === "ArrowUp" || key === "Enter" ||
+              key === "Escape"
+              ? ListboxMessage.PressedKey({ key })
+              : undefined, { preventDefault: true })),
       list: p.part("ul", (b) => b.id(p.id("list")).attr("role", "listbox")),
       // A part takes arguments after the builder: the consumer passes the
       // row it's drawing.
@@ -244,7 +241,8 @@ export const Listbox = Html.component({
               "aria-selected": String(active === option.id),
               "aria-disabled": option.disabled === true ? "true" : undefined
             })
-            .onClick(
+            .on(
+              "click",
               option.disabled === true
                 ? () => undefined
                 : ListboxMessage.ClickedOption({ id: option.id })

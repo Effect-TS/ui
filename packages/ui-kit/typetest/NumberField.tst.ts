@@ -72,7 +72,7 @@ describe("NumberField", () => {
             >()
             expect(
               numberField.increment({
-                element: h.button.onClick(Msg.Clicked()),
+                element: h.button.on("click", Msg.Clicked()),
                 disabled: true
               })
             )

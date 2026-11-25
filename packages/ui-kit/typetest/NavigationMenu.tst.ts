@@ -35,7 +35,7 @@ describe("NavigationMenu", () => {
         expect(navigationMenu.item(h.li)).type.toBe<Li<never>>()
         expect(navigationMenu.link({ element: h.a })).type.toBe<A<never>>()
         const link = navigationMenu.link({
-          element: h.a.onClick(Msg.Clicked()).onMount(NeedsClock()),
+          element: h.a.on("click", Msg.Clicked()).onMount(NeedsClock()),
           active: true
         })
         expect(link).type.toBe<A<Clock>>()

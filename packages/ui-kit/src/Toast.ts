@@ -128,7 +128,7 @@
  *         toast: { id: "saved", title: "Saved", type: "success" }
  *       })
  *   },
- *   view: (h) => h.button.onClick(EditorMessage.ClickedSave()).children("Save")
+ *   view: (h) => h.button.on("click", EditorMessage.ClickedSave()).children("Save")
  * })
  *
  * const App = Html.component({
@@ -913,12 +913,11 @@ export const ToastProvider = Html.component({
         "data-starting-style": flag(toast.transitionStatus === "starting"),
         "data-ending-style": flag(ending)
       })
-        .onKeyDown((
+        .on("keydown", (
           { key }
         ) => (key === "Escape"
           ? ToastProviderMessage.PressedEscape({ id: toast.id })
-          : undefined)
-        )
+          : undefined))
         .onMount(
           TrackToast({ id: toast.id, ending }).pipe(
             Mount.map((tracked) =>
@@ -984,9 +983,9 @@ export const ToastProvider = Html.component({
           ? undefined
           : "true"
       })
-        .onClick(ToastProviderMessage.ClickedClose({ id: toast.id }))
-        .onFocus(ToastProviderMessage.FocusedClose({ id: toast.id }))
-        .onBlur(ToastProviderMessage.BlurredClose({ id: toast.id })))
+        .on("click", ToastProviderMessage.ClickedClose({ id: toast.id }))
+        .on("focus", ToastProviderMessage.FocusedClose({ id: toast.id }))
+        .on("blur", ToastProviderMessage.BlurredClose({ id: toast.id })))
     return {
       toasts,
       expanded,

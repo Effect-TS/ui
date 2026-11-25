@@ -63,9 +63,9 @@
  *
  * That handler also means the root gets every `keydown` while it has
  * focus. A host gives an event only to the innermost element with a
- * handler for it, so an ancestor's `onKeyDown` never sees Escape or the
- * arrow keys pressed on the checkbox. To handle them, add `onKeyDown` to
- * the root's button, which runs after the checkbox's own.
+ * handler for it, so an ancestor's `keydown` handler never sees Escape
+ * or the arrow keys pressed on the checkbox. To handle them, add a
+ * `keydown` handler to the root's button, which runs after the checkbox's own.
  *
  * **Forms**
  *
@@ -412,11 +412,11 @@ export const Checkbox = Html.component({
               "aria-controls": resolved.controls
             })
             .disabled(resolved.disabled)
-            .onClick(CheckboxMessage.ClickedRoot())
-            .onKeyDown(
+            .on("click", CheckboxMessage.ClickedRoot())
+            .on(
+              "keydown",
               ({ key }) =>
-                key === "Enter" ? CheckboxMessage.PressedEnter() : undefined,
-              // Cancels Enter's click on the button, and leaves every other key alone.
+                key === "Enter" ? CheckboxMessage.PressedEnter() : undefined, // Cancels Enter's click on the button, and leaves every other key alone.
               { preventDefault: true }
             )
             // The form field goes after the children already on the button, and

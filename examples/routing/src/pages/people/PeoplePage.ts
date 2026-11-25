@@ -68,7 +68,9 @@ export const PeoplePageNoDeps = PeoplePageDef.make({
     return h.div.children(
       h.h1.class("text-4xl font-bold text-gray-800 mb-6").children("People"),
       h.search.class("mb-6").children(
-        h.form.onSubmit(PeoplePageMessage.SubmittedSearch()).class("flex gap-2")
+        h.form.on("submit", PeoplePageMessage.SubmittedSearch()).class(
+          "flex gap-2"
+        )
           .children(
             h.div.class("flex-1").children(
               h.label.attr("for", "people-search").class("sr-only").children(

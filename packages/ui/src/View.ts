@@ -1378,7 +1378,7 @@ const escapeId = (value: string): string =>
  *
  * Every method returns a copy, so a view stays a value. `Handlers` maps an
  * event name to its payload; a vocabulary's element class fixes it and adds
- * sugar. The core builder leaves payloads untyped.
+ * its own helpers. The core builder leaves payloads untyped.
  *
  * This base class has no `children`, so it's the shape of a void element.
  * `ContainerBuilder` adds it, and a vocabulary does the same for the tags

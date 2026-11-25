@@ -734,7 +734,7 @@ export const hydrateEffect = <
  * status is the one the server shipped. A waiting instance is inert: its
  * buttons do nothing, links still navigate through the Router, and a
  * `<form>` submits natively. What the user types or picks in its fields
- * stays, and reaches the fields' `onInput` and `onChange` when it adopts.
+ * stays, and reaches the fields' `input` and `change` handlers when it adopts.
  * Head sync starts once no instance is waiting.
  *
  * The cache hydrates from the state's `~query` entries. Until `adopted`

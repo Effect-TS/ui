@@ -17,9 +17,10 @@
  * only the innermost element with a handler for an event gets it.
  *
  * Drag and drop is declared, not handled: `draggable(data)` makes a drag
- * source and `onDrop(handler, { accepts })` a drop target, and the host does
- * the browser's part. Enter and leave go to the active drop target only, not
- * to every element the pointer crosses as `mouseenter` does. Drag and drop
+ * source and `dropTarget({ accepts })` a drop target, whose `drop` handler
+ * gets the drop, and the host does the browser's part. Enter and leave go to
+ * the active drop target only, not to every element the pointer crosses as
+ * `mouseenter` does. Drag and drop
  * needs a pointer, so give every drag a button or menu that sends the same
  * message.
  *
@@ -33,14 +34,14 @@
  *
  * A `dialog` is closed, open, or open as a modal: `.open(b)` and `.modal(b)`
  * set the same state, and the last call wins. A modal's close requests, such
- * as Escape, come to `onCancel`, and it closes when the Model says so. Forms
+ * as Escape, come to `cancel`, and it closes when the Model says so. Forms
  * in a dialog are the app's like any other, so read the choice in
- * `onSubmit`, not `returnValue`.
+ * `submit`, not `returnValue`.
  *
  * Any element can be a popover with `.popover(mode, open)`, its state
  * separate from a `dialog`'s or `details`'s `open`. A `"manual"` popover is
  * controlled by the Model. An `"auto"` popover is followed: the browser
- * closes it on Escape, a click outside or another popover opening, `onToggle`
+ * closes it on Escape, a click outside or another popover opening, `toggle`
  * reports it, and the Model must follow. Position a popover next to its
  * trigger with CSS anchor positioning.
  *
@@ -63,9 +64,9 @@
  *   init: () => "",
  *   update: (_, message) => (message._tag === "UpdatedDraft" ? message.value : ""),
  *   view: (h, draft) =>
- *     h.form.onSubmit(Message.SubmittedForm()).children(
+ *     h.form.on("submit", Message.SubmittedForm()).children(
  *       h.input.ref(NewTodo).attr("aria-label", "New todo").value(draft)
- *         .onInput(({ value }) => Message.UpdatedDraft({ value })),
+ *         .on("input", ({ value }) => Message.UpdatedDraft({ value })),
  *       h.button.attr("type", "submit").children("Add")
  *     )
  * })
@@ -89,9 +90,9 @@
  *   update: (_, message) => (message._tag === "UpdatedDraft" ? message.value : ""),
  *   view: (h, draft) =>
  *     h.textarea.attr("aria-label", "Message").value(draft)
- *       .onInput(({ value }) => Message.UpdatedDraft({ value }))
+ *       .on("input", ({ value }) => Message.UpdatedDraft({ value }))
  *       // Enter that ends an IME composition only confirms the text.
- *       .onKeyDown(
+ *       .on("keydown",
  *         ({ key, shift, composing }) =>
  *           key === "Enter" && !shift && !composing ? Message.PressedEnter() : undefined,
  *         { preventDefault: true }
@@ -344,7 +345,9 @@ export interface InputPayload extends ValuePayload {
 
 /**
  * The payload of `paste`: the clipboard's plain text, or `""` when it has
- * none or the browser won't let it be read.
+ * none or the browser won't let it be read. With `{ preventDefault: true }`
+ * a handler that returns a message cancels the paste, so the element's text
+ * stays as it is and the Model decides what the pasted text does.
  *
  * @stability experimental
  * @category events
@@ -356,7 +359,9 @@ export interface PastePayload {
 
 /**
  * The payload of `compositionend` on an `input` or `textarea`: the value
- * the field holds once an input method has committed the composed text.
+ * the field holds once an input method has committed the composed text. The
+ * `input` events sent while it composed have `composing` set, so a handler
+ * can wait for this one to act on the text.
  *
  * @stability experimental
  * @category events
@@ -545,7 +550,7 @@ export interface DragSourceOptions extends View.EventOptions {
 }
 
 /**
- * A drop target, set with `onDrop`: the drag types it accepts, matched without
+ * A drop target, set with `dropTarget`: the drag types it accepts, matched without
  * case with `"Files"` for files, and the drop effect it shows. Stored as the
  * element's `drop` options.
  *
@@ -637,7 +642,7 @@ export interface FocusOutPayload extends FocusWithinPayload, BlurPayload {}
  * `focus`, `blur`, `mouseenter`, `mouseleave` and `scroll` don't bubble: only
  * the element they happen on gets them. The others go to the innermost element
  * with a handler, except the drop target's events: `dragenter`, `dragleave`,
- * `dragover` and `drop` go to the active drop target, as `onDrop` describes.
+ * `dragover` and `drop` go to the active drop target, as `dropTarget` describes.
  *
  * `pointerdown` starts every press. A `mousedown` may not follow it: a
  * touch may send no mouse events, and a `pointerdown` whose default was
@@ -675,6 +680,17 @@ export interface Events {
 
 /**
  * The events of one tag: the shared `Events` plus the tag's own.
+ *
+ * **Details**
+ *
+ * A `dialog`'s `cancel` is a close request, such as Escape. For a modal the
+ * browser host cancels it, and the Model decides whether the dialog closes.
+ * `cancelable` is `false` when the browser won't let the request be
+ * cancelled, as after repeated cancelled requests: it closes the dialog
+ * itself, and `close` follows. `close` is sent after every close, the
+ * Model's included, except the close the browser host makes to switch a
+ * dialog between modal and non-modal, and a close the browser reports after
+ * the dialog was shown again.
  *
  * @stability experimental
  * @category events
@@ -722,8 +738,8 @@ export type ValueNode =
 
 /**
  * The builder of a void HTML element, such as `h.input` or `h.br`: the core
- * builder plus typed event sugar, controlled properties and a few attribute
- * helpers, and no children. `Element` adds `children` for the other tags.
+ * builder plus typed events, controlled properties, drag and drop and a few
+ * attribute helpers, and no children. `Element` adds `children` for the other tags.
  *
  * **Details**
  *
@@ -737,7 +753,6 @@ export type ValueNode =
  * @category models
  * @since 0.1.0
  */
-// oxlint-disable-next-line typescript/no-unsafe-declaration-merging
 export class VoidElement<
   out Msg,
   out R = never,
@@ -938,17 +953,17 @@ export class VoidElement<
    *
    * The Model decides when the modal closes. The browser host cancels its
    * close requests, such as Escape and, where `closedby` is supported, a
-   * click on the backdrop, and sends them as `onCancel`; a modal without
-   * `onCancel` ignores them. Browsers may still close a modal whose close
+   * click on the backdrop, and sends them as `cancel`; a modal without a
+   * `cancel` handler ignores them. Browsers may still close a modal whose close
    * requests keep being cancelled: Chromium 153 did after one or two
    * cancelled Escapes, depending on user activation, and other browsers may
    * differ. When the Model still says `true`, the host shows it again on the
    * next frame, which moves focus to the dialog's first focusable element.
    *
    * A form in the dialog is the app's, like any other: its submission comes
-   * to `onSubmit`, with the submitter's `name` and `value` in `entries`, and
+   * to `submit`, with the submitter's `name` and `value` in `entries`, and
    * `method="dialog"` neither closes the dialog nor sets `returnValue`.
-   * `onClose` is sent for every close, the Model's included, except the
+   * `close` is sent for every close, the Model's included, except the
    * closes the host makes to switch between modal and non-modal.
    *
    * The server renders a modal dialog closed, since HTML has no attribute
@@ -972,11 +987,11 @@ export class VoidElement<
    * A `"manual"` popover is controlled: the browser host shows and hides it
    * as the Model says at every commit, whether or not its component
    * rendered, and when anything else changes it, such as a `popovertarget`
-   * button, puts it back on the next frame. Use `onClick` to open it.
+   * button, puts it back on the next frame. Use a `click` handler to open it.
    *
    * An `"auto"` popover is followed: the browser closes it on Escape, a
    * click outside, another auto popover opening or a modal dialog opening,
-   * and sends `onToggle`. The Model must follow it. The host shows or hides
+   * and sends `toggle`. The Model must follow it. The host shows or hides
    * it only when the Model's value changes, so a Model that ignores the
    * toggle still says open while the popover is closed, and it reopens only
    * once the value goes to `false` and back. The same holds when the
@@ -997,7 +1012,7 @@ export class VoidElement<
    * Makes this element a drag source carrying `data`, strings by type such
    * as `{ "application/x-todo": id }`, and sets `draggable="true"`. The host
    * puts the data on the drag when it starts. Calling it again replaces the
-   * data; it keeps an `onDragStart` handler, in either order.
+   * data; it keeps a `dragstart` handler, in either order.
    *
    * @since 0.1.0
    */
@@ -1017,21 +1032,30 @@ export class VoidElement<
     )
   }
   /**
-   * Sugar for `on("dragstart", handler)` that keeps the data set with
-   * `draggable`, in either order.
+   * Like `View.ElementBuilder.on`, except that a `dragstart` or `drop`
+   * handler set without options keeps the options `draggable` or
+   * `dropTarget` set, so they can be called in either order.
    *
    * @since 0.1.0
    */
-  onDragStart(handler: View.Handler<Msg, {}>): this {
-    return this.on(
-      "dragstart" as any,
+  override on<K extends string>(
+    event: K & keyof E,
+    handler: View.Handler<Msg, E[K & keyof E]>,
+    options?: View.EventOptions | undefined
+  ): this {
+    return super.on(
+      event as any,
       handler as any,
-      this.eventOptions.dragstart
+      options ?? (event === "dragstart" || event === "drop"
+        ? this.eventOptions[event]
+        : undefined)
     )
   }
   /**
    * Makes this element a drop target for drags carrying one of the
-   * `accepts` types, and sends the drop.
+   * `accepts` types. Pair it with `on("drop", handler)`, which gets the
+   * drop: neither does anything without the other. Calling it again
+   * replaces the options; it keeps the `drop` handler, in either order.
    *
    * **Details**
    *
@@ -1043,241 +1067,46 @@ export class VoidElement<
    * still stops a dropped file from opening in the page.
    *
    * The active drop target is the innermost one on the pointer's path that
-   * accepts the drag. Unlike `mouseenter`, `onDragEnter` and `onDragLeave` go
+   * accepts the drag. Unlike `mouseenter`, `dragenter` and `dragleave` go
    * to the active target only: moving between its children sends nothing,
    * and moving into a nested target leaves the outer one.
    *
    * The active target is worked out from the drag's events, not from
-   * rendering. After an `onDragEnter`, one `onDragLeave` follows when a later
+   * rendering. After a `dragenter`, one `dragleave` follows when a later
    * drag event finds the drag over another target or none, the drag leaves
-   * the window, is dropped (after `onDrop`) or ends. A render that removes
-   * the target's `onDrop` or changes what it accepts takes effect on the next
-   * `dragenter` or `dragover`, or when the drag ends, not during the render,
-   * and the leave then goes to the handler the element has at that point.
-   * Nothing is sent once the element's `onDragLeave` is removed or its
-   * component is gone.
+   * the window, is dropped (after `drop`) or ends. A render that removes
+   * the target's `drop` handler or changes what it accepts takes effect on
+   * the next `dragenter` or `dragover`, or when the drag ends, not during
+   * the render, and the leave then goes to the handler the element has at
+   * that point. Nothing is sent once the element's `dragleave` handler is
+   * removed or its component is gone.
+   *
+   * `dragover` is for an active drop target that needs the pointer's
+   * position, such as a list reordered by halves of its items. The host
+   * sends at most one per animation frame, only when the position changed,
+   * and drops a queued one when the target stops being active, goes away,
+   * stops accepting the drag after a render or the drag ends.
+   *
+   * **Example** (A drop target for todos)
+   *
+   * ```ts
+   * import type { Html } from "@effect/ui/html"
+   *
+   * declare const h: Html.Tags<string>
+   *
+   * const column = h.section
+   *   .dropTarget({ accepts: ["application/x-todo"], dropEffect: "move" })
+   *   .on("drop", ({ data }) => data["application/x-todo"])
+   * ```
    *
    * @since 0.1.0
    */
-  onDrop(
-    handler: View.Handler<Msg, DropPayload>,
-    options: Omit<DropTargetOptions, "preventDefault">
-  ): this {
+  dropTarget(options: Omit<DropTargetOptions, "preventDefault">): this {
     const target: DropTargetOptions = { ...options, preventDefault: "always" }
-    return this.on("drop" as any, handler as any, target)
+    return View.withFields(this, {
+      eventOptions: { ...this.eventOptions, drop: target }
+    })
   }
-}
-
-/**
- * Event handler sugar methods on `VoidElement`.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export interface VoidElement<
-  out Msg,
-  out R = never,
-  in out E = Record<string, unknown>,
-  in out Node = unknown,
-  out Tag extends string = string
-> {
-  /**
-   * Sugar for `on("click", handler, options)`.
-   *
-   * @since 0.1.0
-   */
-  onClick(
-    handler: View.Handler<Msg, PointerPayload>,
-    options?: View.EventOptions | undefined
-  ): this
-  /**
-   * Sugar for `on("dblclick", handler, options)`.
-   *
-   * @since 0.1.0
-   */
-  onDoubleClick(
-    handler: View.Handler<Msg, PointerPayload>,
-    options?: View.EventOptions | undefined
-  ): this
-  /**
-   * Sugar for `on("keydown", handler, options)`.
-   *
-   * @since 0.1.0
-   */
-  onKeyDown(
-    handler: View.Handler<Msg, KeyPayload>,
-    options?: View.EventOptions | undefined
-  ): this
-  /**
-   * Sugar for `on("keyup", handler, options)`.
-   *
-   * @since 0.1.0
-   */
-  onKeyUp(
-    handler: View.Handler<Msg, KeyPayload>,
-    options?: View.EventOptions | undefined
-  ): this
-  /**
-   * Sugar for `on("focus", handler)`.
-   *
-   * @since 0.1.0
-   */
-  onFocus(handler: View.Handler<Msg, FocusPayload>): this
-  /**
-   * Sugar for `on("blur", handler)`.
-   *
-   * @since 0.1.0
-   */
-  onBlur(handler: View.Handler<Msg, BlurPayload>): this
-  /**
-   * Sugar for `on("paste", handler, options)`. The handler gets the
-   * clipboard's plain text. With `{ preventDefault: true }` a handler that
-   * returns a message cancels the paste, so the element's text stays as it
-   * is and the Model decides what the pasted text does.
-   *
-   * @since 0.1.0
-   */
-  onPaste(
-    handler: View.Handler<Msg, PastePayload>,
-    options?: View.EventOptions | undefined
-  ): this
-  /**
-   * Sugar for `on("dragend", handler)`, on the drag's source: `dropped` is
-   * false when the drag was cancelled.
-   *
-   * @since 0.1.0
-   */
-  onDragEnd(handler: View.Handler<Msg, DragEndPayload>): this
-  /**
-   * Sugar for `on("dragenter", handler)`. Sent when this drop target becomes
-   * the active one, as `onDrop` describes; it does nothing on an element
-   * without `onDrop`.
-   *
-   * @since 0.1.0
-   */
-  onDragEnter(handler: View.Handler<Msg, {}>): this
-  /**
-   * Sugar for `on("dragleave", handler)`. Sent when this drop target stops
-   * being the active one, as `onDrop` describes.
-   *
-   * @since 0.1.0
-   */
-  onDragLeave(handler: View.Handler<Msg, {}>): this
-  /**
-   * Sugar for `on("dragover", handler)`, for an active drop target that
-   * needs the pointer's position, such as a list reordered by halves of its
-   * items. The host sends at most one per animation frame, only when the
-   * position changed, and drops a queued one when the target stops being
-   * active, goes away, stops accepting the drag after a render or the drag
-   * ends. The browser's default is handled by
-   * `onDrop`'s `accepts` either way.
-   *
-   * @since 0.1.0
-   */
-  onDragOver(handler: View.Handler<Msg, DragOverPayload>): this
-  /**
-   * Sugar for `on("input", handler)`, on the elements that have it.
-   *
-   * @since 0.1.0
-   */
-  onInput<E2 extends E & { readonly input: unknown }>(
-    this: VoidElement<Msg, R, E2, Node>,
-    handler: View.Handler<Msg, E2["input"]>
-  ): this
-  /**
-   * Sugar for `on("change", handler)`, on the elements that have it.
-   *
-   * @since 0.1.0
-   */
-  onChange<E2 extends E & { readonly change: unknown }>(
-    this: VoidElement<Msg, R, E2, Node>,
-    handler: View.Handler<Msg, E2["change"]>
-  ): this
-  /**
-   * Sugar for `on("compositionend", handler)`, on an `input` or
-   * `textarea`: an input method committed the text it composed. The
-   * `input` events sent while it composed have `composing` set, so a
-   * handler can wait for this one to act on the text.
-   *
-   * @since 0.1.0
-   */
-  onCompositionEnd<E2 extends E & { readonly compositionend: unknown }>(
-    this: VoidElement<Msg, R, E2, Node>,
-    handler: View.Handler<Msg, E2["compositionend"]>
-  ): this
-  /**
-   * Sugar for `on("submit", handler)`, on a `form`. The browser host always
-   * cancels the native submission of a form the app renders, so it takes no
-   * options.
-   *
-   * @since 0.1.0
-   */
-  onSubmit<E2 extends E & { readonly submit: unknown }>(
-    this: VoidElement<Msg, R, E2, Node>,
-    handler: View.Handler<Msg, E2["submit"]>
-  ): this
-  /**
-   * Sugar for `on("toggle", handler)`: a `details`, a `dialog` or a popover
-   * opened or closed.
-   *
-   * @since 0.1.0
-   */
-  onToggle<E2 extends E & { readonly toggle: unknown }>(
-    this: VoidElement<Msg, R, E2, Node>,
-    handler: View.Handler<Msg, E2["toggle"]>
-  ): this
-  /**
-   * Sugar for `on("cancel", handler)`, on a `dialog`: a close request, such
-   * as Escape. For a modal the browser host cancels it, and the Model
-   * decides whether the dialog closes. `cancelable` is `false` when the
-   * browser won't let the request be cancelled, as after repeated cancelled
-   * requests: it closes the dialog itself, and `onClose` follows.
-   *
-   * @since 0.1.0
-   */
-  onCancel<E2 extends E & { readonly cancel: unknown }>(
-    this: VoidElement<Msg, R, E2, Node>,
-    handler: View.Handler<Msg, E2["cancel"]>
-  ): this
-  /**
-   * Sugar for `on("close", handler)`, on a `dialog`: sent after every close,
-   * the Model's included, except the close the browser host makes to switch
-   * a dialog between modal and non-modal, and a close the browser reports
-   * after the dialog was shown again.
-   *
-   * @since 0.1.0
-   */
-  onClose<E2 extends E & { readonly close: unknown }>(
-    this: VoidElement<Msg, R, E2, Node>,
-    handler: View.Handler<Msg, E2["close"]>
-  ): this
-}
-
-const eventSugar = (event: string) =>
-  function(
-    this: VoidElement<any>,
-    handler: any,
-    options?: View.EventOptions
-  ) {
-    return this.on(event, handler, options)
-  }
-
-for (
-  const pair
-    of "Click DoubleClick:dblclick KeyDown KeyUp Focus Blur Paste DragEnd DragEnter DragLeave DragOver Input Change CompositionEnd Submit Toggle Cancel Close"
-      .split(" ")
-) {
-  const [name, event] = pair.split(":")
-  const method = "on" + name
-  const fn = eventSugar(event ?? name!.toLowerCase())
-  Object.defineProperty(fn, "name", { value: method, configurable: true })
-  Object.defineProperty(VoidElement.prototype, method, {
-    value: fn,
-    writable: true,
-    enumerable: false,
-    configurable: true
-  })
 }
 
 /**
@@ -1638,7 +1467,7 @@ export interface Elements extends View.Elements {
  * import { Schema } from "effect"
  *
  * const Button = <Msg>(h: Html.H<Msg>, label: string, message: Msg) =>
- *   h.button.onClick(message).children(label)
+ *   h.button.on("click", message).children(label)
  *
  * export const Counter = Html.component({
  *   name: "Counter",
@@ -1731,7 +1560,7 @@ export const vocabulary: View.Vocabulary<Elements> = { name, tags }
  * }).make({
  *   init: () => 0,
  *   update: ($) => $.model + 1,
- *   view: (h, count) => h.button.onClick("ClickedIncrement").children(String(count))
+ *   view: (h, count) => h.button.on("click", "ClickedIncrement").children(String(count))
  * })
  * ```
  *
@@ -1759,21 +1588,6 @@ export const ref = <K extends keyof HTMLElementTagNameMap>(
   _tag: K
 ): Renderer.Ref<HTMLElementTagNameMap[K]> =>
   Renderer.ref<HTMLElementTagNameMap[K]>(name)
-
-type PascalCase<S extends string> = S extends `${infer Head}-${infer Tail}`
-  ? `${Capitalize<Head>}${PascalCase<Tail>}`
-  : Capitalize<S>
-
-/**
- * The method a custom element's event gets: `on` and the event's name in
- * camelCase, so `color-changed` is `onColorChanged` and `sl-change` is
- * `onSlChange`.
- *
- * @stability experimental
- * @category custom elements
- * @since 0.1.0
- */
-export type CustomEventMethod<K extends string> = `on${PascalCase<K>}`
 
 /**
  * The names that get no generated method on a custom element, because the
@@ -1804,27 +1618,12 @@ type PropertyMethods<P> = {
   ) => Self
 }
 
-type EventMethods<Msg, E> = {
-  readonly [
-    K in keyof E & string as CustomEventMethod<K> extends CustomElementReserved
-      ? never
-      : CustomEventMethod<K>
-  ]: {
-    // Method syntax keeps the handler bivariant, as on `Element`, so the builder stays covariant in `Msg`.
-    method<Self>(
-      this: Self,
-      handler: View.Handler<Msg, E[K]>,
-      options?: View.EventOptions | undefined
-    ): Self
-  }["method"]
-}
-
 type TypesOf<S> = {
   readonly [K in keyof S]: S[K] extends Schema.Top ? S[K]["Type"] : never
 }
 
 /**
- * The builder under a custom element's generated methods: an `Element` whose
+ * The builder under a custom element's property methods: an `Element` whose
  * `prop` takes only the declared properties, each typed by its Schema, and
  * whose `on` adds the declared events, each with its decoded `detail` as
  * the payload.
@@ -1833,7 +1632,7 @@ type TypesOf<S> = {
  *
  * `P` maps each declared property to its value type and `E` each declared
  * event to its `detail`. A declared event replaces an HTML event of the same
- * name. `CustomElement` adds a method per declaration.
+ * name. `CustomElement` adds a method per declared property.
  *
  * @stability experimental
  * @category custom elements
@@ -1906,12 +1705,11 @@ export class CustomElementBuilder<
   }
 }
 
-type Undeclared<P, E, K extends string> = K extends
-  keyof P | CustomEventMethod<keyof E & string> ? never : unknown
+type Undeclared<P, K extends string> = K extends keyof P ? never : unknown
 
 /**
- * The HTML methods a declared property or event can share a name with. Once
- * a declaration takes the name, the HTML method can't be called, so the
+ * The HTML methods a declared property can share a name with. Once a
+ * declaration takes the name, the HTML method can't be called, so the
  * generated method is the only signature left.
  *
  * @stability experimental
@@ -1926,88 +1724,33 @@ export interface CustomElementBuilder<
   out Tag extends string = string
 > {
   disabled(
-    this: Undeclared<P, E, "disabled">,
+    this: Undeclared<P, "disabled">,
     disabled: boolean
   ): this
   popover(
-    this: Undeclared<P, E, "popover">,
+    this: Undeclared<P, "popover">,
     mode: PopoverMode,
     open: boolean
   ): this
   draggable(
-    this: Undeclared<P, E, "draggable">,
+    this: Undeclared<P, "draggable">,
     data: Readonly<Record<string, string>>,
     options?: { readonly effectAllowed?: EffectAllowed | undefined } | undefined
   ): this
-  onDragStart(
-    this: Undeclared<P, E, "onDragStart">,
-    handler: View.Handler<Msg, {}>
-  ): this
-  onDrop(
-    this: Undeclared<P, E, "onDrop">,
-    handler: View.Handler<Msg, DropPayload>,
+  dropTarget(
+    this: Undeclared<P, "dropTarget">,
     options: Omit<DropTargetOptions, "preventDefault">
-  ): this
-  onClick(
-    this: Undeclared<P, E, "onClick">,
-    handler: View.Handler<Msg, PointerPayload>,
-    options?: View.EventOptions | undefined
-  ): this
-  onDoubleClick(
-    this: Undeclared<P, E, "onDoubleClick">,
-    handler: View.Handler<Msg, PointerPayload>,
-    options?: View.EventOptions | undefined
-  ): this
-  onKeyDown(
-    this: Undeclared<P, E, "onKeyDown">,
-    handler: View.Handler<Msg, KeyPayload>,
-    options?: View.EventOptions | undefined
-  ): this
-  onKeyUp(
-    this: Undeclared<P, E, "onKeyUp">,
-    handler: View.Handler<Msg, KeyPayload>,
-    options?: View.EventOptions | undefined
-  ): this
-  onFocus(
-    this: Undeclared<P, E, "onFocus">,
-    handler: View.Handler<Msg, FocusPayload>
-  ): this
-  onBlur(
-    this: Undeclared<P, E, "onBlur">,
-    handler: View.Handler<Msg, BlurPayload>
-  ): this
-  onPaste(
-    this: Undeclared<P, E, "onPaste">,
-    handler: View.Handler<Msg, PastePayload>,
-    options?: View.EventOptions | undefined
-  ): this
-  onDragEnd(
-    this: Undeclared<P, E, "onDragEnd">,
-    handler: View.Handler<Msg, DragEndPayload>
-  ): this
-  onDragEnter(
-    this: Undeclared<P, E, "onDragEnter">,
-    handler: View.Handler<Msg, {}>
-  ): this
-  onDragLeave(
-    this: Undeclared<P, E, "onDragLeave">,
-    handler: View.Handler<Msg, {}>
-  ): this
-  onDragOver(
-    this: Undeclared<P, E, "onDragOver">,
-    handler: View.Handler<Msg, DragOverPayload>
   ): this
 }
 
 /**
  * The builder of a custom element: `CustomElementBuilder` plus a method per
- * declared property, named after it, and one per declared event, named
- * `CustomEventMethod`.
+ * declared property, named after it. Declared events are handled with `on`.
  *
  * **Details**
  *
  * A declared name wins over the HTML method of the same name, such as
- * `value`, `disabled` or `onChange`, and is typed by its Schema. A wrong
+ * `value` or `disabled`, and is typed by its Schema. A wrong
  * value for one of those reports "No overload matches this call", with the
  * declared signature as the first overload. A name in
  * `CustomElementReserved` gets no method.
@@ -2024,7 +1767,6 @@ export type CustomElement<
   Tag extends string = string
 > =
   & PropertyMethods<P>
-  & EventMethods<Msg, E>
   & CustomElementBuilder<Msg, R, P, E, Tag>
 
 /**
@@ -2067,9 +1809,6 @@ export interface CustomElementBinding<Tag extends string, P, E> {
   readonly events: E
 }
 
-const capitalize = (name: string): string =>
-  name.charAt(0).toUpperCase() + name.slice(1)
-
 /**
  * Binds a custom element, a web component another library or your own code
  * defines, to the HTML vocabulary, with typed properties and events.
@@ -2094,21 +1833,20 @@ const capitalize = (name: string): string =>
  * The server renders none of them: the browser host sets them when it adopts
  * the element.
  *
- * Each declared event gets a method named `CustomEventMethod`, whose handler
- * receives the event's `detail` decoded by its Schema. A `detail` the Schema
+ * `on` takes each declared event, and its handler receives the event's
+ * `detail` decoded by its Schema. A `detail` the Schema
  * rejects is logged with `console.error` and sends no message. A missing or
  * `null` `detail` that the Schema rejects is decoded again as `{}`, so
  * `Schema.Struct({})` declares an event without a payload. An event that
  * doesn't bubble reaches the element's own handler only.
  *
- * `prop` and `on` take the same declarations, typed the same way, and set
- * a property whose name has no method (see `CustomElementReserved`). The
- * HTML methods, such as `class`, `style` and `onClick`, work as on any
- * element. Registering the element with `customElements.define`, often by
+ * `prop` takes the same declarations, typed the same way, and sets a
+ * property whose name has no method (see `CustomElementReserved`). The
+ * HTML methods, such as `class`, `style` and `on("click", ...)`, work as
+ * on any element. Registering the element with `customElements.define`, often by
  * importing its package, is still the app's job.
  *
- * Throws when `tag` isn't a custom element name, lowercase with a hyphen,
- * or when two declarations get the same method name.
+ * Throws when `tag` isn't a custom element name, lowercase with a hyphen.
  *
  * In a test, `HtmlScene.fireElement` and `HtmlPlay.fireElement` send a
  * declared event with a typed `detail`.
@@ -2139,7 +1877,7 @@ const capitalize = (name: string): string =>
  *     ColorPicker(h)
  *       .class("swatch")
  *       .color(color)
- *       .onColorChanged(({ value }) => Message.ChangedColor({ color: value }))
+ *       .on("color-changed", ({ value }) => Message.ChangedColor({ color: value }))
  * })
  * ```
  *
@@ -2198,11 +1936,6 @@ export const customElement = <
     if (name in core || name === "id" || name === "class" || name === "style") {
       return
     }
-    if (Object.hasOwn(Bound.prototype, name)) {
-      throw new Error(
-        `Html.customElement: two declarations of <${tag}> get the method ${name}`
-      )
-    }
     Object.defineProperty(Bound.prototype, name, {
       value: method,
       writable: true,
@@ -2213,12 +1946,6 @@ export const customElement = <
     define(name, function(this: Bound, value: unknown) {
       return this.prop(name, value)
     })
-  }
-  for (const event in events) {
-    define(
-      "on" + event.split("-").map(capitalize).join(""),
-      eventSugar(event)
-    )
   }
   const root = View.shorthand(new Bound(tag))
   return Object.assign(() => root, { tag, properties, events }) as any

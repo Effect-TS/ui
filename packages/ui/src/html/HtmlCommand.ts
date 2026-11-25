@@ -321,7 +321,7 @@ export const select = <N extends HTMLInputElement | HTMLTextAreaElement, Msg>(
  * `ref` names a `form`, or a control that belongs to one, by nesting or by
  * its `form` attribute. The browser validates the form first, unless it has
  * `novalidate`, and then fires `submit`, which reaches the form's
- * `onSubmit`. `submitted` is `false` when the element has no form.
+ * `submit` handler. `submitted` is `false` when the element has no form.
  *
  * @stability experimental
  * @category commands
@@ -375,7 +375,7 @@ export const ShowPicker: Command.Factory<
  * **When to use**
  *
  * Use to open a file input the view renders from a menu item or a keyboard
- * shortcut. The files arrive in the input's `onChange`. To choose files
+ * shortcut. The files arrive in the input's `change` handler. To choose files
  * without rendering an input, use `HtmlFiles.pick`.
  *
  * **Details**

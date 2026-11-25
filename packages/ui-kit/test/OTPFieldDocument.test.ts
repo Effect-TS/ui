@@ -41,8 +41,9 @@ const Page = Html.component({
     Logged: ($, { entry }) => ({ ...$.model, log: [...$.model.log, entry] })
   },
   view: (h, model) =>
-    h.form.onSubmit(({ fields }) =>
-      Message.Logged({ entry: "submitted " + fields.code })
+    h.form.on(
+      "submit",
+      ({ fields }) => Message.Logged({ entry: "submitted " + fields.code })
     ).children(
       DirectionProvider(h, {
         props: { direction: "rtl" },

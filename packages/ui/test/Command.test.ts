@@ -158,17 +158,22 @@ describe("Command", () => {
       Effect.gen(function*() {
         assert.deepStrictEqual(
           yield* SaveTodo.make(todo).effect.pipe(
-            Effect.provide(SaveTodo.toLayer(() =>
-              Effect.succeed(TodoItemMessage.SaveFailed({ reason: "mocked" }))
-            ))
+            Effect.provide(
+              SaveTodo.toLayer(() =>
+                Effect.succeed(TodoItemMessage.SaveFailed({ reason: "mocked" }))
+              )
+            )
           ),
           TodoItemMessage.SaveFailed({ reason: "mocked" })
         )
         assert.deepStrictEqual(
           yield* SaveTodo.make(todo).effect.pipe(
-            Effect.provide(Layer.succeed(SaveTodo, () =>
-              Effect.succeed(TodoItemMessage.Saved())
-            ))
+            Effect.provide(
+              Layer.succeed(
+                SaveTodo,
+                () => Effect.succeed(TodoItemMessage.Saved())
+              )
+            )
           ),
           TodoItemMessage.Saved()
         )

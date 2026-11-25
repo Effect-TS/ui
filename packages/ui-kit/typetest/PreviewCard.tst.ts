@@ -32,7 +32,7 @@ describe("PreviewCard", () => {
           props: { open: false },
           view: (previewCard) => {
             const trigger = previewCard.trigger({
-              element: h.a.onClick(Msg.Clicked()),
+              element: h.a.on("click", Msg.Clicked()),
               delay: 100,
               closeDelay: 50
             })

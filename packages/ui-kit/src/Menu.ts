@@ -2180,11 +2180,10 @@ const pressable = <B extends Handles<any>>(
       ({ button, pointerType }: Html.PointerPayload) =>
         button === 0 && pointerType !== "touch" ? press(pointerType) : undefined
     )
-    .onClick(({ pointerType }: Html.PointerPayload) =>
+    .on("click", ({ pointerType }: Html.PointerPayload) =>
       pointerType === "" || pointerType === "touch"
         ? click(pointerType)
-        : undefined
-    )
+        : undefined)
 
 /**
  * The options of one `trigger` part besides its `element`, over the
@@ -3014,7 +3013,8 @@ export const Menu = Html.component({
             MenuMessage.PressedTrigger({ key, triggerId, pointerType })
         )
           .on("mouseup", MenuMessage.ReleasedTrigger())
-          .onKeyDown(
+          .on(
+            "keydown",
             ({ composing, key: pressed }) =>
               composing ? undefined : triggerKey(pressed, key, triggerId),
             {
@@ -3027,7 +3027,7 @@ export const Menu = Html.component({
             : own
         }
         return hoverOpens(
-          own.onFocus(MenuMessage.FocusedBarTrigger({ key, triggerId })),
+          own.on("focus", MenuMessage.FocusedBarTrigger({ key, triggerId })),
           key,
           triggerId,
           options
@@ -3118,14 +3118,11 @@ export const Menu = Html.component({
         (pointerType) => MenuMessage.PressedSubmenuTrigger({ pointerType }),
         (pointerType) => MenuMessage.ClickedSubmenuTrigger({ pointerType })
       )
-        .onKeyDown(
-          ({ composing, key }) =>
-            !composing &&
-              (key === parentKeys.open || key === "Enter" || key === " ")
-              ? MenuMessage.PressedSubmenuTriggerKey({ key })
-              : undefined,
-          { preventDefault: true }
-        )
+        .on("keydown", ({ composing, key }) =>
+          !composing &&
+            (key === parentKeys.open || key === "Enter" || key === " ")
+            ? MenuMessage.PressedSubmenuTriggerKey({ key })
+            : undefined, { preventDefault: true })
       return hover ? hoverOpens(own, "submenu", null, {}) : own
     })
     const submenuTrigger = View.wrapPart(
@@ -3250,10 +3247,9 @@ export const Menu = Html.component({
           "data-nested": flag(nested),
           "data-instant": instant
         })
-        .onKeyDown(keyMessage(null), { preventDefault: true })
-        .onKeyUp(({ key }) =>
-          key === " " ? MenuMessage.ReleasedSpace({ action: null }) : undefined
-        )
+        .on("keydown", keyMessage(null), { preventDefault: true })
+        .on("keyup", ({ key }) =>
+          key === " " ? MenuMessage.ReleasedSpace({ action: null }) : undefined)
         .forward((node) =>
           listed || inputDrawn
             ? node.attr("role", "presentation")
@@ -3351,13 +3347,16 @@ export const Menu = Html.component({
               ? undefined
               : MenuMessage.ReleasedItem({ action, pointerType })
         )
-        .onClick(
+        .on(
+          "click",
           ({ pointerType }) => MenuMessage.ClickedItem({ action, pointerType }),
           { preventDefault: off && action.kind === "link" }
         )
-        .onKeyDown(keyMessage(action), { preventDefault: true })
-        .onKeyUp(({ key }) =>
-          key === " " ? MenuMessage.ReleasedSpace({ action }) : undefined
+        .on("keydown", keyMessage(action), { preventDefault: true })
+        .on(
+          "keyup",
+          ({ key }) =>
+            key === " " ? MenuMessage.ReleasedSpace({ action }) : undefined
         )
       return shownItem
         ? own
@@ -3554,17 +3553,16 @@ export const Menu = Html.component({
         .value(query)
         .disabled(disabled)
         .on("input", ({ value }) => MenuMessage.ChangedInput({ value }))
-        .onKeyDown(({ alt, composing, ctrl, key, meta, shift }) =>
+        .on("keydown", ({ alt, composing, ctrl, key, meta, shift }) =>
           composing
             ? undefined
             : MenuMessage.PressedInputKey({
               key,
               modified: alt || ctrl || meta || shift
-            })
-        )
+            }))
         .on("mousedown", MenuMessage.PressedInput())
-        .onFocus(MenuMessage.FocusedInput())
-        .onBlur(MenuMessage.BlurredInput())
+        .on("focus", MenuMessage.FocusedInput())
+        .on("blur", MenuMessage.BlurredInput())
     })
 
     const clearPart = p.part("button", (b) =>
@@ -3579,7 +3577,7 @@ export const Menu = Html.component({
         .on("mousedown", MenuMessage.PressedInput(), {
           preventDefault: "always"
         })
-        .onClick(MenuMessage.ClickedClear()))
+        .on("click", MenuMessage.ClickedClear()))
     const clear = View.wrapPart(
       clearPart,
       <B extends View.PartTarget<"button">>(

@@ -52,7 +52,7 @@ describe("Popover", () => {
       props: { open: false },
       view: (popover) => {
         const trigger = popover.trigger({
-          element: h.button.onClick(Msg.Clicked()),
+          element: h.button.on("click", Msg.Clicked()),
           openOnHover: true,
           delay: 100
         })

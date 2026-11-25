@@ -120,7 +120,7 @@ const App = Html.component({
               combo.menu.trigger(h.button).children("Combo menu"),
               h.ul.children(combo.menu.visible.map((item) =>
                 combo.dialog.close(combo.menu.item(h.li.key(item.id), item))
-                  .onClick(AppMessage.Clicked({ id: item.id }))
+                  .on("click", AppMessage.Clicked({ id: item.id }))
                   .children(item.label)
               ))
             ),

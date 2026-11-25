@@ -962,11 +962,12 @@ export const Tabs = Html.component({
           "data-active": flag(active),
           "data-disabled": flag(disabled)
         })
-        .onClick(
+        .on(
+          "click",
           TabsMessage.ClickedTab({ value }),
           disabled ? { preventDefault: "always" } : undefined
         )
-        .onKeyDown(({ alt, ctrl, key, meta }) => {
+        .on("keydown", ({ alt, ctrl, key, meta }) => {
           const to = alt || ctrl || meta
             ? undefined
             : stepOf(key, orientation, rtl)
@@ -974,8 +975,8 @@ export const Tabs = Html.component({
             ? undefined
             : TabsMessage.PressedKey({ value, to })
         }, { preventDefault: true })
-        .onFocus(TabsMessage.FocusedTab({ value }))
-        .onBlur(TabsMessage.BlurredTab())
+        .on("focus", TabsMessage.FocusedTab({ value }))
+        .on("blur", TabsMessage.BlurredTab())
       const typed = b.tag === "button"
         ? decorated.attr("type", "button")
         : decorated

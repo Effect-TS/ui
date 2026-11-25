@@ -42,7 +42,7 @@ describe("Collapsible", () => {
       props: { open: false },
       view: (collapsible) => {
         const trigger = collapsible.trigger(
-          h.button.class("trigger").onClick(Msg.Clicked())
+          h.button.class("trigger").on("click", Msg.Clicked())
         )
         expect(trigger).type.toBe<Button>()
         expect(collapsible.root(h.section)).type.toBe<Section>()

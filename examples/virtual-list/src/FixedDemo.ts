@@ -15,7 +15,7 @@ export const FixedDemo = Html.component({
   view: (h, model) =>
     h.div.class("page").children(
       h.div.class("toolbar").children(
-        h.button.attr("id", "last").onClick(FixedMessage.ClickedLast())
+        h.button.attr("id", "last").on("click", FixedMessage.ClickedLast())
           .children("Jump to the last row")
       ),
       VirtualList(h, {

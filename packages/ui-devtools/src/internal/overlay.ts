@@ -269,7 +269,7 @@ const SeqLink = (h: H, ref: Ref) =>
       "aria-label",
       "Go to #" + ref.seq + " " + Read.summaryOf(ref.entry)
     )
-      .onClick(OverlayMessage.ClickedLink({ seq: ref.seq })).children(
+      .on("click", OverlayMessage.ClickedLink({ seq: ref.seq })).children(
         "#" + ref.seq
       )
 
@@ -342,7 +342,8 @@ const shows = (model: OverlayModel, session: string, seq: number) =>
 const PausedBadge = (h: H, seq: number) =>
   h.span.class("paused").children(
     h.span.class("paused-label").children("Paused at #" + seq),
-    h.button.class("resume").attr("aria-label", "Resume the live page").onClick(
+    h.button.class("resume").attr("aria-label", "Resume the live page").on(
+      "click",
       OverlayMessage.ClickedResume()
     )
       .children("Resume")
@@ -381,7 +382,7 @@ const PausedBar = (
           "#" + page.seq
         )
         .value(String(Math.max(0, at)))
-        .onInput(({ value }) => {
+        .on("input", ({ value }) => {
           const entry = stops[Number(value)]
           return entry === undefined
             ? undefined
@@ -435,7 +436,8 @@ const moveCorner = (
 }
 
 const CornerPicker = (h: H, model: OverlayModel) =>
-  h.div.class("corner-wrap").onKeyDown(
+  h.div.class("corner-wrap").on(
+    "keydown",
     ({ key }) =>
       key === "Escape" && model.pickingCorner
         ? OverlayMessage.ClosedCornerPicker()
@@ -446,7 +448,7 @@ const CornerPicker = (h: H, model: OverlayModel) =>
       .attr("aria-label", "Move inspector to another corner")
       .attr("aria-expanded", String(model.pickingCorner))
       .attr("title", "Move inspector to another corner")
-      .onClick(OverlayMessage.ClickedCornerPicker())
+      .on("click", OverlayMessage.ClickedCornerPicker())
       .children(
         h.span.class("corner-icon").attr("aria-hidden", "true").children(
           corners.map(([corner]) =>
@@ -464,7 +466,7 @@ const CornerPicker = (h: H, model: OverlayModel) =>
             h.button.key(corner)
               .class("corner-option", model.position === corner && "on")
               .attr("aria-pressed", String(model.position === corner))
-              .onClick(OverlayMessage.ChosePosition({ position: corner }))
+              .on("click", OverlayMessage.ChosePosition({ position: corner }))
               .children(label)
           )
         )
@@ -495,17 +497,18 @@ const Header = (
         "title",
         page !== null ? "Resume before clearing" : "Clear the timeline"
       )
-      .onClick(OverlayMessage.ClickedClear()).children("Clear"),
+      .on("click", OverlayMessage.ClickedClear()).children("Clear"),
     h.button.class("follow", following && "on").attr(
       "aria-pressed",
       String(following)
     )
-      .onClick(OverlayMessage.ClickedFollowLatest()).children(
+      .on("click", OverlayMessage.ClickedFollowLatest()).children(
         h.span.class("dot").attr("aria-hidden", "true"),
         "Follow latest"
       ),
     CornerPicker(h, model),
-    h.button.class("close").attr("aria-label", "Close the inspector").onClick(
+    h.button.class("close").attr("aria-label", "Close the inspector").on(
+      "click",
       OverlayMessage.ClickedClose()
     )
       .children("✕")
@@ -631,7 +634,10 @@ const InstanceItem = (
       ? h.span.class("chev").attr("aria-hidden", "true")
       : h.button.class("chev").attr("aria-expanded", String(row.expanded))
         .attr("aria-label", "Instances under " + name)
-        .onClick(OverlayMessage.ToggledBranch({ instance: summary.instance }))
+        .on(
+          "click",
+          OverlayMessage.ToggledBranch({ instance: summary.instance })
+        )
         .children(
           row.expanded ? "▾" : "▸"
         ),
@@ -644,7 +650,7 @@ const InstanceItem = (
       .attr("aria-current", owner === summary.instance ? "true" : undefined)
       .attr("data-instance", name)
       .attr("title", "Show only " + name + " and the instances under it")
-      .onClick(OverlayMessage.ClickedScope({ instance: summary.instance }))
+      .on("click", OverlayMessage.ClickedScope({ instance: summary.instance }))
       .children(
         tree
           ? null
@@ -770,7 +776,7 @@ const Instances = (
       )
         .attr("placeholder", "Find an instance").attr("spellcheck", "false")
         .value(model.find)
-        .onInput(({ value }) => OverlayMessage.TypedFind({ text: value }))
+        .on("input", ({ value }) => OverlayMessage.TypedFind({ text: value }))
     ),
     rows.length === 0
       ? h.p.class("inote").children(
@@ -779,18 +785,23 @@ const Instances = (
           : "No instance has run a Command or taken a message yet."
       )
       : InstanceList(h, session, rows, model, owner?.instance, mode),
-    mode === "find" ? null : h.button.class("browse").onClick(
-      OverlayMessage.ClickedBrowse({
-        browse: !model.browse,
-        branches: model.browse || owner === undefined
-          ? []
-          : lineage(session, owner).slice(0, -1).map(({ instance }) => instance)
-      })
-    ).children(
-      model.browse
-        ? "Back to active instances"
-        : "Browse all " + count.toLocaleString("en-US")
-    )
+    mode === "find" ?
+      null :
+      h.button.class("browse").on(
+        "click",
+        OverlayMessage.ClickedBrowse({
+          browse: !model.browse,
+          branches: model.browse || owner === undefined
+            ? []
+            : lineage(session, owner).slice(0, -1).map(({ instance }) =>
+              instance
+            )
+        })
+      ).children(
+        model.browse
+          ? "Back to active instances"
+          : "Browse all " + count.toLocaleString("en-US")
+      )
   )
 }
 
@@ -805,7 +816,7 @@ const Filters = (h: H, model: OverlayModel) =>
           "aria-pressed",
           String(model.filter === filter)
         )
-        .onClick(OverlayMessage.ClickedFilter({ filter })).children(label)
+        .on("click", OverlayMessage.ClickedFilter({ filter })).children(label)
     )
   )
 
@@ -924,7 +935,7 @@ const Timeline = (
                     "aria-current",
                     entry.seq === selected ? "true" : undefined
                   )
-                  .onClick(OverlayMessage.ClickedEntry({ seq: entry.seq }))
+                  .on("click", OverlayMessage.ClickedEntry({ seq: entry.seq }))
                   .children(
                     h.span.class("seq").children(String(entry.seq)),
                     Mark(h, Read.markOf(entry), "mark", toneClass(label.tone)),
@@ -950,7 +961,10 @@ const Timeline = (
             (hidden === 1
               ? "1 lifecycle entry"
               : hidden + " lifecycle entries") + " hidden. ",
-            h.button.onClick(OverlayMessage.ClickedFilter({ filter: "all" }))
+            h.button.on(
+              "click",
+              OverlayMessage.ClickedFilter({ filter: "all" })
+            )
               .children(
                 hidden === 1 ? "Show it" : "Show them"
               )
@@ -1238,7 +1252,7 @@ const treeRow = (h: H, row: Read.Row) => {
         ).attr(
           "aria-label",
           label === undefined ? key : key + ", " + label
-        ).onClick(OverlayMessage.ToggledModelPath({ path: branch.path }))
+        ).on("click", OverlayMessage.ToggledModelPath({ path: branch.path }))
           .children(
             h.span.class("chev").attr("aria-hidden", "true").children(
               branch.expanded ? "▾" : "▸"
@@ -1597,7 +1611,8 @@ const Details = (
         return [
           h.div.class("raw-head").children(
             h.p.class("note").children("The frame as the log encoded it"),
-            h.button.class("copy").ref(CopyButton).onClick(
+            h.button.class("copy").ref(CopyButton).on(
+              "click",
               OverlayMessage.ClickedCopyFrame({ seq: entry.seq, text: frame })
             ).children(model.copied === entry.seq ? "Copied" : "Copy frame")
           ),
@@ -1672,7 +1687,7 @@ const Crumbs = (
               "title",
               "Show only " + segment + " and the instances under it"
             )
-            .onClick(OverlayMessage.ClickedScope({ instance })).children(
+            .on("click", OverlayMessage.ClickedScope({ instance })).children(
               segment
             )
         ]
@@ -1716,7 +1731,8 @@ const Inspected = (
               ? "Open the time travel slider at this entry"
               : "No longer held, or no page to show it on"
           )
-          .onClick(
+          .on(
+            "click",
             OverlayMessage.ClickedTimeTravel({
               session: entry.session,
               seq: entry.seq
@@ -1817,7 +1833,7 @@ const Panel = (h: H, model: OverlayModel) => {
       ),
       h.div.class("right").children(
         h.button.class("back").attr("aria-label", "Back to the timeline")
-          .onClick(OverlayMessage.ClickedBack())
+          .on("click", OverlayMessage.ClickedBack())
           .children("← Timeline"),
         entry === undefined
           ? h.section.class("ehead").children(
@@ -1859,7 +1875,8 @@ const Launcher = (h: H, model: OverlayModel) => {
     ).attr(
       "title",
       "Open the Effect UI inspector. Drag or press arrow keys to move to another corner."
-    ).onClick(OverlayMessage.ClickedOpen()).onKeyDown(
+    ).on("click", OverlayMessage.ClickedOpen()).on(
+      "keydown",
       ({ alt, ctrl, key, meta, shift }) => {
         if (alt || ctrl || meta || shift) return undefined
         const next = moveCorner(model.position, key)

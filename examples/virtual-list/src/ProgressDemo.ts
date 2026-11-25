@@ -63,7 +63,8 @@ export const ProgressDemo = Html.component({
       : 0
     return h.div.children(
       h.div.class("toolbar fixed").children(
-        h.button.attr("id", "toggle-tracking").onClick(
+        h.button.attr("id", "toggle-tracking").on(
+          "click",
           ProgressMessage.ToggledTracking()
         ).children(
           model.track ? "Stop tracking" : "Track the scroll"

@@ -1185,11 +1185,12 @@ export const DialogTrigger = <Msg, R = never>(
     }
     const button = triggerAttrs(node, open, popupId)
     if (onPress === undefined) return button
-    if (typeof onPress !== "function") return button.onClick(onPress)
+    if (typeof onPress !== "function") return button.on("click", onPress)
     const triggerId = idOf(node)
     const press = onPress as (press: DialogTriggerPress) => Msg
-    return button.onClick(({ pointerType }) =>
-      press({ triggerId, method: methodOf(pointerType) })
+    return button.on(
+      "click",
+      ({ pointerType }) => press({ triggerId, method: methodOf(pointerType) })
     )
   })
 }
@@ -1365,8 +1366,10 @@ export const Dialog = Html.component({
         // A click can still reach a disabled button from an element inside it.
         return disabled
           ? button
-          : button.onClick(({ pointerType }) =>
-            DialogMessage.ClickedTrigger({ triggerId, key, pointerType })
+          : button.on(
+            "click",
+            ({ pointerType }) =>
+              DialogMessage.ClickedTrigger({ triggerId, key, pointerType })
           )
       }
     )
@@ -1518,8 +1521,9 @@ export const Dialog = Html.component({
     const close = p.part(
       "button",
       (b) =>
-        b.attr("type", "button").onClick(({ pointerType }) =>
-          DialogMessage.ClickedClose({ pointerType })
+        b.attr("type", "button").on(
+          "click",
+          ({ pointerType }) => DialogMessage.ClickedClose({ pointerType })
         )
     )
     const initialFocus = p.part((b) =>

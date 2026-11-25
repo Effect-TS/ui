@@ -21,7 +21,7 @@ export const Page = Html.component({
   view: (h, model) =>
     h.div.class("counter-page").children(
       h.button
-        .onClick(PageMessage.ClickedToggleCounter())
+        .on("click", PageMessage.ClickedToggleCounter())
         .children(
           model.isCounterShown ? "Hide counter" : "Show counter"
         ),

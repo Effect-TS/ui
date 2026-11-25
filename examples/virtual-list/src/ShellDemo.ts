@@ -19,9 +19,9 @@ export const ShellDemo = Html.component({
     h.div.class("shell").children(
       h.aside.class("sidebar").children(
         h.strong.children("Inbox"),
-        h.button.attr("id", "jump").onClick(ShellMessage.ClickedJump())
+        h.button.attr("id", "jump").on("click", ShellMessage.ClickedJump())
           .children("Jump to 5,000"),
-        h.button.attr("id", "append").onClick(ShellMessage.ClickedAppend())
+        h.button.attr("id", "append").on("click", ShellMessage.ClickedAppend())
           .children("Append a row")
       ),
       h.main.class("main").children(

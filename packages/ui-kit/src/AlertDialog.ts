@@ -102,7 +102,7 @@
  *               alertDialog.title(h.h2).children("Discard draft?"),
  *               alertDialog.description(h.p).children("You can't undo this."),
  *               alertDialog.initialFocus(alertDialog.close(h.button)).children("Cancel"),
- *               h.button.onClick(EditorMessage.ClickedDiscard()).children("Discard")
+ *               h.button.on("click", EditorMessage.ClickedDiscard()).children("Discard")
  *             )
  *           )
  *         )

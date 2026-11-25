@@ -583,7 +583,7 @@ export const Collapsible = Html.component({
           "aria-disabled": undefined
         })
         .disabled(disabled)
-        .onClick(CollapsibleMessage.ClickedTrigger())
+        .on("click", CollapsibleMessage.ClickedTrigger())
         .forward((node) => {
           const consumer = node.elementAttrs["aria-controls"]
           const controls = open ? panelId : undefined

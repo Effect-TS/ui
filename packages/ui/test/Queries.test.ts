@@ -99,7 +99,9 @@ const makeApp = () => {
           onSuccess: ({ value }) => value,
           onFailure: () => "failed"
         })),
-        h.button.onClick(NoteMessage.Click()).children(`clicks ${model.clicks}`)
+        h.button.on("click", NoteMessage.Click()).children(
+          `clicks ${model.clicks}`
+        )
       )
   })
 

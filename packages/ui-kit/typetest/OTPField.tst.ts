@@ -73,7 +73,7 @@ describe("OTPField", () => {
             }
           },
           view: (otpField) => {
-            expect(otpField.root(h.div.onClick(Msg.Clicked()))).type.toBe<
+            expect(otpField.root(h.div.on("click", Msg.Clicked()))).type.toBe<
               Div<never>
             >()
             expect(otpField.root(field.group(h.div)).children(needsClock)).type

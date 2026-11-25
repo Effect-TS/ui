@@ -46,9 +46,10 @@ const Page = Html.component({
   },
   view: (h, model) =>
     h.main.children(
-      h.button.attr("id", "reverse").onClick(PageMessage.Reversed()).children(
-        "Reverse"
-      ),
+      h.button.attr("id", "reverse").on("click", PageMessage.Reversed())
+        .children(
+          "Reverse"
+        ),
       Accordion(h, {
         props: {
           value: model.open,

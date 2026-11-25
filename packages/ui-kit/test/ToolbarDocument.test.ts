@@ -75,7 +75,8 @@ const Page = Html.component({
             h.div.attrs({ id: "toolbar", "data-clicks": String(model.clicks) })
           ).children(
             toolbar.button({
-              element: h.button.attr("id", "bold").onClick(
+              element: h.button.attr("id", "bold").on(
+                "click",
                 Message.ClickedBold()
               ),
               value: "bold"

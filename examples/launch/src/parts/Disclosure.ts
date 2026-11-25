@@ -26,7 +26,7 @@ export const Disclosure = Html.component({
         type: "button",
         "aria-expanded": String(model.isOpen),
         "aria-controls": p.id("panel")
-      }).onClick(Message.ClickedTrigger())),
+      }).on("click", Message.ClickedTrigger())),
     panel: p.part("div", (div) => div.id(p.id("panel")))
   })
 })

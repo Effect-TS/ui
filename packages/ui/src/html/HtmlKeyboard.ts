@@ -1,7 +1,7 @@
 /**
  * Pure keyboard helpers over `Html.KeyPayload`: turn a table of single-key
- * shortcuts into a handler for `HtmlSubscription.onDocument` or element
- * `onKeyDown`.
+ * shortcuts into a handler for `HtmlSubscription.onDocument` or an
+ * element's `keydown` handler.
  *
  * @stability experimental
  * @since 0.1.0
@@ -41,8 +41,8 @@ export interface Shortcut<Msg> {
 
 /**
  * Turns a table of single-key {@link Shortcut} rows into a pure `keydown` or
- * `keyup` handler usable with `HtmlSubscription.onDocument` or element
- * `onKeyDown`.
+ * `keyup` handler usable with `HtmlSubscription.onDocument` or an element's
+ * `keydown` handler.
  *
  * **Details**
  *
@@ -79,7 +79,7 @@ export interface Shortcut<Msg> {
  *   init: () => 0,
  *   update: { PressedNext: ($) => $.model + 1, PressedPrevious: ($) => $.model - 1 },
  *   view: (h, row) =>
- *     h.button.onKeyDown(
+ *     h.button.on("keydown",
  *       HtmlKeyboard.shortcuts([
  *         { key: "j", message: Message.PressedNext() },
  *         { key: "k", message: Message.PressedPrevious() }

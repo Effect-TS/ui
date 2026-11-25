@@ -34,7 +34,7 @@ const Settings = Html.component({
     ClickedRow: ($) => ({ ...$.model, rowClicks: $.model.rowClicks + 1 })
   },
   view: (h, model) =>
-    h.div.onClick(SettingsMessage.ClickedRow()).children(
+    h.div.on("click", SettingsMessage.ClickedRow()).children(
       Switch(h, {
         props: { checked: model.notify, ...h.props },
         onToggle: ({ checked }) => SettingsMessage.ToggledNotify({ checked }),
@@ -203,7 +203,7 @@ describe("Switch", () => {
   it("the root keeps a consumer's click handler without onToggle, and refuses it with one in every state", () => {
     const handler = () => undefined
     assert.strictEqual(
-      rootOf({ checked: false }, h.button.onClick(handler)).handlers.click,
+      rootOf({ checked: false }, h.button.on("click", handler)).handlers.click,
       handler
     )
     const toggling = (props: SwitchProps, when: "before" | "after") => () =>
@@ -213,8 +213,8 @@ describe("Switch", () => {
           onToggle: () => undefined,
           view: (parts) =>
             when === "before"
-              ? parts.root(h.button.onClick(handler))
-              : parts.root(h.button).onClick(handler)
+              ? parts.root(h.button.on("click", handler))
+              : parts.root(h.button).on("click", handler)
         }),
         []
       )

@@ -88,8 +88,8 @@ export const Tooltip = Html.component({
     const id = h.id("tip")
     return h.span(
       h.button
-        .onFocus(TooltipMessage.FocusedTooltip({ id }))
-        .onBlur(TooltipMessage.BlurredTooltip({ id }))
+        .on("focus", TooltipMessage.FocusedTooltip({ id }))
+        .on("blur", TooltipMessage.BlurredTooltip({ id }))
         .attr("aria-describedby", id)
         .children(h.props.label),
       h.reads.provider.open === id &&
@@ -249,7 +249,7 @@ export const Panel = Html.component({
     }),
   view: (h, model) =>
     h.section(
-      h.button.onClick(PanelMessage.Toggled()).children(h.props.title),
+      h.button.on("click", PanelMessage.Toggled()).children(h.props.title),
       model.open &&
         h.p.children(h.reads.group === undefined ? "On its own" : "In a group")
     )
@@ -346,7 +346,7 @@ export const Menu = Html.component({
     openBelow: below,
     item: p.part(
       "button",
-      (b, item: string) => b.onClick(MenuMessage.PickedItem({ item }))
+      (b, item: string) => b.on("click", MenuMessage.PickedItem({ item }))
     )
   })
 })

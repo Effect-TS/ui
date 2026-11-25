@@ -63,7 +63,7 @@ const Status = FilePreviewDef.fragment((h, preview: Preview) =>
         "flex items-center justify-between gap-3 p-4 bg-white rounded-lg shadow"
       ).children(
         h.span.class("text-gray-700").children(`Reading ${name}…`),
-        h.button.onClick(PreviewMessage.ClickedCancel())
+        h.button.on("click", PreviewMessage.ClickedCancel())
           .class(
             BUTTON_CLASS,
             "border border-red-300 text-red-600 hover:bg-red-50"
@@ -119,7 +119,7 @@ export const FilePreview = FilePreviewDef.make({
         ).children(
           "Choose a file",
           h.input.attr("type", "file").class("sr-only").value("")
-            .onChange(({ files }) => PreviewMessage.ChoseFiles({ files }))
+            .on("change", ({ files }) => PreviewMessage.ChoseFiles({ files }))
         ),
         Status(h, preview)
       )

@@ -78,7 +78,7 @@ describe("Input", () => {
 
   it("the input keeps a caller's input handler without onUpdate, and refuses it with one in every state", () => {
     const handler = () => undefined
-    const own = h.input.onInput(handler)
+    const own = h.input.on("input", handler)
     const clash = /Input: the element already handles input/
     for (const disabled of [false, true]) {
       const props = { value: "", disabled }
@@ -87,7 +87,7 @@ describe("Input", () => {
         handler
       )
       assert.strictEqual(
-        build(Input(h, { props }).onInput(handler)).handlers.input,
+        build(Input(h, { props }).on("input", handler)).handlers.input,
         handler
       )
       assert.throws(
@@ -95,7 +95,8 @@ describe("Input", () => {
         clash
       )
       assert.throws(
-        () => build(Input(h, { props, onUpdate: handler }).onInput(handler)),
+        () =>
+          build(Input(h, { props, onUpdate: handler }).on("input", handler)),
         clash
       )
     }
