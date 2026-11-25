@@ -393,6 +393,20 @@ describe("Tooltip", () => {
         .emitted({ _tag: "RequestedClose" })
     }))
 
+  it.effect("the pointer the hover area last saw doesn't hold it open once disableHoverablePopup is set", () =>
+    Effect.gen(function*() {
+      const scene = yield* opened({ open: true })
+      scene.fire(trigger, "mouseenter")
+        .mounted(tracking(scene), sent("ReturnedToHoverArea"))
+        .props({ open: true, disableHoverablePopup: true })
+        .fire(trigger, "mouseleave")
+      scene.resolve(
+        scene.current.pending[0]!.command,
+        completed("CompletedWaitBeforeClosing")
+      )
+        .emitted({ _tag: "RequestedClose" })
+    }))
+
   it.effect("listens on the document only while it shows", () =>
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(Tooltip, { open: false }, standIn)
@@ -430,6 +444,8 @@ describe("Tooltip", () => {
       assert.deepStrictEqual(scene.current.emitted, [])
       scene.props({ open: true })
       scene.mounted(tracking(scene), placed())
+        .fire(trigger, "mouseenter")
+        .fire(trigger, "mouseleave")
         .mounted(tracking(scene), sent("LeftHoverArea"))
       scene.resolve(
         scene.current.pending[0]!.command,

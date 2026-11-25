@@ -281,6 +281,20 @@ describe("Tooltip in a document", { concurrent: false }, () => {
       assert.isFalse(open())
     }).pipe(Effect.scoped))
 
+  it.effect("a tooltip the consumer opened stays open as the pointer moves elsewhere, until a press", () =>
+    Effect.gen(function*() {
+      const root = yield* mountPage()
+      const open = () => root.model()!.open
+      mouse(document.body, "mousemove", 10, 10)
+      yield* tick
+      assert.isTrue(open())
+      document.body.dispatchEvent(
+        new MouseEvent("mousedown", { clientX: 10, clientY: 10, bubbles: true })
+      )
+      yield* tick
+      assert.isFalse(open())
+    }).pipe(Effect.scoped))
+
   it.effect("a press on the popup keeps it open, while a press in the triangle closes it", () =>
     Effect.gen(function*() {
       rects.set("trigger", { x: 400, y: 300, width: 40, height: 20 })
