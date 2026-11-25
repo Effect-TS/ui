@@ -55,9 +55,9 @@
  * it with `numberField.input(field.control(h.input))` and pass
  * `disabled: field.disabled`. The input keeps the id its builder has, the
  * field's or your own, and gets a generated one otherwise. Each button
- * points at it with `aria-controls`. The input gets
- * `aria-roledescription="Number field"` and the buttons `aria-label`
- * "Decrease" and "Increase", unless the builder has its own.
+ * points at it with `aria-controls`. The buttons default to `aria-label`
+ * "Decrease" and "Increase"; set `aria-label` on each builder to override
+ * or localize them.
  *
  * **Data attributes**
  *
@@ -91,8 +91,9 @@
  *
  * The input's `keydown` handler cancels the default of the stepping keys
  * and of a character that may not be typed, so the input gets every
- * `keydown` while it has focus, and an ancestor's `onKeyDown` never sees
- * them. To handle them, add `onKeyDown` to the input's builder.
+ * `keydown` while it has focus, and an ancestor's `keydown` handler never
+ * sees them. To handle them, add a `keydown` handler to the input's
+ * builder.
  *
  * **Pointer**
  *
@@ -1329,8 +1330,7 @@ const cursorBox =
 const inputDefaults = {
   autocomplete: "off",
   autocorrect: "off",
-  spellcheck: "false",
-  "aria-roledescription": "Number field"
+  spellcheck: "false"
 }
 
 const stepperDefaults = {
@@ -1359,12 +1359,12 @@ const stepperDefaults = {
  *   `aria-disabled`, and `disabled`, which they remove: an unavailable
  *   button stays focusable, so a press that reaches the bound isn't lost
  * - `scrubArea`: `role`
- * - `scrubAreaCursor`: `id`, `role` and `popover`
+ * - `scrubAreaCursor`: `id`, `aria-hidden` and `popover`
  *
  * The styles the buttons, the scrub area and the cursor need are added to
  * the consumer's `style`, after it. The input's `autocomplete`,
- * `autocorrect`, `spellcheck` and `aria-roledescription`, and a button's
- * `aria-label`, are written only when the builder has none.
+ * `autocorrect` and `spellcheck`, and a button's `aria-label`, are
+ * written only when the builder has none.
  *
  * The input handles `input`, `blur` and `keydown` on a layer of its own, so
  * the consumer's handlers for them, and a `Field`'s, still run.
@@ -1657,25 +1657,21 @@ export const NumberField = Html.component({
         })
         .disabled(disabled)
         .value(text)
-        .onInput(({ value }) => NumberFieldMessage.UpdatedInput({ value }))
-        .onBlur((payload) =>
+        .on("input", ({ value }) => NumberFieldMessage.UpdatedInput({ value }))
+        .on("blur", (payload) =>
           NumberFieldMessage.BlurredInput({
             disabled: payload.disabled === true
-          })
-        )
-        .onKeyDown(
-          ({ alt, composing, ctrl, key, meta, shift }) => {
-            if (s.locked || composing || ctrl || meta) return undefined
-            const steps = key === "ArrowUp" || key === "ArrowDown"
-            const bounds = !alt &&
-              ((key === "Home" && s.min !== undefined) ||
-                (key === "End" && s.max !== undefined))
-            return steps || bounds
-              ? NumberFieldMessage.PressedKey({ key, shift, alt })
-              : undefined
-          },
-          { preventDefault: true }
-        )
+          }))
+        .on("keydown", ({ alt, composing, ctrl, key, meta, shift }) => {
+          if (s.locked || composing || ctrl || meta) return undefined
+          const steps = key === "ArrowUp" || key === "ArrowDown"
+          const bounds = !alt &&
+            ((key === "Home" && s.min !== undefined) ||
+              (key === "End" && s.max !== undefined))
+          return steps || bounds
+            ? NumberFieldMessage.PressedKey({ key, shift, alt })
+            : undefined
+        }, { preventDefault: true })
         .onMount(
           TrackInput({
             locked: s.locked,
@@ -1750,7 +1746,7 @@ export const NumberField = Html.component({
       state(b)
         .attrs({
           id: cursorId,
-          role: "presentation",
+          "aria-hidden": "true",
           popover: "manual"
         })
         .prop("popoverOpen", true)

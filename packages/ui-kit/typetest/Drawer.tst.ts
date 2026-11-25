@@ -14,6 +14,13 @@ const Msg = UiSchema.TaggedEnum({ Clicked: {} })
 type Msg = typeof Msg.Type
 
 type Div = Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
+type Button = Html.Element<
+  Msg,
+  never,
+  Html.EventsOf<"button">,
+  HTMLButtonElement,
+  "button"
+>
 type DialogElement = Html.Element<
   Msg,
   never,
@@ -97,6 +104,8 @@ describe("Drawer", () => {
           })
         ).type.toBe<Div>()
         expect(drawer.swipeArea({ element: h.div })).type.toBe<Div>()
+        expect(drawer.snapTrigger(h.button)).type.toBe<Button>()
+        expect(drawer.snapStatus(h.div)).type.toBe<Div>()
         expect(drawer.swiping).type.toBe<boolean>()
         expect(drawer.swipeDirection).type.toBe<DrawerSwipeDirection>()
         expect(drawer.expanded).type.toBe<boolean>()
@@ -109,6 +118,8 @@ describe("Drawer", () => {
         expect(drawer.popup).type.not.toBeCallableWith(h.span)
         expect(drawer.backdrop).type.not.toBeCallableWith(h.span)
         expect(drawer.content).type.not.toBeCallableWith(h.span)
+        expect(drawer.snapTrigger).type.not.toBeCallableWith(h.div)
+        expect(drawer.snapStatus).type.not.toBeCallableWith(h.span)
         expect(drawer.swipeArea).type.not.toBeCallableWith({ element: h.span })
         expect(drawer.swipeArea).type.not.toBeCallableWith({
           element: h.div,

@@ -24,8 +24,8 @@ const Counter = Html.component({
   view: (h, model) =>
     h.section(
       h.output.attr("id", "state").children(`${model.moves}:${model.count}`),
-      h.button.onClick(CounterMessage.Moved()).children("Move"),
-      h.button.onClick(CounterMessage.Clicked()).children("Count")
+      h.button.on("click", CounterMessage.Moved()).children("Move"),
+      h.button.on("click", CounterMessage.Clicked()).children("Count")
     )
 })
 
@@ -41,7 +41,7 @@ const Side = Html.component({
   view: (h, model) =>
     h.section(
       h.span.attr("id", "side").children(model.on ? "on" : "off"),
-      h.button.onClick(SideMessage.Toggled()).children("Toggle")
+      h.button.on("click", SideMessage.Toggled()).children("Toggle")
     )
 })
 

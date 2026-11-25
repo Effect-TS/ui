@@ -31,7 +31,7 @@
  *       $.run(HtmlFiles.pick(({ files }) => Message.Picked({ names: files.map((file) => file.name) }))),
  *     Picked: (_, { names }) => names
  *   },
- *   view: (h, names) => h.button.onClick(Message.ClickedAttach()).children(names.join(", ") || "Attach")
+ *   view: (h, names) => h.button.on("click", Message.ClickedAttach()).children(names.join(", ") || "Attach")
  * })
  *
  * Effect.gen(function*() {

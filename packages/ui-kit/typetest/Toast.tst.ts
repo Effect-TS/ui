@@ -44,7 +44,8 @@ describe("ToastProvider", () => {
         ToastProvider(h, {
           view: (toastProvider) => {
             expect(toastProvider.toasts).type.toBe<ReadonlyArray<ToastItem>>()
-            expect(toastProvider.viewport(h.div.onClick(Msg.Clicked()))).type
+            expect(toastProvider.viewport(h.div.on("click", Msg.Clicked())))
+              .type
               .toBe<Div>()
             expect(toastProvider.root({ element: h.div, toast })).type.toBe<
               Div

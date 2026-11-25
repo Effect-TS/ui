@@ -440,9 +440,10 @@ export const Field = Html.component({
     const formControl = (own: boolean) =>
       p.part(["input", "textarea", "select", "button"], (b) => {
         const control = (own
-          ? flags(b).attr("id", controlId).onFocus(
+          ? flags(b).attr("id", controlId).on(
+            "focus",
             FieldMessage.FocusedControl()
-          ).onBlur(blurred)
+          ).on("blur", blurred)
           : flags(b))
           .attrs({
             "aria-invalid": showsError ? "true" : undefined,

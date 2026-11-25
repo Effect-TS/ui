@@ -71,7 +71,7 @@ const Picker = Html.component({
               view: (menu) =>
                 h.ul.children(menu.visible.map((item) =>
                   dialog.close(menu.item(h.li.key(item.id), item))
-                    .onClick(PickerMessage.Clicked({ id: item.id }))
+                    .on("click", PickerMessage.Clicked({ id: item.id }))
                     .children(item.label)
                 ))
             })
@@ -242,9 +242,12 @@ const Keys = Html.component({
     seen,
     container: p.part(
       "div",
-      (b) => b.onKeyDown(({ key }) => "container " + key)
+      (b) => b.on("keydown", ({ key }) => "container " + key)
     ),
-    focused: p.part("input", (b) => b.onKeyDown(({ key }) => "focused " + key))
+    focused: p.part(
+      "input",
+      (b) => b.on("keydown", ({ key }) => "focused " + key)
+    )
   })
 })
 
@@ -262,8 +265,11 @@ const KeysApp = Html.component({
         keys.container(h.div).children(
           h.input.attr("aria-label", "Bare"),
           // A handler of the consumer's that sends nothing still takes the event from the container.
-          h.input.attr("aria-label", "Shadowing").onKeyDown(() => undefined),
-          keys.focused(h.input.attr("aria-label", "Composed")).onKeyDown((
+          h.input.attr("aria-label", "Shadowing").on(
+            "keydown",
+            () => undefined
+          ),
+          keys.focused(h.input.attr("aria-label", "Composed")).on("keydown", (
             { key }
           ) => "consumer " + key),
           h.output(keys.seen.join(", ") + " | " + seen.join(", "))
@@ -551,7 +557,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
           parts: (p) => ({
             button: p.part(
               "button",
-              (b) => b.onClick("hit", { preventDefault: true })
+              (b) => b.on("click", "hit", { preventDefault: true })
             )
           })
         })
@@ -566,7 +572,7 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
           Hit(h, {
             key: "h",
             view: (hit) =>
-              hit.button(h.button).onClick(() => undefined, {
+              hit.button(h.button).on("click", () => undefined, {
                 preventDefault: false
               }).children("hit")
           })
@@ -587,7 +593,9 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        parts: (p) => ({ button: p.part("button", (b) => b.onClick("hit")) })
+        parts: (p) => ({
+          button: p.part("button", (b) => b.on("click", "hit"))
+        })
       })
       const App = Html.component({
         name: "App",
@@ -601,7 +609,9 @@ describe("headless components on BrowserHost", { concurrent: false }, () => {
             Plain(h, {
               key: "p",
               view: (plain) =>
-                plain.button(h.button).onClick("own", { preventDefault: true })
+                plain.button(h.button).on("click", "own", {
+                  preventDefault: true
+                })
                   .children("hit")
             })
         })

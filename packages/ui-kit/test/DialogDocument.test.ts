@@ -8,6 +8,7 @@ import {
   byId,
   click,
   container,
+  focusability,
   focusVisibility,
   holdExits,
   popovers,
@@ -153,13 +154,15 @@ const Page = Html.component({
           h.div(
             model.late ? h.button.attr("id", "late").children("Late") : null
           ),
-          h.button.attr("id", "shut").onClick(Message.Closed()).children(
+          h.button.attr("id", "shut").on("click", Message.Closed()).children(
             "Shut"
           ),
-          h.button.attr("id", "switch").onClick(Message.Switched()).children(
-            "Switch"
-          ),
-          h.button.attr("id", "reopen").onClick(
+          h.button.attr("id", "switch").on("click", Message.Switched())
+            .children(
+              "Switch"
+            ),
+          h.button.attr("id", "reopen").on(
+            "click",
             Message.RequestedOpen({ which: "a", triggerId: null, method: null })
           )
             .children(
@@ -217,7 +220,8 @@ const Page = Html.component({
                     ? dialog.initialFocus(h.input.attr("id", "second"))
                     : h.input.attr("id", "second"),
                   props.siblings
-                    ? h.button.attr("id", "open-b").onClick(
+                    ? h.button.attr("id", "open-b").on(
+                      "click",
                       Message.RequestedOpen({
                         which: "b",
                         triggerId: null,
@@ -320,9 +324,10 @@ const escape = (init: KeyboardEventInit = {}, target: EventTarget = document) =>
       ...init
     })
   )
-const tab = () => {
+const tab = (shiftKey = false) => {
   const event = new KeyboardEvent("keydown", {
     key: "Tab",
+    shiftKey,
     bubbles: true,
     cancelable: true
   })
@@ -649,6 +654,28 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.strictEqual(layerOf(dialog).getAttribute("inert"), "")
     }))
 
+  it.effect("a modal in a shadow root hides its neighbours there and on the page, but not its host or a status region, and Tab moves through it", () =>
+    Effect.gen(function*() {
+      yield* popovers
+      const host = yield* container
+      const neighbour = yield* container
+      const shadow = host.attachShadow({ mode: "open" })
+      const sibling = shadow.appendChild(document.createElement("p"))
+      const status = shadow.appendChild(document.createElement("div"))
+      status.setAttribute("role", "status")
+      yield* mountPage({}, shadow.appendChild(document.createElement("div")))
+      assert.deepStrictEqual(
+        [host, neighbour, sibling, status, shadow.getElementById("page")!]
+          .map((element) => element.getAttribute("aria-hidden")),
+        [null, "true", "true", null, "true"]
+      )
+      assert.strictEqual(shadow.activeElement?.id, "first")
+      assert.isFalse(tab())
+      shadow.getElementById("second")!.focus()
+      assert.isTrue(tab())
+      assert.strictEqual(shadow.activeElement?.id, "first")
+    }))
+
   it.effect("trap-focus hides the page but leaves its scroll and focus alone", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage({ modal: "trap-focus" })
@@ -749,6 +776,45 @@ describe("Dialog in a document", { concurrent: false }, () => {
       byId("second").remove()
       yield* tick
       assert.strictEqual(document.activeElement, app.querySelector(".popup-a"))
+    }))
+
+  it.effect("Tab reaches editing hosts, media controls and a details without a summary, skipping a details with a summary or what a closed details hides", () =>
+    Effect.gen(function*() {
+      yield* mountPage({})
+      const popup = document.querySelector(".popup-a")!
+      for (
+        const [html, wraps] of [
+          ["<div contenteditable></div>", true],
+          ["<div contenteditable=\"true\"></div>", true],
+          ["<div contenteditable=\"plaintext-only\"></div>", true],
+          ["<details>More</details>", true],
+          ["<audio controls></audio>", true],
+          ["<video controls></video>", true],
+          ["<details><summary>More</summary></details>", false]
+        ] as const
+      ) {
+        popup.insertAdjacentHTML("beforeend", html)
+        const last = popup.lastElementChild as HTMLElement
+        last.focus()
+        assert.strictEqual(tab(), wraps, html)
+        if (wraps) assert.strictEqual(document.activeElement?.id, "first", html)
+        last.remove()
+      }
+      // When script can't focus the disclosure, the wrap leaves the move to the browser.
+      yield* focusability
+      const details = popup.appendChild(document.createElement("details"))
+      details.appendChild(document.createElement("button")).id = "inner"
+      byId("first").focus()
+      assert.isFalse(tab(true))
+      assert.strictEqual(
+        document.activeElement?.previousElementSibling,
+        details
+      )
+      details.open = true
+      details.prepend(byId("first"), byId("second"))
+      byId("inner").focus()
+      assert.isFalse(tab())
+      assert.strictEqual(document.activeElement?.nextElementSibling, details)
     }))
 
   it.effect("a kept-mounted modal keeps its popup element as it opens, closes and reopens", () =>
@@ -983,13 +1049,17 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement?.id, "first")
     }))
 
-  it.effect("Escape gives focus back to the trigger with a focus ring as the close starts, and the popup is inert", () =>
+  it.effect("keyboard open, Tab wrap and Escape ask for a focus ring as the popup goes inert, while an external close leaves it to the browser", () =>
     Effect.gen(function*() {
       yield* holdExits
       const { calls } = yield* focusVisibility
-      const { app, log } = yield* mountPage({})
+      const { app, log } = yield* mountPage({ openMethod: "keyboard" })
       const popup = app.querySelector(".popup-a")!
+      assert.deepStrictEqual(calls.at(-1), ["first", true])
       assert.isNull(popup.getAttribute("inert"))
+      byId("second").focus()
+      assert.isTrue(tab())
+      assert.deepStrictEqual(calls.at(-1), ["first", true])
       escape()
       yield* tick
       assert.notInclude(log(), "Settled a false")
@@ -997,6 +1067,11 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.strictEqual(popup.getAttribute("inert"), "")
       assert.strictEqual(document.activeElement?.id, "trigger")
       assert.deepStrictEqual(calls.at(-1), ["trigger", true])
+      byId("reopen").click()
+      yield* tick
+      byId("shut").click()
+      yield* tick
+      assert.deepStrictEqual(calls.at(-1), ["trigger", undefined])
     }))
 
   it.effect("focus leaving or a press that focuses the page keeps focus where it went as the close starts", () =>
@@ -1104,15 +1179,23 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement?.id, "trigger-b")
     }))
 
-  it.effect("with the trigger gone, focus goes back to what had it before the open, over what had it since", () =>
+  it.effect("with the trigger disabled or gone, focus goes back to what had it before the open, over what had it since", () =>
     Effect.gen(function*() {
       yield* mountPage({ detached: true, a: false })
       byId("page").focus()
       byId("detached").click()
       yield* tick
-      byId("detached").remove()
+      byId("detached").setAttribute("disabled", "")
       byId("shut").focus()
       byId("first").focus()
+      escape()
+      yield* tick
+      yield* tick
+      assert.strictEqual(document.activeElement?.id, "page")
+      byId("detached").removeAttribute("disabled")
+      byId("detached").click()
+      yield* tick
+      byId("detached").remove()
       escape()
       yield* tick
       yield* tick

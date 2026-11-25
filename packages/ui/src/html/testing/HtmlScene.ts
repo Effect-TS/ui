@@ -44,10 +44,10 @@
  *     }),
  *   view: (h, model) =>
  *     h.div(
- *       h.form.onSubmit(({ fields }) => Message.SubmittedForm({ zip: fields.zip ?? "" })).children(
+ *       h.form.on("submit", ({ fields }) => Message.SubmittedForm({ zip: fields.zip ?? "" })).children(
  *         h.label.attr("for", "zip").children("Zip code"),
  *         h.input.attrs({ id: "zip", name: "zip" }).value(model.zip)
- *           .onInput(({ value }) => Message.UpdatedZip({ zip: value })),
+ *           .on("input", ({ value }) => Message.UpdatedZip({ zip: value })),
  *         h.button.children("Get Weather")
  *       ),
  *       h.p.attr("role", "status").children(model.forecast)
@@ -206,7 +206,7 @@ export interface Steps<C extends AnyComponent, Parts = never>
    * **Details**
    *
    * The drop goes to the innermost element, the matched one or an ancestor,
-   * whose `onDrop` accepts one of those types, compared without case. It
+   * whose `dropTarget` accepts one of those types, compared without case. It
    * throws when no drop target there accepts the types. The browser host
    * always cancels a drop on a target, so the default is cancelled.
    */
@@ -492,7 +492,7 @@ class StepsImpl extends internal.SceneCursor {
     return this.interact("drop", (state) => {
       const step = this.name("drop")
       const node = engine.findOne(state, locator, step)
-      // Any layer's `onDrop` makes a target, a part's included. The scene then decides which layers run.
+      // Any layer's `dropTarget` makes a target, a part's included. The scene then decides which layers run.
       const target = engine.ancestry(state, node).find((
         at
       ): at is View.Element<any, any> =>

@@ -44,10 +44,10 @@ const lazyRow = (
   h.tr.key(String(row.id)).class(selected && "danger").children(
     h.td.class("col-md-1").children(String(row.id)),
     h.td.class("col-md-4").children(
-      h.a.onClick(Message.Select({ id: row.id })).children(row.label)
+      h.a.on("click", Message.Select({ id: row.id })).children(row.label)
     ),
     h.td.class("col-md-1").children(
-      h.a.onClick(Message.Remove({ id: row.id })).children(
+      h.a.on("click", Message.Remove({ id: row.id })).children(
         h.span.class("glyphicon", "glyphicon-remove").attr(
           "aria-hidden",
           "true"
@@ -76,10 +76,10 @@ const RowView = Html.component({
     h.tr.class(h.props.selected && "danger").children(
       h.td.class("col-md-1").children(String(h.props.row.id)),
       h.td.class("col-md-4").children(
-        h.a.onClick(RowMessage.Select()).children(h.props.row.label)
+        h.a.on("click", RowMessage.Select()).children(h.props.row.label)
       ),
       h.td.class("col-md-1").children(
-        h.a.onClick(RowMessage.Remove()).children(
+        h.a.on("click", RowMessage.Remove()).children(
           h.span.class("glyphicon", "glyphicon-remove").attr(
             "aria-hidden",
             "true"
@@ -121,10 +121,12 @@ const tables = (start: () => TableModel) => ({
             .children(
               h.td.class("col-md-1").children(String(row.id)),
               h.td.class("col-md-4").children(
-                h.a.onClick(Message.Select({ id: row.id })).children(row.label)
+                h.a.on("click", Message.Select({ id: row.id })).children(
+                  row.label
+                )
               ),
               h.td.class("col-md-1").children(
-                h.a.onClick(Message.Remove({ id: row.id })).children(
+                h.a.on("click", Message.Remove({ id: row.id })).children(
                   h.span.class("glyphicon", "glyphicon-remove").attr(
                     "aria-hidden",
                     "true"

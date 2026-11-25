@@ -58,7 +58,7 @@ const Plain = Html.component(app).make({
             "aria-expanded": "false",
             "aria-controls": h.id("panel", row.id)
           })
-            .onClick(AppMessage.Toggle({ id: row.id })).children(row.label),
+            .on("click", AppMessage.Toggle({ id: row.id })).children(row.label),
           h.span(row.done ? "done" : "todo"),
           h.div.id(h.id("panel", row.id)).attr("hidden", "").children("details")
         )
@@ -81,7 +81,7 @@ const NormalRow = Html.component({
         h.button.attrs({
           "aria-expanded": String(open),
           "aria-controls": h.id("panel")
-        }).onClick(flip)
+        }).on("click", flip)
           .children(h.props.row.label),
         h.span(h.props.row.done ? "done" : "todo"),
         h.div.id(h.id("panel")).attr("hidden", open ? undefined : "").children(
@@ -114,7 +114,7 @@ const Disclosure = Html.component({
         b.attrs({
           "aria-expanded": String(open),
           "aria-controls": p.id("panel")
-        }).onClick(flip)
+        }).on("click", flip)
     ),
     panel: p.part(
       "div",
@@ -211,10 +211,14 @@ const Poker = Html.component({
     update: ($, message) => $.send(Provider, message),
     view: (h) =>
       h.div(
-        h.button.class("poke-touch").onClick(ProviderMessage.Touch()).children(
-          "touch"
-        ),
-        h.button.class("poke-open").onClick(ProviderMessage.Open({ id: "r0" }))
+        h.button.class("poke-touch").on("click", ProviderMessage.Touch())
+          .children(
+            "touch"
+          ),
+        h.button.class("poke-open").on(
+          "click",
+          ProviderMessage.Open({ id: "r0" })
+        )
           .children("open")
       )
   })

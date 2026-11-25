@@ -4,7 +4,7 @@ import { NumberField, type NumberFieldProps } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { container, popovers, tick } from "./utils/document.ts"
+import { container, notWebKit, popovers, tick } from "./utils/document.ts"
 
 const Value = Schema.NullOr(Schema.Number)
 const Message = UiSchema.TaggedEnum({
@@ -149,16 +149,10 @@ const type = (input: HTMLInputElement, text: string) => {
   input.dispatchEvent(new Event("input", { bubbles: true }))
 }
 
-// happy-dom supports every CSS declaration, which is how WebKit is told
-// apart, and WebKit is never asked for the lock.
+// WebKit is never asked for the lock.
 const pointerLock = Effect.acquireRelease(
   Effect.sync(() => {
     let held: Element | null = null
-    const css = Object.getOwnPropertyDescriptor(window, "CSS")!
-    Object.defineProperty(window, "CSS", {
-      configurable: true,
-      value: { supports: () => false }
-    })
     const change = (element: Element | null) => {
       held = element
       document.dispatchEvent(new Event("pointerlockchange"))
@@ -174,16 +168,15 @@ const pointerLock = Effect.acquireRelease(
       requestPointerLock: () =>
         Promise.resolve().then(() => change(document.body))
     })
-    return { css, held: () => held, lose: () => change(null) }
+    return { held: () => held, lose: () => change(null) }
   }),
-  ({ css }) =>
+  () =>
     Effect.sync(() => {
-      Object.defineProperty(window, "CSS", css)
       Reflect.deleteProperty(document, "pointerLockElement")
       Reflect.deleteProperty(document, "exitPointerLock")
       Reflect.deleteProperty(document.body, "requestPointerLock")
     })
-).pipe(Effect.tap(popovers))
+).pipe(Effect.tap(popovers), Effect.tap(notWebKit))
 
 const firefox = Effect.acquireRelease(
   Effect.sync(() =>
@@ -383,7 +376,8 @@ describe("NumberField in a document", { concurrent: false }, () => {
       const cursor = app.querySelector<HTMLElement>(".cursor")!
       assert.isNotNull(cursor)
       assert.strictEqual(cursor.getAttribute("popover"), "manual")
-      assert.strictEqual(cursor.getAttribute("role"), "presentation")
+      assert.strictEqual(cursor.getAttribute("aria-hidden"), "true")
+      assert.isNull(cursor.getAttribute("role"))
       pointer(window, "pointermove", { clientX: 10, clientY: 10, movementX: 4 })
       yield* tick
       assert.deepStrictEqual(taken(), ["updated 9 scrub"])

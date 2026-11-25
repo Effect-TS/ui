@@ -162,7 +162,7 @@ export const Toggle = <Msg, R = never>(
     }
     const button = pressedAttrs(node, props.pressed, disabled)
     return !disabled && onToggle !== undefined
-      ? button.onClick(() => onToggle({ pressed: !props.pressed }))
+      ? button.on("click", () => onToggle({ pressed: !props.pressed }))
       : button
   })
 }

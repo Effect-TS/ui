@@ -118,7 +118,7 @@ const Card = Html.component({
         ),
       onFailure: () => h.p("Missing"),
       onSuccess: ({ value }) =>
-        h.p.onClick(Message.Bump()).children(
+        h.p.on("click", Message.Bump()).children(
           value.name,
           h.patched.team ? "*" : ""
         )

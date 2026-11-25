@@ -172,7 +172,7 @@ describe("HtmlFiles", { concurrent: false }, () => {
           h.input.attrs({ type: "file", "aria-label": "Attachment" }).ref(
             Attachment
           ).value("")
-            .onChange(({ files }) => Message.Chose({ files }))
+            .on("change", ({ files }) => Message.Chose({ files }))
       })
       const app = document.body.appendChild(document.createElement("div"))
       yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
@@ -225,7 +225,7 @@ describe("HtmlFiles", { concurrent: false }, () => {
             Submitted: () => [...$.model, "submitted"]
           }),
         view: (h) =>
-          h.form.onSubmit(Message.Submitted()).children(
+          h.form.on("submit", Message.Submitted()).children(
             h.input.attr("type", "submit").ref(Submit),
             h.input.attr("type", "file").ref(Attachment),
             h.input.attr("type", "file").disabled(true).ref(Locked)

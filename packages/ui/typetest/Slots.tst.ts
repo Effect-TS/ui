@@ -103,7 +103,10 @@ describe("slots", () => {
     expect(Panel(h, {
       key: "p",
       slots: {
-        body: [h.p("note"), h.button.onClick(PageMsg.Saved()).children("save")]
+        body: [
+          h.p("note"),
+          h.button.on("click", PageMsg.Saved()).children("save")
+        ]
       }
     })).type.toBe<View.Child<PageMsg, never>>()
     expect(
@@ -125,7 +128,7 @@ describe("slots", () => {
     })
     expect(Panel).type.not.toBeCallableWith(h, {
       key: "p",
-      slots: { body: other.button.onClick(OtherMsg.Other()).children("x") }
+      slots: { body: other.button.on("click", OtherMsg.Other()).children("x") }
     })
   })
 

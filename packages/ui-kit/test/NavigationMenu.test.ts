@@ -32,13 +32,10 @@ const Page = Html.component({
             ).children(
               navigationMenu.item(h.li).children(
                 navigationMenu.link({
-                  element: h.a.attr("href", "/").onKeyDown(
-                    ({ key }) =>
-                      h.props.claimsRight && key === "ArrowRight"
-                        ? Message.PressedRight()
-                        : undefined,
-                    { preventDefault: true }
-                  ),
+                  element: h.a.attr("href", "/").on("keydown", ({ key }) =>
+                    h.props.claimsRight && key === "ArrowRight"
+                      ? Message.PressedRight()
+                      : undefined, { preventDefault: true }),
                   active: true
                 }).children("Home")
               ),
@@ -75,7 +72,7 @@ const Page = Html.component({
             )
           )
       }),
-      h.button.onClick(Message.ClickedTurn()).children("Turn")
+      h.button.on("click", Message.ClickedTurn()).children("Turn")
     )
 })
 

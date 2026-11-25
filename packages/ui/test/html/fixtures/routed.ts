@@ -141,7 +141,7 @@ export const App = Html.component({
         ),
         h.a.attr("href", "https://example.com/").children("Elsewhere"),
         h.a.attr("href", AppRoute.print(AppRoute.Slow())).children("Slow"),
-        h.button.onClick(Message.Block()).children("Block"),
+        h.button.on("click", Message.Block()).children("Block"),
         h.form
           .attrs({
             method: "get",
@@ -157,7 +157,7 @@ export const App = Html.component({
             action: "/search",
             "aria-label": "Filter"
           })
-          .onSubmit(Message.Filter()).children(
+          .on("submit", Message.Filter()).children(
             h.input.attrs({ name: "q", value: "x" }),
             h.button.attr("type", "submit").children("Filter")
           )

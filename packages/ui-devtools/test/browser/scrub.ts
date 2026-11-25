@@ -24,7 +24,7 @@ const Counter = Html.component({
   update: { ClickedCount: ($) => $.evolve({ count: $.model.count + 1 }) },
   view: (h, model) =>
     h.div(
-      h.button.onClick(CounterMessage.ClickedCount()).children(
+      h.button.on("click", CounterMessage.ClickedCount()).children(
         "Count " + model.count
       ),
       model.count % 2 === 1 ? Label(h, { key: "odd" }) : null

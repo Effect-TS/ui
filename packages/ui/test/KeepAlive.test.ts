@@ -2528,7 +2528,8 @@ describe("keep-alive children written into closed slots", () => {
       }).make({
         init: () => 0,
         update: ($) => $.model + 1,
-        view: (h, count) => h.button.onClick("inc").children("count:" + count)
+        view: (h, count) =>
+          h.button.on("click", "inc").children("count:" + count)
       })
       const Writer = Html.component({
         name: "Writer",
@@ -2544,7 +2545,7 @@ describe("keep-alive children written into closed slots", () => {
         update: ($) => $.model === "a" ? "b" : "a",
         parts: (p, which) => ({
           which,
-          flip: p.part("button", (b) => b.onClick("flip"))
+          flip: p.part("button", (b) => b.on("click", "flip"))
         })
       })
       const Page = Html.component({

@@ -2,7 +2,7 @@
 import { Positioning } from "@effect/ui-kit"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Stream } from "effect"
-import { tick } from "./utils/document.ts"
+import { notWebKit, tick, visualViewport } from "./utils/document.ts"
 
 type Rect = {
   readonly x: number
@@ -80,6 +80,10 @@ const track = Effect.fnUntraced(
     rects.set("anchor", { x: 100, y: 100, width: 80, height: 20 })
     rects.set("positioner", { x: 0, y: 0, width: 120, height: 60 })
     const node = document.getElementById("positioner")!
+    Object.defineProperty(node, "offsetHeight", {
+      configurable: true,
+      value: 60
+    })
     node.style.left = "7px"
     node.style.top = "9px"
     const args = Positioning.trackArgs(props, {
@@ -141,6 +145,20 @@ describe("trackPosition in a document", { concurrent: false }, () => {
       document.dispatchEvent(new Event("scroll"))
       yield* tick
       assert.notStrictEqual(node.style.left, "140px")
+    }).pipe(Effect.scoped))
+
+  it.effect("keeps the popup inside the visual viewport as it resizes and scrolls", () =>
+    Effect.gen(function*() {
+      const { visual } = yield* visualViewport
+      yield* notWebKit
+      const { node } = yield* track(false)
+      assert.strictEqual(node.style.top, "120px")
+      visual.move({ height: 150 }, "resize")
+      yield* tick
+      assert.strictEqual(node.style.top, "40px")
+      visual.move({ offsetTop: 90 }, "scroll")
+      yield* tick
+      assert.strictEqual(node.style.top, "120px")
     }).pipe(Effect.scoped))
 })
 

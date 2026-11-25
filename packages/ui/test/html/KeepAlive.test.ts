@@ -386,7 +386,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
   }).make({
     init: () => "server",
     update: (_, text) => text,
-    view: (h, text) => h.input.value(text).onInput(({ value }) => value)
+    view: (h, text) => h.input.value(text).on("input", ({ value }) => value)
   })
   const Box = Html.component({
     name: "Box",
@@ -452,7 +452,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
   }).make({
     init: () => "server",
     update: (_, text) => text,
-    view: (h, note) => h.input.value(note).onInput(({ value }) => value)
+    view: (h, note) => h.input.value(note).on("input", ({ value }) => value)
   })
   const Bare = Html.component({
     name: "Bare",
@@ -690,7 +690,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
               }),
               h.article(
                 h.props.moved ? row : null,
-                h.input.value(text).onInput(({ value }) => value)
+                h.input.value(text).on("input", ({ value }) => value)
               ),
               h.em(text)
             )
@@ -1476,7 +1476,7 @@ describe("keep-alive children in a receiver that waits for its Layer", {
           update: ($) => $.model + 1,
           view: (h) =>
             h.div(
-              h.button.onClick(null).children("again"),
+              h.button.on("click", null).children("again"),
               Gated(h, { key: "f", slots: { body: h.slots.passed } })
             )
         })
@@ -1743,7 +1743,7 @@ const LateDraft = Html.component({
 }).make({
   init: () => lateServing ? "server" : "client",
   update: (_, text) => text,
-  view: (h, text) => h.input.value(text).onInput(({ value }) => value)
+  view: (h, text) => h.input.value(text).on("input", ({ value }) => value)
 })
 const LateKeeper = Html.component({
   name: "LateKeeper",
@@ -1754,7 +1754,7 @@ const LateKeeper = Html.component({
   update: ($) => $.model + 1,
   view: (h, count) =>
     h.div(
-      h.button.onClick("bump").children(String(count)),
+      h.button.on("click", "bump").children(String(count)),
       h.keepAlive((s) => LateDraft(s, { key: "d" }))
     )
 })

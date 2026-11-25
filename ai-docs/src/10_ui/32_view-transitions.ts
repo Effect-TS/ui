@@ -48,12 +48,12 @@ export const NoteBoardNoDeps = Html.component({
   view: (h, model) =>
     h.section(
       h.div(
-        h.input.attr("aria-label", "Filter").value(model.filter).onInput((
+        h.input.attr("aria-label", "Filter").value(model.filter).on("input", (
           { value }
         ) => NoteBoardMessage.TypedFilter({ value })),
-        h.button.onClick(NoteBoardMessage.ClickedLayout({ layout: "grid" }))
+        h.button.on("click", NoteBoardMessage.ClickedLayout({ layout: "grid" }))
           .children("Grid"),
-        h.button.onClick(NoteBoardMessage.ClickedLayout({ layout: "list" }))
+        h.button.on("click", NoteBoardMessage.ClickedLayout({ layout: "list" }))
           .children("List")
       ),
       AsyncResult.isSuccess(h.queries.notes)

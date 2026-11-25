@@ -33,7 +33,7 @@ describe("Fieldset", () => {
           props: { disabled: true },
           view: (fieldset) => {
             expect(fieldset.disabled).type.toBe<boolean>()
-            expect(fieldset.legend(h.div.onClick(Msg.Clicked()))).type.toBe<
+            expect(fieldset.legend(h.div.on("click", Msg.Clicked()))).type.toBe<
               Element<"div">
             >()
             expect(fieldset.legend(h.legend)).type.toBe<Element<"legend">>()

@@ -48,7 +48,7 @@ const Page = Html.component({
         slots: {
           title: "bumps " + model.bumps,
           body: [
-            h.button.onClick(PageMsg.Bump()).children("bump"),
+            h.button.on("click", PageMsg.Bump()).children("bump"),
             Note(h, {
               key: "n",
               onEmit: (event) => PageMsg.Saved({ text: event.text })

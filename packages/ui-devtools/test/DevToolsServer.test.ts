@@ -713,7 +713,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
         yield* play("open")
         yield* until(() =>
           document.querySelectorAll("iframe[data-effect-ui-devtools]")
-            .length === 1 &&
+              .length === 1 &&
           overlay().querySelector("button") !== null
         )
         const root = overlay()

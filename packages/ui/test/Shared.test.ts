@@ -1120,7 +1120,7 @@ describe("a component that reads its own kind", () => {
       }),
     parts: (p, picked) => ({
       picked,
-      item: p.part("button", (b) => b.onClick(MenuMessage.Pick()))
+      item: p.part("button", (b) => b.on("click", MenuMessage.Pick()))
     })
   })
   const Menus = Html.component({

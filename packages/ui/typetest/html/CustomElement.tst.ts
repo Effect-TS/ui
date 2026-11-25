@@ -34,31 +34,29 @@ const Message = UiSchema.TaggedEnum({
 })
 
 describe("Html.customElement", () => {
-  it("types the generated methods and the primitives by the declared Schemas", () => {
+  it("types the property methods and the primitives by the declared Schemas", () => {
     Html.component({ name: "App", model: Schema.String, message: Message })
       .make({
         init: () => "",
         update: { ChangedColor: (_, { color }) => color, Cleared: () => "" },
         view: (h, color) => {
           const picker = Picker(h).id("p").class("swatch").color(color)
-            .onColorChanged(({ value }) =>
-              Message.ChangedColor({ color: value })
-            )
-            .onClick(({ x }) => x > 0 ? Message.Cleared() : undefined)
-            .disabled("yes")
-            .value([1, 2])
-            .onChange(({ n }) => n > 0 ? Message.Cleared() : undefined)
-            .prop("content", "tip")
             .on(
               "color-changed",
               ({ value }) => Message.ChangedColor({ color: value })
             )
+            .on("click", ({ x }) => x > 0 ? Message.Cleared() : undefined)
+            .disabled("yes")
+            .value([1, 2])
+            .on("change", ({ n }) => n > 0 ? Message.Cleared() : undefined)
+            .prop("content", "tip")
             .children(h.span("slot"))
             .color(color)
           expect(picker.color).type.not.toBeCallableWith(1)
           expect(picker.value).type.not.toBeCallableWith("x")
           expect(picker.disabled).type.not.toBeCallableWith(true)
-          expect(picker.onClick).type.not.toBeCallableWith(
+          expect(picker.on).type.not.toBeCallableWith(
+            "click",
             ({ button }: { readonly button: number }) =>
               button > 0 ? Message.Cleared() : undefined
           )
@@ -66,15 +64,15 @@ describe("Html.customElement", () => {
           expect(picker.prop).type.not.toBeCallableWith("nope", "x")
           expect(picker.on).type.not.toBeCallableWith("nope", Message.Cleared())
           expect(picker).type.not.toHaveProperty("nope")
-          expect(picker).type.not.toHaveProperty("onNope")
           expect(picker.content).type.toBe<
             ReadonlyArray<View.Node<typeof Message.Type, any>> | undefined
           >()
-          expect(picker.onColorChanged).type.not.toBeCallableWith(
+          expect(picker.on).type.not.toBeCallableWith(
+            "color-changed",
             ({ hex }: { readonly hex: string }) =>
               Message.ChangedColor({ color: hex })
           )
-          expect(picker.onColorChanged).type.not.toBeCallableWith({
+          expect(picker.on).type.not.toBeCallableWith("color-changed", {
             _tag: "Other" as const
           })
           const Attach = Mount.make(
@@ -83,7 +81,7 @@ describe("Html.customElement", () => {
             (_: HTMLElement) => Effect.succeed(Component.noop)
           )
           expect(Picker(h).onMount(Attach()).forward((node) => h.div(node)))
-            .type.toHaveProperty("onColorChanged")
+            .type.toHaveProperty("color")
           return Picker(h)(h.span("shorthand")).color(color)
         }
       })

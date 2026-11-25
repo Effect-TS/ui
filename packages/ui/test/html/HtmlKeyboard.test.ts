@@ -61,7 +61,7 @@ describe("HtmlKeyboard.shortcuts", () => {
     assert.strictEqual(handle(key({ key: "x" })), undefined)
   })
 
-  it.effect("works with both element onKeyDown and HtmlSubscription.onDocument", () =>
+  it.effect("works with both an element's keydown handler and HtmlSubscription.onDocument", () =>
     Effect.gen(function*() {
       const Panel = Html.component({
         name: "Panel",
@@ -72,7 +72,8 @@ describe("HtmlKeyboard.shortcuts", () => {
         update: ($, entry) => [...$.model, entry],
         view: (h, log) =>
           h.div(
-            h.button.onKeyDown(
+            h.button.on(
+              "keydown",
               HtmlKeyboard.shortcuts([{ key: "j", message: "el:j" }]),
               { preventDefault: true }
             )

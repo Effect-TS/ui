@@ -93,8 +93,8 @@ const ListPage = Html.component({
     h.div(
       h.h1(`List page ${h.props.route.search.page}`),
       h.input.attr("aria-label", "Search").value(h.props.route.search.q ?? "")
-        .onInput(({ value }) => ListMessage.Typed({ value })),
-      h.button.onClick(ListMessage.Next()).children("Next"),
+        .on("input", ({ value }) => ListMessage.Typed({ value })),
+      h.button.on("click", ListMessage.Next()).children("Next"),
       h.a.attr("href", ListRoute.print(ListRoute.List({ search: { page: 2 } })))
         .children("Page 2"),
       h.a.attr("href", "#results").children("Results")
@@ -582,7 +582,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
         init: () => 0,
         update: ($) => $.model + 1,
         view: (h) =>
-          h.a.attr("href", "/people/1").onClick("Peek", {
+          h.a.attr("href", "/people/1").on("click", "Peek", {
             preventDefault: true
           }).children("Person 1")
       })

@@ -34,12 +34,12 @@ export const focusVisibility = Effect.acquireRelease(
   Effect.sync(() => {
     const proto = window.HTMLElement.prototype
     const focus = proto.focus
-    const calls: Array<readonly [string, boolean]> = []
+    const calls: Array<readonly [string, boolean | undefined]> = []
     proto.focus = function(this: HTMLElement, options?: FocusOptions) {
       calls.push([
         this.id,
         (options as { readonly focusVisible?: boolean } | undefined)
-          ?.focusVisible === true
+          ?.focusVisible
       ])
       focus.call(this, options)
     }
@@ -144,12 +144,29 @@ export const popovers = Effect.acquireRelease(
   (restore) => Effect.sync(restore)
 ).pipe(Effect.andThen(fieldsetDisabled))
 
+// happy-dom's CSS.supports passes anything, which reads as WebKit.
+export const notWebKit = Effect.acquireRelease(
+  Effect.sync(() => {
+    const css = Object.getOwnPropertyDescriptor(window, "CSS")!
+    Object.defineProperty(window, "CSS", {
+      configurable: true,
+      value: { supports: () => false }
+    })
+    return css
+  }),
+  (css) => Effect.sync(() => Object.defineProperty(window, "CSS", css))
+)
+
 class FakeVisualViewport extends EventTarget {
+  width = 1024
   height = 800
+  offsetLeft = 0
   offsetTop = 0
   scale = 1
   move(
-    changes: Partial<Pick<FakeVisualViewport, "height" | "offsetTop">>,
+    changes: Partial<
+      Pick<FakeVisualViewport, "width" | "height" | "offsetTop" | "scale">
+    >,
     type: "resize" | "scroll" = "resize"
   ) {
     Object.assign(this, changes)

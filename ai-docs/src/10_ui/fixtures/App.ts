@@ -85,7 +85,7 @@ export const App = Html.component({
           NotFound: () =>
             h.section(
               h.h1("Page not found"),
-              h.button.onClick(AppMessage.ClickedBackToNotes()).children(
+              h.button.on("click", AppMessage.ClickedBackToNotes()).children(
                 "Back to all notes"
               )
             )

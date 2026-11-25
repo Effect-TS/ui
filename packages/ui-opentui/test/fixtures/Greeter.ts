@@ -14,7 +14,7 @@ export const Greeter = OpenTui.component({
   view: (h, model) =>
     h.box.children(
       h.text("Hello " + model.name),
-      h.input.style({ width: 20 }).value(model.name).focused(true).onInput((
+      h.input.style({ width: 20 }).value(model.name).focused(true).on("input", (
         { value }
       ) => Message.TypedName({ value }))
     )

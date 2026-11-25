@@ -81,7 +81,7 @@ const Picker = Html.component({
               view: (menu) =>
                 h.ul.children(menu.visible.map((item) =>
                   dialog.close(menu.item(h.li.key(item.id), item))
-                    .onClick(PickerMessage.Clicked({ id: item.id }))
+                    .on("click", PickerMessage.Clicked({ id: item.id }))
                     .children(item.label)
                 ))
             })
@@ -113,8 +113,8 @@ const Bell = Html.component({
     }),
   view: (h, count) =>
     h.span(
-      h.button.onClick(BellMessage.Ring()).children("ring " + count),
-      h.button.onClick(BellMessage.Break()).children("break")
+      h.button.on("click", BellMessage.Ring()).children("ring " + count),
+      h.button.on("click", BellMessage.Break()).children("break")
     )
 })
 
@@ -291,7 +291,7 @@ const Probe = Html.component({
   init: (): ReadonlyArray<number> => [],
   update: ($) => [...$.model, $.props.count],
   view: (h, read) =>
-    h.button.onClick(ProbeMessage.Read()).children(
+    h.button.on("click", ProbeMessage.Read()).children(
       "read [" + read.join(",") + "]"
     )
 })
@@ -310,7 +310,7 @@ const Counted = Html.component({
       view: (menu) =>
         h.div(
           menu.trigger(h.button).children("toggle"),
-          h.button.onClick("bump").children("bump"),
+          h.button.on("click", "bump").children("bump"),
           Probe(h, { key: "p", props: { count } })
         )
     })
@@ -418,7 +418,7 @@ describe("headless components", () => {
         update: ($) => !$.model,
         view: (h, active) =>
           h.div(
-            h.button.onClick("toggle").children("toggle"),
+            h.button.on("click", "toggle").children("toggle"),
             Control(h, {
               key: "control",
               props: { active },

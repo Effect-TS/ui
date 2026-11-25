@@ -169,7 +169,8 @@ export const Nav = Html.component({
                           isNested
                             ? "max-rail:ps-[30px] rail:ps-[26px]"
                             : "max-rail:ps-3.5 rail:ps-3"
-                        ).attr("href", `#${id}`).onClick(
+                        ).attr("href", `#${id}`).on(
+                          "click",
                           NavMessage.ClickedSection()
                         ),
                         active: id === model.current

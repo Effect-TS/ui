@@ -5936,7 +5936,9 @@ describe("Runtime", () => {
         { args: {}, success: Act, invalidates: () => [] }
       ) {
         static readonly layer = this.toLayer(
-          Host.useSync((host) => () => Effect.succeed(Act.Done({ by: host.name })))
+          Host.useSync((host) => () =>
+            Effect.succeed(Act.Done({ by: host.name }))
+          )
         )
       }
       class Need extends Command.Service<Need>()(
@@ -6582,41 +6584,43 @@ describe("Runtime", () => {
     }).pipe(Effect.scoped, provideHost))
 
   it.effect("records root emitted events from init and updates in order on TestHost", () =>
-    provideHost(Effect.gen(function*() {
-      const Events = UiSchema.TaggedEnum({
-        Ready: {},
-        Stepped: { value: Schema.Number }
-      })
-      const Message = UiSchema.TaggedEnum({ Step: {} })
-      const Emitter = Component.define({
-        name: "Emitter",
-        model: Schema.Number,
-        message: Message,
-        events: Events
-      }).make({
-        init: ($) => $.set(0).emit(Events.Ready()),
-        update: ($) => {
-          const next = $.model + 1
-          return $.set(next).emit(
-            Events.Stepped({ value: next }),
-            Events.Stepped({ value: next * 10 })
-          )
-        },
-        view: (h, n) =>
-          h.el("button").on("click", Message.Step()).children(String(n))
-      })
-      const root = yield* TestHost.mount(Emitter, {})
-      assert.deepStrictEqual(root.emitted, [Events.Ready()])
-      click(root, "0")
-      yield* TestHost.settle
-      root.send(Message.Step())
-      yield* TestHost.settle
-      assert.deepStrictEqual(root.emitted, [
-        Events.Ready(),
-        Events.Stepped({ value: 1 }),
-        Events.Stepped({ value: 10 }),
-        Events.Stepped({ value: 2 }),
-        Events.Stepped({ value: 20 })
-      ])
-    }).pipe(Effect.scoped)))
+    provideHost(
+      Effect.gen(function*() {
+        const Events = UiSchema.TaggedEnum({
+          Ready: {},
+          Stepped: { value: Schema.Number }
+        })
+        const Message = UiSchema.TaggedEnum({ Step: {} })
+        const Emitter = Component.define({
+          name: "Emitter",
+          model: Schema.Number,
+          message: Message,
+          events: Events
+        }).make({
+          init: ($) => $.set(0).emit(Events.Ready()),
+          update: ($) => {
+            const next = $.model + 1
+            return $.set(next).emit(
+              Events.Stepped({ value: next }),
+              Events.Stepped({ value: next * 10 })
+            )
+          },
+          view: (h, n) =>
+            h.el("button").on("click", Message.Step()).children(String(n))
+        })
+        const root = yield* TestHost.mount(Emitter, {})
+        assert.deepStrictEqual(root.emitted, [Events.Ready()])
+        click(root, "0")
+        yield* TestHost.settle
+        root.send(Message.Step())
+        yield* TestHost.settle
+        assert.deepStrictEqual(root.emitted, [
+          Events.Ready(),
+          Events.Stepped({ value: 1 }),
+          Events.Stepped({ value: 10 }),
+          Events.Stepped({ value: 2 }),
+          Events.Stepped({ value: 20 })
+        ])
+      }).pipe(Effect.scoped)
+    ))
 })

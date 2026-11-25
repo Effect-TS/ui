@@ -64,6 +64,7 @@ describe("Meter", () => {
       assert(helper)
       assert.strictEqual(helper.attrs?.role, "presentation")
       assert.match(helper.attrs?.style ?? "", /clip:rect\(0,0,0,0\)/)
+      assert.match(helper.attrs?.style ?? "", /user-select:none/)
       assert.isUndefined(helper.attrs?.["aria-hidden"])
       assert.strictEqual(Locator.textOf(helper), "x")
       assert.strictEqual(scene.get(value).attrs?.["aria-hidden"], "true")

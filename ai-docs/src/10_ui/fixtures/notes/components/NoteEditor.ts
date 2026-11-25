@@ -132,20 +132,22 @@ const clickedDiscard = NoteEditorDef.update(
 //
 // A modal dialog is open while the Model says so. The browser host shows it
 // in the top layer, keeps focus inside and gives focus back when it closes.
-// Escape is a close request: it comes to `onCancel`, and the dialog closes
+// Escape is a close request: it comes to `cancel`, and the dialog closes
 // only when `update` says so. A form in the dialog is the app's like any
 // other, so the choice is read from the submission's `entries`, not from
 // `returnValue`, and `method="dialog"` isn't needed.
 const discardDialog = NoteEditorDef.fragment((h, open: boolean) =>
   h.dialog.attr("aria-label", "Discard your changes?")
     .modal(open)
-    .onCancel(NoteEditorMessage.CancelledDiscardDialog())
-    .onClose(NoteEditorMessage.ClosedDiscardDialog()).children(
+    .on("cancel", NoteEditorMessage.CancelledDiscardDialog())
+    .on("close", NoteEditorMessage.ClosedDiscardDialog()).children(
       h.h2("Discard your changes?"),
-      h.form.onSubmit(({ entries }) =>
-        NoteEditorMessage.SubmittedDiscardForm({
-          choice: entries.find(([name]) => name === "choice")?.[1] ?? ""
-        })
+      h.form.on(
+        "submit",
+        ({ entries }) =>
+          NoteEditorMessage.SubmittedDiscardForm({
+            choice: entries.find(([name]) => name === "choice")?.[1] ?? ""
+          })
       ).children(
         h.button.attrs({ name: "choice", value: "keep" }).children(
           "Keep editing"
@@ -170,25 +172,24 @@ const discardDialog = NoteEditorDef.fragment((h, open: boolean) =>
 // the same string anywhere else.
 const noteEditorView = NoteEditorDef.view((h, model) =>
   h.div(
-    h.form.attr("aria-label", "Edit note").onSubmit(
+    h.form.attr("aria-label", "Edit note").on(
+      "submit",
       NoteEditorMessage.RequestedSave()
     ).children(
       h.h2(h.props.note.title),
       h.textarea.attr("aria-label", "Body").value(model.draft)
         .class("note-body", model.draft !== model.saved && "unsaved")
-        .onInput(({ value }) => NoteEditorMessage.UpdatedBody({ body: value }))
+        .on("input", ({ value }) =>
+          NoteEditorMessage.UpdatedBody({ body: value }))
         // Ctrl+S or Cmd+S saves instead of opening the browser's save
         // dialog. With `preventDefault`, the browser's default is cancelled
         // only when the handler returns a message, so every other key types
         // as usual. Nothing stops the event's propagation, and a form's
-        // `submit` is always cancelled, so `onSubmit` takes no options.
-        .onKeyDown(
-          ({ ctrl, key, meta }) =>
-            (ctrl || meta) && key === "s"
-              ? NoteEditorMessage.RequestedSave()
-              : undefined,
-          { preventDefault: true }
-        ),
+        // `submit` is always cancelled, so its handler needs no options.
+        .on("keydown", ({ ctrl, key, meta }) =>
+          (ctrl || meta) && key === "s"
+            ? NoteEditorMessage.RequestedSave()
+            : undefined, { preventDefault: true }),
       // `h.isRunning` is true while this instance has a save queued or running.
       h.button.attr("type", "submit")
         .disabled(model.draft === model.saved).children(
@@ -196,7 +197,7 @@ const noteEditorView = NoteEditorDef.view((h, model) =>
         ),
       // A menu is an auto popover in the top layer, so no ancestor's
       // `overflow` clips it. Its button is a `popovertarget` invoker: the
-      // browser opens and closes it with no handler, and `onToggle` keeps
+      // browser opens and closes it with no handler, and `toggle` keeps
       // the Model in step with that and with Escape or a click outside.
       // CSS anchor positioning puts the menu under its button; a browser
       // without it shows the menu centred.
@@ -213,10 +214,11 @@ const noteEditorView = NoteEditorDef.view((h, model) =>
           `position-anchor: --actions-${h.props.note.id}; position-area: bottom span-left; margin: 0`
       })
         .popover("auto", model.actionsOpen)
-        .onToggle(({ open }) => NoteEditorMessage.ToggledActions({ open }))
+        .on("toggle", ({ open }) =>
+          NoteEditorMessage.ToggledActions({ open }))
         .children(
           h.button.attr("type", "button").disabled(model.draft === model.saved)
-            .onClick(NoteEditorMessage.ClickedDiscard()).children(
+            .on("click", NoteEditorMessage.ClickedDiscard()).children(
               "Discard changes"
             )
         ),

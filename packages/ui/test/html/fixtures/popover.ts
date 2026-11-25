@@ -174,9 +174,8 @@ export const Menu = Html.component({
     h.div(
       model.shown && h.div.attrs({ "aria-label": "Menu", role: "menu" })
         .popover(model.mode, model.open)
-        .onToggle(({ newState, oldState, open }) =>
-          MenuMessage.Toggled({ open, newState, oldState })
-        )
+        .on("toggle", ({ newState, oldState, open }) =>
+          MenuMessage.Toggled({ open, newState, oldState }))
         .children(h.button("Rename"))
     )
 })

@@ -48,11 +48,12 @@ export const TodoItem = Html.component({
     h.li.class(h.props.todo.done && "done").children(
       h.label(
         h.input.attr("type", "checkbox").checked(h.props.todo.done)
-          .onInput(({ checked }) => TodoItemMessage.Toggle({ done: checked })),
+          .on("input", ({ checked }) =>
+            TodoItemMessage.Toggle({ done: checked })),
         h.props.todo.title
       ),
       h.button.attr("aria-label", `Delete ${h.props.todo.title}`)
-        .onClick(TodoItemMessage.Delete()).children("×")
+        .on("click", TodoItemMessage.Delete()).children("×")
     )
 })
 
@@ -119,12 +120,12 @@ export const TodoApp = Html.component({
     const left = model.todos.filter((todo) => !todo.done).length
     return h.main(
       h.h1("Todos"),
-      h.form.onSubmit(TodoAppMessage.Add()).children(
+      h.form.on("submit", TodoAppMessage.Add()).children(
         h.input.attrs({
           "aria-label": "New todo",
           placeholder: "What needs doing?"
         }).value(model.draft)
-          .onInput(({ value }) => TodoAppMessage.Draft({ value })),
+          .on("input", ({ value }) => TodoAppMessage.Draft({ value })),
         h.button.attr("type", "submit").children("Add")
       ),
       h.ul.attr("aria-label", "Todos").children(
@@ -141,7 +142,7 @@ export const TodoApp = Html.component({
       ),
       h.p(`${left} ${left === 1 ? "item" : "items"} left`),
       h.button.disabled(left === model.todos.length)
-        .onClick(TodoAppMessage.ClearDone()).children("Clear done")
+        .on("click", TodoAppMessage.ClearDone()).children("Clear done")
     )
   }
 })

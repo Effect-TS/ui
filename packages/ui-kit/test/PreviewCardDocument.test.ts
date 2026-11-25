@@ -51,7 +51,7 @@ const Page = Html.component({
   },
   view: (h, model) =>
     h.div(
-      h.button.attr("id", "outside").onClick(Message.RemovedB()).children(
+      h.button.attr("id", "outside").on("click", Message.RemovedB()).children(
         "Outside"
       ),
       PreviewCard(h, {

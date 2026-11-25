@@ -22,7 +22,7 @@ describe("Separator", () => {
           "aria-orientation": "horizontal",
           "data-orientation": "horizontal"
         })
-        .onClick(Msg.Clicked())
+        .on("click", Msg.Clicked())
     })
       .class("rule")
       .attrs({

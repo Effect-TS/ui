@@ -68,7 +68,7 @@ const Page = Html.component({
           collapsible.trigger(h.button.attr("id", "trigger")).children(
             "Details"
           ),
-          h.button.attr("id", "release").onClick(PageMessage.ReleaseHold())
+          h.button.attr("id", "release").on("click", PageMessage.ReleaseHold())
             .children("Release"),
           collapsible.panel(
             h.div.attr("id", "panel").attr("style", model.config.style)
@@ -226,6 +226,7 @@ describe("Collapsible in a document", { concurrent: false }, () => {
       yield* tick
       yield* tick
       assert.deepStrictEqual(seen, ["auto", "120px", "ending 120px"])
+      assert.isTrue(byId("panel").hasAttribute("inert"))
       assert.isTrue(byId("root").hasAttribute("data-ending-style"))
       assert.isTrue(byId("trigger").hasAttribute("data-ending-style"))
 

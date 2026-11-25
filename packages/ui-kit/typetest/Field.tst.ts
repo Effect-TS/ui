@@ -54,9 +54,10 @@ describe("Field", () => {
               Element<"label">
             >()
             expect(field.control(h.input)).type.toBe<InputElement<Msg>>()
-            expect(field.control(h.textarea.onClick(Msg.Clicked()))).type.toBe<
-              Element<"textarea">
-            >()
+            expect(field.control(h.textarea.on("click", Msg.Clicked()))).type
+              .toBe<
+                Element<"textarea">
+              >()
             expect(field.control(h.select)).type.toBe<Element<"select">>()
             expect(field.control(h.button)).type.toBe<Element<"button">>()
             expect(field.description(h.p).children(needsClock)).type.toBe<

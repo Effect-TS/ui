@@ -83,7 +83,7 @@ describe("Html", () => {
   it("Html.component supplies the HTML vocabulary and Html.H types reusable pure views", () => {
     const Button = <M>(h: Html.H<M>, message: M) => {
       expect(h.props).type.toBe<unknown>()
-      return h.button.onClick(message).children("Save")
+      return h.button.on("click", message).children("Save")
     }
     const Field = <M, C extends View.Children<M>>(h: Html.H<M>, options: {
       readonly label: string
@@ -161,9 +161,10 @@ describe("Html", () => {
       init: () => "",
       update: ($) => $.model,
       view: (h, draft) => {
-        const form = h.form.onSubmit(Msg.Sent({ title: draft })).children(
-          h.input.ref(Field).value(draft).onInput(({ value }) =>
-            Msg.Typed({ value })
+        const form = h.form.on("submit", Msg.Sent({ title: draft })).children(
+          h.input.ref(Field).value(draft).on(
+            "input",
+            ({ value }) => Msg.Typed({ value })
           ),
           h.button.attr("type", "submit").children("Add"),
           h.span(draft),
@@ -313,33 +314,37 @@ describe("Html", () => {
       init: () => "",
       update: ($) => $.model,
       view: (h) => {
-        expect(h.input.onInput).type.toBeCallableWith(
+        expect(h.input.on).type.toBeCallableWith(
+          "input",
           ({ checked }: Html.InputPayload) => Msg.Checked({ checked })
         )
         expect(h.textarea.on).type.toBeCallableWith(
           "input",
           ({ value }: Html.ValuePayload) => Msg.Typed({ value })
         )
-        expect(h.form.onSubmit).type.toBeCallableWith((
+        expect(h.form.on).type.toBeCallableWith("submit", (
           { fields }: Html.SubmitPayload
         ) => Msg.Sent({ title: fields.title ?? "" }))
-        expect(h.button.onClick).type.toBeCallableWith((
+        expect(h.button.on).type.toBeCallableWith("click", (
           { shift }: Html.PointerPayload
         ) => shift ? undefined : Msg.Mounted())
-        expect(h.input.onCompositionEnd).type.toBeCallableWith(
+        expect(h.input.on).type.toBeCallableWith(
+          "compositionend",
           ({ value }: Html.CompositionPayload) => Msg.Typed({ value })
         )
         expect(h.textarea.on).type.toBeCallableWith(
           "compositionend",
           ({ value }: Html.CompositionPayload) => Msg.Typed({ value })
         )
-        expect(h.input.onInput).type.toBeCallableWith(
+        expect(h.input.on).type.toBeCallableWith(
+          "input",
           ({ composing, inputType, value }: Html.InputPayload) =>
             composing || inputType === "insertReplacementText"
               ? undefined
               : Msg.Typed({ value })
         )
-        expect(h.input.onKeyDown).type.toBeCallableWith(
+        expect(h.input.on).type.toBeCallableWith(
+          "keydown",
           ({ selectionEnd, selectionStart }: Html.KeyPayload) =>
             selectionStart === selectionEnd ? undefined : Msg.Mounted()
         )
@@ -355,7 +360,7 @@ describe("Html", () => {
           | ReturnType<typeof Msg.Mounted>
           | undefined
         >()
-        expect(h.div.onKeyDown).type.toBeCallableWith(shortcutHandler)
+        expect(h.div.on).type.toBeCallableWith("keydown", shortcutHandler)
         HtmlSubscription.onDocument("keydown", shortcutHandler, {
           preventDefault: true
         })
@@ -368,7 +373,8 @@ describe("Html", () => {
             ReturnType<typeof Msg.Typed> | ReturnType<typeof Msg.Mounted>
           >
         >()
-        expect(h.input.onPaste).type.toBeCallableWith(
+        expect(h.input.on).type.toBeCallableWith(
+          "paste",
           ({ text }: Html.PastePayload) => Msg.Typed({ value: text }),
           { preventDefault: true }
         )
@@ -386,7 +392,7 @@ describe("Html", () => {
           "compositionend",
           Msg.Mounted()
         )
-        expect(h.button.onClick).type.not.toBeCallableWith("not a message")
+        expect(h.button.on).type.not.toBeCallableWith("click", "not a message")
         return h.div()
       }
     })
@@ -418,7 +424,8 @@ describe("Html", () => {
         expect(h.div.popover).type.toBeCallableWith("manual", true)
         expect(h.button.popover).type.toBeCallableWith("auto", false)
         expect(h.div.popover).type.not.toBeCallableWith("hint", true)
-        expect(h.div.onToggle).type.toBeCallableWith(
+        expect(h.div.on).type.toBeCallableWith(
+          "toggle",
           ({ newState, oldState, open }: Html.PopoverTogglePayload) =>
             Msg.Typed({ value: `${oldState}${newState}${open}` })
         )
@@ -772,7 +779,8 @@ describe("BrowserHost", () => {
   }).make({
     init: () => 0,
     update: ($) => $.model + 1,
-    view: (h, count) => h.button.onClick(Msg.Mounted()).children(String(count))
+    view: (h, count) =>
+      h.button.on("click", Msg.Mounted()).children(String(count))
   })
 
   it("mountEffect needs only a Scope for an HTML root", () => {

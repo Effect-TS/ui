@@ -171,7 +171,7 @@ export const ${name} = Html.component({
   init: () => 0,
   update: ($) => $.model + 1,
   view: (h, count) =>
-    h.button.attr("data-${name}", "").onClick(Message.Inc())
+    h.button.attr("data-${name}", "").on("click", Message.Inc())
       .children(\`${label}=\${count}\`)
 })
 `
