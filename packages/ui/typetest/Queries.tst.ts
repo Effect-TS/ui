@@ -20,11 +20,7 @@ class GetUser extends Query.Service<GetUser>()(
     error: Schema.String,
     staleTime: "1 minute"
   }
-) {
-  static readonly layer = this.toLayer(({ id }) =>
-    Effect.succeed({ id, name: "Ann", teamId: "t" })
-  )
-}
+) {}
 
 class GetTeam extends Query.Service<GetTeam>()(
   "typetest/GetTeam",
@@ -34,11 +30,7 @@ class GetTeam extends Query.Service<GetTeam>()(
     error: Schema.Never,
     staleTime: 0
   }
-) {
-  static readonly layer = this.toLayer(({ id }) =>
-    Effect.succeed({ id, title: "T" })
-  )
-}
+) {}
 
 const Message = UiSchema.TaggedEnum({
   UserChanged: { state: Schema.String, failed: Schema.Boolean },
@@ -406,9 +398,7 @@ class GetCount extends Query.Service<GetCount>()(
     error: Schema.Never,
     staleTime: 0
   }
-) {
-  static readonly layer = this.toLayer(() => Effect.succeed(1))
-}
+) {}
 
 const ListMessage = UiSchema.TaggedEnum({
   UsersChanged: { changed: Schema.Number },
@@ -615,11 +605,7 @@ class ListMessages extends Query.InfiniteService<ListMessages>()(
     next: (lastPage) => Option.fromNullishOr(lastPage.next),
     staleTime: "1 minute"
   }
-) {
-  static readonly layer = this.toLayer((_args, _cursor) =>
-    Effect.succeed({ messages: [], next: null })
-  )
-}
+) {}
 
 const ChatMessage = UiSchema.TaggedEnum({
   Changed: { count: Schema.Number },

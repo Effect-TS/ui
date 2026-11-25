@@ -32,15 +32,11 @@ class B
 class CA extends Command.Service<CA>()(
   "CA",
   { args: {}, success: Message, invalidates: () => [] }
-) {
-  static readonly layer = this.toLayer(() => Effect.succeed(Message.Done()))
-}
+) {}
 class CB extends Command.Service<CB>()(
   "CB",
   { args: {}, success: Message, invalidates: () => [] }
-) {
-  static readonly layer = this.toLayer(() => Effect.succeed(Message.Done()))
-}
+) {}
 
 declare const NeedsRuntime: Component.Component<
   "NeedsRuntime",

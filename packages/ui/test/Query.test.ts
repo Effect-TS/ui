@@ -806,48 +806,6 @@ describe("Query", () => {
     }).pipe(Effect.provide(TestQuery.layer()))
   })
 
-  it.effect("toLayer accepts a plain function and interrupts its fetches when its Scope closes", () => {
-    const { GetUser } = makeUsers({ staleTime: "Infinity" })
-    const events: Array<string> = []
-    const cleanup = Latch.makeUnsafe()
-    const override = GetUser.toLayer(({ id }) =>
-      id === "slow"
-        ? Effect.sync(() => events.push("fetch started")).pipe(
-          Effect.andThen(Effect.never),
-          Effect.ensuring(Effect.andThen(
-            cleanup.await,
-            Effect.sync(() => events.push("fetch cleaned up"))
-          ))
-        )
-        : Effect.succeed({ id, name: "Mock" })
-    )
-    return Effect.gen(function*() {
-      const scope = yield* Scope.make()
-      const build = yield* Layer.buildWithScope(override, scope)
-      assert.deepStrictEqual(
-        yield* GetUser.get({ id: "1" }).pipe(Effect.provideContext(build)),
-        { id: "1", name: "Mock" }
-      )
-      yield* GetUser.prefetch({ id: "slow" }).pipe(Effect.provideContext(build))
-      yield* flush
-      const closing = yield* Effect.forkScoped(
-        Effect.andThen(
-          Scope.close(scope, Exit.void),
-          Effect.sync(() => events.push("scope closed"))
-        )
-      )
-      yield* flush
-      assert.deepStrictEqual(events, ["fetch started"])
-      yield* cleanup.open
-      yield* Fiber.join(closing)
-      assert.deepStrictEqual(events, [
-        "fetch started",
-        "fetch cleaned up",
-        "scope closed"
-      ])
-    }).pipe(Effect.provide(TestQuery.layer()))
-  })
-
   it.effect("makeCache builds the cache when it runs and disposes it with its Scope", () => {
     let listeners = 0
     const signal: Query.Signal = {

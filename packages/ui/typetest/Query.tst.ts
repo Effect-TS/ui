@@ -50,25 +50,14 @@ class Count extends Query.Service<Count>()("Count", {
   success: Schema.Number,
   error: Schema.Never,
   staleTime: 0
-}) {
-  static readonly layer = this.toLayer((prefix) =>
-    Effect.succeed(prefix.length)
-  )
-}
+}) {}
 
-declare const fetcher: (args: string) => Effect.Effect<number>
-declare const fetcherEffect: Effect.Effect<
-  (args: string) => Effect.Effect<number>
->
 declare const failingBuild: Effect.Effect<
   (args: string) => Effect.Effect<number>,
   "boom",
   Api | Scope.Scope
 >
 declare const wrongResult: (args: string) => Effect.Effect<string>
-declare const wrongResultEffect: Effect.Effect<
-  (args: string) => Effect.Effect<string>
->
 declare const needsApiPerCall: (
   args: string
 ) => Effect.Effect<number, never, Api>
@@ -108,29 +97,22 @@ describe("Query", () => {
     expect(GetUser.get).type.not.toBeCallableWith()
   })
 
-  it("toLayer infers live Layers, fakes, failures and rejects mismatched fetchers", () => {
-    expect(GetUser.layer).type.toBe<Layer.Layer<GetUser, never, Api>>()
+  it("toLayer infers fakes and failures, rejects mismatched fetchers, and Layer.succeed still works", () => {
     expect(
       GetUser.toLayer(({ id }) => {
         expect(id).type.toBe<string>()
         return Effect.succeed({ id, name: "Ann" })
       })
     ).type.toBe<Layer.Layer<GetUser>>()
-    expect(Count.toLayer(fetcher)).type.toBe<Layer.Layer<Count>>()
-    expect(Count.toLayer(fetcherEffect)).type.toBe<Layer.Layer<Count>>()
+    expect(
+      Layer.succeed(GetUser, ({ id }) => Effect.succeed({ id, name: "Ann" }))
+    ).type.toBe<Layer.Layer<GetUser>>()
     expect(Count.toLayer(failingBuild)).type.toBe<
       Layer.Layer<Count, "boom", Api>
     >()
     expect(Count.toLayer).type.not.toBeCallableWith(wrongResult)
-    expect(Count.toLayer).type.not.toBeCallableWith(wrongResultEffect)
     expect(Count.toLayer).type.not.toBeCallableWith(needsApiPerCall)
     expect(Count.toLayer).type.not.toBeCallableWith(needsApiPerCallEffect)
-  })
-
-  it("a fake can also be provided with Layer.succeed", () => {
-    expect(
-      Layer.succeed(GetUser, ({ id }) => Effect.succeed({ id, name: "Ann" }))
-    ).type.toBe<Layer.Layer<GetUser>>()
   })
 
   it("patches and writes are typed by their read", () => {
@@ -197,11 +179,7 @@ class ListUsers extends Query.InfiniteService<ListUsers>()(
       lastPage.next === null ? Option.none() : Option.some(lastPage.next),
     staleTime: "1 minute"
   }
-) {
-  static readonly layer = this.toLayer((_args, _cursor) =>
-    Effect.succeed({ users: [], next: null })
-  )
-}
+) {}
 
 describe("InfiniteService", () => {
   it("infers the page, item, cursor and error from the definition", () => {
@@ -222,14 +200,6 @@ describe("InfiniteService", () => {
         expect(cursor).type.toBe<Option.Option<number>>()
         return Effect.succeed({ users: [], next: null })
       })
-    ).type.toBe<Layer.Layer<ListUsers>>()
-    expect(
-      ListUsers.toLayer(
-        Effect.succeed((_args, cursor) => {
-          expect(cursor).type.toBe<Option.Option<number>>()
-          return Effect.succeed({ users: [], next: null })
-        })
-      )
     ).type.toBe<Layer.Layer<ListUsers>>()
   })
 

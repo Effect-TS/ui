@@ -1,6 +1,6 @@
 import { Command, type Component, Query, UiSchema, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Effect, Schema } from "effect"
+import { Schema } from "effect"
 import type { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
 
@@ -14,11 +14,7 @@ class GetUser extends Query.Service<GetUser>()(
     error: Schema.String,
     staleTime: "1 minute"
   }
-) {
-  static readonly layer = this.toLayer(({ id }) =>
-    Effect.succeed({ id, name: "Ann" })
-  )
-}
+) {}
 
 const Message = UiSchema.TaggedEnum({
   Edited: { body: Schema.String },
@@ -32,15 +28,11 @@ const Events = UiSchema.TaggedEnum({ Changed: {} })
 class Save extends Command.Service<Save>()(
   "typetest/define/Save",
   { args: {}, success: Message, invalidates: () => [] }
-) {
-  static readonly layer = this.toLayer(() => Effect.succeed(Message.Saved()))
-}
+) {}
 class Audit extends Command.Service<Audit>()(
   "typetest/define/Audit",
   { args: {}, success: Message, invalidates: () => [] }
-) {
-  static readonly layer = this.toLayer(() => Effect.succeed(Message.Saved()))
-}
+) {}
 
 const Model = Schema.Struct({ body: Schema.String, edits: Schema.Number })
 type Model = typeof Model.Type

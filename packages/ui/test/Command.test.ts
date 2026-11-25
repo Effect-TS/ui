@@ -145,21 +145,6 @@ describe("Command", () => {
         )
       ))
 
-    it.effect("toLayer overrides a Command service with a plain function", () =>
-      Effect.gen(function*() {
-        const message = yield* SaveTodo.make(todo).effect
-        assert.deepStrictEqual(
-          message,
-          TodoItemMessage.SaveFailed({ reason: "mocked" })
-        )
-      }).pipe(
-        Effect.provide(
-          SaveTodo.toLayer(() =>
-            Effect.succeed(TodoItemMessage.SaveFailed({ reason: "mocked" }))
-          )
-        )
-      ))
-
     it.effect("the implementation owns the error policy", () =>
       Effect.gen(function*() {
         const message = yield* SaveTodo.make(todo).effect
@@ -169,12 +154,25 @@ describe("Command", () => {
         )
       }).pipe(Effect.provide(SaveTodo.layer.pipe(Layer.provide(failingKv)))))
 
-    it.effect("a fake is a plain Layer.succeed", () =>
+    it.effect("a fake is toLayer or Layer.succeed", () =>
       Effect.gen(function*() {
-        const message = yield* SaveTodo.make(todo).effect
-        assert.deepStrictEqual(message, TodoItemMessage.Saved())
-      }).pipe(Effect.provide(Layer.succeed(SaveTodo, () =>
-        Effect.succeed(TodoItemMessage.Saved())))))
+        assert.deepStrictEqual(
+          yield* SaveTodo.make(todo).effect.pipe(
+            Effect.provide(SaveTodo.toLayer(() =>
+              Effect.succeed(TodoItemMessage.SaveFailed({ reason: "mocked" }))
+            ))
+          ),
+          TodoItemMessage.SaveFailed({ reason: "mocked" })
+        )
+        assert.deepStrictEqual(
+          yield* SaveTodo.make(todo).effect.pipe(
+            Effect.provide(Layer.succeed(SaveTodo, () =>
+              Effect.succeed(TodoItemMessage.Saved())
+            ))
+          ),
+          TodoItemMessage.Saved()
+        )
+      }))
 
     it.effect("a stream service runs its Stream", () =>
       Effect.gen(function*() {

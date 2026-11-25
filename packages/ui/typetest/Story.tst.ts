@@ -264,11 +264,7 @@ describe("Story", () => {
         error: SaveFailed,
         invalidates: () => []
       }
-    ) {
-      static readonly layer = this.toLayer(() =>
-        Effect.fail(new SaveFailed({ reason: "x" }))
-      )
-    }
+    ) {}
     const matched = Save.make().pipe(
       Command.match({ onSuccess: () => 1, onFailure: () => 2 })
     )
