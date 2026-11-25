@@ -210,7 +210,7 @@ export const LaunchPage = Html.component({
                 h.img.attr("src", "/effect-ui-black.svg").attr(
                   "alt",
                   "Effect UI"
-                ).attr("width", "122").attr("height", "28")
+                ).attr("width", "123").attr("height", "28")
               )
             ),
           h.div.class("article-links").children(
