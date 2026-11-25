@@ -50,13 +50,19 @@ const corners: { readonly [P in Position]: string } = {
 }
 
 // A painted copy's dialogs and popovers sit in the top layer, above any z-index. While paused the frame
-// joins the top layer after them, so the copy never covers the panel.
+// joins the top layer after them, so the copy never covers the panel. Leaving the top layer takes the frame
+// out of the page for a moment, so it only re-joins when something else is in the top layer.
 const raise = (frame: HTMLIFrameElement) => {
   if (typeof frame.showPopover !== "function") return
+  if (frame.matches(":popover-open")) {
+    if (frame.ownerDocument.querySelector(aboveFrame) === null) return
+    frame.hidePopover()
+  }
   frame.setAttribute("popover", "manual")
-  if (frame.matches(":popover-open")) frame.hidePopover()
   frame.showPopover()
 }
+
+const aboveFrame = ":popover-open:not([data-effect-ui-devtools]), :modal"
 
 const lower = (frame: HTMLIFrameElement) => {
   if (!frame.hasAttribute("popover")) return

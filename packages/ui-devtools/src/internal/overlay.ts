@@ -51,6 +51,8 @@ const Filter = Schema.Literals(["messages", "commands", "all"])
 
 const Pane = Schema.Literals(["timeline", "entry"])
 
+const Page = Schema.Struct({ session: Schema.String, seq: Schema.Number })
+
 const OverlayProps = Schema.Struct({ feed: FeedSchema })
 
 type OverlayProps = typeof OverlayProps.Type
@@ -73,6 +75,7 @@ const OverlayModel = Schema.Struct({
   pins: Schema.Number,
   pane: Pane,
   paused: Schema.NullOr(Paused),
+  painting: Schema.NullOr(Page),
   expanded: Schema.Array(Schema.String)
 })
 
@@ -105,7 +108,8 @@ const OverlayMessage = UiSchema.TaggedEnum({
   ClickedResume: {},
   ClickedClear: {},
   Cleared: {},
-  Painted: Paused.fields
+  Painted: Paused.fields,
+  FailedPaint: Page.fields
 })
 
 type OverlayMessage = typeof OverlayMessage.Type
@@ -141,14 +145,14 @@ export class Paint extends Command.Service<Paint>()(
   },
   Effect.gen(function*() {
     const pages = yield* Pages
-    return ({ seq, session }) =>
+    return ({ seq, session }): Effect.Effect<OverlayMessage | Component.Noop> =>
       seq === null
         ? Effect.as(pages.resume, Component.noop)
         : Effect.map(
           pages.paint(session, seq),
           (painted) =>
             painted === undefined
-              ? Component.noop
+              ? OverlayMessage.FailedPaint({ session, seq })
               : OverlayMessage.Painted({ session, seq, ...painted })
         )
   })
@@ -275,16 +279,20 @@ const Placeholder = (h: H, value: MessageLog.Placeholder) =>
       "unserialisable " + value["~unserialisable"]
     )
 
+const pageAt = (model: OverlayModel) => model.painting ?? model.paused
+
 const sessionOf = (feed: Feed, model: OverlayModel): Session | undefined => {
   const sessions = feed.inspector.sessions()
-  const paused = model.paused?.session
+  const paused = pageAt(model)?.session
   return (paused === undefined
     ? undefined
     : sessions.find((session) => session.id === paused)) ?? sessions.at(-1)
 }
 
-const shows = (model: OverlayModel, session: string, seq: number) =>
-  model.paused?.session === session && model.paused.seq === seq
+const shows = (model: OverlayModel, session: string, seq: number) => {
+  const page = pageAt(model)
+  return page?.session === session && page.seq === seq
+}
 
 const PausedBadge = (h: H, seq: number) =>
   h.span.class("paused").children(
@@ -303,13 +311,21 @@ const paths = (h: H, list: ReadonlyArray<string>) =>
 
 const PausedBar = (
   h: H,
-  paused: typeof Paused.Type,
+  page: typeof Page.Type,
+  paused: typeof Paused.Type | null,
   timeline: ReadonlyArray<Entry>,
   paintable: Feed["paintable"]
 ) => {
   const stops = timeline.filter((entry) => paintable(entry.session, entry.seq))
     .reverse()
-  const at = stops.findIndex((entry) => entry.seq === paused.seq)
+  const at = stops.findIndex((entry) => entry.seq === page.seq)
+  const notes = paused === null ? [] : ([
+    ["No state at #" + paused.seq + ", shown from init: ", paused.fellBack],
+    [
+      "A feature slot shows its fallback, since its Layer isn't built on the painted page, in: ",
+      paused.fallbacks
+    ]
+  ] as const).filter(([, list]) => list.length > 0)
   return h.section.class("pausebar").attr(
     "aria-label",
     "Page shown at an earlier entry"
@@ -322,7 +338,7 @@ const PausedBar = (
       ).attr("min", "0")
         .attr("max", String(Math.max(0, stops.length - 1))).attr(
           "aria-valuetext",
-          "#" + paused.seq
+          "#" + page.seq
         )
         .value(String(Math.max(0, at)))
         .onInput(({ value }) => {
@@ -331,20 +347,18 @@ const PausedBar = (
             ? undefined
             : OverlayMessage.ScrubbedPage({ seq: entry.seq })
         }),
-      h.span.class("at").children("#" + paused.seq)
+      h.span.class("at").children("#" + page.seq)
     ),
-    paused.fellBack.length === 0 ?
-      null :
-      h.p.class("pause-note", "tone-open").children(
-        "No state at #" + paused.seq + ", shown from init: ",
-        paths(h, paused.fellBack)
-      ),
-    paused.fallbacks.length === 0 ?
-      null :
-      h.p.class("pause-note", "tone-open").children(
-        "A feature slot shows its fallback, since its Layer isn't built on the painted page, in: ",
-        paths(h, paused.fallbacks)
+    h.p.class("pause-notes", "tone-open").attr(
+      "title",
+      notes.length === 0
+        ? undefined
+        : notes.map(([lead, list]) => lead + list.join(", ")).join("\n")
+    ).children(
+      notes.map(([lead, list]) =>
+        h.span.class("pause-note").children(lead, paths(h, list))
       )
+    )
   )
 }
 
@@ -355,7 +369,8 @@ const Header = (
   model: OverlayModel
 ) => {
   const following = model.selected === null && model.pinned
-  const canClear = session !== undefined && count > 0 && model.paused === null
+  const page = pageAt(model)
+  const canClear = session !== undefined && count > 0 && page === null
   return h.header.class("bar").children(
     h.span.class("logo").attr("aria-hidden", "true"),
     h.h2.class("title").children("Effect UI inspector"),
@@ -363,14 +378,14 @@ const Header = (
       ? null
       : h.span.class("app").children(session.app),
     h.span.class("spacer"),
-    model.paused === null ? null : PausedBadge(h, model.paused.seq),
+    page === null ? null : PausedBadge(h, page.seq),
     h.span.class("count").children(
       count === 1 ? "1 entry" : count + " entries"
     ),
     h.button.class("clear").disabled(!canClear)
       .attr(
         "title",
-        model.paused !== null ? "Resume before clearing" : "Clear the timeline"
+        page !== null ? "Resume before clearing" : "Clear the timeline"
       )
       .onClick(OverlayMessage.ClickedClear()).children("Clear"),
     h.button.class("follow", following && "on").attr(
@@ -547,7 +562,8 @@ const InstanceList = (
   rows: ReadonlyArray<InstanceRow>,
   model: OverlayModel,
   owner: number | undefined,
-  mode: "active" | "tree" | "find"
+  mode: "active" | "tree" | "find",
+  slots: number | undefined
 ) => {
   const keys = rows.map((row) => String(row.summary.instance))
   const target = owner === undefined || model.selected === null
@@ -574,7 +590,7 @@ const InstanceList = (
         h.div.class("ilist", mode === "tree" && "tree-list").attr(
           "aria-label",
           "Instances"
-        )
+        ).attr("style", slots === undefined ? undefined : "--slots:" + slots)
       ).children(
         list.list(h.ul).children(
           list.items.map((index) => {
@@ -599,23 +615,40 @@ const InstanceList = (
   })
 }
 
+const ownerSlots = (
+  session: Session,
+  listed: ReadonlyArray<InstanceRow>,
+  timeline: ReadonlyArray<Entry>
+) => {
+  const shown = new Set(listed.map((row) => row.summary.instance))
+  return timeline.some((entry) => {
+      const at = Read.instanceOf(entry)
+      return at !== undefined && !shown.has(at) &&
+        session.summary(at) !== undefined
+    })
+    ? listed.length + 1
+    : undefined
+}
+
 const Instances = (
   h: H,
   session: Session,
   model: OverlayModel,
-  owner: Inspector.Summary | undefined
+  owner: Inspector.Summary | undefined,
+  timeline: ReadonlyArray<Entry>
 ) => {
   const count = session.instanceCount()
   const find = model.find.trim()
   const mode = find !== "" ? "find" : model.browse ? "tree" : "active"
+  const scoped = model.scope === null ? undefined : session.summary(model.scope)
   const rows = mode === "find"
     ? session.find(find).map((summary) => flatRow(summary))
     : mode === "tree"
     ? treeRows(session, new Set(model.branches))
-    : activeRows(session, [
-      owner,
-      model.scope === null ? undefined : session.summary(model.scope)
-    ])
+    : activeRows(session, [scoped, owner])
+  const slots = mode === "active" && pageAt(model) !== null
+    ? ownerSlots(session, activeRows(session, [scoped]), timeline)
+    : undefined
   return h.section.class("instances").attr("aria-label", "Instances").children(
     h.div.class("ihead").children(
       h.h3.class("heading").children("Instances"),
@@ -634,7 +667,7 @@ const Instances = (
           ? "No instance matches."
           : "No instance has run a Command or taken a message yet."
       )
-      : InstanceList(h, session, rows, model, owner?.instance, mode),
+      : InstanceList(h, session, rows, model, owner?.instance, mode, slots),
     mode === "find" ? null : h.button.class("browse").onClick(
       OverlayMessage.ClickedBrowse({
         browse: !model.browse,
@@ -1643,7 +1676,8 @@ const Panel = (h: H, model: OverlayModel) => {
   const at = entry === undefined ? undefined : Read.instanceOf(entry)
   const owner = at === undefined ? undefined : session.summary(at)
   const shown = scope === null ? owner : session.summary(scope)
-  return h.div.class("panel", model.paused !== null && "pausing").attr(
+  const page = pageAt(model)
+  return h.div.class("panel", page !== null && "pausing").attr(
     "role",
     "dialog"
   ).attr(
@@ -1652,12 +1686,12 @@ const Panel = (h: H, model: OverlayModel) => {
   ).attr("data-pane", model.pane).children(
     h.span.class("grip").attr("aria-hidden", "true"),
     Header(h, session, entries.length, model),
-    model.paused === null
+    page === null
       ? null
-      : PausedBar(h, model.paused, timeline, feed.paintable),
+      : PausedBar(h, page, model.paused, timeline, feed.paintable),
     h.div.class("body").children(
       h.div.class("left").children(
-        Instances(h, session, model, owner),
+        Instances(h, session, model, owner, timeline),
         Filters(h, model),
         Timeline(
           h,
@@ -1701,6 +1735,7 @@ const synced = (model: OverlayModel, feed: Feed) => {
 
 const Launcher = (h: H, model: OverlayModel) => {
   const failures = h.props.feed.failures() - model.failures
+  const page = pageAt(model)
   const noun = failures === 1 ? " failure" : " failures"
   return h.div.class("launch").children(
     h.button.class("launcher").attr(
@@ -1726,18 +1761,23 @@ const Launcher = (h: H, model: OverlayModel) => {
           String(failures),
           h.span.class("sr").children(noun)
         ),
-    model.paused === null ? null : PausedBadge(h, model.paused.seq)
+    page === null ? null : PausedBadge(h, page.seq)
   )
 }
 
 const resumePage = () => Paint.make({ session: "", seq: null })
 
+const resumed = { paused: null, painting: null } as const
+
+const isPainting = (model: OverlayModel, page: typeof Page.Type) =>
+  model.painting?.session === page.session && model.painting.seq === page.seq
+
 const repaint = (model: OverlayModel, feed: Feed, seq: number) => {
   const session = sessionOf(feed, model)
-  return model.paused !== null && session !== undefined &&
+  return pageAt(model) !== null && session !== undefined &&
       feed.paintable(session.id, seq)
-    ? [Paint.make({ session: session.id, seq })]
-    : []
+    ? { session: session.id, seq }
+    : undefined
 }
 
 export const Overlay = Html.component({
@@ -1764,6 +1804,7 @@ export const Overlay = Html.component({
     pins: 0,
     pane: "timeline",
     paused: null,
+    painting: null,
     expanded: []
   }),
   update: {
@@ -1783,23 +1824,29 @@ export const Overlay = Html.component({
       $.evolve({ open: false, failures: $.props.feed.failures() }).run(
         SaveOpen.make({ open: false })
       ),
-    ClickedEntry: ($, { seq }) =>
-      $.evolve({
+    ClickedEntry: ($, { seq }) => {
+      const page = repaint($.model, $.props.feed, seq)
+      return $.evolve({
         selected: seq,
         pane: "entry",
-        ...($.model.pinned ? { pins: increment } : {})
+        ...($.model.pinned ? { pins: increment } : {}),
+        ...(page === undefined ? {} : { painting: page })
       })
-        .run(...repaint($.model, $.props.feed, seq)),
-    ClickedLink: ($, { seq }) =>
-      $.evolve({
+        .run(...(page === undefined ? [] : [Paint.make(page)]))
+    },
+    ClickedLink: ($, { seq }) => {
+      const page = repaint($.model, $.props.feed, seq)
+      return $.evolve({
         selected: seq,
         filter: "all",
         scope: null,
         pinned: false,
         reveal: seq,
-        pins: increment
+        pins: increment,
+        ...(page === undefined ? {} : { painting: page })
       })
-        .run(...repaint($.model, $.props.feed, seq)),
+        .run(...(page === undefined ? [] : [Paint.make(page)]))
+    },
     ClickedScope: ($, { instance }) =>
       $.evolve({ scope: $.model.scope === instance ? null : instance }),
     TypedFind: ($, { text }) => $.evolve({ find: text }),
@@ -1814,9 +1861,9 @@ export const Overlay = Html.component({
     ClickedFilter: ($, { filter }) => $.evolve({ filter }),
     ClickedFollowLatest: ($) => {
       const next = $.evolve({ selected: null, ...following })
-      return $.model.paused === null
+      return pageAt($.model) === null
         ? next
-        : next.evolve({ paused: null }).run(resumePage())
+        : next.evolve(resumed).run(resumePage())
     },
     ClickedBack: ($) => $.evolve({ pane: "timeline" }),
     ScrolledTimeline: ($, { atStart }) =>
@@ -1839,20 +1886,25 @@ export const Overlay = Html.component({
     FailedCopyFrame: ($) => $.evolve({ copied: null }),
     ClickedTimeTravel: ($, { session, seq }) =>
       shows($.model, session, seq)
-        ? $.evolve({ paused: null }).run(resumePage())
-        : $.run(Paint.make({ session, seq })),
-    ScrubbedPage: ($, { seq }) =>
-      $.evolve({ selected: seq, pinned: false, reveal: seq, pins: increment })
-        .run(
-          Paint.make({
-            session: sessionOf($.props.feed, $.model)?.id ?? "",
-            seq
-          })
+        ? $.evolve(resumed).run(resumePage())
+        : $.evolve({ painting: { session, seq } }).run(
+          Paint.make({ session, seq })
         ),
-    ClickedResume: ($) => $.evolve({ paused: null }).run(resumePage()),
+    ScrubbedPage: ($, { seq }) => {
+      const page = { session: sessionOf($.props.feed, $.model)?.id ?? "", seq }
+      return $.evolve({
+        selected: seq,
+        pinned: false,
+        reveal: seq,
+        pins: increment,
+        painting: page
+      })
+        .run(Paint.make(page))
+    },
+    ClickedResume: ($) => $.evolve(resumed).run(resumePage()),
     ClickedClear: ($) => {
       const session = sessionOf($.props.feed, $.model)
-      return $.model.paused !== null || session === undefined
+      return pageAt($.model) !== null || session === undefined
         ? $.model
         : $.run(Clear.make({ session: session.id }))
     },
@@ -1868,7 +1920,13 @@ export const Overlay = Html.component({
         ...following
       })
     },
-    Painted: ($, paused) => $.evolve({ paused })
+    Painted: ($, paused) =>
+      $.evolve({
+        paused,
+        ...(isPainting($.model, paused) ? { painting: null } : {})
+      }),
+    FailedPaint: ($, page) =>
+      isPainting($.model, page) ? $.evolve({ painting: null }) : $.model
   },
   subscriptions: ({ props }) => [
     Subscription.make(
