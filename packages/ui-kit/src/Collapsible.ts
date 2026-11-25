@@ -33,15 +33,16 @@
  *
  * The panel also sets the CSS variables `--collapsible-panel-height` and
  * `--collapsible-panel-width`: the size of its content in px while it opens
- * and closes, and `auto` otherwise, so an open panel follows its content. The
- * size is read from `scrollHeight` and `scrollWidth`, which report `0` on an
- * inline box, so an inline panel such as a `<span>` needs `display: block` to
- * animate with `--collapsible-panel-height`. `data-starting-style` is present
- * for the first frame after the panel opens, and `data-ending-style` while it
- * closes, so a transition can run from and to a closed style: give the panel
- * `height: var(--collapsible-panel-height)`, `overflow: hidden` and a
- * `transition` on `height`, and `height: 0` under `[data-starting-style]` and
- * `[data-ending-style]`.
+ * and closes, and `auto` otherwise, so an open panel follows its content.
+ * `data-starting-style` is present for the first frame after the panel opens,
+ * and `data-ending-style` while it closes, so a transition can run from and to
+ * a closed style: give the panel `height: var(--collapsible-panel-height)`,
+ * `overflow: hidden` and a `transition` on `height`, and `height: 0` under
+ * `[data-starting-style]` and `[data-ending-style]`.
+ *
+ * The size is read from `scrollHeight` and `scrollWidth`, which report `0` on
+ * an inline box, so an inline panel such as a `<span>` needs `display: block`
+ * to animate with `--collapsible-panel-height`.
  *
  * A keyframe animation works too, from or to `var(--collapsible-panel-height)`.
  * The panel stays in the page until its own transitions and animations finish,
@@ -598,9 +599,7 @@ export const Collapsible = Html.component({
             ? undefined
             : hiddenUntilFound
             ? "until-found"
-            : props.keepMounted === "css"
-            ? undefined
-            : "",
+            : flag(props.keepMounted !== "css"),
           "data-starting-style": flag(
             transitionStatus === "starting" || (!mounted && hiddenUntilFound)
           )
@@ -626,8 +625,7 @@ export const Collapsible = Html.component({
       ): ReturnType<B["attr"]> | undefined => {
         panelId = idOf(element) ?? panelId
         const out = panelPart(element, panelId)
-        return mounted || hiddenUntilFound || props.keepMounted === true ||
-            props.keepMounted === "css"
+        return mounted || hiddenUntilFound || props.keepMounted
           ? out
           : undefined
       }
