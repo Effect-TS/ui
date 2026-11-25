@@ -191,7 +191,7 @@
  *               autocomplete.popup(h.div).children(
  *                 autocomplete.empty(h.div).children("No tags"),
  *                 autocomplete.list(h.div).children(
- *                   ...autocomplete.items.map(({ label, value }) =>
+ *                   autocomplete.items.map(({ label, value }) =>
  *                     autocomplete.item({ element: h.div, value }).children(label)
  *                   )
  *                 )

@@ -31,7 +31,7 @@ const Comparison = Html.component({
     CodeGroup(h, {
       view: () =>
         h.main.children(
-          ...(["left/0", "right/0", "left/1"] as const).map((id) =>
+          (["left/0", "right/0", "left/1"] as const).map((id) =>
             h.section.key(id).attr("aria-label", id).children(
               Code(h, file(id), {
                 preview,
@@ -52,7 +52,7 @@ const Alone = Html.component({
   update: ($) => $.model,
   view: (h) =>
     h.main.children(
-      ...(["first", "second"] as const).map((id) =>
+      (["first", "second"] as const).map((id) =>
         h.section.key(id).attr("aria-label", id).children(
           Code(h, file(id), { preview })
         )

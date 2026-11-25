@@ -701,7 +701,7 @@ export interface Step<
    *   },
    *   view: (h, model) =>
    *     h.ul.class(model.layout).children(
-   *       ...["a", "b"].map((id) => h.li.key(id).style({ viewTransitionName: `item-${id}` }).children(id))
+   *       ["a", "b"].map((id) => h.li.key(id).style({ viewTransitionName: `item-${id}` }).children(id))
    *     )
    * })
    * ```
@@ -2834,7 +2834,7 @@ export declare namespace Definition {
  * export const NoteList = NoteListDef.make({
  *   init: () => ({ notes: [] }),
  *   update: ($) => $.model,
- *   view: (h, model) => h.el("ul", ...model.notes.map((note) => noteRow(h, note)))
+ *   view: (h, model) => h.el("ul", model.notes.map((note) => noteRow(h, note)))
  * })
  * ```
  *

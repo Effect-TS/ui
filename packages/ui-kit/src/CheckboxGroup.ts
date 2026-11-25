@@ -83,7 +83,7 @@
  *             Checkbox(h, { key: "all", props: { parent: true }, view: (checkbox) => checkbox.root(h.button) }),
  *             "All fruit"
  *           ),
- *           ...fruits.map((fruit) =>
+ *           fruits.map((fruit) =>
  *             h.label.children(
  *               Checkbox(h, { key: fruit, props: { value: fruit }, view: (checkbox) => checkbox.root(h.button) }),
  *               fruit

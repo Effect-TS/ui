@@ -289,7 +289,7 @@ export const Tree = <M>(h: Html.H<M>, options: TreeOptions<M>) => {
           "stroke-border-strong",
           "direct"
         ).attrs({ "stroke-width": "1.5", "stroke-dasharray": "4 4" }),
-      ...past.flatMap((s, i) =>
+      past.flatMap((s, i) =>
         s.moves.map((move, j) =>
           Link(
             h,
@@ -301,7 +301,7 @@ export const Tree = <M>(h: Html.H<M>, options: TreeOptions<M>) => {
           ).attr("stroke-width", "2.5")
         )
       ),
-      ...(moving?.moves ?? []).map((move, j) =>
+      moving?.moves.map((move, j) =>
         Link(
           h,
           path(move),
@@ -310,7 +310,7 @@ export const Tree = <M>(h: Html.H<M>, options: TreeOptions<M>) => {
         ).attrs({ "stroke-width": "2.5", pathLength: "1" })
       )
     ),
-    ...names.map((name) => {
+    names.map((name) => {
       const status = statusOf(step, name)
       const shown = options.badge?.(name) ?? statusText(step, name)
       // Compact nodes are too narrow for a role: they show what runs.
@@ -350,7 +350,7 @@ export const Tree = <M>(h: Html.H<M>, options: TreeOptions<M>) => {
       // Only a node that can send gets a button.
       if (message === undefined) {
         return h.div.class(nodeClass, size).key(name).attrs(attrs)
-          .style(place).children(...content)
+          .style(place).children(content)
       }
       return Button(h, { onPress: message }).class(
         nodeClass,
@@ -361,7 +361,7 @@ export const Tree = <M>(h: Html.H<M>, options: TreeOptions<M>) => {
           ...attrs,
           "aria-label": options.label?.(name) ??
             displayName(side, name)
-        }).style(place).children(...content)
+        }).style(place).children(content)
     }),
     svg(h, "svg").attrs({
       viewBox: `0 0 ${width} ${height}`,
@@ -369,11 +369,11 @@ export const Tree = <M>(h: Html.H<M>, options: TreeOptions<M>) => {
         "pointer-events-none absolute inset-0 z-1 size-full overflow-visible",
       "aria-hidden": "true"
     }).children(
-      ...(travels
+      travels
         ? tracks(moving?.moves ?? []).map((track, i) =>
           Packet(h, track, `${key}-packet-${i}`)
         )
-        : rests.map((rest, i) => Resting(h, rest, i)))
+        : rests.map((rest, i) => Resting(h, rest, i))
     )
   )
 }

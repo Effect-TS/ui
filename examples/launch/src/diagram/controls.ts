@@ -73,7 +73,7 @@ export const Segmented = <M, A extends string>(
             "border-border bg-muted p-0.5"
           ).attr("aria-label", options.label)
         ).children(
-          ...options.items.map((item) =>
+          options.items.map((item) =>
             group.radio({
               element: h.button.key(item).class(
                 segment,

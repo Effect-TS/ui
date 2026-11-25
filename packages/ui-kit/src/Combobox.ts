@@ -220,7 +220,7 @@
  *                 combobox.popup(h.div).children(
  *                   combobox.empty(h.div).children("No fruit found"),
  *                   combobox.list(h.div).children(
- *                     ...combobox.items.map(({ label, value }) =>
+ *                     combobox.items.map(({ label, value }) =>
  *                       combobox.item({ element: h.div, value }).children(
  *                         label,
  *                         combobox.itemIndicator({ element: h.span, value })?.children("✓")

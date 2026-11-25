@@ -61,7 +61,7 @@ export const Scrubber = <M>(
                 "motion-safe:duration-150"
               )
             ),
-            ...Array.from({ length: options.cells }, (_, index) =>
+            Array.from({ length: options.cells }, (_, index) =>
               h.span.key(String(index)).class(
                 "relative",
                 index > 0 && divider

@@ -34,7 +34,7 @@ const Page = Html.component({
   update: ($) => $.model,
   view: (h) =>
     h.main.children(
-      ...h.props.files.map((snippet) =>
+      h.props.files.map((snippet) =>
         h.section.key(snippet.id).attr("aria-label", snippet.id)
           .children(Code(h, snippet))
       )

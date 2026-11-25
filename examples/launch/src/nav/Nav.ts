@@ -142,7 +142,7 @@ export const Nav = Html.component({
                 "max-rail:[box-shadow:0_16px_24px_-16px_var(--color-ring)]"
               )
             ).children(
-              ...sections.map(({ id, label, isNested }) =>
+              sections.map(({ id, label, isNested }) =>
                 menu.item(h.li.key(id)).children(
                   menu.link({
                     element: h.a.class(
