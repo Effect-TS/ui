@@ -15,9 +15,9 @@
  *
  * Each part takes the consumer's builder and returns it, so the consumer
  * goes on chaining and adds children with `.children(...)`. `root`
- * appends a visually hidden `<span role="presentation">` with
- * `user-select: none` after all its children, which makes NVDA read the
- * label while staying out of copied text. `value` fills in the value
+ * appends a visually hidden, non-selectable `<span role="presentation">`
+ * after all its children so NVDA reads the label without leaking into
+ * copied text. `value` fills in the value
  * text when the consumer gives it no children. The other parts add no
  * markup.
  *
@@ -107,11 +107,9 @@ import {
  * - `valueText`: the text that describes the value, as the root's
  *   `aria-valuetext` and as what `value` shows, in every state. Left out,
  *   it is the percentage, rounded to a whole number, as `"40%"`, the same
- *   on the server and in the browser. While indeterminate without
- *   `valueText`, `aria-valuetext` is omitted so the screen reader
- *   announces the indeterminate state in the user's language, and `value`
- *   shows nothing. Build your own text, such as `"3 of 5 files"`, in the
- *   view from your Model.
+ *   on the server and in the browser. While indeterminate without `valueText`,
+ *   `aria-valuetext` is omitted and `value` shows nothing. Build your own
+ *   text, such as `"3 of 5 files"`, in the view from your Model.
  *
  * @stability experimental
  * @category schemas

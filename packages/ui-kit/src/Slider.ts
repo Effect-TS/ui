@@ -860,7 +860,7 @@ const hidden =
  * `disabled`, `aria-orientation`, `aria-valuenow` and `aria-disabled`,
  * which it removes. The thumb's and indicator's CSS variables and the
  * input's hiding style are added to the consumer's `style`, after it.
- * `aria-valuetext` and every other attribute stay the consumer's.
+ * Every other attribute stays the consumer's.
  *
  * A thumb whose `index` has no value throws when the view renders.
  *

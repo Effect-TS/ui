@@ -56,8 +56,8 @@
  * `disabled: field.disabled`. The input keeps the id its builder has, the
  * field's or your own, and gets a generated one otherwise. Each button
  * points at it with `aria-controls`. The buttons default to `aria-label`
- * "Decrease" and "Increase" unless the builder has its own; pass an
- * `aria-label` on each button's builder to localize them.
+ * "Decrease" and "Increase"; set `aria-label` on each builder to override
+ * or localize them.
  *
  * **Data attributes**
  *
