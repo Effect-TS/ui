@@ -288,6 +288,7 @@ interface Options {
   readonly query?: Renderer.QueryOptions | undefined
   readonly head?: boolean | undefined
   readonly adoptionHead?: boolean | undefined
+  readonly scheduler?: Scheduler.Scheduler | undefined
 }
 
 const makeCell = (
@@ -484,7 +485,7 @@ const start = (
   server?: Server,
   decodedRoot?: readonly [string, Exit.Exit<Decoded, unknown>]
 ) => {
-  const ctx = onScheduler(caller)
+  const ctx = onScheduler(caller, options?.scheduler)
   const logService = Context.get(ctx, messageLog.MessageLog)
   const executor = Context.get(ctx, Executor.CurrentExecutor)
   const clock = Context.get(ctx, Clock.Clock)
@@ -867,8 +868,10 @@ const loadsIn = (
   for (const kid of kids) loadsIn(inst, kid, out)
 }
 
-const onScheduler = (ctx: Context.Context<any>): Context.Context<any> => {
-  const callers = Context.get(ctx, Scheduler.Scheduler)
+const onScheduler = (
+  ctx: Context.Context<any>,
+  callers = Context.get(ctx, Scheduler.Scheduler)
+): Context.Context<any> => {
   let dispatcher: Scheduler.SchedulerDispatcher | undefined
   return Context.add(
     ctx,
@@ -882,7 +885,7 @@ const onScheduler = (ctx: Context.Context<any>): Context.Context<any> => {
 }
 
 /**
- * Renders a tree on the server: on a host that only keeps the node tree,
+ * Renders a tree on the server: on a host that keeps nothing,
  * waiting for provided Layers and the per-request cache's fetches until
  * nothing is in flight or the budget runs out, then serialising it once.
  *
@@ -905,7 +908,6 @@ export const prerender = (
       Effect.fnUntraced(function*(scope) {
         const budget = Duration.fromInputUnsafe(options.budget)
         const started = !Duration.isZero(budget)
-        const host = serverHost.make(options.elements)
         const ctx = Context.add(
           yield* Effect.context<never>(),
           Scope.Scope,
@@ -914,15 +916,12 @@ export const prerender = (
         const made = start(
           component,
           props,
-          host.createElement("#root"),
+          serverHost.node,
           ctx,
           undefined,
           {
-            elements: host.elements,
-            make: (_container, ownsHead, step) => ({
-              base: bridge(host, step, ownsHead),
-              dom: undefined
-            })
+            elements: options.elements,
+            make: () => ({ base: serverHost.host, dom: undefined })
           },
           { fetches: started, hooks: serverHooks, idle: idleOf }
         )

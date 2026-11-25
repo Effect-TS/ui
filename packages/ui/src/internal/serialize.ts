@@ -38,7 +38,7 @@ type Snap =
       | undefined
     readonly status: Status
     readonly bare: boolean
-    readonly kids: ReadonlyArray<Snap>
+    readonly kid: Snap | undefined
     readonly kept: ReadonlyArray<Snap>
   }
   | {
@@ -78,13 +78,13 @@ export const snapshot = (
     const component = inst.component as unknown as Component.Any
     const shipped = inst.failure === undefined && !deferred.has(inst)
     const rendered = inst.rendered
-    const kept: Array<Snap> = []
-    for (
-      const entry of (inst.kept as keptRun.Table | undefined)?.kids.values() ??
-        []
-    ) {
-      if (entry.rec === undefined && !entry.inst.closed) {
-        kept.push(instance(entry.inst))
+    let kept: Array<Snap> | undefined
+    const table = inst.kept as keptRun.Table | undefined
+    if (table !== undefined) {
+      for (const entry of table.kids.values()) {
+        if (entry.rec === undefined && !entry.inst.closed) {
+          ;(kept ??= []).push(instance(entry.inst))
+        }
       }
     }
     const encoded = shipped
@@ -99,10 +99,10 @@ export const snapshot = (
       bare: inst.parent !== undefined && component.layer === undefined &&
         (inst.at!.v as View.Child<any, any>).alive === undefined &&
         rendered?.v._tag === "Element",
-      kids: inst.failure === undefined && rendered !== undefined
-        ? [rec(inst, rendered, inst.path)]
-        : [],
-      kept
+      kid: inst.failure === undefined && rendered !== undefined
+        ? rec(inst, rendered, inst.path)
+        : undefined,
+      kept: kept ?? noKids
     }
   }
   const kidsOf = (
@@ -243,13 +243,14 @@ export const write = (
           let inner = under
           if (!under) {
             const exit = encodedOf(snap)
-            if (
-              stateCodecOf(inst.component as unknown as Component.Any).redacted
-            ) warnRedacted(inst, ctx)
-            else if (exit !== undefined && Exit.isFailure(exit)) {
-              warnUnencoded(inst, ctx, exit.cause)
-            }
             if (exit === undefined || Exit.isFailure(exit)) {
+              if (
+                stateCodecOf(inst.component as unknown as Component.Any)
+                  .redacted
+              ) warnRedacted(inst, ctx)
+              else if (exit !== undefined) {
+                warnUnencoded(inst, ctx, exit.cause)
+              }
               if (into === state) deferredPaths.push(path)
               inner = true
             } else {
@@ -264,7 +265,7 @@ export const write = (
           if (!bare) {
             sink.enter(path)
           }
-          for (const kid of snap.kids) visit(kid, inner)
+          if (snap.kid !== undefined) visit(snap.kid, inner)
           if (!bare) sink.leave(path)
           if (snap.kept.length === 0) return
           const was = into

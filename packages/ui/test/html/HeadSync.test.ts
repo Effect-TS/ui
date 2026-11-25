@@ -157,5 +157,34 @@ describe("BrowserHost head", {
     expect((await Effect.runPromise(Renderer.prerender(custom, {}))).head).toBe(
       42
     )
+    const ChildWithFold = Component.define({
+      name: "ChildWithFold",
+      model: Schema.Null,
+      message: Schema.Never,
+      elements: {
+        ...Html.vocabulary,
+        head: {
+          merge: () => ({ title: "custom" }),
+          title: (head: any) => head.title
+        }
+      }
+    }).make({
+      init: () => null,
+      update: ($) => $.model,
+      view: (h) => h.div("child")
+    })
+    const RootWithTitledHtml = Html.component({
+      name: "RootWithTitledHtml",
+      model: Schema.Null,
+      message: Schema.Never
+    }).make({
+      init: () => null,
+      update: ($) => $.model,
+      head: () => [Head.title("root")],
+      view: (h) => h.div(ChildWithFold(h, { key: "child", props: {} }))
+    })
+    expect(
+      (await Effect.runPromise(Renderer.prerender(RootWithTitledHtml, {}))).head
+    ).toEqual({ ...empty, title: "custom" })
   })
 })

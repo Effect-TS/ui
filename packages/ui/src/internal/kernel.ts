@@ -727,22 +727,23 @@ export const flush = (tree: Tree): void => {
   }
 }
 
+// A view is called through this, as it may have a `call` of its own.
+const callView = Function.prototype.call
+
 const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
   const component = inst.component
   const view = component.view ?? component["~content"]!
   try {
-    const tree: View.Node<any, any> | undefined = Reflect.apply(
+    const tree: View.Node<any, any> | undefined = callView.call(
       view,
       component,
-      [
-        inst.model,
-        inst.props,
-        inst.runs?.running,
-        inst.results,
-        View.takesPathSource(view) ? inst : inst.path,
-        inst.look,
-        inst
-      ]
+      inst.model,
+      inst.props,
+      inst.runs?.running,
+      inst.results,
+      View.takesPathSource(view) ? inst : inst.path,
+      inst.look,
+      inst
     )
     if (dev && tree !== undefined) {
       const author = checkPaths(inst, tree)
@@ -755,7 +756,8 @@ const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
   }
 }
 
-const authorOf = (inst: Instance): Instance =>
+/** @internal */
+export const authorOf = (inst: Instance): Instance =>
   inst.at !== undefined &&
     (inst.at.v as View.Child<any, any>).view !== undefined
     ? inst.parent!
@@ -1473,7 +1475,12 @@ const patchElement = (
   } else if (views.length === 1 && olds.length === 1) {
     const old = olds[0]!
     const next = views[0]!
-    if (next._tag === "Element" && old.v !== next && pairs(old.v, next)) {
+    if (next._tag === "Text" && old.v._tag === "Text") {
+      if (old.v.text !== next.text) host.setText(old.node, next.text)
+      old.v = next
+    } else if (
+      next._tag === "Element" && old.v !== next && pairs(old.v, next)
+    ) {
       patchElement(inst, old, old.v as View.Element<any, any>, next)
     } else olds[0] = patch(inst, old, next)
   } else rec.kids = patchList(inst, node, olds, views, null, true)
@@ -1520,15 +1527,20 @@ const patchList = (
   whole?: boolean
 ): Array<Rec> => {
   const host = inst.tree.host
-  const out: Array<Rec> = new Array(views.length)
   let start = 0
   let oldEnd = olds.length - 1
   let end = views.length - 1
+  let out: Array<Rec> = oldEnd === end ? olds : new Array(views.length)
   while (
     start <= oldEnd && start <= end && pairs(olds[start]!.v, views[start]!)
   ) {
     out[start] = patch(inst, olds[start]!, views[start]!)
     start++
+  }
+  if (out === olds) {
+    if (start > end) return out
+    out = new Array(views.length)
+    for (let index = 0; index < start; index++) out[index] = olds[index]!
   }
   while (
     start <= oldEnd && start <= end &&
@@ -1539,10 +1551,12 @@ const patchList = (
     end--
   }
   const count = end - start + 1
-  const sources = new Int32Array(count)
+  const sources = count > 0 && start <= oldEnd
+    ? new Int32Array(count)
+    : undefined
   let byKey: Map<unknown, number> | undefined
   let same: Int32Array | undefined
-  for (let index = start > oldEnd ? -1 : end; index >= start; index--) {
+  for (let index = sources === undefined ? -1 : end; index >= start; index--) {
     const key = keyOf(views[index]!)
     if (key === undefined) continue
     const next = (byKey ??= new Map()).get(key)
@@ -1564,7 +1578,7 @@ const patchList = (
       : undefined
     while (
       to !== undefined &&
-      (sources[to - start] !== 0 || !pairs(old.v, views[to]!))
+      (sources![to - start] !== 0 || !pairs(old.v, views[to]!))
     ) {
       const next = key === undefined || same === undefined
         ? 0
@@ -1572,13 +1586,13 @@ const patchList = (
       to = next === 0 ? undefined : next - 1
     }
     if (to !== undefined) {
-      sources[to - start] = index + 1
+      sources![to - start] = index + 1
       if (to < last) moved = true
       else last = to
     } else (gone ??= []).push(old)
   }
   for (let index = start; index <= end; index++) {
-    const source = sources[index - start]!
+    const source = sources === undefined ? 0 : sources[index - start]!
     out[index] = source === 0
       ? create(inst, views[index]!)
       : patch(inst, olds[source - 1]!, views[index]!)
@@ -1600,7 +1614,9 @@ const patchList = (
   }
   if (!moved) {
     for (let index = start, from = start; index <= end + 1; index++) {
-      if (index > end || sources[index - start] !== 0) {
+      if (
+        index > end || (sources !== undefined && sources[index - start] !== 0)
+      ) {
         const ref = index < views.length ? nodeOf(out[index]!) : after
         while (from < index) place(host, parent, out[from++]!, ref)
         from = index + 1
@@ -1608,12 +1624,12 @@ const patchList = (
     }
     return out
   }
-  const stay = increasing(sources)
+  const stay = increasing(sources!)
   let at = stay.length - 1
   let ref = end + 1 < views.length ? nodeOf(out[end + 1]!) : after
   for (let offset = count - 1; offset >= 0; offset--) {
     const index = start + offset
-    if (sources[offset] !== 0 && at >= 0 && stay[at] === offset) at--
+    if (sources![offset] !== 0 && at >= 0 && stay[at] === offset) at--
     else place(host, parent, out[index]!, ref)
     ref = nodeOf(out[index]!)
   }

@@ -704,7 +704,7 @@ export const isElementBuilder = (
  * @since 0.1.0
  */
 export const toNode = <Msg, R>(content: Content<Msg, R>): Node<Msg, R> =>
-  content instanceof ElementBuilder ? build(content, []) : content
+  content instanceof ElementBuilder ? buildWith(content, noChildren) : content
 
 /**
  * Builds the element node a builder describes: the children it holds, then
@@ -930,10 +930,12 @@ const withTokens = (
   owned: ReadonlyArray<Owned>
 ): Readonly<Record<string, string>> => {
   let out: Record<string, string> | undefined
-  for (const layer of owned) {
-    for (const name in layer.tokens) {
+  for (let index = 0; index < owned.length; index++) {
+    const tokens = owned[index]!.tokens
+    if (tokens === noFields) continue
+    for (const name in tokens) {
       out ??= { ...attrs }
-      out[name] = joinTokens(out[name], layer.tokens[name]!)
+      out[name] = joinTokens(out[name], tokens[name]!)
     }
   }
   return out ?? attrs
@@ -995,11 +997,12 @@ const copyBuilder = <B extends ElementBuilder<any, any, any, any>>(
   // A builder keeps no state under a symbol, so the count is the whole check.
   if (fields === builderFields.length) {
     const proto = Object.getPrototypeOf(builder)
-    let copier = copiers.get(proto)
+    let copier = proto === lastProto ? lastCopier : copiers.get(proto)
     if (copier === undefined) {
-      copier = makeCopier(proto, builder)
-      copiers.set(proto, copier)
+      copiers.set(proto, copier = makeCopier(proto, builder))
     }
+    lastProto = proto
+    lastCopier = copier
     if (copier !== null) return new copier(builder) as B
   }
   return Object.assign(Object.create(Object.getPrototypeOf(builder)), builder)
@@ -1026,6 +1029,8 @@ type Copier = new(
 
 /** A class's copier by its prototype, or `null` for a class whose builders are copied generically. */
 const copiers = new WeakMap<object, Copier | null>()
+let lastProto: object | undefined
+let lastCopier: Copier | null = null
 
 /**
  * A constructor that copies the base fields of a builder of the class with
@@ -1201,14 +1206,15 @@ export const makePart = (
     throw new Error(owner.path + ": a part can't apply another part")
   }
   const attrs: Record<string, string> = { ...builder.elementAttrs }
-  const tokens: Record<string, string> = {}
+  let tokens: Record<string, string> | undefined
   for (const name of patch.removals ?? []) {
     // Token lists are additive: a part can omit its own tokens, not the consumer's.
     if (!tokenListAttributes.has(name)) delete attrs[name]
   }
   for (const name in patch.elementAttrs) {
-    if (tokenListAttributes.has(name)) tokens[name] = patch.elementAttrs[name]!
-    else attrs[name] = patch.elementAttrs[name]!
+    if (tokenListAttributes.has(name)) {
+      ;(tokens ??= {})[name] = patch.elementAttrs[name]!
+    } else attrs[name] = patch.elementAttrs[name]!
   }
   const layer: Owned = {
     owner,
@@ -1216,11 +1222,15 @@ export const makePart = (
     eventOptions: patch.eventOptions,
     refKey: patch.refKey,
     mount: patch.mount,
-    tokens
+    tokens: tokens ?? noFields
   }
   const out = withFields(builder, {
     elementAttrs: attrs,
-    props: { ...builder.props, ...patch.props },
+    props: patch.props === noFields
+      ? builder.props
+      : builder.props === noFields
+      ? patch.props
+      : { ...builder.props, ...patch.props },
     owned: [...builder.owned, layer]
   })
   // The part's children come after the ones the builder came with, and its
@@ -1327,6 +1337,9 @@ const blankFields = {
   removals: undefined
 }
 
+let lastPath = ""
+let lastEscaped = ""
+
 /**
  * An id for an element of the instance at `path`, the same on the server and
  * the client. The path, the name and the key are each escaped down to
@@ -1340,9 +1353,14 @@ export const idOf = (
   path: string,
   name: string,
   key?: string | number | undefined
-): string =>
-  escapeId(path) + "-" + escapeId(name) +
-  (key === undefined ? "" : "-" + escapeId(String(key)))
+): string => {
+  if (path !== lastPath) {
+    lastPath = path
+    lastEscaped = escapeId(path)
+  }
+  return lastEscaped + "-" + escapeId(name) +
+    (key === undefined ? "" : "-" + escapeId(String(key)))
+}
 
 // The underscore that opens and closes an escape is escaped too, so the escaping can be undone.
 const escapeId = (value: string): string =>
@@ -1524,12 +1542,18 @@ export class ElementBuilder<
    * @since 0.1.0
    */
   attr(name: string, value: string | undefined): this {
-    const out = copyBuilder(this) as Mutable<this>
+    const attrs = this.elementAttrs
     const removals = this.removals
+    // A `shorthand` is a function whose chain methods must return a plain builder.
+    if (
+      value === undefined && removals === undefined &&
+      (attrs === noFields || !Object.hasOwn(attrs, name)) &&
+      typeof this !== "function"
+    ) return this
+    const out = copyBuilder(this) as Mutable<this>
     if (value === undefined && removals !== undefined) {
       out.removals = [...removals, name]
     }
-    const attrs = this.elementAttrs
     if (attrs === noFields) {
       if (value !== undefined) out.elementAttrs = assoc(attrs, name, value)
       // Removing an attribute that isn't set leaves the record as it is.
@@ -2242,6 +2266,8 @@ const helperClasses = new WeakMap<
   Vocabulary<any>,
   typeof HelperImpl<any, any>
 >()
+let lastElements: Vocabulary<any> | undefined
+let lastHelperClass: typeof HelperImpl<any, any> | undefined
 
 /**
  * What a runtime can give a view in place of its path: something whose
@@ -2291,13 +2317,16 @@ export const makeHelper = <Msg, Props, V extends Elements = never>(
   if (elements === undefined) {
     return new HelperImpl(props, undefined, running, path ?? "", store) as any
   }
-  let Class = helperClasses.get(elements)
+  let Class = elements === lastElements
+    ? lastHelperClass
+    : helperClasses.get(elements)
   if (Class === undefined) {
     const Made = class extends HelperImpl<any, any> {}
     Object.assign(Made.prototype, elements.tags)
-    helperClasses.set(elements, Made)
-    Class = Made
+    helperClasses.set(elements, Class = Made)
   }
+  lastElements = elements
+  lastHelperClass = Class
   return new Class(props, elements, running, path ?? "", store) as any
 }
 

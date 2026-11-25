@@ -972,10 +972,10 @@ const makeUpdate = (
 ): Update<any, any, any, any> =>
   Object.assign(Object.create(UpdateProto), {
     model,
-    commands: [],
-    emitted: [],
-    lists: [],
-    sends: [],
+    commands: noEffects,
+    emitted: noEffects,
+    lists: noEffects,
+    sends: noEffects,
     viewTransitionTypes: undefined,
     props,
     queries,
@@ -992,7 +992,19 @@ const toUpdateFn = (
     : ($, msg) => update[(msg as { readonly _tag: string })._tag]($, msg)
 
 const initSet = (model: unknown) =>
-  makeStep(model, [], [], [], [], undefined) as Step<any, any, any, never>
+  makeStep(
+    model,
+    noEffects,
+    noEffects,
+    noEffects,
+    noEffects,
+    undefined
+  ) as Step<
+    any,
+    any,
+    any,
+    never
+  >
 const makeInit = (props: unknown): Init<any, any, any, any> => ({
   props,
   set: initSet
@@ -2219,6 +2231,7 @@ const Proto = Object.assign(Object.create(Function.prototype), {
       queryCore.loaded!.run.first(inst as never)
     }
     if (this.head !== undefined) heads.loaded?.(inst as never)
+    if (this.elements?.head !== undefined) heads.trackFold(inst as never)
   },
   "~kept": keeper
 })

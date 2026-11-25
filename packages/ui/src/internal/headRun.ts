@@ -31,9 +31,12 @@ const placed = (rec: Kernel.Rec, out: Array<Kernel.Instance>): void => {
   }
 }
 
+const foldings = new WeakMap<Kernel.Tree, Folding>()
+
 class Folding {
   readonly root: Kernel.Instance
   readonly neutral: View.HeadFold
+  readonly active = new Set<Kernel.Instance>()
   given: string | undefined = undefined
   constructor(root: Kernel.Instance, neutral: View.HeadFold) {
     this.root = root
@@ -43,7 +46,12 @@ class Folding {
     const tree = this.root.tree
     const failed: Array<Kernel.Instance | unknown> = []
     let fold = foldOf(this.root) ?? this.neutral
-    const skip = fold !== this.neutral && skipsEmpty(fold.merge)
+    const skip = skipsEmpty(fold.merge) && (
+      fold !== this.neutral ||
+      (heads.html === undefined && !heads.hasCustomFold(tree))
+    )
+    const walk = !skip || this.active.size > 1 ||
+      (this.active.size === 1 && !this.active.has(this.root))
     const node = (inst: Kernel.Instance): Head.Tree<unknown> | undefined => {
       if (inst.closed || inst.failure !== undefined) {
         return skip
@@ -51,6 +59,10 @@ class Folding {
           : { path: inst.path, entries: none, children: none }
       }
       const head = (inst.component as unknown as Component.Any).head
+      if (fold === this.neutral) fold = foldOf(inst) ?? fold
+      const hasKids = walk && inst.rendered !== undefined &&
+        Kernel.authorOf(inst).live > 0
+      if (skip && head === undefined && !hasKids) return undefined
       let entries: ReadonlyArray<unknown> = none
       if (head !== undefined) {
         try {
@@ -60,21 +72,22 @@ class Folding {
           return undefined
         }
       }
-      if (fold === this.neutral) fold = foldOf(inst) ?? fold
-      const below: Array<Kernel.Instance> = []
-      if (inst.rendered !== undefined) placed(inst.rendered, below)
-      const children: Array<Head.Tree<unknown>> = []
-      for (let index = 0; index < below.length; index++) {
-        const child = node(below[index]!)
-        if (child !== undefined) children.push(child)
+      let children: Array<Head.Tree<unknown>> | undefined
+      if (hasKids) {
+        const below: Array<Kernel.Instance> = []
+        placed(inst.rendered!, below)
+        for (let index = 0; index < below.length; index++) {
+          const child = node(below[index]!)
+          if (child !== undefined) (children ??= []).push(child)
+        }
       }
-      if (skip && entries.length === 0 && children.length === 0) {
+      if (skip && entries.length === 0 && children === undefined) {
         return undefined
       }
       return {
         path: inst.path,
         entries,
-        children,
+        children: children ?? none,
         onError: (error) => failed.push(inst, error)
       }
     }
@@ -113,13 +126,18 @@ class Folding {
 export const make =
   (neutral: View.HeadFold) => (inst: Kernel.Instance): void => {
     const tree = inst.tree
-    if (tree.head !== undefined) return
-    let root = inst
-    while (root.parent !== undefined) root = root.parent
-    const folding = new Folding(root, neutral)
-    tree.head = { value: undefined, title: undefined }
-    const work = tree.work
-    tree.work = (idle) =>
-      work?.(idle) === true ||
-      (idle && tree.drew === true && !(tree.drew = false) && folding.run())
+    let folding = foldings.get(tree)
+    if (folding === undefined) {
+      let root = inst
+      while (root.parent !== undefined) root = root.parent
+      const made = folding = new Folding(root, neutral)
+      foldings.set(tree, made)
+      tree.head = { value: undefined, title: undefined }
+      const work = tree.work
+      tree.work = (idle) =>
+        work?.(idle) === true ||
+        (idle && tree.drew === true && !(tree.drew = false) && made.run())
+    }
+    folding.active.add(inst)
+    ;(inst.closers ??= []).push(() => folding.active.delete(inst))
   }

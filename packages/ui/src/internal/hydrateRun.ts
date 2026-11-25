@@ -132,7 +132,7 @@ export const make = (
   let resuming = false
   const serves = (owner: Kernel.Instance | undefined, path: string) =>
     (owner === undefined ? pass : adopting.has(owner) && (pass || resuming)) &&
-    !deferred.has(path) &&
+    (deferred.size === 0 || !deferred.has(path)) &&
     Object.hasOwn(state, path)
   if (active !== undefined) use(host, active.host)
   const setEvents = host.setEvents
@@ -178,7 +178,7 @@ export const make = (
     const view = rec.v as View.Child<any, any>
     const path = (view.alive === undefined && at || owner.path) + "/" +
       segmentOf(view.component, view.key)
-    if (resumed.delete(rec)) return false
+    if (resuming && resumed.delete(rec)) return false
     const served = serves(owner, path)
     if (view.alive === undefined) active?.child(path, served)
     const from = served
@@ -344,7 +344,12 @@ export const make = (
       }
       if (got === undefined) return undefined
       adopting.add(inst)
-      started.set(path, inst)
+      if (
+        inst.component.layer !== undefined ||
+        (inst.env.ctx === undefined && inst.env.cause === undefined)
+      ) {
+        started.set(path, inst)
+      }
       inst.results = got.results
       const owning = reportedOf(
         inst.component as unknown as Component.Any,

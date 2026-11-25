@@ -1,54 +1,29 @@
 /**
- * The host a server render runs on. It only keeps the node tree, which the
- * runtime needs to patch: the HTML comes from the rendered tree, not from
- * these nodes.
+ * The host a server render runs on. It keeps nothing: the HTML comes from
+ * the rendered tree, so every element and text is the one `node`.
  *
  * @internal
  */
-import type * as Renderer from "../Renderer.ts"
+import type * as Kernel from "./kernel.ts"
 
 /** @internal */
-export interface Node {
-  parent: Node | undefined
-  readonly children: Array<Node>
-}
+export const node: unknown = {}
 
-const detach = (node: Node) => {
-  const parent = node.parent
-  if (parent === undefined) return
-  parent.children.splice(parent.children.indexOf(node), 1)
-  node.parent = undefined
-}
-
-const node = (): Node => ({ parent: undefined, children: [] })
+const same = () => node
+const noop = () => {}
 
 /** @internal */
-export const make = (
-  elements: ReadonlyArray<string> | "any"
-): Renderer.Host<Node> => ({
-  createElement: node,
-  createText: node,
-  createContainer: node,
-  setText() {},
-  setAttr() {},
-  setProp() {},
-  insertBefore(parent, child, ref) {
-    detach(child)
-    const index = ref === undefined ? -1 : parent.children.indexOf(ref)
-    if (index < 0) parent.children.push(child)
-    else parent.children.splice(index, 0, child)
-    child.parent = parent
-  },
-  remove: detach,
-  parentOf: (child) => child.parent,
-  nextOf(child) {
-    const siblings = child.parent?.children
-    return siblings === undefined
-      ? undefined
-      : siblings[siblings.indexOf(child) + 1]
-  },
-  setEvents() {},
-  elements,
-  controlled: new Set(),
+export const host: Kernel.Host<unknown> = {
+  createElement: same,
+  createText: same,
+  createContainer: same,
+  setText: noop,
+  setAttr: noop,
+  setProp: noop,
+  setEvents: noop,
+  insert: noop,
+  remove: noop,
+  parentOf: same,
+  nextOf: () => null,
   runsMounts: false
-})
+}
