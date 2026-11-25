@@ -237,22 +237,20 @@ const TrackMenubar = Mount.makeStream(
         const document = node.ownerDocument
         const view = document.defaultView
         let found = ""
-        const scan = (): ReadonlyArray<string> => {
-          const triggers = barTriggers(node)
-            .filter((trigger) =>
-              trigger.id !== "" && !trigger.hasAttribute("disabled")
-            )
-            .map((trigger) => trigger.id)
+        const enabled = () =>
+          barTriggers(node).filter((trigger) =>
+            trigger.id !== "" && !trigger.hasAttribute("disabled")
+          )
+        const scan = () => {
+          const triggers = enabled().map((trigger) => trigger.id)
           const rtl = view?.getComputedStyle(node).direction === "rtl"
           const next = JSON.stringify([triggers, rtl])
-          if (next !== found) {
-            found = next
-            Queue.offerUnsafe(
-              queue,
-              MenubarMessage.FoundTriggers({ triggers, rtl })
-            )
-          }
-          return triggers
+          if (next === found) return
+          found = next
+          Queue.offerUnsafe(
+            queue,
+            MenubarMessage.FoundTriggers({ triggers, rtl })
+          )
         }
         const selector = `[${triggerAttribute}]`
         const holdsTrigger = (changed: Node) =>
@@ -277,11 +275,9 @@ const TrackMenubar = Mount.makeStream(
           attributes: true,
           attributeFilter: ["id", "disabled", triggerAttribute]
         })
-        const first = scan()[0]
+        scan()
         // The root was the Tab stop until now, as in server-rendered HTML: focus on it goes to the first trigger.
-        if (document.activeElement === node && first !== undefined) {
-          document.getElementById(first)?.focus()
-        }
+        if (document.activeElement === node) enabled()[0]?.focus()
         yield* Effect.addFinalizer(() =>
           Effect.sync(() => observer?.disconnect())
         )
