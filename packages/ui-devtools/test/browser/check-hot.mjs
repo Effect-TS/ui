@@ -9,6 +9,32 @@ const root = fs.mkdtempSync(path.join(import.meta.dirname, ".hot-tmp-"))
 const write = (name, source) =>
   fs.writeFileSync(path.join(root, name), source, "utf8")
 
+const on = (page) => ({
+  text: (selector) => page.locator(selector).textContent(),
+  shows: (selector, value) =>
+    page.waitForFunction(
+      ([selector, value]) =>
+        document.querySelector(selector)?.textContent === value,
+      [selector, value]
+    ),
+  edit: (name, source) => {
+    write(name, source)
+    // Saves a few milliseconds apart can reach the page as one update.
+    return page.waitForTimeout(700)
+  }
+})
+
+const collectTags = (ws, logTags) =>
+  ws.on("framesent", ({ payload }) => {
+    if (typeof payload !== "string") return
+    try {
+      const parsed = JSON.parse(payload)
+      if (typeof parsed?._tag === "string") logTags.push(parsed._tag)
+    } catch {
+      return
+    }
+  })
+
 const html = (script) =>
   `<!doctype html><html><head><meta charset="utf-8"><link rel="icon" href="data:,"><script type="module" src="/${script}"></script></head><body><div id="root"></div></body></html>`
 
@@ -130,6 +156,89 @@ Layer.launch(Main).pipe(Effect.runFork)
 )
 write("routed.ts", routedSource("r1"))
 
+const counterSource = (name, label) => `
+import { UiSchema } from "@effect/ui"
+import { Html } from "@effect/ui/html"
+import { Schema } from "effect"
+
+const Message = UiSchema.TaggedEnum({ Inc: {} })
+
+export const ${name} = Html.component({
+  name: "${name}",
+  model: Schema.Number,
+  message: Message
+}).make({
+  init: () => 0,
+  update: ($) => $.model + 1,
+  view: (h, count) =>
+    h.button.attr("data-${name}", "").onClick(Message.Inc())
+      .children(\`${label}=\${count}\`)
+})
+`
+
+// Exports only a function that draws its private component.
+const hiddenSource = (label) =>
+  counterSource("Hidden", label).replace(
+    "export const Hidden",
+    "const Hidden"
+  ) +
+  "export const drawHidden = (h: any) => Hidden(h, { key: \"h\" })\n"
+
+const parentSource = (heading) => `
+import { UiSchema } from "@effect/ui"
+import { Html } from "@effect/ui/html"
+import { Schema } from "effect"
+import { drawHidden } from "./hidden.ts"
+import { Kid } from "./kid.ts"
+
+const Message = UiSchema.TaggedEnum({ Inc: {} })
+
+export const Parent = Html.component({
+  name: "Parent",
+  model: Schema.Number,
+  message: Message
+}).make({
+  init: () => 0,
+  update: ($) => $.model + 1,
+  view: (h) =>
+    h.div(
+      h.h1(${JSON.stringify(heading)}),
+      Kid(h, { key: "k" }),
+      drawHidden(h)
+    )
+})
+`
+
+write("children.html", html("children-main.ts"))
+write(
+  "children-main.ts",
+  `import { BrowserHost } from "@effect/ui/html"
+import { Effect, Layer } from "effect"
+import { Parent } from "./parent.ts"
+const Main = BrowserHost.mount(Parent, {}, document.getElementById("root")!)
+Layer.launch(Main).pipe(Effect.runFork)
+`
+)
+write("parent.ts", parentSource("Parent"))
+write("kid.ts", counterSource("Kid", "K"))
+write("hidden.ts", hiddenSource("H"))
+
+const snakeDir = path.join(root, "snake")
+fs.cpSync(path.join(repo, "examples/snake/src"), path.join(snakeDir, "src"), {
+  recursive: true,
+  filter: (from) => !from.endsWith(".test.ts")
+})
+write(
+  "snake/package.json",
+  JSON.stringify({ imports: { "#domain/*": "./src/domain/*.ts" } })
+)
+write("snake.html", html("snake/src/main.ts"))
+const snakeGame = fs.readFileSync(
+  path.join(snakeDir, "src/SnakeGame.ts"),
+  "utf8"
+)
+const snakeMain = fs.readFileSync(path.join(snakeDir, "src/main.ts"), "utf8")
+
 try {
   await run("hot reload", async ({ browser, expect, failures, url }) => {
     const page = await browser.newPage()
@@ -141,17 +250,7 @@ try {
       if (!ws.url().includes(":47769/")) return
       sockets.add(ws)
       ws.on("close", () => sockets.delete(ws))
-      if (ws.url().endsWith("/log")) {
-        ws.on("framesent", ({ payload }) => {
-          if (typeof payload !== "string") return
-          try {
-            const parsed = JSON.parse(payload)
-            if (typeof parsed?._tag === "string") logTags.push(parsed._tag)
-          } catch {
-            return
-          }
-        })
-      }
+      if (ws.url().endsWith("/log")) collectTags(ws, logTags)
     })
     const liveSockets = (suffix) =>
       [...sockets].filter((ws) => !ws.isClosed() && ws.url().endsWith(suffix))
@@ -166,14 +265,8 @@ try {
       failures.push("pageerror: " + String(error))
     })
 
-    const text = (selector) => page.locator(selector).textContent()
+    const { shows, text } = on(page)
     const count = async () => Number(await text("[data-count]"))
-    const shows = (selector, value) =>
-      page.waitForFunction(
-        ([selector, value]) =>
-          document.querySelector(selector)?.textContent === value,
-        [selector, value]
-      )
     const counted = () =>
       page.waitForFunction(
         () => Number(document.querySelector("[data-count]")?.textContent) >= 3
@@ -319,6 +412,163 @@ try {
   }, {
     root,
     plugins: [DevToolsVite.plugin({ port: 47769 })],
+    experimental: { hmrPartialAccept: false },
+    server: { fs: { allow: [root, repo] } }
+  })
+
+  await run("hot update", async ({ browser, expect, failures, url }) => {
+    const page = await browser.newPage()
+    const logTags = []
+    let loads = 0
+    page.on("load", () => loads++)
+    page.on("websocket", (ws) => {
+      if (ws.url().endsWith(":47770/log")) collectTags(ws, logTags)
+    })
+    page.on("console", (msg) => {
+      if (msg.type() === "error") failures.push("console error: " + msg.text())
+    })
+    page.on("pageerror", (error) => {
+      failures.push("pageerror: " + String(error))
+    })
+
+    const cells = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll(".w-6")].map((cell) => cell.className)
+          .join("|")
+      )
+    const { edit, shows, text } = on(page)
+    const titled = (text) => shows("h1", text)
+    const reloadWith = (name, source) =>
+      Promise.all([page.waitForEvent("load"), edit(name, source)])
+
+    await page.goto(url + "snake.html")
+    await titled("Snake Game")
+    await page.keyboard.press(" ")
+    await page.waitForFunction(() =>
+      document.body.textContent?.includes("Playing")
+    )
+    await page.waitForTimeout(400)
+    await page.keyboard.press(" ")
+    await page.waitForFunction(() =>
+      document.body.textContent?.includes("Paused")
+    )
+    const paused = await cells()
+    const documentTitle = await page.title()
+    await page.evaluate(() => {
+      window.hotH1 = document.querySelector("h1")
+    })
+    loads = 0
+    logTags.length = 0
+
+    await edit(
+      "snake/src/SnakeGame.ts",
+      snakeGame.replace("\"Snake Game\"", "\"Snake Edited\"")
+    )
+    await titled("Snake Edited")
+    await page.waitForTimeout(200)
+    expect(loads === 0, "title edit loaded no page", { loads })
+    expect(
+      await page.evaluate(() => document.querySelector("h1") === window.hotH1),
+      "title edit kept the h1 node",
+      {}
+    )
+    const edited = await cells()
+    expect(edited === paused, "title edit kept the snake and apple", {})
+    expect(
+      (await page.title()) === documentTitle,
+      "title edit kept the head",
+      { before: documentTitle, after: await page.title() }
+    )
+    const replayed = logTags.filter((tag) =>
+      tag === "Mounted" || tag.startsWith("Command")
+    )
+    expect(replayed.length === 0, "title edit ran no init or Command", {
+      logTags
+    })
+    await page.keyboard.press(" ")
+    await page.waitForFunction(
+      (paused) =>
+        [...document.querySelectorAll(".w-6")].map((cell) => cell.className)
+          .join("|") !== paused,
+      paused
+    )
+    await page.keyboard.press(" ")
+    await page.waitForFunction(() =>
+      document.body.textContent?.includes("Paused")
+    )
+
+    const fresh = await cells()
+    await reloadWith(
+      "snake/src/main.ts",
+      snakeMain.replace(
+        "import { SnakeGame } from \"./SnakeGame.ts\"",
+        "import { SnakeGame, SnakeGameModel } from \"./SnakeGame.ts\"\nvoid SnakeGameModel"
+      )
+    )
+    await titled("Snake Edited")
+    loads = 0
+    await reloadWith(
+      "snake/src/SnakeGame.ts",
+      snakeGame.replace("\"Snake Game\"", "\"Snake Mixed\"")
+    )
+    await titled("Snake Mixed")
+    expect(loads === 1, "edit under a mixed import reloaded the page", {
+      loads
+    })
+    expect(
+      (await cells()) === fresh,
+      "edit under a mixed import kept the snake and apple",
+      {}
+    )
+
+    const click = async (selector, value) => {
+      await page.locator(selector).click()
+      await shows(selector, value)
+    }
+    const sameKid = () =>
+      page.evaluate(() =>
+        document.querySelector("[data-Kid]") === window.hotKid
+      )
+
+    await page.goto(url + "children.html")
+    await titled("Parent")
+    await click("[data-Kid]", "K=1")
+    await click("[data-Hidden]", "H=1")
+    await page.evaluate(() => {
+      window.hotKid = document.querySelector("[data-Kid]")
+    })
+    loads = 0
+
+    await edit("kid.ts", counterSource("Kid", "K2"))
+    await shows("[data-Kid]", "K2=1")
+    expect(
+      loads === 0 && await sameKid() && (await text("[data-Hidden]")) === "H=1",
+      "child edit updated the clicked child in place",
+      { loads, hidden: await text("[data-Hidden]") }
+    )
+
+    await edit("parent.ts", parentSource("Parent 2"))
+    await titled("Parent 2")
+    expect(
+      loads === 0 && await sameKid() &&
+        (await text("[data-Kid]")) === "K2=1" &&
+        (await text("[data-Hidden]")) === "H=1",
+      "parent edit kept the already-updated child in place",
+      { loads, kid: await text("[data-Kid]") }
+    )
+
+    await edit("hidden.ts", hiddenSource("H2"))
+    await shows("[data-Hidden]", "H2=1")
+    expect(
+      loads === 1 && (await text("[data-Kid]")) === "K2=1",
+      "edit of a private child reloaded with the counters kept",
+      { loads, kid: await text("[data-Kid]") }
+    )
+
+    await page.close()
+  }, {
+    root,
+    plugins: [DevToolsVite.plugin({ port: 47770 })],
     server: { fs: { allow: [root, repo] } }
   })
 } finally {

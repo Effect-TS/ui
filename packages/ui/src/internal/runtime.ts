@@ -20,7 +20,6 @@ import * as domHost from "./domHost.ts"
 import * as Executor from "./executor.ts"
 import * as heads from "./heads.ts"
 import type * as hydrateRun from "./hydrateRun.ts"
-import type * as keptRun from "./keptRun.ts"
 import * as Kernel from "./kernel.ts"
 import * as lazy from "./lazy.ts"
 import * as messageLog from "./messageLog.ts"
@@ -818,12 +817,9 @@ const findIn = (
     ? undefined
     : findInRec(inst.rendered, born, numberOf)
   if (found !== undefined) return found
-  const kept = inst.kept as keptRun.Table | undefined
-  if (kept !== undefined) {
-    for (const entry of kept.kids.values()) {
-      const found = findIn(entry.inst, born, numberOf)
-      if (found !== undefined) return found
-    }
+  for (const entry of inst.kept?.children() ?? []) {
+    const found = findIn(entry.inst, born, numberOf)
+    if (found !== undefined) return found
   }
   return undefined
 }

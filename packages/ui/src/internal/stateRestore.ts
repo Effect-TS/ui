@@ -216,7 +216,7 @@ export const make = (options: Options): StateRestore => {
     const notes = keptIn(out, top, inst.path)
     for (const path in unclaimed) notes[path] = unclaimed[path]
     if (table === undefined) return
-    for (const entry of table.kids.values()) {
+    for (const entry of table.children()) {
       visit(entry.inst, notes[entry.inst.path] = {}, top)
     }
   }

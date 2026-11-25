@@ -41,6 +41,14 @@ export class Table {
       for (const entry of this.kids.values()) drop(author, entry)
     })
   }
+  // Exclude loading entries: they hold the author, not the lazy child.
+  children(): ReadonlyArray<Entry> {
+    const out: Array<Entry> = []
+    for (const entry of this.kids.values()) {
+      if (entry.loading === undefined) out.push(entry)
+    }
+    return out
+  }
   parked(): ReadonlyArray<Rec> {
     const out: Array<Rec> = []
     for (const entry of this.kids.values()) {
