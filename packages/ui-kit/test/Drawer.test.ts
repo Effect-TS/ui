@@ -74,7 +74,7 @@ const opened = {
   triggerId: null,
   reason: "swipe"
 } as DrawerEvents
-const snapped = (snapPoint: number) =>
+const snapped = (snapPoint: number | string) =>
   ({ _tag: "Snapped", snapPoint }) as DrawerEvents
 const measured = sent("Measured", { height: 800, viewport: 800, fontSize: 16 })
 
@@ -201,6 +201,68 @@ describe("Drawer", () => {
           release({ direction: "up", deltaY: -590, height: 800 })
         )
         .emitted(snapped(1))
+    }))
+
+  it.effect("snapTrigger moves to the next snap point and wraps, and snapStatus is a live region", () =>
+    Effect.gen(function*() {
+      const snapTrigger = Locator.attr("class", "snap")
+      const status = Locator.attr("class", "status")
+      const snapStandIn = {
+        elements: Html,
+        view: (drawer: Parts, h: H) =>
+          drawer.popup(h.div.class("popup")).children(
+            drawer.snapTrigger(
+              h.button.class("snap").attr("aria-disabled", "true")
+            ),
+            drawer.snapStatus(h.div.class("status"))
+          )
+      }
+      // Before measurement the order given, without the repeat. After, by height.
+      const snapPoints = [0.5, 0.5, "240px", 1]
+      const scene = yield* Scene.make(
+        Drawer,
+        { open: true, snapPoints: [0.5, 0.5] },
+        snapStandIn
+      )
+      scene.expectMount(tracked(scene))
+      assert.deepInclude(scene.get(status).attrs, {
+        role: "status",
+        "aria-live": "polite",
+        "aria-atomic": "true"
+      })
+      assert.deepInclude(scene.get(snapTrigger).attrs, {
+        type: "button",
+        disabled: "",
+        "data-disabled": ""
+      })
+      scene.click(snapTrigger)
+      assert.deepStrictEqual(scene.current.emitted, [])
+
+      scene.props({ open: true, snapPoints, snapPoint: 0.5 })
+        .expectMount(tracked(scene))
+      assert.isUndefined(scene.get(snapTrigger).attrs?.disabled)
+      assert.isUndefined(scene.get(snapTrigger).attrs?.["aria-disabled"])
+      scene.click(snapTrigger).emitted(snapped("240px"))
+        .mounted(tracked(scene), measured)
+        .expectMount(tracked(scene))
+        .click(snapTrigger).emitted(snapped(1))
+        .props({ open: true, snapPoints, snapPoint: 1 })
+        .expectMount(tracked(scene))
+        .click(snapTrigger).emitted(snapped("240px"))
+
+      // Horizontal drawers and collapsed snap points disable the trigger.
+      scene.props({ open: true, snapPoints, swipeDirection: "left" })
+        .expectMount(tracked(scene))
+      assert.strictEqual(scene.get(snapTrigger).attrs?.disabled, "")
+
+      scene.props({ open: true, snapPoints: [0.5, 1] })
+        .expectMount(tracked(scene))
+        .mounted(
+          tracked(scene),
+          sent("Measured", { height: 400, viewport: 800, fontSize: 16 })
+        )
+      assert.strictEqual(scene.get(snapTrigger).attrs?.disabled, "")
+      scene.expectMount(tracked(scene))
     }))
 
   it.effect("a refused dismiss puts the drawer back", () =>
