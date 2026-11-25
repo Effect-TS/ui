@@ -415,6 +415,11 @@ describe("DevTools overlay", { concurrent: false }, () => {
         text(root.querySelector(".paused-label")),
         /^Paused at #\d+$/
       )
+      assert.strictEqual(
+        text(root.querySelector(".scrub .muted")),
+        "Time travel"
+      )
+      assert.match(text(root.querySelector(".scrub .at")), /^#\d+$/)
       assert.strictEqual(app.style.getPropertyValue("display"), "none")
       assert.strictEqual(
         Array.from(copy()!.querySelectorAll("p")).map((status) =>

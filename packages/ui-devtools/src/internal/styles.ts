@@ -85,6 +85,7 @@ ${markRules}
 .resume { padding: 2px 10px; border-radius: 999px; background: var(--ink); color: var(--bg); font-weight: 500; }
 .pausebar { display: grid; gap: 2px; padding: 8px 20px; border-bottom: 1px solid var(--line); background: var(--sel); }
 .scrub { display: flex; align-items: center; gap: 12px; }
+.scrub .muted { white-space: nowrap; }
 .scrub input { flex: 1; min-width: 0; margin: 0; accent-color: var(--ink); }
 .scrub .at { min-width: 48px; text-align: right; font-variant-numeric: tabular-nums; }
 .pause-notes { display: grid; gap: 4px; min-height: 18px; font-size: 12px; line-height: 18px; }

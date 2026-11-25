@@ -339,7 +339,7 @@ const PausedBar = (
     "Page shown at an earlier entry"
   ).children(
     h.div.class("scrub").children(
-      h.span.class("muted").children("Page at"),
+      h.span.class("muted").children("Time travel"),
       h.input.attr("type", "range").attr(
         "aria-label",
         "Entry shown on the page"
