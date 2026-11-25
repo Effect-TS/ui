@@ -144,7 +144,7 @@
  *         h.div(
  *           Editor(h, {}),
  *           toastProvider.viewport(h.div.class("toasts")).children(
- *             ...toastProvider.toasts.map((toast) =>
+ *             toastProvider.toasts.map((toast) =>
  *               toastProvider.root({ element: h.div.class("toast"), toast }).children(
  *                 toastProvider.title({ element: h.strong, toast }).children(toast.title),
  *                 toastProvider.close({ element: h.button, toast }).children("Dismiss")

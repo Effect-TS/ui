@@ -108,7 +108,7 @@ const Lines = (
     "[font-variant-ligatures:none]"
   ).children(
     h.code.children(
-      ...snippet.lines.map((tokens, index) => {
+      snippet.lines.map((tokens, index) => {
         const text = tokens.map((token) => token.text).join("").trim()
         return h.span.key(String(index)).class(
           "block border-l-2 border-transparent ps-3 pe-3.5",
@@ -117,7 +117,7 @@ const Lines = (
           "motion-safe:duration-200"
         ).attr("data-current", text === current ? "" : undefined)
           .children(
-            ...tokens.map((token) =>
+            tokens.map((token) =>
               h.span.style({ color: token.color }).children(
                 token.text
               )
@@ -184,7 +184,7 @@ const Note = (h: Html.H<PlayTestMessage>, model: PlayTestModel) => {
     "aria-hidden",
     "true"
   ).children(
-    ...[before, ...notes].map((text, index) =>
+    [before, ...notes].map((text, index) =>
       h.span.key(String(index)).class(
         "col-start-1 row-start-1 text-pretty",
         index !== shown && "invisible"

@@ -283,7 +283,7 @@ export const SignupForm = Html.component({
         field._tag === "Validating" ? h.span.children("Checking…") : null,
         field._tag === "Invalid"
           ? h.ul.attr("role", "alert").children(
-            ...field.errors.map((error) => h.li.children(error))
+            field.errors.map((error) => h.li.children(error))
           )
           : null
       )

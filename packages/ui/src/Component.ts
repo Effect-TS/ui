@@ -701,7 +701,7 @@ export interface Step<
    *   },
    *   view: (h, model) =>
    *     h.ul.class(model.layout).children(
-   *       ...["a", "b"].map((id) => h.li.key(id).style({ viewTransitionName: `item-${id}` }).children(id))
+   *       ["a", "b"].map((id) => h.li.key(id).style({ viewTransitionName: `item-${id}` }).children(id))
    *     )
    * })
    * ```

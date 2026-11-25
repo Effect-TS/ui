@@ -79,7 +79,7 @@
  *       view: (fieldset) =>
  *         fieldset.root(h.fieldset.class("billing")).children(
  *           fieldset.legend(h.div).children("Billing details"),
- *           ...["Company", "Tax ID"].map((name) =>
+ *           ["Company", "Tax ID"].map((name) =>
  *             Field(h, {
  *               key: name,
  *               view: (field) =>

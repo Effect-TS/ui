@@ -118,7 +118,7 @@ const Lane = (
     // One segment per step, across the full width.
     h.div.class("flex gap-[3px]").attr("aria-hidden", "true")
       .children(
-        ...steps.map((_, index) =>
+        steps.map((_, index) =>
           h.span.key(String(index)).class(
             "h-1.5 flex-1 rounded-full",
             index <= shown ? "bg-accent" : "bg-border-strong",
@@ -134,7 +134,7 @@ const Lane = (
       "true"
     )
       .children(
-        ...[undefined, ...steps].map((s, index) =>
+        [undefined, ...steps].map((s, index) =>
           h.p.key(String(index)).class(
             "col-start-1 row-start-1 text-pretty",
             index - 1 !== shown && "invisible",
@@ -185,7 +185,7 @@ const Timeline = (
       "flex font-mono text-[0.6875rem] text-muted-foreground",
       "font-features-[normal]"
     ).attr("aria-hidden", "true").children(
-      ...turns.map((turn) =>
+      turns.map((turn) =>
         h.span.key(turn.side.id).style({
           flex: String(turn.steps.length)
         }).class(
@@ -289,7 +289,7 @@ export const Diagram = Html.component({
       Timeline(h, turns, time, end),
       h.div.class("grid grid-cols-2 gap-4 diagram-narrow:gap-2")
         .children(
-          ...turns.map((turn, index) =>
+          turns.map((turn, index) =>
             h.div.key(turn.side.id).class("contents").children(
               Lane(h, turn, {
                 time,

@@ -71,7 +71,7 @@ export const Icon = <M>(
     "stroke-linejoin": "round",
     "aria-hidden": "true"
   }).children(
-    ...icons[name].map(([tag, attrs], index) =>
+    icons[name].map(([tag, attrs], index) =>
       h.el(tag).key(String(index)).attrs(
         Object.fromEntries(
           Object.entries(attrs).map(([key, value]) => [

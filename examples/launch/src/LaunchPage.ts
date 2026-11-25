@@ -85,7 +85,7 @@ const Example = <M>(
     .children(
       h.p.class("text-[0.9375rem]/[1.4] font-semibold text-pretty")
         .children(title),
-      ...Files(h, files, previews)
+      Files(h, files, previews)
     )
 
 const Caption = <M>(
@@ -332,7 +332,7 @@ export const LaunchPage = Html.component({
                   "font-features-[normal]"
                 ).children(label),
                 h.ul.class("mt-2.5 flex flex-wrap gap-2").children(
-                  ...items.split(",").map((item) =>
+                  items.split(",").map((item) =>
                     h.li.key(item.trim()).class(
                       "rounded-full border border-border bg-muted",
                       "px-3 py-1 text-[0.8125rem]/[1.4]",
@@ -384,7 +384,7 @@ export const LaunchPage = Html.component({
             },
             Counter: (h, { code, label }, caption, occurrence) =>
               h.figure.class(listing).children(
-                ...snippets[code].map((snippet, index) =>
+                snippets[code].map((snippet, index) =>
                   h.div.key(snippet.name).children(
                     Code(h, snippet, {
                       preview: previewOf(snippet),
@@ -424,7 +424,7 @@ export const LaunchPage = Html.component({
               ),
             Listing: (h, { code, whole }, caption) =>
               h.figure.class(listing).children(
-                ...Files(
+                Files(
                   h,
                   snippets[code],
                   whole === "true" ? [] : undefined

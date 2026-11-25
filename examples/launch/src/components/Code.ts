@@ -12,7 +12,7 @@ const Line = <M>(
   index: number
 ) =>
   h.span.key(String(index)).class("block px-3.5").children(
-    ...tokens.map((token) =>
+    tokens.map((token) =>
       h.span.style({ color: token.color }).children(token.text)
     ),
     "\n"
@@ -34,7 +34,7 @@ const wrapped = "wrap-anywhere whitespace-pre-wrap"
 const Body = <M>(
   h: Html.H<M>,
   lines: ReadonlyArray<View.Content<M>>
-) => h.pre.class(body, wrapped).children(h.code.children(...lines))
+) => h.pre.class(body, wrapped).children(h.code.children(lines))
 
 // A run of lines in a file with folds. An empty run draws nothing.
 const Run = <M>(
@@ -43,7 +43,7 @@ const Run = <M>(
   lines: ReadonlyArray<View.Content<M>>
 ) =>
   lines.length > 0 &&
-  h.pre.key(key).class(wrapped).children(h.code.children(...lines))
+  h.pre.key(key).class(wrapped).children(h.code.children(lines))
 
 const Window = <M>(
   h: Html.H<M>,
@@ -67,7 +67,7 @@ const Window = <M>(
         h.span.class("text-[10px] tracking-widest uppercase")
           .children("TypeScript")
       ),
-      ...demo,
+      demo,
       body
     )
 
@@ -105,7 +105,7 @@ export const CodeWindow = Html.component({
     // The folds are buttons between runs of code, so the file is
     // several pre elements rather than one.
     return h.div.class(body, "font-mono").children(
-      ...folds.flatMap((fold, index) => [
+      folds.flatMap((fold, index) => [
         Run(
           h,
           `run-${index}`,
