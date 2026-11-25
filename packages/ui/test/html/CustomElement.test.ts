@@ -22,6 +22,7 @@ const Picker = Html.customElement({
   events: {
     "color-changed": Schema.Struct({ value: Schema.String }),
     change: Schema.Struct({ color: Schema.String }),
+    submit: Schema.Struct({ color: Schema.String }),
     cleared: Schema.Struct({})
   }
 })
@@ -70,6 +71,7 @@ const Swatch = Html.component({
         .value(stops)
         .onColorChanged(({ value }) => Message.ChangedColor({ color: value }))
         .onChange(({ color }) => Message.ChangedColor({ color }))
+        .onSubmit(({ color }) => Message.ChangedColor({ color }))
         .onCleared(Message.Cleared()),
       h.output(`${color} ${cleared}`)
     )
@@ -169,8 +171,12 @@ describe("Html.customElement", () => {
         detail: { color: "#abc" },
         bubbles: true
       })
+      send(picker(app)!, "submit", {
+        detail: { color: "#def" },
+        bubbles: true
+      })
       yield* tick
-      expect(app.querySelector("output")!.textContent).toBe("#abc 1")
+      expect(app.querySelector("output")!.textContent).toBe("#def 1")
       expect(error).toHaveBeenCalledOnce()
     }).pipe(Effect.scoped))
 

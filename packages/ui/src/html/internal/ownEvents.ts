@@ -20,8 +20,8 @@ export const ownEvents: ReadonlySet<string> = new Set([
 
 /**
  * The other events `Html.EventsOf` types, which bubble even when a script
- * dispatches one without `bubbles`. An event of any other name that doesn't
- * bubble reaches only its target.
+ * dispatches one without `bubbles`, unless it's a `CustomEvent`. An event of
+ * any other name that doesn't bubble reaches only its target.
  *
  * @internal
  */

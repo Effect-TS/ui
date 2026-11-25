@@ -1784,7 +1784,8 @@ export type CustomEventMethod<K extends string> = `on${Capitalize<
  * The names that get no generated method on a custom element, because the
  * builder already uses them: its own fields and core methods, such as
  * `content`, `key`, `ref`, `children` and `onMount`, the names every
- * object has, such as `toString`, plus `id`, `class` and `style`. Set a property with one of these names with `prop`.
+ * object has, such as `toString`, plus `id`, `class` and `style`. Set a
+ * property with one of these names with `prop`.
  *
  * @stability experimental
  * @category custom elements

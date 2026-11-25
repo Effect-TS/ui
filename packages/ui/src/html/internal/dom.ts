@@ -514,7 +514,8 @@ export const makeHost = (
   const listener = (event: Event): void => {
     const name = event.type
     const path = event.composedPath() as Array<Node>
-    if (dropTargetEvents.has(name)) {
+    const custom = isCustomEvent(event)
+    if (!custom && dropTargetEvents.has(name)) {
       return onDropTarget(name, event as DragEvent, path)
     }
     const target = path[0] ?? event.target as Node
@@ -570,12 +571,12 @@ export const makeHost = (
       event.preventDefault()
       submit.ownedUnhandled.add(event)
     }
-    if (name === "dragstart") startDrag(event as DragEvent, path)
+    if (!custom && name === "dragstart") startDrag(event as DragEvent, path)
     const own = ownEvents.has(name) ||
-      (!event.bubbles && (isCustomEvent(event) || !bubblingEvents.has(name)))
+      (!event.bubbles && (custom || !bubblingEvents.has(name)))
     let node: Node
     const payload = () =>
-      name === "dragend"
+      !custom && name === "dragend"
         ? {
           dropped: droppedHere ||
             ((event as DragEvent).dataTransfer?.dropEffect ?? "none") !== "none"
@@ -597,7 +598,7 @@ export const makeHost = (
       }
       if (own) break
     }
-    if (name === "dragend") endTargets()
+    if (!custom && name === "dragend") endTargets()
     if (restoring.has(name) && target !== undefined && target !== null) {
       restoreSoon(target)
     }

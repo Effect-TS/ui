@@ -149,7 +149,8 @@ const fieldOf = (
 
 /**
  * Builds the payload a handler gets: plain data, read from the event and the
- * elements involved. A `CustomEvent` adds its `detail`, whatever its name.
+ * elements involved. A `CustomEvent`'s payload is its `detail`, whatever its
+ * name.
  */
 export const payloadOf = (
   name: string,
@@ -157,12 +158,10 @@ export const payloadOf = (
   target: EventTarget | null,
   element: globalThis.Element,
   pointer: Html.PointerType | undefined
-): unknown => {
-  const payload = htmlPayloadOf(name, event, target, element, pointer)
-  return isCustomEvent(event)
-    ? { ...(payload as object), detail: event.detail }
-    : payload
-}
+): unknown =>
+  isCustomEvent(event)
+    ? { detail: event.detail }
+    : htmlPayloadOf(name, event, target, element, pointer)
 
 /** @internal */
 export const isCustomEvent = (event: Event): event is CustomEvent => {
