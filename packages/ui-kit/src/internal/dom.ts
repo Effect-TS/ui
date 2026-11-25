@@ -24,8 +24,10 @@ export const focusVisible = (element: Element): boolean => {
   }
 }
 
-export const activeOf = (document: Document): Element | null => {
-  let active = document.activeElement
+export const activeOf = (
+  root: Document | ShadowRoot
+): Element | null => {
+  let active = root.activeElement
   while (active?.shadowRoot?.activeElement != null) {
     active = active.shadowRoot.activeElement
   }

@@ -7,7 +7,7 @@ import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
-import { popovers } from "./utils/document.ts"
+import { holdExits, popovers } from "./utils/document.ts"
 
 // The first post is a loading toast; Complete turns it into a timed success.
 const PosterMessage = UiSchema.TaggedEnum({
@@ -98,12 +98,20 @@ const tick = Effect.promise(() =>
   new Promise<void>((resolve) => setTimeout(resolve, 30))
 )
 
-const mountPage = Effect.fnUntraced(function*(timeout: number) {
+const mountPage = Effect.fnUntraced(function*(
+  timeout: number,
+  options?: { readonly shadow?: boolean }
+) {
   yield* popovers
-  const container = yield* Effect.acquireRelease(
+  const host = yield* Effect.acquireRelease(
     Effect.sync(() => document.body.appendChild(document.createElement("div"))),
     (element) => Effect.sync(() => element.remove())
   )
+  const container = options?.shadow
+    ? host.attachShadow({ mode: "closed" }).appendChild(
+      document.createElement("div")
+    )
+    : host
   yield* BrowserHost.mountEffect(Page, { timeout }, container)
   yield* tick
   return {
@@ -116,7 +124,8 @@ const press = (target: EventTarget, key: string) => {
   const event = new KeyboardEvent("keydown", {
     key,
     bubbles: true,
-    cancelable: true
+    cancelable: true,
+    composed: true
   })
   target.dispatchEvent(event)
   return event.defaultPrevented
@@ -182,7 +191,7 @@ describe("ToastProvider", { concurrent: false }, () => {
       Effect.provide(Layer.merge(TestHost.layer(), TestGlobalEvents.layer))
     ))
 
-  it.effect("a collapsed stack exposes a focused Close and reports only user dismissals", () =>
+  it.effect("toasts and their Close stay exposed to screen readers, and only user dismissals are reported", () =>
     Effect.gen(function*() {
       const root = yield* TestHost.mount(Page, { timeout: 0 })
       const get = (id: string) => root.get(Locator.attr("id", id))
@@ -196,20 +205,17 @@ describe("ToastProvider", { concurrent: false }, () => {
       yield* TestHost.settle
       assert.isUndefined(get("t1").attrs?.inert)
       assert.strictEqual(Locator.textOf(root.get(Locator.tag("output"))), "")
-      const hidden = () => get("close-t2").attrs?.["aria-hidden"]
-      assert.strictEqual(hidden(), "true")
-      fire("close-t2", "focus")
-      yield* TestHost.settle
-      assert.isUndefined(hidden())
-      fire("close-t2", "blur")
-      yield* TestHost.settle
-      assert.strictEqual(hidden(), "true")
+      // t1 is high priority: its alert copy is what announces it.
+      assert.strictEqual(get("t1").attrs?.["aria-live"], "off")
+      for (const id of ["t1", "close-t1", "t2", "close-t2"]) {
+        assert.isUndefined(get(id).attrs?.["aria-hidden"])
+      }
       fire("close-t2", "click")
       yield* TestHost.settle
       assert.strictEqual(Locator.textOf(root.get(Locator.tag("output"))), "t2")
     }).pipe(Effect.provide(TestHost.layer())))
 
-  it.effect("F6 moves focus into the stack and back, and focus on a closing toast moves to the next one", () =>
+  it.effect("F6 moves focus into the stack and back", () =>
     Effect.gen(function*() {
       const { byId, region } = yield* mountPage(0)
       const post = byId("post")!
@@ -225,13 +231,67 @@ describe("ToastProvider", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement, region)
       assert.isTrue(press(region, "F6"))
       assert.strictEqual(document.activeElement, post)
+    }))
 
-      // Newest first: t2, then t1.
-      press(post, "F6")
-      byId("t2")!.focus()
-      press(byId("t2")!, "Escape")
+  it.effect("focus that lands on a closing toast moves on in the direction it came from", () =>
+    Effect.gen(function*() {
+      yield* holdExits
+      const { byId } = yield* mountPage(0)
+      const post = byId("post")!
+      post.click()
+      post.click()
+      post.click()
+      yield* tick
+
+      // Newest first: t3, t2, t1. An exit transition never ends.
+      const t2 = byId("t2")!
+      t2.focus()
+      press(t2, "Escape")
       yield* tick
       assert.strictEqual(document.activeElement, byId("t1"))
+
+      // Shift+Tab from t1 skips back over t2, Tab from the page forward.
+      t2.focus()
+      assert.strictEqual(document.activeElement, byId("t3"))
+      post.focus()
+      t2.focus()
+      assert.strictEqual(document.activeElement, byId("t1"))
+
+      // t1 closes while focused: back to t3. Tab from t3 into the closing
+      // t1, with no toast after it, leaves the stack.
+      const t1 = byId("t1")!
+      press(t1, "Escape")
+      yield* tick
+      assert.strictEqual(document.activeElement, byId("t3"))
+      t1.focus()
+      assert.strictEqual(document.activeElement, post)
+
+      // An exit inside a toast that shows isn't the toast's, even on a dialog.
+      const nested = byId("t3")!.appendChild(document.createElement("div"))
+      nested.setAttribute("role", "dialog")
+      const inner = nested.appendChild(document.createElement("button"))
+      inner.focus()
+      nested.setAttribute("data-ending-style", "")
+      yield* tick
+      assert.strictEqual(document.activeElement, inner)
+      post.focus()
+      inner.focus()
+      assert.strictEqual(document.activeElement, inner)
+    }))
+
+  it.effect("F6 then Escape moves focus into the stack and back inside a closed shadow root", () =>
+    Effect.gen(function*() {
+      const { byId, region } = yield* mountPage(0, { shadow: true })
+      const post = byId("post")!
+      post.focus()
+      post.click()
+      yield* tick
+      const shadow = region.getRootNode() as ShadowRoot
+
+      assert.isTrue(press(post, "F6"))
+      assert.strictEqual(shadow.activeElement, region)
+      assert.isTrue(press(region, "Escape"))
+      assert.strictEqual(shadow.activeElement, post)
     }))
 
   it.effect("closing the last focused toast never leaves focus on the empty stack, so later toasts time out", () =>
