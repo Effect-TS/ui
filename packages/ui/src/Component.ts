@@ -138,8 +138,7 @@ export interface Noop {
 }
 
 /**
- * Schema for `Component.noop`, for a `Command.Service` whose `success` is
- * silent or a union of a message and `Component.Noop`.
+ * Schema for `Component.noop`.
  *
  * @stability experimental
  * @category schemas

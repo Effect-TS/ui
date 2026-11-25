@@ -13,13 +13,10 @@
  *   the framework services. Issue one with `RollDie.make({ sides: 6 })`. Its
  *   body can't fail.
  * - `Command.Service<Self>()(key, { args, success, error, invalidates })` for
- *   Commands that reach any other service. Attach the implementation with
- *   `toLayer`, which takes a function or an Effect that runs once per Layer
- *   build and captures the services it uses, so a component's requirements name
- *   the Command service, never what its implementation uses. Issue one with
- *   `DeleteTodo.make({ id })` and fake it with
- *   `DeleteTodo.toLayer(({ id }) => ...)` or
- *   `Layer.succeed(DeleteTodo, ({ id }) => ...)`.
+ *   Commands that reach other services. Attach the implementation with
+ *   `toLayer` (a function, or an Effect that builds one and captures its
+ *   dependencies), so a component only requires the Command service. Issue
+ *   with `DeleteTodo.make({ id })`; fake with `DeleteTodo.toLayer(fn)`.
  *
  * A `Command.Service` declares what it does to the query cache:
  * `invalidates`, `optimistic` and `writes` are optional. Omitting
@@ -728,11 +725,8 @@ export interface Factory<
  *
  * **Details**
  *
- * It's a `Context.Service` whose value is the Command's implementation: a
- * function of the args struct returning an `Effect` (or a `Stream`).
- * `toLayer` builds a Layer providing that implementation, and `make` issues a
- * Command that requires the service. A fake is `X.toLayer((args) => ...)` or
- * `Layer.succeed(X, (args) => ...)`.
+ * A `Context.Service` holding the Command's implementation. Attach one with
+ * `toLayer` (or fake with `X.toLayer(fn)`), and issue Commands with `make`.
  *
  * @stability experimental
  * @category models
@@ -754,10 +748,7 @@ export interface Service<
   >,
   Definition<Args, Success["Type"], IsStream, Error["Type"], G>
 {
-  /**
-   * Builds a Layer providing this Command's implementation, from a function or
-   * an Effect that builds one. It requires what the implementation captured.
-   */
+  /** Builds a Layer providing this Command's implementation. */
   toLayer<LE = never, LR = never>(
     build:
       | Service.Implementation<Args, Success["Type"], IsStream, Error["Type"]>
@@ -767,11 +758,9 @@ export interface Service<
         LR
       >
   ): Layer.Layer<Self, LE, Exclude<LR, Scope.Scope>>
-  /** The args Schema. */
   readonly args: Schema.Top
-  /** The success Schema. */
   readonly success: Success
-  /** The error Schema. Defaults to `Schema.Never`. */
+  /** Defaults to `Schema.Never`. */
   readonly error: Error
   /**
    * Issues the Command. The component requires `Self`. When the body can
@@ -819,9 +808,8 @@ export declare namespace Service {
    *
    * On top of `Options`:
    *
-   * - `success` is a required Schema for the body's result.
-   * - `error` is an optional Schema for the body's typed failure; defaults to
-   *   `Schema.Never`.
+   * - `success`: Schema for the body's result.
+   * - `error`: optional failure Schema; defaults to `Schema.Never`.
    * - `invalidates` is optional: what a run invalidates, from the args
    *   only, so it's known at issue. It's applied on every exit of a started
    *   run. Omitting it invalidates nothing.
@@ -1177,15 +1165,11 @@ export const make: {
  *
  * **Details**
  *
- * The arguments are the key and the options (`args`, `success`, and optional
- * `error`, which defaults to `Schema.Never`). Attach the implementation with
- * `toLayer`, passing either the body function or an Effect that runs once per
- * Layer build and returns the body, capturing the services it uses then. The
- * resulting class has `toLayer`, `args`, `success`, `error`, and `make(args)`,
- * which issues a Command that requires the class. A component's requirements
- * therefore name the Command service, never what its implementation uses, and
- * a fake is `X.toLayer((args) => ...)` or `Layer.succeed(X, (args) => ...)`.
- * The key is the Command's name in the log and in story tests.
+ * Takes a key (the Command's name in logs and stories) and options (`args`,
+ * `success`, optional `error` defaulting to `Schema.Never`). Attach the body
+ * with `toLayer`, passing a function or an Effect that runs once per Layer
+ * build to capture its dependencies; components then require only this class,
+ * and tests can fake it with `X.toLayer(fn)`.
  *
  * The body may use framework services on each call without them appearing in
  * the Layer's requirements. When one component consumes the result, the body

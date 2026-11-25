@@ -33,11 +33,9 @@ export const NoteEditorMessage = UiSchema.TaggedEnum({
 // What the editor reports to its parent: what the user did, with no cause.
 export const NoteEditorEvents = UiSchema.TaggedEnum({ Saved: { note: Note } })
 
-// A side effect is a Command, and I/O goes through a `Command.Service`. Attach
-// its implementation with `toLayer`, which runs once when the Layer is built
-// and captures the services it uses. That is why a component requires
-// `SaveNote` and never `Notes`. `Command.make` is only for bodies that need no
-// service. Calling `fetch` in one compiles, but a test can't fake it.
+// I/O goes in a `Command.Service`. `toLayer` runs once per Layer build to
+// capture dependencies, so components require `SaveNote`, never `Notes`.
+// `Command.make` is only for service-free bodies.
 //
 // The command lives in the file of the component that runs it. Only
 // `NoteEditor` consumes its result, so its body returns a `NoteEditorMessage`

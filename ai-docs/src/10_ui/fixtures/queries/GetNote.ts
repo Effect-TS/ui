@@ -3,10 +3,8 @@ import { Query } from "@effect/ui"
 import { Effect, Schema } from "effect"
 import { Notes } from "../notes/services/Notes.ts"
 
-// A query is data loaded by its arguments and cached, so components watching
-// the same note share one entry and one fetch. Attach its fetcher with
-// `toLayer`, capturing `Notes` when its Layer is built. `SaveNote` invalidates
-// `NotesTag`, so a save refetches it.
+// Queries cache one entry per args; `toLayer` captures `Notes` at Layer build.
+// `SaveNote` invalidates `NotesTag`, so a save refetches it.
 export class GetNote extends Query.Service<GetNote>()(
   "notes/GetNote",
   {

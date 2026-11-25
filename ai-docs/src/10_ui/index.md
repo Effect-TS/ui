@@ -7,14 +7,12 @@ and Subscriptions that the runtime runs for you, and data comes from queries,
 built with `Query`, also in `@effect/ui`. `@effect/ui/html` adds the HTML elements, the
 browser host and router, and server rendering.
 
-A `Command.Service` declares its `args`, `success` (and optional `error`,
-defaulting to `Schema.Never`) Schemas, may omit `invalidates` when it
-invalidates no queries, and attaches its implementation with `toLayer` (use
-`Component.Noop` as a Schema for a silent result). A `Query.Service` or
-`Query.InfiniteService` declares its Schemas and options, and attaches its
-fetcher with `toLayer`: define `static readonly layer = this.toLayer(...)` on
-the class, or pass a plain function like `GetNote.toLayer(fn)` for a test
-override. Provide a feature implementation with `NoteActivity.toLayer(ActivityLog)`.
+`Query.Service`, `Query.InfiniteService`, and `Command.Service` declare only
+their Schemas and options (`Command.Service` requires `success`, defaults
+`error` to `Schema.Never`, may omit `invalidates`, and uses `Component.Noop`
+for silent results). Attach implementations with `toLayer` (e.g.
+`static readonly layer = this.toLayer(...)`, or `GetNote.toLayer(fn)` in
+tests). Provide a feature implementation with `NoteActivity.toLayer(ActivityLog)`.
 Declare a child component by calling it with the parent's `h`:
 `NoteEditor(h, { key, props, onEmit })`. Render a feature service with its
 `render`, `NoteActivity.render(h, { key, fallback })`, and include a

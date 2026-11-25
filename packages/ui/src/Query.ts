@@ -4,10 +4,9 @@
  * and arguments, shares in-flight fetches, refetches stale entries on demand,
  * and collects unused entries.
  *
- * A query's fetcher is attached with `toLayer`, built once per Layer build, and
- * captures the services it uses, so `get` requires the query and cache, not the
- * fetcher's dependencies. Replace a fetcher with `GetUser.toLayer((args) => ...)`
- * or `Layer.succeed(GetUser, (args) => ...)` for a fake.
+ * Attach a fetcher with `toLayer`: it builds once per Layer build and captures
+ * its dependencies, so `get` requires only the query and cache. Fake it in
+ * tests with `GetUser.toLayer(fn)`.
  *
  * Plain Effect code provides the cache with `Query.layer()`. Every time-based
  * rule runs on the `Clock`, so `TestClock` drives it, and
@@ -192,9 +191,8 @@ export declare namespace Query {
  *
  * **Details**
  *
- * It's a `Context.Service` whose value is the query's fetcher. `toLayer` builds
- * a Layer providing the fetcher, and the static methods look the cache up, so
- * they require the cache and, where they may fetch, the query itself.
+ * A `Context.Service` holding the query's fetcher. Attach one with `toLayer`;
+ * static methods look up the cache and require the query when they may fetch.
  *
  * @stability experimental
  * @category models
@@ -211,11 +209,9 @@ export interface Service<
   Query<Args, A, E>
 {
   /**
-   * Builds a Layer providing this query's fetcher, from a fetcher function or
-   * an Effect that builds one. It requires what the fetcher captured. A fetch
-   * runs under the build that asked for it, and is interrupted when that
-   * build's Scope closes. The close waits for the fetch's cleanup before it
-   * releases what the fetcher captured.
+   * Builds a Layer providing the fetcher from a function or an Effect. Fetches
+   * are interrupted when the Layer's Scope closes, waiting for cleanup before
+   * releasing captured resources.
    */
   toLayer<LE = never, LR = never>(
     build:
@@ -316,8 +312,7 @@ export declare namespace Service {
 }
 
 /**
- * Defines a query: a class service with a name and its options. Attach its
- * fetcher with `toLayer`.
+ * Defines a query service class. Attach its fetcher with `toLayer`.
  *
  * **When to use**
  *
@@ -339,9 +334,9 @@ export declare namespace Service {
  * - `refetchInterval` polls an entry while it's watched.
  * - `tags` lists the invalidation tags the query belongs to.
  *
- * Attach a fetcher with `toLayer`, passing either a fetcher function or an
- * Effect that runs once per Layer build and returns the function that fetches.
- * Retries go inside the fetcher, with `Effect.retry`: the cache never retries.
+ * `toLayer` takes a fetcher function or an Effect that builds one once per
+ * Layer build. Retries go inside the fetcher (`Effect.retry`); the cache never
+ * retries.
  *
  * **Gotchas**
  *
@@ -772,7 +767,7 @@ export interface InfiniteService<
   >,
   InfiniteQuery<Args, Page, Item, E>
 {
-  /** Builds a Layer providing this query's fetcher, as for any query. */
+  /** Builds a Layer providing the fetcher. */
   toLayer<LE = never, LR = never>(
     build:
       | ((args: Args, cursor: Option.Option<Cursor>) => Effect.Effect<Page, E>)
@@ -875,8 +870,8 @@ export interface InfiniteService<
  * - `cursor` is the Schema of a cursor, and `next` derives the cursor of
  *   the page after `lastPage` from the server's pages, `None` when the
  *   list has ended. It must be pure. The cursor is never stored.
- * - Attach its fetcher with `toLayer`; the fetcher takes the arguments and the
- *   cursor, `None` for the first page.
+ * - Attach the fetcher with `toLayer`; it takes `(args, cursor)`, with `None`
+ *   for the first page.
  * - The other options are a query's. `staleTime` counts from the end of the
  *   last load that started at the first page: loading more changes no
  *   timestamp.

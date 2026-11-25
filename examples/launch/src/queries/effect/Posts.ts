@@ -4,23 +4,20 @@ import { Effect, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { Post, PostsApi } from "../Posts.ts"
 
-// A query is a service declared from its Schemas. Its value is the
-// fetcher, attached with `toLayer`, and the cache keeps one result per args.
+// A query caches one result per args; attach its fetcher with `toLayer`.
 export class SearchPosts extends Query.Service<SearchPosts>()(
   "SearchPosts",
   {
     args: { search: Schema.String },
     success: Schema.Array(Post),
     error: Schema.String,
-    // A result older than this is refetched when it is next needed.
+    // Stale entries refetch on next use.
     staleTime: "1 minute"
   }
 ) {
-  // Runs once, when SearchPosts.layer is built.
   static readonly layer = this.toLayer(
     Effect.gen(function*() {
       const api = yield* PostsApi
-      // Runs on each fetch.
       return ({ search }) => api.search(search)
     })
   )
