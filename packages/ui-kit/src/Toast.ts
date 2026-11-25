@@ -69,12 +69,13 @@
  *
  * **Keyboard**
  *
- * F6 moves focus into the viewport while it holds a toast, and F6 again, or
- * Shift+Tab from the viewport, returns it to where it was. Tab moves through
- * the toasts, which are focusable, and their buttons. Escape closes the toast
- * that has focus. When a focused toast closes, focus moves to the next toast,
- * else back to where it was before it entered the viewport, by F6, Tab or a
- * press. Failing both, focus leaves the viewport, so the stack collapses.
+ * F6 moves focus into the viewport while it holds a toast, and F6 again,
+ * Shift+Tab or Escape from the viewport returns it to where it was. Tab moves
+ * through the toasts, which are focusable, and their buttons. Escape closes
+ * the toast that has focus. When a focused toast closes, or focus lands on a
+ * closing one, focus moves to the next toast, else back to where it was
+ * before it entered the viewport, by F6, Tab or a press. Failing both, focus
+ * leaves the viewport, so the stack collapses.
  *
  * **Timers**
  *
@@ -177,6 +178,7 @@ import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { flag, visuallyHidden, withStyle } from "./internal/attributes.ts"
+import { activeOf, focusVisible } from "./internal/dom.ts"
 import { keepOnTop } from "./internal/topLayer.ts"
 
 /**
@@ -304,8 +306,6 @@ const ToastProviderMessage = UiSchema.TaggedEnum({
   BlurredViewport: {},
   FocusedWindow: {},
   BlurredWindow: {},
-  FocusedClose: { id: Schema.String },
-  BlurredClose: { id: Schema.String },
   MeasuredToast: { id: Schema.String, height: Schema.Number },
   FinishedExit: { id: Schema.String },
   CompletedWaitBeforeDismissal: { id: Schema.String }
@@ -325,14 +325,12 @@ type Entry = typeof Entry.Type
 
 // Newest first. `hovering`: the pointer is on the viewport. `focused`:
 // keyboard focus is in it. `windowFocused`: the window has focus. The
-// timers run only while all three allow it. `closeFocused`: the toast whose
-// close button has focus, from the keyboard or a press.
+// timers run only while all three allow it.
 const ToastProviderModel = Schema.Struct({
   toasts: Schema.Array(Entry),
   hovering: Schema.Boolean,
   focused: Schema.Boolean,
-  windowFocused: Schema.Boolean,
-  closeFocused: Schema.NullOr(Schema.String)
+  windowFocused: Schema.Boolean
 })
 
 type ToastProviderModel = typeof ToastProviderModel.Type
@@ -427,10 +425,10 @@ const focusable =
   "[role=dialog]:not([data-ending-style]):not([inert]),[role=alertdialog]:not([data-ending-style]):not([inert])"
 
 // What the viewport needs from its document: F6 into the viewport and back,
-// keyboard focus inside it, a pointer
-// that left while the toast under it was removed, and focus that a closing
-// toast left with nowhere to stay. `empty`: no toast shows, so F6 is the page's.
-// `hovering`: what the Model believes about the pointer.
+// keyboard focus inside it, a pointer that left while the toast under it was
+// removed, and focus that a closing toast left with nowhere to stay. `empty`:
+// no toast shows, so F6 is the page's. `hovering`: what the Model believes
+// about the pointer.
 const TrackViewport = Mount.makeStream(
   "TrackViewport",
   { args: { empty: Schema.Boolean, hovering: Schema.Boolean } },
@@ -440,48 +438,90 @@ const TrackViewport = Mount.makeStream(
         const document = node.ownerDocument
         let { empty, hovering } = args
         let focused = false
+        // The active element of the viewport's own root, so a focused
+        // control in a shadow root inside a toast counts as inside.
+        const active = () =>
+          (node.getRootNode() as Document | ShadowRoot).activeElement
+        const inside = () => node.contains(active())
         // Where focus was before it entered the viewport, by F6, Tab or a
         // press, while it's still in the page.
         let previous: HTMLElement | null = null
         const restore = (): boolean => {
           if (previous === null || !previous.isConnected) return false
           if (previous === document.body) {
-            ;(document.activeElement as HTMLElement | null)?.blur()
+            ;(activeOf(document) as HTMLElement | null)?.blur()
           } else previous.focus({ preventScroll: true })
-          const restored = !node.contains(document.activeElement)
+          const restored = !inside()
           if (restored) previous = null
           return restored
         }
+        // Back to where focus was, else out of the viewport, so the stack
+        // collapses.
+        const leave = () => {
+          if (!restore()) (activeOf(document) as HTMLElement | null)?.blur()
+        }
+        // Focus moves off a closing toast, to the toast after it, or before
+        // it when `back`, else to the other side, else out of the viewport.
+        const passOn = (closing: Node, back: boolean) => {
+          const roots = Array.from(
+            node.querySelectorAll<HTMLElement>(focusable)
+          )
+          // `closing` isn't one of them, so they split around it.
+          const split = roots.findIndex((root) =>
+            closing.compareDocumentPosition(root) &
+            Node.DOCUMENT_POSITION_FOLLOWING
+          )
+          const at = split === -1 ? roots.length : split
+          const after = roots[at]
+          const before = roots[at - 1]
+          const next = back ? before ?? after : after ?? before
+          if (next === undefined) leave()
+          else next.focus()
+        }
         const onKeyDown = (event: KeyboardEvent) => {
           if (event.defaultPrevented) return
+          const onViewport = event.composedPath()[0] === node
           if (event.key === "F6") {
-            if (node.contains(document.activeElement)) {
+            if (inside()) {
               if (restore()) event.preventDefault()
             } else if (!empty) {
               event.preventDefault()
-              previous = document.activeElement as HTMLElement | null
+              previous = activeOf(document) as HTMLElement | null
               node.focus(
                 { preventScroll: true, focusVisible: true } as FocusOptions
               )
             }
           } else if (
-            event.key === "Tab" && event.shiftKey && event.target === node &&
-            restore()
+            onViewport &&
+            (event.key === "Escape" || (event.key === "Tab" && event.shiftKey))
           ) {
+            if (event.key === "Escape") leave()
+            else if (!restore()) return
             event.preventDefault()
           }
         }
         // Only keyboard focus expands the stack, so a click on a toast
-        // doesn't hold it open after the pointer leaves.
+        // doesn't hold it open after the pointer leaves. Focus that lands on
+        // a closing toast, by Tab or a press, moves on, the way it came.
         const onFocusIn = (event: FocusEvent) => {
           const from = event.relatedTarget as HTMLElement | null
           if (
             previous === null && from !== null && !node.contains(from)
           ) previous = from
-          const target = event.target as Element | null
-          if (
-            focused || target === null || !target.matches(":focus-visible")
-          ) return
+          const target = event.target as Element
+          const closing = target.closest("[data-ending-style]")
+          if (closing !== null && node.contains(closing)) {
+            passOn(
+              closing,
+              from !== null &&
+                (closing.compareDocumentPosition(from) &
+                    Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+            )
+            return
+          }
+          if (focused || !focusVisible(event.composedPath()[0] as Element)) {
+            return
+          }
           focused = true
           Queue.offerUnsafe(queue, "FocusedViewport")
         }
@@ -494,7 +534,7 @@ const TrackViewport = Mount.makeStream(
         }
         // A toast removed under the pointer sends no mouseleave.
         const onMouseOver = (event: MouseEvent) => {
-          if (hovering && !node.contains(event.target as Node | null)) {
+          if (hovering && !event.composedPath().includes(node)) {
             hovering = false
             Queue.offerUnsafe(queue, "LeftViewport")
           }
@@ -505,23 +545,14 @@ const TrackViewport = Mount.makeStream(
         // it's blurred, so the stack collapses and the timers of later toasts
         // run.
         const handOff = (records: ReadonlyArray<MutationRecord>) => {
-          const active = document.activeElement as HTMLElement | null
-          if (!node.contains(active)) return
-          const roots = Array.from(
-            node.querySelectorAll<HTMLElement>(focusable)
-          )
+          const focus = active()
+          if (!node.contains(focus)) return
           const closing = records.find(({ target }) =>
             (target as Element).hasAttribute("data-ending-style") &&
-            target.contains(active)
+            target.contains(focus)
           )?.target
-          if (roots.length === 0) {
-            if (!restore()) active?.blur()
-          } else if (closing !== undefined) {
-            const next = roots.find((root) =>
-              closing.compareDocumentPosition(root) & 4
-            ) ?? roots.at(-1)!
-            next.focus()
-          }
+          if (node.querySelector(focusable) === null) leave()
+          else if (closing !== undefined) passOn(closing, false)
         }
         yield* Effect.acquireRelease(
           Effect.sync(() => {
@@ -743,8 +774,7 @@ export const ToastProvider = Html.component({
     toasts: [],
     hovering: false,
     focused: false,
-    windowFocused: true,
-    closeFocused: null
+    windowFocused: true
   }),
   update: {
     // A toast that shows is replaced in place. One that is closing is added
@@ -792,13 +822,6 @@ export const ToastProvider = Html.component({
       settle($, UiStruct.evolve($.model, { windowFocused: true })),
     BlurredWindow: ($) =>
       settle($, UiStruct.evolve($.model, { windowFocused: false })),
-    FocusedClose: ($, { id }) => $.evolve({ closeFocused: id }),
-    BlurredClose: (
-      $,
-      { id }
-    ) => ($.model.closeFocused === id
-      ? $.evolve({ closeFocused: null })
-      : $.model),
     // The first measure ends the starting style. A closing toast keeps its
     // height at 0, so the toasts behind it move up.
     MeasuredToast: ($, { id, height }) => {
@@ -833,13 +856,11 @@ export const ToastProvider = Html.component({
     const empty = !model.toasts.some((toast) => toast.transition !== "ending")
     const frontmost = model.toasts[0]?.height ?? 0
     // A high-priority toast is announced at once by an alert copy of its
-    // text, and its root is hidden from screen readers while focus is
-    // elsewhere, so it isn't read twice.
-    const urgent = model.focused
-      ? []
-      : model.toasts.filter((toast) =>
-        toast.priority === "high" && toast.transition !== "ending"
-      )
+    // text. Its root is `aria-live="off"`, so the polite viewport doesn't
+    // read it again.
+    const urgent = model.toasts.filter((toast) =>
+      toast.priority === "high" && toast.transition !== "ending"
+    )
     const alerts = urgent.length === 0 ? undefined : View.toNode(
       new Html.Element<never>("div").attr("style", visuallyHidden).children(
         ...urgent.map((toast) =>
@@ -905,7 +926,7 @@ export const ToastProvider = Html.component({
         "aria-describedby": toast.description !== undefined
           ? p.id("description", toast.id)
           : undefined,
-        "aria-hidden": high && !model.focused ? "true" : undefined,
+        "aria-live": high ? "off" : undefined,
         inert: flag(toast.limited),
         "data-expanded": flag(expanded),
         "data-limited": flag(toast.limited),
@@ -971,21 +992,12 @@ export const ToastProvider = Html.component({
       (b, toast: ToastItem) =>
         b.attrs({ type: "button", "data-type": toast.type })
     )
-    // Hidden from screen readers while the stack is collapsed, since a
-    // keyboard user reaches it by focusing the viewport, which expands the
-    // stack. It stays exposed while it has focus, as after a press that
-    // ended outside the stack.
-    const closePart = p.part("button", (b, toast: ToastItem) =>
-      b.attrs({
-        type: "button",
-        "data-type": toast.type,
-        "aria-hidden": expanded || model.closeFocused === toast.id
-          ? undefined
-          : "true"
-      })
-        .on("click", ToastProviderMessage.ClickedClose({ id: toast.id }))
-        .on("focus", ToastProviderMessage.FocusedClose({ id: toast.id }))
-        .on("blur", ToastProviderMessage.BlurredClose({ id: toast.id })))
+    const closePart = p.part(
+      "button",
+      (b, toast: ToastItem) =>
+        b.attrs({ type: "button", "data-type": toast.type })
+          .on("click", ToastProviderMessage.ClickedClose({ id: toast.id }))
+    )
     return {
       toasts,
       expanded,
