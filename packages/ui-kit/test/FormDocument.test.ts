@@ -81,7 +81,10 @@ const Signup = Html.component({
                 fields[name].value
               )
               .disabled(model.saving)
-              .onInput(({ value }) => Message.UpdatedField({ name, value })),
+              .on(
+                "input",
+                ({ value }) => Message.UpdatedField({ name, value })
+              ),
             field.error(h.span)?.children("Invalid")
           )
       })
@@ -109,7 +112,7 @@ const Signup = Html.component({
                 form: "signup"
               })
                 .checked(fields.billing.value === value)
-                .onClick(Message.UpdatedField({ name: "billing", value }))
+                .on("click", Message.UpdatedField({ name: "billing", value }))
             )
           )
       }),
