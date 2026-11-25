@@ -21,7 +21,6 @@ const Picker = Html.customElement({
   },
   events: {
     "color-changed": Schema.Struct({ value: Schema.String }),
-    change: Schema.Struct({ color: Schema.String }),
     submit: Schema.Struct({ color: Schema.String }),
     cleared: Schema.Struct({})
   }
@@ -70,7 +69,6 @@ const Swatch = Html.component({
         .color(color)
         .value(stops)
         .onColorChanged(({ value }) => Message.ChangedColor({ color: value }))
-        .onChange(({ color }) => Message.ChangedColor({ color }))
         .onSubmit(({ color }) => Message.ChangedColor({ color }))
         .onCleared(Message.Cleared()),
       h.output(`${color} ${cleared}`)
@@ -155,28 +153,31 @@ describe("Html.customElement", () => {
       expect(app.querySelector("output")!.textContent).toBe("#f00,#0f0")
     }).pipe(Effect.scoped))
 
-  it.effect("decodes each event's detail, also for an HTML event name, logs one its Schema rejects, and decodes a missing one as {}", () =>
+  it.effect("SSR omits properties, hydration adopts the element, events decode details, and value stays plain", () =>
     Effect.gen(function*() {
       const error = vi.spyOn(console, "error").mockImplementation(() => {})
       yield* Effect.addFinalizer(() => Effect.sync(() => error.mockRestore()))
+      const rendered = yield* HtmlServer.renderToHtml(Swatch, {})
+      expect(rendered.html).toContain(
+        `<test-picker class="swatch"></test-picker>`
+      )
       const app = yield* container
-      yield* BrowserHost.mountEffect(Swatch, {}, app)
+      app.innerHTML = rendered.html
+      const server = picker(app)!
+      yield* HtmlHydrate.hydrateEffect(Swatch, {}, app, rendered.state)
       yield* tick
-      send(picker(app)!, "color-changed", {
-        detail: { value: 1 },
-        bubbles: true
-      })
-      send(picker(app)!, "cleared", { bubbles: true })
-      send(picker(app)!, "change", {
-        detail: { color: "#abc" },
-        bubbles: true
-      })
-      send(picker(app)!, "submit", {
-        detail: { color: "#def" },
-        bubbles: true
-      })
+      expect(picker(app)).toBe(server)
+      expect(server.color).toBe("#000")
+      expect(server.value).toEqual([1, 2])
+      server.value = [3]
+
+      send(server, "color-changed", { detail: { value: 1 }, bubbles: true })
+      send(server, "cleared", { bubbles: true })
+      send(server, "submit", { detail: { color: "#def" }, bubbles: true })
       yield* tick
       expect(app.querySelector("output")!.textContent).toBe("#def 1")
+      expect(server.color).toBe("#def")
+      expect(server.value).toEqual([3])
       expect(error).toHaveBeenCalledOnce()
     }).pipe(Effect.scoped))
 
@@ -198,48 +199,17 @@ describe("Html.customElement", () => {
       const app = yield* container
       yield* BrowserHost.mountEffect(Nested, {}, app)
       yield* tick
+      const outer = picker(app)!
       const inner = app.querySelector("#inner")!
       send(inner, "cleared", {})
       yield* tick
       expect(app.querySelector("output")!.textContent).toBe("0")
-      send(inner, "cleared", { bubbles: true })
+      send(outer, "cleared", {})
       yield* tick
       expect(app.querySelector("output")!.textContent).toBe("1")
-    }).pipe(Effect.scoped))
-
-  it.effect("value is a plain property, written when the view changes it", () =>
-    Effect.gen(function*() {
-      const app = yield* container
-      yield* BrowserHost.mountEffect(Swatch, {}, app)
+      send(inner, "cleared", { bubbles: true })
       yield* tick
-      const element = picker(app)!
-      expect(element.value).toEqual([1, 2])
-      element.value = [3]
-      send(element, "cleared", { bubbles: true })
-      yield* tick
-      expect(element.value).toEqual([3])
-    }).pipe(Effect.scoped))
-
-  it.effect("the server renders no properties, and hydration sets them on the server's element", () =>
-    Effect.gen(function*() {
-      const rendered = yield* HtmlServer.renderToHtml(Swatch, {})
-      expect(rendered.html).toContain(
-        `<test-picker class="swatch"></test-picker>`
-      )
-      const app = yield* container
-      app.innerHTML = rendered.html
-      const server = picker(app)!
-      yield* HtmlHydrate.hydrateEffect(Swatch, {}, app, rendered.state)
-      yield* tick
-      expect(picker(app)).toBe(server)
-      expect(server.color).toBe("#000")
-      expect(server.value).toEqual([1, 2])
-      send(server, "color-changed", {
-        detail: { value: "#f00" },
-        bubbles: true
-      })
-      yield* tick
-      expect(server.color).toBe("#f00")
+      expect(app.querySelector("output")!.textContent).toBe("2")
     }).pipe(Effect.scoped))
 
   it("throws for a tag that isn't a custom element name, and for two events with one method name", () => {

@@ -29,12 +29,7 @@ export const svgTags: ReadonlySet<string> = new Set([
   "foreignObject"
 ])
 
-/**
- * Whether `tag` names a custom element, whose properties are the element's
- * own: none is controlled, and the server renders none.
- *
- * @internal
- */
+/** @internal */
 export const isCustomTag = (tag: string): boolean => tag.includes("-")
 
 export { attributeName } from "../../internal/attributeName.ts"

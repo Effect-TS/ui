@@ -1760,10 +1760,6 @@ export const ref = <K extends keyof HTMLElementTagNameMap>(
 ): Renderer.Ref<HTMLElementTagNameMap[K]> =>
   Renderer.ref<HTMLElementTagNameMap[K]>(name)
 
-// ---------------------------------------------------------------------------
-// custom elements
-// ---------------------------------------------------------------------------
-
 type PascalCase<S extends string> = S extends `${infer Head}-${infer Tail}`
   ? `${Capitalize<Head>}${PascalCase<Tail>}`
   : Capitalize<S>
