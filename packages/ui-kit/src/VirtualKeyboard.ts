@@ -61,7 +61,6 @@
  * const closed: VirtualKeyboard.Sample = {
  *   layoutWidth: 400,
  *   layoutHeight: 800,
- *   visualWidth: 400,
  *   visualHeight: 800,
  *   visualTop: 0,
  *   scale: 1,
@@ -102,7 +101,8 @@ const threshold = 60
  *   viewport.
  * - `inset`: the height below `bottom` that the keyboard covers, rounded
  *   up, which the mount writes as `--keyboard-inset`. 0 while the layout
- *   viewport follows the keyboard.
+ *   viewport follows the keyboard, unless the page is pinch-zoomed and the
+ *   layout viewport's bottom is off screen.
  * - `resizing`: the layout viewport follows the keyboard and hasn't reached
  *   the visual viewport's height yet, so the page is still moving. A scroll
  *   started now may restart when it settles.
@@ -138,6 +138,8 @@ export type Band = typeof Band.Type
  *   back up there.
  * - `visualWidth`, `visualHeight`, `visualTop`, `scale`:
  *   `visualViewport`'s `width`, `height`, `offsetTop` and `scale`.
+ *   Without `visualWidth`, `step` takes the visual viewport to be as wide
+ *   as the layout viewport, and reports no band while `scale` isn't 1.
  * - `smallViewportHeight`: the height of `100svh`.
  * - `android`: the browser runs on Android.
  * - `focused`: a text field has focus.
@@ -149,7 +151,7 @@ export type Band = typeof Band.Type
 export interface Sample {
   readonly layoutWidth: number
   readonly layoutHeight: number
-  readonly visualWidth: number
+  readonly visualWidth?: number | undefined
   readonly visualHeight: number
   readonly visualTop: number
   readonly scale: number
@@ -223,10 +225,15 @@ export const initialState = (
  */
 export const step = (state: State, sample: Sample): Step => {
   const { layoutHeight, scale, visualHeight } = sample
-  const zoomed = sample.layoutWidth - sample.visualWidth >= 1
+  // Without the visual width a zoom can't be told from a wide layout.
+  if (sample.visualWidth === undefined && scale !== 1) {
+    return { state, band: null }
+  }
+  const visualWidth = sample.visualWidth ?? sample.layoutWidth
+  const zoomed = sample.layoutWidth - visualWidth >= 1
   // The share of the layout viewport the visual one shows: all of it, unless
   // pinch-zoomed in. A keyboard leaves the width alone.
-  const fit = Math.min(1, sample.visualWidth / sample.layoutWidth)
+  const fit = Math.min(1, visualWidth / sample.layoutWidth)
   const shown = layoutHeight * fit
   const onScreen = visualHeight * scale
   let layoutWidth = state.layoutWidth

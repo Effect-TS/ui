@@ -15,7 +15,6 @@ import {
 const closed: VirtualKeyboard.Sample = {
   layoutWidth: 400,
   layoutHeight: 800,
-  visualWidth: 400,
   visualHeight: 800,
   visualTop: 0,
   scale: 1,
