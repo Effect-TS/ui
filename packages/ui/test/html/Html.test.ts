@@ -560,4 +560,11 @@ describe("Html", () => {
         assert.include(rendered.html, "<p>Idle</p>")
       }))
   })
+
+  it("a dragstart handler set without options replaces the options of an earlier on", () => {
+    const image = new Html.VoidElement("img")
+      .on("dragstart", "first", { preventDefault: "always" })
+      .on("dragstart", "second")
+    assert.isUndefined(image.eventOptions.dragstart)
+  })
 })

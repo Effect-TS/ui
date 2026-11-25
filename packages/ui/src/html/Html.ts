@@ -1034,7 +1034,8 @@ export class VoidElement<
   /**
    * Like `View.ElementBuilder.on`, except that a `dragstart` or `drop`
    * handler set without options keeps the options `draggable` or
-   * `dropTarget` set, so they can be called in either order.
+   * `dropTarget` set, so they can be called in either order. Options set
+   * by an earlier `on` are replaced as usual.
    *
    * @since 0.1.0
    */
@@ -1043,12 +1044,14 @@ export class VoidElement<
     handler: View.Handler<Msg, E[K & keyof E]>,
     options?: View.EventOptions | undefined
   ): this {
+    const set = this.eventOptions[event]
+    const helper =
+      (event === "dragstart" && set !== undefined && "data" in set) ||
+      (event === "drop" && set !== undefined && "accepts" in set)
     return super.on(
       event as any,
       handler as any,
-      options ?? (event === "dragstart" || event === "drop"
-        ? this.eventOptions[event]
-        : undefined)
+      options ?? (helper ? set : undefined)
     )
   }
   /**
