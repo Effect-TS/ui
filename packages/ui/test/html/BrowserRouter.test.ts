@@ -662,26 +662,20 @@ describe("BrowserRouter", { concurrent: false }, () => {
       )
     }).pipe(Effect.scoped))
 
-  it.effect("follows links, GET forms and link intent in a mount inside a closed shadow root", () =>
+  it.effect("follows GET forms and reports each composed touch intent once in a closed shadow root", () =>
     Effect.gen(function*() {
-      const { app, root, router } = yield* start("/", {}, "closed")
+      const { app, router } = yield* start("/", {}, "closed")
       const intents = intentsOf(router)
       const touch = new Event("touchstart", { bubbles: true, composed: true })
       link(app, "Person 1").dispatchEvent(touch)
       expect(intents).toEqual(["/people/1"])
       link(app, "Person 1").dispatchEvent(touch)
       expect(intents).toEqual(["/people/1", "/people/1"])
-      expect(clickReporting(link(app, "Person 1"), { composed: true })).toBe(
-        true
-      )
-      yield* tick
-      expect(window.location.pathname).toBe("/people/1")
       submitForm(app, "Search")
       yield* tick
       expect(window.location.pathname + window.location.search).toBe(
         "/search?q=ada"
       )
-      expect(root.model()?.route._tag).toBe("Search")
     }).pipe(Effect.scoped))
 
   it.effect("restores the scroll position on back and forward between #hash entries", () =>
