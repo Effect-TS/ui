@@ -91,7 +91,7 @@ export const Kit = Html.component({
         h.p.class("kit-count").children(
           h.strong.children(String(modules.length)),
           h.span.children(
-            "headless components in @effect/ui-kit"
+            "headless components, ready on day one."
           )
         ),
         Toggle(h, {
