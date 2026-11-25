@@ -1,13 +1,79 @@
 /**
- * The equality props, shared values and reports change by: shallow for plain records, `Equal.equals`
- * otherwise.
+ * The equality props, shared values and reports change by: structural for plain records and arrays,
+ * `Equal.equals` otherwise.
  *
  * @internal
  */
 import * as Equal from "effect/Equal"
 
+// Pairs on the active comparison path, for coinductive cycle detection matching `Equal.equals`.
+const pathLeft: Array<object> = []
+const pathRight: Array<object> = []
+
+const isPlainObject = (value: object): boolean => {
+  const proto = Object.getPrototypeOf(value)
+  return proto === Object.prototype || proto === null
+}
+
+const sameObject = (a: object, b: object): boolean => {
+  if (Equal.symbol in a || Equal.symbol in b) return Equal.equals(a, b)
+  const isArray = Array.isArray(a)
+  if (isArray !== Array.isArray(b)) return false
+  if (isArray) {
+    if ((a as Array<unknown>).length !== (b as Array<unknown>).length) {
+      return false
+    }
+  } else if (!isPlainObject(a) || !isPlainObject(b)) {
+    return Equal.equals(a, b)
+  }
+  const depth = pathLeft.length
+  for (let i = depth; i-- > 0;) {
+    if (pathLeft[i] === a && pathRight[i] === b) return true
+  }
+  let pushed = false
+  try {
+    if (isArray) {
+      for (let i = 0; i < (a as Array<unknown>).length; i++) {
+        const x = (a as Array<unknown>)[i]
+        const y = (b as Array<unknown>)[i]
+        if (x === y) continue
+        if (!pushed) {
+          pushed = true
+          pathLeft.push(a)
+          pathRight.push(b)
+        }
+        if (!propsEqual(x, y)) return false
+      }
+      return true
+    }
+    let count = 0
+    for (const key in a) {
+      if (!Object.hasOwn(a, key)) continue
+      if (!Object.hasOwn(b, key)) return false
+      const x = (a as Record<string, unknown>)[key]
+      const y = (b as Record<string, unknown>)[key]
+      if (x !== y) {
+        if (!pushed) {
+          pushed = true
+          pathLeft.push(a)
+          pathRight.push(b)
+        }
+        if (!propsEqual(x, y)) return false
+      }
+      count++
+    }
+    for (const key in b) {
+      if (Object.hasOwn(b, key)) count--
+    }
+    return count === 0
+  } finally {
+    if (pushed) pathLeft.length = pathRight.length = depth
+  }
+}
+
 /**
- * Shallow per key, with `Equal.equals` only for values that differ by reference.
+ * Structural equality for plain records and arrays, with `Equal.equals` for custom `Equal` values
+ * and non-plain objects.
  *
  * @internal
  */
@@ -15,69 +81,19 @@ export const propsEqual = (a: unknown, b: unknown): boolean => {
   if (a === b) return true
   if (
     typeof a !== "object" || typeof b !== "object" || a === null || b === null
-  ) return Equal.equals(a, b)
-  let count = 0
-  for (const key in a) {
-    if (!Object.hasOwn(a, key)) continue
-    if (!Object.hasOwn(b, key)) return false
-    const x = (a as any)[key]
-    const y = (b as any)[key]
-    if (x !== y && (differsPlainly(x, y) || !Equal.equals(x, y))) return false
-    count++
+  ) {
+    return (a !== a && b !== b) || (
+      typeof a === "function" && typeof b === "function" &&
+      Equal.symbol in a && Equal.symbol in b && Equal.equals(a, b)
+    )
   }
-  for (const key in b) {
-    if (Object.hasOwn(b, key)) count--
-  }
-  return count === 0
+  return sameObject(a, b)
 }
 
-const isPrimitive = (u: unknown): boolean =>
-  u === null || (typeof u !== "object" && typeof u !== "function")
-
 /**
- * An object literal, or one with no prototype.
+ * A shared value, or what an owner's `collects.onChange` returns: structural for plain records and
+ * arrays, and `Equal.equals` otherwise.
  *
  * @internal
  */
-export const isPlainRecord = (value: unknown): value is object => {
-  if (typeof value !== "object" || value === null) return false
-  const proto = Object.getPrototypeOf(value)
-  return proto === Object.prototype || proto === null
-}
-
-/**
- * Whether two plain objects have a field that differs as a primitive, so they can't be equal. It
- * answers for the common change, a record with one field replaced, without the hashes `Equal.equals`
- * takes of both. `false` leaves the answer to `Equal.equals`.
- */
-const differsPlainly = (a: unknown, b: unknown): boolean => {
-  if (
-    typeof a !== "object" || typeof b !== "object" || a === null || b === null
-  ) return false
-  if (
-    Object.getPrototypeOf(a) !== Object.prototype ||
-    Object.getPrototypeOf(b) !== Object.prototype
-  ) return false
-  // An object with its own equality decides for itself.
-  if (Equal.symbol in a || Equal.symbol in b) return false
-  for (const key in a) {
-    if (!Object.hasOwn(b, key)) continue
-    const x = (a as any)[key]
-    const y = (b as any)[key]
-    // `NaN` is equal to itself for `Equal.equals`.
-    if (x !== y && isPrimitive(x) && isPrimitive(y) && (x === x || y === y)) {
-      return true
-    }
-  }
-  return false
-}
-
-/**
- * A shared value, or what an owner's `collects.onChange` returns: compared as props are when both are plain
- * records, so one built anew each time is no change, and by `Equal.equals` otherwise, so a new Date of
- * the same time isn't either.
- *
- * @internal
- */
-export const sharedEqual = (a: unknown, b: unknown): boolean =>
-  isPlainRecord(a) && isPlainRecord(b) ? propsEqual(a, b) : Equal.equals(a, b)
+export const sharedEqual: (a: unknown, b: unknown) => boolean = propsEqual

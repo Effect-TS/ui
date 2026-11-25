@@ -21,8 +21,10 @@ import {
   Context,
   Deferred,
   Effect,
+  Equal,
   Exit,
   Fiber,
+  Hash,
   Layer,
   LayerMap,
   Logger,
@@ -2741,6 +2743,129 @@ describe("Runtime", () => {
         })
         yield* TestHost.settle
         assert.strictEqual(changes(), 4)
+      })))
+
+    it.effect("props preserve Equal.equals for cycles, custom Equal and non-plain values", () =>
+      provideHost(Effect.gen(function*() {
+        const token = (id: string, note: string) => ({
+          id,
+          note,
+          [Equal.symbol](that: unknown): boolean {
+            return typeof that === "object" && that !== null &&
+              (that as { readonly id?: unknown }).id === id
+          },
+          [Hash.symbol](): number {
+            return Hash.string(id)
+          }
+        })
+        const loop = (n: number) => {
+          const node: Record<string, unknown> = { n }
+          node.self = node
+          return node
+        }
+        const arrayLoop = (n: number) => {
+          const list: Array<unknown> = [n]
+          list.push(list)
+          return list
+        }
+        const Props = Schema.Struct({
+          cycle: Schema.Unknown,
+          list: Schema.Unknown,
+          tok: Schema.Unknown,
+          at: Schema.Unknown
+        })
+        const Leaf = Component.define({
+          name: "Leaf",
+          props: Props,
+          model: Schema.Null,
+          message: Schema.Never
+        }).make({
+          init: () => null,
+          update: ($) => $.model,
+          view: (h) =>
+            h.el("span", String((h.props.cycle as { readonly n: number }).n))
+        })
+        const Host = Component.define({
+          name: "Host",
+          model: Props,
+          message: Props
+        }).make({
+          init: () => ({
+            cycle: loop(1),
+            list: arrayLoop(1),
+            tok: token("a", "one"),
+            at: new Date(100)
+          }),
+          update: (_, next) => next,
+          view: (h, model) => h.el("div", Leaf(h, { key: "l", props: model }))
+        })
+        const root = yield* TestHost.mount(Host, {})
+        yield* TestHost.settle
+        const changes = () =>
+          tags(root, "/Host/Leaf[l]").filter((tag) => tag === "PropsChanged")
+            .length
+
+        // Equal cyclic record (including an unrolled cycle), cyclic array, custom Equal and Date.
+        const step2: Record<string, unknown> = { n: 1 }
+        const step1: Record<string, unknown> = { n: 1, self: step2 }
+        step2.self = step1
+        root.send({
+          cycle: step1,
+          list: arrayLoop(1),
+          tok: token("a", "different-note-ignored-by-Equal"),
+          at: new Date(100)
+        })
+        yield* TestHost.settle
+        assert.strictEqual(changes(), 0)
+
+        // Differing cyclic record triggers a re-render.
+        root.send({
+          cycle: loop(2),
+          list: arrayLoop(1),
+          tok: token("a", "one"),
+          at: new Date(100)
+        })
+        yield* TestHost.settle
+        assert.strictEqual(changes(), 1)
+        assert.strictEqual(root.text(), "2")
+
+        // Differing cyclic array triggers a re-render.
+        root.send({
+          cycle: loop(2),
+          list: arrayLoop(2),
+          tok: token("a", "one"),
+          at: new Date(100)
+        })
+        yield* TestHost.settle
+        assert.strictEqual(changes(), 2)
+
+        // Custom Equal returning false triggers a re-render; plain record vs Equal also differs.
+        root.send({
+          cycle: loop(2),
+          list: arrayLoop(2),
+          tok: token("b", "one"),
+          at: new Date(100)
+        })
+        yield* TestHost.settle
+        assert.strictEqual(changes(), 3)
+        root.send({
+          cycle: loop(2),
+          list: arrayLoop(2),
+          tok: { id: "b", note: "one" },
+          at: new Date(100)
+        })
+        yield* TestHost.settle
+        assert.strictEqual(changes(), 4)
+
+        // Differing Date triggers a re-render.
+        root.send({
+          cycle: loop(2),
+          list: arrayLoop(2),
+          tok: { id: "b", note: "one" },
+          at: new Date(200)
+        })
+        yield* TestHost.settle
+        assert.strictEqual(changes(), 5)
       })))
   })
 
