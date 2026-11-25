@@ -77,7 +77,10 @@ await run("scrub", async ({ browser, expect, failures, url }) => {
   await watch(page)
   await drag([[8, 30], [max, 30], [max - 6, 6]])
   const seen = {
-    ...await page.evaluate(() => window.__scrub),
+    ...await page.evaluate(() => {
+      window.__scrub.done = true
+      return window.__scrub
+    }),
     onTop: await onTop()
   }
 

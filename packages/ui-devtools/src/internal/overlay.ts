@@ -103,7 +103,7 @@ const OverlayMessage = UiSchema.TaggedEnum({
   ClickedCopyFrame: { seq: Schema.Number, text: Schema.String },
   SucceededCopyFrame: { seq: Schema.Number },
   FailedCopyFrame: {},
-  ClickedTimeTravel: { session: Schema.String, seq: Schema.Number },
+  ClickedTimeTravel: Page.fields,
   ScrubbedPage: { seq: Schema.Number },
   ClickedResume: {},
   ClickedClear: {},
@@ -281,6 +281,11 @@ const Placeholder = (h: H, value: MessageLog.Placeholder) =>
 
 const pageAt = (model: OverlayModel) => model.painting ?? model.paused
 
+const samePage = (
+  a: typeof Page.Type | null | undefined,
+  b: typeof Page.Type | null | undefined
+) => a?.session === b?.session && a?.seq === b?.seq
+
 const sessionOf = (feed: Feed, model: OverlayModel): Session | undefined => {
   const sessions = feed.inspector.sessions()
   const paused = pageAt(model)?.session
@@ -289,10 +294,8 @@ const sessionOf = (feed: Feed, model: OverlayModel): Session | undefined => {
     : sessions.find((session) => session.id === paused)) ?? sessions.at(-1)
 }
 
-const shows = (model: OverlayModel, session: string, seq: number) => {
-  const page = pageAt(model)
-  return page?.session === session && page.seq === seq
-}
+const shows = (model: OverlayModel, session: string, seq: number) =>
+  samePage(pageAt(model), { session, seq })
 
 const PausedBadge = (h: H, seq: number) =>
   h.span.class("paused").children(
@@ -562,8 +565,7 @@ const InstanceList = (
   rows: ReadonlyArray<InstanceRow>,
   model: OverlayModel,
   owner: number | undefined,
-  mode: "active" | "tree" | "find",
-  slots: number | undefined
+  mode: "active" | "tree" | "find"
 ) => {
   const keys = rows.map((row) => String(row.summary.instance))
   const target = owner === undefined || model.selected === null
@@ -590,7 +592,7 @@ const InstanceList = (
         h.div.class("ilist", mode === "tree" && "tree-list").attr(
           "aria-label",
           "Instances"
-        ).attr("style", slots === undefined ? undefined : "--slots:" + slots)
+        )
       ).children(
         list.list(h.ul).children(
           list.items.map((index) => {
@@ -649,7 +651,10 @@ const Instances = (
   const slots = mode === "active" && pageAt(model) !== null
     ? ownerSlots(session, activeRows(session, [scoped]), timeline)
     : undefined
-  return h.section.class("instances").attr("aria-label", "Instances").children(
+  return h.section.class("instances").attr("aria-label", "Instances").attr(
+    "style",
+    slots === undefined ? undefined : "--slots:" + slots
+  ).children(
     h.div.class("ihead").children(
       h.h3.class("heading").children("Instances"),
       h.span.class("icount").children(count.toLocaleString("en-US")),
@@ -667,7 +672,7 @@ const Instances = (
           ? "No instance matches."
           : "No instance has run a Command or taken a message yet."
       )
-      : InstanceList(h, session, rows, model, owner?.instance, mode, slots),
+      : InstanceList(h, session, rows, model, owner?.instance, mode),
     mode === "find" ? null : h.button.class("browse").onClick(
       OverlayMessage.ClickedBrowse({
         browse: !model.browse,
@@ -1727,10 +1732,7 @@ const Panel = (h: H, model: OverlayModel) => {
 
 const synced = (model: OverlayModel, feed: Feed) => {
   const paused = feed.paused() ?? null
-  return paused?.session === model.paused?.session &&
-      paused?.seq === model.paused?.seq
-    ? {}
-    : { paused }
+  return samePage(paused, model.paused) ? {} : { paused }
 }
 
 const Launcher = (h: H, model: OverlayModel) => {
@@ -1769,15 +1771,14 @@ const resumePage = () => Paint.make({ session: "", seq: null })
 
 const resumed = { paused: null, painting: null } as const
 
-const isPainting = (model: OverlayModel, page: typeof Page.Type) =>
-  model.painting?.session === page.session && model.painting.seq === page.seq
-
 const repaint = (model: OverlayModel, feed: Feed, seq: number) => {
   const session = sessionOf(feed, model)
-  return pageAt(model) !== null && session !== undefined &&
-      feed.paintable(session.id, seq)
-    ? { session: session.id, seq }
-    : undefined
+  if (
+    pageAt(model) === null || session === undefined ||
+    !feed.paintable(session.id, seq)
+  ) return { model: {}, commands: [] }
+  const page = { session: session.id, seq }
+  return { model: { painting: page }, commands: [Paint.make(page)] }
 }
 
 export const Overlay = Html.component({
@@ -1825,17 +1826,17 @@ export const Overlay = Html.component({
         SaveOpen.make({ open: false })
       ),
     ClickedEntry: ($, { seq }) => {
-      const page = repaint($.model, $.props.feed, seq)
+      const paint = repaint($.model, $.props.feed, seq)
       return $.evolve({
         selected: seq,
         pane: "entry",
         ...($.model.pinned ? { pins: increment } : {}),
-        ...(page === undefined ? {} : { painting: page })
+        ...paint.model
       })
-        .run(...(page === undefined ? [] : [Paint.make(page)]))
+        .run(...paint.commands)
     },
     ClickedLink: ($, { seq }) => {
-      const page = repaint($.model, $.props.feed, seq)
+      const paint = repaint($.model, $.props.feed, seq)
       return $.evolve({
         selected: seq,
         filter: "all",
@@ -1843,9 +1844,9 @@ export const Overlay = Html.component({
         pinned: false,
         reveal: seq,
         pins: increment,
-        ...(page === undefined ? {} : { painting: page })
+        ...paint.model
       })
-        .run(...(page === undefined ? [] : [Paint.make(page)]))
+        .run(...paint.commands)
     },
     ClickedScope: ($, { instance }) =>
       $.evolve({ scope: $.model.scope === instance ? null : instance }),
@@ -1923,10 +1924,10 @@ export const Overlay = Html.component({
     Painted: ($, paused) =>
       $.evolve({
         paused,
-        ...(isPainting($.model, paused) ? { painting: null } : {})
+        ...(samePage($.model.painting, paused) ? { painting: null } : {})
       }),
     FailedPaint: ($, page) =>
-      isPainting($.model, page) ? $.evolve({ painting: null }) : $.model
+      samePage($.model.painting, page) ? $.evolve({ painting: null }) : $.model
   },
   subscriptions: ({ props }) => [
     Subscription.make(
