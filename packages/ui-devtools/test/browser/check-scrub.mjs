@@ -39,6 +39,7 @@ await run("scrub", async ({ browser, expect, failures, url }) => {
   await frame.getByRole("button", { name: "Everything" }).click()
   await frame.locator(".row-button", { hasText: "ClickedCount" }).first()
     .click()
+  await page.evaluate(() => document.getElementById("held").showPopover())
   await frame.getByRole("button", { name: "Time travel", exact: true }).click()
   await frame.getByRole("button", { name: "Resume the live page" }).waitFor()
   await page.waitForTimeout(100)
@@ -65,7 +66,13 @@ await run("scrub", async ({ browser, expect, failures, url }) => {
 
   const seen = await page.evaluate(() => {
     window.__scrub.done = true
-    return window.__scrub
+    const held = document.getElementById("held").getBoundingClientRect()
+    const top = document.elementFromPoint(held.left + 4, held.top + 4)
+    return {
+      ...window.__scrub,
+      held: document.getElementById("held").matches(":popover-open"),
+      onTop: top?.hasAttribute("data-effect-ui-devtools") === true
+    }
   })
   const shown = new Set(seen.frames.map((frame) => frame.slider))
   expect(shown.size > 20, "the scrub went through the entries", [...shown])
@@ -73,6 +80,11 @@ await run("scrub", async ({ browser, expect, failures, url }) => {
     seen.toggles === 0,
     "the panel stays in the top layer while scrubbing",
     seen.toggles
+  )
+  expect(
+    seen.held && seen.onTop,
+    "the panel stays above a popover held open under it",
+    { held: seen.held, onTop: seen.onTop }
   )
   const torn = seen.frames.filter((frame) =>
     frame.badge !== frame.slider || frame.entry !== frame.slider ||

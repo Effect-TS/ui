@@ -24,10 +24,13 @@ const scene = (page) =>
       .getBoundingClientRect()
     const x = Math.max(panel.left, dialog.left) + 4
     const y = Math.max(panel.top, dialog.top) + 4
+    copy?.removeAttribute("inert")
+    const hit = document.elementFromPoint(x, y)
+    copy?.setAttribute("inert", "")
     return {
       panelOnTop: x > Math.min(panel.right, dialog.right) ||
         y > Math.min(panel.bottom, dialog.bottom) ||
-        document.elementFromPoint(x, y) === frame,
+        hit === frame,
       frameInTopLayer: frame.matches(":popover-open"),
       liveShown: getComputedStyle(live).display !== "none",
       live: describe(live),
@@ -55,8 +58,7 @@ await run("pause", async ({ browser, expect, failures, url }) => {
   await frame.getByRole("button", { name: "Open the Effect UI inspector" })
     .click()
   await frame.getByRole("dialog", { name: "Effect UI inspector" }).waitFor()
-  await frame.locator(".row-button", { hasText: "ClickedOpenDialog" }).first()
-    .click()
+  await frame.locator(".row-button", { hasText: "ClickedCount" }).last().click()
   const travel = frame.getByRole("button", { name: "Time travel", exact: true })
   const tooltip = await travel.getAttribute("title")
   expect(
@@ -66,7 +68,9 @@ await run("pause", async ({ browser, expect, failures, url }) => {
   )
   await travel.click({ timeout: 5_000 })
   await frame.getByRole("button", { name: "Resume the live page" }).waitFor()
-  await page.waitForTimeout(100)
+  await frame.locator(".row-button", { hasText: "ClickedOpenDialog" }).first()
+    .click()
+  await page.waitForTimeout(150)
 
   const paused = await scene(page)
   expect(
