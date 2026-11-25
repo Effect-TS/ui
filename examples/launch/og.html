@@ -1,12 +1,13 @@
 <!doctype html>
 <!--
   The source of public/og.png, the picture a link to the page unfurls
-  with. It's the page's masthead in the dark theme, at the 1200 by 630
-  that Open Graph asks for. After a change, draw it again from this
-  directory with Chromium:
+  with. It's styled as the hero of effect.website's landing page in
+  the dark theme, as a phone shows it: 600 by 315, drawn at twice the
+  size for the 1200 by 630 that Open Graph asks for. After a change,
+  draw it again from this directory with Chromium:
 
-    chromium --headless --hide-scrollbars --window-size=1200,630 \
-      --screenshot=public/og.png og.html
+    chromium --headless --hide-scrollbars --window-size=600,315 \
+      --force-device-scale-factor=2 --screenshot=public/og.png og.html
 -->
 <html lang="en">
   <head>
@@ -27,13 +28,15 @@
           format("woff2-variations");
       }
 
-      /* The dark theme's colors, from src/styles.css. */
+      /* effect.website's dark theme. */
       :root {
         --background: oklch(14.1% 0.005 285.823);
         --foreground: oklch(98.5% 0 0);
-        --muted-foreground: oklch(70.5% 0.015 286.067);
         --prose-foreground: oklch(87.1% 0.006 286.286);
-        --border: oklch(27.4% 0.006 286.033);
+        --muted-foreground: oklch(70.5% 0.015 286.067);
+        --subtle-foreground: oklch(55.2% 0.016 285.938);
+        --hero-glow-a: #ffffff1f;
+        --hero-glow-b: #ffffff14;
       }
 
       * {
@@ -42,75 +45,125 @@
       }
 
       body {
-        width: 1200px;
-        height: 630px;
-        padding: 60px 72px 0;
+        position: relative;
+        width: 600px;
+        height: 315px;
         overflow: hidden;
         background: var(--background);
         color: var(--foreground);
         font-family: "Inter Variable", sans-serif;
-        font-feature-settings: "cv11", "ss01";
         -webkit-font-smoothing: antialiased;
-      }
-
-      .masthead {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-
-      .masthead img {
-        display: block;
-        height: 46px;
       }
 
       .mono {
         font-family: "JetBrains Mono Variable", monospace;
-        font-size: 19px;
-        font-weight: 500;
-        letter-spacing: 0.1em;
-        color: var(--muted-foreground);
+        font-size: 14px;
+        line-height: 1.5;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--prose-foreground);
       }
 
-      /* The page's header, without its fade and its moving strokes: a
-         plain grid of six lines down it, as on effect.website. */
-      header {
-        margin-top: 44px;
-        padding: 52px 0 58px;
-        border-block: 1px solid var(--border);
-        background: linear-gradient(to right, var(--border) 1px, transparent 1px) center / calc(100% / 6) 100%;
+      .subtle {
+        color: var(--subtle-foreground);
+      }
+
+      /* The site's navigation bar. */
+      nav {
+        position: relative;
+        display: flex;
+        height: 64px;
+        align-items: center;
+        justify-content: space-between;
+        padding-inline: 32px;
+        border-bottom: 1px solid #27272a;
+        background: #09090b;
+      }
+
+      nav img {
+        display: block;
+        height: 28px;
+      }
+
+      nav .mono {
+        font-size: 12px;
+        text-transform: none;
+      }
+
+      .hero {
+        position: relative;
+        height: 251px;
+        padding: 30px 32px 0;
+      }
+
+      .hero > * {
+        position: relative;
+      }
+
+      /* The hero's grid: a line down the middle and one every 12.2917rem
+         from it, with a row every 194px. The rows are counted from the
+         top of the picture, which puts one between the title and the
+         text under it. */
+      .hero > .grid-bg {
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(90deg, #27272ab3 1px, #0000 1px),
+          linear-gradient(#27272ab3 1px, #0000 1px);
+        background-position: calc(50% + 6.14583rem) -64px;
+        background-size: 12.2917rem 194px;
+      }
+
+      /* The light that falls on the hero from the top right. */
+      .hero > .hero-glow {
+        position: absolute;
+        inset: 0 0 auto;
+        height: 600px;
+        background:
+          radial-gradient(ellipse 50% 80% at 70% -20%, var(--hero-glow-a) 0%, transparent 40%),
+          radial-gradient(ellipse 30% 50% at 80% 0%, var(--hero-glow-b) 0%, transparent 30%);
+      }
+
+      /* The site's dither: two white dots in every four pixels, nearly
+         transparent, over the whole page. */
+      .dither {
+        position: absolute;
+        inset: 0;
+        opacity: 0.03;
+        background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect x='0' y='0' width='1' height='1' fill='white'/%3E%3Crect x='2' y='2' width='1' height='1' fill='white'/%3E%3C/svg%3E")
+          0 0 / 4px 4px;
       }
 
       h1 {
-        margin-top: 26px;
-        font-size: 104px;
+        margin-top: 16px;
+        font-size: 3.052rem;
         font-weight: 700;
-        line-height: 1.08;
-        letter-spacing: -0.035em;
+        line-height: 1.15;
       }
 
       .lede {
-        margin-top: 40px;
-        max-width: 880px;
+        margin-top: 24px;
+        font-size: 1.25rem;
+        line-height: 1.375;
         text-wrap: balance;
-        font-size: 35px;
-        line-height: 1.4;
-        letter-spacing: -0.011em;
-        color: var(--prose-foreground);
+        color: var(--muted-foreground);
       }
     </style>
   </head>
   <body>
-    <div class="masthead">
+    <div class="dither"></div>
+    <nav>
       <img src="public/effect-ui-white.svg" alt="Effect UI" />
-      <span class="mono">ui.effect.website</span>
-    </div>
-    <header>
-      <p class="mono">// PUBLIC PREVIEW</p>
+      <span class="mono subtle">ui.effect.website</span>
+    </nav>
+    <div class="hero">
+      <div class="grid-bg"></div>
+      <div class="hero-glow"></div>
+      <p class="mono"><span class="subtle">//</span> Public preview</p>
       <h1>Introducing Effect UI</h1>
-    </header>
-    <p class="lede">
-      The new frontend library that continues the work of Foldkit 0.x.
-    </p>
+      <p class="lede">
+        The new frontend library that continues the work of Foldkit 0.x.
+      </p>
+    </div>
   </body>
 </html>
