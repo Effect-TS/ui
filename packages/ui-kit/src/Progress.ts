@@ -15,8 +15,9 @@
  *
  * Each part takes the consumer's builder and returns it, so the consumer
  * goes on chaining and adds children with `.children(...)`. `root`
- * appends a visually hidden `<span role="presentation">` after all its
- * children, which makes NVDA read the label. `value` fills in the value
+ * appends a visually hidden `<span role="presentation">` with
+ * `user-select: none` after all its children, which makes NVDA read the
+ * label while staying out of copied text. `value` fills in the value
  * text when the consumer gives it no children. The other parts add no
  * markup.
  *
@@ -107,9 +108,10 @@ import {
  *   `aria-valuetext` and as what `value` shows, in every state. Left out,
  *   it is the percentage, rounded to a whole number, as `"40%"`, the same
  *   on the server and in the browser. While indeterminate without
- *   `valueText`, `aria-valuetext` is `"indeterminate progress"` and
- *   `value` shows nothing. Build your own text, such as `"3 of 5 files"`,
- *   in the view from your Model.
+ *   `valueText`, `aria-valuetext` is omitted so the screen reader
+ *   announces the indeterminate state in the user's language, and `value`
+ *   shows nothing. Build your own text, such as `"3 of 5 files"`, in the
+ *   view from your Model.
  *
  * @stability experimental
  * @category schemas
@@ -179,8 +181,9 @@ const resolve = (props: ProgressProps) => {
  * the builder before the part, including the ones a state leaves absent:
  *
  * - `root`: `role`, `aria-valuemin`, `aria-valuemax`, `aria-valuenow`
- *   (absent while indeterminate) and `aria-valuetext`. `aria-labelledby`
- *   is a token list: the label's id is added to the consumer's own.
+ *   (absent while indeterminate) and `aria-valuetext` (absent while
+ *   indeterminate without `valueText`). `aria-labelledby` is a token
+ *   list: the label's id is added to the consumer's own.
  * - `label`: `id` and `role="presentation"`
  * - `value`: `aria-hidden="true"`, as the root already reports the value
  * - every part: the data attributes
@@ -230,7 +233,7 @@ export const Progress = Html.component({
             "aria-valuemin": String(min),
             "aria-valuemax": String(max),
             "aria-valuenow": value === null ? undefined : String(value),
-            "aria-valuetext": valueText ?? "indeterminate progress",
+            "aria-valuetext": valueText,
             // A token list: added to the consumer's own.
             "aria-labelledby": labelId
           })

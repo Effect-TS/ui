@@ -242,7 +242,7 @@ describe("Slider", () => {
       scene.keydown(input(1), "Home").emitted(...both([0.1, 0.2]))
     }))
 
-  it.effect("a range has a thumb per value, labelled by its end, and a key cannot close the gap", () =>
+  it.effect("a range has a thumb per value and a key cannot close the gap", () =>
     Effect.gen(function*() {
       const scene = yield* makeScene({
         value: [70, 20],
@@ -250,14 +250,8 @@ describe("Slider", () => {
       })
       // The values are sorted.
       scene.parts((slider) => assert.deepStrictEqual(slider.values, [20, 70]))
-      assert.strictEqual(
-        scene.get(input(0)).attrs?.["aria-valuetext"],
-        "20 start range"
-      )
-      assert.strictEqual(
-        scene.get(input(1)).attrs?.["aria-valuetext"],
-        "70 end range"
-      )
+      assert.isUndefined(scene.get(input(0)).attrs?.["aria-valuetext"])
+      assert.isUndefined(scene.get(input(1)).attrs?.["aria-valuetext"])
       assert.strictEqual(scene.get(input(1)).props?.value, "70")
       assert.strictEqual(
         scene.get(indicator).attrs?.style,

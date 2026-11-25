@@ -106,9 +106,9 @@ describe("NumberField", () => {
         autocomplete: "off",
         autocorrect: "off",
         spellcheck: "false",
-        "aria-roledescription": "Number field",
         form: "order"
       })
+      assert.isUndefined(scene.get(input).attrs?.["aria-roledescription"])
       assert.isUndefined(scene.get(input).attrs?.name)
       assert.strictEqual(text(scene), "1,234.5")
       assert.strictEqual(scene.get(group).attrs?.role, "group")
@@ -131,6 +131,14 @@ describe("NumberField", () => {
         })
       }
       assert.strictEqual(scene.query(cursor), undefined)
+      const activeCursor = Story.parts(NumberField, {
+        model: { ...idle, scrubbing: true, cursor: true },
+        props: { value: 1234.5 }
+      }).scrubAreaCursor(h.span.class("cursor"))
+      assert(activeCursor)
+      const cursorAttrs = View.build(activeCursor, []).attrs
+      assert.strictEqual(cursorAttrs["aria-hidden"], "true")
+      assert.isUndefined(cursorAttrs.role)
       const children = scene.get(root).children ?? []
       assert.strictEqual(children[children.length - 1], scene.get(formInput))
       assert.deepInclude(scene.get(formInput).attrs, {

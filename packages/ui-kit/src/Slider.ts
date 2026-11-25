@@ -49,8 +49,7 @@
  * such as "Minimum". Each input then points at the description and the
  * error. The field is focused while either thumb has focus, and touched
  * once focus leaves the slider. Don't pass `field.control` to more than one
- * input, since that gives two elements one `id`. Two thumbs get
- * `aria-valuetext` saying which end each one is, unless you set one.
+ * input, since that gives two elements one `id`.
  *
  * **Data attributes**
  *
@@ -962,23 +961,15 @@ export const Slider = Html.component({
         .onInput(({ value }) => SliderMessage.UpdatedThumb({ index, value }))
         .onFocus(SliderMessage.FocusedThumb({ index }))
         .onBlur(SliderMessage.BlurredThumb({ index }))
-        .forward((node) => {
-          // The consumer's text wins. Two thumbs say which end each one is.
-          const text = node.elementAttrs["aria-valuetext"] === undefined &&
-              s.values.length === 2
-            ? node.attr(
-              "aria-valuetext",
-              value + " " + (index === 0 ? "start" : "end") + " range"
-            )
-            : node
-          return text.attr(
+        .forward((node) =>
+          node.attr(
             "style",
             withStyle(
               node.elementAttrs.style,
               hidden + (s.vertical ? ";writing-mode:vertical-lr" : "")
             )
           )
-        })
+        )
     })
     const thumbPart = p.part((
       b,
