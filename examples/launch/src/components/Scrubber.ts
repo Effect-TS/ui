@@ -41,6 +41,9 @@ export const Scrubber = <M>(
         slider.control(
           h.div.class(
             "relative h-8 touch-none rounded-md",
+            // The control captures the pointer while dragging, so its
+            // cursor is the one that shows.
+            "data-dragging:cursor-grabbing",
             "has-focus-visible:outline-2",
             "has-focus-visible:outline-offset-2",
             "has-focus-visible:outline-accent"
