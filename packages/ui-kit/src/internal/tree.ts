@@ -47,8 +47,7 @@ const layerOf = (
   builder: { readonly owned: ReadonlyArray<View.Owned> }
 ): View.Owned => builder.owned[builder.owned.length - 1]!
 
-// Builds a part's node, running the consumer's `forward` hooks, and finds the
-// element the part decorated, which a hook may have wrapped.
+// Build a part and find its element even when a `forward` hook wraps it.
 export const buildOwn = <Msg, R>(
   node: View.ElementBuilder<Msg, R, any, any>
 ): {

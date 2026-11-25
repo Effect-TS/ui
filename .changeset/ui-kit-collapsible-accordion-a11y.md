@@ -2,4 +2,4 @@
 "@effect/ui-kit": patch
 ---
 
-Mark closing `Collapsible` and `Accordion` panels `inert` during exit transitions, merge consumer `aria-labelledby` tokens on `AccordionItem` panels, and keep rootless `Collapsible` `aria-controls` linked to custom panel IDs.
+`Collapsible` and `Accordion` panels are now `inert` during exit transitions so keyboard focus skips closing content, and `Collapsible` keeps `aria-controls` linked to custom panel IDs even without `root`. `AccordionItem` panels also merge their trigger ID into any consumer-supplied `aria-labelledby` instead of overwriting it.

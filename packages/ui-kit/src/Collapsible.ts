@@ -437,15 +437,13 @@ const TrackPanel = Mount.makeStream(
  * passes in, including the ones a state leaves absent: the data attributes on
  * every part; on the trigger `type`, `disabled`, `aria-disabled`, which it
  * removes, `aria-expanded` and `aria-controls`, which it sets only while the
- * panel is open; on the panel `hidden` and `inert` while closing. The panel
- * keeps an `id` the consumer gives it, and gets a generated one otherwise. A
- * trigger built before the panel, such as one inside a heading, still points
- * its `aria-controls` at the panel's final `id`, on the button even when
- * wrapped with `forward` or without `root`, and leaves every other element's
- * alone. The panel's CSS variables, and
- * the `animation-name` and durations it overrides to skip an animation, are
- * added after the consumer's inline style. A handler the consumer adds to a
- * part runs after the collapsible's own.
+ * panel is open; on the panel `hidden`, and `inert` while closing. The panel
+ * keeps a consumer `id` and gets a generated one otherwise; the trigger's
+ * `aria-controls` always points at the panel's final `id`, even when built
+ * before the panel, wrapped with `forward`, or rendered without `root`. The
+ * panel's CSS variables, and the `animation-name` and durations it overrides
+ * to skip an animation, are added after the consumer's inline style. A
+ * handler the consumer adds to a part runs after the collapsible's own.
  *
  * On the server and on a host that doesn't run mounts, a panel that opens
  * stays at `data-starting-style`, and one that closes stays in the page.
