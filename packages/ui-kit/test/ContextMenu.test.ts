@@ -170,26 +170,10 @@ describe("Menu contextTrigger", () => {
 
   it.effect("the Menu key and Shift+F10 open it against the focusable trigger on the first item, once, and another right click moves it", () =>
     Effect.gen(function*() {
-      const menuKey = yield* HtmlScene.make(
-        Menu,
-        { open: false, items },
-        standIn
-      )
-      menuKey.expectMount(longPress(menuKey))
-        .fire(area, "keydown", keyPress("ContextMenu"))
-        .expectDefaultPrevented()
-        .emitted(
-          { _tag: "Highlighted", value: "copy", reason: "none" },
-          opened("row")
-        )
-      // A second press is the user's, however soon it comes.
-      menuKey.fire(area, "keydown", keyPress("F10", { shift: true }))
-        .emitted(opened("row"))
-      yield* elapse(menuKey, "WaitBeforeContextGrace", 500)
       const scene = yield* HtmlScene.make(Menu, { open: false, items }, standIn)
       scene.expectMount(longPress(scene))
       assert.strictEqual(scene.get(area).attrs?.tabindex, "0")
-      scene.fire(area, "keydown", keyPress("F10", { shift: true }))
+      scene.fire(area, "keydown", keyPress("ContextMenu"))
         .expectDefaultPrevented()
         .emitted(
           { _tag: "Highlighted", value: "copy", reason: "none" },
@@ -197,6 +181,10 @@ describe("Menu contextTrigger", () => {
         )
       // The browser's own `contextmenu` for the same key opens nothing more.
       scene.fire(area, "contextmenu", rightClick(0, 0, "")).expectHandled()
+      // A second press is the user's, however soon it comes.
+      scene.fire(area, "keydown", keyPress("F10", { shift: true }))
+        .expectDefaultPrevented()
+        .emitted(opened("row"))
       scene.props({ open: true, items }).mounted(
         tracked(scene),
         sent("ShowedPopup")

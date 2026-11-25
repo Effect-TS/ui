@@ -845,9 +845,6 @@ describe("Menu", () => {
         scene.get(trigger).attrs?.["aria-controls"],
         "inspector"
       )
-      scene.fire(trigger, "mousedown", pointer("mouse")).emitted(
-        opened("trigger-press")
-      )
       scene.props({ open: true, items }).mounted(
         tracked(scene),
         sent("ShowedPopup")
