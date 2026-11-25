@@ -11,8 +11,9 @@ export class SearchPeople extends Query.Service<SearchPeople>()(
     success: Schema.Array(Person),
     error: Schema.Never,
     staleTime: "Infinity"
-  },
-  Effect.succeed(({ searchText }) =>
+  }
+) {
+  static readonly layer = this.toLayer(({ searchText }) =>
     Effect.as(Effect.sleep(SEARCH_LATENCY), searchPeople(searchText))
   )
-) {}
+}

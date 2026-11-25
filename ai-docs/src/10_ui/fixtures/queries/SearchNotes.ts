@@ -13,9 +13,12 @@ export class SearchNotes extends Query.Service<SearchNotes>()(
     error: Schema.Never,
     staleTime: "30 seconds",
     tags: [NotesTag]
-  },
-  Effect.gen(function*() {
-    const notes = yield* Notes
-    return (search) => notes.search(search)
-  })
-) {}
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.gen(function*() {
+      const notes = yield* Notes
+      return (search) => notes.search(search)
+    })
+  )
+}

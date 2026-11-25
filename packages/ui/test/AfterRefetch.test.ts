@@ -40,15 +40,18 @@ const makeApp = (options?: {
       success: User,
       error: Schema.String,
       staleTime: "30 seconds"
-    },
-    Effect.succeed(({ id }) =>
-      Effect.gen(function*() {
-        yield* Effect.sleep(db.delay.get(id) ?? 10)
-        if (db.fail.has(id)) return yield* Effect.fail("down")
-        return { id, name: db.names.get(id) ?? "?" }
-      })
+    }
+  ) {
+    static readonly layer = this.toLayer(
+      Effect.succeed(({ id }) =>
+        Effect.gen(function*() {
+          yield* Effect.sleep(db.delay.get(id) ?? 10)
+          if (db.fail.has(id)) return yield* Effect.fail("down")
+          return { id, name: db.names.get(id) ?? "?" }
+        })
+      )
     )
-  ) {}
+  }
 
   const invalidates = options?.invalidates ?? "self"
   class RenameUser extends Command.Service<RenameUser>()(
@@ -891,18 +894,21 @@ describe("Command.afterRefetch", () => {
         cursor: Schema.Number,
         next: (lastPage) => Option.fromNullishOr(lastPage.next),
         staleTime: "30 seconds"
-      },
-      Effect.succeed((_args, cursor) =>
-        Effect.gen(function*() {
-          const index = Option.getOrElse(cursor, () => 0)
-          yield* Effect.sleep("10 millis")
-          return {
-            items: [{ id: `${db.version}-${index}` }],
-            next: index < 1 ? index + 1 : null
-          }
-        })
+      }
+    ) {
+      static readonly layer = this.toLayer(
+        Effect.succeed((_args, cursor) =>
+          Effect.gen(function*() {
+            const index = Option.getOrElse(cursor, () => 0)
+            yield* Effect.sleep("10 millis")
+            return {
+              items: [{ id: `${db.version}-${index}` }],
+              next: index < 1 ? index + 1 : null
+            }
+          })
+        )
       )
-    ) {}
+    }
     class Touch extends Command.Service<Touch>()(
       "items/Touch",
       { args: {}, invalidates: () => [ListItems] },

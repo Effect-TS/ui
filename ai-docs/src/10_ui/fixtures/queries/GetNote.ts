@@ -4,8 +4,8 @@ import { Effect, Schema } from "effect"
 import { Notes } from "../notes/services/Notes.ts"
 
 // A query is data loaded by its arguments and cached, so components watching
-// the same note share one entry and one fetch. Like a `Command.Service`, it
-// captures `Notes` when its Layer is built. `SaveNote` invalidates
+// the same note share one entry and one fetch. Attach its fetcher with
+// `toLayer`, capturing `Notes` when its Layer is built. `SaveNote` invalidates
 // `NotesTag`, so a save refetches it.
 export class GetNote extends Query.Service<GetNote>()(
   "notes/GetNote",
@@ -15,9 +15,12 @@ export class GetNote extends Query.Service<GetNote>()(
     error: NoteNotFound,
     staleTime: "30 seconds",
     tags: [NotesTag]
-  },
-  Effect.gen(function*() {
-    const notes = yield* Notes
-    return ({ id }) => notes.get(id)
-  })
-) {}
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.gen(function*() {
+      const notes = yield* Notes
+      return ({ id }) => notes.get(id)
+    })
+  )
+}

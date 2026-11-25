@@ -114,7 +114,11 @@ export class ListUsers extends Query.Service<ListUsers>()("users/ListUsers", {
   error: Schema.Never,
   staleTime: "30 seconds",
   tags: [Users]
-}, Effect.map(UsersApi, (api) => ({ page }) => api.list(page))) {}
+}) {
+  static readonly layer = this.toLayer(
+    Effect.map(UsersApi, (api) => ({ page }) => api.list(page))
+  )
+}
 
 export class GetUser extends Query.Service<GetUser>()("users/GetUser", {
   args: { id: Schema.String },
@@ -122,7 +126,11 @@ export class GetUser extends Query.Service<GetUser>()("users/GetUser", {
   error: UserNotFound,
   staleTime: "30 seconds",
   tags: [Users]
-}, Effect.map(UsersApi, (api) => ({ id }) => api.get(id))) {}
+}) {
+  static readonly layer = this.toLayer(
+    Effect.map(UsersApi, (api) => ({ id }) => api.get(id))
+  )
+}
 
 // Mutations
 

@@ -56,16 +56,19 @@ const makeUsers = (staleTime: Duration.Input = "30 seconds") => {
       success: User,
       error: Schema.String,
       staleTime
-    },
-    Effect.sync(() => ({ id }) =>
-      Effect.gen(function*() {
-        db.calls++
-        yield* Effect.sleep(10)
-        if (db.fail) return yield* Effect.fail("nope")
-        return { id, name: db.name }
-      })
+    }
+  ) {
+    static readonly layer = this.toLayer(
+      Effect.sync(() => ({ id }) =>
+        Effect.gen(function*() {
+          db.calls++
+          yield* Effect.sleep(10)
+          if (db.fail) return yield* Effect.fail("nope")
+          return { id, name: db.name }
+        })
+      )
     )
-  ) {}
+  }
   return {
     db,
     GetUser,
@@ -82,15 +85,18 @@ const makeCount = (staleTime: Duration.Input = "30 seconds") => {
       success: Schema.Number,
       error: Schema.Never,
       staleTime
-    },
-    Effect.sync(() => () =>
-      Effect.gen(function*() {
-        db.calls++
-        yield* Effect.sleep(10)
-        return db.count
-      })
+    }
+  ) {
+    static readonly layer = this.toLayer(
+      Effect.sync(() => () =>
+        Effect.gen(function*() {
+          db.calls++
+          yield* Effect.sleep(10)
+          return db.count
+        })
+      )
     )
-  ) {}
+  }
   return {
     db,
     GetCount,
@@ -179,7 +185,11 @@ describe("Query runs", () => {
       error: Schema.Never,
       staleTime: 0,
       tags: [Tagged]
-    }, Effect.succeed(() => Effect.succeed(0))) {}
+    }) {
+      static readonly layer = this.toLayer(
+        Effect.succeed(() => Effect.succeed(0))
+      )
+    }
 
     it("applyPatches applies, in issue order, the patches of one entry", () => {
       const patches = [
@@ -656,11 +666,14 @@ describe("Query runs", () => {
           success: Schema.Struct({ payload: Schema.Any }),
           error: Schema.Never,
           staleTime: "30 seconds"
-        },
-        Effect.sync(() => ({ id }) =>
-          Effect.sync(() => ({ payload: payloads[id] }))
+        }
+      ) {
+        static readonly layer = this.toLayer(
+          Effect.sync(() => ({ id }) =>
+            Effect.sync(() => ({ payload: payloads[id] }))
+          )
         )
-      ) {}
+      }
       const inPlace = (
         id: string,
         mutate: (payload: Record<string, unknown>) => void
@@ -768,9 +781,12 @@ describe("Query runs", () => {
           success: Schema.Any,
           error: Schema.Never,
           staleTime: "30 seconds"
-        },
-        Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
-      ) {}
+        }
+      ) {
+        static readonly layer = this.toLayer(
+          Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
+        )
+      }
       const inPlace = (id: string, mutate: (value: any) => void) =>
         GetAny.patch({ id }, (value) => {
           mutate(value)
@@ -846,9 +862,12 @@ describe("Query runs", () => {
           success: Schema.Any,
           error: Schema.Never,
           staleTime: "30 seconds"
-        },
-        Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
-      ) {}
+        }
+      ) {
+        static readonly layer = this.toLayer(
+          Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
+        )
+      }
       return Effect.gen(function*() {
         for (const id of Object.keys(values)) yield* GetAny.get({ id })
         yield* issue({
@@ -973,9 +992,12 @@ describe("Query runs", () => {
           success: Schema.Any,
           error: Schema.Never,
           staleTime: "30 seconds"
-        },
-        Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
-      ) {}
+        }
+      ) {
+        static readonly layer = this.toLayer(
+          Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
+        )
+      }
       const inPlace = (id: string, mutate: (value: any) => void) =>
         GetAny.patch({ id }, (value) => {
           mutate(value)
@@ -1041,9 +1063,12 @@ describe("Query runs", () => {
           success: Schema.Any,
           error: Schema.Never,
           staleTime: "30 seconds"
-        },
-        Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
-      ) {}
+        }
+      ) {
+        static readonly layer = this.toLayer(
+          Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
+        )
+      }
       const inPlace = (id: string, mutate: (value: any) => void) =>
         GetBinary.patch({ id }, (value) => {
           mutate(value)
@@ -1183,22 +1208,25 @@ describe("Query runs", () => {
           success: Schema.String,
           error: Schema.Never,
           staleTime: "30 seconds"
-        },
-        Effect.sync(() => () =>
-          Effect.suspend(() => {
-            const n = ++calls
-            log.push("start " + n)
-            return Effect.sleep(10).pipe(
-              Effect.as("v" + n),
-              Effect.onInterrupt(() =>
-                Deferred.await(gate).pipe(
-                  Effect.andThen(Effect.sync(() => log.push("cleaned " + n)))
+        }
+      ) {
+        static readonly layer = this.toLayer(
+          Effect.sync(() => () =>
+            Effect.suspend(() => {
+              const n = ++calls
+              log.push("start " + n)
+              return Effect.sleep(10).pipe(
+                Effect.as("v" + n),
+                Effect.onInterrupt(() =>
+                  Deferred.await(gate).pipe(
+                    Effect.andThen(Effect.sync(() => log.push("cleaned " + n)))
+                  )
                 )
               )
-            )
-          })
+            })
+          )
         )
-      ) {}
+      }
       return Effect.gen(function*() {
         yield* GetGated.get({ id: "1" }).pipe(Effect.forkScoped)
         yield* advance(10)
@@ -1235,22 +1263,25 @@ describe("Query runs", () => {
           success: Schema.String,
           error: Schema.Never,
           staleTime: "30 seconds"
-        },
-        Effect.sync(() => () =>
-          Effect.suspend(() => {
-            const n = ++calls
-            log.push("start " + n)
-            return Effect.sleep(10).pipe(
-              Effect.as("v" + n),
-              Effect.onInterrupt(() =>
-                cleanup.await.pipe(
-                  Effect.andThen(Effect.sync(() => log.push("cleaned " + n)))
+        }
+      ) {
+        static readonly layer = this.toLayer(
+          Effect.sync(() => () =>
+            Effect.suspend(() => {
+              const n = ++calls
+              log.push("start " + n)
+              return Effect.sleep(10).pipe(
+                Effect.as("v" + n),
+                Effect.onInterrupt(() =>
+                  cleanup.await.pipe(
+                    Effect.andThen(Effect.sync(() => log.push("cleaned " + n)))
+                  )
                 )
               )
-            )
-          })
+            })
+          )
         )
-      ) {}
+      }
       return Effect.gen(function*() {
         const scopeA = yield* Scope.make()
         const buildA = yield* Layer.buildWithScope(

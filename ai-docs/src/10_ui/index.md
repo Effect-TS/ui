@@ -8,7 +8,10 @@ built with `Query`, also in `@effect/ui`. `@effect/ui/html` adds the HTML elemen
 browser host and router, and server rendering.
 
 A `Command.Service` may omit `invalidates` when it invalidates no queries.
-Provide a feature implementation with `NoteActivity.toLayer(ActivityLog)`.
+A `Query.Service` or `Query.InfiniteService` declares its Schemas and options,
+and attaches its fetcher with `toLayer`: define `static readonly layer = this.toLayer(...)`
+on the class, or pass a plain function like `GetNote.toLayer(fn)` for a test
+override. Provide a feature implementation with `NoteActivity.toLayer(ActivityLog)`.
 Declare a child component by calling it with the parent's `h`:
 `NoteEditor(h, { key, props, onEmit })`. Render a feature service with its
 `render`, `NoteActivity.render(h, { key, fallback })`, and include a

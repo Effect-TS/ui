@@ -3316,24 +3316,23 @@ export interface Define<V extends View.Elements> {
  * **Example** (A page that loads its user, and the user's team)
  *
  * ```ts import.meta.vitest
- * import { Component } from "@effect/ui"
- * import { Effect, Schema } from "effect"
+ * import { Component, Query } from "@effect/ui"
+ * import { Schema } from "effect"
  * import { AsyncResult } from "effect/reactivity"
- * import { Query } from "@effect/ui"
  *
  * class GetUser extends Query.Service<GetUser>()("GetUser", {
  *   args: { id: Schema.String },
  *   success: Schema.Struct({ name: Schema.String, teamId: Schema.String }),
  *   error: Schema.Never,
  *   staleTime: "1 minute"
- * }, Effect.succeed(({ id }) => Effect.succeed({ name: `User ${id}`, teamId: "t1" }))) {}
+ * }) {}
  *
  * class GetTeam extends Query.Service<GetTeam>()("GetTeam", {
  *   args: { id: Schema.String },
  *   success: Schema.Struct({ title: Schema.String }),
  *   error: Schema.Never,
  *   staleTime: "1 minute"
- * }, Effect.succeed(({ id }) => Effect.succeed({ title: `Team ${id}` }))) {}
+ * }) {}
  *
  * const UserPage = Component.define({
  *   name: "UserPage",

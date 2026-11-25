@@ -12,13 +12,21 @@ it.effect("omits reads with Redacted args, success or error schemas from the ser
     success: Schema.String,
     error: Schema.Never,
     staleTime: Infinity
-  }, Effect.succeed(() => Effect.succeed("ok"))) {}
+  }) {
+    static readonly layer = this.toLayer(
+      Effect.succeed(() => Effect.succeed("ok"))
+    )
+  }
   class Success extends Query.Service<Success>()("secret/Success", {
     args: {},
     success: Schema.Redacted(Schema.String),
     error: Schema.Never,
     staleTime: Infinity
-  }, Effect.succeed(() => Effect.succeed(Redacted.make("success-secret")))) {}
+  }) {
+    static readonly layer = this.toLayer(
+      Effect.succeed(() => Effect.succeed(Redacted.make("success-secret")))
+    )
+  }
   class Error extends Query.Service<Error>()(
     "secret/Error",
     {
@@ -26,17 +34,24 @@ it.effect("omits reads with Redacted args, success or error schemas from the ser
       success: Schema.String,
       error: Schema.Redacted(Schema.String),
       staleTime: Infinity
-    },
-    Effect.succeed(({ fail }) =>
-      fail ? Effect.fail(Redacted.make("error-secret")) : Effect.succeed("ok")
+    }
+  ) {
+    static readonly layer = this.toLayer(
+      Effect.succeed(({ fail }) =>
+        fail ? Effect.fail(Redacted.make("error-secret")) : Effect.succeed("ok")
+      )
     )
-  ) {}
+  }
   class Optional extends Query.Service<Optional>()("secret/Optional", {
     args: { token: Schema.optional(Schema.Redacted(Schema.String)) },
     success: Schema.String,
     error: Schema.Never,
     staleTime: Infinity
-  }, Effect.succeed(() => Effect.succeed("ok"))) {}
+  }) {
+    static readonly layer = this.toLayer(
+      Effect.succeed(() => Effect.succeed("ok"))
+    )
+  }
   const App = Html.component({
     name: "Secrets",
     model: Schema.Struct({}),
@@ -107,7 +122,11 @@ const hydrationCase = <A>(
       success: schema,
       error: Schema.Never,
       staleTime: Infinity
-    }, Effect.succeed(() => Effect.succeed(value))) {}
+    }) {
+      static readonly layer = this.toLayer(
+        Effect.succeed(() => Effect.succeed(value))
+      )
+    }
     const App = Html.component({
       name: "App",
       model: Schema.Struct({ value: schema }),

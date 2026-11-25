@@ -79,9 +79,12 @@ const makeApp = (options?: {
       error: Schema.String,
       staleTime: "30 seconds",
       refetchInterval: options?.interval === true ? "5 seconds" : undefined
-    },
-    Effect.succeed(({ id }) => Effect.request(FetchUser({ id }), resolver))
-  ) {}
+    }
+  ) {
+    static readonly layer = this.toLayer(
+      Effect.succeed(({ id }) => Effect.request(FetchUser({ id }), resolver))
+    )
+  }
 
   class RenameUser extends Command.Service<RenameUser>()(
     "users/RenameUser",
@@ -1081,13 +1084,16 @@ describe("Keyed redaction", () => {
         success: Account,
         error: Schema.Never,
         staleTime: "30 seconds"
-      },
-      Effect.succeed(({ token }) =>
-        Effect.succeed({
-          secret: Redacted.make(`secret-of-${Redacted.value(token)}`)
-        })
+      }
+    ) {
+      static readonly layer = this.toLayer(
+        Effect.succeed(({ token }) =>
+          Effect.succeed({
+            secret: Redacted.make(`secret-of-${Redacted.value(token)}`)
+          })
+        )
       )
-    ) {}
+    }
     const Page = Component.define({
       name: "Page",
       props: Schema.Struct({

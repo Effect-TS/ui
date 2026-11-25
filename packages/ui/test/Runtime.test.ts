@@ -1320,7 +1320,11 @@ describe("Runtime", () => {
       success: Schema.Number,
       error: Schema.Never,
       staleTime: "Infinity"
-    }, Effect.succeed(() => Effect.succeed(0))) {}
+    }) {
+      static readonly layer = this.toLayer(
+        Effect.succeed(() => Effect.succeed(0))
+      )
+    }
     const fetcher = (server: Server) =>
       Layer.succeed(GetCount, () =>
         Effect.sync(() => {
@@ -5989,7 +5993,11 @@ describe("Runtime", () => {
           success: Schema.String,
           error: Schema.Never,
           staleTime: "30 seconds"
-        }, Greeter.useSync((greeter) => () => Effect.succeed(greeter.room))) {}
+        }) {
+          static readonly layer = this.toLayer(
+            Greeter.useSync((greeter) => () => Effect.succeed(greeter.room))
+          )
+        }
         const value = (result: AsyncResult.AsyncResult<string, never>) =>
           AsyncResult.isSuccess(result) ? result.value : "-"
         const Reading = Component.define({

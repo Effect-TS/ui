@@ -19,9 +19,12 @@ class GetUser extends Query.Service<GetUser>()(
     success: User,
     error: Schema.String,
     staleTime: "1 minute"
-  },
-  Effect.succeed(({ id }) => Effect.succeed({ id, name: "Ann", teamId: "t" }))
-) {}
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.succeed(({ id }) => Effect.succeed({ id, name: "Ann", teamId: "t" }))
+  )
+}
 
 class GetTeam extends Query.Service<GetTeam>()(
   "typetest/GetTeam",
@@ -30,9 +33,12 @@ class GetTeam extends Query.Service<GetTeam>()(
     success: Team,
     error: Schema.Never,
     staleTime: 0
-  },
-  Effect.succeed(({ id }) => Effect.succeed({ id, title: "T" }))
-) {}
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.succeed(({ id }) => Effect.succeed({ id, title: "T" }))
+  )
+}
 
 const Message = UiSchema.TaggedEnum({
   UserChanged: { state: Schema.String, failed: Schema.Boolean },
@@ -140,12 +146,13 @@ class GetName extends Query.Service<GetName>()(
     success: Schema.String,
     error: Schema.Never,
     staleTime: 0
-  },
-  Effect.gen(function*() {
+  }
+) {
+  static readonly layer = this.toLayer(Effect.gen(function*() {
     const api = yield* Api
     return ({ id }) => api.name(id)
-  })
-) {}
+  }))
+}
 
 describe("Component queries", () => {
   it("infers every type from the reads", () => {
@@ -398,9 +405,10 @@ class GetCount extends Query.Service<GetCount>()(
     success: Schema.Number,
     error: Schema.Never,
     staleTime: 0
-  },
-  Effect.succeed(() => Effect.succeed(1))
-) {}
+  }
+) {
+  static readonly layer = this.toLayer(Effect.succeed(() => Effect.succeed(1)))
+}
 
 const ListMessage = UiSchema.TaggedEnum({
   UsersChanged: { changed: Schema.Number },
@@ -606,11 +614,14 @@ class ListMessages extends Query.InfiniteService<ListMessages>()(
     cursor: Schema.Number,
     next: (lastPage) => Option.fromNullishOr(lastPage.next),
     staleTime: "1 minute"
-  },
-  Effect.succeed((_args, _cursor) =>
-    Effect.succeed({ messages: [], next: null })
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.succeed((_args, _cursor) =>
+      Effect.succeed({ messages: [], next: null })
+    )
   )
-) {}
+}
 
 const ChatMessage = UiSchema.TaggedEnum({
   Changed: { count: Schema.Number },

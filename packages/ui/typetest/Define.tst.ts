@@ -13,9 +13,12 @@ class GetUser extends Query.Service<GetUser>()(
     success: User,
     error: Schema.String,
     staleTime: "1 minute"
-  },
-  Effect.succeed(({ id }) => Effect.succeed({ id, name: "Ann" }))
-) {}
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.succeed(({ id }) => Effect.succeed({ id, name: "Ann" }))
+  )
+}
 
 const Message = UiSchema.TaggedEnum({
   Edited: { body: Schema.String },

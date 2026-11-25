@@ -28,7 +28,11 @@ export class GetNote extends Query.Service<GetNote>()("GetNote", {
   success: Schema.String,
   error: Schema.Never,
   staleTime: "1 minute"
-}, Effect.succeed(({ id }) => Effect.succeed(`Note ${id}`))) {}
+}) {
+  static readonly layer = this.toLayer(
+    Effect.succeed(({ id }) => Effect.succeed(`Note ${id}`))
+  )
+}
 
 const reader = <const Name extends string>(name: Name) =>
   Component.define({

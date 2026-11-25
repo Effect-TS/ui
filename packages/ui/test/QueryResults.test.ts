@@ -28,18 +28,23 @@ const makeApp = (options?: {
       error: Schema.String,
       staleTime: options?.staleTime ?? "30 seconds",
       refetchInterval: options?.interval === true ? "5 seconds" : undefined
-    },
-    Effect.succeed(({ id }) =>
-      Effect.gen(function*() {
-        db.calls++
-        yield* Effect.sleep("10 millis")
-        const name = db.names.get(id)
-        return name === undefined ? yield* Effect.fail("missing") : { id, name }
-      }).pipe(
-        Effect.onInterrupt(() => Effect.sync(() => db.interrupted.push(id)))
+    }
+  ) {
+    static readonly layer = this.toLayer(
+      Effect.succeed(({ id }) =>
+        Effect.gen(function*() {
+          db.calls++
+          yield* Effect.sleep("10 millis")
+          const name = db.names.get(id)
+          return name === undefined
+            ? yield* Effect.fail("missing")
+            : { id, name }
+        }).pipe(
+          Effect.onInterrupt(() => Effect.sync(() => db.interrupted.push(id)))
+        )
       )
     )
-  ) {}
+  }
 
   class RenameUser extends Command.Service<RenameUser>()(
     "users/RenameUser",
@@ -691,13 +696,16 @@ describe("Query results", () => {
           success: Schema.String,
           error: Schema.String,
           staleTime: "1 second"
-        },
-        Effect.succeed(({ id }) =>
-          Effect.callback<string, string>((resume) =>
-            void finish.set(id, resume)
+        }
+      ) {
+        static readonly layer = this.toLayer(
+          Effect.succeed(({ id }) =>
+            Effect.callback<string, string>((resume) =>
+              void finish.set(id, resume)
+            )
           )
         )
-      ) {}
+      }
       const Message = UiSchema.TaggedEnum({ Changed: { state: Schema.String } })
       const Watcher = Component.define({
         name: "Watcher",
@@ -1333,9 +1341,12 @@ describe("Query results", () => {
         cursor: Schema.Number,
         next: () => Option.none(),
         staleTime: "30 seconds"
-      },
-      Effect.succeed(() => Effect.succeed([]))
-    ) {}
+      }
+    ) {
+      static readonly layer = this.toLayer(
+        Effect.succeed(() => Effect.succeed([]))
+      )
+    }
     const make = (queries: unknown) =>
       Component.define({
         name: "Bad",
@@ -1434,14 +1445,17 @@ describe("Query results", () => {
         success: Account,
         error: Schema.Never,
         staleTime: "30 seconds"
-      },
-      Effect.succeed(({ token }) =>
-        Effect.succeed({
-          id: "acc",
-          secret: Redacted.make(`secret-of-${Redacted.value(token)}`)
-        })
+      }
+    ) {
+      static readonly layer = this.toLayer(
+        Effect.succeed(({ token }) =>
+          Effect.succeed({
+            id: "acc",
+            secret: Redacted.make(`secret-of-${Redacted.value(token)}`)
+          })
+        )
       )
-    ) {}
+    }
     const Page = Component.define({
       name: "Page",
       props: Schema.Struct({ token: Schema.Redacted(Schema.String) }),

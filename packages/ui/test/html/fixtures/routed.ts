@@ -46,7 +46,11 @@ export class GetBio extends Query.Service<GetBio>()("GetBio", {
   success: Schema.String,
   error: Schema.Never,
   staleTime: "30 seconds"
-}, Effect.map(People, (people) => ({ id }) => people.bio(id))) {}
+}) {
+  static readonly layer = this.toLayer(
+    Effect.map(People, (people) => ({ id }) => people.bio(id))
+  )
+}
 
 export const Person = Html.component({
   name: "Person",

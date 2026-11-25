@@ -66,19 +66,22 @@ export class GetPerson extends Query.Service<GetPerson>()(
     success: Schema.String,
     error: Schema.String,
     staleTime: "30 seconds"
-  },
-  Effect.succeed(({ id }) =>
-    Effect.suspend(() => {
-      personFetches.count++
-      const result = personFetches.fail
-        ? Effect.fail(`No person ${id}`)
-        : Effect.succeed(`Person ${id}`)
-      return personFetches.delay > 0
-        ? Effect.andThen(Effect.sleep(personFetches.delay), result)
-        : result
-    })
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.succeed(({ id }) =>
+      Effect.suspend(() => {
+        personFetches.count++
+        const result = personFetches.fail
+          ? Effect.fail(`No person ${id}`)
+          : Effect.succeed(`Person ${id}`)
+        return personFetches.delay > 0
+          ? Effect.andThen(Effect.sleep(personFetches.delay), result)
+          : result
+      })
+    )
   )
-) {}
+}
 
 /** Renames optimistically, and never finishes: the patch stays live. */
 export class RenamePerson

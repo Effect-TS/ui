@@ -909,7 +909,11 @@ describe("HtmlServer", { concurrent: false }, () => {
         success: Schema.String,
         error: Schema.Never,
         staleTime: "30 seconds"
-      }, Effect.succeed(() => Effect.succeed("loaded"))) {}
+      }) {
+        static readonly layer = this.toLayer(
+          Effect.succeed(() => Effect.succeed("loaded"))
+        )
+      }
       const ChildMessage = UiSchema.TaggedEnum({ Loaded: {}, Tracked: {} })
       const Track = Command.make(
         "Track",
@@ -1755,7 +1759,11 @@ describe("HtmlServer", { concurrent: false }, () => {
         success: Schema.String,
         error: Schema.Never,
         staleTime: "30 seconds"
-      }, Effect.succeed(() => Effect.as(Effect.sleep("10 millis"), "data"))) {}
+      }) {
+        static readonly layer = this.toLayer(
+          Effect.succeed(() => Effect.as(Effect.sleep("10 millis"), "data"))
+        )
+      }
       class Panel extends Feature.Service<Panel>()("Panel", {
         props: Schema.Struct({}),
         events: Schema.Never
@@ -1817,7 +1825,11 @@ describe("HtmlServer", { concurrent: false }, () => {
         success: Schema.String,
         error: Schema.Never,
         staleTime: "30 seconds"
-      }, Effect.succeed(() => Effect.die("boom"))) {}
+      }) {
+        static readonly layer = this.toLayer(
+          Effect.succeed(() => Effect.die("boom"))
+        )
+      }
       const Doomed = Html.component({
         name: "Doomed",
         model: Schema.Struct({}),
@@ -1914,7 +1926,11 @@ describe("HtmlServer", { concurrent: false }, () => {
           success: Schema.String,
           error: Schema.Never,
           staleTime: "30 seconds"
-        }, Effect.succeed(() => Effect.succeed("data"))) {}
+        }) {
+          static readonly layer = this.toLayer(
+            Effect.succeed(() => Effect.succeed("data"))
+          )
+        }
         const Changed = UiSchema.TaggedEnum({
           ChangedOn: { on: Schema.Boolean }
         })
@@ -2528,7 +2544,11 @@ describe("HtmlServer", { concurrent: false }, () => {
         success: Schema.String,
         error: Schema.Never,
         staleTime: "30 seconds"
-      }, Effect.succeed(() => Effect.succeed("loaded"))) {}
+      }) {
+        static readonly layer = this.toLayer(
+          Effect.succeed(() => Effect.succeed("loaded"))
+        )
+      }
       const Panel = Html.component({
         name: "Panel",
         props: Schema.Struct({ id: Schema.String }),
@@ -3041,16 +3061,19 @@ const makeItems = () => {
       success: Schema.String,
       error: Schema.String,
       staleTime: "1 minute"
-    },
-    Effect.succeed(({ id }) =>
-      Effect.suspend(() => {
-        calls.push(id)
-        return id === 404
-          ? Effect.fail("missing")
-          : Effect.succeed(`Item ${id}`)
-      })
+    }
+  ) {
+    static readonly layer = this.toLayer(
+      Effect.succeed(({ id }) =>
+        Effect.suspend(() => {
+          calls.push(id)
+          return id === 404
+            ? Effect.fail("missing")
+            : Effect.succeed(`Item ${id}`)
+        })
+      )
     )
-  ) {}
+  }
   const show = (result: AsyncResult.AsyncResult<string, string>) =>
     AsyncResult.isSuccess(result)
       ? result.value
@@ -3160,19 +3183,22 @@ describe("HtmlServer queries", { concurrent: false }, () => {
           success: Schema.String,
           error: Schema.String,
           staleTime: "1 minute"
-        },
-        Effect.succeed(({ id }) =>
-          Effect.suspend(() => {
-            calls.push(id)
-            return id === 404
-              ? Effect.fail("missing")
-              : Effect.as(
-                Effect.sleep(id === 3 ? "300 millis" : "0 millis"),
-                `Item ${id}`
-              )
-          })
+        }
+      ) {
+        static readonly layer = this.toLayer(
+          Effect.succeed(({ id }) =>
+            Effect.suspend(() => {
+              calls.push(id)
+              return id === 404
+                ? Effect.fail("missing")
+                : Effect.as(
+                  Effect.sleep(id === 3 ? "300 millis" : "0 millis"),
+                  `Item ${id}`
+                )
+            })
+          )
         )
-      ) {}
+      }
       const List = Html.component({
         name: "List",
         model: Schema.Struct({}),
@@ -3234,7 +3260,11 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         success: Schema.Number,
         error: Schema.Never,
         staleTime: "1 minute"
-      }, Effect.succeed(() => Effect.succeed("x" as unknown as number))) {}
+      }) {
+        static readonly layer = this.toLayer(
+          Effect.succeed(() => Effect.succeed("x" as unknown as number))
+        )
+      }
       const Page = Html.component({
         name: "Page",
         model: Schema.Struct({}),
@@ -3377,7 +3407,11 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         success: Schema.String,
         error: Schema.Never,
         staleTime: 0
-      }, Effect.succeed(({ id }) => Effect.succeed(`Now ${id}`))) {}
+      }) {
+        static readonly layer = this.toLayer(
+          Effect.succeed(({ id }) => Effect.succeed(`Now ${id}`))
+        )
+      }
       const Now = Html.component({
         name: "Now",
         props: Schema.Struct({ id: Schema.Number }),
@@ -3599,9 +3633,12 @@ describe("HtmlServer queries", { concurrent: false }, () => {
             success: Schema.String,
             error: Schema.Never,
             staleTime: "30 seconds"
-          },
-          Effect.succeed(({ id }) => Effect.as(Effect.yieldNow, `text ${id}`))
-        ) {}
+          }
+        ) {
+          static readonly layer = this.toLayer(
+            Effect.succeed(({ id }) => Effect.as(Effect.yieldNow, `text ${id}`))
+          )
+        }
         let renders = 0
         const Page = Html.component({
           name: "Page",

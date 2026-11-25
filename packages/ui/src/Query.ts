@@ -1,12 +1,13 @@
 /**
  * A keyed data cache. Each query is a class service with a name, argument and
- * result Schemas, a freshness duration, and a fetcher. The cache keeps one
- * entry per query and arguments, shares in-flight fetches, refetches stale
- * entries on demand, and collects unused entries.
+ * result Schemas, and a freshness duration. The cache keeps one entry per query
+ * and arguments, shares in-flight fetches, refetches stale entries on demand,
+ * and collects unused entries.
  *
- * A query's fetcher is built once per Layer build and captures the services it
- * uses, so `get` requires the query and cache, not the fetcher's dependencies.
- * Replace a fetcher with `Layer.succeed(GetUser, (args) => ...)` for a fake.
+ * A query's fetcher is attached with `toLayer`, built once per Layer build, and
+ * captures the services it uses, so `get` requires the query and cache, not the
+ * fetcher's dependencies. Replace a fetcher with `GetUser.toLayer((args) => ...)`
+ * or `Layer.succeed(GetUser, (args) => ...)` for a fake.
  *
  * Plain Effect code provides the cache with `Query.layer()`. Every time-based
  * rule runs on the `Clock`, so `TestClock` drives it, and
@@ -30,7 +31,11 @@
  *   success: Schema.Struct({ id: Schema.String, name: Schema.String }),
  *   error: Schema.Never,
  *   staleTime: "30 seconds"
- * }, Effect.sync(() => ({ id }) => Effect.sync(() => ({ id, name: `User ${++requests}` })))) {}
+ * }) {
+ *   static readonly layer = this.toLayer(({ id }) =>
+ *     Effect.sync(() => ({ id, name: `User ${++requests}` }))
+ *   )
+ * }
  *
  * const program = Effect.gen(function*() {
  *   // Two callers at once share one fetch, and the second call is served from the cache.
@@ -187,9 +192,9 @@ export declare namespace Query {
  *
  * **Details**
  *
- * It's a `Context.Service` whose value is the query's fetcher. `layer` builds
- * the fetcher, and the static methods look the cache up, so they require the
- * cache and, where they may fetch, the query itself.
+ * It's a `Context.Service` whose value is the query's fetcher. `toLayer` builds
+ * a Layer providing the fetcher, and the static methods look the cache up, so
+ * they require the cache and, where they may fetch, the query itself.
  *
  * @stability experimental
  * @category models
@@ -200,20 +205,23 @@ export interface Service<
   in out Name extends string,
   in out Args,
   in out A,
-  in out E,
-  out LE,
-  out LR
+  in out E
 > extends
   Context.ServiceClass<Self, Name, (args: Args) => Effect.Effect<A, E>>,
   Query<Args, A, E>
 {
   /**
-   * The fetcher's Layer. It requires what the fetcher captured. A fetch runs
-   * under the build that asked for it, and is interrupted when that build's
-   * Scope closes. The close waits for the fetch's cleanup before it releases
-   * what the fetcher captured.
+   * Builds a Layer providing this query's fetcher, from a fetcher function or
+   * an Effect that builds one. It requires what the fetcher captured. A fetch
+   * runs under the build that asked for it, and is interrupted when that
+   * build's Scope closes. The close waits for the fetch's cleanup before it
+   * releases what the fetcher captured.
    */
-  readonly layer: Layer.Layer<Self, LE, LR>
+  toLayer<LE = never, LR = never>(
+    build:
+      | ((args: Args) => Effect.Effect<A, E>)
+      | Effect.Effect<(args: Args) => Effect.Effect<A, E>, LE, LR>
+  ): Layer.Layer<Self, LE, Exclude<LR, Scope.Scope>>
   /**
    * Returns the stored value when it's fresh, and fetches otherwise, joining
    * a fetch already in flight. The result of the fetch is stored.
@@ -308,8 +316,8 @@ export declare namespace Service {
 }
 
 /**
- * Defines a query: a class service with a name, its options, and an Effect
- * that builds its fetcher.
+ * Defines a query: a class service with a name and its options. Attach its
+ * fetcher with `toLayer`.
  *
  * **When to use**
  *
@@ -331,9 +339,9 @@ export declare namespace Service {
  * - `refetchInterval` polls an entry while it's watched.
  * - `tags` lists the invalidation tags the query belongs to.
  *
- * The fetcher's Effect runs once per Layer build and returns the function
- * that fetches. Retries go inside the fetcher, with `Effect.retry`: the cache
- * never retries.
+ * Attach a fetcher with `toLayer`, passing either a fetcher function or an
+ * Effect that runs once per Layer build and returns the function that fetches.
+ * Retries go inside the fetcher, with `Effect.retry`: the cache never retries.
  *
  * **Gotchas**
  *
@@ -390,10 +398,12 @@ export declare namespace Service {
  *   success: Schema.String,
  *   error: Schema.Never,
  *   staleTime: "1 minute"
- * }, Effect.gen(function*() {
- *   const api = yield* UsersApi
- *   return ({ id }) => api.name(id)
- * })) {}
+ * }) {
+ *   static readonly layer = this.toLayer(Effect.gen(function*() {
+ *     const api = yield* UsersApi
+ *     return ({ id }) => api.name(id)
+ *   }))
+ * }
  *
  * const layer = GetUserName.layer.pipe(
  *   Layer.provide(Layer.succeed(UsersApi, { name: (id) => Effect.succeed(`user-${id}`) })),
@@ -413,9 +423,7 @@ export const Service: <Self>() => <
     readonly [x: string]: Service.NoServices
   },
   Success extends Service.NoServices,
-  Error extends Service.NoServices,
-  LE,
-  LR
+  Error extends Service.NoServices
 >(
   name: Name,
   options: {
@@ -428,22 +436,13 @@ export const Service: <Self>() => <
       | RefetchInterval<Service.ArgsType<Args>, Success["Type"], Error["Type"]>
       | undefined
     readonly tags?: ReadonlyArray<Tag> | undefined
-  },
-  fetcher: Effect.Effect<
-    (
-      args: Service.ArgsType<Args>
-    ) => Effect.Effect<Success["Type"], Error["Type"]>,
-    LE,
-    LR
-  >
+  }
 ) => Service<
   Self,
   Name,
   Service.ArgsType<Args>,
   Success["Type"],
-  Error["Type"],
-  LE,
-  Exclude<LR, Scope.Scope>
+  Error["Type"]
 > = () =>
 (
   name: string,
@@ -455,11 +454,10 @@ export const Service: <Self>() => <
     readonly idleTimeToLive?: Duration.Input | undefined
     readonly refetchInterval?: RefetchInterval<any, any, any> | undefined
     readonly tags?: ReadonlyArray<Tag> | undefined
-  },
-  fetcher: Effect.Effect<Fetcher, any, any>
+  }
 ): any => {
   const def = makeDef(name, options)
-  const QueryService = queryClass(def, fetcher)
+  const QueryService = queryClass(def)
   return class extends QueryService {
     static set(args: unknown, value: unknown) {
       return write(QueryService, args, value)
@@ -468,25 +466,27 @@ export const Service: <Self>() => <
 }
 
 /**
- * The class every query is: the fetcher's service, its Layer and the statics
- * that look the cache up. An infinite query adds its own.
+ * The class every query is: the fetcher's service, its `toLayer` and the
+ * statics that look the cache up. An infinite query adds its own.
  */
-const queryClass = (
-  def: QueryDef,
-  fetcher: Effect.Effect<Fetcher, any, any>
-) => {
+const queryClass = (def: QueryDef) => {
   const Base = Context.Service<any, Fetcher>()(def.name)
   class QueryService extends Base {
     static readonly [TypeId]: any = def
-    static readonly layer = Layer.effect(
-      Base,
-      Effect.gen(function*() {
-        const scope = yield* Effect.scope
-        const build = makeBuild(yield* fetcher)
-        yield* Scope.addFinalizer(scope, closeBuild(build))
-        return build.fetcher
-      })
-    )
+    static toLayer(
+      build: Fetcher | Effect.Effect<Fetcher, any, any>
+    ): Layer.Layer<any, any, any> {
+      return Layer.effect(
+        Base,
+        Effect.gen(function*() {
+          const scope = yield* Effect.scope
+          const fetcher = Effect.isEffect(build) ? yield* build : build
+          const built = makeBuild(fetcher)
+          yield* Scope.addFinalizer(scope, closeBuild(built))
+          return built.fetcher
+        })
+      )
+    }
     static get(args: unknown) {
       return withCache((cache, context) =>
         cache.get(
@@ -763,9 +763,7 @@ export interface InfiniteService<
   in out Page,
   in out Item,
   in out Cursor,
-  in out E,
-  out LE,
-  out LR
+  in out E
 > extends
   Context.ServiceClass<
     Self,
@@ -774,8 +772,16 @@ export interface InfiniteService<
   >,
   InfiniteQuery<Args, Page, Item, E>
 {
-  /** The fetcher's Layer, as for any query. */
-  readonly layer: Layer.Layer<Self, LE, LR>
+  /** Builds a Layer providing this query's fetcher, as for any query. */
+  toLayer<LE = never, LR = never>(
+    build:
+      | ((args: Args, cursor: Option.Option<Cursor>) => Effect.Effect<Page, E>)
+      | Effect.Effect<
+        (args: Args, cursor: Option.Option<Cursor>) => Effect.Effect<Page, E>,
+        LE,
+        LR
+      >
+  ): Layer.Layer<Self, LE, Exclude<LR, Scope.Scope>>
   /**
    * Returns the held pages when they're fresh, and otherwise loads the list
    * again from the first page, as many pages as it holds, joining a load in
@@ -869,8 +875,8 @@ export interface InfiniteService<
  * - `cursor` is the Schema of a cursor, and `next` derives the cursor of
  *   the page after `lastPage` from the server's pages, `None` when the
  *   list has ended. It must be pure. The cursor is never stored.
- * - The fetcher takes the arguments and the cursor, `None` for the first
- *   page.
+ * - Attach its fetcher with `toLayer`; the fetcher takes the arguments and the
+ *   cursor, `None` for the first page.
  * - The other options are a query's. `staleTime` counts from the end of the
  *   last load that started at the first page: loading more changes no
  *   timestamp.
@@ -924,13 +930,15 @@ export interface InfiniteService<
  *   cursor: Schema.Number,
  *   next: (lastPage) => Option.fromNullishOr(lastPage.next),
  *   staleTime: "30 seconds"
- * }, Effect.succeed(({ room }, cursor) => {
- *   const from = Option.getOrElse(cursor, () => 0)
- *   return Effect.succeed({
- *     messages: [{ id: `${room}-${from}`, text: `message ${from}` }],
- *     next: from < 2 ? from + 1 : null
+ * }) {
+ *   static readonly layer = this.toLayer(({ room }, cursor) => {
+ *     const from = Option.getOrElse(cursor, () => 0)
+ *     return Effect.succeed({
+ *       messages: [{ id: `${room}-${from}`, text: `message ${from}` }],
+ *       next: from < 2 ? from + 1 : null
+ *     })
  *   })
- * })) {}
+ * }
  *
  * const program = Effect.gen(function*() {
  *   yield* ListMessages.get({ room: "a" })
@@ -953,9 +961,7 @@ export const InfiniteService: <Self>() => <
   PageSchema extends Service.NoServices,
   Item,
   CursorSchema extends Service.NoServices,
-  Error extends Service.NoServices,
-  LE,
-  LR
+  Error extends Service.NoServices
 >(
   name: Name,
   options: {
@@ -979,15 +985,7 @@ export const InfiniteService: <Self>() => <
       >
       | undefined
     readonly tags?: ReadonlyArray<Tag> | undefined
-  },
-  fetcher: Effect.Effect<
-    (
-      args: Service.ArgsType<Args>,
-      cursor: Option.Option<CursorSchema["Type"]>
-    ) => Effect.Effect<PageSchema["Type"], Error["Type"]>,
-    LE,
-    LR
-  >
+  }
 ) => InfiniteService<
   Self,
   Name,
@@ -995,9 +993,7 @@ export const InfiniteService: <Self>() => <
   PageSchema["Type"],
   Item,
   CursorSchema["Type"],
-  Error["Type"],
-  LE,
-  Exclude<LR, Scope.Scope>
+  Error["Type"]
 > = () =>
 (
   name: string,
@@ -1013,8 +1009,7 @@ export const InfiniteService: <Self>() => <
     readonly idleTimeToLive?: Duration.Input | undefined
     readonly refetchInterval?: RefetchInterval<any, any, any> | undefined
     readonly tags?: ReadonlyArray<Tag> | undefined
-  },
-  fetcher: Effect.Effect<Fetcher, any, any>
+  }
 ): any => {
   const def = makeDef(
     name,
@@ -1026,7 +1021,7 @@ export const InfiniteService: <Self>() => <
       cursor: options.cursor
     })
   )
-  const QueryService = queryClass(def, fetcher)
+  const QueryService = queryClass(def)
   return class extends QueryService {
     static readonly [InfiniteTypeId]: any = InfiniteTypeId
     static loadMore(args: unknown) {
@@ -1196,7 +1191,7 @@ export interface Write<R extends Query.Any = Query.Any> {
  * **Example** (Testing a patch)
  *
  * ```ts import.meta.vitest
- * import { Effect, Schema } from "effect"
+ * import { Schema } from "effect"
  * import { Query } from "@effect/ui"
  *
  * class GetCount extends Query.Service<GetCount>()("counts/GetCount", {
@@ -1204,7 +1199,7 @@ export interface Write<R extends Query.Any = Query.Any> {
  *   success: Schema.Number,
  *   error: Schema.Never,
  *   staleTime: "1 minute"
- * }, Effect.succeed(() => Effect.succeed(0))) {}
+ * }) {}
  *
  * const patches = [GetCount.patch({ id: "a" }, (n) => n + 1)]
  * Query.applyPatches(patches, GetCount, { id: "a" }, 1) // => 2
@@ -1249,7 +1244,7 @@ export const applyPatches = <R extends Query.Any>(
  * **Example** (Testing a Command's targets)
  *
  * ```ts import.meta.vitest
- * import { Effect, Schema } from "effect"
+ * import { Schema } from "effect"
  * import { Query } from "@effect/ui"
  *
  * const Users = Query.Tag("users")
@@ -1260,7 +1255,7 @@ export const applyPatches = <R extends Query.Any>(
  *   error: Schema.Never,
  *   staleTime: "1 minute",
  *   tags: [Users]
- * }, Effect.succeed(({ id }) => Effect.succeed(id))) {}
+ * }) {}
  *
  * Query.invalidatesEntry({ invalidates: [Users] }, GetUser, { id: "1" }) // => true
  * Query.invalidatesEntry({ invalidates: [GetUser.entry({ id: "1" })] }, GetUser, { id: "2" }) // => false

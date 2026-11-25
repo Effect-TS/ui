@@ -105,12 +105,15 @@ export class IsUsernameTaken extends Query.Service<IsUsernameTaken>()(
     success: Schema.Boolean,
     error: Schema.Never,
     staleTime: "30 seconds"
-  },
-  Effect.gen(function*() {
-    const accounts = yield* Accounts
-    return ({ username }) => accounts.isTaken(username)
-  })
-) {}
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.gen(function*() {
+      const accounts = yield* Accounts
+      return ({ username }) => accounts.isTaken(username)
+    })
+  )
+}
 
 const TextFieldName = Schema.Literals(["username", "email"])
 const SecretFieldName = Schema.Literals(["password", "confirm"])

@@ -4,8 +4,8 @@ import { Effect, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { Post, PostsApi } from "../Posts.ts"
 
-// A query is a service. Its value is the fetcher, a function from
-// args to an Effect, and the cache keeps one result per args.
+// A query is a service declared from its Schemas. Its value is the
+// fetcher, attached with `toLayer`, and the cache keeps one result per args.
 export class SearchPosts extends Query.Service<SearchPosts>()(
   "SearchPosts",
   {
@@ -14,14 +14,17 @@ export class SearchPosts extends Query.Service<SearchPosts>()(
     error: Schema.String,
     // A result older than this is refetched when it is next needed.
     staleTime: "1 minute"
-  },
+  }
+) {
   // Runs once, when SearchPosts.layer is built.
-  Effect.gen(function*() {
-    const api = yield* PostsApi
-    // Runs on each fetch.
-    return ({ search }) => api.search(search)
-  })
-) {}
+  static readonly layer = this.toLayer(
+    Effect.gen(function*() {
+      const api = yield* PostsApi
+      // Runs on each fetch.
+      return ({ search }) => api.search(search)
+    })
+  )
+}
 
 export const PostsMessage = UiSchema.TaggedEnum({
   UpdatedSearch: { search: Schema.String }

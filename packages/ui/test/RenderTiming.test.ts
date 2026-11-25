@@ -57,9 +57,12 @@ describe("render timing", () => {
           success: Schema.String,
           error: Schema.Never,
           staleTime: "30 seconds"
-        },
-        Effect.succeed(() => Effect.as(Effect.sleep("10 millis"), "Ann"))
-      ) {}
+        }
+      ) {
+        static readonly layer = this.toLayer(
+          Effect.succeed(() => Effect.as(Effect.sleep("10 millis"), "Ann"))
+        )
+      }
       const ReaderMessage = Schema.TaggedUnion({ Named: {} })
       const Reader = Component.define({
         name: "Reader",
@@ -114,9 +117,12 @@ describe("render timing", () => {
         success: Schema.Number,
         error: Schema.Never,
         staleTime: "30 seconds"
-      },
-      Effect.succeed(({ n }) => Effect.as(Effect.sleep("10 millis"), n))
-    ) {}
+      }
+    ) {
+      static readonly layer = this.toLayer(
+        Effect.succeed(({ n }) => Effect.as(Effect.sleep("10 millis"), n))
+      )
+    }
     const Again = Command.make(
       "Again",
       { args: {} },

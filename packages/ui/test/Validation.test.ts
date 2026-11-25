@@ -390,11 +390,14 @@ describe("Validation", () => {
         success: Schema.Boolean,
         error: Schema.Never,
         staleTime: "30 seconds"
-      },
-      Effect.succeed(({ username }: { readonly username: string }) =>
-        Effect.succeed(username === "ada")
+      }
+    ) {
+      static readonly layer = this.toLayer(
+        Effect.succeed(({ username }: { readonly username: string }) =>
+          Effect.succeed(username === "ada")
+        )
       )
-    ) {}
+    }
     class CreateAccount extends Command.Service<CreateAccount>()(
       "accounts/CreateAccount",
       { args: { username: Schema.String } },

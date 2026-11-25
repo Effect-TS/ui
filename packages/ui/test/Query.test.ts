@@ -68,23 +68,26 @@ const makeUsers = (options: {
       error: Schema.String,
       tags: [Users],
       ...options
-    },
-    Effect.sync(() => ({ id }) =>
-      Effect.gen(function*() {
-        db.calls++
-        yield* Effect.sleep(10)
-        if (db.mode === "die") return yield* Effect.die("boom")
-        // A Fail next to an Interrupt is still a Failure, and holds only the Fail.
-        if (db.mode === "fail") {
-          return yield* Effect.failCause(
-            Cause.combine(Cause.fail("nope"), Cause.interrupt())
-          )
-        }
-        if (db.mode === "interrupt") return yield* Effect.interrupt
-        return { id, name: db.name }
-      })
+    }
+  ) {
+    static readonly layer = this.toLayer(
+      Effect.sync(() => ({ id }) =>
+        Effect.gen(function*() {
+          db.calls++
+          yield* Effect.sleep(10)
+          if (db.mode === "die") return yield* Effect.die("boom")
+          // A Fail next to an Interrupt is still a Failure, and holds only the Fail.
+          if (db.mode === "fail") {
+            return yield* Effect.failCause(
+              Cause.combine(Cause.fail("nope"), Cause.interrupt())
+            )
+          }
+          if (db.mode === "interrupt") return yield* Effect.interrupt
+          return { id, name: db.name }
+        })
+      )
     )
-  ) {}
+  }
   const provide = Effect.provide(Layer.merge(GetUser.layer, TestQuery.layer()))
   return { db, GetUser, provide }
 }
@@ -753,8 +756,9 @@ describe("Query", () => {
         success: Schema.Number,
         error: Schema.Never,
         staleTime: 0
-      },
-      Effect.gen(function*() {
+      }
+    ) {
+      static readonly layer = this.toLayer(Effect.gen(function*() {
         yield* Effect.addFinalizer(() =>
           Effect.sync(() => events.push("resource released"))
         )
@@ -766,8 +770,8 @@ describe("Query", () => {
               Effect.sync(() => events.push("fetch cleaned up"))
             ))
           )
-      })
-    ) {}
+      }))
+    }
     return Effect.gen(function*() {
       const scope = yield* Scope.make()
       const build = yield* Layer.buildWithScope(Slow.layer, scope)
@@ -800,6 +804,48 @@ describe("Query", () => {
         "fetch started",
         "fetch cleaned up",
         "resource released"
+      ])
+    }).pipe(Effect.provide(TestQuery.layer()))
+  })
+
+  it.effect("toLayer accepts a plain function and interrupts its fetches when its Scope closes", () => {
+    const { GetUser } = makeUsers({ staleTime: "Infinity" })
+    const events: Array<string> = []
+    const cleanup = Latch.makeUnsafe()
+    const override = GetUser.toLayer(({ id }) =>
+      id === "slow"
+        ? Effect.sync(() => events.push("fetch started")).pipe(
+          Effect.andThen(Effect.never),
+          Effect.ensuring(Effect.andThen(
+            cleanup.await,
+            Effect.sync(() => events.push("fetch cleaned up"))
+          ))
+        )
+        : Effect.succeed({ id, name: "Mock" })
+    )
+    return Effect.gen(function*() {
+      const scope = yield* Scope.make()
+      const build = yield* Layer.buildWithScope(override, scope)
+      assert.deepStrictEqual(
+        yield* GetUser.get({ id: "1" }).pipe(Effect.provideContext(build)),
+        { id: "1", name: "Mock" }
+      )
+      yield* GetUser.prefetch({ id: "slow" }).pipe(Effect.provideContext(build))
+      yield* flush
+      const closing = yield* Effect.forkScoped(
+        Effect.andThen(
+          Scope.close(scope, Exit.void),
+          Effect.sync(() => events.push("scope closed"))
+        )
+      )
+      yield* flush
+      assert.deepStrictEqual(events, ["fetch started"])
+      yield* cleanup.open
+      yield* Fiber.join(closing)
+      assert.deepStrictEqual(events, [
+        "fetch started",
+        "fetch cleaned up",
+        "scope closed"
       ])
     }).pipe(Effect.provide(TestQuery.layer()))
   })
@@ -881,8 +927,9 @@ describe("Query", () => {
         success: Schema.Number,
         error: Schema.Never,
         staleTime: 0
-      },
-      Effect.succeed(() =>
+      }
+    ) {
+      static readonly layer = this.toLayer(Effect.succeed(() =>
         Effect.ensuring(
           Effect.never,
           Effect.andThen(
@@ -890,8 +937,8 @@ describe("Query", () => {
             Effect.sync(() => events.push("fetch cleaned up"))
           )
         )
-      )
-    ) {}
+      ))
+    }
     return Effect.gen(function*() {
       const scope = yield* Scope.make()
       const cache = yield* Layer.buildWithScope(
@@ -1054,14 +1101,22 @@ describe("Query", () => {
       success: Schema.Number,
       error: Schema.Never,
       staleTime: "Infinity"
-    }, Effect.sync(() => () => Effect.sync(() => ++calls))) {}
+    }) {
+      static readonly layer = this.toLayer(
+        Effect.sync(() => () => Effect.sync(() => ++calls))
+      )
+    }
     // The args are the key, so they needn't be a struct.
     class ById extends Query.Service<ById>()("ById", {
       args: Schema.Any,
       success: Schema.Number,
       error: Schema.Never,
       staleTime: "Infinity"
-    }, Effect.sync(() => () => Effect.sync(() => ++calls))) {}
+    }) {
+      static readonly layer = this.toLayer(
+        Effect.sync(() => () => Effect.sync(() => ++calls))
+      )
+    }
     return Effect.gen(function*() {
       const token = Redacted.make("s3cret")
       // Property order doesn't matter. A different secret is a different entry.
@@ -1145,12 +1200,16 @@ describe("Query", () => {
         // A required key keeps its undefined.
         cursor: Schema.UndefinedOr(Schema.String)
       }
-    }, fetcher) {}
+    }) {
+      static readonly layer = this.toLayer(fetcher)
+    }
     // The Schema decides what the args may be: this property may be missing, and may not be undefined.
     class Exact extends Query.Service<Exact>()("Exact", {
       ...options,
       args: { page: Schema.optionalKey(Schema.Number) }
-    }, fetcher) {}
+    }) {
+      static readonly layer = this.toLayer(fetcher)
+    }
     // Two more ways to write a struct with optional fields. What isn't a field keeps its undefined.
     class Rest extends Query.Service<Rest>()("Rest", {
       ...options,
@@ -1163,14 +1222,18 @@ describe("Query", () => {
           Schema.Record(Schema.String, Schema.UndefinedOr(Schema.Number))
         ]
       )
-    }, fetcher) {}
+    }) {
+      static readonly layer = this.toLayer(fetcher)
+    }
     class Keyed extends Query.Service<Keyed>()("Keyed", {
       ...options,
       args: Schema.Record(
         Schema.Literals(["a", "b"]),
         Schema.optional(Schema.Number)
       )
-    }, fetcher) {}
+    }) {
+      static readonly layer = this.toLayer(fetcher)
+    }
     return Effect.gen(function*() {
       const token = Redacted.make("s3cret")
       const cursor = undefined
@@ -1226,7 +1289,9 @@ describe("Query", () => {
       args: Schema.Struct({ page: Schema.optional(Schema.Number) }).check(
         Schema.makeFilter((args) => "page" in args)
       )
-    }, fetcher) {}
+    }) {
+      static readonly layer = this.toLayer(fetcher)
+    }
     // The caller passes a number. This undefined is made by the Schema's own encoding, and JSON can't carry it.
     class Encoded extends Query.Service<Encoded>()("Encoded", {
       ...options,
@@ -1239,7 +1304,9 @@ describe("Query", () => {
           })
         )
       )
-    }, fetcher) {}
+    }) {
+      static readonly layer = this.toLayer(fetcher)
+    }
     // A declared type's guard is the Schema's to run. `when` names undefined, so the guard isn't asked.
     // `until` doesn't, and only the guard could say, so the Schema gets the undefined and rejects it.
     const guarded: Array<unknown> = []
@@ -1250,7 +1317,9 @@ describe("Query", () => {
     class Guarded extends Query.Service<Guarded>()("Guarded", {
       ...options,
       args: { when: Schema.optional(Stamp), until: Schema.optionalKey(Stamp) }
-    }, fetcher) {}
+    }) {
+      static readonly layer = this.toLayer(fetcher)
+    }
     // What the drop leaves is handed on as it was defined, and args that lose nothing are handed on themselves.
     const seen: Array<unknown> = []
     class Plain extends Query.Service<Plain>()("Plain", {
@@ -1264,7 +1333,9 @@ describe("Query", () => {
           return true
         })
       )
-    }, fetcher) {}
+    }) {
+      static readonly layer = this.toLayer(fetcher)
+    }
     const thrown = <R>(get: Effect.Effect<number, never, R>) =>
       Effect.map(
         Effect.exit(get),
@@ -1359,7 +1430,9 @@ describe("Query", () => {
     class Nested extends Query.Service<Nested>()("Nested", {
       ...options,
       args: { id: Schema.String, filter: Page }
-    }, fetcher) {}
+    }) {
+      static readonly layer = this.toLayer(fetcher)
+    }
     class Held extends Query.Service<Held>()("Held", {
       ...options,
       args: {
@@ -1369,21 +1442,28 @@ describe("Query", () => {
         tuple: Schema.Tuple([Page, Schema.UndefinedOr(Page)]),
         option: Schema.Option(Page)
       }
-    }, fetcher) {}
+    }) {
+      static readonly layer = this.toLayer(fetcher)
+    }
     // Args that are not themselves a struct are not looked into either.
     class ByClass extends Query.Service<ByClass>()(
       "ByClass",
-      { ...options, args: Paged },
-      fetcher
-    ) {}
+      { ...options, args: Paged }
+    ) {
+      static readonly layer = this.toLayer(fetcher)
+    }
     class ByUnion extends Query.Service<ByUnion>()("ByUnion", {
       ...options,
       args: Schema.Union([Page, Schema.String])
-    }, fetcher) {}
+    }) {
+      static readonly layer = this.toLayer(fetcher)
+    }
     class BySuspend extends Query.Service<BySuspend>()("BySuspend", {
       ...options,
       args: Schema.suspend(() => Page)
-    }, fetcher) {}
+    }) {
+      static readonly layer = this.toLayer(fetcher)
+    }
     return Effect.gen(function*() {
       const page = { page: undefined }
       // The JSON encoding has no `undefined`, so below the args struct it and `null` are one entry, whichever
@@ -1446,7 +1526,7 @@ describe("Query", () => {
         error: Schema.Never,
         staleTime: 0,
         ...options
-      }, Effect.succeed(() => Effect.succeed(1)))
+      })
     assert.throws(
       define({ staleTime: -1 }),
       `[Query] "Bad": staleTime can't be negative`
@@ -1509,11 +1589,14 @@ describe("Query", () => {
         success: Schema.Number,
         error: Schema.Never,
         staleTime: 0
-      },
-      Effect.succeed(() =>
-        ++calls === 1 ? Effect.succeed(1) : Effect.die("boom")
+      }
+    ) {
+      static readonly layer = this.toLayer(
+        Effect.succeed(() =>
+          ++calls === 1 ? Effect.succeed(1) : Effect.die("boom")
+        )
       )
-    ) {}
+    }
     return Effect.gen(function*() {
       const gate = yield* Latch.make(false)
       const waiting: Array<boolean> = []

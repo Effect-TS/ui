@@ -52,9 +52,12 @@ const lateSave = Effect.gen(function*() {
             success: Schema.String,
             error: Schema.Never,
             staleTime: "30 seconds"
-          },
-          Effect.succeed(() => Effect.never)
-        ) {}
+          }
+        ) {
+          static readonly layer = this.toLayer(
+            Effect.succeed(() => Effect.never)
+          )
+        }
         const Note = Html.component({
           name: "Note",
           model: Schema.Null,
@@ -228,9 +231,12 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
           success: Schema.String,
           error: Schema.Never,
           staleTime: "30 seconds"
-        },
-        Effect.succeed(({ id }) => Effect.succeed(`Note ${id}`))
-      ) {}
+        }
+      ) {
+        static readonly layer = this.toLayer(
+          Effect.succeed(({ id }) => Effect.succeed(`Note ${id}`))
+        )
+      }
       const Note = Html.component({
         name: "Note",
         model: Schema.Null,
@@ -289,21 +295,23 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
                 success: Schema.String,
                 error: Schema.Never,
                 staleTime: "30 seconds"
-              },
-              Effect.succeed(() =>
+              }
+            ) {
+              static readonly layer = this.toLayer(Effect.succeed(() =>
                 Effect.sync(() => {
                   calls.fetches++
                   return "fetched"
                 })
-              )
-            ) {}
+              ))
+            }
             const Note = Html.component({
               name: "Note",
               model: Schema.Null,
               message: Schema.Never,
               queries: { note: { query: GetNote, args: () => ({ id: "1" }) } }
             }).make({
-              init: () => null,
+              init: () =>
+                null,
               update: ($) => $.model,
               view: (h) =>
                 h.p.children(AsyncResult.match(h.queries.note, {

@@ -950,7 +950,7 @@ type PageRequirement<P> = P extends Page<infer R> ? R : never
  * **Example** (Prefetching a detail page)
  *
  * ```ts
- * import { Effect, Schema } from "effect"
+ * import { Schema } from "effect"
  * import { Query } from "@effect/ui"
  * import { Component, Route, Router } from "@effect/ui"
  *
@@ -961,8 +961,10 @@ type PageRequirement<P> = P extends Page<infer R> ? R : never
  *
  * class GetPerson extends Query.Service<GetPerson>()("GetPerson", {
  *   args: { id: Schema.Number },
- *   success: Schema.String
- * }, Effect.succeed(({ id }) => Effect.succeed(`Person ${id}`))) {}
+ *   success: Schema.String,
+ *   error: Schema.Never,
+ *   staleTime: "1 minute"
+ * }) {}
  *
  * const Person = Component.define({
  *   name: "Person",

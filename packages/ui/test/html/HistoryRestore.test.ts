@@ -129,7 +129,11 @@ class GetTab extends Query.Service<GetTab>()("GetTab", {
   success: Schema.String,
   error: Schema.Never,
   staleTime: "30 seconds"
-}, Effect.succeed(() => Effect.succeed("billing"))) {}
+}) {
+  static readonly layer = this.toLayer(
+    Effect.succeed(() => Effect.succeed("billing"))
+  )
+}
 const draft = (restore?: false) =>
   Html.component({
     name: "Draft",

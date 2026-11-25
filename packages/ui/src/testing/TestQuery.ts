@@ -18,7 +18,9 @@
  *   success: Schema.String,
  *   error: Schema.Never,
  *   staleTime: "30 seconds"
- * }, Effect.succeed(({ id }) => Effect.succeed(`user-${id}`))) {}
+ * }) {
+ *   static readonly layer = this.toLayer(({ id }) => Effect.succeed(`user-${id}`))
+ * }
  *
  * const program = Effect.gen(function*() {
  *   yield* GetUser.get({ id: "1" })

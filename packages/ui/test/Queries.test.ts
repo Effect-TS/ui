@@ -31,14 +31,17 @@ const makeApp = () => {
       success: Schema.String,
       error: Schema.Never,
       staleTime: "30 seconds"
-    },
-    Effect.succeed(({ id }) =>
-      Effect.sleep("10 millis").pipe(Effect.map(() => {
-        server.calls++
-        return `Note ${id}`
-      }))
+    }
+  ) {
+    static readonly layer = this.toLayer(
+      Effect.succeed(({ id }) =>
+        Effect.sleep("10 millis").pipe(Effect.map(() => {
+          server.calls++
+          return `Note ${id}`
+        }))
+      )
     )
-  ) {}
+  }
 
   // Invalidates the note, so the query refetches it while it keeps the old value.
   class Touch extends Command.Service<Touch>()(
