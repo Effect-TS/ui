@@ -60,7 +60,7 @@ export const PerformanceChart = <M>(h: Html.H<M>) =>
         "grid grid-cols-[max-content_minmax(0,1fr)_max-content]",
         "gap-x-3.5 gap-y-2.5 text-sm tabular-nums"
       ).attr("role", "list").children(
-        ...summary.map((entry) => {
+        summary.map((entry) => {
           const isEffect = entry.framework === "effect-ui"
           return h.li.key(entry.framework).class(
             "col-span-full grid grid-cols-subgrid items-center",
@@ -127,7 +127,7 @@ const Full = <M>(
           h.th.class(label, header).attr("scope", "col").children(
             "Workload"
           ),
-          ...frameworks.map((framework) =>
+          frameworks.map((framework) =>
             h.th.class(amount, header).attr("scope", "col").children(
               names[framework]
             )
@@ -135,17 +135,17 @@ const Full = <M>(
         )
       ),
       h.tbody.children(
-        ...rows.map((row) =>
+        rows.map((row) =>
           h.tr.key(row.benchmark).class(
             "not-first:*:border-t not-first:*:border-border"
           ).children(
             Label(h, row),
-            ...frameworks.map((framework) =>
+            frameworks.map((framework) =>
               h.td.class(
                 amount,
                 framework === "effect-ui" && "font-semibold"
               )
-                .children(...Amount(h, row, framework))
+                .children(Amount(h, row, framework))
             )
           )
         )
