@@ -34,12 +34,12 @@ export const focusVisibility = Effect.acquireRelease(
   Effect.sync(() => {
     const proto = window.HTMLElement.prototype
     const focus = proto.focus
-    const calls: Array<readonly [string, boolean]> = []
+    const calls: Array<readonly [string, boolean | undefined]> = []
     proto.focus = function(this: HTMLElement, options?: FocusOptions) {
       calls.push([
         this.id,
         (options as { readonly focusVisible?: boolean } | undefined)
-          ?.focusVisible === true
+          ?.focusVisible
       ])
       focus.call(this, options)
     }

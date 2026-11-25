@@ -122,7 +122,7 @@ describe("Popover", () => {
         scene.get(portal).attrs?.style ?? "",
         /^z-index:2;position:fixed;inset:0;.*;position:absolute;inset:0 auto auto 0$/
       )
-      assert.isUndefined(scene.get(portal).attrs?.["aria-modal"])
+      assert.strictEqual(scene.get(portal).attrs?.["aria-modal"], "false")
       assert.deepInclude(scene.get(positioner).attrs, {
         role: "presentation",
         "data-side": "bottom",
