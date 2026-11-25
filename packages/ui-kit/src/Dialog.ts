@@ -143,23 +143,17 @@
  * **In place**
  *
  * With `topLayer: false`, the portal is a `<dialog open>` where the view
- * draws it, not a popover in the top layer, like Base UI's portal given a
- * `container`. It is an ordinary element of the page: an ancestor's
- * `overflow`, `position: relative` and stacking context apply to it. The
- * kit resets its box inline to none of its own, `position: static` among
- * it, so the backdrop, the viewport and the popup are positioned against
- * the nearest positioned ancestor:
- * `.card { position: relative; overflow: hidden }` and
- * `.viewport { position: absolute; inset: 0 }` keep the dialog inside the
- * card. Popups in the top layer, such as other dialogs and the toasts, stay
- * above it.
+ * draws it, like Base UI's portal given a `container`, so an ancestor's
+ * `overflow`, `position` and stacking context apply to it. Its box is reset
+ * to none of its own, so the backdrop, viewport and popup are positioned
+ * against the nearest positioned ancestor:
+ * `.card { position: relative; overflow: hidden }` with
+ * `.viewport { position: absolute; inset: 0 }` keeps the dialog inside the
+ * card. Popups in the top layer, such as the toasts, stay above it.
  *
- * A dialog in place is never modal: `modal` counts as `false`, whatever it
- * says. A modal blocks the whole page, so it belongs above it, in the top
- * layer. Opening a dialog in place does nothing to the rest of the page: no
- * scroll lock, no `aria-hidden`, and no layer over the viewport. It still
- * asks to close on Escape, a press outside and focus leaving it, as with
- * `modal: false`.
+ * A dialog in place is never modal, whatever `modal` says: no scroll lock,
+ * no `aria-hidden` and no layer over the viewport. It still asks to close
+ * on Escape, a press outside and focus leaving it.
  *
  * **Nesting**
  *
@@ -1492,8 +1486,7 @@ export const Dialog = Html.component({
         .attr("id", portalId)
         .attr("aria-modal", modal === false ? "false" : undefined)
       // Shown once TrackDialog has started, so it sees what had focus before the browser moves it in.
-      // In place, set the `open` attribute directly rather than `.open()` so the
-      // host doesn't call `dialog.show()`, whose focusing steps override `initialFocus: false`.
+      // In place, set `open` directly: `.open()` calls `dialog.show()`, which ignores `initialFocus: false`.
       const placed = topLayer
         ? identified.open(false).popover("manual", model.mounted)
         : identified.attr("open", flag(model.mounted))

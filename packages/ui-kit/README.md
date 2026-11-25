@@ -19,7 +19,7 @@ Checkbox(h, {
 })
 ```
 
-Every popup renders in the browser's top layer by default. `Dialog`, `Drawer`, `Popover`, `Tooltip`, `PreviewCard`, `Menu` (and so `Menubar` and `ContextMenu`), `Select`, `Combobox`, `Autocomplete` and `ToastProvider` take `topLayer: false` to render in place instead, like Base UI's portal given a `container`: the popup is an ordinary element where the view draws it, placed against its containing block, clipped by its ancestors' `overflow` and under their stacking context, and it does nothing to the rest of the page when it opens.
+Every popup renders in the browser's top layer by default. `Dialog`, `Drawer`, `Popover`, `Tooltip`, `PreviewCard`, `Menu` (and so `Menubar` and `ContextMenu`), `Select`, `Combobox`, `Autocomplete` and `ToastProvider` take `topLayer: false` to render in place instead, like Base UI's portal given a `container`: placed and clipped inside the element the view draws it in, and never modal.
 
 A component that doesn't need an instance, such as `Switch`, is a plain view function instead: it takes no `key`, and an `on<Event>` option in place of `onEmit`. Keeping no state isn't enough on its own: `Progress` needs an instance for the id its bar points at, and `DirectionProvider` for sharing the direction with the components inside it.
 

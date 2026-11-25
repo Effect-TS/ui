@@ -44,16 +44,10 @@
  *
  * **In place**
  *
- * With `topLayer: false`, the portal is a `<dialog open>` where the view
- * draws it, with no box of its own and `position: static`, and the
- * positioner's `left` and `top` are measured from its containing block, the
- * nearest positioned or transformed ancestor. Draw the trigger and the
- * portal inside `.card { position: relative }`, and the popup opens next to
- * the trigger inside the card, clipped by the card's `overflow` and under
- * its stacking context. The default `collisionBoundary` is then the area
- * the ancestors' `overflow` leaves visible, so the popup flips to stay in
- * the card. With the default `modal: false`, opening it does nothing to the
- * rest of the page. `Dialog` describes the rest.
+ * With `topLayer: false`, the portal renders in place as a `<dialog open>`
+ * with no box of its own, and the popup is placed and clipped inside the
+ * positioner's containing block, as `Positioning` describes. `Dialog`'s
+ * **In place** describes the rest.
  *
  * The positioner's inline style carries `left` and `top`, and the variables
  * `--anchor-width`, `--anchor-height`, `--available-width`,

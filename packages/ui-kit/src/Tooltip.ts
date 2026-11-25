@@ -49,14 +49,9 @@
  * padding, a background and `overflow: auto`, so reset those on the
  * positioner and style the popup instead.
  *
- * With `topLayer: false`, the positioner is no popover: it is an ordinary
- * element where the view draws it, `hidden` while the tooltip is closed,
- * and its `left` and `top` are measured from its containing block, the
- * nearest positioned or transformed ancestor. Inside
- * `.card { position: relative; overflow: hidden }` the tooltip shows next to
- * its trigger, clipped by the card and under its stacking context, and the
- * default `collisionBoundary` is the part of the card in view, so the
- * tooltip flips to stay inside it.
+ * With `topLayer: false`, the positioner renders in place as an ordinary
+ * element, `hidden` while closed, and the tooltip is placed and clipped
+ * inside its containing block, as `Positioning` describes.
  *
  * **CSS variables**
  *

@@ -41,14 +41,10 @@
  * popup and the arrow, and a backdrop as a fixed layer:
  * `.backdrop { position: fixed; inset: 0 }`. The backdrop takes no presses.
  *
- * With `topLayer: false`, the portal is no popover: it is an ordinary
- * `<div>` where the view draws it, `hidden` while the card is closed, with
- * no box of its own and `position: static`. The positioner's `left` and
- * `top` are then measured from its containing block, the nearest positioned
- * or transformed ancestor, so inside `.card { position: relative }` the
- * preview opens next to its link inside the card, clipped by the card's
- * `overflow` and under its stacking context. The default
- * `collisionBoundary` is the part of the card in view.
+ * With `topLayer: false`, the portal renders in place as a `<div>` with no
+ * box of its own, `hidden` while closed, and the preview is placed and
+ * clipped inside the positioner's containing block, as `Positioning`
+ * describes.
  *
  * The positioner's inline style carries `left` and `top`, and the variables
  * `--anchor-width`, `--anchor-height`, `--available-width`,

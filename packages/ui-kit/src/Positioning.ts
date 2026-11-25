@@ -365,12 +365,9 @@ export type PositionMethod = typeof PositionMethod.Type
  *   scrolls or the anchor moves or changes size.
  * - `anchor`: the id of an element, or a `Rect` in the viewport, to place
  *   the popup against instead of the component's own anchor.
- * - `topLayer`: `false` keeps the popup out of the browser's top layer. It
- *   renders where the view draws it, as an ordinary element, and is placed
- *   against its containing block instead of the viewport, so it stays
- *   inside an element with `position: relative` and `overflow`, under its
- *   stacking context. `true` when left out. The component's JSDoc says what
- *   else changes.
+ * - `topLayer`: `false` draws the positioner in place, as the module's
+ *   **Gotchas** describe. `true` when left out. The component's JSDoc says
+ *   what else changes.
  *
  * @stability experimental
  * @category schemas
@@ -1167,10 +1164,8 @@ export type Placement = typeof Placement.Type
  *   `"left"` and `"right"`. An anchor on one line is measured as a whole.
  *   False when left out.
  * - `inlineHit`: where the pointer rested on the anchor, for `inline`.
- * - `topLayer`: `false` for a positioner drawn in place, out of the top
- *   layer. `left` and `top` are then measured from its containing block,
- *   and `"clipping-ancestors"` is cut to its ancestors' `overflow`. True
- *   when left out.
+ * - `topLayer`: `false` for a positioner drawn in place, as the module's
+ *   **Gotchas** describe. `true` when left out.
  *
  * @stability experimental
  * @category schemas

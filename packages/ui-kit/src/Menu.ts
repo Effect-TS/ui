@@ -62,17 +62,12 @@
  *
  * **In place**
  *
- * With `topLayer: false`, the backdrop and the positioner are no popovers:
- * they are ordinary elements where the view draws them, `hidden` while the
- * menu is closed. The positioner's `left` and `top` are measured from its
- * containing block, the nearest positioned or transformed ancestor, so
- * inside `.card { position: relative; overflow: hidden }` the popup opens
- * next to its trigger inside the card and flips to stay in the part of it
- * in view. The backdrop covers that containing block instead of the
- * viewport. A submenu takes `topLayer` from the menu it opens from, unless
- * it sets its own. A menu in place is never modal, whatever `modal` or a
- * `Menubar` says, since a modal blocks the whole page and belongs in the
- * top layer: opening it does nothing to the rest of the page.
+ * With `topLayer: false`, the backdrop and the positioner render in place
+ * as ordinary elements, `hidden` while closed, and the popup is placed and
+ * clipped inside its containing block, as `Positioning` describes. The
+ * backdrop covers that block, and the menu is never modal, whatever `modal`
+ * or a `Menubar` says. A submenu takes `topLayer` from its parent unless
+ * it sets its own.
  *
  * **CSS variables**
  *
@@ -556,8 +551,7 @@ export type MenuFilterMode = typeof MenuFilterMode.Type
  *   False when left out.
  * - the `Positioning.PositionerFields`. `side` is `"bottom"` when left out,
  *   and `"inline-end"` with `align` `"start"` in a submenu. `topLayer:
- *   false` draws the menu in place, as the module describes, and a submenu
- *   takes its parent's when it leaves it out.
+ *   false` draws the menu in place, as the module describes.
  *
  * @stability experimental
  * @category schemas

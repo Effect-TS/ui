@@ -74,17 +74,10 @@
  * background and `overflow: auto`, so reset those on the positioner and
  * the backdrop and style the popup instead.
  *
- * With `topLayer: false`, the backdrop and the positioner are no popovers:
- * they are ordinary elements where the view draws them, `hidden` while the
- * popup is closed. The positioner's `left` and `top` are measured from its
- * containing block, the nearest positioned or transformed ancestor, so
- * inside `.card { position: relative; overflow: hidden }` the popup opens
- * below the input inside the card and flips to stay in the part of it in
- * view. The backdrop covers that containing block instead of the viewport.
- * The combobox is then never modal, whatever `modal` says, since a modal
- * blocks the whole page and belongs in the top layer, and the rest of the
- * page isn't hidden from screen readers while it is open. Opening it does
- * nothing to the rest of the page.
+ * With `topLayer: false`, the backdrop and the positioner render in place
+ * as ordinary elements, `hidden` while closed, and the popup is placed and
+ * clipped inside its containing block, as `Positioning` describes. The
+ * backdrop covers that block, and the combobox is never modal.
  *
  * **CSS variables**
  *

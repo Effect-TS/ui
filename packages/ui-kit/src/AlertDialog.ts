@@ -137,9 +137,7 @@ import { Dialog, type DialogEvents, DialogProps } from "./Dialog.ts"
  * - `triggerId`, `keepMounted`, `forceRenderBackdrop`, `initialFocus`,
  *   `finalFocus`, `id`, `openMethod` and `holdExit`: as for a `Dialog`.
  *
- * An alert dialog is always modal: it blocks the whole page until the user
- * answers, so it stays in the top layer, above everything it blocks. A
- * `Dialog` drawn in place with `topLayer: false` is for `modal: false`.
+ * An alert dialog is always modal, so it always renders in the top layer.
  *
  * @stability experimental
  * @category schemas

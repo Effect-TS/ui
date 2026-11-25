@@ -116,17 +116,11 @@
  *
  * **In place**
  *
- * With `topLayer: false`, the backdrop and the positioner are no popovers:
- * they are ordinary elements where the view draws them, `hidden` while the
- * select is closed. The positioner's `left` and `top` are measured from its
- * containing block, the nearest positioned or transformed ancestor, so
- * inside `.card { position: relative; overflow: hidden }` the popup opens
- * below the trigger inside the card and flips to stay in the part of it in
- * view. The backdrop covers that containing block instead of the viewport.
- * The popup is then never aligned with the trigger, since that measures it
- * against the viewport, and never modal, whatever `alignItemWithTrigger`
- * and `modal` say: a modal blocks the whole page, so it belongs in the top
- * layer. Opening it does nothing to the rest of the page.
+ * With `topLayer: false`, the backdrop and the positioner render in place
+ * as ordinary elements, `hidden` while closed, and the popup is placed and
+ * clipped inside its containing block, as `Positioning` describes. The
+ * backdrop covers that block, and the select is never modal or aligned with
+ * its trigger, whatever `modal` and `alignItemWithTrigger` say.
  *
  * **Form**
  *
