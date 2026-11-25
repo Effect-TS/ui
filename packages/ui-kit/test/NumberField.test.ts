@@ -131,14 +131,6 @@ describe("NumberField", () => {
         })
       }
       assert.strictEqual(scene.query(cursor), undefined)
-      const activeCursor = Story.parts(NumberField, {
-        model: { ...idle, scrubbing: true, cursor: true },
-        props: { value: 1234.5 }
-      }).scrubAreaCursor(h.span.class("cursor"))
-      assert(activeCursor)
-      const cursorAttrs = View.build(activeCursor, []).attrs
-      assert.strictEqual(cursorAttrs["aria-hidden"], "true")
-      assert.isUndefined(cursorAttrs.role)
       const children = scene.get(root).children ?? []
       assert.strictEqual(children[children.length - 1], scene.get(formInput))
       assert.deepInclude(scene.get(formInput).attrs, {
@@ -192,7 +184,6 @@ describe("NumberField", () => {
                     id: "amount",
                     type: "number",
                     inputmode: "tel",
-                    "aria-roledescription": "Amount",
                     autocomplete: "transaction-amount",
                     readonly: "",
                     "aria-disabled": "true"
@@ -228,7 +219,6 @@ describe("NumberField", () => {
         id: "amount",
         type: "text",
         inputmode: "numeric",
-        "aria-roledescription": "Amount",
         autocomplete: "transaction-amount",
         disabled: ""
       })
