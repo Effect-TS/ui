@@ -821,14 +821,12 @@ describe("OpenTuiHost", () => {
       expect(frame).toContain("Home")
       expect(frame).toContain("logs tab")
 
-      // Controlled tabSelect: rejected move to index 2 reverts; accepted move to 0 commits
       yield* app.pressArrow("right")
       yield* app.pressEnter
       yield* app.pressArrow("left")
       yield* app.pressEnter
       expect(app.root.model()?.tab).toBe(0)
 
-      // Uncontrolled tabSelect: native selection survives unrelated re-renders
       app.root.send(Message.Updated({ focus: "uncontrolled" }))
       yield* app.settle
       yield* app.pressArrow("right")
@@ -840,7 +838,6 @@ describe("OpenTuiHost", () => {
       const controlledSlider = children[2] as OT.SliderRenderable
       const uncontrolledSlider = children[3] as OT.SliderRenderable
 
-      // Controlled slider: click at 80 reverts to 20; click at 40 commits; orientation updates
       expect(controlledSlider.value).toBe(20)
       yield* app.click(controlledSlider.x + 16, controlledSlider.y)
       expect(controlledSlider.value).toBe(20)
@@ -850,7 +847,6 @@ describe("OpenTuiHost", () => {
       yield* app.settle
       expect(controlledSlider.orientation).toBe("vertical")
 
-      // Uncontrolled slider: native value persists across unrelated re-renders
       yield* app.click(uncontrolledSlider.x + 12, uncontrolledSlider.y)
       app.root.send(Message.Updated({ tick: 2 }))
       yield* app.settle
@@ -943,7 +939,6 @@ describe("OpenTuiHost", () => {
       expect(frame).toContain("bullet item")
       expect(frame).toContain("█▀█ █")
 
-      // Hiding line numbers persists when the code child unmounts and remounts
       app.root.send(Message.HidLineNumbers())
       yield* app.settle
       expect(app.captureFrame().split("\n")[0]!.trimEnd()).toBe("const a = 1")
@@ -956,7 +951,6 @@ describe("OpenTuiHost", () => {
       yield* app.settle
       expect(app.captureFrame().split("\n")[0]!.trimEnd()).toBe("const a = 1")
 
-      // Omitting code content restores empty string without throwing
       app.root.send(Message.ClearedContent())
       yield* app.settle
       expect(app.captureFrame()).not.toContain("const a = 1")
