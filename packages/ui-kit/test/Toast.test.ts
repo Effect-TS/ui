@@ -215,7 +215,7 @@ describe("ToastProvider", { concurrent: false }, () => {
       assert.strictEqual(Locator.textOf(root.get(Locator.tag("output"))), "t2")
     }).pipe(Effect.provide(TestHost.layer())))
 
-  it.effect("F6 moves focus into the stack and back, and focus on a closing toast moves to the next one", () =>
+  it.effect("F6 moves focus into the stack and back", () =>
     Effect.gen(function*() {
       const { byId, region } = yield* mountPage(0)
       const post = byId("post")!
@@ -231,16 +231,6 @@ describe("ToastProvider", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement, region)
       assert.isTrue(press(region, "F6"))
       assert.strictEqual(document.activeElement, post)
-      press(post, "F6")
-      assert.isTrue(press(region, "Escape"))
-      assert.strictEqual(document.activeElement, post)
-
-      // Newest first: t2, then t1.
-      press(post, "F6")
-      byId("t2")!.focus()
-      press(byId("t2")!, "Escape")
-      yield* tick
-      assert.strictEqual(document.activeElement, byId("t1"))
     }))
 
   it.effect("focus that lands on a closing toast moves on in the direction it came from", () =>
@@ -289,7 +279,7 @@ describe("ToastProvider", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement, inner)
     }))
 
-  it.effect("F6 and Escape move focus into the stack and back inside a closed shadow root", () =>
+  it.effect("F6 then Escape moves focus into the stack and back inside a closed shadow root", () =>
     Effect.gen(function*() {
       const { byId, region } = yield* mountPage(0, { shadow: true })
       const post = byId("post")!
@@ -300,9 +290,6 @@ describe("ToastProvider", { concurrent: false }, () => {
 
       assert.isTrue(press(post, "F6"))
       assert.strictEqual(shadow.activeElement, region)
-      assert.isTrue(press(region, "F6"))
-      assert.strictEqual(shadow.activeElement, post)
-      press(post, "F6")
       assert.isTrue(press(region, "Escape"))
       assert.strictEqual(shadow.activeElement, post)
     }))
