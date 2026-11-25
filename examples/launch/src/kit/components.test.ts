@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
 import { readdirSync, readFileSync } from "node:fs"
-import { components, extras } from "./components.ts"
+import { modules } from "./components.ts"
 
 const kit = new URL(
   "../../../../packages/ui-kit/src/",
@@ -17,12 +17,12 @@ describe("kit components", () => {
       .filter((file) => file.endsWith(".ts") && file !== "index.ts")
       .map((file) => file.slice(0, -".ts".length))
     assert.deepStrictEqual(
-      [...components, ...extras].sort(),
+      [...modules].sort(),
       modules.sort()
     )
   })
 
   it("is counted correctly in the article", () => {
-    assert.include(article, `${components.length} in all`)
+    assert.include(article, `${modules.length} components`)
   })
 })

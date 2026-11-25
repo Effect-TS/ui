@@ -2,10 +2,10 @@ import { Subscription, UiSchema } from "@effect/ui"
 import { Toggle } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema, Stream } from "effect"
-import { components, extras, type Module } from "./components.ts"
+import { type Module, modules } from "./components.ts"
 import { tile } from "./tiles.ts"
 
-export const modules = [...components, ...extras]
+export { modules }
 
 // Each tick starts one tile, and a tile plays for `playFor` ticks, so
 // no more than three move at once. The stride shares no factor with
@@ -89,9 +89,9 @@ export const Kit = Html.component({
     ).children(
       h.div.class("kit-head").children(
         h.p.class("kit-count").children(
-          h.strong.children(String(components.length)),
+          h.strong.children(String(modules.length)),
           h.span.children(
-            "components, ready on day one."
+            "headless components in @effect/ui-kit"
           )
         ),
         Toggle(h, {
@@ -103,11 +103,7 @@ export const Kit = Html.component({
         )
       ),
       h.ul.class("kit-wall").children(
-        components.map((name) => Tile(h, name, model.step))
-      ),
-      h.p.class("kit-also").children("Also in the kit"),
-      h.ul.class("kit-wall").children(
-        extras.map((name) => Tile(h, name, model.step))
+        modules.map((name) => Tile(h, name, model.step))
       )
     )
 })

@@ -1,8 +1,7 @@
-// The modules of @effect/ui-kit. components.test.ts checks these lists
-// against the package's source.
-
-// The components that Base UI has too.
-export const components = [
+// The modules of @effect/ui-kit: every component in Base UI, and a few
+// of the kit's own. components.test.ts checks this list against the
+// package's source.
+export const modules = [
   "Accordion",
   "AlertDialog",
   "Autocomplete",
@@ -14,6 +13,7 @@ export const components = [
   "Combobox",
   "ContextMenu",
   "Dialog",
+  "DirectionProvider",
   "Drawer",
   "Field",
   "Fieldset",
@@ -26,6 +26,7 @@ export const components = [
   "NumberField",
   "OTPField",
   "Popover",
+  "Positioning",
   "PreviewCard",
   "Progress",
   "RadioGroup",
@@ -39,16 +40,9 @@ export const components = [
   "Toggle",
   "ToggleGroup",
   "Toolbar",
-  "Tooltip"
-] as const
-
-export const extras = [
-  "DirectionProvider",
-  "Positioning",
+  "Tooltip",
   "VirtualKeyboard",
   "VirtualList"
 ] as const
 
-export type Module =
-  | (typeof components)[number]
-  | (typeof extras)[number]
+export type Module = (typeof modules)[number]
