@@ -31,8 +31,8 @@ Effect.gen(function*() {
     DevToolsHeadless.layer({ server: process.argv[2] })
   )
   const app = yield* OpenTuiTest.mount(Greeter, {}).pipe(Effect.provide(log))
-  const lines = createInterface({ input: process.stdin })
-    [Symbol.asyncIterator]()
+  const input = createInterface({ input: process.stdin })
+  const lines = input[Symbol.asyncIterator]()
   while (true) {
     const line = yield* Effect.promise(() => lines.next())
     if (line.done === true) return

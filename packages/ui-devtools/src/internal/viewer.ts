@@ -4,7 +4,6 @@ import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as PubSub from "effect/PubSub"
 import * as Schedule from "effect/Schedule"
-import * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
 import * as Socket from "effect/socket/Socket"
 import * as Stream from "effect/Stream"
@@ -20,10 +19,6 @@ import {
   SavePosition
 } from "./overlay.ts"
 import { styles } from "./styles.ts"
-
-const decodeWire = Schema.decodeUnknownOption(
-  Schema.fromJsonString(MessageLog.Wire)
-)
 
 const standaloneStyles = `
 html, body, #root, .overlay { height: 100%; }
@@ -84,17 +79,31 @@ export const mount = (
       )
       const pull = yield* Socket.readerString(socket)
       return yield* Effect.forever(Effect.flatMap(pull, (chunks) => {
-        const batch: Array<MessageLog.WireEntry> = []
+        let batch: Array<MessageLog.WireEntry> = []
+        let changed = false
         for (const chunk of chunks) {
-          const decoded = decodeWire(chunk)
+          const decoded = Control.decodeWatched(chunk)
           if (decoded._tag === "None" || decoded.value._tag === "Hello") {
             continue
           }
           const frame = decoded.value
+          if (frame._tag === "Held") {
+            // Ingest first, so the batch's frames stay in order with this message.
+            inspector.ingest(batch)
+            batch = []
+            const held = new Set(frame.sessions)
+            for (const session of inspector.sessions()) {
+              if (held.has(session.id)) continue
+              inspector.remove(session.id)
+              origins.delete(session.id)
+            }
+            changed = true
+            continue
+          }
           if (!origins.has(frame.session)) origins.set(frame.session, frame.at)
           batch.push(frame)
         }
-        if (batch.length === 0) return Effect.void
+        if (batch.length === 0 && !changed) return Effect.void
         inspector.ingest(batch)
         return PubSub.publish(changes, undefined)
       }))

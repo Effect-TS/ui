@@ -1,3 +1,4 @@
+import * as MessageLog from "@effect/ui/MessageLog"
 import * as Schema from "effect/Schema"
 
 export const Request = Schema.Union([
@@ -69,6 +70,15 @@ export const decodeToServer = Schema.decodeUnknownOption(
 )
 
 export const metaName = "effect-ui-devtools"
+
+// What `/watch` sends: Wire frames, and the sessions the server holds, on connect and whenever it drops one.
+export const Held = Schema.TaggedStruct("Held", {
+  sessions: Schema.Array(Schema.String)
+})
+
+export const decodeWatched = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Union([MessageLog.Wire, Held]))
+)
 
 export const defaultPort = 4774
 

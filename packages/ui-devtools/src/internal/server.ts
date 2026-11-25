@@ -30,6 +30,7 @@ interface Meta {
   host: MessageLog.WireHost | undefined
   connected: boolean
   closed: number
+  started?: MessageLog.WireEntry | undefined
 }
 
 const loopback = new Set(["localhost", "127.0.0.1", "[::1]", "::1"])
@@ -51,18 +52,27 @@ export const make = (options: Options) => {
   let closed = 0
   const timeout = options.timeout ?? 10_000
 
+  const held = () =>
+    JSON.stringify({
+      _tag: "Held",
+      sessions: inspector.sessions().map((session) => session.id)
+    })
+  const broadcast = (text: string) => {
+    for (const watcher of watchers) Queue.offerUnsafe(watcher, text)
+  }
+
   const prune = () => {
     const gone = Array.from(meta).filter(([, m]) => !m.connected).sort((
       [, a],
       [, b]
     ) => a.closed - b.closed)
-    for (
-      const [session] of gone.slice(0, Math.max(0, gone.length - options.keep))
-    ) {
+    const dropped = gone.slice(0, Math.max(0, gone.length - options.keep))
+    for (const [session] of dropped) {
       meta.delete(session)
       inspector.remove(session)
       history.drop(session)
     }
+    if (dropped.length > 0) broadcast(held())
   }
 
   const allowed = (origin: string | undefined) => {
@@ -114,15 +124,16 @@ export const make = (options: Options) => {
                 meta.set(frame.session, { host, connected: true, closed: 0 })
               } else known.connected = true
             }
+            if (frame._tag === "SessionStarted") {
+              meta.get(frame.session)!.started = frame
+            }
             batch.push(frame)
           }
           if (batch.length === 0) return
           inspector.ingest(batch)
           for (const frame of batch) {
             history.record(frame)
-            if (watchers.size === 0) continue
-            const text = JSON.stringify(frame)
-            for (const watcher of watchers) Queue.offerUnsafe(watcher, text)
+            if (watchers.size > 0) broadcast(JSON.stringify(frame))
           }
           notify()
         }))
@@ -220,8 +231,9 @@ export const make = (options: Options) => {
     }))
   )
 
-  // Sends the frames the server holds, then each new one. A frame seen twice, as after an app reconnects,
-  // is ignored by the reader's Inspector.
+  // Sends the sessions the server holds and their frames, then each new frame. A session's SessionStarted
+  // goes first even after it has rolled out, so a late reader has its app name. A frame seen twice, as after
+  // an app reconnects, is ignored by the reader's Inspector.
   const watch = HttpRouter.add(
     "GET",
     "/watch",
@@ -229,8 +241,16 @@ export const make = (options: Options) => {
       const writer = yield* socket.writer
       const pull = yield* Socket.readerString(socket)
       const outbox = yield* Queue.unbounded<string>()
+      Queue.offerUnsafe(outbox, held())
       for (const session of inspector.sessions()) {
-        for (const frame of session.entries()) {
+        const entries = session.entries()
+        const started = meta.get(session.id)?.started
+        if (
+          started !== undefined && started.seq < (entries[0]?.seq ?? Infinity)
+        ) {
+          Queue.offerUnsafe(outbox, JSON.stringify(started))
+        }
+        for (const frame of entries) {
           Queue.offerUnsafe(outbox, JSON.stringify(frame))
         }
       }
