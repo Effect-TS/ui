@@ -123,7 +123,7 @@ import * as Html from "@effect/ui/html/Html"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
 import { CheckboxGroup } from "./CheckboxGroup.ts"
-import { type Attributed, flag } from "./internal/attributes.ts"
+import { type Attributed, defaults, flag } from "./internal/attributes.ts"
 import { CheckboxGroupMessage } from "./internal/checkboxGroup.ts"
 import { field } from "./internal/field.ts"
 
@@ -327,12 +327,11 @@ const state = <B extends Attributed<B>>(
  * the indicator's `aria-hidden="true"`, which keeps a glyph inside it out
  * of the checkbox's name, and the data attributes. That includes the ones
  * a state leaves absent, so a `disabled` on the consumer's button is
- * removed unless the
- * `disabled` prop is set. A part writes them when it is applied, so an
- * attribute the consumer chains after `checkbox.root(...)` or `checkbox.indicator(...)`
- * is the consumer's to answer for. The root writes `id` as the `id` prop
- * says, and the group's parent adds the members' ids to the consumer's
- * `aria-controls`.
+ * removed unless the `disabled` prop is set. A part writes them when it is
+ * applied, so an attribute the consumer chains after `checkbox.root(...)`
+ * or `checkbox.indicator(...)` is the consumer's to answer for. The root
+ * writes `id` as the `id` prop says, and the group's parent adds the
+ * members' ids to the consumer's `aria-controls`.
  *
  * The checkbox reads the nearest `CheckboxGroup` above it, if there is one.
  *
@@ -407,9 +406,7 @@ export const Checkbox = Html.component({
               // has by then, such as the one `field.control` wrote for its
               // label.
               ? b.forward((node) =>
-                node.elementAttrs.id === undefined
-                  ? node.attr("id", memberId(p.props, p.id))
-                  : node
+                defaults(node, { id: memberId(p.props, p.id) })
               )
               : b,
             resolved

@@ -115,13 +115,11 @@ export const Separator = <Msg, R = never>(
 ): SeparatorElement<Msg, R> => {
   const element: SeparatorElement<Msg, R> = options.element ?? h.div
   const orientation = options.props?.orientation ?? "horizontal"
-  return element.forward((node) =>
-    node.elementAttrs.role === "none" ||
-      node.elementAttrs.role === "presentation"
-      ? node.attrs({
-        "aria-orientation": undefined,
-        "data-orientation": orientation
-      })
-      : separatorAttrs(node, orientation)
-  )
+  return element.forward((node) => {
+    const role = node.elementAttrs.role
+    const own = separatorAttrs(node, orientation)
+    return role === "none" || role === "presentation"
+      ? own.attrs({ role, "aria-orientation": undefined })
+      : own
+  })
 }
