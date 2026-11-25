@@ -79,7 +79,7 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
         yield* view.click(play)
         yield* view.expect(current).toHaveText(/HtmlPlay\.make/)
         yield* TestClock.adjust("1400 millis")
-        yield* view.expect(current).toHaveText(/click\(increment\)/)
+        yield* view.expect(current).toHaveText(/click\(addOne\)/)
         yield* TestClock.adjust("7 seconds")
         yield* view.expect(current).toHaveText(/toHaveText\("0"\)/)
         yield* view.expect(clock).toHaveText("1,000 ms")

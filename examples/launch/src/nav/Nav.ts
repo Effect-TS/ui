@@ -149,7 +149,9 @@ export const Nav = Html.component({
                       "block border-s-2 border-border text-sm",
                       "text-muted-foreground hover:text-foreground",
                       "aria-[current]:border-foreground aria-[current]:bg-muted",
-                      "aria-[current]:text-foreground aria-[current]:font-medium",
+                      // The same weight as the others: a heavier label is
+                      // wider, and wrapping it moved every item below.
+                      "aria-[current]:text-foreground",
                       "wrap-break-word focus-visible:-outline-offset-2",
                       "max-rail:py-2.5 max-rail:pe-3.5",
                       "rail:py-[5px] rail:pe-3 rail:text-[0.8125rem]",

@@ -121,6 +121,7 @@ export const toMarkdown = (source: string, snippets: Snippets) => {
       case "Footer":
         return body
       case "AgentPrompt":
+      case "PageOnly":
         return ""
       default:
         throw new Error(`No text for the island "${name}"`)
@@ -137,4 +138,6 @@ export const toMarkdown = (source: string, snippets: Snippets) => {
       (_, name, text) => island(name, text)
     )
     .replace(/\n{3,}/g, "\n\n")
+    // A section with nothing but islands the copy leaves out goes too.
+    .replace(/^## .*\n\n(?=## )/gm, "")
 }

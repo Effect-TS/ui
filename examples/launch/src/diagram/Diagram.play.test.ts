@@ -7,6 +7,7 @@ import { Diagram } from "./Diagram.ts"
 
 const button = (name: string | RegExp) =>
   HtmlLocator.role("button", { name })
+const choice = (name: string) => HtmlLocator.role("radio", { name })
 const announced = Locator.attr("aria-live", "polite")
 const inPanel = (title: string, locator: Locator.Locator) =>
   Locator.inside(HtmlLocator.role("group", { name: title }), locator)
@@ -22,7 +23,7 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
         const progress = (title: string) =>
           inPanel(title, Locator.attr("data-part", "progress"))
         const playing = Locator.attr("data-active", "true")
-        yield* play.click(button("A2"))
+        yield* play.click(choice("A2"))
         yield* play.expect(playing).toHaveCount(0)
         yield* play.click(button("Play"))
         yield* play.expect(playing).toHaveAccessibleName(
@@ -71,10 +72,10 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
         yield* play.expect(announced).toHaveText(
           "Foldkit 0.x, step 2 of 8: A wraps it in a Message of its own."
         )
-        yield* play.click(button("Previous step"))
-        yield* play.click(button("Previous step"))
+        yield* play.click(button("Back one step"))
+        yield* play.click(button("Back one step"))
         yield* play.expect(announced).toHaveText("")
-        yield* play.click(button("Root"))
+        yield* play.click(choice("Root"))
         yield* play.type(HtmlLocator.role("slider"), "4")
         yield* play.expect(announced).toHaveText(
           "Effect UI, step 1 of 3: Root's view sends a Message."

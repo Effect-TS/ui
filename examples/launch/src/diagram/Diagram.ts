@@ -27,7 +27,7 @@ export const DiagramMessage = UiSchema.TaggedEnum({
   ClickedBack: {},
   ClickedNext: {},
   ClickedReset: {},
-  Scrubbed: { value: Schema.String },
+  Scrubbed: { value: Schema.Number },
   Ticked: {}
 })
 type Msg = typeof DiagramMessage.Type
@@ -67,7 +67,6 @@ const Lane = (
   turn: Turn,
   options: {
     readonly time: number
-    readonly isDimmed: boolean
     readonly waiting: string
     readonly runs: number
   }
@@ -84,8 +83,7 @@ const Lane = (
     "gap-3 diagram-narrow:p-2.5",
     isActive &&
       "border-accent [box-shadow:0_0_0_1px_var(--color-accent)]",
-    options.isDimmed && "opacity-55",
-    "motion-safe:transition-[border-color,box-shadow,opacity]",
+    "motion-safe:transition-[border-color,box-shadow]",
     "motion-safe:duration-300"
   ).attrs({
     role: "group",
@@ -101,7 +99,7 @@ const Lane = (
         "font-mono text-[0.6875rem] whitespace-nowrap tabular-nums",
         "font-features-[normal]",
         done || isActive
-          ? "font-semibold text-accent"
+          ? "font-semibold text-accent-text"
           : "text-muted-foreground"
       ).attr("data-part", "progress").children(
         done ? "Done" : `${shown + 1}/${steps.length}`
@@ -181,7 +179,7 @@ const Timeline = (
       valueText: describe(turns, time, end),
       value: time + 1,
       cells: end + 1,
-      onInput: (value) => DiagramMessage.Scrubbed({ value })
+      onMove: (value) => DiagramMessage.Scrubbed({ value })
     }),
     h.div.class(
       "flex font-mono text-[0.6875rem] text-muted-foreground",
@@ -192,13 +190,19 @@ const Timeline = (
           flex: String(turn.steps.length)
         }).class(
           "truncate text-center",
-          isPlayingAt(turn, time) && "font-semibold text-accent",
+          isPlayingAt(turn, time) && "font-semibold text-accent-text",
           "motion-safe:transition-[color] motion-safe:duration-300"
         ).children(turn.side.title)
       ),
       h.span.style({ flex: "1" })
     )
   )
+
+const names: Readonly<Record<ScenarioName, string>> = {
+  messages: "How Foldkit 0.x and Effect UI each handle a Message",
+  sharedState:
+    "How Foldkit 0.x and Effect UI each change a shared value"
+}
 
 export const Diagram = Html.component({
   name: "Diagram",
@@ -234,7 +238,7 @@ export const Diagram = Html.component({
         player: P.seek(
           $.model.player,
           Math.min(
-            Math.max(Number(value) - 1, -1),
+            Math.max(value - 1, -1),
             endOf($.props.scenario, $.model.choice)
           )
         )
@@ -259,11 +263,10 @@ export const Diagram = Html.component({
     const { step: time, isPlaying, runs } = model.player
     const turns = turnsOf(scenario, model.choice)
     const end = endOf(h.props.scenario, model.choice)
-    const isOnePlaying = turns.some((turn) => isPlayingAt(turn, time))
     return h.figure.class(
       wide,
       "@container/diagram flex flex-col gap-4 [--wide:920px]"
-    ).children(
+    ).attr("aria-label", names[h.props.scenario]).children(
       h.div.class("flex flex-wrap items-end justify-between gap-3")
         .children(
           SenderPicker(
@@ -290,7 +293,6 @@ export const Diagram = Html.component({
             h.div.key(turn.side.id).class("contents").children(
               Lane(h, turn, {
                 time,
-                isDimmed: isOnePlaying && !isPlayingAt(turn, time),
                 waiting: index === 0 || time < 0
                   ? "Waiting for the Message."
                   : `Plays after ${turns[0]!.side.title}.`,

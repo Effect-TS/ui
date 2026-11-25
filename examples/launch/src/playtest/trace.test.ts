@@ -57,7 +57,7 @@ describe("the Play test figure's trace", () => {
       assert.deepStrictEqual(
         frames[5].log.map(rowOf),
         [
-          [0, "Message", "ClickedIncrement"],
+          [0, "Message", "ClickedAdd"],
           [0, "Message", "ClickedResetAfterDelay"],
           [0, "CommandStarted", "DelayReset"],
           [1000, "Message", "CompletedDelayReset"],
@@ -79,7 +79,7 @@ describe("the Play test figure's trace", () => {
         ),
         [
           [],
-          ["increment: Increment"],
+          ["addOne: +1"],
           ["reset: Resetting"],
           [],
           ["count: 1"],

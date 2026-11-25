@@ -1,4 +1,5 @@
 import { caption, srOnly } from "#components/Classes"
+import { Icon } from "#components/Icon"
 import { Scrubber } from "#components/Scrubber"
 import { Snippet } from "#domain/Snippet"
 import { Command, Subscription, UiSchema } from "@effect/ui"
@@ -9,7 +10,7 @@ import { Frame, run, sources } from "./trace.ts"
 
 export const PlayTestMessage = UiSchema.TaggedEnum({
   CompletedRun: { frames: Schema.Array(Frame) },
-  Scrubbed: { value: Schema.String },
+  Scrubbed: { value: Schema.Number },
   ClickedPlay: {},
   ClickedPause: {},
   Ticked: {}
@@ -29,7 +30,7 @@ export const RunPlayTest = Command.make(
 /** What each line of the test does, one per entry of `sources`. */
 export const notes: ReadonlyArray<string> = [
   "The test mounts the real Counter on the test host. There's no browser and no DOM.",
-  "The click sends ClickedIncrement, and the count is 1.",
+  "The click sends ClickedAdd with an amount of 1, and the count is 1.",
   "The click runs the real DelayReset Command, which sleeps on the TestClock.",
   "The test moves the clock to 999 ms. DelayReset is still asleep.",
   "The count is still 1.",
@@ -145,13 +146,17 @@ const Controls = (
         : PlayTestMessage.ClickedPlay(),
       props: { disabled: !isLoaded, focusableWhenDisabled: true }
     }).class(
-      "inline-flex min-w-[4.75rem] flex-none cursor-pointer",
-      "items-center justify-center rounded-md border",
+      "inline-flex min-w-[6.25rem] flex-none cursor-pointer",
+      "items-center justify-center gap-1.5 rounded-md border",
       "border-foreground bg-foreground px-3 py-1 text-control",
       "font-medium text-background font-features-[normal]",
       "focus-visible:outline-accent aria-disabled:cursor-default",
       "aria-disabled:opacity-45"
     ).children(
+      Icon(h, model.isPlaying ? "pause" : "play", {
+        class: "size-3.5",
+        filled: true
+      }),
       model.isPlaying ? "Pause" : isAtEnd ? "Replay" : "Play"
     ),
     h.div.class("min-w-0 flex-1").children(
@@ -165,7 +170,7 @@ const Controls = (
         value: shown,
         cells: sources.length,
         disabled: !isLoaded,
-        onInput: (value) => PlayTestMessage.Scrubbed({ value })
+        onMove: (value) => PlayTestMessage.Scrubbed({ value })
       })
     )
   )
@@ -200,7 +205,7 @@ export const PlayTest = Html.component({
   update: {
     CompletedRun: ($, { frames }) => $.evolve({ frames }),
     Scrubbed: ($, { value }) => {
-      const line = Math.min(Number(value), $.model.frames.length)
+      const line = Math.min(value, $.model.frames.length)
       return $.evolve({
         position: line > 0 ? line - 1 : null,
         isPlaying: false

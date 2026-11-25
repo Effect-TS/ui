@@ -9,6 +9,9 @@ export const Islands = {
     title: Schema.String,
     prompt: Schema.String
   }),
+  // Text for the page that the Markdown copy of the article leaves
+  // out.
+  PageOnly: Schema.Struct({}),
   Diagram: Schema.Struct({ scenario: ScenarioName }),
   Compare: Schema.Struct({
     foldkit: Code,

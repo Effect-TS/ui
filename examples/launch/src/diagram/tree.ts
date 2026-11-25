@@ -1,3 +1,4 @@
+import { Button } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Array, Option } from "effect"
 import {
@@ -351,13 +352,16 @@ export const Tree = <M>(h: Html.H<M>, options: TreeOptions<M>) => {
         return h.div.class(nodeClass, size).key(name).attrs(attrs)
           .style(place).children(...content)
       }
-      return h.button.class(nodeClass, size, buttonClass).key(name)
+      return Button(h, { onPress: message }).class(
+        nodeClass,
+        size,
+        buttonClass
+      ).key(name)
         .attrs({
           ...attrs,
-          type: "button",
           "aria-label": options.label?.(name) ??
             displayName(side, name)
-        }).style(place).onClick(message).children(...content)
+        }).style(place).children(...content)
     }),
     svg(h, "svg").attrs({
       viewBox: `0 0 ${width} ${height}`,

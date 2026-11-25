@@ -1,3 +1,4 @@
+import { Slider } from "@effect/ui-kit"
 import type { Html } from "@effect/ui/html"
 
 // Shorter than the row, so the cursor on it stands out.
@@ -10,9 +11,8 @@ const divider = [
  * A slider drawn as a row of `cells` cells with a cursor on the
  * dividers between them. `value` counts the cells to the left of the
  * cursor, which are tinted: 0 puts it before the first cell and `cells`
- * after the last. The cursor is the thumb of a native range input laid
- * over the cells, so dragging, clicking and the arrow keys all work as
- * they do on any slider.
+ * after the last. The kit's Slider handles dragging, clicking and the
+ * arrow keys.
  */
 export const Scrubber = <M>(
   h: Html.H<M>,
@@ -22,39 +22,70 @@ export const Scrubber = <M>(
     readonly value: number
     readonly cells: number
     readonly disabled?: boolean | undefined
-    readonly onInput: (value: string) => M
+    readonly onMove: (value: number) => M
   }
 ) =>
-  h.div.class("relative h-8 min-w-0").children(
-    h.div.class(
-      "absolute inset-0 grid auto-cols-fr grid-flow-col overflow-hidden",
-      "rounded-md border border-border-strong bg-background"
-    ).attr("aria-hidden", "true").children(
-      ...Array.from({ length: options.cells }, (_, index) =>
-        h.span.key(String(index)).class(
-          "relative",
-          index > 0 && divider,
-          index < options.value && "bg-wash",
-          "motion-safe:transition-[background-color]",
-          "motion-safe:duration-150"
-        ))
-    ),
-    // Wider than the cells by half a cursor on each side, which puts
-    // the cursor's centre on a divider at every stop, and taller, so
-    // the cursor stands clear of the row.
-    h.input.class(
-      "scrubber-input absolute -inset-x-[3px] -inset-y-1",
-      "h-[calc(100%+8px)] w-[calc(100%+6px)]"
-    ).attrs({
-      type: "range",
-      min: "0",
-      max: String(options.cells),
-      step: "1",
-      "aria-label": options.label,
-      "aria-valuetext": options.valueText
-    }).disabled(options.disabled === true).value(
-      String(options.value)
-    ).onInput(({ value }) =>
-      options.onInput(value)
-    )
-  )
+  Slider(h, {
+    props: {
+      value: options.value,
+      max: options.cells,
+      disabled: options.disabled === true
+    },
+    onEmit: {
+      Moved: ({ value }) =>
+        typeof value === "number" ? options.onMove(value) : undefined,
+      Committed: () => undefined
+    },
+    view: (slider) =>
+      slider.root(h.div.class("min-w-0")).children(
+        slider.control(
+          h.div.class(
+            "relative h-8 touch-none rounded-md",
+            "has-focus-visible:outline-2",
+            "has-focus-visible:outline-offset-2",
+            "has-focus-visible:outline-accent"
+          )
+        ).children(
+          slider.track(
+            h.div.class(
+              "absolute inset-0 grid auto-cols-fr grid-flow-col",
+              "overflow-hidden rounded-md border border-border-strong",
+              "bg-background"
+            )
+          ).children(
+            slider.indicator(
+              h.span.class(
+                "absolute inset-y-0 left-(--slider-indicator-start)",
+                "w-(--slider-indicator-size) bg-wash",
+                "motion-safe:transition-[width]",
+                "motion-safe:duration-150"
+              )
+            ),
+            ...Array.from({ length: options.cells }, (_, index) =>
+              h.span.key(String(index)).class(
+                "relative",
+                index > 0 && divider
+              ))
+          ),
+          // 22px wide to give the pointer something to grab, and taller
+          // than the row, so it stands clear of it. Only the 6px bar in
+          // its middle shows, centred on a divider at every stop.
+          slider.thumb({
+            element: h.div.class(
+              "absolute -inset-y-1 left-(--slider-thumb-position)",
+              "w-[22px] -translate-x-1/2 cursor-grab",
+              "data-dragging:cursor-grabbing",
+              "data-disabled:cursor-default",
+              "before:absolute before:inset-y-0 before:left-2",
+              "before:w-1.5 before:rounded-[3px] before:bg-foreground",
+              "before:content-['']",
+              "before:[box-shadow:2px_0_0_var(--color-background),-2px_0_0_var(--color-background)]"
+            ),
+            input: h.input.attrs({
+              "aria-label": options.label,
+              "aria-valuetext": options.valueText
+            })
+          })
+        )
+      )
+  })

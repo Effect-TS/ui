@@ -1,4 +1,5 @@
-import { Button } from "@effect/ui-kit"
+import { Icon } from "#components/Icon"
+import { Button, RadioGroup } from "@effect/ui-kit"
 import type { Html } from "@effect/ui/html"
 import type { Name, Scenario } from "./scenarios.ts"
 
@@ -31,14 +32,15 @@ const segment = [
   "text-control font-medium text-muted-foreground",
   "font-features-[normal] hover:text-foreground",
   "focus-visible:outline-accent",
-  "aria-pressed:bg-background aria-pressed:text-foreground",
-  "aria-pressed:[box-shadow:0_0_0_1px_var(--color-border-strong)]",
+  "aria-checked:bg-background aria-checked:text-foreground",
+  "aria-checked:[box-shadow:0_0_0_1px_var(--color-border-strong)]",
   "motion-safe:transition-[background-color,color]",
   "motion-safe:duration-150"
 ].join(" ")
 
-// A row of toggle buttons, one pressed: Tab to a button and press
-// Enter or Space to choose it.
+// One choice of several, drawn as a row of segments. The kit's
+// RadioGroup puts the chosen one in the Tab order, and the arrow keys
+// move to the next and choose it.
 export const Segmented = <M, A extends string>(
   h: Html.H<M>,
   options: {
@@ -53,20 +55,35 @@ export const Segmented = <M, A extends string>(
   h.div.class("flex flex-col gap-1.5").children(
     h.span.class("text-sm font-medium").attr("aria-hidden", "true")
       .children(options.label),
-    h.div.class(
-      "inline-flex w-fit flex-wrap gap-0.5 rounded-md border",
-      "border-border bg-muted p-0.5"
-    ).attrs({ role: "group", "aria-label": options.label }).children(
-      ...options.items.map((item) =>
-        Button(h, { onPress: options.onPick(item) }).key(item).class(
-          segment,
-          options.mono === false && "font-sans"
-        ).attr(
-          "aria-pressed",
-          item === options.value ? "true" : "false"
-        ).children(options.text?.(item) ?? item)
-      )
-    )
+    RadioGroup(h, {
+      props: {
+        value: options.value,
+        items: options.items.map((value) => ({ value }))
+      },
+      onEmit: {
+        Picked: ({ value }) => {
+          const item = options.items.find((item) => item === value)
+          return item === undefined ? undefined : options.onPick(item)
+        }
+      },
+      view: (group) =>
+        group.root(
+          h.div.class(
+            "inline-flex w-fit flex-wrap gap-0.5 rounded-md border",
+            "border-border bg-muted p-0.5"
+          ).attr("aria-label", options.label)
+        ).children(
+          ...options.items.map((item) =>
+            group.radio({
+              element: h.button.key(item).class(
+                segment,
+                options.mono === false && "font-sans"
+              ),
+              value: item
+            }).children(options.text?.(item) ?? item)
+          )
+        )
+    })
   )
 
 export const SenderPicker = <M>(
@@ -106,10 +123,10 @@ export const Transport = <M>(
     Button(h, {
       onPress: options.isPlaying ? options.pause : options.play
     }).class(primary, "min-w-[6.5rem]").children(
-      h.span.class("w-3 text-center text-[0.7em]").attr(
-        "aria-hidden",
-        "true"
-      ).children(options.isPlaying ? "❚❚" : "▶"),
+      Icon(h, options.isPlaying ? "pause" : "play", {
+        class: "size-3.5",
+        filled: true
+      }),
       options.isPlaying
         ? "Pause"
         : options.atEnd
@@ -122,8 +139,8 @@ export const Transport = <M>(
         disabled: options.atStart,
         focusableWhenDisabled: true
       }
-    }).class(secondary).attr("aria-label", "Previous step").children(
-      h.span.attr("aria-hidden", "true").children("←"),
+    }).class(secondary).attr("aria-label", "Back one step").children(
+      Icon(h, "back"),
       h.span.class("diagram-narrow:hidden").attr(
         "aria-hidden",
         "true"
@@ -139,7 +156,7 @@ export const Transport = <M>(
         "true"
       )
         .children("Next"),
-      h.span.attr("aria-hidden", "true").children("→")
+      Icon(h, "next")
     ),
     Button(h, {
       onPress: options.replay,
@@ -149,7 +166,7 @@ export const Transport = <M>(
       }
     }).class(secondary).attr("aria-label", "Back to the start")
       .children(
-        h.span.attr("aria-hidden", "true").children("↺")
+        Icon(h, "reset")
       )
   )
 

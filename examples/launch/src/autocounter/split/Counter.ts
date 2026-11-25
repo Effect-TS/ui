@@ -24,7 +24,8 @@ const init = CounterDef.init(() => ({
 // Foldkit 0.x, instead of a record of handlers.
 const update = CounterDef.update(($, message) =>
   CounterMessage.match(message, {
-    ClickedIncrement: () => $.evolve({ count: (count) => count + 1 }),
+    ClickedAdd: ({ amount }) =>
+      $.evolve({ count: (count) => count + amount }),
     ClickedResetAfterDelay: () => $.run(DelayReset.make({})),
     CompletedDelayReset: () => $.evolve({ count: 0 }),
     ClickedToggleAutoCount: () =>
@@ -49,11 +50,17 @@ const subscriptions = CounterDef.subscriptions(({ model }) => [
 const view = CounterDef.view((h, model) =>
   h.div.class("counter").children(
     h.output.class("counter-value").children(String(model.count)),
-    Button(h, { onPress: CounterMessage.ClickedIncrement() })
-      .class("counter-button counter-increment")
-      .children("Increment"),
+    Button(h, { onPress: CounterMessage.ClickedAdd({ amount: 1 }) })
+      .class("counter-button counter-add")
+      .children("+1"),
+    Button(h, { onPress: CounterMessage.ClickedAdd({ amount: 5 }) })
+      .class("counter-button counter-add")
+      .children("+5"),
     Button(h, {
-      props: { disabled: h.isRunning(DelayReset) },
+      props: {
+        disabled: h.isRunning(DelayReset),
+        focusableWhenDisabled: true
+      },
       onPress: CounterMessage.ClickedResetAfterDelay()
     }).class("counter-button counter-reset").children(
       h.isRunning(DelayReset) ? "Resetting" : "Reset in 1 second"

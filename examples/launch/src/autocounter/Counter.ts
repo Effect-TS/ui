@@ -4,9 +4,10 @@ import { Html } from "@effect/ui/html"
 import { Effect, Schema, Stream } from "effect"
 
 // A Schema union with a constructor for each Message, like Foldkit
-// 0.x's defineMessageUnion.
+// 0.x's defineMessageUnion. A Message's fields are its payload:
+// ClickedAdd carries the amount to add.
 export const CounterMessage = UiSchema.TaggedEnum({
-  ClickedIncrement: {},
+  ClickedAdd: { amount: Schema.Number },
   ClickedResetAfterDelay: {},
   CompletedDelayReset: {},
   ClickedToggleAutoCount: {},
@@ -26,7 +27,7 @@ export const DelayReset = Command.make(
 )
 
 // Html.component defines a Component whose view builds HTML
-// elements, such as h.div. HTML isn't built into the core.
+// elements, such as h.div.
 export const Counter = Html.component({
   name: "Counter",
   model: Schema.Struct({
@@ -40,8 +41,9 @@ export const Counter = Html.component({
   // the result: $.evolve changes the fields it names, and $.run
   // issues a Command. Foldkit 0.x returned { model, commands }.
   update: {
-    ClickedIncrement: ($) =>
-      $.evolve({ count: (count) => count + 1 }),
+    // The Message's payload is the handler's second argument.
+    ClickedAdd: ($, { amount }) =>
+      $.evolve({ count: (count) => count + amount }),
     ClickedResetAfterDelay: ($) => $.run(DelayReset.make({})),
     CompletedDelayReset: ($) => $.evolve({ count: 0 }),
     ClickedToggleAutoCount: ($) =>
@@ -69,13 +71,21 @@ export const Counter = Html.component({
       h.output.class("counter-value").children(String(model.count)),
       // Button is a view function from the UI kit, not a Component.
       // It returns a <button> builder, and a press sends onPress.
-      Button(h, { onPress: CounterMessage.ClickedIncrement() })
-        .class("counter-button counter-increment")
-        .children("Increment"),
+      Button(h, { onPress: CounterMessage.ClickedAdd({ amount: 1 }) })
+        .class("counter-button counter-add")
+        .children("+1"),
+      Button(h, { onPress: CounterMessage.ClickedAdd({ amount: 5 }) })
+        .class("counter-button counter-add")
+        .children("+5"),
       Button(h, {
-        // True while a DelayReset Command is running. The runtime
-        // tracks that, so the Model doesn't need a flag for it.
-        props: { disabled: h.isRunning(DelayReset) },
+        props: {
+          // h.isRunning is true while a DelayReset Command is
+          // running. The runtime tracks that, so the Model doesn't
+          // need a flag for it.
+          disabled: h.isRunning(DelayReset),
+          // Keeps keyboard focus on the button while it's disabled.
+          focusableWhenDisabled: true
+        },
         onPress: CounterMessage.ClickedResetAfterDelay()
       }).class("counter-button counter-reset").children(
         h.isRunning(DelayReset) ? "Resetting" : "Reset in 1 second"

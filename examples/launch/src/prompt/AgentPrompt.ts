@@ -1,5 +1,6 @@
+import { Icon } from "#components/Icon"
 import { Command, UiSchema } from "@effect/ui"
-import { Button } from "@effect/ui-kit"
+import { Button, Tooltip } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Effect, Schema } from "effect"
 
@@ -7,7 +8,9 @@ export const AgentPromptMessage = UiSchema.TaggedEnum({
   ClickedCopy: {},
   SucceededCopyPrompt: {},
   FailedCopyPrompt: {},
-  ClearedCopyFeedback: {}
+  ClearedCopyFeedback: {},
+  RequestedOpenTip: {},
+  RequestedCloseTip: {}
 })
 
 export const CopyPrompt = Command.make(
@@ -44,11 +47,12 @@ export const AgentPrompt = Html.component({
     prompt: Schema.String
   }),
   model: Schema.Struct({
-    status: Schema.Literals(["Idle", "Copied", "Failed"])
+    status: Schema.Literals(["Idle", "Copied", "Failed"]),
+    isTipOpen: Schema.Boolean
   }),
   message: AgentPromptMessage
 }).make({
-  init: () => ({ status: "Idle" }),
+  init: () => ({ status: "Idle", isTipOpen: false }),
   update: {
     ClickedCopy: ($) =>
       $.run(CopyPrompt.make({ text: $.props.prompt })),
@@ -56,7 +60,9 @@ export const AgentPrompt = Html.component({
       $.evolve({ status: "Copied" }).run(ClearCopyFeedback.make({})),
     FailedCopyPrompt: ($) =>
       $.evolve({ status: "Failed" }).run(ClearCopyFeedback.make({})),
-    ClearedCopyFeedback: ($) => $.evolve({ status: "Idle" })
+    ClearedCopyFeedback: ($) => $.evolve({ status: "Idle" }),
+    RequestedOpenTip: ($) => $.evolve({ isTipOpen: true }),
+    RequestedCloseTip: ($) => $.evolve({ isTipOpen: false })
   },
   view: (h, model) =>
     h.aside.class(
@@ -66,30 +72,55 @@ export const AgentPrompt = Html.component({
       h.div.class("flex items-center justify-between gap-3")
         .children(
           h.p.class("text-sm font-semibold").children(h.props.title),
-          h.div.class("group relative shrink-0").children(
-            Button(h, { onPress: AgentPromptMessage.ClickedCopy() })
-              .attr("aria-label", labels[model.status])
-              .class(
-                "flex size-8 cursor-pointer items-center justify-center",
-                "rounded-sm text-muted-foreground transition-colors",
-                "hover:bg-wash hover:text-foreground"
-              ).children(
-                h.span.attr("aria-hidden", "true").class(
-                  "block size-4 bg-current",
-                  model.status === "Copied"
-                    ? "mask-(--icon-check)"
-                    : "mask-(--icon-copy)"
+          Tooltip(h, {
+            props: {
+              // The result of a copy shows for as long as it is news,
+              // wherever the pointer is.
+              open: model.isTipOpen || model.status !== "Idle",
+              delay: 200,
+              closeOnClick: false,
+              align: "end",
+              sideOffset: 4
+            },
+            onEmit: {
+              RequestedOpen: () =>
+                AgentPromptMessage.RequestedOpenTip(),
+              RequestedClose: () =>
+                AgentPromptMessage.RequestedCloseTip()
+            },
+            view: (tooltip) =>
+              h.div.class("shrink-0").children(
+                Button(h, {
+                  element: tooltip.trigger(h.button),
+                  onPress: AgentPromptMessage.ClickedCopy()
+                })
+                  .attr("aria-label", labels[model.status])
+                  .class(
+                    "flex size-8 cursor-pointer items-center justify-center",
+                    "rounded-sm text-muted-foreground transition-colors",
+                    "hover:bg-wash hover:text-foreground"
+                  ).children(
+                    Icon(
+                      h,
+                      model.status === "Copied" ? "check" : "copy"
+                    )
+                  ),
+                // A popover comes with a border, padding and a
+                // background of its own.
+                tooltip.positioner(
+                  h.div.class(
+                    "overflow-visible border-0 bg-transparent p-0"
+                  )
+                ).children(
+                  tooltip.popup(
+                    h.div.class(
+                      "rounded-sm bg-foreground px-2 py-1 text-xs",
+                      "whitespace-nowrap text-background"
+                    )
+                  ).children(labels[model.status])
                 )
-              ),
-            h.span.attr("aria-hidden", "true").class(
-              "pointer-events-none absolute right-0 bottom-full mb-1",
-              "rounded-sm bg-foreground px-2 py-1 text-xs",
-              "whitespace-nowrap text-background transition-opacity",
-              model.status === "Idle"
-                ? "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
-                : "opacity-100"
-            ).children(labels[model.status])
-          )
+              )
+          })
         ),
       h.p.class("mt-1 font-mono text-code wrap-anywhere").children(
         h.props.prompt

@@ -23,6 +23,7 @@
   --color-wash: color-mix(in oklab, var(--color-foreground) 7%, transparent);
   --color-accent: oklch(55% 0.2 270);
   --color-accent-foreground: oklch(100% 0 0);
+  --color-accent-text: oklch(55% 0.2 270);
   --color-white: oklch(100% 0 0);
   --color-positive: oklch(50% 0.14 150);
   --color-negative: oklch(53% 0.2 27);
@@ -55,13 +56,12 @@
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --default-transition-timing-function: ease;
 
+  /* Lucide icons, as masks for the icons that CSS draws. The rest come
+     from the lucide package, in components/Icon.ts. */
   --icon-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  --icon-copy: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='9' width='13' height='13' rx='2'/%3E%3Cpath d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'/%3E%3C/svg%3E");
-  --icon-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 4 4L19 6'/%3E%3C/svg%3E");
-  --icon-plus: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E");
-  --icon-reset: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8'/%3E%3Cpath d='M3 3v5h5'/%3E%3C/svg%3E");
-  --icon-play: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath d='M7 4.5v15a1 1 0 0 0 1.5.86l13-7.5a1 1 0 0 0 0-1.72l-13-7.5A1 1 0 0 0 7 4.5Z'/%3E%3C/svg%3E");
-  --icon-stop: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Crect x='5' y='5' width='14' height='14' rx='2'/%3E%3C/svg%3E");
+  --icon-reset: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8'/%3E%3Cpath d='M3 3v5h5'/%3E%3C/svg%3E");
+  --icon-play: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z'/%3E%3C/svg%3E");
+  --icon-stop: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='18' height='18' x='3' y='3' rx='2'/%3E%3C/svg%3E");
 }
 
 @property --column {
@@ -71,6 +71,16 @@
 }
 
 @layer components {
+  /* Off screen until the keyboard reaches it. */
+  .skip-link {
+    @apply absolute top-2 left-2 z-20 rounded-md bg-foreground px-3 py-2 text-sm font-medium text-background;
+    transform: translateY(-200%);
+
+    &:focus {
+      transform: none;
+    }
+  }
+
   .article-masthead {
     @apply mx-auto mb-9 flex max-w-(--column) items-center justify-between gap-4;
   }
@@ -114,60 +124,9 @@
     @apply font-mono text-[10px] font-medium tracking-[0.1em] text-muted-foreground;
   }
 
+  /* The same space above the rule as below it. */
   .article-section {
-    @apply border-t border-border pt-7;
-  }
-
-  /* A range input laid over a row of cells. Only its thumb shows: a
-     cursor that stands on the dividers between the cells. */
-  .scrubber-input {
-    appearance: none;
-    margin: 0;
-    border-radius: var(--radius-md);
-    background: transparent;
-
-    &:focus-visible {
-      outline-color: var(--color-accent);
-    }
-
-    &::-webkit-slider-runnable-track {
-      height: 100%;
-      background: transparent;
-    }
-
-    &::-moz-range-track {
-      height: 100%;
-      background: transparent;
-    }
-
-    &::-webkit-slider-thumb {
-      appearance: none;
-      width: 6px;
-      height: 100%;
-      border: 0;
-      border-radius: 3px;
-      background: var(--color-foreground);
-      box-shadow: 0 0 0 2px var(--color-background);
-      cursor: grab;
-    }
-
-    &::-moz-range-thumb {
-      width: 6px;
-      height: 100%;
-      border: 0;
-      border-radius: 3px;
-      background: var(--color-foreground);
-      box-shadow: 0 0 0 2px var(--color-background);
-      cursor: grab;
-    }
-
-    &:active::-webkit-slider-thumb {
-      cursor: grabbing;
-    }
-
-    &:active::-moz-range-thumb {
-      cursor: grabbing;
-    }
+    @apply border-t border-border pt-10;
   }
 
   .code-window {
@@ -227,12 +186,12 @@
       @apply border-foreground bg-muted;
     }
 
-    &:disabled {
+    &:disabled,
+    &[aria-disabled="true"] {
       @apply cursor-not-allowed border-border-strong bg-background opacity-50;
     }
   }
 
-  .counter-increment,
   .counter-reset,
   .counter-start,
   .counter-stop {
@@ -243,7 +202,7 @@
     }
   }
 
-  .counter-increment,
+  .counter-add,
   .counter-start,
   .counter-stop {
     &:hover {
@@ -255,9 +214,8 @@
     --counter-icon: var(--icon-reset);
   }
 
-  .counter-increment {
-    --counter-icon: var(--icon-plus);
-    @apply border-foreground bg-foreground text-background;
+  .counter-add {
+    @apply border-foreground bg-foreground text-background tabular-nums;
 
     &:hover {
       @apply border-foreground bg-foreground;
@@ -320,11 +278,14 @@
       --color-muted-foreground: oklch(70.5% 0.015 286.067);
       --color-subtle-foreground: oklch(55.2% 0.016 285.938);
       --color-prose-foreground: oklch(87.1% 0.006 286.286);
-      --color-card: oklch(21% 0.006 285.885);
+      /* Between the page and muted, as in the light theme, so a muted
+         strip on a card shows. */
+      --color-card: oklch(17.5% 0.005 285.85);
       --color-border: oklch(27.4% 0.006 286.033);
       --color-border-strong: oklch(37% 0.013 285.805);
       --color-ring: color-mix(in oklab, var(--color-foreground) 22%, transparent);
       --color-wash: color-mix(in oklab, var(--color-foreground) 9%, transparent);
+      --color-accent-text: oklch(74% 0.14 270);
     }
   }
 
@@ -347,7 +308,6 @@
   a[href],
   button:not(:disabled, [aria-disabled="true"]),
   [role="button"]:not([aria-disabled="true"]),
-  input[type="range"]:not(:disabled),
   select:not(:disabled),
   summary,
   label[for] {

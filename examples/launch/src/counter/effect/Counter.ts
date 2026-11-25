@@ -10,8 +10,7 @@ const CounterMessage = UiSchema.TaggedEnum({
 export const Counter = Html.component({
   name: "Counter",
   // What the parent passes in. init and update read it as $.props
-  // and view as h.props. In Foldkit 0.x, viewInputs went to view
-  // alone.
+  // and view as h.props.
   props: Schema.Struct({ label: Schema.String }),
   model: Schema.Struct({ count: Schema.Number }),
   message: CounterMessage

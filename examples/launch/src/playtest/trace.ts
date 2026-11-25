@@ -6,7 +6,7 @@ import { Counter } from "../autocounter/Counter.ts"
 
 // The locators of src/autocounter/Counter.play.test.ts.
 const count = HtmlLocator.role("status")
-const increment = HtmlLocator.role("button", { name: "Increment" })
+const addOne = HtmlLocator.role("button", { name: "+1" })
 const reset = HtmlLocator.role("button", {
   name: "Reset in 1 second"
 })
@@ -29,9 +29,9 @@ interface Step {
  */
 const steps: ReadonlyArray<Step> = [
   {
-    source: "yield* play.click(increment)",
-    target: ["increment", increment],
-    run: (play) => play.click(increment)
+    source: "yield* play.click(addOne)",
+    target: ["addOne", addOne],
+    run: (play) => play.click(addOne)
   },
   {
     source: "yield* play.click(reset)",

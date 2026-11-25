@@ -68,6 +68,14 @@ const sources: {
   ]]
 }
 
+// The themes' colours that fall short of 4.5:1 against a code
+// window's background, each swapped for a darker or lighter colour
+// from the same GitHub palette.
+const colorReplacements = {
+  "github-light": { "#d73a49": "#b31d28", "#e36209": "#953800" },
+  "github-dark": { "#6a737d": "#8b949e" }
+}
+
 const tokenize = async (
   key: string,
   file: string,
@@ -79,6 +87,7 @@ const tokenize = async (
   const result = await codeToTokens(code, {
     lang: "ts",
     themes: { light: "github-light", dark: "github-dark" },
+    colorReplacements,
     defaultColor: "light-dark()"
   })
   const name = path.basename(file)
