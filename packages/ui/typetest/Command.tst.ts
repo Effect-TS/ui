@@ -274,6 +274,57 @@ describe("Command", () => {
         Effect.succeed(() => Db.use((db) => db.save))
       )
     })
+
+    it("preserves success and error Schema types on the class", () => {
+      expect(SA.success).type.toBe<typeof Schema.String>()
+      expect(SA.error).type.toBe<typeof Schema.Never>()
+      expect(SB.success).type.toBe<typeof Schema.Number>()
+      expect(SB.error).type.toBe<typeof Schema.Never>()
+      expect(Save.success).type.toBe<typeof Schema.String>()
+      expect(Save.error).type.toBe<typeof SaveFailed>()
+
+      class Copy extends Command.Service<Copy>()("Copy", {
+        args: {},
+        success: SA.success,
+        error: SA.error
+      }) {}
+      expect(Copy.toLayer(() => Effect.succeed("ok"))).type.toBe<
+        Layer.Layer<Copy>
+      >()
+      expect(Copy.toLayer).type.not.toBeCallableWith(() => Effect.succeed(123))
+      expect(Copy.toLayer).type.not.toBeCallableWith(() => Effect.fail("boom"))
+
+      class CopyErr extends Command.Service<CopyErr>()("CopyErr", {
+        args: {},
+        success: Save.success,
+        error: Save.error
+      }) {}
+      expect(CopyErr.make()).type.toBe<
+        Command.Unmatched<string, SaveFailed, CopyErr, "Effect">
+      >()
+      expect(
+        CopyErr.toLayer(() => Effect.fail(new SaveFailed({ reason: "x" })))
+      ).type.toBe<Layer.Layer<CopyErr>>()
+      expect(CopyErr.toLayer).type.not.toBeCallableWith(() =>
+        Effect.fail("boom")
+      )
+
+      class CopyStream extends Command.Service<CopyStream>()("CopyStream", {
+        args: {},
+        success: SB.success,
+        error: SB.error,
+        stream: true
+      }) {}
+      expect(CopyStream.toLayer(() => Stream.fromIterable([1]))).type.toBe<
+        Layer.Layer<CopyStream>
+      >()
+      expect(CopyStream.toLayer).type.not.toBeCallableWith(() =>
+        Stream.fromIterable(["bad"])
+      )
+      expect(CopyStream.toLayer).type.not.toBeCallableWith(() =>
+        Stream.fail("boom")
+      )
+    })
   })
 
   describe("make", () => {

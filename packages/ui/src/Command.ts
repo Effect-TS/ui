@@ -742,17 +742,17 @@ export interface Service<
   in out Self,
   in out Key extends string,
   in out Args,
-  in out A,
+  in out Success extends Schema.Top,
   out IsStream extends boolean,
-  in out Err = never,
+  in out Error extends Schema.Top = Schema.Never,
   out G extends string = never
 > extends
   Context.ServiceClass<
     Self,
     Key,
-    Service.Implementation<Args, A, IsStream, Err>
+    Service.Implementation<Args, Success["Type"], IsStream, Error["Type"]>
   >,
-  Definition<Args, A, IsStream, Err, G>
+  Definition<Args, Success["Type"], IsStream, Error["Type"], G>
 {
   /**
    * Builds a Layer providing this Command's implementation, from a function or
@@ -760,27 +760,37 @@ export interface Service<
    */
   toLayer<LE = never, LR = never>(
     build:
-      | Service.Implementation<Args, A, IsStream, Err>
-      | Effect.Effect<Service.Implementation<Args, A, IsStream, Err>, LE, LR>
+      | Service.Implementation<Args, Success["Type"], IsStream, Error["Type"]>
+      | Effect.Effect<
+        Service.Implementation<Args, Success["Type"], IsStream, Error["Type"]>,
+        LE,
+        LR
+      >
   ): Layer.Layer<Self, LE, Exclude<LR, Scope.Scope>>
   /** The args Schema. */
   readonly args: Schema.Top
   /** The success Schema. */
-  readonly success: Schema.Top
+  readonly success: Success
   /** The error Schema. Defaults to `Schema.Never`. */
-  readonly error: Schema.Top
+  readonly error: Error
   /**
    * Issues the Command. The component requires `Self`. When the body can
-   * fail (`Err` isn't `never`) the result is `Unmatched`, which `$.run`
-   * rejects: handle the failure in the body, or map both channels with
+   * fail (`Error["Type"]` isn't `never`) the result is `Unmatched`, which
+   * `$.run` rejects: handle the failure in the body, or map both channels with
    * `Command.match`.
    */
   make(
     ...args: MakeArgs<Args>
-  ): [Err] extends [never] ?
-    (IsStream extends true ? Issued<A, Self, A, "Stream">
-      : Issued<A, Self, A, "Effect">)
-    : Unmatched<A, Err, Self, IsStream extends true ? "Stream" : "Effect">
+  ): [Error["Type"]] extends [never] ?
+    (IsStream extends true ?
+      Issued<Success["Type"], Self, Success["Type"], "Stream">
+      : Issued<Success["Type"], Self, Success["Type"], "Effect">)
+    : Unmatched<
+      Success["Type"],
+      Error["Type"],
+      Self,
+      IsStream extends true ? "Stream" : "Effect"
+    >
 }
 
 /**
@@ -1253,9 +1263,9 @@ export const Service: <Self>() => {
     Self,
     Key,
     ArgsOf<In>,
-    Success["Type"],
+    Success,
     false,
-    Error["Type"],
+    Error,
     G
   >
   <
@@ -1274,9 +1284,9 @@ export const Service: <Self>() => {
     Self,
     Key,
     ArgsOf<In>,
-    Success["Type"],
+    Success,
     true,
-    Error["Type"],
+    Error,
     G
   >
 } = () =>
