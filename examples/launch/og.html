@@ -72,32 +72,13 @@
         color: var(--muted-foreground);
       }
 
-      /* The page's header: six lines down it that fade out at the top
-         and the bottom, with a brighter stroke on three of them. The
-         picture is in one color, so the strokes and the slashes leave
-         out the page's accent. */
+      /* The page's header, without its fade and its moving strokes: a
+         plain grid of six lines down it, as on effect.website. */
       header {
-        --pulse: linear-gradient(to bottom, transparent, var(--foreground) 70%, transparent);
-        position: relative;
         margin-top: 44px;
         padding: 52px 0 58px;
         border-block: 1px solid var(--border);
         background: linear-gradient(to right, var(--border) 1px, transparent 1px) center / calc(100% / 6) 100%;
-      }
-
-      header::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background:
-          var(--pulse) calc(100% * 7 / 12) 82% / 2px 140px no-repeat,
-          var(--pulse) calc(100% * 3 / 12) 10% / 2px 140px no-repeat,
-          var(--pulse) calc(100% * 9 / 12) 40% / 2px 140px no-repeat,
-          linear-gradient(to bottom, var(--background), transparent 50%, var(--background));
-      }
-
-      header > * {
-        position: relative;
       }
 
       h1 {
