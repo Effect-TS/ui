@@ -595,7 +595,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
         message: ListMessage
       }).make({
         init: () => 0,
-        update: { Set: ($, { n }) => n },
+        update: { Set: (_, { n }) => n },
         view: (h, n) =>
           h.div(
             h.button.onClick(ListMessage.Set({ n: 1 })).children("One"),
