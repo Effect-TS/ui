@@ -3777,7 +3777,22 @@ describe("BrowserHost", { concurrent: false }, () => {
       "a mounted root doesn't retain events it emitted",
       () =>
         Effect.gen(function*() {
-          const refs: Array<WeakRef<object>> = []
+          const mounted: Array<WeakRef<object>> = []
+          const updated: Array<WeakRef<object>> = []
+          const sink: MessageLog.MessageLog = {
+            enabled: true,
+            record: (entry) => {
+              if (entry._tag === "Mounted") {
+                for (const event of entry.events) {
+                  mounted.push(new WeakRef(event as object))
+                }
+              } else if (entry._tag === "Update") {
+                for (const event of entry.events) {
+                  updated.push(new WeakRef(event as object))
+                }
+              }
+            }
+          }
           const Events = UiSchema.TaggedEnum({
             Emitted: { payload: Schema.Array(Schema.Number) }
           })
@@ -3788,29 +3803,30 @@ describe("BrowserHost", { concurrent: false }, () => {
             message: Message,
             events: Events
           }).make({
-            init: ($) => {
-              const payload = [0]
-              refs.push(new WeakRef(payload))
-              return $.set(0).emit(Events.Emitted({ payload }))
-            },
-            update: ($) => {
-              const payload = [$.model + 1]
-              refs.push(new WeakRef(payload))
-              return $.set($.model + 1).emit(Events.Emitted({ payload }))
-            },
+            init: ($) => $.set(0).emit(Events.Emitted({ payload: [0] })),
+            update: ($) =>
+              $.set($.model + 1).emit(
+                Events.Emitted({ payload: [$.model + 1] })
+              ),
             view: (h, n) =>
               h.button.onClick(Message.Pressed()).children(String(n))
           })
           const app = yield* container
-          const root = yield* BrowserHost.mountEffect(Emitter, {}, app)
+          const root = yield* BrowserHost.mountEffect(Emitter, {}, app).pipe(
+            Effect.provideService(MessageLog.MessageLog, sink)
+          )
           const button = HtmlLocator.getByRole(app, "button")
           for (let i = 0; i < 3; i++) {
             HtmlLocator.click(button)
             yield* tick
           }
           expect(root.model()).toBe(3)
+          expect(mounted.length).toBe(1)
+          expect(updated.length).toBe(3)
           yield* collectGarbage
-          expect(refs.filter((ref) => ref.deref() !== undefined)).toEqual([])
+          expect(
+            [...mounted, ...updated].filter((ref) => ref.deref() !== undefined)
+          ).toEqual([])
         }).pipe(Effect.scoped)
     )
 
