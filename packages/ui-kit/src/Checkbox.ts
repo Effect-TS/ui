@@ -158,11 +158,11 @@ import { field } from "./internal/field.ts"
  *   it. It submits nothing.
  * - `id`: the root's `id`, for a `<label for>` beside it. A member
  *   writes it, and the group's parent lists it in `aria-controls`. Left
- *   out, a member writes a generated one unless its element has an id
- *   already, such as the one `field.control` writes for its label. The
- *   parent still lists the generated id, so pass `id` to a member drawn on
- *   `field.control` when the parent's `aria-controls` matters. Outside a
- *   group the root writes it only when it is set.
+ *   out, a member writes a generated one, and the parent lists that, unless
+ *   its element has an id already, such as the one `field.control` writes
+ *   for its label. The parent can't see that id, so give a member drawn on
+ *   `field.control` one id, as the `id` of both the `Field` and the
+ *   checkbox. Outside a group the root writes it only when it is set.
  *
  * @stability experimental
  * @category schemas

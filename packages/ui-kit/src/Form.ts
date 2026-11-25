@@ -168,20 +168,18 @@ const takeTabStop = (element: HTMLElement): boolean =>
   radioGroup(element).some((radio) => radio.checked && takeFocus(radio)) ||
   takeFocus(element)
 
-const isInvalid = (element: Element): element is HTMLElement =>
-  element.getAttribute("aria-invalid") === "true"
-
 // The invalid elements inside the form and the controls outside it that name
-// it with `form`, in document order.
-const invalidOf = (form: HTMLFormElement): Array<HTMLElement> => {
-  const inside = form.querySelectorAll<HTMLElement>("[aria-invalid=\"true\"]")
-  const outside = Array.from(form.elements).filter((element) =>
-    !form.contains(element)
-  ).filter(isInvalid)
-  return [...inside, ...outside].sort((a, b) =>
-    a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1
+// it with `form`, in document order. A control's name shadows a property of
+// its form, such as `contains` or `elements`, so the form's own aren't used.
+const invalidOf = (form: HTMLFormElement): Array<HTMLElement> =>
+  Array.from(
+    (Node.prototype.getRootNode.call(form) as ParentNode).querySelectorAll<
+      HTMLElement
+    >("[aria-invalid=\"true\"]")
+  ).filter((element) =>
+    Node.prototype.contains.call(form, element) ||
+    (element as HTMLInputElement).form === form
   )
-}
 
 const focusInvalid = (form: HTMLFormElement): boolean =>
   invalidOf(form)

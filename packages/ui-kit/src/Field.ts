@@ -50,10 +50,12 @@
  * `error` returns `undefined` unless the field is invalid and enabled, so
  * write `field.error(h.div)?.children(message)`. The message is the consumer's:
  * validate in `update`, pass the outcome as `invalid` and the text as the
- * error's children. The error is an alert, so a screen reader reads it as it
- * appears or changes, such as after a blur or a submit that leaves focus
- * where it was. Chain `.attr("role", undefined)` after the part to keep it
- * silent.
+ * error's children. The error has `role="alert"`, a live region, so
+ * assistive technology is told when it is inserted or its text changes,
+ * such as after a blur, or a submit that leaves focus where it was. An error
+ * already shown with the same text raises no new alert, so a second submit
+ * with nothing changed is silent. Chain `.attr("role", undefined)` after
+ * the part to turn it off.
  *
  * **Data attributes**
  *
@@ -185,6 +187,9 @@ import { withoutField } from "./internal/field.ts"
  *
  * **Details**
  *
+ * - `id`: the control's `id`, which the label points at. A generated one
+ *   when it is left out. Pass it when another kit call on the control
+ *   writes an id of its own, and give that call the same one.
  * - `disabled`: disables the control with the native `disabled`
  *   attribute, sets `data-disabled` on every part and hides the error.
  *   Left out, the control keeps its own `disabled`. A disabled `Fieldset`
@@ -206,6 +211,7 @@ import { withoutField } from "./internal/field.ts"
  * @since 0.1.0
  */
 export const FieldProps = Schema.Struct({
+  id: Schema.optional(Schema.String),
   disabled: Schema.optional(Schema.Boolean),
   invalid: Schema.optional(Schema.Boolean),
   described: Schema.optional(Schema.Boolean),
@@ -407,7 +413,7 @@ export const Field = Html.component({
     // disables it.
     const focused = model.focused && !disabled
     const showsError = invalid && !disabled
-    const controlId = p.id("control")
+    const controlId = p.props.id ?? p.id("control")
     const descriptionId = p.id("description")
     const errorId = p.id("error")
     const legendId = p.id("legend")

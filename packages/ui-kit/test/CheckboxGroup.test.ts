@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { UiSchema } from "@effect/ui"
 import { Checkbox, CheckboxGroup, Field } from "@effect/ui-kit"
-import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
+import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { container, tick } from "./utils/document.ts"
@@ -175,7 +175,7 @@ const mount = Effect.gen(function*() {
 })
 
 describe("CheckboxGroup", { concurrent: false }, () => {
-  it.effect("a member drawn on field.control keeps the id its label points at", () =>
+  it.effect("a member drawn on field.control keeps the id its label points at, and one id given to both is the parent's too", () =>
     Effect.gen(function*() {
       const Terms = Html.component({
         name: "Terms",
@@ -186,26 +186,47 @@ describe("CheckboxGroup", { concurrent: false }, () => {
         update: ($) => $.model,
         view: (h) =>
           CheckboxGroup(h, {
-            props: { value: [] },
+            props: { value: [], allValues: ["apple", "pear"] },
             view: (checkboxGroup) =>
               checkboxGroup.root(h.div).children(
-                Field(h, {
-                  view: (field) =>
-                    field.root(h.div).children(
-                      field.label(h.label).children("Apple"),
-                      Checkbox(h, {
-                        props: { value: "apple" },
-                        view: (checkbox) =>
-                          checkbox.root(field.control(h.button))
-                      })
-                    )
-                })
+                Checkbox(h, {
+                  key: "all",
+                  props: { parent: true },
+                  view: (checkbox) => checkbox.root(h.button.class("all"))
+                }),
+                ...["apple", "pear"].map((fruit) =>
+                  Field(h, {
+                    key: fruit,
+                    props: { id: fruit === "apple" ? "apple" : undefined },
+                    view: (field) =>
+                      field.root(h.div).children(
+                        field.label(h.label).children(fruit),
+                        Checkbox(h, {
+                          props: {
+                            value: fruit,
+                            id: fruit === "apple" ? "apple" : undefined
+                          },
+                          view: (checkbox) =>
+                            checkbox.root(field.control(h.button))
+                        })
+                      )
+                  })
+                )
               )
           })
       })
-      const { html } = yield* HtmlServer.renderToHtml(Terms, {})
-      const id = /<label [^>]*for="([^"]+)"/.exec(html)?.[1]
-      assert.match(html, new RegExp(`<button [^>]*id="${id}"`))
+      const app = yield* container
+      yield* BrowserHost.mountEffect(Terms, {}, app)
+      yield* tick
+      const [apple, pear] = Array.from(app.querySelectorAll("label")).map(
+        (label) => label.control
+      )
+      assert.strictEqual(apple?.id, "apple")
+      assert.strictEqual(pear?.getAttribute("role"), "checkbox")
+      assert.include(
+        app.querySelector(".all")!.getAttribute("aria-controls")!.split(" "),
+        "apple"
+      )
     }))
 
   it.effect("members tick the group's value, and the parent cycles mix, all, none and back, leaving a disabled member alone", () =>

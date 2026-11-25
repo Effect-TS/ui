@@ -97,7 +97,7 @@
  * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(Basket, {}))
  * if (!/<div class="fruits"[^>]* role="group"/.test(html)) throw new Error("the root isn't a styled group")
  * const controls = /aria-checked="mixed"[^>]* aria-controls="([^"]+)"/.exec(html)?.[1].split(" ") ?? []
- * const apple = /<button id="([^"]+)"[^>]*><input type="hidden" name="fruit" value="apple">/.exec(html)?.[1]
+ * const apple = /<button [^>]* id="([^"]+)"[^>]*><input type="hidden" name="fruit" value="apple">/.exec(html)?.[1]
  * if (apple === undefined || !controls.includes(apple)) throw new Error("the mixed parent doesn't control the apple")
  * ```
  *

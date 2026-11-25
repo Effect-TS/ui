@@ -138,12 +138,60 @@ const Signup = Html.component({
   }
 })
 
+// Radios outside the form, the invalid one first, and controls inside it
+// whose names shadow the form's `contains` and `elements`.
+const Detached = Html.component({
+  name: "Detached",
+  model: Schema.Null,
+  message: Schema.Never
+}).make({
+  init: () => null,
+  update: ($) => $.model,
+  view: (h) => {
+    const radio = (value: string, form?: string) =>
+      h.input.attrs({
+        type: "radio",
+        name: "billing",
+        value,
+        form,
+        "aria-invalid": value === "monthly" ? "true" : undefined
+      }).checked(value !== "monthly")
+    return h.div(
+      radio("other"),
+      radio("monthly", "detached"),
+      radio("yearly", "detached"),
+      Form(h, {
+        view: (form) =>
+          form.root(h.form.attr("id", "detached")).children(
+            h.input.attrs({ name: "contains" }),
+            h.input.attrs({ name: "elements", "aria-invalid": "true" }),
+            h.button.attr("type", "submit")
+          )
+      })
+    )
+  }
+})
+
 const type = (input: HTMLInputElement, value: string) => {
   input.value = value
   input.dispatchEvent(new Event("input", { bubbles: true }))
 }
 
 describe("Form in a document", { concurrent: false }, () => {
+  it.effect("an invalid radio outside the form, first in document order, passes focus to the checked radio of its form", () =>
+    Effect.gen(function*() {
+      yield* focusability
+      const app = yield* container
+      yield* BrowserHost.mountEffect(Detached, {}, app)
+      yield* tick
+      app.querySelector<HTMLButtonElement>("button[type=submit]")!.click()
+      yield* tick
+      assert.strictEqual(
+        document.activeElement,
+        app.querySelector("input[value=yearly]")
+      )
+    }).pipe(Effect.scoped))
+
   it.effect("focuses the first invalid control on submit, outside the form too, and leaves focus alone when valid or invalidated later", () =>
     Effect.gen(function*() {
       yield* focusability

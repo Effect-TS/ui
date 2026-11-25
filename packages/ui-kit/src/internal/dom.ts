@@ -37,8 +37,10 @@ export const radioGroup = (element: HTMLElement): Array<HTMLInputElement> => {
   if (
     radio.localName !== "input" || radio.type !== "radio" || radio.name === ""
   ) return []
+  // The whole tree, for a form's radios outside it that name it with `form`.
+  // A form's own `querySelectorAll` could be shadowed by a control's name.
   return Array.from(
-    (radio.form ?? radio.ownerDocument).querySelectorAll<HTMLInputElement>(
+    (radio.getRootNode() as ParentNode).querySelectorAll<HTMLInputElement>(
       "input[type=\"radio\"]"
     )
   )
