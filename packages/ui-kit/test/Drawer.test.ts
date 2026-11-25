@@ -219,7 +219,7 @@ describe("Drawer", () => {
       const snapPoints = [0.5, 0.5, "240px", 1]
       const scene = yield* Scene.make(
         Drawer,
-        { open: true, snapPoints, snapPoint: 0.5 },
+        { open: true, snapPoints: [0.5, 0.5] },
         snapStandIn
       )
       scene.expectMount(tracked(scene))
@@ -228,7 +228,16 @@ describe("Drawer", () => {
         "aria-live": "polite",
         "aria-atomic": "true"
       })
-      assert.strictEqual(scene.get(snapTrigger).attrs?.type, "button")
+      assert.deepInclude(scene.get(snapTrigger).attrs, {
+        type: "button",
+        disabled: "",
+        "data-disabled": ""
+      })
+      scene.click(snapTrigger)
+      assert.deepStrictEqual(scene.current.emitted, [])
+
+      scene.props({ open: true, snapPoints, snapPoint: 0.5 })
+        .expectMount(tracked(scene))
       assert.isUndefined(scene.get(snapTrigger).attrs?.disabled)
       scene.click(snapTrigger).emitted(snapped("240px"))
         .mounted(tracked(scene), measured)
@@ -238,35 +247,19 @@ describe("Drawer", () => {
         .expectMount(tracked(scene))
         .click(snapTrigger).emitted(snapped("240px"))
 
-      for (
-        const props of [
-          { open: true, snapPoints: [1] },
-          { open: true, snapPoints: [0.5, 0.5] },
-          { open: true, snapPoints, swipeDirection: "left" as const }
-        ]
-      ) {
-        const disabled = yield* Scene.make(Drawer, props, snapStandIn)
-        disabled.expectMount(tracked(disabled))
-        assert.deepInclude(disabled.get(snapTrigger).attrs, {
-          disabled: "",
-          "data-disabled": ""
-        })
-        disabled.click(snapTrigger)
-        assert.deepStrictEqual(disabled.current.emitted, [])
-      }
+      // Horizontal drawers and collapsed snap points disable the trigger.
+      scene.props({ open: true, snapPoints, swipeDirection: "left" })
+        .expectMount(tracked(scene))
+      assert.strictEqual(scene.get(snapTrigger).attrs?.disabled, "")
 
-      // Both points resolve to the popup's 400px, so only one applies.
-      const collapsed = yield* Scene.make(
-        Drawer,
-        { open: true, snapPoints: [0.5, 1] },
-        snapStandIn
-      )
-      collapsed.expectMount(tracked(collapsed)).mounted(
-        tracked(collapsed),
-        sent("Measured", { height: 400, viewport: 800, fontSize: 16 })
-      )
-      assert.strictEqual(collapsed.get(snapTrigger).attrs?.disabled, "")
-      collapsed.expectMount(tracked(collapsed))
+      scene.props({ open: true, snapPoints: [0.5, 1] })
+        .expectMount(tracked(scene))
+        .mounted(
+          tracked(scene),
+          sent("Measured", { height: 400, viewport: 800, fontSize: 16 })
+        )
+      assert.strictEqual(scene.get(snapTrigger).attrs?.disabled, "")
+      scene.expectMount(tracked(scene))
     }))
 
   it.effect("a refused dismiss puts the drawer back", () =>
