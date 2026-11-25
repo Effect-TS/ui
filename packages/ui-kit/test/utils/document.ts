@@ -144,6 +144,19 @@ export const popovers = Effect.acquireRelease(
   (restore) => Effect.sync(restore)
 ).pipe(Effect.andThen(fieldsetDisabled))
 
+// happy-dom's CSS.supports passes anything, which reads as WebKit.
+export const notWebKit = Effect.acquireRelease(
+  Effect.sync(() => {
+    const css = Object.getOwnPropertyDescriptor(window, "CSS")!
+    Object.defineProperty(window, "CSS", {
+      configurable: true,
+      value: { supports: () => false }
+    })
+    return css
+  }),
+  (css) => Effect.sync(() => Object.defineProperty(window, "CSS", css))
+)
+
 class FakeVisualViewport extends EventTarget {
   width = 1024
   height = 800

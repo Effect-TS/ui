@@ -87,7 +87,7 @@ import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { activeOf, isHTMLElement } from "./internal/dom.ts"
-import { isAndroid, isWebKit } from "./internal/platform.ts"
+import { isAndroid } from "./internal/platform.ts"
 
 const threshold = 60
 
@@ -234,8 +234,10 @@ export const step = (state: State, sample: Sample): Step => {
   // The share of the layout viewport the visual one shows: all of it, unless
   // pinch-zoomed in. A keyboard leaves the width alone.
   const fit = Math.min(1, visualWidth / sample.layoutWidth)
-  const shown = layoutHeight * fit
-  const onScreen = visualHeight * scale
+  // Heights on screen, so a zoom changes none of the comparisons below.
+  const layout = layoutHeight * fit * scale
+  const visual = visualHeight * scale
+  const small = sample.smallViewportHeight * fit * scale
   let layoutWidth = state.layoutWidth
   let tallest = state.tallestLayoutHeight
   let shrunk = false
@@ -254,16 +256,15 @@ export const step = (state: State, sample: Sample): Step => {
   })
   if (!sample.focused) return { state: next(null), band: null }
   let keyboardHeight = state.keyboardHeight
-  if ((shown - visualHeight) * scale > threshold || shrunk) {
-    keyboardHeight = onScreen
+  if (layout - visual > threshold || shrunk) {
+    keyboardHeight = visual
   } else if (
     keyboardHeight === null ||
-    Math.abs(onScreen - keyboardHeight) > threshold
+    Math.abs(visual - keyboardHeight) > threshold
   ) {
     return { state: next(null), band: null }
   }
-  const follows =
-    (sample.smallViewportHeight * fit - visualHeight) * scale <= threshold
+  const follows = small - visual <= threshold
   const top = Math.max(0, sample.visualTop)
   const bottom = follows && !zoomed
     ? layoutHeight
@@ -274,7 +275,7 @@ export const step = (state: State, sample: Sample): Step => {
       top,
       bottom,
       inset: Math.max(0, Math.ceil(layoutHeight - bottom)),
-      resizing: follows && Math.abs(shown - visualHeight) * scale >= 1
+      resizing: follows && Math.abs(layout - visual) >= 1
     }
   }
 }
@@ -359,7 +360,6 @@ export const watch = (node: Node): Stream.Stream<Band | null> =>
     if (view === null || viewport === null) return Stream.succeed(null)
     return Stream.callback<Band | null>((queue) => {
       const android = isAndroid(view)
-      const webkit = isWebKit(view)
       const layout = () => {
         const { innerHeight, innerWidth } = view
         const width = document.documentElement.clientWidth || innerWidth
@@ -367,7 +367,7 @@ export const watch = (node: Node): Stream.Stream<Band | null> =>
           layoutWidth: width,
           // Under pinch-zoom, WebKit shrinks innerWidth and innerHeight to
           // the visual viewport; the root element keeps the layout width.
-          layoutHeight: webkit ? innerHeight * width / innerWidth : innerHeight
+          layoutHeight: innerHeight * Math.max(1, width / innerWidth)
         }
       }
       let state = initialState(layout())

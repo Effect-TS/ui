@@ -1510,12 +1510,6 @@ export const trackPosition = (
       }
     }
 
-    // What turns a client rect's position into a fixed one.
-    const fixedOffset = (axis: "offsetLeft" | "offsetTop"): number =>
-      webkit && current.positionMethod === "fixed"
-        ? view.visualViewport?.[axis] ?? 0
-        : 0
-
     const boundaryOf = (viewport: Rect): Rect => {
       const boundary = current.collisionBoundary
       if (boundary === "clipping-ancestors") return viewport
@@ -1602,8 +1596,11 @@ export const trackPosition = (
         ? Math.max(0, current.options.sideOffset)
         : 0
       const scrolled = current.positionMethod === "absolute"
-      const offsetX = scrolled ? view.scrollX : fixedOffset("offsetLeft")
-      const offsetY = scrolled ? view.scrollY : fixedOffset("offsetTop")
+      // A fixed box is placed from the layout viewport, which WebKit's client
+      // rects aren't measured from.
+      const visual = webkit ? view.visualViewport : null
+      const offsetX = scrolled ? view.scrollX : visual?.offsetLeft ?? 0
+      const offsetY = scrolled ? view.scrollY : visual?.offsetTop ?? 0
       const dpr = view.devicePixelRatio || 1
       const snap = (start: number, length: number) =>
         (Math.round((start + length) * dpr) - Math.round(start * dpr)) / dpr

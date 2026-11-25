@@ -2,7 +2,7 @@
 import { Positioning } from "@effect/ui-kit"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Stream } from "effect"
-import { tick, visualViewport } from "./utils/document.ts"
+import { notWebKit, tick, visualViewport } from "./utils/document.ts"
 
 type Rect = {
   readonly x: number
@@ -146,16 +146,8 @@ describe("trackPosition in a document", { concurrent: false }, () => {
   it.effect("keeps the popup inside the visual viewport as it resizes and scrolls", () =>
     Effect.gen(function*() {
       const { visual } = yield* visualViewport
-      // happy-dom's CSS.supports passes anything, which reads as WebKit; this
-      // test is for Chromium and Gecko, which measure from the layout viewport.
-      const css = Object.getOwnPropertyDescriptor(window, "CSS")!
-      Object.defineProperty(window, "CSS", {
-        configurable: true,
-        value: { supports: () => false }
-      })
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => Object.defineProperty(window, "CSS", css))
-      )
+      // Chromium and Gecko, which measure from the layout viewport.
+      yield* notWebKit
       Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
         configurable: true,
         get(this: HTMLElement) {
