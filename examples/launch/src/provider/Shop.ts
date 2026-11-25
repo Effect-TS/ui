@@ -5,8 +5,7 @@ import { CartMessage, CartProvider } from "./CartProvider.ts"
 
 export const Shop = Html.component({
   name: "Shop",
-  // Shop keeps no state and has no Messages: a null Model and an
-  // update with nothing to handle.
+  // Shop has no state and no Messages.
   model: Schema.Null,
   message: Schema.Never
 }).make({
@@ -17,7 +16,11 @@ export const Shop = Html.component({
       // CartProvider draws nothing. Shop passes it this view, and
       // every Component rendered in it, at any depth, is inside the
       // Provider.
-      view: () => h.main(CartCount(h, {}), Product(h, {}))
+      view: () =>
+        h.main(
+          CartCount(h, {}),
+          h.article(h.h3("Notebook"), AddToCart(h, {}))
+        )
     })
 })
 
@@ -32,16 +35,6 @@ const CartCount = Html.component({
   init: () => null,
   update: ($) => $.model,
   view: (h) => h.output(`${h.reads.cart.count} in cart`)
-})
-
-const Product = Html.component({
-  name: "Product",
-  model: Schema.Null,
-  message: Schema.Never
-}).make({
-  init: () => null,
-  update: ($) => $.model,
-  view: (h) => h.article(h.h3("Notebook"), AddToCart(h, {}))
 })
 
 const AddToCartMessage = UiSchema.TaggedEnum({ ClickedAdd: {} })

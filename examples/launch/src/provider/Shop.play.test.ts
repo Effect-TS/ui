@@ -5,7 +5,7 @@ import { Effect } from "effect"
 import { Shop } from "./Shop.ts"
 
 it.layer(TestHost.layer(), { buildPerTest: true })("Shop", (it) => {
-  it.effect("counts an item added from inside a Product", () =>
+  it.effect("counts an item that AddToCart adds", () =>
     Effect.gen(function*() {
       const play = yield* HtmlPlay.make(Shop, {})
       yield* play.expect(HtmlLocator.role("status"))

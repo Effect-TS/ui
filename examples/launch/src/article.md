@@ -4,7 +4,7 @@ title: Introducing Effect UI
 
 Effect UI is the new frontend library that continues the work of Foldkit 0.x, the framework at [foldkit.dev](https://foldkit.dev). We announced it as the "new frontend foundation" in [Foldkit Joins Effect](https://foldkit.dev/blog/foldkit-joins-effect).
 
-Effect UI is in public preview: it isn't on npm yet and doesn't have everything Foldkit 0.x has. If you're building with Foldkit 0.x today, we encourage you to continue. **The migration to Effect UI will be an upgrade, not a rewrite.** Feature work on Foldkit 0.x has moved to Effect UI.
+Effect UI is in public preview. If you're building with Foldkit 0.x, **the migration will be an upgrade, not a rewrite.**
 
 This page is built with Effect UI. You can [read its source](https://github.com/Effect-TS/ui/tree/main/examples/launch) on GitHub.
 
@@ -39,23 +39,23 @@ This article isn't a complete list of what changes from Foldkit 0.x to Effect UI
 
 ## Components
 
-Foldkit 0.x used the Elm Architecture, with the whole app as one program: one Model, one update and one view. That made every state change easy to follow, but it had costs as an app grew. Every Message ran the view from the root, every parent stored state and forwarded Messages for its children, and the routes of an app couldn't be split into separate chunks.
+Foldkit 0.x used the Elm Architecture, with the whole app as one program: one Model, one update and one view. That made every state change easy to follow, but it had costs as an app grew. Every Message ran the view from the root, every parent stored state and forwarded Messages for its children, and no part of an app could load from a chunk of its own.
 
-Effect UI keeps the architecture and applies it to each Component. **A Component is an Elm Architecture program of its own, and you build an app by composing Components.**
+Effect UI keeps the Elm Architecture and applies it to each Component. **A Component is an Elm Architecture program of its own, and you build an app by composing Components.**
 
 ::Architecture
 
 A Component is self-contained. Its parent doesn't store its state or forward its Messages, so you can write, test and reuse it on its own. A Component can also bring its own services, load from a chunk of its own and fail while the rest of the app keeps running.
 
-### A complete Component
+### Anatomy of a Component
 
-This counter is a complete Component. One definition holds its Model, Messages, init, update, subscriptions and view, with a delayed reset Command and an auto-count Subscription.
+This counter has every part of a Component. One definition holds its Model, Messages, init, update, subscriptions and view.
 
 ::Counter{code="intro" label="Live auto-counter"}
 
 Click "+1", then click the Effect UI button in the bottom-right corner. [DevTools](#devtools) lists the Message you sent and what it changed.
 
-`Html.component` defines a Component whose view builds HTML elements. Each platform has its own set of elements, called a vocabulary. `OpenTui.component`, from `@effect/ui-opentui`, defines a Component whose view builds terminal elements. **The view is the only part of a Component that depends on the platform.** Its Model, Messages, update, Commands, Subscriptions and queries are written the same way on every platform.
+`Html.component` defines a Component whose view builds HTML elements. Each platform has its own set of elements, called a vocabulary. `OpenTui.component`, from `@effect/ui-opentui`, defines a Component whose view builds terminal elements. **A Component has the same parts on every platform.** The view depends on the platform, and so do the Commands and Subscriptions that work with it: `HtmlCommand.focus` focuses an HTML element, and `OpenTuiCommand.focus` focuses a terminal one.
 
 ### How Messages travel in Foldkit 0.x vs. Effect UI
 
@@ -71,7 +71,7 @@ The diagram below illustrates how each architecture handles a Message.
 
 Here is the same small app in both: a Page that shows or hides a Counter.
 
-In Foldkit 0.x, Page keeps the Counter's Model inside its own, wraps each of the Counter's Messages in a Message of its own and passes it on to the Counter's update. In Effect UI, Page calls Counter in its view and passes it props. **Page no longer stores, wraps or forwards anything for Counter, and it is about half as long.**
+In Foldkit 0.x, Page keeps the Counter's Model inside its own, wraps each of the Counter's Messages in a Message of its own and passes it on to the Counter's update. In Effect UI, Page calls Counter in its view and passes it props. **A parent no longer stores, wraps or forwards anything for its children.** Here, that makes Page about half as long.
 
 When Page's view runs, Counter's view runs again only if its props changed.
 
@@ -89,7 +89,7 @@ As a Component grows, you can still move init, update, subscriptions and view in
 
 In Foldkit 0.x, state that several Submodels needed lived in the Model of a parent they shared. Each level passed it down, and a Submodel communicated back up the tree with an OutMessage, which each parent forwarded until it reached the owner.
 
-In Effect UI, a Provider shares part of its Model with Components inside it, at any depth. In this example, CartProvider holds the cart count. CartCount reads that count, and AddToCart sends CartProvider a Message to change it. Product sits between CartProvider and AddToCart but passes no cart value or Message. Only CartProvider's update changes the count.
+In Effect UI, a Provider shares part of its Model with Components inside it, at any depth. In this example, CartProvider holds the cart count. CartCount reads that count, and AddToCart sends CartProvider a Message to change it. Shop renders both and passes neither one a cart value or a Message. Only CartProvider's update changes the count.
 
 ::Listing{code="provider"}
 
@@ -97,14 +97,14 @@ In Effect UI, a Provider shares part of its Model with Components inside it, at 
 
 ### Data fetching with queries
 
-In Foldkit 0.x, fetched data lived in the Model, and the parent drove the experimental `Query`: it stored it, forwarded its Messages and decided when to load or refresh. In Effect UI, **you define a query once, a Component lists the queries it needs, and the runtime fetches and caches the data.**
+In Foldkit 0.x, fetched data lived in the Model, and the parent drove the `Query`: it stored it, forwarded its Messages and decided when to load or refresh. In Effect UI, **you define a query once, a Component lists the queries it needs, and the runtime fetches the data and keeps it in one cache for every Component.**
 
 - **Fetching:** When the Component is rendered, and again when the query's arguments change. `debounce` waits until they settle.
 - **Caching:** One result per query and arguments, kept by the runtime. Components that ask for the same data share one fetch.
 - **Freshness:** A result older than `staleTime` stays on screen while the runtime refetches it.
 - **States:** Each result is an `AsyncResult` in one of three states: no result yet, failure or success.
 
-::Chips{label="Also built in" items="polling, refetch on focus and reconnect, load more, invalidation from Commands, optimistic updates, prefetch on link hover, server rendering, restore on Back and forward"}
+::Chips{label="Also built into queries" items="polling, refetch on focus and reconnect, load more, invalidation from Commands, optimistic updates, prefetch on link hover, server rendering, restore on Back and forward"}
 
 ::Compare{foldkit="queryFoldkit" foldkitTitle="Foldkit 0.x: The parent stores and drives the Query" effect="queryEffect" effectTitle="Effect UI: The Component lists its query"}
 
@@ -202,7 +202,7 @@ In [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark),
 ## Also new
 
 - **Services per Component:** Provide services to a Component and everything below it with `Component.provide`. Its Commands and Subscriptions use them, and TypeScript reports a missing service at compile time.
-- **Code splitting:** Load a Component from a chunk of its own with `Component.lazy`. The chunk loads the first time the Component is rendered, so it stays out of the initial bundle. In Foldkit 0.x, the routes of a single app couldn't be split.
+- **Code splitting:** Load a Component from a chunk of its own with `Component.lazy`. The chunk loads the first time the Component is rendered, so it stays out of the initial bundle. In Foldkit 0.x, an app's Model, update and view all loaded in one bundle.
 - **Control overlapping Commands:** When a Command is issued again while still running, use `concurrent` to run both, `switch` to interrupt the earlier run or `queue` to wait for it.
 
 ## What stays the same
@@ -233,7 +233,7 @@ The [examples](https://github.com/Effect-TS/ui/tree/main/examples) in the reposi
 
 We're making Effect UI public before it's finished so that you can help shape it. It doesn't have everything Foldkit 0.x has yet, but there is enough here to try it, get a feel for the new APIs and tell us what you think.
 
-**If you're building with Foldkit 0.x, keep going!** It will receive critical bug fixes at least until Effect UI ships with an upgrade guide, and moving over will be an upgrade, not a rewrite.
+**If you're building with Foldkit 0.x, keep going!** Feature work has moved to Effect UI, but Foldkit 0.x will receive critical bug fixes at least until Effect UI ships with an upgrade guide. Moving over will be an upgrade, not a rewrite.
 
 Effect UI is developed in [Effect-TS/ui](https://github.com/Effect-TS/ui). Applicable Foldkit issues and pull requests will be transferred there, so you don't need to open them again.
 

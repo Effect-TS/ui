@@ -245,10 +245,7 @@ export const LaunchPage = Html.component({
           )
         ),
         h.header.class("article-header").children(
-          h.p.class("article-eyebrow").children(
-            h.span.class("text-accent-text").children("//"),
-            " PUBLIC PREVIEW"
-          ),
+          h.p.class("article-eyebrow").children("// PUBLIC PREVIEW"),
           h.h1.class(
             "text-[clamp(2.2rem,5.2vw,3.6rem)]/[1.08] font-bold",
             "tracking-[-0.035em] text-balance"

@@ -31,6 +31,7 @@
   --color-white: oklch(100% 0 0);
   --color-positive: oklch(50% 0.14 150);
   --color-negative: oklch(53% 0.2 27);
+  --color-marker: oklch(60% 0.23 27);
 
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -102,39 +103,49 @@
   }
 
   .article-header {
-    @apply relative mx-auto max-w-(--column) border-y border-border py-9;
+    @apply relative isolate mx-auto max-w-(--column) border-y border-border py-9;
     background-image: linear-gradient(to right, var(--color-border) 1px, transparent 1px);
     background-size: calc(100% / 6) 100%;
     background-position: center;
 
-    /* A fade over the lines at the top and the bottom, and over it
-       three short strokes in the color the diagrams give a Message.
-       Each runs down a line of its own, one after another. */
+    /* A fade over the lines at the top and the bottom. */
     &::before {
-      --pulse: linear-gradient(to bottom, transparent, var(--color-accent-text) 70%, transparent);
-      --pulse-length: 96px;
-      --pulse-start: calc(var(--pulse-length) * -1);
-      --pulse-end: calc(100% + var(--pulse-length));
       content: "";
       position: absolute;
       inset: 0;
-      overflow: hidden;
       pointer-events: none;
+      background-image: linear-gradient(to bottom, var(--color-background), transparent 50%, var(--color-background));
+    }
+
+    /* The pulse of the grid on effect.website. When the page loads, a
+       ring grows from the middle of the header, and the lines inside
+       it are brighter. It is under the fade and the text. */
+    &::after {
+      --ring-start: max(0px, var(--header-bloom) - 150px);
+      --ring-end: calc(var(--header-bloom) + 60px);
+      --ring-line: color-mix(in oklab, var(--color-foreground) 35%, transparent);
+      --ring-fill: color-mix(in oklab, var(--color-foreground) 3%, transparent);
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      opacity: 0;
       background-image:
-        var(--pulse), var(--pulse), var(--pulse),
-        linear-gradient(to bottom, var(--color-background), transparent 50%, var(--color-background));
-      background-repeat: no-repeat;
-      background-size: 1px var(--pulse-length), 1px var(--pulse-length), 1px var(--pulse-length), 100% 100%;
-      background-position:
-        calc(100% * 7 / 12) var(--pulse-start),
-        calc(100% * 3 / 12) var(--pulse-start),
-        calc(100% * 9 / 12) var(--pulse-start),
-        0 0;
+        linear-gradient(to right, var(--ring-line) 1px, transparent 1px), linear-gradient(var(--ring-fill), var(--ring-fill));
+      background-size: calc(100% / 6) 100%, 100% 100%;
+      background-position: center;
+      mask-image: radial-gradient(
+        circle farthest-corner at center,
+        transparent var(--ring-start),
+        #000 calc(var(--ring-start) * 0.3 + var(--ring-end) * 0.7),
+        transparent var(--ring-end)
+      );
     }
 
     @media (prefers-reduced-motion: no-preference) {
-      &::before {
-        animation: header-pulses 14s ease-in-out infinite;
+      &::after {
+        animation: header-bloom 3s linear both;
       }
     }
 
@@ -350,101 +361,169 @@
   }
 }
 
-/* A bar of the performance chart grows from the left as it scrolls up
-   through the bottom fifth of the window. The scroll position drives
-   it, so the bars are drawn in full wherever a browser can't do that. */
+/* The bars of the performance chart grow from the left as the chart
+   scrolls up from the bottom of the window, each starting a little
+   after the one above it. The last is full when the chart is a little
+   below the middle of the window. The scroll position drives them, so
+   they are drawn in full wherever a browser can't do that. */
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
+    .chart-bars {
+      view-timeline: --chart-bars block;
+    }
+
     .chart-bar {
       animation: chart-bar-grow linear both;
-      animation-timeline: view();
-      animation-range: entry 100% cover 20%;
+      animation-timeline: --chart-bars;
+      animation-range: cover calc(var(--bar, 0) * 2.5%) cover calc(27% + var(--bar, 0) * 2.5%);
+    }
+
+    .chart-bars > :nth-child(2) {
+      --bar: 1;
+    }
+
+    .chart-bars > :nth-child(3) {
+      --bar: 2;
+    }
+
+    .chart-bars > :nth-child(4) {
+      --bar: 3;
+    }
+
+    .chart-bars > :nth-child(5) {
+      --bar: 4;
+    }
+
+    .chart-bars > :nth-child(6) {
+      --bar: 5;
+    }
+
+    .chart-bars > :nth-child(n + 7) {
+      --bar: 6;
     }
   }
 }
 
-/* The arrow to the DevTools button. It is drawn as its part of the
-   article scrolls up from the arrow's top edge, and fades as the end
-   of that part passes the upper half of the window. It is large where
-   the window has a margin beside the text and small where it hasn't.
-   It needs a browser that can tie an animation to the scroll
-   position. */
+/* The arrow to the DevTools button, in red marker on the page, under
+   its content. Its tail is at a place on the page, beside the first
+   lines of its part of the article. Its tip is 10px above the button,
+   which is fixed to the corner of the window, so the arrow stretches
+   as the page scrolls. Once the end of its part reaches the tip, the
+   tip stays there, and the arrow scrolls away with the page. It needs
+   the margin beside the text, and a browser that can tie an animation
+   to the scroll position. */
 .launcher-pointer {
   display: none;
 }
 
 @supports (animation-timeline: view()) {
-  .launcher-section {
-    --pointer-size: clamp(72px, (100vw - 1280px) * 0.6 + 110px, 300px);
-    view-timeline: --launcher-section block;
-    view-timeline-inset: 40% calc(var(--pointer-size) * 0.9 - 48px);
-
-    /* Without a margin the arrow is over the text, so it goes as soon
-       as the end of its part is above it. */
-    @media (width < 960px) {
-      view-timeline-inset: 78% calc(var(--pointer-size) * 0.9 - 48px);
+  @media (width >= 960px) {
+    .launcher-section {
+      view-timeline: --launcher-section block;
     }
-  }
 
-  /* The tip of the arrow is 10px above the middle of the button,
-     which is 87px by 34px and 12px from the corner. */
-  .launcher-pointer {
-    @apply pointer-events-none fixed z-5 block size-(--pointer-size) text-accent;
-    right: calc(55.5px - var(--pointer-size) * 0.14);
-    bottom: calc(56px - var(--pointer-size) * 0.09);
-    animation: launcher-pointer-show linear both;
-    animation-timeline: --launcher-section;
-  }
+    /* From where the tail is on the page to a window's height below
+       it, which is long enough to follow the tail until its part of
+       the article has left the window. */
+    .launcher-tail {
+      --pointer-width: clamp(60px, (100vw - 1280px) * 0.5 + 90px, 240px);
+      --pointer-stroke: clamp(5px, var(--pointer-width) * 0.035, 8px);
+      @apply pointer-events-none absolute h-screen w-0;
+      view-timeline: --launcher-tail block;
+      animation: launcher-pointer-tail linear both;
+      animation-timeline: --launcher-tail;
+    }
 
-  /* As thick on the small arrow as a line this size needs to show. */
-  .launcher-pointer path {
-    vector-effect: non-scaling-stroke;
-    stroke-width: clamp(2.5px, var(--pointer-size) * 0.022, 6.6px);
-  }
+    /* A box from the tail to the tip. Its right edge is over the
+       middle of the button, which is 87px by 34px and 12px from the
+       corner. Each element here has one animation, because the build
+       gives a list of them a duration of 0s, which a scroll position
+       can't drive. */
+    .launcher-pointer {
+      @apply fixed -z-1 block w-(--pointer-width) text-marker;
+      top: var(--launcher-tail-top);
+      right: 55.5px;
+      bottom: 56px;
+      animation: launcher-pointer-tip linear both;
+      animation-timeline: --launcher-section;
 
-  .launcher-pointer-line {
-    stroke-dasharray: 1;
-  }
+      /* Until its part has left the window. Not written as 100%,
+         because the build turns an end of 100% into 0%. */
+      animation-range: entry calc(100% + 56px) exit 99.999%;
+    }
 
-  @media (prefers-reduced-motion: no-preference) {
+    /* It shows once the tail is well above the tip. */
+    .launcher-pointer-ink {
+      @apply absolute inset-0;
+      animation: launcher-pointer-in linear both;
+      animation-timeline: --launcher-tail;
+      animation-range: 150px 240px;
+    }
+
+    .launcher-pointer svg {
+      @apply absolute overflow-visible;
+      stroke-width: var(--pointer-stroke);
+    }
+
+    .launcher-pointer path {
+      vector-effect: non-scaling-stroke;
+    }
+
     .launcher-pointer-line {
-      animation: launcher-pointer-line linear both;
-      animation-timeline: --launcher-section;
+      @apply inset-0 size-full;
     }
 
+    /* Its point is at the tip. */
     .launcher-pointer-head {
-      animation: launcher-pointer-head linear both;
-      animation-timeline: --launcher-section;
+      --head: clamp(26px, var(--pointer-width) * 0.2, 44px);
+      right: calc(var(--head) / -2);
+      bottom: 0;
+      width: var(--head);
+      height: calc(var(--head) * 15 / 26);
     }
   }
 }
 
-@keyframes launcher-pointer-show {
-  0%, 100% {
-    opacity: 0;
+/* How far the tail is from the top of the window. Registered, so it
+   can be animated. */
+@property --launcher-tail-top {
+  syntax: "<length-percentage>";
+  inherits: true;
+  initial-value: 100%;
+}
+
+/* The tail's element is a window tall, so over its time in the window
+   its top goes from the bottom edge to a window's height above the top
+   one. The line starts 28px below that, level with the middle of the
+   first lines. */
+@keyframes launcher-pointer-tail {
+  from {
+    --launcher-tail-top: calc(100% + 28px);
   }
 
-  4%, 86% {
-    opacity: 1;
+  to {
+    --launcher-tail-top: calc(28px - 100%);
   }
 }
 
-@keyframes launcher-pointer-line {
-  0% {
-    stroke-dashoffset: 1;
+/* From when the end of the arrow's part of the article is level with
+   the tip until it leaves the top of the window, the tip follows it. */
+@keyframes launcher-pointer-tip {
+  from {
+    bottom: 56px;
   }
 
-  32%, 100% {
-    stroke-dashoffset: 0;
+  to {
+    bottom: 100%;
   }
 }
 
-@keyframes launcher-pointer-head {
-  0%, 30% {
+@keyframes launcher-pointer-in {
+  from {
     opacity: 0;
   }
 
-  36%, 100% {
+  to {
     opacity: 1;
   }
 }
@@ -459,38 +538,28 @@
   }
 }
 
-/* One stroke at a time: each waits at the top, out of sight, runs to
-   the bottom and stays there until the cycle starts over. */
-@keyframes header-pulses {
-  0%, 8% {
-    background-position:
-      calc(100% * 7 / 12) var(--pulse-start),
-      calc(100% * 3 / 12) var(--pulse-start),
-      calc(100% * 9 / 12) var(--pulse-start),
-      0 0;
+/* The ring's radius, as a share of the way from the middle of the
+   header to its corners. Registered, so it can be animated. */
+@property --header-bloom {
+  syntax: "<length-percentage>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+/* As on effect.website: the ring passes the corners 150px behind it
+   after 2.3 seconds, keeps growing, and fades over the last 0.6. */
+@keyframes header-bloom {
+  from {
+    --header-bloom: 0px;
+    opacity: 1;
   }
 
-  28%, 40% {
-    background-position:
-      calc(100% * 7 / 12) var(--pulse-end),
-      calc(100% * 3 / 12) var(--pulse-start),
-      calc(100% * 9 / 12) var(--pulse-start),
-      0 0;
+  80% {
+    opacity: 1;
   }
 
-  60%, 72% {
-    background-position:
-      calc(100% * 7 / 12) var(--pulse-end),
-      calc(100% * 3 / 12) var(--pulse-end),
-      calc(100% * 9 / 12) var(--pulse-start),
-      0 0;
-  }
-
-  92%, 100% {
-    background-position:
-      calc(100% * 7 / 12) var(--pulse-end),
-      calc(100% * 3 / 12) var(--pulse-end),
-      calc(100% * 9 / 12) var(--pulse-end),
-      0 0;
+  to {
+    --header-bloom: calc(130.43% + 195.65px);
+    opacity: 0;
   }
 }
