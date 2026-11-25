@@ -7,6 +7,13 @@ export const isHTMLElement = (node: unknown): node is HTMLElement => {
   return ctor !== undefined && node instanceof ctor
 }
 
+// The element an event's target is, or the element a text node is in.
+export const elementOf = (target: EventTarget | null): Element | null => {
+  const node = target as Node | null
+  if (node === null || typeof node.nodeType !== "number") return null
+  return node.nodeType === 1 ? node as Element : node.parentElement
+}
+
 export const perDocument = <A>(make: () => A): (document: Document) => A => {
   const made = new WeakMap<Document, A>()
   return (document) => {

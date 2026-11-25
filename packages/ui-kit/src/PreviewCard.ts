@@ -86,7 +86,10 @@
  * the card, focus goes back to the trigger as the close starts, without
  * opening the card again, and the card is `inert` through its exit. The
  * card's own links follow the trigger in the tab order when the portal is
- * drawn right after it.
+ * drawn right after it. A card opened from a detached trigger isn't next to
+ * the link in the page, so Tab from the link skips the card's content and
+ * the card closes. Anything interactive in such a card must also be
+ * reachable from the link's own page.
  *
  * **Hover**
  *
@@ -216,11 +219,11 @@ import {
   withStyle
 } from "./internal/attributes.ts"
 import { detachedChannel } from "./internal/detached.ts"
-import { focusVisible } from "./internal/dom.ts"
+import { elementOf, focusVisible } from "./internal/dom.ts"
 import { lineUnder } from "./internal/inlineRect.ts"
 import { onEscape, Point, pointOf } from "./internal/interaction.ts"
 import { listenOutside } from "./internal/outside.ts"
-import { inSafeArea } from "./internal/safeArea.ts"
+import { watchHoverArea } from "./internal/safeArea.ts"
 import { atDocumentOrigin, portalBox, raiseAbove } from "./internal/topLayer.ts"
 import {
   frameOf,
@@ -739,12 +742,6 @@ const TrackPositionerArgs = Schema.Struct({
 
 type TrackPositionerArgs = typeof TrackPositionerArgs.Type
 
-const elementOf = (target: EventTarget | null): Element | null => {
-  const node = target as Node | null
-  if (node === null || typeof node.nodeType !== "number") return null
-  return node.nodeType === 1 ? node as Element : node.parentElement
-}
-
 const watchPointer = (
   node: HTMLElement,
   args: TrackPositionerArgs,
@@ -753,8 +750,6 @@ const watchPointer = (
   Stream.callback<PreviewCardMessage>((queue) => {
     const document = node.ownerDocument
     let current = args
-    let from: Point | null = null
-    let away: boolean | null = null
     let removed = false
     const send = (message: PreviewCardMessage) => {
       Queue.offerUnsafe(queue, message)
@@ -765,36 +760,6 @@ const watchPointer = (
       elementOf(target)?.closest(current.triggers) != null
     const inside = (target: EventTarget | null) =>
       within(target) || onTrigger(target)
-    const report = (next: boolean) => {
-      if (away === next) return
-      away = next
-      send(
-        next
-          ? PreviewCardMessage.LeftHoverArea()
-          : PreviewCardMessage.ReturnedToHoverArea()
-      )
-    }
-    const onMouseLeave = (event: MouseEvent) => {
-      if (elementOf(event.target)?.matches(current.triggers) === true) {
-        from = { x: event.clientX, y: event.clientY }
-      }
-    }
-    const onMouseMove = (event: MouseEvent) => {
-      const point = { x: event.clientX, y: event.clientY }
-      if (inside(event.target)) {
-        return report(false)
-      }
-      if (
-        from !== null && inSafeArea(point, from, node.getBoundingClientRect())
-      ) return report(false)
-      from = null
-      report(true)
-    }
-    const onMouseOut = (event: MouseEvent) => {
-      if (event.relatedTarget !== null) return
-      from = null
-      report(true)
-    }
     const onFocusIn = (event: FocusEvent) => {
       if (!within(event.relatedTarget)) send(PreviewCardMessage.FocusedPopup())
     }
@@ -833,21 +798,12 @@ const watchPointer = (
           capture: true,
           signal
         })
-        document.addEventListener("mouseleave", onMouseLeave, {
-          capture: true,
-          passive: true,
-          signal
-        })
-        document.addEventListener("mousemove", onMouseMove, {
-          capture: true,
-          passive: true,
-          signal
-        })
-        document.addEventListener("mouseout", onMouseOut, {
-          capture: true,
-          passive: true,
-          signal
-        })
+        watchHoverArea(node, signal, () => current.triggers, (away) =>
+          send(
+            away
+              ? PreviewCardMessage.LeftHoverArea()
+              : PreviewCardMessage.ReturnedToHoverArea()
+          ))
         node.addEventListener("focusin", onFocusIn, { signal })
         node.addEventListener("focusout", onFocusOut, { signal })
         if (document.body !== null) {
@@ -1018,6 +974,10 @@ export interface PreviewCardTriggerProps {
  * part, with this link's `id`. Give the link an `id` and pass the one
  * `RequestedOpen` reports as the card's `triggerId`, so the popup is placed
  * against it. Nothing happens while no card with that `id` is drawn.
+ *
+ * The card isn't next to this link in the page, so Tab from the link skips
+ * the card's content and the card closes. Anything interactive in the card
+ * must also be reachable from the link's own page.
  *
  * It sets `data-popup-open` and the attribute the card finds its triggers by,
  * in `forward`, so they win over the caller's. It takes the element's mount,
