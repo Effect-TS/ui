@@ -30,7 +30,7 @@ A component that doesn't need an instance, such as `Switch`, is a plain view fun
 - [Button](src/Button.ts): a native button that can stay focusable while disabled.
 - [Checkbox](src/Checkbox.ts): a controlled checkbox with an indicator.
 - [CheckboxGroup](src/CheckboxGroup.ts): one list of ticked values shared by the checkboxes inside it, with a parent checkbox that ticks or unticks them all.
-- [Collapsible](src/Collapsible.ts): a panel that a button shows and hides, whose open state lives in your Model. It publishes the panel's size as CSS variables for height and width transitions, and with `hiddenUntilFound` the browser's find-in-page can open it.
+- [Collapsible](src/Collapsible.ts): a panel (any element) that a button shows and hides, whose open state lives in your Model. It publishes the panel's size as CSS variables for height and width transitions, supports `keepMounted: "css"` for CSS-controlled visibility below a breakpoint, and with `hiddenUntilFound` the browser's find-in-page can open it.
 - [Combobox](src/Combobox.ts): an input that filters a list of options as the user types, whose open state, value and text live in your Model, with single or multiple selection, chips, an input inside the popup, grids, inline lists and inputs for a form.
 - [ContextMenu](src/ContextMenu.ts): a `Menu` that opens at the pointer on a right click, or after a long press on a touch screen, over an area of the page, with submenus and the browser's own menu kept away.
 - [Dialog](src/Dialog.ts): a popup in the top layer whose open state lives in your Model, as a modal, a focus trap or a non-modal panel, with `DialogTrigger` to open it from another component.

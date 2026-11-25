@@ -110,6 +110,39 @@ describe("Collapsible", () => {
       })
     }))
 
+  it.effect("keeps a closed panel mounted without hidden when keepMounted is \"css\", unless hiddenUntilFound is set", () =>
+    Effect.gen(function*() {
+      const css = yield* Scene.make(
+        Collapsible,
+        { open: false, keepMounted: "css" },
+        standIn
+      )
+      css.expectMount(tracked(css))
+      assert.deepInclude(css.get(panel).attrs, { "data-closed": "" })
+      assert.isUndefined(css.get(panel).attrs?.hidden)
+      assert.isUndefined(css.get(panel).attrs?.["data-starting-style"])
+      assert.isUndefined(
+        View.build(
+          parts({ open: false, keepMounted: "css" }).panel(
+            h.ul.attr("hidden", "x")
+          )!,
+          []
+        ).attrs.hidden
+      )
+
+      const untilFound = yield* Scene.make(
+        Collapsible,
+        { open: false, keepMounted: "css", hiddenUntilFound: true },
+        standIn
+      )
+      untilFound.expectMount(tracked(untilFound))
+      assert.deepInclude(untilFound.get(panel).attrs, {
+        "data-closed": "",
+        hidden: "until-found",
+        "data-starting-style": ""
+      })
+    }))
+
   it("the root repoints a trigger built before the panel to the consumer's panel id, on the button itself and not another element", () => {
     const generated = View.build(parts({ open: true }).panel(h.div)!, []).attrs
       .id!
@@ -142,24 +175,21 @@ describe("Collapsible", () => {
     )
   })
 
-  it("each part rejects another tag", () => {
+  it("root and panel accept any element while trigger requires button", () => {
     const collapsible = parts({ open: true })
-    assert.strictEqual(View.build(collapsible.root(h.div), []).tag, "div")
-    assert.throws(
-      () => collapsible.root(h.span as any),
-      /a part for <div> was given <span>/
+    assert.strictEqual(
+      View.build(collapsible.root(h.section), []).tag,
+      "section"
+    )
+    assert.strictEqual(View.build(collapsible.panel(h.span)!, []).tag, "span")
+    assert.strictEqual(
+      View.build(parts({ open: false, keepMounted: "css" }).panel(h.ul)!, [])
+        .tag,
+      "ul"
     )
     assert.throws(
       () => collapsible.trigger(h.div as any),
       /a part for <button> was given <div>/
-    )
-    assert.throws(
-      () => collapsible.panel(h.section as any),
-      /a part for <div> was given <section>/
-    )
-    assert.throws(
-      () => parts({ open: false }).panel(h.section as any),
-      /a part for <div> was given <section>/
     )
   })
 
