@@ -40,60 +40,60 @@ export const script: ReadonlyArray<Row> = [
     benchmark: "01_run1k",
     label: "Create 1,000 rows",
     unit: "ms",
-    values: [7.0, 24.6, 45.6, 25.8, 23.4, 11.5, 10.9]
+    values: [7.1, 22.5, 47.3, 24.2, 23.8, 12.0, 12.5]
   },
   {
     benchmark: "02_replace1k",
     label: "Replace 1,000 rows",
     unit: "ms",
-    values: [14.5, 34.0, 60.3, 48.1, 34.5, 23.1, 22.6]
+    values: [14.7, 33.7, 57.0, 42.8, 36.8, 23.7, 21.6]
   },
   {
     benchmark: "03_update10th1k_x16",
     label: "Update every 10th row",
     unit: "ms",
     slowdown: 4,
-    values: [1.4, 18.3, 28.6, 14.5, 8.2, 4.0, 3.2]
+    values: [1.3, 23.2, 25.5, 12.8, 8.0, 3.6, 3.1]
   },
   {
     benchmark: "04_select1k",
     label: "Select a row",
     unit: "ms",
     slowdown: 4,
-    values: [1.1, 7.1, 10.8, 9.6, 3.8, 7.4, 2.6]
+    values: [1.2, 7.5, 10.8, 9.0, 3.9, 7.1, 2.5]
   },
   {
     benchmark: "05_swap1k",
     label: "Swap two rows",
     unit: "ms",
     slowdown: 4,
-    values: [0.8, 6.7, 8.5, 64.2, 4.2, 5.2, 4.2]
+    values: [0.8, 7.5, 8.6, 70.0, 4.0, 4.3, 3.5]
   },
   {
     benchmark: "06_remove-one-1k",
     label: "Remove a row",
     unit: "ms",
     slowdown: 2,
-    values: [1.0, 3.3, 4.2, 3.5, 10.1, 1.9, 1.5]
+    values: [1.0, 3.6, 4.7, 3.6, 10.3, 1.7, 1.2]
   },
   {
     benchmark: "07_create10k",
     label: "Create 10,000 rows",
     unit: "ms",
-    values: [69.8, 182, 415, 430, 231, 109, 104]
+    values: [69.1, 183, 408, 428, 209, 104, 94.4]
   },
   {
     benchmark: "08_create1k-after1k_x2",
     label: "Append 1,000 rows",
     unit: "ms",
-    values: [7.4, 26.1, 44.4, 26.2, 23.2, 11.9, 11.7]
+    values: [7.3, 24.8, 45.3, 25.5, 23.1, 12.1, 10.9]
   },
   {
     benchmark: "09_clear1k_x8",
     label: "Clear 1,000 rows",
     unit: "ms",
     slowdown: 4,
-    values: [31.9, 45.6, 59.7, 72.0, 54.7, 35.8, 47.2]
+    values: [34.6, 42.2, 61.6, 67.0, 56.8, 39.3, 42.3]
   }
 ]
 
@@ -102,13 +102,13 @@ export const load: ReadonlyArray<Row> = [
     benchmark: "42_size-compressed",
     label: "Compressed size",
     unit: "kB",
-    values: [2.5, 51.7, 86.8, 51.4, 23.3, 9.7, 4.5]
+    values: [2.5, 51.9, 86.8, 51.4, 23.3, 9.7, 4.5]
   },
   {
     benchmark: "43_first-paint",
     label: "First paint",
     unit: "ms",
-    values: [76.3, 385, 685, 547, 193, 90.5, 78.2]
+    values: [71.9, 363, 737, 395, 165, 95.7, 71.5]
   },
   {
     benchmark: "21_ready-memory",
@@ -120,7 +120,7 @@ export const load: ReadonlyArray<Row> = [
     benchmark: "22_run-memory",
     label: "Memory with 1,000 rows",
     unit: "MB",
-    values: [1.9, 4.2, 6.1, 4.4, 3.9, 2.9, 2.7]
+    values: [1.9, 4.1, 6.1, 4.4, 3.9, 2.9, 2.7]
   }
 ]
 
