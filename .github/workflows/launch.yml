@@ -6,7 +6,11 @@ on:
     paths:
       - examples/launch/**
       - packages/**
+      - package.json
       - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - tsconfig.base.json
+      - .github/actions/setup/**
       - .github/workflows/launch.yml
 
 concurrency:
@@ -18,7 +22,7 @@ permissions: {}
 jobs:
   deploy:
     name: Deploy to ui.effect.website
-    if: github.repository == 'Effect-TS/ui'
+    if: github.repository == 'Effect-TS/ui' && github.ref == 'refs/heads/main'
     runs-on: namespace-profile-linux-small
     permissions:
       contents: read
