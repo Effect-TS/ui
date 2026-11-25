@@ -175,4 +175,4 @@ export const layer = (
  * @since 0.1.0
  */
 export const url = (options?: Pick<Options, "port">): string =>
-  "http://127.0.0.1:" + (options?.port ?? defaultPort)
+  Control.serverUrl(options?.port)

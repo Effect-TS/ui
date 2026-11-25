@@ -5,7 +5,7 @@ import {
 } from "@effect/ui-kit/VirtualList"
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
-import type * as BrowserHost from "@effect/ui/html/BrowserHost"
+import * as BrowserHost from "@effect/ui/html/BrowserHost"
 import * as Html from "@effect/ui/html/Html"
 import * as MessageLog from "@effect/ui/MessageLog"
 import * as Renderer from "@effect/ui/Renderer"
@@ -14,9 +14,11 @@ import * as UiSchema from "@effect/ui/UiSchema"
 import type * as View from "@effect/ui/View"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
+import * as Layer from "effect/Layer"
 import * as Option from "effect/Option"
 import * as Predicate from "effect/Predicate"
 import * as Schema from "effect/Schema"
+import type * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import * as Inspector from "../Inspector.ts"
 import { Paused } from "./control.ts"
@@ -40,8 +42,6 @@ export interface Feed {
   readonly failures: () => number
   readonly open: boolean
   readonly position: () => Position
-  // The DevTools server's own page, with no app to close over, move around or paint.
-  readonly standalone?: boolean | undefined
 }
 
 export class Pages extends Context.Service<Pages, {
@@ -504,12 +504,11 @@ const Header = (
         h.span.class("dot").attr("aria-hidden", "true"),
         "Follow latest"
       ),
-    h.props.feed.standalone ? null : [
-      CornerPicker(h, model),
-      h.button.class("close").attr("aria-label", "Close the inspector")
-        .onClick(OverlayMessage.ClickedClose())
-        .children("✕")
-    ]
+    CornerPicker(h, model),
+    h.button.class("close").attr("aria-label", "Close the inspector").onClick(
+      OverlayMessage.ClickedClose()
+    )
+      .children("✕")
   )
 }
 
@@ -1707,7 +1706,7 @@ const Inspected = (
           Name(h, entry, label.text),
           label.detail === undefined ? null : " " + label.detail
         ),
-        feed.standalone ? null : h.button.class("show", shown && "on").attr(
+        h.button.class("show", shown && "on").attr(
           "aria-pressed",
           String(shown)
         ).disabled(!paintable)
@@ -1749,7 +1748,7 @@ const Panel = (h: H, model: OverlayModel) => {
       "aria-label",
       "Effect UI inspector"
     ).children(
-      feed.standalone ? null : h.span.class("grip").attr("aria-hidden", "true"),
+      h.span.class("grip").attr("aria-hidden", "true"),
       Header(h, undefined, 0, model),
       h.p.class("empty-note").children(
         "Nothing logged yet. Entries appear here as the app runs."
@@ -1796,7 +1795,7 @@ const Panel = (h: H, model: OverlayModel) => {
     "aria-label",
     "Effect UI inspector"
   ).attr("data-pane", model.pane).children(
-    feed.standalone ? null : h.span.class("grip").attr("aria-hidden", "true"),
+    h.span.class("grip").attr("aria-hidden", "true"),
     Header(h, session, entries.length, model),
     page === null
       ? null
@@ -2093,3 +2092,21 @@ export const Overlay = Html.component({
         )
     )
 })
+
+export const mountOverlay = (
+  container: HTMLElement,
+  feed: Feed,
+  pages: Pages["Service"]
+): Effect.Effect<void, never, Scope.Scope> =>
+  BrowserHost.mountEffect(Overlay, { feed }, container, { head: false }).pipe(
+    Effect.provideService(MessageLog.MessageLog, MessageLog.noop),
+    Effect.provide(
+      Layer.mergeAll(
+        Paint.layer,
+        Clear.layer,
+        SaveOpen.layer,
+        SavePosition.layer
+      ).pipe(Layer.provide(Layer.succeed(Pages, pages)))
+    ),
+    Effect.asVoid
+  )

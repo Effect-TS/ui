@@ -53,7 +53,7 @@ export const make = (options: Options) => {
   const timeout = options.timeout ?? 10_000
 
   const held = () =>
-    JSON.stringify({
+    Control.encodeHeld({
       _tag: "Held",
       sessions: inspector.sessions().map((session) => session.id)
     })
@@ -128,13 +128,11 @@ export const make = (options: Options) => {
               meta.get(frame.session)!.started = frame
             }
             batch.push(frame)
+            broadcast(chunk)
           }
           if (batch.length === 0) return
           inspector.ingest(batch)
-          for (const frame of batch) {
-            history.record(frame)
-            if (watchers.size > 0) broadcast(JSON.stringify(frame))
-          }
+          for (const frame of batch) history.record(frame)
           notify()
         }))
       }).pipe(Effect.ensuring(Effect.sync(() => {
@@ -243,14 +241,11 @@ export const make = (options: Options) => {
       const outbox = yield* Queue.unbounded<string>()
       Queue.offerUnsafe(outbox, held())
       for (const session of inspector.sessions()) {
-        const entries = session.entries()
         const started = meta.get(session.id)?.started
-        if (
-          started !== undefined && started.seq < (entries[0]?.seq ?? Infinity)
-        ) {
+        if (started !== undefined) {
           Queue.offerUnsafe(outbox, JSON.stringify(started))
         }
-        for (const frame of entries) {
+        for (const frame of session.entries()) {
           Queue.offerUnsafe(outbox, JSON.stringify(frame))
         }
       }

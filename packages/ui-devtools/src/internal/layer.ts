@@ -11,16 +11,7 @@ import * as Stream from "effect/Stream"
 import * as Control from "./control.ts"
 import * as History from "./history.ts"
 import * as InspectorInternal from "./inspector.ts"
-import {
-  Clear,
-  type Feed,
-  Overlay,
-  Pages,
-  Paint,
-  type Position,
-  SaveOpen,
-  SavePosition
-} from "./overlay.ts"
+import { type Feed, mountOverlay, Pages, type Position } from "./overlay.ts"
 import { isFailure } from "./read.ts"
 import * as Remote from "./remote.ts"
 import { styles } from "./styles.ts"
@@ -87,17 +78,6 @@ const lower = (frame: HTMLIFrameElement) => {
   frame.removeAttribute("popover")
 }
 
-const fromPage = (): { readonly url?: unknown; readonly size?: unknown } => {
-  const content = document.querySelector<HTMLMetaElement>(
-    "meta[name=\"" + Control.metaName + "\"]"
-  )?.content
-  try {
-    return content === undefined ? {} : JSON.parse(content)
-  } catch {
-    return {}
-  }
-}
-
 let explicit = 0
 
 export const make = (options: Options): Layer.Layer<never> =>
@@ -117,7 +97,7 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
           devToolsKey
         ]?.takeOver()
       }
-      const page = fromPage()
+      const page = Control.fromPage()
       const server = options.server ??
         (typeof page.url === "string" ? page.url : undefined)
       const size = Math.max(
@@ -459,21 +439,7 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         )
       }
 
-      yield* BrowserHost.mountEffect(Overlay, { feed }, container, {
-        head: false
-      }).pipe(
-        Effect.provideService(MessageLog.MessageLog, MessageLog.noop),
-        Effect.provide(
-          Layer.mergeAll(
-            Paint.layer,
-            Clear.layer,
-            SaveOpen.layer,
-            SavePosition.layer
-          ).pipe(
-            Layer.provide(Layer.succeed(Pages, pages))
-          )
-        )
-      )
+      yield* mountOverlay(container, feed, pages)
 
       const encoded = yield* MessageLog.makeEncoded((batch) =>
         Effect.suspend(() => {

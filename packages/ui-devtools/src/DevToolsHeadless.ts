@@ -67,9 +67,6 @@ export const layer = (options?: {
   readonly size?: number | undefined
 }): Layer.Layer<never> =>
   MessageLog.socket(
-    Control.socketUrl(
-      options?.server ?? "http://127.0.0.1:" + Control.defaultPort,
-      "/log"
-    ),
+    Control.socketUrl(options?.server ?? Control.serverUrl(), "/log"),
     { host: options?.host ?? "terminal", buffer: options?.size }
   ).pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))

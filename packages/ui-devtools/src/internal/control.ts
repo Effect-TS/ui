@@ -71,16 +71,35 @@ export const decodeToServer = Schema.decodeUnknownOption(
 
 export const metaName = "effect-ui-devtools"
 
+// What the server that serves a page wrote into its meta tag.
+export const fromPage = (): {
+  readonly url?: unknown
+  readonly size?: unknown
+} => {
+  const content = document.querySelector<HTMLMetaElement>(
+    "meta[name=\"" + metaName + "\"]"
+  )?.content
+  try {
+    return content === undefined ? {} : JSON.parse(content)
+  } catch {
+    return {}
+  }
+}
+
 // What `/watch` sends: Wire frames, and the sessions the server holds, on connect and whenever it drops one.
 export const Held = Schema.TaggedStruct("Held", {
   sessions: Schema.Array(Schema.String)
 })
 
+export const encodeHeld = Schema.encodeSync(Schema.fromJsonString(Held))
 export const decodeWatched = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Union([MessageLog.Wire, Held]))
 )
 
 export const defaultPort = 4774
+
+export const serverUrl = (port: number = defaultPort): string =>
+  "http://127.0.0.1:" + port
 
 export const socketUrl = (server: string, path: string) => {
   const url = new URL(path, server)
