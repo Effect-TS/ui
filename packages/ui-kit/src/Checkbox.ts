@@ -156,13 +156,12 @@ import { field } from "./internal/field.ts"
  *   with `uncheckedValue`.
  * - `parent`: makes the checkbox the parent of the `CheckboxGroup` around
  *   it. It submits nothing.
- * - `id`: the root's `id`, for a `<label for>` beside it. A member
- *   writes it, and the group's parent lists it in `aria-controls`. Left
- *   out, a member writes a generated one, and the parent lists that, unless
- *   its element has an id already, such as the one `field.control` writes
- *   for its label. The parent can't see that id, so give a member drawn on
- *   `field.control` one id, as the `id` of both the `Field` and the
- *   checkbox. Outside a group the root writes it only when it is set.
+ * - `id`: the root's `id`. A group parent lists this ID, or a generated
+ *   fallback, in `aria-controls`. A member preserves an existing element
+ *   ID when this prop is omitted, but the parent cannot read that ID.
+ *   For a member drawn on `field.control`, pass the same `id` to `Field`
+ *   and `Checkbox` so both the label and parent reference the control.
+ *   Outside a group, the root writes `id` only when this prop is set.
  *
  * @stability experimental
  * @category schemas
@@ -402,9 +401,7 @@ export const Checkbox = Html.component({
             p.props.id !== undefined
               ? b.attr("id", p.props.id)
               : resolved.role === "member"
-              // Read when the element is built, so a member keeps an id it
-              // has by then, such as the one `field.control` wrote for its
-              // label.
+              // Preserve IDs assigned at build time, including field.control's.
               ? b.forward((node) =>
                 defaults(node, { id: memberId(p.props, p.id) })
               )

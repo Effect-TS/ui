@@ -50,12 +50,9 @@
  * `error` returns `undefined` unless the field is invalid and enabled, so
  * write `field.error(h.div)?.children(message)`. The message is the consumer's:
  * validate in `update`, pass the outcome as `invalid` and the text as the
- * error's children. The error has `role="alert"`, a live region, so
- * assistive technology is told when it is inserted or its text changes,
- * such as after a blur, or a submit that leaves focus where it was. An error
- * already shown with the same text raises no new alert, so a second submit
- * with nothing changed is silent. Chain `.attr("role", undefined)` after
- * the part to turn it off.
+ * error's children. The error has `role="alert"` for live-region updates.
+ * Submitting again with unchanged text and focus creates no new alert.
+ * Chain `.attr("role", undefined)` after the part to remove the alert role.
  *
  * **Data attributes**
  *
@@ -187,9 +184,8 @@ import { withoutField } from "./internal/field.ts"
  *
  * **Details**
  *
- * - `id`: the control's `id`, which the label points at. A generated one
- *   when it is left out. Pass it when another kit call on the control
- *   writes an id of its own, and give that call the same one.
+ * - `id`: the control's `id` and the label's `for`; generated if omitted.
+ *   If another component writes the control's ID, pass the same `id` to both.
  * - `disabled`: disables the control with the native `disabled`
  *   attribute, sets `data-disabled` on every part and hides the error.
  *   Left out, the control keeps its own `disabled`. A disabled `Fieldset`

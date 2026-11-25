@@ -98,8 +98,7 @@ export type SeparatorElement<Msg, R = never> = Html.Element<
  * the caller's, set on `element` or chained after the call: `role`,
  * `aria-orientation` and `data-orientation`. A purely decorative divider
  * keeps the caller's `role="none"` or `role="presentation"`, and drops
- * `aria-orientation`, so a screen reader skips it. `Separator` reserves no
- * event, so the caller's other attributes, handlers and children stay.
+ * `aria-orientation`. Other attributes, handlers and children stay.
  *
  * @stability experimental
  * @category components

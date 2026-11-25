@@ -168,9 +168,8 @@ const takeTabStop = (element: HTMLElement): boolean =>
   radioGroup(element).some((radio) => radio.checked && takeFocus(radio)) ||
   takeFocus(element)
 
-// The invalid elements inside the form and the controls outside it that name
-// it with `form`, in document order. A control's name shadows a property of
-// its form, such as `contains` or `elements`, so the form's own aren't used.
+// Include external associated controls in document order. Use Node methods
+// because named controls can shadow the form's properties.
 const invalidOf = (form: HTMLFormElement): Array<HTMLElement> =>
   Array.from(
     (Node.prototype.getRootNode.call(form) as ParentNode).querySelectorAll<
