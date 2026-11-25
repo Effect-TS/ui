@@ -50,7 +50,10 @@
  * `error` returns `undefined` unless the field is invalid and enabled, so
  * write `field.error(h.div)?.children(message)`. The message is the consumer's:
  * validate in `update`, pass the outcome as `invalid` and the text as the
- * error's children.
+ * error's children. The error is an alert, so a screen reader reads it as it
+ * appears or changes, such as after a blur or a submit that leaves focus
+ * where it was. Chain `.attr("role", undefined)` after the part to keep it
+ * silent.
  *
  * **Data attributes**
  *
@@ -314,7 +317,8 @@ const blurred = ({ disabled }: Partial<Html.BlurPayload>) =>
  * - `label`: `for`, the control's id
  * - `control`: `id` and `aria-invalid`
  * - `member`: `aria-invalid`
- * - `legend`, `description` and `error`: `id`
+ * - `legend` and `description`: `id`
+ * - `error`: `id` and `role="alert"`
  *
  * A part writes them when it is applied, so an attribute the consumer
  * chains after it is the consumer's to answer for. Leave the control's
@@ -426,7 +430,7 @@ export const Field = Html.component({
       flags(builder).attr("data-disabled", flag(disabled))
     const describedBy = [described && descriptionId, showsError && errorId]
       .filter((id) => id !== false).join(" ")
-    const error = p.part((b) => state(b).attr("id", errorId))
+    const error = p.part((b) => state(b).attrs({ id: errorId, role: "alert" }))
     // The parts that use it take any element, so the payload isn't typed.
     const trackFocus = (b: View.ContainerBuilder<typeof FieldMessage.Type>) =>
       state(b)

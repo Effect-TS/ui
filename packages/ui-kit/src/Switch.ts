@@ -221,10 +221,11 @@ const state = <B extends Attributed<B>>(
  *
  * The switch's own attributes win over the ones the consumer set on the
  * builders, before the part or after it: `type`, `role`, `disabled`, the ARIA state
- * (`aria-checked`, `aria-disabled`, `aria-readonly`, `aria-required`)
- * and the data attributes. That includes the ones a state leaves absent,
- * so a `disabled` on the consumer's button is removed unless the
- * `disabled` prop is set.
+ * (`aria-checked`, `aria-disabled`, `aria-readonly`, `aria-required`),
+ * the thumb's `aria-hidden="true"`, which keeps its content out of the
+ * switch's name, and the data attributes. That includes the ones a state
+ * leaves absent, so a `disabled` on the consumer's button is removed unless
+ * the `disabled` prop is set.
  *
  * @stability experimental
  * @category components
@@ -275,6 +276,7 @@ export const Switch = <Msg, A extends View.Content<Msg, any>>(
           ? root.on("click", () => onToggle({ checked: !props.checked }))
           : root
       }),
-    thumb: (element) => element.forward((node) => state(node, props))
+    thumb: (element) =>
+      element.forward((node) => state(node, props).attr("aria-hidden", "true"))
   })
 }

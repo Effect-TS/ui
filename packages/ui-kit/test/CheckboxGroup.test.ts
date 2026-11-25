@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { UiSchema } from "@effect/ui"
 import { Checkbox, CheckboxGroup, Field } from "@effect/ui-kit"
-import { BrowserHost, Html } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { container, tick } from "./utils/document.ts"
@@ -175,6 +175,39 @@ const mount = Effect.gen(function*() {
 })
 
 describe("CheckboxGroup", { concurrent: false }, () => {
+  it.effect("a member drawn on field.control keeps the id its label points at", () =>
+    Effect.gen(function*() {
+      const Terms = Html.component({
+        name: "Terms",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          CheckboxGroup(h, {
+            props: { value: [] },
+            view: (checkboxGroup) =>
+              checkboxGroup.root(h.div).children(
+                Field(h, {
+                  view: (field) =>
+                    field.root(h.div).children(
+                      field.label(h.label).children("Apple"),
+                      Checkbox(h, {
+                        props: { value: "apple" },
+                        view: (checkbox) =>
+                          checkbox.root(field.control(h.button))
+                      })
+                    )
+                })
+              )
+          })
+      })
+      const { html } = yield* HtmlServer.renderToHtml(Terms, {})
+      const id = /<label [^>]*for="([^"]+)"/.exec(html)?.[1]
+      assert.match(html, new RegExp(`<button [^>]*id="${id}"`))
+    }))
+
   it.effect("members tick the group's value, and the parent cycles mix, all, none and back, leaving a disabled member alone", () =>
     Effect.gen(function*() {
       const { app, button, click, submitted, ticked } = yield* mount

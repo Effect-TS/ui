@@ -96,8 +96,10 @@ export type SeparatorElement<Msg, R = never> = Html.Element<
  * `Separator` returns the builder it was given, or `h.div`, and writes its
  * own attributes in `forward`, when the element is built. So they win over
  * the caller's, set on `element` or chained after the call: `role`,
- * `aria-orientation` and `data-orientation`. `Separator` reserves no event,
- * so the caller's other attributes, handlers and children stay.
+ * `aria-orientation` and `data-orientation`. A purely decorative divider
+ * keeps the caller's `role="none"` or `role="presentation"`, and drops
+ * `aria-orientation`, so a screen reader skips it. `Separator` reserves no
+ * event, so the caller's other attributes, handlers and children stay.
  *
  * @stability experimental
  * @category components
@@ -113,5 +115,13 @@ export const Separator = <Msg, R = never>(
 ): SeparatorElement<Msg, R> => {
   const element: SeparatorElement<Msg, R> = options.element ?? h.div
   const orientation = options.props?.orientation ?? "horizontal"
-  return element.forward((node) => separatorAttrs(node, orientation))
+  return element.forward((node) =>
+    node.elementAttrs.role === "none" ||
+      node.elementAttrs.role === "presentation"
+      ? node.attrs({
+        "aria-orientation": undefined,
+        "data-orientation": orientation
+      })
+      : separatorAttrs(node, orientation)
+  )
 }

@@ -157,9 +157,12 @@ import { field } from "./internal/field.ts"
  * - `parent`: makes the checkbox the parent of the `CheckboxGroup` around
  *   it. It submits nothing.
  * - `id`: the root's `id`, for a `<label for>` beside it. A member
- *   writes it, or a generated one when it is left out, and the group's parent
- *   lists it in `aria-controls`. Outside a group the root writes it only
- *   when it is set, so `field.control` keeps the one it writes.
+ *   writes it, and the group's parent lists it in `aria-controls`. Left
+ *   out, a member writes a generated one unless its element has an id
+ *   already, such as the one `field.control` writes for its label. The
+ *   parent still lists the generated id, so pass `id` to a member drawn on
+ *   `field.control` when the parent's `aria-controls` matters. Outside a
+ *   group the root writes it only when it is set.
  *
  * @stability experimental
  * @category schemas
@@ -320,9 +323,11 @@ const state = <B extends Attributed<B>>(
  *
  * The checkbox's own attributes win over the ones the consumer set on the
  * builder before the part: `type`, `role`, `disabled`, the ARIA state
- * (`aria-checked`, `aria-disabled`, `aria-readonly`, `aria-required`)
- * and the data attributes. That includes the ones a state leaves absent,
- * so a `disabled` on the consumer's button is removed unless the
+ * (`aria-checked`, `aria-disabled`, `aria-readonly`, `aria-required`),
+ * the indicator's `aria-hidden="true"`, which keeps a glyph inside it out
+ * of the checkbox's name, and the data attributes. That includes the ones
+ * a state leaves absent, so a `disabled` on the consumer's button is
+ * removed unless the
  * `disabled` prop is set. A part writes them when it is applied, so an
  * attribute the consumer chains after `checkbox.root(...)` or `checkbox.indicator(...)`
  * is the consumer's to answer for. The root writes `id` as the `id` prop
@@ -385,7 +390,6 @@ export const Checkbox = Html.component({
   parts: (p) => {
     const resolved = resolve(p.props, p.reads.group)
     const hidden = field(resolved.field)
-    const id = resolved.role === "member" ? memberId(p.props, p.id) : p.props.id
     return {
       checked: resolved.checked,
       indeterminate: resolved.indeterminate,
@@ -395,7 +399,21 @@ export const Checkbox = Html.component({
       root: p.part(
         "button",
         (b) =>
-          state(id === undefined ? b : b.attr("id", id), resolved)
+          state(
+            p.props.id !== undefined
+              ? b.attr("id", p.props.id)
+              : resolved.role === "member"
+              // Read when the element is built, so a member keeps an id it
+              // has by then, such as the one `field.control` wrote for its
+              // label.
+              ? b.forward((node) =>
+                node.elementAttrs.id === undefined
+                  ? node.attr("id", memberId(p.props, p.id))
+                  : node
+              )
+              : b,
+            resolved
+          )
             .attrs({
               // Inside a form a button submits by default.
               type: "button",
@@ -424,7 +442,10 @@ export const Checkbox = Html.component({
             // before the ones the consumer chains afterward.
             .children(hidden)
       ),
-      indicator: p.part("span", (b) => state(b, resolved))
+      indicator: p.part(
+        "span",
+        (b) => state(b, resolved).attr("aria-hidden", "true")
+      )
     }
   }
 })

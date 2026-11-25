@@ -70,73 +70,71 @@ const Signup = Html.component({
   },
   view: (h, model) => {
     const { fields } = SignupValidation.validate(model.form)
-    const text = (name: "email" | "name") =>
+    const text = (name: "email" | "name", form?: string) =>
       Field(h, {
         key: name,
         props: { invalid: fields[name]._tag === "Invalid" },
         view: (field) =>
           field.root(h.div).children(
-            field.control(h.input).attrs({ name, "aria-label": name }).value(
-              fields[name].value
-            )
+            field.control(h.input).attrs({ name, "aria-label": name, form })
+              .value(
+                fields[name].value
+              )
               .disabled(model.saving)
-              .on(
-                "input",
-                ({ value }) => Message.UpdatedField({ name, value })
-              ),
+              .onInput(({ value }) => Message.UpdatedField({ name, value })),
             field.error(h.span)?.children("Invalid")
           )
       })
     const plans = [{ value: "free", disabled: true }, { value: "team" }]
-    return Form(h, {
-      onEmit: () => Message.SubmittedForm(),
-      view: (form) =>
-        form.root(h.form).children(
-          RadioGroup(h, {
-            props: {
-              value: fields.plan.value === "" ? null : fields.plan.value,
-              items: plans,
-              invalid: fields.plan._tag === "Invalid"
-            },
-            onEmit: {
-              Picked: ({ value }) =>
-                Message.UpdatedField({ name: "plan", value })
-            },
-            view: (radioGroup) =>
-              radioGroup.root(h.div).children(
-                ...plans.map(({ value }) =>
-                  radioGroup.radio({
-                    element: h.button.attr("data-plan", value),
-                    value
-                  })
+    return h.div(
+      Form(h, {
+        onEmit: () => Message.SubmittedForm(),
+        view: (form) =>
+          form.root(h.form.attr("id", "signup")).children(
+            RadioGroup(h, {
+              props: {
+                value: fields.plan.value === "" ? null : fields.plan.value,
+                items: plans,
+                invalid: fields.plan._tag === "Invalid"
+              },
+              onEmit: {
+                Picked: ({ value }) =>
+                  Message.UpdatedField({ name: "plan", value })
+              },
+              view: (radioGroup) =>
+                radioGroup.root(h.div).children(
+                  ...plans.map(({ value }) =>
+                    radioGroup.radio({
+                      element: h.button.attr("data-plan", value),
+                      value
+                    })
+                  )
                 )
-              )
-          }),
-          Field(h, {
-            key: "billing",
-            props: { invalid: fields.billing._tag === "Invalid" },
-            view: (field) =>
-              field.group(h.div).children(
-                field.legend(h.span).children("Billing"),
-                ...["monthly", "yearly"].map((value) =>
-                  field.member(h.input).attrs({
-                    type: "radio",
-                    name: "billing",
-                    value
-                  })
-                    .checked(fields.billing.value === value)
-                    .on(
-                      "click",
-                      Message.UpdatedField({ name: "billing", value })
-                    )
+            }),
+            Field(h, {
+              key: "billing",
+              props: { invalid: fields.billing._tag === "Invalid" },
+              view: (field) =>
+                field.group(h.div).children(
+                  field.legend(h.span).children("Billing"),
+                  ...["monthly", "yearly"].map((value) =>
+                    field.member(h.input).attrs({
+                      type: "radio",
+                      name: "billing",
+                      value
+                    })
+                      .checked(fields.billing.value === value)
+                      .onClick(Message.UpdatedField({ name: "billing", value }))
+                  )
                 )
-              )
-          }),
-          text("email"),
-          text("name"),
-          h.button.attr("type", "submit").children("Sign up")
-        )
-    })
+            }),
+            text("email"),
+            h.button.attr("type", "submit").children("Sign up")
+          )
+      }),
+      // Outside the form, which it names with `form`.
+      text("name", "signup")
+    )
   }
 })
 
@@ -146,7 +144,7 @@ const type = (input: HTMLInputElement, value: string) => {
 }
 
 describe("Form in a document", { concurrent: false }, () => {
-  it.effect("focuses the first invalid control on submit, and leaves focus alone when valid or invalidated later", () =>
+  it.effect("focuses the first invalid control on submit, outside the form too, and leaves focus alone when valid or invalidated later", () =>
     Effect.gen(function*() {
       yield* focusability
       const app = yield* container
@@ -179,8 +177,11 @@ describe("Form in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement, email)
       assert.deepStrictEqual([email.selectionStart, email.selectionEnd], [0, 4])
 
-      type(name, "Ada")
       type(email, "ada@example.com")
+      yield* submitForm
+      assert.strictEqual(document.activeElement, name)
+
+      type(name, "Ada")
       yield* submitForm
       assert.strictEqual(document.activeElement, submit)
 
