@@ -779,7 +779,7 @@ export const mount = <
       component as any,
       props,
       container,
-      options as any
+      { ...options, recordEmitted: true } as any
     ).pipe(
       Effect.provideService(
         Clock.Clock,
