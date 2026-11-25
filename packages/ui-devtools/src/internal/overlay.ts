@@ -1855,8 +1855,7 @@ const Launcher = (h: H, model: OverlayModel) => {
       { preventDefault: true }
     )
       .children(
-        h.span.class("logo").attr("aria-hidden", "true"),
-        "Effect UI",
+        h.span.class("lockup").attr("aria-hidden", "true"),
         h.span.class("launcher-count").children(
           String(sessionOf(h.props.feed, model)?.entries().length ?? 0)
         )
