@@ -75,7 +75,8 @@ export type WebMcpOptions = internal.WebMcpOptions
  * **Details**
  *
  * The overlay starts closed, as a button at `position` (`"BottomRight"` by
- * default) that opens it, and remembers its open state and size in
+ * default) that can be dragged or moved with arrow keys or the corner picker
+ * to any corner, and remembers its corner, open state and size in
  * `localStorage`. It's mounted in an iframe added to the end of
  * `document.body` and removed when the Layer closes, so the app's DOM is
  * left as it is. The iframe takes the size and shape of the launcher or the

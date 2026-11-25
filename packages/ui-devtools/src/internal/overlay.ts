@@ -22,6 +22,15 @@ import * as Inspector from "../Inspector.ts"
 import { Paused } from "./control.ts"
 import * as Read from "./read.ts"
 
+export const Position = Schema.Literals([
+  "TopLeft",
+  "TopRight",
+  "BottomLeft",
+  "BottomRight"
+])
+
+export type Position = typeof Position.Type
+
 export interface Feed {
   readonly inspector: Inspector.Inspector
   readonly origin: (session: string) => number | undefined
@@ -30,6 +39,7 @@ export interface Feed {
   readonly paused: () => typeof Paused.Type | undefined
   readonly failures: () => number
   readonly open: boolean
+  readonly position: () => Position
 }
 
 export class Pages extends Context.Service<Pages, {
@@ -40,6 +50,7 @@ export class Pages extends Context.Service<Pages, {
   readonly resume: Effect.Effect<void>
   readonly clear: (session: string) => Effect.Effect<void>
   readonly setOpen: (open: boolean) => Effect.Effect<void>
+  readonly setPosition: (position: Position) => Effect.Effect<void>
 }>()("@effect/ui-devtools/Pages") {}
 
 const FeedSchema = Schema.declare(
@@ -76,7 +87,10 @@ const OverlayModel = Schema.Struct({
   pane: Pane,
   paused: Schema.NullOr(Paused),
   painting: Schema.NullOr(Page),
-  expanded: Schema.Array(Schema.String)
+  expanded: Schema.Array(Schema.String),
+  position: Position,
+  pickingCorner: Schema.Boolean,
+  announced: Schema.NullOr(Schema.String)
 })
 
 type OverlayModel = typeof OverlayModel.Type
@@ -109,7 +123,10 @@ const OverlayMessage = UiSchema.TaggedEnum({
   ClickedClear: {},
   Cleared: {},
   Painted: Paused.fields,
-  FailedPaint: Page.fields
+  FailedPaint: Page.fields,
+  ClickedCornerPicker: {},
+  ClosedCornerPicker: {},
+  ChosePosition: { position: Position }
 })
 
 type OverlayMessage = typeof OverlayMessage.Type
@@ -174,6 +191,16 @@ export class SaveOpen extends Command.Service<SaveOpen>()(
   Effect.gen(function*() {
     const pages = yield* Pages
     return ({ open }) => Effect.as(pages.setOpen(open), Component.noop)
+  })
+) {}
+
+export class SavePosition extends Command.Service<SavePosition>()(
+  "devtools/SavePosition",
+  { args: { position: Position } },
+  Effect.gen(function*() {
+    const pages = yield* Pages
+    return ({ position }) =>
+      Effect.as(pages.setPosition(position), Component.noop)
   })
 ) {}
 
@@ -365,6 +392,72 @@ const PausedBar = (
   )
 }
 
+const corners: ReadonlyArray<readonly [Position, string]> = [
+  ["TopLeft", "Top left"],
+  ["TopRight", "Top right"],
+  ["BottomLeft", "Bottom left"],
+  ["BottomRight", "Bottom right"]
+]
+
+const cornerLabel = (position: Position) =>
+  corners.find(([corner]) => corner === position)![1]
+
+const moveCorner = (
+  position: Position,
+  key: string
+): Position | undefined => {
+  const vertical = position.startsWith("Top") ? "Top" : "Bottom"
+  const horizontal = position.endsWith("Left") ? "Left" : "Right"
+  switch (key) {
+    case "ArrowUp":
+      return ("Top" + horizontal) as Position
+    case "ArrowDown":
+      return ("Bottom" + horizontal) as Position
+    case "ArrowLeft":
+      return (vertical + "Left") as Position
+    case "ArrowRight":
+      return (vertical + "Right") as Position
+    default:
+      return undefined
+  }
+}
+
+const CornerPicker = (h: H, model: OverlayModel) =>
+  h.div.class("corner-wrap").onKeyDown(
+    ({ key }) =>
+      key === "Escape" && model.pickingCorner
+        ? OverlayMessage.ClosedCornerPicker()
+        : undefined,
+    { preventDefault: true }
+  ).children(
+    h.button.class("corner", model.pickingCorner && "on")
+      .attr("aria-label", "Move inspector to another corner")
+      .attr("aria-expanded", String(model.pickingCorner))
+      .attr("title", "Move inspector to another corner")
+      .onClick(OverlayMessage.ClickedCornerPicker())
+      .children(
+        h.span.class("corner-icon").attr("aria-hidden", "true").children(
+          corners.map(([corner]) =>
+            h.i.key(corner).class(model.position === corner && "here")
+          )
+        )
+      ),
+    !model.pickingCorner
+      ? null
+      : h.div.class("corner-menu")
+        .attr("role", "group")
+        .attr("aria-label", "Inspector corner")
+        .children(
+          corners.map(([corner, label]) =>
+            h.button.key(corner)
+              .class("corner-option", model.position === corner && "on")
+              .attr("aria-pressed", String(model.position === corner))
+              .onClick(OverlayMessage.ChosePosition({ position: corner }))
+              .children(label)
+          )
+        )
+  )
+
 const Header = (
   h: H,
   session: Session | undefined,
@@ -399,6 +492,7 @@ const Header = (
         h.span.class("dot").attr("aria-hidden", "true"),
         "Follow latest"
       ),
+    CornerPicker(h, model),
     h.button.class("close").attr("aria-label", "Close the inspector").onClick(
       OverlayMessage.ClickedClose()
     )
@@ -1732,7 +1826,11 @@ const Panel = (h: H, model: OverlayModel) => {
 
 const synced = (model: OverlayModel, feed: Feed) => {
   const paused = feed.paused() ?? null
-  return samePage(paused, model.paused) ? {} : { paused }
+  const position = feed.position()
+  return {
+    ...(samePage(paused, model.paused) ? {} : { paused }),
+    ...(position === model.position ? {} : { position })
+  }
 }
 
 const Launcher = (h: H, model: OverlayModel) => {
@@ -1743,7 +1841,22 @@ const Launcher = (h: H, model: OverlayModel) => {
     h.button.class("launcher").attr(
       "aria-label",
       "Open the Effect UI inspector"
-    ).onClick(OverlayMessage.ClickedOpen())
+    ).attr(
+      "aria-keyshortcuts",
+      "ArrowUp ArrowDown ArrowLeft ArrowRight"
+    ).attr(
+      "title",
+      "Open the Effect UI inspector. Drag or press arrow keys to move to another corner."
+    ).onClick(OverlayMessage.ClickedOpen()).onKeyDown(
+      ({ alt, ctrl, key, meta, shift }) => {
+        if (alt || ctrl || meta || shift) return undefined
+        const next = moveCorner(model.position, key)
+        return next === undefined
+          ? undefined
+          : OverlayMessage.ChosePosition({ position: next })
+      },
+      { preventDefault: true }
+    )
       .children(
         h.span.class("logo").attr("aria-hidden", "true"),
         "Effect UI",
@@ -1806,7 +1919,10 @@ export const Overlay = Html.component({
     pane: "timeline",
     paused: null,
     painting: null,
-    expanded: []
+    expanded: [],
+    position: $.props.feed.position(),
+    pickingCorner: false,
+    announced: null
   }),
   update: {
     ReceivedFrames: ($) =>
@@ -1818,11 +1934,20 @@ export const Overlay = Html.component({
         ...synced($.model, $.props.feed)
       }),
     ClickedOpen: ($) =>
-      $.evolve({ open: true, atStart: true, ...following }).run(
+      $.evolve({
+        open: true,
+        atStart: true,
+        pickingCorner: false,
+        ...following
+      }).run(
         SaveOpen.make({ open: true })
       ),
     ClickedClose: ($) =>
-      $.evolve({ open: false, failures: $.props.feed.failures() }).run(
+      $.evolve({
+        open: false,
+        pickingCorner: false,
+        failures: $.props.feed.failures()
+      }).run(
         SaveOpen.make({ open: false })
       ),
     ClickedEntry: ($, { seq }) => {
@@ -1927,7 +2052,16 @@ export const Overlay = Html.component({
         ...(samePage($.model.painting, paused) ? { painting: null } : {})
       }),
     FailedPaint: ($, page) =>
-      samePage($.model.painting, page) ? $.evolve({ painting: null }) : $.model
+      samePage($.model.painting, page) ? $.evolve({ painting: null }) : $.model,
+    ClickedCornerPicker: ($) =>
+      $.evolve({ pickingCorner: !$.model.pickingCorner }),
+    ClosedCornerPicker: ($) => $.evolve({ pickingCorner: false }),
+    ChosePosition: ($, { position }) =>
+      $.evolve({
+        position,
+        pickingCorner: false,
+        announced: "Inspector moved to " + cornerLabel(position).toLowerCase()
+      }).run(SavePosition.make({ position }))
   },
   subscriptions: ({ props }) => [
     Subscription.make(
@@ -1939,6 +2073,11 @@ export const Overlay = Html.component({
     h.div.class("overlay").children(
       model.open
         ? Panel(h, model)
-        : Launcher(h, model)
+        : Launcher(h, model),
+      model.announced === null
+        ? null
+        : h.span.class("sr").attr("aria-live", "polite").children(
+          model.announced
+        )
     )
 })
