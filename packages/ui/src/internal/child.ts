@@ -31,8 +31,8 @@ export interface ComposeOptions extends Options {
 
 const noProps: Readonly<Record<string, never>> = Object.freeze({})
 
-// Components a hot update copied onto an older object, mapped to that object,
-// so a re-run module's view keeps its children mounted.
+// Resolve new component objects to their original identities so hot updates
+// keep existing children mounted.
 let replaced: WeakMap<object, Component.Any> | undefined
 
 /** @internal */

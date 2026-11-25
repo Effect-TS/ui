@@ -41,8 +41,7 @@ export class Table {
       for (const entry of this.kids.values()) drop(author, entry)
     })
   }
-  // The entries that hold a kept child. A lazy child still loading is left
-  // out: its entry holds the author.
+  // Exclude loading entries: they hold the author, not the lazy child.
   children(): ReadonlyArray<Entry> {
     const out: Array<Entry> = []
     for (const entry of this.kids.values()) {

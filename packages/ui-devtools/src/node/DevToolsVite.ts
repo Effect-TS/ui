@@ -175,7 +175,6 @@ const devToolsClient = (options: OverlayOptions): string =>
 
 const scriptRE = /\.[cm]?[jt]sx?$/
 
-// The source parsed, or `undefined` when it isn't a script this can read.
 const programOf = (
   context: TransformContext,
   code: string,
@@ -225,15 +224,13 @@ const reasonOf = (error: unknown): string =>
  * state no longer decodes restart from `init` with a console warning.
  *
  * It also turns on Vite's `experimental.hmrPartialAccept`, unless the config
- * sets it to `false`, and has each module that exports components accept
- * updates to those exports. An edit to such a module updates its mounted
- * instances in place: each keeps its DOM, Model and running subscriptions,
- * and draws again with the new code. An edit that can't be applied that way
- * falls back to the reload above. That includes a Model or props that no
- * longer fit their new Schema, a component with queries, shared state, parts,
- * slots or a Layer, a module whose importers also use its other exports, and
- * an edit that would replace a child an instance draws, such as one whose
- * component the module makes again.
+ * sets it to `false`, and adds HMR handlers for detected component exports.
+ * Compatible edits redraw mounted instances without remounting, preserving
+ * their Models and running subscriptions. Other edits use the reload above,
+ * including edits whose new Schemas reject the current Model or props, edits
+ * that replace a child, and components with queries, shared state, parts,
+ * slots or a Layer.
+ * Importers that use non-component exports can also trigger a reload.
  *
  * @stability experimental
  * @category constructors

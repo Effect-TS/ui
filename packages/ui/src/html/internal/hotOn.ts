@@ -194,7 +194,7 @@ type Fields = Component.Any & {
   readonly "~load"?: unknown
 }
 
-// Only a component whose state lives in its Model can take new code in place.
+// State outside the Model has no in-place migration path.
 const plain = (component: Fields): boolean => {
   const definition = component.definition
   return component.view !== undefined && component.layer === undefined &&
@@ -221,7 +221,6 @@ const fits = (schema: Schema.Top | undefined, value: unknown): boolean => {
   }
 }
 
-// Collects each instance under `inst`, failed and parked ones included.
 const instancesIn = (
   inst: Kernel.Instance,
   out: Set<Kernel.Instance>
@@ -235,7 +234,7 @@ const instancesIn = (
 
 const instancesInRec = (rec: Kernel.Rec, out: Set<Kernel.Instance>): void => {
   const inst = rec.inst as Kernel.Instance | undefined
-  // A child's own instance, or one that failed and shows its fallback.
+  // Failed children still need checking even when their fallback is visible.
   if (
     rec.v._tag === "Child" && inst !== undefined &&
     (rec.kids === undefined || inst.failure !== undefined)
@@ -246,9 +245,7 @@ const instancesInRec = (rec: Kernel.Rec, out: Set<Kernel.Instance>): void => {
 const holdsChild = (rec: Kernel.Rec): boolean =>
   rec.v._tag === "Child" || (rec.kids?.some(holdsChild) ?? false)
 
-// Whether patching `rec` to `view` is sure to keep each child under it in
-// place: on the way to a child, every list must pair up index by index, which
-// the reconciler patches in place. Any other change there counts as no.
+// Require index-by-index pairing along each child's ancestry to avoid remounts.
 const reuses = (
   rec: Kernel.Rec,
   view: View.Node<any, any>,
@@ -272,9 +269,8 @@ const reuses = (
     kids.every((kid, index) => reuses(kid, next.children[index]!, resolve))
 }
 
-// Whether the new view, drawn now, keeps every child the instance draws in
-// place. A component made again by a re-run module is a new object, and a
-// child moved into a new element is made again, so those edits reload.
+// Reload if a child would remount, including when its component identity or
+// ancestor elements change.
 const keepsChildren = (
   inst: Kernel.Instance,
   to: Fields,
@@ -325,7 +321,7 @@ const swap = (
     ) return false
     found.push(inst)
   }
-  // Every importer holds the first object, so the new code goes onto it.
+  // Mutate the first object so existing importers see the new code.
   for (const [from, to] of pairs) {
     Object.assign(from as Component.Any, to)
     replace(from as Component.Any, to)

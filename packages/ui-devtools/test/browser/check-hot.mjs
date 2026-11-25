@@ -24,7 +24,6 @@ const on = (page) => ({
   }
 })
 
-// Collects the tag of each message a `/log` socket sends.
 const collectTags = (ws, logTags) =>
   ws.on("framesent", ({ payload }) => {
     if (typeof payload !== "string") return
