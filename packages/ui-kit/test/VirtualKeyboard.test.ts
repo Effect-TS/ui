@@ -15,6 +15,7 @@ import {
 const closed: VirtualKeyboard.Sample = {
   layoutWidth: 400,
   layoutHeight: 800,
+  visualWidth: 400,
   visualHeight: 800,
   visualTop: 0,
   scale: 1,
@@ -65,15 +66,40 @@ describe("VirtualKeyboard.step", () => {
       band: null
     },
     {
-      name: "a pinch-zoom alone is no keyboard",
-      samples: [{ visualHeight: 400, scale: 2 }],
+      name:
+        "a pinch-zoom alone is no keyboard, on a layout viewport wider than the screen too",
+      samples: [{
+        layoutWidth: 980,
+        layoutHeight: 1960,
+        visualWidth: 200,
+        visualHeight: 400,
+        scale: 2
+      }],
       band: null
     },
     {
       name:
         "under a pinch-zoom, the band is the part of the layout viewport on screen above the keyboard",
-      samples: [{ visualHeight: 250, visualTop: 100, scale: 2 }],
+      samples: [{
+        visualWidth: 200,
+        visualHeight: 250,
+        visualTop: 100,
+        scale: 2
+      }],
       band: { top: 100, bottom: 350, inset: 450, resizing: false }
+    },
+    {
+      name:
+        "under a pinch-zoom, a layout viewport that follows the keyboard still gets an inset below the screen",
+      samples: [{
+        layoutHeight: 500,
+        visualWidth: 200,
+        visualHeight: 250,
+        scale: 2,
+        smallViewportHeight: 500,
+        android: true
+      }],
+      band: { top: 0, bottom: 250, inset: 250, resizing: false }
     },
     {
       name: "the band moves with a panned visual viewport",
@@ -210,7 +236,13 @@ describe("VirtualKeyboard.TrackKeyboard", { concurrent: false }, () => {
     Effect.gen(function*() {
       const { visual } = yield* visualViewport
       const app = yield* container
-      // WebKit at scale 2 reports the 400x800 layout viewport as 200x400.
+      // WebKit at scale 2 reports the 400x800 layout viewport as 200x400,
+      // and the root element's clientWidth as 400.
+      const root = document.documentElement as { clientWidth?: number }
+      Object.defineProperty(root, "clientWidth", {
+        configurable: true,
+        value: 400
+      })
       Object.defineProperty(window, "innerWidth", {
         configurable: true,
         value: 200
@@ -220,9 +252,10 @@ describe("VirtualKeyboard.TrackKeyboard", { concurrent: false }, () => {
         value: 400
       })
       yield* Effect.addFinalizer(() =>
-        Effect.sync(() =>
+        Effect.sync(() => {
           delete (window as { innerWidth?: unknown }).innerWidth
-        )
+          delete root.clientWidth
+        })
       )
       visual.move({ width: 200, height: 400, scale: 2 })
       yield* BrowserHost.mountEffect(Sheet, {}, app)
