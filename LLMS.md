@@ -606,7 +606,7 @@ consumer refuses to, because it doesn't run the component's `update`.
 
 ### Shared state
 
-A headless component with `shares: (model, props) => value` owns shared
+A headless component with `shares: (model, props, reads) => value` owns shared
 state: every component in its `view` closure, at any depth, can read the
 value. An owner with no parts of its own can omit `parts` in `make`; its
 `view` closure receives `{}`. A reader lists the owners it reads in
@@ -654,6 +654,14 @@ instance of the same component above it. The outermost one has none, so the
 entry is `optional: true`, and the component must have `shares` itself. Write
 `shares` before `reads`, so `report` and `onChange` are typed by it. In a
 `Scene`, the component itself is the owner: `s.shared(Menu, value)`.
+
+An owner's `shares` gets its `reads` as a third argument, so it can share
+what it derives from the owners above it. A nested fieldset is disabled while
+the one around it is:
+`value: (_, props, reads) => ({ disabled: props.disabled || reads.parent?.disabled === true })`.
+The fields inside read only the nearest fieldset. To read its own kind in
+`shares`, give it a `schema` or annotate what it returns, as the value's
+type would refer to itself.
 
 Every owner update re-runs its closure, and headless children in it
 re-render each time, so put normal components directly under an owner.
@@ -1114,7 +1122,8 @@ Known limits:
   a tooltip provider that knows which tooltip is open, tooltips that read it
   and tell it when they're focused, and a scene of one tooltip with no
   provider mounted. Then an optional owner, the reports readers give it, a
-  reader's `onChange`, and a component that reads and sends to its own kind.
+  reader's `onChange`, a component that reads and sends to its own kind, and
+  an owner that shares what it derives from the one above it.
 - **[Custom elements](./ai-docs/src/10_ui/24_custom-elements.ts)**:
   Use web components from other libraries in an HTML view: bind each tag
   with its properties and events once, set them with typed methods, and fire

@@ -3,7 +3,7 @@ import type * as Component from "../Component.ts"
 import * as View from "../View.ts"
 import { sharedEqual } from "./equal.ts"
 import * as Kernel from "./kernel.ts"
-import { readsOf } from "./shared.ts"
+import { readsOf, values } from "./shared.ts"
 
 type Inst = Kernel.Instance
 
@@ -240,7 +240,12 @@ const refresh = (inst: Inst, seq: number | undefined | void): boolean => {
   const owning = inst.owning as Owning
   let value: unknown
   try {
-    value = definitionOf(inst).shares!(inst.model, inst.props)
+    const definition = definitionOf(inst)
+    value = definition.shares!(
+      inst.model,
+      inst.props,
+      values(definition.name, readsOf(definition), inst.look) as never
+    )
   } catch (error) {
     fail(inst, "shares", error)
     return false
@@ -259,6 +264,18 @@ const refresh = (inst: Inst, seq: number | undefined | void): boolean => {
     sharedOf(inst.tree).rounds.push(inst)
   }
   return true
+}
+
+/**
+ * @internal
+ *
+ * An owner that reads others refreshes as it renders, when its props are final too: refreshing when an owner
+ * above changes would give its readers' `onChange` a value made from its old props.
+ */
+export const rendered = (inst: Inst): void => {
+  if (inst.owning !== undefined && inst.reading !== undefined) {
+    refresh(inst, undefined)
+  }
 }
 
 const report = (inst: Inst): void => {

@@ -280,6 +280,7 @@ const noOwners: Owners = new Map()
 
 /** The owners the readers below `component` see: `owners`, and `component` nearest when it's an owner. */
 const ownersBelow = (
+  given: Owners | undefined,
   owners: Owners,
   component: { readonly definition: Component.Definition.Any },
   model: unknown,
@@ -288,8 +289,23 @@ const ownersBelow = (
   const shares = component.definition.shares
   return shares === undefined
     ? owners
-    : new Map(owners).set(component.definition, shares(model, props))
+    : new Map(owners).set(
+      component.definition,
+      shares(model, props, readsIn(component.definition, given, owners))
+    )
 }
+
+// What an owner's `shares` reads: the owners above it, as its parts read them.
+const readsIn = (
+  definition: Component.Definition.Any,
+  given: Owners | undefined,
+  owners: Owners
+): never =>
+  sharedReads.values(
+    definition.name,
+    sharedReads.readsOf(definition),
+    sharedLookup(given, owners)
+  ) as never
 
 /**
  * What the story's component itself reads: only given values, as nothing is above it. A component that
@@ -351,7 +367,11 @@ const sharedDefault = (owner: Component.Headless.Any): unknown => {
       `Scene: the scene reads the shared state of ${name}, whose props aren't all optional, so it has no default. Give it with .shared(${name}, value)`
     )
   }
-  return owner.definition.shares!(owner.init(props).model, props)
+  return owner.definition.shares!(
+    owner.init(props).model,
+    props,
+    readsIn(owner.definition, undefined, noOwners)
+  )
 }
 
 /**
@@ -625,7 +645,7 @@ const expandRoot = <Msg>(
           childPath,
           depth + 1,
           own,
-          ownersBelow(owners, component, model, node.props),
+          ownersBelow(shared, owners, component, model, node.props),
           (label) => checkChildPaths(label, tree),
           reads
         )
@@ -797,7 +817,13 @@ export const expandedView = (
     fields.childModels,
     storySlots.get(fields.component),
     fields.shared,
-    ownersBelow(noOwners, fields.component, fields.model, fields.props),
+    ownersBelow(
+      fields.shared,
+      noOwners,
+      fields.component,
+      fields.model,
+      fields.props
+    ),
     fields.childStatus,
     fields.slotStatus,
     fields
@@ -2337,7 +2363,7 @@ export const rootParts = <Props, Parts>(
           shared: sharedLookup(shared, owners)
         }),
         at,
-        ownersBelow(owners, owned, ownedModel, child.props)
+        ownersBelow(shared, owners, owned, ownedModel, child.props)
       )
       value = value.parts(parts)
       owner = inner
@@ -2349,7 +2375,7 @@ export const rootParts = <Props, Parts>(
   return resolve(
     component.parts(model, props, { owner, shared: rootShared(shared) }),
     owner,
-    ownersBelow(noOwners, component, model, props)
+    ownersBelow(shared, noOwners, component, model, props)
   )[0] as Parts
 }
 
