@@ -134,7 +134,6 @@ try {
   const beforeEdit1 = await count()
   expect((await label()) === "v1", "initial label", await label())
 
-  // 1. Compatible view edit: count survives and still ticks once per interval.
   await Promise.all([
     page.waitForEvent("load"),
     Promise.resolve().then(() => writeTimer(timerSource("v2")))
@@ -148,7 +147,6 @@ try {
     afterEdit1
   })
 
-  // Measure ticks over 350ms at 100ms interval -> should be 2-5 ticks (not doubled!).
   const t0 = await count()
   await page.waitForTimeout(350)
   const t1 = await count()
@@ -159,7 +157,6 @@ try {
     delta
   })
 
-  // 2. Second compatible edit + broken module recovery: snapshot survives broken edit.
   const beforeBreak = await count()
   expectingError = true
   await Promise.all([
@@ -181,7 +178,6 @@ try {
     afterFix
   })
 
-  // 3. Incompatible Model edit: restarts from init with console warning.
   warnings.length = 0
   await Promise.all([
     page.waitForEvent("load"),
@@ -204,7 +200,6 @@ try {
     warnings
   )
 
-  // 4. Manual refresh after compatible edit starts fresh from init.
   await Promise.all([
     page.waitForEvent("load"),
     Promise.resolve().then(() => writeTimer(timerSource("v4")))

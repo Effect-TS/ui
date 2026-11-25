@@ -610,7 +610,9 @@ const start = (
       : routing === undefined
       ? hot.hold
       : (owner, rec, at) =>
-        hot.hold(owner, rec, at) || routing.hold(owner, rec, at),
+        hot.hasSnapshot
+          ? hot.hold(owner, rec, at)
+          : routing.hold(owner, rec, at),
     commit: () => {
       base.commit?.()
       hydrating?.commit()

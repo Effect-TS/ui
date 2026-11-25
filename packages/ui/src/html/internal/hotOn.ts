@@ -103,7 +103,7 @@ const parsePayload = (raw: string): HotPayload | undefined => {
       return parsed as HotPayload
     }
   } catch {
-    // Corrupted storage entry is ignored.
+    return undefined
   }
   return undefined
 }
@@ -185,14 +185,9 @@ const takeRoot = (
   containerId: string | undefined
 ): SavedRoot | undefined => {
   if (pending === undefined || pending.roots.length === 0) return undefined
-  let index = containerId === undefined
-    ? -1
-    : pending.roots.findIndex((entry) =>
-      entry.path === path && entry.containerId === containerId
-    )
-  if (index < 0) {
-    index = pending.roots.findIndex((entry) => entry.path === path)
-  }
+  const index = pending.roots.findIndex((entry) =>
+    entry.path === path && entry.containerId === containerId
+  )
   if (index < 0) return undefined
   return pending.roots.splice(index, 1)[0]
 }
@@ -336,7 +331,9 @@ export const open = (
       if (claimed !== undefined) restoreScroll(view, windowState)
     },
     flushed: (buildsPending) => {
-      if (buildsPending === 0 && restoring !== undefined) {
+      if (
+        buildsPending === 0 && !restore.holding() && restoring !== undefined
+      ) {
         restoring = undefined
         if (windowState.pending?.roots.length === 0) {
           windowState.pending = undefined

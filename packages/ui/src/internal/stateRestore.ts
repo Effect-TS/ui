@@ -8,6 +8,7 @@ import type * as View from "../View.ts"
 import { runCodec } from "./codecRun.ts"
 import type * as keptRun from "./keptRun.ts"
 import * as Kernel from "./kernel.ts"
+import * as lazy from "./lazy.ts"
 import { segmentOf } from "./paths.ts"
 import type * as componentQueries from "./queries.ts"
 import * as queryCore from "./queryCore.ts"
@@ -67,6 +68,7 @@ export interface StateRestore {
   ) => Kernel.Next
   readonly restored: (inst: Kernel.Instance) => boolean
   readonly hold: NonNullable<Kernel.Host["hold"]>
+  readonly holding: () => boolean
   readonly heldFor: (
     owner: Kernel.Instance,
     rec: Kernel.Rec,
@@ -151,6 +153,14 @@ export const restoreQueries = (
   return out
 }
 
+const resolveComponent = (component: unknown): Component.Any | undefined => {
+  if (lazy.isLazy(component)) {
+    const state = lazy.stateOf(component)
+    return state._tag === "Loaded" ? state.component : undefined
+  }
+  return component as Component.Any
+}
+
 /** @internal */
 export const make = (options: Options): StateRestore => {
   const {
@@ -227,6 +237,7 @@ export const make = (options: Options): StateRestore => {
   }
   let popped: Saved | undefined
   const pop = () => {
+    taken.clear()
     const left = entry()
     popped = left && { ...left["~kept" + rootPath] as Saved | undefined }
   }
@@ -272,7 +283,8 @@ export const make = (options: Options): StateRestore => {
     for (const author in held.notes) {
       Object.assign(keptIn(to, top, author), held.notes[author])
     }
-    const component = view.component as unknown as Component.Any
+    const component = resolveComponent(view.component)
+    if (component === undefined) return
     const restore = component.definition.restore
     const state = saved[path]
     if (state === undefined || restore === false) return
@@ -308,8 +320,10 @@ export const make = (options: Options): StateRestore => {
   >()
   const hold: StateRestore["hold"] = (owner, rec, at) => {
     const view = rec.v as View.Child<any, any>
-    const component = view.component as unknown as Component.Any
-    if (component.definition?.restore === false) return false
+    const component = resolveComponent(view.component)
+    if (component === undefined || component.definition?.restore === false) {
+      return false
+    }
     const path = (view.alive === undefined && at || owner.path) + "/" +
       segmentOf(view.component, view.key)
     let own: Saved | undefined
@@ -368,11 +382,11 @@ export const make = (options: Options): StateRestore => {
       const component = inst.component as unknown as Component.Any
       const own = supplyOf(inst)
       claim(inst, own === undefined ? popped : own["~kept"] as Saved)
+      const held = taken.get(inst.path)
+      taken.delete(inst.path)
       if (adopted === true || component.definition.restore === false) {
         return first
       }
-      const held = taken.get(inst.path)
-      taken.delete(inst.path)
       const found: services.PageState | undefined = held !== undefined
         ? held[0]
         : own === undefined
@@ -404,10 +418,12 @@ export const make = (options: Options): StateRestore => {
     },
     restored: (inst) => restored.has(inst),
     hold,
+    holding: () => waitingFor.size > 0,
     heldFor,
     pop,
     clear: () => {
       popped = undefined
+      taken.clear()
     },
     ended: (author, path) => {
       delete waits.get(author)?.[path]
