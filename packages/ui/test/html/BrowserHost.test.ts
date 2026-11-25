@@ -18,6 +18,7 @@ import {
   Html,
   HtmlCommand,
   HtmlHydrate,
+  HtmlScheduler,
   HtmlServer,
   HtmlSubscription
 } from "@effect/ui/html"
@@ -777,6 +778,28 @@ describe("BrowserHost", { concurrent: false }, () => {
           ])
           expect(writes).toEqual([])
         }), "/search?utm_source=news"))
+
+    it.effect("keeps typed text when HtmlScheduler has no budget left", () =>
+      withSearch(({ field, history, type, writes }) =>
+        Effect.gen(function*() {
+          yield* Effect.promise(async () => {
+            let text = ""
+            for (const char of "effect") {
+              text += char
+              type(text)
+              field.setSelectionRange(text.length, text.length)
+              await Promise.resolve()
+              expect(field.value).toBe(text)
+              expect(history.entries()).toEqual([`/search?q=${text}`])
+            }
+          })
+          yield* tick
+          expect(field.value).toBe("effect")
+          expect(field.selectionStart).toBe(6)
+          expect(history.entries()).toEqual(["/search?q=effect"])
+          expect(writes).toEqual([])
+        })
+      ).pipe(Effect.provide(HtmlScheduler.layer({ budget: 0 }))))
 
     it.effect("a rejected keystroke is put back", () =>
       withSearch(({ field, history, type }) =>
