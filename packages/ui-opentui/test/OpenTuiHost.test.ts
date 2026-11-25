@@ -723,66 +723,51 @@ describe("OpenTuiHost", () => {
     Effect.gen(function*() {
       const FocusTarget = Schema.Literals(["controlled", "uncontrolled"])
       const Message = UiSchema.TaggedEnum({
-        ChangedControlledTab: { index: Schema.Number },
-        PickedControlledTab: { index: Schema.Number },
-        ChangedUncontrolledTab: { index: Schema.Number },
-        PickedUncontrolledTab: { index: Schema.Number },
-        ChangedControlledSlider: { value: Schema.Number },
-        ChangedUncontrolledSlider: { value: Schema.Number },
-        SwitchedFocus: { target: FocusTarget },
-        SetVertical: { vertical: Schema.Boolean },
-        BumpedTick: {}
+        ChangedTab: { index: Schema.Number },
+        ChangedSlider: { value: Schema.Number },
+        Logged: { entry: Schema.String },
+        Updated: {
+          focus: Schema.optional(FocusTarget),
+          vertical: Schema.optional(Schema.Boolean),
+          tick: Schema.optional(Schema.Number)
+        }
       })
 
       const App = OpenTui.component({
         name: "TabSelectAndSlider",
         model: Schema.Struct({
           tab: Schema.Number,
-          controlledPicked: Schema.Array(Schema.Number),
-          uncontrolledChanged: Schema.Array(Schema.Number),
-          uncontrolledPicked: Schema.Array(Schema.Number),
           slider: Schema.Number,
-          sliderEvents: Schema.Array(Schema.Number),
-          uncontrolledSliderEvents: Schema.Array(Schema.Number),
           focus: FocusTarget,
           vertical: Schema.Boolean,
-          tick: Schema.Number
+          tick: Schema.Number,
+          log: Schema.Array(Schema.String)
         }),
         message: Message
       }).make({
         init: () => ({
           tab: 1,
-          controlledPicked: [],
-          uncontrolledChanged: [],
-          uncontrolledPicked: [],
           slider: 20,
-          sliderEvents: [],
-          uncontrolledSliderEvents: [],
           focus: "controlled" as const,
           vertical: false,
-          tick: 0
+          tick: 0,
+          log: []
         }),
         update: {
-          ChangedControlledTab: ($, { index }) =>
+          ChangedTab: ($, { index }) =>
             index === 2 ? $.model : $.evolve({ tab: index }),
-          PickedControlledTab: ($, { index }) =>
-            $.evolve({ controlledPicked: (xs) => [...xs, index] }),
-          ChangedUncontrolledTab: ($, { index }) =>
-            $.evolve({ uncontrolledChanged: (xs) => [...xs, index] }),
-          PickedUncontrolledTab: ($, { index }) =>
-            $.evolve({ uncontrolledPicked: (xs) => [...xs, index] }),
-          ChangedControlledSlider: ($, { value }) =>
-            value > 50
-              ? $.evolve({ sliderEvents: (xs) => [...xs, value] })
-              : $.evolve({
-                slider: value,
-                sliderEvents: (xs) => [...xs, value]
-              }),
-          ChangedUncontrolledSlider: ($, { value }) =>
-            $.evolve({ uncontrolledSliderEvents: (xs) => [...xs, value] }),
-          SwitchedFocus: ($, { target }) => $.evolve({ focus: target }),
-          SetVertical: ($, { vertical }) => $.evolve({ vertical }),
-          BumpedTick: ($) => $.evolve({ tick: (n) => n + 1 })
+          ChangedSlider: ($, { value }) =>
+            $.evolve({
+              slider: value > 50 ? $.model.slider : value,
+              log: (xs) => [...xs, `slider:${value}`]
+            }),
+          Logged: ($, { entry }) => $.evolve({ log: (xs) => [...xs, entry] }),
+          Updated: ($, patch) =>
+            $.evolve({
+              focus: patch.focus ?? $.model.focus,
+              vertical: patch.vertical ?? $.model.vertical,
+              tick: patch.tick ?? $.model.tick
+            })
         },
         view: (h, model) =>
           h.box.style({ flexDirection: "column", width: 44, height: 14 })
@@ -795,20 +780,20 @@ describe("OpenTuiHost", () => {
                 { name: "Locked", description: "rejected tab" }
               ]).focused(model.focus === "controlled")
                 .onSelectionChanged(({ index }) =>
-                  Message.ChangedControlledTab({ index })
+                  Message.ChangedTab({ index })
                 )
                 .onItemSelected(({ index }) =>
-                  Message.PickedControlledTab({ index })
+                  Message.Logged({ entry: `tab:${index}` })
                 ),
               h.tabSelect.style({ width: 40, tabWidth: 12 }).options([
                 { name: "Alpha", description: "alpha tab" },
                 { name: "Beta", description: "beta tab" }
               ]).focused(model.focus === "uncontrolled")
                 .onSelectionChanged(({ index }) =>
-                  Message.ChangedUncontrolledTab({ index })
+                  Message.Logged({ entry: `utab-change:${index}` })
                 )
                 .onItemSelected(({ index }) =>
-                  Message.PickedUncontrolledTab({ index })
+                  Message.Logged({ entry: `utab-pick:${index}` })
                 ),
               h.slider.style({
                 orientation: model.vertical ? "vertical" : "horizontal",
@@ -817,7 +802,7 @@ describe("OpenTuiHost", () => {
                 min: 0,
                 max: 100
               }).value(model.slider).onChange(({ value }) =>
-                Message.ChangedControlledSlider({ value })
+                Message.ChangedSlider({ value })
               ),
               h.slider.style({
                 width: 20,
@@ -825,7 +810,7 @@ describe("OpenTuiHost", () => {
                 min: 0,
                 max: 100
               }).onChange(({ value }) =>
-                Message.ChangedUncontrolledSlider({ value })
+                Message.Logged({ entry: `uslider:${value}` })
               ),
               h.text(`tick=${model.tick}`)
             )
@@ -839,53 +824,47 @@ describe("OpenTuiHost", () => {
       // Controlled tabSelect: rejected move to index 2 reverts; accepted move to 0 commits
       yield* app.pressArrow("right")
       yield* app.pressEnter
-      expect(app.root.model()?.tab).toBe(1)
-      expect(app.root.model()?.controlledPicked).toEqual([1])
-
       yield* app.pressArrow("left")
       yield* app.pressEnter
       expect(app.root.model()?.tab).toBe(0)
-      expect(app.root.model()?.controlledPicked).toEqual([1, 0])
 
       // Uncontrolled tabSelect: native selection survives unrelated re-renders
-      app.root.send(Message.SwitchedFocus({ target: "uncontrolled" }))
+      app.root.send(Message.Updated({ focus: "uncontrolled" }))
       yield* app.settle
       yield* app.pressArrow("right")
-      app.root.send(Message.BumpedTick())
+      app.root.send(Message.Updated({ tick: 1 }))
       yield* app.settle
       yield* app.pressEnter
-      expect(app.root.model()?.uncontrolledChanged).toEqual([1])
-      expect(app.root.model()?.uncontrolledPicked).toEqual([1])
 
-      // Controlled slider: click > 50 delivers numeric payload and reverts; click <= 50 commits
-      const controlledNode = app.setup.renderer.root.getChildren()[0]!
-        .getChildren()[2] as OT.SliderRenderable
-      const uncontrolledNode = app.setup.renderer.root.getChildren()[0]!
-        .getChildren()[3] as OT.SliderRenderable
+      const children = app.setup.renderer.root.getChildren()[0]!.getChildren()
+      const controlledSlider = children[2] as OT.SliderRenderable
+      const uncontrolledSlider = children[3] as OT.SliderRenderable
 
-      expect(controlledNode.value).toBe(20)
-      yield* app.click(controlledNode.x + 16, controlledNode.y)
-      expect(app.root.model()?.sliderEvents.at(-1)).toBeGreaterThan(50)
-      expect(app.root.model()?.slider).toBe(20)
-      expect(controlledNode.value).toBe(20)
-
-      yield* app.click(controlledNode.x + 8, controlledNode.y)
-      expect(app.root.model()?.slider).toBe(40)
-      expect(controlledNode.value).toBe(40)
-
-      // Switching orientation after construction works
-      app.root.send(Message.SetVertical({ vertical: true }))
+      // Controlled slider: click at 80 reverts to 20; click at 40 commits; orientation updates
+      expect(controlledSlider.value).toBe(20)
+      yield* app.click(controlledSlider.x + 16, controlledSlider.y)
+      expect(controlledSlider.value).toBe(20)
+      yield* app.click(controlledSlider.x + 8, controlledSlider.y)
+      expect(controlledSlider.value).toBe(40)
+      app.root.send(Message.Updated({ vertical: true }))
       yield* app.settle
-      expect(controlledNode.orientation).toBe("vertical")
+      expect(controlledSlider.orientation).toBe("vertical")
 
       // Uncontrolled slider: native value persists across unrelated re-renders
-      yield* app.click(uncontrolledNode.x + 12, uncontrolledNode.y)
-      const movedValue = uncontrolledNode.value
-      expect(movedValue).toBeGreaterThan(0)
-      expect(app.root.model()?.uncontrolledSliderEvents.at(-1)).toBe(movedValue)
-      app.root.send(Message.BumpedTick())
+      yield* app.click(uncontrolledSlider.x + 12, uncontrolledSlider.y)
+      app.root.send(Message.Updated({ tick: 2 }))
       yield* app.settle
-      expect(uncontrolledNode.value).toBe(movedValue)
+      expect(uncontrolledSlider.value).toBe(60)
+
+      expect(app.root.model()?.log).toEqual([
+        "tab:1",
+        "tab:0",
+        "utab-change:1",
+        "utab-pick:1",
+        "slider:80",
+        "slider:40",
+        "uslider:60"
+      ])
     }))
 
   it.effect("renders code, lineNumber, diff, markdown, and asciiFont, clears removed code content, and preserves hidden line numbers across remount", () =>
@@ -935,7 +914,6 @@ describe("OpenTuiHost", () => {
                     ...(model.hasContent
                       ? { content: "const a = 1\nconst b = 2" }
                       : {}),
-                    filetype: "typescript",
                     width: 34,
                     height: 2
                   })
