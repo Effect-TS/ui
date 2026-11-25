@@ -51,11 +51,11 @@
  * and stay after the mount ends, so a closing popup keeps its place through
  * an exit transition.
  *
- * While it runs, the mount places the popup again when the window resizes,
- * when the positioner changes size, and, unless `disableAnchorTracking` is
- * set, when anything outside the positioner scrolls or the anchor changes size
- * or moves. Scrolling inside the positioner, such as a long list, doesn't
- * move it.
+ * While it runs, the mount places the popup again when the window or the
+ * visual viewport resizes or the visual viewport scrolls, when the positioner
+ * changes size, and, unless `disableAnchorTracking` is set, when anything
+ * outside the positioner scrolls or the anchor changes size or moves.
+ * Scrolling inside the positioner, such as a long list, doesn't move it.
  *
  * **Gotchas**
  *
@@ -63,6 +63,9 @@
  *   for `"absolute"`. So the positioner has to be positioned against the
  *   viewport, as a popover or a modal dialog in the top layer is. Inside a
  *   transformed or positioned ancestor it lands in the wrong place.
+ * - The viewport the popup keeps inside is the visual viewport: the part of
+ *   the page on screen, which a pinch-zoom or a software keyboard makes
+ *   smaller than the layout viewport.
  * - The positioner has to be laid out while the mount runs, so issue the
  *   mount only while the popup shows.
  * - The anchor is the first element in the document that matches
@@ -123,6 +126,7 @@ import {
   type Lines,
   linesOf
 } from "./internal/inlineRect.ts"
+import { isWebKit } from "./internal/platform.ts"
 
 /**
  * The side of the anchor a popup shows on. `"inline-start"` and
@@ -1484,12 +1488,33 @@ export const trackPosition = (
     let reported: Placement | null = null
     let owned = written.get(node) ?? new Map<string, string>()
 
-    const viewportOf = (): Rect => ({
-      x: 0,
-      y: 0,
-      width: document.documentElement.clientWidth,
-      height: document.documentElement.clientHeight
-    })
+    // WebKit measures client rects from the visual viewport, other engines
+    // from the layout viewport.
+    const webkit = isWebKit(view)
+
+    const viewportOf = (): Rect => {
+      const visual = view.visualViewport
+      if (visual == null) {
+        return {
+          x: 0,
+          y: 0,
+          width: document.documentElement.clientWidth,
+          height: document.documentElement.clientHeight
+        }
+      }
+      return {
+        x: webkit ? 0 : visual.offsetLeft,
+        y: webkit ? 0 : visual.offsetTop,
+        width: visual.width,
+        height: visual.height
+      }
+    }
+
+    // What turns a client rect's position into a fixed one.
+    const fixedOffset = (axis: "offsetLeft" | "offsetTop"): number =>
+      webkit && current.positionMethod === "fixed"
+        ? view.visualViewport?.[axis] ?? 0
+        : 0
 
     const boundaryOf = (viewport: Rect): Rect => {
       const boundary = current.collisionBoundary
@@ -1577,18 +1602,20 @@ export const trackPosition = (
         ? Math.max(0, current.options.sideOffset)
         : 0
       const scrolled = current.positionMethod === "absolute"
+      const offsetX = scrolled ? view.scrollX : fixedOffset("offsetLeft")
+      const offsetY = scrolled ? view.scrollY : fixedOffset("offsetTop")
       const dpr = view.devicePixelRatio || 1
       const snap = (start: number, length: number) =>
         (Math.round((start + length) * dpr) - Math.round(start * dpr)) / dpr
       const next = new Map<string, string>([
         [
           "left",
-          (placed.x + (scrolled ? view.scrollX : 0) -
+          (placed.x + offsetX -
             (side === "right" ? bridge : 0)) + "px"
         ],
         [
           "top",
-          (placed.y + (scrolled ? view.scrollY : 0) -
+          (placed.y + offsetY -
             (side === "bottom" ? bridge : 0)) + "px"
         ],
         ["--anchor-width", snap(anchorRect.x, anchorRect.width) + "px"],
@@ -1644,7 +1671,10 @@ export const trackPosition = (
       const anchor = current.disableAnchorTracking || current.anchorRect != null
         ? null
         : document.querySelector(current.anchorSelector)
+      const visual = view.visualViewport
       view.addEventListener("resize", update)
+      visual?.addEventListener("resize", update)
+      visual?.addEventListener("scroll", update)
       if (!current.disableAnchorTracking && current.anchorRect == null) {
         document.addEventListener("scroll", onScroll, {
           capture: true,
@@ -1669,6 +1699,8 @@ export const trackPosition = (
       const moves = anchor === null ? () => {} : observeMove(anchor, update)
       return () => {
         view.removeEventListener("resize", update)
+        visual?.removeEventListener("resize", update)
+        visual?.removeEventListener("scroll", update)
         document.removeEventListener("scroll", onScroll, { capture: true })
         view.cancelAnimationFrame(frame)
         sizes?.disconnect()

@@ -65,9 +65,15 @@ describe("VirtualKeyboard.step", () => {
       band: null
     },
     {
-      name: "no band while pinch-zoomed",
-      samples: [{ ...over, scale: 2 }],
+      name: "a pinch-zoom alone is no keyboard",
+      samples: [{ visualHeight: 400, scale: 2 }],
       band: null
+    },
+    {
+      name:
+        "under a pinch-zoom, the band is the part of the layout viewport on screen above the keyboard",
+      samples: [{ visualHeight: 250, visualTop: 100, scale: 2 }],
+      band: { top: 100, bottom: 350, inset: 450, resizing: false }
     },
     {
       name: "the band moves with a panned visual viewport",
@@ -199,4 +205,34 @@ describe("VirtualKeyboard.TrackKeyboard", { concurrent: false }, () => {
       assert.strictEqual(sheet.style.getPropertyValue("--keyboard-inset"), "")
       assert.strictEqual(probes(), 0)
     }))
+
+  it.effect("reads WebKit's zoomed innerWidth and innerHeight at the layout viewport's size", () =>
+    Effect.gen(function*() {
+      const { visual } = yield* visualViewport
+      const app = yield* container
+      // WebKit at scale 2 reports the 400x800 layout viewport as 200x400.
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: 200
+      })
+      Object.defineProperty(window, "innerHeight", {
+        configurable: true,
+        value: 400
+      })
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() =>
+          delete (window as { innerWidth?: unknown }).innerWidth
+        )
+      )
+      visual.move({ width: 200, height: 400, scale: 2 })
+      yield* BrowserHost.mountEffect(Sheet, {}, app)
+      yield* tick
+      byId("field").focus()
+      visual.move({ height: 250 })
+      yield* tick
+      assert.strictEqual(
+        byId("sheet").style.getPropertyValue("--keyboard-inset"),
+        "550px"
+      )
+    }).pipe(Effect.scoped))
 })

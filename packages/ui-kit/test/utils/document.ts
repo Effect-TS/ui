@@ -145,11 +145,15 @@ export const popovers = Effect.acquireRelease(
 ).pipe(Effect.andThen(fieldsetDisabled))
 
 class FakeVisualViewport extends EventTarget {
+  width = 1024
   height = 800
+  offsetLeft = 0
   offsetTop = 0
   scale = 1
   move(
-    changes: Partial<Pick<FakeVisualViewport, "height" | "offsetTop">>,
+    changes: Partial<
+      Pick<FakeVisualViewport, "width" | "height" | "offsetTop" | "scale">
+    >,
     type: "resize" | "scroll" = "resize"
   ) {
     Object.assign(this, changes)

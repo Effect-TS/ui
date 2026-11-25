@@ -31,21 +31,25 @@
  * - Only while a text field has focus: an `<input>` of a type that types
  *   text, a `<textarea>` or an editable element, and not a disabled one.
  * - The visual viewport is more than 60 pixels shorter than the layout
- *   viewport, which a browser's toolbar alone doesn't do.
+ *   viewport, which a browser's toolbar alone doesn't do. Its height is
+ *   taken at its size on screen, times `scale`, so a pinch-zoom alone isn't
+ *   a keyboard.
  * - On Android, the layout viewport is more than 60 pixels shorter than the
  *   tallest it has been at the current width, for a keyboard that resizes
  *   the page. A change of width, such as a rotation, starts the count again.
  * - Once seen, the keyboard counts as up until the visual viewport's height
- *   changes by more than 60 pixels or focus leaves the text fields, so a
- *   layout viewport that shrinks to the visual one afterwards doesn't hide
- *   it.
+ *   on screen changes by more than 60 pixels or focus leaves the text
+ *   fields, so a layout viewport that shrinks to the visual one afterwards
+ *   doesn't hide it.
  * - While the layout viewport follows the keyboard, as `100svh` does in some
  *   browsers, content fixed to the bottom already sits above it, and the
  *   inset is 0.
  *
  * **Gotchas**
  *
- * - While the page is pinch-zoomed there is no band.
+ * - While the page is pinch-zoomed, the band is the part of the layout
+ *   viewport on screen above the keyboard, so content fixed to the bottom
+ *   moves up into view.
  * - Without `visualViewport`, the Stream reports `null` once and ends.
  * - While a text field has focus, `watch` keeps a hidden element in
  *   `<body>` to measure `100svh`.
@@ -129,7 +133,8 @@ export type Band = typeof Band.Type
  * **Details**
  *
  * - `layoutWidth`, `layoutHeight`: the layout viewport, `innerWidth` and
- *   `innerHeight`.
+ *   `innerHeight`. WebKit shrinks those to the visual viewport while the
+ *   page is pinch-zoomed, so `watch` multiplies them by `scale` there.
  * - `visualHeight`, `visualTop`, `scale`: `visualViewport`'s `height`,
  *   `offsetTop` and `scale`.
  * - `smallViewportHeight`: the height of `100svh`.
@@ -160,8 +165,8 @@ export interface Sample {
  *   to.
  * - `tallestLayoutHeight`: the tallest layout viewport seen at that width,
  *   kept on Android only.
- * - `keyboardHeight`: the visual viewport's height when the keyboard was
- *   last seen, or `null` while none is.
+ * - `keyboardHeight`: the visual viewport's height on screen, times
+ *   `scale`, when the keyboard was last seen, or `null` while none is.
  *
  * @stability experimental
  * @category models
@@ -215,8 +220,8 @@ export const initialState = (
  * @since 0.1.0
  */
 export const step = (state: State, sample: Sample): Step => {
-  if (sample.scale !== 1) return { state, band: null }
   const { layoutHeight, visualHeight } = sample
+  const onScreen = visualHeight * sample.scale
   let layoutWidth = state.layoutWidth
   let tallest = state.tallestLayoutHeight
   let shrunk = false
@@ -235,15 +240,15 @@ export const step = (state: State, sample: Sample): Step => {
   })
   if (!sample.focused) return { state: next(null), band: null }
   let keyboardHeight = state.keyboardHeight
-  if (layoutHeight - visualHeight > threshold || shrunk) {
-    keyboardHeight = visualHeight
+  if (layoutHeight - onScreen > threshold || shrunk) {
+    keyboardHeight = onScreen
   } else if (
     keyboardHeight === null ||
-    Math.abs(visualHeight - keyboardHeight) > threshold
+    Math.abs(onScreen - keyboardHeight) > threshold
   ) {
     return { state: next(null), band: null }
   }
-  const follows = sample.smallViewportHeight - visualHeight <= threshold
+  const follows = sample.smallViewportHeight - onScreen <= threshold
   const top = Math.max(0, sample.visualTop)
   const bottom = follows
     ? layoutHeight
@@ -254,7 +259,7 @@ export const step = (state: State, sample: Sample): Step => {
       top,
       bottom,
       inset: Math.max(0, Math.ceil(layoutHeight - bottom)),
-      resizing: follows && Math.abs(layoutHeight - visualHeight) >= 1
+      resizing: follows && Math.abs(layoutHeight - onScreen) >= 1
     }
   }
 }
@@ -339,10 +344,21 @@ export const watch = (node: Node): Stream.Stream<Band | null> =>
     if (view === null || viewport === null) return Stream.succeed(null)
     return Stream.callback<Band | null>((queue) => {
       const android = isAndroid(view)
-      let state = initialState({
-        layoutWidth: view.innerWidth,
-        layoutHeight: view.innerHeight
-      })
+      // Under pinch-zoom, WebKit shrinks innerWidth and innerHeight to the
+      // visual viewport; other engines keep the layout viewport's.
+      const layout = () => {
+        const { innerHeight, innerWidth } = view
+        const { scale, width } = viewport
+        const zoom = Math.abs(innerWidth - width) <
+            Math.abs(innerWidth - width * scale)
+          ? scale
+          : 1
+        return {
+          layoutWidth: innerWidth * zoom,
+          layoutHeight: innerHeight * zoom
+        }
+      }
+      let state = initialState(layout())
       let probe: HTMLElement | null = null
       let frame = -1
 
@@ -359,8 +375,7 @@ export const watch = (node: Node): Stream.Stream<Band | null> =>
       const sample = (): void => {
         const focused = textFieldOf(activeOf(document)) !== null
         const next = step(state, {
-          layoutWidth: view.innerWidth,
-          layoutHeight: view.innerHeight,
+          ...layout(),
           visualHeight: viewport.height,
           visualTop: viewport.offsetTop,
           scale: viewport.scale,

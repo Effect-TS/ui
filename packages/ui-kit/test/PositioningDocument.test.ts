@@ -2,7 +2,7 @@
 import { Positioning } from "@effect/ui-kit"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Stream } from "effect"
-import { tick } from "./utils/document.ts"
+import { tick, visualViewport } from "./utils/document.ts"
 
 type Rect = {
   readonly x: number
@@ -141,6 +141,37 @@ describe("trackPosition in a document", { concurrent: false }, () => {
       document.dispatchEvent(new Event("scroll"))
       yield* tick
       assert.notStrictEqual(node.style.left, "140px")
+    }).pipe(Effect.scoped))
+
+  it.effect("keeps the popup inside the visual viewport as it resizes and scrolls", () =>
+    Effect.gen(function*() {
+      const { visual } = yield* visualViewport
+      // happy-dom's CSS.supports passes anything, which reads as WebKit; this
+      // test is for Chromium and Gecko, which measure from the layout viewport.
+      const css = Object.getOwnPropertyDescriptor(window, "CSS")!
+      Object.defineProperty(window, "CSS", {
+        configurable: true,
+        value: { supports: () => false }
+      })
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => Object.defineProperty(window, "CSS", css))
+      )
+      Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+        configurable: true,
+        get(this: HTMLElement) {
+          return this.id === "positioner" ? 60 : 0
+        }
+      })
+      const { node } = yield* track(false)
+      assert.strictEqual(node.style.top, "120px")
+      // A keyboard leaves 150px on screen: no room below the anchor.
+      visual.move({ height: 150 }, "resize")
+      yield* tick
+      assert.strictEqual(node.style.top, "40px")
+      // Panned down by 90px: no room above it.
+      visual.move({ offsetTop: 90 }, "scroll")
+      yield* tick
+      assert.strictEqual(node.style.top, "120px")
     }).pipe(Effect.scoped))
 })
 
