@@ -526,34 +526,22 @@ const snappingOf = (props: DrawerProps, sizes: Sizes): Snapping | null => {
   }
 }
 
-// The snap points `snapTrigger` cycles through, from the lowest to the
-// tallest. Before the popup is measured, the distinct `snapPoints` in order.
-const snapCycleOf = (
-  props: DrawerProps,
-  sizes: Sizes
-): ReadonlyArray<DrawerSnapPoint> => {
-  if (
-    isHorizontal(props.swipeDirection ?? "down") ||
-    props.snapPoints === undefined
-  ) return []
-  if (sizes.height <= 0 || sizes.viewport <= 0) {
-    return props.snapPoints.filter((point, i, all) =>
-      all.findIndex((other) => Object.is(other, point)) === i
-    )
-  }
-  return [...snapsOf(props.snapPoints, sizes)]
-    .sort((a, b) => a.height - b.height)
-    .map((snap) => snap.value)
-}
-
+// The snap point `snapTrigger` moves to: the next taller one, and from the
+// tallest the lowest. Before the popup is measured, the distinct `snapPoints`
+// in order.
 const nextSnapPoint = (
   props: DrawerProps,
-  sizes: Sizes
+  sizes: Sizes,
+  snapping: Snapping | null
 ): DrawerSnapPoint | undefined => {
-  const cycle = snapCycleOf(props, sizes)
+  if (isHorizontal(props.swipeDirection ?? "down")) return undefined
+  const cycle = sizes.height <= 0 || sizes.viewport <= 0
+    ? [...new Set(props.snapPoints)]
+    : [...(snapping?.snaps ?? [])]
+      .sort((a, b) => a.height - b.height)
+      .map((snap) => snap.value)
   if (cycle.length < 2) return undefined
-  const active = snappingOf(props, sizes)?.active?.value ??
-    props.snapPoint ?? cycle[0]
+  const active = snapping?.active?.value ?? props.snapPoint ?? cycle[0]
   const index = cycle.findIndex((point) => Object.is(point, active))
   return cycle[(index + 1) % cycle.length]
 }
@@ -1971,7 +1959,7 @@ export const Drawer = Html.component({
     CancelledAreaSwipe: ($) => $.evolve({ area: null }),
     PressedSnapTrigger: ($) => {
       const snapPoint = $.props.open
-        ? nextSnapPoint($.props, $.model)
+        ? nextSnapPoint($.props, $.model, snappingOf($.props, $.model))
         : undefined
       return snapPoint === undefined
         ? $.model
@@ -2088,12 +2076,13 @@ export const Drawer = Html.component({
 
     const content = p.part("div", (b) => b.attr(contentAttribute, ""))
 
-    const snapDisabled = nextSnapPoint(props, model) === undefined
-    const snapTrigger = p.part("button", (b) =>
-      b
-        .attrs({ type: "button", "data-disabled": flag(snapDisabled) })
-        .disabled(snapDisabled)
-        .onClick(DrawerMessage.PressedSnapTrigger()))
+    const snapTrigger = p.part("button", (b) => {
+      const disabled = nextSnapPoint(props, model, snapping) === undefined
+      return b
+        .attrs({ type: "button", "data-disabled": flag(disabled) })
+        .disabled(disabled)
+        .onClick(DrawerMessage.PressedSnapTrigger())
+    })
     const snapStatus = p.part("div", (b) =>
       b.attrs({
         role: "status",
