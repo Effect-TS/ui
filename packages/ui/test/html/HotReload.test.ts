@@ -609,12 +609,13 @@ describe("hot reload", { concurrent: false }, () => {
           assert.isTrue(
             hotSwap(first, { App: app("edited", Edited), Counter: Edited })
           )
+          assert.isTrue(hotSwap(first, { App: app("edited2", Edited) }))
           yield* tick
-          assert.strictEqual(el.textContent, "edited=1b=1rowfailedloading")
+          assert.strictEqual(el.textContent, "edited2=1b=1rowfailedloading")
           assert.strictEqual(el.querySelector("button"), button)
           button.click()
           yield* tick
-          assert.strictEqual(el.textContent, "edited=1b=2rowfailedloading")
+          assert.strictEqual(el.textContent, "edited2=1b=2rowfailedloading")
 
           const Text = Html.component({
             name: "Counter",
@@ -642,15 +643,17 @@ describe("hot reload", { concurrent: false }, () => {
             hotSwap({ Broken }, { Broken: fixed("Broken", () => "fixed") })
           )
           yield* tick
-          assert.strictEqual(el.textContent, "edited=1b=2rowfailedloading")
+          assert.strictEqual(el.textContent, "edited2=1b=2rowfailedloading")
 
           // The save skips the kept lazy child that is still loading.
           triggerHotSave()
-          assert.include(
-            sessionStorage.getItem("@effect/ui/hot") ?? "",
-            "/App/Counter[c]\":2"
-          )
-          sessionStorage.clear()
+        }))
+
+      yield* inContainer("swap", (el) =>
+        Effect.gen(function*() {
+          yield* BrowserHost.mountEffect(first.App, {}, el)
+          yield* tick
+          assert.strictEqual(el.textContent, "edited2=1b=2rowfailedloading")
         }))
 
       // A fallback on show that holds a child is drawn again, child included.

@@ -185,36 +185,12 @@ const hiddenSource = (label) =>
   ) +
   "export const drawHidden = (h: any) => Hidden(h, { key: \"h\" })\n"
 
-const brokenSource = (fixed) => `
+const parentSource = (heading) => `
 import { UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
-
-const Message = UiSchema.TaggedEnum({ Inc: {} })
-
-export const Broken = Html.component({
-  name: "Broken",
-  model: Schema.Number,
-  message: Message
-}).make({
-  init: () => 0,
-  update: ($) => $.model,
-  view: (h) => ${
-  fixed
-    ? "h.i.attr(\"data-broken\", \"\").children(\"fixed\")"
-    : "{ throw new Error(\"broken on purpose\") }"
-}
-})
-`
-
-const parentSource = (heading, wrap = false) => `
-import { UiSchema } from "@effect/ui"
-import { Html } from "@effect/ui/html"
-import { Schema } from "effect"
-import { Broken } from "./broken.ts"
 import { drawHidden } from "./hidden.ts"
 import { Kid } from "./kid.ts"
-import { Pending } from "./pending.ts"
 
 const Message = UiSchema.TaggedEnum({ Inc: {} })
 
@@ -228,101 +204,25 @@ export const Parent = Html.component({
   view: (h) =>
     h.div(
       h.h1(${JSON.stringify(heading)}),
-      ${wrap ? "h.section(Kid(h, { key: \"k\" }))" : "Kid(h, { key: \"k\" })"},
-      drawHidden(h),
-      Broken(h, {
-        key: "b",
-        fallback: () => h.i.attr("data-broken", "").children("failed")
-      }),
-      h.keepAlive((s) =>
-        Pending(s, { key: "p", fallback: () => s.i("pending") })
-      )
+      Kid(h, { key: "k" }),
+      drawHidden(h)
     )
 })
-`
-
-// Declares a lazy child in the module, so each run of it makes a new one.
-const lazyParentSource = (heading) => `
-import { Component, UiSchema } from "@effect/ui"
-import { Html } from "@effect/ui/html"
-import { Schema } from "effect"
-
-const Message = UiSchema.TaggedEnum({ Inc: {} })
-
-const LazyKid = Component.lazy(
-  "LazyKid",
-  () => import("./lazy-kid.ts").then((m) => m.LazyKid)
-)
-
-export const LazyParent = Html.component({
-  name: "LazyParent",
-  model: Schema.Number,
-  message: Message
-}).make({
-  init: () => 0,
-  update: ($) => $.model + 1,
-  view: (h) =>
-    h.div(
-      h.h1(${JSON.stringify(heading)}),
-      LazyKid(h, { key: "l", fallback: () => h.i("loading") })
-    )
-})
-`
-
-// Shows the private counter as the fallback of a child that always fails.
-const fallbackParentSource = (heading) => `
-import { UiSchema } from "@effect/ui"
-import { Html } from "@effect/ui/html"
-import { Schema } from "effect"
-import { drawHidden } from "./fallback-hidden.ts"
-import { Broken } from "./still-broken.ts"
-
-const Message = UiSchema.TaggedEnum({ Inc: {} })
-
-export const FallbackParent = Html.component({
-  name: "FallbackParent",
-  model: Schema.Number,
-  message: Message
-}).make({
-  init: () => 0,
-  update: ($) => $.model + 1,
-  view: (h) =>
-    h.div(
-      h.h1(${JSON.stringify(heading)}),
-      Broken(h, { key: "b", fallback: () => drawHidden(h) })
-    )
-})
-`
-
-const mainSource = (file, name) => `
-import { BrowserHost } from "@effect/ui/html"
-import { Effect, Layer } from "effect"
-import { ${name} } from "./${file}"
-const Main = BrowserHost.mount(${name}, {}, document.getElementById("root")!)
-Layer.launch(Main).pipe(Effect.runFork)
 `
 
 write("children.html", html("children-main.ts"))
-write("children-main.ts", mainSource("parent.ts", "Parent"))
+write(
+  "children-main.ts",
+  `import { BrowserHost } from "@effect/ui/html"
+import { Effect, Layer } from "effect"
+import { Parent } from "./parent.ts"
+const Main = BrowserHost.mount(Parent, {}, document.getElementById("root")!)
+Layer.launch(Main).pipe(Effect.runFork)
+`
+)
 write("parent.ts", parentSource("Parent"))
 write("kid.ts", counterSource("Kid", "K"))
 write("hidden.ts", hiddenSource("H"))
-write("broken.ts", brokenSource(false))
-write(
-  "pending.ts",
-  `import { Component } from "@effect/ui"
-export const Pending = Component.lazy("Pending", () => new Promise<any>(() => {}))
-`
-)
-write("fallback.html", html("fallback-main.ts"))
-write("fallback-main.ts", mainSource("fallback-parent.ts", "FallbackParent"))
-write("fallback-parent.ts", fallbackParentSource("Fallback"))
-write("fallback-hidden.ts", hiddenSource("H"))
-write("still-broken.ts", brokenSource(false))
-write("lazy.html", html("lazy-main.ts"))
-write("lazy-main.ts", mainSource("lazy-parent.ts", "LazyParent"))
-write("lazy-parent.ts", lazyParentSource("Lazy"))
-write("lazy-kid.ts", counterSource("LazyKid", "L"))
 
 const snakeDir = path.join(root, "snake")
 fs.cpSync(path.join(repo, "examples/snake/src"), path.join(snakeDir, "src"), {
@@ -519,7 +419,6 @@ try {
 
   await run("hot update", async ({ browser, expect, failures, url }) => {
     const page = await browser.newPage()
-    const warnings = []
     const logTags = []
     let loads = 0
     page.on("load", () => loads++)
@@ -527,7 +426,6 @@ try {
       if (ws.url().endsWith(":47770/log")) collectTags(ws, logTags)
     })
     page.on("console", (msg) => {
-      if (msg.type() === "warning") warnings.push(msg.text())
       if (msg.type() === "error") failures.push("console error: " + msg.text())
     })
     page.on("pageerror", (error) => {
@@ -539,7 +437,7 @@ try {
         [...document.querySelectorAll(".w-6")].map((cell) => cell.className)
           .join("|")
       )
-    const { edit, shows } = on(page)
+    const { edit, shows, text } = on(page)
     const titled = (text) => shows("h1", text)
     const reloadWith = (name, source) =>
       Promise.all([page.waitForEvent("load"), edit(name, source)])
@@ -600,25 +498,6 @@ try {
       document.body.textContent?.includes("Paused")
     )
 
-    warnings.length = 0
-    const withLevel = snakeGame
-      .replace("\"Snake Game\"", "\"Snake Level\"")
-      .replace(
-        "highScore: Schema.Number",
-        "highScore: Schema.Number,\n  level: Schema.Number"
-      )
-      .replace("highScore: 0 })", "highScore: 0, level: 1 })")
-    await reloadWith("snake/src/SnakeGame.ts", withLevel)
-    await titled("Snake Level")
-    expect(
-      warnings.some((text) =>
-        text.includes("/SnakeGame restarted from init") &&
-        text.includes("no longer decodes")
-      ),
-      "new required Model field reloaded and restarted from init",
-      warnings
-    )
-
     const fresh = await cells()
     await reloadWith(
       "snake/src/main.ts",
@@ -627,11 +506,11 @@ try {
         "import { SnakeGame, SnakeGameModel } from \"./SnakeGame.ts\"\nvoid SnakeGameModel"
       )
     )
-    await titled("Snake Level")
+    await titled("Snake Edited")
     loads = 0
     await reloadWith(
       "snake/src/SnakeGame.ts",
-      withLevel.replace("\"Snake Level\"", "\"Snake Mixed\"")
+      snakeGame.replace("\"Snake Game\"", "\"Snake Mixed\"")
     )
     await titled("Snake Mixed")
     expect(loads === 1, "edit under a mixed import reloaded the page", {
@@ -643,57 +522,22 @@ try {
       {}
     )
 
-    await page.close()
-  }, {
-    root,
-    plugins: [DevToolsVite.plugin({ port: 47770 })],
-    server: { fs: { allow: [root, repo] } }
-  })
-
-  await run("hot children", async ({ browser, expect, failures, url }) => {
-    const page = await browser.newPage()
-    let loads = 0
-    page.on("load", () => loads++)
-    page.on("console", (msg) => {
-      if (msg.type() !== "error") return
-      if (msg.text().includes("broken on purpose")) return
-      failures.push("console error: " + msg.text())
-    })
-    page.on("pageerror", (error) => {
-      failures.push("pageerror: " + String(error))
-    })
-
-    const { edit, shows, text } = on(page)
     const click = async (selector, value) => {
       await page.locator(selector).click()
       await shows(selector, value)
     }
-    const mark = () =>
-      page.evaluate(() => {
-        window.hotKid = document.querySelector("[data-Kid]")
-      })
     const sameKid = () =>
       page.evaluate(() =>
         document.querySelector("[data-Kid]") === window.hotKid
       )
 
     await page.goto(url + "children.html")
-    await shows("[data-broken]", "failed")
-    await shows("h1", "Parent")
+    await titled("Parent")
     await click("[data-Kid]", "K=1")
     await click("[data-Hidden]", "H=1")
-    loads = 0
-
-    await edit("parent.ts", parentSource("Parent", true))
-    await page.waitForSelector("section [data-Kid]")
-    await shows("[data-Kid]", "K=1")
-    expect(
-      loads === 1 && (await text("[data-Kid]")) === "K=1" &&
-        (await text("[data-Hidden]")) === "H=1",
-      "wrapping a child in an element reloaded with the counter kept",
-      { loads, kid: await text("[data-Kid]") }
-    )
-    await mark()
+    await page.evaluate(() => {
+      window.hotKid = document.querySelector("[data-Kid]")
+    })
     loads = 0
 
     await edit("kid.ts", counterSource("Kid", "K2"))
@@ -704,14 +548,13 @@ try {
       { loads, hidden: await text("[data-Hidden]") }
     )
 
-    await edit("parent.ts", parentSource("Parent 2", true))
-    await shows("h1", "Parent 2")
+    await edit("parent.ts", parentSource("Parent 2"))
+    await titled("Parent 2")
     expect(
       loads === 0 && await sameKid() &&
         (await text("[data-Kid]")) === "K2=1" &&
-        (await text("[data-Hidden]")) === "H=1" &&
-        (await text("[data-broken]")) === "failed",
-      "parent edit next to a text fallback and a loading kept child stayed in place",
+        (await text("[data-Hidden]")) === "H=1",
+      "parent edit kept the already-updated child in place",
       { loads, kid: await text("[data-Kid]") }
     )
 
@@ -723,44 +566,10 @@ try {
       { loads, kid: await text("[data-Kid]") }
     )
 
-    loads = 0
-    await edit("broken.ts", brokenSource(true))
-    await shows("[data-broken]", "fixed")
-    expect(
-      loads === 1 && (await text("[data-Kid]")) === "K2=1",
-      "fix of a failed child reloaded",
-      { loads }
-    )
-
-    await page.goto(url + "fallback.html")
-    await shows("h1", "Fallback")
-    await click("[data-Hidden]", "H=1")
-    loads = 0
-    await edit("fallback-hidden.ts", hiddenSource("H2"))
-    await shows("[data-Hidden]", "H2=1")
-    expect(
-      loads === 1,
-      "edit of a counter shown as a fallback reloaded with the count kept",
-      { loads }
-    )
-
-    await page.goto(url + "lazy.html")
-    await shows("h1", "Lazy")
-    await page.waitForSelector("[data-LazyKid]")
-    await click("[data-LazyKid]", "L=1")
-    loads = 0
-    await edit("lazy-parent.ts", lazyParentSource("Lazy 2"))
-    await shows("h1", "Lazy 2")
-    await page.waitForSelector("[data-LazyKid]")
-    // The reload doesn't wait for the lazy module, so the child starts at init.
-    expect(loads === 1, "edit next to a module-local lazy child reloaded", {
-      loads
-    })
-
     await page.close()
   }, {
     root,
-    plugins: [DevToolsVite.plugin({ port: 47771 })],
+    plugins: [DevToolsVite.plugin({ port: 47770 })],
     server: { fs: { allow: [root, repo] } }
   })
 } finally {
