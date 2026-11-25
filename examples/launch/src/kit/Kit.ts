@@ -1,7 +1,7 @@
-import { Subscription, UiSchema } from "@effect/ui"
+import { Command, Subscription, UiSchema } from "@effect/ui"
 import { Toggle } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
-import { Schema, Stream } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import { type Module, modules } from "./components.ts"
 import { tile } from "./tiles.ts"
 
@@ -34,23 +34,54 @@ const prefersReducedMotion = () =>
     .matches ??
     false
 
+const ModuleName = Schema.Literals(modules)
+
 export const KitMessage = UiSchema.TaggedEnum({
   Ticked: {},
-  ToggledPause: { pressed: Schema.Boolean }
+  ToggledPause: { pressed: Schema.Boolean },
+  EnteredTile: { name: ModuleName },
+  FinishedHoverPlay: { name: ModuleName }
 })
+type KitMessage = typeof KitMessage.Type
 
-const Tile = <M>(h: Html.H<M>, name: Module, step: number) => {
-  const isPlaying = playingAt(step).includes(name)
+const KitModel = Schema.Struct({
+  step: Schema.Number,
+  isPaused: Schema.Boolean,
+  // Tiles the pointer set playing, each for as long as a tile the
+  // timer starts.
+  hovered: Schema.Array(ModuleName)
+})
+type KitModel = typeof KitModel.Type
+
+/** Ends a tile's play that the pointer started. */
+export const FinishHoverPlay = Command.make(
+  "FinishHoverPlay",
+  { args: { name: ModuleName } },
+  ({ name }) =>
+    Effect.sleep(`${tickMs * playFor} millis`).pipe(
+      Effect.as(KitMessage.FinishedHoverPlay({ name }))
+    )
+)
+
+const isPlaying = (model: KitModel, name: Module) =>
+  model.hovered.includes(name) || playingAt(model.step).includes(name)
+
+const Tile = (
+  h: Html.H<KitMessage>,
+  name: Module,
+  model: KitModel
+) => {
+  const playing = isPlaying(model, name)
   return h.li.key(name).class("kit-tile").attr(
     "data-playing",
-    isPlaying ? "" : undefined
-  ).children(
+    playing ? "" : undefined
+  ).on("mouseenter", KitMessage.EnteredTile({ name })).children(
     // The pictures are for looking at: the name below each one is
     // what a screen reader reads, and nothing inside takes focus.
     h.div.class("kit-picture").attr("aria-hidden", "true").attr(
       "inert",
       ""
-    ).children(tile(h, name, isPlaying)),
+    ).children(tile(h, name, playing)),
     h.span.class("kit-name").children(name)
   )
 }
@@ -61,16 +92,22 @@ const Tile = <M>(h: Html.H<M>, name: Module, step: number) => {
  */
 export const Kit = Html.component({
   name: "Kit",
-  model: Schema.Struct({
-    step: Schema.Number,
-    isPaused: Schema.Boolean
-  }),
+  model: KitModel,
   message: KitMessage
 }).make({
-  init: () => ({ step: -1, isPaused: false }),
+  init: () => ({ step: -1, isPaused: false, hovered: [] }),
   update: {
     Ticked: ($) => $.evolve({ step: (step) => step + 1 }),
-    ToggledPause: ($, { pressed }) => $.evolve({ isPaused: pressed })
+    ToggledPause: ($, { pressed }) => $.evolve({ isPaused: pressed }),
+    // A tile that is already playing ignores the pointer.
+    EnteredTile: ($, { name }) =>
+      isPlaying($.model, name) ? $.model : $.evolve({
+        hovered: (hovered) => [...hovered, name]
+      }).run(FinishHoverPlay.make({ name })),
+    FinishedHoverPlay: ($, { name }) =>
+      $.evolve({
+        hovered: (hovered) => hovered.filter((tile) => tile !== name)
+      })
   },
   subscriptions: ({ model }) => [
     !model.isPaused &&
@@ -103,7 +140,7 @@ export const Kit = Html.component({
         )
       ),
       h.ul.class("kit-wall").children(
-        modules.map((name) => Tile(h, name, model.step))
+        modules.map((name) => Tile(h, name, model))
       )
     )
 })
