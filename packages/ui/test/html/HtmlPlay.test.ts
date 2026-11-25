@@ -75,7 +75,6 @@ const play = <A, E>(
 
 const supplied = TestGlobalEvents.make()
 
-// Logs each document key but Escape. Nested fires "inner" through `supplied` and returns nothing.
 const Shortcuts = Html.component({
   name: "Shortcuts",
   model: Schema.Array(Schema.String),

@@ -66,7 +66,7 @@ let current: Dispatch | undefined
  */
 export const dispatch = <A>(fire: (heard: () => void) => A): A => {
   const outer = current
-  // The dispatch an `observe` starts before any handler ran is the one it observes.
+  // Reuse an observation frame only while its listener status is unknown.
   const own: Dispatch = outer !== undefined && outer.heard === undefined
     ? outer
     : { heard: false, handled: false }

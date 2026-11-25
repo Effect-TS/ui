@@ -157,12 +157,12 @@ export interface HtmlPlay<Model, Msg, Events>
     details?: KeyDetails
   ): Effect.Effect<void, Play.StepError>
   /**
-   * Presses `key` on the document: delivers `keydown` to the tree's document
-   * listeners and settles the resulting UI work without advancing `TestClock`.
-   * Missing payload fields default as for an element keydown with `editable`
-   * and `defaultPrevented` false. With `TestGlobalEvents` provided, the key
-   * goes through it once, to every root on that document. It fails when
-   * nothing listens, which only `TestGlobalEvents.make`'s fake can report.
+   * Dispatches `keydown` on the document and settles the resulting UI work
+   * without advancing `TestClock`. With `TestGlobalEvents` provided, the key
+   * reaches every root sharing that source. Missing payload fields default
+   * as for an element keydown, with `editable` and `defaultPrevented` false.
+   * Fails if no document keydown listener is registered, but only the fake
+   * created by `TestGlobalEvents.make` can report missing listeners.
    */
   keydown(
     target: "document",
@@ -209,7 +209,6 @@ export interface HtmlPlay<Model, Msg, Events>
 }
 
 class HtmlPlayCursor extends internal.PlayCursor {
-  /** `make` sets it once the tree is mounted. */
   documentKeys!: DocumentKeys
   protected override bubbles(event: string): boolean {
     return !ownEvents.has(event)
