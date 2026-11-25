@@ -1,6 +1,7 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/jetbrains-mono";
 @import "tailwindcss";
+@import "./kit/kit.css";
 
 /* The Open Graph picture's source is drawn on its own, with its own
    styles, so none of its words become utilities here. */

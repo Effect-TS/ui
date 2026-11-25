@@ -460,7 +460,7 @@ export const LaunchPage = Html.component({
                   ]
                 }
               }),
-            Kit: (h) => Kit(h),
+            Kit: (h) => Kit(h, {}),
             LauncherPointer: (h, _attributes, content) =>
               LauncherPointer(h, content),
             PerformanceChart: (h) => PerformanceChart(h),

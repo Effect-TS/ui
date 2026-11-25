@@ -137,7 +137,9 @@ A Component owns the behavior, keyboard handling and ARIA while you control ever
 
 ### The UI kit
 
-`@effect/ui-kit` has every component in [Base UI](https://base-ui.com/), 37 in all, plus a virtual list and three utilities.
+`@effect/ui-kit` ships every component in [Base UI](https://base-ui.com/), 37 in all, plus a virtual list and three utilities. That's a full component library on day one. Each component already handles its keyboard, focus and ARIA, and you write the markup and the styles.
+
+The wall below is built with Effect UI and runs on this page. The switch, the slider, the tabs and most of the other tiles are the kit's own components, flipping and filling as you watch. Components that open over the page, such as Dialog and Menu, are drawn in their shape instead, so they don't open over this article.
 
 ::Kit
 

@@ -20,7 +20,9 @@ import {
   Play,
   Plug,
   RotateCcw,
+  Scissors,
   Split,
+  Trash2,
   Workflow
 } from "lucide"
 
@@ -31,6 +33,7 @@ const icons = {
   check: Check,
   clock: Clock,
   copy: Copy,
+  cut: Scissors,
   database: Database,
   download: Download,
   external: ArrowUpRight,
@@ -46,6 +49,7 @@ const icons = {
   plug: Plug,
   reset: RotateCcw,
   split: Split,
+  trash: Trash2,
   workflow: Workflow
 } satisfies Record<string, IconNode>
 

@@ -1,33 +1,113 @@
-import type { Html } from "@effect/ui/html"
-import { components, extras } from "./components.ts"
+import { Subscription, UiSchema } from "@effect/ui"
+import { Toggle } from "@effect/ui-kit"
+import { Html } from "@effect/ui/html"
+import { Schema, Stream } from "effect"
+import { components, extras, type Module } from "./components.ts"
+import { tile } from "./tiles.ts"
 
-// In columns, so the names read down each one in alphabetical order.
-const names = [
-  "columns-2 gap-x-6 font-mono text-[0.8125rem]/[1.9]",
-  "font-features-[normal] min-[560px]:columns-3",
-  "min-[760px]:columns-4 compact:text-[0.75rem]/[1.9]"
-].join(" ")
+export const modules = [...components, ...extras]
 
-const Names = <M>(h: Html.H<M>, list: ReadonlyArray<string>) =>
-  h.ul.class(names).children(
-    list.map((name) =>
-      h.li.key(name).class("truncate").children(name)
-    )
+// Each tick starts one tile, and a tile plays for `playFor` ticks, so
+// no more than three move at once. The stride shares no factor with
+// the number of modules, so the order visits every tile once per
+// round, and the next tile is rarely beside the last.
+const tickMs = 650
+const playFor = 3
+
+const gcd = (a: number, b: number): number =>
+  b === 0 ? a : gcd(b, a % b)
+
+const stride = Array.from(
+  { length: modules.length },
+  (_, n) => 16 + n
+)
+  .find((n) => gcd(n, modules.length) === 1)!
+
+/** The modules whose tiles play at `step`, the newest first. */
+export const playingAt = (step: number): ReadonlyArray<Module> =>
+  Array.from({ length: playFor }, (_, back) => step - back)
+    .filter((started) => started >= 0)
+    .map((started) => modules[(started * stride) % modules.length]!)
+
+const prefersReducedMotion = () =>
+  globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")
+    .matches ??
+    false
+
+export const KitMessage = UiSchema.TaggedEnum({
+  Ticked: {},
+  ToggledPause: { pressed: Schema.Boolean }
+})
+
+const Tile = <M>(h: Html.H<M>, name: Module, step: number) => {
+  const isPlaying = playingAt(step).includes(name)
+  return h.li.key(name).class("kit-tile").attr(
+    "data-playing",
+    isPlaying ? "" : undefined
+  ).children(
+    // The pictures are for looking at: the name below each one is
+    // what a screen reader reads, and nothing inside takes focus.
+    h.div.class("kit-picture").attr("aria-hidden", "true").attr(
+      "inert",
+      ""
+    ).children(tile(h, name, isPlaying)),
+    h.span.class("kit-name").children(name)
   )
+}
 
 /**
- * Every module of the UI kit by name: the components, then the rest.
+ * Every module of the UI kit, each drawn with the kit itself and set
+ * moving a few at a time.
  */
-export const Kit = <M>(h: Html.H<M>) =>
-  h.figure.class(
-    "mx-auto my-8 max-w-(--column) rounded-lg border border-border",
-    "bg-card px-5 py-4 [p+&]:mt-[1.4em] compact:px-4"
-  ).attr("aria-label", "The components of the UI kit").children(
-    Names(h, components),
-    h.p.class(
-      "mt-4 border-t border-border pt-4 font-mono text-[0.6875rem]",
-      "tracking-[0.08em] uppercase text-muted-foreground",
-      "font-features-[normal]"
-    ).children("Also in the kit"),
-    h.div.class("mt-1.5").children(Names(h, extras))
-  )
+export const Kit = Html.component({
+  name: "Kit",
+  model: Schema.Struct({
+    step: Schema.Number,
+    isPaused: Schema.Boolean
+  }),
+  message: KitMessage
+}).make({
+  init: () => ({ step: -1, isPaused: false }),
+  update: {
+    Ticked: ($) => $.evolve({ step: (step) => step + 1 }),
+    ToggledPause: ($, { pressed }) => $.evolve({ isPaused: pressed })
+  },
+  subscriptions: ({ model }) => [
+    !model.isPaused &&
+    Subscription.make(
+      "tick",
+      Stream.tick(`${tickMs} millis`).pipe(
+        Stream.filter(() => !prefersReducedMotion()),
+        Stream.map(() => KitMessage.Ticked())
+      )
+    )
+  ],
+  view: (h, model) =>
+    h.figure.class("kit").attr(
+      "aria-label",
+      "The modules of the UI kit"
+    ).children(
+      h.div.class("kit-head").children(
+        h.p.class("kit-count").children(
+          h.strong.children(String(components.length)),
+          h.span.children(
+            "components, ready on day one."
+          )
+        ),
+        Toggle(h, {
+          props: { pressed: model.isPaused },
+          onToggle: ({ pressed }) =>
+            KitMessage.ToggledPause({ pressed })
+        }).class("kit-pause").children(
+          "Pause motion"
+        )
+      ),
+      h.ul.class("kit-wall").children(
+        components.map((name) => Tile(h, name, model.step))
+      ),
+      h.p.class("kit-also").children("Also in the kit"),
+      h.ul.class("kit-wall").children(
+        extras.map((name) => Tile(h, name, model.step))
+      )
+    )
+})

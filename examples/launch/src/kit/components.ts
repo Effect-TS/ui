@@ -40,11 +40,15 @@ export const components = [
   "ToggleGroup",
   "Toolbar",
   "Tooltip"
-]
+] as const
 
 export const extras = [
   "DirectionProvider",
   "Positioning",
   "VirtualKeyboard",
   "VirtualList"
-]
+] as const
+
+export type Module =
+  | (typeof components)[number]
+  | (typeof extras)[number]
