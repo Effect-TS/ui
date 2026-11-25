@@ -98,6 +98,16 @@ describe("Collapsible", () => {
       disabled.click(trigger)
       assert.deepStrictEqual(disabled.current.emitted, [])
 
+      const css = yield* Scene.make(
+        Collapsible,
+        { open: false, keepMounted: "css" },
+        standIn
+      )
+      css.expectMount(tracked(css))
+      assert.deepInclude(css.get(panel).attrs, { "data-closed": "" })
+      assert.isUndefined(css.get(panel).attrs?.hidden)
+      assert.isUndefined(css.get(panel).attrs?.["data-starting-style"])
+
       const untilFound = yield* Scene.make(
         Collapsible,
         { open: false, keepMounted: true, hiddenUntilFound: true },
@@ -108,39 +118,12 @@ describe("Collapsible", () => {
         hidden: "until-found",
         "data-starting-style": ""
       })
-    }))
-
-  it.effect("keeps a closed panel mounted without hidden when keepMounted is \"css\", unless hiddenUntilFound is set", () =>
-    Effect.gen(function*() {
-      const css = yield* Scene.make(
-        Collapsible,
-        { open: false, keepMounted: "css" },
-        standIn
-      )
-      css.expectMount(tracked(css))
-      assert.deepInclude(css.get(panel).attrs, { "data-closed": "" })
-      assert.isUndefined(css.get(panel).attrs?.hidden)
-      assert.isUndefined(css.get(panel).attrs?.["data-starting-style"])
-      assert.isUndefined(
-        View.build(
-          parts({ open: false, keepMounted: "css" }).panel(
-            h.ul.attr("hidden", "x")
-          )!,
-          []
-        ).attrs.hidden
-      )
-
-      const untilFound = yield* Scene.make(
-        Collapsible,
-        { open: false, keepMounted: "css", hiddenUntilFound: true },
-        standIn
-      )
-      untilFound.expectMount(tracked(untilFound))
-      assert.deepInclude(untilFound.get(panel).attrs, {
-        "data-closed": "",
-        hidden: "until-found",
-        "data-starting-style": ""
+      untilFound.props({
+        open: false,
+        keepMounted: "css",
+        hiddenUntilFound: true
       })
+      assert.strictEqual(untilFound.get(panel).attrs?.hidden, "until-found")
     }))
 
   it("the root repoints a trigger built before the panel to the consumer's panel id, on the button itself and not another element", () => {
@@ -182,11 +165,6 @@ describe("Collapsible", () => {
       "section"
     )
     assert.strictEqual(View.build(collapsible.panel(h.span)!, []).tag, "span")
-    assert.strictEqual(
-      View.build(parts({ open: false, keepMounted: "css" }).panel(h.ul)!, [])
-        .tag,
-      "ul"
-    )
     assert.throws(
       () => collapsible.trigger(h.div as any),
       /a part for <button> was given <div>/

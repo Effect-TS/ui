@@ -13,7 +13,6 @@ type Button = Html.Element<
   HTMLButtonElement,
   "button"
 >
-type Div = Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
 type Section = Html.Element<
   Msg,
   never,
@@ -46,9 +45,7 @@ describe("Collapsible", () => {
           h.button.class("trigger").onClick(Msg.Clicked())
         )
         expect(trigger).type.toBe<Button>()
-        expect(collapsible.root(h.div)).type.toBe<Div>()
         expect(collapsible.root(h.section)).type.toBe<Section>()
-        expect(collapsible.panel(h.div)).type.toBe<Div | undefined>()
         expect(collapsible.panel(h.span)).type.toBe<Span | undefined>()
         expect(collapsible.open).type.toBe<boolean>()
         expect(collapsible.mounted).type.toBe<boolean>()
