@@ -1,6 +1,6 @@
 /**
  * A local server that lets an agent inspect and control a running
- * `@effect/ui` app over MCP.
+ * `@effect/ui` app over MCP, and shows its sessions on a page.
  *
  * Pages that build `DevTools.layer` with the server's URL send it their
  * `MessageLog` as Wire frames on `/log`, and take requests on `/control`.
@@ -11,6 +11,9 @@
  * The server holds an `Inspector` of its own, so the read tools answer from
  * its copy of the log: they keep working after the tab reloads or closes, and
  * cover server-rendered sessions. The control tools go to the page.
+ *
+ * Open the server's URL to inspect the newest session and follow live updates.
+ * This read-only page also supports terminal apps using `DevToolsHeadless.layer`.
  *
  * | Tool | Does |
  * | --- | --- |
@@ -48,10 +51,38 @@ import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer"
 import * as Effect from "effect/Effect"
 import * as HttpRouter from "effect/http/HttpRouter"
 import type * as HttpServerError from "effect/http/HttpServerError"
+import * as HttpServerResponse from "effect/http/HttpServerResponse"
 import * as Layer from "effect/Layer"
+import { readFile } from "node:fs/promises"
 import { createServer } from "node:http"
+import * as Control from "../internal/control.ts"
 import * as Mcp from "../internal/mcp.ts"
 import * as Server from "../internal/server.ts"
+
+// This path resolves from both src/node and dist/node.
+const viewerFile = new URL("../../dist/viewer.html", import.meta.url)
+
+const viewer = (size: number) =>
+  HttpRouter.add(
+    "GET",
+    "/",
+    Effect.map(
+      Effect.promise(() => readFile(viewerFile, "utf8").catch(() => undefined)),
+      (html) =>
+        html === undefined
+          ? HttpServerResponse.text(
+            "The DevTools page isn't built. Run `pnpm build-viewer` in @effect/ui-devtools.",
+            { status: 404 }
+          )
+          : HttpServerResponse.html(
+            html.replace(
+              "<head>",
+              "<head><meta name=\"" + Control.metaName + "\" content='" +
+                JSON.stringify({ size }) + "'>"
+            )
+          )
+    )
+  )
 
 /**
  * The port the server listens on unless told otherwise. It's fixed, so a
@@ -61,7 +92,7 @@ import * as Server from "../internal/server.ts"
  * @category constants
  * @since 0.1.0
  */
-export const defaultPort = 4774
+export const defaultPort = Control.defaultPort
 
 /**
  * Options for `layer`.
@@ -89,7 +120,8 @@ export interface Options {
 }
 
 /**
- * Serves `/mcp`, `/log` and `/control` on `127.0.0.1` at `port`.
+ * Serves the page, `/mcp`, `/log`, `/control` and `/watch` on `127.0.0.1`
+ * at `port`.
  *
  * **Details**
  *
@@ -111,15 +143,19 @@ export const layer = (
   options?: Options
 ): Layer.Layer<never, HttpServerError.ServeError> =>
   Layer.unwrap(Effect.sync(() => {
+    const size = Math.max(1, options?.size ?? 1_000)
     const { routes, server } = Server.make({
-      size: Math.max(1, options?.size ?? 1_000),
+      size,
       dispatch: options?.dispatch ?? false,
       keep: Math.max(0, options?.keep ?? 5)
     })
-    return HttpRouter.serve(Layer.mergeAll(routes, Mcp.layer(server)), {
-      disableLogger: true,
-      disableListenLog: true
-    }).pipe(
+    return HttpRouter.serve(
+      Layer.mergeAll(routes, viewer(size), Mcp.layer(server)),
+      {
+        disableLogger: true,
+        disableListenLog: true
+      }
+    ).pipe(
       Layer.provide(
         NodeHttpServer.layer(createServer, {
           port: options?.port ?? defaultPort,
@@ -131,11 +167,11 @@ export const layer = (
 
 /**
  * The URL a page and an MCP client use for a server started with these
- * options. Add `/mcp` for the MCP endpoint.
+ * options, and the server's own page. Add `/mcp` for the MCP endpoint.
  *
  * @stability experimental
  * @category constructors
  * @since 0.1.0
  */
 export const url = (options?: Pick<Options, "port">): string =>
-  "http://127.0.0.1:" + (options?.port ?? defaultPort)
+  Control.serverUrl(options?.port)

@@ -5,6 +5,7 @@ import * as HttpRouter from "effect/http/HttpRouter"
 import * as HttpServerRequest from "effect/http/HttpServerRequest"
 import * as HttpServerResponse from "effect/http/HttpServerResponse"
 import * as Layer from "effect/Layer"
+import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
 import * as Socket from "effect/socket/Socket"
@@ -29,6 +30,7 @@ interface Meta {
   host: MessageLog.WireHost | undefined
   connected: boolean
   closed: number
+  started?: MessageLog.WireEntry | undefined
 }
 
 const loopback = new Set(["localhost", "127.0.0.1", "[::1]", "::1"])
@@ -45,22 +47,32 @@ export const make = (options: Options) => {
   const history = History.make(options.size)
   const meta = new Map<string, Meta>()
   const pages = new Set<Page>()
+  const watchers = new Set<Queue.Queue<string>>()
   const { notify, until } = Tools.makeWaiters()
   let closed = 0
   const timeout = options.timeout ?? 10_000
+
+  const held = () =>
+    Control.encodeHeld({
+      _tag: "Held",
+      sessions: inspector.sessions().map((session) => session.id)
+    })
+  const broadcast = (text: string) => {
+    for (const watcher of watchers) Queue.offerUnsafe(watcher, text)
+  }
 
   const prune = () => {
     const gone = Array.from(meta).filter(([, m]) => !m.connected).sort((
       [, a],
       [, b]
     ) => a.closed - b.closed)
-    for (
-      const [session] of gone.slice(0, Math.max(0, gone.length - options.keep))
-    ) {
+    const dropped = gone.slice(0, Math.max(0, gone.length - options.keep))
+    for (const [session] of dropped) {
       meta.delete(session)
       inspector.remove(session)
       history.drop(session)
     }
+    if (dropped.length > 0) broadcast(held())
   }
 
   const allowed = (origin: string | undefined) => {
@@ -112,7 +124,11 @@ export const make = (options: Options) => {
                 meta.set(frame.session, { host, connected: true, closed: 0 })
               } else known.connected = true
             }
+            if (frame._tag === "SessionStarted") {
+              meta.get(frame.session)!.started = frame
+            }
             batch.push(frame)
+            broadcast(chunk)
           }
           if (batch.length === 0) return
           inspector.ingest(batch)
@@ -213,6 +229,36 @@ export const make = (options: Options) => {
     }))
   )
 
+  // Replay SessionStarted even after eviction so late viewers have the app name.
+  // The viewer's Inspector ignores duplicate frames.
+  const watch = HttpRouter.add(
+    "GET",
+    "/watch",
+    upgrade(Effect.fnUntraced(function*(socket) {
+      const writer = yield* socket.writer
+      const pull = yield* Socket.readerString(socket)
+      const outbox = yield* Queue.unbounded<string>()
+      Queue.offerUnsafe(outbox, held())
+      for (const session of inspector.sessions()) {
+        const started = meta.get(session.id)?.started
+        if (started !== undefined) {
+          Queue.offerUnsafe(outbox, JSON.stringify(started))
+        }
+        for (const frame of session.entries()) {
+          Queue.offerUnsafe(outbox, JSON.stringify(frame))
+        }
+      }
+      watchers.add(outbox)
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => watchers.delete(outbox))
+      )
+      return yield* Effect.raceFirst(
+        Effect.forever(Effect.flatMap(Queue.take(outbox), writer.write)),
+        Effect.forever(pull)
+      )
+    }))
+  )
+
   const server: Tools.Backend = {
     options,
     inspector,
@@ -227,5 +273,5 @@ export const make = (options: Options) => {
         .at(-1)?.seq,
     gap: "skipped"
   }
-  return { server, routes: Layer.mergeAll(log, control) }
+  return { server, routes: Layer.mergeAll(log, control, watch) }
 }

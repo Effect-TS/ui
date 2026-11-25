@@ -3,7 +3,7 @@
  * @since 0.1.0
  */
 
-// @barrel: Auto-generated exports. Do not edit manually.
+// @barrel(!(DevToolsHeadless|*.d).ts): Auto-generated exports. Do not edit manually.
 
 /**
  * @stability experimental

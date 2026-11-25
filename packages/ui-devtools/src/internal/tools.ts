@@ -97,7 +97,7 @@ const write = hints(false, true, false, true)
 
 const ListSessions = read(Tool.make("list_sessions", {
   description:
-    "Lists the sessions the server holds. A session is one mounted root: a page load, or a server render. " +
+    "Lists the sessions the server holds. A session is one mounted root: a page load, a server render, or a terminal app. " +
     "Shows whether its page is connected, whether it can be controlled (show_entry, resume, dispatch), " +
     "and where it is paused.",
   success: Result,
@@ -396,7 +396,7 @@ export const handlers = (server: Backend) => {
     return page === undefined
       ? fail(
         "Session " + session.id +
-          " can't be controlled: it is server rendered, or its tab was closed or reloaded."
+          " can't be controlled: it is server rendered or a terminal app, or its tab was closed or reloaded."
       )
       : Effect.succeed(page)
   }

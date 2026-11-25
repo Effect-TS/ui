@@ -5,7 +5,7 @@ import {
 } from "@effect/ui-kit/VirtualList"
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
-import type * as BrowserHost from "@effect/ui/html/BrowserHost"
+import * as BrowserHost from "@effect/ui/html/BrowserHost"
 import * as Html from "@effect/ui/html/Html"
 import * as MessageLog from "@effect/ui/MessageLog"
 import * as Renderer from "@effect/ui/Renderer"
@@ -14,9 +14,11 @@ import * as UiSchema from "@effect/ui/UiSchema"
 import type * as View from "@effect/ui/View"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
+import * as Layer from "effect/Layer"
 import * as Option from "effect/Option"
 import * as Predicate from "effect/Predicate"
 import * as Schema from "effect/Schema"
+import type * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import * as Inspector from "../Inspector.ts"
 import { Paused } from "./control.ts"
@@ -2090,3 +2092,21 @@ export const Overlay = Html.component({
         )
     )
 })
+
+export const mountOverlay = (
+  container: HTMLElement,
+  feed: Feed,
+  pages: Pages["Service"]
+): Effect.Effect<void, never, Scope.Scope> =>
+  BrowserHost.mountEffect(Overlay, { feed }, container, { head: false }).pipe(
+    Effect.provideService(MessageLog.MessageLog, MessageLog.noop),
+    Effect.provide(
+      Layer.mergeAll(
+        Paint.layer,
+        Clear.layer,
+        SaveOpen.layer,
+        SavePosition.layer
+      ).pipe(Layer.provide(Layer.succeed(Pages, pages)))
+    ),
+    Effect.asVoid
+  )

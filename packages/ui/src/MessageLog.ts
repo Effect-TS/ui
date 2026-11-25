@@ -1053,7 +1053,7 @@ export const wireVersion = 1
  * @category Wire
  * @since 0.1.0
  */
-export type WireHost = "browser" | "server" | "test"
+export type WireHost = "browser" | "server" | "terminal" | "test"
 
 const BaseWire = {
   seq: Schema.Number,
@@ -1163,7 +1163,7 @@ const RunWire = {
 export const Wire = Schema.Union([
   Schema.TaggedStruct("Hello", {
     version: Schema.Number,
-    host: Schema.Literals(["browser", "server", "test"])
+    host: Schema.Literals(["browser", "server", "terminal", "test"])
   }),
   Schema.TaggedStruct("SessionStarted", { ...BaseWire, app: Schema.String }),
   Schema.TaggedStruct("FetchStarted", {

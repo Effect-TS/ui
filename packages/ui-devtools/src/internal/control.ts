@@ -1,3 +1,4 @@
+import * as MessageLog from "@effect/ui/MessageLog"
 import * as Schema from "effect/Schema"
 
 export const Request = Schema.Union([
@@ -69,3 +70,38 @@ export const decodeToServer = Schema.decodeUnknownOption(
 )
 
 export const metaName = "effect-ui-devtools"
+
+export const fromPage = (): {
+  readonly url?: unknown
+  readonly size?: unknown
+} => {
+  const content = document.querySelector<HTMLMetaElement>(
+    "meta[name=\"" + metaName + "\"]"
+  )?.content
+  try {
+    return content === undefined ? {} : JSON.parse(content)
+  } catch {
+    return {}
+  }
+}
+
+// Sent on /watch at connection and after eviction so viewers can remove dropped sessions.
+export const Held = Schema.TaggedStruct("Held", {
+  sessions: Schema.Array(Schema.String)
+})
+
+export const encodeHeld = Schema.encodeSync(Schema.fromJsonString(Held))
+export const decodeWatched = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Union([MessageLog.Wire, Held]))
+)
+
+export const defaultPort = 4774
+
+export const serverUrl = (port: number = defaultPort): string =>
+  "http://127.0.0.1:" + port
+
+export const socketUrl = (server: string, path: string) => {
+  const url = new URL(path, server)
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
+  return url.href
+}
