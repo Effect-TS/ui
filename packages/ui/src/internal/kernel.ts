@@ -727,6 +727,7 @@ export const flush = (tree: Tree): void => {
   }
 }
 
+// A view is called through this, as it may have a `call` of its own.
 const callView = Function.prototype.call
 
 const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
@@ -755,7 +756,8 @@ const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
   }
 }
 
-const authorOf = (inst: Instance): Instance =>
+/** @internal */
+export const authorOf = (inst: Instance): Instance =>
   inst.at !== undefined &&
     (inst.at.v as View.Child<any, any>).view !== undefined
     ? inst.parent!
@@ -1476,7 +1478,9 @@ const patchElement = (
     if (next._tag === "Text" && old.v._tag === "Text") {
       if (old.v.text !== next.text) host.setText(old.node, next.text)
       old.v = next
-    } else if (next._tag === "Element" && old.v !== next && pairs(old.v, next)) {
+    } else if (
+      next._tag === "Element" && old.v !== next && pairs(old.v, next)
+    ) {
       patchElement(inst, old, old.v as View.Element<any, any>, next)
     } else olds[0] = patch(inst, old, next)
   } else rec.kids = patchList(inst, node, olds, views, null, true)
@@ -1547,6 +1551,7 @@ const patchList = (
     end--
   }
   const count = end - start + 1
+  // With nothing old left to place, or nothing new, no old one is looked up.
   const sources = count > 0 && start <= oldEnd
     ? new Int32Array(count)
     : undefined

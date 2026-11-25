@@ -16,11 +16,11 @@ import type * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 import type * as Html from "./Html.ts"
-import { isRadio, radioGroup, SVG } from "./internal/dom.ts"
-import { attributeName } from "./internal/elements.ts"
+import { attributeOf, isRadio, radioGroup } from "./internal/dom.ts"
 import * as markers from "./internal/markers.ts"
 
 const ELEMENT = 1
+const TEXT = 3
 const COMMENT = 8
 
 const markerOf = (node: Node) =>
@@ -40,6 +40,12 @@ const closeOf = (open: Node, path: string): Node | null => {
   }
   return null
 }
+
+/** Whether `node` is an element with `tag`, or a text when `tag` is `null`. */
+const matches = (node: Node, tag: string | null): boolean =>
+  tag === null
+    ? node.nodeType === TEXT
+    : (node as Element).localName === tag
 
 const emptyValue = (name: string): unknown => name === "value" ? "" : false
 
@@ -194,6 +200,7 @@ interface Building {
   readonly node: Node
   names: Array<string> | undefined
   last: Node | undefined
+  /** How many ranges were open when the element was taken. */
   readonly rangeDepth: number
 }
 
@@ -292,11 +299,7 @@ const between = (
         candidate = candidate.nextSibling
       }
       if (candidate === null || candidate === end) return null
-      if (
-        tag === null
-          ? candidate.nodeType === 3
-          : (candidate as Element).localName === tag
-      ) {
+      if (matches(candidate, tag)) {
         let resume: Node | null = null
         for (let node: Node = first; node !== candidate;) {
           const following = node.nextSibling!
@@ -321,19 +324,16 @@ const between = (
     if (freshDepth > 0) return null
     let node = next()
     if (node === null) return null
-    const matched = tag === null
-      ? node.nodeType === 3
-      : (node as Element).localName === tag
     if (node === bare) {
       bare = undefined
-      if (!matched) {
+      if (!matches(node, tag)) {
         drop(node)
         return null
       }
       if (parent === container) taken.add(node)
       return node
     }
-    if ((missing && missed.has(scopeOf(node))) || !matched) {
+    if ((missing && missed.has(scopeOf(node))) || !matches(node, tag)) {
       const scope = scopeOf(node)
       node = resync(node, tag)
       if (node === null) {
@@ -381,12 +381,10 @@ const between = (
       }
     }
     if (inside) {
-      if (ranges.length > rangeDepth) {
-        while (
-          ranges.length > rangeDepth &&
-          element.contains(ranges[ranges.length - 1]!.open)
-        ) ranges.pop()
-      }
+      while (
+        ranges.length > rangeDepth &&
+        element.contains(ranges[ranges.length - 1]!.open)
+      ) ranges.pop()
       at = element.nextSibling
       parent = into
     }
@@ -453,10 +451,7 @@ const between = (
       const entry = building(node)
       if (entry !== undefined) {
         const element = node as Element
-        let normalized = attributeName(name, false)
-        if (normalized !== name) {
-          normalized = attributeName(name, element.namespaceURI === SVG)
-        }
+        const normalized = attributeOf(element, name)
         if (normalized === undefined) return
         if (value !== undefined) (entry.names ??= []).push(normalized)
         const served = element.getAttribute(normalized)

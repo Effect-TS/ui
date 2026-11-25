@@ -961,6 +961,7 @@ const UpdateProto = {
   }
 }
 
+// `$` holds the message being handled, for `combine`.
 const makeUpdate = (
   model: unknown,
   props: unknown,
@@ -984,7 +985,14 @@ const makeUpdate = (
   })
 
 const initSet = (model: unknown) =>
-  makeStep(model, noEffects, noEffects, noEffects, noEffects, undefined) as Step<
+  makeStep(
+    model,
+    noEffects,
+    noEffects,
+    noEffects,
+    noEffects,
+    undefined
+  ) as Step<
     any,
     any,
     any,

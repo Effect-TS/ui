@@ -991,8 +991,10 @@ export const withFields = <B extends ElementBuilder<any, any, any, any>>(
 const copyBuilder = <B extends ElementBuilder<any, any, any, any>>(
   builder: B
 ): B => {
+  // Counted in place: `Object.keys` would make an array for every copy.
   let fields = 0
   for (const _ in builder) fields++
+  // A builder keeps no state under a symbol, so the count is the whole check.
   if (fields === builderFields.length) {
     const proto = Object.getPrototypeOf(builder)
     let copier = proto === lastProto ? lastCopier : copiers.get(proto)
@@ -1025,10 +1027,16 @@ type Copier = new(
   builder: ElementBuilder<any, any, any, any>
 ) => ElementBuilder<any, any, any, any>
 
+/** A class's copier by its prototype, or `null` for a class whose builders are copied generically. */
 const copiers = new WeakMap<object, Copier | null>()
 let lastProto: object | undefined
 let lastCopier: Copier | null = null
 
+/**
+ * A constructor that copies the base fields of a builder of the class with
+ * `proto`. `null` when `first`, the first builder of the class to be copied,
+ * lacks a base field, which a count of its keys doesn't show.
+ */
 const makeCopier = (
   proto: object,
   first: ElementBuilder<any, any, any, any>
@@ -1200,6 +1208,7 @@ export const makePart = (
   const attrs: Record<string, string> = { ...builder.elementAttrs }
   let tokens: Record<string, string> | undefined
   for (const name of patch.removals ?? []) {
+    // Token lists are additive: a part can omit its own tokens, not the consumer's.
     if (!tokenListAttributes.has(name)) delete attrs[name]
   }
   for (const name in patch.elementAttrs) {
@@ -1353,6 +1362,7 @@ export const idOf = (
     (key === undefined ? "" : "-" + escapeId(String(key)))
 }
 
+// The underscore that opens and closes an escape is escaped too, so the escaping can be undone.
 const escapeId = (value: string): string =>
   value.replace(
     /[^A-Za-z0-9]/g,
@@ -1534,6 +1544,9 @@ export class ElementBuilder<
   attr(name: string, value: string | undefined): this {
     const attrs = this.elementAttrs
     const removals = this.removals
+    // Removing an attribute that isn't set changes nothing, so the builder
+    // is its own result. A `shorthand` is still copied: its chain methods
+    // return a plain builder, not the function.
     if (
       value === undefined && removals === undefined &&
       (attrs === noFields || !Object.hasOwn(attrs, name)) &&
@@ -1545,6 +1558,7 @@ export class ElementBuilder<
     }
     if (attrs === noFields) {
       if (value !== undefined) out.elementAttrs = assoc(attrs, name, value)
+      // Removing an attribute that isn't set leaves the record as it is.
     } else if (value !== undefined || Object.hasOwn(attrs, name)) {
       out.elementAttrs = withEntry(attrs, name, value)
     }

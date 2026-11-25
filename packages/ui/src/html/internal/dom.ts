@@ -1,7 +1,7 @@
 import * as Cause from "effect/Cause"
 import * as Kernel from "../../internal/kernel.ts"
 import * as transitionRun from "../../internal/transitionRun.ts"
-import * as View from "../../View.ts"
+import type * as View from "../../View.ts"
 import type * as Html from "../Html.ts"
 import * as documentHead from "./documentHead.ts"
 import { attributeName, svgTags } from "./elements.ts"
@@ -17,6 +17,22 @@ import * as submit from "./submit.ts"
 
 /** @internal */
 export const SVG = "http://www.w3.org/2000/svg"
+
+/**
+ * `name` as `element` writes it. A name HTML leaves as it is, SVG leaves
+ * too, so the element's namespace is read only for a name HTML would change.
+ *
+ * @internal
+ */
+export const attributeOf = (
+  element: globalThis.Element,
+  name: string
+): string | undefined => {
+  const html = attributeName(name, false)
+  return html === name || element.namespaceURI !== SVG
+    ? html
+    : attributeName(name, true)
+}
 
 /** @internal */
 export const controlled: ReadonlySet<string> = new Set([
@@ -589,12 +605,10 @@ export const makeHost = (
     listening.add(name)
     container.addEventListener(name, listener, true)
     if (name === "click") listen("pointerdown")
+    else if (name === "dragend") listen("dragstart")
     else if (name === "drop") {
       for (const targetEvent of dropTargetEvents) listen(targetEvent)
-      listen("dragstart")
       listen("dragend")
-    } else if (name === "dragend") {
-      listen("dragstart")
     }
   }
 
@@ -655,10 +669,7 @@ export const makeHost = (
     },
     setAttr(node, name, value, previous) {
       const element = node as HTMLElement
-      let normalized = attributeName(name, false)
-      if (normalized !== name) {
-        normalized = attributeName(name, element.namespaceURI === SVG)
-      }
+      const normalized = attributeOf(element, name)
       if (normalized === undefined) return
       if (
         normalized !== "style" || element.style === undefined ||
@@ -750,12 +761,8 @@ export const makeHost = (
       if (first) (node as Node).$r = record
       const { eventOptions, handlers } = record.v as View.Element<any, any>
       for (const name in handlers) listen(name)
-      if (
-        eventOptions !== View.noFields && eventOptions.dragstart !== undefined
-      ) {
-        listen("dragstart")
-        listen("dragend")
-      }
+      // `dragend` brings `dragstart` with it.
+      if (eventOptions.dragstart !== undefined) listen("dragend")
     },
     insert(parent, node, before) {
       parent.insertBefore(node, before)

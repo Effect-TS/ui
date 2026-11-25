@@ -46,10 +46,14 @@ class Folding {
     const tree = this.root.tree
     const failed: Array<Kernel.Instance | unknown> = []
     let fold = foldOf(this.root) ?? this.neutral
+    // A neutral fold gives way to the first one found below, which may not
+    // skip empty nodes. An `html` root is taken to hold only `html`, so none
+    // is found below it.
     const skip = (fold !== this.neutral ||
       (this.root.component as unknown as Component.Any).elements?.name ===
         "html") &&
       skipsEmpty(fold.merge)
+    // The tree below the root is walked only when something in it has a head.
     const walk = !skip || this.active.size > 1 ||
       (this.active.size === 1 && !this.active.has(this.root))
     const node = (inst: Kernel.Instance): Head.Tree<unknown> | undefined => {
@@ -61,10 +65,7 @@ class Folding {
       const head = (inst.component as unknown as Component.Any).head
       if (fold === this.neutral) fold = foldOf(inst) ?? fold
       const hasKids = walk && inst.rendered !== undefined &&
-        (inst.at !== undefined &&
-            (inst.at.v as View.Child<any, any>).view !== undefined
-          ? inst.parent!
-          : inst).live > 0
+        Kernel.authorOf(inst).live > 0
       if (skip && head === undefined && !hasKids) return undefined
       let entries: ReadonlyArray<unknown> = none
       if (head !== undefined) {
@@ -95,9 +96,7 @@ class Folding {
       }
     }
     const conflicts: Array<Head.Conflict> = []
-    const folded =
-      (skip && this.active.size === 0 ? undefined : node(this.root)) ??
-        { entries: none, children: none }
+    const folded = node(this.root) ?? { entries: none, children: none }
     const value = fold.merge(folded, {
       onConflict: (conflict) => conflicts.push(conflict)
     })
@@ -135,15 +134,14 @@ export const make =
     if (folding === undefined) {
       let root = inst
       while (root.parent !== undefined) root = root.parent
-      folding = new Folding(root, neutral)
-      foldings.set(tree, folding)
+      const made = folding = new Folding(root, neutral)
+      foldings.set(tree, made)
       tree.head = { value: undefined, title: undefined }
       const work = tree.work
       tree.work = (idle) =>
         work?.(idle) === true ||
-        (idle && tree.drew === true && !(tree.drew = false) && folding!.run())
+        (idle && tree.drew === true && !(tree.drew = false) && made.run())
     }
-    const current = folding
-    current.active.add(inst)
-    ;(inst.closers ??= []).push(() => current.active.delete(inst))
+    folding.active.add(inst)
+    ;(inst.closers ??= []).push(() => folding.active.delete(inst))
   }

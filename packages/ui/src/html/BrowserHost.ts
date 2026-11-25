@@ -571,9 +571,7 @@ export const mountRoot = (
         container,
         make,
         [Html.name],
-        hydrate === undefined && scheduler === undefined
-          ? options
-          : { ...options, hydrate, scheduler }
+        { ...options, hydrate, scheduler }
       ),
       context
     )

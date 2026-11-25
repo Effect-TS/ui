@@ -78,16 +78,14 @@ export const snapshot = (
     const component = inst.component as unknown as Component.Any
     const shipped = inst.failure === undefined && !deferred.has(inst)
     const rendered = inst.rendered
-    let kept: ReadonlyArray<Snap> = noKids
+    let kept: Array<Snap> | undefined
     const table = inst.kept as keptRun.Table | undefined
     if (table !== undefined) {
-      let parked: Array<Snap> | undefined
       for (const entry of table.kids.values()) {
         if (entry.rec === undefined && !entry.inst.closed) {
-          ;(parked ??= []).push(instance(entry.inst))
+          ;(kept ??= []).push(instance(entry.inst))
         }
       }
-      if (parked !== undefined) kept = parked
     }
     const encoded = shipped
       ? runCodec(encodePage(component, inst.model, inst.results, inst.owning))
@@ -104,7 +102,7 @@ export const snapshot = (
       kid: inst.failure === undefined && rendered !== undefined
         ? rec(inst, rendered, inst.path)
         : undefined,
-      kept
+      kept: kept ?? noKids
     }
   }
   const kidsOf = (

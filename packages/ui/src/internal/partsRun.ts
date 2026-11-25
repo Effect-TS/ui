@@ -91,14 +91,14 @@ export const layer = (
     ? new Mounts(view.mount as any, owned) as unknown as View.Mount<any>
     : undefined
   if (owned.length === 0) {
-    return mount === view.mount ? view : { ...view, mount }
+    return mount === undefined ? view : { ...view, mount }
   }
-  const layers = owned.length > 1
-    ? [
-      ...owned.slice().sort((a, b) => b.owner.path.length - a.owner.path.length),
-      view
-    ]
-    : [owned[0]!, view]
+  const layers = [
+    ...(owned.length > 1
+      ? owned.slice().sort((a, b) => b.owner.path.length - a.owner.path.length)
+      : owned),
+    view
+  ]
   if (dev) checkLayers(inst, layers)
   let handlers: Record<string, Layered> | undefined
   let options: Record<string, Record<string, unknown>> | undefined
@@ -107,8 +107,7 @@ export const layer = (
       ? inst
       : (layer as View.Owned).owner as Kernel.Instance
     for (const event in layer.handlers) {
-      ;(handlers ??= {})[event] ??= new Layered()
-      handlers[event]!.layers.push({
+      ;((handlers ??= {})[event] ??= new Layered()).layers.push({
         inst: target,
         handler: layer.handlers[event],
         prevents: layer.eventOptions[event]?.preventDefault === true
