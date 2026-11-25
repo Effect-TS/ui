@@ -1,10 +1,25 @@
 // @vitest-environment happy-dom
-import type { Component } from "@effect/ui"
-import { BrowserHost, Html } from "@effect/ui/html"
-import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing"
+import { type Component, Subscription } from "@effect/ui"
+import { BrowserHost, Html, HtmlSubscription } from "@effect/ui/html"
+import {
+  HtmlLocator,
+  HtmlPlay,
+  TestGlobalEvents
+} from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Effect, Exit, Schema, type Scope } from "effect"
+import {
+  Cause,
+  Clock,
+  Duration,
+  Effect,
+  Exit,
+  Layer,
+  Schema,
+  type Scope,
+  Stream
+} from "effect"
+import { TestClock } from "effect/testing"
 import { Menu } from "./fixtures/headless.ts"
 import { Settings } from "./fixtures/settings.ts"
 
@@ -295,4 +310,91 @@ describe("HtmlPlay", () => {
         /nothing handles "click"/
       )
     }).pipe(play))
+
+  it.effect("keydown on document settles UI work without advancing TestClock, checks ignored/missing listeners, and keeps TestGlobalEvents.fire non-settling", () =>
+    Effect.gen(function*() {
+      const Shortcuts = Html.component({
+        name: "Shortcuts",
+        model: Schema.Struct({
+          listening: Schema.Boolean,
+          ticks: Schema.Number,
+          entries: Schema.Array(Schema.String)
+        }),
+        message: Schema.String
+      }).make({
+        init: () => ({ listening: true, ticks: 0, entries: [] }),
+        update: ($, message) => {
+          if (message === "tick") return { ...$.model, ticks: $.model.ticks + 1 }
+          if (message === "stop") return { ...$.model, listening: false }
+          return { ...$.model, entries: [...$.model.entries, message] }
+        },
+        view: (h, model) =>
+          h.div(
+            h.output(`${model.ticks}:${model.entries.join(",")}`)
+          ),
+        subscriptions: ({ model }) => [
+          model.entries.length > 0 &&
+          Subscription.make(
+            "clock",
+            Stream.tick(Duration.millis(100)).pipe(
+              Stream.drop(1),
+              Stream.as("tick")
+            )
+          ),
+          model.listening &&
+          HtmlSubscription.onDocument("keydown", (event) => {
+            if (event.key === "Escape") return undefined
+            if (event.key === "q") return "stop"
+            return `${event.key}:${event.shift}:${event.defaultPrevented}`
+          })
+        ]
+      })
+
+      // Works with only TestHost.layer(): settles without advancing TestClock.
+      yield* play(Effect.gen(function*() {
+        const start = yield* Clock.currentTimeMillis
+        const p = yield* HtmlPlay.make(Shortcuts, {})
+        yield* p.keydown("document", "ArrowUp")
+        assert.strictEqual(yield* Clock.currentTimeMillis, start)
+        assert.strictEqual(
+          p.root.text(),
+          "0:ArrowUp:false:false"
+        )
+        yield* p.keydown("document", "ArrowRight", {
+          shift: true,
+          defaultPrevented: true
+        })
+        assert.strictEqual(yield* Clock.currentTimeMillis, start)
+        assert.strictEqual(
+          p.root.text(),
+          "0:ArrowUp:false:false,ArrowRight:true:true"
+        )
+        yield* TestClock.adjust("100 millis")
+        yield* p.expect(log).toHaveText(
+          "1:ArrowUp:false:false,ArrowRight:true:true"
+        )
+        yield* p.keydown("document", "Escape")
+        yield* p.expectIgnored()
+        yield* p.keydown("document", "q")
+        const missing = yield* Effect.exit(p.keydown("document", "ArrowUp"))
+        assert.match(
+          Exit.isFailure(missing) ? Cause.pretty(missing.cause) : "",
+          /nothing listens for "keydown" on the document/
+        )
+      }))
+
+      // Shares TestGlobalEvents.layer when provided, while TestGlobalEvents.fire stays non-settling.
+      yield* Effect.gen(function*() {
+        const p = yield* HtmlPlay.make(Shortcuts, {})
+        yield* p.keydown("document", "a")
+        assert.strictEqual(p.root.text(), "0:a:false:false")
+        yield* TestGlobalEvents.fire("document", "keydown", { key: "b" })
+        assert.strictEqual(p.root.text(), "0:a:false:false")
+        yield* TestHost.settle
+        assert.strictEqual(p.root.text(), "0:a:false:false,b:false:false")
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(Layer.merge(TestHost.layer(), TestGlobalEvents.layer))
+      )
+    }))
 })

@@ -69,6 +69,7 @@
  * @since 0.1.0
  */
 import * as Effect from "effect/Effect"
+import * as Option from "effect/Option"
 import type * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
@@ -82,10 +83,14 @@ import type * as Play from "../../testing/Play.ts"
 import * as TestHost from "../../testing/TestHost.ts"
 import type * as View from "../../View.ts"
 import type * as Html from "../Html.ts"
+import * as HtmlSubscription from "../HtmlSubscription.ts"
 import * as defaults from "../internal/defaults.ts"
 import { isCustomTag } from "../internal/elements.ts"
+import * as fireGlobal from "../internal/fireGlobal.ts"
+import * as globalEvents from "../internal/globalEvents.ts"
 import { ownEvents } from "../internal/ownEvents.ts"
 import type * as HtmlScene from "./HtmlScene.ts"
+import * as TestGlobalEvents from "./TestGlobalEvents.ts"
 
 /**
  * The assertions `expect(locator)` offers in an `HtmlPlay`: the Play's,
@@ -98,6 +103,9 @@ import type * as HtmlScene from "./HtmlScene.ts"
 export type Expect = HtmlScene.Expect<Effect.Effect<void, Play.StepError>>
 
 type KeyDetails = Partial<Omit<Html.KeyPayload, "key">>
+type DocumentKeyDetails = Partial<
+  Omit<HtmlSubscription.GlobalPayload<Html.KeyPayload>, "key">
+>
 
 /**
  * A cursor over an HTML tree on `TestHost`: the Play's steps, plus a step
@@ -150,6 +158,17 @@ export interface HtmlPlay<Model, Msg, Events>
     details?: KeyDetails
   ): Effect.Effect<void, Play.StepError>
   /**
+   * Presses `key` on the document: delivers `keydown` to active document
+   * listeners and settles the resulting UI work without advancing `TestClock`.
+   * Missing payload fields default as for an element keydown with `editable`
+   * and `defaultPrevented` false.
+   */
+  keydown(
+    target: "document",
+    key: string,
+    details?: DocumentKeyDetails
+  ): Effect.Effect<void, Play.StepError>
+  /**
    * Submits the form `locator` matches, or the one the matched element is
    * in, as pressing Enter in it would: `submit` goes to the form with the
    * fields read from the tree. No button counts as the submitter.
@@ -189,6 +208,7 @@ export interface HtmlPlay<Model, Msg, Events>
 }
 
 class HtmlPlayCursor extends internal.PlayCursor {
+  globalEvents!: TestGlobalEvents.TestGlobalEvents
   protected override bubbles(event: string): boolean {
     return !ownEvents.has(event)
   }
@@ -301,13 +321,44 @@ class HtmlPlayCursor extends internal.PlayCursor {
     )
   }
   keydown(
-    locator: Locator.Locator,
+    target: "document" | Locator.Locator,
     key: string,
-    details?: KeyDetails
+    details?: DocumentKeyDetails
   ): Effect.Effect<void, Play.StepError> {
+    if (target === "document") {
+      const site = callSite(this.keydown)
+      const name = this.name("keydown")
+      return Effect.gen({ self: this }, function*() {
+        yield* this.settle
+        yield* Effect.sync(() =>
+          atSite(site, () => {
+            this.checkReady(name)
+            const payload = {
+              ...defaults.keyPayload(key, details),
+              defaultPrevented: details?.defaultPrevented === true
+            }
+            const [result, handled] = globalEvents.trackHandled(() =>
+              fireGlobal.fireOn(
+                this.globalEvents,
+                "document",
+                "keydown",
+                payload
+              )
+            )
+            if (!result.heard) {
+              throw new Error(
+                `${name}: nothing listens for "keydown" on the document`
+              )
+            }
+            this.recordInteraction("keydown", handled)
+          })
+        )
+        yield* this.settle
+      })
+    }
     return this.one(
       "keydown",
-      locator,
+      target,
       "keydown",
       (node) => defaults.keyPayload(key, details, internal.ancestors(node))
     )
@@ -433,8 +484,27 @@ export const make = <
   )
   return Effect.gen(function*() {
     const { host } = yield* TestHost.TestHost
-    return yield* Effect.provideService(started, Renderer.Renderer, {
+    const existing = yield* Effect.serviceOption(
+      TestGlobalEvents.TestGlobalEvents
+    )
+    const mounted = Effect.provideService(started, Renderer.Renderer, {
       host: htmlHost(host)
     })
+    let events: TestGlobalEvents.TestGlobalEvents
+    let play: HtmlPlayCursor
+    if (Option.isSome(existing)) {
+      events = existing.value
+      play = yield* mounted
+    } else {
+      const created = TestGlobalEvents.make()
+      events = created
+      play = yield* Effect.provideService(
+        mounted,
+        HtmlSubscription.GlobalEvents,
+        created
+      )
+    }
+    play.globalEvents = events
+    return play
   }) as any
 }

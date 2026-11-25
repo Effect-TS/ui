@@ -11,6 +11,17 @@ import * as defaults from "./defaults.ts"
 /** @internal */
 export type Listener = (payload: unknown, preventDefault: () => void) => void
 
+/** @internal */
+export const detailed: unique symbol = Symbol.for(
+  "@effect/ui/html/testing/TestGlobalEvents/detailed"
+) as any
+
+/** @internal */
+export interface FireResult {
+  readonly heard: boolean
+  readonly cancelled: boolean
+}
+
 const key = defaults.keyPayload("", undefined)
 const pointerEvents: ReadonlySet<string> = new Set([
   "click",
@@ -22,7 +33,7 @@ const pointerEvents: ReadonlySet<string> = new Set([
 
 /**
  * Fires `event` at the capture listeners, then at the bubble ones, and
- * returns whether one cancelled the default.
+ * returns whether any listener heard it and whether one cancelled the default.
  *
  * `listening` is asked for a phase's listeners as the phase starts, as a
  * browser reads them, so a bubble listener the capture phase added hears the
@@ -32,11 +43,11 @@ const pointerEvents: ReadonlySet<string> = new Set([
  *
  * @internal
  */
-export const fire = (
+export const fireDetailed = (
   event: string,
   given: object | undefined,
   listening: (capture: boolean) => Iterable<Listener>
-): boolean => {
+): FireResult => {
   const defaults = event === "keydown" || event === "keyup"
     ? key
     : pointerEvents.has(event)
@@ -45,12 +56,14 @@ export const fire = (
   const prevented =
     (given as { readonly defaultPrevented?: unknown } | undefined)
       ?.defaultPrevented === true
+  let heard = false
   let cancelled = false
   const preventDefault = () => {
     cancelled = true
   }
   for (const capture of [true, false]) {
     for (const listener of listening(capture)) {
+      heard = true
       listener({
         ...defaults,
         ...given,
@@ -58,8 +71,38 @@ export const fire = (
       }, preventDefault)
     }
   }
-  return cancelled
+  return { heard, cancelled }
 }
+
+/**
+ * Fires `event` at the capture listeners, then at the bubble ones, and
+ * returns whether one cancelled the default.
+ *
+ * @internal
+ */
+export const fire = (
+  event: string,
+  given: object | undefined,
+  listening: (capture: boolean) => Iterable<Listener>
+): boolean => fireDetailed(event, given, listening).cancelled
+
+/** @internal */
+export const fireOn = (
+  events: {
+    readonly fire: (target: any, event: any, payload?: any) => boolean
+    readonly [detailed]?: (
+      target: string,
+      event: string,
+      payload: object | undefined
+    ) => FireResult
+  },
+  target: string,
+  event: string,
+  payload: object | undefined
+): FireResult =>
+  events[detailed] !== undefined
+    ? events[detailed](target, event, payload)
+    : { heard: true, cancelled: events.fire(target, event, payload) }
 
 export const custom = (
   given: { readonly detail?: unknown } | undefined

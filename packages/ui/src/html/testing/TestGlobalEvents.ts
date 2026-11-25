@@ -130,7 +130,7 @@ interface Entry {
 export const make = (): HtmlSubscription.GlobalEvents & TestGlobalEvents => {
   const entries = new Set<Entry>()
   const fire = (target: string, event: string, payload: object | undefined) =>
-    fireGlobal.fire(event, payload, function*(capture) {
+    fireGlobal.fireDetailed(event, payload, function*(capture) {
       // Copied as the phase starts. A listener an earlier one's message removed is skipped.
       for (const entry of Array.from(entries)) {
         if (
@@ -149,10 +149,12 @@ export const make = (): HtmlSubscription.GlobalEvents & TestGlobalEvents => {
         entries.delete(entry)
       }
     },
-    fire: (target, event, payload) => fire(target, event as string, payload),
+    fire: (target, event, payload) =>
+      fire(target, event as string, payload).cancelled,
     fireCustomEvent: (event, payload) =>
-      fire("document", event, fireGlobal.custom(payload))
-  }
+      fire("document", event, fireGlobal.custom(payload)).cancelled,
+    [fireGlobal.detailed]: fire
+  } as HtmlSubscription.GlobalEvents & TestGlobalEvents
 }
 
 /**

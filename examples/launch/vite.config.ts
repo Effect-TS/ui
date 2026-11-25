@@ -66,10 +66,7 @@ const sources: {
   ]],
   playSnake: [[
     "../snake/src/SnakeGame.play.test.ts",
-    all(
-      declaration("press"),
-      test("steers to the apple, eats it and pauses")
-    )
+    test("steers to the apple, eats it and pauses")
   ]],
   partsUse: [["src/parts/Details.ts", whole]],
   partsDefine: [["src/parts/Disclosure.ts", whole]],

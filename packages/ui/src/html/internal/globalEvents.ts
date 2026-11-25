@@ -44,6 +44,28 @@ export interface Listener {
 export const listenerOf = (subscription: object): Listener | undefined =>
   (subscription as { readonly [listener]?: Listener })[listener]
 
+let onHandled: (() => void) | undefined
+
+/**
+ * Runs `f` and reports whether any `globalEvents.run` call inside it produced
+ * a message.
+ *
+ * @internal
+ */
+export const trackHandled = <A>(f: () => A): readonly [A, boolean] => {
+  let handled = false
+  const previous = onHandled
+  onHandled = () => {
+    handled = true
+    previous?.()
+  }
+  try {
+    return [f(), handled] as const
+  } finally {
+    onHandled = previous
+  }
+}
+
 /**
  * Runs `declared`'s handler with `payload`, as the browser host runs an
  * element's: `preventDefault: "always"` cancels first, and `true` makes
@@ -61,6 +83,7 @@ export const run = (
   if (declared.preventDefault === "always") preventDefault()
   const message = handle(declared.handler, payload)
   if (message !== undefined) {
+    onHandled?.()
     onMessage(message, declared.preventDefault === true ? preventDefault : noop)
   }
 }
