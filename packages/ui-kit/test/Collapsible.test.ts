@@ -106,6 +106,7 @@ describe("Collapsible", () => {
       css.expectMount(tracked(css))
       assert.deepInclude(css.get(panel).attrs, { "data-closed": "" })
       assert.isUndefined(css.get(panel).attrs?.hidden)
+      assert.isUndefined(css.get(panel).attrs?.inert)
       assert.isUndefined(css.get(panel).attrs?.["data-starting-style"])
 
       const untilFound = yield* Scene.make(
@@ -118,43 +119,78 @@ describe("Collapsible", () => {
         hidden: "until-found",
         "data-starting-style": ""
       })
+      assert.isUndefined(untilFound.get(panel).attrs?.inert)
       untilFound.props({
         open: false,
         keepMounted: "css",
         hiddenUntilFound: true
       })
       assert.strictEqual(untilFound.get(panel).attrs?.hidden, "until-found")
+
+      const closing = yield* Scene.make(
+        Collapsible,
+        { open: true, holdExit: true },
+        standIn
+      )
+      closing.expectMount(tracked(closing))
+      assert.isUndefined(closing.get(panel).attrs?.inert)
+      closing.props({ open: false, holdExit: true })
+      assert.strictEqual(closing.get(panel).attrs?.inert, "")
+      assert.isUndefined(closing.get(panel).attrs?.hidden)
+      closing.props({ open: true, holdExit: true })
+      assert.isUndefined(closing.get(panel).attrs?.inert)
     }))
 
-  it("the root repoints a trigger built before the panel to the consumer's panel id, on the button itself and not another element", () => {
+  it("repoints a trigger built before the panel to the consumer's panel id, with or without root, on the button itself", () => {
     const generated = View.build(parts({ open: true }).panel(h.div)!, []).attrs
       .id!
-    const collapsible = parts({ open: true })
-    const node = View.build(
-      collapsible.root(h.div).children(
-        h.h3.children(
-          collapsible.trigger(
-            h.button.forward((button) =>
-              h.span.class("wrapper").children(button)
+    for (const withRoot of [true, false]) {
+      const collapsible = parts({ open: true })
+      const container = withRoot ? collapsible.root(h.div) : h.section
+      const node = View.build(
+        container.children(
+          h.h3.children(
+            collapsible.trigger(
+              h.button
+                .attr("aria-controls", "elsewhere")
+                .forward((button) => h.span.class("wrapper").children(button))
             )
-          )
+          ),
+          h.button.attr("aria-controls", generated),
+          collapsible.panel(h.div.attr("id", "shipping"))
         ),
-        h.button.attr("aria-controls", generated),
-        collapsible.panel(h.div.attr("id", "shipping"))
+        []
+      )
+      const wrapper = (node.children[0] as View.Element<never>)
+        .children[0] as View.Element<never>
+      assert.strictEqual(wrapper.attrs.class, "wrapper")
+      assert.isUndefined(wrapper.attrs["aria-controls"])
+      assert.strictEqual(
+        (wrapper.children[0] as View.Element<never>).attrs["aria-controls"],
+        "elsewhere shipping"
+      )
+      assert.strictEqual(
+        (node.children[1] as View.Element<never>).attrs["aria-controls"],
+        generated
+      )
+    }
+
+    const chained = parts({ open: true })
+    const chainedNode = View.build(
+      h.section.children(
+        h.h3.children(chained.trigger(h.button)),
+        chained.panel(h.div)?.attr("id", "shipping-after")
       ),
       []
     )
-    const wrapper = (node.children[0] as View.Element<never>)
-      .children[0] as View.Element<never>
-    assert.strictEqual(wrapper.attrs.class, "wrapper")
-    assert.isUndefined(wrapper.attrs["aria-controls"])
     assert.strictEqual(
-      (wrapper.children[0] as View.Element<never>).attrs["aria-controls"],
-      "shipping"
+      ((chainedNode.children[0] as View.Element<never>)
+        .children[0] as View.Element<never>).attrs["aria-controls"],
+      "shipping-after"
     )
     assert.strictEqual(
-      (node.children[1] as View.Element<never>).attrs["aria-controls"],
-      generated
+      (chainedNode.children[1] as View.Element<never>).attrs.id,
+      "shipping-after"
     )
   })
 
@@ -248,6 +284,9 @@ describe("Collapsible", () => {
       const panelNode = View.build(
         collapsible.panel(
           consumer(h.div).attr("id", "shipping").attr("hidden", "x").attr(
+            "inert",
+            "x"
+          ).attr(
             "style",
             "color:red;--collapsible-panel-height:1px"
           )
@@ -260,6 +299,7 @@ describe("Collapsible", () => {
         id: "shipping"
       })
       assert.strictEqual(panelNode.attrs.hidden, isOpen ? undefined : "")
+      assert.isUndefined(panelNode.attrs.inert)
       assert.strictEqual(panelNode.attrs["data-open"], isOpen ? "" : undefined)
       assert.strictEqual(
         panelNode.attrs["data-closed"],

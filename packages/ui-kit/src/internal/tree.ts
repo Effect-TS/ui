@@ -1,4 +1,5 @@
 import * as View from "@effect/ui/View"
+import { ownedTokens } from "./attributes.ts"
 
 export type Rewrite = (
   node: View.Node<any, any>
@@ -53,16 +54,23 @@ export const carries = (
   layers: Layers
 ): boolean => element.owned?.some((layer) => layers.has(layer)) === true
 
-export const setOn = <N extends View.Node<any, any>>(
+export const setTokensOn = <N extends View.Node<any, any>>(
   node: N,
-  layers: Layers,
+  layers: ReadonlyMap<View.Owned, string | undefined>,
   name: string,
   value: string | undefined
 ): N =>
   rewrite(
     node,
-    (element) =>
-      element._tag === "Element" && carries(element, layers)
-        ? withAttr(element, name, value)
-        : undefined
+    (element) => {
+      if (element._tag !== "Element") return undefined
+      const layer = element.owned?.find((l) => layers.has(l))
+      return layer === undefined
+        ? undefined
+        : withAttr(
+          element,
+          name,
+          ownedTokens(element.owned, name, layers.get(layer), value)
+        )
+    }
   )

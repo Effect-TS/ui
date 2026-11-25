@@ -141,6 +141,7 @@ import {
   type Attributed,
   flag,
   idOf,
+  ownedTokens,
   ownStyle,
   withTokens
 } from "./internal/attributes.ts"
@@ -151,7 +152,7 @@ import {
   statusOf,
   transitionAttrs
 } from "./internal/transition.ts"
-import { layerOf, rewrite, withAttr } from "./internal/tree.ts"
+import { find, layerOf } from "./internal/tree.ts"
 
 /**
  * Controls whether the panel is open and how it stays in the page while
@@ -437,13 +438,12 @@ const TrackPanel = Mount.makeStream(
  * passes in, including the ones a state leaves absent: the data attributes on
  * every part; on the trigger `type`, `disabled`, `aria-disabled`, which it
  * removes, `aria-expanded` and `aria-controls`, which it sets only while the
- * panel is open; on the panel `hidden`. The panel keeps an `id` the consumer
- * gives it, and gets a generated one otherwise. A trigger inside another
- * element, such as a heading, is built before the panel's `id` is known, so
- * the root points that trigger's `aria-controls` at the consumer's `id`, on
- * the button even when the consumer wraps it with `forward`, and leaves every
- * other element's alone: draw the root around both when the
- * panel has an `id` of its own. The panel's CSS variables, and
+ * panel is open; on the panel `hidden` and `inert` while closing. The panel
+ * keeps an `id` the consumer gives it, and gets a generated one otherwise. A
+ * trigger built before the panel, such as one inside a heading, still points
+ * its `aria-controls` at the panel's final `id`, on the button even when
+ * wrapped with `forward` or without `root`, and leaves every other element's
+ * alone. The panel's CSS variables, and
  * the `animation-name` and durations it overrides to skip an animation, are
  * added after the consumer's inline style. A handler the consumer adds to a
  * part runs after the collapsible's own.
@@ -544,32 +544,29 @@ export const Collapsible = Html.component({
         flag(disabled)
       )
 
-    const triggers = new Map<
-      View.Owned,
-      {
-        readonly controls: string | undefined
-        readonly consumer: string | undefined
+    const triggers: Array<{
+      readonly element: View.Element<any, any>
+      readonly consumer: string | undefined
+      controls: string | undefined
+    }> = []
+    const syncTriggers = () => {
+      const target = open ? panelId : undefined
+      for (const entry of triggers) {
+        if (entry.controls === target) continue
+        entry.controls = target
+        const next = ownedTokens(
+          entry.element.owned,
+          "aria-controls",
+          entry.consumer,
+          target
+        )
+        const attrs = entry.element.attrs as Record<string, string>
+        if (next === undefined) delete attrs["aria-controls"]
+        else attrs["aria-controls"] = next
       }
-    >()
-    const root = p.part((b) =>
-      states(b).forward((node) => {
-        const target = open ? panelId : undefined
-        if (
-          ![...triggers.values()].some(({ controls }) => controls !== target)
-        ) return node
-        return rewrite(View.build(node, []), (element) => {
-          if (element._tag !== "Element") return undefined
-          const layer = element.owned?.find((l) => triggers.has(l))
-          return layer === undefined
-            ? undefined
-            : withAttr(
-              element,
-              "aria-controls",
-              withTokens(triggers.get(layer)!.consumer, target)
-            )
-        })
-      })
-    )
+    }
+
+    const root = p.part((b) => states(b))
 
     const trigger = p.part("button", (b) =>
       b
@@ -587,8 +584,21 @@ export const Collapsible = Html.component({
         .forward((node) => {
           const consumer = node.elementAttrs["aria-controls"]
           const controls = open ? panelId : undefined
-          triggers.set(layerOf(node), { controls, consumer })
-          return node.attr("aria-controls", withTokens(consumer, controls))
+          const layer = layerOf(node)
+          const built = View.build(
+            node.attr("aria-controls", withTokens(consumer, controls)),
+            []
+          )
+          if (open) {
+            const button = find(
+              built,
+              (element) => element.owned?.includes(layer) === true
+            )
+            if (button !== undefined) {
+              triggers.push({ element: button, consumer, controls })
+            }
+          }
+          return built
         }))
 
     const panelPart = p.part((b, id: string) =>
@@ -600,12 +610,17 @@ export const Collapsible = Html.component({
             : hiddenUntilFound
             ? "until-found"
             : flag(props.keepMounted !== "css"),
+          inert: flag(!open && model.mounted),
           "data-starting-style": flag(
             transitionStatus === "starting" || (!mounted && hiddenUntilFound)
           )
         })
         .forward((node) => {
-          panelId = node.elementAttrs.id ?? id
+          const next = node.elementAttrs.id || id
+          if (next !== panelId) {
+            panelId = next
+            syncTriggers()
+          }
           return ownStyle(panelStyle(model, open))(node)
         })
         .onMount(
@@ -623,7 +638,11 @@ export const Collapsible = Html.component({
       <B extends View.PartTarget<string>>(
         element: B
       ): ReturnType<B["attr"]> | undefined => {
-        panelId = idOf(element) ?? panelId
+        const next = idOf(element)
+        if (next !== null && next !== panelId) {
+          panelId = next
+          syncTriggers()
+        }
         const out = panelPart(element, panelId)
         return mounted || hiddenUntilFound || props.keepMounted
           ? out

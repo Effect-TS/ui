@@ -98,6 +98,25 @@ describe("Accordion", () => {
         _tag: "Settled",
         open: true
       })
+
+      const closing = yield* itemScene(
+        { value: "a", holdExit: true },
+        { value: ["a"] }
+      )
+      closing.givenChild(Collapsible, {
+        mounted: true,
+        started: true,
+        ending: true,
+        size: null,
+        instant: false,
+        openOnLoad: false
+      })
+      assert.isUndefined(closing.get(panel).attrs?.inert)
+      closing.shared(Accordion, shared({ value: [] }))
+      assert.strictEqual(closing.get(panel).attrs?.inert, "")
+      assert.isUndefined(closing.get(panel).attrs?.hidden)
+      closing.shared(Accordion, shared({ value: ["a"] }))
+      assert.isUndefined(closing.get(panel).attrs?.inert)
     }))
 
   it.effect("a disabled item or accordion asks for nothing, and the accordion's mount options reach the panel", () =>
@@ -152,9 +171,10 @@ describe("Accordion", () => {
       scene.parts((item) => {
         const body = h.section.children(
           item.panel(
-            h.div.attr("id", "panel-a").forward((panel) =>
-              h.div.class("wrapper").children(panel)
-            )
+            h.div
+              .attr("id", "panel-a")
+              .attr("aria-labelledby", "elsewhere")
+              .forward((panel) => h.div.class("wrapper").children(panel))
           )
         )
         const node = View.build(
@@ -174,7 +194,7 @@ describe("Accordion", () => {
         assert.isUndefined(wrapper.attrs["aria-labelledby"])
         assert.strictEqual(
           (wrapper.children[0] as View.Element<never>).attrs["aria-labelledby"],
-          "trigger-a"
+          "elsewhere trigger-a"
         )
         assert.strictEqual(triggerAttrs["aria-controls"], "panel-a")
       })
@@ -186,11 +206,20 @@ describe("Accordion", () => {
       scene.parts((item) => {
         item.trigger(h.button.attr("id", "unused"))
         const node = View.build(
-          item.root(h.div).children(item.panel(h.div.class("panel"))),
+          item.root(h.div).children(
+            item.panel(h.div.class("panel")),
+            item.panel(
+              h.div.class("labelled").attr("aria-labelledby", "elsewhere")
+            )
+          ),
           []
         )
         assert.isUndefined(
           (node.children[0] as View.Element<never>).attrs["aria-labelledby"]
+        )
+        assert.strictEqual(
+          (node.children[1] as View.Element<never>).attrs["aria-labelledby"],
+          "elsewhere"
         )
       })
     }))
@@ -292,7 +321,7 @@ describe("Accordion", () => {
           class: "mine",
           id: "answer",
           role: "region",
-          "aria-labelledby": "question"
+          "aria-labelledby": "elsewhere question"
         })
         assert.isUndefined(panelNode.attrs["data-index"])
         assert.match(
