@@ -10,7 +10,10 @@ import { LaunchPage } from "./LaunchPage.ts"
 const Main = BrowserHost.mount(
   LaunchPage,
   {
+    // The code this page shows, highlighted when the page is built.
     snippets,
+    // The address of the page's Markdown copy, which the agent
+    // prompts point to.
     articleUrl: new URL("article.md", document.baseURI).href
   },
   document.getElementById("root")!
