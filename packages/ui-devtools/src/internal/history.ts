@@ -143,6 +143,8 @@ const makeSession = (size: number) => {
           byPath.set(path, recorded as BrowserHost.Recorded)
         }
       }
+      // A render can log child mounts after the selected entry, even when their
+      // cause is at or before it. Changes to a path or ancestor block reuse.
       const dirty = new Set<string>()
       for (const entry of entries) {
         if (entry.seq <= seq) continue
