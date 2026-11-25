@@ -652,5 +652,26 @@ describe("hot reload", { concurrent: false }, () => {
           )
           sessionStorage.clear()
         }))
+
+      // A fallback on show that holds a child is drawn again, child included.
+      const shell = (label: string) =>
+        Html.component({ name: "Shell", model: Schema.Number, message: Msg })
+          .make({
+            init: () => 0,
+            update: ($) => $.model,
+            view: (h) =>
+              h.div(
+                h.span(label),
+                Broken(h, { key: "b", fallback: () => Row(h, { key: "r" }) })
+              )
+          })
+      const Shell = shell("a")
+      yield* inContainer("swap-fallback", (el) =>
+        Effect.gen(function*() {
+          yield* BrowserHost.mountEffect(Shell, {}, el)
+          yield* tick
+          assert.strictEqual(el.textContent, "arow")
+          assert.isFalse(hotSwap({ Shell }, { Shell: shell("b") }))
+        }))
     }))
 })

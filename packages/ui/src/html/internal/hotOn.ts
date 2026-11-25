@@ -285,7 +285,9 @@ const reuses = (
       return view._tag === "Child" && view.key === old.key &&
         resolve(view.component) === old.component &&
         view.view === undefined && view.slots === undefined &&
-        (view.alive === undefined) === (old.alive === undefined)
+        (view.alive === undefined) === (old.alive === undefined) &&
+        // A fallback on show is drawn again, so a child in it may be made again.
+        !(rec.kids?.some(holdsChild) ?? false)
     case "Element": {
       if (
         view._tag !== "Element" || view.tag !== old.tag ||

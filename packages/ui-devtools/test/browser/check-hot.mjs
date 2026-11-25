@@ -242,6 +242,31 @@ export const LazyParent = Html.component({
 })
 `
 
+// Shows the private counter as the fallback of a child that always fails.
+const fallbackParentSource = (heading) => `
+import { UiSchema } from "@effect/ui"
+import { Html } from "@effect/ui/html"
+import { Schema } from "effect"
+import { drawHidden } from "./fallback-hidden.ts"
+import { Broken } from "./still-broken.ts"
+
+const Message = UiSchema.TaggedEnum({ Inc: {} })
+
+export const FallbackParent = Html.component({
+  name: "FallbackParent",
+  model: Schema.Number,
+  message: Message
+}).make({
+  init: () => 0,
+  update: ($) => $.model + 1,
+  view: (h) =>
+    h.div(
+      h.h1(${JSON.stringify(heading)}),
+      Broken(h, { key: "b", fallback: () => drawHidden(h) })
+    )
+})
+`
+
 const mainSource = (file, name) => `
 import { BrowserHost } from "@effect/ui/html"
 import { Effect, Layer } from "effect"
@@ -262,6 +287,11 @@ write(
 export const Pending = Component.lazy("Pending", () => new Promise<any>(() => {}))
 `
 )
+write("fallback.html", html("fallback-main.ts"))
+write("fallback-main.ts", mainSource("fallback-parent.ts", "FallbackParent"))
+write("fallback-parent.ts", fallbackParentSource("Fallback"))
+write("fallback-hidden.ts", hiddenSource("H"))
+write("still-broken.ts", brokenSource(false))
 write("lazy.html", html("lazy-main.ts"))
 write("lazy-main.ts", mainSource("lazy-parent.ts", "LazyParent"))
 write("lazy-parent.ts", lazyParentSource("Lazy"))
@@ -696,8 +726,9 @@ try {
     expect(
       loads === 0 && await sameKid() &&
         (await text("[data-Kid]")) === "K2=1" &&
-        (await text("[data-Hidden]")) === "H=1",
-      "parent edit kept its children, a loading kept one included",
+        (await text("[data-Hidden]")) === "H=1" &&
+        (await text("[data-broken]")) === "failed",
+      "parent edit next to a text fallback and a loading kept child stayed in place",
       { loads, kid: await text("[data-Kid]") }
     )
 
@@ -715,6 +746,18 @@ try {
     expect(
       loads === 1 && (await text("[data-Kid]")) === "K2=1",
       "fix of a failed child reloaded",
+      { loads }
+    )
+
+    await page.goto(url + "fallback.html")
+    await shows("h1", "Fallback")
+    await click("[data-Hidden]", "H=1")
+    loads = 0
+    await edit("fallback-hidden.ts", hiddenSource("H2"))
+    await shows("[data-Hidden]", "H2=1")
+    expect(
+      loads === 1,
+      "edit of a counter shown as a fallback reloaded with the count kept",
       { loads }
     )
 
