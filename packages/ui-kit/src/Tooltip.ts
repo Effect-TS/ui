@@ -49,6 +49,15 @@
  * padding, a background and `overflow: auto`, so reset those on the
  * positioner and style the popup instead.
  *
+ * With `topLayer: false`, the positioner is no popover: it is an ordinary
+ * element where the view draws it, `hidden` while the tooltip is closed,
+ * and its `left` and `top` are measured from its containing block, the
+ * nearest positioned or transformed ancestor. Inside
+ * `.card { position: relative; overflow: hidden }` the tooltip shows next to
+ * its trigger, clipped by the card and under its stacking context, and the
+ * default `collisionBoundary` is the part of the card in view, so the
+ * tooltip flips to stay inside it.
+ *
  * **CSS variables**
  *
  * Set on the positioner:
@@ -179,6 +188,7 @@ import {
 } from "./internal/attributes.ts"
 import { watchHoverArea } from "./internal/hoverArea.ts"
 import { onEscape } from "./internal/interaction.ts"
+import { layered } from "./internal/topLayer.ts"
 import * as Positioning from "./Positioning.ts"
 
 /**
@@ -264,6 +274,8 @@ export type TooltipAlign = typeof TooltipAlign.Type
  *   scrolls or the trigger moves or changes size.
  * - `anchor`: the id of an element to place the popup against instead of
  *   the trigger.
+ * - `topLayer`: `false` draws the positioner in place, out of the top
+ *   layer, as the module describes. `true` when left out.
  *
  * @stability experimental
  * @category schemas
@@ -883,18 +895,18 @@ export const Tooltip = Html.component({
           role: "presentation",
           "data-anchor-hidden": flag(shown && placement?.anchorHidden)
         })
-        .popover("manual", shown)
         .forward((node) =>
           node.attr("style", withStyle(node.elementAttrs.style, style))
         )
+      const layer = layered(decorated, tracked.topLayer !== false, shown)
       return shown
-        ? decorated
+        ? layer
           .on("mouseenter", TooltipMessage.EnteredPositioner())
           .on("mouseleave", TooltipMessage.LeftPositioner())
           .onMount(
             TrackTooltip({ position: tracked, trigger: triggerSelector })
           )
-        : decorated
+        : layer
     })
     const popup = p.part("div", (b) =>
       popupId === null

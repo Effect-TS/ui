@@ -103,7 +103,65 @@ const track = Effect.fnUntraced(
   }
 )
 
+const sized = (element: Element, width: number, height: number) => {
+  for (
+    const [name, value] of [["offsetWidth", width], ["clientWidth", width], [
+      "offsetHeight",
+      height
+    ], ["clientHeight", height]] as const
+  ) {
+    Object.defineProperty(element, name, { configurable: true, value })
+  }
+}
+
+// A card at (50, 20), 300 by 130, holds the anchor near its bottom edge and
+// a 120 by 60 positioner drawn in place.
+const trackInCard = Effect.fnUntraced(
+  function*(props: Positioning.PositionerOptions) {
+    yield* geometry
+    document.body.innerHTML =
+      `<div id="card" style="position:relative;overflow:hidden"><button id="anchor"></button><div id="positioner" style="position:absolute"></div></div>`
+    rects.set("card", { x: 50, y: 20, width: 300, height: 130 })
+    rects.set("anchor", { x: 100, y: 110, width: 80, height: 20 })
+    rects.set("positioner", { x: 0, y: 0, width: 120, height: 60 })
+    sized(document.getElementById("card")!, 300, 130)
+    const node = document.getElementById("positioner")!
+    sized(node, 120, 60)
+    const args = Positioning.trackArgs(props, {
+      side: "bottom",
+      anchorSelector: "#anchor"
+    })
+    const placements: Array<Positioning.Placement> = []
+    yield* Positioning.trackPosition(node, args, Stream.never).pipe(
+      Stream.runForEach((placement) =>
+        Effect.sync(() => placements.push(placement))
+      ),
+      Effect.forkScoped
+    )
+    yield* tick
+    return { node, placements }
+  }
+)
+
 describe("trackPosition in a document", { concurrent: false }, () => {
+  it.effect("in place, it measures from the containing block and keeps the popup inside its clipping ancestors", () =>
+    Effect.gen(function*() {
+      const { node, placements } = yield* trackInCard({ topLayer: false })
+      // Below the anchor it would leave the card, so it flips above it, and
+      // left and top are measured from the card's corner.
+      assert.strictEqual(placements[0]?.side, "top")
+      assert.strictEqual(node.style.left, "30px")
+      assert.strictEqual(node.style.top, "30px")
+    }).pipe(Effect.scoped))
+
+  it.effect("in the top layer, the same popup fits below the anchor in the viewport", () =>
+    Effect.gen(function*() {
+      const { node, placements } = yield* trackInCard({})
+      assert.strictEqual(placements[0]?.side, "bottom")
+      assert.strictEqual(node.style.left, "80px")
+      assert.strictEqual(node.style.top, "130px")
+    }).pipe(Effect.scoped))
+
   it.effect("with leaveCoordinates, it leaves left and top to the caller and still writes the variables", () =>
     Effect.gen(function*() {
       const { node, placements } = yield* track(true)

@@ -129,7 +129,7 @@ import { Dialog, type DialogEvents, DialogProps } from "./Dialog.ts"
 /**
  * Controls whether the alert dialog is open and where focus goes: a
  * `Dialog`'s props without `modal` and `disablePointerDismissal`, which an
- * alert dialog fixes.
+ * alert dialog fixes, and without `topLayer`.
  *
  * **Details**
  *
@@ -137,12 +137,16 @@ import { Dialog, type DialogEvents, DialogProps } from "./Dialog.ts"
  * - `triggerId`, `keepMounted`, `forceRenderBackdrop`, `initialFocus`,
  *   `finalFocus`, `id`, `openMethod` and `holdExit`: as for a `Dialog`.
  *
+ * An alert dialog is always modal: it blocks the whole page until the user
+ * answers, so it stays in the top layer, above everything it blocks. A
+ * `Dialog` drawn in place with `topLayer: false` is for `modal: false`.
+ *
  * @stability experimental
  * @category schemas
  * @since 0.1.0
  */
 export const AlertDialogProps = DialogProps.mapFields(
-  Struct.omit(["modal", "disablePointerDismissal"])
+  Struct.omit(["modal", "disablePointerDismissal", "topLayer"])
 )
 
 /**

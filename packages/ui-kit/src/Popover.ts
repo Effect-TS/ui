@@ -14,7 +14,7 @@
  * | Part           | Element                                                   |
  * | :------------- | :-------------------------------------------------------- |
  * | `trigger`      | `<button>` that opens the popover                         |
- * | `portal`       | `<dialog>` in the top layer, around the parts below        |
+ * | `portal`       | `<dialog>` in the top layer, around the parts below       |
  * | `backdrop`     | `<div>` that covers the page                              |
  * | `positioner`   | `<div>` placed next to the trigger                        |
  * | `popup`        | `<div>` with the popover's content                        |
@@ -41,6 +41,19 @@
  * `positionMethod: "fixed"`. The positioner is placed inside it, so style the
  * popup and the arrow, and a backdrop as a fixed layer:
  * `.backdrop { position: fixed; inset: 0 }`.
+ *
+ * **In place**
+ *
+ * With `topLayer: false`, the portal is a `<dialog open>` where the view
+ * draws it, with no box of its own and `position: static`, and the
+ * positioner's `left` and `top` are measured from its containing block, the
+ * nearest positioned or transformed ancestor. Draw the trigger and the
+ * portal inside `.card { position: relative }`, and the popup opens next to
+ * the trigger inside the card, clipped by the card's `overflow` and under
+ * its stacking context. The default `collisionBoundary` is then the area
+ * the ancestors' `overflow` leaves visible, so the popup flips to stay in
+ * the card. With the default `modal: false`, opening it does nothing to the
+ * rest of the page. `Dialog` describes the rest.
  *
  * The positioner's inline style carries `left` and `top`, and the variables
  * `--anchor-width`, `--anchor-height`, `--available-width`,
@@ -201,6 +214,53 @@
  * if (!html.includes("data-side=\"bottom\"")) throw new Error("the popup doesn't name its side")
  * ```
  *
+ * **Example** (A popover that opens inside its card, out of the top layer)
+ *
+ * ```ts import.meta.vitest
+ * import { UiSchema } from "@effect/ui"
+ * import { Html, HtmlServer } from "@effect/ui/html"
+ * import { Popover } from "@effect/ui-kit"
+ * import { Effect, Schema } from "effect"
+ *
+ * const DemoMessage = UiSchema.TaggedEnum({ RequestedOpen: {}, RequestedClose: {} })
+ *
+ * const Demo = Html.component({
+ *   name: "Demo",
+ *   model: Schema.Struct({ open: Schema.Boolean }),
+ *   message: DemoMessage
+ * }).make({
+ *   init: () => ({ open: false }),
+ *   update: {
+ *     RequestedOpen: ($) => $.evolve({ open: true }),
+ *     RequestedClose: ($) => $.evolve({ open: false })
+ *   },
+ *   view: (h, model) =>
+ *     // The card is the containing block, and its overflow clips the popup.
+ *     h.div.attr("style", "position:relative;overflow:hidden").children(
+ *       Popover(h, {
+ *         props: { open: model.open, topLayer: false, keepMounted: true },
+ *         onEmit: {
+ *           RequestedOpen: () => DemoMessage.RequestedOpen(),
+ *           RequestedClose: () => DemoMessage.RequestedClose(),
+ *           Settled: () => undefined
+ *         },
+ *         view: (popover) =>
+ *           h.div(
+ *             popover.trigger({ element: h.button }).children("Details"),
+ *             popover.portal(h.dialog)?.children(
+ *               popover.positioner(h.div).children(popover.popup(h.div).children("Inside the card"))
+ *             )
+ *           )
+ *       })
+ *     )
+ * })
+ *
+ * // The portal is an ordinary closed dialog in the card, not a popover.
+ * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(Demo, {}))
+ * if (html.includes("popover=")) throw new Error("the popover is in the top layer")
+ * if (!/<dialog[^>]* style="position:static/.test(html)) throw new Error("the portal has a box of its own")
+ * ```
+ *
  * @stability experimental
  * @since 0.1.0
  */
@@ -323,6 +383,8 @@ export type PopoverAlign = typeof PopoverAlign.Type
  *   page taller when the popup reaches past its end.
  * - `anchor`: the id of an element, or a `Rect` in the viewport, to place
  *   the popup against instead of the trigger.
+ * - `topLayer`: `false` draws the popover in place, out of the top layer,
+ *   as the module's **In place** describes. `true` when left out.
  *
  * @stability experimental
  * @category schemas
@@ -1057,7 +1119,7 @@ export const Popover = Html.component({
       "dialog",
       (b) =>
         b.forward((node) =>
-          tracked.positionMethod === "absolute"
+          tracked.positionMethod === "absolute" && tracked.topLayer !== false
             ? node.attr(
               "style",
               withStyle(node.elementAttrs.style, atDocumentOrigin)
@@ -1126,7 +1188,8 @@ export const Popover = Html.component({
         finalFocus: byHover ? false : props.finalFocus,
         id: portalId,
         openMethod: props.openMethod ?? model.method,
-        holdExit: props.holdExit
+        holdExit: props.holdExit,
+        topLayer: props.topLayer
       },
       onEmit: {
         RequestedOpen: ({ triggerId }) =>

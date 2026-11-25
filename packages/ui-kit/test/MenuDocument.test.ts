@@ -82,7 +82,8 @@ const Config = Schema.Struct({
   refuseClose: Schema.Boolean,
   shareDisabled: Schema.Boolean,
   rtlRoot: Schema.Boolean,
-  rtlShare: Schema.Boolean
+  rtlShare: Schema.Boolean,
+  topLayer: Schema.optional(Schema.Boolean)
 })
 type Config = typeof Config.Type
 
@@ -159,6 +160,7 @@ const Page = Html.component({
               : items,
             id: "menu",
             modal: model.modal,
+            topLayer: h.props.topLayer,
             triggerId: h.props.viewport ? model.triggerId : undefined,
             ...(h.props.filter ? { query: model.query } : {})
           },
@@ -709,6 +711,24 @@ describe("Menu in a document", { concurrent: false }, () => {
       assert.strictEqual(document.body.style.overflowY, "")
       assert.isTrue(blocker.inert)
       assert.isNull(byId("before").getAttribute("aria-hidden"))
+    }))
+
+  it.effect("drawn in place, the menu and its submenu are no popovers, and the menu isn't modal", () =>
+    Effect.gen(function*() {
+      yield* mountPage({ topLayer: false })
+      const positioner = byId("positioner")
+      assert.isFalse(positioner.hasAttribute("popover"))
+      assert.isTrue(positioner.hidden)
+      mousedown(byId("trigger"))
+      yield* tick
+      assert.isFalse(positioner.hidden)
+      assert.isFalse(positioner.matches(":popover-open"))
+      assert.isNull(positioner.querySelector("[data-menu-blocker]"))
+      assert.strictEqual(document.body.style.overflowY, "")
+      // The submenu takes `topLayer` from the menu it opens from.
+      const submenu = byId("share-positioner")
+      assert.isFalse(submenu.hasAttribute("popover"))
+      assert.isTrue(submenu.hidden)
     }))
 
   it.effect("the positioner lets the pointer through until its first frames, before it may be placed", () =>

@@ -41,6 +41,15 @@
  * popup and the arrow, and a backdrop as a fixed layer:
  * `.backdrop { position: fixed; inset: 0 }`. The backdrop takes no presses.
  *
+ * With `topLayer: false`, the portal is no popover: it is an ordinary
+ * `<div>` where the view draws it, `hidden` while the card is closed, with
+ * no box of its own and `position: static`. The positioner's `left` and
+ * `top` are then measured from its containing block, the nearest positioned
+ * or transformed ancestor, so inside `.card { position: relative }` the
+ * preview opens next to its link inside the card, clipped by the card's
+ * `overflow` and under its stacking context. The default
+ * `collisionBoundary` is the part of the card in view.
+ *
  * The positioner's inline style carries `left` and `top`, and the variables
  * `--anchor-width`, `--anchor-height`, `--available-width`,
  * `--available-height` and `--transform-origin`. `sideOffset` is padding on
@@ -224,7 +233,13 @@ import { watchHoverArea } from "./internal/hoverArea.ts"
 import { lineUnder } from "./internal/inlineRect.ts"
 import { onEscape, Point, pointOf } from "./internal/interaction.ts"
 import { listenOutside } from "./internal/outside.ts"
-import { atDocumentOrigin, portalBox, raiseAbove } from "./internal/topLayer.ts"
+import {
+  atDocumentOrigin,
+  inPlaceBox,
+  layered,
+  portalBox,
+  raiseAbove
+} from "./internal/topLayer.ts"
 import {
   frameOf,
   settling,
@@ -307,6 +322,8 @@ export type PreviewCardAlign = typeof PreviewCardAlign.Type
  *   page taller when the popup reaches past its end.
  * - `anchor`: the id of an element, or a `Rect` in the viewport, to place
  *   the popup against instead of the trigger.
+ * - `topLayer`: `false` draws the portal in place, out of the top layer, as
+ *   the module describes. `true` when left out.
  *
  * @stability experimental
  * @category schemas
@@ -854,6 +871,7 @@ const TrackPreviewCardPresence = Mount.makeStream(
       mounted: Schema.Boolean,
       started: Schema.Boolean,
       holdExit: Schema.Boolean,
+      topLayer: Schema.Boolean,
       popupId: Schema.String,
       trigger: Schema.String
     }
@@ -894,7 +912,7 @@ const TrackPreviewCardPresence = Mount.makeStream(
         if (previous.open && !next.open) closing()
         if (!previous.open && next.open) {
           node.inert = false
-          raiseAbove(node)
+          if (current.topLayer) raiseAbove(node)
           send(PreviewCardMessage.ShowedPortal())
           opening()
         }
@@ -902,7 +920,7 @@ const TrackPreviewCardPresence = Mount.makeStream(
       }
       return Effect.acquireRelease(
         Effect.sync(() => {
-          raiseAbove(node)
+          if (current.topLayer) raiseAbove(node)
           node.inert = !current.open
           if (!current.mounted) send(PreviewCardMessage.ShowedPortal())
           if (current.open) opening()
@@ -1328,13 +1346,14 @@ export const PreviewCard = Html.component({
         )
     )
 
-    const portalStyle = tracked.positionMethod === "absolute"
+    const topLayer = tracked.topLayer !== false
+    const portalStyle = !topLayer
+      ? inPlaceBox
+      : tracked.positionMethod === "absolute"
       ? portalBox + ";" + atDocumentOrigin
       : portalBox
     const portalPart = p.part("div", (b) => {
-      const portal = b
-        .attr("id", cardId)
-        .popover("manual", shown)
+      const portal = layered(b.attr("id", cardId), topLayer, shown)
         .forward((node) =>
           node.attr("style", withStyle(node.elementAttrs.style, portalStyle))
         )
@@ -1345,6 +1364,7 @@ export const PreviewCard = Html.component({
             mounted: model.mounted,
             started: model.started,
             holdExit: props.holdExit === true,
+            topLayer,
             popupId,
             trigger: triggerSelector
           })

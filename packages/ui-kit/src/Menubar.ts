@@ -174,7 +174,8 @@ import {
  *   ArrowDown and ArrowUp.
  * - `modal`: while a menu is open, the page doesn't scroll and a press
  *   outside the menubar and the menu only closes the menu. True when left
- *   out.
+ *   out. A menu drawn in place, with `topLayer: false` on the `Menu`, is
+ *   never modal.
  * - `disabled`: every menu in the menubar ignores the user.
  * - `loopFocus`: the arrow keys wrap from the last trigger to the first.
  *   True when left out.

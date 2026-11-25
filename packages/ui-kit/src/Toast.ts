@@ -101,6 +101,16 @@
  * `inset: auto 1rem 1rem auto; margin: 0; border: 0; padding: 0;
  * background: none; overflow: visible`.
  *
+ * With `topLayer: false` on the provider, the viewport is no popover: it is
+ * an ordinary element where the view draws it, so an ancestor's `overflow`,
+ * `position: relative` and stacking context apply to it, and its CSS
+ * places it inside that ancestor, for example
+ * `.card { position: relative } .toasts { position: absolute; inset: auto 0.5rem 0.5rem auto }`.
+ * It has no box from the browser, isn't kept above dialogs, and `z-index`
+ * on it works as on any other element. A `Dialog` with `modal: true` hides
+ * it from screen readers along with the rest of the page, and its layer
+ * takes the presses meant for it.
+ *
  * **Limits**
  *
  * Toasts anchored to another element, swiping a toast
@@ -187,7 +197,7 @@ import {
   withStyle
 } from "./internal/attributes.ts"
 import { activeOf, focusVisible } from "./internal/dom.ts"
-import { keepOnTop } from "./internal/topLayer.ts"
+import { keepOnTop, layered } from "./internal/topLayer.ts"
 
 /**
  * The content of a toast, as a sender posts it in `RequestedAdd`.
@@ -258,6 +268,9 @@ export interface ToastItem extends ToastData {
  *   5000 by default. `0` keeps toasts until they're closed.
  * - `limit`: how many toasts show at once, 3 by default. The older ones
  *   stay in the list, marked `limited` and `inert`, until newer ones close.
+ * - `topLayer`: `false` draws the viewport in place, as an ordinary element
+ *   where the view puts it, instead of as a popover in the top layer, as
+ *   the module's **Layering** describes. `true` when left out.
  *
  * @stability experimental
  * @category schemas
@@ -265,7 +278,8 @@ export interface ToastItem extends ToastData {
  */
 export const ToastProviderProps = Schema.Struct({
   timeout: Schema.optional(Schema.Number),
-  limit: Schema.optional(Schema.Number)
+  limit: Schema.optional(Schema.Number),
+  topLayer: Schema.optional(Schema.Boolean)
 })
 
 /**
@@ -442,7 +456,8 @@ const TrackViewport = Mount.makeStream(
     args: {
       id: Schema.String,
       empty: Schema.Boolean,
-      hovering: Schema.Boolean
+      hovering: Schema.Boolean,
+      topLayer: Schema.Boolean
     }
   },
   (node: HTMLElement, args, changes) =>
@@ -450,6 +465,7 @@ const TrackViewport = Mount.makeStream(
       Effect.gen(function*() {
         const document = node.ownerDocument
         let { empty, hovering } = args
+        const { topLayer } = args
         let focused = false
         const toastRoot = attrSelector(rootAttr, args.id)
         const focusable = `${toastRoot}:not([data-ending-style]):not([inert])`
@@ -566,7 +582,7 @@ const TrackViewport = Mount.makeStream(
         }
         yield* Effect.acquireRelease(
           Effect.sync(() => {
-            const unkeep = keepOnTop(node)
+            const unkeep = topLayer ? keepOnTop(node) : () => {}
             const observer = new MutationObserver(handOff)
             observer.observe(node, {
               subtree: true,
@@ -884,20 +900,29 @@ export const ToastProvider = Html.component({
         )
       )
     )
+    const topLayer = p.props.topLayer !== false
     const viewport = p.part("div", (b) =>
-      b.attrs({
-        role: "region",
-        tabindex: "-1",
-        "aria-live": "polite",
-        "aria-atomic": "false",
-        "aria-relevant": "additions text",
-        "data-expanded": flag(expanded)
-      })
-        .on("mouseenter", ToastProviderMessage.EnteredViewport())
-        .on("mouseleave", ToastProviderMessage.LeftViewport())
-        .popover("manual", true)
+      layered(
+        b.attrs({
+          role: "region",
+          tabindex: "-1",
+          "aria-live": "polite",
+          "aria-atomic": "false",
+          "aria-relevant": "additions text",
+          "data-expanded": flag(expanded)
+        })
+          .on("mouseenter", ToastProviderMessage.EnteredViewport())
+          .on("mouseleave", ToastProviderMessage.LeftViewport()),
+        topLayer,
+        true
+      )
         .onMount(
-          TrackViewport({ id: owner, empty, hovering: model.hovering }).pipe(
+          TrackViewport({
+            id: owner,
+            empty,
+            hovering: model.hovering,
+            topLayer
+          }).pipe(
             Mount.map((fact) => ToastProviderMessage[fact]())
           )
         )

@@ -58,7 +58,8 @@ const Config = Schema.Struct({
   viewport: Schema.Boolean,
   finalMark: Schema.Boolean,
   initialFocus: Schema.optional(Schema.Boolean),
-  skips: Schema.Boolean
+  skips: Schema.Boolean,
+  topLayer: Schema.optional(Schema.Boolean)
 })
 type Config = typeof Config.Type
 
@@ -191,7 +192,8 @@ const Page = Html.component({
               triggerId: model.triggerId,
               finalFocus: props.finalFocus,
               initialFocus: props.initialFocus,
-              openMethod: props.openMethod ?? model.method
+              openMethod: props.openMethod ?? model.method,
+              topLayer: props.topLayer
             },
             onEmit: on("a"),
             view: (dialog) => {
@@ -870,6 +872,31 @@ describe("Dialog in a document", { concurrent: false }, () => {
           assert.strictEqual(clicks, tapped + 1, String(modal))
         }))
       }
+    }))
+
+  it.effect("drawn in place, it is an open dialog that leaves the page alone, whatever modal says", () =>
+    Effect.gen(function*() {
+      const { app, log } = yield* mountPage({ modal: true, topLayer: false })
+      const dialog = app.querySelector("dialog")!
+      assert.isFalse(dialog.hasAttribute("popover"))
+      assert.isTrue(dialog.open)
+      assert.isFalse(dialog.matches(":popover-open"))
+      assert.include(dialog.getAttribute("style") ?? "", "position:static")
+      assert.isNull(dialog.querySelector(":scope > [role=presentation]"))
+      assert.isNull(byId("page").closest("[aria-hidden]"))
+      assert.strictEqual(document.body.style.overflowY, "")
+      assert.strictEqual(document.documentElement.style.overflowY, "")
+      assert.strictEqual(document.activeElement?.id, "first")
+      // A press on the page closes it and reaches the page, as without a modal.
+      const page = byId("page")
+      let clicks = 0
+      page.addEventListener("click", () => clicks++)
+      click(page, "touch")
+      yield* tick
+      assert.deepStrictEqual(dismissals(log()), [
+        "RequestedClose a outside-press"
+      ])
+      assert.strictEqual(clicks, 1)
     }))
 
   it.effect("a close before the first frame still exits and settles", () =>
