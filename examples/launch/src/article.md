@@ -98,22 +98,20 @@ In Foldkit 0.x, fetched data lived in the Model, and the parent drove the experi
 
 ::Chips{label="Also built in" items="polling, refetch on focus and reconnect, load more, invalidation from Commands, optimistic updates, prefetch on link hover, server rendering, restore on Back and forward"}
 
-:::Compare{foldkit="queryFoldkit" foldkitTitle="Foldkit 0.x: the parent stores and drives the Query" effect="queryEffect" effectTitle="Effect UI: the Component lists its query"}
-Both search the same posts as you type, 300 ms after the last keystroke. In Foldkit 0.x, the wait was a version counter in the Model and a `DelaySearch` Command. In Effect UI, it is the `debounce` option, and only this version refetches a result older than a minute.
-:::
+::Compare{foldkit="queryFoldkit" foldkitTitle="Foldkit 0.x: the parent stores and drives the Query" effect="queryEffect" effectTitle="Effect UI: the Component lists its query"}
 
 ### Where state lives
 
-In Foldkit 0.x, all of an app's state lived in its one Model. In Effect UI, state lives in four places, and a view reads each one its own way:
+In Foldkit 0.x, all of an app's state lived in its one Model. In Effect UI, state lives in four places:
 
-| State                                                            | Where it lives            | A view reads         |
-| ---------------------------------------------------------------- | ------------------------- | -------------------- |
-| What the Component changes, such as a form draft                 | Its own Model             | `model`              |
-| What a parent or a [Provider](#shared-state-with-providers) owns | Another Component's Model | `h.props`, `h.reads` |
-| Data a [query](#built-in-queries) fetched                        | The runtime's query cache | `h.queries`          |
-| Which Commands are running                                       | The runtime               | `h.isRunning`        |
+| State                                                             | Where it lives            |
+| ----------------------------------------------------------------- | ------------------------- |
+| A Component's own state                                           | Its own Model             |
+| State a parent or a [Provider](#shared-state-with-providers) owns | Another Component's Model |
+| Data a [query](#built-in-queries) fetched                         | The runtime's query cache |
+| Which Commands are running                                        | The runtime               |
 
-So a Model holds only the state its Component changes through update, not everything its view shows. With logging enabled, you can still replay a Component's recorded state, because the log includes what update read from props, queries and Providers.
+So a Model holds only the state that its own update changes, not everything the view shows. With logging enabled, you can still replay a Component's recorded state, because the log includes what update read from props, queries and Providers.
 
 ## Views and rendering
 
