@@ -18,12 +18,7 @@ import * as submit from "./submit.ts"
 /** @internal */
 export const SVG = "http://www.w3.org/2000/svg"
 
-/**
- * `name` as `element` writes it. A name HTML leaves as it is, SVG leaves
- * too, so the element's namespace is read only for a name HTML would change.
- *
- * @internal
- */
+/** @internal */
 export const attributeOf = (
   element: globalThis.Element,
   name: string

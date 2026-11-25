@@ -1551,7 +1551,6 @@ const patchList = (
     end--
   }
   const count = end - start + 1
-  // With nothing old left to place, or nothing new, no old one is looked up.
   const sources = count > 0 && start <= oldEnd
     ? new Int32Array(count)
     : undefined

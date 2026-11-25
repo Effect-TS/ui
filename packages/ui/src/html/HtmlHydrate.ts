@@ -41,7 +41,6 @@ const closeOf = (open: Node, path: string): Node | null => {
   return null
 }
 
-/** Whether `node` is an element with `tag`, or a text when `tag` is `null`. */
 const matches = (node: Node, tag: string | null): boolean =>
   tag === null
     ? node.nodeType === TEXT
@@ -200,7 +199,6 @@ interface Building {
   readonly node: Node
   names: Array<string> | undefined
   last: Node | undefined
-  /** How many ranges were open when the element was taken. */
   readonly rangeDepth: number
 }
 

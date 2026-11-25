@@ -344,8 +344,6 @@ export const make = (
       }
       if (got === undefined) return undefined
       adopting.add(inst)
-      // `hold` only looks for an instance still waiting on a Layer, which one
-      // with a settled env and no Layer of its own never is.
       if (
         inst.component.layer !== undefined ||
         (inst.env.ctx === undefined && inst.env.cause === undefined)

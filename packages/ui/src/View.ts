@@ -1544,9 +1544,7 @@ export class ElementBuilder<
   attr(name: string, value: string | undefined): this {
     const attrs = this.elementAttrs
     const removals = this.removals
-    // Removing an attribute that isn't set changes nothing, so the builder
-    // is its own result. A `shorthand` is still copied: its chain methods
-    // return a plain builder, not the function.
+    // A `shorthand` is a function whose chain methods must return a plain builder.
     if (
       value === undefined && removals === undefined &&
       (attrs === noFields || !Object.hasOwn(attrs, name)) &&
