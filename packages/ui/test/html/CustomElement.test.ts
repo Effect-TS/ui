@@ -192,7 +192,7 @@ describe("Html.customElement", () => {
       expect(error).toHaveBeenCalledOnce()
     }).pipe(Effect.scoped))
 
-  it.effect("an event that doesn't bubble reaches only its target's handler", () =>
+  it.effect("an event that doesn't bubble reaches only its target's handler, and one that bubbles from a native child keeps its detail", () =>
     Effect.gen(function*() {
       const Nested = Html.component({
         name: "Nested",
@@ -202,10 +202,15 @@ describe("Html.customElement", () => {
         init: () => 0,
         update: ($) => $.model + 1,
         view: (h, cleared) =>
-          Picker(h).onCleared(Message.Cleared()).children(
-            Picker(h).attr("id", "inner"),
-            h.output(String(cleared))
-          )
+          Picker(h).onCleared(Message.Cleared())
+            .onColorChanged(({ value }) =>
+              Message.ChangedColor({ color: value })
+            )
+            .children(
+              Picker(h).attr("id", "inner"),
+              h.span("send"),
+              h.output(String(cleared))
+            )
       })
       const app = yield* container
       yield* BrowserHost.mountEffect(Nested, {}, app)
@@ -221,6 +226,12 @@ describe("Html.customElement", () => {
       send(inner, "cleared", { bubbles: true })
       yield* tick
       expect(app.querySelector("output")!.textContent).toBe("2")
+      send(app.querySelector("span")!, "color-changed", {
+        detail: { value: "#fff" },
+        bubbles: true
+      })
+      yield* tick
+      expect(app.querySelector("output")!.textContent).toBe("3")
     }).pipe(Effect.scoped))
 
   it("throws for a tag that isn't a custom element name, and for two events with one method name", () => {

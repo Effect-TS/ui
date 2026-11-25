@@ -528,15 +528,15 @@ export const makeHost = (
   const listener = (event: Event): void => {
     const name = event.type
     const path = event.composedPath() as Array<Node>
-    if (
-      view !== null && event instanceof view.CustomEvent &&
-      isCustomTag((event.target as globalThis.Element).localName ?? "")
-    ) {
+    const custom = view !== null && event instanceof view.CustomEvent
+    const detailFor = (node: Node) =>
+      custom && isCustomTag((node as globalThis.Element).localName ?? "")
+    if (detailFor(event.target as Node)) {
       deliver(
         event,
         path,
         !event.bubbles || ownEvents.has(name),
-        () => ({ detail: event.detail })
+        () => ({ detail: (event as CustomEvent).detail })
       )
       return
     }
@@ -600,9 +600,12 @@ export const makeHost = (
     const handled = deliver(
       event,
       path,
-      ownEvents.has(name) || (!event.bubbles && !bubblingEvents.has(name)),
+      ownEvents.has(name) ||
+        (!event.bubbles && (custom || !bubblingEvents.has(name))),
       (node) =>
-        name === "dragend"
+        detailFor(node)
+          ? { detail: (event as CustomEvent).detail }
+          : name === "dragend"
           ? {
             dropped: droppedHere ||
               ((event as DragEvent).dataTransfer?.dropEffect ?? "none") !==
