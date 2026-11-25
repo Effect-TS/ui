@@ -276,17 +276,15 @@ const render = (which: string, topLayer: boolean) =>
   )
 
 describe("topLayer", () => {
-  for (const which of names) {
-    it.effect(`${which} is a popover by default, and an ordinary element with topLayer: false`, () =>
-      Effect.gen(function*() {
-        const layered = yield* render(which, true)
-        assert.match(layered, /popover="manual"/)
-        const inPlace = yield* render(which, false)
-        assert.notMatch(inPlace, /popover=/)
-      }))
-  }
+  it.effect("each popup is a popover by default, and an ordinary element with topLayer: false", () =>
+    Effect.gen(function*() {
+      for (const which of names) {
+        assert.match(yield* render(which, true), /popover="manual"/, which)
+        assert.notMatch(yield* render(which, false), /popover=/, which)
+      }
+    }))
 
-  it.effect("a closed popup drawn in place is hidden", () =>
+  it.effect("a closed popup drawn in place is hidden, while the toast viewport shows", () =>
     Effect.gen(function*() {
       for (
         const which of ["Tooltip", "Menu", "Select", "Combobox", "PreviewCard"]
@@ -295,10 +293,6 @@ describe("topLayer", () => {
       }
       // A closed `<dialog>` is hidden by the browser without its `open`.
       assert.notMatch(yield* render("Dialog", false), /<dialog[^>]* open/)
-    }))
-
-  it.effect("the toast viewport drawn in place shows", () =>
-    Effect.gen(function*() {
       assert.notMatch(
         yield* render("Toast", false),
         /class="toasts"[^>]* hidden/

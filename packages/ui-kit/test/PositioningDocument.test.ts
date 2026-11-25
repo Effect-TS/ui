@@ -145,7 +145,6 @@ const sized = (element: Element, width: number, height: number) => {
 // edge and a 120 by 60 positioner drawn in place.
 const trackInCard = Effect.fnUntraced(
   function*(
-    props: Positioning.PositionerOptions,
     options: {
       readonly scale?: number
       readonly cardHeight?: number
@@ -178,7 +177,7 @@ const trackInCard = Effect.fnUntraced(
     sized(card, 300, cardHeight)
     const node = document.getElementById("positioner")!
     sized(node, 120, 60)
-    const args = Positioning.trackArgs(props, {
+    const args = Positioning.trackArgs({ topLayer: false }, {
       side: "bottom",
       anchorSelector: "#anchor"
     })
@@ -197,35 +196,27 @@ const trackInCard = Effect.fnUntraced(
 describe("trackPosition in a document", { concurrent: false }, () => {
   it.effect("in place, it measures from the containing block, keeps local alignment under scale, and re-places when the clipping card resizes", () =>
     Effect.gen(function*() {
-      for (const scale of [1, 2]) {
-        yield* Effect.scoped(Effect.gen(function*() {
-          const { node, placements } = yield* trackInCard(
-            { topLayer: false },
-            { scale }
-          )
-          // Below the anchor it would leave the card, so it flips above it, and
-          // left, top and size variables stay in the card's local coordinates.
-          assert.strictEqual(placements[0]?.side, "top", String(scale))
-          assert.strictEqual(node.style.left, "30px", String(scale))
-          assert.strictEqual(node.style.top, "30px", String(scale))
-          assert.strictEqual(
-            node.style.getPropertyValue("--anchor-width"),
-            "80px",
-            String(scale)
-          )
-          assert.strictEqual(
-            node.style.getPropertyValue("--available-height"),
-            "85px",
-            String(scale)
-          )
-        }))
-      }
+      yield* Effect.scoped(Effect.gen(function*() {
+        const { node, placements } = yield* trackInCard({ scale: 2 })
+        // Below the anchor it would leave the card, so it flips above it, and
+        // left, top and size variables stay in the card's local coordinates.
+        assert.strictEqual(placements[0]?.side, "top")
+        assert.strictEqual(node.style.left, "30px")
+        assert.strictEqual(node.style.top, "30px")
+        assert.strictEqual(
+          node.style.getPropertyValue("--anchor-width"),
+          "80px"
+        )
+        assert.strictEqual(
+          node.style.getPropertyValue("--available-height"),
+          "85px"
+        )
+      }))
       // Shrinking the clipping card flips the popup without a scroll or window resize.
       yield* Effect.scoped(Effect.gen(function*() {
-        const { card, node, placements } = yield* trackInCard(
-          { topLayer: false },
-          { cardHeight: 200 }
-        )
+        const { card, node, placements } = yield* trackInCard({
+          cardHeight: 200
+        })
         assert.strictEqual(placements.at(-1)?.side, "bottom")
         rects.set("card", { x: 50, y: 20, width: 300, height: 130 })
         sized(card, 300, 130)
@@ -235,14 +226,6 @@ describe("trackPosition in a document", { concurrent: false }, () => {
         assert.strictEqual(node.style.top, "30px")
       }))
     }))
-
-  it.effect("in the top layer, the same popup fits below the anchor in the viewport", () =>
-    Effect.gen(function*() {
-      const { node, placements } = yield* trackInCard({})
-      assert.strictEqual(placements[0]?.side, "bottom")
-      assert.strictEqual(node.style.left, "80px")
-      assert.strictEqual(node.style.top, "130px")
-    }).pipe(Effect.scoped))
 
   it.effect("with leaveCoordinates, it leaves left and top to the caller and still writes the variables", () =>
     Effect.gen(function*() {

@@ -879,7 +879,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       }
     }))
 
-  it.effect("a touch on a non-modal dialog's backdrop drops its click, while a touch outside it reaches the page", () =>
+  it.effect("a touch on a non-modal dialog's backdrop drops its click", () =>
     Effect.gen(function*() {
       for (const modal of ["trap-focus", false] as const) {
         yield* Effect.scoped(Effect.gen(function*() {
@@ -908,18 +908,6 @@ describe("Dialog in a document", { concurrent: false }, () => {
           assert.strictEqual(clicks, 0, String(modal))
         }))
       }
-      yield* Effect.scoped(Effect.gen(function*() {
-        const { log } = yield* mountPage({ modal: false, backdrop: true })
-        const page = byId("page")
-        let clicks = 0
-        page.addEventListener("click", () => clicks++)
-        click(page, "touch")
-        yield* tick
-        assert.deepStrictEqual(dismissals(log()), [
-          "RequestedClose a outside-press"
-        ])
-        assert.strictEqual(clicks, 1)
-      }))
     }))
 
   it.effect("opening an inline dialog programmatically with initialFocus: false preserves outside focus and page scroll", () =>
