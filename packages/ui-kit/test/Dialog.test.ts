@@ -322,7 +322,7 @@ describe("Dialog", () => {
       assert.strictEqual(child!.attrs.class, "backdrop")
     }))
 
-  it.effect("the other modes draw no layer and no aria-modal", () =>
+  it.effect("the other modes draw no layer, and only a non-modal dialog sets aria-modal, to false", () =>
     Effect.gen(function*() {
       const scene = yield* Scene.make(
         Dialog,
@@ -350,6 +350,7 @@ describe("Dialog", () => {
       assert.isUndefined(scene.get(Locator.tag("input")).attrs?.autofocus)
       scene.expectMount(tracked(scene))
       assert.strictEqual(scene.get(portal).props?.popoverOpen, true)
+      assert.strictEqual(scene.get(portal).attrs?.["aria-modal"], "false")
     }))
 
   it.effect("a nested dialog can force a backdrop, and a parent ignores Escape", () =>

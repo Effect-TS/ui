@@ -22,22 +22,37 @@ const stackOf = perDocument((): Stack => ({
   unlock: undefined
 }))
 
+// `timer` and `marquee` are left out, as their implicit `aria-live` is off.
+const liveRegions =
+  "[aria-live],[role=\"alert\"],[role=\"status\"],[role=\"log\"],output"
+
 const hide = ({ also, inside }: Layer): () => void => {
   const body = inside.ownerDocument.body
   if (body === null) return () => {}
-  const live = Array.from(body.querySelectorAll("[aria-live]"))
-  const stops = new Set<Node>([inside, ...also, ...live])
+  // The shadow roots on the way up, whose own children are the dialog's
+  // neighbours too.
+  const roots: Array<ParentNode> = [body]
   const keep = new Set<Node>()
-  for (const element of stops) {
-    for (
-      let node: Node | null = element;
-      node !== null && !keep.has(node);
-      node = node.parentNode
-    ) keep.add(node)
+  const keepPath = (element: Node) => {
+    for (let node: Node | null = element; node !== null && !keep.has(node);) {
+      keep.add(node)
+      const host: Node | null | undefined = node.parentNode === null
+        ? (node as Partial<ShadowRoot>).host
+        : undefined
+      if (host != null) roots.push(node as ShadowRoot)
+      node = node.parentNode ?? host ?? null
+    }
   }
+  keepPath(inside)
+  also.forEach(keepPath)
+  const live = roots.flatMap((root) =>
+    Array.from(root.querySelectorAll(liveRegions))
+  )
+  live.forEach(keepPath)
+  const stops = new Set<Node>([inside, ...also, ...live])
   const hidden: Array<readonly [Element, string | null]> = []
-  const walk = (parent: Element) => {
-    if (stops.has(parent)) return
+  const walk = (parent: ParentNode) => {
+    if (stops.has(parent as Node)) return
     for (const child of Array.from(parent.children)) {
       if (child.localName === "script") continue
       if (keep.has(child)) {
@@ -50,7 +65,7 @@ const hide = ({ also, inside }: Layer): () => void => {
       hidden.push([child, before])
     }
   }
-  walk(body)
+  roots.forEach(walk)
   return () => {
     for (const [element, before] of hidden) {
       if (before === null) element.removeAttribute("aria-hidden")

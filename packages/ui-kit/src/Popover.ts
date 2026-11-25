@@ -850,7 +850,7 @@ export const PopoverTrigger = <Msg, R = never>(
  * it passes in, including the ones a state leaves absent: on the trigger
  * `id`, `type`, `disabled`, `aria-haspopup`, `aria-expanded`, `aria-controls`,
  * `data-popup-open`, `data-pressed`, `data-disabled` and `data-dialog-trigger`;
- * on the portal `id`, `popover` and `open`; `role` and `id` on the
+ * on the portal `id`, `popover`, `open` and `aria-modal`; `role` and `id` on the
  * positioner; `id` and `aria-hidden` on the arrow; the data attributes on the
  * backdrop, positioner, popup, viewport and arrow; and what a `Dialog` owns on
  * the popup, title, description, close, `initialFocus` and `finalFocus` parts.

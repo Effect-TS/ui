@@ -101,7 +101,8 @@
  * - `modal: "trap-focus"`: focus stays inside and the page is hidden from
  *   screen readers, but the page behind still scrolls and takes clicks.
  * - `modal: false`: the page stays usable, and the dialog asks to close when
- *   focus leaves it.
+ *   focus leaves it. The portal has `aria-modal="false"`, as Chromium takes
+ *   any `<dialog>` in the top layer as modal.
  *
  * The page is hidden with `aria-hidden` on everything outside the dialog,
  * except live regions such as the toasts. The scroll lock keeps the space of
@@ -477,9 +478,13 @@ const tabbableSelector = [
   "textarea",
   "iframe",
   "summary",
+  "details",
+  "audio[controls]",
+  "video[controls]",
   "[tabindex]",
   "[contenteditable=\"\"]",
-  "[contenteditable=\"true\"]"
+  "[contenteditable=\"true\"]",
+  "[contenteditable=\"plaintext-only\"]"
 ].join(",")
 
 const closestOf = (
@@ -503,17 +508,28 @@ const radioOut = (element: HTMLElement): boolean => {
   return group.some((other) => other.checked) || group[0] !== radio
 }
 
-const tabbables = (dialog: Element, root: Element): Array<HTMLElement> => {
-  const view = dialog.ownerDocument.defaultView
-  return Array.from(root.querySelectorAll<HTMLElement>(tabbableSelector))
+const focusable = (element: HTMLElement): boolean =>
+  element.isConnected && element.getClientRects().length > 0 &&
+  !element.matches(":disabled") && element.closest("[inert]") === null &&
+  element.ownerDocument.defaultView?.getComputedStyle(element).visibility !==
+    "hidden"
+
+// Chromium reports a `tabIndex` of -1 for an editing host and for a
+// `<details>` without a summary, though Tab reaches both.
+const inTabOrder = (element: HTMLElement): boolean =>
+  element.tabIndex >= 0 ||
+  (!element.hasAttribute("tabindex") &&
+    (element.localName === "details"
+      ? element.querySelector(":scope > summary") === null
+      : element.matches("[contenteditable]:not([contenteditable=\"false\"])") &&
+        element.parentElement?.isContentEditable !== true))
+
+const tabbables = (dialog: Element, root: Element): Array<HTMLElement> =>
+  Array.from(root.querySelectorAll<HTMLElement>(tabbableSelector))
     .filter((element) =>
-      element.tabIndex >= 0 && element.getClientRects().length > 0 &&
-      !inNested(dialog, element) &&
-      !element.matches(":disabled") && element.closest("[inert]") === null &&
-      view?.getComputedStyle(element).visibility !== "hidden" &&
-      !radioOut(element)
+      inTabOrder(element) && !inNested(dialog, element) &&
+      focusable(element) && !radioOut(element)
     )
-}
 
 const TrackDialogArgs = {
   modal: DialogModal,
@@ -572,9 +588,10 @@ const onTop = (stack: Stack, node: HTMLDialogElement): boolean => {
 }
 
 let handingOff = 0
+// Without `focusVisible`, the browser decides whether to draw a focus ring.
 const handOff = (
   element: HTMLElement | null | undefined,
-  focusVisible = false
+  focusVisible?: boolean
 ): void => {
   if (element == null) return
   handingOff++
@@ -621,8 +638,16 @@ const TrackDialog = Mount.makeStream(
       const stack = stackOf(document)
       let current: TrackDialogArgs = args
       const send = (message: DialogMessage) => Queue.offerUnsafe(queue, message)
+      // The dialog's own root, a shadow root when it's in one.
+      const scope = (): Document | ShadowRoot =>
+        node.isConnected
+          ? node.getRootNode() as Document | ShadowRoot
+          : document
+      // In a shadow root, focus outside it leaves its `activeElement` null.
+      const focusedNow = (): Element | null =>
+        scope().activeElement ?? document.activeElement
       const popup = (): HTMLElement =>
-        (document.getElementById(current.popupId) as HTMLElement | null) ?? node
+        (scope().getElementById(current.popupId) as HTMLElement | null) ?? node
       const topmost = () => current.topmost && onTop(stack, node)
       const Watcher = closeWatcherOf(view)
       const entry: Showing = {
@@ -652,16 +677,17 @@ const TrackDialog = Mount.makeStream(
       const onTrigger = (target: Node): boolean =>
         closestOf(target, anyTrigger) != null ||
         trigger?.contains(target) === true
-      const findTrigger = (): HTMLElement | null =>
-        (current.triggerId === null
+      const findTrigger = (): HTMLElement | null => {
+        const focused = focusedNow()
+        return (current.triggerId === null
           ? null
           : document.getElementById(current.triggerId)) ??
-          (isHTMLElement(document.activeElement) &&
-              document.activeElement.matches(controls)
-            ? document.activeElement
+          (isHTMLElement(focused) && focused.matches(controls)
+            ? focused
             : document.querySelector<HTMLElement>(controls))
+      }
       let trigger = findTrigger()
-      const active = document.activeElement
+      const active = focusedNow()
       let focusInside = node.contains(active)
       let lastFocused: HTMLElement | null = focusInside
         ? active as HTMLElement
@@ -693,7 +719,7 @@ const TrackDialog = Mount.makeStream(
         const root = popup()
         if (root.contains(from)) return
         if (!current.initialFocus) {
-          const focused = document.activeElement
+          const focused = focusedNow()
           if (focused === null || !node.contains(focused)) return
           if (
             isHTMLElement(from) && from !== document.body && from.isConnected
@@ -708,7 +734,8 @@ const TrackDialog = Mount.makeStream(
           marked ?? (current.openMethod === "touch"
             ? undefined
             : tabbables(node, root)[0]) ??
-            root
+            root,
+          current.openMethod === "keyboard" ? true : undefined
         )
       }
 
@@ -746,7 +773,7 @@ const TrackDialog = Mount.makeStream(
           return
         }
         if (event.key !== "Tab" || current.modal === false) return
-        const focused = document.activeElement
+        const focused = focusedNow()
         if (
           focused !== null && focused !== document.body &&
           !node.contains(focused) &&
@@ -758,7 +785,7 @@ const TrackDialog = Mount.makeStream(
         const last = items.at(-1)
         if (first === undefined || last === undefined) {
           event.preventDefault()
-          handOff(root)
+          handOff(root, true)
         } else if (
           !node.contains(focused) ||
           (event.shiftKey
@@ -766,7 +793,7 @@ const TrackDialog = Mount.makeStream(
             : focused === last)
         ) {
           event.preventDefault()
-          handOff(event.shiftKey ? last : first)
+          handOff(event.shiftKey ? last : first, true)
         }
       }
 
@@ -884,7 +911,7 @@ const TrackDialog = Mount.makeStream(
 
       const recover = () =>
         frame(() => {
-          const focused = document.activeElement
+          const focused = focusedNow()
           if (!current.open || !focusInside || lastFocused === null) return
           if (focused !== null && focused !== document.body) return
           if (
@@ -900,8 +927,9 @@ const TrackDialog = Mount.makeStream(
       const opening = (from: Element | null) =>
         frame(() => {
           if (current.open && topmost()) focusFirst(from)
-          focusInside = node.contains(document.activeElement)
-          if (focusInside) lastFocused = document.activeElement as HTMLElement
+          const focused = focusedNow()
+          focusInside = node.contains(focused)
+          if (focusInside) lastFocused = focused as HTMLElement
           if (current.open && !current.started) {
             frame(() => send(DialogMessage.RenderedFirstFrame()))
           }
@@ -920,7 +948,7 @@ const TrackDialog = Mount.makeStream(
           finalFocus,
           portalId
         } = current
-        const focused = document.activeElement as HTMLElement | null
+        const focused = focusedNow() as HTMLElement | null
         const away = !held && focused !== null && focused !== document.body &&
           !node.contains(focused)
         if (
@@ -934,15 +962,15 @@ const TrackDialog = Mount.makeStream(
           if (focusInside && node.contains(focused)) focused?.blur()
           return
         }
-        const visible = closeMethod === "keyboard"
+        const visible = closeMethod === "keyboard" ? true : undefined
         const marked = closedByFocusOut || (closedByOutsidePress && away)
           ? null
           : byAttribute(document, "data-final-focus", portalId)
-        if (marked?.isConnected === true) return handOff(marked, visible)
+        if (marked != null && focusable(marked)) return handOff(marked, visible)
         if (away) return
         const back = [trigger, before, ...[...visited].reverse()].find((
           element
-        ) => element?.isConnected === true && !node.contains(element))
+        ) => element != null && !node.contains(element) && focusable(element))
         handOff(back, visible)
       }
       const restore = (parents: ReadonlyArray<typeof entry>) =>
@@ -980,7 +1008,7 @@ const TrackDialog = Mount.makeStream(
         if (
           next.open && previous.open && next.initialFocus &&
           !previous.initialFocus
-        ) opening(document.activeElement)
+        ) opening(focusedNow())
         if (next.open !== previous.open || next.modal !== previous.modal) hold()
         if (next.open !== previous.open || next.topmost !== previous.topmost) {
           rewatch(stack)
@@ -992,7 +1020,7 @@ const TrackDialog = Mount.makeStream(
           send(DialogMessage.ShowedPortal())
           page.takeRecords()
           added = new WeakSet()
-          const focused = document.activeElement
+          const focused = focusedNow()
           if (isHTMLElement(focused) && !node.contains(focused)) {
             before = focused
           }
@@ -1221,7 +1249,7 @@ export const DialogTrigger = <Msg, R = never>(
  * it passes in, including the ones a state leaves absent: on the trigger
  * `type`, `aria-haspopup`, `aria-expanded`, `aria-controls`, `data-popup-open`,
  * and `data-dialog-trigger`, which the dialog tells its triggers by; on the
- * portal `id`, `popover` and `open`; `role` on the backdrop and the viewport; the
+ * portal `id`, `popover`, `open` and `aria-modal`; `role` on the backdrop and the viewport; the
  * data attributes on the backdrop (including `data-dialog-backdrop`), viewport
  * and popup; `id`, `tabindex` and `inert` on the popup; `type` on the close part; `autofocus` on `initialFocus`; and
  * `data-final-focus`, which the dialog finds the element by, on `finalFocus`.
@@ -1388,6 +1416,7 @@ export const Dialog = Html.component({
     const portalPart = p.part("dialog", (b) => {
       const dialog = b
         .attr("id", portalId)
+        .attr("aria-modal", modal === false ? "false" : undefined)
         .open(false)
         // Shown once TrackDialog has started, so it sees what had focus before the browser moves it in.
         .popover("manual", model.mounted)
