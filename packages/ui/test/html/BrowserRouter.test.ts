@@ -667,10 +667,11 @@ describe("BrowserRouter", { concurrent: false }, () => {
         intents.push(href)
         return intent(href)
       }
-      link(app, "Person 1").dispatchEvent(
-        new Event("touchstart", { bubbles: true, composed: true })
-      )
+      const touch = new Event("touchstart", { bubbles: true, composed: true })
+      link(app, "Person 1").dispatchEvent(touch)
       expect(intents).toEqual(["/people/1"])
+      link(app, "Person 1").dispatchEvent(touch)
+      expect(intents).toEqual(["/people/1", "/people/1"])
       expect(clickReporting(link(app, "Person 1"), { composed: true })).toBe(
         true
       )

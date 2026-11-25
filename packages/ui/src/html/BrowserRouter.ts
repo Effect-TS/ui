@@ -501,10 +501,13 @@ const make = (
         )
       } else follow(event, href)
     }
-    const seen = new WeakSet<Event>()
+    const handled = new WeakSet<Event>()
+    const begin = (event: Event) => {
+      handled.delete(event)
+    }
     const once = <E extends Event>(f: (event: E) => void) => (event: E) => {
-      if (seen.has(event)) return
-      seen.add(event)
+      if (handled.has(event)) return
+      handled.add(event)
       f(event)
     }
     const listeners: ReadonlyArray<
@@ -520,11 +523,15 @@ const make = (
     ]
     const listen = (target: EventTarget) => {
       for (const [type, f, options] of listeners) {
+        target.addEventListener(type, begin, { capture: true, passive: true })
         target.addEventListener(type, f, options)
       }
     }
     const unlisten = (target: EventTarget) => {
-      for (const [type, f] of listeners) target.removeEventListener(type, f)
+      for (const [type, f] of listeners) {
+        target.removeEventListener(type, begin, true)
+        target.removeEventListener(type, f)
+      }
     }
     const shadows = new Map<ShadowRoot, number>()
     listen(document)
