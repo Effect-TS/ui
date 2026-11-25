@@ -483,32 +483,33 @@ const TrackViewport = Mount.makeStream(
         const leave = () => {
           if (!restore()) focusedElement()?.blur()
         }
-        // Focus moves off a closing toast, to the toast after it, or before
-        // it when `back`. Focus that `entered` it by Tab or Shift+Tab leaves
-        // the viewport when there's none that way, so it can't loop. Focus
-        // that was on it already goes to the other side first.
-        const passOn = (closing: Node, back: boolean, entered: boolean) => {
+        // Whether `b` comes after `a` in the document.
+        const follows = (a: Node, b: Node) =>
+          (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) > 0
+        // Focus moves off a closing toast. Focus that entered it by Tab, or
+        // by Shift+Tab when `back`, goes to the next toast that way, and
+        // leaves the viewport when there's none, so it can't loop. Focus that
+        // was on it already, with `back` unset, goes to the toast after it,
+        // else the one before.
+        const passOn = (closing: Node, back?: boolean) => {
           const roots = Array.from(
             node.querySelectorAll<HTMLElement>(focusable)
           )
           // `closing` isn't one of them, so they split around it.
-          const split = roots.findIndex((root) =>
-            closing.compareDocumentPosition(root) &
-            Node.DOCUMENT_POSITION_FOLLOWING
-          )
+          const split = roots.findIndex((root) => follows(closing, root))
           const at = split === -1 ? roots.length : split
           const after = roots[at]
           const before = roots[at - 1]
-          const ahead = back ? before : after
-          const next = entered ? ahead : ahead ?? (back ? after : before)
+          const next = back === undefined
+            ? after ?? before
+            : back
+            ? before
+            : after
           if (next === undefined) leave()
           else next.focus()
         }
         const onKeyDown = (event: KeyboardEvent) => {
           if (event.defaultPrevented) return
-          // Not `event.target`, which is the host when the viewport is in a
-          // closed shadow root.
-          const onViewport = active() === node
           if (event.key === "F6") {
             if (inside()) {
               if (restore()) event.preventDefault()
@@ -519,13 +520,15 @@ const TrackViewport = Mount.makeStream(
                 { preventScroll: true, focusVisible: true } as FocusOptions
               )
             }
-          } else if (
-            onViewport &&
-            (event.key === "Escape" || (event.key === "Tab" && event.shiftKey))
-          ) {
-            if (event.key === "Escape") leave()
-            else if (!restore()) return
-            event.preventDefault()
+          } else if (active() === node) {
+            // Not `event.target`, which is the host when the viewport is in
+            // a closed shadow root.
+            if (event.key === "Escape") {
+              leave()
+              event.preventDefault()
+            } else if (event.key === "Tab" && event.shiftKey && restore()) {
+              event.preventDefault()
+            }
           }
         }
         // Only keyboard focus expands the stack, so a click on a toast
@@ -538,14 +541,7 @@ const TrackViewport = Mount.makeStream(
           ) previous = from
           const closing = closingRoot(event.target as Element)
           if (closing !== null) {
-            passOn(
-              closing,
-              from !== null &&
-                (closing.compareDocumentPosition(from) &
-                    Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
-              true
-            )
-            return
+            return passOn(closing, from !== null && follows(closing, from))
           }
           if (focused || !focusVisible(event.composedPath()[0] as Element)) {
             return
@@ -578,8 +574,8 @@ const TrackViewport = Mount.makeStream(
           const closing = records.some(({ target }) => target.contains(focus))
             ? closingRoot(focus!)
             : null
-          if (node.querySelector(focusable) === null) leave()
-          else if (closing !== null) passOn(closing, false, false)
+          if (closing !== null) passOn(closing)
+          else if (node.querySelector(focusable) === null) leave()
         }
         yield* Effect.acquireRelease(
           Effect.sync(() => {
@@ -882,6 +878,7 @@ export const ToastProvider = Html.component({
     }))
     const empty = !model.toasts.some((toast) => toast.transition !== "ending")
     const frontmost = model.toasts[0]?.height ?? 0
+    const owner = p.id("viewport")
     // A high-priority toast is announced at once by an alert copy of its
     // text. Its root is `aria-live="off"`, so the polite viewport doesn't
     // read it again.
@@ -914,11 +911,7 @@ export const ToastProvider = Html.component({
         .on("mouseleave", ToastProviderMessage.LeftViewport())
         .popover("manual", true)
         .onMount(
-          TrackViewport({
-            id: p.id("viewport"),
-            empty,
-            hovering: model.hovering
-          }).pipe(
+          TrackViewport({ id: owner, empty, hovering: model.hovering }).pipe(
             Mount.map((fact) => ToastProviderMessage[fact]())
           )
         )
@@ -949,7 +942,7 @@ export const ToastProvider = Html.component({
       ].filter((declaration) => declaration !== undefined).join(";")
       return b.attrs({
         role: high ? "alertdialog" : "dialog",
-        [rootAttr]: p.id("viewport"),
+        [rootAttr]: owner,
         tabindex: "0",
         "aria-modal": "false",
         "aria-labelledby": toast.title !== undefined

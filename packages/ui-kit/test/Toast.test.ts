@@ -7,7 +7,7 @@ import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
-import { popovers } from "./utils/document.ts"
+import { holdExits, popovers } from "./utils/document.ts"
 
 // The first post is a loading toast; Complete turns it into a timed success.
 const PosterMessage = UiSchema.TaggedEnum({
@@ -245,6 +245,7 @@ describe("ToastProvider", { concurrent: false }, () => {
 
   it.effect("focus that lands on a closing toast moves on in the direction it came from", () =>
     Effect.gen(function*() {
+      yield* holdExits
       const { byId } = yield* mountPage(0)
       const post = byId("post")!
       post.click()
@@ -252,13 +253,8 @@ describe("ToastProvider", { concurrent: false }, () => {
       post.click()
       yield* tick
 
-      // Newest first: t3, t2, t1. t2's exit transition never ends.
-      const hold = (toast: HTMLElement) => {
-        toast.getAnimations =
-          () => [{ finished: new Promise(() => {}) } as Animation]
-      }
+      // Newest first: t3, t2, t1. An exit transition never ends.
       const t2 = byId("t2")!
-      hold(t2)
       t2.focus()
       press(t2, "Escape")
       yield* tick
@@ -274,7 +270,6 @@ describe("ToastProvider", { concurrent: false }, () => {
       // t1 closes while focused: back to t3. Tab from t3 into the closing
       // t1, with no toast after it, leaves the stack.
       const t1 = byId("t1")!
-      hold(t1)
       press(t1, "Escape")
       yield* tick
       assert.strictEqual(document.activeElement, byId("t3"))
