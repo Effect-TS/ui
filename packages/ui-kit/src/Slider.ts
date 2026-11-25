@@ -171,7 +171,12 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { type Attributed, flag, withStyle } from "./internal/attributes.ts"
+import {
+  type Attributed,
+  flag,
+  ownStyle,
+  withStyle
+} from "./internal/attributes.ts"
 import { focusVisible } from "./internal/dom.ts"
 import { clamp } from "./internal/range.ts"
 import type { WithRequirements } from "./internal/requirements.ts"
@@ -961,15 +966,9 @@ export const Slider = Html.component({
         .onInput(({ value }) => SliderMessage.UpdatedThumb({ index, value }))
         .onFocus(SliderMessage.FocusedThumb({ index }))
         .onBlur(SliderMessage.BlurredThumb({ index }))
-        .forward((node) =>
-          node.attr(
-            "style",
-            withStyle(
-              node.elementAttrs.style,
-              hidden + (s.vertical ? ";writing-mode:vertical-lr" : "")
-            )
-          )
-        )
+        .forward(ownStyle(
+          hidden + (s.vertical ? ";writing-mode:vertical-lr" : "")
+        ))
     })
     const thumbPart = p.part((
       b,
