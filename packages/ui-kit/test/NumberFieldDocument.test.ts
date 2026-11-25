@@ -383,7 +383,8 @@ describe("NumberField in a document", { concurrent: false }, () => {
       const cursor = app.querySelector<HTMLElement>(".cursor")!
       assert.isNotNull(cursor)
       assert.strictEqual(cursor.getAttribute("popover"), "manual")
-      assert.strictEqual(cursor.getAttribute("role"), "presentation")
+      assert.strictEqual(cursor.getAttribute("aria-hidden"), "true")
+      assert.isNull(cursor.getAttribute("role"))
       pointer(window, "pointermove", { clientX: 10, clientY: 10, movementX: 4 })
       yield* tick
       assert.deepStrictEqual(taken(), ["updated 9 scrub"])

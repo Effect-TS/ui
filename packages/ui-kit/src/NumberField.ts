@@ -55,9 +55,9 @@
  * it with `numberField.input(field.control(h.input))` and pass
  * `disabled: field.disabled`. The input keeps the id its builder has, the
  * field's or your own, and gets a generated one otherwise. Each button
- * points at it with `aria-controls`. The input gets
- * `aria-roledescription="Number field"` and the buttons `aria-label`
- * "Decrease" and "Increase", unless the builder has its own.
+ * points at it with `aria-controls`. The buttons default to `aria-label`
+ * "Decrease" and "Increase"; set `aria-label` on each builder to override
+ * or localize them.
  *
  * **Data attributes**
  *
@@ -1329,8 +1329,7 @@ const cursorBox =
 const inputDefaults = {
   autocomplete: "off",
   autocorrect: "off",
-  spellcheck: "false",
-  "aria-roledescription": "Number field"
+  spellcheck: "false"
 }
 
 const stepperDefaults = {
@@ -1359,12 +1358,12 @@ const stepperDefaults = {
  *   `aria-disabled`, and `disabled`, which they remove: an unavailable
  *   button stays focusable, so a press that reaches the bound isn't lost
  * - `scrubArea`: `role`
- * - `scrubAreaCursor`: `id`, `role` and `popover`
+ * - `scrubAreaCursor`: `id`, `aria-hidden` and `popover`
  *
  * The styles the buttons, the scrub area and the cursor need are added to
  * the consumer's `style`, after it. The input's `autocomplete`,
- * `autocorrect`, `spellcheck` and `aria-roledescription`, and a button's
- * `aria-label`, are written only when the builder has none.
+ * `autocorrect` and `spellcheck`, and a button's `aria-label`, are
+ * written only when the builder has none.
  *
  * The input handles `input`, `blur` and `keydown` on a layer of its own, so
  * the consumer's handlers for them, and a `Field`'s, still run.
@@ -1750,7 +1749,7 @@ export const NumberField = Html.component({
       state(b)
         .attrs({
           id: cursorId,
-          role: "presentation",
+          "aria-hidden": "true",
           popover: "manual"
         })
         .prop("popoverOpen", true)

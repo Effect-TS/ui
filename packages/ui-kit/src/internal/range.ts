@@ -1,6 +1,6 @@
 import * as Html from "@effect/ui/html/Html"
 import * as View from "@effect/ui/View"
-import { visuallyHidden } from "./attributes.ts"
+import { noSelect, visuallyHidden } from "./attributes.ts"
 
 export const clamp = (value: number, min: number, max: number): number =>
   Math.min(Math.max(value, min), max)
@@ -42,12 +42,11 @@ export const fillValue = <Msg, R, Handlers, HostNode, Tag extends string>(
     ? node
     : node.children(text)
 
-// The markup that makes NVDA read the label of a bar: without content of
-// its own after the label, it reads the value alone. The root appends it
-// after all its children.
+// Appended after the root's children so NVDA reads the label, not just the
+// value; `noSelect` keeps the fallback text out of copy-paste.
 export const nvdaLabel = View.toNode(
   new Html.Element<never>("span").attrs({
     role: "presentation",
-    style: visuallyHidden
+    style: visuallyHidden + ";" + noSelect
   }).children("x")
 )
