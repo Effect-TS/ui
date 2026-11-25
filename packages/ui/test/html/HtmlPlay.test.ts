@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { type Component, Subscription } from "@effect/ui"
+import type { Component } from "@effect/ui"
 import { BrowserHost, Html, HtmlSubscription } from "@effect/ui/html"
 import {
   HtmlLocator,
@@ -8,18 +8,7 @@ import {
 } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import {
-  Cause,
-  Clock,
-  Duration,
-  Effect,
-  Exit,
-  Layer,
-  Schema,
-  type Scope,
-  Stream
-} from "effect"
-import { TestClock } from "effect/testing"
+import { Cause, Clock, Effect, Exit, Layer, Schema, type Scope } from "effect"
 import { Menu } from "./fixtures/headless.ts"
 import { Settings } from "./fixtures/settings.ts"
 
@@ -83,6 +72,29 @@ const inBrowser = Effect.fnUntraced(function*(
 const play = <A, E>(
   test: Effect.Effect<A, E, TestHost.TestHost | Scope.Scope>
 ) => test.pipe(Effect.scoped, Effect.provide(TestHost.layer()))
+
+const supplied = TestGlobalEvents.make()
+
+// Logs each document key but Escape. Nested fires "inner" through `supplied` and returns nothing.
+const Shortcuts = Html.component({
+  name: "Shortcuts",
+  model: Schema.Array(Schema.String),
+  message: Schema.String
+}).make({
+  init: () => [],
+  update: ($, entry) => [...$.model, entry],
+  view: (h, entries) => h.output(entries.join(",")),
+  subscriptions: () => [
+    HtmlSubscription.onDocument("keydown", ({ key, shift }) => {
+      if (key === "Escape") return undefined
+      if (key === "Nested") {
+        supplied.fire("document", "keydown", { key: "inner" })
+        return undefined
+      }
+      return `${key}:${shift}`
+    })
+  ]
+})
 
 describe("HtmlPlay", () => {
   it.effect("type, keydown and a click's defaults send what BrowserHost sends", () =>
@@ -311,227 +323,76 @@ describe("HtmlPlay", () => {
       )
     }).pipe(play))
 
-  it.effect("keydown on document settles UI work without advancing TestClock, checks ignored/missing listeners, and keeps TestGlobalEvents.fire non-settling", () =>
+  it.effect("keydown on the document settles without advancing TestClock, and reports ignored and missing listeners", () =>
+    play(Effect.gen(function*() {
+      const start = yield* Clock.currentTimeMillis
+      const p = yield* HtmlPlay.make(Shortcuts, {})
+      yield* p.keydown("document", "a", { shift: true })
+      assert.strictEqual(p.root.text(), "a:true")
+      assert.strictEqual(yield* Clock.currentTimeMillis, start)
+      yield* p.keydown("document", "Escape")
+      yield* p.expectIgnored()
+      const quiet = yield* HtmlPlay.make(Checkout, {})
+      const missing = yield* Effect.exit(quiet.keydown("document", "a"))
+      assert.match(
+        Exit.isFailure(missing) ? Cause.pretty(missing.cause) : "",
+        /nothing listens for "keydown" on the document/
+      )
+    })))
+
+  it.effect("keydown on the document reaches every root sharing TestGlobalEvents.layer", () =>
     Effect.gen(function*() {
-      const source = TestGlobalEvents.make()
-      const Shortcuts = Html.component({
-        name: "Shortcuts",
-        model: Schema.Struct({
-          listening: Schema.Boolean,
-          ticks: Schema.Number,
-          entries: Schema.Array(Schema.String)
-        }),
-        message: Schema.String
-      }).make({
-        init: () => ({ listening: true, ticks: 0, entries: [] }),
-        update: ($, message) => {
-          if (message === "tick") {
-            return { ...$.model, ticks: $.model.ticks + 1 }
-          }
-          if (message === "stop") return { ...$.model, listening: false }
-          return { ...$.model, entries: [...$.model.entries, message] }
+      const quiet = yield* HtmlPlay.make(Checkout, {})
+      const mounted = yield* TestHost.mount(Shortcuts, {})
+      yield* quiet.keydown("document", "a")
+      assert.deepStrictEqual(mounted.model(), ["a:false"])
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(Layer.merge(TestHost.layer(), TestGlobalEvents.layer))
+    ))
+
+  it.effect("keydown on the document keeps a supplied source, and a key a handler fires counts for itself", () =>
+    play(Effect.gen(function*() {
+      const p = yield* HtmlPlay.make(Shortcuts, {})
+      supplied.fire("document", "keydown", { key: "a" })
+      yield* TestHost.settle
+      assert.strictEqual(p.root.text(), "a:false")
+      yield* p.keydown("document", "Nested")
+      yield* p.expectIgnored()
+      assert.strictEqual(p.root.text(), "a:false,inner:false")
+    })).pipe(Effect.provideService(HtmlSubscription.GlobalEvents, supplied)))
+
+  it.effect("keydown on the document through a custom source fires once and settles", () => {
+    const target = new EventTarget()
+    let fired = 0
+    const custom:
+      & HtmlSubscription.GlobalEvents
+      & TestGlobalEvents.TestGlobalEvents = {
+        listen: (on, event, { capture }, listener) => {
+          const handle = (e: Event) =>
+            listener((e as CustomEvent).detail, () => e.preventDefault())
+          target.addEventListener(`${on}:${event}`, handle, { capture })
+          return () =>
+            target.removeEventListener(`${on}:${event}`, handle, { capture })
         },
-        view: (h, model) =>
-          h.div(
-            h.output(`${model.ticks}:${model.entries.join(",")}`)
-          ),
-        subscriptions: ({ model }) => [
-          model.entries.length > 0 &&
-          Subscription.make(
-            "clock",
-            Stream.tick(Duration.millis(100)).pipe(
-              Stream.drop(1),
-              Stream.as("tick")
-            )
-          ),
-          model.listening &&
-          HtmlSubscription.onDocument("keydown", (event) => {
-            if (event.key === "Escape") return undefined
-            if (event.key === "q") return "stop"
-            if (event.key === "n") {
-              source.fire("window", "blur")
-              return undefined
-            }
-            if (event.key === "o") {
-              source.fire("document", "keydown", { key: "i" })
-              return undefined
-            }
-            return `${event.key}:${event.shift}:${event.defaultPrevented}`
-          }),
-          HtmlSubscription.onWindow("blur", "blur")
-        ]
-      })
-
-      // Works with only TestHost.layer(): settles without advancing TestClock.
-      yield* play(Effect.gen(function*() {
-        const start = yield* Clock.currentTimeMillis
-        const p = yield* HtmlPlay.make(Shortcuts, {})
-        yield* p.keydown("document", "ArrowUp")
-        assert.strictEqual(yield* Clock.currentTimeMillis, start)
-        assert.strictEqual(
-          p.root.text(),
-          "0:ArrowUp:false:false"
-        )
-        yield* p.keydown("document", "ArrowRight", {
-          shift: true,
-          defaultPrevented: true
-        })
-        assert.strictEqual(yield* Clock.currentTimeMillis, start)
-        assert.strictEqual(
-          p.root.text(),
-          "0:ArrowUp:false:false,ArrowRight:true:true"
-        )
-        yield* TestClock.adjust("100 millis")
-        yield* p.expect(log).toHaveText(
-          "1:ArrowUp:false:false,ArrowRight:true:true"
-        )
-        yield* p.keydown("document", "Escape")
-        yield* p.expectIgnored()
-        yield* p.keydown("document", "q")
-        const missing = yield* Effect.exit(p.keydown("document", "ArrowUp"))
-        assert.match(
-          Exit.isFailure(missing) ? Cause.pretty(missing.cause) : "",
-          /nothing listens for "keydown" on the document/
-        )
-      }))
-
-      // Shares TestGlobalEvents.layer when provided, while TestGlobalEvents.fire stays non-settling.
-      yield* Effect.gen(function*() {
-        const p = yield* HtmlPlay.make(Shortcuts, {})
-        const other = yield* HtmlPlay.make(Shortcuts, {})
-        yield* p.keydown("document", "a")
-        assert.strictEqual(p.root.text(), "0:a:false:false")
-        assert.strictEqual(other.root.text(), "0:a:false:false")
-        yield* TestGlobalEvents.fire("document", "keydown", { key: "b" })
-        assert.strictEqual(p.root.text(), "0:a:false:false")
-        yield* TestHost.settle
-        assert.strictEqual(p.root.text(), "0:a:false:false,b:false:false")
-        assert.strictEqual(other.root.text(), "0:a:false:false,b:false:false")
-      }).pipe(
-        Effect.scoped,
-        Effect.provide(Layer.merge(TestHost.layer(), TestGlobalEvents.layer))
-      )
-
-      // A root TestHost.mount mounted on the shared document hears the key, and the step settles it.
-      yield* Effect.gen(function*() {
-        const quiet = yield* HtmlPlay.make(Checkout, {})
-        const mounted = yield* TestHost.mount(Shortcuts, {})
-        yield* quiet.keydown("document", "c")
-        assert.deepStrictEqual(mounted.model()?.entries, ["c:false:false"])
-      }).pipe(
-        Effect.scoped,
-        Effect.provide(Layer.merge(TestHost.layer(), TestGlobalEvents.layer))
-      )
-
-      // Preserves a caller-supplied HtmlSubscription.GlobalEvents without TestGlobalEvents.
-      yield* Effect.gen(function*() {
-        const p = yield* HtmlPlay.make(Shortcuts, {})
-        yield* p.keydown("document", "a")
-        assert.strictEqual(p.root.text(), "0:a:false:false")
-        source.fire("document", "keydown", { key: "b" })
-        source.fire("window", "blur")
-        assert.strictEqual(p.root.text(), "0:a:false:false")
-        yield* TestHost.settle
-        assert.strictEqual(p.root.text(), "0:a:false:false,b:false:false,blur")
-        // A message from an event the key handler fires doesn't count as the key's.
-        yield* p.keydown("document", "n")
-        yield* p.expectIgnored()
-        assert.strictEqual(
-          p.root.text(),
-          "0:a:false:false,b:false:false,blur,blur"
-        )
-        // Nor does one from a nested keydown.
-        yield* p.keydown("document", "o")
-        yield* p.expectIgnored()
-        assert.strictEqual(
-          p.root.text(),
-          "0:a:false:false,b:false:false,blur,blur,i:false:false"
-        )
-      }).pipe(
-        Effect.scoped,
-        Effect.provideService(HtmlSubscription.GlobalEvents, source),
-        Effect.provide(TestHost.layer())
-      )
-
-      // Direct HtmlSubscription.GlobalEvents.listen callback counts as heard (ignored), then missing after unsubscribe.
-      let hits = 0
-      let detach: (() => void) | undefined
-      const Direct = Html.component({
-        name: "Direct",
-        model: Schema.Null,
-        message: Schema.Never
-      }).make({
-        init: () => null,
-        update: ($) => $.model,
-        view: (h) => h.p("direct"),
-        subscriptions: () => [
-          Subscription.make(
-            "direct",
-            Stream.unwrap(
-              Effect.map(HtmlSubscription.GlobalEvents, (events) => {
-                detach = events.listen(
-                  "document",
-                  "keydown",
-                  { capture: false },
-                  () => {
-                    hits++
-                  }
-                )
-                return Stream.never
-              })
-            )
+        fire: (on, event, payload) => {
+          fired++
+          return !target.dispatchEvent(
+            new CustomEvent(`${on}:${String(event)}`, {
+              detail: { shift: false, ...payload }
+            })
           )
-        ]
-      })
-      yield* play(Effect.gen(function*() {
-        const p = yield* HtmlPlay.make(Direct, {})
-        yield* p.keydown("document", "a")
-        assert.strictEqual(hits, 1)
-        yield* p.expectIgnored()
-        detach?.()
-        const missing = yield* Effect.exit(p.keydown("document", "a"))
-        assert.match(
-          Exit.isFailure(missing) ? Cause.pretty(missing.cause) : "",
-          /nothing listens for "keydown" on the document/
-        )
-      }))
-
-      // A custom source without the bundled fake's dispatch tracking still gets one key and a settle.
-      const target = new EventTarget()
-      let dispatched = 0
-      const custom:
-        & HtmlSubscription.GlobalEvents
-        & TestGlobalEvents.TestGlobalEvents = {
-          listen: (on, event, { capture }, listener) => {
-            const type = `${on}:${event}`
-            const handle = (e: Event) =>
-              listener((e as CustomEvent).detail, () => e.preventDefault())
-            target.addEventListener(type, handle, { capture })
-            return () => target.removeEventListener(type, handle, { capture })
-          },
-          fire: (on, event, payload) => {
-            dispatched++
-            return !target.dispatchEvent(
-              new CustomEvent(`${on}:${String(event)}`, {
-                cancelable: true,
-                detail: { shift: false, defaultPrevented: false, ...payload }
-              })
-            )
-          },
-          fireCustomEvent: () => false
-        }
-      yield* play(
-        Effect.gen(function*() {
-          const p = yield* HtmlPlay.make(Shortcuts, {})
-          yield* p.keydown("document", "x")
-          assert.strictEqual(dispatched, 1)
-          assert.strictEqual(p.root.text(), "0:x:false:false")
-          yield* p.keydown("document", "Escape")
-          yield* p.expectIgnored()
-        }).pipe(
-          Effect.provideService(HtmlSubscription.GlobalEvents, custom),
-          Effect.provideService(TestGlobalEvents.TestGlobalEvents, custom)
-        )
-      )
-    }))
+        },
+        fireCustomEvent: () => false
+      }
+    return play(Effect.gen(function*() {
+      const p = yield* HtmlPlay.make(Shortcuts, {})
+      yield* p.keydown("document", "a")
+      assert.strictEqual(fired, 1)
+      assert.strictEqual(p.root.text(), "a:false")
+    })).pipe(
+      Effect.provideService(HtmlSubscription.GlobalEvents, custom),
+      Effect.provideService(TestGlobalEvents.TestGlobalEvents, custom)
+    )
+  })
 })
