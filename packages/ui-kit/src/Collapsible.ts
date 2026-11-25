@@ -151,7 +151,7 @@ import {
   statusOf,
   transitionAttrs
 } from "./internal/transition.ts"
-import { find, layerOf } from "./internal/tree.ts"
+import { buildOwn } from "./internal/tree.ts"
 
 /**
  * Controls whether the panel is open and how it stays in the page while
@@ -543,23 +543,21 @@ export const Collapsible = Html.component({
         flag(disabled)
       )
 
+    // The open triggers built so far: each one's own copy of its attributes,
+    // rewritten in place when the panel's id turns out to be another.
     const triggers: Array<{
       readonly attrs: Record<string, string>
       readonly consumer: string | undefined
-      controls: string | undefined
     }> = []
-    const syncTriggers = () => {
-      const target = open ? panelId : undefined
-      for (const entry of triggers) {
-        if (entry.controls === target) continue
-        entry.controls = target
-        const next = withTokens(entry.consumer, target)
-        if (next === undefined) delete entry.attrs["aria-controls"]
-        else entry.attrs["aria-controls"] = next
+    const setPanelId = (id: string) => {
+      if (id === panelId) return
+      panelId = id
+      for (const { attrs, consumer } of triggers) {
+        attrs["aria-controls"] = withTokens(consumer, id)!
       }
     }
 
-    const root = p.part((b) => states(b))
+    const root = p.part(states)
 
     const trigger = p.part("button", (b) =>
       b
@@ -575,21 +573,16 @@ export const Collapsible = Html.component({
         .disabled(disabled)
         .onClick(CollapsibleMessage.ClickedTrigger())
         .forward((node) => {
-          const layer = layerOf(node)
-          const built = View.build(node, [])
-          const button = find(
-            built,
-            (element) => element.owned?.includes(layer) === true
-          )
-          if (button === undefined) return built
-          const consumer = button.attrs["aria-controls"]
-          const controls = open ? panelId : undefined
-          const next = withTokens(consumer, controls)
-          const attrs: Record<string, string> = { ...button.attrs }
-          if (next === undefined) delete attrs["aria-controls"]
-          else attrs["aria-controls"] = next
-          ;(button as { attrs: Readonly<Record<string, string>> }).attrs = attrs
-          if (open) triggers.push({ attrs, consumer, controls })
+          if (!open) return node
+          const { built, own } = buildOwn(node)
+          if (own === undefined) return built
+          const consumer = own.attrs["aria-controls"]
+          const attrs = {
+            ...own.attrs,
+            "aria-controls": withTokens(consumer, panelId)!
+          }
+          ;(own as { attrs: Readonly<Record<string, string>> }).attrs = attrs
+          triggers.push({ attrs, consumer })
           return built
         }))
 
@@ -608,17 +601,10 @@ export const Collapsible = Html.component({
           )
         })
         .forward((node) => {
-          const layer = layerOf(node)
-          const built = View.build(ownStyle(panelStyle(model, open))(node), [])
-          const element = find(
-            built,
-            (candidate) => candidate.owned?.includes(layer) === true
+          const { built, own } = buildOwn(
+            ownStyle(panelStyle(model, open))(node)
           )
-          const next = element?.attrs.id || id
-          if (next !== panelId) {
-            panelId = next
-            syncTriggers()
-          }
+          setPanelId(own?.attrs.id || id)
           return built
         })
         .onMount(
@@ -636,11 +622,8 @@ export const Collapsible = Html.component({
       <B extends View.PartTarget<string>>(
         element: B
       ): ReturnType<B["attr"]> | undefined => {
-        const next = idOf(element)
-        if (next !== null && next !== panelId) {
-          panelId = next
-          syncTriggers()
-        }
+        const id = idOf(element)
+        if (id !== null) setPanelId(id)
         const out = panelPart(element, panelId)
         return mounted || hiddenUntilFound || props.keepMounted
           ? out

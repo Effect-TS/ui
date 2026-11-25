@@ -129,9 +129,9 @@ import {
 } from "./Collapsible.ts"
 import { type Attributed, flag, idOf, ownStyle } from "./internal/attributes.ts"
 import {
+  buildOwn,
   carries,
   find,
-  layerOf,
   rewrite,
   setTokensOn
 } from "./internal/tree.ts"
@@ -516,36 +516,23 @@ export const AccordionItem = Html.component({
       states(b)
         .attr("id", id)
         .forward((node) => {
-          const layer = layerOf(node)
+          const { built, layer, own } = buildOwn(node)
           triggers.add(layer)
-          const built = View.build(node, [])
-          const button = find(
-            built,
-            (element) => element.owned?.includes(layer) === true
-          )
-          triggerId = button?.attrs.id || id
+          triggerId = own?.attrs.id || id
           return built
         }))
     const panelPart = p.part("div", (b) =>
       states(b)
         .attr("role", "region")
         .forward((node) => {
-          const layer = layerOf(node)
-          const built = View.build(
+          const { built, layer, own } = buildOwn(
             ownStyle(
               "--accordion-panel-height:var(--collapsible-panel-height);--accordion-panel-width:var(--collapsible-panel-width)"
-            )(node),
-            []
+            )(node)
           )
-          const element = find(
-            built,
-            (candidate) => candidate.owned?.includes(layer) === true
-          )
-          if (element === undefined) return built
-          panels.set(layer, element.attrs["aria-labelledby"])
-          return triggerId === undefined
-            ? built
-            : setTokensOn(built, panels, "aria-labelledby", triggerId)
+          if (own === undefined) return built
+          panels.set(layer, own.attrs["aria-labelledby"])
+          return setTokensOn(built, panels, "aria-labelledby", triggerId)
         }))
 
     return p.child(Collapsible, {

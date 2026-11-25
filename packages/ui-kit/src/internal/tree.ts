@@ -31,7 +31,7 @@ export const find = (
   return undefined
 }
 
-export const withAttr = <E extends View.Element<any, any>>(
+const withAttr = <E extends View.Element<any, any>>(
   element: E,
   name: string,
   value: string | undefined
@@ -43,15 +43,31 @@ export const withAttr = <E extends View.Element<any, any>>(
   return { ...element, attrs }
 }
 
-export const layerOf = (
+const layerOf = (
   builder: { readonly owned: ReadonlyArray<View.Owned> }
 ): View.Owned => builder.owned[builder.owned.length - 1]!
 
-type Layers = ReadonlySet<View.Owned> | ReadonlyMap<View.Owned, unknown>
+// Builds a part's node, running the consumer's `forward` hooks, and finds the
+// element the part decorated, which a hook may have wrapped.
+export const buildOwn = <Msg, R>(
+  node: View.ElementBuilder<Msg, R, any, any>
+): {
+  readonly layer: View.Owned
+  readonly built: View.Element<Msg, R>
+  readonly own: View.Element<any, any> | undefined
+} => {
+  const layer = layerOf(node)
+  const built = View.build(node, [])
+  return {
+    layer,
+    built,
+    own: find(built, (element) => element.owned?.includes(layer) === true)
+  }
+}
 
 export const carries = (
   element: View.Element<any, any>,
-  layers: Layers
+  layers: ReadonlySet<View.Owned>
 ): boolean => element.owned?.some((layer) => layers.has(layer)) === true
 
 export const setTokensOn = <N extends View.Node<any, any>>(
