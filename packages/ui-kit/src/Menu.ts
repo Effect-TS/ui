@@ -691,6 +691,10 @@ const MenuMessage = UiSchema.TaggedEnum({
     y: Schema.Number,
     pointerType: Schema.String
   },
+  PressedContextKey: {
+    key: Schema.String,
+    triggerId: Schema.NullOr(Schema.String)
+  },
   TouchedContextTrigger: {
     key: Schema.String,
     triggerId: Schema.NullOr(Schema.String),
@@ -806,6 +810,8 @@ const MenuModel = Schema.Struct({
     })
   ),
   justOpened: Schema.Boolean,
+  // The Menu key or Shift+F10 opened it, and the browser's `contextmenu` for that key may follow.
+  keyEcho: Schema.Boolean,
   releaseArmed: Schema.Boolean,
   barCurrent: Schema.NullOr(Schema.String)
 })
@@ -946,6 +952,7 @@ const open = (
     readonly context?: {
       readonly point: Positioning.Rect | null
       readonly release: boolean
+      readonly byKey?: boolean
     } | null
     readonly group?: boolean
   } = {}
@@ -984,6 +991,7 @@ const open = (
     context: context !== null,
     point: context?.point ?? null,
     justOpened: context !== null,
+    keyEcho: context?.byKey === true,
     releaseArmed: context?.release ?? false,
     longPress: null
   })
@@ -1294,11 +1302,12 @@ const openAt = (
   triggerId: string | null,
   point: Positioning.Rect | null,
   method: MenuInteraction,
-  release: boolean
+  release: boolean,
+  byKey = false
 ) => {
   if (disabledOf($)) return $
   return open($.model, $, "trigger-press", method, key, triggerId, {
-    context: { point, release }
+    context: { point, release, byKey }
   })
     .run(WaitBeforeContextGrace.make({ delay: LongPressDelay }))
 }
@@ -2188,18 +2197,28 @@ const MenuTriggerHoverDefault = 100
 
 const listIdOf = (popupId: string) => popupId + "-list"
 
+// For a `forward` hook, which sees the caller's attributes: `aria-controls` is a token list, so the menu's `id` joins the caller's.
+const controlling = <
+  B extends Attributed<B> & {
+    readonly elementAttrs: Readonly<Record<string, string>>
+  }
+>(node: B, id: string | null): B => {
+  const own = node.elementAttrs["aria-controls"]
+  return id === null || own?.split(/\s+/).includes(id)
+    ? node
+    : node.attr("aria-controls", own === undefined ? id : own + " " + id)
+}
+
 const triggerAttrs = <B extends Attributed<B>>(
   builder: B,
   popupId: string,
   open: boolean,
-  active: boolean,
-  controls: string | null = popupId
+  active: boolean
 ): B =>
   builder
     .attrs({
       "aria-haspopup": "menu",
       "aria-expanded": String(open),
-      "aria-controls": open && controls !== null ? controls : undefined,
       "data-popup-open": flag(open),
       "data-menu-trigger": popupId,
       "data-menu-active": flag(active)
@@ -2302,9 +2321,9 @@ export interface MenuTriggerProps {
  *
  * **Details**
  *
- * It sets `aria-haspopup="menu"`, `aria-expanded`, `data-popup-open`,
- * `data-pressed`, and `aria-controls` while the menu is open, in
- * `forward`, so they win over the caller's. Give the menu the same `id`,
+ * It sets `aria-haspopup="menu"`, `aria-expanded`, `data-popup-open` and
+ * `data-pressed` in `forward`, so they win over the caller's, and adds the
+ * menu's `id` to the caller's `aria-controls` while the menu is open. Give the menu the same `id`,
  * and the trigger's `id` as the menu's `triggerId`: the menu then places
  * its popup against the trigger, a press on it isn't a press outside, and
  * focus goes back to it when the menu closes.
@@ -2373,12 +2392,11 @@ export const MenuTrigger = <Msg, R = never>(
           reason
         })
         : handler
-    const button = triggerAttrs(
-      node.attr("type", "button"),
-      popupId,
-      open,
-      open,
-      options.props.filtered === true ? listIdOf(popupId) : popupId
+    const button = controlling(
+      triggerAttrs(node.attr("type", "button"), popupId, open, open),
+      open
+        ? options.props.filtered === true ? listIdOf(popupId) : popupId
+        : null
     )
       .attrs({
         "data-pressed": flag(open),
@@ -2569,14 +2587,11 @@ export const Menu = Html.component({
     menubar: {
       owner: Menubar,
       optional: true,
-      report: (model, props, id) => ({
+      report: (model, props) => ({
         open: props.open,
         trigger: props.parentItem !== undefined
           ? null
-          : ownTrigger(model, props),
-        menu: props.parentItem === undefined && props.disabled !== true
-          ? id("menu")
-          : null
+          : ownTrigger(model, props)
       }),
       onChange: (menubar) => MenuMessage.ChangedMenubar({ menubar })
     },
@@ -2621,6 +2636,7 @@ export const Menu = Html.component({
     point: null,
     longPress: null,
     justOpened: false,
+    keyEcho: false,
     releaseArmed: false,
     barCurrent: null
   }),
@@ -2631,11 +2647,12 @@ export const Menu = Html.component({
     PressedContextTrigger: ($, { key, pointerType, triggerId, x, y }) => {
       const point = contextPoint(x, y, pointerType)
       // Off macOS, the browser follows the Menu key or Shift+F10 the trigger handled with a `contextmenu` of its own.
-      return point === null && $.model.justOpened && $.model.point === null &&
-          $.model.trigger === key
-        ? $.model
+      return point === null && $.model.keyEcho && $.model.trigger === key
+        ? $.evolve({ keyEcho: false })
         : openAt($, key, triggerId, point, methodOf(pointerType), true)
     },
+    PressedContextKey: ($, { key, triggerId }) =>
+      openAt($, key, triggerId, null, "keyboard", false, true),
     TouchedContextTrigger: ($, { key, triggerId, x, y }) =>
       disabledOf($)
         ? $.model
@@ -2654,7 +2671,8 @@ export const Menu = Html.component({
       const point = { x: press.x, y: press.y, width: 10, height: 10 }
       return openAt($, press.key, press.triggerId, point, "touch", false)
     },
-    CompletedWaitBeforeContextGrace: ($) => $.evolve({ justOpened: false }),
+    CompletedWaitBeforeContextGrace: ($) =>
+      $.evolve({ justOpened: false, keyEcho: false }),
     ReleasedContextPointer: ($, { outside }) => {
       if (!$.model.releaseArmed) return $.model
       const next = UiStruct.evolve($.model, { releaseArmed: false })
@@ -2999,12 +3017,13 @@ export const Menu = Html.component({
     let listed = false
     let inputDrawn = false
     // Set once the view is drawn: with a `list` part, it has the menu role and not the popup.
-    const controlsMenu =
-      (expanded: boolean) => <B extends Attributed<B>>(node: B): B =>
-        node.attr(
-          "aria-controls",
-          expanded ? listed ? listId : popupId : undefined
-        )
+    const controlsMenu = (expanded: boolean) =>
+    <
+      B extends Attributed<B> & {
+        readonly elementAttrs: Readonly<Record<string, string>>
+      }
+    >(node: B): B =>
+      controlling(node, expanded ? listed ? listId : popupId : null)
 
     const states = <B extends Attributed<B>>(builder: B): B =>
       transitionAttrs(builder, open, transitionStatus)
@@ -3026,17 +3045,6 @@ export const Menu = Html.component({
           closeDelay: options.closeDelay ?? props.closeDelay ?? 0
         })
       ).on("mouseleave", MenuMessage.LeftTrigger())
-
-    let tabStopDrawn = false
-    // Until the menubar has found its triggers, as on the server, the first enabled one of its first menu is the stop.
-    const tabStop = (off: boolean, key: string): boolean => {
-      if (off || bar === undefined) return false
-      const stop = bar.tabStop === null
-        ? !tabStopDrawn && bar.firstMenu === p.id("menu")
-        : bar.tabStop === key
-      if (stop) tabStopDrawn = true
-      return stop
-    }
 
     const triggerKey = (
       pressed: string,
@@ -3081,8 +3089,7 @@ export const Menu = Html.component({
           b.attrs({ id: key, type: "button" }),
           popupId,
           open && active,
-          shown && active,
-          null
+          shown && active
         )
           .forward(controlsMenu(open && active))
           .attrs({
@@ -3095,7 +3102,7 @@ export const Menu = Html.component({
           ? attributed
           : attributed.attrs({
             role: "menuitem",
-            tabindex: tabStop(off, key) ? "0" : "-1",
+            tabindex: !off && bar.tabStop === key ? "0" : "-1",
             [triggerAttribute]: ""
           })
         if (options.disabled === true) return item
@@ -3166,13 +3173,7 @@ export const Menu = Html.component({
           .onKeyDown(
             (payload) =>
               contextKey(payload)
-                ? MenuMessage.PressedContextTrigger({
-                  key,
-                  triggerId,
-                  x: 0,
-                  y: 0,
-                  pointerType: ""
-                })
+                ? MenuMessage.PressedContextKey({ key, triggerId })
                 : undefined,
             { preventDefault: true }
           )
@@ -3220,7 +3221,7 @@ export const Menu = Html.component({
     const submenuTriggerPart = p.part("div", (b) => {
       const parentKeys = keys(parent?.orientation ?? "vertical", rtl)
       const own = pressable(
-        triggerAttrs(b, popupId, open, shown, null).attr(
+        triggerAttrs(b, popupId, open, shown).attr(
           "data-disabled",
           flag(disabled)
         ).forward(controlsMenu(open)),

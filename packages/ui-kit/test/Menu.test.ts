@@ -734,17 +734,20 @@ describe("Menu", () => {
       assert.deepInclude(scene.get(popup).attrs, { role: "presentation" })
       assert.strictEqual(scene.get(trigger).attrs?.["aria-controls"], listId)
       const helper = View.makeHelper<never, {}, Html.Elements>({}, Html)
-      const detached = View.build(
-        MenuTrigger(helper, {
-          props: {
-            open: true,
-            popupId: scene.get(popup).attrs!.id!,
-            filtered: true
-          }
-        }),
-        []
-      )
-      assert.strictEqual(detached.attrs["aria-controls"], listId)
+      const detached = (open: boolean) =>
+        View.build(
+          MenuTrigger(helper, {
+            element: helper.button.attr("aria-controls", "inspector"),
+            props: {
+              open,
+              popupId: scene.get(popup).attrs!.id!,
+              filtered: true
+            }
+          }),
+          []
+        ).attrs["aria-controls"]
+      assert.strictEqual(detached(true), "inspector " + listId)
+      assert.strictEqual(detached(false), "inspector")
       assert.deepInclude(scene.get(Locator.attr("class", "list")).attrs, {
         role: "menu",
         "aria-labelledby": "edit"
@@ -819,6 +822,40 @@ describe("Menu", () => {
         tracked(scene),
         sent("ShowedPopup")
       ).emitted(highlighted("copy", "none"))
+    }))
+
+  it.effect("the trigger keeps the caller's aria-controls and adds the popup's while open", () =>
+    Effect.gen(function*() {
+      const scene = yield* HtmlScene.make(Menu, { open: false, items }, {
+        elements: Html,
+        view: (menu, h) =>
+          h.div(
+            menu.trigger({
+              element: h.button.class("trigger").attrs({
+                id: "edit",
+                "aria-controls": "inspector"
+              })
+            }),
+            menu.positioner(h.div.class("positioner")).children(
+              menu.popup(h.div.class("popup"))
+            )
+          )
+      })
+      assert.strictEqual(
+        scene.get(trigger).attrs?.["aria-controls"],
+        "inspector"
+      )
+      scene.fire(trigger, "mousedown", pointer("mouse")).emitted(
+        opened("trigger-press")
+      )
+      scene.props({ open: true, items }).mounted(
+        tracked(scene),
+        sent("ShowedPopup")
+      )
+      assert.strictEqual(
+        scene.get(trigger).attrs?.["aria-controls"],
+        "inspector " + scene.get(popup).attrs?.id
+      )
     }))
 
   it.effect("trigger reads its options from the object it's given, getters included", () =>

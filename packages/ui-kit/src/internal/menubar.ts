@@ -14,9 +14,7 @@ export const barTriggers = (bar: Element): Array<HTMLElement> =>
 
 export const MenubarMenu = Schema.Struct({
   open: Schema.Boolean,
-  trigger: Schema.NullOr(Schema.String),
-  // The menu's `id("menu")`, when it is a root menu that isn't disabled.
-  menu: Schema.NullOr(Schema.String)
+  trigger: Schema.NullOr(Schema.String)
 })
 
 export type MenubarMenu = typeof MenubarMenu.Type
@@ -29,7 +27,6 @@ export const MenubarShared = Schema.Struct({
   hasSubmenuOpen: Schema.Boolean,
   current: Schema.NullOr(Schema.String),
   tabStop: Schema.NullOr(Schema.String),
-  firstMenu: Schema.NullOr(Schema.String),
   opening: Schema.NullOr(Schema.String)
 })
 

@@ -182,6 +182,9 @@ describe("Menu contextTrigger", () => {
           { _tag: "Highlighted", value: "copy", reason: "none" },
           opened("row")
         )
+      // A second press is the user's, however soon it comes.
+      menuKey.fire(area, "keydown", keyPress("F10", { shift: true }))
+        .emitted(opened("row"))
       yield* elapse(menuKey, "WaitBeforeContextGrace", 500)
       const scene = yield* HtmlScene.make(Menu, { open: false, items }, standIn)
       scene.expectMount(longPress(scene))
