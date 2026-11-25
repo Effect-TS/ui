@@ -55,9 +55,7 @@ const lateSave = Effect.gen(function*() {
             staleTime: "30 seconds"
           }
         ) {
-          static readonly layer = this.toLayer(
-            Effect.succeed(() => Effect.never)
-          )
+          static readonly layer = this.toLayer(() => Effect.never)
         }
         const Note = Html.component({
           name: "Note",
@@ -236,8 +234,8 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
           staleTime: "30 seconds"
         }
       ) {
-        static readonly layer = this.toLayer(
-          Effect.succeed(({ id }) => Effect.succeed(`Note ${id}`))
+        static readonly layer = this.toLayer(({ id }) =>
+          Effect.succeed(`Note ${id}`)
         )
       }
       const Note = Html.component({
@@ -302,12 +300,12 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
                 staleTime: "30 seconds"
               }
             ) {
-              static readonly layer = this.toLayer(Effect.succeed(() =>
+              static readonly layer = this.toLayer(() =>
                 Effect.sync(() => {
                   calls.fetches++
                   return "fetched"
                 })
-              ))
+              )
             }
             const Note = Html.component({
               name: "Note",
@@ -315,8 +313,7 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
               message: Schema.Never,
               queries: { note: { query: GetNote, args: () => ({ id: "1" }) } }
             }).make({
-              init: () =>
-                null,
+              init: () => null,
               update: ($) => $.model,
               view: (h) =>
                 h.p.children(AsyncResult.match(h.queries.note, {

@@ -21,8 +21,8 @@ class GetUser extends Query.Service<GetUser>()(
     staleTime: "1 minute"
   }
 ) {
-  static readonly layer = this.toLayer(
-    Effect.succeed(({ id }) => Effect.succeed({ id, name: "Ann", teamId: "t" }))
+  static readonly layer = this.toLayer(({ id }) =>
+    Effect.succeed({ id, name: "Ann", teamId: "t" })
   )
 }
 
@@ -35,8 +35,8 @@ class GetTeam extends Query.Service<GetTeam>()(
     staleTime: 0
   }
 ) {
-  static readonly layer = this.toLayer(
-    Effect.succeed(({ id }) => Effect.succeed({ id, title: "T" }))
+  static readonly layer = this.toLayer(({ id }) =>
+    Effect.succeed({ id, title: "T" })
   )
 }
 
@@ -407,7 +407,7 @@ class GetCount extends Query.Service<GetCount>()(
     staleTime: 0
   }
 ) {
-  static readonly layer = this.toLayer(Effect.succeed(() => Effect.succeed(1)))
+  static readonly layer = this.toLayer(() => Effect.succeed(1))
 }
 
 const ListMessage = UiSchema.TaggedEnum({
@@ -616,10 +616,8 @@ class ListMessages extends Query.InfiniteService<ListMessages>()(
     staleTime: "1 minute"
   }
 ) {
-  static readonly layer = this.toLayer(
-    Effect.succeed((_args, _cursor) =>
-      Effect.succeed({ messages: [], next: null })
-    )
+  static readonly layer = this.toLayer((_args, _cursor) =>
+    Effect.succeed({ messages: [], next: null })
   )
 }
 

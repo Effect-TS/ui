@@ -70,22 +70,20 @@ const makeUsers = (options: {
       ...options
     }
   ) {
-    static readonly layer = this.toLayer(
-      Effect.sync(() => ({ id }) =>
-        Effect.gen(function*() {
-          db.calls++
-          yield* Effect.sleep(10)
-          if (db.mode === "die") return yield* Effect.die("boom")
-          // A Fail next to an Interrupt is still a Failure, and holds only the Fail.
-          if (db.mode === "fail") {
-            return yield* Effect.failCause(
-              Cause.combine(Cause.fail("nope"), Cause.interrupt())
-            )
-          }
-          if (db.mode === "interrupt") return yield* Effect.interrupt
-          return { id, name: db.name }
-        })
-      )
+    static readonly layer = this.toLayer(({ id }) =>
+      Effect.gen(function*() {
+        db.calls++
+        yield* Effect.sleep(10)
+        if (db.mode === "die") return yield* Effect.die("boom")
+        // A Fail next to an Interrupt is still a Failure, and holds only the Fail.
+        if (db.mode === "fail") {
+          return yield* Effect.failCause(
+            Cause.combine(Cause.fail("nope"), Cause.interrupt())
+          )
+        }
+        if (db.mode === "interrupt") return yield* Effect.interrupt
+        return { id, name: db.name }
+      })
     )
   }
   const provide = Effect.provide(Layer.merge(GetUser.layer, TestQuery.layer()))
@@ -929,7 +927,7 @@ describe("Query", () => {
         staleTime: 0
       }
     ) {
-      static readonly layer = this.toLayer(Effect.succeed(() =>
+      static readonly layer = this.toLayer(() =>
         Effect.ensuring(
           Effect.never,
           Effect.andThen(
@@ -937,7 +935,7 @@ describe("Query", () => {
             Effect.sync(() => events.push("fetch cleaned up"))
           )
         )
-      ))
+      )
     }
     return Effect.gen(function*() {
       const scope = yield* Scope.make()
@@ -1102,9 +1100,7 @@ describe("Query", () => {
       error: Schema.Never,
       staleTime: "Infinity"
     }) {
-      static readonly layer = this.toLayer(
-        Effect.sync(() => () => Effect.sync(() => ++calls))
-      )
+      static readonly layer = this.toLayer(() => Effect.sync(() => ++calls))
     }
     // The args are the key, so they needn't be a struct.
     class ById extends Query.Service<ById>()("ById", {
@@ -1113,9 +1109,7 @@ describe("Query", () => {
       error: Schema.Never,
       staleTime: "Infinity"
     }) {
-      static readonly layer = this.toLayer(
-        Effect.sync(() => () => Effect.sync(() => ++calls))
-      )
+      static readonly layer = this.toLayer(() => Effect.sync(() => ++calls))
     }
     return Effect.gen(function*() {
       const token = Redacted.make("s3cret")
@@ -1591,10 +1585,8 @@ describe("Query", () => {
         staleTime: 0
       }
     ) {
-      static readonly layer = this.toLayer(
-        Effect.succeed(() =>
-          ++calls === 1 ? Effect.succeed(1) : Effect.die("boom")
-        )
+      static readonly layer = this.toLayer(() =>
+        ++calls === 1 ? Effect.succeed(1) : Effect.die("boom")
       )
     }
     return Effect.gen(function*() {

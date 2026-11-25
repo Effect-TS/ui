@@ -30,18 +30,16 @@ const makeApp = (options?: {
       refetchInterval: options?.interval === true ? "5 seconds" : undefined
     }
   ) {
-    static readonly layer = this.toLayer(
-      Effect.succeed(({ id }) =>
-        Effect.gen(function*() {
-          db.calls++
-          yield* Effect.sleep("10 millis")
-          const name = db.names.get(id)
-          return name === undefined
-            ? yield* Effect.fail("missing")
-            : { id, name }
-        }).pipe(
-          Effect.onInterrupt(() => Effect.sync(() => db.interrupted.push(id)))
-        )
+    static readonly layer = this.toLayer(({ id }) =>
+      Effect.gen(function*() {
+        db.calls++
+        yield* Effect.sleep("10 millis")
+        const name = db.names.get(id)
+        return name === undefined
+          ? yield* Effect.fail("missing")
+          : { id, name }
+      }).pipe(
+        Effect.onInterrupt(() => Effect.sync(() => db.interrupted.push(id)))
       )
     )
   }
@@ -710,11 +708,9 @@ describe("Query results", () => {
           staleTime: "1 second"
         }
       ) {
-        static readonly layer = this.toLayer(
-          Effect.succeed(({ id }) =>
-            Effect.callback<string, string>((resume) =>
-              void finish.set(id, resume)
-            )
+        static readonly layer = this.toLayer(({ id }) =>
+          Effect.callback<string, string>((resume) =>
+            void finish.set(id, resume)
           )
         )
       }
@@ -1354,11 +1350,7 @@ describe("Query results", () => {
         next: () => Option.none(),
         staleTime: "30 seconds"
       }
-    ) {
-      static readonly layer = this.toLayer(
-        Effect.succeed(() => Effect.succeed([]))
-      )
-    }
+    ) {}
     const make = (queries: unknown) =>
       Component.define({
         name: "Bad",
@@ -1459,13 +1451,11 @@ describe("Query results", () => {
         staleTime: "30 seconds"
       }
     ) {
-      static readonly layer = this.toLayer(
-        Effect.succeed(({ token }) =>
-          Effect.succeed({
-            id: "acc",
-            secret: Redacted.make(`secret-of-${Redacted.value(token)}`)
-          })
-        )
+      static readonly layer = this.toLayer(({ token }) =>
+        Effect.succeed({
+          id: "acc",
+          secret: Redacted.make(`secret-of-${Redacted.value(token)}`)
+        })
       )
     }
     const Page = Component.define({

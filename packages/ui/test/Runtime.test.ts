@@ -1320,11 +1320,7 @@ describe("Runtime", () => {
       success: Schema.Number,
       error: Schema.Never,
       staleTime: "Infinity"
-    }) {
-      static readonly layer = this.toLayer(
-        Effect.succeed(() => Effect.succeed(0))
-      )
-    }
+    }) {}
     const fetcher = (server: Server) =>
       Layer.succeed(GetCount, () =>
         Effect.sync(() => {
@@ -1669,7 +1665,7 @@ describe("Runtime", () => {
       const gate = Deferred.makeUnsafe<void>()
       class Stubborn extends Command.Service<Stubborn>()(
         "test/Stubborn",
-        { args: {}, success: Schema.Number, invalidates: () => [] }
+        { args: {}, success: Schema.Void, invalidates: () => [] }
       ) {
         static readonly layer = this.toLayer(
           Effect.gen(function*() {
@@ -1680,7 +1676,9 @@ describe("Runtime", () => {
               Effect.uninterruptible(
                 Effect.andThen(
                   Deferred.await(gate),
-                  Effect.sync(() => events.push("body done"))
+                  Effect.sync(() => {
+                    events.push("body done")
+                  })
                 )
               )
           })
@@ -1914,9 +1912,7 @@ describe("Runtime", () => {
             invalidates: () => [],
             mode: "switch"
           }
-        ) {
-          static readonly layer = this.toLayer(() => held("switch"))
-        }
+        ) {}
         class Watch extends Command.Service<Watch>()(
           "test/Watch",
           {
@@ -1925,11 +1921,7 @@ describe("Runtime", () => {
             invalidates: () => [],
             stream: true
           }
-        ) {
-          static readonly layer = this.toLayer(() =>
-            Stream.fromEffect(held("stream"))
-          )
-        }
+        ) {}
         const Local = Command.make(
           "test/Local",
           { args: {} },

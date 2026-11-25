@@ -43,15 +43,13 @@ const makeUsers = (staleTime: Duration.Input = 0) => {
       tags: [Users]
     }
   ) {
-    static readonly layer = this.toLayer(
-      Effect.sync(() => ({ id }) =>
-        Effect.gen(function*() {
-          db.calls++
-          yield* Effect.sleep(10)
-          if (id === "404") return yield* Effect.fail("not found")
-          return { id, name: db.name }
-        })
-      )
+    static readonly layer = this.toLayer(({ id }) =>
+      Effect.gen(function*() {
+        db.calls++
+        yield* Effect.sleep(10)
+        if (id === "404") return yield* Effect.fail("not found")
+        return { id, name: db.name }
+      })
     )
   }
   return { db, GetUser }
@@ -206,11 +204,7 @@ describe("Query snapshots", () => {
       success: User,
       error: Schema.String,
       staleTime: 0
-    }) {
-      static readonly layer = this.toLayer(
-        Effect.succeed(({ id }) => Effect.succeed({ id, name: "" }))
-      )
-    }
+    }) {}
     const snapshot = Query.makeSnapshot(def, "user", undefined, undefined)
     assert.isTrue(Schema.is(resultSchema(GetUser, "user"))(snapshot))
     assert.isFalse(Schema.is(resultSchema(GetUser, "users"))(snapshot))
@@ -224,11 +218,7 @@ describe("Query snapshots", () => {
       success: Schema.Struct({ value: Schema.Redacted(Schema.String) }),
       error: Schema.Never,
       staleTime: 0
-    }) {
-      static readonly layer = this.toLayer(
-        Effect.succeed(() => Effect.succeed({ value: Redacted.make("v") }))
-      )
-    }
+    }) {}
     const secretDef = Query.defOf(GetSecret)
     const args = { token: Redacted.make("t") }
     const snapshot = Query.makeSnapshot(
@@ -313,9 +303,7 @@ describe("Query hydration", () => {
       error: Schema.Never,
       staleTime: 0
     }) {
-      static readonly layer = this.toLayer(
-        Effect.succeed(() => Effect.die("boom"))
-      )
+      static readonly layer = this.toLayer(() => Effect.die("boom"))
     }
     return Effect.gen(function*() {
       yield* GetUser.get({ id: "1" }).pipe(Effect.forkScoped)
@@ -375,8 +363,8 @@ describe("Query hydration", () => {
       error: Schema.Never,
       staleTime: 0
     }) {
-      static readonly layer = this.toLayer(
-        Effect.succeed(() => Effect.succeed("x" as unknown as number))
+      static readonly layer = this.toLayer(() =>
+        Effect.succeed("x" as unknown as number)
       )
     }
     const problems: Array<Query.Problem.Any> = []
@@ -452,11 +440,7 @@ describe("Query hydration", () => {
         success: Schema.Number,
         error: Schema.Never,
         staleTime: "1 minute"
-      }) {
-        static readonly layer = this.toLayer(
-          Effect.succeed(() => Effect.succeed(2))
-        )
-      }
+      }) {}
       assert.isUndefined(yield* TestQuery.entry(Other, {}))
       yield* Fiber.interrupt(watcher)
     }).pipe(Effect.provide(Layer.merge(GetUser.layer, TestQuery.layer())))
@@ -470,9 +454,7 @@ describe("Query hydration", () => {
       error: Schema.Never,
       staleTime: "Infinity"
     }) {
-      static readonly layer = this.toLayer(
-        Effect.succeed(() => Effect.succeed(2))
-      )
+      static readonly layer = this.toLayer(() => Effect.succeed(2))
     }
     return Effect.gen(function*() {
       const query = yield* cache
@@ -572,10 +554,8 @@ describe("Query snapshot identity", () => {
         staleTime: "1 minute"
       }
     ) {
-      static readonly layer = this.toLayer(
-        Effect.sync(() => ({ n }) =>
-          Effect.succeed(Object.is(n, -0) ? "minus zero" : "zero")
-        )
+      static readonly layer = this.toLayer(({ n }) =>
+        Effect.succeed(Object.is(n, -0) ? "minus zero" : "zero")
       )
     }
     const def = Query.defOf(GetPoint)
@@ -617,11 +597,7 @@ describe("Query snapshot identity", () => {
         error: Schema.Never,
         staleTime: "1 minute"
       }
-    ) {
-      static readonly layer = this.toLayer(
-        Effect.sync(() => ({ s }) => Effect.succeed(s))
-      )
-    }
+    ) {}
     const def = Query.defOf(GetTrimmed)
     const json = Schema.toCodecJson(resultSchema(GetTrimmed, "trimmed"))
     // " a " decodes to "a", whose key is {"s":"a"}: the snapshot would name an entry it wasn't taken from.
@@ -660,11 +636,7 @@ describe("Query snapshot identity", () => {
         error: Schema.Never,
         staleTime: "1 minute"
       }
-    ) {
-      static readonly layer = this.toLayer(
-        Effect.sync(() => ({ id }) => Effect.succeed(id))
-      )
-    }
+    ) {}
     const def = Query.defOf(GetPage)
     const json = Schema.toCodecJson(resultSchema(GetPage, "page"))
     const args = { id: "1", page: undefined }

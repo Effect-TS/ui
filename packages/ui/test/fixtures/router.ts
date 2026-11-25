@@ -68,18 +68,16 @@ export class GetPerson extends Query.Service<GetPerson>()(
     staleTime: "30 seconds"
   }
 ) {
-  static readonly layer = this.toLayer(
-    Effect.succeed(({ id }) =>
-      Effect.suspend(() => {
-        personFetches.count++
-        const result = personFetches.fail
-          ? Effect.fail(`No person ${id}`)
-          : Effect.succeed(`Person ${id}`)
-        return personFetches.delay > 0
-          ? Effect.andThen(Effect.sleep(personFetches.delay), result)
-          : result
-      })
-    )
+  static readonly layer = this.toLayer(({ id }) =>
+    Effect.suspend(() => {
+      personFetches.count++
+      const result = personFetches.fail
+        ? Effect.fail(`No person ${id}`)
+        : Effect.succeed(`Person ${id}`)
+      return personFetches.delay > 0
+        ? Effect.andThen(Effect.sleep(personFetches.delay), result)
+        : result
+    })
   )
 }
 

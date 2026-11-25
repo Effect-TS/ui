@@ -58,15 +58,13 @@ const makeUsers = (staleTime: Duration.Input = "30 seconds") => {
       staleTime
     }
   ) {
-    static readonly layer = this.toLayer(
-      Effect.sync(() => ({ id }) =>
-        Effect.gen(function*() {
-          db.calls++
-          yield* Effect.sleep(10)
-          if (db.fail) return yield* Effect.fail("nope")
-          return { id, name: db.name }
-        })
-      )
+    static readonly layer = this.toLayer(({ id }) =>
+      Effect.gen(function*() {
+        db.calls++
+        yield* Effect.sleep(10)
+        if (db.fail) return yield* Effect.fail("nope")
+        return { id, name: db.name }
+      })
     )
   }
   return {
@@ -87,14 +85,12 @@ const makeCount = (staleTime: Duration.Input = "30 seconds") => {
       staleTime
     }
   ) {
-    static readonly layer = this.toLayer(
-      Effect.sync(() => () =>
-        Effect.gen(function*() {
-          db.calls++
-          yield* Effect.sleep(10)
-          return db.count
-        })
-      )
+    static readonly layer = this.toLayer(() =>
+      Effect.gen(function*() {
+        db.calls++
+        yield* Effect.sleep(10)
+        return db.count
+      })
     )
   }
   return {
@@ -185,11 +181,7 @@ describe("Query runs", () => {
       error: Schema.Never,
       staleTime: 0,
       tags: [Tagged]
-    }) {
-      static readonly layer = this.toLayer(
-        Effect.succeed(() => Effect.succeed(0))
-      )
-    }
+    }) {}
 
     it("applyPatches applies, in issue order, the patches of one entry", () => {
       const patches = [
@@ -668,10 +660,8 @@ describe("Query runs", () => {
           staleTime: "30 seconds"
         }
       ) {
-        static readonly layer = this.toLayer(
-          Effect.sync(() => ({ id }) =>
-            Effect.sync(() => ({ payload: payloads[id] }))
-          )
+        static readonly layer = this.toLayer(({ id }) =>
+          Effect.sync(() => ({ payload: payloads[id] }))
         )
       }
       const inPlace = (
@@ -783,8 +773,8 @@ describe("Query runs", () => {
           staleTime: "30 seconds"
         }
       ) {
-        static readonly layer = this.toLayer(
-          Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
+        static readonly layer = this.toLayer(({ id }) =>
+          Effect.sync(() => values[id])
         )
       }
       const inPlace = (id: string, mutate: (value: any) => void) =>
@@ -864,8 +854,8 @@ describe("Query runs", () => {
           staleTime: "30 seconds"
         }
       ) {
-        static readonly layer = this.toLayer(
-          Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
+        static readonly layer = this.toLayer(({ id }) =>
+          Effect.sync(() => values[id])
         )
       }
       return Effect.gen(function*() {
@@ -994,8 +984,8 @@ describe("Query runs", () => {
           staleTime: "30 seconds"
         }
       ) {
-        static readonly layer = this.toLayer(
-          Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
+        static readonly layer = this.toLayer(({ id }) =>
+          Effect.sync(() => values[id])
         )
       }
       const inPlace = (id: string, mutate: (value: any) => void) =>
@@ -1065,8 +1055,8 @@ describe("Query runs", () => {
           staleTime: "30 seconds"
         }
       ) {
-        static readonly layer = this.toLayer(
-          Effect.sync(() => ({ id }) => Effect.sync(() => values[id]))
+        static readonly layer = this.toLayer(({ id }) =>
+          Effect.sync(() => values[id])
         )
       }
       const inPlace = (id: string, mutate: (value: any) => void) =>
@@ -1210,21 +1200,19 @@ describe("Query runs", () => {
           staleTime: "30 seconds"
         }
       ) {
-        static readonly layer = this.toLayer(
-          Effect.sync(() => () =>
-            Effect.suspend(() => {
-              const n = ++calls
-              log.push("start " + n)
-              return Effect.sleep(10).pipe(
-                Effect.as("v" + n),
-                Effect.onInterrupt(() =>
-                  Deferred.await(gate).pipe(
-                    Effect.andThen(Effect.sync(() => log.push("cleaned " + n)))
-                  )
+        static readonly layer = this.toLayer(() =>
+          Effect.suspend(() => {
+            const n = ++calls
+            log.push("start " + n)
+            return Effect.sleep(10).pipe(
+              Effect.as("v" + n),
+              Effect.onInterrupt(() =>
+                Deferred.await(gate).pipe(
+                  Effect.andThen(Effect.sync(() => log.push("cleaned " + n)))
                 )
               )
-            })
-          )
+            )
+          })
         )
       }
       return Effect.gen(function*() {
@@ -1265,21 +1253,19 @@ describe("Query runs", () => {
           staleTime: "30 seconds"
         }
       ) {
-        static readonly layer = this.toLayer(
-          Effect.sync(() => () =>
-            Effect.suspend(() => {
-              const n = ++calls
-              log.push("start " + n)
-              return Effect.sleep(10).pipe(
-                Effect.as("v" + n),
-                Effect.onInterrupt(() =>
-                  cleanup.await.pipe(
-                    Effect.andThen(Effect.sync(() => log.push("cleaned " + n)))
-                  )
+        static readonly layer = this.toLayer(() =>
+          Effect.suspend(() => {
+            const n = ++calls
+            log.push("start " + n)
+            return Effect.sleep(10).pipe(
+              Effect.as("v" + n),
+              Effect.onInterrupt(() =>
+                cleanup.await.pipe(
+                  Effect.andThen(Effect.sync(() => log.push("cleaned " + n)))
                 )
               )
-            })
-          )
+            )
+          })
         )
       }
       return Effect.gen(function*() {

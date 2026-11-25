@@ -13,9 +13,7 @@ it.effect("omits reads with Redacted args, success or error schemas from the ser
     error: Schema.Never,
     staleTime: Infinity
   }) {
-    static readonly layer = this.toLayer(
-      Effect.succeed(() => Effect.succeed("ok"))
-    )
+    static readonly layer = this.toLayer(() => Effect.succeed("ok"))
   }
   class Success extends Query.Service<Success>()("secret/Success", {
     args: {},
@@ -23,8 +21,8 @@ it.effect("omits reads with Redacted args, success or error schemas from the ser
     error: Schema.Never,
     staleTime: Infinity
   }) {
-    static readonly layer = this.toLayer(
-      Effect.succeed(() => Effect.succeed(Redacted.make("success-secret")))
+    static readonly layer = this.toLayer(() =>
+      Effect.succeed(Redacted.make("success-secret"))
     )
   }
   class Error extends Query.Service<Error>()(
@@ -36,10 +34,8 @@ it.effect("omits reads with Redacted args, success or error schemas from the ser
       staleTime: Infinity
     }
   ) {
-    static readonly layer = this.toLayer(
-      Effect.succeed(({ fail }) =>
-        fail ? Effect.fail(Redacted.make("error-secret")) : Effect.succeed("ok")
-      )
+    static readonly layer = this.toLayer(({ fail }) =>
+      fail ? Effect.fail(Redacted.make("error-secret")) : Effect.succeed("ok")
     )
   }
   class Optional extends Query.Service<Optional>()("secret/Optional", {
@@ -48,9 +44,7 @@ it.effect("omits reads with Redacted args, success or error schemas from the ser
     error: Schema.Never,
     staleTime: Infinity
   }) {
-    static readonly layer = this.toLayer(
-      Effect.succeed(() => Effect.succeed("ok"))
-    )
+    static readonly layer = this.toLayer(() => Effect.succeed("ok"))
   }
   const App = Html.component({
     name: "Secrets",
@@ -123,9 +117,7 @@ const hydrationCase = <A>(
       error: Schema.Never,
       staleTime: Infinity
     }) {
-      static readonly layer = this.toLayer(
-        Effect.succeed(() => Effect.succeed(value))
-      )
+      static readonly layer = this.toLayer(() => Effect.succeed(value))
     }
     const App = Html.component({
       name: "App",

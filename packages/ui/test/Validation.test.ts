@@ -391,13 +391,7 @@ describe("Validation", () => {
         error: Schema.Never,
         staleTime: "30 seconds"
       }
-    ) {
-      static readonly layer = this.toLayer(
-        Effect.succeed(({ username }: { readonly username: string }) =>
-          Effect.succeed(username === "ada")
-        )
-      )
-    }
+    ) {}
     const Message = UiSchema.TaggedEnum({
       UpdatedUsername: { value: Schema.String },
       ClickedSubmit: {},
@@ -406,11 +400,7 @@ describe("Validation", () => {
     class CreateAccount extends Command.Service<CreateAccount>()(
       "accounts/CreateAccount",
       { args: { username: Schema.String }, success: Message }
-    ) {
-      static readonly layer = this.toLayer(() =>
-        Effect.succeed(Message.CreatedAccount())
-      )
-    }
+    ) {}
     const Account = Validation.make({
       username: { required: "Pick a username", rules: [Rule.minLength(3)] }
     }, {

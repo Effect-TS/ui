@@ -373,9 +373,7 @@ describe("Story", () => {
         error: SaveFailed,
         invalidates: () => []
       }
-    ) {
-      static readonly layer = this.toLayer(() => Effect.void)
-    }
+    ) {}
     const Msg = UiSchema.TaggedEnum({
       Save: {},
       Saved: {},

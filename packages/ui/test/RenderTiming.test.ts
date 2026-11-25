@@ -59,8 +59,8 @@ describe("render timing", () => {
           staleTime: "30 seconds"
         }
       ) {
-        static readonly layer = this.toLayer(
-          Effect.succeed(() => Effect.as(Effect.sleep("10 millis"), "Ann"))
+        static readonly layer = this.toLayer(() =>
+          Effect.as(Effect.sleep("10 millis"), "Ann")
         )
       }
       const ReaderMessage = Schema.TaggedUnion({ Named: {} })
@@ -119,8 +119,8 @@ describe("render timing", () => {
         staleTime: "30 seconds"
       }
     ) {
-      static readonly layer = this.toLayer(
-        Effect.succeed(({ n }) => Effect.as(Effect.sleep("10 millis"), n))
+      static readonly layer = this.toLayer(({ n }) =>
+        Effect.as(Effect.sleep("10 millis"), n)
       )
     }
     const Again = Command.make(

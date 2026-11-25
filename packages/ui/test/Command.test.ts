@@ -102,9 +102,7 @@ describe("Command", () => {
       class NoInvalidation extends Command.Service<NoInvalidation>()(
         "NoInvalidation",
         { args: {}, success: Schema.Void }
-      ) {
-        static readonly layer = this.toLayer(() => Effect.void)
-      }
+      ) {}
       assert.deepStrictEqual(NoInvalidation.make().invalidates, [])
       assert.strictEqual(NoInvalidation.success, Schema.Void)
       assert.strictEqual(NoInvalidation.error, Schema.Never)
@@ -122,11 +120,7 @@ describe("Command", () => {
           optimistic: ({ id, name }) => [{ id, name }] as any,
           writes: (success, { id }) => [{ id, success }] as any
         }
-      ) {
-        static readonly layer = this.toLayer(({ name }) =>
-          Effect.succeed(name.toUpperCase())
-        )
-      }
+      ) {}
       const command = Rename.make({ id: "u1", name: "ada" })
       assert.deepStrictEqual(command.invalidates, [Query.Tag("user:u1")])
       assert.deepStrictEqual(command.optimistic as unknown, [{

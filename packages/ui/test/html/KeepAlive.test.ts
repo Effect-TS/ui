@@ -81,9 +81,7 @@ class GetTab extends Query.Service<GetTab>()("GetTab", {
   error: Schema.Never,
   staleTime: "30 seconds"
 }) {
-  static readonly layer = this.toLayer(
-    Effect.succeed(() => Effect.succeed("billing"))
-  )
+  static readonly layer = this.toLayer(() => Effect.succeed("billing"))
 }
 
 const Settings = Html.component({

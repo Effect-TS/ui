@@ -1316,7 +1316,7 @@ export const Service: <Self>() => {
       optimistic: optimistic?.(args) ?? noTargets,
       writes: writes === undefined
         ? undefined
-        : (success) => writes(success, args),
+        : (value) => writes(value, args),
       work: stream
         ? Stream.unwrap(Effect.map(service, (run) => run(args)))
         : Effect.flatMap(service, (run) => run(args))

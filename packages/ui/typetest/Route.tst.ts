@@ -238,8 +238,8 @@ class GetPerson extends Query.Service<GetPerson>()(
     staleTime: "1 minute"
   }
 ) {
-  static readonly layer = this.toLayer(
-    Effect.succeed(({ id }) => Effect.succeed(`Person ${id}`))
+  static readonly layer = this.toLayer(({ id }) =>
+    Effect.succeed(`Person ${id}`)
   )
 }
 

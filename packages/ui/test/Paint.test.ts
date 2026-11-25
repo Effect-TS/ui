@@ -25,13 +25,11 @@ const makeApp = () => {
       staleTime: 0
     }
   ) {
-    static readonly layer = this.toLayer(
-      Effect.succeed(({ id }) =>
-        Effect.sync(() => {
-          ran.fetches++
-          return id.toUpperCase()
-        }).pipe(Effect.delay("10 millis"))
-      )
+    static readonly layer = this.toLayer(({ id }) =>
+      Effect.sync(() => {
+        ran.fetches++
+        return id.toUpperCase()
+      }).pipe(Effect.delay("10 millis"))
     )
   }
 

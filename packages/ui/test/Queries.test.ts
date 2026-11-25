@@ -33,13 +33,11 @@ const makeApp = () => {
       staleTime: "30 seconds"
     }
   ) {
-    static readonly layer = this.toLayer(
-      Effect.succeed(({ id }) =>
-        Effect.sleep("10 millis").pipe(Effect.map(() => {
-          server.calls++
-          return `Note ${id}`
-        }))
-      )
+    static readonly layer = this.toLayer(({ id }) =>
+      Effect.sleep("10 millis").pipe(Effect.map(() => {
+        server.calls++
+        return `Note ${id}`
+      }))
     )
   }
 

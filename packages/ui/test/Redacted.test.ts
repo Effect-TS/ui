@@ -21,8 +21,8 @@ class GetToken extends Query.Service<GetToken>()(
     staleTime: "1 minute"
   }
 ) {
-  static readonly layer = this.toLayer(
-    Effect.succeed(() => Effect.succeed(Redacted.make("loaded-secret")))
+  static readonly layer = this.toLayer(() =>
+    Effect.succeed(Redacted.make("loaded-secret"))
   )
 }
 
@@ -35,9 +35,7 @@ class GetByKey extends Query.Service<GetByKey>()(
     staleTime: "1 minute"
   }
 ) {
-  static readonly layer = this.toLayer(
-    Effect.succeed(() => Effect.succeed("ok"))
-  )
+  static readonly layer = this.toLayer(() => Effect.succeed("ok"))
 }
 
 class GetFailing extends Query.Service<GetFailing>()(
@@ -49,8 +47,8 @@ class GetFailing extends Query.Service<GetFailing>()(
     staleTime: "1 minute"
   }
 ) {
-  static readonly layer = this.toLayer(
-    Effect.succeed(() => Effect.fail(Redacted.make("error-secret")))
+  static readonly layer = this.toLayer(() =>
+    Effect.fail(Redacted.make("error-secret"))
   )
 }
 

@@ -160,7 +160,7 @@ export type Outcome = typeof Outcome.Type
  * @category schemas
  * @since 0.1.0
  */
-export const PatchOutcome = Schema.Literals(["navigated", "blocked", "stale"])
+export const PatchOutcome = Schema.Literals([...Outcome.literals, "stale"])
 
 /**
  * What `patchSearch` returns: `"stale"` when the Router's path no longer

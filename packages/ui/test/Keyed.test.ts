@@ -81,8 +81,8 @@ const makeApp = (options?: {
       refetchInterval: options?.interval === true ? "5 seconds" : undefined
     }
   ) {
-    static readonly layer = this.toLayer(
-      Effect.succeed(({ id }) => Effect.request(FetchUser({ id }), resolver))
+    static readonly layer = this.toLayer(({ id }) =>
+      Effect.request(FetchUser({ id }), resolver)
     )
   }
 
@@ -1086,12 +1086,10 @@ describe("Keyed redaction", () => {
         staleTime: "30 seconds"
       }
     ) {
-      static readonly layer = this.toLayer(
-        Effect.succeed(({ token }) =>
-          Effect.succeed({
-            secret: Redacted.make(`secret-of-${Redacted.value(token)}`)
-          })
-        )
+      static readonly layer = this.toLayer(({ token }) =>
+        Effect.succeed({
+          secret: Redacted.make(`secret-of-${Redacted.value(token)}`)
+        })
       )
     }
     const Page = Component.define({
