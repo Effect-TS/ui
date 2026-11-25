@@ -211,7 +211,9 @@ describe("Drawer", () => {
         elements: Html,
         view: (drawer: Parts, h: H) =>
           drawer.popup(h.div.class("popup")).children(
-            drawer.snapTrigger(h.button.class("snap")),
+            drawer.snapTrigger(
+              h.button.class("snap").attr("aria-disabled", "true")
+            ),
             drawer.snapStatus(h.div.class("status"))
           )
       }
@@ -239,6 +241,7 @@ describe("Drawer", () => {
       scene.props({ open: true, snapPoints, snapPoint: 0.5 })
         .expectMount(tracked(scene))
       assert.isUndefined(scene.get(snapTrigger).attrs?.disabled)
+      assert.isUndefined(scene.get(snapTrigger).attrs?.["aria-disabled"])
       scene.click(snapTrigger).emitted(snapped("240px"))
         .mounted(tracked(scene), measured)
         .expectMount(tracked(scene))

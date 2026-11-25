@@ -542,7 +542,9 @@ const nextSnapPoint = (
       .map((snap) => snap.value)
   if (cycle.length < 2) return undefined
   const active = snapping?.active?.value ?? props.snapPoint ?? cycle[0]
-  const index = cycle.findIndex((point) => Object.is(point, active))
+  const index = cycle.findIndex((point) =>
+    point === active || Object.is(point, active)
+  )
   return cycle[(index + 1) % cycle.length]
 }
 
@@ -2079,7 +2081,11 @@ export const Drawer = Html.component({
     const snapTrigger = p.part("button", (b) => {
       const disabled = nextSnapPoint(props, model, snapping) === undefined
       return b
-        .attrs({ type: "button", "data-disabled": flag(disabled) })
+        .attrs({
+          type: "button",
+          "aria-disabled": undefined,
+          "data-disabled": flag(disabled)
+        })
         .disabled(disabled)
         .onClick(DrawerMessage.PressedSnapTrigger())
     })
