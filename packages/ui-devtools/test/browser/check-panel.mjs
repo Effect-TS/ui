@@ -366,6 +366,109 @@ await run("panel", async ({ browser, expect, failures, url }) => {
     await context.close()
   }
 
+  const corner = async () => {
+    const context = await browser.newContext({
+      viewport: { width: 1440, height: 900 }
+    })
+    const page = await context.newPage()
+    page.on(
+      "pageerror",
+      (error) => failures.push("page error " + String(error))
+    )
+    await page.goto(url)
+    await page.waitForSelector("body[data-ready]", { state: "attached" })
+    const frame = page.frameLocator("iframe[data-effect-ui-devtools]")
+    const launcher = frame.getByRole("button", {
+      name: "Open the Effect UI inspector"
+    })
+    const panel = frame.getByRole("dialog", { name: "Effect UI inspector" })
+    await launcher.waitFor()
+    await page.waitForTimeout(100)
+
+    const initial = await launcher.boundingBox()
+    expect(
+      initial.x + initial.width > 1400 && initial.y + initial.height > 860,
+      "the launcher starts in the bottom-right corner",
+      initial
+    )
+
+    await page.mouse.move(
+      initial.x + initial.width / 2,
+      initial.y + initial.height / 2
+    )
+    await page.mouse.down()
+    await page.mouse.move(100, 80, { steps: 10 })
+    await page.mouse.up()
+    await page.waitForTimeout(150)
+    const dragged = await launcher.boundingBox()
+    expect(
+      dragged.x <= 20 && dragged.y <= 20 && !(await panel.isVisible()),
+      "dragging the launcher moves it to the top-left corner without opening the panel",
+      dragged
+    )
+
+    await page.reload()
+    await page.waitForSelector("body[data-ready]", { state: "attached" })
+    await launcher.waitFor()
+    await page.waitForTimeout(100)
+    const remembered = await launcher.boundingBox()
+    expect(
+      remembered.x <= 20 && remembered.y <= 20,
+      "reloading remembers the launcher's saved corner",
+      remembered
+    )
+
+    await launcher.click()
+    await panel.waitFor()
+    await page.waitForTimeout(100)
+    const openedTopLeft = await panel.boundingBox()
+    expect(
+      openedTopLeft.x <= 20 && openedTopLeft.y <= 20,
+      "clicking the moved launcher opens the panel in that corner",
+      openedTopLeft
+    )
+
+    const picker = frame.getByRole("button", {
+      name: "Move inspector to another corner"
+    })
+    await picker.focus()
+    await page.keyboard.press("Enter")
+    await frame.getByRole("button", { name: "Top right" }).waitFor()
+    await page.keyboard.press("Escape")
+    expect(
+      !(await frame.locator(".corner-menu").isVisible()),
+      "Escape closes the corner picker",
+      {}
+    )
+    await picker.focus()
+    await page.keyboard.press("Enter")
+    await page.keyboard.press("Tab")
+    await page.keyboard.press("Tab")
+    await page.keyboard.press("Enter")
+    await page.waitForTimeout(100)
+    const pickedTopRight = await panel.boundingBox()
+    expect(
+      pickedTopRight.x + pickedTopRight.width > 1400 && pickedTopRight.y <= 20,
+      "the keyboard corner picker moves the inspector to the chosen corner",
+      pickedTopRight
+    )
+
+    await frame.getByRole("button", { name: "Close the inspector" }).click()
+    await launcher.waitFor()
+    await launcher.focus()
+    await page.keyboard.press("ArrowDown")
+    await page.waitForTimeout(100)
+    const arrowMoved = await launcher.boundingBox()
+    expect(
+      arrowMoved.x + arrowMoved.width > 1400 &&
+        arrowMoved.y + arrowMoved.height > 860 && !(await panel.isVisible()),
+      "arrow keys on the focused launcher move it to another corner without opening the panel",
+      arrowMoved
+    )
+    await context.close()
+  }
+
   await desktop()
+  await corner()
   await narrow()
 })

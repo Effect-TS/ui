@@ -1240,6 +1240,69 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.isNull(root.querySelector(".tree .tl[data-change]"))
     }))
 
+  it.live("moves between corners with arrow keys and the corner picker, and remembers the corner", () =>
+    Effect.gen(function*() {
+      const frame = () =>
+        document.querySelector<HTMLIFrameElement>(
+          "iframe[data-effect-ui-devtools]"
+        )!
+      const press = Effect.fnUntraced(function*(element: Element, key: string) {
+        const view = element.ownerDocument.defaultView!
+        element.dispatchEvent(
+          new view.KeyboardEvent("keydown", {
+            key,
+            bubbles: true,
+            composed: true,
+            cancelable: true
+          })
+        )
+        yield* settle
+      })
+      yield* Effect.scoped(Effect.gen(function*() {
+        const { root } = yield* mount("open")
+        const doc = root.ownerDocument.documentElement
+        assert.strictEqual(doc.getAttribute("data-position"), "BottomRight")
+
+        const launcher = HtmlLocator.getByRole(root, "button", {
+          name: "Open the Effect UI inspector"
+        })
+        yield* press(launcher, "ArrowLeft")
+        assert.strictEqual(doc.getAttribute("data-position"), "BottomLeft")
+        assert.strictEqual(frame().style.left, "12px")
+        assert.strictEqual(frame().style.bottom, "12px")
+        assert.isNull(root.querySelector(".panel"))
+
+        yield* press(launcher, "ArrowUp")
+        assert.strictEqual(doc.getAttribute("data-position"), "TopLeft")
+        assert.strictEqual(frame().style.top, "12px")
+        assert.strictEqual(frame().style.left, "12px")
+
+        yield* open(root)
+        yield* click(
+          HtmlLocator.getByRole(root, "button", {
+            name: "Move inspector to another corner"
+          })
+        )
+        yield* click(
+          HtmlLocator.getByRole(root, "button", { name: "Top right" })
+        )
+        assert.strictEqual(doc.getAttribute("data-position"), "TopRight")
+        assert.strictEqual(frame().style.top, "12px")
+        assert.strictEqual(frame().style.right, "12px")
+        assert.isNull(root.querySelector(".corner-menu"))
+      }))
+
+      yield* Effect.scoped(Effect.gen(function*() {
+        const services = yield* Layer.build(DevTools.layer())
+        yield* play("open").pipe(Effect.provide(services))
+        yield* settle
+        assert.strictEqual(
+          overlay().ownerDocument.documentElement.getAttribute("data-position"),
+          "TopRight"
+        )
+      }))
+    }))
+
   it.live("leaves the app's Model and DOM as they are", () =>
     Effect.gen(function*() {
       const models = (entries: ReadonlyArray<MessageLog.Wire>) => {

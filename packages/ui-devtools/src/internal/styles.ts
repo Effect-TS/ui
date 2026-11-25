@@ -71,7 +71,8 @@ ${markRules}
 .tone-bad { color: var(--bad); }
 .tone-open { color: var(--open); }
 .launch { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); }
-.launcher { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; font-weight: 500; }
+.launcher { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; font-weight: 500; touch-action: none; }
+[data-dragging] .launcher { cursor: grabbing; user-select: none; }
 .launch .paused { padding: 0 4px 0 10px; border-left: 1px solid var(--line); }
 .launcher .logo { margin-right: -2px; }
 .alert { display: flex; align-items: center; gap: 5px; align-self: stretch; padding: 0 12px 0 10px; border-left: 1px solid var(--line); color: var(--bad); font-weight: 500; font-variant-numeric: tabular-nums; }
@@ -115,6 +116,16 @@ ${markRules}
 .follow:hover, .follow.on, .clear:hover:not(:disabled), .close:hover, .back:hover { background: var(--sel); color: var(--ink); }
 .clear:disabled { opacity: .5; cursor: default; }
 .close { width: 28px; height: 28px; border-radius: 6px; color: var(--muted); text-align: center; }
+.corner-wrap { position: relative; flex: none; }
+.corner { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 6px; color: var(--muted); }
+.corner:hover, .corner.on { background: var(--sel); color: var(--ink); }
+.corner-icon { display: grid; grid-template-columns: repeat(2, 4px); gap: 3px; }
+.corner-icon i { display: block; width: 4px; height: 4px; border-radius: 1px; background: currentColor; opacity: .32; }
+.corner-icon i.here { opacity: 1; background: var(--ink); }
+.corner-menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 2; display: grid; grid-template-columns: repeat(2, max-content); gap: 4px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); box-shadow: 0 6px 18px light-dark(rgb(0 0 0 / .12), rgb(0 0 0 / .45)); }
+.corner-option { padding: 4px 8px; border-radius: 5px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.corner-option:hover, .corner-option.on { background: var(--sel); color: var(--ink); }
+.corner-option.on { font-weight: 600; }
 .body { display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); min-height: 0; }
 .left { background: var(--sunk); border-right: 1px solid var(--line); display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-height: 0; }
 .instances { padding: 10px 0 6px; border-bottom: 1px solid var(--line); min-width: 0; }

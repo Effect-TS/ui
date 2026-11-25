@@ -11,14 +11,23 @@ import * as Stream from "effect/Stream"
 import * as Control from "./control.ts"
 import * as History from "./history.ts"
 import * as InspectorInternal from "./inspector.ts"
-import { Clear, type Feed, Overlay, Pages, Paint, SaveOpen } from "./overlay.ts"
+import {
+  Clear,
+  type Feed,
+  Overlay,
+  Pages,
+  Paint,
+  type Position,
+  SaveOpen,
+  SavePosition
+} from "./overlay.ts"
 import { isFailure } from "./read.ts"
 import * as Remote from "./remote.ts"
 import { styles } from "./styles.ts"
 import * as Tools from "./tools.ts"
 import * as WebMcp from "./webmcp.ts"
 
-export type Position = "TopLeft" | "TopRight" | "BottomLeft" | "BottomRight"
+export type { Position }
 
 export interface WebMcpOptions {
   readonly dispatch?: boolean | undefined
@@ -26,7 +35,17 @@ export interface WebMcpOptions {
 
 const sizeKey = "@effect/ui-devtools/size"
 const openKey = "@effect/ui-devtools/open"
+const positionKey = "@effect/ui-devtools/position"
 const devToolsKey = Symbol.for("@effect/ui/devtools")
+
+const positions = new Set<string>([
+  "TopLeft",
+  "TopRight",
+  "BottomLeft",
+  "BottomRight"
+])
+const isPosition = (value: unknown): value is Position =>
+  typeof value === "string" && positions.has(value)
 
 interface Attached {
   readonly messageLog: MessageLog.MessageLog
@@ -152,6 +171,10 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
           return
         }
       }
+      const savedPosition = load(positionKey)
+      let position: Position = isPosition(savedPosition)
+        ? savedPosition
+        : (options.position ?? "BottomRight")
       const feed: Feed = {
         inspector,
         origin: (session) => origins.get(session),
@@ -160,7 +183,8 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
           roots.has(session) && history.holds(session, seq),
         paused: () => paused?.at,
         failures: () => failures,
-        open: load(openKey) === true
+        open: load(openKey) === true,
+        position: () => position
       }
       const unpause: Effect.Effect<void> = Effect.suspend(() => {
         const was = paused
@@ -218,7 +242,8 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
             wireHistory?.clear(sessionId, upTo)
             notify()
           }),
-        setOpen: (open) => Effect.sync(() => save(openKey, open))
+        setOpen: (open) => Effect.sync(() => save(openKey, open)),
+        setPosition: (next) => Effect.sync(() => setPosition(next))
       })
       const controllables: BrowserHost.Controllables = {
         register: (root) => {
@@ -235,7 +260,6 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         }
       }
 
-      const position = options.position ?? "BottomRight"
       const frame = document.createElement("iframe")
       frame.setAttribute("data-effect-ui-devtools", "")
       frame.title = "Effect UI inspector"
@@ -274,7 +298,20 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
       const container = inner.getElementById("root")!
 
       const root = inner.documentElement
-      root.setAttribute("data-position", position)
+      const place = (next: Position) => {
+        position = next
+        frame.style.top = next.startsWith("Top") ? "12px" : "auto"
+        frame.style.bottom = next.startsWith("Bottom") ? "12px" : "auto"
+        frame.style.left = next.endsWith("Left") ? "12px" : "auto"
+        frame.style.right = next.endsWith("Right") ? "12px" : "auto"
+        root.setAttribute("data-position", next)
+      }
+      const setPosition = (next: Position) => {
+        place(next)
+        save(positionKey, next)
+        changed()
+      }
+      place(position)
       const resize = (width: number, height: number) => {
         root.style.setProperty(
           "--panel-w",
@@ -292,33 +329,110 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
       ) {
         resize(saved[0], saved[1])
       }
-      const grow = {
-        x: position.endsWith("Right") ? -1 : 1,
-        y: position.startsWith("Bottom") ? -1 : 1
-      }
-      container.addEventListener("pointerdown", (event) => {
-        const grip = (event.target as Element).closest<HTMLElement>(".grip")
-        const panel = grip?.parentElement
-        if (grip == null || panel == null || event.button !== 0) return
+      let suppressClick = false
+      inner.addEventListener("click", (event) => {
+        if (!suppressClick) return
+        suppressClick = false
         event.preventDefault()
+        event.stopImmediatePropagation()
+      }, true)
+      const clamp = (value: number, min: number, max: number) =>
+        Math.min(Math.max(value, min), Math.max(min, max))
+      container.addEventListener("pointerdown", (event) => {
+        const target = event.target as Element
+        const grip = target.closest<HTMLElement>(".grip")
+        if (grip != null && event.button === 0) {
+          const panel = grip.parentElement
+          if (panel == null) return
+          event.preventDefault()
+          const grow = {
+            x: position.endsWith("Right") ? -1 : 1,
+            y: position.startsWith("Bottom") ? -1 : 1
+          }
+          const start = {
+            x: event.screenX,
+            y: event.screenY,
+            rect: panel.getBoundingClientRect()
+          }
+          const move = (moved: PointerEvent) =>
+            resize(
+              start.rect.width + grow.x * (moved.screenX - start.x),
+              start.rect.height + grow.y * (moved.screenY - start.y)
+            )
+          const end = () => {
+            grip.removeEventListener("pointermove", move)
+            const rect = panel.getBoundingClientRect()
+            save(sizeKey, [rect.width, rect.height])
+          }
+          grip.setPointerCapture(event.pointerId)
+          grip.addEventListener("pointermove", move)
+          grip.addEventListener("lostpointercapture", end, { once: true })
+          return
+        }
+        const launcher = target.closest<HTMLElement>(".launcher")
+        if (launcher == null || event.button !== 0) return
+        suppressClick = false
         const start = {
           x: event.screenX,
           y: event.screenY,
-          rect: panel.getBoundingClientRect()
+          rect: frame.getBoundingClientRect()
         }
-        const move = (moved: PointerEvent) =>
-          resize(
-            start.rect.width + grow.x * (moved.screenX - start.x),
-            start.rect.height + grow.y * (moved.screenY - start.y)
-          )
-        const end = () => {
-          grip.removeEventListener("pointermove", move)
-          const rect = panel.getBoundingClientRect()
-          save(sizeKey, [rect.width, rect.height])
+        let dragging = false
+        let left = start.rect.left
+        let top = start.rect.top
+        const move = (moved: PointerEvent) => {
+          const dx = moved.screenX - start.x
+          const dy = moved.screenY - start.y
+          if (!dragging) {
+            if (Math.hypot(dx, dy) < 6) return
+            dragging = true
+            root.setAttribute("data-dragging", "true")
+          }
+          const vw = view?.innerWidth ?? 0
+          const vh = view?.innerHeight ?? 0
+          left = clamp(start.rect.left + dx, 12, vw - start.rect.width - 12)
+          top = clamp(start.rect.top + dy, 12, vh - start.rect.height - 12)
+          frame.style.left = Math.round(left) + "px"
+          frame.style.top = Math.round(top) + "px"
+          frame.style.right = "auto"
+          frame.style.bottom = "auto"
         }
-        grip.setPointerCapture(event.pointerId)
-        grip.addEventListener("pointermove", move)
-        grip.addEventListener("lostpointercapture", end, { once: true })
+        let done = false
+        const finish = (cancelled: boolean) => {
+          if (done) return
+          done = true
+          launcher.removeEventListener("pointermove", move)
+          launcher.removeEventListener("pointerup", onUp)
+          launcher.removeEventListener("pointercancel", onCancel)
+          launcher.removeEventListener("lostpointercapture", onLost)
+          if (!dragging) return
+          root.removeAttribute("data-dragging")
+          suppressClick = true
+          setTimeout(() => {
+            suppressClick = false
+          }, 0)
+          if (cancelled) {
+            place(position)
+            return
+          }
+          const vw = view?.innerWidth ?? 0
+          const vh = view?.innerHeight ?? 0
+          const vertical = top + start.rect.height / 2 < vh / 2
+            ? "Top"
+            : "Bottom"
+          const horizontal = left + start.rect.width / 2 < vw / 2
+            ? "Left"
+            : "Right"
+          setPosition((vertical + horizontal) as Position)
+        }
+        const onUp = () => finish(false)
+        const onCancel = () => finish(true)
+        const onLost = () => finish(false)
+        launcher.setPointerCapture?.(event.pointerId)
+        launcher.addEventListener("pointermove", move)
+        launcher.addEventListener("pointerup", onUp)
+        launcher.addEventListener("pointercancel", onCancel)
+        launcher.addEventListener("lostpointercapture", onLost)
       })
 
       const viewport = () => {
@@ -354,7 +468,12 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
       }).pipe(
         Effect.provideService(MessageLog.MessageLog, MessageLog.noop),
         Effect.provide(
-          Layer.mergeAll(Paint.layer, Clear.layer, SaveOpen.layer).pipe(
+          Layer.mergeAll(
+            Paint.layer,
+            Clear.layer,
+            SaveOpen.layer,
+            SavePosition.layer
+          ).pipe(
             Layer.provide(Layer.succeed(Pages, pages))
           )
         )
