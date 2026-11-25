@@ -127,13 +127,7 @@ import {
   CollapsibleToggleReason,
   type CollapsibleTransitionStatus
 } from "./Collapsible.ts"
-import {
-  type Attributed,
-  flag,
-  idOf,
-  ownStyle,
-  withTokens
-} from "./internal/attributes.ts"
+import { type Attributed, flag, idOf, ownStyle } from "./internal/attributes.ts"
 import {
   carries,
   find,
@@ -522,19 +516,36 @@ export const AccordionItem = Html.component({
       states(b)
         .attr("id", id)
         .forward((node) => {
-          triggerId = node.elementAttrs.id ?? id
-          triggers.add(layerOf(node))
-          return node
+          const layer = layerOf(node)
+          triggers.add(layer)
+          const built = View.build(node, [])
+          const button = find(
+            built,
+            (element) => element.owned?.includes(layer) === true
+          )
+          triggerId = button?.attrs.id || id
+          return built
         }))
     const panelPart = p.part("div", (b) =>
       states(b)
         .attr("role", "region")
         .forward((node) => {
-          const consumer = node.elementAttrs["aria-labelledby"]
-          panels.set(layerOf(node), consumer)
-          return ownStyle(
-            "--accordion-panel-height:var(--collapsible-panel-height);--accordion-panel-width:var(--collapsible-panel-width)"
-          )(node.attr("aria-labelledby", withTokens(consumer, triggerId)))
+          const layer = layerOf(node)
+          const built = View.build(
+            ownStyle(
+              "--accordion-panel-height:var(--collapsible-panel-height);--accordion-panel-width:var(--collapsible-panel-width)"
+            )(node),
+            []
+          )
+          const element = find(
+            built,
+            (candidate) => candidate.owned?.includes(layer) === true
+          )
+          if (element === undefined) return built
+          panels.set(layer, element.attrs["aria-labelledby"])
+          return triggerId === undefined
+            ? built
+            : setTokensOn(built, panels, "aria-labelledby", triggerId)
         }))
 
     return p.child(Collapsible, {

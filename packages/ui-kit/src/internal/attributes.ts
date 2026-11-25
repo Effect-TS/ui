@@ -25,26 +25,6 @@ export const withTokens = (
   return tokens.includes(own) ? consumer : consumer + " " + own
 }
 
-export const ownedTokens = (
-  owned: ReadonlyArray<View.Owned> | undefined,
-  name: string,
-  consumer: string | undefined,
-  own: string | undefined
-): string | undefined => {
-  let value = withTokens(consumer, own)
-  if (owned !== undefined) {
-    for (const layer of owned) {
-      const extra = layer.tokens[name]
-      if (extra !== undefined) {
-        for (const token of extra.split(asciiSpace)) {
-          if (token !== "") value = withTokens(value, token)
-        }
-      }
-    }
-  }
-  return value
-}
-
 export const ownStyle = (own: string) =>
 <
   N extends Attributed<N> & {

@@ -173,8 +173,11 @@ describe("Accordion", () => {
           item.panel(
             h.div
               .attr("id", "panel-a")
-              .attr("aria-labelledby", "elsewhere")
-              .forward((panel) => h.div.class("wrapper").children(panel))
+              .forward((panel) =>
+                h.div
+                  .class("wrapper")
+                  .children(panel.attr("aria-labelledby", "elsewhere"))
+              )
           )
         )
         const node = View.build(

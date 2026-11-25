@@ -141,7 +141,6 @@ import {
   type Attributed,
   flag,
   idOf,
-  ownedTokens,
   ownStyle,
   withTokens
 } from "./internal/attributes.ts"
@@ -545,7 +544,7 @@ export const Collapsible = Html.component({
       )
 
     const triggers: Array<{
-      readonly element: View.Element<any, any>
+      readonly attrs: Record<string, string>
       readonly consumer: string | undefined
       controls: string | undefined
     }> = []
@@ -554,15 +553,9 @@ export const Collapsible = Html.component({
       for (const entry of triggers) {
         if (entry.controls === target) continue
         entry.controls = target
-        const next = ownedTokens(
-          entry.element.owned,
-          "aria-controls",
-          entry.consumer,
-          target
-        )
-        const attrs = entry.element.attrs as Record<string, string>
-        if (next === undefined) delete attrs["aria-controls"]
-        else attrs["aria-controls"] = next
+        const next = withTokens(entry.consumer, target)
+        if (next === undefined) delete entry.attrs["aria-controls"]
+        else entry.attrs["aria-controls"] = next
       }
     }
 
@@ -582,22 +575,21 @@ export const Collapsible = Html.component({
         .disabled(disabled)
         .onClick(CollapsibleMessage.ClickedTrigger())
         .forward((node) => {
-          const consumer = node.elementAttrs["aria-controls"]
-          const controls = open ? panelId : undefined
           const layer = layerOf(node)
-          const built = View.build(
-            node.attr("aria-controls", withTokens(consumer, controls)),
-            []
+          const built = View.build(node, [])
+          const button = find(
+            built,
+            (element) => element.owned?.includes(layer) === true
           )
-          if (open) {
-            const button = find(
-              built,
-              (element) => element.owned?.includes(layer) === true
-            )
-            if (button !== undefined) {
-              triggers.push({ element: button, consumer, controls })
-            }
-          }
+          if (button === undefined) return built
+          const consumer = button.attrs["aria-controls"]
+          const controls = open ? panelId : undefined
+          const next = withTokens(consumer, controls)
+          const attrs: Record<string, string> = { ...button.attrs }
+          if (next === undefined) delete attrs["aria-controls"]
+          else attrs["aria-controls"] = next
+          ;(button as { attrs: Readonly<Record<string, string>> }).attrs = attrs
+          if (open) triggers.push({ attrs, consumer, controls })
           return built
         }))
 
@@ -616,12 +608,18 @@ export const Collapsible = Html.component({
           )
         })
         .forward((node) => {
-          const next = node.elementAttrs.id || id
+          const layer = layerOf(node)
+          const built = View.build(ownStyle(panelStyle(model, open))(node), [])
+          const element = find(
+            built,
+            (candidate) => candidate.owned?.includes(layer) === true
+          )
+          const next = element?.attrs.id || id
           if (next !== panelId) {
             panelId = next
             syncTriggers()
           }
-          return ownStyle(panelStyle(model, open))(node)
+          return built
         })
         .onMount(
           TrackPanel({

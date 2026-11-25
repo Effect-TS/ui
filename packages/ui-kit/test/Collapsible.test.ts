@@ -175,23 +175,43 @@ describe("Collapsible", () => {
       )
     }
 
-    const chained = parts({ open: true })
-    const chainedNode = View.build(
-      h.section.children(
-        h.h3.children(chained.trigger(h.button)),
-        chained.panel(h.div)?.attr("id", "shipping-after")
-      ),
-      []
-    )
-    assert.strictEqual(
-      ((chainedNode.children[0] as View.Element<never>)
-        .children[0] as View.Element<never>).attrs["aria-controls"],
-      "shipping-after"
-    )
-    assert.strictEqual(
-      (chainedNode.children[1] as View.Element<never>).attrs.id,
-      "shipping-after"
-    )
+    for (
+      const [id, makePanel] of [
+        [
+          "shipping-after",
+          (c: Parts) => c.panel(h.div)?.attr("id", "shipping-after")
+        ],
+        [
+          "shipping-hook",
+          (c: Parts) =>
+            c.panel(h.div.forward((panel) => panel.attr("id", "shipping-hook")))
+        ]
+      ] as const
+    ) {
+      const rootless = parts({ open: true })
+      const rootlessNode = View.build(
+        h.section.children(
+          h.h3.children(
+            rootless.trigger(
+              h.button.forward((button) =>
+                button.attr("aria-controls", "extra")
+              )
+            )
+          ),
+          makePanel(rootless)
+        ),
+        []
+      )
+      assert.strictEqual(
+        ((rootlessNode.children[0] as View.Element<never>)
+          .children[0] as View.Element<never>).attrs["aria-controls"],
+        `extra ${id}`
+      )
+      assert.strictEqual(
+        (rootlessNode.children[1] as View.Element<never>).attrs.id,
+        id
+      )
+    }
   })
 
   it("root and panel accept any element while trigger requires button", () => {

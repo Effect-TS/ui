@@ -1,5 +1,5 @@
 import * as View from "@effect/ui/View"
-import { ownedTokens } from "./attributes.ts"
+import { withTokens } from "./attributes.ts"
 
 export type Rewrite = (
   node: View.Node<any, any>
@@ -67,10 +67,6 @@ export const setTokensOn = <N extends View.Node<any, any>>(
       const layer = element.owned?.find((l) => layers.has(l))
       return layer === undefined
         ? undefined
-        : withAttr(
-          element,
-          name,
-          ownedTokens(element.owned, name, layers.get(layer), value)
-        )
+        : withAttr(element, name, withTokens(layers.get(layer), value))
     }
   )
