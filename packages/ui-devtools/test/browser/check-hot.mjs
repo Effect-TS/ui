@@ -14,6 +14,45 @@ const root = fs.mkdtempSync(path.join(import.meta.dirname, ".hot-tmp-"))
 const writeTimer = (source) =>
   fs.writeFileSync(path.join(root, "timer.ts"), source, "utf8")
 
+const writeRouted = (source) =>
+  fs.writeFileSync(path.join(root, "routed.ts"), source, "utf8")
+
+const routedSource = (label) => `
+import { Route, Router, UiSchema } from "@effect/ui"
+import { Html } from "@effect/ui/html"
+import { Schema } from "effect"
+
+export const AppRoute = Route.union({
+  Home: Route.make("/routed.html"),
+  Other: Route.make("/other")
+})
+
+const Message = UiSchema.TaggedEnum({
+  ChangedRoute: { route: AppRoute }
+})
+
+export const RoutedPage = Html.component({
+  name: "RoutedPage",
+  props: Schema.Struct({ route: AppRoute }),
+  model: AppRoute,
+  message: Message
+}).make({
+  init: ($) => $.props.route,
+  update: (_, msg) => msg.route,
+  subscriptions: ({ model }) => [
+    Router.subscription(
+      AppRoute,
+      model,
+      (route) => Message.ChangedRoute({ route })
+    )
+  ],
+  view: (h) =>
+    h.div.attr("style", "height:5000px").children(
+      h.span.attr("data-routed-label", "").children(${JSON.stringify(label)})
+    )
+})
+`
+
 const timerSource = (label) => `
 import { Subscription, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
@@ -82,6 +121,29 @@ Layer.launch(Main).pipe(Effect.runFork)
   "utf8"
 )
 writeTimer(timerSource("v1"))
+fs.writeFileSync(
+  path.join(root, "routed.html"),
+  `<!doctype html><html><head><meta charset="utf-8"><link rel="icon" href="data:,"></head><body><div id="root"></div><script type="module" src="/routed-main.ts"></script></body></html>`,
+  "utf8"
+)
+fs.writeFileSync(
+  path.join(root, "routed-main.ts"),
+  `import { Router } from "@effect/ui"
+import { BrowserHost, BrowserRouter } from "@effect/ui/html"
+import { Effect, Layer } from "effect"
+import { AppRoute, RoutedPage } from "./routed.ts"
+const Main = BrowserHost.mount(
+  RoutedPage,
+  Router.props(AppRoute),
+  document.getElementById("root")!
+).pipe(
+  Layer.provide(BrowserRouter.layer({ routes: AppRoute }))
+)
+Layer.launch(Main).pipe(Effect.runFork)
+`,
+  "utf8"
+)
+writeRouted(routedSource("r1"))
 
 const server = await createServer({
   root,
@@ -212,6 +274,25 @@ try {
   const afterManualReload = await count()
   expect(afterManualReload < 3, "manual reload started from init", {
     afterManualReload
+  })
+
+  await page.goto(url + "routed.html")
+  await page.waitForFunction(
+    () => document.querySelector("[data-routed-label]")?.textContent === "r1"
+  )
+  await page.evaluate(() => window.scrollTo(0, 1500))
+  await page.waitForFunction(() => window.scrollY === 1500)
+  await Promise.all([
+    page.waitForEvent("load"),
+    Promise.resolve().then(() => writeRouted(routedSource("r2")))
+  ])
+  await page.waitForFunction(
+    () => document.querySelector("[data-routed-label]")?.textContent === "r2"
+  )
+  await page.waitForFunction(() => window.scrollY === 1500)
+  const routedScrollY = await page.evaluate(() => window.scrollY)
+  expect(routedScrollY === 1500, "routed page preserved scrollY", {
+    routedScrollY
   })
 
   await page.close()

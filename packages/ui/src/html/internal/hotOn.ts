@@ -192,8 +192,11 @@ const takeRoot = (
   return pending.roots.splice(index, 1)[0]
 }
 
-const restoreScroll = (view: Window, state: WindowState): void => {
-  const scroll = state.pending?.scroll
+const restoreScroll = (
+  view: Window,
+  state: WindowState,
+  scroll: HotPayload["scroll"]
+): void => {
   if (state.scrolled || scroll === undefined) return
   state.scrolled = true
   if (scroll.x === 0 && scroll.y === 0) return
@@ -217,6 +220,7 @@ export const open = (
   const containerId = container.id === "" ? undefined : container.id
   const windowState = stateOf(view)
   const pending = loadPending(view, windowState)
+  const scroll = pending?.scroll
   const claimed = takeRoot(pending, path, containerId)
   if (claimed !== undefined) {
     for (const message of claimed.warnings ?? []) warn(message)
@@ -328,15 +332,15 @@ export const open = (
         restore.ended(author, at)
       }
       windowState.roots.add(live)
-      if (claimed !== undefined) restoreScroll(view, windowState)
     },
     flushed: (buildsPending) => {
-      if (
-        buildsPending === 0 && !restore.holding() && restoring !== undefined
-      ) {
-        restoring = undefined
-        if (windowState.pending?.roots.length === 0) {
-          windowState.pending = undefined
+      if (buildsPending === 0 && !restore.holding()) {
+        if (claimed !== undefined) restoreScroll(view, windowState, scroll)
+        if (restoring !== undefined) {
+          restoring = undefined
+          if (windowState.pending?.roots.length === 0) {
+            windowState.pending = undefined
+          }
         }
       }
     },
