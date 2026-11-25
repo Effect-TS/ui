@@ -59,23 +59,22 @@ export const CanvasArtMessage = UiSchema.TaggedEnum({
 export const GenerateBall = Command.make(
   "GenerateBall",
   { args: { x: Schema.Number, y: Schema.Number } },
-  ({ x, y }) =>
-    Effect.gen(function*() {
-      const angle = yield* Random.nextBetween(0, Math.PI * 2)
-      const speed = yield* Random.nextBetween(BALL_SPEED_MIN, BALL_SPEED_MAX)
-      const radius = yield* Random.nextBetween(BALL_RADIUS_MIN, BALL_RADIUS_MAX)
-      const color = PALETTE[
-        yield* Random.nextIntBetween(0, PALETTE.length, { halfOpen: true })
-      ]!
-      return {
-        x,
-        y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        radius,
-        color
-      }
-    })
+  Effect.fnUntraced(function*({ x, y }) {
+    const angle = yield* Random.nextBetween(0, Math.PI * 2)
+    const speed = yield* Random.nextBetween(BALL_SPEED_MIN, BALL_SPEED_MAX)
+    const radius = yield* Random.nextBetween(BALL_RADIUS_MIN, BALL_RADIUS_MAX)
+    const color = PALETTE[
+      yield* Random.nextIntBetween(0, PALETTE.length, { halfOpen: true })
+    ]!
+    return {
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      radius,
+      color
+    }
+  })
 )
 
 const advance = (seconds: number) => (ball: Ball): Ball => {

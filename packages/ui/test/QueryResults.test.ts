@@ -30,16 +30,21 @@ const makeApp = (options?: {
       refetchInterval: options?.interval === true ? "5 seconds" : undefined
     }
   ) {
-    static readonly layer = this.toLayer(({ id }) =>
-      Effect.gen(function*() {
-        db.calls++
-        yield* Effect.sleep("10 millis")
-        const name = db.names.get(id)
-        return name === undefined
-          ? yield* Effect.fail("missing")
-          : { id, name }
-      }).pipe(
-        Effect.onInterrupt(() => Effect.sync(() => db.interrupted.push(id)))
+    static readonly layer = this.toLayer(
+      Effect.fnUntraced(
+        function*({ id }) {
+          db.calls++
+          yield* Effect.sleep("10 millis")
+          const name = db.names.get(id)
+          return name === undefined
+            ? yield* Effect.fail("missing")
+            : { id, name }
+        },
+        (effect, { id }) =>
+          Effect.onInterrupt(
+            effect,
+            () => Effect.sync(() => db.interrupted.push(id))
+          )
       )
     )
   }
@@ -56,8 +61,8 @@ const makeApp = (options?: {
       ) => [GetUser.patch({ id }, (user) => ({ ...user, name }))]
     }
   ) {
-    static readonly layer = this.toLayer(({ id, name }) =>
-      Effect.gen(function*() {
+    static readonly layer = this.toLayer(
+      Effect.fnUntraced(function*({ id, name }) {
         yield* Effect.sleep("10 millis")
         if (name === "") return yield* Effect.fail("empty")
         db.names.set(id, name)

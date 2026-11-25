@@ -70,21 +70,19 @@ const makeUsers = (options: {
       ...options
     }
   ) {
-    static readonly layer = this.toLayer(({ id }) =>
-      Effect.gen(function*() {
-        db.calls++
-        yield* Effect.sleep(10)
-        if (db.mode === "die") return yield* Effect.die("boom")
-        // A Fail next to an Interrupt is still a Failure, and holds only the Fail.
-        if (db.mode === "fail") {
-          return yield* Effect.failCause(
-            Cause.combine(Cause.fail("nope"), Cause.interrupt())
-          )
-        }
-        if (db.mode === "interrupt") return yield* Effect.interrupt
-        return { id, name: db.name }
-      })
-    )
+    static readonly layer = this.toLayer(Effect.fnUntraced(function*({ id }) {
+      db.calls++
+      yield* Effect.sleep(10)
+      if (db.mode === "die") return yield* Effect.die("boom")
+      // A Fail next to an Interrupt is still a Failure, and holds only the Fail.
+      if (db.mode === "fail") {
+        return yield* Effect.failCause(
+          Cause.combine(Cause.fail("nope"), Cause.interrupt())
+        )
+      }
+      if (db.mode === "interrupt") return yield* Effect.interrupt
+      return { id, name: db.name }
+    }))
   }
   const provide = Effect.provide(Layer.merge(GetUser.layer, TestQuery.layer()))
   return { db, GetUser, provide }

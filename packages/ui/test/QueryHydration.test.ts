@@ -43,14 +43,12 @@ const makeUsers = (staleTime: Duration.Input = 0) => {
       tags: [Users]
     }
   ) {
-    static readonly layer = this.toLayer(({ id }) =>
-      Effect.gen(function*() {
-        db.calls++
-        yield* Effect.sleep(10)
-        if (id === "404") return yield* Effect.fail("not found")
-        return { id, name: db.name }
-      })
-    )
+    static readonly layer = this.toLayer(Effect.fnUntraced(function*({ id }) {
+      db.calls++
+      yield* Effect.sleep(10)
+      if (id === "404") return yield* Effect.fail("not found")
+      return { id, name: db.name }
+    }))
   }
   return { db, GetUser }
 }

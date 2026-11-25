@@ -41,20 +41,18 @@ export const AttachEditor = Mount.makeStream(
   "AttachEditor",
   { args: { text: Schema.String } },
   (node: HTMLElement, _args, changes) =>
-    Stream.callback<string>((queue) =>
-      Effect.gen(function*() {
-        const editor = yield* Effect.acquireRelease(
-          Effect.sync(() => createEditor(node)),
-          (editor) => Effect.sync(() => editor.destroy())
-        )
-        editor.onChange((text) => Queue.offerUnsafe(queue, text))
-        // `changes` starts with the current args.
-        yield* Stream.runForEach(changes, ({ text }) =>
-          Effect.sync(() => {
-            if (editor.text() !== text) editor.setText(text)
-          })).pipe(Effect.forkScoped)
-      })
-    )
+    Stream.callback<string>(Effect.fnUntraced(function*(queue) {
+      const editor = yield* Effect.acquireRelease(
+        Effect.sync(() => createEditor(node)),
+        (editor) => Effect.sync(() => editor.destroy())
+      )
+      editor.onChange((text) => Queue.offerUnsafe(queue, text))
+      // `changes` starts with the current args.
+      yield* Stream.runForEach(changes, ({ text }) =>
+        Effect.sync(() => {
+          if (editor.text() !== text) editor.setText(text)
+        })).pipe(Effect.forkScoped)
+    }))
 )
 
 // ---------------------------------------------------------------------------

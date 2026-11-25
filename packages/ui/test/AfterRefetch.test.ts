@@ -42,13 +42,11 @@ const makeApp = (options?: {
       staleTime: "30 seconds"
     }
   ) {
-    static readonly layer = this.toLayer(({ id }) =>
-      Effect.gen(function*() {
-        yield* Effect.sleep(db.delay.get(id) ?? 10)
-        if (db.fail.has(id)) return yield* Effect.fail("down")
-        return { id, name: db.names.get(id) ?? "?" }
-      })
-    )
+    static readonly layer = this.toLayer(Effect.fnUntraced(function*({ id }) {
+      yield* Effect.sleep(db.delay.get(id) ?? 10)
+      if (db.fail.has(id)) return yield* Effect.fail("down")
+      return { id, name: db.names.get(id) ?? "?" }
+    }))
   }
 
   const invalidates = options?.invalidates ?? "self"
@@ -71,8 +69,8 @@ const makeApp = (options?: {
           : [GetUser.patch({ id }, (user) => ({ ...user, name }))]
     }
   ) {
-    static readonly layer = this.toLayer(({ id, name }) =>
-      Effect.gen(function*() {
+    static readonly layer = this.toLayer(
+      Effect.fnUntraced(function*({ id, name }) {
         order.push(`body ${name}`)
         const cleanup = options?.cleanup
         if (cleanup !== undefined) {
@@ -895,8 +893,8 @@ describe("Command.afterRefetch", () => {
         staleTime: "30 seconds"
       }
     ) {
-      static readonly layer = this.toLayer((_args, cursor) =>
-        Effect.gen(function*() {
+      static readonly layer = this.toLayer(
+        Effect.fnUntraced(function*(_args, cursor) {
           const index = Option.getOrElse(cursor, () => 0)
           yield* Effect.sleep("10 millis")
           return {
