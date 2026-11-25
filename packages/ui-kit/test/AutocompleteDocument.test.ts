@@ -68,8 +68,9 @@ const Page = Html.component({
   init: () => ({ open: false, value: "", log: [] }),
   update: formUpdate,
   view: (h, model) =>
-    h.form.onSubmit(({ fields }) =>
-      Message.Submitted({ query: fields.q ?? "" })
+    h.form.on(
+      "submit",
+      ({ fields }) => Message.Submitted({ query: fields.q ?? "" })
     ).children(
       Field(h, {
         props: { filled: model.value !== "" },
@@ -123,9 +124,8 @@ const InPopup = Html.component({
   update: formUpdate,
   view: (h, model) =>
     h.div(
-      h.form.attr("id", "search").onSubmit(({ fields }) =>
-        Message.Submitted({ query: fields.q ?? "" })
-      ),
+      h.form.attr("id", "search").on("submit", ({ fields }) =>
+        Message.Submitted({ query: fields.q ?? "" })),
       Autocomplete(h, {
         props: {
           open: model.open,
@@ -137,7 +137,8 @@ const InPopup = Html.component({
           submitOnItemClick: true
         },
         onEmit: {
-          RequestedOpen: ({ reason }) => Message.RequestedOpen({ reason }),
+          RequestedOpen: ({ reason }) =>
+            Message.RequestedOpen({ reason }),
           RequestedClose: ({ reason }) => Message.RequestedClose({ reason }),
           Updated: ({ reason, value }) => Message.Updated({ value, reason }),
           Highlighted: () => undefined,

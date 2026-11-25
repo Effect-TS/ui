@@ -45,11 +45,14 @@ const Poster = Html.component({
     },
     view: (h) =>
       h.div(
-        h.button.attr("id", "post").onClick(PosterMessage.ClickedPost())
+        h.button.attr("id", "post").on("click", PosterMessage.ClickedPost())
           .children("Post"),
-        h.button.attr("id", "complete").onClick(PosterMessage.CompletedUpload())
+        h.button.attr("id", "complete").on(
+          "click",
+          PosterMessage.CompletedUpload()
+        )
           .children("Complete"),
-        h.button.attr("id", "drop").onClick(PosterMessage.ClickedDrop())
+        h.button.attr("id", "drop").on("click", PosterMessage.ClickedDrop())
           .children("Drop")
       )
   })
@@ -289,9 +292,10 @@ const Above = Html.component({
     ToastProvider(h, {
       view: (toastProvider) =>
         h.div(
-          h.button.attr("id", "open").onClick(AboveMessage.Opened()).children(
-            "Open"
-          ),
+          h.button.attr("id", "open").on("click", AboveMessage.Opened())
+            .children(
+              "Open"
+            ),
           toastProvider.viewport(h.div.attr("id", "toasts")),
           Dialog(h, {
             props: { open },

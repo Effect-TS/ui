@@ -215,7 +215,7 @@ describe("forward", () => {
       }
     )
     assert.throws(
-      () => View.build(guarded.onClick(clicked), []),
+      () => View.build(guarded.on("click", clicked), []),
       /already handles click/
     )
 
@@ -243,9 +243,10 @@ describe("forward", () => {
       (element: HTMLElement) => Effect.succeed(element.localName)
     )
     const frame = View.build(
-      framed(h.button.key("row"), "amount").onClick(clicked).ref(Field).onMount(
-        ReadTag().pipe(Mount.map(() => clicked))
-      ),
+      framed(h.button.key("row"), "amount").on("click", clicked).ref(Field)
+        .onMount(
+          ReadTag().pipe(Mount.map(() => clicked))
+        ),
       []
     )
     const button = frame.children[0] as View.Element<Message>

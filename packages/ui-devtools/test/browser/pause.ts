@@ -30,25 +30,26 @@ const Scene = Html.component({
   },
   view: (h, model) =>
     h.main(
-      h.button.onClick(SceneMessage.ClickedCount()).children(
+      h.button.on("click", SceneMessage.ClickedCount()).children(
         "Count " + model.count
       ),
-      h.button.onClick(SceneMessage.ClickedMenu()).children("Open menu"),
-      h.div.attr("id", "menu").popover("auto", model.menu).onToggle((
+      h.button.on("click", SceneMessage.ClickedMenu()).children("Open menu"),
+      h.div.attr("id", "menu").popover("auto", model.menu).on("toggle", (
         { open }
       ) => SceneMessage.ToggledMenu({ open }))
         .children(
           h.p("Menu"),
-          h.button.onClick(SceneMessage.ClickedOpenDialog()).children(
+          h.button.on("click", SceneMessage.ClickedOpenDialog()).children(
             "Open dialog"
           )
         ),
-      h.dialog.attr("aria-label", "Settings").modal(model.dialog).onCancel(
+      h.dialog.attr("aria-label", "Settings").modal(model.dialog).on(
+        "cancel",
         SceneMessage.ClickedCloseDialog()
       )
         .children(
           h.p("Settings"),
-          h.button.onClick(SceneMessage.ClickedCloseDialog()).children(
+          h.button.on("click", SceneMessage.ClickedCloseDialog()).children(
             "Close dialog"
           )
         )

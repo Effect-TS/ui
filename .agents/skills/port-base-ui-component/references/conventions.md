@@ -211,7 +211,7 @@ Checkbox(h, {
 - `on<Event>` is a view function's event, one option per event. Name it
   as the present tense of the event a component would emit: `onPress`
   for `Pressed`, `onToggle` for `Toggled`. An event with no payload takes
-  the message, like `.onClick(msg)`. One with a payload takes a function
+  the message, like `.on("click", msg)`. One with a payload takes a function
   of the object a component's event would carry,
   `onToggle: ({ checked }) => msg`. A detached trigger's payload is often
   ignored, so its options take the message alone as well, as
@@ -537,17 +537,17 @@ portal. The details are in the JSDoc of `popover` and `modal` in
   compose `Positioning.trackPosition` inside it instead, as `Menu`,
   `Select`, `PreviewCard` and `internal/combobox.ts` do. Don't use CSS
   anchor positioning.
-- `.popover("auto", open)` with `onToggle` follows the browser: it closes
+- `.popover("auto", open)` with a `toggle` handler follows the browser: it closes
   on Escape, an outside click, or another auto popover opening, and the
-  Model stores what `onToggle` reports. Use it only when `open` is the
+  Model stores what `toggle` reports. Use it only when `open` is the
   component's own Model state and nobody can refuse a close, as in
   `Listbox`. Never use it for an `open` prop: the browser would close the
   popup while the props still say open.
 - A modal is native or kit-managed, by who owns modality:
-  - **Native**: `<dialog>` with `.modal(open)` and `onCancel`, where the
+  - **Native**: `<dialog>` with `.modal(open)` and a `cancel` handler, where the
     browser owns modality. The host cancels Escape and backdrop clicks and
-    reports them as `onCancel`, which emits `RequestedClose`. Browsers may
-    still force a close after repeated cancels, so handle `onClose` too
+    reports them as `cancel`, which emits `RequestedClose`. Browsers may
+    still force a close after repeated cancels, so handle `close` too
     and emit `RequestedClose` from it.
   - **Kit-managed**: `.popover("manual", open)`, where the component owns
     focus, outside-interaction blocking, close requests and exit presence.

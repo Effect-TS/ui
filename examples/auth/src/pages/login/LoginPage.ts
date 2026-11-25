@@ -161,7 +161,7 @@ export const LoginPageNoDeps = Html.component({
         h.form.attr("aria-label", "Sign in").attr("novalidate", "").class(
           "space-y-6"
         )
-          .onSubmit(LoginPageMessage.SubmittedForm()).children(
+          .on("submit", LoginPageMessage.SubmittedForm()).children(
             FormField(h, {
               key: "email",
               label: "Email",

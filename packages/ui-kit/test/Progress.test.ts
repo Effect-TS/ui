@@ -119,7 +119,7 @@ describe("Progress", () => {
       const attrs = scene.get(root).attrs
       assert.isUndefined(scene.get(indicator).attrs?.style)
       assert.isUndefined(attrs?.["aria-valuenow"])
-      assert.strictEqual(attrs?.["aria-valuetext"], "indeterminate progress")
+      assert.isUndefined(attrs?.["aria-valuetext"])
       assert.strictEqual(Locator.textOf(scene.get(value)), "")
       for (const part of everyPart) {
         expectState(scene.get(part).attrs, "data-indeterminate")
@@ -165,6 +165,7 @@ describe("Progress", () => {
       last.attrs.style ?? "",
       /position:absolute;width:1px;height:1px/
     )
+    assert.match(last.attrs.style ?? "", /user-select:none/)
   })
 
   it("the indicator's width wins over the consumer's inline style, whose other declarations stay", () => {

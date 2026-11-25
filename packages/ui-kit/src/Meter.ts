@@ -19,8 +19,9 @@
  *
  * Each part takes the consumer's builder and returns it, so the consumer
  * goes on chaining and adds children with `.children(...)`. `root`
- * appends a visually hidden `<span role="presentation">` after all its
- * children, which makes NVDA read the label. `value` fills in the value
+ * appends a visually hidden, non-selectable `<span role="presentation">`
+ * after all its children so NVDA reads the label without leaking into
+ * copied text. `value` fills in the value
  * text when the consumer gives it no children. The other parts add no
  * markup.
  *

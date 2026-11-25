@@ -43,7 +43,7 @@ describe("Checkbox", () => {
             expect(
               checkbox.indicator(h.span.class("tick")).children(needsClock)
             ).type.toBe<Span<Clock>>()
-            const root = checkbox.root(h.button.onClick(Msg.Clicked()))
+            const root = checkbox.root(h.button.on("click", Msg.Clicked()))
               .children(checkbox.indicator(h.span), needsClock)
             expect(root).type.toBe<Button<Clock>>()
             return root

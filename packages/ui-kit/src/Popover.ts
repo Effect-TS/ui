@@ -96,15 +96,16 @@
  *
  * A trigger with `openOnHover` asks the popover to open once the mouse has
  * rested on it for `delay` milliseconds, 300 by default, with the reason
- * `trigger-hover`. A popover opened that way takes no focus, is never modal,
- * doesn't close when focus moves, and its backdrop takes no presses. It asks
- * to close, with `trigger-hover`, `closeDelay` milliseconds after the pointer
- * has left both the trigger and the positioner. A layer that covers the
- * trigger and gives the pointer back where it rested is no new hover. A press
- * on the trigger within 500 milliseconds of the hover keeps it open, as a
- * popover opened by a press, so a click that was already on its way doesn't
- * close it. After that a press closes it. Hovering another trigger with
- * `openOnHover` while the popover is open moves it there at once.
+ * `trigger-hover`. A popover opened that way takes no focus, gives no focus
+ * back when it closes, is never modal, doesn't close when focus moves, and its
+ * backdrop takes no presses. It asks to close, with `trigger-hover`,
+ * `closeDelay` milliseconds after the pointer has left both the trigger and
+ * the positioner. A layer that covers the trigger and gives the pointer back
+ * where it rested is no new hover. A press on the trigger within 500
+ * milliseconds of the hover keeps it open, as a popover opened by a press, so
+ * a click that was already on its way doesn't close it. After that a press
+ * closes it. Hovering another trigger with `openOnHover` while the popover is
+ * open moves it there at once.
  *
  * **Several triggers**
  *

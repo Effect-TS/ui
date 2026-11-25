@@ -47,10 +47,10 @@ export const ConfirmDialog = Html.component({
     }),
   view: (h) =>
     h.dialog.attr("aria-label", "Confirm").modal(h.props.open)
-      .onCancel(ConfirmDialogMessage.CancelledDialog())
-      .onClose(ConfirmDialogMessage.ClosedDialog())
+      .on("cancel", ConfirmDialogMessage.CancelledDialog())
+      .on("close", ConfirmDialogMessage.ClosedDialog())
       .children(
-        h.button.onClick(ConfirmDialogMessage.ClickedConfirm()).children(
+        h.button.on("click", ConfirmDialogMessage.ClickedConfirm()).children(
           "Confirm"
         )
       )
@@ -80,7 +80,7 @@ export const Page = Html.component({
     }),
   view: (h, model) =>
     h.div(
-      h.button.onClick(PageMessage.ClickedDelete()).children("Delete"),
+      h.button.on("click", PageMessage.ClickedDelete()).children("Delete"),
       model.deleted && h.p.children("Deleted"),
       ConfirmDialog(h, {
         props: { open: model.confirming },
@@ -134,11 +134,11 @@ export const Wizard = Html.component({
     }),
   view: (h, model) =>
     h.dialog.attr("aria-label", "Import").modal(true)
-      .onCancel(WizardMessage.ClickedCancel())
-      .onClose(WizardMessage.ClosedDialog())
+      .on("cancel", WizardMessage.ClickedCancel())
+      .on("close", WizardMessage.ClosedDialog())
       .children(
         h.p.children(`Step ${model.step + 1} of ${h.props.steps}`),
-        h.button.onClick(WizardMessage.ClickedNext()).children("Next")
+        h.button.on("click", WizardMessage.ClickedNext()).children("Next")
       )
 })
 
@@ -166,7 +166,7 @@ export const Host = Html.component({
     }),
   view: (h, model) =>
     h.div(
-      h.button.onClick(HostMessage.ClickedImport()).children("Import"),
+      h.button.on("click", HostMessage.ClickedImport()).children("Import"),
       h.p.children(`Imported ${model.imported}`),
       model.importing && Wizard(h, {
         props: { steps: 3 },
@@ -230,7 +230,7 @@ export const OpenButton = Html.component({
         $.send(ModalProvider, ModalProviderMessage.RequestedOpen())
     }),
   view: (h) =>
-    h.button.onClick(OpenButtonMessage.ClickedOpen()).children("Open")
+    h.button.on("click", OpenButtonMessage.ClickedOpen()).children("Open")
 })
 
 // Two events, two messages; they share the handler in `update`.
@@ -296,7 +296,7 @@ export const Counter = Html.component({
       ClickedIncrement: () => ({ count: $.model.count + 1 })
     }),
   view: (h, model) =>
-    h.button.onClick(CounterMessage.ClickedIncrement()).children(
+    h.button.on("click", CounterMessage.ClickedIncrement()).children(
       String(model.count)
     )
 })
@@ -325,9 +325,9 @@ export const Dual = Html.component({
   // Counter above is a seed.
   view: (h, model) =>
     h.div(
-      h.button.onClick(DualMessage.ClickedOpen()).children("Open"),
+      h.button.on("click", DualMessage.ClickedOpen()).children("Open"),
       h.dialog.modal(model.open || h.props.open).children(
-        h.button.onClick(DualMessage.ClickedClose()).children("Close")
+        h.button.on("click", DualMessage.ClickedClose()).children("Close")
       )
     )
 })

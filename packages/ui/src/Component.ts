@@ -1682,8 +1682,8 @@ export interface PartsHelper<Msg, Props, V extends View.Elements> {
    *     }),
    *   parts: (p, open) => ({
    *     open,
-   *     trigger: p.part("button", (b) => b.onClick(DialogMessage.Opened())),
-   *     close: p.part("button", (b) => b.onClick(DialogMessage.Closed()))
+   *     trigger: p.part("button", (b) => b.on("click", DialogMessage.Opened())),
+   *     close: p.part("button", (b) => b.on("click", DialogMessage.Closed()))
    *   })
    * })
    *
@@ -3423,7 +3423,7 @@ export interface Define<V extends View.Elements> {
  *   init: () => true,
  *   update: ($) => !$.model,
  *   view: (h, open) =>
- *     h.el("section", h.el("h2", h.slots.title), h.el("button").onClick("ClickedToggle"), open && h.slots.body)
+ *     h.el("section", h.el("h2", h.slots.title), h.el("button").on("click", "ClickedToggle"), open && h.slots.body)
  * })
  *
  * export const Page = Component.define({
@@ -3437,7 +3437,7 @@ export interface Define<V extends View.Elements> {
  *   view: (h, likes) =>
  *     Card(h, {
  *       key: "card",
- *       slots: { title: "Likes", body: h.el("button").onClick("ClickedLike").children(`${likes} likes`) }
+ *       slots: { title: "Likes", body: h.el("button").on("click", "ClickedLike").children(`${likes} likes`) }
  *     })
  * })
  * ```

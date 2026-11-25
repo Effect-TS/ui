@@ -209,7 +209,7 @@ const Pair = Html.component({
   update: { ClickedAdd: ($) => $.evolve({ n: $.model.n + 1 }) },
   view: (h, model) =>
     h.div(
-      h.button.onClick(PairMessage.ClickedAdd()).children("Add"),
+      h.button.on("click", PairMessage.ClickedAdd()).children("Add"),
       Slot.render(h, { key: "s", props: {}, fallback: () => h.em("fallback") }),
       Shown(h, { key: "a", props: { n: model.n } }),
       Shown(h, { key: "b", props: { n: model.n } })
@@ -244,8 +244,8 @@ describe("DevTools overlay", { concurrent: false }, () => {
         view: (h, model) =>
           h.div(
             h.output.children(`${model.x}:${model.c}`),
-            h.button.onClick({ _tag: "Move" }).children("Move"),
-            h.button.onClick({ _tag: "Commit" }).children("Commit")
+            h.button.on("click", { _tag: "Move" }).children("Move"),
+            h.button.on("click", { _tag: "Commit" }).children("Commit")
           )
       })
       yield* Effect.scoped(Effect.gen(function*() {
@@ -310,10 +310,10 @@ describe("DevTools overlay", { concurrent: false }, () => {
         view: (h, model) =>
           h.div(
             h.output.attr("data-peer", h.props.label).children(String(model.v)),
-            h.button.onClick(PairMoveMessage.Move()).children(
+            h.button.on("click", PairMoveMessage.Move()).children(
               "Move " + h.props.label
             ),
-            h.button.onClick(PairMoveMessage.Commit()).children(
+            h.button.on("click", PairMoveMessage.Commit()).children(
               "Commit " + h.props.label
             )
           )
@@ -586,7 +586,8 @@ describe("DevTools overlay", { concurrent: false }, () => {
               TriggerEvents.Set({ n: 3 })
             )
         },
-        view: (h) => h.button.onClick(TriggerMessage.Clicked()).children("Go")
+        view: (h) =>
+          h.button.on("click", TriggerMessage.Clicked()).children("Go")
       })
       const ListMessage = UiSchema.TaggedEnum({ Set: { n: Schema.Number } })
       const List = Html.component({
@@ -598,7 +599,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
         update: { Set: (_, { n }) => n },
         view: (h, n) =>
           h.div(
-            h.button.onClick(ListMessage.Set({ n: 1 })).children("One"),
+            h.button.on("click", ListMessage.Set({ n: 1 })).children("One"),
             Trigger(h, {
               key: "t",
               onEmit: { Set: ({ n }) => ListMessage.Set({ n }) }
@@ -883,7 +884,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       }).make({
         init: () => null,
         update: { Pinged: ($) => $.model },
-        view: (h) => h.button.onClick(LeafMessage.Pinged()).children("Ping")
+        view: (h) => h.button.on("click", LeafMessage.Pinged()).children("Ping")
       })
       const Pane = Html.component({
         name: "Pane",
@@ -904,7 +905,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
         update: { Toggled: ($) => !$.model },
         view: (h, on) =>
           h.main(
-            h.button.onClick(HostMessage.Toggled()).children("Toggle"),
+            h.button.on("click", HostMessage.Toggled()).children("Toggle"),
             on ? Pane(h, { key: "p" }) : null
           )
       })
@@ -982,8 +983,8 @@ describe("DevTools overlay", { concurrent: false }, () => {
         },
         view: (h) =>
           h.div.children(
-            h.button.onClick(Message.Typed()).children("Type"),
-            h.button.onClick(Message.Replaced()).children("Replace")
+            h.button.on("click", Message.Typed()).children("Type"),
+            h.button.on("click", Message.Replaced()).children("Replace")
           )
       })
       const app = document.body.appendChild(document.createElement("div"))
@@ -1072,7 +1073,9 @@ describe("DevTools overlay", { concurrent: false }, () => {
         init: () => ({}),
         update: { ClickedUpload: ($) => $.run(Upload.make()) },
         view: (h) =>
-          h.button.onClick(UploaderMessage.ClickedUpload()).children("Upload")
+          h.button.on("click", UploaderMessage.ClickedUpload()).children(
+            "Upload"
+          )
       })
       const Page = Html.component({
         name: "Page",
@@ -1157,7 +1160,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
             ),
           Saved: ($) => $.model
         },
-        view: (h) => h.button.onClick(Message.Escaped()).children("Escape")
+        view: (h) => h.button.on("click", Message.Escaped()).children("Escape")
       })
       const app = document.body.appendChild(document.createElement("div"))
       yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))

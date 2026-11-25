@@ -49,7 +49,7 @@ describe("Dialog", () => {
       props: { open: false },
       view: (dialog) => {
         const trigger = dialog.trigger(
-          h.button.class("open").onClick(Msg.Clicked())
+          h.button.class("open").on("click", Msg.Clicked())
         )
         expect(trigger).type.toBe<Button>()
         expect(dialog.portal(h.dialog)).type.toBe<DialogElement | undefined>()

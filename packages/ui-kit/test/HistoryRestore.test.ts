@@ -86,9 +86,10 @@ const Page = Html.component({
   ],
   view: (h, model) =>
     h.div(
-      h.button.attr("data-testid", "away").onClick(PageMessage.Left()).children(
-        "Away"
-      ),
+      h.button.attr("data-testid", "away").on("click", PageMessage.Left())
+        .children(
+          "Away"
+        ),
       model.route._tag === "Edit"
         ? h.div(
           Popover(h, {

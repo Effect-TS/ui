@@ -875,11 +875,10 @@ export const Tooltip = Html.component({
           .on("mouseenter", TooltipMessage.EnteredTrigger())
           .on("mouseleave", TooltipMessage.LeftTrigger())
           .on("mousedown", TooltipMessage.PressedTrigger())
-          .onClick(TooltipMessage.ClickedTrigger())
-          .onFocus(({ focusVisible }: Html.FocusPayload) =>
-            TooltipMessage.FocusedTrigger({ visible: focusVisible })
-          )
-          .onBlur(TooltipMessage.BlurredTrigger())
+          .on("click", TooltipMessage.ClickedTrigger())
+          .on("focus", ({ focusVisible }: Html.FocusPayload) =>
+            TooltipMessage.FocusedTrigger({ visible: focusVisible }))
+          .on("blur", TooltipMessage.BlurredTrigger())
           .attr("data-tooltip-trigger", triggerId)
     )
     const style = Positioning.positionerStyle(tracked.positionMethod) +

@@ -55,7 +55,7 @@ export const Snake = Html.component({
   view: (h, model) =>
     model.running
       ? h.p(`heading ${model.heading}`)
-      : h.button.onClick(SnakeMessage.ClickedStart()).children("Start"),
+      : h.button.on("click", SnakeMessage.ClickedStart()).children("Start"),
   subscriptions: ({ model }) => [
     model.running && HtmlSubscription.shortcuts([
       {

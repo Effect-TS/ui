@@ -59,22 +59,26 @@ export const Confirm = Html.component({
     }),
   view: (h, model) => {
     const dialog = h.dialog.attr("aria-label", "Delete note?")
-      .onCancel(({ cancelable }) =>
-        ConfirmMessage.Escaped({ forced: cancelable === false })
+      .on(
+        "cancel",
+        ({ cancelable }) =>
+          ConfirmMessage.Escaped({ forced: cancelable === false })
       )
-      .onClose(ConfirmMessage.Closed())
+      .on("close", ConfirmMessage.Closed())
     return h.div(
-      h.button.onClick(ConfirmMessage.Ask()).children("Ask"),
-      h.button.onClick(ConfirmMessage.Remove()).children("Remove"),
+      h.button.on("click", ConfirmMessage.Ask()).children("Ask"),
+      h.button.on("click", ConfirmMessage.Remove()).children("Remove"),
       model.shown &&
         (model.state === "modal"
           ? dialog.modal(true)
           : dialog.open(model.state === "open")).children(
             h.h2("Delete note?"),
-            h.form.attr("method", "dialog").onSubmit(({ entries }) =>
-              ConfirmMessage.Chosen({
-                choice: entries.find(([name]) => name === "choice")?.[1] ?? ""
-              })
+            h.form.attr("method", "dialog").on(
+              "submit",
+              ({ entries }) =>
+                ConfirmMessage.Chosen({
+                  choice: entries.find(([name]) => name === "choice")?.[1] ?? ""
+                })
             ).children(
               h.button.attrs({ name: "choice", value: "keep" }).children(
                 "Keep"

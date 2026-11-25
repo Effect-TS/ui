@@ -91,11 +91,11 @@ export const SearchPageNoDeps = Html.component({
         ),
         h.nav.attr("aria-label", "Pages").children(
           h.button.attr("type", "button").disabled(page <= 1)
-            .onClick(SearchPageMessage.ClickedPage({ page: page - 1 }))
+            .on("click", SearchPageMessage.ClickedPage({ page: page - 1 }))
             .children("Previous"),
           h.span(`Page ${page} of ${results.pages}`),
           h.button.attr("type", "button").disabled(page >= results.pages)
-            .onClick(SearchPageMessage.ClickedPage({ page: page + 1 }))
+            .on("click", SearchPageMessage.ClickedPage({ page: page + 1 }))
             .children("Next")
         )
       )
@@ -108,15 +108,15 @@ export const SearchPageNoDeps = Html.component({
       // most every 200 ms, to stay under the browsers' limits on history
       // calls.
       h.input.attrs({ type: "search", "aria-label": "Search" }).value(q ?? "")
-        .onInput(({ value }) =>
-          SearchPageMessage.UpdatedSearch({ text: value })
+        .on(
+          "input",
+          ({ value }) => SearchPageMessage.UpdatedSearch({ text: value })
         ),
       h.select.attr("aria-label", "Order").value(sort)
-        .onChange(({ value }) =>
+        .on("change", ({ value }) =>
           SearchPageMessage.SelectedOrder({
             sort: value === "desc" ? "desc" : "asc"
-          })
-        )
+          }))
         .children(
           h.option.attr("value", "asc").children("A to Z"),
           h.option.attr("value", "desc").children("Z to A")

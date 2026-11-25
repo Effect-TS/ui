@@ -51,7 +51,7 @@ const Row = Html.component({
   update: ($) => $.model + 1,
   view: (h, clicks) =>
     h.li(
-      h.button.onClick(RowMessage.Clicked()).children(h.props.label),
+      h.button.on("click", RowMessage.Clicked()).children(h.props.label),
       h.span(`${clicks} clicked`),
       h.em(`row ${h.props.label}`)
     )
@@ -252,7 +252,7 @@ describe("HtmlHydrate", () => {
           update: ($) => $.model + 1,
           view: (h, count) =>
             h.div(
-              h.button.onClick(Bumped.Bumped()).children(String(count)),
+              h.button.on("click", Bumped.Bumped()).children(String(count)),
               Panel.render(h, {
                 key: "p",
                 props: {},

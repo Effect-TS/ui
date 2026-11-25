@@ -43,13 +43,13 @@ describe("OpenTuiHost", () => {
               " ",
               h.a.href("https://effect.website").children("link")
             ),
-            h.box.style({ border: true, width: 10 }).onMouseDown(
+            h.box.style({ border: true, width: 10 }).on(
+              "mousedown",
               Message.ClickedIncrement()
             ).children(h.text("[ + ]")),
             h.input.style({ width: 20 }).placeholder("name").value(model.name)
-              .focused(true).onInput(({ value }) =>
-                Message.UpdatedName({ value })
-              ),
+              .focused(true).on("input", ({ value }) =>
+                Message.UpdatedName({ value })),
             model.count > 0
               ? h.text.key("positive").style({ fg: "#00ff00" }).children(
                 "positive!"
@@ -118,7 +118,7 @@ describe("OpenTuiHost", () => {
         view: (h, model) =>
           h.box.style({ flexDirection: "column", width: 30 }).children(
             h.input.style({ width: 20 }).value(model.value).focused(true)
-              .onInput(({ value }) => Message.UpdatedValue({ value })),
+              .on("input", ({ value }) => Message.UpdatedValue({ value })),
             h.text(`val=${model.value}`)
           )
       })
@@ -181,22 +181,27 @@ describe("OpenTuiHost", () => {
           h.box.style({ flexDirection: "column", width: 30, height: 12 })
             .children(
               h.input.style({ width: 20 }).value(model.digits)
-                .focused(model.focusTarget === "input").onInput(({ value }) =>
-                  Message.UpdatedInput({ value })
+                .focused(model.focusTarget === "input").on(
+                  "input",
+                  ({ value }) => Message.UpdatedInput({ value })
                 ),
               h.textarea.style({ width: 20, height: 3 }).value(model.notes)
                 .focused(model.focusTarget === "textarea")
-                .onInput(({ value }) => Message.UpdatedArea({ value })),
+                .on("input", ({ value }) => Message.UpdatedArea({ value })),
               h.select.style({ width: 20, height: 6 }).options([
                 { name: "One", description: "first" },
                 { name: "Two", description: "second" },
                 { name: "Locked", description: "rejected" }
               ]).selectedIndex(model.index)
                 .focused(model.focusTarget === "select")
-                .onSelectionChanged(({ index }) =>
-                  Message.ChangedSelect({ index })
+                .on(
+                  "selectionChanged",
+                  ({ index }) => Message.ChangedSelect({ index })
                 )
-                .onItemSelected(({ index }) => Message.PickedItem({ index })),
+                .on(
+                  "itemSelected",
+                  ({ index }) => Message.PickedItem({ index })
+                ),
               h.text(`tick=${model.tick}`)
             )
       })
@@ -289,10 +294,10 @@ describe("OpenTuiHost", () => {
             .children(
               h.input.ref(First).style({ width: 16 }).value(model.firstText)
                 .focused(model.active === "first")
-                .onInput(({ value }) => Message.UpdatedFirst({ value })),
+                .on("input", ({ value }) => Message.UpdatedFirst({ value })),
               h.input.style({ width: 16 }).value(model.secondText)
                 .focused(model.active === "second")
-                .onInput(({ value }) => Message.UpdatedSecond({ value })),
+                .on("input", ({ value }) => Message.UpdatedSecond({ value })),
               h.scrollbox.ref(Scroll).style({ width: 20, height: 4 }).children(
                 h.text("line 1"),
                 h.text("line 2"),
@@ -671,8 +676,11 @@ describe("OpenTuiHost", () => {
             width: 24,
             height: 6,
             ...(model.bordered ? { border: true } : {})
-          }).onMouseDown(Message.OuterClicked()).children(
-            h.box.style({ width: 12, height: 3 }).onMouseDown(() => undefined)
+          }).on("mousedown", Message.OuterClicked()).children(
+            h.box.style({ width: 12, height: 3 }).on(
+              "mousedown",
+              () => undefined
+            )
               .children(h.text("inner"))
           )
       })
@@ -779,21 +787,26 @@ describe("OpenTuiHost", () => {
                 { name: "Logs", description: "logs tab" },
                 { name: "Locked", description: "rejected tab" }
               ]).focused(model.focus === "controlled")
-                .onSelectionChanged(({ index }) =>
-                  Message.ChangedTab({ index })
+                .on(
+                  "selectionChanged",
+                  ({ index }) => Message.ChangedTab({ index })
                 )
-                .onItemSelected(({ index }) =>
-                  Message.Logged({ entry: `tab:${index}` })
+                .on(
+                  "itemSelected",
+                  ({ index }) => Message.Logged({ entry: `tab:${index}` })
                 ),
               h.tabSelect.style({ width: 40, tabWidth: 12 }).options([
                 { name: "Alpha", description: "alpha tab" },
                 { name: "Beta", description: "beta tab" }
               ]).focused(model.focus === "uncontrolled")
-                .onSelectionChanged(({ index }) =>
-                  Message.Logged({ entry: `utab-change:${index}` })
+                .on(
+                  "selectionChanged",
+                  ({ index }) =>
+                    Message.Logged({ entry: `utab-change:${index}` })
                 )
-                .onItemSelected(({ index }) =>
-                  Message.Logged({ entry: `utab-pick:${index}` })
+                .on(
+                  "itemSelected",
+                  ({ index }) => Message.Logged({ entry: `utab-pick:${index}` })
                 ),
               h.slider.style({
                 orientation: model.vertical ? "vertical" : "horizontal",
@@ -801,16 +814,18 @@ describe("OpenTuiHost", () => {
                 height: model.vertical ? 5 : 1,
                 min: 0,
                 max: 100
-              }).value(model.slider).onChange(({ value }) =>
-                Message.ChangedSlider({ value })
+              }).value(model.slider).on(
+                "change",
+                ({ value }) => Message.ChangedSlider({ value })
               ),
               h.slider.style({
                 width: 20,
                 height: 1,
                 min: 0,
                 max: 100
-              }).onChange(({ value }) =>
-                Message.Logged({ entry: `uslider:${value}` })
+              }).on(
+                "change",
+                ({ value }) => Message.Logged({ entry: `uslider:${value}` })
               ),
               h.text(`tick=${model.tick}`)
             )

@@ -54,9 +54,10 @@ describe("Select", () => {
           key: "s",
           props: { open: false, items },
           view: (select) => {
-            expect(select.trigger(h.button.onClick(Msg.Clicked()))).type.toBe<
-              Button
-            >()
+            expect(select.trigger(h.button.on("click", Msg.Clicked()))).type
+              .toBe<
+                Button
+              >()
             expect(select.value(h.span)).type.toBe<Span>()
             expect(select.label(h.div)).type.toBe<Div>()
             expect(select.positioner(h.div)).type.toBe<Div>()

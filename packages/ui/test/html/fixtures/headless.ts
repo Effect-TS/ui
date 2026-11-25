@@ -169,21 +169,18 @@ export const Menu = MenuDef.make({
             "aria-expanded": String(model.open),
             "aria-controls": p.id("popup")
           })
-          .onClick(MenuMessage.Toggle())
-          .onKeyDown(
-            ({ key }) =>
-              key.length === 1 || key === "ArrowDown"
-                ? MenuMessage.Key({ key })
-                : undefined,
-            {
-              preventDefault: true
-            }
-          )),
+          .on("click", MenuMessage.Toggle())
+          .on("keydown", ({ key }) =>
+            key.length === 1 || key === "ArrowDown"
+              ? MenuMessage.Key({ key })
+              : undefined, {
+            preventDefault: true
+          })),
       popup: p.part("div", (b) =>
         b.id(p.id("popup"))
           .attr("role", "menu")
           .popover("auto", model.open)
-          .onToggle(({ open }) => MenuMessage.Toggled({ open }))),
+          .on("toggle", ({ open }) => MenuMessage.Toggled({ open }))),
       input: p.part("input", (b) =>
         b.ref(Input)
           .attrs({
@@ -194,15 +191,12 @@ export const Menu = MenuDef.make({
               : p.id("item", active)
           })
           .value(model.query)
-          .onInput(({ value }) => MenuMessage.Query({ value }))
-          .onKeyDown(
-            ({ key }) =>
-              key === "ArrowDown" || key === "ArrowUp" || key === "Enter" ||
-                key === "Escape"
-                ? MenuMessage.Key({ key })
-                : undefined,
-            { preventDefault: true }
-          )),
+          .on("input", ({ value }) => MenuMessage.Query({ value }))
+          .on("keydown", ({ key }) =>
+            key === "ArrowDown" || key === "ArrowUp" || key === "Enter" ||
+              key === "Escape"
+              ? MenuMessage.Key({ key })
+              : undefined, { preventDefault: true })),
       item: p.part("li", (b, item: Item) =>
         b.id(p.id("item", item.id))
           .attrs({
@@ -210,7 +204,8 @@ export const Menu = MenuDef.make({
             "aria-disabled": item.disabled === true ? "true" : undefined,
             "data-active": active === item.id ? "" : undefined
           })
-          .onClick(
+          .on(
+            "click",
             item.disabled === true
               ? () => undefined
               : MenuMessage.Pick({ id: item.id })
@@ -239,11 +234,11 @@ export const Dialog = Html.component({
     }),
   parts: (p, model) => ({
     open: model.open,
-    trigger: p.part("button", (b) => b.onClick(DialogMessage.Open())),
+    trigger: p.part("button", (b) => b.on("click", DialogMessage.Open())),
     popup: p.part("dialog", (b) =>
       b.attr("aria-labelledby", p.id("title"))
         .modal(model.open)
-        .onCancel(DialogMessage.Close())),
+        .on("cancel", DialogMessage.Close())),
     title: p.part("h2", (b) => b.id(p.id("title"))),
     // Any element can close the dialog, so the part is declared over the host-neutral builder.
     close: p.part((b) =>

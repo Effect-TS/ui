@@ -70,7 +70,7 @@ const Frame = Html.component({
   view: (h, shown) => {
     frameViews++
     return h.div(
-      h.button.onClick(Toggle.Toggle()).children("toggle"),
+      h.button.on("click", Toggle.Toggle()).children("toggle"),
       shown && h.slots.body
     )
   }
@@ -90,8 +90,8 @@ const Editor = Html.component({
   },
   view: (h, n) =>
     h.span(
-      h.button.onClick(EditorMsg.Typed()).children("type " + n),
-      h.button.onClick(EditorMsg.Break()).children("break")
+      h.button.on("click", EditorMsg.Typed()).children("type " + n),
+      h.button.on("click", EditorMsg.Break()).children("break")
     )
 })
 
@@ -217,14 +217,14 @@ describe("slots", () => {
             update: () => true,
             view: (h, filled) =>
               h.div(
-                h.button.onClick(LateMsg.Fill()).children("fill"),
+                h.button.on("click", LateMsg.Fill()).children("fill"),
                 // No slots at first: the content comes with a later render.
                 filled
                   ? Frame(h, {
                     key: "f",
                     slots: {
                       body: [
-                        h.button.onClick(LateMsg.Hit()).children("hit"),
+                        h.button.on("click", LateMsg.Hit()).children("hit"),
                         Badge.render(h, {
                           key: "b",
                           fallback: () => h.span("no badge")

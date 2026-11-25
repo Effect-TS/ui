@@ -33,9 +33,10 @@ describe("Avatar", () => {
             expect(avatar.image(h.img.attr("alt", "Ada"))).type.toBe<
               AvatarImg<Msg> | undefined
             >()
-            expect(avatar.fallback(h.span.onClick(Msg.Clicked()))).type.toBe<
-              AvatarSpan<Msg> | undefined
-            >()
+            expect(avatar.fallback(h.span.on("click", Msg.Clicked()))).type
+              .toBe<
+                AvatarSpan<Msg> | undefined
+              >()
             const fallback = avatar.fallback(h.span)?.children("AL", needsClock)
             expect(fallback).type.toBe<AvatarSpan<Msg, Clock> | undefined>()
             const root = avatar.root(h.span).children(

@@ -103,13 +103,13 @@ const EditorNoDeps = Html.component({
   view: (h, model) =>
     h.section.attr("aria-label", "Editor " + h.props.noteId).children(
       h.textarea.attr("aria-label", "Body " + h.props.noteId).value(model.draft)
-        .onInput(({ value }) => EditorMessage.UpdatedDraft({ text: value }))
+        .on("input", ({ value }) => EditorMessage.UpdatedDraft({ text: value }))
         .onMount(
           FocusBody({ noteId: h.props.noteId }).pipe(
             Mount.map(() => EditorMessage.CompletedFocusBody())
           )
         ),
-      h.button.onClick(EditorMessage.ClickedSave()).children(
+      h.button.on("click", EditorMessage.ClickedSave()).children(
         "Save " + h.props.noteId
       ),
       h.p(model.status)
@@ -138,9 +138,10 @@ const Workspace = Html.component({
             key: noteId,
             props: { noteId, token: Redacted.make("tok_live_9f2c") }
           }),
-          h.button.onClick(WorkspaceMessage.ClickedClose({ noteId })).children(
-            "Close " + noteId
-          )
+          h.button.on("click", WorkspaceMessage.ClickedClose({ noteId }))
+            .children(
+              "Close " + noteId
+            )
         )
       )
     )

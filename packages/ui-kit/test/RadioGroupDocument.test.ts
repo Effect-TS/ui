@@ -68,14 +68,17 @@ const Host = Html.component({
           )
       }),
       ...items.map(({ value }) =>
-        h.button.attrs({ type: "button", "data-set": value }).onClick(
+        h.button.attrs({ type: "button", "data-set": value }).on(
+          "click",
           RadioGroupHostMessage.SetValue({ value })
         )
       ),
-      h.button.attrs({ type: "button", "data-readonly-toggle": "" }).onClick(
+      h.button.attrs({ type: "button", "data-readonly-toggle": "" }).on(
+        "click",
         RadioGroupHostMessage.SetReadOnly({ readOnly: !model.readOnly })
       ),
-      h.button.attrs({ type: "button", "data-indicators-toggle": "" }).onClick(
+      h.button.attrs({ type: "button", "data-indicators-toggle": "" }).on(
+        "click",
         RadioGroupHostMessage.SetShowIndicators({ show: !model.showIndicators })
       )
     )

@@ -391,13 +391,14 @@ export const ToggleGroup = Html.component({
         props.value.includes(value),
         itemDisabled(props, toolbar, entry)
       )
-        .onClick(ToggleGroupMessage.ClickedItem({ value }))
+        .on("click", ToggleGroupMessage.ClickedItem({ value }))
       if (toolbar !== undefined) return pressed
       return pressed
         .attr("tabindex", value === tabStop ? "0" : "-1")
         .ref(Item.at(value))
-        .onFocus(ToggleGroupMessage.FocusedItem({ value }))
-        .onKeyDown(
+        .on("focus", ToggleGroupMessage.FocusedItem({ value }))
+        .on(
+          "keydown",
           ({ alt, ctrl, key, meta, shift }) =>
             alt || ctrl || meta || shift ||
               !(key === axis.next || key === axis.previous || key === "Home" ||

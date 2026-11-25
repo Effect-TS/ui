@@ -227,7 +227,10 @@ export const UserCard = Html.component({
         h.article(
           h.h2(user.name),
           h.p(user.email),
-          h.button.attr("aria-label", "Like").onClick(UserCardMessage.Like())
+          h.button.attr("aria-label", "Like").on(
+            "click",
+            UserCardMessage.Like()
+          )
             .children(
               `♥ ${user.likes}`
             ),
@@ -299,15 +302,18 @@ export const RenameForm = Html.component({
       onInitial: () => h.p("Loading…"),
       onFailure: () => h.p("There is nothing to rename."),
       onSuccess: ({ value: user }) =>
-        h.form.onSubmit(RenameFormMessage.Save()).children(
+        h.form.on("submit", RenameFormMessage.Save()).children(
           h.input.attr("aria-label", "Name").value(
             Option.getOrElse(model.draft, () => user.name)
           )
-            .onInput(({ value }) => RenameFormMessage.Edit({ name: value })),
+            .on(
+              "input",
+              ({ value }) => RenameFormMessage.Edit({ name: value })
+            ),
           h.button.attr("type", "submit").disabled(Option.isNone(model.draft))
             .children("Save"),
           h.button.attr("type", "button").disabled(Option.isNone(model.draft))
-            .onClick(RenameFormMessage.Cancel()).children("Cancel"),
+            .on("click", RenameFormMessage.Cancel()).children("Cancel"),
           // This instance has a save of this user queued or running.
           h.isRunning(RenameUser, { id: h.props.id }) && h.small("Saving…"),
           Option.match(model.error, {
@@ -333,7 +339,7 @@ export const DetailPage = Html.component({
   view: (h, model) =>
     h.section(
       UserCard(h, { key: "card", props: { id: h.props.id } }),
-      h.button.onClick(DetailPageMessage.ToggleRename()).children(
+      h.button.on("click", DetailPageMessage.ToggleRename()).children(
         model.renaming ? "Close" : "Rename"
       ),
       model.renaming &&
@@ -382,12 +388,14 @@ export const ListPage = Html.component({
           ),
           h.nav(
             h.button.disabled(model.page === 0)
-              .onClick(ListPageMessage.GoTo({ page: model.page - 1 })).children(
+              .on("click", ListPageMessage.GoTo({ page: model.page - 1 }))
+              .children(
                 "Previous"
               ),
             h.span(`Page ${page + 1} of ${pages}`),
             h.button.disabled(model.page >= pages - 1)
-              .onClick(ListPageMessage.GoTo({ page: model.page + 1 })).children(
+              .on("click", ListPageMessage.GoTo({ page: model.page + 1 }))
+              .children(
                 "Next"
               ),
             model.page !== page && h.small(`Loading page ${model.page + 1}…`)

@@ -27,13 +27,13 @@ export const Counter = Html.component({
       h.button
         .class("counter-button")
         .attr("aria-label", "Decrement")
-        .onClick(CounterMessage.ClickedDecrement())
+        .on("click", CounterMessage.ClickedDecrement())
         .children("-"),
       h.output.class("counter-value").children(String(model.count)),
       h.button
         .class("counter-button")
         .attr("aria-label", "Increment")
-        .onClick(CounterMessage.ClickedIncrement())
+        .on("click", CounterMessage.ClickedIncrement())
         .children("+")
     )
 })

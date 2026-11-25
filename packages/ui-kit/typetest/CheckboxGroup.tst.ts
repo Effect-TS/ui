@@ -42,7 +42,7 @@ describe("CheckboxGroup", () => {
             expect(checkboxGroup.root(h.fieldset)).type.toBe<
               Element<"fieldset">
             >()
-            const root = checkboxGroup.root(h.div.onClick(Msg.Clicked()))
+            const root = checkboxGroup.root(h.div.on("click", Msg.Clicked()))
               .children(
                 Checkbox(h, {
                   props: { parent: true },

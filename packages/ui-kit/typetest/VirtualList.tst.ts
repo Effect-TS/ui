@@ -88,7 +88,10 @@ describe("VirtualList", () => {
         >()
         expect(virtualList.list(h.ul)).type.toBe<Ul<never>>()
         expect(
-          virtualList.item({ element: h.li.onClick(Msg.Clicked()), index: 0 })
+          virtualList.item({
+            element: h.li.on("click", Msg.Clicked()),
+            index: 0
+          })
         ).type.toBe<Li<never>>()
 
         const item = virtualList.item({
@@ -114,6 +117,7 @@ describe("VirtualList", () => {
       },
       view: (virtualList) => {
         expect(virtualList.table(h.table)).type.toBe<Table>()
+        expect(virtualList.table(h.div)).type.toBe<Div<never>>()
         expect(virtualList.list(h.tbody)).type.toBe<Tbody>()
         expect(virtualList.item({ element: h.tr, index: 0 })).type.toBe<Tr>()
         return virtualList.table(h.table).children(virtualList.list(h.tbody))

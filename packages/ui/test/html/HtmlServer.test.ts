@@ -111,7 +111,7 @@ const hydrateRows = Effect.fnUntraced(
       ],
       view: (h, clicks) =>
         h.li(
-          h.button.onClick(RowMessage.Clicked()).onMount(Seen()).children(
+          h.button.on("click", RowMessage.Clicked()).onMount(Seen()).children(
             h.props.label
           ),
           h.span(`${clicks} clicked`),
@@ -1140,7 +1140,7 @@ describe("HtmlServer", { concurrent: false }, () => {
             : { ...$.model, clicks: $.model.clicks + 1 },
         view: (h, model) =>
           h.button
-            .onClick(Message.Clicked())
+            .on("click", Message.Clicked())
             .onMount(mountSending("Mounted", Message.Mounted())).children(
               `${model.clicks} ${model.mounted ? "mounted" : "server"}`
             )
@@ -1230,24 +1230,25 @@ describe("HtmlServer", { concurrent: false }, () => {
             (field: string) => ({ value }: { readonly value: string }) =>
               Message.Input({ field, value })
           return h.form(
-            h.input.attr("aria-label", "Name").value(model.name).onInput(
+            h.input.attr("aria-label", "Name").value(model.name).on(
+              "input",
               input("name")
             )
-              .onChange(({ value }) =>
-                Message.Change({ field: "name", value })
-              ),
-            h.input.attr("aria-label", "Other").value(model.other).onInput(
+              .on("change", ({ value }) =>
+                Message.Change({ field: "name", value })),
+            h.input.attr("aria-label", "Other").value(model.other).on(
+              "input",
               input("other")
             ),
-            h.textarea.attr("aria-label", "Note").value(model.note).onInput(
+            h.textarea.attr("aria-label", "Note").value(model.note).on(
+              "input",
               input("note")
             ),
             h.input.attrs({ type: "checkbox", "aria-label": "Agree" }).checked(
               model.agree
             )
-              .onChange(({ checked }) =>
-                Message.Change({ field: "agree", value: String(checked) })
-              )
+              .on("change", ({ checked }) =>
+                Message.Change({ field: "agree", value: String(checked) }))
           )
         }
       })
@@ -1347,13 +1348,17 @@ describe("HtmlServer", { concurrent: false }, () => {
               "aria-label": value,
               form: "choices"
             })
-              .checked(model.choice === value).onChange(() =>
-                Message.Change({ field: "choice", value })
+              .checked(model.choice === value).on(
+                "change",
+                () => Message.Change({ field: "choice", value })
               )
           )
           // The browser starts on B: A is disabled by its group.
           const select = h.select.attr("aria-label", "Pick").value(model.pick)
-            .onChange(({ value }) => Message.Change({ field: "pick", value }))
+            .on(
+              "change",
+              ({ value }) => Message.Change({ field: "pick", value })
+            )
             .children(
               h.optgroup.attr("disabled", "").children(
                 h.option.attr("value", "a").children("A")

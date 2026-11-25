@@ -38,7 +38,7 @@ const Toolbar = Html.component({
               menu.visible.length === 0 && h.p("No actions found."),
               h.ul.children(menu.visible.map((item) =>
                 menu.item(h.li.key(item.id), item)
-                  .onClick(ToolbarMessage.Clicked({ id: item.id }))
+                  .on("click", ToolbarMessage.Clicked({ id: item.id }))
                   .children(item.label)
               ))
             )
@@ -283,15 +283,15 @@ describe("headless components in a story", () => {
           count,
           one: p.part(
             "button",
-            (b) => b.onClick("one", { preventDefault: true })
+            (b) => b.on("click", "one", { preventDefault: true })
           ),
-          ten: p.part("button", (b) => b.onClick("ten"))
+          ten: p.part("button", (b) => b.on("click", "ten"))
         })
       })
       const scene = yield* Scene.make(Dual, {}, {
         elements: Html,
         view: (dual, h) =>
-          dual.ten(dual.one(h.button)).onClick(() => undefined, {
+          dual.ten(dual.one(h.button)).on("click", () => undefined, {
             preventDefault: false
           }).children("both")
       })
@@ -312,7 +312,8 @@ describe("headless components in a story", () => {
           parts: (p) => ({
             link: p.part(
               "a",
-              (b) => b.onClick(() => undefined, { preventDefault: "always" })
+              (b) =>
+                b.on("click", () => undefined, { preventDefault: "always" })
             )
           })
         }
@@ -331,7 +332,7 @@ describe("headless components in a story", () => {
             {
               key: "g",
               view: (guard) =>
-                guard.link(h.a).onClick(Clicked.Clicked()).children("go")
+                guard.link(h.a).on("click", Clicked.Clicked()).children("go")
             }
           )
       })
@@ -362,9 +363,12 @@ describe("headless components in a story", () => {
           $.model + (message === "one" ? 1 : message === "ten" ? 10 : 100),
         parts: (p, count) => ({
           count,
-          one: p.part("div", (b) => b.onClick("one", { preventDefault: true })),
-          ten: p.part("div", (b) => b.onClick("ten")),
-          hundred: p.part("button", (b) => b.onClick("hundred"))
+          one: p.part(
+            "div",
+            (b) => b.on("click", "one", { preventDefault: true })
+          ),
+          ten: p.part("div", (b) => b.on("click", "ten")),
+          hundred: p.part("button", (b) => b.on("click", "hundred"))
         })
       })
       const scene = yield* Scene.make(Outer, {}, {
@@ -400,9 +404,8 @@ describe("headless components in a story", () => {
             zone: p.part(
               "div",
               (b) =>
-                b.onDrop((payload) => payload.data["text/plain"], {
-                  accepts: ["text/plain"]
-                })
+                b.dropTarget({ accepts: ["text/plain"] })
+                  .on("drop", (payload) => payload.data["text/plain"])
             )
           })
         })

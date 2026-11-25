@@ -176,7 +176,7 @@ export const Input = <Msg, R = never>(
       })
       .disabled(disabled)
     return !disabled && onUpdate !== undefined
-      ? input.onInput(({ value }) => onUpdate({ value }))
+      ? input.on("input", ({ value }) => onUpdate({ value }))
       : input
   })
 }

@@ -223,7 +223,7 @@ A message is one fact. The tag says which fact, and the payload holds what the
 event reported. Two events get two messages, even when their handlers differ
 only by a constant. Focus and blur are `FocusedSearchInput` and
 `BlurredSearchInput`, not `ChangedSearchInputFocus({ focused })` sent with
-`true` from `onFocus` and `false` from `onBlur`. A payload the view writes as
+`true` on `focus` and `false` on `blur`. A payload the view writes as
 a literal is choosing between two facts, which is the tag's job. Keep one
 message when one event reports a value, as in `UpdatedBody({ body })` or
 `ToggledActions({ open })`, or when the payload says which of many, as in
@@ -720,10 +720,10 @@ Choose a popup by who decides when it closes:
 
 - With an `open` prop, use `.popover("manual", open)`. Report Escape and an
   outside press as dismissal requests, which the caller can refuse.
-- Use `.popover("auto", open)` with `onToggle` only if the component owns
+- Use `.popover("auto", open)` with a `toggle` handler only if the component owns
   `open` in its Model and nobody can refuse a browser dismissal.
 - For a controlled modal where the browser should own modality, use a dialog
-  with `.modal(open)`. `onCancel` is a dismissal request. `onClose` reports a
+  with `.modal(open)`. `cancel` is a dismissal request. `close` reports a
   close, the caller's own included, so treat it as a dismissal only while
   `$.props.open` is still true: a browser can force a modal closed, and the
   host reopens it while the prop stays true. TestHost doesn't model the forced

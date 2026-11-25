@@ -38,7 +38,7 @@ describe("Meter", () => {
             expect(meter.label(h.span).children(needsClock)).type.toBe<
               Span<Clock>
             >()
-            expect(meter.value(h.span.onClick(Msg.Clicked()))).type.toBe<
+            expect(meter.value(h.span.on("click", Msg.Clicked()))).type.toBe<
               Span<never>
             >()
             expect(meter.track(h.div)).type.toBe<Div<never>>()

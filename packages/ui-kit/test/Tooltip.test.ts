@@ -57,7 +57,7 @@ const Button = <Msg, R>(
   )
   return options.onPress === undefined
     ? element
-    : element.onClick(options.onPress)
+    : element.on("click", options.onPress)
 }
 
 // A parent that opens the tooltip on a styled Button and counts what it hears.
@@ -196,7 +196,7 @@ const Pages = Html.component({
   ],
   view: (h, route) =>
     h.div(
-      h.a.onClick(PagesMessage.Left()).children("Away"),
+      h.a.on("click", PagesMessage.Left()).children("Away"),
       route._tag === "Tips" ? Grouped(h, { key: "tips" }) : null
     )
 })

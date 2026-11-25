@@ -115,7 +115,7 @@ describe("Toggle", () => {
     assert.deepStrictEqual(
       View.build(
         Toggle(h, {
-          element: h.button.onClick(clicked),
+          element: h.button.on("click", clicked),
           props: { pressed: false }
         }),
         []
@@ -127,13 +127,18 @@ describe("Toggle", () => {
       assert.throws(
         () =>
           View.build(
-            Toggle(h, { element: h.button.onClick(clicked), props, onToggle }),
+            Toggle(h, {
+              element: h.button.on("click", clicked),
+              props,
+              onToggle
+            }),
             []
           ),
         /Toggle: the element already handles click/
       )
       assert.throws(
-        () => View.build(Toggle(h, { props, onToggle }).onClick(clicked), []),
+        () =>
+          View.build(Toggle(h, { props, onToggle }).on("click", clicked), []),
         /Toggle: the element already handles click/
       )
     }

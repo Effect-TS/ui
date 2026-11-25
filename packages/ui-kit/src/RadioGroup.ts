@@ -568,34 +568,31 @@ export const RadioGroup = Html.component({
           tabindex: value === tabStop ? "0" : "-1"
         })
         .disabled(state.disabled)
-        .onClick(RadioGroupMessage.ClickedRadio({ value }))
-        .onFocus(RadioGroupMessage.FocusedRadio({ value }))
-        .onKeyDown(
-          ({ alt, ctrl, key, meta }) => {
-            if (key === "Enter") return RadioGroupMessage.PressedEnter()
-            if (ctrl || alt || meta) return undefined
-            if (key === "ArrowDown") {
-              return RadioGroupMessage.PressedArrow({ value, direction: 1 })
-            }
-            if (key === "ArrowUp") {
-              return RadioGroupMessage.PressedArrow({ value, direction: -1 })
-            }
-            if (key === "ArrowRight") {
-              return RadioGroupMessage.PressedArrow({
-                value,
-                direction: rtl ? -1 : 1
-              })
-            }
-            if (key === "ArrowLeft") {
-              return RadioGroupMessage.PressedArrow({
-                value,
-                direction: rtl ? 1 : -1
-              })
-            }
-            return undefined
-          },
-          { preventDefault: true }
-        )
+        .on("click", RadioGroupMessage.ClickedRadio({ value }))
+        .on("focus", RadioGroupMessage.FocusedRadio({ value }))
+        .on("keydown", ({ alt, ctrl, key, meta }) => {
+          if (key === "Enter") return RadioGroupMessage.PressedEnter()
+          if (ctrl || alt || meta) return undefined
+          if (key === "ArrowDown") {
+            return RadioGroupMessage.PressedArrow({ value, direction: 1 })
+          }
+          if (key === "ArrowUp") {
+            return RadioGroupMessage.PressedArrow({ value, direction: -1 })
+          }
+          if (key === "ArrowRight") {
+            return RadioGroupMessage.PressedArrow({
+              value,
+              direction: rtl ? -1 : 1
+            })
+          }
+          if (key === "ArrowLeft") {
+            return RadioGroupMessage.PressedArrow({
+              value,
+              direction: rtl ? 1 : -1
+            })
+          }
+          return undefined
+        }, { preventDefault: true })
     }))
 
     const indicatorPart = p.part("span", (b, value: string) => {

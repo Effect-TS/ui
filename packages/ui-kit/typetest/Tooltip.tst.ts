@@ -38,7 +38,7 @@ describe("Tooltip", () => {
           props: { open: false },
           view: (tooltip) => {
             const trigger = tooltip.trigger(
-              h.button.class("tool").onClick(Msg.Clicked())
+              h.button.class("tool").on("click", Msg.Clicked())
             )
             expect(trigger).type.toBe<Button>()
             expect(tooltip.positioner(h.div)).type.toBe<Div>()

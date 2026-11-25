@@ -35,7 +35,8 @@ export const AbsoluteDemo = Html.component({
   view: (h, model) =>
     h.div.class("page").children(
       h.div.class("toolbar").children(
-        h.button.attr("id", "toggle-layout").onClick(
+        h.button.attr("id", "toggle-layout").on(
+          "click",
           AbsoluteMessage.ToggledLayout()
         ).children(
           model.absolute ? "Use the flow layout" : "Use the absolute layout"
@@ -60,7 +61,8 @@ export const AbsoluteDemo = Html.component({
                 })
                   .attr("style", `height:${heightOf(index, model.grown)}px`)
                   .children(
-                    h.button.class("row-button").onClick(
+                    h.button.class("row-button").on(
+                      "click",
                       AbsoluteMessage.ToggledRow({ index })
                     ).children(
                       "Row " + index

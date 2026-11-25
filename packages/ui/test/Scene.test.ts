@@ -387,7 +387,7 @@ describe("Scene", () => {
             )
           ),
           h.p(log.join(", ")),
-          h.button.onClick("clicked").children("go")
+          h.button.on("click", "clicked").children("go")
         )
     })
     const log = Locator.tag("p")

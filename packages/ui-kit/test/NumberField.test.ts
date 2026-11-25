@@ -106,9 +106,9 @@ describe("NumberField", () => {
         autocomplete: "off",
         autocorrect: "off",
         spellcheck: "false",
-        "aria-roledescription": "Number field",
         form: "order"
       })
+      assert.isUndefined(scene.get(input).attrs?.["aria-roledescription"])
       assert.isUndefined(scene.get(input).attrs?.name)
       assert.strictEqual(text(scene), "1,234.5")
       assert.strictEqual(scene.get(group).attrs?.role, "group")
@@ -184,7 +184,6 @@ describe("NumberField", () => {
                     id: "amount",
                     type: "number",
                     inputmode: "tel",
-                    "aria-roledescription": "Amount",
                     autocomplete: "transaction-amount",
                     readonly: "",
                     "aria-disabled": "true"
@@ -220,7 +219,6 @@ describe("NumberField", () => {
         id: "amount",
         type: "text",
         inputmode: "numeric",
-        "aria-roledescription": "Amount",
         autocomplete: "transaction-amount",
         disabled: ""
       })

@@ -29,7 +29,8 @@ const Sender = Html.component({
       $.send(CheckboxGroup, { _tag: "ToggledItem", value: "pear" })
   },
   view: (h) =>
-    h.button.class("sender").attr("type", "button").onClick(
+    h.button.class("sender").attr("type", "button").on(
+      "click",
       SenderMessage.Clicked()
     )
 })
@@ -142,10 +143,12 @@ const Basket = Html.component({
             })
           )
       }),
-      h.button.class("lock").attr("type", "button").onClick(
+      h.button.class("lock").attr("type", "button").on(
+        "click",
         BasketMessage.ToggledLock()
       ).children("Lock"),
-      h.button.class("freeze").attr("type", "button").onClick(
+      h.button.class("freeze").attr("type", "button").on(
+        "click",
         BasketMessage.ToggledFreeze()
       ).children("Freeze plum")
     )

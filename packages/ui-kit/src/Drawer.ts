@@ -20,6 +20,8 @@
  * | `viewport`     | `<div>` that positions the popup                         |
  * | `popup`        | `<div>` with the drawer's content, which a swipe moves   |
  * | `content`      | `<div>` inside the popup where a mouse drag selects text |
+ * | `snapTrigger`  | `<button>` that moves the drawer to its next snap point |
+ * | `snapStatus`   | `<div>` live region for the current snap point           |
  * | `title`, `description`, `close`, `initialFocus`, `finalFocus` | as for a `Dialog` |
  *
  * Each part takes the consumer's builder and returns it, as a `Dialog`'s do:
@@ -93,11 +95,25 @@
  * the keyboard leaves, and a modal drawer keeps the page from scrolling
  * under it.
  *
+ * With `snapPoints`, `snapTrigger` emits `Snapped` on Enter, Space, click or
+ * tap. It cycles through distinct snap points in height order, wrapping from
+ * tallest to lowest without closing the drawer. Before measurement, it uses
+ * the order of `snapPoints` instead. The button is disabled for horizontal
+ * drawers or when fewer than two distinct snap points are available.
+ *
+ * Give `snapTrigger` an accessible name and render the current position as
+ * `snapStatus`'s children. This polite live region announces text changes
+ * after a press or swipe; the kit supplies no text. To also describe the
+ * position when the button receives focus, set its `aria-describedby` to
+ * the status's `id`.
+ *
  * **Limits**
  *
  * - The popup carries the swipe's mount and the viewport the keyboard's, so
  *   neither takes a mount of the consumer's.
  * - Snap points apply to a drawer that swipes `up` or `down`.
+ * - A mouse or a pen doesn't swipe from `snapTrigger`, as from any button.
+ *   A finger does, and that swipe doesn't press it.
  * - On the server, and on a host that doesn't run mounts, nothing swipes.
  *
  * **Example** (A bottom sheet whose open state lives in the consumer's Model)
@@ -105,29 +121,34 @@
  * ```ts import.meta.vitest
  * import { UiSchema } from "@effect/ui"
  * import { Html, HtmlServer } from "@effect/ui/html"
- * import { Drawer } from "@effect/ui-kit"
+ * import { Drawer, DrawerSnapPoint } from "@effect/ui-kit"
  * import { Effect, Schema } from "effect"
  *
- * const PageMessage = UiSchema.TaggedEnum({ RequestedOpenFilters: {}, RequestedCloseFilters: {} })
+ * const PageMessage = UiSchema.TaggedEnum({
+ *   RequestedOpenFilters: {},
+ *   RequestedCloseFilters: {},
+ *   SnappedFilters: { snapPoint: DrawerSnapPoint }
+ * })
  *
  * const Page = Html.component({
  *   name: "Page",
- *   model: Schema.Struct({ open: Schema.Boolean }),
+ *   model: Schema.Struct({ open: Schema.Boolean, snapPoint: DrawerSnapPoint }),
  *   message: PageMessage
  * }).make({
- *   init: () => ({ open: true }),
+ *   init: () => ({ open: true, snapPoint: 0.5 }),
  *   update: {
- *     RequestedOpenFilters: () => ({ open: true }),
- *     RequestedCloseFilters: () => ({ open: false })
+ *     RequestedOpenFilters: ($) => $.evolve({ open: true }),
+ *     RequestedCloseFilters: ($) => $.evolve({ open: false }),
+ *     SnappedFilters: ($, { snapPoint }) => $.evolve({ snapPoint })
  *   },
  *   view: (h, model) =>
  *     Drawer(h, {
- *       props: { open: model.open },
+ *       props: { open: model.open, snapPoints: [0.5, 1], snapPoint: model.snapPoint },
  *       onEmit: {
  *         RequestedOpen: () => PageMessage.RequestedOpenFilters(),
  *         RequestedClose: () => PageMessage.RequestedCloseFilters(),
  *         Settled: () => undefined,
- *         Snapped: () => undefined
+ *         Snapped: ({ snapPoint }) => PageMessage.SnappedFilters({ snapPoint })
  *       },
  *       view: (drawer) =>
  *         h.div(
@@ -136,6 +157,10 @@
  *             drawer.backdrop(h.div.class("backdrop")),
  *             drawer.viewport(h.div.class("viewport")).children(
  *               drawer.popup(h.div.class("sheet")).children(
+ *                 drawer.snapTrigger(h.button.class("grabber")).attr("aria-label", "Resize filters"),
+ *                 drawer.snapStatus(h.div.class("sr-only")).children(
+ *                   model.snapPoint === 1 ? "Full height" : "Half height"
+ *                 ),
  *                 drawer.title(h.h2).children("Filters"),
  *                 drawer.content(h.div).children("Pick the filters to apply."),
  *                 drawer.close(h.button).children("Done")
@@ -146,10 +171,12 @@
  *     })
  * })
  *
- * // The sheet swipes down, and keeps the consumer's class.
  * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(Page, {}))
  * if (!html.includes(`data-swipe-direction="down"`) || !html.includes(`class="sheet"`)) {
  *   throw new Error("the sheet isn't a drawer")
+ * }
+ * if (!html.includes(`role="status"`) || !html.includes("Half height")) {
+ *   throw new Error("the sheet doesn't announce its height")
  * }
  * ```
  *
@@ -307,8 +334,8 @@ export type DrawerOpenReason = typeof DrawerOpenReason.Type
  * `null`. `RequestedClose` asks for it to close, with the reason.
  * `Settled` reports that the transitions of an open or a close finished, as
  * a `Dialog`'s does. `Snapped` asks for the drawer to rest at another snap
- * point, after a swipe. The consumer decides whether to change `open` and
- * `snapPoint`.
+ * point after a swipe or a press on `snapTrigger`. The consumer decides
+ * whether to change `open` and `snapPoint`.
  *
  * @stability experimental
  * @category schemas
@@ -498,6 +525,25 @@ const snappingOf = (props: DrawerProps, sizes: Sizes): Snapping | null => {
   }
 }
 
+const nextSnapPoint = (
+  props: DrawerProps,
+  sizes: Sizes,
+  snapping: Snapping | null
+): DrawerSnapPoint | undefined => {
+  if (isHorizontal(props.swipeDirection ?? "down")) return undefined
+  const cycle = sizes.height <= 0 || sizes.viewport <= 0
+    ? [...new Set(props.snapPoints)]
+    : [...(snapping?.snaps ?? [])]
+      .sort((a, b) => a.height - b.height)
+      .map((snap) => snap.value)
+  if (cycle.length < 2) return undefined
+  const active = snapping?.active?.value ?? props.snapPoint ?? cycle[0]
+  const index = cycle.findIndex((point) =>
+    point === active || Object.is(point, active)
+  )
+  return cycle[(index + 1) % cycle.length]
+}
+
 const restingProgress = (snapping: Snapping | null): number =>
   snapping === null || snapping.range <= 0 || snapping.active === undefined
     ? 0
@@ -665,6 +711,7 @@ const DrawerMessage = UiSchema.TaggedEnum({
     size: Schema.NullOr(Schema.Number)
   },
   CancelledAreaSwipe: {},
+  PressedSnapTrigger: {},
   ChangedNested: NestedReport.fields,
   RequestedOpenDialog: { triggerId: Schema.NullOr(Schema.String) },
   RequestedCloseDialog: { reason: DialogDismissReason },
@@ -1792,8 +1839,9 @@ const dialogPropsOf = Struct.omit([
  *
  * The parts stack on the `Dialog`'s: `drawer.popup`, `drawer.backdrop` and
  * `drawer.viewport` add the drawer's attributes and mounts to the
- * `Dialog`'s, and `drawer.content` and `drawer.swipeArea` are its own. The
- * popup carries the swipe's mount, so it can't take one of the consumer's.
+ * `Dialog`'s, and `drawer.content`, `drawer.swipeArea`, `drawer.snapTrigger`
+ * and `drawer.snapStatus` are its own. The popup carries the swipe's mount,
+ * so it can't take one of the consumer's.
  *
  * The drawer owns its `Dialog` and emits what it emits, so a `Scene` of the
  * consumer gives `childEmit(Drawer, event)` every event. A `Scene` of the
@@ -1908,6 +1956,14 @@ export const Drawer = Html.component({
       )
     },
     CancelledAreaSwipe: ($) => $.evolve({ area: null }),
+    PressedSnapTrigger: ($) => {
+      const snapPoint = $.props.open
+        ? nextSnapPoint($.props, $.model, snappingOf($.props, $.model))
+        : undefined
+      return snapPoint === undefined
+        ? $.model
+        : $.emit(DrawerEvents.Snapped({ snapPoint }))
+    },
     ChangedNested: ($, { count, height, swiping }) =>
       $.evolve({
         nestedOpen: count,
@@ -2019,6 +2075,24 @@ export const Drawer = Html.component({
 
     const content = p.part("div", (b) => b.attr(contentAttribute, ""))
 
+    const snapTrigger = p.part("button", (b) => {
+      const disabled = nextSnapPoint(props, model, snapping) === undefined
+      return b
+        .attrs({
+          type: "button",
+          "aria-disabled": undefined,
+          "data-disabled": flag(disabled)
+        })
+        .disabled(disabled)
+        .on("click", DrawerMessage.PressedSnapTrigger())
+    })
+    const snapStatus = p.part("div", (b) =>
+      b.attrs({
+        role: "status",
+        "aria-live": "polite",
+        "aria-atomic": "true"
+      }))
+
     const swipeAreaPart = p.part(
       "div",
       (b, key: string, direction: DrawerSwipeDirection, disabled: boolean) => {
@@ -2097,7 +2171,9 @@ export const Drawer = Html.component({
         viewport: <B extends View.PartTarget<"div">>(element: B) =>
           viewport(dialog.viewport(element)),
         content,
-        swipeArea
+        swipeArea,
+        snapTrigger,
+        snapStatus
       })
     })
   }

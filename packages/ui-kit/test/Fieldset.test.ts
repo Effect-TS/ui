@@ -56,7 +56,8 @@ const Billing = Html.component({
             })
           )
       }),
-      h.button.class("lock").attr("type", "button").onClick(
+      h.button.class("lock").attr("type", "button").on(
+        "click",
         Message.ToggledLock()
       ).children("Lock")
     )

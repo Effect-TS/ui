@@ -1300,16 +1300,15 @@ export const PreviewCard = Html.component({
                 ? undefined
                 : PreviewCardMessage.TouchedTrigger()
           )
-          .onFocus(({ focusVisible }: Html.FocusPayload) =>
+          .on("focus", ({ focusVisible }: Html.FocusPayload) =>
             returning > 0
               ? undefined
               : PreviewCardMessage.FocusedTrigger({
                 triggerId: key,
                 ...delays,
                 visible: focusVisible
-              })
-          )
-          .onBlur(PreviewCardMessage.BlurredTrigger())
+              }))
+          .on("blur", PreviewCardMessage.BlurredTrigger())
           .onMount(TrackPreviewCardTrigger({ triggerId: key }))
     )
     const trigger = View.wrapPart(

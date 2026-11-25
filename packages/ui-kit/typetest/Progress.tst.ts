@@ -40,7 +40,7 @@ describe("Progress", () => {
             expect(progress.value(h.span.class("pct")).children(needsClock))
               .type.toBe<Span<Clock>>()
             expect(progress.track(h.div)).type.toBe<Div<never>>()
-            const root = progress.root(h.div.onClick(Msg.Clicked()))
+            const root = progress.root(h.div.on("click", Msg.Clicked()))
               .children(
                 progress.track(h.div).children(progress.indicator(h.div)),
                 needsClock

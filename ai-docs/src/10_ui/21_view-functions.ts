@@ -45,7 +45,7 @@ export const Form = Html.component({
     Card(h).children(
       Field(h, {
         label: "Name",
-        children: [h.input.value(value).onInput(({ value }) => value)]
+        children: [h.input.value(value).on("input", ({ value }) => value)]
       }),
       Framed(h).class("wide").children(value)
     )

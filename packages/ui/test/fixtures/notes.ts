@@ -105,15 +105,14 @@ export const Note = Html.component({
     }),
   view: (h, model) =>
     h.div(
-      h.input.attr("aria-label", "Text").value(model.text).onInput((
+      h.input.attr("aria-label", "Text").value(model.text).on("input", (
         { value }
       ) =>
-        value === model.text ? undefined : NoteMessage.Edit({ text: value })
-      ),
-      h.button.onClick(() => NoteMessage.Save()).children(
+        value === model.text ? undefined : NoteMessage.Edit({ text: value })),
+      h.button.on("click", () => NoteMessage.Save()).children(
         h.isRunning(SaveNote) ? "saving" : "save"
       ),
-      h.button.onClick(() => model.saved ? undefined : NoteMessage.Save())
+      h.button.on("click", () => model.saved ? undefined : NoteMessage.Save())
         .children("save again"),
       h.p.attr("role", "status").children(
         model.saved ? `saved ${model.text}` : model.text
