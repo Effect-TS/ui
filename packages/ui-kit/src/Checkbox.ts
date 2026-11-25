@@ -416,7 +416,8 @@ export const Checkbox = Html.component({
             .on(
               "keydown",
               ({ key }) =>
-                key === "Enter" ? CheckboxMessage.PressedEnter() : undefined, // Cancels Enter's click on the button, and leaves every other key alone.
+                key === "Enter" ? CheckboxMessage.PressedEnter() : undefined,
+              // Cancels Enter's click on the button, and leaves every other key alone.
               { preventDefault: true }
             )
             // The form field goes after the children already on the button, and

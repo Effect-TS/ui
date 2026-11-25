@@ -548,10 +548,14 @@ export const Toolbar = Html.component({
       node: N,
       value: string
     ): N =>
-      roving(node, value).on("keydown", (key) =>
-        moves(key)
-          ? ToolbarMessage.PressedItemKey({ value, key: key.key })
-          : undefined, { preventDefault: true })
+      roving(node, value).on(
+        "keydown",
+        (key) =>
+          moves(key)
+            ? ToolbarMessage.PressedItemKey({ value, key: key.key })
+            : undefined,
+        { preventDefault: true }
+      )
 
     const buttonPart = p.part("button", (b, value: string) => {
       const entry = entryOf(value)

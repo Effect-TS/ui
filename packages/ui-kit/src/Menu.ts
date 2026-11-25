@@ -3118,11 +3118,15 @@ export const Menu = Html.component({
         (pointerType) => MenuMessage.PressedSubmenuTrigger({ pointerType }),
         (pointerType) => MenuMessage.ClickedSubmenuTrigger({ pointerType })
       )
-        .on("keydown", ({ composing, key }) =>
-          !composing &&
-            (key === parentKeys.open || key === "Enter" || key === " ")
-            ? MenuMessage.PressedSubmenuTriggerKey({ key })
-            : undefined, { preventDefault: true })
+        .on(
+          "keydown",
+          ({ composing, key }) =>
+            !composing &&
+              (key === parentKeys.open || key === "Enter" || key === " ")
+              ? MenuMessage.PressedSubmenuTriggerKey({ key })
+              : undefined,
+          { preventDefault: true }
+        )
       return hover ? hoverOpens(own, "submenu", null, {}) : own
     })
     const submenuTrigger = View.wrapPart(

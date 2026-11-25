@@ -1639,14 +1639,18 @@ export const Select = Html.component({
           pointerType === "" || pointerType === "touch"
             ? SelectMessage.ClickedTrigger({ pointerType })
             : undefined)
-        .on("keydown", ({ alt, composing, ctrl, key, meta }) =>
-          composing
-            ? undefined
-            : (arrowsOpen && (key === "ArrowDown" || key === "ArrowUp")) ||
-                (printable(key, alt, ctrl, meta) &&
-                  (key !== " " || typing(model)))
-            ? SelectMessage.PressedTriggerKey({ key })
-            : undefined, { preventDefault: true })
+        .on(
+          "keydown",
+          ({ alt, composing, ctrl, key, meta }) =>
+            composing
+              ? undefined
+              : (arrowsOpen && (key === "ArrowDown" || key === "ArrowUp")) ||
+                  (printable(key, alt, ctrl, meta) &&
+                    (key !== " " || typing(model)))
+              ? SelectMessage.PressedTriggerKey({ key })
+              : undefined,
+          { preventDefault: true }
+        )
         .forward((node) => {
           const named = node
             .attrs({
@@ -1746,15 +1750,19 @@ export const Select = Html.component({
     const popup = p.part("div", (b) =>
       placed(b)
         .attrs({ id: popupId, tabindex: "-1" })
-        .on("keydown", ({ alt, composing, ctrl, key, meta, shift }) =>
-          composing
-            ? undefined
-            : key === "ArrowDown" || key === "ArrowUp" || key === "Home" ||
-                key === "End" ||
-                key === "Enter" || key === "Escape" ||
-                (key === "Tab" && shift) || printable(key, alt, ctrl, meta)
-            ? SelectMessage.PressedPopupKey({ key })
-            : undefined, { preventDefault: true })
+        .on(
+          "keydown",
+          ({ alt, composing, ctrl, key, meta, shift }) =>
+            composing
+              ? undefined
+              : key === "ArrowDown" || key === "ArrowUp" || key === "Home" ||
+                  key === "End" ||
+                  key === "Enter" || key === "Escape" ||
+                  (key === "Tab" && shift) || printable(key, alt, ctrl, meta)
+              ? SelectMessage.PressedPopupKey({ key })
+              : undefined,
+          { preventDefault: true }
+        )
         .on("keyup", ({ key }) =>
           key === " " ? SelectMessage.ReleasedSpace() : undefined)
         .forward((node) => {

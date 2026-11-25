@@ -201,7 +201,8 @@ export const Listbox = Html.component({
               key === "ArrowDown" ||
                 (key.length === 1 && key !== " " && !alt && !ctrl && !meta)
                 ? ListboxMessage.PressedKey({ key })
-                : undefined, // Cancels the default only when a message was returned, so Tab,
+                : undefined,
+            // Cancels the default only when a message was returned, so Tab,
             // Space and Enter keep working.
             { preventDefault: true }
           )),

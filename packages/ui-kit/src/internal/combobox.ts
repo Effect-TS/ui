@@ -1614,15 +1614,19 @@ export const make = <P, E>(
               ? Message.ClickedTrigger({ pointerType })
               : undefined
         )
-        .on("keydown", ({ alt, composing, ctrl, key, meta }) =>
-          composing
-            ? undefined
-            : key === "ArrowDown" || key === "ArrowUp" ||
-                (inPopup && selectable && !multiple && !open && !readOnly &&
-                  printable(key, alt, ctrl, meta) &&
-                  (key !== " " || model.typed !== ""))
-            ? Message.PressedTriggerKey({ key })
-            : undefined, { preventDefault: true })
+        .on(
+          "keydown",
+          ({ alt, composing, ctrl, key, meta }) =>
+            composing
+              ? undefined
+              : key === "ArrowDown" || key === "ArrowUp" ||
+                  (inPopup && selectable && !multiple && !open && !readOnly &&
+                    printable(key, alt, ctrl, meta) &&
+                    (key !== " " || model.typed !== ""))
+              ? Message.PressedTriggerKey({ key })
+              : undefined,
+          { preventDefault: true }
+        )
       if (!inPopup) return decorated.attr("tabindex", "-1")
       return (selectable ? decorated : decorated.attr("form", props.form))
         .attrs({
@@ -1801,10 +1805,14 @@ export const make = <P, E>(
           "data-anchor-hidden": flag(shown && model.placement?.anchorHidden),
           "data-empty": flag(listEmpty)
         })
-        .on("keydown", ({ composing, key }) =>
-          key === "Escape" && open && !composing
-            ? Message.PressedInputKey({ key, chips: chipsDrawn })
-            : undefined, { preventDefault: true })
+        .on(
+          "keydown",
+          ({ composing, key }) =>
+            key === "Escape" && open && !composing
+              ? Message.PressedInputKey({ key, chips: chipsDrawn })
+              : undefined,
+          { preventDefault: true }
+        )
         .forward((node) =>
           inPopup && labelled
             ? node.attr(

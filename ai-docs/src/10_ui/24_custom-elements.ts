@@ -57,7 +57,7 @@ const BrandMessage = UiSchema.TaggedEnum({
 // `ColorPicker(h)` takes the view's `h`, which fixes the handler's message
 // type, and only compiles in an HTML view. It returns an HTML element
 // builder, so `.class`, `.attr`, `.children` and the native events chain
-// with the generated methods.
+// with the property methods.
 export const BrandColor = Html.component({
   name: "BrandColor",
   model: Schema.Struct({ color: Schema.String }),

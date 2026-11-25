@@ -960,7 +960,8 @@ export const Slider = Html.component({
           ({ key, shift }) =>
             sliderKeys.has(key)
               ? SliderMessage.PressedKey({ index, key, shift })
-              : undefined, // Only for the keys the slider handles: a key it doesn't keeps its
+              : undefined,
+          // Only for the keys the slider handles: a key it doesn't keeps its
           // default, such as Tab.
           { preventDefault: true }
         )

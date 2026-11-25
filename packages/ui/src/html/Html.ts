@@ -1044,15 +1044,13 @@ export class VoidElement<
     handler: View.Handler<Msg, E[K & keyof E]>,
     options?: View.EventOptions | undefined
   ): this {
-    const set = this.eventOptions[event]
-    const helper =
-      (event === "dragstart" && set !== undefined && "data" in set) ||
-      (event === "drop" && set !== undefined && "accepts" in set)
-    return super.on(
-      event as any,
-      handler as any,
-      options ?? (helper ? set : undefined)
-    )
+    if (options === undefined && (event === "dragstart" || event === "drop")) {
+      // `draggable` sets `data`, and `dropTarget` sets `accepts`.
+      const set = this.eventOptions[event]
+      const key = event === "dragstart" ? "data" : "accepts"
+      if (set !== undefined && key in set) options = set
+    }
+    return super.on(event as any, handler as any, options)
   }
   /**
    * Makes this element a drop target for drags carrying one of the
@@ -1660,7 +1658,7 @@ export class CustomElementBuilder<
     return super.prop(name, value)
   }
   /**
-   * Like `Element.children`, keeping the generated methods.
+   * Like `Element.children`, keeping the property methods.
    *
    * @since 0.1.0
    */
@@ -1670,7 +1668,7 @@ export class CustomElementBuilder<
     return View.withContent(this, inputs) as any
   }
   /**
-   * Like `Element.onMount`, keeping the generated methods.
+   * Like `Element.onMount`, keeping the property methods.
    *
    * @since 0.1.0
    */
@@ -1695,7 +1693,7 @@ export class CustomElementBuilder<
     return (super.onMount as any)(mount)
   }
   /**
-   * Like `Element.forward`, keeping the generated methods.
+   * Like `Element.forward`, keeping the property methods.
    *
    * @since 0.1.0
    */
@@ -1935,19 +1933,16 @@ export const customElement = <
     }
   }
   const core = new View.ContainerBuilder("")
-  const define = (name: string, method: Function) => {
+  for (const name in properties) {
     if (name in core || name === "id" || name === "class" || name === "style") {
-      return
+      continue
     }
     Object.defineProperty(Bound.prototype, name, {
-      value: method,
+      value(this: Bound, value: unknown) {
+        return this.prop(name, value)
+      },
       writable: true,
       configurable: true
-    })
-  }
-  for (const name in properties) {
-    define(name, function(this: Bound, value: unknown) {
-      return this.prop(name, value)
     })
   }
   const root = View.shorthand(new Bound(tag))
