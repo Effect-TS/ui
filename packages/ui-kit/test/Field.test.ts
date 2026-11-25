@@ -53,6 +53,7 @@ describe("Field", () => {
       assert.strictEqual(scene.get(label).attrs?.for, id)
       const ids = [scene.get(description).attrs?.id, scene.get(error).attrs?.id]
       assert.strictEqual(new Set([id, ...ids]).size, 3)
+      assert.strictEqual(scene.get(error).attrs?.role, "alert")
       // Next to the consumer's own hint, which stays.
       assert.strictEqual(
         scene.get(control).attrs?.["aria-describedby"],
@@ -60,8 +61,10 @@ describe("Field", () => {
       )
       assert.strictEqual(scene.get(control).attrs?.["aria-invalid"], "true")
 
-      scene.props({ described: true, invalid: false })
+      scene.props({ id: "name", described: true, invalid: false })
         .expect(error).toBeAbsent()
+      assert.strictEqual(scene.get(control).attrs?.id, "name")
+      assert.strictEqual(scene.get(label).attrs?.for, "name")
       assert.strictEqual(
         scene.get(control).attrs?.["aria-describedby"],
         `hint ${ids[0]}`

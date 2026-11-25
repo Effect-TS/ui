@@ -50,7 +50,9 @@
  * `error` returns `undefined` unless the field is invalid and enabled, so
  * write `field.error(h.div)?.children(message)`. The message is the consumer's:
  * validate in `update`, pass the outcome as `invalid` and the text as the
- * error's children.
+ * error's children. The error has `role="alert"` for live-region updates.
+ * Submitting again with unchanged text and focus creates no new alert.
+ * Chain `.attr("role", undefined)` after the part to remove the alert role.
  *
  * **Data attributes**
  *
@@ -182,6 +184,8 @@ import { withoutField } from "./internal/field.ts"
  *
  * **Details**
  *
+ * - `id`: the control's `id` and the label's `for`; generated if omitted.
+ *   If another component writes the control's ID, pass the same `id` to both.
  * - `disabled`: disables the control with the native `disabled`
  *   attribute, sets `data-disabled` on every part and hides the error.
  *   Left out, the control keeps its own `disabled`. A disabled `Fieldset`
@@ -203,6 +207,7 @@ import { withoutField } from "./internal/field.ts"
  * @since 0.1.0
  */
 export const FieldProps = Schema.Struct({
+  id: Schema.optional(Schema.String),
   disabled: Schema.optional(Schema.Boolean),
   invalid: Schema.optional(Schema.Boolean),
   described: Schema.optional(Schema.Boolean),
@@ -314,7 +319,8 @@ const blurred = ({ disabled }: Partial<Html.BlurPayload>) =>
  * - `label`: `for`, the control's id
  * - `control`: `id` and `aria-invalid`
  * - `member`: `aria-invalid`
- * - `legend`, `description` and `error`: `id`
+ * - `legend` and `description`: `id`
+ * - `error`: `id` and `role="alert"`
  *
  * A part writes them when it is applied, so an attribute the consumer
  * chains after it is the consumer's to answer for. Leave the control's
@@ -403,7 +409,7 @@ export const Field = Html.component({
     // disables it.
     const focused = model.focused && !disabled
     const showsError = invalid && !disabled
-    const controlId = p.id("control")
+    const controlId = p.props.id ?? p.id("control")
     const descriptionId = p.id("description")
     const errorId = p.id("error")
     const legendId = p.id("legend")
@@ -426,7 +432,7 @@ export const Field = Html.component({
       flags(builder).attr("data-disabled", flag(disabled))
     const describedBy = [described && descriptionId, showsError && errorId]
       .filter((id) => id !== false).join(" ")
-    const error = p.part((b) => state(b).attr("id", errorId))
+    const error = p.part((b) => state(b).attrs({ id: errorId, role: "alert" }))
     // The parts that use it take any element, so the payload isn't typed.
     const trackFocus = (b: View.ContainerBuilder<typeof FieldMessage.Type>) =>
       state(b)

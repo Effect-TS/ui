@@ -123,7 +123,7 @@ import * as Html from "@effect/ui/html/Html"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
 import { CheckboxGroup } from "./CheckboxGroup.ts"
-import { type Attributed, flag } from "./internal/attributes.ts"
+import { type Attributed, defaults, flag } from "./internal/attributes.ts"
 import { CheckboxGroupMessage } from "./internal/checkboxGroup.ts"
 import { field } from "./internal/field.ts"
 
@@ -156,10 +156,12 @@ import { field } from "./internal/field.ts"
  *   with `uncheckedValue`.
  * - `parent`: makes the checkbox the parent of the `CheckboxGroup` around
  *   it. It submits nothing.
- * - `id`: the root's `id`, for a `<label for>` beside it. A member
- *   writes it, or a generated one when it is left out, and the group's parent
- *   lists it in `aria-controls`. Outside a group the root writes it only
- *   when it is set, so `field.control` keeps the one it writes.
+ * - `id`: the root's `id`. A group parent lists this ID, or a generated
+ *   fallback, in `aria-controls`. A member preserves an existing element
+ *   ID when this prop is omitted, but the parent cannot read that ID.
+ *   For a member drawn on `field.control`, pass the same `id` to `Field`
+ *   and `Checkbox` so both the label and parent reference the control.
+ *   Outside a group, the root writes `id` only when this prop is set.
  *
  * @stability experimental
  * @category schemas
@@ -320,14 +322,15 @@ const state = <B extends Attributed<B>>(
  *
  * The checkbox's own attributes win over the ones the consumer set on the
  * builder before the part: `type`, `role`, `disabled`, the ARIA state
- * (`aria-checked`, `aria-disabled`, `aria-readonly`, `aria-required`)
- * and the data attributes. That includes the ones a state leaves absent,
- * so a `disabled` on the consumer's button is removed unless the
- * `disabled` prop is set. A part writes them when it is applied, so an
- * attribute the consumer chains after `checkbox.root(...)` or `checkbox.indicator(...)`
- * is the consumer's to answer for. The root writes `id` as the `id` prop
- * says, and the group's parent adds the members' ids to the consumer's
- * `aria-controls`.
+ * (`aria-checked`, `aria-disabled`, `aria-readonly`, `aria-required`),
+ * the indicator's `aria-hidden="true"`, which keeps a glyph inside it out
+ * of the checkbox's name, and the data attributes. That includes the ones
+ * a state leaves absent, so a `disabled` on the consumer's button is
+ * removed unless the `disabled` prop is set. A part writes them when it is
+ * applied, so an attribute the consumer chains after `checkbox.root(...)`
+ * or `checkbox.indicator(...)` is the consumer's to answer for. The root
+ * writes `id` as the `id` prop says, and the group's parent adds the
+ * members' ids to the consumer's `aria-controls`.
  *
  * The checkbox reads the nearest `CheckboxGroup` above it, if there is one.
  *
@@ -385,7 +388,6 @@ export const Checkbox = Html.component({
   parts: (p) => {
     const resolved = resolve(p.props, p.reads.group)
     const hidden = field(resolved.field)
-    const id = resolved.role === "member" ? memberId(p.props, p.id) : p.props.id
     return {
       checked: resolved.checked,
       indeterminate: resolved.indeterminate,
@@ -395,7 +397,17 @@ export const Checkbox = Html.component({
       root: p.part(
         "button",
         (b) =>
-          state(id === undefined ? b : b.attr("id", id), resolved)
+          state(
+            p.props.id !== undefined
+              ? b.attr("id", p.props.id)
+              : resolved.role === "member"
+              // Preserve IDs assigned at build time, including field.control's.
+              ? b.forward((node) =>
+                defaults(node, { id: memberId(p.props, p.id) })
+              )
+              : b,
+            resolved
+          )
             .attrs({
               // Inside a form a button submits by default.
               type: "button",
@@ -424,7 +436,10 @@ export const Checkbox = Html.component({
             // before the ones the consumer chains afterward.
             .children(hidden)
       ),
-      indicator: p.part("span", (b) => state(b, resolved))
+      indicator: p.part(
+        "span",
+        (b) => state(b, resolved).attr("aria-hidden", "true")
+      )
     }
   }
 })

@@ -415,8 +415,9 @@ type KeyedButton = View.PartTarget<"button"> & {
  * `root`, `role`, `aria-required`, `aria-disabled`, `aria-readonly`,
  * `aria-invalid` and the data attributes; on `radio`, `type`, `role`,
  * `aria-checked`, `aria-disabled`, `aria-invalid`, `disabled`, `tabindex`
- * and the data attributes; on `indicator`, the radio's data attributes plus
- * `data-starting-style` and `data-ending-style`.
+ * and the data attributes; on `indicator`, `aria-hidden="true"`, the radio's
+ * data attributes, `data-starting-style` and `data-ending-style`.
+ * The hidden indicator's content stays out of the radio's accessible name.
  *
  * `radio` and `indicator` throw when given a `value` that is not in
  * `items`. The group reads the nearest `DirectionProvider` above it, if
@@ -599,6 +600,7 @@ export const RadioGroup = Html.component({
       const { checked, ending, starting, ...state } = stateOf(value)
       return itemState(b, { checked, ...state }, required)
         .attrs({
+          "aria-hidden": "true",
           "data-starting-style": flag(starting),
           "data-ending-style": flag(ending)
         })

@@ -18,7 +18,7 @@ describe("Separator", () => {
       props: { orientation: "vertical" },
       element: h.div
         .attrs({
-          role: "presentation",
+          role: "group",
           "aria-orientation": "horizontal",
           "data-orientation": "horizontal"
         })
@@ -27,7 +27,7 @@ describe("Separator", () => {
       .class("rule")
       .attrs({
         "aria-label": "Section divider",
-        role: "none",
+        role: "region",
         "aria-orientation": "horizontal",
         "data-orientation": "horizontal"
       })
@@ -41,5 +41,23 @@ describe("Separator", () => {
       "data-orientation": "vertical"
     })
     assert.deepStrictEqual(node.handlers, { click: { _tag: "Clicked" } })
+  })
+
+  it("keeps a decorative role, set before or after the call, and drops aria-orientation", () => {
+    assert.deepStrictEqual(
+      View.build(Separator(h, { element: h.div.attr("role", "none") }), [])
+        .attrs,
+      { role: "none", "data-orientation": "horizontal" }
+    )
+    assert.deepStrictEqual(
+      View.build(
+        Separator(h, { props: { orientation: "vertical" } }).attrs({
+          role: "presentation",
+          "aria-orientation": "vertical"
+        }),
+        []
+      ).attrs,
+      { role: "presentation", "data-orientation": "vertical" }
+    )
   })
 })

@@ -313,13 +313,12 @@ describe("RadioGroup", () => {
     )
 
     assert.isUndefined(group.indicator({ element: h.span, value: "ssd" }))
-    assert.strictEqual(
-      View.build(
-        group.indicator({ element: h.span, value: "ssd", keepMounted: true })!,
-        []
-      ).attrs?.["data-unchecked"],
-      ""
-    )
+    const kept = View.build(
+      group.indicator({ element: h.span, value: "ssd", keepMounted: true })!,
+      []
+    ).attrs
+    assert.strictEqual(kept?.["data-unchecked"], "")
+    assert.strictEqual(kept?.["aria-hidden"], "true")
 
     assert.throws(
       () => group.root(h.span as any),

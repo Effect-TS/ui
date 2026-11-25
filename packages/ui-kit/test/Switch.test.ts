@@ -184,6 +184,7 @@ describe("Switch", () => {
     const finished = thumbOf(false, element)
     assert.deepStrictEqual(finished.attrs, {
       class: "thumb",
+      "aria-hidden": "true",
       "data-unchecked": ""
     })
     assert.strictEqual(finished.children.length, 1)
@@ -195,6 +196,7 @@ describe("Switch", () => {
     })
     assert.deepStrictEqual(thumbOf(true, builder).attrs, {
       class: "thumb",
+      "aria-hidden": "true",
       "data-unchecked": "",
       "data-required": ""
     })

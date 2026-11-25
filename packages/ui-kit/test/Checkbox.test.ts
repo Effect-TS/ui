@@ -149,6 +149,7 @@ describe("Checkbox", () => {
     )
     assert.deepStrictEqual(View.build(indicator, []).attrs, {
       class: "tick",
+      "aria-hidden": "true",
       "data-unchecked": ""
     })
     // A disabled, indeterminate checkbox keeps its own `disabled` over the

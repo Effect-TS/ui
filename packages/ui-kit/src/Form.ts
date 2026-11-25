@@ -38,7 +38,8 @@
  * its Model ignores the payload and reads the Model.
  *
  * Once the render that follows a submit is committed, the form focuses the
- * first element inside it with `aria-invalid="true"`, in document order,
+ * first element with `aria-invalid="true"`, in document order, inside it or
+ * among the controls outside it that name it with a `form` attribute,
  * and selects the text of an `<input>`. An invalid element that can't take
  * focus itself, such as the root of a radio group, passes it to the first
  * element inside it, in document order, that Tab can reach. A native radio,
@@ -56,9 +57,8 @@
  *
  * **Limits**
  *
- * A control outside the `<form>` that names it with a `form` attribute is
- * submitted with it, but isn't focused. Document order decides which
- * element comes first, so a positive `tabindex` moves none ahead.
+ * Document order decides which element comes first, so a positive
+ * `tabindex` moves none ahead.
  *
  * Errors that arrive after the render that follows the submit, such as a
  * server's, aren't focused: a parent can't ask the form to act. The
@@ -168,8 +168,20 @@ const takeTabStop = (element: HTMLElement): boolean =>
   radioGroup(element).some((radio) => radio.checked && takeFocus(radio)) ||
   takeFocus(element)
 
+// Include external associated controls in document order. Use Node methods
+// because named controls can shadow the form's properties.
+const invalidOf = (form: HTMLFormElement): Array<HTMLElement> =>
+  Array.from(
+    (Node.prototype.getRootNode.call(form) as ParentNode).querySelectorAll<
+      HTMLElement
+    >("[aria-invalid=\"true\"]")
+  ).filter((element) =>
+    Node.prototype.contains.call(form, element) ||
+    (element as HTMLInputElement).form === form
+  )
+
 const focusInvalid = (form: HTMLFormElement): boolean =>
-  Array.from(form.querySelectorAll<HTMLElement>("[aria-invalid=\"true\"]"))
+  invalidOf(form)
     .some((invalid) =>
       [
         invalid,
@@ -208,7 +220,8 @@ const FocusInvalid = Command.make(
  * consumer adds to the form still runs, after the form's.
  *
  * Every submit emits `Submitted`, and then, once the render is committed,
- * the form focuses the first control inside it with `aria-invalid="true"`.
+ * the form focuses the first control with `aria-invalid="true"`, inside it or
+ * naming it with `form`.
  *
  * @stability experimental
  * @category components

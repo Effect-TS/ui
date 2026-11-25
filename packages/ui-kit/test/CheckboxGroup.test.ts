@@ -175,6 +175,60 @@ const mount = Effect.gen(function*() {
 })
 
 describe("CheckboxGroup", { concurrent: false }, () => {
+  it.effect("a member drawn on field.control keeps the id its label points at, and one id given to both is the parent's too", () =>
+    Effect.gen(function*() {
+      const Terms = Html.component({
+        name: "Terms",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          CheckboxGroup(h, {
+            props: { value: [], allValues: ["apple", "pear"] },
+            view: (checkboxGroup) =>
+              checkboxGroup.root(h.div).children(
+                Checkbox(h, {
+                  key: "all",
+                  props: { parent: true },
+                  view: (checkbox) => checkbox.root(h.button.class("all"))
+                }),
+                ...["apple", "pear"].map((fruit) =>
+                  Field(h, {
+                    key: fruit,
+                    props: { id: fruit === "apple" ? "apple" : undefined },
+                    view: (field) =>
+                      field.root(h.div).children(
+                        field.label(h.label).children(fruit),
+                        Checkbox(h, {
+                          props: {
+                            value: fruit,
+                            id: fruit === "apple" ? "apple" : undefined
+                          },
+                          view: (checkbox) =>
+                            checkbox.root(field.control(h.button))
+                        })
+                      )
+                  })
+                )
+              )
+          })
+      })
+      const app = yield* container
+      yield* BrowserHost.mountEffect(Terms, {}, app)
+      yield* tick
+      const [apple, pear] = Array.from(app.querySelectorAll("label")).map(
+        (label) => label.control
+      )
+      assert.strictEqual(apple?.id, "apple")
+      assert.strictEqual(pear?.getAttribute("role"), "checkbox")
+      assert.include(
+        app.querySelector(".all")!.getAttribute("aria-controls")!.split(" "),
+        "apple"
+      )
+    }).pipe(Effect.scoped))
+
   it.effect("members tick the group's value, and the parent cycles mix, all, none and back, leaving a disabled member alone", () =>
     Effect.gen(function*() {
       const { app, button, click, submitted, ticked } = yield* mount
