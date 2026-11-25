@@ -1349,27 +1349,35 @@ describe("Runtime", () => {
       "test/Save",
       {
         args: { n: Schema.Number },
+        success: Schema.Number,
         invalidates: () => [GetCount],
         mode: "queue"
-      },
-      Effect.gen(function*() {
-        const { save } = yield* Api
-        return ({ n }) => save(n)
-      })
-    ) {}
+      }
+    ) {
+      static readonly layer = this.toLayer(
+        Effect.gen(function*() {
+          const { save } = yield* Api
+          return ({ n }) => save(n)
+        })
+      )
+    }
     class Rename extends Command.Service<Rename>()(
       "test/Rename",
       {
         args: { n: Schema.Number },
+        success: Schema.Number,
         invalidates: () => [],
         optimistic: () => [GetCount.patch({ id: "a" }, (count) => count + 100)],
         writes: (count) => [GetCount.set({ id: "a" }, count)]
-      },
-      Effect.gen(function*() {
-        const { save } = yield* Api
-        return ({ n }) => save(n)
-      })
-    ) {}
+      }
+    ) {
+      static readonly layer = this.toLayer(
+        Effect.gen(function*() {
+          const { save } = yield* Api
+          return ({ n }) => save(n)
+        })
+      )
+    }
 
     // The editor's buttons can run either command, so a mount provides both.
     const commands = (server: Server) =>
@@ -1504,8 +1512,14 @@ describe("Runtime", () => {
         // Its service is a Layer above the branch that stays open.
         class Watch extends Command.Service<Watch>()(
           "test/QueuedStream",
-          { args: { n: Schema.Number }, stream: true, mode: "queue" },
-          Effect.succeed(({ n }) =>
+          {
+            args: { n: Schema.Number },
+            success: Component.Noop,
+            stream: true,
+            mode: "queue"
+          }
+        ) {
+          static readonly layer = this.toLayer(({ n }) =>
             Stream.fromEffect(Effect.andThen(
               Effect.sync(() => calls.push(n)),
               Effect.as(
@@ -1514,7 +1528,7 @@ describe("Runtime", () => {
               )
             ))
           )
-        ) {}
+        }
         const Queue = Component.define({
           name: "Queue",
           model: Schema.Null,
@@ -1655,20 +1669,23 @@ describe("Runtime", () => {
       const gate = Deferred.makeUnsafe<void>()
       class Stubborn extends Command.Service<Stubborn>()(
         "test/Stubborn",
-        { args: {}, invalidates: () => [] },
-        Effect.gen(function*() {
-          yield* Effect.addFinalizer(() =>
-            Effect.sync(() => events.push("build released"))
-          )
-          return () =>
-            Effect.uninterruptible(
-              Effect.andThen(
-                Deferred.await(gate),
-                Effect.sync(() => events.push("body done"))
-              )
+        { args: {}, success: Schema.Number, invalidates: () => [] }
+      ) {
+        static readonly layer = this.toLayer(
+          Effect.gen(function*() {
+            yield* Effect.addFinalizer(() =>
+              Effect.sync(() => events.push("build released"))
             )
-        })
-      ) {}
+            return () =>
+              Effect.uninterruptible(
+                Effect.andThen(
+                  Deferred.await(gate),
+                  Effect.sync(() => events.push("body done"))
+                )
+              )
+          })
+        )
+      }
       const Msg = UiSchema.TaggedEnum({ Close: {}, Stop: {}, Done: {} })
       const Child = Component.define({
         name: "Child",
@@ -1829,20 +1846,23 @@ describe("Runtime", () => {
         const events: Array<string> = []
         class Job extends Command.Service<Job>()(
           "test/LateJob",
-          { args: {} },
-          Effect.gen(function*() {
-            yield* Effect.addFinalizer(() =>
-              Effect.sync(() => events.push("layer released"))
-            )
-            return () =>
-              Effect.gen(function*() {
-                yield* Effect.addFinalizer(() =>
-                  Effect.sync(() => events.push("run cleaned"))
-                )
-                return yield* Effect.never
-              })
-          })
-        ) {}
+          { args: {}, success: Schema.Never }
+        ) {
+          static readonly layer = this.toLayer(
+            Effect.gen(function*() {
+              yield* Effect.addFinalizer(() =>
+                Effect.sync(() => events.push("layer released"))
+              )
+              return () =>
+                Effect.gen(function*() {
+                  yield* Effect.addFinalizer(() =>
+                    Effect.sync(() => events.push("run cleaned"))
+                  )
+                  return yield* Effect.never
+                })
+            })
+          )
+        }
         const Child = Component.provide(
           Component.define({
             name: "Child",
@@ -1888,14 +1908,28 @@ describe("Runtime", () => {
           )
         class Latest extends Command.Service<Latest>()(
           "test/Latest",
-          { args: {}, invalidates: () => [], mode: "switch" },
-          Effect.succeed(() => held("switch"))
-        ) {}
+          {
+            args: {},
+            success: Schema.Never,
+            invalidates: () => [],
+            mode: "switch"
+          }
+        ) {
+          static readonly layer = this.toLayer(() => held("switch"))
+        }
         class Watch extends Command.Service<Watch>()(
           "test/Watch",
-          { args: {}, invalidates: () => [], stream: true },
-          Effect.succeed(() => Stream.fromEffect(held("stream")))
-        ) {}
+          {
+            args: {},
+            success: Schema.Never,
+            invalidates: () => [],
+            stream: true
+          }
+        ) {
+          static readonly layer = this.toLayer(() =>
+            Stream.fromEffect(held("stream"))
+          )
+        }
         const Local = Command.make(
           "test/Local",
           { args: {} },
@@ -2151,10 +2185,14 @@ describe("Runtime", () => {
         const Outcome = Schema.Literals(["succeed", "fail", "hold"])
         class Tx extends Command.Service<Tx>()(
           "test/Tx",
-          { args: { outcome: Outcome }, invalidates: () => [] },
-          Effect.succeed((
-            { outcome }: { readonly outcome: typeof Outcome.Type }
-          ) =>
+          {
+            args: { outcome: Outcome },
+            success: Schema.Void,
+            error: Schema.String,
+            invalidates: () => []
+          }
+        ) {
+          static readonly layer = this.toLayer(({ outcome }) =>
             Effect.acquireRelease(
               Effect.void,
               (_, exit) =>
@@ -2177,7 +2215,7 @@ describe("Runtime", () => {
               )
             )
           )
-        ) {}
+        }
         const Msg = UiSchema.TaggedEnum({
           Issue: { outcome: Outcome },
           Stop: {},
@@ -2721,12 +2759,19 @@ describe("Runtime", () => {
     >()("test/Greeter") {}
     class Greet extends Command.Service<Greet>()(
       "test/Greet",
-      { args: { name: Schema.String }, invalidates: () => [] },
-      Effect.gen(function*() {
-        const greeter = yield* Greeter
-        return ({ name }) => Effect.succeed(greeter.greet(name))
-      })
-    ) {}
+      {
+        args: { name: Schema.String },
+        success: Schema.String,
+        invalidates: () => []
+      }
+    ) {
+      static readonly layer = this.toLayer(
+        Effect.gen(function*() {
+          const greeter = yield* Greeter
+          return ({ name }) => Effect.succeed(greeter.greet(name))
+        })
+      )
+    }
     const Hello = Component.define({
       name: "Hello",
       model: Schema.String,
@@ -2839,9 +2884,12 @@ describe("Runtime", () => {
       {}
       class ReadStore extends Command.Service<ReadStore>()(
         "test/ReadStore",
-        { args: {}, invalidates: () => [] },
-        Store.useSync((store) => () => Effect.succeed(String(store.id)))
-      ) {}
+        { args: {}, success: Schema.String, invalidates: () => [] }
+      ) {
+        static readonly layer = this.toLayer(
+          Store.useSync((store) => () => Effect.succeed(String(store.id)))
+        )
+      }
       const StoreId = Component.define({
         name: "StoreId",
         model: Schema.String,
@@ -2914,9 +2962,12 @@ describe("Runtime", () => {
           {}
           class ReadProject extends Command.Service<ReadProject>()(
             "test/ReadProject",
-            { args: {}, invalidates: () => [] },
-            Project.useSync((project) => () => Effect.succeed(project.id))
-          ) {}
+            { args: {}, success: Schema.String, invalidates: () => [] }
+          ) {
+            static readonly layer = this.toLayer(
+              Project.useSync((project) => () => Effect.succeed(project.id))
+            )
+          }
           const ProjectId = Component.define({
             name: "ProjectId",
             model: Schema.String,
@@ -5593,9 +5644,12 @@ describe("Runtime", () => {
       }) {}
       class Show extends Command.Service<Show>()(
         "test/Show",
-        { args: {}, invalidates: () => [] },
-        Greeter.useSync((greeter) => () => Effect.succeed(greeter.room))
-      ) {}
+        { args: {}, success: Schema.String, invalidates: () => [] }
+      ) {
+        static readonly layer = this.toLayer(
+          Greeter.useSync((greeter) => () => Effect.succeed(greeter.room))
+        )
+      }
       const RoomView = Component.define({
         name: "RoomView",
         props: Schema.Struct({ room: Schema.String }),
@@ -5643,11 +5697,14 @@ describe("Runtime", () => {
     })
     class Show extends Command.Service<Show>()(
       "test/KeyedShow",
-      { args: {}, invalidates: () => [] },
-      Greeter.useSync((greeter) => () =>
-        Effect.succeed(Msg.Shown({ room: greeter.room }))
+      { args: {}, success: Msg, invalidates: () => [] }
+    ) {
+      static readonly layer = this.toLayer(
+        Greeter.useSync((greeter) => () =>
+          Effect.succeed(Msg.Shown({ room: greeter.room }))
+        )
       )
-    ) {}
+    }
     /** Starts in room "a". Its text is its room, then the room each `Show` ran against, in order. */
     const RoomView = Component.define({
       name: "RoomView",
@@ -5884,18 +5941,22 @@ describe("Runtime", () => {
       })
       class Ping extends Command.Service<Ping>()(
         "test/KeyedPing",
-        { args: {}, invalidates: () => [] },
-        Host.useSync((host) => () =>
-          Effect.succeed(Act.Done({ by: host.name }))
+        { args: {}, success: Act, invalidates: () => [] }
+      ) {
+        static readonly layer = this.toLayer(
+          Host.useSync((host) => () => Effect.succeed(Act.Done({ by: host.name })))
         )
-      ) {}
+      }
       class Need extends Command.Service<Need>()(
         "test/KeyedNeed",
-        { args: {}, invalidates: () => [] },
-        Greeter.useSync((greeter) => () =>
-          Effect.succeed(Act.Done({ by: greeter.room }))
+        { args: {}, success: Act, invalidates: () => [] }
+      ) {
+        static readonly layer = this.toLayer(
+          Greeter.useSync((greeter) => () =>
+            Effect.succeed(Act.Done({ by: greeter.room }))
+          )
         )
-      ) {}
+      }
       const Acting = Component.define({
         name: "Acting",
         model: Schema.Struct({ room: Schema.String, done: Schema.String }),

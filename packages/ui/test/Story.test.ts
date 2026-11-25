@@ -10,16 +10,7 @@ import {
 import { Html } from "@effect/ui/html"
 import { Locator, Scene, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import {
-  Cause,
-  Data,
-  Effect,
-  Layer,
-  Option,
-  Redacted,
-  Schema,
-  Stream
-} from "effect"
+import { Cause, Effect, Layer, Option, Redacted, Schema, Stream } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import {
   Counter,
@@ -371,14 +362,20 @@ describe("Story", () => {
   })
 
   describe("Commands that can fail", () => {
-    class SaveFailed
-      extends Data.TaggedError("SaveFailed")<{ readonly reason: string }>
-    {}
+    class SaveFailed extends Schema.TaggedError<SaveFailed>()("SaveFailed", {
+      reason: Schema.String
+    }) {}
     class Save extends Command.Service<Save>()(
       "test/Save",
-      { args: { title: Schema.String }, invalidates: () => [] },
-      Effect.succeed((): Effect.Effect<void, SaveFailed> => Effect.void)
-    ) {}
+      {
+        args: { title: Schema.String },
+        success: Schema.Void,
+        error: SaveFailed,
+        invalidates: () => []
+      }
+    ) {
+      static readonly layer = this.toLayer(() => Effect.void)
+    }
     const Msg = UiSchema.TaggedEnum({
       Save: {},
       Saved: {},

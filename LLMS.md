@@ -20,10 +20,13 @@ and Subscriptions that the runtime runs for you, and data comes from queries,
 built with `Query`, also in `@effect/ui`. `@effect/ui/html` adds the HTML elements, the
 browser host and router, and server rendering.
 
-A `Command.Service` may omit `invalidates` when it invalidates no queries.
-A `Query.Service` or `Query.InfiniteService` declares its Schemas and options,
-and attaches its fetcher with `toLayer`: define `static readonly layer = this.toLayer(...)`
-on the class, or pass a plain function like `GetNote.toLayer(fn)` for a test
+A `Command.Service` declares its `args`, `success` (and optional `error`,
+defaulting to `Schema.Never`) Schemas, may omit `invalidates` when it
+invalidates no queries, and attaches its implementation with `toLayer` (use
+`Component.Noop` as a Schema for a silent result). A `Query.Service` or
+`Query.InfiniteService` declares its Schemas and options, and attaches its
+fetcher with `toLayer`: define `static readonly layer = this.toLayer(...)` on
+the class, or pass a plain function like `GetNote.toLayer(fn)` for a test
 override. Provide a feature implementation with `NoteActivity.toLayer(ActivityLog)`.
 Declare a child component by calling it with the parent's `h`:
 `NoteEditor(h, { key, props, onEmit })`. Render a feature service with its
@@ -284,19 +287,27 @@ a typed failure into a message as well:
 ```ts
 export class SaveNote extends Command.Service<SaveNote>()(
   "notes/SaveNote",
-  { args: { note: Note }, mode: "queue", invalidates: () => [NotesTag] },
-  Effect.gen(function*() {
-    const notes = yield* Notes
-    return ({ note }) =>
-      notes.save(note).pipe(
-        Effect.match({
-          onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
-          onFailure: (error) =>
-            NoteEditorMessage.FailedSaveNote({ reason: error.reason })
-        })
-      )
-  })
-) {}
+  {
+    args: { note: Note },
+    success: NoteEditorMessage,
+    mode: "queue",
+    invalidates: () => [NotesTag]
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.gen(function*() {
+      const notes = yield* Notes
+      return ({ note }) =>
+        notes.save(note).pipe(
+          Effect.match({
+            onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
+            onFailure: (error) =>
+              NoteEditorMessage.FailedSaveNote({ reason: error.reason })
+          })
+        )
+    })
+  )
+}
 ```
 
 A body that leaves a typed error gives an unmatched Command, which `$.run`

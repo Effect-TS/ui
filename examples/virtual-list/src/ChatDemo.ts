@@ -16,13 +16,14 @@ const ChatMessage = UiSchema.TaggedEnum({
 
 class LoadOlder extends Command.Service<LoadOlder>()(
   "virtual-list/LoadOlder",
-  { args: { before: Schema.Number }, mode: "switch" },
-  Effect.succeed(({ before }) =>
+  { args: { before: Schema.Number }, success: ChatMessage, mode: "switch" }
+) {
+  static readonly layer = this.toLayer(({ before }) =>
     Effect.sleep(Duration.millis(500)).pipe(
       Effect.as(ChatMessage.LoadedOlder({ before }))
     )
   )
-) {}
+}
 
 const ChatModel = Schema.Struct({
   start: Schema.Number,

@@ -31,14 +31,16 @@ class B
 
 class CA extends Command.Service<CA>()(
   "CA",
-  { args: {}, invalidates: () => [] },
-  Effect.succeed(() => Effect.succeed(Message.Done()))
-) {}
+  { args: {}, success: Message, invalidates: () => [] }
+) {
+  static readonly layer = this.toLayer(() => Effect.succeed(Message.Done()))
+}
 class CB extends Command.Service<CB>()(
   "CB",
-  { args: {}, invalidates: () => [] },
-  Effect.succeed(() => Effect.succeed(Message.Done()))
-) {}
+  { args: {}, success: Message, invalidates: () => [] }
+) {
+  static readonly layer = this.toLayer(() => Effect.succeed(Message.Done()))
+}
 
 declare const NeedsRuntime: Component.Component<
   "NeedsRuntime",
@@ -240,13 +242,9 @@ describe("Component", () => {
   })
 
   describe("Command.Service", () => {
-    it("types the implementation by the message it returns", () => {
-      type Result = Extract<
-        TodoItemMessage,
-        { readonly _tag: "Saved" | "SaveFailed" }
-      >
+    it("types the implementation by its success Schema", () => {
       expect(SaveTodo.make({ id: "t1", title: "milk", done: false })).type.toBe<
-        Command.Issued<Result, SaveTodo, Result, "Effect">
+        Command.Issued<TodoItemMessage, SaveTodo, TodoItemMessage, "Effect">
       >()
       expect(Layer.succeed(SaveTodo)).type.toBeCallableWith(() =>
         Effect.succeed(TodoItemMessage.Saved())
@@ -257,14 +255,10 @@ describe("Component", () => {
     })
 
     it("rejects a function that reaches for a service instead of capturing it", () => {
-      expect(Command.Service<B>()).type.not.toBeCallableWith(
-        "Bad",
-        { args: {}, invalidates: () => [] },
+      expect(CA.toLayer).type.not.toBeCallableWith(
         Effect.succeed(() => Effect.map(A, () => Message.Done()))
       )
-      expect(Command.Service<B>()).type.toBeCallableWith(
-        "Good",
-        { args: {}, invalidates: () => [] },
+      expect(CA.toLayer).type.toBeCallableWith(
         Effect.map(A, () => () => Effect.succeed(Message.Done()))
       )
     })

@@ -65,17 +65,22 @@ const encodeTodo = Schema.encodeSync(Schema.fromJsonString(Todo))
 
 export class SaveTodo extends Command.Service<SaveTodo>()(
   "todos/SaveTodo",
-  { args: Todo, invalidates: () => [] },
-  Effect.gen(function*() {
-    const kv = yield* KeyValueStore.KeyValueStore
-    return (todo) =>
-      kv.set(`todo/${todo.id}`, encodeTodo(todo)).pipe(
-        Effect.as(TodoItemMessage.Saved()),
-        Effect.catchTag("KeyValueStoreError", (error) =>
-          Effect.succeed(TodoItemMessage.SaveFailed({ reason: error.message })))
-      )
-  })
-) {}
+  { args: Todo, success: TodoItemMessage, invalidates: () => [] }
+) {
+  static readonly layer = this.toLayer(
+    Effect.gen(function*() {
+      const kv = yield* KeyValueStore.KeyValueStore
+      return (todo) =>
+        kv.set(`todo/${todo.id}`, encodeTodo(todo)).pipe(
+          Effect.as(TodoItemMessage.Saved()),
+          Effect.catchTag("KeyValueStoreError", (error) =>
+            Effect.succeed(
+              TodoItemMessage.SaveFailed({ reason: error.message })
+            ))
+        )
+    })
+  )
+}
 
 export const TodoItem = Component.define({
   name: "TodoItem",

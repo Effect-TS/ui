@@ -33,11 +33,11 @@ export const NoteEditorMessage = UiSchema.TaggedEnum({
 // What the editor reports to its parent: what the user did, with no cause.
 export const NoteEditorEvents = UiSchema.TaggedEnum({ Saved: { note: Note } })
 
-// A side effect is a Command, and I/O goes through a `Command.Service`. Its
-// implementation runs once, when the Layer is built, and captures the
-// services it uses. That is why a component requires `SaveNote` and never
-// `Notes`. `Command.make` is only for bodies that need no service. Calling
-// `fetch` in one compiles, but a test can't fake it.
+// A side effect is a Command, and I/O goes through a `Command.Service`. Attach
+// its implementation with `toLayer`, which runs once when the Layer is built
+// and captures the services it uses. That is why a component requires
+// `SaveNote` and never `Notes`. `Command.make` is only for bodies that need no
+// service. Calling `fetch` in one compiles, but a test can't fake it.
 //
 // The command lives in the file of the component that runs it. Only
 // `NoteEditor` consumes its result, so its body returns a `NoteEditorMessage`
@@ -47,23 +47,27 @@ export class SaveNote extends Command.Service<SaveNote>()(
   "notes/SaveNote",
   {
     args: { note: Note },
+    success: NoteEditorMessage,
     // Saves from one editor run one at a time, in order.
     mode: "queue",
     // Optional. Returns the tags of the queries a run makes stale.
     invalidates: () => [NotesTag]
-  },
-  Effect.gen(function*() {
-    const notes = yield* Notes
-    return ({ note }) =>
-      notes.save(note).pipe(
-        Effect.match({
-          onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
-          onFailure: (error) =>
-            NoteEditorMessage.FailedSaveNote({ reason: error.reason })
-        })
-      )
-  })
-) {}
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.gen(function*() {
+      const notes = yield* Notes
+      return ({ note }) =>
+        notes.save(note).pipe(
+          Effect.match({
+            onSuccess: (note) => NoteEditorMessage.SucceededSaveNote({ note }),
+            onFailure: (error) =>
+              NoteEditorMessage.FailedSaveNote({ reason: error.reason })
+          })
+        )
+    })
+  )
+}
 
 // The editor is large, so it is written in pieces. `Html.component`
 // takes what nothing is inferred from: the name and the Schemas, plus

@@ -3879,9 +3879,12 @@ describe("BrowserHost", { concurrent: false }, () => {
         const Message = UiSchema.TaggedEnum({ Loaded: {} })
         class Load extends Command.Service<Load>()(
           "Load",
-          { args: { id: Schema.Number } },
-          Effect.succeed(() => Effect.succeed(Message.Loaded()))
-        ) {}
+          { args: { id: Schema.Number }, success: Message }
+        ) {
+          static readonly layer = this.toLayer(() =>
+            Effect.succeed(Message.Loaded())
+          )
+        }
         let renders = 0
         const Page = Html.component({
           name: "Page",

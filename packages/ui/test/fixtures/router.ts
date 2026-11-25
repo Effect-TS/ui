@@ -87,10 +87,13 @@ export class GetPerson extends Query.Service<GetPerson>()(
 export class RenamePerson
   extends Command.Service<RenamePerson>()("RenamePerson", {
     args: { id: Schema.Number },
+    success: Schema.Never,
     invalidates: () => [],
     optimistic: ({ id }) => [GetPerson.patch({ id }, () => "Renamed")]
-  }, Effect.succeed(() => Effect.never))
-{}
+  })
+{
+  static readonly layer = this.toLayer(() => Effect.never)
+}
 
 export const PersonMessage = UiSchema.TaggedEnum({
   Loaded: { name: Schema.String },

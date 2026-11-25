@@ -398,20 +398,23 @@ describe("Validation", () => {
         )
       )
     }
-    class CreateAccount extends Command.Service<CreateAccount>()(
-      "accounts/CreateAccount",
-      { args: { username: Schema.String } },
-      Effect.succeed(() => Effect.succeed(Message.CreatedAccount()))
-    ) {}
-    const Account = Validation.make({
-      username: { required: "Pick a username", rules: [Rule.minLength(3)] }
-    }, {
-      mode: "onChange"
-    })
     const Message = UiSchema.TaggedEnum({
       UpdatedUsername: { value: Schema.String },
       ClickedSubmit: {},
       CreatedAccount: {}
+    })
+    class CreateAccount extends Command.Service<CreateAccount>()(
+      "accounts/CreateAccount",
+      { args: { username: Schema.String }, success: Message }
+    ) {
+      static readonly layer = this.toLayer(() =>
+        Effect.succeed(Message.CreatedAccount())
+      )
+    }
+    const Account = Validation.make({
+      username: { required: "Pick a username", rules: [Rule.minLength(3)] }
+    }, {
+      mode: "onChange"
     })
     const taken = (result: AsyncResult.AsyncResult<boolean>) =>
       AsyncResult.map(

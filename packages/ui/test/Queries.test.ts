@@ -48,10 +48,12 @@ const makeApp = () => {
     "notes/Touch",
     {
       args: { id: Schema.String },
+      success: Schema.Void,
       invalidates: ({ id }) => [GetNote.entry({ id })]
-    },
-    Effect.succeed(() => Effect.void)
-  ) {}
+    }
+  ) {
+    static readonly layer = this.toLayer(() => Effect.void)
+  }
 
   const NoteMessage = UiSchema.TaggedEnum({ Click: {}, Touch: {}, Touched: {} })
   const touched = NoteMessage.Touched()

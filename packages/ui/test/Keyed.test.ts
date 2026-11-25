@@ -90,20 +90,20 @@ const makeApp = (options?: {
     "users/RenameUser",
     {
       args: { id: Schema.String, name: Schema.String },
+      success: Schema.Void,
       invalidates: ({ id }) => [GetUser.entry({ id })],
       optimistic: (
         { id, name }
       ) => [GetUser.patch({ id }, (user) => ({ ...user, name }))]
-    },
-    Effect.succeed((
-      { id, name }: { readonly id: string; readonly name: string }
-    ) =>
+    }
+  ) {
+    static readonly layer = this.toLayer(({ id, name }) =>
       Effect.gen(function*() {
         yield* Effect.sleep("10 millis")
         db.names.set(id, name)
       })
     )
-  ) {}
+  }
 
   const BoardMessage = UiSchema.TaggedEnum({
     Show: { ids: Schema.Array(Schema.String) },

@@ -18,7 +18,7 @@
  *
  * ```ts import.meta.vitest
  * import { Command, Component, UiSchema } from "@effect/ui"
- * import { Effect, Schema } from "effect"
+ * import { Schema } from "effect"
  *
  * const Todo = Schema.Struct({ id: Schema.String, title: Schema.String, done: Schema.Boolean })
  * const TodoItemMessage = UiSchema.TaggedEnum({ ClickedToggle: {}, ClickedSave: {} })
@@ -26,8 +26,7 @@
  *
  * class SaveTodo extends Command.Service<SaveTodo>()(
  *   "todos/SaveTodo",
- *   { args: Todo },
- *   Effect.succeed(() => Effect.void)
+ *   { args: Todo, success: Schema.Void }
  * ) {}
  *
  * const TodoItem = Component.define({
@@ -137,6 +136,18 @@ export type NoopTypeId = typeof NoopTypeId
 export interface Noop {
   readonly [NoopTypeId]: NoopTypeId
 }
+
+/**
+ * Schema for `Component.noop`, for a `Command.Service` whose `success` is
+ * silent or a union of a message and `Component.Noop`.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const Noop: Schema.declare<Noop> = Schema.declare(internalNoop.isNoop, {
+  identifier: "Component.Noop"
+})
 
 /**
  * The message value that sends nothing.
@@ -4171,9 +4182,10 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F }
  *
  * class SaveTodo extends Command.Service<SaveTodo>()(
  *   "todos/SaveTodo",
- *   { args: { id: Schema.String } },
- *   Effect.succeed(() => Effect.void)
- * ) {}
+ *   { args: { id: Schema.String }, success: Schema.Void }
+ * ) {
+ *   static readonly layer = this.toLayer(() => Effect.void)
+ * }
  *
  * class EditorStore extends Context.Service<EditorStore, { readonly draft: string }>()("EditorStore") {
  *   static readonly layer = Layer.succeed(EditorStore, { draft: "" })
@@ -4216,9 +4228,12 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F }
  *
  * class JoinRoom extends Command.Service<JoinRoom>()(
  *   "rooms/JoinRoom",
- *   { args: {} },
- *   Chat.useSync((chat) => () => Effect.succeed(RoomMessage.CompletedJoinRoom({ room: chat.room })))
- * ) {}
+ *   { args: {}, success: RoomMessage }
+ * ) {
+ *   static readonly layer = this.toLayer(
+ *     Chat.useSync((chat) => () => Effect.succeed(RoomMessage.CompletedJoinRoom({ room: chat.room })))
+ *   )
+ * }
  *
  * const RoomView = Component.define({
  *   name: "RoomView",

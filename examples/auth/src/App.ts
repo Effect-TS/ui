@@ -56,31 +56,40 @@ export const AppMessage = UiSchema.TaggedEnum({
 
 export class SaveSession extends Command.Service<SaveSession>()(
   "auth/SaveSession",
-  { args: { session: Session } },
-  SessionStore.useSync((store) => ({ session }) =>
-    store.set(session).pipe(
-      Effect.match({
-        onSuccess: () => Component.noop,
-        onFailure: (error) =>
-          AppMessage.FailedSaveSession({ error: error.message })
-      })
+  {
+    args: { session: Session },
+    success: Schema.Union([AppMessage, Component.Noop])
+  }
+) {
+  static readonly layer = this.toLayer(
+    SessionStore.useSync((store) => ({ session }) =>
+      store.set(session).pipe(
+        Effect.match({
+          onSuccess: () => Component.noop,
+          onFailure: (error) =>
+            AppMessage.FailedSaveSession({ error: error.message })
+        })
+      )
     )
   )
-) {}
+}
 
 export class ClearSession extends Command.Service<ClearSession>()(
   "auth/ClearSession",
-  { args: {} },
-  SessionStore.useSync((store) => () =>
-    store.remove.pipe(
-      Effect.match({
-        onSuccess: () => Component.noop,
-        onFailure: (error) =>
-          AppMessage.FailedClearSession({ error: error.message })
-      })
+  { args: {}, success: Schema.Union([AppMessage, Component.Noop]) }
+) {
+  static readonly layer = this.toLayer(
+    SessionStore.useSync((store) => () =>
+      store.remove.pipe(
+        Effect.match({
+          onSuccess: () => Component.noop,
+          onFailure: (error) =>
+            AppMessage.FailedClearSession({ error: error.message })
+        })
+      )
     )
   )
-) {}
+}
 
 export const LogError = Command.make(
   "LogError",

@@ -53,9 +53,13 @@ const runSimulateAuthRequest = Effect.fn("auth/SimulateAuthRequest")(
 
 export class SimulateAuthRequest extends Command.Service<SimulateAuthRequest>()(
   "auth/SimulateAuthRequest",
-  { args: { email: Schema.String, password: Schema.Redacted(Schema.String) } },
-  Effect.succeed((args) => runSimulateAuthRequest(args))
-) {}
+  {
+    args: { email: Schema.String, password: Schema.Redacted(Schema.String) },
+    success: LoginPageMessage
+  }
+) {
+  static readonly layer = this.toLayer((args) => runSimulateAuthRequest(args))
+}
 
 const FormField = <M>(h: Html.H<M>, options: {
   readonly key: string

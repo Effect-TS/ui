@@ -58,6 +58,8 @@ const makeApp = (options?: {
     "users/RenameUser",
     {
       args: { id: Schema.String, name: Schema.String },
+      success: Schema.String,
+      error: Schema.String,
       mode: options?.mode,
       invalidates: ({ id }) =>
         invalidates === "all"
@@ -69,10 +71,9 @@ const makeApp = (options?: {
         invalidates === "unwatched"
           ? []
           : [GetUser.patch({ id }, (user) => ({ ...user, name }))]
-    },
-    Effect.succeed((
-      { id, name }: { readonly id: string; readonly name: string }
-    ) =>
+    }
+  ) {
+    static readonly layer = this.toLayer(({ id, name }) =>
       Effect.gen(function*() {
         order.push(`body ${name}`)
         const cleanup = options?.cleanup
@@ -85,7 +86,7 @@ const makeApp = (options?: {
         return name
       })
     )
-  ) {}
+  }
 
   const CardMessage = UiSchema.TaggedEnum({
     UserChanged: {},
@@ -911,13 +912,14 @@ describe("Command.afterRefetch", () => {
     }
     class Touch extends Command.Service<Touch>()(
       "items/Touch",
-      { args: {}, invalidates: () => [ListItems] },
-      Effect.succeed(() =>
+      { args: {}, success: Schema.Void, invalidates: () => [ListItems] }
+    ) {
+      static readonly layer = this.toLayer(() =>
         Effect.sleep("10 millis").pipe(Effect.andThen(Effect.sync(() => {
           db.version++
         })))
       )
-    ) {}
+    }
     const ItemsMessage = UiSchema.TaggedEnum({
       More: {},
       Touch: {},

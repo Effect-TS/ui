@@ -1408,9 +1408,12 @@ describe("HtmlServer", { concurrent: false }, () => {
       class Store extends Context.Service<Store, string>()("test/KeyedStore") {}
       class ReadStore extends Command.Service<ReadStore>()(
         "test/ReadKeyedStore",
-        { args: {}, invalidates: () => [] },
-        Store.useSync((store) => () => Effect.succeed(store))
-      ) {}
+        { args: {}, success: Schema.String, invalidates: () => [] }
+      ) {
+        static readonly layer = this.toLayer(
+          Store.useSync((store) => () => Effect.succeed(store))
+        )
+      }
       // What `init` returns where it runs: the client's is dropped for the Model the server rendered.
       let side = "server"
       const Panel = Component.provide(
@@ -3307,8 +3310,13 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       const Message = UiSchema.TaggedEnum({ Refreshed: {} })
       class Refresh extends Command.Service<Refresh>()("Refresh", {
         args: {},
+        success: Message,
         invalidates: () => [GetItem]
-      }, Effect.succeed(() => Effect.succeed(Message.Refreshed()))) {}
+      }) {
+        static readonly layer = this.toLayer(() =>
+          Effect.succeed(Message.Refreshed())
+        )
+      }
       const Page = Html.component({
         name: "Page",
         model: Schema.Struct({}),
@@ -3366,8 +3374,13 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       const Message = UiSchema.TaggedEnum({ Navigated: {}, Refreshed: {} })
       class Refresh extends Command.Service<Refresh>()("Refresh", {
         args: {},
+        success: Message,
         invalidates: () => [GetItem]
-      }, Effect.succeed(() => Effect.succeed(Message.Refreshed()))) {}
+      }) {
+        static readonly layer = this.toLayer(() =>
+          Effect.succeed(Message.Refreshed())
+        )
+      }
       const Page = Html.component({
         name: "Page",
         model: Schema.Struct({}),
@@ -3497,21 +3510,25 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         "ReadBack",
         {
           args: {},
+          success: Schema.Never,
           invalidates: () => [GetItem]
-        },
-        Effect.map(
-          Effect.context<InstanceType<typeof GetItem>>(),
-          (context) => () =>
-            // Reads back its own invalidation target, then never ends, so the fetch stays caller-only.
-            Effect.andThen(
-              GetItem.get({ id: 1 }).pipe(
-                Effect.provide(context),
-                Effect.ignore
-              ),
-              Effect.never
-            )
+        }
+      ) {
+        static readonly layer = this.toLayer(
+          Effect.map(
+            Effect.context<InstanceType<typeof GetItem>>(),
+            (context) => () =>
+              // Reads back its own invalidation target, then never ends, so the fetch stays caller-only.
+              Effect.andThen(
+                GetItem.get({ id: 1 }).pipe(
+                  Effect.provide(context),
+                  Effect.ignore
+                ),
+                Effect.never
+              )
+          )
         )
-      ) {}
+      }
       class Store extends Context.Service<Store, string>()("test/Store") {}
       let builds = 0
       const Slow = Html.component({

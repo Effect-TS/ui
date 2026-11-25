@@ -135,6 +135,15 @@ export interface Location {
 export type Action = "initial" | "push" | "replace" | "pop"
 
 /**
+ * Schema for {@link Outcome}.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const Outcome = Schema.Literals(["navigated", "blocked"])
+
+/**
  * What a navigation Command returns: `"blocked"` when a block was held,
  * else `"navigated"`.
  *
@@ -142,7 +151,16 @@ export type Action = "initial" | "push" | "replace" | "pop"
  * @category models
  * @since 0.1.0
  */
-export type Outcome = "navigated" | "blocked"
+export type Outcome = typeof Outcome.Type
+
+/**
+ * Schema for {@link PatchOutcome}.
+ *
+ * @stability experimental
+ * @category schemas
+ * @since 0.1.0
+ */
+export const PatchOutcome = Schema.Literals(["navigated", "blocked", "stale"])
 
 /**
  * What `patchSearch` returns: `"stale"` when the Router's path no longer
@@ -153,7 +171,7 @@ export type Outcome = "navigated" | "blocked"
  * @category models
  * @since 0.1.0
  */
-export type PatchOutcome = Outcome | "stale"
+export type PatchOutcome = typeof PatchOutcome.Type
 
 /**
  * The patch `patchSearch` takes for a route value: any of its search fields,
@@ -272,14 +290,14 @@ const RouteValue = Schema.declare(
 export class Push extends Command.Service<Push>()(
   "@effect/ui/Router/Push",
   {
-    args: { route: RouteValue }
-  },
-  Effect.map(
-    Router,
-    (router) => ({ route }: { readonly route: { readonly _tag: string } }) =>
-      router.push(route)
+    args: { route: RouteValue },
+    success: Outcome
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.map(Router, (router) => ({ route }) => router.push(route))
   )
-) {}
+}
 
 /**
  * The Command behind `replace`. Use `replace`, which types the route value;
@@ -292,14 +310,14 @@ export class Push extends Command.Service<Push>()(
 export class Replace extends Command.Service<Replace>()(
   "@effect/ui/Router/Replace",
   {
-    args: { route: RouteValue }
-  },
-  Effect.map(
-    Router,
-    (router) => ({ route }: { readonly route: { readonly _tag: string } }) =>
-      router.replace(route)
+    args: { route: RouteValue },
+    success: Outcome
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.map(Router, (router) => ({ route }) => router.replace(route))
   )
-) {}
+}
 
 /**
  * Pushes a history entry for a route value of the given union.
@@ -366,16 +384,18 @@ export class PatchSearch extends Command.Service<PatchSearch>()(
       patch: SearchPatchValue,
       history: Schema.Literals(["push", "replace"]),
       scroll: Schema.Boolean
-    }
-  },
-  Effect.map(Router, (router) =>
-  ({ history, patch, route, scroll }: {
-    readonly route: { readonly _tag: string }
-    readonly patch: Readonly<Record<string, unknown>>
-    readonly history: "push" | "replace"
-    readonly scroll: boolean
-  }) => router.patchSearch(route, patch, { history, scroll }))
-) {}
+    },
+    success: PatchOutcome
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.map(
+      Router,
+      (router) => ({ history, patch, route, scroll }) =>
+        router.patchSearch(route, patch, { history, scroll })
+    )
+  )
+}
 
 /**
  * Writes some of the current route's search params, keeping the rest.
@@ -455,9 +475,17 @@ export const patchSearch = <U extends Routes, R extends U["Type"]>(
  * @category commands
  * @since 0.1.0
  */
-export class Back extends Command.Service<Back>()("@effect/ui/Router/Back", {
-  args: {}
-}, Effect.map(Router, (router) => () => router.back)) {}
+export class Back extends Command.Service<Back>()(
+  "@effect/ui/Router/Back",
+  {
+    args: {},
+    success: Outcome
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.map(Router, (router) => () => router.back)
+  )
+}
 
 /**
  * Goes forward one history entry.
@@ -466,11 +494,17 @@ export class Back extends Command.Service<Back>()("@effect/ui/Router/Back", {
  * @category commands
  * @since 0.1.0
  */
-export class Forward
-  extends Command.Service<Forward>()("@effect/ui/Router/Forward", {
-    args: {}
-  }, Effect.map(Router, (router) => () => router.forward))
-{}
+export class Forward extends Command.Service<Forward>()(
+  "@effect/ui/Router/Forward",
+  {
+    args: {},
+    success: Outcome
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.map(Router, (router) => () => router.forward)
+  )
+}
 
 /**
  * Loads an href with a full page load, such as an external URL.
@@ -482,13 +516,14 @@ export class Forward
 export class Load extends Command.Service<Load>()(
   "@effect/ui/Router/Load",
   {
-    args: { href: Schema.String }
-  },
-  Effect.map(
-    Router,
-    (router) => ({ href }: { readonly href: string }) => router.load(href)
+    args: { href: Schema.String },
+    success: Outcome
+  }
+) {
+  static readonly layer = this.toLayer(
+    Effect.map(Router, (router) => ({ href }) => router.load(href))
   )
-) {}
+}
 
 /**
  * Blocks navigation under a key while the Subscription runs, such as while a

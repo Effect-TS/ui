@@ -31,14 +31,16 @@ const Events = UiSchema.TaggedEnum({ Changed: {} })
 
 class Save extends Command.Service<Save>()(
   "typetest/define/Save",
-  { args: {}, invalidates: () => [] },
-  Effect.succeed(() => Effect.succeed(Message.Saved()))
-) {}
+  { args: {}, success: Message, invalidates: () => [] }
+) {
+  static readonly layer = this.toLayer(() => Effect.succeed(Message.Saved()))
+}
 class Audit extends Command.Service<Audit>()(
   "typetest/define/Audit",
-  { args: {}, invalidates: () => [] },
-  Effect.succeed(() => Effect.succeed(Message.Saved()))
-) {}
+  { args: {}, success: Message, invalidates: () => [] }
+) {
+  static readonly layer = this.toLayer(() => Effect.succeed(Message.Saved()))
+}
 
 const Model = Schema.Struct({ body: Schema.String, edits: Schema.Number })
 type Model = typeof Model.Type
