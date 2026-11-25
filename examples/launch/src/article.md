@@ -11,7 +11,7 @@ This page is built with Effect UI. You can [read its source](https://github.com/
 ## Explore with an AI agent
 
 :::PageOnly
-Copy a prompt to explore this article with an AI agent. The first asks for a short summary. The second asks an agent that can see your Foldkit 0.x project where Effect UI would simplify it most, and to sketch one of those places as a Component.
+Copy a prompt to explore this article with an AI agent. The first asks for a short summary. The second asks an agent that can see your Foldkit 0.x project to identify where Effect UI would simplify it most and to sketch one of those places as a Component.
 :::
 
 ::AgentPrompt{title="TL;DR agent prompt" prompt="Read $URL. In under 200 words, say what Effect UI is and how it relates to Foldkit 0.x. Then list the main changes for someone with a Foldkit 0.x app, one line each, followed by what stays the same. Use only what the page says, and say so when it doesn't cover something."}
@@ -49,7 +49,7 @@ This counter is a complete Component. One definition holds its Model, Messages, 
 
 ::Counter{code="intro" label="Live auto-counter"}
 
-Click "+1", then open the Effect UI button in the bottom-right corner. The [DevTools](#devtools) list the Message you sent and what it changed.
+Click "+1", then click the Effect UI button in the bottom-right corner. The [DevTools](#devtools) list the Message you sent and what it changed.
 
 ### How Messages travel in Foldkit 0.x vs. Effect UI
 
@@ -123,7 +123,7 @@ In Effect UI, a headless Component gives your view parts instead. You apply each
 
 ::Listing{code="partsUse"}
 
-To write a headless Component, you define `parts` instead of a view. It has its own Model, Messages and update, so it can keep its own state. This is the `Disclosure` that `Details` draws, with its open state in its own Model:
+To write a headless Component, you define `parts` instead of a view. The Component has its own Model, Messages and update, so it can keep its own state. This is the `Disclosure` that `Details` draws, with its open state in its own Model:
 
 ::Listing{code="partsDefine" whole="true"}
 
