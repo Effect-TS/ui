@@ -84,6 +84,43 @@ const readable = (frame, selector) =>
   })
 
 await run("panel", async ({ browser, expect, failures, url }) => {
+  const lifecycleOk = async (frame, label) => {
+    const right = await frame.locator(".right").evaluate((node) =>
+      node.getBoundingClientRect().right
+    )
+    const cells = await frame.locator(".life tr[data-kind=instance] > *")
+      .evaluateAll((nodes) =>
+        nodes.map((node) => {
+          const box = node.getBoundingClientRect()
+          return {
+            text: node.textContent.replace(/\s+/g, " ").trim(),
+            left: box.left,
+            right: box.right,
+            top: box.top,
+            bottom: box.bottom,
+            width: box.width,
+            height: box.height
+          }
+        })
+      )
+    const [kind, path, mounted, status] = cells
+    const overlap = !(
+      path.right <= mounted.left + 0.5 ||
+      mounted.right <= path.left + 0.5 ||
+      path.bottom <= mounted.top + 0.5 ||
+      mounted.bottom <= path.top + 0.5
+    )
+    expect(
+      path.width >= 100 && path.height < 60 && mounted.width >= 80 &&
+        mounted.height < 50 && status.width >= 80 &&
+        status.right <= right + 0.5 && !overlap &&
+        kind.right <= path.left + 0.5,
+      label +
+        ": Lifecycle instance path is readable without overlapping mount link",
+      { right, cells }
+    )
+  }
+
   const setup = async (context, query = "") => {
     const page = await context.newPage()
     page.on(
@@ -142,6 +179,18 @@ await run("panel", async ({ browser, expect, failures, url }) => {
       "selecting an entry shows its heading alongside the timeline",
       heading
     )
+
+    await frame.getByRole("tab", { name: "Lifecycle" }).click()
+    await lifecycleOk(frame, "920px two-pane")
+    await page.setViewportSize({ width: 780, height: 800 })
+    await page.waitForTimeout(100)
+    await lifecycleOk(frame, "756px two-pane")
+    await page.setViewportSize({ width: 744, height: 800 })
+    await page.waitForTimeout(100)
+    await lifecycleOk(frame, "720px two-pane")
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.waitForTimeout(100)
+    await frame.getByRole("tab", { name: /^Model/ }).click()
     await type(page, "klm")
     state = await timeline(page)
     expect(atTop(state), "selecting an entry keeps the timeline pinned", state)
@@ -247,6 +296,9 @@ await run("panel", async ({ browser, expect, failures, url }) => {
       seen = await readable(frame, ".tabs .tab:has-text('" + tab + "')")
       expect(seen.ok, "390x844: the " + tab + " tab is readable", seen)
     }
+    await frame.getByRole("tab", { name: "Lifecycle" }).click()
+    await lifecycleOk(frame, "390x844")
+    await frame.getByRole("tab", { name: /^Model/ }).click()
     const escape = ".step[data-step=End] .cause button.ref"
     seen = await readable(frame, escape)
     expect(seen.ok, "390x844: the PressedEscape link is readable", seen)

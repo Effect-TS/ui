@@ -546,12 +546,88 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.strictEqual(copy.querySelector("em")?.textContent, "fallback")
       assert.strictEqual(app.querySelector("strong")?.textContent, "ready")
       const notes = Array.from(
-        root.querySelectorAll(".pause-note"),
-        (node) => text(node)
+        root.querySelectorAll<HTMLDetailsElement>("details.pause-note")
       )
       assert.strictEqual(notes.length, 1)
-      assert.include(notes[0], "fallback")
-      assert.isTrue(notes[0].endsWith(": /Pair"))
+      assert.isFalse(notes[0].open)
+      assert.include(text(notes[0].querySelector("summary")), "fallback")
+      assert.deepStrictEqual(
+        Array.from(
+          notes[0].querySelectorAll(".pause-paths .path"),
+          (node) => text(node)
+        ),
+        ["/Pair"]
+      )
+    }))
+
+  it.live("uses same-cause mount state when time travelling mid-mount or to an Update that mounts a child", () =>
+    Effect.gen(function*() {
+      let inits = 0
+      const Row = Html.component({
+        name: "Row",
+        props: Schema.Struct({ id: Schema.String }),
+        model: Schema.Number,
+        message: Schema.Never
+      }).make({
+        init: () => ++inits,
+        update: ($) => $.model,
+        view: (h, n) => h.li.children(`${h.props.id}:${n}`)
+      })
+      const ListMessage = UiSchema.TaggedEnum({ ClickedAdd: {} })
+      const List = Html.component({
+        name: "List",
+        model: Schema.Array(Schema.String),
+        message: ListMessage
+      }).make({
+        init: () => ["a", "b", "c"],
+        update: { ClickedAdd: ($) => [...$.model, "d"] },
+        view: (h, rows) =>
+          h.div(
+            h.button.onClick(ListMessage.ClickedAdd()).children("Add"),
+            h.ul(rows.map((id) => Row(h, { key: id, props: { id } })))
+          )
+      })
+      const memory = MessageLog.makeMemory({ size: 500 })
+      const services = yield* Layer.build(
+        MessageLog.fanout([
+          DevTools.layer(),
+          Layer.succeed(MessageLog.MessageLog, memory)
+        ])
+      )
+      const app = document.body.appendChild(document.createElement("div"))
+      yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+      yield* BrowserHost.mountEffect(List, {}, app).pipe(
+        Effect.provide(services)
+      )
+      yield* settle
+      yield* click(HtmlLocator.getByRole(app, "button", { name: "Add" }))
+
+      const rowA = memory.entries().find((entry) =>
+        entry._tag === "Mounted" && entry.path === "/List/Row[a]"
+      )!
+      const added = memory.entries().find((entry) => entry._tag === "Update")!
+      const root = overlay()
+      yield* open(root)
+      yield* click(
+        HtmlLocator.getByRole(root, "button", { name: "Everything" })
+      )
+
+      const items = () =>
+        Array.from(
+          app.nextElementSibling!.querySelectorAll("li"),
+          (node) => node.textContent
+        )
+
+      yield* click(entry(root, new RegExp("^#" + rowA.seq + " "))[0]!)
+      yield* click(
+        HtmlLocator.getByRole(root, "button", { name: "Time travel" })
+      )
+      assert.isNull(root.querySelector(".pause-note"))
+      assert.deepStrictEqual(items(), ["a:1", "b:2", "c:3"])
+
+      yield* click(entry(root, new RegExp("^#" + added.seq + " "))[0]!)
+      assert.isNull(root.querySelector(".pause-note"))
+      assert.deepStrictEqual(items(), ["a:1", "b:2", "c:3", "d:4"])
     }))
 
   it.live("finds Editor[n2]'s Save, follows it to its interruption and back", () =>

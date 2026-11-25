@@ -135,6 +135,21 @@ const makeSession = (size: number) => {
           byPath.set(path, recorded as BrowserHost.Recorded)
         }
       }
+      for (const entry of entries) {
+        if (entry.seq <= seq) continue
+        if (
+          (entry._tag === "Mounted" || entry._tag === "Waiting") &&
+          entry.causedBy !== undefined &&
+          entry.causedBy <= seq &&
+          !byPath.has(entry.path)
+        ) {
+          byPath.set(entry.path, {
+            props: entry.props,
+            model: entry.model,
+            queries: entry.queries
+          } as BrowserHost.Recorded)
+        }
+      }
       return (path) => byPath.get(path)
     },
     instanceAt: (seq: number, instance: number): Held | "outside" | undefined =>
