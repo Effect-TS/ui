@@ -571,7 +571,12 @@ describe("hot reload", { concurrent: false }, () => {
         () => new Promise<typeof Row>(() => {})
       )
       const Counter = counter("a")
-      const app = (label: string, child: typeof Counter, row = Row) =>
+      const app = (
+        label: string,
+        child: typeof Counter,
+        row = Row,
+        wrap = false
+      ) =>
         Html.component({ name: "App", model: Schema.Number, message: Msg })
           .make({
             init: () => 0,
@@ -579,7 +584,9 @@ describe("hot reload", { concurrent: false }, () => {
             view: (h, count) =>
               h.div(
                 h.span(`${label}=${count}`),
-                child(h, { key: "c" }),
+                wrap
+                  ? h.section(child(h, { key: "c" }))
+                  : child(h, { key: "c" }),
                 row(h, { key: "r" }),
                 Broken(h, { key: "b", fallback: () => h.i("failed") }),
                 h.keepAlive((s) =>
@@ -628,6 +635,8 @@ describe("hot reload", { concurrent: false }, () => {
           assert.isFalse(
             hotSwap(first, { App: app("c", Counter, fixed("Row", () => "")) })
           )
+          // A child wrapped in a new element would be made again.
+          assert.isFalse(hotSwap(first, { App: app("c", Counter, Row, true) }))
           // A failed child takes its fix by reload.
           assert.isFalse(
             hotSwap({ Broken }, { Broken: fixed("Broken", () => "fixed") })

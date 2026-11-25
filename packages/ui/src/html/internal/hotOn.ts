@@ -264,37 +264,45 @@ const eachInstance = (
   return visit(root)
 }
 
-// The components a record declares as children, not entering them.
-const declared = (rec: Kernel.Rec, out: Set<unknown>): Set<unknown> => {
-  if (rec.v._tag === "Child") {
-    out.add((rec.v as View.Child<any, any>).component)
-    if (rec.kids === undefined) return out
-  }
-  for (const kid of rec.kids ?? []) declared(kid, out)
-  return out
-}
+const holdsChild = (rec: Kernel.Rec): boolean =>
+  rec.v._tag === "Child" || (rec.kids?.some(holdsChild) ?? false)
 
-// The components a view declares as children, or `undefined` when it passes
-// content a child draws, which can't be read here.
-const declares = (
-  node: View.Node<any, any>,
-  resolve: (component: unknown) => unknown,
-  out: Set<unknown>
-): Set<unknown> | undefined => {
-  if (node._tag === "Child") {
-    if (node.view !== undefined || node.slots !== undefined) return undefined
-    out.add(resolve(node.component))
-  } else if (node._tag === "Element") {
-    for (const child of node.children) {
-      if (declares(child, resolve, out) === undefined) return undefined
+// Whether patching `rec` to `view` is sure to keep each child under it in
+// place: on the way to a child, every list must pair up index by index, which
+// the reconciler patches in place. Any other change there counts as no.
+const reuses = (
+  rec: Kernel.Rec,
+  view: View.Node<any, any>,
+  resolve: (component: unknown) => unknown
+): boolean => {
+  const old = rec.v
+  switch (old._tag) {
+    case "Text":
+      return view._tag === "Text"
+    case "Outlet":
+      return view._tag === "Outlet" && view.name === old.name
+    case "Child":
+      return view._tag === "Child" && view.key === old.key &&
+        resolve(view.component) === old.component &&
+        view.view === undefined && view.slots === undefined &&
+        (view.alive === undefined) === (old.alive === undefined)
+    case "Element": {
+      if (
+        view._tag !== "Element" || view.tag !== old.tag ||
+        view.elementKey !== old.elementKey
+      ) return false
+      if (!holdsChild(rec)) return true
+      if (old.owned?.length || view.owned?.length) return false
+      const kids = rec.kids!
+      return kids.length === view.children.length &&
+        kids.every((kid, index) => reuses(kid, view.children[index]!, resolve))
     }
   }
-  return out
 }
 
-// Whether the new view, drawn now, keeps every child the instance draws. A
-// component made again by a re-run module is a new object, and patching to it
-// would remount the child, so that edit reloads instead.
+// Whether the new view, drawn now, keeps every child the instance draws in
+// place. A component made again by a re-run module is a new object, and a
+// child moved into a new element is made again, so those edits reload.
 const keepsChildren = (
   inst: Kernel.Instance,
   to: Fields,
@@ -321,13 +329,7 @@ const keepsChildren = (
     return false
   }
   if (node === undefined) return false
-  const next = declares(node, resolve, new Set())
-  if (next === undefined) return false
-  if (inst.rendered === undefined) return true
-  for (const component of declared(inst.rendered, new Set())) {
-    if (!next.has(component)) return false
-  }
-  return true
+  return inst.rendered === undefined || reuses(inst.rendered, node, resolve)
 }
 
 const swap = (

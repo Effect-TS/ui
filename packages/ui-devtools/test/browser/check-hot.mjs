@@ -180,7 +180,7 @@ export const Broken = Html.component({
 })
 `
 
-const parentSource = (heading) => `
+const parentSource = (heading, wrap = false) => `
 import { UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
@@ -201,7 +201,7 @@ export const Parent = Html.component({
   view: (h) =>
     h.div(
       h.h1(${JSON.stringify(heading)}),
-      Kid(h, { key: "k" }),
+      ${wrap ? "h.section(Kid(h, { key: \"k\" }))" : "Kid(h, { key: \"k\" })"},
       drawHidden(h),
       Broken(h, {
         key: "b",
@@ -669,6 +669,17 @@ try {
     await shows("h1", "Parent")
     await click("[data-Kid]", "K=1")
     await click("[data-Hidden]", "H=1")
+    loads = 0
+
+    await edit("parent.ts", parentSource("Parent", true))
+    await page.waitForSelector("section [data-Kid]")
+    await shows("[data-Kid]", "K=1")
+    expect(
+      loads === 1 && (await text("[data-Kid]")) === "K=1" &&
+        (await text("[data-Hidden]")) === "H=1",
+      "wrapping a child in an element reloaded with the counter kept",
+      { loads, kid: await text("[data-Kid]") }
+    )
     await mark()
     loads = 0
 
@@ -680,7 +691,7 @@ try {
       { loads, hidden: await text("[data-Hidden]") }
     )
 
-    await edit("parent.ts", parentSource("Parent 2"))
+    await edit("parent.ts", parentSource("Parent 2", true))
     await shows("h1", "Parent 2")
     expect(
       loads === 0 && await sameKid() &&
