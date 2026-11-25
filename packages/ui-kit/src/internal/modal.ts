@@ -34,13 +34,13 @@ const hide = ({ also, inside }: Layer): () => void => {
   const roots: Array<ParentNode> = [body]
   const keep = new Set<Node>()
   const keepPath = (element: Node) => {
-    for (let node: Node | null = element; node !== null && !keep.has(node);) {
+    for (
+      let node: Node | null | undefined = element;
+      node != null && !keep.has(node);
+      node = node.parentNode ?? (node as Partial<ShadowRoot>).host
+    ) {
       keep.add(node)
-      const host: Node | null | undefined = node.parentNode === null
-        ? (node as Partial<ShadowRoot>).host
-        : undefined
-      if (host != null) roots.push(node as ShadowRoot)
-      node = node.parentNode ?? host ?? null
+      if (node.nodeType === 11) roots.push(node as ShadowRoot)
     }
   }
   keepPath(inside)
@@ -52,7 +52,7 @@ const hide = ({ also, inside }: Layer): () => void => {
   const stops = new Set<Node>([inside, ...also, ...live])
   const hidden: Array<readonly [Element, string | null]> = []
   const walk = (parent: ParentNode) => {
-    if (stops.has(parent as Node)) return
+    if (stops.has(parent)) return
     for (const child of Array.from(parent.children)) {
       if (child.localName === "script") continue
       if (keep.has(child)) {

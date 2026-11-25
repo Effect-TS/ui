@@ -469,6 +469,10 @@ const blocker = new Html.Element<never>("div").attrs({
 const layer = View.toNode(blocker)
 const inertLayer = View.toNode(blocker.attr("inert", ""))
 
+const editable = ["", "true", "plaintext-only"]
+  .map((value) => `[contenteditable="${value}"]`)
+  .join(",")
+
 const tabbableSelector = [
   "a[href]",
   "area[href]",
@@ -482,9 +486,7 @@ const tabbableSelector = [
   "audio[controls]",
   "video[controls]",
   "[tabindex]",
-  "[contenteditable=\"\"]",
-  "[contenteditable=\"true\"]",
-  "[contenteditable=\"plaintext-only\"]"
+  editable
 ].join(",")
 
 const closestOf = (
@@ -509,22 +511,11 @@ const radioOut = (element: HTMLElement): boolean => {
 }
 
 // Chromium gives what a closed `<details>` hides a box, though Tab skips it.
-const collapsed = (element: Element): boolean => {
-  for (
-    let details = element.parentElement?.closest("details:not([open])");
-    details != null;
-    details = details.parentElement?.closest("details:not([open])")
-  ) {
-    if (details.querySelector(":scope > summary")?.contains(element) !== true) {
-      return true
-    }
-  }
-  return false
-}
+const collapsed = "details:not([open]) > :not(summary:first-of-type)"
 
 const focusable = (element: HTMLElement): boolean =>
   element.isConnected && element.getClientRects().length > 0 &&
-  !collapsed(element) &&
+  element.closest(collapsed) === null &&
   !element.matches(":disabled") && element.closest("[inert]") === null &&
   element.ownerDocument.defaultView?.getComputedStyle(element).visibility !==
     "hidden"
@@ -536,7 +527,7 @@ const inTabOrder = (element: HTMLElement): boolean =>
   (!element.hasAttribute("tabindex") &&
     (element.localName === "details"
       ? element.querySelector(":scope > summary") === null
-      : element.matches("[contenteditable]:not([contenteditable=\"false\"])") &&
+      : element.matches(editable) &&
         element.parentElement?.isContentEditable !== true))
 
 const tabbables = (dialog: Element, root: Element): Array<HTMLElement> =>
@@ -603,12 +594,13 @@ const onTop = (stack: Stack, node: HTMLDialogElement): boolean => {
 }
 
 let handingOff = 0
-// Without `focusVisible`, the browser decides whether to draw a focus ring.
 const handOff = (
   element: HTMLElement | null | undefined,
-  focusVisible?: boolean
+  visible = false
 ): void => {
   if (element == null) return
+  // Never `false`, which hides a focus ring the browser would draw.
+  const focusVisible = visible || undefined
   handingOff++
   try {
     element.focus({ preventScroll: true, focusVisible } as FocusOptions)
@@ -663,7 +655,7 @@ const TrackDialog = Mount.makeStream(
         scope().activeElement ?? document.activeElement
       const popup = (): HTMLElement =>
         (scope().getElementById(current.popupId) as HTMLElement | null) ?? node
-      const takes = (element: HTMLElement, visible?: boolean): boolean => {
+      const takes = (element: HTMLElement, visible = false): boolean => {
         handOff(element, visible)
         return focusedNow() === element
       }
@@ -749,13 +741,12 @@ const TrackDialog = Mount.makeStream(
         const marked = Array.from(
           node.querySelectorAll<HTMLElement>("[autofocus]")
         ).find((element) => !inNested(node, element))
-        const visible = current.openMethod === "keyboard" ? true : undefined
-        if (marked !== undefined) return handOff(marked, visible)
+        const visible = current.openMethod === "keyboard"
         if (
-          current.openMethod !== "touch" &&
+          marked === undefined && current.openMethod !== "touch" &&
           tabbables(node, root).some((element) => takes(element, visible))
         ) return
-        handOff(root, visible)
+        handOff(marked ?? root, visible)
       }
 
       let release: (() => void) | undefined
@@ -815,7 +806,7 @@ const TrackDialog = Mount.makeStream(
           if (takes(to, true)) return event.preventDefault()
           // Chromium can't focus a `<details>` without a summary from script,
           // only with Tab, so the key goes on from a stop next to it.
-          const stop = to.ownerDocument.createElement("span")
+          const stop = document.createElement("span")
           stop.tabIndex = -1
           to[event.shiftKey ? "after" : "before"](stop)
           stop.addEventListener("blur", () => stop.remove(), { once: true })
@@ -991,7 +982,7 @@ const TrackDialog = Mount.makeStream(
           if (focusInside && node.contains(focused)) focused?.blur()
           return
         }
-        const visible = closeMethod === "keyboard" ? true : undefined
+        const visible = closeMethod === "keyboard"
         const marked = closedByFocusOut || (closedByOutsidePress && away)
           ? null
           : byAttribute(document, "data-final-focus", portalId)
