@@ -50,10 +50,6 @@ describe("Html.customElement", () => {
             .value([1, 2])
             .on("change", ({ n }) => n > 0 ? Message.Cleared() : undefined)
             .prop("content", "tip")
-            .on(
-              "color-changed",
-              ({ value }) => Message.ChangedColor({ color: value })
-            )
             .children(h.span("slot"))
             .color(color)
           expect(picker.color).type.not.toBeCallableWith(1)

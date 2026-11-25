@@ -290,6 +290,10 @@ describe("Html", () => {
         h.button.on("click", add).eventOptions,
         h.button.eventOptions
       )
+      assert.isUndefined(
+        h.img.on("dragstart", add, { preventDefault: "always" })
+          .on("dragstart", add).eventOptions.dragstart
+      )
     })
 
     it("a builder class of the user's keeps the fields each of its builders holds", () => {
@@ -559,12 +563,5 @@ describe("Html", () => {
         )
         assert.include(rendered.html, "<p>Idle</p>")
       }))
-  })
-
-  it("a dragstart handler set without options replaces the options of an earlier on", () => {
-    const image = new Html.VoidElement("img")
-      .on("dragstart", "first", { preventDefault: "always" })
-      .on("dragstart", "second")
-    assert.isUndefined(image.eventOptions.dragstart)
   })
 })
