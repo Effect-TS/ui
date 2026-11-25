@@ -72,15 +72,18 @@ import * as Effect from "effect/Effect"
 import type * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
+import * as controlled from "../../internal/controlled.ts"
 import * as internal from "../../internal/play.ts"
 import * as scene from "../../internal/scene.ts"
 import { atSite, callSite } from "../../internal/steps.ts"
+import * as Renderer from "../../Renderer.ts"
 import * as Locator from "../../testing/Locator.ts"
 import type * as Play from "../../testing/Play.ts"
-import type * as TestHost from "../../testing/TestHost.ts"
+import * as TestHost from "../../testing/TestHost.ts"
 import type * as View from "../../View.ts"
 import type * as Html from "../Html.ts"
 import * as defaults from "../internal/defaults.ts"
+import { isCustomTag } from "../internal/elements.ts"
 import { ownEvents } from "../internal/ownEvents.ts"
 import type * as HtmlScene from "./HtmlScene.ts"
 
@@ -370,6 +373,31 @@ class HtmlPlayCursor extends internal.PlayCursor {
   }
 }
 
+const htmlHost = (
+  base: Renderer.Host<TestHost.TestNode>
+): Renderer.Host<TestHost.TestNode> => {
+  const plain = new WeakMap<TestHost.TestElement, Map<string, unknown>>()
+  return {
+    ...base,
+    setProp(node, name, value) {
+      const element = node as TestHost.TestElement
+      if (
+        base.controlled.has(name) && name !== "popoverOpen" &&
+        isCustomTag(element.tag)
+      ) {
+        let values = plain.get(element)
+        if (values === undefined) plain.set(element, values = new Map())
+        if (values.has(name) && values.get(name) === value) return
+        values.set(name, value)
+        base.setProp(node, name, value)
+        controlled.want(element, name, undefined)
+        return
+      }
+      base.setProp(node, name, value)
+    }
+  }
+}
+
 /**
  * Mounts `component` on `TestHost` with `props`, settles, and returns an
  * HTML cursor over it. It takes what `Play.make` takes, and runs the same
@@ -395,4 +423,18 @@ export const make = <
   HtmlPlay<Model, Msg, Events>,
   Play.StepError,
   R | RP | TestHost.TestHost | Scope.Scope
-> => internal.begin(HtmlPlayCursor, "HtmlPlay", make, component, props) as any
+> => {
+  const started = internal.begin(
+    HtmlPlayCursor,
+    "HtmlPlay",
+    make,
+    component,
+    props
+  )
+  return Effect.gen(function*() {
+    const { host } = yield* TestHost.TestHost
+    return yield* Effect.provideService(started, Renderer.Renderer, {
+      host: htmlHost(host)
+    })
+  }) as any
+}

@@ -21,6 +21,7 @@ const Picker = Html.customElement({
   },
   events: {
     "color-changed": Schema.Struct({ value: Schema.String }),
+    input: Schema.Struct({}),
     submit: Schema.Struct({ color: Schema.String }),
     cleared: Schema.Struct({})
   }
@@ -70,7 +71,8 @@ const Swatch = Html.component({
         .value(stops)
         .onColorChanged(({ value }) => Message.ChangedColor({ color: value }))
         .onSubmit(({ color }) => Message.ChangedColor({ color }))
-        .onCleared(Message.Cleared()),
+        .onCleared(Message.Cleared())
+        .onInput(() => undefined),
       h.output(`${color} ${cleared}`)
     )
 })
@@ -225,17 +227,15 @@ describe("Html.customElement", () => {
     ).toThrow()
   })
 
-  it.effect("HtmlPlay.fireElement sends a declared event with its detail", () =>
+  it.effect("HtmlPlay.fireElement sends a declared event, and custom element value stays plain across edits and re-renders", () =>
     Effect.gen(function*() {
       const play = yield* HtmlPlay.make(Swatch, {})
-      yield* play.fireElement(
-        Picker,
-        Locator.tag("test-picker"),
-        "color-changed",
-        {
-          value: "#f00"
-        }
-      )
+      const el = Locator.tag("test-picker")
+      yield* play.type(el, "edited")
+      yield* play.expectIgnored()
+      yield* play.expect(el).toHaveValue("edited")
+      yield* play.fireElement(Picker, el, "color-changed", { value: "#f00" })
       yield* play.expect(Locator.tag("output")).toHaveText("#f00 0")
+      yield* play.expect(el).toHaveValue("edited")
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 })
