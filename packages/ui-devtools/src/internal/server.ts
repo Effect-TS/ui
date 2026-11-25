@@ -5,6 +5,7 @@ import * as HttpRouter from "effect/http/HttpRouter"
 import * as HttpServerRequest from "effect/http/HttpServerRequest"
 import * as HttpServerResponse from "effect/http/HttpServerResponse"
 import * as Layer from "effect/Layer"
+import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
 import * as Socket from "effect/socket/Socket"
@@ -45,6 +46,7 @@ export const make = (options: Options) => {
   const history = History.make(options.size)
   const meta = new Map<string, Meta>()
   const pages = new Set<Page>()
+  const watchers = new Set<Queue.Queue<string>>()
   const { notify, until } = Tools.makeWaiters()
   let closed = 0
   const timeout = options.timeout ?? 10_000
@@ -116,7 +118,12 @@ export const make = (options: Options) => {
           }
           if (batch.length === 0) return
           inspector.ingest(batch)
-          for (const frame of batch) history.record(frame)
+          for (const frame of batch) {
+            history.record(frame)
+            if (watchers.size === 0) continue
+            const text = JSON.stringify(frame)
+            for (const watcher of watchers) Queue.offerUnsafe(watcher, text)
+          }
           notify()
         }))
       }).pipe(Effect.ensuring(Effect.sync(() => {
@@ -213,6 +220,31 @@ export const make = (options: Options) => {
     }))
   )
 
+  // Sends the frames the server holds, then each new one. A frame seen twice, as after an app reconnects,
+  // is ignored by the reader's Inspector.
+  const watch = HttpRouter.add(
+    "GET",
+    "/watch",
+    upgrade(Effect.fnUntraced(function*(socket) {
+      const writer = yield* socket.writer
+      const pull = yield* Socket.readerString(socket)
+      const outbox = yield* Queue.unbounded<string>()
+      for (const session of inspector.sessions()) {
+        for (const frame of session.entries()) {
+          Queue.offerUnsafe(outbox, JSON.stringify(frame))
+        }
+      }
+      watchers.add(outbox)
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => watchers.delete(outbox))
+      )
+      return yield* Effect.raceFirst(
+        Effect.forever(Effect.flatMap(Queue.take(outbox), writer.write)),
+        Effect.forever(pull)
+      )
+    }))
+  )
+
   const server: Tools.Backend = {
     options,
     inspector,
@@ -227,5 +259,5 @@ export const make = (options: Options) => {
         .at(-1)?.seq,
     gap: "skipped"
   }
-  return { server, routes: Layer.mergeAll(log, control) }
+  return { server, routes: Layer.mergeAll(log, control, watch) }
 }

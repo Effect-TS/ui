@@ -109,6 +109,18 @@ Tool names are prefixed with `effect_ui_` (`effect_ui_list_sessions`, `effect_ui
 
 Unlike the Node server, the in-page tools only see the current page load and answer from the overlay's inspector (so `exclude`d updates are not listed and Clear empties the timeline). Both can run at the same time and share the same pause.
 
+## Terminal apps
+
+An app with no DOM, such as an OpenTUI app, sends its log to the server with `DevToolsHeadless.layer`. It isn't in the package's index, so the app never loads the overlay:
+
+```ts
+import * as DevToolsHeadless from "@effect/ui-devtools/DevToolsHeadless"
+
+OpenTuiHost.run(App, {}).pipe(Effect.provide(DevToolsHeadless.layer()))
+```
+
+Run `effect-ui-devtools` in another terminal and open the URL it prints, `http://127.0.0.1:4774` by default. The page is the overlay's panel, filling the tab: it shows the newest session the server holds and follows it live. It's read-only, with no Time travel, and the server can't pause a terminal session or dispatch to it. The page works for web sessions too, and `DevToolsVite.plugin` prints the same URL.
+
 ## The core
 
 `Inspector` is the overlay's core, with no UI. It reads the log's Wire entries and answers the questions a devtools view asks: which entry a number stands for, what an entry was caused by and what it caused, which Command run an `update` issued and how that run ended, and what an instance has going.

@@ -64,6 +64,7 @@
   },
   "scripts": {
     "codegen": "effect-utils codegen",
+    "check-viewer": "node test/browser/check-viewer.mjs",
     "build": "tsc -b tsconfig.json && pnpm babel",
     "babel": "babel dist --plugins annotate-pure-calls --out-dir dist --source-maps",
     "check": "tsc -b tsconfig.json"
@@ -74,7 +75,10 @@
     "effect": "^4.1.4"
   },
   "devDependencies": {
+    "@effect/platform-node": "^4.1.4",
     "@effect/ui": "workspace:^",
+    "@effect/ui-devtools": "workspace:^",
+    "@effect/ui-kit": "workspace:^",
     "@opentui/core": "^0.9.9",
     "@types/node": "^26.6.6",
     "effect": "^4.1.4"

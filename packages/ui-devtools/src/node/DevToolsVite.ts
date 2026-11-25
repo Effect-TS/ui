@@ -286,6 +286,7 @@ export const plugin = (options?: Options): Plugin => {
       const fiber = Layer.build(DevToolsServer.layer(options)).pipe(
         Effect.andThen(Effect.sync(() => {
           settle(true)
+          logger.info("Effect UI DevTools: " + url)
           logger.info("Effect UI DevTools MCP server: " + url + "/mcp")
         })),
         Effect.andThen(Effect.never),

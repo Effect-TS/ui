@@ -98,12 +98,6 @@ const fromPage = (): { readonly url?: unknown; readonly size?: unknown } => {
   }
 }
 
-const socketUrl = (server: string, path: string) => {
-  const url = new URL(path, server)
-  url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
-  return url.href
-}
-
 let explicit = 0
 
 export const make = (options: Options): Layer.Layer<never> =>
@@ -114,9 +108,11 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
     Effect.gen(function*() {
       if (!auto) {
         explicit++
-        yield* Effect.addFinalizer(() => Effect.sync(() => {
-          explicit--
-        }))
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            explicit--
+          })
+        )
         ;(globalThis as unknown as Record<symbol, Attached | undefined>)[
           devToolsKey
         ]?.takeOver()
@@ -516,10 +512,10 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
       }
       if (server !== undefined) {
         const sent = yield* Layer.build(
-          MessageLog.socket(socketUrl(server, "/log"), { buffer: size })
+          MessageLog.socket(Control.socketUrl(server, "/log"), { buffer: size })
         )
         logs.push(Context.get(sent, MessageLog.MessageLog))
-        yield* Remote.connect(socketUrl(server, "/control"), {
+        yield* Remote.connect(Control.socketUrl(server, "/control"), {
           ...controller,
           changes: Stream.fromPubSub(states)
         })

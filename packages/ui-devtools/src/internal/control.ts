@@ -69,3 +69,11 @@ export const decodeToServer = Schema.decodeUnknownOption(
 )
 
 export const metaName = "effect-ui-devtools"
+
+export const defaultPort = 4774
+
+export const socketUrl = (server: string, path: string) => {
+  const url = new URL(path, server)
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
+  return url.href
+}

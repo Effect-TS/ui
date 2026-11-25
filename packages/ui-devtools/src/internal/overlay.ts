@@ -40,6 +40,8 @@ export interface Feed {
   readonly failures: () => number
   readonly open: boolean
   readonly position: () => Position
+  // The DevTools server's own page, with no app to close over, move around or paint.
+  readonly standalone?: boolean | undefined
 }
 
 export class Pages extends Context.Service<Pages, {
@@ -502,11 +504,12 @@ const Header = (
         h.span.class("dot").attr("aria-hidden", "true"),
         "Follow latest"
       ),
-    CornerPicker(h, model),
-    h.button.class("close").attr("aria-label", "Close the inspector").onClick(
-      OverlayMessage.ClickedClose()
-    )
-      .children("✕")
+    h.props.feed.standalone ? null : [
+      CornerPicker(h, model),
+      h.button.class("close").attr("aria-label", "Close the inspector")
+        .onClick(OverlayMessage.ClickedClose())
+        .children("✕")
+    ]
   )
 }
 
@@ -1704,7 +1707,7 @@ const Inspected = (
           Name(h, entry, label.text),
           label.detail === undefined ? null : " " + label.detail
         ),
-        h.button.class("show", shown && "on").attr(
+        feed.standalone ? null : h.button.class("show", shown && "on").attr(
           "aria-pressed",
           String(shown)
         ).disabled(!paintable)
@@ -1746,7 +1749,7 @@ const Panel = (h: H, model: OverlayModel) => {
       "aria-label",
       "Effect UI inspector"
     ).children(
-      h.span.class("grip").attr("aria-hidden", "true"),
+      feed.standalone ? null : h.span.class("grip").attr("aria-hidden", "true"),
       Header(h, undefined, 0, model),
       h.p.class("empty-note").children(
         "Nothing logged yet. Entries appear here as the app runs."
@@ -1793,7 +1796,7 @@ const Panel = (h: H, model: OverlayModel) => {
     "aria-label",
     "Effect UI inspector"
   ).attr("data-pane", model.pane).children(
-    h.span.class("grip").attr("aria-hidden", "true"),
+    feed.standalone ? null : h.span.class("grip").attr("aria-hidden", "true"),
     Header(h, session, entries.length, model),
     page === null
       ? null

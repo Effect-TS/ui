@@ -9,7 +9,9 @@ const usage =
   `Usage: effect-ui-devtools [--port <n>] [--size <n>] [--keep <n>] [--dispatch]
 
 Runs the Effect UI DevTools MCP server. Pages connect with
-DevTools.layer({ server: "<url>" }), agents with <url>/mcp.`
+DevTools.layer({ server: "<url>" }), terminal apps with
+DevToolsHeadless.layer({ server: "<url>" }), agents with <url>/mcp.
+Open <url> in a browser to inspect the newest session.`
 
 const { values } = parseArgs({
   options: {
@@ -47,7 +49,10 @@ if (values.help === true) {
   Layer.build(DevToolsServer.layer(options)).pipe(
     Effect.andThen(
       Effect.sync(() =>
-        process.stdout.write("Effect UI DevTools MCP server: " + url + "/mcp\n")
+        process.stdout.write(
+          "Effect UI DevTools: " + url + "\nEffect UI DevTools MCP server: " +
+            url + "/mcp\n"
+        )
       )
     ),
     Effect.andThen(Effect.never),

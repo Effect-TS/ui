@@ -384,6 +384,12 @@ importers:
       '@effect/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@effect/ui-devtools':
+        specifier: workspace:*
+        version: link:../../packages/ui-devtools
+      '@effect/ui-kit':
+        specifier: workspace:*
+        version: link:../../packages/ui-kit
       '@effect/ui-opentui':
         specifier: workspace:*
         version: link:../../packages/ui-opentui
@@ -580,9 +586,18 @@ importers:
 
   packages/ui-opentui:
     devDependencies:
+      '@effect/platform-node':
+        specifier: ^4.1.4
+        version: 4.1.4(effect@4.1.4)(redis@6.3.1)
       '@effect/ui':
         specifier: workspace:^
         version: link:../ui
+      '@effect/ui-devtools':
+        specifier: workspace:^
+        version: link:../ui-devtools
+      '@effect/ui-kit':
+        specifier: workspace:^
+        version: link:../ui-kit
       '@opentui/core':
         specifier: ^0.9.9
         version: 0.9.9(typescript@7.0.2)(web-tree-sitter@0.25.10)
