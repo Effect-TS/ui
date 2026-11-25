@@ -463,14 +463,15 @@ describe("Tooltip", () => {
         .emitted({ _tag: "RequestedOpen" })
         .props({ open: true, closeDelay: 300 })
       scene.mounted(tracking(scene), placed())
-      // A press with the pointer in the hover area is inside.
-      scene.mounted(tracking(scene), sent("ReturnedToHoverArea"))
+      // A press on the positioner is inside.
+      scene.fire(positioner, "mouseenter")
         .fireDocument("mousedown")
         .expectDefaultPrevented(false)
       assert.deepStrictEqual(scene.current.emitted, [])
       // Keyboard focus holds the tooltip open after the pointer leaves, and
       // a press elsewhere that leaves focus on the trigger still closes it.
-      scene.mounted(tracking(scene), sent("LeftHoverArea"))
+      scene.fire(positioner, "mouseleave")
+        .mounted(tracking(scene), sent("LeftHoverArea"))
       assert.deepStrictEqual(scene.current.pending, [])
       scene.fireDocument("mousedown")
         .emitted({ _tag: "RequestedClose" })
@@ -478,6 +479,7 @@ describe("Tooltip", () => {
       // Without focus, the close delay holds it open, and a press ends the wait.
       scene.fire(trigger, "mouseenter")
         .blur(trigger)
+        .fire(trigger, "mouseleave")
         .mounted(tracking(scene), sent("LeftHoverArea"))
       assert.deepStrictEqual(
         scene.current.pending.map((run) => run.command.args),
@@ -512,7 +514,9 @@ describe("Tooltip", () => {
   it("parts clear stale state and add their styles after the consumer's", () => {
     const tooltip = Story.parts(Tooltip, {
       model: {
-        hovered: false,
+        onTrigger: false,
+        onPositioner: false,
+        inArea: false,
         focused: false,
         instant: null,
         turn: 0,
