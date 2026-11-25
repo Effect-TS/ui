@@ -389,22 +389,20 @@ const TrackTooltip = Mount.makeStream(
     Stream.merge(
       Stream.callback<typeof TooltipMessage.Type>((queue) => {
         const controller = new AbortController()
+        const report = (away: boolean) => {
+          Queue.offerUnsafe(
+            queue,
+            away
+              ? TooltipMessage.LeftHoverArea()
+              : TooltipMessage.ReturnedToHoverArea()
+          )
+        }
+        const trigger = () => args.trigger
         return Effect.acquireRelease(
           Effect.sync(() =>
-            watchHoverArea(node, controller.signal, () =>
-              args.trigger, (away) => {
-              Queue.offerUnsafe(
-                queue,
-                away
-                  ? TooltipMessage.LeftHoverArea()
-                  : TooltipMessage.ReturnedToHoverArea()
-              )
-            })
+            watchHoverArea(node, controller.signal, trigger, report)
           ),
-          () =>
-            Effect.sync(() =>
-              controller.abort()
-            )
+          () => Effect.sync(() => controller.abort())
         )
       }),
       Positioning.trackPosition(
