@@ -80,6 +80,10 @@ const track = Effect.fnUntraced(
     rects.set("anchor", { x: 100, y: 100, width: 80, height: 20 })
     rects.set("positioner", { x: 0, y: 0, width: 120, height: 60 })
     const node = document.getElementById("positioner")!
+    Object.defineProperty(node, "offsetHeight", {
+      configurable: true,
+      value: 60
+    })
     node.style.left = "7px"
     node.style.top = "9px"
     const args = Positioning.trackArgs(props, {
@@ -148,12 +152,6 @@ describe("trackPosition in a document", { concurrent: false }, () => {
       const { visual } = yield* visualViewport
       // Chromium and Gecko, which measure from the layout viewport.
       yield* notWebKit
-      Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
-        configurable: true,
-        get(this: HTMLElement) {
-          return this.id === "positioner" ? 60 : 0
-        }
-      })
       const { node } = yield* track(false)
       assert.strictEqual(node.style.top, "120px")
       // A keyboard leaves 150px on screen: no room below the anchor.
