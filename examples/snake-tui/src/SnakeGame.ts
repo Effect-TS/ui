@@ -4,6 +4,7 @@ import {
   OpenTuiCommand,
   OpenTuiSubscription
 } from "@effect/ui-opentui"
+import { RGBA } from "@opentui/core"
 import { Array, Duration, Schema, Stream } from "effect"
 import { GAME, GAME_SPEED } from "snake/constants"
 import * as Apple from "snake/domain/apple"
@@ -95,11 +96,20 @@ const GAME_STATE_TEXT: Record<GameState, string> = {
   GameOver: "Game Over - Press R to restart"
 }
 
+// Terminal palette colours, so the user's theme supplies the actual colours
+const ANSI = {
+  default: RGBA.defaultForeground(),
+  red: RGBA.fromIndex(1),
+  green: RGBA.fromIndex(2),
+  brightBlack: RGBA.fromIndex(8),
+  brightGreen: RGBA.fromIndex(10)
+}
+
 const GLYPH = {
-  head: { char: "@@", fg: "#22c55e" },
-  body: { char: "[]", fg: "#4ade80" },
-  apple: { char: "()", fg: "#ef4444" },
-  empty: { char: " .", fg: "#374151" }
+  head: { char: "@@", fg: ANSI.brightGreen },
+  body: { char: "[]", fg: ANSI.green },
+  apple: { char: "()", fg: ANSI.red },
+  empty: { char: " .", fg: ANSI.brightBlack }
 }
 
 const cellGlyph = (cell: Position.Position, model: SnakeGameModel) => {
@@ -193,15 +203,16 @@ export const SnakeGame = OpenTui.component({
       gap: 1,
       width: Position.GRID_SIZE * 2 + 4
     }).children(
-      h.text(
+      h.text.style({ fg: ANSI.default }).children(
         h.b("Snake"),
         `  Score: ${model.points}  High: ${model.highScore}`
       ),
-      h.text.style({ fg: "#9ca3af" }).children(
+      h.text.style({ fg: ANSI.default }).children(
         GAME_STATE_TEXT[model.gameState]
       ),
       h.box.style({
         border: true,
+        borderColor: ANSI.brightBlack,
         flexDirection: "column",
         width: Position.GRID_SIZE * 2 + 2,
         height: Position.GRID_SIZE + 2
@@ -214,7 +225,7 @@ export const SnakeGame = OpenTui.component({
             })
           ))
       ),
-      h.text.style({ fg: "#6b7280" }).children(
+      h.text.style({ fg: ANSI.brightBlack }).children(
         "Arrows/WASD: move  SPACE: start/pause  R: restart  Q: quit"
       )
     )
