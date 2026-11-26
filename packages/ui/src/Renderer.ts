@@ -134,9 +134,9 @@ export interface HostEvents<Node> {
  * `elements` lists the vocabularies the host shows, by name, or is `"any"`.
  * `controlled` lists the properties re-applied after every patch, since the
  * user may have changed them; the host skips a no-op. Its members must not
- * change once the host renders. `runsMounts` is `false`
- * on hosts that never run `onMount` work. `commit` is called once at the end
- * of each flush and after mounting, for hosts that apply changes in a batch.
+ * change once the host renders. `runsMounts` is `false` on hosts that never
+ * run `onMount` work. `commit` is called once at the end of each flush and
+ * after mounting, for hosts that apply changes in a batch.
  *
  * `head` receives the head the runtime folded, in the root vocabulary's form
  * (an `HtmlHead` for `Html` when `HtmlHead` is imported, else a title-only
