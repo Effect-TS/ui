@@ -31,6 +31,14 @@ const attributes: ReadonlySet<string> = new Set([
   "data"
 ])
 
+const properties: ReadonlySet<string> = new Set([
+  "href",
+  "src",
+  "action",
+  "formAction",
+  "data"
+])
+
 /**
  * Whether the normalized attribute `name` holds a `javascript:` or
  * `vbscript:` URL, which the renderers omit.
@@ -42,10 +50,10 @@ export const blockedAttribute = (name: string, value: string): boolean =>
 
 /**
  * Whether a built-in element's property `name` would be set to a
- * `javascript:` or `vbscript:` URL. A property is checked as the attribute
- * it reflects.
+ * `javascript:` or `vbscript:` URL. The renderers remove the attribute it
+ * reflects, `name.toLowerCase()`, instead.
  *
  * @internal
  */
 export const blockedProperty = (name: string, value: unknown): boolean =>
-  typeof value === "string" && blockedAttribute(name.toLowerCase(), value)
+  typeof value === "string" && properties.has(name) && isScript(value)

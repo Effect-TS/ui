@@ -324,6 +324,55 @@ describe("HtmlServer", { concurrent: false }, () => {
       }
     }).pipe(Effect.scoped))
 
+  it.effect("a blocked URL property removes only the attribute it reflects", () =>
+    Effect.gen(function*() {
+      const Page = Html.component({
+        name: "Props",
+        props: Schema.Struct({}),
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: (model) => model,
+        view: (h) =>
+          h.div.children(
+            h.a.attr("href", "/save").prop("href", "javascript:"),
+            h.a.prop("href", "javascript:"),
+            h.button.attr("formaction", "/save").prop(
+              "formaction",
+              "javascript:"
+            ),
+            h.button.attr("formaction", "/save").prop(
+              "formAction",
+              "javascript:"
+            )
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toBe(
+        "<!--[/Props--><div><a></a><a></a><button formaction=\"/save\"></button><button></button></div><!--]/Props-->"
+      )
+      for (const hydrate of [false, true]) {
+        // Hydrates markup that still has the blocked href, as an older server wrote it.
+        const app = yield* container(
+          hydrate
+            ? rendered.html.replaceAll("<a>", "<a href=\"javascript:\">")
+            : ""
+        )
+        const before = app.firstElementChild
+        yield* (hydrate
+          ? HtmlHydrate.hydrateEffect(Page, {}, app, rendered.state)
+          : BrowserHost.mountEffect(Page, {}, app))
+        if (hydrate) expect(app.firstElementChild).toBe(before)
+        expect(
+          Array.from(
+            app.querySelectorAll("*"),
+            (element) => element.getAttributeNames()
+          ).flat()
+        ).toEqual(["formaction"])
+      }
+    }).pipe(Effect.scoped))
+
   describe("reports across hydration", () => {
     const Plain = UiSchema.TaggedEnum({ ChangedOn: { on: Schema.Boolean } })
     // An unrelated variant holds a secret, so the last message can't be shipped.

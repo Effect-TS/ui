@@ -112,6 +112,8 @@ const elementAttributes = (
         if (value === true) out.set(name, "")
         else out.delete(name)
         break
+      default:
+        if (url.blockedProperty(name, value)) out.delete(name.toLowerCase())
     }
   }
   return out
