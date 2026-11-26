@@ -730,7 +730,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(region()?.textContent).toBe(announced)
     }).pipe(Effect.scoped))
 
-  it.effect("goes to a link's #hash and moves focus there", () =>
+  it.effect("goes to a link's #hash and moves focus there, and to the top for a bare #", () =>
     Effect.gen(function*() {
       const { app } = yield* start("/")
       clickReporting(link(app, "Person 2 bio"))
@@ -741,23 +741,18 @@ describe("BrowserRouter", { concurrent: false }, () => {
       const bio = document.getElementById("bio")!
       expect(document.activeElement).toBe(bio)
       expect(bio.getAttribute("tabindex")).toBe("-1")
-    }).pipe(Effect.scoped))
 
-  it.effect("a bare # link keeps the # and scrolls to the top", () =>
-    Effect.gen(function*() {
-      yield* start("/people/2")
-      const host = yield* container
+      const follow = (href: string) => {
+        const anchor = app.appendChild(document.createElement("a"))
+        anchor.setAttribute("href", href)
+        clickReporting(anchor)
+        return tick
+      }
       // A fragment ending in # isn't bare.
-      const trailing = host.appendChild(document.createElement("a"))
-      trailing.setAttribute("href", "#bio#")
-      clickReporting(trailing)
-      yield* tick
+      yield* follow("#bio#")
       expect(window.location.hash).toBe("#bio#")
-      const top = host.appendChild(document.createElement("a"))
-      top.setAttribute("href", "#")
       window.scrollTo(0, 1500)
-      expect(clickReporting(top)).toBe(true)
-      yield* tick
+      yield* follow("#")
       expect(window.location.href).toBe(`${window.location.origin}/people/2#`)
       expect(window.scrollY).toBe(0)
     }).pipe(Effect.scoped))
