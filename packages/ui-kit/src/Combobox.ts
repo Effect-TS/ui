@@ -257,6 +257,7 @@ import * as Schema from "effect/Schema"
 import { DirectionProvider } from "./DirectionProvider.ts"
 import * as Engine from "./internal/combobox.ts"
 import { type TextFilter, textFilter } from "./internal/filter.ts"
+import { valueSchema } from "./internal/formInputs.ts"
 import * as Positioning from "./Positioning.ts"
 
 /**
@@ -286,9 +287,6 @@ export const ComboboxItem = Engine.Item
  * @since 0.1.0
  */
 export type ComboboxItem<V extends string = string> = Engine.Item<V>
-
-const valueSchema = <V extends string>(value: Schema.Codec<V, string>) =>
-  Schema.NullOr(Schema.Union([value, Schema.Array(value)]))
 
 /**
  * What a `Combobox` holds: the selected value, the values with

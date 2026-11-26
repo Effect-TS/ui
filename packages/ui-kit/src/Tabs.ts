@@ -387,10 +387,7 @@ const phaseOf = (model: TabsModel, props: TabsProps, rtl: boolean): TabsModel =>
 const enabledIn = (
   tabs: ReadonlyArray<TabsTab>,
   value: string | null
-): value is string => {
-  const tab = tabs[indexOf(tabs, value)]
-  return tab !== undefined && tab.disabled !== true
-}
+): value is string => ListNavigation.available(tabs[indexOf(tabs, value)])
 
 const rtlOf = ($: Directed & { readonly model: TabsModel }) =>
   rightToLeft($.reads.provider, $.model.rtl)
@@ -402,9 +399,7 @@ const activate = <V extends string>(
   value: string
 ) => {
   const tab = $.props.tabs[indexOf($.props.tabs, value)]
-  if (tab === undefined || tab.disabled === true || value === $.props.value) {
-    return model
-  }
+  if (!ListNavigation.available(tab) || value === $.props.value) return model
   return $.set(model).emit(
     events.Selected({
       value: tab.value,

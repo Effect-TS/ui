@@ -1,5 +1,6 @@
 import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
+import * as Schema from "effect/Schema"
 import { flag, visuallyHidden } from "./attributes.ts"
 
 export interface FormField {
@@ -13,6 +14,9 @@ export interface FormField {
   readonly values: ReadonlyArray<string>
   readonly filled: boolean
 }
+
+export const valueSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+  Schema.NullOr(Schema.Union([value, Schema.Array(value)]))
 
 export interface Valued<V extends string = string> {
   readonly value?: V | ReadonlyArray<V> | null | undefined

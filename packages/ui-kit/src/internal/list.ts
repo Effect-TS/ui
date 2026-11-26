@@ -5,7 +5,7 @@ export const keyed = <
   Tag extends string,
   Rest extends ReadonlyArray<unknown>,
   R,
-  V extends string = string
+  V extends string
 >(
   part: View.Part<Tag, [value: V, ...Rest], R>
 ) =>
@@ -22,7 +22,7 @@ export const keyed = <
     ): ReturnType<B["attr"]> => part(element.key(value), value, ...rest)
   )
 
-export const valued = <Tag extends string, R, V extends string = string>(
+export const valued = <Tag extends string, R, V extends string>(
   part: View.Part<Tag, [value: V], R>
 ) =>
   View.wrapPart(

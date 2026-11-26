@@ -238,6 +238,7 @@ import {
   filledOf,
   formInputs,
   toggled,
+  valueSchema,
   valuesOf
 } from "./internal/formInputs.ts"
 import { methodOf } from "./internal/interaction.ts"
@@ -284,9 +285,6 @@ export const SelectItem = itemSchema(Schema.String)
 export type SelectItem<V extends string = string> = ReturnType<
   typeof itemSchema<V>
 >["Type"]
-
-const valueSchema = <V extends string>(value: Schema.Codec<V, string>) =>
-  Schema.NullOr(Schema.Union([value, Schema.Array(value)]))
 
 /**
  * What a `Select` holds: one value, the values of a `multiple` select, or
@@ -683,7 +681,7 @@ const pick = <V extends string>(
     pressing: false
   })
     .emit(events.Picked({ value: item.value, reason: "item-press" }))
-    .emit(SelectEvents.RequestedClose({ reason: "item-press" }))
+    .emit(events.RequestedClose({ reason: "item-press" }))
 }
 
 const highlight = (

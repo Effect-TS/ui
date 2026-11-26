@@ -261,14 +261,14 @@ interface InToolbar {
 }
 
 const disabledOf = (
-  props: ToggleGroupProps<string>,
+  props: ToggleGroupProps,
   toolbar: InToolbar | undefined
 ): boolean => props.disabled === true || toolbar?.disabled === true
 
 const itemDisabled = (
-  props: ToggleGroupProps<string>,
+  props: ToggleGroupProps,
   toolbar: InToolbar | undefined,
-  item: ToggleGroupItem<string>
+  item: ToggleGroupItem
 ): boolean =>
   disabledOf(props, toolbar) || !ListNavigation.available(item) ||
   toolbar?.disabledItems.includes(item.value) === true
@@ -292,7 +292,7 @@ const toggled = <V extends string>(
 
 const tabStopOf = (
   model: ToggleGroupModel,
-  props: ToggleGroupProps<string>,
+  props: ToggleGroupProps,
   toolbar: InToolbar | undefined
 ): string | null => {
   const items = enabledOf(props, toolbar)

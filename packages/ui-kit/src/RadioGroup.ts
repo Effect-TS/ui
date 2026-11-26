@@ -403,10 +403,7 @@ const itemOf = <V extends string>(
   value: string
 ): RadioGroupItem<V> | undefined => items.find((item) => item.value === value)
 
-const picks = <V extends string>(
-  props: RadioGroupProps<V>,
-  item: RadioGroupItem<V>
-): boolean =>
+const picks = (props: RadioGroupProps, item: RadioGroupItem): boolean =>
   props.readOnly !== true && item.readOnly !== true &&
   props.value !== item.value
 
