@@ -75,20 +75,16 @@ jobs:
           pnpm install
           pnpm build
           env -u GITHUB_STEP_SUMMARY pnpm bundle-size --json "$RUNNER_TEMP/base-size.json"
+      # The Bundle size comment workflow posts this report, as fork PRs get a read-only token here.
       - name: Report bundle size
         run: |
           base="$RUNNER_TEMP/base-size.json"
-          report="$RUNNER_TEMP/bundle-size/report.md"
-          mkdir -p "$(dirname "$report")"
-          if [[ -f "$base" ]]; then
-            pnpm bundle-size --base "$base" --markdown "$report"
-          else
-            pnpm bundle-size --markdown "$report"
-          fi
-      # The Bundle size comment workflow posts this report, as fork PRs get a read-only token here.
-      - name: Save PR number
-        if: github.event_name == 'pull_request'
-        run: echo "$PR" > "$RUNNER_TEMP/bundle-size/pr"
+          dir="$RUNNER_TEMP/bundle-size"
+          mkdir -p "$dir"
+          args=(--markdown "$dir/report.md")
+          if [[ -f "$base" ]]; then args+=(--base "$base"); fi
+          pnpm bundle-size "${args[@]}"
+          if [[ -n "$PR" ]]; then echo "$PR" > "$dir/pr"; fi
         env:
           PR: ${{ github.event.pull_request.number }}
       - name: Upload report

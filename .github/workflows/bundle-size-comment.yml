@@ -28,7 +28,7 @@ jobs:
           RUN_ID: ${{ github.event.workflow_run.id }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          artifacts=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID/artifacts" --jq '[.artifacts[] | select(.name == "bundle-size")] | length')
+          artifacts=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID/artifacts?name=bundle-size" --jq .total_count)
           if [[ "$artifacts" == 0 ]]; then
             echo "Run $RUN_ID has no bundle size report."
             exit 0
@@ -47,9 +47,9 @@ jobs:
           fi
           marker="<!-- bundle-size -->"
           { echo "$marker"; cat report/report.md; } > body.md
-          ids=$(gh api --paginate "repos/$GH_REPO/issues/$pr/comments" --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id")
-          if [[ -n "$ids" ]]; then
-            gh api --method PATCH "repos/$GH_REPO/issues/comments/${ids%%$'\n'*}" -F body=@body.md --silent
+          id=$(gh api --paginate "repos/$GH_REPO/issues/$pr/comments?per_page=100" --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -n 1)
+          if [[ -n "$id" ]]; then
+            gh api --method PATCH "repos/$GH_REPO/issues/comments/$id" -F body=@body.md --silent
           else
             gh api "repos/$GH_REPO/issues/$pr/comments" -F body=@body.md --silent
           fi
