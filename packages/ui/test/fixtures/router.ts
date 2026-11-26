@@ -164,7 +164,7 @@ export const Person = Html.component({
     )
 }).pipe(Component.provide(Layer.merge(GetPerson.layer, RenamePerson.layer)))
 
-/** Shows a person, whose result history doesn't save, and their friend, and counts clicks. */
+/** A person, whose result history doesn't save, their friend, and a click count. */
 export const Card = Html.component({
   name: "Card",
   props: Schema.Struct({ id: Schema.Number }),

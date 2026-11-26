@@ -665,10 +665,9 @@ describe("Router", { concurrent: false }, () => {
           click(root, "Home")
           yield* TestHost.settle
           history.go(-1)
-          // The entry leaves out the opted-out result.
           assert.notInclude(JSON.stringify(history.current().state), "Person 1")
           yield* TestHost.settle
-          // A warm cache serves both results, with no fetch.
+          // The warm cache serves both, with no fetch.
           assert.include(root.text(), card)
           assert.strictEqual(personFetches.count, 2)
           click(root, "Home")
@@ -682,7 +681,7 @@ describe("Router", { concurrent: false }, () => {
           yield* TestHost.settle
           history.go(-1)
           yield* TestHost.settle
-          // After a reload the Model and the saved result are restored at once, and the opted-out one is fetched.
+          // After a reload, only the opted-out result is fetched.
           assert.deepStrictEqual(root.frames().slice(1), [
             "HomePerson 1Person 2SlowBackBlockUnblockLoadingPerson 2count 1",
             "HomePerson 1Person 2SlowBackBlockUnblock" + card

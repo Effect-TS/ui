@@ -3043,7 +3043,7 @@ export interface DefineOptions<
             >
           ) => ArgsFor<S[K], M[K & keyof M]>
           readonly debounce?: Duration.Input | undefined
-          /** `false` keeps the result out of history: Back reads it from the cache or fetches it. */
+          /** `false` keeps the result out of history. */
           readonly restore?: false | undefined
           readonly onChange?:
             | OnChange<S[K], M[K & keyof M], NoInfer<Msg>>
@@ -3308,11 +3308,10 @@ export interface Define<V extends View.Elements> {
  * and the keys whose result changed. The result is written first, and the
  * message's `update` sees it in `$.queries`.
  *
- * An entry's `restore: false` keeps its result out of history, for a result
- * too large to save, such as a table: Back restores the Model, and the query
- * reads its cache entry or fetches as on a fresh mount, so its `onChange`
- * runs again. Page state from the server still holds it, and so can history
- * when the user leaves before hydration has decoded it.
+ * An entry's `restore: false` keeps its result out of history, for a large
+ * result such as a table. On Back the query reads the cache or fetches, as on
+ * a fresh mount, so its `onChange` runs again. Server page state still holds
+ * the result, and so can history if the user leaves before hydration decodes it.
  *
  * `head` returns the instance's head entries, typed by the component's
  * vocabulary: `Head.title`, `Head.titleTemplate` and `Head.reduce` on any

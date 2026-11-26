@@ -128,7 +128,7 @@ export const restoreQueries = (
   return out
 }
 
-/** The results history saves: an entry with `restore: false` holds its empty result. */
+/** `results` with each `restore: false` entry emptied. */
 const savedResults = (
   component: Component.Any,
   results: componentQueries.Results | undefined

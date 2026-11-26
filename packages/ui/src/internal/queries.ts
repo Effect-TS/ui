@@ -41,7 +41,6 @@ export interface Entry {
   /** From `debounce`: how many milliseconds a fetch for changed args waits. */
   readonly debounce: number | undefined
   readonly onChange: ((...args: Array<any>) => unknown) | undefined
-  /** From `restore: false`: history saves the empty result instead. */
   readonly restore: false | undefined
 }
 
@@ -350,7 +349,7 @@ export interface Bound {
   readonly byName: ReadonlyMap<string, Entry>
   /** Every result empty: an instance's results before a query writes one. */
   readonly empty: Results
-  /** The empty result of every `restore: false` entry, which history saves over its result. */
+  /** The empty result of each `restore: false` entry, for history to save. */
   readonly unsaved: Results | undefined
   /** The Schema of the results for page state and history: a field per query, by name. */
   readonly schema: ResultsSchema
