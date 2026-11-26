@@ -2232,7 +2232,6 @@ export const makeEncoded = (
   })
 
 interface Sent {
-  readonly seq: number
   readonly tag: WireEntry["_tag"]
   /** The session, or the session and instance of an instance entry. */
   readonly key: string
@@ -2248,9 +2247,9 @@ interface Sent {
  * Entries are encoded by `makeEncoded`. The Layer keeps the last `buffer`
  * frames (1,000 by default), which every new connection receives after its
  * `Hello`, so devtools that connect late see the recent past. Frames that
- * leave that ring are still sent first when they hold live state: each
- * session's `SessionStarted`, and for each instance that hasn't logged
- * `Unmounted`, its `Mounted` and its latest `Update` or `Waiting`. A lost
+ * leave that ring are still sent first while they hold live state: each
+ * session's `SessionStarted`, and each instance's `Mounted` and latest
+ * `Update` or `Waiting` until its `Unmounted` leaves the ring too. A lost
  * connection is retried with backoff, and one warning is logged.
  *
  * @stability experimental
@@ -2267,30 +2266,26 @@ export const socket = (url: string, options?: {
     Effect.gen(function*() {
       const size = Math.max(1, options?.buffer ?? 1_000)
       const outbox = yield* Queue.unbounded<string>()
-      // A frame that leaves `replay` is kept while it holds live state. An
-      // instance is live from its first `Mounted` or `Waiting` to its
-      // `Unmounted`.
       const replay: Array<Sent> = []
-      const sessions = new Map<string, Sent>()
-      const live = new Map<
-        string,
-        { mounted?: Sent; state?: Sent | undefined }
-      >()
+      // Frames that left `replay` and still hold live state, in the order
+      // they left, which is the order a reader takes them in.
+      const kept = new Map<string, string>()
       const hello = JSON.stringify({
         _tag: "Hello",
         version: wireVersion,
         host: options?.host ?? "browser"
       })
 
-      const pin = (left: Sent) => {
-        if (left.tag === "SessionStarted") return sessions.set(left.key, left)
-        const pins = live.get(left.key)
-        if (pins === undefined) return
-        if (left.tag === "Mounted") {
-          pins.mounted = left
-          pins.state = undefined
-        } else if (left.tag === "Update" || left.tag === "Waiting") {
-          pins.state = left
+      const keep = ({ frame, key, tag }: Sent) => {
+        if (tag === "SessionStarted" || tag === "Mounted") {
+          kept.set(key, frame)
+        } else if (tag === "Update" || tag === "Waiting") {
+          // Deleted first, so the frame goes last.
+          kept.delete(key + "/state")
+          kept.set(key + "/state", frame)
+        } else if (tag === "Unmounted") {
+          kept.delete(key)
+          kept.delete(key + "/state")
         }
       }
 
@@ -2298,44 +2293,31 @@ export const socket = (url: string, options?: {
         (batch) =>
           Effect.sync(() => {
             for (const encoded of batch) {
-              const tag = encoded._tag
-              const key = "instance" in encoded
-                ? encoded.session + "/" + encoded.instance
-                : encoded.session
               const frame = JSON.stringify(encoded)
-              if (tag === "Unmounted") live.delete(key)
-              else if (
-                (tag === "Mounted" || tag === "Waiting") && !live.has(key)
-              ) live.set(key, {})
-              replay.push({ seq: encoded.seq, tag, key, frame })
-              if (replay.length > size) pin(replay.shift()!)
+              replay.push({
+                tag: encoded._tag,
+                key: "instance" in encoded
+                  ? encoded.session + "/" + encoded.instance
+                  : encoded.session,
+                frame
+              })
+              if (replay.length > size) keep(replay.shift()!)
               Queue.offerUnsafe(outbox, frame)
             }
           }),
         { maxEntryBytes: options?.maxEntryBytes }
       )
 
-      const backlog = () => {
-        const pinned = Array.from(sessions.values())
-        for (const { mounted, state } of live.values()) {
-          if (mounted !== undefined) pinned.push(mounted)
-          if (state !== undefined) pinned.push(state)
-        }
-        pinned.sort((a, b) => a.seq - b.seq)
-        return [
-          hello,
-          ...pinned.map((sent) => sent.frame),
-          ...replay.map((sent) => sent.frame)
-        ]
-      }
-
       const connection = Effect.gen(function*() {
         const ws = yield* Socket.makeWebSocket(url)
         const writer = yield* ws.writer
         const reader = yield* ws.reader
         // What's queued is already in the replay buffer, so it's sent from there.
-        const frames = yield* Effect.map(Queue.clear(outbox), backlog)
-        yield* Effect.forEach(frames, (frame) => writer.write(frame), {
+        const backlog = yield* Effect.map(
+          Queue.clear(outbox),
+          () => [hello, ...kept.values(), ...replay.map((sent) => sent.frame)]
+        )
+        yield* Effect.forEach(backlog, (frame) => writer.write(frame), {
           discard: true
         })
         return yield* Effect.raceFirst(
