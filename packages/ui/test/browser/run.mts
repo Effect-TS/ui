@@ -3,8 +3,7 @@ import { fileURLToPath } from "node:url"
 import { chromium, type Page } from "playwright"
 
 /**
- * Runs the check `name`: bundles `${name}.ts` into a page that starts with `markup`, waits for it to
- * set `data-ready` on the body, and calls `check` with the page.
+ * The bundled test must set `data-ready` on the body before its assertions can run.
  */
 export const run = async (
   name: string,

@@ -22,9 +22,8 @@
  * - an instance was still waiting for its Layer when the budget was spent;
  * - a problem was reported, on either side.
  *
- * In a browser, a `DOMParser` document has no window, and `showPopover` and
- * `showModal` throw in it, so the page is hydrated in an off-screen iframe,
- * removed when the Scope closes.
+ * In browser tests, hydration uses an off-screen iframe so popovers and modal
+ * dialogs can open. The iframe is removed when the Scope closes.
  *
  * **Example** (Checking a page hydrates)
  *
@@ -271,9 +270,8 @@ const compareHeads = (
 }
 
 /**
- * The document to hydrate `parsed` in: itself if it has a window, else an iframe's, removed with the
- * Scope. The frame is off-screen rather than `display: none`, so focus, layout and animation frames
- * work, and `write` gives it a standards-mode document. The scripts moved into it stay inert.
+ * Keep the iframe off-screen rather than hidden to preserve layout and animation frames.
+ * `write` establishes standards mode; moving the parsed nodes keeps their scripts inert.
  */
 const liveDocument = Effect.fnUntraced(function*(parsed: Document) {
   if (parsed.defaultView !== null) return parsed
