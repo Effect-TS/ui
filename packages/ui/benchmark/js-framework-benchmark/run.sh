@@ -7,9 +7,9 @@
 #   packages/ui/benchmark/js-framework-benchmark/run.sh <dir> [--count <n>] [--benchmark <prefix>...]
 #
 # <dir> is where the harness is cloned, outside the repository. The browser is $CHROMIUM, else
-# `chromium` on PATH. REVERSE=1 runs the frameworks in reverse order, for a second pass. Extra
-# arguments go to each of the harness's `npm run bench`. Results, with the load average when each
-# framework started, are written to <dir>/webdriver-ts/results and summarized by summarize.mjs.
+# `chromium` on PATH. REVERSE=1 runs the frameworks in reverse order. Extra arguments go to each of
+# the harness's `npm run bench`. Results and load.txt are written to <dir>/webdriver-ts/results and
+# summarized by summarize.mjs.
 set -euo pipefail
 
 HARNESS_REV=0f4e78932bf85ed60b163b801bbdbd720fdda54f
@@ -71,7 +71,7 @@ rm -rf results && mkdir results
 order=("${FRAMEWORKS[@]}")
 if [ "${REVERSE:-}" = 1 ]; then mapfile -t order < <(printf '%s\n' "${FRAMEWORKS[@]}" | tac); fi
 load() { echo "$1 $(date -u +%FT%TZ) $(cut -d' ' -f1-3 /proc/loadavg)" >> results/load.txt; }
-# One framework at a time, in order: given several, the harness sorts them by name.
+# One framework at a time: given several, the harness sorts them by name.
 for f in "${order[@]}"; do
   load "$f start"
   npm run bench -- --headless --chromeBinary "$chromium" "$@" --framework "keyed/$f"

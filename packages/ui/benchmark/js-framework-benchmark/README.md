@@ -8,7 +8,7 @@ The harness already has entries for Foldkit and the other frameworks. `effect-ui
 
 Measured on 2026-11-26 with harness revision [`0f4e789`](https://github.com/krausest/js-framework-benchmark/tree/0f4e78932bf85ed60b163b801bbdbd720fdda54f), headless Chromium 153.0.8010.52, Node 26.13 and Linux 6.18, on a shared Azure VM with an AMD EPYC 7763 (16 vCPUs) and 62 GB of RAM. Effect UI is commit `6f86af8`.
 
-There were two full runs of the harness's defaults: 15 iterations of each CPU benchmark and one of each memory and size benchmark. The first run went through the frameworks in the order of the tables and the second in reverse, because other jobs share the VM. The load average when each framework started is in `results/*/load.txt`. It stayed below 9 through the first run. In the second run it was 27 when Solid started and below 2 from React onwards. An earlier first run, which started at a load average of 36, was discarded and repeated.
+There were two full runs of the harness's defaults: 15 iterations of each CPU benchmark and one of each memory and size benchmark. The first run went through the frameworks in the order of the tables and the second in reverse, because other jobs share the VM. The load average when each framework started is in `results/*/load.txt`: below 9 through the first run, and in the second 27 when Solid started and below 2 from React on. An earlier first run started at a load average of 36, which about doubled vanilla JS's and Effect UI's script times, so it was discarded and repeated.
 
 Each cell is the median of both runs' values pooled. Lower is better everywhere.
 
@@ -51,7 +51,7 @@ Each cell is the median of both runs' values pooled. Lower is better everywhere.
 | results/pass1               |      1.00 |      1.26 |    1.45 |        1.74 | 1.23 |   1.14 |  1.09 |
 | results/pass2               |      1.00 |      1.27 |    1.45 |        1.76 | 1.30 |   1.33 |  1.26 |
 
-`vs vanilla` is the geometric mean, over the nine CPU benchmarks, of each framework's median total over vanilla JS's. It's unweighted, unlike the harness's own result page. Solid and Svelte ran at the start of the second run, when the load was highest, which is why their ratios are higher there. Compare frameworks within a run, not the two runs with each other. Effect UI, Foldkit and React score about the same in both runs; Vue, Svelte and Solid score higher in the second.
+`vs vanilla` is the geometric mean, over the nine CPU benchmarks, of each framework's median total over vanilla JS's. It's unweighted, unlike the harness's own result page. Compare frameworks within a run, not the two runs with each other. Effect UI, Foldkit and React score about the same in both. Vue, Svelte and Solid score higher in the second, Solid and Svelte because they started it, when the load was highest.
 
 `total` is the harness's duration from the click to the end of the next paint, read from the Chrome trace. On this VM, painting 1,000 rows takes about 100 ms whatever the framework, so the `script` table (the JavaScript that ran in that window) separates the frameworks better. Sizes and first paint are one sample per run, so treat them as rough. The harness slows the CPU down 4 times for update every 10th row, select row, swap rows and clear 1,000 rows, and 2 times for remove row, so those rows of the tables are 4 (or 2) times what the same work takes at full speed.
 
@@ -59,7 +59,7 @@ Each cell is the median of both runs' values pooled. Lower is better everywhere.
 
 In script time, Effect UI is ahead of Foldkit 0.x on every operation. It runs less than half the JavaScript to create 10,000 rows (181 ms against 399 ms), uses a third less memory with 1,000 rows (4.1 MB against 6.1 MB), and its bundle is 53 kB compressed against Foldkit's 87 kB.
 
-Effect UI is also ahead of React overall. React's 487 ms swap rows makes the gap look larger than it is. That's a known cost of how React moves keyed rows when two distant ones trade places. Without swap rows, `vs vanilla` is 1.27 for Effect UI and 1.41 for React. Effect UI is clearly ahead on creating 10,000 rows (181 ms of script against 422 ms), on replacing rows and on clearing, about level on creating and appending 1,000 rows, and behind on update every 10th row (16.1 ms against 12.9 ms). Svelte and Solid are ahead of both. Vue is about level with Effect UI in total time (1.25 against 1.27) and ahead in script time.
+Effect UI is also ahead of React overall. React's 487 ms swap rows makes the gap look larger than it is. That's a known cost of how React moves keyed rows when two distant ones trade places. Without swap rows, `vs vanilla` is 1.27 for Effect UI and 1.41 for React. In script time, Effect UI is ahead on creating 10,000 rows (181 ms against 422 ms), replacing rows and clearing, level on creating and appending 1,000 rows, and behind on update every 10th row (16.1 ms against 12.9 ms). Svelte and Solid are ahead of both. Vue is level with Effect UI in total time (1.25 against 1.27) and ahead in script time.
 
 The gap is widest on small updates. Updating every 10th row, selecting a row and swapping two rows cost Effect UI 6 to 16 ms of script with the CPU slowed down 4 times, about 1.5 to 4 ms at full speed. Vue, Svelte and Solid need about 3 to 7 ms slowed down. In Effect UI each message runs `update`, then the whole `view`, and `h.lazy` compares the arguments of all 1,000 rows to find the few that changed. Svelte and Solid track which DOM nodes depend on which state and write only those, so their cost follows the size of the change, not the size of the table. Creating rows is closer, since every framework has to build every row.
 
@@ -109,7 +109,7 @@ pnpm install
 packages/ui/benchmark/js-framework-benchmark/run.sh ../js-framework-benchmark
 ```
 
-The argument is where the harness is cloned, outside this repository. `run.sh` clones the harness at the pinned revision with only the seven entries, installs it, builds and packs `@effect/ui`, builds every entry, starts the harness's server on port 8080, checks that every entry is keyed and runs the benchmarks one framework at a time. A run takes about an hour. Set `REVERSE=1` to run the frameworks in reverse order, as the second run above did. Arguments after the directory go to the harness, for example `--count 3 --benchmark 01_ 07_` for a quick check.
+The argument is where the harness is cloned, outside this repository. `run.sh` clones the harness at the pinned revision with only the seven entries, installs it, builds and packs `@effect/ui`, builds every entry, starts the harness's server on port 8080, checks that every entry is keyed and runs the benchmarks one framework at a time. A run takes about an hour. `REVERSE=1` runs the frameworks in reverse order, as the second run did. Arguments after the directory go to the harness, for example `--count 3 --benchmark 01_ 07_` for a quick check.
 
 To summarize one or more runs:
 
