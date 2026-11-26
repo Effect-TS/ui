@@ -55,7 +55,7 @@ This counter shows the core parts of a Component. One definition holds its Model
 
 Click "+1", then click the Effect UI button in the bottom-right corner. [DevTools](#devtools) lists the Message you sent and what it changed.
 
-**A Component works the same on every platform.** Only the platform-specific pieces change: the view elements, the host you mount onto and the effects that interact with them. `Html.component` and `HtmlCommand.focus` target HTML, while `OpenTui.component` and `OpenTuiCommand.focus` in `@effect/ui-opentui` target the terminal.
+**A Component works the same on every platform.** Only the platform-specific pieces change: the view elements, the host you mount onto and the effects that interact with them. For example, `Html.component` and `HtmlCommand.focus` target HTML, while `OpenTui.component` and `OpenTuiCommand.focus` in `@effect/ui-opentui` target the terminal.
 
 ### How Foldkit 0.x and Effect UI handle Messages
 
