@@ -215,6 +215,7 @@ import {
   flag,
   idOf,
   noSelect,
+  textInputDefaults,
   visuallyHidden,
   withStyle
 } from "./internal/attributes.ts"
@@ -1327,12 +1328,6 @@ const WatchScrub = Mount.makeStream(
 const cursorBox =
   "position:fixed;inset:0 auto auto 0;margin:0;pointer-events:none"
 
-const inputDefaults = {
-  autocomplete: "off",
-  autocorrect: "off",
-  spellcheck: "false"
-}
-
 const stepperDefaults = {
   [1]: { "aria-label": "Increase" },
   [-1]: { "aria-label": "Decrease" }
@@ -1683,7 +1678,7 @@ export const NumberField = Html.component({
             focus: model.focus
           })
         )
-        .forward((node) => defaults(node, inputDefaults)))
+        .forward((node) => defaults(node, textInputDefaults)))
     const stepperPart = p.part(
       "button",
       (b, direction: Direction, own: boolean) => {

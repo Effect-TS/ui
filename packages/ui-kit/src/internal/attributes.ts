@@ -136,6 +136,13 @@ export const defaults = <B extends Attributed<B> & Named>(
     node
   )
 
+// For an input the user types free text into.
+export const textInputDefaults = {
+  autocomplete: "off",
+  autocorrect: "off",
+  spellcheck: "false"
+}
+
 export const pressedAttrs = <
   B extends Attributed<B> & { readonly disabled: (disabled: boolean) => B }
 >(

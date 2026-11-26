@@ -9,7 +9,11 @@ export type Format = Intl.NumberFormatOptions & {
   readonly trailingZeroDisplay?: string | undefined
 }
 
-const cached = <A>(store: Map<string, A>, key: unknown, make: () => A): A => {
+export const cached = <A>(
+  store: Map<string, A>,
+  key: unknown,
+  make: () => A
+): A => {
   const id = JSON.stringify(key)
   let value = store.get(id)
   if (value === undefined) {
@@ -148,6 +152,11 @@ const toAscii = (value: string, digits: ReadonlyArray<string>): string =>
       ? String(character.charCodeAt(0) % 16)
       : character
   })
+
+const digitSets = new Map<string, ReadonlyArray<string>>()
+
+export const toAsciiDigits = (text: string, locale: Locale): string =>
+  toAscii(text, cached(digitSets, locale, () => digitsOf(locale)))
 
 interface Reader {
   readonly decimal: string
