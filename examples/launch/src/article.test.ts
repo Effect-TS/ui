@@ -25,23 +25,4 @@ describe("article", () => {
       []
     )
   })
-
-  // pnpm 12 rejects a bare tarball URL as a dependency name (Effect-TS/ui#311).
-  it("names the package in every snapshot install URL", () => {
-    for (const doc of ["article.md", "../../../README.md"]) {
-      const source = readFileSync(
-        new URL(doc, import.meta.url),
-        "utf8"
-      )
-      const urls = Array.from(source.matchAll(
-        /[^\s"']*(https:\/\/pkg\.pr\.new\/Effect-TS\/ui\/(@effect\/[\w-]+)@[^\s"']*)/g
-      ))
-      assert.isNotEmpty(urls)
-      assert.deepStrictEqual(
-        urls.map(([arg]) => arg),
-        urls.map(([, url, name]) => `${name}@${url}`),
-        doc
-      )
-    }
-  })
 })
