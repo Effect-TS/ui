@@ -6,6 +6,7 @@ import {
   DialogTrigger
 } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
+import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing"
 import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -248,6 +249,60 @@ describe("Dialog", () => {
         .mounted(tracked(scene), sent("FocusedOutside"))
       assert.deepStrictEqual(scene.current.emitted, [])
     }))
+
+  for (const topLayer of [true, false]) {
+    it.effect(`opens, takes input and closes in HtmlPlay with topLayer: ${topLayer}`, () =>
+      Effect.gen(function*() {
+        const Msg = UiSchema.TaggedEnum({
+          Opened: {},
+          Closed: {},
+          Typed: { value: Schema.String }
+        })
+        const Settings = Html.component({
+          name: "Settings",
+          model: Schema.Struct({ open: Schema.Boolean, name: Schema.String }),
+          message: Msg
+        }).make({
+          init: () => ({ open: false, name: "" }),
+          update: {
+            Opened: ($) => $.evolve({ open: true }),
+            Closed: ($) => $.evolve({ open: false }),
+            Typed: ($, { value }) => $.evolve({ name: value })
+          },
+          view: (h, model) =>
+            Dialog(h, {
+              props: { open: model.open, topLayer },
+              onEmit: {
+                RequestedOpen: () => Msg.Opened(),
+                RequestedClose: () => Msg.Closed(),
+                Settled: () => undefined
+              },
+              view: (dialog) =>
+                h.div(
+                  dialog.trigger(h.button).children("Settings"),
+                  dialog.portal(h.dialog)?.children(
+                    dialog.popup(h.div).children(
+                      dialog.title(h.h2).children("Settings"),
+                      h.input.attr("aria-label", "Name").value(model.name)
+                        .on("input", ({ value }) => Msg.Typed({ value })),
+                      dialog.close(h.button).children("Close")
+                    )
+                  )
+                )
+            })
+        })
+        const play = yield* HtmlPlay.make(Settings, {})
+        const settings = HtmlLocator.role("button", { name: "Settings" })
+        yield* play.click(settings)
+        yield* play.expect(HtmlLocator.role("dialog", { name: "Settings" }))
+          .toExist()
+        yield* play.type(HtmlLocator.role("textbox", { name: "Name" }), "Ada")
+        yield* play.expect(HtmlLocator.role("textbox", { name: "Name" }))
+          .toHaveValue("Ada")
+        yield* play.click(HtmlLocator.role("button", { name: "Close" }))
+        yield* play.expect(settings).toHaveAttribute("aria-expanded", "false")
+      }).pipe(Effect.provide(TestHost.layer())))
+  }
 
   it.effect("reports transition state and waits for holdExit to be released before settling", () =>
     Effect.gen(function*() {
