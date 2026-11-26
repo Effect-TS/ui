@@ -139,7 +139,7 @@ export const ToggleGroupOrientation = Schema.Literals([
  */
 export type ToggleGroupOrientation = typeof ToggleGroupOrientation.Type
 
-const itemSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+const itemSchema = <S extends Schema.Codec<string, string>>(value: S) =>
   Schema.Struct({ value, disabled: Schema.optional(Schema.Boolean) })
 
 /**
@@ -160,10 +160,10 @@ export const ToggleGroupItem = itemSchema(Schema.String)
  * @since 0.1.0
  */
 export type ToggleGroupItem<V extends string = string> = ReturnType<
-  typeof itemSchema<V>
+  typeof itemSchema<Schema.Codec<V, string>>
 >["Type"]
 
-const propsSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+const propsSchema = <S extends Schema.Codec<string, string>>(value: S) =>
   Schema.Struct({
     value: Schema.Array(value),
     items: Schema.Array(itemSchema(value)),
@@ -204,10 +204,10 @@ export const ToggleGroupProps = propsSchema(Schema.String)
  * @since 0.1.0
  */
 export type ToggleGroupProps<V extends string = string> = ReturnType<
-  typeof propsSchema<V>
+  typeof propsSchema<Schema.Codec<V, string>>
 >["Type"]
 
-const eventsSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+const eventsSchema = <S extends Schema.Codec<string, string>>(value: S) =>
   UiSchema.TaggedEnum({ Toggled: { value: Schema.Array(value) } })
 
 /**
@@ -235,7 +235,7 @@ export const ToggleGroupEvents = eventsSchema(Schema.String)
  * @since 0.1.0
  */
 export type ToggleGroupEvents<V extends string = string> = ReturnType<
-  typeof eventsSchema<V>
+  typeof eventsSchema<Schema.Codec<V, string>>
 >["Type"]
 
 const ToggleGroupMessage = UiSchema.TaggedEnum({

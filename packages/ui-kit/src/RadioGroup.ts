@@ -126,7 +126,7 @@ import { keyed } from "./internal/list.ts"
 import { frameOf, whenFinished } from "./internal/transition.ts"
 import * as ListNavigation from "./ListNavigation.ts"
 
-const itemSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+const itemSchema = <S extends Schema.Codec<string, string>>(value: S) =>
   Schema.Struct({
     value,
     disabled: Schema.optional(Schema.Boolean),
@@ -158,10 +158,10 @@ export const RadioGroupItem = itemSchema(Schema.String)
  * @since 0.1.0
  */
 export type RadioGroupItem<V extends string = string> = ReturnType<
-  typeof itemSchema<V>
+  typeof itemSchema<Schema.Codec<V, string>>
 >["Type"]
 
-const propsSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+const propsSchema = <S extends Schema.Codec<string, string>>(value: S) =>
   Schema.Struct({
     value: Schema.NullOr(value),
     items: Schema.Array(itemSchema(value)),
@@ -206,10 +206,10 @@ export const RadioGroupProps = propsSchema(Schema.String)
  * @since 0.1.0
  */
 export type RadioGroupProps<V extends string = string> = ReturnType<
-  typeof propsSchema<V>
+  typeof propsSchema<Schema.Codec<V, string>>
 >["Type"]
 
-const eventsSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+const eventsSchema = <S extends Schema.Codec<string, string>>(value: S) =>
   UiSchema.TaggedEnum({ Picked: { value } })
 
 /**
@@ -230,7 +230,7 @@ export const RadioGroupEvents = eventsSchema(Schema.String)
  * @since 0.1.0
  */
 export type RadioGroupEvents<V extends string = string> = ReturnType<
-  typeof eventsSchema<V>
+  typeof eventsSchema<Schema.Codec<V, string>>
 >["Type"]
 
 const RadioGroupModel = Schema.Struct({

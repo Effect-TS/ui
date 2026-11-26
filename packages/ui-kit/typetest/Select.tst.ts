@@ -185,6 +185,7 @@ describe("Select", () => {
           element: h.div,
           value: "sepia"
         })
+        expect(select.highlighted).type.toBe<"light" | "dark" | null>()
         return select.trigger(h.button)
       }
     })

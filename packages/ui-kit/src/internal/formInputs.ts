@@ -15,7 +15,7 @@ export interface FormField {
   readonly filled: boolean
 }
 
-export const valueSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+export const valueSchema = <S extends Schema.Codec<string, string>>(value: S) =>
   Schema.NullOr(Schema.Union([value, Schema.Array(value)]))
 
 export interface Valued<V extends string = string> {

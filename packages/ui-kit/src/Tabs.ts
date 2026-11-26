@@ -201,7 +201,7 @@ export const TabsActivationDirection = Schema.Literals([
  */
 export type TabsActivationDirection = typeof TabsActivationDirection.Type
 
-const tabSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+const tabSchema = <S extends Schema.Codec<string, string>>(value: S) =>
   Schema.Struct({
     value,
     disabled: Schema.optional(Schema.Boolean),
@@ -233,10 +233,10 @@ export const TabsTab = tabSchema(Schema.String)
  * @since 0.1.0
  */
 export type TabsTab<V extends string = string> = ReturnType<
-  typeof tabSchema<V>
+  typeof tabSchema<Schema.Codec<V, string>>
 >["Type"]
 
-const propsSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+const propsSchema = <S extends Schema.Codec<string, string>>(value: S) =>
   Schema.Struct({
     value: Schema.NullOr(value),
     tabs: Schema.Array(tabSchema(value)),
@@ -279,10 +279,10 @@ export const TabsProps = propsSchema(Schema.String)
  * @since 0.1.0
  */
 export type TabsProps<V extends string = string> = ReturnType<
-  typeof propsSchema<V>
+  typeof propsSchema<Schema.Codec<V, string>>
 >["Type"]
 
-const eventsSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+const eventsSchema = <S extends Schema.Codec<string, string>>(value: S) =>
   UiSchema.TaggedEnum({
     Selected: { value, activationDirection: TabsActivationDirection }
   })
@@ -307,7 +307,7 @@ export const TabsEvents = eventsSchema(Schema.String)
  * @since 0.1.0
  */
 export type TabsEvents<V extends string = string> = ReturnType<
-  typeof eventsSchema<V>
+  typeof eventsSchema<Schema.Codec<V, string>>
 >["Type"]
 
 const TabsMessage = UiSchema.TaggedEnum({
@@ -395,7 +395,7 @@ const rtlOf = ($: Directed & { readonly model: TabsModel }) =>
 const activate = <V extends string>(
   model: TabsModel,
   $: TabsUpdate<V>,
-  events: ReturnType<typeof eventsSchema<V>>,
+  events: ReturnType<typeof eventsSchema<Schema.Codec<V, string>>>,
   value: string
 ) => {
   const tab = $.props.tabs[indexOf($.props.tabs, value)]

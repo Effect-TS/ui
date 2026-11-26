@@ -306,7 +306,7 @@ export const ComboboxValue = valueSchema(Schema.String)
  * @since 0.1.0
  */
 export type ComboboxValue<V extends string = string> = ReturnType<
-  typeof valueSchema<V>
+  typeof valueSchema<Schema.Codec<V, string>>
 >["Type"]
 
 /**
@@ -416,7 +416,7 @@ export const ComboboxFilterMode = Engine.FilterMode
  */
 export type ComboboxFilterMode = typeof ComboboxFilterMode.Type
 
-const propsSchema = <V extends string>(value: Schema.Codec<V, string>) => {
+const propsSchema = <S extends Schema.Codec<string, string>>(value: S) => {
   const item = Engine.itemSchema(value)
   return Schema.Struct({
     open: Schema.Boolean,
@@ -533,10 +533,10 @@ export const ComboboxProps = propsSchema(Schema.String)
  * @since 0.1.0
  */
 export type ComboboxProps<V extends string = string> = ReturnType<
-  typeof propsSchema<V>
+  typeof propsSchema<Schema.Codec<V, string>>
 >["Type"]
 
-const eventsSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+const eventsSchema = <S extends Schema.Codec<string, string>>(value: S) =>
   UiSchema.TaggedEnum({
     RequestedOpen: { reason: ComboboxChangeReason },
     RequestedClose: { reason: ComboboxChangeReason },
@@ -585,7 +585,7 @@ export const ComboboxEvents = eventsSchema(Schema.String)
  * @since 0.1.0
  */
 export type ComboboxEvents<V extends string = string> = ReturnType<
-  typeof eventsSchema<V>
+  typeof eventsSchema<Schema.Codec<V, string>>
 >["Type"]
 
 /**

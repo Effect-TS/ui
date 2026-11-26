@@ -211,6 +211,9 @@ describe("Combobox", () => {
           element: h.div,
           value: "plum"
         })
+        const group = combobox.groups[0]!
+        expect(group.items[0]!.value).type.toBe<"apple" | "pear">()
+        expect(group.rows[0]![0]!.value).type.toBe<"apple" | "pear">()
         return combobox.input(h.input)
       }
     })

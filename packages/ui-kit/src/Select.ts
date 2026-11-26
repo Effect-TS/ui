@@ -258,7 +258,7 @@ import * as Positioning from "./Positioning.ts"
 import { Toolbar } from "./Toolbar.ts"
 import * as Typeahead from "./Typeahead.ts"
 
-const itemSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+const itemSchema = <S extends Schema.Codec<string, string>>(value: S) =>
   Schema.Struct({
     value,
     label: Schema.String,
@@ -283,7 +283,7 @@ export const SelectItem = itemSchema(Schema.String)
  * @since 0.1.0
  */
 export type SelectItem<V extends string = string> = ReturnType<
-  typeof itemSchema<V>
+  typeof itemSchema<Schema.Codec<V, string>>
 >["Type"]
 
 /**
@@ -304,7 +304,7 @@ export const SelectValue = valueSchema(Schema.String)
  * @since 0.1.0
  */
 export type SelectValue<V extends string = string> = ReturnType<
-  typeof valueSchema<V>
+  typeof valueSchema<Schema.Codec<V, string>>
 >["Type"]
 
 /**
@@ -379,7 +379,7 @@ export const SelectChangeReason = Schema.Literals([
  */
 export type SelectChangeReason = typeof SelectChangeReason.Type
 
-const propsSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+const propsSchema = <S extends Schema.Codec<string, string>>(value: S) =>
   Schema.Struct({
     open: Schema.Boolean,
     items: Schema.Array(itemSchema(value)),
@@ -454,10 +454,10 @@ export const SelectProps = propsSchema(Schema.String)
  * @since 0.1.0
  */
 export type SelectProps<V extends string = string> = ReturnType<
-  typeof propsSchema<V>
+  typeof propsSchema<Schema.Codec<V, string>>
 >["Type"]
 
-const eventsSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+const eventsSchema = <S extends Schema.Codec<string, string>>(value: S) =>
   UiSchema.TaggedEnum({
     RequestedOpen: { reason: SelectChangeReason },
     RequestedClose: { reason: SelectChangeReason },
@@ -465,7 +465,9 @@ const eventsSchema = <V extends string>(value: Schema.Codec<V, string>) =>
     Settled: { open: Schema.Boolean }
   })
 
-type SelectEventsSchema<V extends string> = ReturnType<typeof eventsSchema<V>>
+type SelectEventsSchema<V extends string> = ReturnType<
+  typeof eventsSchema<Schema.Codec<V, string>>
+>
 
 /**
  * What a `Select` emits.
@@ -1632,7 +1634,10 @@ export const makeSelect = <V extends string>(
         ? props.placeholder
         : values.map((value) => items.get(value)?.label ?? value).join(", ")
       const hovers = open && props.highlightItemOnHover !== false
-      const highlighted = model.active
+      // The active key can be stale after the items change, so resolve it to an item.
+      const highlighted = model.active === null
+        ? null
+        : items.get(model.active)?.value ?? null
       let labelled = false
       let listed = false
 
@@ -1787,7 +1792,7 @@ export const makeSelect = <V extends string>(
             lock: open && (modal || aligned),
             modal,
             touch,
-            active: open && highlighted !== null && items.has(highlighted)
+            active: open && highlighted !== null
               ? itemId(highlighted)
               : null,
             scroll: model.activeByKey,

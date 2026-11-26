@@ -63,9 +63,7 @@ import {
   type TransitionStatus
 } from "./transition.ts"
 
-export const itemSchema = <V extends string>(
-  value: Schema.Codec<V, string>
-) =>
+export const itemSchema = <S extends Schema.Codec<string, string>>(value: S) =>
   Schema.Struct({
     value,
     label: Schema.String,
@@ -77,7 +75,7 @@ export const itemSchema = <V extends string>(
 export const Item = itemSchema(Schema.String)
 
 export type Item<V extends string = string> = ReturnType<
-  typeof itemSchema<V>
+  typeof itemSchema<Schema.Codec<V, string>>
 >["Type"]
 
 export interface Group<V extends string = string> {
@@ -403,8 +401,10 @@ const rowsOf = (
   return rows
 }
 
-const groupsOf = (items: ReadonlyArray<Item>): ReadonlyArray<Group> => {
-  const groups: Array<{ key: string | undefined; items: Array<Item> }> = []
+const groupsOf = <V extends string>(
+  items: ReadonlyArray<Item<V>>
+): ReadonlyArray<Group<V>> => {
+  const groups: Array<{ key: string | undefined; items: Array<Item<V>> }> = []
   for (const item of items) {
     const last = groups[groups.length - 1]
     if (last !== undefined && last.key === item.group) last.items.push(item)

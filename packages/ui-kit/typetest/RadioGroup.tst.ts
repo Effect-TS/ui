@@ -3,7 +3,8 @@ import {
   Field,
   makeRadioGroup,
   RadioGroup,
-  type RadioGroupEvents
+  type RadioGroupEvents,
+  RadioGroupItem
 } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Context, Effect, Schema } from "effect"
@@ -41,6 +42,11 @@ type Span<R> = Html.Element<
 const h = View.makeHelper<Msg, {}, Html.Elements>({}, Html)
 
 describe("RadioGroup", () => {
+  it("the exported schemas keep their concrete field schemas", () => {
+    expect(RadioGroupItem.fields.value).type.toBe<typeof Schema.String>()
+    expect(RadioGroupItem.make).type.not.toBeCallableWith({ value: 42 })
+  })
+
   it("needs no provider: its read of a DirectionProvider is optional", () => {
     expect<Component.Headless.Requirements<typeof RadioGroup>>().type.toBe<
       never
