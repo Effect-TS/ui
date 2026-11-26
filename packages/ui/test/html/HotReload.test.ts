@@ -679,9 +679,8 @@ describe("hot reload", { concurrent: false }, () => {
         }))
     }))
 
-  it.live("saves a live root after a second copy's root unmounts, even from an older version", () =>
+  it.live("gives the hot hooks to the copy that still has mounted roots", () =>
     Effect.gen(function*() {
-      sessionStorage.clear()
       const app = (html: typeof Html, name: string) =>
         html.component({ name, model: Schema.Number, message: Schema.Never })
           .make({
@@ -689,34 +688,30 @@ describe("hot reload", { concurrent: false }, () => {
             update: ($) => $.model,
             view: (h) => h.p("x")
           })
+      const saved = () => {
+        sessionStorage.clear()
+        triggerHotSave()
+        return sessionStorage.getItem("@effect/ui/hot") ?? ""
+      }
+      vi.resetModules()
+      const [Host, Html2] = yield* Effect.promise(() =>
+        Promise.all([
+          import("@effect/ui/html/BrowserHost"),
+          import("@effect/ui/html/Html")
+        ])
+      )
+      const mountB = (b: HTMLDivElement) =>
+        Host.mountEffect(app(Html2, "CopyB"), {}, b)
       yield* inContainer("copy-a", (a) =>
         Effect.gen(function*() {
           yield* BrowserHost.mountEffect(app(Html, "CopyA"), {}, a)
-          vi.resetModules()
-          const [Host, Html2] = yield* Effect.promise(() =>
-            Promise.all([
-              import("@effect/ui/html/BrowserHost"),
-              import("@effect/ui/html/Html")
-            ])
-          )
-          const savesA = Effect.gen(function*() {
-            sessionStorage.clear()
-            yield* inContainer("copy-b", (b) =>
-              Effect.scoped(Host.mountEffect(app(Html2, "CopyB"), {}, b)))
-            triggerHotSave()
-            assert.include(
-              sessionStorage.getItem("@effect/ui/hot") ?? "",
-              "/CopyA"
-            )
-          })
-          yield* savesA
-          // Older versions' save hooks have no `live`.
-          const hook = (window as any)[hotKey]
-          const live = hook.live
-          delete hook.live
-          yield* savesA.pipe(Effect.ensuring(Effect.sync(() => {
-            hook.live = live
-          })))
+          yield* inContainer("copy-b", mountB)
+          assert.include(saved(), "/CopyA")
+        }))
+      yield* inContainer("copy-b", (b) =>
+        Effect.gen(function*() {
+          yield* mountB(b)
+          assert.include(saved(), "/CopyB")
         }))
     }))
 })
