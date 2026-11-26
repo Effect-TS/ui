@@ -47,6 +47,9 @@
     "./html/MarkdownContent": {
       "types": "./src/html/MarkdownContent.d.ts"
     },
+    "./html/HtmlServerViteDocument": {
+      "types": "./src/html/HtmlServerViteDocument.d.ts"
+    },
     "./*": "./src/*.ts",
     "./internal/*": null,
     "./html/internal/*": null,
@@ -84,6 +87,9 @@
       "./html/testing": "./dist/html/testing/index.js",
       "./html/MarkdownContent": {
         "types": "./src/html/MarkdownContent.d.ts"
+      },
+      "./html/HtmlServerViteDocument": {
+        "types": "./src/html/HtmlServerViteDocument.d.ts"
       },
       "./*": "./dist/*.js",
       "./internal/*": null,

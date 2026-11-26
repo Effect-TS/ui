@@ -21,7 +21,6 @@
     <!-- A crawler reads these without running the page, so they are
          written here and not in LaunchPage's head. The URLs are
          absolute because Open Graph takes no others. -->
-    <title>Introducing Effect UI</title>
     <meta
       name="description"
       content="Effect UI is the new frontend library that continues the work of Foldkit 0.x. Now in public preview: see what changes and what stays the same."
@@ -58,7 +57,7 @@
     <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><!--app-html--></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

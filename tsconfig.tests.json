@@ -6,7 +6,9 @@
     "**/vitest.*.ts", // All vitest config files across all packages
     "./packages/*/test/**/*.ts",
     "./packages/*/typetest/**/*.ts",
-    "./packages/*/benchmark/**/*.ts"
+    "./packages/*/benchmark/**/*.ts",
+    // The `virtual:@effect/ui/document` types, which the Vite fixture's server entry uses.
+    "./packages/ui/src/html/HtmlServerViteDocument.d.ts"
   ],
   "exclude": [
     "**/node_modules/**",

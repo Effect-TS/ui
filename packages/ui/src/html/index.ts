@@ -13,7 +13,7 @@
  * @since 0.1.0
  */
 
-// @barrel(!(HtmlServerHttp|MarkdownVite|*.d).ts): Auto-generated exports. Do not edit manually.
+// @barrel(!(HtmlServerHttp|HtmlServerVite|MarkdownVite|*.d).ts): Auto-generated exports. Do not edit manually.
 
 /**
  * @stability experimental

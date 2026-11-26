@@ -4,6 +4,7 @@
   "include": ["src/**/*.ts", "vite.config.ts"],
   "compilerOptions": {
     "rootDir": ".",
+    "types": ["vite/client"],
     "noEmit": true,
     "declaration": false,
     "declarationMap": false,

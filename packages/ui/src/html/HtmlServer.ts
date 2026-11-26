@@ -230,3 +230,87 @@ export const serializeState = (state: Renderer.State): string =>
     /[<\u2028\u2029]/g,
     (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`
   )
+
+/**
+ * Fills an HTML template with a rendered page.
+ *
+ * **When to use**
+ *
+ * Use with an `index.html` that holds the page's static markup and asset
+ * tags. `HtmlServerVite.plugin` does this with the app's own `index.html`.
+ *
+ * **Details**
+ *
+ * It adds `htmlAttributes` and `bodyAttributes` right after the `<html>`
+ * and `<body>` tag names, puts `head` before `</head>`, replaces the
+ * `<!--app-html-->` marker with `html`, and adds the state as
+ * `<script type="application/json" id="state">` before `</body>`.
+ *
+ * **Gotchas**
+ *
+ * It throws if the template has no `<!--app-html-->`, `</head>` or
+ * `</body>`. Leave attributes the app sets through its head, such as
+ * `lang`, out of the template, or the tag gets them twice.
+ *
+ * **Example** (Filling a template)
+ *
+ * ```ts import.meta.vitest
+ * import { HtmlServer } from "@effect/ui/html"
+ *
+ * const template =
+ *   "<html><head></head><body><div id=\"app\"><!--app-html--></div></body></html>"
+ *
+ * const page = HtmlServer.document(template, {
+ *   html: "<h1>Home</h1>",
+ *   state: {},
+ *   model: undefined,
+ *   head: "<title>Home</title>",
+ *   htmlAttributes: "lang=\"en\"",
+ *   bodyAttributes: ""
+ * })
+ * page // => '<html lang="en"><head><title>Home</title></head><body><div id="app"><h1>Home</h1></div><script type="application/json" id="state">{}</script></body></html>'
+ * ```
+ *
+ * @stability experimental
+ * @category utils
+ * @since 0.1.0
+ */
+export const document = (
+  template: string,
+  rendered: Rendered<unknown>
+): string => {
+  if (!template.includes(appMarker)) {
+    throw new Error(`The document template has no ${appMarker} marker`)
+  }
+  let html = withAttributes(
+    template,
+    /<html(?=[\s/>])/i,
+    rendered.htmlAttributes
+  )
+  html = withAttributes(html, /<body(?=[\s/>])/i, rendered.bodyAttributes)
+  html = insertBefore(html, "</head>", rendered.head)
+  html = insertBefore(
+    html,
+    "</body>",
+    `<script type="application/json" id="state">${
+      serializeState(rendered.state)
+    }</script>`
+  )
+  // Last, so no search above runs over the app's markup.
+  return html.replace(appMarker, () => rendered.html)
+}
+
+const appMarker = "<!--app-html-->"
+
+const withAttributes = (html: string, open: RegExp, attributes: string) =>
+  attributes === ""
+    ? html
+    : html.replace(open, (tag) => `${tag} ${attributes}`)
+
+const insertBefore = (html: string, tag: string, content: string) => {
+  const index = html.indexOf(tag)
+  if (index === -1) {
+    throw new Error(`The document template has no ${tag}`)
+  }
+  return html.slice(0, index) + content + html.slice(index)
+}
