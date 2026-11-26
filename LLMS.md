@@ -532,6 +532,11 @@ it in `onInitial` to keep the old results on screen, marked busy, instead
 of showing a loading message on every keystroke:
 
 ```ts
+const list = (notes: ReadonlyArray<Note>, busy: boolean) =>
+  h.ul.attr("aria-busy", String(busy)).children(
+    notes.map((note) => h.li.key(note.id).children(note.title))
+  )
+
 AsyncResult.match(h.queries.results, {
   onInitial: () =>
     Option.match(h.previous.results, {
