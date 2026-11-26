@@ -56,6 +56,7 @@ A component that doesn't need an instance, such as `Switch`, is a plain view fun
 - [PreviewCard](src/PreviewCard.ts): a card that previews what a link leads to while the link is hovered or focused, placed against the line of a wrapped link the pointer rested on. The pointer can cross diagonally from the link to the card, and `PreviewCardTrigger` opens it from a link drawn elsewhere.
 - [Progress](src/Progress.ts): a progress bar whose value lives in your Model, with a label, a value text and an indicator sized to the value.
 - [RadioGroup](src/RadioGroup.ts): a controlled group of radio buttons with roving focus, arrow-key navigation, animated indicators and a hidden form input.
+- [RangeCalendar](src/RangeCalendar.ts): a `Calendar` that picks a range of dates in two presses, with a preview of the range in progress.
 - [ScrollArea](src/ScrollArea.ts): a native scroll container with custom scrollbars, overflow state, and edge-fade CSS variables.
 - [Select](src/Select.ts): a button that opens a list of options, whose open state and value live in your Model, with typeahead, the popup laid over the trigger with the selected option on its text, and inputs for a form.
 - [Separator](src/Separator.ts): a horizontal or vertical divider between sections of content.

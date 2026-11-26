@@ -208,6 +208,12 @@ export * from "./RadioGroup.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * from "./RangeCalendar.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./ScrollArea.ts"
 
 /**
