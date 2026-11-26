@@ -1,7 +1,7 @@
 /**
  * A two-page app on the Router: a root that holds the route, a home page, a
  * person page that reads its name through a query, counts its visits (a
- * Command) and counts clicks, a card page whose query results history
+ * Command) and counts clicks, a card page with a query result history
  * doesn't save, and a slow page whose provided Layer takes a second to build.
  */
 import {
@@ -164,7 +164,7 @@ export const Person = Html.component({
     )
 }).pipe(Component.provide(Layer.merge(GetPerson.layer, RenamePerson.layer)))
 
-/** Shows a person and their friend, neither of which history saves, and counts clicks. */
+/** Shows a person, whose result history doesn't save, and their friend, and counts clicks. */
 export const Card = Html.component({
   name: "Card",
   props: Schema.Struct({ id: Schema.Number }),
@@ -178,8 +178,7 @@ export const Card = Html.component({
     },
     friends: {
       queryMany: GetPerson,
-      args: ({ props }) => [{ id: props.id + 1 }],
-      restore: false
+      args: ({ props }) => [{ id: props.id + 1 }]
     }
   }
 }).make({
