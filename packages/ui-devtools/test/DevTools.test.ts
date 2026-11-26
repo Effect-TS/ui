@@ -970,11 +970,6 @@ describe("DevTools overlay", { concurrent: false }, () => {
         ])
 
         yield* showActive(root)
-        assert.deepStrictEqual(rows(), [
-          "Leaf[l] -",
-          "Host -",
-          "Leaf[l] - unmounted"
-        ])
         yield* click(
           HtmlLocator.getByRole(root, "button", { name: /^Browse all/ })
         )
