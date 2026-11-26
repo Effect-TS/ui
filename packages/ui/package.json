@@ -97,7 +97,8 @@
     "build": "tsc -b tsconfig.json && pnpm babel",
     "babel": "babel dist --plugins annotate-pure-calls --out-dir dist --source-maps",
     "check": "tsc -b tsconfig.json",
-    "check-pause": "node test/browser/check-pause.mjs"
+    "check-pause": "node test/browser/check-pause.mjs",
+    "check-ssr": "node test/browser/check-ssr.mjs"
   },
   "peerDependencies": {
     "effect": "^4.1.4"

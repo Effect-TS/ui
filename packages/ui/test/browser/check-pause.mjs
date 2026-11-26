@@ -1,35 +1,4 @@
-import { build } from "esbuild"
-import { fileURLToPath } from "node:url"
-import { chromium } from "playwright"
-
-const at = process.argv.indexOf("--executable")
-const executablePath = at >= 0 ? process.argv[at + 1] : process.env.CHROMIUM
-
-const bundle = await build({
-  entryPoints: [fileURLToPath(new URL("./pause.ts", import.meta.url))],
-  bundle: true,
-  write: false,
-  format: "esm",
-  target: "es2023",
-  logLevel: "silent"
-})
-const html = `<!doctype html>
-<html>
-  <head><style>body { margin: 0; font: 14px system-ui; } main { display: flex; gap: 8px; padding: 24px; }</style></head>
-  <body>
-    <button id="resume">Resume</button>
-    <div id="root" style="display: flex"></div>
-    <script type="module">${
-  bundle.outputFiles[0].text.replaceAll("</script", "<\\/script")
-}</script>
-  </body>
-</html>`
-
-const browser = await chromium.launch({ executablePath })
-const failures = []
-const expect = (ok, what, detail) => {
-  if (!ok) failures.push(what + " " + JSON.stringify(detail))
-}
+import { run } from "./run.mts"
 
 const scene = (page) =>
   page.evaluate(() => {
@@ -55,16 +24,12 @@ const clickAt = async (page, locator) => {
   await page.waitForTimeout(100)
 }
 
-const page = await browser.newPage({ viewport: { width: 800, height: 600 } })
-page.on("pageerror", (error) => failures.push("page error " + String(error)))
-await page.route(
-  "http://check.test/",
-  (route) => route.fulfill({ contentType: "text/html", body: html })
-)
-try {
-  await page.goto("http://check.test/")
-  await page.waitForSelector("body[data-ready]", { state: "attached" })
+const markup =
+  `<style>body { margin: 0; font: 14px system-ui; } main { display: flex; gap: 8px; padding: 24px; }</style>
+    <button id="resume">Resume</button>
+    <div id="root" style="display: flex"></div>`
 
+await run("pause", markup, async (page, expect) => {
   await clickAt(page, page.locator("#root:not([inert]) .count"))
   const live = await scene(page)
   expect(
@@ -363,14 +328,4 @@ try {
     "pausing and resuming before the open toggles arrive delivers the same toggles as no pause",
     { baseline, pausedAround, around }
   )
-} catch (error) {
-  failures.push(String(error).split("\n")[0])
-} finally {
-  await browser.close()
-}
-
-if (failures.length > 0) {
-  console.error(failures.join("\n"))
-  process.exit(1)
-}
-console.log("check-pause: ok")
+})

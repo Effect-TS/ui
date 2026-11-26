@@ -84,14 +84,16 @@ import * as server from "../internal/server.ts"
  * `html`, `model` and `head` are the server's. `state` is the server's
  * state as the client read it, after `HtmlServer.serializeState` and
  * `JSON.parse`. `document` is the hydrated page and `container` the app's
- * element in it. `root` is the client tree, registered with `TestHost` so
- * `TestHost.settle` waits for it; `root.fetches()` lists the client's
- * fetches. `adopted` lists the paths whose Model the client adopted. `log`
- * is the client's log up to adoption and `serverLog` the server's, both
- * unbounded unless `logSize` says otherwise. `commands` lists all `init`
- * Commands run by adopted instances, by position. `misses` lists query
- * entries the server's cache had in flight when the budget
- * was spent, or never started with a budget of 0. The client fetches those.
+ * element in it. When hydration uses an iframe, both belong to its realm, so
+ * `container instanceof HTMLElement` is `false`: use
+ * `document.defaultView.HTMLElement`. `root` is the client tree, registered
+ * with `TestHost` so `TestHost.settle` waits for it; `root.fetches()` lists
+ * the client's fetches. `adopted` lists the paths whose Model the client
+ * adopted. `log` is the client's log up to adoption and `serverLog` the
+ * server's, both unbounded unless `logSize` says otherwise. `commands` lists
+ * all `init` Commands run by adopted instances, by position. `misses` lists
+ * query entries the server's cache had in flight when the budget was spent,
+ * or never started with a budget of 0. The client fetches those.
  *
  * @stability experimental
  * @category models
@@ -264,6 +266,24 @@ const compareHeads = (
   return problems
 }
 
+/**
+ * Keep the iframe off-screen rather than hidden so focus, layout and animation frames work.
+ * `write` establishes standards mode; moving the parsed nodes keeps their scripts inert.
+ */
+const liveDocument = Effect.fnUntraced(function*(parsed: Document) {
+  const frame = globalThis.document.createElement("iframe")
+  frame.style.cssText =
+    "position:fixed;left:-10000px;top:0;width:100vw;height:100vh;border:0"
+  yield* Effect.addFinalizer(() => Effect.sync(() => frame.remove()))
+  globalThis.document.body.append(frame)
+  const live = frame.contentDocument!
+  live.open()
+  live.write("<!doctype html>")
+  live.close()
+  live.documentElement.replaceWith(parsed.documentElement)
+  return live
+})
+
 const nextMacrotask = Effect.callback<void>((resume) => {
   const handle = setTimeout(() => resume(Effect.void), 0)
   return Effect.sync(() => clearTimeout(handle))
@@ -318,6 +338,12 @@ const stepLimit = 10_000
  *
  * Any problem fails `ssr`, including `Command.ServerCommandIssued` on the
  * server. To test one, render with `Renderer.prerender` instead.
+ *
+ * In browser tests, pages with a popover or modal dialog open in the server
+ * render hydrate in an off-screen iframe, removed when the Scope closes.
+ * Other pages hydrate without a window. On those pages, opening a popover
+ * or modal dialog first on the client throws `InvalidStateError`, including
+ * after hydration or in an instance that waited for its Layer.
  *
  * @stability experimental
  * @category constructors
@@ -423,11 +449,18 @@ export const ssr = <
       { readonly query: string; readonly logKey: string }
     > = []
     const writer = server.makeWriter()
+    let topLayer = false
     const serverFiber = yield* runtime.prerender(component as any, props, {
       budget,
       elements: [Html.name],
       static: isStatic,
-      sink: writer,
+      sink: {
+        ...writer,
+        open(tag, attrs, props) {
+          topLayer ||= props.popoverOpen === true || props.open === "modal"
+          writer.open(tag, attrs, props)
+        }
+      },
       onFinish: (cache) => {
         serverCache = cache
         misses = cache.misses()
@@ -473,7 +506,11 @@ export const ssr = <
     }><head>${server.headTags(serverHead)}</head><body ${
       server.attributes(server.bodyOwned(serverHead))
     }><div id="app">${html}</div></body></html>`
-    const document = new DOMParser().parseFromString(page, "text/html")
+    const parsed = new DOMParser().parseFromString(page, "text/html")
+    // happy-dom gives a parsed document a window.
+    const document = topLayer && parsed.defaultView === null
+      ? yield* liveDocument(parsed)
+      : parsed
     const container = document.getElementById("app")!
     const before = serverNodes(container)
     const project = options?.frames ??
