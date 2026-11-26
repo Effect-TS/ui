@@ -5,34 +5,41 @@ import { Cause, Effect, Exit, Layer, Schema } from "effect"
 // The `effect/testing` barrel pulls in `node:assert`.
 import * as TestClock from "effect/testing/TestClock"
 
-const App = Html.component({
+const app = Html.component({
   name: "App",
   model: Schema.Struct({}),
   message: Schema.Never
-}).make({
-  init: () => ({}),
-  update: ($) => $.model,
-  view: (h) =>
-    h.div(
-      h.div.popover("manual", true).children("Cookies"),
-      h.dialog.modal(true).children("Terms")
-    )
 })
 
-Effect.runPromiseExit(
-  ssr(App, {}).pipe(
-    Effect.map(({ container }) => ({
-      popover: container.querySelector(":popover-open") !== null,
-      modal: container.querySelector(":modal") !== null
-    })),
-    Effect.scoped,
-    Effect.provide(Layer.mergeAll(TestHost.layer(), TestClock.layer()))
+const Popover = app.make({
+  init: () => ({}),
+  update: ($) => $.model,
+  view: (h) => h.div.popover("manual", true).children("Cookies")
+})
+
+const Modal = app.make({
+  init: () => ({}),
+  update: ($) => $.model,
+  view: (h) => h.dialog.modal(true).children("Terms")
+})
+
+/** Whether `App` hydrates with an element matching `selector`, or how `ssr` failed. */
+const hydrates = (App: typeof Popover, selector: string) =>
+  Effect.runPromiseExit(
+    ssr(App, {}).pipe(
+      Effect.map(({ container }) => container.querySelector(selector) !== null),
+      Effect.scoped,
+      Effect.provide(Layer.mergeAll(TestHost.layer(), TestClock.layer()))
+    )
+  ).then((exit) =>
+    Exit.isSuccess(exit) ? exit.value : Cause.pretty(exit.cause).split("\n")[0]
   )
-).then((exit) => {
-  Object.assign(globalThis, {
-    results: Exit.isSuccess(exit)
-      ? exit.value
-      : { failure: Cause.pretty(exit.cause).split("\n")[0] }
-  })
+
+// One page each, so each has to get the window it needs on its own.
+Promise.all([
+  hydrates(Popover, ":popover-open"),
+  hydrates(Modal, ":modal")
+]).then(([popover, modal]) => {
+  Object.assign(globalThis, { results: { popover, modal } })
   document.body.setAttribute("data-ready", "")
 })

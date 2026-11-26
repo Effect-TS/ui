@@ -344,9 +344,10 @@ const stepLimit = 10_000
  * Any problem fails `ssr`, including `Command.ServerCommandIssued` on the
  * server. To test one, render with `Renderer.prerender` instead.
  *
- * In a browser, a popover or a modal dialog that first opens after hydration
- * throws `InvalidStateError`: the page only has a window when the server
- * rendered one open.
+ * In a browser, the page only has a window when the server rendered a
+ * popover or a modal dialog open. One that first opens on the client, after
+ * hydration or in an instance that waited for its Layer, throws
+ * `InvalidStateError`.
  *
  * @stability experimental
  * @category constructors

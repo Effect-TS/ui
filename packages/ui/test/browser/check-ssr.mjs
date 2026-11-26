@@ -1,10 +1,11 @@
 import { run } from "./run.mts"
 
 await run("ssr", "", async (page, expect) => {
-  const results = await page.evaluate(() => globalThis.results)
+  const { popover, modal } = await page.evaluate(() => globalThis.results)
   expect(
-    results.popover === true && results.modal === true,
-    "a popover and a modal dialog open from the start hydrate open",
-    results
+    popover === true,
+    "a popover open from the start hydrates open",
+    popover
   )
+  expect(modal === true, "a dialog modal from the start hydrates modal", modal)
 })
