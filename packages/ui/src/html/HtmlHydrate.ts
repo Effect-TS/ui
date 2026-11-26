@@ -743,7 +743,8 @@ export const hydrateEffect = <
  * buttons do nothing, links still navigate through the Router, and a
  * `<form>` submits natively. What the user types or picks in its fields
  * stays, and reaches the fields' `input` and `change` handlers when it adopts.
- * Head sync starts once no instance is waiting.
+ * Clicks and submits aren't kept, whether made on a waiting instance or
+ * before the client runs. Head sync starts once no instance is waiting.
  *
  * The cache hydrates from the state's `~query` entries. Until `adopted`
  * completes or the Router first navigates, a watch, `get` or `prefetch`

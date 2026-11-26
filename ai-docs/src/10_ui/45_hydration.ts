@@ -31,6 +31,26 @@ const hydrate = Effect.gen(function*() {
   )
   // `hydrateEffect` is `hydrate` as an Effect that returns the root. `adopted`
   // completes once every instance is live. Until then a waiting one is inert.
+  // Field edits made before an instance adopts reach its handlers; clicks and
+  // submits don't.
+  //
+  // To keep clicks and submits made before hydration starts, place an inline
+  // script at the start of `<body>` with capture-phase listeners on
+  // `document` for targets inside the container. If `target.closest("button")`
+  // is a button the app will replay, cancel the click and record the button.
+  // Leave other clicks, such as on links, alone. Cancel submits and record each
+  // form with its `submitter`. Remove the listeners before `hydrateEffect`,
+  // or clicks on live instances would run twice. From then on, waiting
+  // instances' click handlers don't run and their forms submit natively.
+  //
+  // After `root.adopted`, skip anything no longer connected or enabled
+  // (hydration disconnects the nodes it rebuilt). Call `click()` on each
+  // recorded button, and `form.requestSubmit(submitter)` for each submit, or
+  // `form.requestSubmit()` when it had no submitter. Skip a submit if its
+  // recorded submitter is no longer a submit button for that form:
+  // `requestSubmit` would throw; omitting the submitter would lose its name
+  // and value. Replay waits for the slowest instance. If the client bundle
+  // fails to load, cancelled submits leave forms doing nothing.
   yield* root.adopted
   return yield* Effect.never
 }).pipe(
