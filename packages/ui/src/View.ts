@@ -1591,7 +1591,8 @@ export class ElementBuilder<
     return out
   }
   /**
-   * Sets an attribute, or removes it with `undefined`.
+   * Sets an attribute, or removes it with `undefined`. The HTML renderers omit
+   * a URL attribute holding a `javascript:` or `vbscript:` URL; see `Html`.
    *
    * @since 0.1.0
    */
@@ -1658,7 +1659,9 @@ export class ElementBuilder<
     return out
   }
   /**
-   * Sets a property. The host decides what it means.
+   * Sets a property. The host decides what it means. For built-in elements,
+   * the HTML host removes the reflected attribute when a URL property is set
+   * to a `javascript:` or `vbscript:` URL; see `Html`.
    *
    * @since 0.1.0
    */

@@ -240,6 +240,146 @@ describe("HtmlServer", { concurrent: false }, () => {
       }
     }).pipe(Effect.scoped))
 
+  it.effect("drops javascript: and vbscript: URLs on the server, fresh client and hydrated client", () =>
+    Effect.gen(function*() {
+      const Page = Html.component({
+        name: "Urls",
+        props: Schema.Struct({ url: Schema.String }),
+        model: Schema.String,
+        message: Schema.String
+      }).make({
+        init: ($) => $.props.url,
+        update: (_, message) => message,
+        view: (h, url) =>
+          h.div.children(
+            h.a.attr("href", url),
+            h.form.attr("action", url).children(
+              h.button.attr("formaction", url)
+            ),
+            h.img.attr("src", url),
+            h.el("object").attr("data", url),
+            h.el("svg").children(
+              h.el("a").attr("href", url).attr("xlink:href", url)
+            )
+          )
+      })
+      const blocked = " Java\tScript:"
+      const rendered = yield* HtmlServer.renderToHtml(Page, { url: blocked })
+      expect(rendered.html).toBe(
+        "<!--[/Urls--><div><a></a><form><button></button></form><img><object></object>" +
+          "<svg><a></a></svg></div><!--]/Urls-->"
+      )
+      const relative = yield* HtmlServer.renderToHtml(Page, {
+        url: "/relative"
+      })
+      expect(relative.html).toBe(
+        "<!--[/Urls--><div><a href=\"/relative\"></a><form action=\"/relative\"><button formaction=\"/relative\"></button></form>" +
+          "<img src=\"/relative\"><object data=\"/relative\"></object>" +
+          "<svg><a href=\"/relative\" xlink:href=\"/relative\"></a></svg></div><!--]/Urls-->"
+      )
+      const written = (url: string) =>
+        ["href", "action", "formaction", "src", "data", "href", "xlink:href"]
+          .map((name) => `${name}=${url}`)
+      for (const hydrate of [false, true]) {
+        const app = yield* container(hydrate ? rendered.html : "")
+        const before = app.firstElementChild
+        const root = yield* (hydrate
+          ? HtmlHydrate.hydrateEffect(
+            Page,
+            { url: blocked },
+            app,
+            rendered.state
+          )
+          : BrowserHost.mountEffect(Page, { url: blocked }, app))
+        if (hydrate) expect(app.firstElementChild).toBe(before)
+        // `attributes`, not `getAttribute`: happy-dom's is stale for an SVG `a` with both hrefs.
+        const urls = () =>
+          Array.from(
+            app.querySelectorAll("*"),
+            (element) =>
+              Array.from(element.attributes, (attribute) =>
+                `${attribute.name}=${attribute.value}`)
+          ).flat()
+        expect(urls()).toEqual([])
+        for (
+          const [url, expected] of [
+            ["/relative", written("/relative")],
+            ["VBSCRIPT:", []],
+            ["mailto:a@b.c", written("mailto:a@b.c")]
+          ] as const
+        ) {
+          root.send(url)
+          yield* tick
+          expect(urls()).toEqual(expected)
+        }
+      }
+    }).pipe(Effect.scoped))
+
+  it.effect("a blocked URL property removes only the attribute it reflects, and adoption drops a stale blocked URL", () =>
+    Effect.gen(function*() {
+      let sets = 0
+      customElements.define(
+        "x-url-prop",
+        class extends HTMLElement {
+          get href() {
+            return "javascript:"
+          }
+          set href(_: string) {
+            sets++
+          }
+        }
+      )
+      const Page = Html.component({
+        name: "Props",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          h.div.children(
+            h.a.attr("href", "javascript:"),
+            h.a.attr("href", "/save").prop("href", "javascript:"),
+            h.a.prop("href", "javascript:"),
+            h.button.attr("formaction", "/save").prop(
+              "formaction",
+              "javascript:"
+            ),
+            h.button.attr("formaction", "/save").prop(
+              "formAction",
+              "javascript:"
+            ),
+            h.el("x-url-prop").prop("href", "javascript:")
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toBe(
+        "<!--[/Props--><div><a></a><a></a><a></a><button formaction=\"/save\"></button><button></button><x-url-prop></x-url-prop></div><!--]/Props-->"
+      )
+      for (const hydrate of [false, true]) {
+        // Hydrates markup that still has the blocked href, as an older server wrote it.
+        const app = yield* container(
+          hydrate
+            ? rendered.html.replaceAll("<a>", "<a href=\"javascript:\">")
+            : ""
+        )
+        const before = app.firstElementChild
+        sets = 0
+        yield* (hydrate
+          ? HtmlHydrate.hydrateEffect(Page, {}, app, rendered.state)
+          : BrowserHost.mountEffect(Page, {}, app))
+        if (hydrate) expect(app.firstElementChild).toBe(before)
+        // A custom element's equal property isn't written again on adoption.
+        expect(sets).toBe(hydrate ? 0 : 1)
+        expect(
+          Array.from(
+            app.querySelectorAll("*"),
+            (element) => element.getAttributeNames()
+          ).flat()
+        ).toEqual(["formaction"])
+      }
+    }).pipe(Effect.scoped))
+
   describe("reports across hydration", () => {
     const Plain = UiSchema.TaggedEnum({ ChangedOn: { on: Schema.Boolean } })
     // An unrelated variant holds a secret, so the last message can't be shipped.

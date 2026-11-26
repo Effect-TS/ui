@@ -18,6 +18,7 @@ import * as BrowserHost from "./BrowserHost.ts"
 import type * as Html from "./Html.ts"
 import { attributeOf, isRadio, radioGroup } from "./internal/dom.ts"
 import * as markers from "./internal/markers.ts"
+import * as url from "./internal/url.ts"
 
 const ELEMENT = 1
 const TEXT = 3
@@ -451,6 +452,9 @@ const between = (
         const element = node as Element
         const normalized = attributeOf(element, name)
         if (normalized === undefined) return
+        if (value !== undefined && url.blockedAttribute(normalized, value)) {
+          value = undefined
+        }
         if (value !== undefined) (entry.names ??= []).push(normalized)
         const served = element.getAttribute(normalized)
         if (value === undefined ? served === null : served === value) return
@@ -467,9 +471,11 @@ const between = (
       if (edits.keeps(node, name, value)) {
         return keeping(node, name, value, () => base.setProp(node, name, value))
       }
+      // An equal `href` property can still have its attribute, which the host removes.
       if (
         entry !== undefined && (node as any)[name] === value &&
-        base.controlled?.has(name) !== true
+        base.controlled?.has(name) !== true &&
+        !url.blockedProperty((node as Element).localName, name, value)
       ) return
       base.setProp(node, name, value)
     },

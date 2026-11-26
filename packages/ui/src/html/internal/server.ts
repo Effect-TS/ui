@@ -8,6 +8,7 @@ import * as Head from "../HtmlHead.ts"
 import * as elements from "./elements.ts"
 import * as headAttributes from "./headAttributes.ts"
 import * as markers from "./markers.ts"
+import * as url from "./url.ts"
 
 // ---------------------------------------------------------------------------
 // HTML
@@ -92,7 +93,9 @@ const elementAttributes = (
   const svg = elements.svgTags.has(tag)
   for (const [name, value] of Object.entries(attrs)) {
     const normalized = elements.attributeName(name, svg)
-    if (normalized !== undefined) out.set(normalized, value)
+    if (normalized === undefined) continue
+    if (url.blockedAttribute(normalized, value)) out.delete(normalized)
+    else out.set(normalized, value)
   }
   if (elements.isCustomTag(tag)) return out
   for (const [name, value] of Object.entries(props)) {
@@ -109,6 +112,10 @@ const elementAttributes = (
         if (value === true) out.set(name, "")
         else out.delete(name)
         break
+      default:
+        if (url.blockedProperty(tag, name, value)) {
+          out.delete(name.toLowerCase())
+        }
     }
   }
   return out
@@ -155,6 +162,7 @@ const plainAttributes = (
       ) return undefined
     }
     const value = attrs[name]!
+    if (url.blockedAttribute(name, value)) continue
     out += value === "" ? ` ${name}` : ` ${name}="${escapeAttribute(value)}"`
   }
   return out
