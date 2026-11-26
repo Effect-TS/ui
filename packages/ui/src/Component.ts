@@ -3311,7 +3311,8 @@ export interface Define<V extends View.Elements> {
  * An entry's `restore: false` keeps its result out of history, for a result
  * too large to save, such as a table: Back restores the Model, and the query
  * reads its cache entry or fetches as on a fresh mount, so its `onChange`
- * runs again. Page state from the server still holds it.
+ * runs again. Page state from the server still holds it, and so can history
+ * when the user leaves before hydration has decoded it.
  *
  * `head` returns the instance's head entries, typed by the component's
  * vocabulary: `Head.title`, `Head.titleTemplate` and `Head.reduce` on any
