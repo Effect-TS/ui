@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { assert, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
+import { Effect, Schema, SchemaGetter } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { describe, vi } from "vitest"
 
@@ -260,6 +260,94 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
       yield* tick
       assert.strictEqual(app.querySelector("p")?.textContent, "Note 1")
     }))
+
+  it.effect("an unread async ~query decode is interrupted when Query loads after adoption", () =>
+    Effect.gen(function*() {
+      vi.resetModules()
+      const [Component, UiSchema, Html, HtmlServer, HtmlHydrate, queryCore] =
+        yield* Effect.promise(() =>
+          Promise.all([
+            import("@effect/ui/Component"),
+            import("@effect/ui/UiSchema"),
+            import("@effect/ui/html/Html"),
+            import("@effect/ui/html/HtmlServer"),
+            import("@effect/ui/html/HtmlHydrate"),
+            import("@effect/ui/internal/queryCore")
+          ])
+        )
+      let child: ((h: any) => any) | undefined
+      const Message = UiSchema.TaggedEnum({ Opened: {} })
+      const App = Html.component({
+        name: "App",
+        model: Schema.Boolean,
+        message: Message
+      }).make({
+        init: () => false,
+        update: () => true,
+        view: (h, open) =>
+          h.div.children(
+            h.button.on("click", Message.Opened()).children("Open"),
+            open && child !== undefined ? child(h) : h.p.children("closed")
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(App, {})
+      const app = yield* container
+      app.innerHTML = rendered.html
+      const root = yield* HtmlHydrate.hydrateEffect(App, {}, app, {
+        ...rendered.state,
+        "~query": {
+          "lazy/AsyncNote": [
+            ["{\"id\":\"1\"}", 0, "Note 1", 0],
+            ["{\"id\":\"2\"}", 0, "orphan", 0]
+          ]
+        }
+      })
+      yield* root.adopted
+      assert.isUndefined(queryCore.loaded)
+
+      const Query = yield* Effect.promise(() => import("@effect/ui/Query"))
+      let orphanCancelled = false
+      const Body = Schema.String.pipe(Schema.decode({
+        decode: SchemaGetter.transformEffect((body: string) =>
+          body === "orphan"
+            ? Effect.onInterrupt(Effect.never, () =>
+              Effect.sync(() => {
+                orphanCancelled = true
+              }))
+            : Effect.succeed(body)
+        ),
+        encode: SchemaGetter.transform((body: string) => body)
+      }))
+      class GetNote extends Query.Service<GetNote>()("lazy/AsyncNote", {
+        args: { id: Schema.String },
+        success: Body,
+        error: Schema.Never,
+        staleTime: "30 seconds"
+      }) {
+        static readonly layer = this.toLayer(() => Effect.never)
+      }
+      const Note = Html.component({
+        name: "Note",
+        model: Schema.Null,
+        message: Schema.Never,
+        queries: { note: { query: GetNote, args: () => ({ id: "1" }) } }
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          h.p.children(
+            AsyncResult.isSuccess(h.queries.note)
+              ? h.queries.note.value
+              : "loading"
+          )
+      }).pipe(Component.provide(GetNote.layer))
+      child = (h) => Note(h, {})
+
+      app.querySelector("button")!.click()
+      yield* tick
+      assert.strictEqual(app.querySelector("p")?.textContent, "Note 1")
+      assert.isTrue(orphanCancelled)
+    }).pipe(Effect.scoped))
 
   it.effect("a Command that imports Query while it runs still writes its result to the cache", () =>
     Effect.gen(function*() {
