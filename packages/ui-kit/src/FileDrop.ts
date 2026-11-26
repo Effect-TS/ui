@@ -300,8 +300,8 @@ export const FileDrop = Html.component({
 }).make({
   init: () => ({ dragOver: false }),
   update: {
-    // The Model tracks the drag even while disabled, and `parts` hides it.
-    Entered: ($) => $.evolve({ dragOver: true }),
+    Entered: ($) =>
+      $.props.disabled === true ? $.model : $.evolve({ dragOver: true }),
     Left: ($) => $.evolve({ dragOver: false }),
     Dropped: ($, { files }) =>
       $.evolve({ dragOver: false }).emit(...classify(files, $.props)),
@@ -310,7 +310,8 @@ export const FileDrop = Html.component({
         ? $.model
         : $.run(
           HtmlFiles.pick(
-            ({ files }) => FileDropMessage.CompletedPick({ files }),
+            ({ opened, files }) =>
+              FileDropMessage.CompletedPick({ files: opened ? files : [] }),
             {
               accept: $.props.accept,
               multiple: $.props.multiple

@@ -124,7 +124,7 @@ describe("FileDrop", () => {
       assert.deepStrictEqual(scene.current.emitted, [])
 
       scene.click(trigger)
-        .resolve(HtmlFiles.Pick, { opened: false, files: [] })
+        .resolve(HtmlFiles.Pick, { opened: false, files: [png] })
       assert.deepStrictEqual(scene.current.emitted, [])
 
       // Mixed picked batch emits Picked then Rejected.
@@ -161,8 +161,11 @@ describe("FileDrop", () => {
       scene.expect(trigger).toBeDisabled()
 
       scene.fire(zone, "dragenter")
-        .drop(zone, { files: [file("photo.png", "image/png")] })
+        .props({ disabled: false })
       assert.isUndefined(scene.get(zone).attrs?.["data-drag-over"])
+
+      scene.props({ disabled: true })
+        .drop(zone, { files: [file("photo.png", "image/png")] })
       assert.deepStrictEqual(scene.current.emitted, [])
     }))
 
