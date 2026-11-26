@@ -184,10 +184,7 @@ const syncMonth = (scene: Scene, next: CalendarProps) => {
   scene.props(next)
   const sub = scene.subscriptions.find((key) => key.startsWith("syncedMonth"))
   if (sub !== undefined) {
-    scene.subscription(sub, {
-      _tag: "SyncedMonth",
-      month: DateTime.startOf(DateTime.removeTime(next.month), "month")
-    } as never)
+    scene.subscription(sub, { _tag: "SyncedMonth" } as never)
   }
   return scene
 }

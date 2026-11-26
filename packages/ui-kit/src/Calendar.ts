@@ -165,8 +165,6 @@ import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
 import * as DateTime from "effect/DateTime"
-import * as Effect from "effect/Effect"
-import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { DirectionProvider } from "./DirectionProvider.ts"
@@ -175,21 +173,19 @@ import {
   CalendarDate,
   CalendarDayRef,
   CalendarGridKey,
-  CalendarGridModelFields,
+  CalendarGridModel,
   CalendarGridPropsFields,
   type CalendarWeekdayName,
-  canGoNextMonth,
-  canGoPreviousMonth,
+  canStepMonth,
   dateKey,
   dayAttrs,
   firstDayOfWeek,
   focusDay,
-  formatFullDate,
   formatMonthTitle,
+  fullDateFormatter,
   gridKeyOf,
   isOutOfRange,
   moveDate,
-  normalizeDate,
   normalizeOptional,
   sameDay,
   sameMonth,
@@ -199,8 +195,7 @@ import {
   weekdayNames,
   weeksOfMonth
 } from "./internal/calendar.ts"
-import { rightToLeft, watchDirectionScoped } from "./internal/direction.ts"
-import { isElement } from "./internal/dom.ts"
+import { rightToLeft, TrackDirection } from "./internal/direction.ts"
 
 /**
  * Short and long localized names for a day of the week in `Calendar`.
@@ -281,41 +276,24 @@ export const CalendarEvents = UiSchema.TaggedEnum({
  */
 export type CalendarEvents = typeof CalendarEvents.Type
 
-const CalendarModel = Schema.Struct(CalendarGridModelFields)
-
-type CalendarModel = typeof CalendarModel.Type
-
 const CalendarMessage = UiSchema.TaggedEnum({
   ClickedDay: { date: Schema.DateTimeUtc, unavailable: Schema.Boolean },
-  ClickedPrevious: {},
-  ClickedNext: {},
+  ClickedStep: { months: Schema.Literals([-1, 1]) },
   FocusedDay: { date: Schema.DateTimeUtc },
   BlurredDay: {},
   PressedKey: { date: Schema.DateTimeUtc, move: CalendarGridKey },
-  SyncedMonth: { month: Schema.DateTimeUtc },
+  SyncedMonth: {},
   FoundDirection: { rtl: Schema.Boolean }
 })
 
 type CalendarMessage = typeof CalendarMessage.Type
 
 type CalendarUpdate = Component.Update<
-  CalendarModel,
+  CalendarGridModel,
   CalendarMessage,
   CalendarEvents,
   CalendarProps
 >
-
-const TrackRootDirection = Mount.makeStream(
-  "TrackCalendarDirection",
-  { args: {} },
-  (node: unknown) =>
-    Stream.callback<CalendarMessage>((queue) =>
-      isElement(node)
-        ? watchDirectionScoped(node, (rtl) =>
-          Queue.offerUnsafe(queue, CalendarMessage.FoundDirection({ rtl })))
-        : Effect.void
-    )
-)
 
 const disabledWhileFocused = Subscription.make(
   "disabledWhileFocused",
@@ -323,9 +301,9 @@ const disabledWhileFocused = Subscription.make(
 )
 
 const contextOf = (props: CalendarProps) => ({
-  monthStart: startOfMonth(normalizeDate(props.month)),
+  monthStart: startOfMonth(DateTime.removeTime(props.month)),
   preferred: normalizeOptional(props.value),
-  today: normalizeDate(props.today),
+  today: DateTime.removeTime(props.today),
   min: normalizeOptional(props.min),
   max: normalizeOptional(props.max)
 })
@@ -337,13 +315,6 @@ const navigate = (
 ) => {
   if ($.props.disabled === true) return $.model
   const context = contextOf($.props)
-  if (
-    context.min !== null &&
-    context.max !== null &&
-    DateTime.isGreaterThan(context.min, context.max)
-  ) {
-    return $.model
-  }
   const weekStartsOn = $.props.firstDayOfWeek ?? firstDayOfWeek($.props.locale)
   const target = moveDate(date, move, weekStartsOn, context.min, context.max)
   if (sameDay(target, date)) {
@@ -401,7 +372,7 @@ const navigate = (
 export const Calendar = Html.component({
   name: "Calendar",
   props: CalendarProps,
-  model: CalendarModel,
+  model: CalendarGridModel,
   message: CalendarMessage,
   events: CalendarEvents,
   reads: {
@@ -412,7 +383,7 @@ export const Calendar = Html.component({
   init: ({ props }) => ({
     focusedDay: null,
     focused: false,
-    shownMonth: startOfMonth(normalizeDate(props.month)),
+    shownMonth: startOfMonth(DateTime.removeTime(props.month)),
     pendingFocus: null,
     rtl: false
   }),
@@ -431,25 +402,17 @@ export const Calendar = Html.component({
         CalendarEvents.Picked({ date })
       )
     },
-    ClickedPrevious: ($) => {
-      const { min, monthStart } = contextOf($.props)
-      if (!canGoPreviousMonth(monthStart, min, $.props.disabled === true)) {
+    ClickedStep: ($, { months }) => {
+      const { max, min, monthStart } = contextOf($.props)
+      if (
+        $.props.disabled === true ||
+        !canStepMonth(monthStart, months, min, max)
+      ) {
         return $.model
       }
       return $.evolve({ pendingFocus: null }).emit(
         CalendarEvents.RequestedMonth({
-          month: DateTime.subtract(monthStart, { months: 1 })
-        })
-      )
-    },
-    ClickedNext: ($) => {
-      const { max, monthStart } = contextOf($.props)
-      if (!canGoNextMonth(monthStart, max, $.props.disabled === true)) {
-        return $.model
-      }
-      return $.evolve({ pendingFocus: null }).emit(
-        CalendarEvents.RequestedMonth({
-          month: DateTime.add(monthStart, { months: 1 })
+          month: DateTime.add(monthStart, { months })
         })
       )
     },
@@ -467,27 +430,22 @@ export const Calendar = Html.component({
     PressedKey: ($, { date, move }) => navigate($, date, move),
     SyncedMonth: ($) => {
       const context = contextOf($.props)
-      const phase = syncMonthPhase($.model, context)
-      const next = $.evolve({
-        focusedDay: phase.focusedDay,
-        focused: phase.focused,
-        shownMonth: phase.shownMonth,
-        pendingFocus: phase.pendingFocus
-      })
-      return phase.shouldFocus && phase.focusedDay !== null
+      const { shouldFocus, ...phase } = syncMonthPhase($.model, context)
+      const next = $.evolve({ ...phase, shownMonth: context.monthStart })
+      return shouldFocus && phase.focusedDay !== null
         ? next.run(focusDay(phase.focusedDay))
         : next
     },
     FoundDirection: ($, { rtl }) => $.evolve({ rtl })
   },
   subscriptions: ({ model, props }) => {
-    const monthStart = startOfMonth(normalizeDate(props.month))
+    const monthStart = startOfMonth(DateTime.removeTime(props.month))
     return [
       !sameMonth(monthStart, model.shownMonth) &&
       Subscription.make(
         "syncedMonth",
         [dateKey(monthStart)],
-        () => Stream.make(CalendarMessage.SyncedMonth({ month: monthStart }))
+        () => Stream.make(CalendarMessage.SyncedMonth())
       ),
       model.focused && props.disabled === true && disabledWhileFocused
     ]
@@ -504,10 +462,26 @@ export const Calendar = Html.component({
     const weekdays = weekdayNames(props.locale, weekStartsOn)
     const title = formatMonthTitle(monthStart, props.locale)
     const phase = syncMonthPhase(model, context)
-    const tabStop = tabStopOf(phase, context, weeks, disabled)
+    const tabStop = tabStopOf(phase.focusedDay, context, weeks)
+    const fullDate = fullDateFormatter(props.locale)
     const headingId = p.id("heading")
-    const prevDisabled = !canGoPreviousMonth(monthStart, min, disabled)
-    const nextDisabled = !canGoNextMonth(monthStart, max, disabled)
+    const isSelected = (date: DateTime.Utc) =>
+      value !== null && sameDay(date, value)
+
+    const step = (months: -1 | 1, label: string) => {
+      const stepDisabled = disabled ||
+        !canStepMonth(monthStart, months, min, max)
+      return p.part("button", (b) =>
+        b
+          .attrs({
+            type: "button",
+            "aria-disabled": undefined,
+            "data-disabled": flag(stepDisabled)
+          })
+          .disabled(stepDisabled)
+          .on("click", CalendarMessage.ClickedStep({ months }))
+          .forward(fallbackLabel(label)))
+    }
 
     const weekdayPart = p.part("th", (b, index: number) => {
       const weekday = Number.isInteger(index) ? weekdays[index] : undefined
@@ -523,24 +497,19 @@ export const Calendar = Html.component({
       })
     })
 
-    const cellPart = p.part("td", (b, date: DateTime.Utc) => {
-      const selected = value !== null && sameDay(date, value)
-      return b.attrs({
+    const cellPart = p.part("td", (b, date: DateTime.Utc) =>
+      b.attrs({
         role: "gridcell",
-        "aria-selected": String(selected)
-      })
-    })
+        "aria-selected": String(isSelected(date))
+      }))
 
     const dayPart = p.part(
       "button",
-      (b, date: DateTime.Utc, unavailable: boolean) => {
-        const key = dateKey(date)
+      (b, date: DateTime.Utc, key: string, unavailable: boolean) => {
         const dayDisabled = disabled || isOutOfRange(date, min, max)
-        const selected = value !== null && sameDay(date, value)
         const isToday = sameDay(date, today)
         const outsideMonth = !sameMonth(date, monthStart)
-        const isFocused = !disabled &&
-          !dayDisabled &&
+        const isFocused = !dayDisabled &&
           phase.focused &&
           phase.focusedDay !== null &&
           sameDay(date, phase.focusedDay)
@@ -550,7 +519,7 @@ export const Calendar = Html.component({
         return dayAttrs(
           b,
           {
-            selected,
+            selected: isSelected(date),
             today: isToday,
             outsideMonth,
             unavailable,
@@ -558,7 +527,7 @@ export const Calendar = Html.component({
             focused: isFocused,
             tabStop: isTabStop
           },
-          formatFullDate(date, props.locale)
+          DateTime.formatIntl(date, fullDate)
         )
           .ref(CalendarDayRef.at(key))
           .on(
@@ -593,7 +562,11 @@ export const Calendar = Html.component({
             "data-disabled": flag(disabled),
             "data-readonly": flag(readOnly)
           })
-          .onMount(TrackRootDirection())
+          .onMount(
+            TrackDirection().pipe(
+              Mount.map((rtl) => CalendarMessage.FoundDirection({ rtl }))
+            )
+          )
       ),
       heading: p.part((b) =>
         b.attrs({
@@ -603,28 +576,8 @@ export const Calendar = Html.component({
           "data-readonly": flag(readOnly)
         })
       ),
-      previous: p.part("button", (b) =>
-        b
-          .attrs({
-            type: "button",
-            "aria-disabled": undefined,
-            "data-disabled": flag(prevDisabled)
-          })
-          .disabled(prevDisabled)
-          .on("click", CalendarMessage.ClickedPrevious())
-          .forward(fallbackLabel("Previous month"))
-      ),
-      next: p.part("button", (b) =>
-        b
-          .attrs({
-            type: "button",
-            "aria-disabled": undefined,
-            "data-disabled": flag(nextDisabled)
-          })
-          .disabled(nextDisabled)
-          .on("click", CalendarMessage.ClickedNext())
-          .forward(fallbackLabel("Next month"))
-      ),
+      previous: step(-1, "Previous month"),
+      next: step(1, "Next month"),
       grid: p.part("table", (b) =>
         b.attrs({
           role: "grid",
@@ -633,8 +586,7 @@ export const Calendar = Html.component({
           "aria-readonly": readOnly ? "true" : undefined,
           "data-disabled": flag(disabled),
           "data-readonly": flag(readOnly)
-        })
-      ),
+        })),
       weekday: View.wrapPart(
         weekdayPart,
         <B extends Keyed<"th">>(
@@ -650,7 +602,7 @@ export const Calendar = Html.component({
             readonly date: DateTime.DateTime
           }
         ): ReturnType<B["attr"]> => {
-          const normalized = normalizeDate(date)
+          const normalized = DateTime.removeTime(date)
           return cellPart(element.key(dateKey(normalized)), normalized)
         }
       ),
@@ -663,10 +615,12 @@ export const Calendar = Html.component({
             readonly unavailable?: boolean | undefined
           }
         ): ReturnType<B["attr"]> => {
-          const normalized = normalizeDate(date)
+          const normalized = DateTime.removeTime(date)
+          const key = dateKey(normalized)
           return dayPart(
-            element.key(dateKey(normalized)),
+            element.key(key),
             normalized,
+            key,
             unavailable === true
           )
         }

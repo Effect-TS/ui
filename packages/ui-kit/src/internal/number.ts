@@ -9,7 +9,11 @@ export type Format = Intl.NumberFormatOptions & {
   readonly trailingZeroDisplay?: string | undefined
 }
 
-const cached = <A>(store: Map<string, A>, key: unknown, make: () => A): A => {
+export const cached = <A>(
+  store: Map<string, A>,
+  key: unknown,
+  make: () => A
+): A => {
   const id = JSON.stringify(key)
   let value = store.get(id)
   if (value === undefined) {
