@@ -251,6 +251,34 @@ describe("NumberField in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(taken(), [])
     }))
 
+  it.effect("accepts either apostrophe as the group separator only where the locale groups with one", () =>
+    Effect.gen(function*() {
+      for (const mark of ["'", "’"]) {
+        const text = "1" + mark + "234.25"
+        const typed = yield* mount({ locale: "de-CH" }, null)
+        select(typed.input, "1", 1)
+        assert.isFalse(blocks(typed.input, mark))
+        type(typed.input, text)
+        yield* tick
+        assert.strictEqual(typed.input.value, text)
+        assert.deepStrictEqual(typed.taken(), ["updated 1234.25 input-change"])
+
+        const pasted = yield* mount({ locale: "de-CH" }, null)
+        select(pasted.input, "", 0)
+        assert.isTrue(paste(pasted.input, text))
+        assert.strictEqual(pasted.input.value, text)
+        yield* tick
+        assert.deepStrictEqual(pasted.taken(), ["updated 1234.25 input-paste"])
+
+        const us = yield* mount({ locale: "en-US" }, null)
+        select(us.input, "1", 1)
+        assert.isTrue(blocks(us.input, mark))
+        select(us.input, "", 0)
+        assert.isTrue(paste(us.input, text))
+        assert.strictEqual(us.input.value, "1234.25")
+      }
+    }))
+
   it.effect("stepper press steps, repeats while held, commits on release, and ignores secondary or mouse clicks", () =>
     Effect.gen(function*() {
       const { app, input, taken } = yield* mount({ locale: "en-US", max: 12 })
