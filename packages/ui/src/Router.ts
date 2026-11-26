@@ -730,11 +730,11 @@ export const subscription = <U extends Routes, Msg>(
   const have = union.print(held)
   const same = (route: { readonly _tag: string }) =>
     route._tag === held._tag && union.print(route) === have
-  /** Whether a static render of the held route also stands for the route: same path, or both the catch-all. */
+  /** Whether a static render of the held route also stands for the route: same path, or both not found. */
   const staticMatch = (route: { readonly _tag: string }) =>
     route._tag === held._tag &&
     (union.printPath(route) === union.printPath(held) ||
-      (union as Partial<UnionInternals>).routes?.[held._tag]?.path === "/*")
+      isNotFound(union, held._tag))
   const mismatch = (route: { readonly _tag: string }) => {
     const router = union.print(route)
     return new RouteMismatch({
@@ -1330,6 +1330,19 @@ const splitHash = (href: string): readonly [string, string] => {
 const pathnameOf = (url: string): string => {
   const at = url.indexOf("?")
   return at < 0 ? url : url.slice(0, at)
+}
+
+/**
+ * Whether `tag` is the union's catch-all route, as `Route.union` picks it: the
+ * first declared `"/*"`. False for a union without definitions.
+ */
+const isNotFound = (union: Route.AnyUnion, tag: string): boolean => {
+  const routes = (union as Partial<UnionInternals>).routes
+  if (routes === undefined) return false
+  for (const name in routes) {
+    if (routes[name]!.path === "/*") return name === tag
+  }
+  return false
 }
 
 /** What a Router's routes are: a `Route.union`, with its definitions and `make`. */
