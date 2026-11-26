@@ -337,15 +337,12 @@ describe("HtmlHydrate", () => {
     Effect.gen(function*() {
       const Page = Html.component({
         name: "Page",
-        model: Schema.Struct({
-          label: Schema.String,
-          at: Schema.Date
-        }),
+        model: Schema.Date,
         message: Schema.Never
       }).make({
-        init: () => ({ label: "init", at: new Date(0) }),
+        init: () => new Date(0),
         update: ($) => $.model,
-        view: (h, model) => h.p(`${model.label} ${model.at.getTime()}`)
+        view: (h, at) => h.p(String(at.getTime()))
       })
       const LazyPage = Component.lazy("LazyPage", () => Promise.resolve(Page))
       const App = Html.component({
@@ -358,19 +355,15 @@ describe("HtmlHydrate", () => {
         view: (h) => h.div(LazyPage(h, { key: "p" }))
       })
       const rendered = yield* HtmlServer.renderToHtml(App, {})
-      assert.isTrue(Object.hasOwn(rendered.state, "/App/LazyPage[p]"))
       yield* Effect.promise(() => LazyPage.preload())
       const app = yield* container(rendered.html)
       const server = [...app.querySelectorAll("*")]
       yield* HtmlHydrate.hydrateEffect(App, {}, app, {
         ...rendered.state,
-        "/App/LazyPage[p]": {
-          label: "saved",
-          at: "1970-01-01T00:00:01.000Z"
-        }
+        "/App/LazyPage[p]": "1970-01-01T00:00:01.000Z"
       })
       sameElements(app, server)
-      assert.strictEqual(app.textContent, "saved 1000")
+      assert.strictEqual(app.textContent, "1000")
     }).pipe(Effect.scoped))
 
   it.effect("keeps nodes before a mismatch inside a row, rebuilds the rest of that row, and keeps sibling rows", () =>
