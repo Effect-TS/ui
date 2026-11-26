@@ -392,6 +392,22 @@ describe("DevToolsServer", { concurrent: false }, () => {
           spanId: "span",
           traceId: "trace"
         })
+        const update = (
+          seq: number,
+          commands: ReadonlyArray<Command.Command<any, any>>
+        ) => ({
+          _tag: "Update",
+          ...base(seq),
+          source: { _tag: "Dispatch" },
+          message: { _tag: "Click" },
+          props: { id: "b" },
+          model: {},
+          queries: { note: note("b") },
+          commands,
+          events: [],
+          lists: [],
+          sends: []
+        })
         for (
           const entry of [
             {
@@ -421,7 +437,11 @@ describe("DevToolsServer", { concurrent: false }, () => {
               name: "note",
               result: note("b")
             },
-            { _tag: "Drawn", ...base(7) }
+            { _tag: "Drawn", ...base(7) },
+            // Queued behind the run still going, so it hasn't started.
+            update(8, [Touch.make({ id: "b" })]),
+            update(9, []),
+            { _tag: "Drawn", ...base(10) }
           ] as ReadonlyArray<MessageLog.Entry>
         ) log.record(entry)
 
@@ -429,13 +449,13 @@ describe("DevToolsServer", { concurrent: false }, () => {
         const [session] = yield* agent.call<ReadonlyArray<any>>(
           "list_sessions"
         ).pipe(
-          Effect.filterOrFail(([session]) => session?.last === 7),
+          Effect.filterOrFail(([session]) => session?.last === 10),
           Effect.retry(Schedule.spaced("10 millis")),
           Effect.timeout("5 seconds")
         )
         assert.strictEqual(session.app, "Note")
         const [instance] = yield* agent.call("list_instances")
-        assert.strictEqual(instance.status, "1 ended, 1 running")
+        assert.strictEqual(instance.status, "1 ended, 1 running, 1 waiting")
         const state = yield* agent.call("get_state", { instance: 1 })
         assert.deepStrictEqual(state.props, { id: "b" })
         assert.strictEqual(state.queries.note[2], "Note b")

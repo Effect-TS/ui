@@ -2280,9 +2280,10 @@ const slotOf = (entry: WireEntry): string => {
  * leave that ring are still sent first while they hold live state: each
  * session's `SessionStarted` and, until an instance's `Unmounted` leaves
  * the ring too, its `Mounted`, its latest state frame and any
- * `PropsChanged` and `QueryChanged` since, the `CommandStarted` of each
- * run still going, and how each run those two state frames issued ended. A
- * lost connection is retried with backoff, and one warning is logged.
+ * `PropsChanged` and `QueryChanged` since, each state frame that issued a
+ * run that hasn't started, the `CommandStarted` of each run still going, and
+ * how each run those kept state frames issued ended. A lost connection is
+ * retried with backoff, and one warning is logged.
  *
  * @stability experimental
  * @category layers
@@ -2301,52 +2302,60 @@ export const socket = (url: string, options?: {
       const replay: Array<Sent> = []
       // Frames that left `replay` and still hold live state.
       const sessions = new Map<string, Sent>()
-      const live = new Map<string, {
-        readonly kept: Map<string, Sent>
-        mounted?: string
-        state?: string
-      }>()
+      const live = new Map<string, Map<string, Sent>>()
+      // Each instance's Command runs that are logged as issued but haven't
+      // started or ended, by slot.
+      const pending = new Map<string, Set<string>>()
       const hello = JSON.stringify({
         _tag: "Hello",
         version: wireVersion,
         host: options?.host ?? "browser"
       })
 
+      const isState = (tag: WireEntry["_tag"]) =>
+        tag === "Waiting" || tag === "Mounted" || tag === "Update"
+      const issues = (owner: string, slot: string) => {
+        for (const run of pending.get(owner) ?? []) {
+          if (run.startsWith(slot + "/")) return true
+        }
+        return false
+      }
+
       const keep = (sent: Sent) => {
         const { tag, owner, slot } = sent
         if (tag === "SessionStarted") return void sessions.set(owner, sent)
         if (tag === "Unmounted") return void live.delete(owner)
-        let instance = live.get(owner)
-        if (tag === "Waiting" || tag === "Mounted" || tag === "Update") {
-          if (instance === undefined) {
-            live.set(owner, instance = { kept: new Map() })
-          }
+        let kept = live.get(owner)
+        if (isState(tag)) {
+          if (kept === undefined) live.set(owner, kept = new Map())
           // It holds the props and query results, and replaces the state
-          // frame before it, with how that frame's runs ended, unless that
-          // is the `Mounted`, which still says the instance mounted.
-          const before = instance.state === instance.mounted
-            ? undefined
-            : instance.state
-          for (const [at, old] of instance.kept) {
-            if (
-              at === "props" || at.startsWith("query/") || at === before ||
-              (before !== undefined && old.tag !== "CommandStarted" &&
-                at.startsWith(before + "/"))
-            ) instance.kept.delete(at)
+          // frames before it, with how their runs ended. The `Mounted` stays,
+          // as it says the instance mounted, and so does a frame with a run
+          // that hasn't started, as it's that run's only record.
+          const replaced = new Set<string>()
+          for (const [at, old] of kept) {
+            if (at === "props" || at.startsWith("query/")) kept.delete(at)
+            else if (
+              isState(old.tag) && old.tag !== "Mounted" && !issues(owner, at)
+            ) replaced.add(at)
           }
-          if (tag === "Mounted") instance.mounted = slot
-          instance.state = slot
-          instance.kept.set(slot, sent)
-        } else if (instance === undefined || slot === "") {
+          for (const [at, old] of kept) {
+            if (
+              replaced.has(at) ||
+              (old.tag !== "CommandStarted" && replaced.has(at.split("/")[0]))
+            ) kept.delete(at)
+          }
+          kept.set(slot, sent)
+        } else if (kept === undefined || slot === "") {
           return
         } else if (
           tag === "CommandStarted" || tag === "PropsChanged" ||
           tag === "QueryChanged" ||
           // A run's end is kept while the frame that issued it is, so
           // replaying that frame doesn't open the run again.
-          instance.kept.has(slot.slice(0, slot.indexOf("/")))
-        ) instance.kept.set(slot, sent)
-        else instance.kept.delete(slot)
+          kept.has(slot.slice(0, slot.indexOf("/")))
+        ) kept.set(slot, sent)
+        else kept.delete(slot)
       }
 
       const log = yield* makeEncoded(
@@ -2354,13 +2363,24 @@ export const socket = (url: string, options?: {
           Effect.sync(() => {
             for (const encoded of batch) {
               const frame = JSON.stringify(encoded)
+              const owner = "instance" in encoded
+                ? encoded.session + "/" + encoded.instance
+                : encoded.session
+              const slot = slotOf(encoded)
+              if (encoded._tag === "Unmounted") pending.delete(owner)
+              else if ("commands" in encoded) {
+                encoded.commands.forEach((command, index) => {
+                  if (command._tag === "Interrupt") return
+                  let runs = pending.get(owner)
+                  if (runs === undefined) pending.set(owner, runs = new Set())
+                  runs.add(slot + "/" + index)
+                })
+              } else if (slot !== "") pending.get(owner)?.delete(slot)
               replay.push({
                 seq: encoded.seq,
                 tag: encoded._tag,
-                owner: "instance" in encoded
-                  ? encoded.session + "/" + encoded.instance
-                  : encoded.session,
-                slot: slotOf(encoded),
+                owner,
+                slot,
                 frame
               })
               if (replay.length > size) keep(replay.shift()!)
@@ -2372,9 +2392,7 @@ export const socket = (url: string, options?: {
 
       const replayed = () => {
         const kept = Array.from(sessions.values())
-        for (const instance of live.values()) {
-          kept.push(...instance.kept.values())
-        }
+        for (const instance of live.values()) kept.push(...instance.values())
         kept.sort((a, b) => a.seq - b.seq)
         return [hello, ...kept.concat(replay).map((sent) => sent.frame)]
       }
