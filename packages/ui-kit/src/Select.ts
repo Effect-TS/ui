@@ -1110,10 +1110,23 @@ const watch = (
       align()
       arrows()
       focusActive(false)
+      if (current.pressing) keepFocus()
       if (!current.aligned) reveal()
       if (!current.started) {
         frame(() => frame(() => send(SelectMessage.RenderedFirstFrame())))
       }
+    }
+
+    // Opening during capture lets this listener cancel the same press before
+    // its default action moves focus back to the trigger. The timestamp check
+    // leaves later presses alone if the popup opened after dispatch ended.
+    const keepFocus = () => {
+      const openedAt = performance.now()
+      const onMouseDown = (event: Event) => {
+        event.currentTarget!.removeEventListener("mousedown", onMouseDown)
+        if (event.timeStamp <= openedAt) event.preventDefault()
+      }
+      trigger()?.addEventListener("mousedown", onMouseDown, { signal })
     }
 
     const closing = () => {
@@ -2077,7 +2090,8 @@ export const makeSelect = <V extends string>(
  *
  * The trigger and the popup cancel the keys they handle. The positioner's
  * mount places the popup, moves focus into it, scrolls it and listens for
- * presses and focus outside it.
+ * presses and focus outside it. If it opens during `mousedown`, it cancels
+ * the default action to keep focus in the popup.
  *
  * It emits `RequestedOpen`, `RequestedClose`, `Picked` and `Settled`.
  *
