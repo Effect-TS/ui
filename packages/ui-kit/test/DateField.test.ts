@@ -89,7 +89,11 @@ describe("DateField", () => {
         { value: utc("2026-11-26"), locale: "bg" },
         standIn
       )
-      assert.strictEqual(text(scene), "26.11.2026 г.")
+      // ICU prints U+0020 or U+202F before "г." depending on its version.
+      const shown = text(scene) as string
+      assert.match(shown, /^26\.11\.2026[ \u202f]г\.$/)
+      scene.type(input, shown.replace("26.", "28."))
+      scene.blur(input).emitted(committed(utc("2026-11-28")))
       scene.type(input, "27.11.2026 г.")
       scene.blur(input).emitted(committed(utc("2026-11-27")))
 
