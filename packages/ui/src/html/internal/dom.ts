@@ -120,19 +120,21 @@ const canonicalAttrs = (
 const ignore = () => {}
 
 // Chromium blurs a focused element that a render detaches, to remove or to
-// move it. The HTML standard and other browsers don't. That blur comes first
-// in the DOM call and has no `relatedTarget`, so only such a first `blur` or
-// `focusout` is dropped. A later one, such as a reconnected element sending
-// focus into an iframe, is a real exit. Module-level, because `BrowserHost`
-// detaches through one host while another one listens.
-let detaching: Partial<Record<string, Event>> | undefined
-const detach = (f: () => void): void => {
-  const outer = detaching
-  detaching = {}
+// move it, while the node is still in place. The HTML standard and other
+// browsers don't. So a `blur` or `focusout` is dropped only while the node
+// is where it was. One after it has gone, such as a reconnected element
+// sending focus into an iframe, is a real exit. Module-level, because
+// `BrowserHost` detaches through one host while another one listens.
+let inPlace: (() => boolean) | undefined
+const detach = (node: globalThis.Node, f: () => void): void => {
+  const outer = inPlace
+  const { nextSibling, parentNode } = node
+  inPlace = () =>
+    node.parentNode === parentNode && node.nextSibling === nextSibling
   try {
     f()
   } finally {
-    detaching = outer
+    inPlace = outer
   }
 }
 
@@ -546,9 +548,7 @@ export const makeHost = (
   const listener = (event: Event): void => {
     const name = event.type
     if (
-      detaching !== undefined && (name === "blur" || name === "focusout") &&
-      (detaching[name] ??= event) === event &&
-      (event as FocusEvent).relatedTarget === null
+      (name === "blur" || name === "focusout") && inPlace?.()
     ) return
     const path = event.composedPath() as Array<Node>
     const custom = view !== null && event instanceof view.CustomEvent
@@ -835,16 +835,17 @@ export const makeHost = (
       if (eventOptions.dragstart !== undefined) listen("dragend")
     },
     insert(parent, node, before) {
-      if (node.isConnected) detach(() => parent.insertBefore(node, before))
-      else parent.insertBefore(node, before)
+      if (node.isConnected) {
+        detach(node, () => parent.insertBefore(node, before))
+      } else parent.insertBefore(node, before)
     },
     remove(parent, node) {
       if (shown.size > 0) closeShownIn(node, true)
-      detach(() => parent.removeChild(node))
+      detach(node, () => parent.removeChild(node))
     },
     clear(parent) {
       if (shown.size > 0) closeShownIn(parent, false)
-      detach(() => parent.textContent = "")
+      detach(parent.firstChild ?? parent, () => parent.textContent = "")
     },
     parentOf: (node) => node.parentNode!,
     nextOf: (node) => node.nextSibling,

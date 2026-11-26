@@ -1775,7 +1775,8 @@ describe("BrowserHost", { concurrent: false }, () => {
           ["f", "a", "b"],
           ["a", "b", "f"],
           ["a", "b", "g", "s"],
-          ["s", "a", "b", "g"]
+          ["s", "a", "b", "g"],
+          ["a", "b", "g", "s"]
         ]
         const Items = Html.component({
           name: "Items",
@@ -1799,9 +1800,12 @@ describe("BrowserHost", { concurrent: false }, () => {
         // Chromium blurs a focused element as it leaves the document, also to move. happy-dom doesn't.
         const proto = window.Node.prototype
         const { insertBefore, removeChild } = proto
+        let chromium = true
         const blurIn = (node: Node) => {
           const active = document.activeElement as HTMLElement | null
-          if (active !== null && node.contains(active)) active.blur()
+          if (chromium && active !== null && node.contains(active)) {
+            active.blur()
+          }
         }
         const spies = [
           vi.spyOn(proto, "removeChild").mockImplementation(
@@ -1855,6 +1859,11 @@ describe("BrowserHost", { concurrent: false }, () => {
         document.getElementById("a")!.blur()
         yield* tick
         expect(root.model()).toEqual({ step: 3, left: 3 })
+        // The same exit, from a focused moved element, in a browser that doesn't blur on detach.
+        app.querySelector<HTMLElement>("x-steal")!.focus()
+        chromium = false
+        yield* next()
+        expect(root.model()).toEqual({ step: 4, left: 4 })
       }).pipe(Effect.scoped))
 
     it.effect("focus says whether the element shows a focus ring", () =>
