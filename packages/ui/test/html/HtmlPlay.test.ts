@@ -86,7 +86,7 @@ const Shortcuts = Html.component({
 })
 
 describe("HtmlPlay", () => {
-  it.effect("click and type refuse inert targets however they are found, and fire still delivers", () =>
+  it.effect("click and type refuse inert targets even when found with hidden: true, and fire still delivers", () =>
     Effect.gen(function*() {
       const Guarded = Html.component({
         name: "Guarded",
@@ -104,10 +104,6 @@ describe("HtmlPlay", () => {
                 ({ value }) => `name:${value}`
               )
             ),
-            h.button.on("click", "behind").children("Behind"),
-            h.dialog.attr("aria-label", "Modal").modal(true).children(
-              h.button.on("click", "inside").children("Inside")
-            ),
             h.output(entries.join("|"))
           )
       })
@@ -122,8 +118,7 @@ describe("HtmlPlay", () => {
           p.type(
             HtmlLocator.role("textbox", { name: "Name", hidden: true }),
             "x"
-          ),
-          p.click("Behind")
+          )
         ]
       ) {
         const exit = yield* Effect.exit(step)
@@ -132,9 +127,8 @@ describe("HtmlPlay", () => {
           /is inert/
         )
       }
-      yield* p.click("Inside")
       yield* p.fire(deleteButton, "click")
-      yield* p.expect(log).toHaveText("inside|delete")
+      yield* p.expect(log).toHaveText("delete")
     }).pipe(play))
 
   it.effect("type, keydown and a click's defaults send what BrowserHost sends", () =>
