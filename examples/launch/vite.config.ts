@@ -1,10 +1,11 @@
+import { plugin as htmlServer } from "@effect/ui/html/HtmlServerVite"
 import { markdown } from "@effect/ui/html/MarkdownVite"
 import tailwindcss from "@tailwindcss/vite"
 import { Schema } from "effect"
 import { readFile } from "node:fs/promises"
 import * as path from "node:path"
 import { codeToTokens } from "shiki"
-import { createServer, defineConfig, type Plugin } from "vite"
+import { defineConfig, type Plugin } from "vite"
 import { toMarkdown } from "./src/domain/ArticleText.ts"
 import {
   all,
@@ -218,59 +219,6 @@ const articleText = (
   }
 }
 
-const prerender = (loadSnippets: () => Promise<Snippets>): Plugin => {
-  let root = ""
-  return {
-    name: "launch:prerender",
-    apply: "build",
-    configResolved(config) {
-      root = config.root
-    },
-    transformIndexHtml: {
-      order: "post",
-      async handler(html) {
-        const server = await createServer({
-          configFile: false,
-          root,
-          mode: "production",
-          logLevel: "error",
-          server: { middlewareMode: true, ws: false },
-          appType: "custom",
-          ssr: { noExternal: [/^@effect\/ui/] },
-          plugins: [
-            snippets(loadSnippets),
-            markdown({ islands: Islands, frontmatter: Frontmatter })
-          ]
-        })
-        try {
-          const mod = (await server.ssrLoadModule(
-            "/src/prerender.ts"
-          )) as {
-            readonly render: () => Promise<{
-              readonly html: string
-              readonly state: string
-            }>
-          }
-          const rendered = await mod.render()
-          const rootTag = `<div id="root"></div>`
-          if (!html.includes(rootTag)) {
-            throw new Error(
-              `Expected ${rootTag} in index.html for prerendering`
-            )
-          }
-          return html.replace(
-            rootTag,
-            () =>
-              `<div id="root">${rendered.html}</div>\n    <script type="application/json" id="state">${rendered.state}</script>`
-          )
-        } finally {
-          await server.close()
-        }
-      }
-    }
-  }
-}
-
 export default defineConfig(({ command }) => {
   let cachedSnippets: Promise<Snippets> | undefined
   const loadSnippets = command === "build"
@@ -282,8 +230,13 @@ export default defineConfig(({ command }) => {
       tailwindcss(),
       snippets(loadSnippets),
       articleText(loadSnippets),
-      ...(loadSnippets ? [prerender(loadSnippets)] : []),
-      markdown({ islands: Islands, frontmatter: Frontmatter })
+      markdown({ islands: Islands, frontmatter: Frontmatter }),
+      // The prerendered page is requested at the site's origin, so its
+      // links to article.md are the ones the site serves.
+      htmlServer({
+        entry: "/src/entry.server.ts",
+        origin: "https://ui.effect.website"
+      })
     ]
   }
 })

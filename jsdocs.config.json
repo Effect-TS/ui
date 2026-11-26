@@ -8,6 +8,7 @@
     "**/node_modules/**",
     "packages/**/ai-docs/**",
     "packages/tools/**",
+    "packages/**/test/**",
     "packages/**/src/internal/**",
     "packages/**/src/**/internal/**"
   ],

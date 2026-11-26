@@ -1,4 +1,3 @@
-/// <reference types="@effect/ui/html/HtmlServerViteDocument" />
 import { layerHttp } from "@effect/ui/html/HtmlServerHttp"
 import { Layer } from "effect"
 import { document } from "virtual:@effect/ui/document"
