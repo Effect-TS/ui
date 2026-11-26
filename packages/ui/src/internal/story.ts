@@ -238,9 +238,8 @@ const expandedChildren = new WeakMap<
 >()
 
 /**
- * The headless children an expanded closure or fallback stands for, by its root, outermost first: one per
- * child whose closure's root is the next child, with whether it shows its fallback. The runtime matches each in turn, as it patches the child
- * and then its view's root.
+ * Tracks the declaring children of an expanded root, outermost first. Scene uses
+ * this identity rather than the rendered root to match headless siblings.
  *
  * @internal
  */
@@ -252,7 +251,6 @@ export const expansionOf = new WeakMap<
 /** @internal */
 export interface Expansion {
   readonly child: View.Child<any, any>
-  // The runtime creates a failed child's fallback anew: it never patches the child's view into it.
   readonly fallback: boolean
 }
 
@@ -267,7 +265,6 @@ export const slotLengths = new WeakMap<
   ReadonlyArray<readonly [string, number]>
 >()
 
-// The root a child shows, its view's or its fallback's, as the runtime matches it: by the child first.
 // A copy per render: a closure may return a node it cached, and the identities are this render's.
 const standsFor = (
   child: View.Child<any, any>,

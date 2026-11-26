@@ -69,10 +69,8 @@ export const patches = (
 
 /**
  * For each of `news`, the index of the old node it patches, or -1 when it's
- * created. The runtime's list patch: the common prefix and then the common
- * suffix pair up in place, and in between a keyed node takes the old with
- * its key, wherever it was, and any other node the unkeyed old at its own
- * index. The olds no node takes are removed.
+ * created. Mirrors the runtime's sibling matching so Scene preserves the
+ * same mounts.
  *
  * @internal
  */
