@@ -19,7 +19,7 @@ import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, expect, it } from "@effect/vitest"
 import { Context, Effect, Exit, Layer, Option, Schema, Scope } from "effect"
 import { TestClock } from "effect/testing"
-import { describe } from "vitest"
+import { describe, vi } from "vitest"
 import { App, AppRoute, Message, People } from "./fixtures/routed.ts"
 
 const SearchRoute = Route.union({
@@ -739,6 +739,47 @@ describe("BrowserRouter", { concurrent: false }, () => {
       const bio = document.getElementById("bio")!
       expect(document.activeElement).toBe(bio)
       expect(bio.getAttribute("tabindex")).toBe("-1")
+    }).pipe(Effect.scoped))
+
+  /** Appends `<h2 id="late">` to `app`, as data arriving after load would render it. */
+  const renderLate = (app: Element) => {
+    const late = app.appendChild(document.createElement("h2"))
+    // Happy DOM has no layout; make the scroll to it observable.
+    late.scrollIntoView = () => window.scrollTo(0, 300)
+    late.id = "late"
+    return late
+  }
+
+  it.effect("goes to an initial #hash rendered after load and moves focus there", () =>
+    Effect.gen(function*() {
+      window.scrollTo(0, 0)
+      const { app } = yield* start("/people/1#late")
+      const late = renderLate(app)
+      yield* tick
+      expect(window.scrollY).toBe(300)
+      expect(document.activeElement).toBe(late)
+    }).pipe(Effect.scoped))
+
+  it.effect("leaves a late initial #hash alone once the reader has interacted", () =>
+    Effect.gen(function*() {
+      window.scrollTo(0, 0)
+      const { app } = yield* start("/people/1#late")
+      app.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))
+      const late = renderLate(app)
+      yield* tick
+      expect(window.scrollY).toBe(0)
+      expect(document.activeElement).not.toBe(late)
+    }).pipe(Effect.scoped))
+
+  it.effect("stops waiting for a late initial #hash when the hash changes", () =>
+    Effect.gen(function*() {
+      const disconnect = vi.spyOn(MutationObserver.prototype, "disconnect")
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => disconnect.mockRestore())
+      )
+      const { router } = yield* start("/people/1#late")
+      yield* router.navigate("/people/1#other")
+      expect(disconnect).toHaveBeenCalled()
     }).pipe(Effect.scoped))
 
   it.effect("ignores links and reverts back and forward while blocked", () =>
