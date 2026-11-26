@@ -2708,6 +2708,12 @@ interface CacheInternals {
    */
   readonly dehydrate: () => Dehydrated
   /**
+   * Looks up a Success that `dehydrate()` actually emitted into `~query`, by
+   * query definition and args key. Returns `undefined` before `dehydrate()`
+   * runs or for omitted entries.
+   */
+  readonly shipped: queryCore.ShippedLookup
+  /**
    * Holds the `~query` payload's entries raw until their query registers.
    * Opens the fetch-free window unless `static`, where every entry has an
    * unknown age instead.
@@ -2900,9 +2906,10 @@ const settledMap = (
  * parameters are the query's `args`, `success` and `error` Schemas, so a walk
  * over the results' AST, such as the log's redaction, reaches what a snapshot
  * holds. On the wire a snapshot is a tuple: `[]` when empty,
- * `[argsKey, 0, value, timestamp, patched]` for a Success, and
- * `[argsKey, 1, [error, ...], [value, timestamp] | null]` for a Failure with
- * its previous Success.
+ * `[argsKey, 0, value, timestamp, patched]` for an inline Success (lists add
+ * `hasMore`), `[argsKey, 1, [error, ...], [value, timestamp] | null]` for a
+ * Failure with its previous Success, and in page state `[argsKey, 2]` (lists
+ * add `hasMore`) to reference an unpatched Success already shipped in `~query`.
  *
  * The args key on the wire is built through the `args` type parameter, so
  * it is the entry's key in page state and its log key under the log's
@@ -2968,45 +2975,59 @@ const snapshotRun = (def: QueryDef, label: string, decoding: boolean) => {
       const data = input[SnapshotTypeId]
       if (data.result === undefined) return Effect.succeed(input)
       const result = data.result
-      // The key stays as it is: it is the snapshot's identity. A decoded snapshot is accepted only when its
-      // args, decoded all the way, key back to it, so it never names an entry other than the one it was taken from.
-      return Effect.flatMap(
-        Effect.all([
-          args(data.args, options),
-          // A patched value is used as it is: a patch that fails `success` is reported as `PatchInvalid`, and a
-          // check of a query result mustn't throw on it.
-          settledMap(
-            result,
-            (u) => data.patched ? Effect.succeed(u) : success(u, options),
-            (u) => error(u, options)
-          ),
-          // A failed load more holds a typed error too, which the message log's form carries.
-          data.more?._tag === "Failed"
-            ? Effect.map(
-              error(data.more.error, options),
-              (error): More<unknown> => ({ _tag: "Failed", error })
-            )
-            : Effect.succeed(data.more)
-        ]),
-        ([args, result, more]) => {
-          if (decoding) {
-            let back: string | undefined
-            try {
-              back = def.argsKey(args)
-            } catch {
-              back = undefined
-            }
-            if (back !== data.argsKey) {
-              return Effect.fail(
-                snapshotIssue(def, "the args key isn't the key of its args")
+      return Effect.flatMap(Effect.context(), (ctx) => {
+        const shipped = data.patched || result._tag !== "Success" ||
+            data.argsKey === undefined
+          ? undefined
+          : Context.get(ctx, queryCore.Shipped)?.(def, data.argsKey)
+        const sameShipped = result._tag === "Success" &&
+          shipped !== undefined &&
+          shipped.value === result.value &&
+          shipped.timestamp === result.timestamp
+        // The key stays as it is: it is the snapshot's identity. A decoded snapshot is accepted only when its
+        // args, decoded all the way, key back to it, so it never names an entry other than the one it was taken from.
+        return Effect.flatMap(
+          Effect.all([
+            args(data.args, options),
+            // A patched value is used as it is: a patch that fails `success` is reported as `PatchInvalid`, and a
+            // check of a query result mustn't throw on it. A value matching the shipped `~query` entry was already
+            // validated by its codec and keeps its object identity for reference encoding and shared hydration.
+            settledMap(
+              result,
+              (u) =>
+                data.patched || sameShipped
+                  ? Effect.succeed(u)
+                  : success(u, options),
+              (u) => error(u, options)
+            ),
+            // A failed load more holds a typed error too, which the message log's form carries.
+            data.more?._tag === "Failed"
+              ? Effect.map(
+                error(data.more.error, options),
+                (error): More<unknown> => ({ _tag: "Failed", error })
               )
+              : Effect.succeed(data.more)
+          ]),
+          ([args, result, more]) => {
+            if (decoding) {
+              let back: string | undefined
+              try {
+                back = def.argsKey(args)
+              } catch {
+                back = undefined
+              }
+              if (back !== data.argsKey) {
+                return Effect.fail(
+                  snapshotIssue(def, "the args key isn't the key of its args")
+                )
+              }
             }
+            return Effect.succeed(
+              new SnapshotImpl({ ...data, args, result, more })
+            )
           }
-          return Effect.succeed(
-            new SnapshotImpl({ ...data, args, result, more })
-          )
-        }
-      )
+        )
+      })
     }
   }
 }
@@ -3097,6 +3118,30 @@ const snapshotWire = (
     options: SchemaAST.ParseOptions
   ): Effect.Effect<SnapshotImpl, SchemaIssue.Issue> => {
     const [key, tag, payload, fourth, fifth, sixth] = tuple
+    if (tag === 2) {
+      return Effect.flatMap(Effect.context(), (ctx) => {
+        const hit = Context.get(ctx, queryCore.Shipped)?.(def, key)
+        if (hit === undefined) {
+          return Effect.fail(
+            invalid("the referenced ~query entry wasn't shipped")
+          )
+        }
+        return Effect.map(fromKey(key, options), (args) =>
+          new SnapshotImpl({
+            def,
+            label,
+            argsKey: key as string,
+            args,
+            result: hit,
+            patched: false,
+            more: def.list === undefined
+              ? undefined
+              : payload === true
+              ? moreAvailable
+              : moreEnd
+          }))
+      })
+    }
     return Effect.map(fromKey(key, options), (args) => {
       const data = { def, label, argsKey: key as string, args }
       if (tag === 0) {
@@ -3157,7 +3202,14 @@ const snapshotWire = (
         Schema.Literal(1),
         Schema.Array(error),
         Schema.NullOr(Schema.Tuple([success, Schema.Number]))
-      ])
+      ]),
+      ...(log
+        ? []
+        : [
+          def.list === undefined
+            ? Schema.Tuple([Schema.String, Schema.Literal(2)])
+            : Schema.Tuple([Schema.String, Schema.Literal(2), Schema.Boolean])
+        ])
     ]),
     decode: (
       tuple: any,
@@ -3178,33 +3230,48 @@ const snapshotWire = (
         : data.more._tag === "Failed"
         ? { Failed: data.more.error }
         : data.more._tag
-      return Effect.map(toKey(data.args, options), (key) => {
-        const tuple: Array<unknown> = result._tag === "Success"
-          ? def.list === undefined
-            ? [key, 0, result.value, result.timestamp, data.patched]
+      return Effect.flatMap(Effect.context(), (ctx) => {
+        const lookup = log ? undefined : Context.get(ctx, queryCore.Shipped)
+        return Effect.map(toKey(data.args, options), (key) => {
+          if (result._tag === "Success") {
+            const shipped = data.patched ? undefined : lookup?.(def, key)
+            if (
+              shipped !== undefined &&
+              shipped.value === result.value &&
+              shipped.timestamp === result.timestamp
+            ) {
+              return def.list === undefined
+                ? [key, 2]
+                : [key, 2, data.more !== undefined && data.more._tag !== "End"]
+            }
+          }
+          const tuple: Array<unknown> = result._tag === "Success"
+            ? def.list === undefined
+              ? [key, 0, result.value, result.timestamp, data.patched]
+              : [
+                key,
+                0,
+                result.value,
+                result.timestamp,
+                data.patched,
+                data.more !== undefined && data.more._tag !== "End"
+              ]
             : [
               key,
-              0,
-              result.value,
-              result.timestamp,
-              data.patched,
-              data.more !== undefined && data.more._tag !== "End"
+              1,
+              result.cause.reasons.filter(Cause.isFailReason).map((reason) =>
+                reason.error
+              ),
+              Option.isSome(result.previousSuccess)
+                ? [
+                  result.previousSuccess.value.value,
+                  result.previousSuccess.value.timestamp
+                ]
+                : null
             ]
-          : [
-            key,
-            1,
-            result.cause.reasons.filter(Cause.isFailReason).map((reason) =>
-              reason.error
-            ),
-            Option.isSome(result.previousSuccess)
-              ? [
-                result.previousSuccess.value.value,
-                result.previousSuccess.value.timestamp
-              ]
-              : null
-          ]
-        if (log) tuple.push([result.waiting, more])
-        return tuple
+          if (log) tuple.push([result.waiting, more])
+          return tuple
+        })
       })
     }
   }
@@ -3689,6 +3756,49 @@ const parseRaw = (
     if (byKey.size > 0) out.set(name, byKey)
   }
   return out
+}
+
+/**
+ * Decoded Success values of raw `~query` tuples, keyed by the tuple object
+ * `parseRaw` kept. Shared between `decodeRaw` and `shippedOf`, so whichever
+ * decodes a shipped entry first hands the same value to the other.
+ */
+const decodedRaw = new WeakMap<
+  RawTuple,
+  { readonly def: QueryDef; readonly value: unknown }
+>()
+
+const decodeRawSuccess = (def: QueryDef, tuple: RawTuple): unknown => {
+  const hit = decodedRaw.get(tuple)
+  if (hit !== undefined && hit.def === def) return hit.value
+  const value = def.codec().decodeSuccess(tuple[2])
+  decodedRaw.set(tuple, { def, value })
+  return value
+}
+
+/**
+ * Builds a lookup over a `~query` payload for hydrating page-state snapshots
+ * that reference it. Decoded Successes are memoized on the raw tuple object
+ * so the cache's `decodeRaw` and every watching instance share one decode.
+ *
+ * @internal
+ */
+export const shippedOf = (
+  input: unknown
+): queryCore.ShippedLookup | undefined => {
+  const parsed = parseRaw(input)
+  if (parsed === undefined) return undefined
+  return (def: QueryDef, argsKey: string) => {
+    const tuple = parsed.get(def.name)?.get(argsKey)
+    if (tuple === undefined || tuple[1] !== 0) return undefined
+    try {
+      return AsyncResult.success(decodeRawSuccess(def, tuple), {
+        timestamp: tuple[3]
+      })
+    } catch {
+      return undefined
+    }
+  }
 }
 
 /**
@@ -5801,7 +5911,7 @@ const buildCache = (
       try {
         const codec = def.codec()
         result = tuple[1] === 0
-          ? AsyncResult.success(codec.decodeSuccess(tuple[2]), {
+          ? AsyncResult.success(decodeRawSuccess(def, tuple), {
             timestamp: tuple[3]
           })
           : AsyncResult.failure(
@@ -5880,8 +5990,10 @@ const buildCache = (
       }
     }
   }
+  let emitted: Map<string, Map<string, AsyncResult.Success<any, any>>> | undefined
   const dehydrate: CacheInternals["dehydrate"] = () => {
     const out: Dehydrated = {}
+    emitted = new Map()
     for (const entry of allEntries()) {
       if (entry.fetch !== undefined) dropFetch(entry, entry.fetch)
       resumeAll(entry.waiters, Exit.interrupt())
@@ -5916,6 +6028,11 @@ const buildCache = (
             entry.settledAt
           ]
         ;(out[entry.def.name] ??= []).push(tuple)
+        if (result._tag === "Success") {
+          let byKey = emitted.get(entry.def.name)
+          if (byKey === undefined) emitted.set(entry.def.name, byKey = new Map())
+          byKey.set(entry.argsKey, result)
+        }
       } catch {
         const logKey = logKeyOf(entry)
         report(
@@ -6062,6 +6179,8 @@ const buildCache = (
     invalidate,
     beginRun,
     dehydrate,
+    shipped: (def: QueryDef, argsKey: string) =>
+      emitted?.get(def.name)?.get(argsKey),
     hydrate,
     closeWindow,
     isWindowOpen: () => windowOpen,
@@ -6156,6 +6275,7 @@ queryCore.load({
   makeSnapshot,
   makeSnapshotMap,
   sameMore,
+  shippedOf,
   snapshotData,
   snapshotMapData,
   snapshotMapSchema,

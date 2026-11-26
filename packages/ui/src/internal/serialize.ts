@@ -9,6 +9,7 @@ import type * as View from "../View.ts"
 import { runCodec, warnOnce, warnUnencoded } from "./codecRun.ts"
 import type * as Kernel from "./kernel.ts"
 import { segment, slotSegment } from "./paths.ts"
+import * as queryCore from "./queryCore.ts"
 import type * as services from "./services.ts"
 import { encodePage, stateCodecOf } from "./stateCodec.ts"
 
@@ -70,7 +71,8 @@ interface Snapshot {
 /** @internal */
 export const snapshot = (
   root: Kernel.Instance,
-  deferred: ReadonlySet<Kernel.Instance>
+  deferred: ReadonlySet<Kernel.Instance>,
+  shippedQuery?: queryCore.ShippedLookup | undefined
 ): Snapshot => {
   const late: Array<Fiber.Fiber<Page, SchemaIssue.Issue>> = []
   const instance = (inst: Kernel.Instance): Snap => {
@@ -84,7 +86,15 @@ export const snapshot = (
       }
     }
     const encoded = shipped
-      ? runCodec(encodePage(component, inst.model, inst.results, inst.owning))
+      ? runCodec(
+        shippedQuery === undefined
+          ? encodePage(component, inst.model, inst.results, inst.owning)
+          : Effect.provideService(
+            encodePage(component, inst.model, inst.results, inst.owning),
+            queryCore.Shipped,
+            shippedQuery
+          )
+      )
       : undefined
     if (encoded !== undefined && !Exit.isExit(encoded)) late.push(encoded)
     return {

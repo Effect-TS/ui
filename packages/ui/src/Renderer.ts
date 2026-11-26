@@ -309,7 +309,9 @@ export interface Hydration<Node> {
  * The client decodes the state with its own Schemas, so it has to come from a
  * server on the same build. A path whose state doesn't decode isn't adopted:
  * the client runs `init` and builds it and its subtree fresh. Only `~query`
- * hydrates the cache, so a payload without it fetches every query again.
+ * hydrates the cache, and shipped instance snapshots can reference entries in
+ * `~query`, so a payload without it fetches every query again and won't adopt
+ * instances whose results reference `~query`.
  *
  * @stability experimental
  * @category models
