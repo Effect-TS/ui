@@ -148,7 +148,7 @@ import type * as Mount from "../Mount.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
 import type * as HtmlHead from "./HtmlHead.ts"
-import { svgTagNames } from "./internal/elements.ts"
+import * as elements from "./internal/elements.ts"
 
 // ---------------------------------------------------------------------------
 // host
@@ -1451,13 +1451,12 @@ export type VoidTag = typeof voidTags[number]
 
 /**
  * The SVG tags, each a builder on `h` that renders in the SVG namespace.
- * `text` is `h.svgText`, since `h.text` makes a text node.
  *
  * @stability experimental
  * @category svg
  * @since 0.1.0
  */
-export const svgTags = svgTagNames
+export const svgTags = elements.svgTags
 
 /**
  * An SVG tag.
@@ -1566,10 +1565,10 @@ type SvgPresentationAttribute =
   | "word-spacing"
   | "writing-mode"
 
-type Box = "x" | "y" | "width" | "height"
-type Viewport = "viewBox" | "preserveAspectRatio"
-type Link = "href" | "xlink:href"
-type TextPosition =
+type SvgBox = "x" | "y" | "width" | "height"
+type SvgViewport = "viewBox" | "preserveAspectRatio"
+type SvgLink = "href" | "xlink:href"
+type SvgTextPosition =
   | "x"
   | "y"
   | "dx"
@@ -1577,14 +1576,14 @@ type TextPosition =
   | "rotate"
   | "textLength"
   | "lengthAdjust"
-type Gradient =
-  | Link
+type SvgGradient =
+  | SvgLink
   | "gradientUnits"
   | "gradientTransform"
   | "spreadMethod"
 
 interface SvgOwnAttributes {
-  readonly svg: Box | Viewport | "xmlns" | "xmlns:xlink" | "version"
+  readonly svg: SvgBox | SvgViewport | "xmlns" | "xmlns:xlink" | "version"
   readonly g: never
   readonly path: "d" | "pathLength"
   readonly circle: "cx" | "cy" | "r" | "pathLength"
@@ -1592,11 +1591,11 @@ interface SvgOwnAttributes {
   readonly line: "x1" | "y1" | "x2" | "y2" | "pathLength"
   readonly polyline: "points" | "pathLength"
   readonly polygon: "points" | "pathLength"
-  readonly rect: Box | "rx" | "ry" | "pathLength"
-  readonly text: TextPosition
-  readonly tspan: TextPosition
+  readonly rect: SvgBox | "rx" | "ry" | "pathLength"
+  readonly text: SvgTextPosition
+  readonly tspan: SvgTextPosition
   readonly textPath:
-    | Link
+    | SvgLink
     | "path"
     | "startOffset"
     | "method"
@@ -1605,36 +1604,36 @@ interface SvgOwnAttributes {
     | "textLength"
     | "lengthAdjust"
   readonly defs: never
-  readonly use: Box | Link
-  readonly symbol: Box | Viewport | "refX" | "refY"
+  readonly use: SvgBox | SvgLink
+  readonly symbol: SvgBox | SvgViewport | "refX" | "refY"
   readonly clipPath: "clipPathUnits"
-  readonly mask: Box | "maskUnits" | "maskContentUnits"
+  readonly mask: SvgBox | "maskUnits" | "maskContentUnits"
   readonly pattern:
-    | Box
-    | Viewport
-    | Link
+    | SvgBox
+    | SvgViewport
+    | SvgLink
     | "patternUnits"
     | "patternContentUnits"
     | "patternTransform"
   readonly marker:
-    | Viewport
+    | SvgViewport
     | "refX"
     | "refY"
     | "markerUnits"
     | "markerWidth"
     | "markerHeight"
     | "orient"
-  readonly linearGradient: Gradient | "x1" | "y1" | "x2" | "y2"
-  readonly radialGradient: Gradient | "cx" | "cy" | "r" | "fx" | "fy" | "fr"
+  readonly linearGradient: SvgGradient | "x1" | "y1" | "x2" | "y2"
+  readonly radialGradient: SvgGradient | "cx" | "cy" | "r" | "fx" | "fy" | "fr"
   readonly stop: "offset"
-  readonly filter: Box | "filterUnits" | "primitiveUnits"
+  readonly filter: SvgBox | "filterUnits" | "primitiveUnits"
   readonly image:
-    | Box
-    | Link
+    | SvgBox
+    | SvgLink
     | "preserveAspectRatio"
     | "crossorigin"
     | "decoding"
-  readonly foreignObject: Box
+  readonly foreignObject: SvgBox
 }
 
 /**
@@ -1655,10 +1654,10 @@ interface SvgOwnAttributes {
  * @category svg
  * @since 0.1.0
  */
-export type SvgAttribute<Tag extends string> =
+export type SvgAttribute<Tag extends SvgTag> =
   | SvgGlobalAttribute
   | SvgPresentationAttribute
-  | (Tag extends keyof SvgOwnAttributes ? SvgOwnAttributes[Tag] : never)
+  | SvgOwnAttributes[Tag]
 
 /**
  * The builder of an SVG element, such as `h.svg` or `h.path`: the core
@@ -1681,7 +1680,7 @@ export interface SvgElement<
   Msg,
   R = never,
   Node = unknown,
-  Tag extends string = string
+  Tag extends SvgTag = SvgTag
 > extends View.ContainerBuilder<Msg, R, SvgEvents, Node, Tag> {
   /**
    * Sets one attribute; `undefined` removes it.
@@ -1781,13 +1780,8 @@ export type Tags<Msg> =
     >
   }
   & {
-    readonly [K in Exclude<SvgTag, "text">]: View.Shorthand<
+    readonly [K in SvgTag as K extends "text" ? "svgText" : K]: View.Shorthand<
       SvgElement<Msg, never, SVGElementTagNameMap[K], K>
-    >
-  }
-  & {
-    readonly svgText: View.Shorthand<
-      SvgElement<Msg, never, SVGTextElement, "text">
     >
   }
 
@@ -1949,11 +1943,9 @@ export const component: Component.Define<Elements> = (options) =>
 export const ref = <K extends keyof HTMLElementTagNameMap | SvgTag>(
   name: string,
   _tag: K
-): Renderer.Ref<NodeOf<K>> => Renderer.ref<NodeOf<K>>(name)
-
-type NodeOf<K extends string> = K extends keyof HTMLElementTagNameMap
-  ? HTMLElementTagNameMap[K]
-  : SVGElementTagNameMap[K & SvgTag]
+): Renderer.Ref<
+  (HTMLElementTagNameMap & Pick<SVGElementTagNameMap, SvgTag>)[K]
+> => Renderer.ref(name)
 
 /**
  * The names that get no generated method on a custom element, because the

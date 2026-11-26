@@ -1104,10 +1104,6 @@ Known limits:
   makes one child swappable with `Feature.Service`, and passes its editor
   into another component's slot. This entry module
   mounts the page, which is in `fixtures/pages/notes/NotePage.ts`.
-- **[Drawing icons and charts with SVG](./ai-docs/src/10_ui/21_svg-icons.ts)**:
-  SVG tags have builders on `h` like HTML tags: `h.svg`, `h.path`,
-  `h.circle`, `h.g` and the rest. Attribute names are checked per tag,
-  and SVG's `<text>` is `h.svgText` because `h.text` makes a text node.
 - **[Reusing view functions with children](./ai-docs/src/10_ui/21_view-functions.ts)**:
   Name view functions in CapitalCase, like components.
   Use a plain function for a stateless wrapper. Return the builder when
@@ -1146,6 +1142,10 @@ Known limits:
 - **[Drawing on a canvas](./ai-docs/src/10_ui/25_drawing-on-canvas.ts)**:
   Draw a scene from the Model, move it every animation frame, turn presses
   into scene points, and test it in a scene and a whole-app test.
+- **[Drawing icons and charts with SVG](./ai-docs/src/10_ui/25_drawing-with-svg.ts)**:
+  SVG tags have builders on `h` like HTML tags: `h.svg`, `h.path`,
+  `h.circle`, `h.g` and the rest. Attribute names are checked per tag,
+  and SVG's `<text>` is `h.svgText` because `h.text` makes a text node.
 - **[Validating forms](./ai-docs/src/10_ui/26_forms.ts)**:
   Validate a sign-up form with `Validation`: rules on each field, a rule
   that reads another field, a username check run by a debounced query, and
