@@ -2,4 +2,4 @@
 "@effect/ui-kit": patch
 ---
 
-Fix Combobox, Drawer, Menu, Select, PreviewCard and outside-press scrollbar handling when mounted into a same-origin iframe from the parent window.
+Fix focus handling, Combobox inline completion, Drawer swipe detection, and Select scroll-arrow hover when mounted into a same-origin iframe from the parent window. Scrollbar presses in the iframe no longer dismiss popups.
