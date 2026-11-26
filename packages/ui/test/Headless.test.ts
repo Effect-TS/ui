@@ -517,51 +517,52 @@ describe("headless components", () => {
   }
 
   // Only the view's own return value is rejected: an array of children still renders.
-  for (const where of ["view", "closure"] as const) {
-    it.effect(`a ${where} that returns an array fails, asking for one node`, () =>
-      provideHost(Effect.gen(function*() {
-        const Pair = Html.component({
-          name: "Pair",
-          model: Schema.Null,
-          message: Schema.Never
-        }).make({
-          init: () => null,
-          update: ($) => $.model,
-          view: (h) => [h.button("Toggle"), h.output("Closed")] as never
-        })
-        const Parent = Html.component({
-          name: "Parent",
-          model: Schema.Null,
-          message: Schema.Never
-        }).make({
-          init: () => null,
-          update: ($) => $.model,
-          view: (h) =>
-            h.div(
-              [h.span("kept")],
-              where === "view" ? Pair(h, { key: "p" }) : Menu(h, {
-                key: "p",
-                props: { items },
-                view: (menu) =>
-                  [
-                    menu.trigger(h.button).children("Toggle"),
-                    h.output("Closed")
-                  ] as never
-              })
-            )
-        })
-        const root = yield* TestHost.mount(Parent, {})
-        yield* TestHost.settle
-        assert.deepStrictEqual(failures(root), [
-          where === "view" ? "/Parent/Pair[p] view" : "/Parent/Menu[p] view"
-        ])
+  it.effect("a view or closure that returns an array fails, asking for one node", () =>
+    provideHost(Effect.gen(function*() {
+      const Pair = Html.component({
+        name: "Pair",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => [h.button("Toggle"), h.output("Closed")] as never
+      })
+      const Parent = Html.component({
+        name: "Parent",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          h.div(
+            [h.span("kept")],
+            Pair(h, { key: "p" }),
+            Menu(h, {
+              key: "m",
+              props: { items },
+              view: (menu) =>
+                [
+                  menu.trigger(h.button).children("Toggle"),
+                  h.output("Closed")
+                ] as never
+            })
+          )
+      })
+      const root = yield* TestHost.mount(Parent, {})
+      yield* TestHost.settle
+      assert.deepStrictEqual(failures(root), [
+        "/Parent/Pair[p] view",
+        "/Parent/Menu[m] view"
+      ])
+      for (const entry of root.log()) {
+        if (entry._tag !== "Failed") continue
         assert.include(
-          Cause.pretty(
-            root.log().find((entry) => entry._tag === "Failed")!.cause
-          ),
+          Cause.pretty(entry.cause),
           "A view must return one node. Wrap multiple children in `h.div(items)`."
         )
-        assert.strictEqual(root.text(), "kept")
-      })))
-  }
+      }
+      assert.strictEqual(root.text(), "kept")
+    })))
 })
