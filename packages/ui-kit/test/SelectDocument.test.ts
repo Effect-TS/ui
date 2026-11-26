@@ -8,6 +8,7 @@ import {
   byId,
   container,
   holdExits,
+  inIframe,
   popovers,
   press,
   tick
@@ -267,7 +268,10 @@ const Page = Html.component({
   }
 })
 
-const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
+const mountPage = Effect.fnUntraced(function*(
+  config: Partial<Config> = {},
+  into: typeof container = container
+) {
   yield* popovers
   yield* geometry
   rects.set(
@@ -275,7 +279,7 @@ const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
     rects.get("trigger") ?? { x: 100, y: 300, width: 120, height: 30 }
   )
   rects.set("value", { x: 110, y: 305, width: 60, height: 20 })
-  const app = yield* container
+  const app = yield* into
   const root = yield* BrowserHost.mountEffect(
     Page,
     {
@@ -290,7 +294,7 @@ const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
     app
   )
   yield* tick
-  return { root, log: () => root.model()?.log ?? [] }
+  return { app, root, log: () => root.model()?.log ?? [] }
 })
 
 const style = (name: string) => byId("positioner").style.getPropertyValue(name)
@@ -680,6 +684,44 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.strictEqual(document.body.style.overflowY, "")
       assert.strictEqual(document.activeElement, byId("trigger"))
       assert.isFalse(touched())
+    }).pipe(Effect.scoped))
+
+  it.effect("driven from the parent window in an iframe, a quick drag picks an item, and a backdrop press closes it", () =>
+    Effect.gen(function*() {
+      const { app, log } = yield* mountPage({}, inIframe)
+      const doc = app.ownerDocument
+      press(byId("trigger", doc))
+      mousedown(byId("trigger", doc))
+      yield* tick
+      const dark = app.querySelector("[data-testid=dark]")!
+      dark.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          pointerType: "mouse",
+          buttons: 1,
+          movementY: 10
+        })
+      )
+      yield* tick
+      dark.dispatchEvent(
+        new MouseEvent("mouseup", { bubbles: true, button: 0 })
+      )
+      yield* tick
+      keydown(byId("trigger", doc), "ArrowDown")
+      yield* tick
+      const blocker = byId("positioner", doc).querySelector(
+        "[data-select-blocker]"
+      )!
+      press(blocker)
+      assert.isFalse(mousedown(blocker))
+      yield* tick
+      assert.deepStrictEqual(log(), [
+        "RequestedOpen trigger-press",
+        "Picked dark",
+        "RequestedClose item-press",
+        "RequestedOpen list-navigation",
+        "RequestedClose outside-press"
+      ])
     }).pipe(Effect.scoped))
 
   it.effect("a modal select hides the page from screen readers, and its dismiss button closes it", () =>

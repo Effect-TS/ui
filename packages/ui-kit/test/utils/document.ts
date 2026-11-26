@@ -11,7 +11,41 @@ export const container = Effect.acquireRelease(
   (element) => Effect.sync(() => element.remove())
 )
 
-export const byId = (id: string) => document.getElementById(id)!
+export const byId = (id: string, doc = document) => doc.getElementById(id)!
+
+/**
+ * happy-dom shares DOM constructors across frames. Replace the parent
+ * constructors so iframe nodes fail parent-realm instanceof checks, as in a browser.
+ */
+export const inIframe = Effect.gen(function*() {
+  const iframe = document.createElement("iframe")
+  iframe.srcdoc = "<!doctype html><html><body></body></html>"
+  document.body.appendChild(iframe)
+  const view = iframe.contentWindow!
+  const saved = (["Node", "Element", "HTMLElement"] as const).map((name) => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, name)!
+    const Real = globalThis[name]
+    Object.defineProperty(view, name, { value: Real, configurable: true })
+    // Inherits the real prototype, so helpers that patch it still reach every node.
+    Object.defineProperty(globalThis, name, {
+      value: Object.create(Real, {
+        [Symbol.hasInstance]: { value: () => false }
+      }),
+      configurable: true
+    })
+    return [name, descriptor] as const
+  })
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => {
+      for (const [name, descriptor] of saved) {
+        Object.defineProperty(globalThis, name, descriptor)
+      }
+      iframe.remove()
+    })
+  )
+  const doc = iframe.contentDocument!
+  return doc.body.appendChild(doc.createElement("div"))
+})
 
 export const holdExits = Effect.acquireRelease(
   Effect.sync(() => {

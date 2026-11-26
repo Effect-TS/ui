@@ -180,6 +180,7 @@ import {
   sameMonth,
   startOfMonth
 } from "./internal/calendar.ts"
+import { isElement } from "./internal/dom.ts"
 import { trackComposing } from "./internal/interaction.ts"
 import { listenOutside } from "./internal/outside.ts"
 import { layered, raiseAbove } from "./internal/topLayer.ts"
@@ -351,7 +352,7 @@ const TrackDatePicker = Mount.makeStream(
               Queue.offerUnsafe(queue, DatePickerMessage.Dismissed({ reason }))
             const inside = (target: Node) =>
               node.contains(target) ||
-              (target instanceof Element && target.closest(anchors) !== null)
+              (isElement(target) && target.closest(anchors) !== null)
             const composing = trackComposing(document, controller.signal)
             raiseAbove(node)
             listenOutside(document, controller.signal, {

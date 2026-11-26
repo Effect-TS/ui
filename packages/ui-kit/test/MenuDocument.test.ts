@@ -5,7 +5,14 @@ import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { TestClock } from "effect/testing"
-import { byId, container, holdExits, popovers, tick } from "./utils/document.ts"
+import {
+  byId,
+  container,
+  holdExits,
+  inIframe,
+  popovers,
+  tick
+} from "./utils/document.ts"
 
 type Rect = {
   readonly x: number
@@ -286,11 +293,14 @@ const Page = Html.component({
     })
 })
 
-const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
+const mountPage = Effect.fnUntraced(function*(
+  config: Partial<Config> = {},
+  into: typeof container = container
+) {
   yield* popovers
   yield* geometry
   rects.set("trigger", { x: 100, y: 100, width: 80, height: 30 })
-  const app = yield* container
+  const app = yield* into
   const root = yield* BrowserHost.mountEffect(Page, {
     filter: false,
     viewport: false,
@@ -302,7 +312,7 @@ const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
     ...config
   }, app)
   yield* tick
-  return { root, log: () => root.model()?.log ?? [] }
+  return { app, root, log: () => root.model()?.log ?? [] }
 })
 
 const item = (value: string) =>
@@ -330,7 +340,7 @@ const mousedown = (target: Element) => {
       button: 0
     })
   )
-  target.dispatchEvent(
+  return target.dispatchEvent(
     new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 })
   )
 }
@@ -711,6 +721,26 @@ describe("Menu in a document", { concurrent: false }, () => {
       assert.strictEqual(document.body.style.overflowY, "")
       assert.isTrue(blocker.inert)
       assert.isNull(byId("before").getAttribute("aria-hidden"))
+    }))
+
+  it.effect("driven from the parent window in an iframe, a modal menu stays open as its trigger takes focus, and a backdrop press closes it", () =>
+    Effect.gen(function*() {
+      const { app, log } = yield* mountPage({}, inIframe)
+      const doc = app.ownerDocument
+      mousedown(byId("trigger", doc))
+      yield* tick
+      byId("trigger", doc).focus()
+      yield* tick
+      const blocker = byId("positioner", doc).querySelector<HTMLElement>(
+        "[data-menu-blocker]"
+      )!
+      assert.isFalse(blocker.inert)
+      assert.isFalse(mousedown(blocker))
+      yield* tick
+      assert.deepStrictEqual(log(), [
+        "root RequestedOpen trigger-press",
+        "root RequestedClose outside-press"
+      ])
     }))
 
   it.effect("drawn in place, the menu isn't modal, and its submenu is drawn in place too", () =>

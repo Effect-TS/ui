@@ -232,7 +232,7 @@ import {
   dismissAttrs,
   dismissSpan
 } from "./internal/blocker.ts"
-import { focusFinal, override } from "./internal/dom.ts"
+import { focusFinal, isElement, override } from "./internal/dom.ts"
 import {
   autofillMatch,
   filledOf,
@@ -1162,7 +1162,7 @@ const watch = (
         event.pointerType !== "mouse" || event.buttons !== 1 || dragged
       ) return
       if (
-        !(event.target instanceof Element) ||
+        !isElement(event.target) ||
         event.target.closest("[role=\"option\"]") === null
       ) return
       dragY += event.movementY
@@ -1184,7 +1184,7 @@ const watch = (
       scrollBy(arrow, arrow.getAttribute("data-select-scroll-arrow") === "up")
     }
     const onMouseDown = (event: MouseEvent) => {
-      if (event.target instanceof Node && blocking.is(event.target)) {
+      if (blocking.is(event.target)) {
         event
           .preventDefault()
       }

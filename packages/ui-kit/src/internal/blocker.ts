@@ -1,6 +1,7 @@
 import * as Html from "@effect/ui/html/Html"
 import * as View from "@effect/ui/View"
 import { flag, noSelect, visuallyHidden } from "./attributes.ts"
+import { isElement } from "./dom.ts"
 
 export const blockers = (attribute: string) => {
   const blocker = new Html.Element<never>("div")
@@ -9,8 +10,8 @@ export const blockers = (attribute: string) => {
       [attribute]: "",
       style: "position:fixed;inset:0;z-index:-1;" + noSelect
     })
-  const is = (target: Node): boolean =>
-    target instanceof Element && target.hasAttribute(attribute)
+  const is = (target: EventTarget | null): boolean =>
+    isElement(target) && target.hasAttribute(attribute)
   return {
     open: View.toNode(blocker),
     closed: View.toNode(blocker.attr("inert", "")),

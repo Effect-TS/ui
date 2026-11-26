@@ -283,7 +283,7 @@ import {
 } from "./internal/attributes.ts"
 import { backdropStyle, blockers, cutPath } from "./internal/blocker.ts"
 import { isRtl, provided, rightToLeft } from "./internal/direction.ts"
-import { focusFinal, override } from "./internal/dom.ts"
+import { focusFinal, isElement, override } from "./internal/dom.ts"
 import { type TextFilter, textFilter } from "./internal/filter.ts"
 import { methodOf, onEscape } from "./internal/interaction.ts"
 import { grouped, keyed } from "./internal/list.ts"
@@ -1462,7 +1462,7 @@ const watch = (
         : document.getElementById(current.inputId) as HTMLInputElement | null
     const inside = (target: Node): boolean =>
       (node.contains(target) && !blocker.is(target)) ||
-      (target instanceof Element && target.closest(selectors.any) !== null)
+      (isElement(target) && target.closest(selectors.any) !== null)
 
     const areaOf = (anchor: HTMLElement | null): Element | null =>
       anchor === null || current.context
@@ -2051,7 +2051,7 @@ const watch = (
         })
         node.addEventListener("keydown", onKeyDown, { capture: true, signal })
         node.addEventListener("mousedown", (event) => {
-          if (event.target instanceof Node && blocker.is(event.target)) {
+          if (blocker.is(event.target)) {
             event.preventDefault()
           }
         }, { signal })
