@@ -109,7 +109,8 @@ const preorder = (root: Node, visit: (node: Node) => boolean): void => {
     const children = node.children
     if (children === undefined) continue
     for (let index = children.length - 1; index >= 0; index--) {
-      if (index in children) pending.push(children[index]!)
+      const child = children[index]
+      if (child !== undefined) pending.push(child)
     }
   }
 }
