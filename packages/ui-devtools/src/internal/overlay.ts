@@ -584,6 +584,9 @@ const lineage = (session: Session, summary: Inspector.Summary) => {
   return chain
 }
 
+const ancestors = (session: Session, summary: Inspector.Summary) =>
+  lineage(session, summary).slice(0, -1).map(({ instance }) => instance)
+
 const Statuses = (h: H, summary: Inspector.Summary) => {
   const statuses = Read.statusesOf(summary)
   return h.span.class("status").attr(
@@ -798,13 +801,11 @@ const Instances = (
           browse: !model.browse,
           branches: model.browse || owner === undefined
             ? []
-            : lineage(session, owner).slice(0, -1).map(({ instance }) =>
-              instance
-            )
+            : ancestors(session, owner)
         })
       ).children(
         model.browse
-          ? "Back to active instances"
+          ? "Show active instances"
           : "Browse all " + count.toLocaleString("en-US")
       )
   )
@@ -1917,6 +1918,17 @@ const resumePage = () => Paint.make({ session: "", seq: null })
 
 const resumed = { paused: null, painting: null } as const
 
+const openTo = (model: OverlayModel, feed: Feed, seq: number) => {
+  const session = sessionOf(feed, model)
+  if (!model.browse || session === undefined) return {}
+  const at = Read.instanceOf(session.resolve(seq))
+  const owner = at === undefined ? undefined : session.summary(at)
+  if (owner === undefined) return {}
+  const open = ancestors(session, owner)
+    .filter((instance) => !model.branches.includes(instance))
+  return open.length === 0 ? {} : { branches: [...model.branches, ...open] }
+}
+
 const repaint = (model: OverlayModel, feed: Feed, seq: number) => {
   const session = sessionOf(feed, model)
   if (
@@ -1939,7 +1951,7 @@ export const Overlay = Html.component({
     selected: null,
     filter: "messages",
     scope: null,
-    browse: false,
+    browse: true,
     find: "",
     branches: [],
     failures: 0,
@@ -1989,6 +2001,7 @@ export const Overlay = Html.component({
         selected: seq,
         pane: "entry",
         ...($.model.pinned ? { pins: increment } : {}),
+        ...openTo($.model, $.props.feed, seq),
         ...paint.model
       })
         .run(...paint.commands)
@@ -2002,6 +2015,7 @@ export const Overlay = Html.component({
         pinned: false,
         reveal: seq,
         pins: increment,
+        ...openTo($.model, $.props.feed, seq),
         ...paint.model
       })
         .run(...paint.commands)

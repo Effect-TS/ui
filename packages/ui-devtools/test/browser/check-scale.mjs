@@ -51,6 +51,16 @@ await run("scale", async ({ browser, expect, failures, url }) => {
     count
   )
 
+  const appRoll = await frame.locator("[data-instance=App] .roll.tone-bad")
+    .textContent()
+  expect(
+    appRoll === "2 failed or interrupted",
+    "the list starts as the tree, and a parent counts a failure three levels below it",
+    appRoll
+  )
+  await frame.getByRole("button", { name: "Show active instances" }).click()
+  await settle()
+
   const active = await list()
   const rank = (name) => active.names.indexOf(name)
   expect(
@@ -98,20 +108,11 @@ await run("scale", async ({ browser, expect, failures, url }) => {
   await settle()
   const tree = await list()
   expect(bounded(tree), "the tree renders only the rows its box shows", tree)
-  await page.evaluate(() => {
-    document.querySelector("iframe[data-effect-ui-devtools]").contentDocument
-      .querySelector(".ilist").scrollTop = 0
-  })
-  await settle()
-  const appRoll = await frame.locator("[data-instance=App] .roll.tone-bad")
-    .textContent()
   expect(
-    appRoll === "2 failed or interrupted",
-    "a parent counts a failure three levels below it",
-    appRoll
+    tree.names.includes("Row[s5-5]"),
+    "the tree opens down to the selected entry's instance",
+    tree.names
   )
-  await frame.getByRole("button", { name: "Back to active instances" }).click()
-  await settle()
 
   await frame.locator(".crumb", { hasText: "Section[s5]" }).click()
   await settle()
