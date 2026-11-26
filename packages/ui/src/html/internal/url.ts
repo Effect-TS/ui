@@ -32,18 +32,8 @@ const attributes: ReadonlySet<string> = new Set([
   "data"
 ])
 
-/** What an SVG `set` or `animate` sets its target attribute to. */
-const animationValues: ReadonlySet<string> = new Set([
-  "to",
-  "from",
-  "by",
-  "values"
-])
-
-const isAnimation = (tag: string): boolean => {
-  const lower = tag.toLowerCase()
-  return lower === "set" || lower === "animate"
-}
+/** SVG `set` and `animate`, as the HTML parser folds their case. */
+const animation = /^(set|animate)$/i
 
 const properties: ReadonlySet<string> = new Set([
   "href",
@@ -67,8 +57,10 @@ export const blockedAttribute = (
 ): boolean =>
   attributes.has(name)
     ? isScript(value)
-    : animationValues.has(name) && isAnimation(tag) &&
-      (name === "values" ? value.split(";").some(isScript) : isScript(value))
+    : name === "values"
+    ? animation.test(tag) && value.split(";").some(isScript)
+    : (name === "to" || name === "from" || name === "by") &&
+      animation.test(tag) && isScript(value)
 
 /**
  * Whether a URL is blocked for property `name` of a built-in `tag`.
