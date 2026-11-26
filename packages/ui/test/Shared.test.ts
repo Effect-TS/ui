@@ -1180,6 +1180,128 @@ describe("a component that reads its own kind", () => {
     assert.lengthOf(nested.sent(Menu, MenuMessage.Picked()).current.sent, 0)
   })
 
+  const Renamed = UiSchema.TaggedEnum({ Renamed: {} })
+  // Shares its path: the one above's, then its name and its Model.
+  const Path = Component.define({
+    name: "Path",
+    props: Schema.Struct({ name: Schema.String }),
+    model: Schema.String,
+    message: Renamed,
+    shares: {
+      value: (suffix, props, reads) =>
+        `${reads.parent ?? ""}/${props.name}${suffix}`,
+      schema: Schema.String,
+      receives: ["Renamed"]
+    },
+    reads: { parent: { owner: "self", optional: true } }
+  }).make({
+    init: () => "",
+    update: ($) => $.model + "!",
+    parts: (_, suffix) => ({ suffix })
+  })
+  const Saw = UiSchema.TaggedEnum({ Saw: { path: Schema.String } })
+  const Where = Component.define({
+    name: "Where",
+    model: Schema.Null,
+    message: Saw,
+    reads: { path: { owner: Path, onChange: (path) => Saw.Saw({ path }) } }
+  }).make({
+    init: () => null,
+    update: ($) => $.model,
+    parts: (p) => ({ path: p.reads.path })
+  })
+
+  const Rename = Component.define({
+    name: "Rename",
+    model: Schema.Null,
+    message: Renamed,
+    reads: { path: Path }
+  }).make({
+    init: () => null,
+    update: ($, message) => $.send(Path, message),
+    view: (h) =>
+      h.el("button").on("click", Renamed.Renamed()).children("rename")
+  })
+  // A rename of the outer Path changes what it shares, and with `follow` the name it gives the inner one,
+  // in one update.
+  const Paths = Component.define({
+    name: "Paths",
+    props: Schema.Struct({ follow: Schema.Boolean }),
+    model: Schema.Null,
+    message: Schema.Never
+  }).make({
+    init: () => null,
+    update: ($) => $.model,
+    view: (h) =>
+      Path(h, {
+        key: "outer",
+        props: { name: "a" },
+        view: (outer) =>
+          h.el("div", [
+            Rename(h, {}),
+            Path(h, {
+              key: "inner",
+              props: { name: h.props.follow ? "b" + outer.suffix : "b" },
+              view: () =>
+                Where(h, { view: (where) => h.el("span", where.path) })
+            })
+          ])
+      })
+  })
+
+  it.effect("an owner derives its value from the one above it, and its reader's onChange gets only the final value", () =>
+    Effect.forEach(
+      [[true, "/a!/b!"], [false, "/a!/b"]] as const,
+      ([follow, renamed]) =>
+        provideHost(Effect.gen(function*() {
+          const root = yield* TestHost.mount(Paths, { follow })
+          yield* TestHost.settle
+          const path = () => Locator.textOf(root.get(Locator.tag("span")))
+          assert.strictEqual(path(), "/a/b")
+          click(root, "rename")
+          yield* TestHost.settle
+          assert.strictEqual(path(), renamed)
+          assert.deepStrictEqual(
+            updatesAt(root.log(), "/Paths/Path[outer]/Path[inner]/Where[]").map(
+              (
+                entry
+              ) => entry.message
+            ),
+            [{ _tag: "Saw", path: renamed }]
+          )
+        }))
+    ))
+
+  it.effect("in a scene, an owner derives its value from the one above it", () =>
+    Effect.gen(function*() {
+      const scene = yield* Scene.make(Paths, { follow: true })
+      scene.expect(Locator.text("/a/b")).toExist()
+    }).pipe(Effect.scoped))
+
+  it.effect("in a scene, an owner's default derives its value from the values given", () =>
+    Effect.gen(function*() {
+      const Label = Component.define({
+        name: "Label",
+        model: Schema.Null,
+        message: Schema.Never,
+        shares: (_, __, reads) => reads.tips.label,
+        reads: { tips: TipsProvider }
+      }).make({ init: () => null, update: ($) => $.model })
+      const Show = Component.define({
+        name: "Show",
+        model: Schema.Null,
+        message: Schema.Never,
+        reads: { label: Label }
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.el("p", `label:${h.reads.label}`)
+      })
+      const scene = yield* Scene.make(Show, {})
+      scene.shared(TipsProvider, { open: null, label: "given" })
+        .expect(Locator.text("label:given")).toExist()
+    }).pipe(Effect.scoped))
+
   it("rejects a read of its own kind that isn't optional, or in a component that shares nothing", () => {
     const self = { owner: "self", optional: true } as const
     assert.throws(

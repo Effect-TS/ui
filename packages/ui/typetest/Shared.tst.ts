@@ -300,6 +300,60 @@ describe("a component that reads its own kind", () => {
     expect<Component.Requirements<typeof Nest>>().type.toBe<never>()
   })
 
+  it("reads the owners above it in shares, with a schema or an annotated return for its own kind", () => {
+    const Lock = Schema.Struct({ disabled: Schema.Boolean })
+    Component.define({
+      name: "Above",
+      model: Schema.Null,
+      message: NestMessage,
+      shares: (_, __, reads) => {
+        expect(reads.tips).type.toBe<{ open: string | null }>()
+        expect(reads.maybe).type.toBe<{ open: string | null } | undefined>()
+        return reads.tips.open
+      },
+      reads: {
+        tips: TipsProvider,
+        maybe: { owner: TipsProvider, optional: true }
+      }
+    })
+    Component.define({
+      name: "Schema",
+      props: Schema.Struct({ disabled: Schema.Boolean }),
+      model: Schema.Null,
+      message: NestMessage,
+      reads: { parent: { owner: "self", optional: true } },
+      shares: {
+        value: (_, props, reads) => {
+          expect(reads.parent).type.toBe<
+            { readonly disabled: boolean } | undefined
+          >()
+          return { disabled: props.disabled || reads.parent?.disabled === true }
+        },
+        schema: Lock
+      }
+    })
+    Component.define({
+      name: "Annotated",
+      model: Schema.Null,
+      message: NestMessage,
+      shares: (_, __, reads): { disabled: boolean } => {
+        expect(reads.parent).type.toBe<{ disabled: boolean } | undefined>()
+        return { disabled: reads.parent?.disabled === true }
+      },
+      reads: { parent: { owner: "self", optional: true } }
+    })
+    Component.define({
+      name: "Neither",
+      model: Schema.Null,
+      message: NestMessage,
+      shares: (_, __, reads) => ({
+        // @ts-expect-error Give shares a schema, or annotate what value returns, to read its own kind in it
+        disabled: reads.parent?.disabled === true
+      }),
+      reads: { parent: { owner: "self", optional: true } }
+    })
+  })
+
   it("rejects a read of its own kind that isn't optional, reports what it doesn't collect, or shares nothing", () => {
     expect(Component.define).type.not.toBeCallableWith({
       name: "Required",

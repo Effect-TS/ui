@@ -280,15 +280,24 @@ const noOwners: Owners = new Map()
 
 /** The owners the readers below `component` see: `owners`, and `component` nearest when it's an owner. */
 const ownersBelow = (
+  given: Owners | undefined,
   owners: Owners,
   component: { readonly definition: Component.Definition.Any },
   model: unknown,
   props: unknown
 ): Owners => {
-  const shares = component.definition.shares
-  return shares === undefined
+  const definition = component.definition
+  return definition.shares === undefined
     ? owners
-    : new Map(owners).set(component.definition, shares(model, props))
+    : new Map(owners).set(
+      definition,
+      sharedReads.ownerValue(
+        definition,
+        model,
+        props,
+        sharedLookup(given, owners)
+      )
+    )
 }
 
 /**
@@ -342,8 +351,14 @@ export const withShared = (
   return given
 }
 
-/** What `owner` shares with no instance of it in the story: from `init` with no props, if it takes none. */
-const sharedDefault = (owner: Component.Headless.Any): unknown => {
+/**
+ * What `owner` shares with no instance of it in the story: from `init` with no props, if it takes none.
+ * It stands above the story, so it reads only the given values.
+ */
+const sharedDefault = (
+  owner: Component.Headless.Any,
+  given: Owners | undefined
+): unknown => {
   const name = owner.definition.name
   const props = {}
   if (!Schema.is(owner.props)(props)) {
@@ -351,7 +366,12 @@ const sharedDefault = (owner: Component.Headless.Any): unknown => {
       `Scene: the scene reads the shared state of ${name}, whose props aren't all optional, so it has no default. Give it with .shared(${name}, value)`
     )
   }
-  return owner.definition.shares!(owner.init(props).model, props)
+  return sharedReads.ownerValue(
+    owner.definition,
+    owner.init(props).model,
+    props,
+    rootShared(given)
+  )
 }
 
 /**
@@ -366,7 +386,7 @@ export const sharedLookup =
     const definition = owner.definition
     if (given?.has(definition)) return given.get(definition)
     if (owners.has(definition)) return owners.get(definition)
-    return optional === true ? undefined : sharedDefault(owner)
+    return optional === true ? undefined : sharedDefault(owner, given)
   }
 
 /** What the story's component reads of `owner`: a given value, or the default of a required read. */
@@ -380,7 +400,7 @@ const sharedBefore = (
   }
   if (read.optional) return undefined
   try {
-    return { value: sharedDefault(read.owner) }
+    return { value: sharedDefault(read.owner, given) }
   } catch (error) {
     if (error instanceof MissingShared) return undefined
     throw error
@@ -625,7 +645,7 @@ const expandRoot = <Msg>(
           childPath,
           depth + 1,
           own,
-          ownersBelow(owners, component, model, node.props),
+          ownersBelow(shared, owners, component, model, node.props),
           (label) => checkChildPaths(label, tree),
           reads
         )
@@ -797,7 +817,13 @@ export const expandedView = (
     fields.childModels,
     storySlots.get(fields.component),
     fields.shared,
-    ownersBelow(noOwners, fields.component, fields.model, fields.props),
+    ownersBelow(
+      fields.shared,
+      noOwners,
+      fields.component,
+      fields.model,
+      fields.props
+    ),
     fields.childStatus,
     fields.slotStatus,
     fields
@@ -2337,7 +2363,7 @@ export const rootParts = <Props, Parts>(
           shared: sharedLookup(shared, owners)
         }),
         at,
-        ownersBelow(owners, owned, ownedModel, child.props)
+        ownersBelow(shared, owners, owned, ownedModel, child.props)
       )
       value = value.parts(parts)
       owner = inner
@@ -2349,7 +2375,7 @@ export const rootParts = <Props, Parts>(
   return resolve(
     component.parts(model, props, { owner, shared: rootShared(shared) }),
     owner,
-    ownersBelow(noOwners, component, model, props)
+    ownersBelow(shared, noOwners, component, model, props)
   )[0] as Parts
 }
 

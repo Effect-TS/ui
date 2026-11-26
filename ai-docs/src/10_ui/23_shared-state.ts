@@ -5,7 +5,8 @@
  * a tooltip provider that knows which tooltip is open, tooltips that read it
  * and tell it when they're focused, and a scene of one tooltip with no
  * provider mounted. Then an optional owner, the reports readers give it, a
- * reader's `onChange`, and a component that reads and sends to its own kind.
+ * reader's `onChange`, a component that reads and sends to its own kind, and
+ * an owner that shares what it derives from the one above it.
  */
 import { UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
@@ -369,4 +370,42 @@ export const nestedMenu = Effect.gen(function*() {
     .expect(Locator.text("nested")).toExist()
   // A nested one sends the pick up.
   menu.click("Copy").sent(Menu, MenuMessage.PickedItem({ item: "copy" }))
+})
+
+// ---------------------------------------------------------------------------
+// An owner that derives what it shares from the owner above it
+// ---------------------------------------------------------------------------
+
+// `shares` gets the component's reads as its third argument, so a nested
+// lock is locked while the one around it is, and a reader reads only the
+// nearest lock. A value that reads its own kind would refer to its own type,
+// so it needs a `schema` or an annotated return.
+export const Lock = Html.component({
+  name: "Lock",
+  props: Schema.Struct({ locked: Schema.optional(Schema.Boolean) }),
+  model: Schema.Null,
+  message: Schema.Never,
+  shares: {
+    value: (_, props, reads) => ({
+      locked: props.locked === true || reads.parent?.locked === true
+    }),
+    schema: Schema.Struct({ locked: Schema.Boolean })
+  },
+  reads: { parent: { owner: "self", optional: true } }
+}).make({
+  init: () => null,
+  update: ($) => $.model,
+  parts: (p) => ({
+    locked: p.props.locked === true || p.reads.parent?.locked === true
+  })
+})
+
+// The lock in the scene isn't locked itself, but the one given above it is.
+export const nestedLock = Effect.gen(function*() {
+  const lock = yield* Scene.make(Lock, {}, {
+    elements: Html,
+    view: (lock, h) => h.p.children(lock.locked ? "locked" : "open")
+  })
+  lock.expect(Locator.text("open")).toExist()
+  lock.shared(Lock, { locked: true }).expect(Locator.text("locked")).toExist()
 })

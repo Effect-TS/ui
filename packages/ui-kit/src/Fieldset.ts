@@ -54,10 +54,8 @@
  * field around it is disabled by the browser alone, and its own parts
  * don't show it: pass `disabled: fieldset.disabled` to it.
  *
- * A fieldset doesn't read the fieldset around it. Pass the outer one's
- * state to a nested fieldset, `props: { disabled: outerFieldset.disabled || locked }`.
- * Without it the browser still disables the controls of the inner one, but
- * its legend and its fields don't show it.
+ * A nested fieldset reads the fieldset around it, and is disabled while
+ * it is, along with its legend and its fields.
  *
  * **Example** (Two fields under one legend)
  *
@@ -166,14 +164,18 @@ export const Fieldset = Html.component({
   model: Schema.Struct({}),
   message: Schema.Never,
   shares: {
-    value: (_model, props) => ({ disabled: props.disabled === true }),
+    value: (_model, props, reads) => ({
+      disabled: props.disabled === true || reads.fieldset?.disabled === true
+    }),
     schema: Schema.Struct({ disabled: Schema.Boolean })
-  }
+  },
+  reads: { fieldset: { owner: "self", optional: true } }
 }).make({
   init: () => ({}),
   update: ($) => $.model,
   parts: (p) => {
-    const disabled = p.props.disabled === true
+    const disabled = p.props.disabled === true ||
+      p.reads.fieldset?.disabled === true
     const legendId = p.id("legend")
     return {
       disabled,

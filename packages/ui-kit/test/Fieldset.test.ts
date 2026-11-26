@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { UiSchema, View } from "@effect/ui"
 import { Field, Fieldset, type FieldsetProps } from "@effect/ui-kit"
-import { BrowserHost, Html } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlServer } from "@effect/ui/html"
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -18,10 +18,11 @@ const Message = UiSchema.TaggedEnum({ ToggledLock: {} })
 
 const Billing = Html.component({
   name: "Billing",
+  props: Schema.Struct({ locked: Schema.optional(Schema.Boolean) }),
   model: Schema.Struct({ locked: Schema.Boolean }),
   message: Message
 }).make({
-  init: () => ({ locked: false }),
+  init: ($) => ({ locked: $.props.locked === true }),
   update: { ToggledLock: ($) => ({ locked: !$.model.locked }) },
   view: (h, model) => {
     const formField = (name: string) =>
@@ -45,7 +46,6 @@ const Billing = Html.component({
             formField("company"),
             Fieldset(h, {
               key: "address",
-              props: { disabled: outerFieldset.disabled },
               view: (innerFieldset) =>
                 innerFieldset.root(h.fieldset.class("address")).children(
                   innerFieldset.legend(h.div.class("address-legend")).children(
@@ -167,6 +167,18 @@ describe("Fieldset", { concurrent: false }, () => {
       yield* toggleLock(app)
       assert.deepStrictEqual(state("company"), [])
     }).pipe(Effect.scoped))
+
+  it.effect("a nested fieldset and its fields are disabled by the fieldset around it from the first render", () =>
+    Effect.gen(function*() {
+      const { html } = yield* HtmlServer.renderToHtml(Billing, { locked: true })
+      const app = document.createElement("div")
+      app.innerHTML = html
+      assert.isTrue(app.querySelector(".city")!.hasAttribute("data-disabled"))
+      assert.isTrue(
+        app.querySelector(".address-legend")!.hasAttribute("data-disabled")
+      )
+      assert.strictEqual(app.querySelectorAll("span").length, 0)
+    }))
 
   it.effect("a blur sent while an outer fieldset is being disabled leaves a nested field's touched state alone", () =>
     Effect.gen(function*() {

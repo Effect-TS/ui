@@ -87,6 +87,23 @@ export const values = (
   return out
 }
 
+/**
+ * What an owner shares, reading the owners above it through `lookup`.
+ *
+ * @internal
+ */
+export const ownerValue = (
+  definition: Component.Definition.Any,
+  model: unknown,
+  props: unknown,
+  lookup: Component.SharedLookup | undefined
+): unknown =>
+  definition.shares!(
+    model,
+    props,
+    values(definition.name, readsOf(definition), lookup)
+  )
+
 /** @internal */
 export const record = (
   component: Component.Any,
