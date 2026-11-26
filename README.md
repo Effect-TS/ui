@@ -46,7 +46,7 @@ const Counter = Html.component({
     )
 })
 
-const Main = BrowserHost.mount(Counter, {}, document.getElementById("root")!)
+const Main = BrowserHost.mount(Counter, {}, document.getElementById("app")!)
 
 Layer.launch(Main).pipe(Effect.runFork)
 ```
@@ -101,6 +101,27 @@ pnpm add effect @opentui/core@^0.9.9 \
 pnpm reports unmet `@effect/*` peers for these packages, because a URL doesn't satisfy their `^0.0.0` range. They still use the snapshots you installed, so you can ignore the warning.
 
 `@effect/ui-devtools/node` also requires `@effect/platform-node`, and `@effect/ui-opentui` has its own [runtime requirements](packages/ui-opentui/README.md#requirements).
+
+### Start a new app
+
+Vite's `vanilla-ts` template is enough to run the quick start and its tests:
+
+```sh
+pnpm create vite my-app --template vanilla-ts
+cd my-app
+pnpm add effect @effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@main
+pnpm add -D vitest @effect/vitest happy-dom
+```
+
+Then:
+
+1. Add `strict` and `exactOptionalPropertyTypes` to `tsconfig.json`, as in [Requirements](#requirements).
+2. Delete `src/counter.ts` and replace `src/main.ts` with the quick start, which mounts into the template's `#app`.
+3. Run `pnpm dev` to open the app, and `pnpm build` to type check and build it.
+
+Tests need no Vitest config: `pnpm vitest` runs Stories, Scenes and Plays in Node. A Play needs `TestHost.layer()`. A test file that calls `ssr` also needs `// @vitest-environment happy-dom` on its first line. [`ai-docs/src/10_ui/50_testing.ts`](ai-docs/src/10_ui/50_testing.ts) shows each kind of test.
+
+`@effect/ui` ships `LLMS.md` as `node_modules/@effect/ui/AGENTS.md`, matching the version you installed. Point your own `AGENTS.md` or `CLAUDE.md` at it so a coding agent reads it.
 
 ## Examples
 

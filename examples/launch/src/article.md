@@ -213,6 +213,8 @@ pnpm add effect \
 
 To stay on one build, replace `main` with a commit's short SHA. You can ignore pnpm's unmet `@effect/ui` peer warning: `@effect/ui-kit` still uses the snapshot you installed.
 
+To start a new app from Vite's `vanilla-ts` template, follow [Start a new app](https://github.com/Effect-TS/ui#start-a-new-app). `@effect/ui` ships its guide as `node_modules/@effect/ui/AGENTS.md`, so point your coding agent's instructions at that file.
+
 The [examples](https://github.com/Effect-TS/ui/tree/main/examples) in the repository are complete apps you can read and run.
 
 ## What happens next
