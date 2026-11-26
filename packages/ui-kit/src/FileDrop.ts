@@ -177,6 +177,13 @@ export const FileDropRejectReason = Schema.Literals([
  */
 export type FileDropRejectReason = typeof FileDropRejectReason.Type
 
+const FileSchema = Schema.declare(
+  (u): u is File => typeof File === "function" && u instanceof File,
+  { expected: "File" }
+)
+
+const FileArray = Schema.Array(FileSchema)
+
 /**
  * Events a `FileDrop` emits: `Picked` for accepted files and `Rejected` for
  * files rejected for count or type.
@@ -186,9 +193,9 @@ export type FileDropRejectReason = typeof FileDropRejectReason.Type
  * @since 0.1.0
  */
 export const FileDropEvents = UiSchema.TaggedEnum({
-  Picked: { files: Schema.Array(Schema.instanceOf(File)) },
+  Picked: { files: FileArray },
   Rejected: {
-    files: Schema.Array(Schema.instanceOf(File)),
+    files: FileArray,
     reason: FileDropRejectReason
   }
 })
@@ -209,11 +216,11 @@ const FileDropModel = Schema.Struct({
 const FileDropMessage = UiSchema.TaggedEnum({
   Entered: {},
   Left: {},
-  Dropped: { files: Schema.Array(Schema.instanceOf(File)) },
+  Dropped: { files: FileArray },
   ClickedTrigger: {},
   PickedFiles: {
     opened: Schema.Boolean,
-    files: Schema.Array(Schema.instanceOf(File))
+    files: FileArray
   }
 })
 
