@@ -22,6 +22,10 @@
  * - an instance was still waiting for its Layer when the budget was spent;
  * - a problem was reported, on either side.
  *
+ * In a browser, the page is hydrated in an off-screen iframe so that it has a
+ * window: `showPopover` and `showModal` throw in a `DOMParser` document.
+ * The iframe is removed when the Scope closes.
+ *
  * **Example** (Checking a page hydrates)
  *
  * ```ts
@@ -84,8 +88,10 @@ import * as server from "../internal/server.ts"
  * `html`, `model` and `head` are the server's. `state` is the server's
  * state as the client read it, after `HtmlServer.serializeState` and
  * `JSON.parse`. `document` is the hydrated page and `container` the app's
- * element in it. `root` is the client tree, registered with `TestHost` so
- * `TestHost.settle` waits for it; `root.fetches()` lists the client's
+ * element in it. In a browser, both belong to the iframe `ssr` hydrates in,
+ * so check them against `document.defaultView`'s globals, not the test
+ * page's: `container instanceof HTMLElement` is `false`. `root` is the
+ * client tree, registered with `TestHost` so `TestHost.settle` waits for it; `root.fetches()` lists the client's
  * fetches. `adopted` lists the paths whose Model the client adopted. `log`
  * is the client's log up to adoption and `serverLog` the server's, both
  * unbounded unless `logSize` says otherwise. `commands` lists all `init`
@@ -263,6 +269,41 @@ const compareHeads = (
   }
   return problems
 }
+
+/**
+ * A document with a window to hydrate `parsed` in. A `DOMParser` document has none in a browser, and
+ * `showPopover` and `showModal` throw in it, so its tree moves into an iframe the Scope removes. The
+ * frame is off-screen rather than `display: none`, so focus, layout and animation frames work, and
+ * `write` gives it a standards-mode document. Adopted scripts stay inert.
+ */
+const liveDocument = (
+  parsed: Document
+): Effect.Effect<Document, never, Scope.Scope> =>
+  parsed.defaultView !== null
+    ? Effect.succeed(parsed)
+    : Effect.map(
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          const frame = globalThis.document.createElement("iframe")
+          frame.style.cssText =
+            "position:fixed;left:-10000px;top:0;width:100vw;height:100vh;border:0"
+          globalThis.document.body.append(frame)
+          return frame
+        }),
+        (frame) => Effect.sync(() => frame.remove())
+      ),
+      (frame) => {
+        const live = frame.contentDocument!
+        live.open()
+        live.write("<!doctype html>")
+        live.close()
+        live.replaceChild(
+          live.adoptNode(parsed.documentElement),
+          live.documentElement
+        )
+        return live
+      }
+    )
 
 const nextMacrotask = Effect.callback<void>((resume) => {
   const handle = setTimeout(() => resume(Effect.void), 0)
@@ -473,7 +514,10 @@ export const ssr = <
     }><head>${server.headTags(serverHead)}</head><body ${
       server.attributes(server.bodyOwned(serverHead))
     }><div id="app">${html}</div></body></html>`
-    const document = new DOMParser().parseFromString(page, "text/html")
+    // Acquired before the host, so the host is disposed before the frame is removed.
+    const document = yield* liveDocument(
+      new DOMParser().parseFromString(page, "text/html")
+    )
     const container = document.getElementById("app")!
     const before = serverNodes(container)
     const project = options?.frames ??
