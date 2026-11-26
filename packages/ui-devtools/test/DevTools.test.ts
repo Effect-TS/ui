@@ -969,15 +969,15 @@ describe("DevTools overlay", { concurrent: false }, () => {
           "Leaf[l] -"
         ])
 
-        const toggleView = (name: RegExp) =>
-          click(HtmlLocator.getByRole(root, "button", { name }))
-        yield* toggleView(/^Show active instances/)
+        yield* showActive(root)
         assert.deepStrictEqual(rows(), [
           "Leaf[l] -",
           "Host -",
           "Leaf[l] - unmounted"
         ])
-        yield* toggleView(/^Browse all/)
+        yield* click(
+          HtmlLocator.getByRole(root, "button", { name: /^Browse all/ })
+        )
         assert.deepStrictEqual(rows(), [
           "Host true",
           "Pane[p] false",

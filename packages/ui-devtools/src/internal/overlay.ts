@@ -584,8 +584,18 @@ const lineage = (session: Session, summary: Inspector.Summary) => {
   return chain
 }
 
-const ancestors = (session: Session, summary: Inspector.Summary) =>
-  lineage(session, summary).slice(0, -1).map(({ instance }) => instance)
+const ownerOf = (
+  session: Session,
+  entry: Entry | Inspector.Outside | undefined
+) => {
+  const at = entry && Read.instanceOf(entry)
+  return at === undefined ? undefined : session.summary(at)
+}
+
+const ancestors = (session: Session, owner: Inspector.Summary | undefined) =>
+  owner === undefined
+    ? []
+    : lineage(session, owner).slice(0, -1).map(({ instance }) => instance)
 
 const Statuses = (h: H, summary: Inspector.Summary) => {
   const statuses = Read.statusesOf(summary)
@@ -799,9 +809,7 @@ const Instances = (
         "click",
         OverlayMessage.ClickedBrowse({
           browse: !model.browse,
-          branches: model.browse || owner === undefined
-            ? []
-            : ancestors(session, owner)
+          branches: model.browse ? [] : ancestors(session, owner)
         })
       ).children(
         model.browse
@@ -1709,8 +1717,7 @@ const Inspected = (
   steps: ReadonlyArray<Read.Step>,
   model: OverlayModel
 ) => {
-  const at = Read.instanceOf(entry)
-  const self = at === undefined ? undefined : session.summary(at)
+  const self = ownerOf(session, entry)
   const label = Read.labelOf(entry)
   const origin = feed.origin(entry.session)
   const kind = entry._tag === "Update"
@@ -1806,8 +1813,7 @@ const Panel = (h: H, model: OverlayModel) => {
     ? undefined
     : selected
   const steps = entry === undefined ? [] : Read.chainOf(session, entry)
-  const at = entry === undefined ? undefined : Read.instanceOf(entry)
-  const owner = at === undefined ? undefined : session.summary(at)
+  const owner = ownerOf(session, entry)
   const shown = scope === null ? owner : session.summary(scope)
   const page = pageAt(model)
   return h.div.class("panel", page !== null && "pausing").attr(
@@ -1920,13 +1926,14 @@ const resumed = { paused: null, painting: null } as const
 
 const openTo = (model: OverlayModel, feed: Feed, seq: number) => {
   const session = sessionOf(feed, model)
-  if (!model.browse || session === undefined) return {}
-  const at = Read.instanceOf(session.resolve(seq))
-  const owner = at === undefined ? undefined : session.summary(at)
-  if (owner === undefined) return {}
-  const open = ancestors(session, owner)
-    .filter((instance) => !model.branches.includes(instance))
-  return open.length === 0 ? {} : { branches: [...model.branches, ...open] }
+  return !model.browse || session === undefined ? {} : {
+    branches: [
+      ...new Set([
+        ...model.branches,
+        ...ancestors(session, ownerOf(session, session.resolve(seq)))
+      ])
+    ]
+  }
 }
 
 const repaint = (model: OverlayModel, feed: Feed, seq: number) => {
