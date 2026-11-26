@@ -3,12 +3,11 @@
 //
 //   node packages/ui/benchmark/kit-startup/run.mjs [--samples 20] [--chromium <path>] [--json <file>]
 //
-// The browser is --chromium, else $CHROMIUM, else `chromium` on PATH, else the Chromium that the
-// `playwright` dev dependency installed.
+// Chromium comes from --chromium, $CHROMIUM, `chromium` on PATH, or the playwright dev dependency.
 //
-// Every page is a Vite production build against the packed @effect/ui and @effect/ui-kit, as an
-// external consumer would get them. It defines the same one-button @effect/ui shell, and
-// the kit variants also store their imports in globalThis.__retained so the bundler keeps them:
+// Each page is a Vite production build against the packed @effect/ui and @effect/ui-kit, with the
+// same one-button shell. Kit variants store their imports in globalThis.__retained so the bundler
+// keeps them:
 //
 //   baseline  the shell only
 //   checkbox  + Checkbox
@@ -16,29 +15,19 @@
 //   eight     + Accordion, Checkbox, Dialog, Popover, Select, Switch, Tabs, Tooltip
 //   all       + every export, through the barrel's namespace
 //
-// Each page inlines its chunk in a <script type="module">, as the ES bundle is meant to run, after
-// a classic script that records __tPre. The timer is part of the bundle: globalThis.__t0 =
-// performance.now() is prepended to the built chunk and __t1 appended, so "eval" is the chunk's
-// top-level execution only. Fetching and scheduling the module happen before __t0 runs, so they
-// can't reach it; the run checks that by also loading the all page as an external module served
-// 250 ms late. "__tPre to __t1" is the wider interval: it adds parse, compile and the wait before
-// the module runs. The page then mounts the shell into #app, outside both figures.
+// Each page inlines its chunk as a <script type="module">. "eval" runs from __t0, prepended to the
+// chunk, to __t1, appended, so fetching and scheduling fall outside it; the run checks this by also
+// serving the all page as an external module 250 ms late. "__tPre to __t1" adds parse, compile and
+// the wait before the module runs. The shell mounts after both.
 //
-// Each sample is a fresh browser context (no code cache, no shared heap). After the page settles,
-// the run forces a GC twice over CDP and reads Runtime.getHeapUsage: "heap" is the used JS heap.
-// Mount pages (checkbox, combobox, and a plain button for the baseline) then call __mount(), which
-// launches a second app drawing that definition into #kit: "mount" runs from the call to the
-// MutationObserver callback that sees its root, and "mount heap" is the used heap after another GC,
-// minus "heap". Variants rotate each round; every figure is the median (min-max) of the samples,
-// at 1x and at 4x CPU throttling (Emulation.setCPUThrottlingRate).
+// Each sample uses a fresh browser context, with no code cache or shared heap. "heap" is the used
+// JS heap after two forced GCs. Mount pages then call __mount(), which draws one definition into
+// #kit: "mount" ends when a MutationObserver sees its root, and "mount heap" is the added heap
+// after another GC. Variants rotate each round. Figures are median (min-max) at 1x and 4x CPU
+// throttling; with an even sample count the median is the mean of the middle pair.
 //
-// The run also takes one heap snapshot each of baseline and all, built without minification so
-// constructor names survive, and lists the largest differences in self (shallow) size by node type
-// and constructor. That says what was allocated, not what retains it.
-//
-// "Kit top-level bindings kept (unminified chunk)" splits the unminified chunk at Rolldown's "// <module path>"
-// headers and counts, per kit module, the declarations in dist that its own section still declares
-// at the top level. Even sample counts report the mean of the middle pair as the median.
+// Heap snapshots of the unminified baseline and all pages compare self size by constructor. That
+// shows what was allocated, not what retains it.
 import assert from "node:assert/strict"
 import { execFileSync, execSync } from "node:child_process"
 import * as fs from "node:fs"
@@ -218,10 +207,9 @@ const kitModules = (chunk) =>
   )
 const kitPath = (id) => id.replace(/^.*\/@effect\/ui-kit\/dist\//, "")
 
-// Statement level: per kit module, the top-level bindings in dist that the final unminified chunk
-// still declares. Top-level names are unique in a chunk, as Rolldown suffixes a colliding one with
-// $n, so each module's own rendered code names its bindings there; a name counts only when the
-// chunk declares it at column 0, that is at the top level.
+// Per kit module, the dist top-level bindings that the final unminified chunk still declares at
+// column 0. Rolldown suffixes colliding top-level names with $n, so each module's rendered code
+// gives its final names.
 const topLevel = (code) =>
   Array.from(
     code.matchAll(
@@ -247,7 +235,6 @@ function keptBindings(chunk) {
   )
 }
 
-// The shell starts after __t1, so eval covers module evaluation only.
 const timed = (code) =>
   "globalThis.__t0=performance.now();\n" + code +
   "\n;globalThis.__t1=performance.now();globalThis.__start();"
