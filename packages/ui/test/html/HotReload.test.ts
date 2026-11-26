@@ -7,8 +7,17 @@ import {
   HtmlHydrate,
   HtmlServer
 } from "@effect/ui/html"
-import { assert, describe, it } from "@effect/vitest"
-import { Deferred, Effect, Layer, Redacted, Schema, SchemaGetter } from "effect"
+import { assert, describe, it, vi } from "@effect/vitest"
+import {
+  Deferred,
+  Effect,
+  Exit,
+  Layer,
+  Redacted,
+  Schema,
+  SchemaGetter,
+  Scope
+} from "effect"
 
 const hotKey = Symbol.for("@effect/ui/hot")
 const swapKey = Symbol.for("@effect/ui/hot/swap")
@@ -677,5 +686,44 @@ describe("hot reload", { concurrent: false }, () => {
           assert.strictEqual(el.textContent, "arow")
           assert.isFalse(hotSwap({ Shell }, { Shell: shell("b") }))
         }))
+    }))
+
+  it.live("gives the hot hooks to the copy that still has mounted roots", () =>
+    Effect.gen(function*() {
+      const app = (html: typeof Html, name: string) =>
+        html.component({ name, model: Schema.Number, message: Schema.Never })
+          .make({
+            init: () => 1,
+            update: ($) => $.model,
+            view: (h) => h.p("x")
+          })
+      const saved = () => {
+        sessionStorage.clear()
+        triggerHotSave()
+        return sessionStorage.getItem("@effect/ui/hot") ?? ""
+      }
+      vi.resetModules()
+      const [Host, Html2] = yield* Effect.promise(() =>
+        Promise.all([
+          import("@effect/ui/html/BrowserHost"),
+          import("@effect/ui/html/Html")
+        ])
+      )
+      yield* inContainer(
+        "copy-a",
+        (a) =>
+          inContainer("copy-b", (b) =>
+            Effect.gen(function*() {
+              // Closes A if an assertion fails before the explicit close.
+              const scopeA = yield* Scope.fork(yield* Effect.scope)
+              yield* BrowserHost.mountEffect(app(Html, "CopyA"), {}, a).pipe(
+                Scope.provide(scopeA)
+              )
+              yield* Host.mountEffect(app(Html2, "CopyB"), {}, b)
+              assert.include(saved(), "/CopyA")
+              yield* Scope.close(scopeA, Exit.void)
+              assert.include(saved(), "/CopyB")
+            }))
+      )
     }))
 })

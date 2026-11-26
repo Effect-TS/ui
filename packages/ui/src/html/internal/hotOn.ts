@@ -16,6 +16,7 @@ const hotKey = Symbol.for("@effect/ui/hot")
 const swapKey = Symbol.for("@effect/ui/hot/swap")
 const devToolsKey = Symbol.for("@effect/ui/devtools")
 const storageKey = "@effect/ui/hot"
+const releasedEvent = "@effect/ui/hot/released"
 
 export interface DevToolsHook {
   readonly messageLog: MessageLog.MessageLog
@@ -51,6 +52,13 @@ interface WindowState {
   readonly roots: Map<Kernel.Instance, () => SavedRoot | undefined>
   pending: HotPayload | undefined
   scroll: HotPayload["scroll"]
+  readonly saveHook: () => void
+  readonly swapHook: (
+    first: Exports,
+    next: Exports,
+    names: ReadonlyArray<string>
+  ) => boolean
+  readonly claim: () => void
 }
 
 const states = new WeakMap<Window, WindowState>()
@@ -123,18 +131,33 @@ const stateOf = (view: Window): WindowState => {
     const made: WindowState = {
       roots: new Map(),
       pending: undefined,
-      scroll: undefined
+      scroll: undefined,
+      saveHook: () => saveWindow(view, made),
+      swapHook: (first, next, names) => swap(made, first, next, names),
+      claim: () => claimHooks(view, made)
     }
     states.set(view, state = made)
-    const hooks = view as unknown as Record<symbol, unknown>
-    hooks[hotKey] ??= () => saveWindow(view, made)
-    hooks[swapKey] ??= (
-      first: Exports,
-      next: Exports,
-      names: ReadonlyArray<string>
-    ) => swap(made, first, next, names)
   }
   return state
+}
+
+// Copies of this module in one window share its hooks. The first copy to mount
+// a root owns them until its last root detaches, then hands them to a copy
+// that still has mounted roots. Only copies with roots listen for the handoff.
+const claimHooks = (view: Window, state: WindowState): void => {
+  const hooks = view as unknown as Record<symbol, unknown>
+  if (hooks[hotKey] !== undefined) return
+  hooks[hotKey] = state.saveHook
+  hooks[swapKey] = state.swapHook
+}
+
+const releaseHooks = (view: Window, state: WindowState): void => {
+  view.removeEventListener(releasedEvent, state.claim)
+  const hooks = view as unknown as Record<symbol, unknown>
+  if (hooks[hotKey] !== state.saveHook) return
+  delete hooks[hotKey]
+  delete hooks[swapKey]
+  view.dispatchEvent(new Event(releasedEvent))
 }
 
 const loadPending = (
@@ -421,6 +444,8 @@ export const open = (
       instance = inst
       restore.watch(inst.tree)
       windowState.roots.set(inst, capture)
+      view.addEventListener(releasedEvent, windowState.claim)
+      windowState.claim()
     },
     flushed: (buildsPendingSince) => {
       if (
@@ -439,6 +464,7 @@ export const open = (
     detach: () => {
       if (instance !== undefined) windowState.roots.delete(instance)
       instance = undefined
+      if (windowState.roots.size === 0) releaseHooks(view, windowState)
     }
   }
 }
