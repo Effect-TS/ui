@@ -121,7 +121,10 @@ const FieldPage = Html.component({
             },
             view: (calendar) =>
               calendar.root(field.group(h.div.attr("id", "group"))).children(
-                calendar.grid(h.table).children(
+                // Keyed by month, so each month change replaces the grid.
+                calendar.grid(
+                  h.table.key(DateTime.formatIsoDateUtc(calendar.month))
+                ).children(
                   h.tbody(
                     ...calendar.weeks.map((week) =>
                       h.tr(

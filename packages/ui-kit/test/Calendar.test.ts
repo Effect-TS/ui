@@ -186,10 +186,10 @@ const syncMonth = (scene: Scene, next: CalendarProps) => {
   if (sub !== undefined) {
     scene.subscription(sub, { _tag: "SyncedMonth" } as never)
   }
-  // A focused day parks focus on the grid before its month goes.
+  // A focused day parks focus on the root before its month goes.
   const park = scene.current.pending.find(({ command }) =>
     (command.args as { readonly ref: { readonly key: string } }).ref.key ===
-      "CalendarGrid"
+      "CalendarRoot"
   )
   if (park !== undefined) {
     scene.resolve(park.command as never, { found: true } as never)

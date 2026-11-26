@@ -69,7 +69,8 @@
  * range. Moves that leave the shown month emit `RequestedMonth`; if the
  * consumer leaves `month` unchanged, focus stays in the shown month. When
  * `month` changes while a day has focus, focus follows the new tab stop,
- * passing through the grid so it never leaves the calendar.
+ * passing through `root` so it never leaves the calendar. Keep `root`
+ * mounted across month changes; the grid and days can be replaced.
  * If no day in the new month is in range, a visible day from an adjacent
  * month can receive focus.
  *
@@ -160,10 +161,12 @@
  * @stability experimental
  * @since 0.1.0
  */
+import * as Command from "@effect/ui/Command"
 import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
 import * as Mount from "@effect/ui/Mount"
+import * as Renderer from "@effect/ui/Renderer"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
@@ -305,7 +308,8 @@ const disabledWhileFocused = Subscription.make(
   Stream.make(CalendarMessage.BlurredDay())
 )
 
-const CalendarGridRef = Html.ref("CalendarGrid", "table")
+// `root` takes any element.
+const CalendarRootRef = Renderer.ref("CalendarRoot")
 
 const monthOf = (props: CalendarProps) =>
   startOfMonth(DateTime.removeTime(props.month))
@@ -362,14 +366,13 @@ const navigate = (
  * builder before applying the part, including attributes a state leaves
  * absent:
  *
- * - `root`: `data-disabled` and `data-readonly`
+ * - `root`: `tabindex="-1"`, `data-disabled` and `data-readonly`
  * - `heading`: `id`, `aria-live="polite"`, `data-disabled` and `data-readonly`
  * - `previous`, `next`: `type="button"`, `disabled`, `aria-disabled` and
  *   `data-disabled` (plus a fallback `aria-label` when the button has no
  *   accessible name)
- * - `grid`: `role="grid"`, `tabindex="-1"`, `aria-labelledby` (appending the
- *   heading's id), `aria-disabled`, `aria-readonly`, `data-disabled` and
- *   `data-readonly`
+ * - `grid`: `role="grid"`, `aria-labelledby` (appending the heading's id),
+ *   `aria-disabled`, `aria-readonly`, `data-disabled` and `data-readonly`
  * - `weekday`: `scope="col"` and `abbr`
  * - `cell`: `role="gridcell"` and `aria-selected`
  * - `day`: `type="button"`, `tabindex`, `disabled`, `aria-label`,
@@ -457,13 +460,12 @@ export const Calendar = Html.component({
         return $.evolve({ ...phase, shownMonth: context.monthStart })
       }
       // Removing the focused day would blur it to `<body>`, so focus moves
-      // to the grid while the old month is still shown.
+      // to the root, which outlives the month, while the old month is shown.
       return $.run(
-        HtmlCommand.focus(
-          CalendarGridRef,
-          () => CalendarMessage.ParkedFocus({ date }),
-          { preventScroll: true }
-        )
+        HtmlCommand.Focus.make({
+          ref: CalendarRootRef,
+          options: { preventScroll: true }
+        }).pipe(Command.map(() => CalendarMessage.ParkedFocus({ date })))
       )
     },
     ParkedFocus: ($, { date }) =>
@@ -491,7 +493,7 @@ export const Calendar = Html.component({
     const disabled = props.disabled === true
     const readOnly = props.readOnly === true
     const rtl = rightToLeft(p.reads.provider, model.rtl)
-    // A focused day keeps its month on screen. Parking focus on the grid
+    // A focused day keeps its month on screen. Parking focus on the root
     // blurs the day, which lets the new month render.
     const context = contextOf(
       props,
@@ -600,9 +602,11 @@ export const Calendar = Html.component({
       root: p.part((b) =>
         b
           .attrs({
+            tabindex: "-1",
             "data-disabled": flag(disabled),
             "data-readonly": flag(readOnly)
           })
+          .ref(CalendarRootRef)
           .onMount(
             TrackDirection().pipe(
               Mount.map((rtl) => CalendarMessage.FoundDirection({ rtl }))
@@ -620,17 +624,14 @@ export const Calendar = Html.component({
       previous: step(-1, "Previous month"),
       next: step(1, "Next month"),
       grid: p.part("table", (b) =>
-        b
-          .attrs({
-            role: "grid",
-            tabindex: "-1",
-            "aria-labelledby": headingId,
-            "aria-disabled": disabled ? "true" : undefined,
-            "aria-readonly": readOnly ? "true" : undefined,
-            "data-disabled": flag(disabled),
-            "data-readonly": flag(readOnly)
-          })
-          .ref(CalendarGridRef)),
+        b.attrs({
+          role: "grid",
+          "aria-labelledby": headingId,
+          "aria-disabled": disabled ? "true" : undefined,
+          "aria-readonly": readOnly ? "true" : undefined,
+          "data-disabled": flag(disabled),
+          "data-readonly": flag(readOnly)
+        })),
       weekday: View.wrapPart(
         weekdayPart,
         <B extends Keyed<"th">>(
