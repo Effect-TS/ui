@@ -30,7 +30,6 @@ const Dialog = app.make({
   view: (h) => h.dialog.open(true).children("Notes")
 })
 
-/** Whether `App` hydrates with an element matching `selector` and in a document with a window, or how `ssr` failed. */
 const hydrates = (App: typeof Popover, selector: string) =>
   Effect.runPromise(
     ssr(App, {}).pipe(
@@ -43,7 +42,7 @@ const hydrates = (App: typeof Popover, selector: string) =>
     )
   ).catch(String)
 
-// One page each, so each has to get the window it needs on its own.
+// Separate pages catch either missing iframe condition.
 Promise.all([
   hydrates(Popover, ":popover-open"),
   hydrates(Modal, ":modal"),

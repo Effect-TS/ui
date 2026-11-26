@@ -84,7 +84,7 @@ import * as server from "../internal/server.ts"
  * `html`, `model` and `head` are the server's. `state` is the server's
  * state as the client read it, after `HtmlServer.serializeState` and
  * `JSON.parse`. `document` is the hydrated page and `container` the app's
- * element in it. When `ssr` hydrated in an iframe, both belong to it, so
+ * element in it. When hydration uses an iframe, both belong to its realm, so
  * `container instanceof HTMLElement` is `false`: use
  * `document.defaultView.HTMLElement`. `root` is the client tree, registered
  * with `TestHost` so `TestHost.settle` waits for it; `root.fetches()` lists
@@ -339,11 +339,11 @@ const stepLimit = 10_000
  * Any problem fails `ssr`, including `Command.ServerCommandIssued` on the
  * server. To test one, render with `Renderer.prerender` instead.
  *
- * In a browser, a page the server rendered with a popover or a modal dialog
- * open hydrates in an off-screen iframe, removed when the Scope closes. Any
- * other page has no window, so a popover or a modal dialog that first opens
- * on the client, after hydration or in an instance that waited for its Layer,
- * throws `InvalidStateError`.
+ * In browser tests, pages with a popover or modal dialog open in the server
+ * render hydrate in an off-screen iframe, removed when the Scope closes.
+ * Other pages hydrate without a window. On those pages, opening a popover
+ * or modal dialog first on the client throws `InvalidStateError`, including
+ * after hydration or in an instance that waited for its Layer.
  *
  * @stability experimental
  * @category constructors
@@ -449,7 +449,6 @@ export const ssr = <
       { readonly query: string; readonly logKey: string }
     > = []
     const writer = server.makeWriter()
-    // Whether the server rendered a popover or a modal dialog open: only those need a window to hydrate in.
     let topLayer = false
     const serverFiber = yield* runtime.prerender(component as any, props, {
       budget,

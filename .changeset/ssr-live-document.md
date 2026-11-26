@@ -2,4 +2,4 @@
 "@effect/ui": patch
 ---
 
-In browser tests, `ssr` now hydrates initially open popovers and modal dialogs without throwing `InvalidStateError`. Such a page hydrates in a scope-owned iframe, so the returned `document` and `container` belong to its realm.
+In browser tests, `ssr` now hydrates popovers and modal dialogs open in the server render without throwing `InvalidStateError`, using a scope-owned iframe. Other pages still hydrate without a window, so opening these elements first on the client still throws.
