@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
-import { UiSchema } from "@effect/ui"
+import { Component, UiSchema } from "@effect/ui"
 import { Dialog, DialogTrigger, ToastProvider } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
+import { Deferred, Effect, Layer, Schema } from "effect"
 import {
   byId,
   click,
@@ -1443,6 +1443,51 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(dismissals(second.log()), [
         "RequestedClose a escape-key"
       ])
+    }))
+
+  it.effect("focus goes back to what had it before a dialog opened while a Layer above it built", () =>
+    Effect.gen(function*() {
+      yield* popovers
+      const gate = yield* Deferred.make<void>()
+      const ClosedMessage = UiSchema.TaggedEnum({ Closed: {} })
+      const Gated = Component.provide(
+        Html.component({
+          name: "Gated",
+          model: Schema.Boolean,
+          message: ClosedMessage
+        }).make({
+          init: () => true,
+          update: { Closed: () => false },
+          view: (h, open) =>
+            Dialog(h, {
+              props: { open },
+              onEmit: {
+                RequestedOpen: () => undefined,
+                RequestedClose: () => ClosedMessage.Closed(),
+                Settled: () => undefined
+              },
+              view: (dialog) =>
+                h.div(
+                  dialog.portal(h.dialog)?.children(
+                    dialog.popup(h.div).children(h.input.attr("id", "field"))
+                  )
+                )
+            })
+        }),
+        Layer.effectDiscard(Deferred.await(gate))
+      )
+      const app = yield* container
+      const before = document.body.appendChild(document.createElement("button"))
+      yield* Effect.addFinalizer(() => Effect.sync(() => before.remove()))
+      before.focus()
+      yield* BrowserHost.mountEffect(Gated, {}, app)
+      yield* tick
+      yield* Deferred.succeed(gate, undefined)
+      yield* tick
+      assert.strictEqual(document.activeElement?.id, "field")
+      escape()
+      yield* tick
+      assert.strictEqual(document.activeElement, before)
     }))
 
   it.effect("focus goes back to what had it before the open, and stays there without initialFocus, in an iframe", () =>

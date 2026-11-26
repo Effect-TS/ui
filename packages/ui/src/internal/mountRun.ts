@@ -30,7 +30,8 @@ class Running {
     const env = inst.env
     let ctx = env.ctx
     if (ctx === undefined) {
-      if (env.cause === undefined) {
+      // A `beforeCommit` mount needs no services, so it doesn't wait for a Layer above it.
+      if (env.cause === undefined && this.mount.beforeCommit !== true) {
         env.waiting.push(() => env.cause === undefined && this.start(from))
         return
       }

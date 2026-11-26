@@ -107,19 +107,24 @@ export type DefinitionTypeId = typeof DefinitionTypeId
  * document but before the host's commit, which shows the popovers and modal
  * dialogs the flush opened. Use it for work that must see the page as it was
  * before, such as recording which element had focus before a modal dialog
- * moves it in. Until the components above it have their services, the body
- * waits, and then starts after the commit like any other.
+ * moves it in. Its body can't require services, so it starts on time even
+ * while a Layer above it is still building.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Options<In extends Command.ArgsInput, Node = unknown> {
+export interface Options<
+  In extends Command.ArgsInput,
+  Node = unknown,
+  R = never
+> {
   readonly args: In
   readonly paint?:
     | ((node: Node, args: Command.ArgsOf<In>) => void)
     | undefined
-  readonly beforeCommit?: boolean | undefined
+  readonly beforeCommit?: [R] extends [never] ? boolean | undefined
+    : false | undefined
 }
 
 /**
@@ -443,7 +448,7 @@ export const make = <
   R = never
 >(
   name: Name,
-  options: Options<In, Node>,
+  options: Options<In, Node, R>,
   run: (
     node: Node,
     args: Command.ArgsOf<In>,
@@ -518,7 +523,7 @@ export const makeStream = <
   R = never
 >(
   name: Name,
-  options: Options<In, Node>,
+  options: Options<In, Node, R>,
   run: (
     node: Node,
     args: Command.ArgsOf<In>,
@@ -535,7 +540,7 @@ export const makeStream = <
 
 const define = (
   name: string,
-  options: Options<Command.ArgsInput, any>,
+  options: Options<Command.ArgsInput, any, any>,
   stream: boolean,
   run: Fields["run"]
 ): any => {
