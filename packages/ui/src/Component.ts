@@ -1996,16 +1996,17 @@ export type QuerySpec = {
   readonly [name: string]: QueryOne<any> | QueryMany<any>
 }
 
-// A `query` beside a `queryMany` in one entry, or an infinite query under `queryMany`, is rejected.
+// Rejected: a `query` beside a `queryMany` in one entry, an infinite query under `queryMany`, and
+// `dropPrevious` on a `queryMany` entry, which keeps no previous result.
 type OneQuery<M> = [M] extends [Query.Query.Any] ?
   { readonly "~error": "an entry takes one of query and queryMany" }
   : unknown
-// `dropPrevious` is for a `query` entry: a `queryMany` entry never keeps a previous result.
-type DropPrevious<M> = [M] extends [Query.Query.Any] ? never
-  : boolean | undefined
 type ManyQuery<R> = [R] extends [Query.InfiniteQuery.Any] ?
   { readonly "~error": "an infinite query takes query, not queryMany" }
   : unknown
+type DropPrevious<M> = [M] extends [Query.Query.Any] ?
+  { readonly "~error": "dropPrevious is for a query entry, not queryMany" }
+  : boolean
 
 /**
  * The queries of a component.
@@ -3034,8 +3035,8 @@ export interface DefineOptions<
           readonly debounce?: Duration.Input | undefined
           /** `false` keeps the result out of history. */
           readonly restore?: false | undefined
-          /** `true` opens changed args as `Initial`, not the last Success. A `query` entry only. */
-          readonly dropPrevious?: DropPrevious<M[K & keyof M]>
+          /** `true` opens changed args as `Initial`, not the last Success. */
+          readonly dropPrevious?: DropPrevious<M[K & keyof M]> | undefined
           readonly onChange?:
             | OnChange<S[K], M[K & keyof M], NoInfer<Msg>>
             | undefined

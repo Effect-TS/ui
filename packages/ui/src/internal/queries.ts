@@ -108,38 +108,6 @@ export const boundOf: (
 /** @internal */
 export const isWatchKey: (key: string) => boolean = queryCore.isWatchKey
 
-/** A Success kept for other args, waiting, per stored Success: one value however often it's read. */
-const kept = new WeakMap<object, AsyncResult.Success<any, any>>()
-
-/**
- * The stored result at the query's current args. Until one is stored, the
- * Success stored for other args, waiting, unless `dropPrevious`; else
- * `Initial`, waiting when enabled.
- */
-const open = (
-  snapshot: unknown,
-  argsKey: string | undefined,
-  dropPrevious: boolean
-): AsyncResult.AsyncResult<any, any> => {
-  if (argsKey === undefined) return AsyncResult.initial(false)
-  const data = queryModule().snapshotData(snapshot)
-  const result = data?.result
-  if (result === undefined) return AsyncResult.initial(true)
-  if (data!.argsKey === argsKey) return result
-  if (dropPrevious || result._tag !== "Success") {
-    return AsyncResult.initial(true)
-  }
-  let out = kept.get(result)
-  if (out === undefined) {
-    out = AsyncResult.success(result.value, {
-      waiting: true,
-      timestamp: result.timestamp
-    })
-    kept.set(result, out)
-  }
-  return out
-}
-
 /** Whether the opened value includes an unconfirmed patch. */
 const patched = (snapshot: unknown, argsKey: string | undefined): boolean => {
   const data = queryModule().snapshotData(snapshot)
@@ -163,29 +131,55 @@ const listOf = (def: QueryDef, pages: ReadonlyArray<unknown>) => {
   return out
 }
 
-/** One opened list per snapshot, or per kept Success, so a view and `onChange` share it. */
+/** One opened list per snapshot, so a view and `onChange` share it. */
 const openedLists = new WeakMap<object, AsyncResult.AsyncResult<any, any>>()
 
-/** A list's result opened as `h.queries` shows it: `{ items, pages, more }`. */
-const openList = (
+/** One kept result per stored Success, so every read gets the same value. */
+const kept = new WeakMap<object, AsyncResult.AsyncResult<any, any>>()
+
+/**
+ * A query's result as `h.queries` shows it: the one stored at its current
+ * args, a list as `{ items, pages, more }`. Until one is stored, the Success
+ * stored for other args, waiting, unless `dropPrevious`; else `Initial`,
+ * waiting when enabled.
+ */
+const open = (
   snapshot: unknown,
-  result: AsyncResult.AsyncResult<any, any>
+  argsKey: string | undefined,
+  entry: Entry
 ): AsyncResult.AsyncResult<any, any> => {
-  if (result._tag === "Initial") return result
-  const data = queryModule().snapshotData(snapshot)!
-  // A list kept for other args offers no more: `$.loadMore` loads the current args.
-  const isKept = data.result !== result
-  const key = isKept ? result : snapshot as object
-  let opened = openedLists.get(key)
-  if (opened === undefined) {
-    const more = isKept ? { _tag: "Loading" } : data.more ?? { _tag: "End" }
-    opened = AsyncResult.map(
-      result,
-      (pages: ReadonlyArray<unknown>) => ({ ...listOf(data.def, pages), more })
-    )
-    openedLists.set(key, opened)
+  if (argsKey === undefined) return AsyncResult.initial(false)
+  const data = queryModule().snapshotData(snapshot)
+  if (data?.result === undefined) return AsyncResult.initial(true)
+  const { def, result } = data
+  if (data.argsKey === argsKey) {
+    if (!entry.list) return result
+    let opened = openedLists.get(snapshot as object)
+    if (opened === undefined) {
+      const more = data.more ?? { _tag: "End" }
+      opened = AsyncResult.map(
+        result,
+        (pages: ReadonlyArray<unknown>) => ({ ...listOf(def, pages), more })
+      )
+      openedLists.set(snapshot as object, opened)
+    }
+    return opened
   }
-  return opened
+  if (entry.dropPrevious || result._tag !== "Success") {
+    return AsyncResult.initial(true)
+  }
+  let out = kept.get(result)
+  if (out === undefined) {
+    out = AsyncResult.success(
+      entry.list
+        // A kept list offers no more: `$.loadMore` loads the current args.
+        ? { ...listOf(def, result.value), more: { _tag: "Loading" } }
+        : result.value,
+      { waiting: true, timestamp: result.timestamp }
+    )
+    kept.set(result, out)
+  }
+  return out
 }
 
 /**
@@ -504,10 +498,7 @@ export const bind = (
     }
     return opened
   }
-  const queriesProto = view((snapshot, argsKey, entry) => {
-    const result = open(snapshot, argsKey, entry.dropPrevious)
-    return entry.list ? openList(snapshot, result) : result
-  }, openKeyedResult)
+  const queriesProto = view(open, openKeyedResult)
   const patchedProto = view(patched, undefined)
   const viewOf = (proto: object, state: State) => {
     const out = Object.create(proto)

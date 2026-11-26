@@ -472,7 +472,7 @@ describe("Keyed queries", () => {
         users: {
           queryMany: GetUser,
           args: () => [{ id: "1" }],
-          // @ts-expect-error Type 'true' is not assignable to type 'never'
+          // @ts-expect-error dropPrevious is for a query entry, not queryMany
           dropPrevious: true
         },
         team: { query: GetTeam, args: () => ({ id: "1" }), dropPrevious: true }
