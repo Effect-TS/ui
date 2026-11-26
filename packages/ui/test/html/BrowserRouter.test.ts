@@ -707,10 +707,12 @@ describe("BrowserRouter", { concurrent: false }, () => {
       // Happy DOM has no layout; make a scroll back to the anchor observable.
       app.querySelector<HTMLElement>("#bio")!.scrollIntoView = () =>
         window.scrollTo(0, 300)
-      window.scrollTo(0, 100)
+      window.scrollTo(0, 0)
+      // Clicking the current #hash again scrolls back to it.
       clickReporting(link(app, "Person 2 bio"))
       yield* tick
-      expect(window.scrollY).toBe(100)
+      expect(window.scrollY).toBe(300)
+      window.scrollTo(0, 100)
       yield* router.navigate("/people/2#top")
       yield* tick
       window.scrollTo(0, 40)
@@ -728,7 +730,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(region()?.textContent).toBe(announced)
     }).pipe(Effect.scoped))
 
-  it.effect("goes to a link's #hash and moves focus there", () =>
+  it.effect("goes to a link's #hash and moves focus there, and to the top for a bare #", () =>
     Effect.gen(function*() {
       const { app } = yield* start("/")
       clickReporting(link(app, "Person 2 bio"))
@@ -739,6 +741,20 @@ describe("BrowserRouter", { concurrent: false }, () => {
       const bio = document.getElementById("bio")!
       expect(document.activeElement).toBe(bio)
       expect(bio.getAttribute("tabindex")).toBe("-1")
+
+      const follow = (href: string) => {
+        const anchor = app.appendChild(document.createElement("a"))
+        anchor.setAttribute("href", href)
+        clickReporting(anchor)
+        return tick
+      }
+      // A fragment ending in # isn't bare.
+      yield* follow("#bio#")
+      expect(window.location.hash).toBe("#bio#")
+      window.scrollTo(0, 1500)
+      yield* follow("#")
+      expect(window.location.href).toBe(`${window.location.origin}/people/2#`)
+      expect(window.scrollY).toBe(0)
     }).pipe(Effect.scoped))
 
   /** Appends `<h2 id="late">` to `app`, as data arriving after load would render it. */

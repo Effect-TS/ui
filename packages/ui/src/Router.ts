@@ -1206,7 +1206,8 @@ export interface Options {
   /**
    * Called for a change to the `#hash` alone within the same route, with the
    * index of the history entry it moved to. `onLeave` was called for the entry
-   * it left, so a pop can restore that entry's scroll position.
+   * it left, so a pop can restore that entry's scroll position. An href to the
+   * current `#hash` also calls it, with the current index and no `onLeave`.
    */
   readonly onHash?:
     | ((hash: string, action: "push" | "pop", index: number) => void)
@@ -1829,7 +1830,8 @@ const build = (
         (route._tag === current.route._tag &&
           routes.print(route) === routes.print(current.route))
       ) {
-        if (hash !== current.hash) {
+        const changed = hash !== current.hash
+        if (changed) {
           // A change to the hash alone: a new entry, and no route change.
           if (replace) replaceNow(current.url + hash, writeState({ index }))
           else {
@@ -1839,6 +1841,9 @@ const build = (
             history.push(current.url + hash, writeState({ index }))
           }
           current = { ...current, hash }
+        }
+        // A repeated hash link writes nothing, but the host can still scroll back to it.
+        if (changed || (source === "href" && hash !== "")) {
           options.onHash?.(hash, "push", index)
         }
         // A followed href delivers the location again, with the same sequence: a navigation that is
