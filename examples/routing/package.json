@@ -14,10 +14,10 @@
   "dependencies": {
     "@effect/ui": "workspace:*",
     "@effect/ui-kit": "workspace:*",
-    "effect": "^4.1.4"
+    "effect": "^4.1.6"
   },
   "devDependencies": {
-    "@effect/vitest": "^4.1.4",
+    "@effect/vitest": "^4.1.6",
     "@tailwindcss/vite": "^4.3.5",
     "tailwindcss": "^4.3.5",
     "vite": "^8.3.6"

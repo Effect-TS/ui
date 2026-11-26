@@ -28,3 +28,5 @@ minimumReleaseAgeExclude:
   - '@opentui/core-win32-arm64@0.9.9'
   - '@opentui/core-win32-x64@0.9.9'
   - '@opentui/core@0.9.9'
+  - effect@4.1.6
+  - '@effect/vitest@4.1.6'

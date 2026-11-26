@@ -10,7 +10,7 @@
   "dependencies": {
     "@effect/ui": "workspace:*",
     "@effect/ui-kit": "workspace:*",
-    "effect": "^4.1.4"
+    "effect": "^4.1.6"
   },
   "devDependencies": {
     "vite": "^8.3.6"
