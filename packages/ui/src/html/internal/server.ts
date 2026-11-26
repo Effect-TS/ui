@@ -94,14 +94,8 @@ const elementAttributes = (
   for (const [name, value] of Object.entries(attrs)) {
     const normalized = elements.attributeName(name, svg)
     if (normalized === undefined) continue
-    if (url.blockedAttribute(normalized, value)) out.delete(normalized)
+    if (url.blockedAttribute(tag, normalized, value)) out.delete(normalized)
     else out.set(normalized, value)
-  }
-  if (url.isAnimation(tag)) {
-    const target = out.get("attributename")
-    for (const [name, value] of out) {
-      if (url.blockedAnimation(target, name, value)) out.delete(name)
-    }
   }
   if (elements.isCustomTag(tag)) return out
   for (const [name, value] of Object.entries(props)) {
@@ -157,7 +151,7 @@ const plainAttributes = (
   if (props !== View.noFields) {
     for (const _ in props) return undefined
   }
-  if (tag === "option" || url.isAnimation(tag)) return undefined
+  if (tag === "option") return undefined
   if (attrs === View.noFields) return ""
   let out = ""
   for (const name in attrs) {
@@ -168,7 +162,7 @@ const plainAttributes = (
       ) return undefined
     }
     const value = attrs[name]!
-    if (url.blockedAttribute(name, value)) continue
+    if (url.blockedAttribute(tag, name, value)) continue
     out += value === "" ? ` ${name}` : ` ${name}="${escapeAttribute(value)}"`
   }
   return out

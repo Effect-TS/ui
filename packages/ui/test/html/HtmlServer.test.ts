@@ -315,7 +315,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       }
     }).pipe(Effect.scoped))
 
-  it.effect("drops animation values that would set a blocked URL on the server and hydrated client", () =>
+  it.effect("drops animation values that would set a blocked URL on the server, on hydration and on update", () =>
     Effect.gen(function*() {
       const Target = Schema.Struct({ name: Schema.String, to: Schema.String })
       const Page = Html.component({
@@ -365,9 +365,8 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(set.hasAttribute("to")).toBe(false)
       for (
         const [name, to, expected] of [
-          ["fill", "vbscript:", "vbscript:"],
-          // Retargeting removes a value that is now a blocked URL.
-          ["href", "vbscript:", null],
+          // Blocked whatever the target, so retargeting can't reveal it.
+          ["fill", "vbscript:", null],
           ["href", "/a", "/a"],
           ["href", "JAVASCRIPT:", null]
         ] as const

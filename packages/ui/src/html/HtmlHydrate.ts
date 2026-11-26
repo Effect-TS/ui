@@ -16,12 +16,7 @@ import type * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
 import * as BrowserHost from "./BrowserHost.ts"
 import type * as Html from "./Html.ts"
-import {
-  attributeOf,
-  blockedValue,
-  isRadio,
-  radioGroup
-} from "./internal/dom.ts"
+import { attributeOf, isRadio, radioGroup } from "./internal/dom.ts"
 import * as markers from "./internal/markers.ts"
 import * as url from "./internal/url.ts"
 
@@ -457,7 +452,10 @@ const between = (
         const element = node as Element
         const normalized = attributeOf(element, name)
         if (normalized === undefined) return
-        if (value !== undefined && blockedValue(element, normalized, value)) {
+        if (
+          value !== undefined &&
+          url.blockedAttribute(element.localName, normalized, value)
+        ) {
           value = undefined
         }
         if (value !== undefined) (entry.names ??= []).push(normalized)

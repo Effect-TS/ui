@@ -32,6 +32,19 @@ const attributes: ReadonlySet<string> = new Set([
   "data"
 ])
 
+/** What an SVG `set` or `animate` sets its target attribute to. */
+const animationValues: ReadonlySet<string> = new Set([
+  "to",
+  "from",
+  "by",
+  "values"
+])
+
+const isAnimation = (tag: string): boolean => {
+  const lower = tag.toLowerCase()
+  return lower === "set" || lower === "animate"
+}
+
 const properties: ReadonlySet<string> = new Set([
   "href",
   "src",
@@ -41,54 +54,21 @@ const properties: ReadonlySet<string> = new Set([
 ])
 
 /**
- * Whether a URL is blocked for the normalized attribute `name`.
+ * Whether a URL is blocked for the normalized attribute `name` of `tag`. An
+ * animation value is blocked whatever attribute it targets; `values` is a
+ * `;`-separated list, blocked when any item is.
  *
  * @internal
  */
-export const blockedAttribute = (name: string, value: string): boolean =>
-  attributes.has(name) && isScript(value)
-
-const animationTags: ReadonlySet<string> = new Set(["set", "animate"])
-
-/**
- * Whether `tag` is an SVG animation that sets an attribute, as the HTML parser
- * folds its case.
- *
- * @internal
- */
-export const isAnimation = (tag: string): boolean =>
-  animationTags.has(tag.toLowerCase())
-
-/**
- * The attributes of an animation that give the values it sets.
- *
- * @internal
- */
-export const animationValues: ReadonlyArray<string> = [
-  "to",
-  "from",
-  "by",
-  "values"
-]
-
-/**
- * Whether an animation's value `name` would set a blocked URL on the
- * attribute `target` names. `values` is a `;`-separated list, blocked when
- * any item is; the others are one URL each.
- *
- * @internal
- */
-export const blockedAnimation = (
-  target: string | null | undefined,
+export const blockedAttribute = (
+  tag: string,
   name: string,
   value: string
-): boolean => {
-  if (target == null || !animationValues.includes(name)) return false
-  const attribute = target.trim()
-  return name === "values"
-    ? value.split(";").some((item) => blockedAttribute(attribute, item))
-    : blockedAttribute(attribute, value)
-}
+): boolean =>
+  attributes.has(name)
+    ? isScript(value)
+    : animationValues.has(name) && isAnimation(tag) &&
+      (name === "values" ? value.split(";").some(isScript) : isScript(value))
 
 /**
  * Whether a URL is blocked for property `name` of a built-in `tag`.
