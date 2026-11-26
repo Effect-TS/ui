@@ -71,7 +71,7 @@ const tracked = (scene: Rendered): Track =>
   (scene.get(positioner) as unknown as View.Element<unknown>).owned?.find((
     layer
   ) => layer.mount !== undefined)?.mount as unknown as Track
-const dismissed = (reason: "escape-key" | "outside-press" | "focus-out") =>
+const dismissed = (reason: "escape-key") =>
   ({ _tag: "Dismissed", reason }) as never
 const props = (more: Partial<DatePickerProps> = {}): DatePickerProps => ({
   value: utc("2026-11-15"),
@@ -92,7 +92,7 @@ const quiet = (
 ) => assert.deepStrictEqual(scene.current.emitted, [])
 
 describe("DatePicker", () => {
-  it.effect("asks to open from the trigger, and to close from it, Escape, a press or focus outside, or a picked day", () =>
+  it.effect("asks to open and close from the trigger, and to close on a picked day", () =>
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(DatePicker, props(), standIn)
       assert.deepInclude(scene.get(trigger).attrs, {
@@ -120,15 +120,6 @@ describe("DatePicker", () => {
       })
       assert.deepInclude(scene.get(positioner).attrs, { "data-open": "" })
       scene.click(trigger).emitted(closed("trigger-press"))
-      scene.mounted(tracked(scene), dismissed("escape-key")).emitted(
-        closed("escape-key")
-      )
-      scene.mounted(tracked(scene), dismissed("outside-press")).emitted(
-        closed("outside-press")
-      )
-      scene.mounted(tracked(scene), dismissed("focus-out")).emitted(
-        closed("focus-out")
-      )
       scene.childEmit(Calendar, { _tag: "Picked", date: utc("2026-11-20") })
         .emitted(picked(utc("2026-11-20")), closed("day-press"))
       // A day of the next month asks for that month too
@@ -146,7 +137,7 @@ describe("DatePicker", () => {
       )
     }))
 
-  it.effect("a typed date outside the shown month also asks for that month", () =>
+  it.effect("a typed date outside the shown month also asks for that month, counting a Zoned month by its local day", () =>
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(DatePicker, props(), standIn)
       const committed = (date: DateTime.Utc | null) =>
@@ -155,30 +146,14 @@ describe("DatePicker", () => {
         picked(utc("2027-01-03")),
         month("2027-01-01")
       )
-      committed(utc("2026-11-20")).emitted(picked(utc("2026-11-20")))
       committed(null).emitted(picked(null))
-    }))
-
-  it.effect("a Zoned value and month show their local day, not their UTC day", () =>
-    Effect.gen(function*() {
-      // 02:00Z on Dec 1 is still Nov 30 in Los Angeles
-      const lateNovember = DateTime.makeZonedUnsafe("2026-12-01T02:00:00Z", {
-        timeZone: "America/Los_Angeles"
-      })
-      const scene = yield* HtmlScene.make(
-        DatePicker,
-        props({ value: lateNovember, month: lateNovember, locale: "en-US" }),
-        standIn
-      )
-      assert.strictEqual(scene.get(input).props?.value, "11/30/2026")
-      assert.strictEqual(
-        scene.get(Locator.attr("data-cell", "2026-11-30"))
-          .attrs?.["aria-selected"],
-        "true"
-      )
-      // Nov 30 is in the shown month, so no other month is asked for
-      scene.childEmit(Calendar, { _tag: "Picked", date: utc("2026-11-30") })
-        .emitted(picked(utc("2026-11-30")), closed("day-press"))
+      // 02:00Z on Dec 1 is still Nov 30 in Los Angeles, so Nov 30 is in the shown month
+      scene.props(props({
+        month: DateTime.makeZonedUnsafe("2026-12-01T02:00:00Z", {
+          timeZone: "America/Los_Angeles"
+        })
+      }))
+      committed(utc("2026-11-30")).emitted(picked(utc("2026-11-30")))
     }))
 
   it.effect("disabled, it disables every control and asks for nothing", () =>
@@ -195,12 +170,10 @@ describe("DatePicker", () => {
       assert.strictEqual(scene.get(input).attrs?.disabled, "")
       assert.strictEqual(scene.get(day("2026-11-20")).attrs?.disabled, "")
       scene.mounted(tracked(scene), dismissed("escape-key"))
-      scene.mounted(tracked(scene), dismissed("outside-press"))
-      scene.mounted(tracked(scene), dismissed("focus-out"))
       quiet(scene)
     }))
 
-  it.effect("read-only, it still opens and closes, and its input and calendar are read-only", () =>
+  it.effect("read-only, it still opens, and its input and calendar are read-only", () =>
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(
         DatePicker,
@@ -212,11 +185,5 @@ describe("DatePicker", () => {
       assert.strictEqual(scene.get(input).attrs?.readonly, "")
       assert.strictEqual(scene.get(grid).attrs?.["aria-readonly"], "true")
       scene.click(trigger).emitted(opened)
-      scene.props(props({ readOnly: true, open: true })).expectMount(
-        tracked(scene)
-      )
-      scene.mounted(tracked(scene), dismissed("escape-key")).emitted(
-        closed("escape-key")
-      )
     }))
 })

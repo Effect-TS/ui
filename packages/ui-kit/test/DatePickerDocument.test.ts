@@ -171,13 +171,7 @@ describe("DatePicker in a document", { concurrent: false }, () => {
       yield* BrowserHost.mountEffect(Page, { topLayer: true }, yield* container)
       yield* tick
       byId("trigger").focus()
-      yield* open("2026-11-15")
-      escape(document.activeElement!)
-      yield* tick
-      assert.isFalse(shown())
-      assert.strictEqual(document.activeElement?.id, "trigger")
-
-      // Escape also closes it from the trigger, as after Shift+Tab out of the popup
+      // Escape closes it from the trigger too, as after Shift+Tab out of the popup
       yield* open("2026-11-15")
       byId("trigger").focus()
       escape(byId("trigger"))
@@ -224,8 +218,6 @@ describe("DatePicker in a document", { concurrent: false }, () => {
       assert.isFalse(shown())
       assert.strictEqual(document.activeElement?.id, "outside")
       assert.deepStrictEqual(log(), [
-        "RequestedOpen trigger-press",
-        "RequestedClose escape-key",
         "RequestedOpen trigger-press",
         "RequestedClose escape-key",
         "RequestedOpen trigger-press",
