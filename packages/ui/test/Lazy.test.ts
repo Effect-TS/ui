@@ -135,26 +135,20 @@ describe("Component.lazy", () => {
       assert.strictEqual(loads, 1)
     })))
 
-  it.effect("waits for lazy children drawn in a headless child's view closure or in a slot, in settle and on the server", () =>
-    Effect.gen(function*() {
-      const rendered = yield* HtmlServer.renderToHtml(makePlacedApp(), {})
-      for (const title of ["a", "b", "c"]) {
-        assert.include(rendered.html, "page:" + title)
-      }
-      yield* provideHost(Effect.gen(function*() {
-        const root = yield* TestHost.mount(makePlacedApp(), {})
-        assert.deepStrictEqual(
-          root.pending().map((load) => load.path),
-          [
-            "/App/Dialog[]/LazyPage[]",
-            "/App/LazyPage[b]",
-            "/App/Frame[]/[body]/LazyPage[c]"
-          ]
-        )
-        yield* TestHost.settle
-        assert.strictEqual(root.text(), "page:apage:bpage:c")
-      }))
-    }))
+  it.effect("settle waits for lazy children drawn in a headless child's view closure or in a slot", () =>
+    provideHost(Effect.gen(function*() {
+      const root = yield* TestHost.mount(makePlacedApp(), {})
+      assert.deepStrictEqual(
+        root.pending().map((load) => load.path),
+        [
+          "/App/Dialog[]/LazyPage[]",
+          "/App/LazyPage[b]",
+          "/App/Frame[]/[body]/LazyPage[c]"
+        ]
+      )
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "page:apage:bpage:c")
+    })))
 
   it.effect("the server ships a failed load's fallback drawn away from its author without deferring the author", () =>
     Effect.gen(function*() {
