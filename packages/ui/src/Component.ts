@@ -3008,7 +3008,7 @@ export interface DefineOptions<
   SV,
   Rp,
   SO extends { readonly [name: string]: Headless.Any | "self" },
-  SA
+  SA = SelfAbove<SV>
 > {
   readonly name: Name
   readonly props?: Schema.Codec<Props, any> | undefined

@@ -1222,9 +1222,11 @@ describe("a component that reads its own kind", () => {
     view: (h) =>
       h.el("button").on("click", Renamed.Renamed()).children("rename")
   })
-  // A rename of the outer Path changes what it shares and the name it gives the inner one, in one update.
+  // A rename of the outer Path changes what it shares, and with `follow` the name it gives the inner one,
+  // in one update.
   const Paths = Component.define({
     name: "Paths",
+    props: Schema.Struct({ follow: Schema.Boolean }),
     model: Schema.Null,
     message: Schema.Never
   }).make({
@@ -1239,7 +1241,7 @@ describe("a component that reads its own kind", () => {
             Rename(h, {}),
             Path(h, {
               key: "inner",
-              props: { name: "b" + outer.suffix },
+              props: { name: h.props.follow ? "b" + outer.suffix : "b" },
               view: () =>
                 Where(h, { view: (where) => h.el("span", where.path) })
             })
@@ -1248,28 +1250,61 @@ describe("a component that reads its own kind", () => {
   })
 
   it.effect("an owner derives its value from the one above it, and its reader's onChange gets only the final value", () =>
-    provideHost(Effect.gen(function*() {
-      const root = yield* TestHost.mount(Paths, {})
-      yield* TestHost.settle
-      const path = () => Locator.textOf(root.get(Locator.tag("span")))
-      assert.strictEqual(path(), "/a/b")
-      click(root, "rename")
-      yield* TestHost.settle
-      assert.strictEqual(path(), "/a!/b!")
-      assert.deepStrictEqual(
-        updatesAt(root.log(), "/Paths/Path[outer]/Path[inner]/Where[]").map((
-          entry
-        ) => entry.message),
-        [{ _tag: "Saw", path: "/a!/b!" }]
-      )
-    })))
+    Effect.forEach(
+      [[true, "/a!/b!"], [false, "/a!/b"]] as const,
+      ([follow, renamed]) =>
+        provideHost(Effect.gen(function*() {
+          const root = yield* TestHost.mount(Paths, { follow })
+          yield* TestHost.settle
+          const path = () => Locator.textOf(root.get(Locator.tag("span")))
+          assert.strictEqual(path(), "/a/b")
+          click(root, "rename")
+          yield* TestHost.settle
+          assert.strictEqual(path(), renamed)
+          assert.deepStrictEqual(
+            updatesAt(root.log(), "/Paths/Path[outer]/Path[inner]/Where[]").map(
+              (
+                entry
+              ) => entry.message
+            ),
+            [{ _tag: "Saw", path: renamed }]
+          )
+        }))
+    ))
 
   it.effect("in a scene, an owner derives its value from the one above it", () =>
     Effect.gen(function*() {
-      const scene = yield* Scene.make(Paths, {})
+      const scene = yield* Scene.make(Paths, { follow: true })
       scene.expect(Locator.text("/a/b")).toExist()
       scene.givenChild(Path, "outer", "!").expect(Locator.text("/a!/b!"))
         .toExist()
+    }).pipe(Effect.scoped))
+
+  it.effect("in a scene, an owner's default derives its value from the values given", () =>
+    Effect.gen(function*() {
+      const Label = Component.define({
+        name: "Label",
+        model: Schema.Null,
+        message: Saw,
+        shares: (_, __, reads) => reads.tips.label,
+        reads: { tips: TipsProvider }
+      }).make({ init: () => null, update: ($) => $.model })
+      const Show = Component.define({
+        name: "Show",
+        model: Schema.Null,
+        message: Saw,
+        reads: {
+          label: { owner: Label, onChange: (path) => Saw.Saw({ path }) }
+        }
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.el("p", `label:${h.reads.label}`)
+      })
+      const scene = yield* Scene.make(Show, {})
+      scene.expect(Locator.text("label:")).toExist()
+      scene.shared(TipsProvider, { open: null, label: "given" })
+        .expect(Locator.text("label:given")).toExist()
     }).pipe(Effect.scoped))
 
   it("rejects a read of its own kind that isn't optional, or in a component that shares nothing", () => {

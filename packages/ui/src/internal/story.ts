@@ -351,8 +351,14 @@ export const withShared = (
   return given
 }
 
-/** What `owner` shares with no instance of it in the story: from `init` with no props, if it takes none. */
-const sharedDefault = (owner: Component.Headless.Any): unknown => {
+/**
+ * What `owner` shares with no instance of it in the story: from `init` with no props, if it takes none,
+ * reading the values given, as it stands above the story.
+ */
+const sharedDefault = (
+  owner: Component.Headless.Any,
+  given: Owners | undefined
+): unknown => {
   const name = owner.definition.name
   const props = {}
   if (!Schema.is(owner.props)(props)) {
@@ -364,7 +370,7 @@ const sharedDefault = (owner: Component.Headless.Any): unknown => {
     owner.definition,
     owner.init(props).model,
     props,
-    rootShared(undefined)
+    rootShared(given)
   )
 }
 
@@ -380,7 +386,7 @@ export const sharedLookup =
     const definition = owner.definition
     if (given?.has(definition)) return given.get(definition)
     if (owners.has(definition)) return owners.get(definition)
-    return optional === true ? undefined : sharedDefault(owner)
+    return optional === true ? undefined : sharedDefault(owner, given)
   }
 
 /** What the story's component reads of `owner`: a given value, or the default of a required read. */
@@ -394,7 +400,7 @@ const sharedBefore = (
   }
   if (read.optional) return undefined
   try {
-    return { value: sharedDefault(read.owner) }
+    return { value: sharedDefault(read.owner, given) }
   } catch (error) {
     if (error instanceof MissingShared) return undefined
     throw error
