@@ -195,10 +195,10 @@ In [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark),
 
 Effect UI keeps these parts of Foldkit 0.x:
 
-- **The same structure in every Component**
-- **State that changes only in update, in response to a Message**
+- **A constrained, agent-friendly architecture**
+- **Predictable state changes**
 - **Side effects as values that the runtime runs**
-- **Tests that account for every Command**
+- **Clear, readable tests focused on behavior, not plumbing**
 - **A Message log you can inspect and replay**
 
 ## Try a snapshot build

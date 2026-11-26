@@ -27,16 +27,16 @@ const features: Readonly<
   "Services per Component": ["plug", "rows"],
   "Code splitting": ["split", "rows"],
   "Control overlapping Commands": ["layers", "rows"],
-  "The same structure in every Component": ["kept", "checklist"],
-  "State that changes only in update, in response to a Message": [
-    "kept",
-    "checklist"
-  ],
+  "A constrained, agent-friendly architecture": ["kept", "checklist"],
+  "Predictable state changes": ["kept", "checklist"],
   "Side effects as values that the runtime runs": [
     "kept",
     "checklist"
   ],
-  "Tests that account for every Command": ["kept", "checklist"],
+  "Clear, readable tests focused on behavior, not plumbing": [
+    "kept",
+    "checklist"
+  ],
   "A Message log you can inspect and replay": ["kept", "checklist"]
 }
 
