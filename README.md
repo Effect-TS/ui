@@ -65,7 +65,7 @@ Layer.launch(Main).pipe(Effect.runFork)
 Every pull request and every push to `main` publishes snapshot builds of all four packages to [pkg.pr.new](https://pkg.pr.new/~/Effect-TS/ui). Install `@effect/ui` with a commit's short SHA alongside `effect` v4:
 
 ```sh
-pnpm add effect https://pkg.pr.new/Effect-TS/ui/@effect/ui@<sha>
+pnpm add effect @effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@<sha>
 ```
 
 Because the packages are not on npm yet, add any extra package URLs alongside `@effect/ui` using the same `<sha>` (installing one alone fails to resolve its `@effect/ui` peer from npm):
@@ -73,15 +73,17 @@ Because the packages are not on npm yet, add any extra package URLs alongside `@
 ```sh
 # With ui-kit and devtools
 pnpm add effect \
-  https://pkg.pr.new/Effect-TS/ui/@effect/ui@<sha> \
-  https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@<sha> \
-  https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@<sha>
+  @effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@<sha> \
+  @effect/ui-kit@https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@<sha> \
+  @effect/ui-devtools@https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@<sha>
 
 # With OpenTUI
 pnpm add effect @opentui/core@^0.9.9 \
-  https://pkg.pr.new/Effect-TS/ui/@effect/ui@<sha> \
-  https://pkg.pr.new/Effect-TS/ui/@effect/ui-opentui@<sha>
+  @effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@<sha> \
+  @effect/ui-opentui@https://pkg.pr.new/Effect-TS/ui/@effect/ui-opentui@<sha>
 ```
+
+pnpm reports unmet `@effect/*` peers for these packages, because a URL doesn't satisfy their `^0.0.0` range. They still use the snapshots you installed, so you can ignore the warning.
 
 `@effect/ui-devtools/node` also requires `@effect/platform-node`, and `@effect/ui-opentui` has its own [runtime requirements](packages/ui-opentui/README.md#requirements).
 

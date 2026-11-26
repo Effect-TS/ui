@@ -207,11 +207,11 @@ Effect UI isn't on npm yet. Every commit to `main` is published as a snapshot bu
 
 ```sh
 pnpm add effect \
-  https://pkg.pr.new/Effect-TS/ui/@effect/ui@main \
-  https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@main
+  @effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@main \
+  @effect/ui-kit@https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@main
 ```
 
-To stay on one build, replace `main` with a commit's short SHA.
+To stay on one build, replace `main` with a commit's short SHA. You can ignore pnpm's unmet `@effect/ui` peer warning: `@effect/ui-kit` still uses the snapshot you installed.
 
 The [examples](https://github.com/Effect-TS/ui/tree/main/examples) in the repository are complete apps you can read and run.
 
