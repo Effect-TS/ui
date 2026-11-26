@@ -183,6 +183,7 @@ import {
   sameMonth,
   startOfMonth
 } from "./internal/calendar.ts"
+import { trackComposing } from "./internal/interaction.ts"
 import { listenOutside } from "./internal/outside.ts"
 import { layered, raiseAbove } from "./internal/topLayer.ts"
 import { frameOf } from "./internal/transition.ts"
@@ -352,6 +353,7 @@ const TrackDatePicker = Mount.makeStream(
             const inside = (target: Node) =>
               node.contains(target) ||
               (target instanceof Element && target.closest(anchors) !== null)
+            const composing = trackComposing(document, controller.signal)
             raiseAbove(node)
             listenOutside(document, controller.signal, {
               open: () => true,
@@ -366,7 +368,7 @@ const TrackDatePicker = Mount.makeStream(
               const target = event.target as Node | null
               if (
                 event.key !== "Escape" || event.defaultPrevented ||
-                event.isComposing || target === null || !inside(target)
+                composing(event) || target === null || !inside(target)
               ) return
               event.preventDefault()
               dismiss("escape-key")

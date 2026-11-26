@@ -151,12 +151,13 @@ const open = Effect.fnUntraced(function*(day: string) {
   yield* focusOn(day)
   assert.isTrue(shown())
 })
-const escape = (target: Element) =>
+const escape = (target: Element, init: KeyboardEventInit = {}) =>
   target.dispatchEvent(
     new KeyboardEvent("keydown", {
       key: "Escape",
       bubbles: true,
-      cancelable: true
+      cancelable: true,
+      ...init
     })
   )
 // A synthetic click sends the button's message without moving focus
@@ -194,10 +195,17 @@ describe("DatePicker in a document", { concurrent: false }, () => {
       )
       assert.isFalse(touched())
 
-      // A press in the input keeps the popup open
+      // A press in the input keeps the popup open, and so does an Escape that
+      // ends an input method's composition there
       yield* open("2026-11-20")
       press(byId("input"))
       byId("input").focus()
+      escape(byId("input"), { isComposing: true })
+      escape(byId("input"), { keyCode: 229 })
+      byId("input").dispatchEvent(
+        new CompositionEvent("compositionend", { bubbles: true })
+      )
+      escape(byId("input"))
       yield* tick
       assert.isTrue(shown())
       assert.isFalse(touched())
