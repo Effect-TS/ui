@@ -14,7 +14,9 @@
  * builder is itself a valid child or view, with the children it holds.
  * Arrays of children are flattened, and `false`, `null` and
  * `undefined` render nothing. Adjacent text merges into one text node when
- * the view is built, and empty text is dropped.
+ * the view is built, and empty text is dropped. Key an element when a
+ * conditional sibling before it has the same tag, or the two can swap
+ * nodes.
  *
  * **Example** (A host-neutral view)
  *
@@ -224,8 +226,10 @@ export const noFields: Readonly<Record<string, never>> = Object.freeze({})
  * decides the meaning of. `handlers` map an event name to its handler, so
  * re-rendering never touches listeners, and `eventOptions` holds the
  * `EventOptions` set with a handler. `key` keeps the element's node when
- * its siblings move; unkeyed elements match by position. `refKey` names the
- * element for ref Commands, and `mount` is the work started by `onMount`.
+ * its siblings move. Unkeyed elements match by position counted from either
+ * end, so an element keeps its node when siblings before or after it come
+ * and go. `refKey` names the element for ref Commands, and `mount` is the
+ * work started by `onMount`.
  *
  * @stability experimental
  * @category models
