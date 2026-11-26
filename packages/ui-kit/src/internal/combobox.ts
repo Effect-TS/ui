@@ -5,12 +5,13 @@ import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
-import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
+import * as ListNavigation from "../ListNavigation.ts"
 import * as Positioning from "../Positioning.ts"
+import * as Typeahead from "../Typeahead.ts"
 import {
   type Attributed,
   attrSelector,
@@ -49,7 +50,7 @@ import {
   valuesOf
 } from "./formInputs.ts"
 import { methodOf } from "./interaction.ts"
-import { available, grouped, type Loop, stepped, valued } from "./list.ts"
+import { grouped, valued } from "./list.ts"
 import { holdLayer, nextLayerOrder } from "./modal.ts"
 import { listenOutside, releasedOutside } from "./outside.ts"
 import { fillValue } from "./range.ts"
@@ -61,7 +62,6 @@ import {
   transitionAttrs,
   type TransitionStatus
 } from "./transition.ts"
-import { printable, typeahead } from "./typeahead.ts"
 
 export const Item = Schema.Struct({
   value: Schema.String,
@@ -242,9 +242,7 @@ export const Model = Schema.Struct({
   closeQuery: Schema.NullOr(Schema.String),
   pressedItem: Schema.NullOr(Schema.String),
   pressing: Schema.Boolean,
-  typed: Schema.String,
-  typedFrom: Schema.Number,
-  matched: Schema.Number,
+  typeahead: Typeahead.State,
   placement: Schema.NullOr(Positioning.Placement),
   completion: Schema.NullOr(
     Schema.Struct({ label: Schema.String, from: Schema.String })
@@ -273,9 +271,7 @@ export const init = (): Model => ({
   closeQuery: null,
   pressedItem: null,
   pressing: false,
-  typed: "",
-  typedFrom: -1,
-  matched: -1,
+  typeahead: Typeahead.initial,
   placement: null,
   completion: null,
   rtl: false,
@@ -288,16 +284,6 @@ type Step<E> = Component.Step<Model, Message, E>
 const Input = Html.ref("ComboboxInput", "input")
 const Trigger = Html.ref("ComboboxTrigger", "button")
 const Chip = Html.ref("ComboboxChip", "div")
-
-const WaitBeforeResetTyping = Command.make(
-  "WaitBeforeResetTyping",
-  { args: {}, mode: "switch" },
-  () =>
-    Effect.as(
-      Effect.sleep(Duration.millis(750)),
-      Message.CompletedWaitBeforeResetTyping()
-    )
-)
 
 const lockedOf = (props: AnySettings): boolean =>
   props.disabled === true || props.readOnly === true
@@ -517,7 +503,7 @@ const open = <E>(
     closeMethod: null,
     focusLeft: false,
     pressedItem: null,
-    typed: "",
+    typeahead: Typeahead.reset,
     pressing: reason === "trigger-press" && props.inputInPopup === true &&
       (method === "mouse" || method === "pen")
   }).emit(props.emits.requestedOpen(reason))
@@ -598,7 +584,11 @@ const pick = <E>(
   method: Interaction
 ): Step<E> => {
   const item = itemOf(props, value)
-  if (item === undefined || !available(item) || lockedOf(props)) return step
+  if (
+    item === undefined || !ListNavigation.available(item) || lockedOf(props)
+  ) {
+    return step
+  }
   if (props.multiple === true) {
     const added = picked(
       step,
@@ -651,10 +641,14 @@ const navigate = <E>(
   const at = shown.findIndex((item) => item.value === highlighted)
   const last = shown.length - 1
   const loops = props.loopFocus !== false
-  const loop: Loop = !loops ? "none" : autoOf(props) ? "wrap" : "escape"
+  const loop: ListNavigation.Loop = !loops
+    ? "none"
+    : autoOf(props)
+    ? "wrap"
+    : "escape"
   let index: number
   if (props.grid === true && (key === "ArrowLeft" || key === "ArrowRight")) {
-    index = stepped(
+    index = ListNavigation.step(
       at,
       last,
       (key === "ArrowRight") !== (props.dir === "rtl") ? 1 : -1,
@@ -664,11 +658,17 @@ const navigate = <E>(
     const rows = rowsOf(shown)
     const row = rows.findIndex((cells) => cells.includes(at))
     const column = rows[row]!.indexOf(at)
-    const next =
-      rows[stepped(row, rows.length - 1, key === "ArrowDown" ? 1 : -1, loop)]
+    const next = rows[
+      ListNavigation.step(
+        row,
+        rows.length - 1,
+        key === "ArrowDown" ? 1 : -1,
+        loop
+      )
+    ]
     index = next === undefined ? -1 : next[Math.min(column, next.length - 1)]!
   } else {
-    index = stepped(at, last, key === "ArrowDown" ? 1 : -1, loop)
+    index = ListNavigation.step(at, last, key === "ArrowDown" ? 1 : -1, loop)
   }
   return highlight(
     step,
@@ -1224,7 +1224,15 @@ const TrackComboboxChips = Mount.makeStream(
           event.preventDefault()
           send(Message.PressedChipArrow({ key }))
           move(undefined)
-        } else if (printable(key, event.altKey, event.ctrlKey, event.metaKey)) {
+        } else if (
+          Typeahead.isPrintable({
+            key,
+            alt: event.altKey,
+            ctrl: event.ctrlKey,
+            meta: event.metaKey,
+            composing: event.isComposing
+          })
+        ) {
           move(undefined)
         }
       }
@@ -1346,14 +1354,16 @@ export const make = <P, E>(
       }
       if (props.readOnly === true) return $.model
       const values = valuesOf(props)
-      const { index, next } = typeahead(
-        $.model,
+      const { index, state } = Typeahead.step(
+        $.model.typeahead,
         key,
         props.items,
         props.items.findIndex((item) => values.includes(item.value))
       )
       const item = props.items[index]
-      const typed = $.evolve(next).run(WaitBeforeResetTyping.make({}))
+      const typed = $.evolve({ typeahead: state }).run(
+        Typeahead.waitReset(Message.CompletedWaitBeforeResetTyping)
+      )
       return item === undefined || values.includes(item.value)
         ? typed
         : picked(typed, props, item.value, "none")
@@ -1365,7 +1375,9 @@ export const make = <P, E>(
       if (lockedOf(props) || props.multiple === true) return $.model
       if (!selectableOf(props)) return rewrite($, props, value, "none")
       const item = autofillMatch(props.items, value)
-      if (!available(item) || valuesOf(props).includes(item.value)) {
+      if (
+        !ListNavigation.available(item) || valuesOf(props).includes(item.value)
+      ) {
         return $.model
       }
       const chosen = picked($, props, item.value, "none")
@@ -1402,7 +1414,8 @@ export const make = <P, E>(
     ClickedItem: ($, { pointerType, value }) =>
       pick($, s($), value, methodOf(pointerType)),
     PressedDismiss: ($) => dismiss($, s($), "close-press", null),
-    CompletedWaitBeforeResetTyping: ($) => $.evolve({ typed: "" }),
+    CompletedWaitBeforeResetTyping: ($) =>
+      $.evolve({ typeahead: Typeahead.reset }),
     ShowedPopup: ($) =>
       $.evolve(
         s($).open
@@ -1750,14 +1763,14 @@ export const make = <P, E>(
         )
         .on(
           "keydown",
-          ({ alt, composing, ctrl, key, meta }) =>
-            composing
+          (event) =>
+            event.composing
               ? undefined
-              : key === "ArrowDown" || key === "ArrowUp" ||
+              : event.key === "ArrowDown" || event.key === "ArrowUp" ||
                   (inPopup && selectable && !multiple && !open && !readOnly &&
-                    printable(key, alt, ctrl, meta) &&
-                    (key !== " " || model.typed !== ""))
-              ? Message.PressedTriggerKey({ key })
+                    Typeahead.isPrintable(event) &&
+                    (event.key !== " " || Typeahead.isTyping(model.typeahead)))
+              ? Message.PressedTriggerKey({ key: event.key })
               : undefined,
           { preventDefault: true }
         )

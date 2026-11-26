@@ -1,6 +1,6 @@
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
-import { Orientation } from "./list.ts"
+import { Orientation } from "../ListNavigation.ts"
 
 export const triggerAttribute = "data-menubar-trigger"
 

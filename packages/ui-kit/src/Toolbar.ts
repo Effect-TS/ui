@@ -145,7 +145,8 @@ import {
   rightToLeft,
   TrackDirection
 } from "./internal/direction.ts"
-import { arrowKeys, stepped, valued } from "./internal/list.ts"
+import { valued } from "./internal/list.ts"
+import * as ListNavigation from "./ListNavigation.ts"
 
 /**
  * The direction a toolbar's items run in, which picks its arrow keys.
@@ -353,7 +354,7 @@ type ToolbarUpdate =
   & Directed
 
 const keysOf = ($: ToolbarUpdate) =>
-  arrowKeys(
+  ListNavigation.arrowKeys(
     $.props.orientation ?? "horizontal",
     rightToLeft($.reads.provider, $.model.rtl)
   )
@@ -361,26 +362,17 @@ const keysOf = ($: ToolbarUpdate) =>
 const targetOf = (
   value: string,
   key: string,
-  { next, previous }: ReturnType<typeof keysOf>,
   $: ToolbarUpdate
 ): ToolbarItem | undefined => {
   const items = $.props.items.filter((item) => reachable($.props, item))
-  const last = items.length - 1
-  if (key !== next && key !== previous && key !== "Home" && key !== "End") {
-    return undefined
-  }
-  const target = items[
-    key === "Home"
-      ? 0
-      : key === "End"
-      ? last
-      : stepped(
-        items.findIndex((item) => item.value === value),
-        last,
-        key === next ? 1 : -1,
-        $.props.loopFocus !== false ? "wrap" : "none"
-      )
-  ]
+  const index = ListNavigation.target(key, {
+    at: items.findIndex((item) => item.value === value),
+    last: items.length - 1,
+    orientation: $.props.orientation ?? "horizontal",
+    rtl: rightToLeft($.reads.provider, $.model.rtl),
+    loop: $.props.loopFocus !== false ? "wrap" : "none"
+  })
+  const target = index === undefined ? undefined : items[index]
   return target === undefined || target.value === value ? undefined : target
 }
 
@@ -462,12 +454,12 @@ export const Toolbar = Html.component({
     FocusedItem: ($, { value }) =>
       $.model.active === value ? $.model : { ...$.model, active: value },
     PressedItemKey: ($, { key, value }) => {
-      const target = targetOf(value, key, keysOf($), $)
+      const target = targetOf(value, key, $)
       return target === undefined ? $.model : moveTo($, target)
     },
     PressedInputKey: ($, { caret, key, value }) => {
       const keys = keysOf($)
-      const target = targetOf(value, key, keys, $)
+      const target = targetOf(value, key, $)
       if (target === undefined) return $.model
       if (caret === null) return moveTo($, target)
       if (key === keys.next) {
@@ -487,7 +479,7 @@ export const Toolbar = Html.component({
     const disabled = props.disabled === true
     const orientation = props.orientation ?? "horizontal"
     const tabStop = tabStopOf(model, props)
-    const axis = arrowKeys(orientation, false)
+    const axis = ListNavigation.arrowKeys(orientation, false)
     const entries = new Map<string, ToolbarItem>()
     for (const item of props.items) {
       if (entries.has(item.value)) {
@@ -544,11 +536,6 @@ export const Toolbar = Html.component({
       })
         .disabled(off && !focusable)
 
-    const moves = ({ alt, ctrl, key, meta, shift }: Html.KeyPayload): boolean =>
-      !alt && !ctrl && !meta && !shift &&
-      (key === axis.next || key === axis.previous || key === "Home" ||
-        key === "End")
-
     const movesFocus = <
       N extends Html.VoidElement<typeof ToolbarMessage.Type, any, any, any, any>
     >(
@@ -558,7 +545,7 @@ export const Toolbar = Html.component({
       roving(node, value).on(
         "keydown",
         (key) =>
-          moves(key)
+          ListNavigation.isKey(key, orientation)
             ? ToolbarMessage.PressedItemKey({ value, key: key.key })
             : undefined,
         { preventDefault: true }

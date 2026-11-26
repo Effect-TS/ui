@@ -142,6 +142,12 @@ export * from "./Input.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as ListNavigation from "./ListNavigation.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Menu.ts"
 
 /**
@@ -269,6 +275,12 @@ export * from "./Toolbar.ts"
  * @since 0.1.0
  */
 export * from "./Tooltip.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as Typeahead from "./Typeahead.ts"
 
 /**
  * @stability experimental

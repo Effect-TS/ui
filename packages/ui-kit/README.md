@@ -71,5 +71,7 @@ A component that doesn't need an instance, such as `Switch`, is a plain view fun
 
 ## Other modules
 
+- [ListNavigation](src/ListNavigation.ts): resolves arrow keys, `Home` and `End` to list indexes, respecting orientation, text direction and looping. The caller moves focus or updates a highlight.
 - [Positioning](src/Positioning.ts): places a popup of your own against an anchor, as `Tooltip` places its popup. `Positioning.place` computes a position from rectangles, and the `Positioning.TrackPosition` mount keeps a positioner next to its anchor.
+- [Typeahead](src/Typeahead.ts): matches typed prefixes against enabled items and cycles on repeated letters. Store `Typeahead.State` in your Model, advance it with `Typeahead.step`, and use `Typeahead.waitReset` to schedule a reset message.
 - [VirtualKeyboard](src/VirtualKeyboard.ts): tells which band of the screen the software keyboard leaves visible, read from `visualViewport`, so content fixed to the bottom can sit above it. `VirtualKeyboard.step` works out the band from the viewport's sizes, without reading the DOM. `VirtualKeyboard.watch` is a Stream of the band, and the `VirtualKeyboard.TrackKeyboard` mount writes the covered height on its node as `--keyboard-inset`.

@@ -152,8 +152,9 @@ import {
   watchDirection
 } from "./internal/direction.ts"
 import { isHTMLElement } from "./internal/dom.ts"
-import { keyed, stepped } from "./internal/list.ts"
+import { keyed } from "./internal/list.ts"
 import { frameOf, statusOf, whenFinished } from "./internal/transition.ts"
+import * as ListNavigation from "./ListNavigation.ts"
 
 /**
  * The direction the tabs are laid out in, which decides their arrow keys.
@@ -297,17 +298,13 @@ export const TabsEvents = UiSchema.TaggedEnum({
  */
 export type TabsEvents = typeof TabsEvents.Type
 
-const Step = Schema.Literals(["first", "previous", "next", "last"])
-
-type Step = typeof Step.Type
-
 const TabsMessage = UiSchema.TaggedEnum({
   ClickedTab: { value: Schema.String },
   FocusedTab: { value: Schema.String },
   BlurredTab: {},
   PressedTab: { value: Schema.String, button: Schema.Number },
   ReleasedPointer: {},
-  PressedKey: { value: Schema.String, to: Step },
+  PressedKey: { value: Schema.String, key: Schema.String },
   ChangedValue: {},
   RenderedFirstFrame: { value: Schema.String },
   FinishedTransition: { value: Schema.String },
@@ -396,41 +393,18 @@ const activate = (model: TabsModel, $: TabsUpdate, value: string) => {
   )
 }
 
-const stepOf = (
-  key: string,
-  orientation: TabsOrientation,
-  rtl: boolean
-): Step | undefined => {
-  if (key === "Home") return "first"
-  if (key === "End") return "last"
-  if (orientation === "vertical") {
-    return key === "ArrowDown"
-      ? "next"
-      : key === "ArrowUp"
-      ? "previous"
-      : undefined
-  }
-  if (key === "ArrowRight") return rtl ? "previous" : "next"
-  if (key === "ArrowLeft") return rtl ? "next" : "previous"
-  return undefined
-}
-
-const navigate = ($: TabsUpdate, value: string, to: Step) => {
+const navigate = ($: TabsUpdate, value: string, key: string) => {
   const tabs = $.props.tabs
   const from = indexOf(tabs, value)
   if (from < 0) return $.model
-  const last = tabs.length - 1
-  const target = to === "first"
-    ? 0
-    : to === "last"
-    ? last
-    : stepped(
-      from,
-      last,
-      to === "next" ? 1 : -1,
-      $.props.loopFocus !== false ? "wrap" : "none"
-    )
-  const tab = tabs[target]
+  const target = ListNavigation.target(key, {
+    at: from,
+    last: tabs.length - 1,
+    orientation: $.props.orientation ?? "horizontal",
+    rtl: rtlOf($),
+    loop: $.props.loopFocus !== false ? "wrap" : "none"
+  })
+  const tab = target === undefined ? undefined : tabs[target]
   if (tab === undefined || target === from) return $.model
   return $.evolve({ highlighted: tab.value }).run(
     HtmlCommand.Focus.make({ ref: Tab.at(tab.value) }).pipe(Command.asNoop)
@@ -890,7 +864,7 @@ export const Tabs = Html.component({
     PressedTab: ($, { button, value }) =>
       $.evolve({ secondary: button === 0 ? null : value }),
     ReleasedPointer: ($) => $.evolve({ secondary: null }),
-    PressedKey: ($, { to, value }) => navigate($, value, to),
+    PressedKey: ($, { key, value }) => navigate($, value, key),
     ChangedValue: ($) => phaseOf($.model, $.props, rtlOf($)),
     RenderedFirstFrame: ($, { value }) => {
       const next = phaseOf($.model, $.props, rtlOf($))
@@ -981,14 +955,14 @@ export const Tabs = Html.component({
           TabsMessage.ClickedTab({ value }),
           disabled ? { preventDefault: "always" } : undefined
         )
-        .on("keydown", ({ alt, ctrl, key, meta }) => {
-          const to = alt || ctrl || meta
-            ? undefined
-            : stepOf(key, orientation, rtl)
-          return to === undefined
-            ? undefined
-            : TabsMessage.PressedKey({ value, to })
-        }, { preventDefault: true })
+        .on(
+          "keydown",
+          (event) =>
+            ListNavigation.isKey(event, orientation)
+              ? TabsMessage.PressedKey({ value, key: event.key })
+              : undefined,
+          { preventDefault: true }
+        )
         .on("focus", TabsMessage.FocusedTab({ value }))
         .on("blur", TabsMessage.BlurredTab())
       const typed = b.tag === "button"

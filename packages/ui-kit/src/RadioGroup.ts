@@ -122,8 +122,9 @@ import { DirectionProvider } from "./DirectionProvider.ts"
 import { type Attributed, flag } from "./internal/attributes.ts"
 import { rightToLeft, watchDirectionScoped } from "./internal/direction.ts"
 import { field } from "./internal/field.ts"
-import { available, keyed, stepped } from "./internal/list.ts"
+import { keyed } from "./internal/list.ts"
 import { frameOf, whenFinished } from "./internal/transition.ts"
+import * as ListNavigation from "./ListNavigation.ts"
 
 /**
  * One option in a `RadioGroup`.
@@ -461,22 +462,28 @@ export const RadioGroup = Html.component({
   update: {
     ClickedRadio: ($, { value }) => {
       const item = itemOf($.props.items, value)
-      if ($.props.disabled === true || !available(item)) return $.model
+      if ($.props.disabled === true || !ListNavigation.available(item)) {
+        return $.model
+      }
       const highlighted = $.evolve({ highlighted: value })
       return picks($.props, item)
         ? highlighted.emit(RadioGroupEvents.Picked({ value }))
         : highlighted
     },
     FocusedRadio: ($, { value }) =>
-      $.props.disabled === true || !available(itemOf($.props.items, value))
+      $.props.disabled === true ||
+        !ListNavigation.available(itemOf($.props.items, value))
         ? $.model
         : $.evolve({ highlighted: value }),
     PressedArrow: ($, { direction, value }) => {
       const source = itemOf($.props.items, value)
-      if ($.props.disabled === true || !available(source)) return $.model
-      const enabled = $.props.items.filter(available)
+      if ($.props.disabled === true || !ListNavigation.available(source)) {
+        return $.model
+      }
+      const enabled = $.props.items.filter(ListNavigation.available)
       const at = enabled.indexOf(source)
-      const target = enabled[stepped(at, enabled.length - 1, direction, "wrap")]
+      const target =
+        enabled[ListNavigation.step(at, enabled.length - 1, direction, "wrap")]
       if (target === undefined) return $.model
       const moved = $.evolve({ highlighted: target.value }).run(
         focusRadio(target.value)
@@ -552,9 +559,9 @@ export const RadioGroup = Html.component({
     const tabStop = disabled
       ? null
       : [model.highlighted, props.value].find((value) =>
-        value !== null && available(byValue.get(value))
+        value !== null && ListNavigation.available(byValue.get(value))
       ) ??
-        props.items.find(available)?.value ??
+        props.items.find(ListNavigation.available)?.value ??
         null
     const checkedItem = props.value === null
       ? undefined

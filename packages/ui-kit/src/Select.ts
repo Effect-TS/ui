@@ -211,7 +211,6 @@ import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as UiStruct from "@effect/ui/UiStruct"
 import * as View from "@effect/ui/View"
-import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
@@ -242,7 +241,7 @@ import {
   valuesOf
 } from "./internal/formInputs.ts"
 import { methodOf } from "./internal/interaction.ts"
-import { available, grouped, stepped, valued } from "./internal/list.ts"
+import { grouped, valued } from "./internal/list.ts"
 import { holdLayer, nextLayerOrder } from "./internal/modal.ts"
 import { listenOutside, releasedOutside } from "./internal/outside.ts"
 import { clamp, fillValue } from "./internal/range.ts"
@@ -253,9 +252,10 @@ import {
   statusOf,
   transitionAttrs
 } from "./internal/transition.ts"
-import { printable, typeahead } from "./internal/typeahead.ts"
+import * as ListNavigation from "./ListNavigation.ts"
 import * as Positioning from "./Positioning.ts"
 import { Toolbar } from "./Toolbar.ts"
+import * as Typeahead from "./Typeahead.ts"
 
 /**
  * One option of a `Select`: the value it submits, the text the trigger shows
@@ -530,9 +530,7 @@ const SelectModel = Schema.Struct({
   focusLeft: Schema.Boolean,
   active: Schema.NullOr(Schema.String),
   activeByKey: Schema.Boolean,
-  typed: Schema.String,
-  typedFrom: Schema.Number,
-  matched: Schema.Number,
+  typeahead: Typeahead.State,
   spaceDown: Schema.Boolean,
   placement: Schema.NullOr(Positioning.Placement),
   fellBack: Schema.Boolean,
@@ -555,16 +553,6 @@ type SelectUpdate = Component.Update<
 
 const Trigger = Html.ref("SelectTrigger", "button")
 
-const WaitBeforeResetTyping = Command.make(
-  "WaitBeforeResetTyping",
-  { args: {}, mode: "switch" },
-  () =>
-    Effect.as(
-      Effect.sleep(Duration.millis(750)),
-      SelectMessage.CompletedWaitBeforeResetTyping()
-    )
-)
-
 const selectedIndexOf = (props: SelectProps): number => {
   const values = valuesOf(props)
   return props.items.findIndex((item) => values.includes(item.value))
@@ -576,8 +564,6 @@ const indexOf = (props: SelectProps, value: string | null): number =>
 const alignedOf = (model: SelectModel, props: SelectProps): boolean =>
   props.alignItemWithTrigger !== false && props.topLayer !== false &&
   !model.fellBack && model.openMethod !== "touch"
-
-const typing = (model: SelectModel): boolean => model.typed !== ""
 
 const startOf = (model: SelectModel, props: SelectProps): number => {
   const selected = selectedIndexOf(props)
@@ -608,7 +594,7 @@ const open = (
     focusLeft: false,
     active: items[active]?.value ?? null,
     activeByKey: method === "keyboard",
-    typed: "",
+    typeahead: Typeahead.reset,
     spaceDown: false,
     fellBack: false,
     pressing: reason === "trigger-press" &&
@@ -652,7 +638,10 @@ const pick = (
 ) => {
   const props = $.props
   const item = props.items.find((candidate) => candidate.value === value)
-  if (!available(item) || props.disabled === true || props.readOnly === true) {
+  if (
+    !ListNavigation.available(item) || props.disabled === true ||
+    props.readOnly === true
+  ) {
     return model
   }
   const next = UiStruct.evolve(model, { active: value, pressedItem: false })
@@ -691,8 +680,8 @@ const hover = (model: SelectModel, active: string | null): SelectModel =>
 
 const typeKey = ($: SelectUpdate, key: string) => {
   const props = $.props
-  const { index, next } = typeahead(
-    $.model,
+  const { index, state } = Typeahead.step(
+    $.model.typeahead,
     key,
     props.items,
     startOf($.model, props)
@@ -701,8 +690,8 @@ const typeKey = ($: SelectUpdate, key: string) => {
   const moved = props.open && item !== undefined
     ? { active: item.value, activeByKey: true }
     : undefined
-  const typed = $.evolve({ ...next, ...moved }).run(
-    WaitBeforeResetTyping.make({})
+  const typed = $.evolve({ typeahead: state, ...moved }).run(
+    Typeahead.waitReset(SelectMessage.CompletedWaitBeforeResetTyping)
   )
   return item === undefined || props.open ||
       valuesOf(props).includes(item.value)
@@ -1416,9 +1405,7 @@ export const Select = Html.component({
     focusLeft: false,
     active: null,
     activeByKey: false,
-    typed: "",
-    typedFrom: -1,
-    matched: -1,
+    typeahead: Typeahead.initial,
     spaceDown: false,
     placement: null,
     fellBack: false,
@@ -1455,24 +1442,22 @@ export const Select = Html.component({
         props.multiple === true
       ) return $.model
       const item = autofillMatch(props.items, value)
-      return !available(item) || valuesOf(props).includes(item.value)
+      return !ListNavigation.available(item) ||
+          valuesOf(props).includes(item.value)
         ? $.model
         : $.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))
     },
     PressedPopupKey: ($, { key }) => {
       const props = $.props
       if (!props.open) return $.model
-      const last = props.items.length - 1
-      const at = indexOf(props, $.model.active)
+      const to = ListNavigation.target(key, {
+        at: indexOf(props, $.model.active),
+        last: props.items.length - 1,
+        orientation: "vertical",
+        loop: "none"
+      })
+      if (to !== undefined) return highlight($.model, props, to)
       switch (key) {
-        case "ArrowDown":
-          return highlight($.model, props, stepped(at, last, 1, "none"))
-        case "ArrowUp":
-          return highlight($.model, props, stepped(at, last, -1, "none"))
-        case "Home":
-          return highlight($.model, props, 0)
-        case "End":
-          return highlight($.model, props, last)
         case "Enter":
           return $.model.active === null
             ? $.model
@@ -1482,7 +1467,7 @@ export const Select = Html.component({
         case "Tab":
           return dismiss($.model, $, "focus-out", "keyboard")
         case " ":
-          return typing($.model)
+          return Typeahead.isTyping($.model.typeahead)
             ? typeKey($, key)
             : $.evolve({ spaceDown: true })
         default:
@@ -1515,7 +1500,8 @@ export const Select = Html.component({
         ? pick(next, $, value, methodOf(pointerType))
         : next
     },
-    CompletedWaitBeforeResetTyping: ($) => $.evolve({ typed: "" }),
+    CompletedWaitBeforeResetTyping: ($) =>
+      $.evolve({ typeahead: Typeahead.reset }),
     ShowedPopup: ($) =>
       $.evolve(
         $.props.open
@@ -1682,13 +1668,14 @@ export const Select = Html.component({
             : undefined)
         .on(
           "keydown",
-          ({ alt, composing, ctrl, key, meta }) =>
-            composing
+          (event) =>
+            event.composing
               ? undefined
-              : (arrowsOpen && (key === "ArrowDown" || key === "ArrowUp")) ||
-                  (printable(key, alt, ctrl, meta) &&
-                    (key !== " " || typing(model)))
-              ? SelectMessage.PressedTriggerKey({ key })
+              : (arrowsOpen &&
+                  (event.key === "ArrowDown" || event.key === "ArrowUp")) ||
+                  (Typeahead.isPrintable(event) &&
+                    (event.key !== " " || Typeahead.isTyping(model.typeahead)))
+              ? SelectMessage.PressedTriggerKey({ key: event.key })
               : undefined,
           { preventDefault: true }
         )
@@ -1799,14 +1786,15 @@ export const Select = Html.component({
         .attrs({ id: popupId, tabindex: "-1" })
         .on(
           "keydown",
-          ({ alt, composing, ctrl, key, meta, shift }) =>
-            composing
+          (event) =>
+            event.composing
               ? undefined
-              : key === "ArrowDown" || key === "ArrowUp" || key === "Home" ||
-                  key === "End" ||
-                  key === "Enter" || key === "Escape" ||
-                  (key === "Tab" && shift) || printable(key, alt, ctrl, meta)
-              ? SelectMessage.PressedPopupKey({ key })
+              : event.key === "ArrowDown" || event.key === "ArrowUp" ||
+                  event.key === "Home" || event.key === "End" ||
+                  event.key === "Enter" || event.key === "Escape" ||
+                  (event.key === "Tab" && event.shift) ||
+                  Typeahead.isPrintable(event)
+              ? SelectMessage.PressedPopupKey({ key: event.key })
               : undefined,
           { preventDefault: true }
         )
