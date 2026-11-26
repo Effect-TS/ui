@@ -125,6 +125,7 @@ import {
   noSelect,
   ownStyle
 } from "./internal/attributes.ts"
+import { isRtl } from "./internal/direction.ts"
 import { override } from "./internal/dom.ts"
 import { isWebKit } from "./internal/platform.ts"
 import { clamp } from "./internal/range.ts"
@@ -334,10 +335,6 @@ const getOffset = (
   if (!vertical && prop === "margin") return start * 2
   return start + (Number.parseFloat(styles[`${key}End`]) || 0)
 }
-
-const isRtl = (viewport: HTMLElement): boolean =>
-  viewport.ownerDocument.defaultView?.getComputedStyle(viewport).direction ===
-    "rtl"
 
 const registeredWindows = new WeakSet<Window>()
 

@@ -129,8 +129,10 @@
  * empty input removes the last value. On a chip, ArrowLeft and ArrowRight
  * move between chips and back to the input, Backspace and Delete remove
  * it, and Enter, Space, a letter, ArrowDown and ArrowUp return to the
- * input, the arrows opening the popup. `dir: "rtl"` mirrors the
- * horizontal arrows.
+ * input, the arrows opening the popup. The horizontal arrows follow
+ * `dir` or, without it, the nearest `DirectionProvider` above the
+ * combobox or, without one, the CSS `direction` of the chips for the
+ * chip keys, and of the popup or an inline list for the item keys.
  *
  * With `inputInPopup`, ArrowDown and ArrowUp on the trigger open the
  * popup, and typing a letter on the closed trigger selects the next
@@ -247,6 +249,7 @@
 import * as Html from "@effect/ui/html/Html"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
+import { DirectionProvider } from "./DirectionProvider.ts"
 import * as Engine from "./internal/combobox.ts"
 import { type TextFilter, textFilter } from "./internal/filter.ts"
 import * as Positioning from "./Positioning.ts"
@@ -451,8 +454,10 @@ export type ComboboxFilterMode = typeof ComboboxFilterMode.Type
  * - `name`, `form`, `autoComplete`: the form field.
  * - `id`: the input's id, or the trigger's with `inputInPopup`, unless
  *   the builder has one. Generated when left out.
- * - `dir`: the writing direction, for the horizontal arrow keys. `"ltr"`
- *   when left out.
+ * - `dir`: the writing direction, for the horizontal arrow keys. When
+ *   left out, the nearest `DirectionProvider`'s or, without one, the CSS
+ *   `direction` of the chips for the chip keys, and of the popup or an
+ *   inline list for the item keys.
  * - `modal`: while open, the page doesn't scroll and a press outside only
  *   closes the popup. False when left out.
  * - `finalFocus`: with `inputInPopup`, on close, focus goes back to the
@@ -715,7 +720,8 @@ const engine = Engine.make(
  * group, the chips, the clear and remove buttons, the trigger without
  * `inputInPopup` and the items, so focus stays in the input. The
  * positioner's mount places the popup and listens for presses and focus
- * outside it.
+ * outside it. The mounts on the positioner, the chips and an inline list
+ * also read their CSS `direction`.
  *
  * It emits `RequestedOpen`, `RequestedClose`, `Picked`,
  * `RequestedInputValue`, `Highlighted` and `Settled`.
@@ -733,6 +739,9 @@ export const Combobox = Html.component({
   model: Engine.Model,
   message: Engine.Message,
   events: ComboboxEvents,
+  reads: {
+    provider: { owner: DirectionProvider, optional: true }
+  },
   restore: false
 }).make({
   init: Engine.init,

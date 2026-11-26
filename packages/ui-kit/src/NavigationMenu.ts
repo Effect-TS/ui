@@ -34,8 +34,10 @@
  *
  * Every link stays in the Tab order and Enter follows the focused one, as
  * the browser does for any link. The arrow keys also move focus between the
- * links of a list: Right and Left in a horizontal menu, swapped when the
- * list's text direction is right-to-left, and Down and Up in a vertical one.
+ * links of a list: Right and Left in a horizontal menu, swapped when it is
+ * right-to-left, and Down and Up in a vertical one. The menu follows the
+ * nearest `DirectionProvider` above it or, without one, the list's CSS
+ * `direction`.
  * Focus stops at the first and the last link and doesn't wrap. A link with
  * `aria-disabled="true"` is skipped, and so is one the browser won't focus,
  * such as a hidden or inert link or one without an `href`. A menu inside
@@ -101,7 +103,9 @@ import * as View from "@effect/ui/View"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
+import { DirectionProvider } from "./DirectionProvider.ts"
 import { flag } from "./internal/attributes.ts"
+import { isRtl, provided } from "./internal/direction.ts"
 
 /**
  * Props for the direction the menu's links run in.
@@ -132,11 +136,18 @@ const linkAttribute = "data-navigation-menu-link"
 
 const TrackArrowKeys = Mount.makeStream(
   "TrackArrowKeys",
-  { args: { scope: Schema.String, vertical: Schema.Boolean } },
+  {
+    args: {
+      scope: Schema.String,
+      vertical: Schema.Boolean,
+      // The nearest `DirectionProvider`'s direction, which wins over CSS.
+      rtl: Schema.NullOr(Schema.Boolean)
+    }
+  },
   (node: HTMLElement, args, changes) =>
     Stream.callback<never>(() =>
       Effect.gen(function*() {
-        let { vertical } = args
+        let { rtl: provided, vertical } = args
         const onKeyDown = (event: KeyboardEvent) => {
           if (
             event.defaultPrevented || event.shiftKey || event.ctrlKey ||
@@ -146,9 +157,7 @@ const TrackArrowKeys = Mount.makeStream(
             ? ["ArrowUp", "ArrowDown"]
             : ["ArrowLeft", "ArrowRight"]
           if (event.key !== backward && event.key !== forward) return
-          const rtl = !vertical &&
-            node.ownerDocument.defaultView?.getComputedStyle(node).direction ===
-              "rtl"
+          const rtl = !vertical && (provided ?? isRtl(node))
           const links = Array.from(
             node.querySelectorAll<HTMLElement>(
               `[${linkAttribute}="${CSS.escape(args.scope)}"]`
@@ -178,6 +187,7 @@ const TrackArrowKeys = Mount.makeStream(
         yield* Stream.runForEach(changes, (next) =>
           Effect.sync(() => {
             vertical = next.vertical
+            provided = next.rtl
           })).pipe(Effect.forkScoped)
       })
     )
@@ -218,7 +228,10 @@ export const NavigationMenu = Html.component({
   name: "NavigationMenu",
   props: NavigationMenuProps,
   model: Schema.Struct({}),
-  message: Schema.Never
+  message: Schema.Never,
+  reads: {
+    provider: { owner: DirectionProvider, optional: true }
+  }
 }).make({
   init: () => ({}),
   update: ($) => $.model,
@@ -239,7 +252,8 @@ export const NavigationMenu = Html.component({
           b.onMount(
             TrackArrowKeys({
               scope,
-              vertical: p.props.orientation === "vertical"
+              vertical: p.props.orientation === "vertical",
+              rtl: provided(p.reads.provider)
             })
           )
       ),

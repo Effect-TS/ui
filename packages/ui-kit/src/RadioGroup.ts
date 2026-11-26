@@ -51,7 +51,7 @@
  * One radio in the group sits in the tab order (`tabindex="0"`); the rest
  * have `tabindex="-1"`. Down and Right move focus to the next enabled radio
  * and pick it; Up and Left move to the previous one, wrapping at the ends.
- * Under a `DirectionProvider` with `direction: "rtl"`, Left and Right swap.
+ * In a right-to-left layout, Left and Right swap.
  * In a read-only group or on a read-only item, arrow keys move focus and
  * the tab stop without emitting `Picked`. Space picks the focused radio
  * through the native button click; Enter is cancelled. Arrow keys with
@@ -120,6 +120,7 @@ import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { DirectionProvider } from "./DirectionProvider.ts"
 import { type Attributed, flag } from "./internal/attributes.ts"
+import { rightToLeft, watchDirectionScoped } from "./internal/direction.ts"
 import { field } from "./internal/field.ts"
 import { available, keyed, stepped } from "./internal/list.ts"
 import { frameOf, whenFinished } from "./internal/transition.ts"
@@ -223,7 +224,9 @@ const RadioGroupModel = Schema.Struct({
   current: Schema.NullOr(Schema.String),
   settled: Schema.NullOr(Schema.String),
   mounted: Schema.Array(Schema.String),
-  leaving: Schema.Array(Schema.String)
+  leaving: Schema.Array(Schema.String),
+  // The root's CSS `direction` is right-to-left.
+  rtl: Schema.Boolean
 })
 
 const RadioGroupMessage = UiSchema.TaggedEnum({
@@ -235,7 +238,8 @@ const RadioGroupMessage = UiSchema.TaggedEnum({
   MountedIndicator: { value: Schema.String },
   UnmountedIndicator: { value: Schema.String },
   StartedIndicator: { value: Schema.String },
-  EndedIndicator: { value: Schema.String }
+  EndedIndicator: { value: Schema.String },
+  FoundDirection: { rtl: Schema.Boolean }
 })
 
 type RadioGroupMessage = typeof RadioGroupMessage.Type
@@ -279,6 +283,11 @@ const TrackGroup = Mount.makeStream(
           Effect.sync(() => {
             groupSend.delete(node)
           })
+      ).pipe(
+        Effect.andThen(
+          watchDirectionScoped(node, (rtl) =>
+            Queue.offerUnsafe(queue, RadioGroupMessage.FoundDirection({ rtl })))
+        )
       )
     )
 )
@@ -420,8 +429,8 @@ type KeyedButton = View.PartTarget<"button"> & {
  * The hidden indicator's content stays out of the radio's accessible name.
  *
  * `radio` and `indicator` throw when given a `value` that is not in
- * `items`. The group reads the nearest `DirectionProvider` above it, if
- * there is one, and swaps Left and Right in a right-to-left layout.
+ * `items`. The group follows the nearest `DirectionProvider` above it or,
+ * without one, the root's CSS `direction`.
  *
  * History restore saves nothing of the group's transient focus or indicator
  * transition state: after Back, forward or a reload it starts from `init`.
@@ -446,7 +455,8 @@ export const RadioGroup = Html.component({
     current: props.value,
     settled: props.value,
     mounted: [],
-    leaving: []
+    leaving: [],
+    rtl: false
   }),
   update: {
     ClickedRadio: ($, { value }) => {
@@ -507,7 +517,8 @@ export const RadioGroup = Html.component({
         : $.evolve({
           settled: $.model.settled === value ? null : $.model.settled,
           leaving: (leaving) => without(leaving, value)
-        })
+        }),
+    FoundDirection: ($, { rtl }) => $.evolve({ rtl })
   },
   subscriptions: ({ props }) => [synced(props.value)],
   parts: (p, model) => {
@@ -516,7 +527,7 @@ export const RadioGroup = Html.component({
     const readOnly = props.readOnly === true
     const required = props.required === true
     const invalid = props.invalid === true
-    const rtl = p.reads.provider?.direction === "rtl"
+    const rtl = rightToLeft(p.reads.provider, model.rtl)
     const byValue = new Map(props.items.map((item) => [item.value, item]))
     const stateOf = (value: string) => {
       const item = byValue.get(value)

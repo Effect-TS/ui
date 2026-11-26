@@ -67,16 +67,18 @@
  * - Home and End move focus to the first and the last tab.
  * - The arrow keys wrap around, unless `loopFocus` is `false`.
  * - Space clicks the focused tab once, when the key goes down, with the
- *   key's modifiers, so a link tab still follows its `href`.
+ *   key's modifiers, so a link tab still follows its `href`. Holding it
+ *   down doesn't click again.
  * - Enter clicks a `<button>` or a link natively, and the tabs click an
- *   `<a>` that has no `href`.
+ *   `<a>` that has no `href`, once while the key is held.
  * - With `activateOnFocus`, moving focus activates the tab as well, unless
  *   a mouse button other than the main one is pressing it.
  *
  * Disabled tabs take focus and are not skipped, so a screen reader can find
  * them, but they never activate.
  *
- * The tabs read the nearest `DirectionProvider` above them, if there is one.
+ * The tabs follow the nearest `DirectionProvider` above them or, without
+ * one, the list's CSS `direction`.
  *
  * **Example** (Three tabs, one of them disabled)
  *
@@ -144,6 +146,11 @@ import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { DirectionProvider } from "./DirectionProvider.ts"
 import { type Attributed, flag, withTokens } from "./internal/attributes.ts"
+import {
+  type Directed,
+  rightToLeft,
+  watchDirection
+} from "./internal/direction.ts"
 import { isHTMLElement } from "./internal/dom.ts"
 import { keyed, stepped } from "./internal/list.ts"
 import { frameOf, statusOf, whenFinished } from "./internal/transition.ts"
@@ -304,7 +311,8 @@ const TabsMessage = UiSchema.TaggedEnum({
   ChangedValue: {},
   RenderedFirstFrame: { value: Schema.String },
   FinishedTransition: { value: Schema.String },
-  MeasuredActiveTab: { sized: Schema.Boolean }
+  MeasuredActiveTab: { sized: Schema.Boolean },
+  FoundDirection: { rtl: Schema.Boolean }
 })
 
 type TabsMessage = typeof TabsMessage.Type
@@ -317,7 +325,9 @@ const TabsModel = Schema.Struct({
   leaving: Schema.Array(Schema.String),
   started: Schema.Boolean,
   direction: TabsActivationDirection,
-  indicator: Schema.Boolean
+  indicator: Schema.Boolean,
+  // The list's CSS `direction` is right-to-left.
+  rtl: Schema.Boolean
 })
 
 type TabsModel = typeof TabsModel.Type
@@ -373,13 +383,8 @@ const enabledIn = (
   return tab !== undefined && tab.disabled !== true
 }
 
-const rtlOf = (
-  $: {
-    readonly reads: {
-      readonly provider?: { readonly direction: string } | undefined
-    }
-  }
-) => $.reads.provider?.direction === "rtl"
+const rtlOf = ($: Directed & { readonly model: TabsModel }) =>
+  rightToLeft($.reads.provider, $.model.rtl)
 
 const activate = (model: TabsModel, $: TabsUpdate, value: string) => {
   if (!enabledIn($.props.tabs, value) || value === $.props.value) return model
@@ -506,22 +511,23 @@ const ActivateFromKeys = Mount.makeStream(
   "ActivateFromKeys",
   { args: {} },
   (node: unknown) =>
-    Stream.callback<never>(() =>
+    Stream.callback<TabsMessage>((queue) =>
       Effect.acquireRelease(
         Effect.sync(() => {
+          // Suppress repeated synthetic clicks while the key is held.
           const onKeyDown = (event: KeyboardEvent) => {
             const tab = tabOf(event, node)
             if (tab === null) return
             const enabled = tab.getAttribute("aria-disabled") !== "true"
             if (event.key === " ") {
               event.preventDefault()
-              if (enabled) clickFrom(tab, event)
+              if (enabled && !event.repeat) clickFrom(tab, event)
             } else if (
               event.key === "Enter" && enabled && tab.localName === "a" &&
               !tab.hasAttribute("href")
             ) {
               event.preventDefault()
-              clickFrom(tab, event)
+              if (!event.repeat) clickFrom(tab, event)
             }
           }
           const onKeyUp = (event: KeyboardEvent) => {
@@ -532,6 +538,12 @@ const ActivateFromKeys = Mount.makeStream(
           }
           const controller = new AbortController()
           if (isHTMLElement(node)) {
+            watchDirection(
+              node,
+              (rtl) =>
+                Queue.offerUnsafe(queue, TabsMessage.FoundDirection({ rtl })),
+              controller.signal
+            )
             node.addEventListener("keydown", onKeyDown, {
               signal: controller.signal
             })
@@ -860,7 +872,8 @@ export const Tabs = Html.component({
     leaving: [],
     started: true,
     direction: "none",
-    indicator: false
+    indicator: false,
+    rtl: false
   }),
   update: {
     ClickedTab: ($, { value }) => activate($.model, $, value),
@@ -893,7 +906,8 @@ export const Tabs = Html.component({
         })
         : next
     },
-    MeasuredActiveTab: ($, { sized }) => $.evolve({ indicator: sized })
+    MeasuredActiveTab: ($, { sized }) => $.evolve({ indicator: sized }),
+    FoundDirection: ($, { rtl }) => $.evolve({ rtl })
   },
   subscriptions: ({ model, props }) => [
     props.value !== model.shown &&
@@ -908,7 +922,7 @@ export const Tabs = Html.component({
     const props = p.props
     const tabs = props.tabs
     const orientation = props.orientation ?? "horizontal"
-    const rtl = rtlOf(p)
+    const rtl = rightToLeft(p.reads.provider, model.rtl)
     const phase = phaseOf(model, props, rtl)
     const entries = new Map<
       string,

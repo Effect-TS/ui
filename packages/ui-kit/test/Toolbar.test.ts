@@ -1,4 +1,4 @@
-import { Component, View } from "@effect/ui"
+import { Component, type Mount, View } from "@effect/ui"
 import { DirectionProvider, Toolbar, type ToolbarProps } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
@@ -60,8 +60,17 @@ const separator = Locator.attr("class", "separator")
 const item = (value: string) => Locator.attr("aria-label", value)
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
+// The root's mount, which reports its CSS direction.
+const trackDirection = (
+  scene: { readonly get: (locator: Locator.Locator) => Locator.Node }
+) =>
+  (scene.get(root) as unknown as View.Element<unknown>).owned?.find((layer) =>
+    layer.mount !== undefined
+  )?.mount as unknown as Mount.Issued<unknown, never, never, unknown>
 const makeScene = (overrides: Partial<ToolbarProps> = {}) =>
-  HtmlScene.make(Toolbar, props(overrides), standIn)
+  HtmlScene.make(Toolbar, props(overrides), standIn).pipe(
+    Effect.map((scene) => scene.expectMount(trackDirection(scene)))
+  )
 type Scene = Effect.Success<ReturnType<typeof makeScene>>
 
 interface Moved {
@@ -273,6 +282,17 @@ describe("Toolbar", () => {
         to: "underline"
       }])
       assert.deepStrictEqual(press("italic", "ArrowRight"), [{ to: "bold" }])
+
+      // Without a provider, the root's CSS direction decides.
+      const css = yield* makeScene()
+      css.mounted(trackDirection(css), true as never)
+      assert.deepStrictEqual(moved(css.keydown(item("bold"), "ArrowLeft")), [{
+        to: "italic"
+      }])
+      css.shared(DirectionProvider, { direction: "ltr" })
+      assert.deepStrictEqual(moved(css.keydown(item("bold"), "ArrowLeft")), [{
+        to: "search"
+      }])
     }))
 
   it.effect("in a text input the arrow keys leave only from the edge of the text, and the default is never cancelled", () =>
@@ -337,7 +357,10 @@ describe("Toolbar", () => {
 
   it("the parts' own attributes win over the consumer's, invalid items or groups fail, and isDisabled resolves them", () => {
     const parts = (overrides: Partial<ToolbarProps> = {}) =>
-      Story.parts(Toolbar, { model: { active: null }, props: props(overrides) })
+      Story.parts(Toolbar, {
+        model: { active: null, rtl: false },
+        props: props(overrides)
+      })
     const owned = {
       tabindex: "3",
       "aria-disabled": "true",

@@ -1,4 +1,4 @@
-import type { Component } from "@effect/ui"
+import type { Component, Mount } from "@effect/ui"
 import { View } from "@effect/ui"
 import {
   DirectionProvider,
@@ -39,8 +39,17 @@ const root = Locator.attr("class", "group")
 const item = (value: string) => Locator.attr("aria-label", value)
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
+// The root's mount, which reports its CSS direction.
+const trackDirection = (
+  scene: { readonly get: (locator: Locator.Locator) => Locator.Node }
+) =>
+  (scene.get(root) as unknown as View.Element<unknown>).owned?.find((layer) =>
+    layer.mount !== undefined
+  )?.mount as unknown as Mount.Issued<unknown, never, never, unknown>
 const makeScene = (overrides: Partial<ToggleGroupProps> = {}) =>
-  HtmlScene.make(ToggleGroup, props(overrides), standIn)
+  HtmlScene.make(ToggleGroup, props(overrides), standIn).pipe(
+    Effect.map((scene) => scene.expectMount(trackDirection(scene)))
+  )
 type Scene = Effect.Success<ReturnType<typeof makeScene>>
 
 const focused = (scene: Scene): ReadonlyArray<string> =>
@@ -193,6 +202,19 @@ describe("ToggleGroup", () => {
       scene.props(props()).shared(DirectionProvider, { direction: "rtl" })
       assert.deepStrictEqual(press("center", "ArrowLeft"), focusOn("right"))
       assert.deepStrictEqual(press("center", "ArrowRight"), focusOn("left"))
+
+      // Without a provider, the root's CSS direction decides.
+      const css = yield* makeScene()
+      css.mounted(trackDirection(css), true as never)
+      assert.deepStrictEqual(
+        focused(css.keydown(item("center"), "ArrowLeft")),
+        focusOn("right")
+      )
+      css.shared(DirectionProvider, { direction: "ltr" })
+      assert.deepStrictEqual(
+        focused(css.keydown(item("center"), "ArrowLeft")),
+        focusOn("left")
+      )
     }))
 
   it.effect("inside a Toolbar, the items leave the tab stop and the arrow keys to it, and its disabled items and state disable them", () =>
@@ -248,7 +270,7 @@ describe("ToggleGroup", () => {
   it("the parts' own attributes win over the consumer's, whose class and others stay", () => {
     const parts = (overrides: Partial<ToggleGroupProps> = {}) =>
       Story.parts(ToggleGroup, {
-        model: { active: null },
+        model: { active: null, rtl: false },
         props: props(overrides)
       })
     const own = h.button

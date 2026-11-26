@@ -46,9 +46,8 @@
  *
  * The arrow keys follow `orientation`: a horizontal group ignores Down and
  * Up, and a vertical one Right and Left. They skip disabled items, and with `loopFocus` they wrap from the last
- * item to the first and back. Inside a `DirectionProvider` with
- * `direction: "rtl"`, Left and Right swap. A key held with Alt, Ctrl, Meta
- * or Shift does nothing.
+ * item to the first and back. In a right-to-left layout, Left and Right
+ * swap. A key held with Alt, Ctrl, Meta or Shift does nothing.
  *
  * **Usage**
  *
@@ -109,10 +108,12 @@
 import * as Command from "@effect/ui/Command"
 import * as Html from "@effect/ui/html/Html"
 import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
+import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
 import { DirectionProvider } from "./DirectionProvider.ts"
 import { flag, pressedAttrs } from "./internal/attributes.ts"
+import { rightToLeft, TrackDirection } from "./internal/direction.ts"
 import { arrowKeys, available, stepped, valued } from "./internal/list.ts"
 import { Toolbar } from "./Toolbar.ts"
 
@@ -229,10 +230,15 @@ export type ToggleGroupEvents = typeof ToggleGroupEvents.Type
 const ToggleGroupMessage = UiSchema.TaggedEnum({
   ClickedItem: { value: Schema.String },
   FocusedItem: { value: Schema.String },
-  PressedKey: { value: Schema.String, key: Schema.String }
+  PressedKey: { value: Schema.String, key: Schema.String },
+  FoundDirection: { rtl: Schema.Boolean }
 })
 
-const ToggleGroupModel = Schema.Struct({ active: Schema.NullOr(Schema.String) })
+// `rtl`: the root's CSS `direction` is right-to-left.
+const ToggleGroupModel = Schema.Struct({
+  active: Schema.NullOr(Schema.String),
+  rtl: Schema.Boolean
+})
 
 type ToggleGroupModel = typeof ToggleGroupModel.Type
 
@@ -315,8 +321,8 @@ const tabStopOf = (
  * so the consumer's handlers for them still run. It cancels only the keys
  * it moves focus with.
  *
- * The group reads the nearest `DirectionProvider` above it, if there is
- * one, and swaps Left and Right in a right-to-left layout. Inside a
+ * The group follows the nearest `DirectionProvider` above it or, without
+ * one, the root's CSS `direction`. Inside a
  * `Toolbar`, an item writes no `tabindex` and handles no `focus` or
  * `keydown`. The toolbar's `disabled` disables the group, and a disabled
  * toolbar item disables the group's item with the same value.
@@ -337,7 +343,7 @@ export const ToggleGroup = Html.component({
     toolbar: { owner: Toolbar, optional: true }
   }
 }).make({
-  init: () => ({ active: null }),
+  init: () => ({ active: null, rtl: false }),
   update: {
     ClickedItem: ($, { value }) =>
       enabled($.props, $.reads.toolbar, value)
@@ -349,7 +355,7 @@ export const ToggleGroup = Html.component({
       const last = items.length - 1
       const { next } = arrowKeys(
         $.props.orientation ?? "horizontal",
-        $.reads.provider?.direction === "rtl"
+        rightToLeft($.reads.provider, $.model.rtl)
       )
       const target = items[
         key === "Home"
@@ -369,7 +375,8 @@ export const ToggleGroup = Html.component({
           Command.asNoop
         )
       )
-    }
+    },
+    FoundDirection: ($, { rtl }) => $.evolve({ rtl })
   },
   parts: (p, model) => {
     const props = p.props
@@ -413,13 +420,20 @@ export const ToggleGroup = Html.component({
       disabled,
       multiple,
       orientation,
-      root: p.part("div", (b) =>
-        b.attrs({
+      root: p.part("div", (b) => {
+        const root = b.attrs({
           role: "group",
           "data-orientation": orientation,
           "data-disabled": flag(disabled),
           "data-multiple": flag(multiple)
-        })),
+        })
+        // In a toolbar the toolbar's keys move focus.
+        return toolbar !== undefined ? root : root.onMount(
+          TrackDirection().pipe(
+            Mount.map((rtl) => ToggleGroupMessage.FoundDirection({ rtl }))
+          )
+        )
+      }),
       item: valued(item)
     }
   }

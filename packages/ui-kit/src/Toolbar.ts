@@ -63,9 +63,9 @@
  *
  * The arrow keys follow `orientation`, and with `loopFocus` they wrap from
  * the last item to the first and back. A disabled item stays in the order
- * unless its entry sets `focusableWhenDisabled: false`. Inside a
- * `DirectionProvider` with `direction: "rtl"`, Left and Right swap. A key held
- * with Alt, Ctrl, Meta or Shift does nothing.
+ * unless its entry sets `focusableWhenDisabled: false`. In a right-to-left
+ * layout, Left and Right swap. A key held with Alt, Ctrl, Meta or Shift does
+ * nothing.
  *
  * In a text input, the arrow keys move the caret, and leave the input only
  * from the end of the text, or from its start for the previous item. Home,
@@ -131,6 +131,7 @@
 import * as Command from "@effect/ui/Command"
 import * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
+import * as Mount from "@effect/ui/Mount"
 import * as Renderer from "@effect/ui/Renderer"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
@@ -139,6 +140,11 @@ import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
 import { DirectionProvider } from "./DirectionProvider.ts"
 import { type Attributed, flag, separatorAttrs } from "./internal/attributes.ts"
+import {
+  type Directed,
+  rightToLeft,
+  TrackDirection
+} from "./internal/direction.ts"
 import { arrowKeys, stepped, valued } from "./internal/list.ts"
 
 /**
@@ -256,10 +262,15 @@ const ToolbarMessage = UiSchema.TaggedEnum({
     value: Schema.String,
     key: Schema.String,
     caret: Schema.NullOr(Schema.Number)
-  }
+  },
+  FoundDirection: { rtl: Schema.Boolean }
 })
 
-const ToolbarModel = Schema.Struct({ active: Schema.NullOr(Schema.String) })
+// `rtl`: the root's CSS `direction` is right-to-left.
+const ToolbarModel = Schema.Struct({
+  active: Schema.NullOr(Schema.String),
+  rtl: Schema.Boolean
+})
 
 type ToolbarModel = typeof ToolbarModel.Type
 
@@ -339,16 +350,12 @@ type ToolbarUpdate =
     never,
     ToolbarProps
   >
-  & {
-    readonly reads: {
-      readonly provider?: { readonly direction: "ltr" | "rtl" } | undefined
-    }
-  }
+  & Directed
 
 const keysOf = ($: ToolbarUpdate) =>
   arrowKeys(
     $.props.orientation ?? "horizontal",
-    $.reads.provider?.direction === "rtl"
+    rightToLeft($.reads.provider, $.model.rtl)
   )
 
 const targetOf = (
@@ -419,9 +426,8 @@ const moveTo = ($: ToolbarUpdate, target: ToolbarItem) =>
  * The toolbar shares `{ disabled, orientation, disabledItems }` with the
  * components in its `view` closure, `disabledItems` holding the values of
  * the disabled items. A `ToggleGroup` inside reads all three, and a `Menu`
- * or `Select` its `orientation`. It reads the
- * nearest `DirectionProvider` above it, if there is one, and swaps Left and
- * Right in a right-to-left layout.
+ * or `Select` its `orientation`. It follows the nearest
+ * `DirectionProvider` above it or, without one, the root's CSS `direction`.
  *
  * @stability experimental
  * @category components
@@ -451,7 +457,7 @@ export const Toolbar = Html.component({
     provider: { owner: DirectionProvider, optional: true }
   }
 }).make({
-  init: () => ({ active: null }),
+  init: () => ({ active: null, rtl: false }),
   update: {
     FocusedItem: ($, { value }) =>
       $.model.active === value ? $.model : { ...$.model, active: value },
@@ -473,7 +479,8 @@ export const Toolbar = Html.component({
         )
       }
       return caret > 0 ? $.model : moveTo($, target)
-    }
+    },
+    FoundDirection: ($, { rtl }) => $.evolve({ rtl })
   },
   parts: (p, model) => {
     const props = p.props
@@ -638,7 +645,11 @@ export const Toolbar = Html.component({
           "aria-orientation": orientation,
           "data-orientation": orientation,
           "data-disabled": flag(disabled)
-        })),
+        }).onMount(
+          TrackDirection().pipe(
+            Mount.map((rtl) => ToolbarMessage.FoundDirection({ rtl }))
+          )
+        )),
       group: View.wrapPart(
         groupPart,
         <B extends View.PartTarget<"div">>(

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { UiSchema, View } from "@effect/ui"
-import { NavigationMenu } from "@effect/ui-kit"
+import { DirectionProvider, NavigationMenu } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -76,16 +76,39 @@ const Page = Html.component({
     )
 })
 
+// A left-to-right provider over a right-to-left list.
+const Provided = Html.component({
+  name: "Provided",
+  model: Schema.Struct({}),
+  message: Schema.Never
+}).make({
+  init: () => ({}),
+  update: ($) => $.model,
+  view: (h) =>
+    DirectionProvider(h, {
+      props: { direction: "ltr" },
+      view: () => Page(h, { props: { rtl: true, claimsRight: false } })
+    })
+})
+
 const mount = Effect.fn(
   function*(
-    props: { readonly rtl?: boolean; readonly claimsRight?: boolean } = {}
+    props: {
+      readonly rtl?: boolean
+      readonly claimsRight?: boolean
+      readonly provided?: boolean
+    } = {}
   ) {
     const app = yield* container
-    yield* BrowserHost.mountEffect(Page, {
-      rtl: false,
-      claimsRight: false,
-      ...props
-    }, app)
+    if (props.provided) {
+      yield* BrowserHost.mountEffect(Provided, {}, app)
+    } else {
+      yield* BrowserHost.mountEffect(Page, {
+        rtl: false,
+        claimsRight: false,
+        ...props
+      }, app)
+    }
     yield* tick
     const links = Array.from(app.querySelectorAll("a"))
     links[0]!.focus()
@@ -163,11 +186,16 @@ describe("NavigationMenu", () => {
       assert.strictEqual(focused(), "Home")
     }).pipe(Effect.scoped))
 
-  it.effect("in a right-to-left list, Left moves to the next link", () =>
+  it.effect("in a right-to-left list, Left moves to the next link, and a DirectionProvider wins over CSS", () =>
     Effect.gen(function*() {
-      yield* mount({ rtl: true })
-      assert.isFalse(press("ArrowRight"))
-      assert.isTrue(press("ArrowLeft"))
+      yield* Effect.scoped(Effect.gen(function*() {
+        yield* mount({ rtl: true })
+        assert.isFalse(press("ArrowRight"))
+        assert.isTrue(press("ArrowLeft"))
+        assert.strictEqual(focused(), "People")
+      }))
+      yield* mount({ provided: true })
+      assert.isTrue(press("ArrowRight"))
       assert.strictEqual(focused(), "People")
     }).pipe(Effect.scoped))
 

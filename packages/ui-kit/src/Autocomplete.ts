@@ -118,7 +118,9 @@
  * the popup, and on a closed autocomplete clears the text. Typing opens the
  * popup. Keys pressed while an IME composes text are left alone. With
  * `grid`, ArrowLeft and ArrowRight move between the items of a row once one
- * is highlighted, mirrored by `dir: "rtl"`.
+ * is highlighted. They follow `dir` or, without it, the nearest
+ * `DirectionProvider` above the autocomplete or, without one, the CSS
+ * `direction` of the popup or an inline list.
  *
  * **Form**
  *
@@ -217,6 +219,7 @@ import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
 import * as Struct from "effect/Struct"
 import type { Combobox } from "./Combobox.ts"
+import { DirectionProvider } from "./DirectionProvider.ts"
 import * as Engine from "./internal/combobox.ts"
 import { type TextFilter, textFilter } from "./internal/filter.ts"
 import * as Positioning from "./Positioning.ts"
@@ -416,8 +419,9 @@ export type AutocompleteMode = typeof AutocompleteMode.Type
  *   can be browsed but not changed.
  * - `id`: the input's id, unless the builder has one. Generated when left
  *   out.
- * - `dir`: the writing direction, for the horizontal arrow keys. `"ltr"`
- *   when left out.
+ * - `dir`: the writing direction, for the horizontal arrow keys. When
+ *   left out, the nearest `DirectionProvider`'s or, without one, the CSS
+ *   `direction` of the popup or an inline list.
  * - `modal`: while open, the page doesn't scroll and a press outside only
  *   closes the popup. False when left out.
  * - `holdExit`: keeps the closing popup shown, for an exit animation the
@@ -628,6 +632,9 @@ export const Autocomplete = Html.component({
   model: Engine.Model,
   message: Engine.Message,
   events: AutocompleteEvents,
+  reads: {
+    provider: { owner: DirectionProvider, optional: true }
+  },
   restore: false
 }).make({
   init: Engine.init,

@@ -28,7 +28,8 @@
  * The provider doesn't write the `dir` attribute and doesn't read it
  * either. Set `dir` on an element yourself, on `<html>` or on the one the
  * `view` closure returns, so the browser lays the text out the same way.
- * A component with no provider above it is left-to-right.
+ * A component with no provider above it follows the CSS `direction` of
+ * its element.
  *
  * A component reads the nearest provider above it, at any depth, so one
  * provider around the app is enough, and a provider around one region
