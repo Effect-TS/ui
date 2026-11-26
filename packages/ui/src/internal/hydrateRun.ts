@@ -81,16 +81,14 @@ const decode = (
   component: Kernel.Runnable,
   encoded: unknown,
   shipped?: queryCore.ShippedContext | undefined
-): Exit.Exit<Decoded, unknown> | Fiber.Fiber<Decoded, unknown> => {
-  const effect = stateCodecOf(component as unknown as Component.Any).decode(
-    encoded
+): Exit.Exit<Decoded, unknown> | Fiber.Fiber<Decoded, unknown> =>
+  runCodec(
+    Effect.provideService(
+      stateCodecOf(component as unknown as Component.Any).decode(encoded),
+      queryCore.Shipped,
+      shipped
+    )
   )
-  return runCodec(
-    shipped === undefined
-      ? effect
-      : Effect.provideService(effect, queryCore.Shipped, shipped)
-  )
-}
 
 const decodeRoot = (
   component: Kernel.Runnable,
@@ -426,11 +424,7 @@ export const make = (
       root?.done()
       finish()
     },
-    close() {
-      for (const [, drop] of drops.values()) drop()
-      drops.clear()
-      shipped()?.cancelPending(true)
-    },
+    close: () => shipped()?.cancelPending(true),
     settled: () => !pass && held.size === 0
   }
 }
