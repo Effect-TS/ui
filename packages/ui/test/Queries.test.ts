@@ -240,11 +240,7 @@ describe("a query without onChange", { concurrent: false }, () => {
       assert.deepStrictEqual(Object.keys(state).sort(), ["model", "queries"])
       assert.deepStrictEqual(state.model, { clicks: 0, last: "none" })
       assert.deepStrictEqual(Object.keys(state.queries), ["note"])
-      assert.deepStrictEqual(state.queries.note.slice(0, 3), [
-        `{"id":"1"}`,
-        0,
-        "Note 1"
-      ])
+      assert.deepStrictEqual(state.queries.note, [`{"id":"1"}`, 2])
       assert.deepStrictEqual(result.adopted, ["/Note"])
       // Only the server fetched.
       assert.deepStrictEqual(result.root.fetches(), [])

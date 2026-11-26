@@ -9,6 +9,7 @@
 import * as Context from "effect/Context"
 import type * as Duration from "effect/Duration"
 import type * as Effect from "effect/Effect"
+import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Query from "../Query.ts"
 import type * as componentQueries from "./queries.ts"
 import type * as queryRun from "./queryRun.ts"
@@ -50,6 +51,7 @@ export interface Loaded extends
     | "makeSnapshot"
     | "makeSnapshotMap"
     | "sameMore"
+    | "shippedOf"
     | "snapshotData"
     | "snapshotMapData"
     | "snapshotMapSchema"
@@ -207,6 +209,24 @@ export const Problems: Context.Reference<(problem: Query.Problem.Any) => void> =
   >("@effect/ui/Query/Problems", {
     // oxlint-disable-next-line no-console
     defaultValue: () => (problem) => console.warn(problem.message)
+  })
+
+/**
+ * Looks up a settled Success already shipped in `~query`, by query definition
+ * and args key. Only provided when encoding or decoding page state so history,
+ * the message log and standalone codecs stay self-contained.
+ *
+ * @internal
+ */
+export type ShippedLookup = (
+  def: any,
+  argsKey: string
+) => AsyncResult.Success<any, any> | undefined
+
+/** @internal */
+export const Shipped: Context.Reference<ShippedLookup | undefined> =
+  Context.Reference<ShippedLookup | undefined>("@effect/ui/Query/Shipped", {
+    defaultValue: () => undefined
   })
 
 /** @internal */

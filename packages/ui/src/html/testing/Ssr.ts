@@ -61,6 +61,7 @@ import * as TestClock from "effect/testing/TestClock"
 import type * as Component from "../../Component.ts"
 import * as domHost from "../../internal/domHost.ts"
 import * as hydrateRun from "../../internal/hydrateRun.ts"
+import * as queryCore from "../../internal/queryCore.ts"
 import * as runtime from "../../internal/runtime.ts"
 import * as MessageLog from "../../MessageLog.ts"
 import * as Query from "../../Query.ts"
@@ -599,6 +600,9 @@ export const ssr = <
       entry._tag === "Mounted" && entry.adopted
     )
     const adopted = adoptedEntries.map((entry) => entry.path)
+    const shipped = state["~query"] === undefined
+      ? undefined
+      : Query.shippedOf(state["~query"])
     for (const path of Object.keys(state)) {
       if (path.startsWith("~")) continue
       const entry = adoptedEntries.find((entry) => entry.path === path)
@@ -606,8 +610,14 @@ export const ssr = <
         problems.push(`${path}: the client didn't adopt the server's Model`)
         continue
       }
+      const encode = runtime.stateCodecOf(entry.component).encode(
+        entry.model,
+        entry.queries
+      )
       const encoded = yield* Effect.option(
-        runtime.stateCodecOf(entry.component).encode(entry.model, entry.queries)
+        shipped === undefined
+          ? encode
+          : Effect.provideService(encode, queryCore.Shipped, shipped)
       )
       const json = encoded._tag === "Some"
         ? JSON.stringify(encoded.value)

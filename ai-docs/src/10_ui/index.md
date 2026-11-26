@@ -495,9 +495,10 @@ queries: {
 The runtime watches each query and keeps its last result beside the Model. A
 result that changes re-renders the instance, without a message. The Model
 holds what the user did, and never a copy of fetched data. The Model plus the
-results is the instance's state: the server ships it and the history entry
-keeps it as `{ model, queries }`, so a hydrated or restored instance starts
-with the results it had.
+results is the instance's state: the server ships it as `{ model, queries }`
+(referencing settled Success results already in `~query` instead of duplicating
+them) and the history entry keeps a self-contained `{ model, queries }` copy,
+so a hydrated or restored instance starts with the results it had.
 
 Every function of the component can read the results, by query name:
 `h.queries` in `view`, and `$.queries` in `update`, `head` and

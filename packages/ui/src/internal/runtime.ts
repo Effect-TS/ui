@@ -971,12 +971,13 @@ export const prerender = (
           )
         }
         const cache = root.freeze()
-        const snap = serialize.snapshot(
-          root.instance as unknown as Kernel.Instance,
-          made.deferred
-        )
         if (cache !== undefined) options.onFinish?.(cache)
         const query = cache === undefined ? {} : cache.dehydrate()
+        const snap = serialize.snapshot(
+          root.instance as unknown as Kernel.Instance,
+          made.deferred,
+          cache?.shipped
+        )
         const nodes: Array<Renderer.ServerNode> = []
         const state = yield* serialize.write(
           snap,

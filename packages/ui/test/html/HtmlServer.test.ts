@@ -2044,7 +2044,7 @@ describe("HtmlServer", { concurrent: false }, () => {
           ["/Page/Group[g]/Item[i]", null],
           ["/Page/Asks[a]", {
             model: null,
-            queries: { text: ["{}", 0, "data", 0, false] }
+            queries: { text: ["{}", 2] }
           }],
           ["~deferred", ["/Page/Off[o]"]],
           ["~status", { "/Page/Slow[s]": "Pending" }],
@@ -3226,11 +3226,11 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       expect(result.html).toContain(
         "<li>Item 1</li><li>failed</li><li>loading</li>"
       )
-      // The result is the settled keys' tuples; the entries ship as ordinary entries of the query.
+      // The result is the settled keys' tuples; Successes reference `~query` and Failures stay inline.
       expect(result.state["/List"]).toEqual({
         model: {},
         queries: {
-          items: [["{\"id\":1}", 0, "Item 1", 0, false], ["{\"id\":404}", 1, [
+          items: [["{\"id\":1}", 2], ["{\"id\":404}", 1, [
             "missing"
           ], null]]
         }
@@ -3770,5 +3770,94 @@ describe("HtmlServer queries", { concurrent: false }, () => {
           decodes: 1
         })
       }).pipe(Effect.scoped)
+  )
+
+  it.effect(
+    "adopts a structured query result via ssr, and builds fresh when ~query is absent",
+    () =>
+      hosted(Effect.gen(function*() {
+        let fetches = 0
+        class GetNote extends Query.Service<GetNote>()("GetNote", {
+          args: { id: Schema.String },
+          success: Schema.Struct({ id: Schema.String, body: Schema.String }),
+          error: Schema.Never,
+          staleTime: "1 minute"
+        }) {
+          static readonly layer = this.toLayer(({ id }) =>
+            Effect.sync(() => {
+              fetches++
+              return { id, body: "structured-note-body" }
+            })
+          )
+        }
+        const Reader = Html.component({
+          name: "Reader",
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          queries: {
+            note: { query: GetNote, args: () => ({ id: "1" }) }
+          }
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) =>
+            h.p(
+              AsyncResult.isSuccess(h.queries.note)
+                ? h.queries.note.value.body
+                : "loading"
+            )
+        })
+        const Page = Html.component({
+          name: "Page",
+          model: Schema.Struct({}),
+          message: Schema.Never
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) =>
+            h.div(
+              Reader(h, { key: "a", props: {} }),
+              Reader(h, { key: "b", props: {} })
+            )
+        }).pipe(Component.provide(GetNote.layer))
+
+        const result = yield* ssr(Page, {})
+        expect(result.adopted).toEqual([
+          "/Page",
+          "/Page/Reader[a]",
+          "/Page/Reader[b]"
+        ])
+        expect(result.state["/Page/Reader[a]"]).toEqual({
+          model: {},
+          queries: { note: ["{\"id\":\"1\"}", 2] }
+        })
+        expect(fetches).toBe(1)
+
+        // Without `~query`, instances referencing it don't adopt and build fresh instead.
+        const withoutQuery = { ...result.state }
+        delete (withoutQuery as Record<string, unknown>)["~query"]
+        const app = yield* container(result.html)
+        const log = MessageLog.makeMemory({ size: 100 })
+        const root = yield* HtmlHydrate.hydrateEffect(
+          Page,
+          {},
+          app,
+          withoutQuery
+        ).pipe(Effect.provideService(MessageLog.MessageLog, log))
+        yield* root.adopted
+        const mounted = Object.fromEntries(
+          log.entries()
+            .filter((entry): entry is MessageLog.Mounted =>
+              entry._tag === "Mounted"
+            )
+            .map((entry) => [entry.path, entry.adopted])
+        )
+        expect(mounted).toEqual({
+          "/Page": true,
+          "/Page/Reader[a]": false,
+          "/Page/Reader[b]": false
+        })
+        expect(app.textContent).toBe("loadingloading")
+      }))
   )
 })
