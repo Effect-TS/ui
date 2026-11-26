@@ -41,6 +41,11 @@
  * popup and the arrow, and a backdrop as a fixed layer:
  * `.backdrop { position: fixed; inset: 0 }`. The backdrop takes no presses.
  *
+ * With `topLayer: false`, the portal renders in place as a `<div>` with no
+ * box of its own, `hidden` while closed, and the preview is placed and
+ * clipped inside the positioner's containing block, as `Positioning`
+ * describes.
+ *
  * The positioner's inline style carries `left` and `top`, and the variables
  * `--anchor-width`, `--anchor-height`, `--available-width`,
  * `--available-height` and `--transform-origin`. `sideOffset` is padding on
@@ -224,7 +229,13 @@ import { watchHoverArea } from "./internal/hoverArea.ts"
 import { lineUnder } from "./internal/inlineRect.ts"
 import { onEscape, Point, pointOf } from "./internal/interaction.ts"
 import { listenOutside } from "./internal/outside.ts"
-import { atDocumentOrigin, portalBox, raiseAbove } from "./internal/topLayer.ts"
+import {
+  atDocumentOrigin,
+  inPlaceBox,
+  layered,
+  portalBox,
+  raiseAbove
+} from "./internal/topLayer.ts"
 import {
   frameOf,
   settling,
@@ -307,6 +318,8 @@ export type PreviewCardAlign = typeof PreviewCardAlign.Type
  *   page taller when the popup reaches past its end.
  * - `anchor`: the id of an element, or a `Rect` in the viewport, to place
  *   the popup against instead of the trigger.
+ * - `topLayer`: `false` draws the portal in place, out of the top layer, as
+ *   the module describes. `true` when left out.
  *
  * @stability experimental
  * @category schemas
@@ -1328,13 +1341,14 @@ export const PreviewCard = Html.component({
         )
     )
 
-    const portalStyle = tracked.positionMethod === "absolute"
+    const topLayer = tracked.topLayer !== false
+    const portalStyle = !topLayer
+      ? inPlaceBox
+      : tracked.positionMethod === "absolute"
       ? portalBox + ";" + atDocumentOrigin
       : portalBox
     const portalPart = p.part("div", (b) => {
-      const portal = b
-        .attr("id", cardId)
-        .popover("manual", shown)
+      const portal = layered(b.attr("id", cardId), topLayer, shown)
         .forward((node) =>
           node.attr("style", withStyle(node.elementAttrs.style, portalStyle))
         )

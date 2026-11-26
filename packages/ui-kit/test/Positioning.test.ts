@@ -321,7 +321,8 @@ describe("trackArgs", () => {
         offsetAsPadding: false,
         leaveCoordinates: false,
         inline: false,
-        inlineHit: null
+        inlineHit: null,
+        topLayer: true
       }
     )
     assert.isTrue(

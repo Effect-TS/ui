@@ -49,6 +49,10 @@
  * padding, a background and `overflow: auto`, so reset those on the
  * positioner and style the popup instead.
  *
+ * With `topLayer: false`, the positioner renders in place as an ordinary
+ * element, `hidden` while closed, and the tooltip is placed and clipped
+ * inside its containing block, as `Positioning` describes.
+ *
  * **CSS variables**
  *
  * Set on the positioner:
@@ -179,6 +183,7 @@ import {
 } from "./internal/attributes.ts"
 import { watchHoverArea } from "./internal/hoverArea.ts"
 import { onEscape } from "./internal/interaction.ts"
+import { layered } from "./internal/topLayer.ts"
 import * as Positioning from "./Positioning.ts"
 
 /**
@@ -264,6 +269,8 @@ export type TooltipAlign = typeof TooltipAlign.Type
  *   scrolls or the trigger moves or changes size.
  * - `anchor`: the id of an element to place the popup against instead of
  *   the trigger.
+ * - `topLayer`: `false` draws the positioner in place, out of the top
+ *   layer, as the module describes. `true` when left out.
  *
  * @stability experimental
  * @category schemas
@@ -883,18 +890,18 @@ export const Tooltip = Html.component({
           role: "presentation",
           "data-anchor-hidden": flag(shown && placement?.anchorHidden)
         })
-        .popover("manual", shown)
         .forward((node) =>
           node.attr("style", withStyle(node.elementAttrs.style, style))
         )
+      const layer = layered(decorated, tracked.topLayer !== false, shown)
       return shown
-        ? decorated
+        ? layer
           .on("mouseenter", TooltipMessage.EnteredPositioner())
           .on("mouseleave", TooltipMessage.LeftPositioner())
           .onMount(
             TrackTooltip({ position: tracked, trigger: triggerSelector })
           )
-        : decorated
+        : layer
     })
     const popup = p.part("div", (b) =>
       popupId === null

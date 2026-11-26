@@ -72,6 +72,11 @@
  * background and `overflow: auto`, so reset those on the positioner and
  * the backdrop and style the popup instead.
  *
+ * With `topLayer: false`, the backdrop and the positioner render in place
+ * as ordinary elements, `hidden` while closed, and the popup is placed and
+ * clipped inside its containing block, as `Positioning` describes. The
+ * backdrop covers that block, and the autocomplete is never modal.
+ *
  * **CSS variables**
  *
  * Set on the positioner:
@@ -426,7 +431,8 @@ export type AutocompleteMode = typeof AutocompleteMode.Type
  *   closes the popup. False when left out.
  * - `holdExit`: keeps the closing popup shown, for an exit animation the
  *   consumer ends by clearing it.
- * - the `Positioning.PositionerFields`, for the popup. `side` is
+ * - the `Positioning.PositionerFields`, for the popup, `topLayer: false`
+ *   among them to draw it in place, as the module describes. `side` is
  *   `"bottom"` when left out, and the anchor is the input group, or the
  *   input without one.
  *

@@ -114,6 +114,14 @@
  * `alignItemWithTrigger: false` to always place it next to the trigger,
  * where the `Positioning` props apply and it flips when it doesn't fit.
  *
+ * **In place**
+ *
+ * With `topLayer: false`, the backdrop and the positioner render in place
+ * as ordinary elements, `hidden` while closed, and the popup is placed and
+ * clipped inside its containing block, as `Positioning` describes. The
+ * backdrop covers that block, and the select is never modal or aligned with
+ * its trigger, whatever `modal` and `alignItemWithTrigger` say.
+ *
  * **Form**
  *
  * With `name`, `required` or `autoComplete`, the trigger is wrapped in
@@ -212,10 +220,11 @@ import {
   type Attributed,
   flag,
   idSelector,
+  ownStyle,
   separatorAttrs,
   withStyle
 } from "./internal/attributes.ts"
-import { backdropBox, blockers, cutPath } from "./internal/blocker.ts"
+import { backdropStyle, blockers, cutPath } from "./internal/blocker.ts"
 import { focusFinal, override } from "./internal/dom.ts"
 import {
   autofillMatch,
@@ -229,7 +238,7 @@ import { available, grouped, stepped, valued } from "./internal/list.ts"
 import { holdScroll } from "./internal/modal.ts"
 import { listenOutside, releasedOutside } from "./internal/outside.ts"
 import { clamp, fillValue } from "./internal/range.ts"
-import { raiseAbove } from "./internal/topLayer.ts"
+import { layered, raiseAbove } from "./internal/topLayer.ts"
 import {
   frameOf,
   settling,
@@ -385,6 +394,8 @@ export type SelectChangeReason = typeof SelectChangeReason.Type
  *   consumer ends by clearing it.
  * - the `Positioning.PositionerFields`, for the popup when it isn't
  *   aligned with the trigger. `side` is `"bottom"` when left out.
+ *   `topLayer: false` draws the backdrop and the positioner in place, as
+ *   the module describes.
  *
  * @stability experimental
  * @category schemas
@@ -547,8 +558,8 @@ const indexOf = (props: SelectProps, value: string | null): number =>
   value === null ? -1 : props.items.findIndex((item) => item.value === value)
 
 const alignedOf = (model: SelectModel, props: SelectProps): boolean =>
-  props.alignItemWithTrigger !== false && !model.fellBack &&
-  model.openMethod !== "touch"
+  props.alignItemWithTrigger !== false && props.topLayer !== false &&
+  !model.fellBack && model.openMethod !== "touch"
 
 const typing = (model: SelectModel): boolean => model.typed !== ""
 
@@ -1536,7 +1547,8 @@ export const Select = Html.component({
     const chosen = new Set(values)
     const filled = filledOf(props)
     const aligned = alignedOf(model, props)
-    const modal = props.modal !== false
+    const topLayer = props.topLayer !== false
+    const modal = topLayer && props.modal !== false
     const touch = model.openMethod === "touch"
     const triggerId = props.id ?? p.id("trigger")
     const labelId = p.id("label")
@@ -1675,45 +1687,40 @@ export const Select = Html.component({
       (b) => b.attrs({ "aria-hidden": "true", "data-popup-open": flag(open) })
     )
 
-    const backdrop = p.part("div", (b) =>
-      states(b)
-        .attr("role", "presentation")
-        .popover("manual", shown)
-        .forward((node) =>
-          node.attr(
-            "style",
-            withStyle(
-              node.elementAttrs.style,
-              open ? backdropBox : backdropBox + ";pointer-events:none"
-            )
-          )
-        ))
+    const backdrop = p.part(
+      "div",
+      (b) =>
+        layered(states(b).attr("role", "presentation"), topLayer, shown)
+          .forward(ownStyle(backdropStyle(topLayer, open)))
+    )
 
     const positionerStyle = aligned
       ? alignedBox
       : Positioning.positionerStyle(tracked.positionMethod)
     const positioner = p.part("div", (b) => {
-      const decorated = placed(b)
-        .attrs({
+      const decorated = layered(
+        placed(b).attrs({
           role: "presentation",
           "data-anchor-hidden": flag(
             shown && !aligned && model.placement?.anchorHidden
           )
-        })
-        .popover("manual", shown)
+        }),
+        topLayer,
+        shown
+      )
         .forward((node) =>
           node.attr(
             "style",
             withStyle(node.elementAttrs.style, positionerStyle)
           )
         )
-      const layered = modal
+      const blocked = modal
         ? decorated.children(open ? blocking.open : blocking.closed)
         : decorated
-      if (!shown) return layered
+      if (!shown) return blocked
       const alignItem = props.items.find((item) => chosen.has(item.value)) ??
         props.items[0]
-      return layered.onMount(
+      return blocked.onMount(
         TrackSelect({
           position,
           open,

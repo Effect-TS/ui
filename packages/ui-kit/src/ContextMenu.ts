@@ -147,7 +147,10 @@ import { Menu, type MenuEvents, MenuProps } from "./Menu.ts"
  *   popup's corner sits under the pointer. `arrowPadding` is 0
  *   and `positionMethod` `"fixed"` when left out. The popup slides along
  *   the pointer's side to stay inside the boundary, unless
- *   `collisionAvoidance.side` is `"flip"`.
+ *   `collisionAvoidance.side` is `"flip"`. With `topLayer: false`, the menu
+ *   is drawn in place, as for a `Menu`, and `positionMethod` is
+ *   `"absolute"` when left out, so the menu stays inside the area's
+ *   clipping ancestors.
  *
  * @stability experimental
  * @category schemas

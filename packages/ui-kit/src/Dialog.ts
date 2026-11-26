@@ -14,7 +14,7 @@
  * | Part           | Element                                              |
  * | :------------- | :--------------------------------------------------- |
  * | `trigger`      | `<button>` that opens the dialog                       |
- * | `portal`       | `<dialog>` in the top layer, around the parts below    |
+ * | `portal`       | `<dialog>` in the top layer, around the parts below  |
  * | `backdrop`     | `<div>` that covers the page                           |
  * | `viewport`     | `<div>` that positions the popup                       |
  * | `popup`        | `<div>` with the dialog's content                      |
@@ -35,6 +35,8 @@
  *
  * The portal is a `<dialog>` shown as a manual popover, in every mode, so it
  * sits in the top layer and needs no portal to another place in the document.
+ * With `topLayer: false` it stays in place instead, as **In place** below
+ * describes.
  * The kit resets its box inline to an empty one at the viewport's corner,
  * with nothing visible of its own, so style the backdrop, viewport and popup
  * as fixed-position layers:
@@ -123,6 +125,13 @@
  * with the keyboard does. `disablePointerDismissal` turns that off, and the
  * close on focus leaving with it.
  *
+ * In the modes other than `modal: true`, a press directly on the page that
+ * closes the dialog still reaches what it landed on, as in Base UI: a tap or
+ * a click on a button of the page closes the dialog and presses the button.
+ * With `modal: true`, or when a tap lands on the dialog's own backdrop or
+ * viewport, a finger closes the dialog as it touches and the tap's click is
+ * dropped, so it doesn't land on the page behind it.
+ *
  * The modal is the kit's, not the browser's: find-in-page and a script's
  * `focus()` still reach the page behind it. On Android, in a browser with
  * `CloseWatcher` such as Chrome, the back gesture asks the topmost open
@@ -130,6 +139,21 @@
  * often as back is used. Firefox on Android has no `CloseWatcher`, so back
  * doesn't reach the dialog there. On desktop and iOS, close requests other
  * than Escape don't reach it.
+ *
+ * **In place**
+ *
+ * With `topLayer: false`, the portal is a `<dialog open>` where the view
+ * draws it, like Base UI's portal given a `container`, so an ancestor's
+ * `overflow`, `position` and stacking context apply to it. Its box is reset
+ * to none of its own, so the backdrop, viewport and popup are positioned
+ * against the nearest positioned ancestor:
+ * `.card { position: relative; overflow: hidden }` with
+ * `.viewport { position: absolute; inset: 0 }` keeps the dialog inside the
+ * card. Popups in the top layer, such as the toasts, stay above it.
+ *
+ * A dialog in place is never modal, whatever `modal` says: no scroll lock,
+ * no `aria-hidden` and no layer over the viewport. It still asks to close
+ * on Escape, a press outside and focus leaving it.
  *
  * **Nesting**
  *
@@ -231,9 +255,19 @@ import {
   radioGroup
 } from "./internal/dom.ts"
 import { methodOf, onScrollbar } from "./internal/interaction.ts"
-import { hideOthers, lockScroll, nextLayerOrder } from "./internal/modal.ts"
+import {
+  hideOthers,
+  lockScroll,
+  modalOf,
+  nextLayerOrder
+} from "./internal/modal.ts"
 import { isAndroid } from "./internal/platform.ts"
-import { inKept, portalBox, raiseAbove } from "./internal/topLayer.ts"
+import {
+  inKept,
+  inPlaceBox,
+  portalBox,
+  raiseAbove
+} from "./internal/topLayer.ts"
 import {
   frameOf,
   settling,
@@ -321,6 +355,9 @@ export type DialogInteraction = typeof DialogInteraction.Type
  *   is `true`, for an exit animation that the consumer runs itself. Set it
  *   back to `false` once that animation ends, and the dialog closes and
  *   emits `Settled`.
+ * - `topLayer`: `false` draws the dialog in place instead of in the top
+ *   layer, and makes it non-modal, as the module's **In place** describes.
+ *   `true` when left out.
  *
  * @stability experimental
  * @category schemas
@@ -338,7 +375,8 @@ export const DialogProps = Schema.Struct({
   finalFocus: Schema.optional(Schema.Boolean),
   id: Schema.optional(Schema.String),
   openMethod: Schema.optional(Schema.NullOr(DialogInteraction)),
-  holdExit: Schema.optional(Schema.Boolean)
+  holdExit: Schema.optional(Schema.Boolean),
+  topLayer: Schema.optional(Schema.Boolean)
 })
 
 /**
@@ -838,8 +876,10 @@ const TrackDialog = Mount.makeStream(
       let ignored: Node | null = null
       const listens = (): boolean =>
         current.open && current.dismissible && topmost()
-      // A touch dismisses on pointerdown, so the dialog has left the top
-      // layer before the tap's click, which would land on the page below.
+      // A touch dismisses on pointerdown, so the dialog's layer, backdrop or
+      // viewport has left or stopped taking events before the tap's click,
+      // which would land on the page behind it. When the tap landed directly
+      // on the page, its click goes through, as a mouse's does.
       const swallowClick = (press: PointerEvent) => {
         const done = new AbortController()
         const options = { capture: true, signal: done.signal }
@@ -883,7 +923,9 @@ const TrackDialog = Mount.makeStream(
           event.pointerType === "touch" ||
           (current.modal === "trap-focus" && !hasBackdrop())
         ) {
-          if (event.pointerType === "touch") swallowClick(event)
+          if (event.pointerType === "touch" && node.contains(target)) {
+            swallowClick(event)
+          }
           dismissing = event.pointerId
           send(DialogMessage.PressedOutside({ pointerType: event.pointerType }))
         } else {
@@ -1270,10 +1312,11 @@ export const DialogTrigger = <Msg, R = never>(
  * it passes in, including the ones a state leaves absent: on the trigger
  * `type`, `aria-haspopup`, `aria-expanded`, `aria-controls`, `data-popup-open`,
  * and `data-dialog-trigger`, which the dialog tells its triggers by; on the
- * portal `id`, `popover`, `open` and `aria-modal`; `role` on the backdrop and
- * the viewport; the data attributes on the backdrop (including
- * `data-dialog-backdrop`), viewport and popup; `id`, `tabindex` and `inert` on
- * the popup; `type` on the close part; `autofocus` on `initialFocus`; and
+ * portal `id`, `popover`, `open` and `aria-modal` (`open` alone with
+ * `topLayer: false`); `role` on the backdrop and the viewport; the data
+ * attributes on the backdrop (including `data-dialog-backdrop`), viewport and
+ * popup; `id`, `tabindex` and `inert` on the popup; `type` on the close
+ * part; `autofocus` on `initialFocus`; and
  * `data-final-focus`, which the dialog finds the element by, on `finalFocus`.
  * The title and description keep an `id` the consumer gives them, and get a
  * generated one otherwise. The portal's `aria-labelledby` and `aria-describedby`
@@ -1358,7 +1401,7 @@ export const Dialog = Html.component({
         ? dismiss($, "close-watcher", null)
         : $.model,
     FocusedOutside: ($) =>
-      $.props.open && topmost($.model) && $.props.modal === false &&
+      $.props.open && topmost($.model) && modalOf($.props) === false &&
         $.props.disablePointerDismissal !== true
         ? dismiss($, "focus-out", null)
         : $.model,
@@ -1381,7 +1424,8 @@ export const Dialog = Html.component({
   },
   parts: (p, model) => {
     const props = p.props
-    const modal = props.modal ?? true
+    const topLayer = props.topLayer !== false
+    const modal = modalOf(props)
     const open = props.open
     const shown = open || model.mounted
     const transitionStatus: DialogTransitionStatus = statusOf(model, props)
@@ -1438,16 +1482,22 @@ export const Dialog = Html.component({
     )
 
     const portalPart = p.part("dialog", (b) => {
-      const dialog = b
+      const identified = b
         .attr("id", portalId)
         .attr("aria-modal", modal === false ? "false" : undefined)
-        .open(false)
-        // Shown once TrackDialog has started, so it sees what had focus before the browser moves it in.
-        .popover("manual", model.mounted)
+      // Shown once TrackDialog has started, so it sees what had focus before the browser moves it in.
+      // In place, set `open` directly: `.open()` calls `dialog.show()`, which ignores `initialFocus: false`.
+      const placed = topLayer
+        ? identified.open(false).popover("manual", model.mounted)
+        : identified.attr("open", flag(model.mounted))
+      const dialog = placed
         .forward((node) =>
           node
             .attrs({
-              style: withStyle(node.elementAttrs.style, portalBox),
+              style: withStyle(
+                node.elementAttrs.style,
+                topLayer ? portalBox : inPlaceBox
+              ),
               "aria-labelledby": withTokens(
                 node.elementAttrs["aria-labelledby"],
                 titleId

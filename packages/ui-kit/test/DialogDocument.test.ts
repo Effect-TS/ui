@@ -56,9 +56,11 @@ const Config = Schema.Struct({
   toast: Schema.Boolean,
   nested: Schema.Boolean,
   viewport: Schema.Boolean,
+  backdrop: Schema.Boolean,
   finalMark: Schema.Boolean,
   initialFocus: Schema.optional(Schema.Boolean),
-  skips: Schema.Boolean
+  skips: Schema.Boolean,
+  topLayer: Schema.optional(Schema.Boolean)
 })
 type Config = typeof Config.Type
 
@@ -75,6 +77,7 @@ const config = (overrides: Partial<Config>): Config => ({
   toast: false,
   nested: false,
   viewport: false,
+  backdrop: false,
   finalMark: false,
   skips: false,
   ...overrides
@@ -191,7 +194,8 @@ const Page = Html.component({
               triggerId: model.triggerId,
               finalFocus: props.finalFocus,
               initialFocus: props.initialFocus,
-              openMethod: props.openMethod ?? model.method
+              openMethod: props.openMethod ?? model.method,
+              topLayer: props.topLayer
             },
             onEmit: on("a"),
             view: (dialog) => {
@@ -275,6 +279,9 @@ const Page = Html.component({
                   String(dialog.closeMethod)
                 ),
                 dialog.portal(h.dialog)?.children(
+                  props.backdrop
+                    ? dialog.backdrop(h.div.attr("id", "backdrop"))
+                    : null,
                   props.viewport
                     ? dialog.viewport(h.div.attr("id", "viewport")).children(
                       popup
@@ -835,7 +842,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.strictEqual(app.querySelector(".popup-a"), popup)
     }))
 
-  it.effect("a touch outside dismisses on its press, and its click doesn't reach the page", () =>
+  it.effect("a touch outside dismisses on its press, and its click reaches the page unless the dialog is modal", () =>
     Effect.gen(function*() {
       for (const modal of [true, false] as const) {
         yield* Effect.scoped(Effect.gen(function*() {
@@ -844,7 +851,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
           let clicks = 0
           page.addEventListener("click", () => clicks++)
           press(
-            modal ? layerOf(document.querySelector("dialog")!) : page,
+            modal === true ? layerOf(document.querySelector("dialog")!) : page,
             "touch"
           )
           yield* tick
@@ -864,11 +871,88 @@ describe("Dialog in a document", { concurrent: false }, () => {
               pointerType: "touch"
             })
           )
-          assert.strictEqual(clicks, 0, String(modal))
+          const tapped = modal === true ? 0 : 1
+          assert.strictEqual(clicks, tapped, String(modal))
           click(page)
-          assert.strictEqual(clicks, 1, String(modal))
+          assert.strictEqual(clicks, tapped + 1, String(modal))
         }))
       }
+    }))
+
+  it.effect("a touch on a non-modal dialog's backdrop drops its click", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage({ modal: false, backdrop: true })
+      const page = byId("page")
+      let clicks = 0
+      page.addEventListener("click", () => clicks++)
+      press(byId("backdrop"), "touch")
+      yield* tick
+      assert.deepStrictEqual(dismissals(log()), [
+        "RequestedClose a outside-press"
+      ])
+      page.dispatchEvent(
+        new PointerEvent("pointerup", { bubbles: true, pointerType: "touch" })
+      )
+      page.dispatchEvent(
+        new PointerEvent("click", {
+          bubbles: true,
+          detail: 1,
+          pointerType: "touch"
+        })
+      )
+      assert.strictEqual(clicks, 0)
+    }))
+
+  it.effect("drawn in place, it isn't modal and opens without moving focus or scroll", () =>
+    Effect.gen(function*() {
+      // Fake the browser's `show()` focusing and scrolling steps, which happy-dom
+      // skips and which would ignore `initialFocus: false`.
+      const proto = window.HTMLDialogElement.prototype
+      const show = proto.show
+      const scroll = Object.getOwnPropertyDescriptor(window, "scrollY")
+      let scrollY = 240
+      Object.defineProperty(window, "scrollY", {
+        configurable: true,
+        get: () => scrollY
+      })
+      proto.show = function(this: HTMLDialogElement) {
+        show.call(this)
+        scrollY = 0
+        this.querySelector<HTMLElement>("input,button,[tabindex]")?.focus()
+      }
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          proto.show = show
+          if (scroll !== undefined) {
+            Object.defineProperty(window, "scrollY", scroll)
+          } else delete (window as { scrollY?: unknown }).scrollY
+        })
+      )
+      const { app, log, send } = yield* mountPage({
+        a: false,
+        modal: true,
+        topLayer: false,
+        initialFocus: false
+      })
+      const page = byId("page")
+      page.focus()
+      send(Message.RequestedOpen({ which: "a", triggerId: null, method: null }))
+      yield* tick
+      const dialog = app.querySelector("dialog")!
+      assert.isTrue(dialog.open)
+      assert.isFalse(dialog.hasAttribute("popover"))
+      assert.strictEqual(document.activeElement, page)
+      assert.strictEqual(window.scrollY, 240)
+      assert.isNull(page.closest("[aria-hidden]"))
+      assert.strictEqual(document.body.style.overflowY, "")
+      let clicks = 0
+      page.addEventListener("click", () => clicks++)
+      click(page, "touch")
+      yield* tick
+      assert.deepStrictEqual(dismissals(log()), [
+        "RequestedClose a outside-press"
+      ])
+      assert.strictEqual(clicks, 1)
     }))
 
   it.effect("a close before the first frame still exits and settles", () =>

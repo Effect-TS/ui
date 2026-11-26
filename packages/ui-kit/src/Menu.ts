@@ -60,6 +60,15 @@
  * background and `overflow: auto`, so reset those on the positioner and
  * the backdrop and style the popup instead.
  *
+ * **In place**
+ *
+ * With `topLayer: false`, the backdrop and the positioner render in place
+ * as ordinary elements, `hidden` while closed, and the popup is placed and
+ * clipped inside its containing block, as `Positioning` describes. The
+ * backdrop covers that block, and the menu is never modal, whatever `modal`
+ * or a `Menubar` says. A submenu takes `topLayer` from its parent unless
+ * it sets its own.
+ *
  * **CSS variables**
  *
  * Set on the positioner, so the popup inherits them: `--anchor-width`,
@@ -272,7 +281,7 @@ import {
   withStyle,
   withTokens
 } from "./internal/attributes.ts"
-import { backdropBox, blockers, cutPath } from "./internal/blocker.ts"
+import { backdropStyle, blockers, cutPath } from "./internal/blocker.ts"
 import { isRtl, provided, rightToLeft } from "./internal/direction.ts"
 import { focusFinal, override } from "./internal/dom.ts"
 import { type TextFilter, textFilter } from "./internal/filter.ts"
@@ -300,7 +309,7 @@ import {
   inSafeArea,
   type Point
 } from "./internal/safeArea.ts"
-import { raiseAbove } from "./internal/topLayer.ts"
+import { layered, raiseAbove } from "./internal/topLayer.ts"
 import {
   frameOf,
   settling,
@@ -541,7 +550,8 @@ export type MenuFilterMode = typeof MenuFilterMode.Type
  *   highlights it while the query isn't empty, `"always"` also when it is.
  *   False when left out.
  * - the `Positioning.PositionerFields`. `side` is `"bottom"` when left out,
- *   and `"inline-end"` with `align` `"start"` in a submenu.
+ *   and `"inline-end"` with `align` `"start"` in a submenu. `topLayer:
+ *   false` draws the menu in place, as the module describes.
  *
  * @stability experimental
  * @category schemas
@@ -676,6 +686,7 @@ const ParentState = Schema.Struct({
   rtl: Schema.Boolean,
   orientation: Orientation,
   disabled: Schema.Boolean,
+  topLayer: Schema.Boolean,
   disabledItems: Schema.Array(Schema.String)
 })
 
@@ -802,6 +813,7 @@ const MenuModel = Schema.Struct({
   pressedItem: Schema.Boolean,
   // The trigger's CSS `direction` is right-to-left.
   rtl: Schema.Boolean,
+  parentTopLayer: Schema.Boolean,
   submenus: Schema.Array(Submenu),
   instant: Schema.NullOr(Instant),
   transitioning: Schema.Boolean,
@@ -1351,7 +1363,9 @@ const contextPlacement = (
     sideOffset: props.sideOffset ?? (offset ? -5 : undefined),
     alignOffset: props.alignOffset ?? (offset ? 2 : undefined),
     arrowPadding: props.arrowPadding ?? 0,
-    positionMethod: props.positionMethod ?? "fixed"
+    // In place, an absolute positioner is clipped by the ancestors it opens in.
+    positionMethod: props.positionMethod ??
+      (props.topLayer === false ? "absolute" : "fixed")
   }
 }
 
@@ -1362,6 +1376,7 @@ const shares = (model: MenuModel, props: MenuProps): ParentState => ({
   rtl: model.provided ?? model.rtl,
   orientation: props.orientation ?? "vertical",
   disabled: props.disabled === true,
+  topLayer: props.topLayer ?? model.parentTopLayer,
   disabledItems: props.items.filter((item) => item.disabled === true).map((
     item
   ) => item.value)
@@ -2641,6 +2656,7 @@ export const Menu = Html.component({
     releaseAllowed: false,
     pressedItem: false,
     rtl: false,
+    parentTopLayer: true,
     submenus: [],
     instant: null,
     transitioning: false,
@@ -2848,7 +2864,10 @@ export const Menu = Html.component({
     ChangedProvider: ($, { rtl }) => $.evolve({ provided: rtl }),
     ChangedParent: ($, { parent }) => {
       if ($.props.parentItem === undefined) return $.model
-      const next = UiStruct.evolve($.model, { rtl: parent.rtl })
+      const next = UiStruct.evolve($.model, {
+        rtl: parent.rtl,
+        parentTopLayer: parent.topLayer
+      })
       if (!$.props.open) return next
       if (!parent.open) return dismiss(next, $, parent.reason ?? "none", null)
       if (parent.active !== null && parent.active !== $.props.parentItem) {
@@ -2974,7 +2993,8 @@ export const Menu = Html.component({
     const openMethod = props.openMethod ?? model.openMethod
     const hovered = hoverOpened(openReason, p)
     const context = !nested && model.context
-    const modal = !nested &&
+    const topLayer = props.topLayer ?? (nested ? parent.topLayer : true)
+    const modal = !nested && topLayer &&
       (context ||
         (bar === undefined ? props.modal !== false && !hovered : bar.modal))
     const popupId = props.id ?? p.id("popup")
@@ -2990,11 +3010,14 @@ export const Menu = Html.component({
     const empty = filtering && (props.query ?? "").trim() !== "" &&
       visible.size === 0
     const tracked = Positioning.trackArgs(
-      nested || bar !== undefined
-        ? { ...props, align: props.align ?? "start" }
-        : context
-        ? contextPlacement(props, model.point)
-        : props,
+      {
+        ...(nested || bar !== undefined
+          ? { ...props, align: props.align ?? "start" }
+          : context
+          ? contextPlacement(props, model.point)
+          : props),
+        topLayer
+      },
       {
         side: nested || bar?.orientation === "vertical"
           ? "inline-end"
@@ -3276,30 +3299,24 @@ export const Menu = Html.component({
         : builder
 
     const backdrop = p.part("div", (b) =>
-      withoutNativeMenu(states(b))
-        .attr("role", "presentation")
-        .popover("manual", shown && !nested)
-        .forward((node) =>
-          node.attr(
-            "style",
-            withStyle(
-              node.elementAttrs.style,
-              open && !hovered
-                ? backdropBox
-                : backdropBox + ";pointer-events:none"
-            )
-          )
-        ))
+      layered(
+        withoutNativeMenu(states(b)).attr("role", "presentation"),
+        topLayer,
+        shown && !nested
+      )
+        .forward(ownStyle(backdropStyle(topLayer, open && !hovered))))
 
     const positionerStyle = Positioning.positionerStyle(tracked.positionMethod)
     const positioner = p.part("div", (b) => {
-      const decorated = placed(b)
-        .attrs({
+      const decorated = layered(
+        placed(b).attrs({
           role: "presentation",
           "data-anchor-hidden": flag(shown && model.placement?.anchorHidden),
           "data-instant": instant
-        })
-        .popover("manual", shown)
+        }),
+        topLayer,
+        shown
+      )
         // Until its first frames, the positioner can be painted before the mount has placed it, and under a
         // still pointer it would take the hover from the trigger it covers.
         .forward((node) =>
@@ -3314,9 +3331,9 @@ export const Menu = Html.component({
           )
         )
       // The layer stays inert until the mount has cut the trigger out of it, as a frame can be painted in between.
-      const layered = modal ? decorated.children(blocker.closed) : decorated
-      if (!shown) return layered
-      return layered.onMount(
+      const blocked = modal ? decorated.children(blocker.closed) : decorated
+      if (!shown) return blocked
+      return blocked.onMount(
         TrackMenu({
           position: tracked,
           open,

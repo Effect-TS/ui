@@ -18,7 +18,10 @@ const Page = Html.component({
   update: { RequestedClose: () => ({ open: false }) },
   view: (h, model) =>
     AlertDialog(h, {
-      props: { open: model.open },
+      props: {
+        ...({ topLayer: false } as object),
+        open: model.open
+      },
       onEmit: {
         RequestedOpen: () => undefined,
         RequestedClose: () => Message.RequestedClose(),

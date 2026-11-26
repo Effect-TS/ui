@@ -15,11 +15,12 @@ import {
   type Attributed,
   attrSelector,
   flag,
+  ownStyle,
   separatorAttrs,
   visuallyHidden,
   withStyle
 } from "./attributes.ts"
-import { backdropBox, blockers, cutPath } from "./blocker.ts"
+import { backdropStyle, blockers, cutPath } from "./blocker.ts"
 import {
   type Directed,
   isRtl,
@@ -42,7 +43,7 @@ import { available, grouped, type Loop, stepped, valued } from "./list.ts"
 import { hideOthers, holdScroll, nextLayerOrder } from "./modal.ts"
 import { listenOutside, releasedOutside } from "./outside.ts"
 import { fillValue } from "./range.ts"
-import { raiseAbove } from "./topLayer.ts"
+import { layered, raiseAbove } from "./topLayer.ts"
 import {
   frameOf,
   settling,
@@ -1388,7 +1389,8 @@ export const make = <P, E>(
     const required = props.required === true
     const multiple = props.multiple === true
     const grid = props.grid === true
-    const modal = props.modal === true
+    const topLayer = props.topLayer !== false
+    const modal = topLayer && props.modal === true
     const values = valuesOf(props)
     const chosen = new Set(values)
     const selectable = selectableOf(props)
@@ -1783,30 +1785,25 @@ export const make = <P, E>(
       ) => chipRemovePart(element, value)
     )
 
-    const backdrop = p.part("div", (b) =>
-      states(b)
-        .attr("role", "presentation")
-        .popover("manual", shown)
-        .forward((node) =>
-          node.attr(
-            "style",
-            withStyle(
-              node.elementAttrs.style,
-              open ? backdropBox : backdropBox + ";pointer-events:none"
-            )
-          )
-        ))
+    const backdrop = p.part(
+      "div",
+      (b) =>
+        layered(states(b).attr("role", "presentation"), topLayer, shown)
+          .forward(ownStyle(backdropStyle(topLayer, open)))
+    )
 
     const positionerStyle = Positioning.positionerStyle(tracked.positionMethod)
     const positioner = p.part("div", (b) => {
-      const decorated = placed(b)
-        .attrs({
+      const decorated = layered(
+        placed(b).attrs({
           role: "presentation",
           "data-combobox-positioner": owner,
           "data-anchor-hidden": flag(shown && model.placement?.anchorHidden),
           "data-empty": flag(listEmpty)
-        })
-        .popover("manual", shown)
+        }),
+        topLayer,
+        shown
+      )
         .forward((node) => {
           const styled = node.attr(
             "style",
@@ -1826,11 +1823,11 @@ export const make = <P, E>(
             )
             : styled
         })
-      const layered = modal
+      const blocked = modal
         ? decorated.children(open ? blocking.open : blocking.closed)
         : decorated
-      if (!shown) return layered
-      return layered.onMount(
+      if (!shown) return blocked
+      return blocked.onMount(
         TrackCombobox({
           position: tracked,
           open,
@@ -1839,7 +1836,7 @@ export const make = <P, E>(
           holdExit: props.holdExit === true,
           inputInPopup: inPopup,
           modal,
-          hide: dismissable,
+          hide: dismissable && topLayer,
           touch: model.openMethod === "touch",
           pressing: model.pressing,
           finalFocus: props.finalFocus !== false,

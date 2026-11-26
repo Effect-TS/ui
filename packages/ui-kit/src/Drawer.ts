@@ -200,6 +200,7 @@ import {
   trackKeyboard,
   TrackKeyboardArgs
 } from "./internal/drawerKeyboard.ts"
+import { modalOf } from "./internal/modal.ts"
 import { clamp } from "./internal/range.ts"
 
 /**
@@ -252,8 +253,12 @@ export type DrawerSnapPoint = typeof DrawerSnapPoint.Type
  * **Details**
  *
  * - `open`, `modal`, `disablePointerDismissal`, `triggerId`, `keepMounted`,
- *   `forceRenderBackdrop`, `initialFocus`, `finalFocus`, `id`, `openMethod`
- *   and `holdExit`: as for a `Dialog`.
+ *   `forceRenderBackdrop`, `initialFocus`, `finalFocus`, `id`, `openMethod`,
+ *   `holdExit` and `topLayer`: as for a `Dialog`. With `topLayer: false` and
+ *   `modal: false`, the drawer slides in from an edge of the element its
+ *   viewport fills, such as a card with `position: relative` and
+ *   `overflow: hidden`, and a fractional snap point is a fraction of that
+ *   viewport's height.
  * - `swipeDirection`: the direction a swipe dismisses the drawer in,
  *   `"down"` by default.
  * - `snapPoints`: the heights the drawer can rest at, from the lowest to the
@@ -2067,7 +2072,7 @@ export const Drawer = Html.component({
         ? b.onMount(
           TrackDrawerKeyboard({
             open,
-            modal: props.modal ?? true,
+            modal: modalOf(props),
             popupId: drawerId
           })
         )

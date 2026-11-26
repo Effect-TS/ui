@@ -62,7 +62,17 @@
  * - `left` and `top` are measured from the viewport, plus the page's scroll
  *   for `"absolute"`. So the positioner has to be positioned against the
  *   viewport, as a popover or a modal dialog in the top layer is. Inside a
- *   transformed or positioned ancestor it lands in the wrong place.
+ *   transformed or positioned ancestor it lands in the wrong place, unless
+ *   `topLayer` is `false`.
+ * - With `topLayer: false`, the positioner is an ordinary element where the
+ *   view draws it, and `left` and `top` are measured from its containing
+ *   block: the nearest positioned or transformed ancestor for
+ *   `"absolute"`, the nearest transformed one or else the viewport for
+ *   `"fixed"`. Draw it without `popover`, so an ancestor's `overflow`,
+ *   `position` and stacking context apply to it, as to any other element.
+ *   `"clipping-ancestors"` is then the area its ancestors' `overflow` leaves
+ *   visible, inside the viewport, so the popup flips and shifts to stay in
+ *   a small scrolling box.
  * - Collisions use the visual viewport (the visible area under pinch-zoom or
  *   a software keyboard), not the layout viewport.
  * - The positioner has to be laid out while the mount runs, so issue the
@@ -355,6 +365,9 @@ export type PositionMethod = typeof PositionMethod.Type
  *   scrolls or the anchor moves or changes size.
  * - `anchor`: the id of an element, or a `Rect` in the viewport, to place
  *   the popup against instead of the component's own anchor.
+ * - `topLayer`: `false` draws the positioner in place, as the module's
+ *   **Gotchas** describe. `true` when left out. The component's JSDoc says
+ *   what else changes.
  *
  * @stability experimental
  * @category schemas
@@ -372,7 +385,8 @@ export const PositionerFields = {
   arrowPadding: Schema.optional(Schema.Number),
   positionMethod: Schema.optional(PositionMethod),
   disableAnchorTracking: Schema.optional(Schema.Boolean),
-  anchor: Schema.optional(Schema.Union([Schema.String, Rect]))
+  anchor: Schema.optional(Schema.Union([Schema.String, Rect])),
+  topLayer: Schema.optional(Schema.Boolean)
 }
 
 /**
@@ -1150,6 +1164,8 @@ export type Placement = typeof Placement.Type
  *   `"left"` and `"right"`. An anchor on one line is measured as a whole.
  *   False when left out.
  * - `inlineHit`: where the pointer rested on the anchor, for `inline`.
+ * - `topLayer`: `false` for a positioner drawn in place, as the module's
+ *   **Gotchas** describe. `true` when left out.
  *
  * @stability experimental
  * @category schemas
@@ -1166,7 +1182,8 @@ export const TrackPositionArgs = Schema.Struct({
   offsetAsPadding: Schema.Boolean,
   leaveCoordinates: Schema.optional(Schema.Boolean),
   inline: Schema.optional(Schema.Boolean),
-  inlineHit: Schema.optional(Schema.NullOr(InlineHit))
+  inlineHit: Schema.optional(Schema.NullOr(InlineHit)),
+  topLayer: Schema.optional(Schema.Boolean)
 })
 
 /**
@@ -1203,6 +1220,8 @@ const arrowY = "--ui-kit-arrow-y"
  *   when left out. `inlineHit` is dropped while `props.anchor` gives
  *   another anchor, an element or a rectangle, since the pointer rested on
  *   the popup's own.
+ *
+ * `topLayer` comes from the props, true when left out.
  *
  * The result is plain data, so a view can also read the defaults from it:
  * `args.options.side` is the side to render before the mount first reports.
@@ -1242,7 +1261,8 @@ export const trackArgs = (
   offsetAsPadding: popup.offsetAsPadding === true,
   leaveCoordinates: popup.leaveCoordinates === true,
   inline: popup.inline === true,
-  inlineHit: props.anchor === undefined ? popup.inlineHit ?? null : null
+  inlineHit: props.anchor === undefined ? popup.inlineHit ?? null : null,
+  topLayer: props.topLayer !== false
 })
 
 /**
@@ -1368,10 +1388,10 @@ const inTopLayer = (element: Element): boolean =>
     }
   })
 
-const clipOf = (element: Element, viewport: Rect): Rect => {
+const clippersOf = (element: Element): Array<Element> => {
   const view = element.ownerDocument.defaultView!
   const root = element.ownerDocument.documentElement
-  let clip = viewport
+  const clippers: Array<Element> = []
   let position = view.getComputedStyle(element).position
   for (
     let current = inTopLayer(element) ? null : element.parentElement;
@@ -1385,13 +1405,81 @@ const clipOf = (element: Element, viewport: Rect): Rect => {
         clipping.test(style.overflow + style.overflowX + style.overflowY) ||
         paintContained(style)
       ) {
-        clip = intersect(clip, innerRect(current))
+        clippers.push(current)
       }
       position = style.position
     }
     if (inTopLayer(current)) break
   }
+  return clippers
+}
+
+const clipOf = (element: Element, viewport: Rect): Rect => {
+  let clip = viewport
+  for (const clipper of clippersOf(element)) {
+    clip = intersect(clip, innerRect(clipper))
+  }
   return clip
+}
+
+interface Origin {
+  readonly x: number
+  readonly y: number
+  readonly scale: { readonly x: number; readonly y: number }
+}
+
+const toLocal = (rect: Rect, origin: Origin): Rect => ({
+  x: (rect.x - origin.x) / origin.scale.x,
+  y: (rect.y - origin.y) / origin.scale.y,
+  width: rect.width / origin.scale.x,
+  height: rect.height / origin.scale.y
+})
+
+// Where the top layer puts `left: 0; top: 0`, and a positioner in place
+// without a containing block of its own. Fixed positioning uses layout
+// coordinates, but WebKit's client rects are relative to the visual viewport.
+const pageOrigin = (
+  view: Window,
+  position: string,
+  webkit: boolean
+): Origin => {
+  if (position !== "fixed") {
+    return { x: -view.scrollX, y: -view.scrollY, scale: { x: 1, y: 1 } }
+  }
+  const visual = webkit ? view.visualViewport : null
+  return {
+    x: -(visual?.offsetLeft ?? 0),
+    y: -(visual?.offsetTop ?? 0),
+    scale: { x: 1, y: 1 }
+  }
+}
+
+// The viewport point that `left: 0; top: 0` puts a positioner at, and the
+// scale of the box it is measured in: the padding box of its containing
+// block, less that block's scroll.
+const originOf = (
+  element: Element,
+  position: string,
+  webkit: boolean
+): Origin => {
+  const document = element.ownerDocument
+  const view = document.defaultView!
+  for (
+    let current = element.parentElement;
+    current !== null && current !== document.documentElement;
+    current = current.parentElement
+  ) {
+    const style = view.getComputedStyle(current)
+    if (style.display === "contents" || !contains(style, position)) continue
+    const rect = current.getBoundingClientRect()
+    const scale = scaleOf(current, rect)
+    return {
+      x: rect.left + (current.clientLeft - current.scrollLeft) * scale.x,
+      y: rect.top + (current.clientTop - current.scrollTop) * scale.y,
+      scale
+    }
+  }
+  return pageOrigin(view, position, webkit)
 }
 
 const sameRect = (a: Rect, b: Rect): boolean =>
@@ -1510,7 +1598,9 @@ export const trackPosition = (
 
     const boundaryOf = (viewport: Rect): Rect => {
       const boundary = current.collisionBoundary
-      if (boundary === "clipping-ancestors") return viewport
+      if (boundary === "clipping-ancestors") {
+        return current.topLayer === false ? clipOf(node, viewport) : viewport
+      }
       if ("id" in boundary) {
         const element = document.getElementById(boundary.id)
         return element === null
@@ -1566,51 +1656,52 @@ export const trackPosition = (
       const viewport = viewportOf()
       const rtl = view.getComputedStyle(node).direction === "rtl"
       const lines = anchor === null ? null : inlineLines(anchor)
+      const origin = current.topLayer === false
+        ? originOf(node, current.positionMethod, webkit)
+        : pageOrigin(view, current.positionMethod, webkit)
       const input = {
         popup,
         arrow: arrow === null
           ? null
           : { width: arrow.offsetWidth, height: arrow.offsetHeight },
-        boundary: boundaryOf(viewport),
-        anchorClip: anchor === null ? viewport : clipOf(anchor, viewport),
+        boundary: toLocal(boundaryOf(viewport), origin),
+        anchorClip: toLocal(
+          anchor === null ? viewport : clipOf(anchor, viewport),
+          origin
+        ),
         rtl,
         options: current.options
       }
       const requested = physicalSide(current.options.side, rtl)
-      let anchorRect = virtual ??
+      let rawAnchor = virtual ??
         (anchor === null
           ? zero
           : lines === null
           ? clientRect(anchor)
           : lineRect(lines, requested))
+      let anchorRect = toLocal(rawAnchor, origin)
       let placed = place({ ...input, anchor: anchorRect })
       const flipped = physicalSide(placed.side, rtl)
       if (lines !== null && flipped !== requested) {
-        anchorRect = lineRect(lines, flipped)
+        rawAnchor = lineRect(lines, flipped)
+        anchorRect = toLocal(rawAnchor, origin)
         placed = place({ ...input, anchor: anchorRect })
       }
       const side = physicalSide(placed.side, rtl)
       const bridge = current.offsetAsPadding
         ? Math.max(0, current.options.sideOffset)
         : 0
-      const scrolled = current.positionMethod === "absolute"
-      // Fixed positioning uses layout coordinates; add back WebKit's visual offset.
-      const visual = webkit ? view.visualViewport : null
-      const offsetX = scrolled ? view.scrollX : visual?.offsetLeft ?? 0
-      const offsetY = scrolled ? view.scrollY : visual?.offsetTop ?? 0
       const dpr = view.devicePixelRatio || 1
       const snap = (start: number, length: number) =>
         (Math.round((start + length) * dpr) - Math.round(start * dpr)) / dpr
       const next = new Map<string, string>([
         [
           "left",
-          (placed.x + offsetX -
-            (side === "right" ? bridge : 0)) + "px"
+          (placed.x - (side === "right" ? bridge : 0)) + "px"
         ],
         [
           "top",
-          (placed.y + offsetY -
-            (side === "bottom" ? bridge : 0)) + "px"
+          (placed.y - (side === "bottom" ? bridge : 0)) + "px"
         ],
         ["--anchor-width", snap(anchorRect.x, anchorRect.width) + "px"],
         ["--anchor-height", snap(anchorRect.y, anchorRect.height) + "px"],
@@ -1637,7 +1728,7 @@ export const trackPosition = (
         side: placed.side,
         align: placed.align,
         anchorHidden: placed.anchorHidden ||
-          (virtual === null && sameRect(anchorRect, zero)),
+          (virtual === null && sameRect(rawAnchor, zero)),
         arrowUncentered: placed.arrow?.uncentered ?? false
       }
       if (reported === null || !sameReport(reported, report)) {
@@ -1679,8 +1770,8 @@ export const trackPosition = (
       const watch = () => sizes?.observe(node, { box: "border-box" })
       const sizes = typeof view.ResizeObserver === "function"
         ? new view.ResizeObserver((entries) => {
-          if (entries[0]?.target === anchor) {
-            // A size the update gives the popup after the anchor resized would be reported as a loop.
+          if (entries.some((entry) => entry.target !== node)) {
+            // A size the update gives the popup after an observed element resized would be reported as a loop.
             sizes?.unobserve(node)
             view.cancelAnimationFrame(frame)
             frame = view.requestAnimationFrame(watch)
@@ -1689,6 +1780,15 @@ export const trackPosition = (
         })
         : null
       if (anchor !== null) sizes?.observe(anchor)
+      const boundary = current.collisionBoundary
+      if (boundary === "clipping-ancestors") {
+        if (current.topLayer === false) {
+          for (const clipper of clippersOf(node)) sizes?.observe(clipper)
+        }
+      } else if ("id" in boundary) {
+        const element = document.getElementById(boundary.id)
+        if (element !== null) sizes?.observe(element)
+      }
       watch()
       const moves = anchor === null ? () => {} : observeMove(anchor, update)
       return () => {

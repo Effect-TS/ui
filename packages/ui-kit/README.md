@@ -19,6 +19,8 @@ Checkbox(h, {
 })
 ```
 
+Every popup renders in the browser's top layer by default. `Dialog`, `Drawer`, `Popover`, `Tooltip`, `PreviewCard`, `Menu` (and so `Menubar` and `ContextMenu`), `Select`, `Combobox`, `Autocomplete` and `ToastProvider` take `topLayer: false` to render in place instead, like Base UI's portal given a `container`: placed and clipped inside the element the view draws it in, and never modal.
+
 A component that doesn't need an instance, such as `Switch`, is a plain view function instead: it takes no `key`, and an `on<Event>` option in place of `onEmit`. Keeping no state isn't enough on its own: `Progress` needs an instance for the id its bar points at, and `DirectionProvider` for sharing the direction with the components inside it.
 
 ## Components
@@ -33,7 +35,7 @@ A component that doesn't need an instance, such as `Switch`, is a plain view fun
 - [Collapsible](src/Collapsible.ts): a panel (any element) that a button shows and hides, whose open state lives in your Model. It publishes the panel's size as CSS variables for height and width transitions, supports `keepMounted: "css"` for CSS-controlled visibility below a breakpoint, and with `hiddenUntilFound` the browser's find-in-page can open it.
 - [Combobox](src/Combobox.ts): an input that filters a list of options as the user types, whose open state, value and text live in your Model, with single or multiple selection, chips, an input inside the popup, grids, inline lists and inputs for a form.
 - [ContextMenu](src/ContextMenu.ts): a `Menu` that opens at the pointer on a right click, or after a long press on a touch screen, over an area of the page, with submenus and the browser's own menu kept away.
-- [Dialog](src/Dialog.ts): a popup in the top layer whose open state lives in your Model, as a modal, a focus trap or a non-modal panel, with `DialogTrigger` to open it from another component.
+- [Dialog](src/Dialog.ts): a popup in the top layer whose open state lives in your Model, as a modal, a focus trap or a non-modal panel, with `DialogTrigger` to open it from another component. With `topLayer: false` it renders in place instead, as a non-modal panel inside the element the view puts it in.
 - [DirectionProvider](src/DirectionProvider.ts): tells the components inside it whether text runs left to right or right to left, so their arrow keys follow it.
 - [Drawer](src/Drawer.ts): a `Dialog` that slides in from an edge of the screen. A swipe toward that edge dismisses it once it travels far enough or is released fast enough. It has snap points, drawers nested in one another, and swipe areas that open it.
 - [DrawerProvider](src/Drawer.ts): scales the page behind the drawers inside it while one is open, as a native sheet does.
