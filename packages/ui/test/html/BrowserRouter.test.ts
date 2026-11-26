@@ -356,7 +356,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
     )
   })
 
-  it.effect("exempts roots hydrated from a static render when only the search differs ", () => {
+  it.effect("exempts roots hydrated from a static render when only the search differs", () => {
     const problems: Array<Query.Problem.Any> = []
     const search = SearchRoute.Search({ search: {} })
     const mismatches = () =>
