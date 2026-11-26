@@ -211,17 +211,15 @@ export const target = (
   key: string,
   options: TargetOptions
 ): number | undefined => {
-  const { last } = options
+  const { at, last, loop } = options
   const { next, previous } = arrowKeys(
     options.orientation ?? "vertical",
-    options.rtl ?? false
+    options.rtl
   )
   if (key === "Home") return last < 0 ? -1 : 0
   if (key === "End") return last < 0 ? -1 : last
-  if (key === next) return step(options.at, last, 1, options.loop ?? "wrap")
-  if (key === previous) {
-    return step(options.at, last, -1, options.loop ?? "wrap")
-  }
+  if (key === next) return step(at, last, 1, loop)
+  if (key === previous) return step(at, last, -1, loop)
   return undefined
 }
 

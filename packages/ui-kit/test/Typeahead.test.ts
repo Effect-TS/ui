@@ -89,7 +89,7 @@ describe("Typeahead", () => {
       assert.strictEqual(def.mode, "switch")
 
       const fiber = yield* Effect.forkChild(Typeahead.WaitReset.make().effect)
-      yield* TestClock.adjust(`${Typeahead.defaultDelay - 1} millis`)
+      yield* TestClock.adjust("749 millis")
       assert.isUndefined(fiber.pollUnsafe())
       yield* TestClock.adjust("1 millis")
       assert.strictEqual(def.resolve(yield* Fiber.join(fiber)), "reset")

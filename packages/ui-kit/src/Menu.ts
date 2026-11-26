@@ -1120,8 +1120,7 @@ const navigate = (model: MenuModel, $: MenuUpdate, key: string) => {
     rtl: rtlOf($, model.rtl),
     loop: props.loopFocus !== false ? "wrap" : "none"
   })
-  if (index === undefined) return undefined
-  const item = items[index]
+  const item = items[index ?? -1]
   return item === undefined
     ? $.set(model)
     : commit(
@@ -1198,9 +1197,10 @@ const pressKey = (
   const props = $.props
   if (!props.open) return $.set(model)
   const parent = parentOf($)
-  const moved = navigate(model, $, key)
-  if (moved !== undefined) return moved
   const nav = keys(props.orientation ?? "vertical", rtlOf($, model.rtl))
+  if (
+    key === nav.next || key === nav.previous || key === "Home" || key === "End"
+  ) return navigate(model, $, key)
   if (key === "Escape") {
     return props.closeParentOnEsc === true && parent !== undefined
       ? closeTree(model, $, "escape-key", "keyboard")
@@ -2899,11 +2899,11 @@ export const Menu = Html.component({
           props.orientation === "horizontal" && hasValue &&
           $.model.active === null
         ) return next
-        return navigate(next, $, key) ?? next
+        return navigate(next, $, key)
       }
       if (key === "Home" || key === "End") {
         return $.model.active !== null && !hasValue
-          ? navigate(next, $, key) ?? next
+          ? navigate(next, $, key)
           : next
       }
       if (key === "Escape") return pressKey(next, $, key, null)

@@ -45,15 +45,7 @@ import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import { available } from "./ListNavigation.ts"
 
-/**
- * The default pause, in milliseconds, before `WaitReset` and `waitReset`
- * clear the typeahead buffer.
- *
- * @stability experimental
- * @category constants
- * @since 0.1.0
- */
-export const defaultDelay = 750
+const defaultDelay = 750
 
 /**
  * An item `step` can match: a `label` to match against, and an optional
@@ -170,11 +162,13 @@ export const step = (
 ): Step => {
   let typed = state.typed
   let typedFrom = typed === "" ? from : state.typedFrom
-  const cycles = items.every((item) =>
-    !available(item) ||
-    item.label[0]?.toLowerCase() !== item.label[1]?.toLowerCase()
-  )
-  if (cycles && typed.toLowerCase() === key.toLowerCase()) {
+  if (
+    typed.toLowerCase() === key.toLowerCase() &&
+    items.every((item) =>
+      !available(item) ||
+      item.label[0]?.toLowerCase() !== item.label[1]?.toLowerCase()
+    )
+  ) {
     typed = ""
     typedFrom = state.matched
   }
@@ -236,7 +230,7 @@ export const isPrintable = (event: KeyEvent): boolean =>
  *
  * **Details**
  *
- * Waits `delay` milliseconds (`defaultDelay`, 750 ms, when omitted). Each new
+ * Waits `delay` milliseconds (750 ms when omitted). Each new
  * run interrupts the previous one in the same component instance, so the timer
  * restarts on every key press.
  *
@@ -254,7 +248,7 @@ export const WaitReset: Command.Factory<
 )
 
 /**
- * Waits `delay` milliseconds (`defaultDelay`, 750 ms, when omitted) before
+ * Waits `delay` milliseconds (750 ms when omitted) before
  * sending `onComplete`'s message, restarting the timer whenever issued again.
  *
  * @stability experimental
