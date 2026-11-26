@@ -1268,6 +1268,18 @@ export const make: {
  * @since 0.1.0
  */
 export const Service: <Self>() => {
+  <const Key extends string>(
+    key: Key,
+    options?: undefined
+  ): Service<
+    Self,
+    Key,
+    ArgsOf<{}>,
+    Component.NoopSchema,
+    false,
+    Schema.Never,
+    never
+  >
   <
     const Key extends string,
     const In extends ArgsInput = {},
@@ -1276,7 +1288,7 @@ export const Service: <Self>() => {
     const G extends GroupField<In> = never
   >(
     key: Key,
-    options?:
+    options:
       & Service.Options<In, Success, Error, G>
       & NoInfer<ServiceGiven<In, Success, Error>>
       & {

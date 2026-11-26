@@ -74,12 +74,12 @@ import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import type * as Types from "effect/Types"
 import { runCodec } from "./internal/codecRun.ts"
+import type { Given } from "./internal/given.ts"
 import * as componentQueries from "./internal/queries.ts"
 import * as queryCore from "./internal/queryCore.ts"
 import { addListener, NonJsonLeaf } from "./internal/queryCore.ts"
 import * as queryRun from "./internal/queryRun.ts"
 import { holdsRedacted, redactAST } from "./internal/schemaRedact.ts"
-import type { Given } from "./internal/given.ts"
 
 /**
  * Identifies a query: a class made by `Service`.

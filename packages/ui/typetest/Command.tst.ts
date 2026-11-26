@@ -203,6 +203,10 @@ describe("Command", () => {
     it("rejects an option that may be absent, since the runtime would use its default", () => {
       const opts: { success?: typeof Schema.String } = {}
       expect(Command.Service<"T">()).type.not.toBeCallableWith("T", opts)
+      const maybe = undefined as { success: typeof Schema.String } | undefined
+      expect(Command.Service<"T">()).type.not.toBeCallableWith("T", maybe)
+      expect(Command.Service<"T">()<"T", {}, typeof Schema.String>).type.not
+        .toBeCallableWith("T")
       const args: { args?: { id: typeof Schema.String } } = {}
       expect(Command.make).type.not.toBeCallableWith(
         "Fx",
