@@ -286,26 +286,19 @@ const ownersBelow = (
   model: unknown,
   props: unknown
 ): Owners => {
-  const shares = component.definition.shares
-  return shares === undefined
+  const definition = component.definition
+  return definition.shares === undefined
     ? owners
     : new Map(owners).set(
-      component.definition,
-      shares(model, props, readsIn(component.definition, given, owners))
+      definition,
+      sharedReads.ownerValue(
+        definition,
+        model,
+        props,
+        sharedLookup(given, owners)
+      )
     )
 }
-
-// What an owner's `shares` reads: the owners above it, as its parts read them.
-const readsIn = (
-  definition: Component.Definition.Any,
-  given: Owners | undefined,
-  owners: Owners
-): never =>
-  sharedReads.values(
-    definition.name,
-    sharedReads.readsOf(definition),
-    sharedLookup(given, owners)
-  ) as never
 
 /**
  * What the story's component itself reads: only given values, as nothing is above it. A component that
@@ -367,10 +360,11 @@ const sharedDefault = (owner: Component.Headless.Any): unknown => {
       `Scene: the scene reads the shared state of ${name}, whose props aren't all optional, so it has no default. Give it with .shared(${name}, value)`
     )
   }
-  return owner.definition.shares!(
+  return sharedReads.ownerValue(
+    owner.definition,
     owner.init(props).model,
     props,
-    readsIn(owner.definition, undefined, noOwners)
+    rootShared(undefined)
   )
 }
 

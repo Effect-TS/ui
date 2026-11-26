@@ -3,7 +3,7 @@ import type * as Component from "../Component.ts"
 import * as View from "../View.ts"
 import { sharedEqual } from "./equal.ts"
 import * as Kernel from "./kernel.ts"
-import { readsOf, values } from "./shared.ts"
+import { ownerValue, readsOf } from "./shared.ts"
 
 type Inst = Kernel.Instance
 
@@ -240,12 +240,7 @@ const refresh = (inst: Inst, seq: number | undefined | void): boolean => {
   const owning = inst.owning as Owning
   let value: unknown
   try {
-    const definition = definitionOf(inst)
-    value = definition.shares!(
-      inst.model,
-      inst.props,
-      values(definition.name, readsOf(definition), inst.look) as never
-    )
+    value = ownerValue(definitionOf(inst), inst.model, inst.props, inst.look)
   } catch (error) {
     fail(inst, "shares", error)
     return false

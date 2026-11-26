@@ -2235,9 +2235,6 @@ const Proto = Object.assign(Object.create(Function.prototype), {
       sharedRun.sync(inst as never, next as never, seq as never)
     }
   },
-  "~render"(inst: unknown) {
-    sharedRun.rendered(inst as never)
-  },
   "~first"(this: Any, inst: unknown) {
     if (sharing(this)) sharedRun.first(inst as never)
     if (this["~queries"] !== undefined) {
@@ -2252,11 +2249,6 @@ const Proto = Object.assign(Object.create(Function.prototype), {
 const sharing = ({ definition }: Any): boolean =>
   definition.shares !== undefined || definition.reads !== undefined
 
-const renderProvided = (inst: unknown): void => {
-  layerRun.reselect(inst as never)
-  sharedRun.rendered(inst as never)
-}
-
 const HeadlessProto = Object.assign(Object.create(Function.prototype), {
   [HeadlessTypeId]: {
     _Props: (_: never) => _,
@@ -2270,7 +2262,8 @@ const HeadlessProto = Object.assign(Object.create(Function.prototype), {
   },
   pipe: Proto.pipe,
   "~sync": Proto["~sync"],
-  "~render": Proto["~render"],
+  // Only a headless component shares state.
+  "~render": sharedRun.rendered,
   "~first": Proto["~first"],
   "~kept": keeper,
   "~owned": owned,
@@ -2386,6 +2379,13 @@ type SharesReads<SR, SO, SA> = {
       Shared.Value<SO[K]> | undefined
     : Shared.Value<SO[K]>
 }
+
+// The `value` of `shares`.
+type SharesValue<Model, Props, SR, SO, SA, SV> = (
+  model: Model,
+  props: Props,
+  reads: SharesReads<SR, SO, SA>
+) => SV
 
 // An owner listed in `reads` is a headless component with `shares`, or the component itself. `make` checks
 // that one which reads itself shares: `SV` here would be fixed before `shares` is inferred.
@@ -3086,18 +3086,10 @@ export interface DefineOptions<
    * around it is. To read its own kind there, give `schema` or annotate what `value` returns.
    */
   readonly shares?:
-    | ((
-      model: Model,
-      props: Props,
-      reads: SharesReads<SR, SO, SA>
-    ) => SV)
+    | SharesValue<Model, Props, SR, SO, SA, SV>
     | {
       /** What the readers below read, from the owner's Model, props and reads. */
-      readonly value: (
-        model: Model,
-        props: Props,
-        reads: SharesReads<SR, SO, SA>
-      ) => SV
+      readonly value: SharesValue<Model, Props, SR, SO, SA, SV>
       /** The Schema of the value. */
       readonly schema?: Schema.Codec<SV, any> | undefined
       /**
@@ -3107,11 +3099,7 @@ export interface DefineOptions<
       readonly receives?: ReadonlyArray<Tags> | undefined
     }
     | {
-      readonly value: (
-        model: Model,
-        props: Props,
-        reads: SharesReads<SR, SO, SA>
-      ) => SV
+      readonly value: SharesValue<Model, Props, SR, SO, SA, SV>
       readonly schema?: Schema.Codec<SV, any> | undefined
       readonly receives?: ReadonlyArray<Tags> | undefined
       /** What the owner collects from the readers below it. */
@@ -4410,7 +4398,7 @@ export const provide: {
       // Nested provides are built as one Layer, so one opt-out keeps all of them off the server.
       layerOnServer: component.layerOnServer && options?.server !== false,
       boot: layerRun.boot,
-      "~render": layerKeys === undefined ? Proto["~render"] : renderProvided
+      "~render": layerKeys === undefined ? undefined : layerRun.reselect
     })
   }
   // A component is an object with the type id; a Layer, an array, a function or a keyed selection means the curried form.
