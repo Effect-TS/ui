@@ -650,6 +650,47 @@ describe("Router", { concurrent: false }, () => {
     })
   })
 
+  it.effect("leaves a restore: false query result out of the entry, and back reads it from the cache or fetches it", () => {
+    const { history, layer } = setup("/cards/1")
+    const card = "Person 1Person 2count 1"
+    return Effect.gen(function*() {
+      personFetches.count = 0
+      yield* run(
+        layer,
+        Effect.gen(function*() {
+          const root = yield* mount
+          yield* TestHost.settle
+          click(root, "count 0")
+          yield* TestHost.settle
+          click(root, "Home")
+          yield* TestHost.settle
+          history.go(-1)
+          assert.notInclude(JSON.stringify(history.current().state), "Person 1")
+          yield* TestHost.settle
+          // The warm cache serves both, with no fetch.
+          assert.include(root.text(), card)
+          assert.strictEqual(personFetches.count, 2)
+          click(root, "Home")
+          yield* TestHost.settle
+        })
+      ).pipe(Effect.scoped)
+      yield* run(
+        Router.make({ routes: AppRoute, history }),
+        Effect.gen(function*() {
+          const root = yield* mount
+          yield* TestHost.settle
+          history.go(-1)
+          yield* TestHost.settle
+          // After a reload, only the opted-out result is fetched.
+          assert.deepStrictEqual(root.frames().slice(1), [
+            "HomePerson 1Person 2SlowBackBlockUnblockLoadingPerson 2count 1",
+            "HomePerson 1Person 2SlowBackBlockUnblock" + card
+          ])
+        })
+      ).pipe(Effect.scoped)
+    })
+  })
+
   it.effect("keeps the snapshot in memory and reports SnapshotWriteFailed when history.state rejects it", () => {
     const inner = Router.memoryHistory("/people/1")
     const history: Router.History = {

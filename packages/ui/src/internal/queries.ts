@@ -41,6 +41,7 @@ export interface Entry {
   /** From `debounce`: how many milliseconds a fetch for changed args waits. */
   readonly debounce: number | undefined
   readonly onChange: ((...args: Array<any>) => unknown) | undefined
+  readonly restore: false | undefined
 }
 
 /**
@@ -255,10 +256,8 @@ const parse = (component: string, queries: unknown): ReadonlyArray<Entry> => {
     if (typeof entry !== "object" || entry === null) {
       throw fail("must be { query, args } or { queryMany, args }.")
     }
-    const { args, debounce, query, queryMany, onChange } = entry as Record<
-      string,
-      unknown
-    >
+    const { args, debounce, query, queryMany, onChange, restore } =
+      entry as Record<string, unknown>
     if ((query === undefined) === (queryMany === undefined)) {
       throw fail("must have exactly one of query and queryMany.")
     }
@@ -273,6 +272,9 @@ const parse = (component: string, queries: unknown): ReadonlyArray<Entry> => {
     if (typeof args !== "function") throw fail("must have an args function.")
     if (onChange !== undefined && typeof onChange !== "function") {
       throw fail("has an onChange that isn't a function.")
+    }
+    if (restore !== undefined && restore !== false) {
+      throw fail("has a restore that isn't false.")
     }
     const list = queryModule().defOf(definition).list !== undefined
     if (queryMany !== undefined && list) {
@@ -289,7 +291,8 @@ const parse = (component: string, queries: unknown): ReadonlyArray<Entry> => {
       debounce: debounce === undefined
         ? undefined
         : Duration.toMillis(debounce as Duration.Input),
-      onChange: onChange as Entry["onChange"]
+      onChange: onChange as Entry["onChange"],
+      restore
     }
   })
 }
@@ -346,6 +349,8 @@ export interface Bound {
   readonly byName: ReadonlyMap<string, Entry>
   /** Every result empty: an instance's results before a query writes one. */
   readonly empty: Results
+  /** The empty result of each `restore: false` entry, for history to save. */
+  readonly unsaved: Results | undefined
   /** The Schema of the results for page state and history: a field per query, by name. */
   readonly schema: ResultsSchema
   /**
@@ -392,6 +397,7 @@ export const bind = (
   if (entries.length === 0) return undefined
   const byName = new Map(entries.map((entry) => [entry.name, entry]))
   const empty: Record<string, unknown> = {}
+  let unsaved: Record<string, unknown> | undefined
   const fields: Record<string, Schema.Top> = {}
   const logFields: Record<string, Schema.Top> = {}
   for (const entry of entries) {
@@ -405,6 +411,9 @@ export const bind = (
     logFields[entry.name] = entry.keyed
       ? queryModule().snapshotMapSchema(entry.query, entry.name, true)
       : queryModule().snapshotSchema(entry.query, entry.name, true)
+    if (entry.restore === false) {
+      ;(unsaved ??= {})[entry.name] = empty[entry.name]
+    }
   }
   Object.freeze(empty)
   const stateKey = Symbol()
@@ -582,6 +591,7 @@ export const bind = (
     entries,
     byName,
     empty,
+    unsaved,
     schema: Schema.Struct(fields) as unknown as ResultsSchema,
     logSchema: Schema.Struct(logFields) as unknown as ResultsSchema,
     context: (model, props, results = empty) => {

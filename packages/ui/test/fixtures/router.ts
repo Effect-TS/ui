@@ -1,8 +1,8 @@
 /**
  * A two-page app on the Router: a root that holds the route, a home page, a
  * person page that reads its name through a query, counts its visits (a
- * Command) and counts clicks, and a slow page whose provided Layer takes a
- * second to build.
+ * Command) and counts clicks, a card page with a query result history
+ * doesn't save, and a slow page whose provided Layer takes a second to build.
  */
 import {
   Command,
@@ -21,6 +21,7 @@ export const AppRoute = Route.union(
   {
     Home: Route.make("/"),
     Person: Route.make("/people/:id", { params: { id: Schema.Number } }),
+    Card: Route.make("/cards/:id", { params: { id: Schema.Number } }),
     Slow: Route.make("/slow"),
     NotFound: Route.make("/*")
   },
@@ -107,6 +108,9 @@ export const CountVisit = Command.make(
   () => Effect.succeed(PersonMessage.Visited())
 )
 
+const nameOf = (result: AsyncResult.AsyncResult<string, string>) =>
+  AsyncResult.isSuccess(result) ? result.value : "Loading"
+
 export const Person = Html.component({
   name: "Person",
   props: Schema.Struct({ id: Schema.Number }),
@@ -121,10 +125,7 @@ export const Person = Html.component({
     person: {
       query: GetPerson,
       args: ({ props }) => ({ id: props.id }),
-      onChange: (result) =>
-        PersonMessage.Loaded({
-          name: AsyncResult.isSuccess(result) ? result.value : "Loading"
-        })
+      onChange: (result) => PersonMessage.Loaded({ name: nameOf(result) })
     }
   }
 }).make({
@@ -162,6 +163,41 @@ export const Person = Html.component({
       h.el("button").on("click", PersonMessage.Rename()).children("Rename")
     )
 }).pipe(Component.provide(Layer.merge(GetPerson.layer, RenamePerson.layer)))
+
+/** A person, whose result history doesn't save, their friend, and a click count. */
+export const Card = Html.component({
+  name: "Card",
+  props: Schema.Struct({ id: Schema.Number }),
+  model: Schema.Struct({ count: Schema.Number }),
+  message: PersonMessage,
+  queries: {
+    person: {
+      query: GetPerson,
+      args: ({ props }) => ({ id: props.id }),
+      restore: false
+    },
+    friends: {
+      queryMany: GetPerson,
+      args: ({ props }) => [{ id: props.id + 1 }]
+    }
+  }
+}).make({
+  init: () => ({ count: 0 }),
+  update: ($, message) =>
+    message._tag === "Bump" ? { count: $.model.count + 1 } : $.model,
+  view: (h, model) =>
+    h.el(
+      "div",
+      h.el("h1", nameOf(h.queries.person)),
+      h.el(
+        "p",
+        h.queries.friends.map((friend) => nameOf(friend.result)).join()
+      ),
+      h.el("button").on("click", PersonMessage.Bump()).children(
+        `count ${model.count}`
+      )
+    )
+}).pipe(Component.provide(GetPerson.layer))
 
 export class SlowData
   extends Context.Service<SlowData, { readonly text: string }>()(
@@ -257,6 +293,11 @@ export const App = Html.component({
         Home: (route) => Home(h, { key: AppRoute.print(route), props: {} }),
         Person: (route) =>
           Person(h, {
+            key: AppRoute.print(route),
+            props: { id: route.params.id }
+          }),
+        Card: (route) =>
+          Card(h, {
             key: AppRoute.print(route),
             props: { id: route.params.id }
           }),

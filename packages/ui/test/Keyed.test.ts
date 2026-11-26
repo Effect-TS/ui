@@ -1021,6 +1021,10 @@ describe("Keyed results", () => {
       () => make({ queryMany: app.GetUser, args: () => [], onChange: 1 }),
       /Bad: queries.users has an onChange that isn't a function/
     )
+    assert.throws(
+      () => make({ queryMany: app.GetUser, args: () => [], restore: true }),
+      /Bad: queries.users has a restore that isn't false/
+    )
   })
 
   it.effect("fails the instance when its queryMany query's args don't return an array", () => {

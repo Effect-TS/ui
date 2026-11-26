@@ -3043,6 +3043,8 @@ export interface DefineOptions<
             >
           ) => ArgsFor<S[K], M[K & keyof M]>
           readonly debounce?: Duration.Input | undefined
+          /** `false` keeps the result out of history. */
+          readonly restore?: false | undefined
           readonly onChange?:
             | OnChange<S[K], M[K & keyof M], NoInfer<Msg>>
             | undefined
@@ -3146,7 +3148,8 @@ export interface DefineOptions<
    *
    * Leave out what depends on a Command an `update` started, such as a timer or a request, and
    * what only the DOM knew, such as hover, focus or a measurement: restore replays `init`'s
-   * Commands only. Hydration doesn't read it: the server sends the whole Model.
+   * Commands only. Hydration doesn't read it: the server sends the whole Model. To leave out
+   * one query's result, give its `queries` entry `restore: false`.
    */
   readonly restore?:
     | false
@@ -3304,6 +3307,11 @@ export interface Define<V extends View.Elements> {
  * result as `h.queries` opens it, and a `queryMany` query's gets its entries
  * and the keys whose result changed. The result is written first, and the
  * message's `update` sees it in `$.queries`.
+ *
+ * An entry's `restore: false` keeps its result out of history, for a large
+ * result such as a table. On Back the query reads the cache or fetches, as on
+ * a fresh mount, so its `onChange` runs again. Server page state still holds
+ * the result, and so can history if the user leaves before hydration decodes it.
  *
  * `head` returns the instance's head entries, typed by the component's
  * vocabulary: `Head.title`, `Head.titleTemplate` and `Head.reduce` on any
