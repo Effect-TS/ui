@@ -114,9 +114,9 @@ const serve = Effect.fnUntraced(
 )
 
 const open = Effect.fnUntraced(
-  function*(url: string, capture: Capture, size?: number) {
+  function*(url: string, capture: Capture) {
     localStorage.clear()
-    const services = yield* Layer.build(DevTools.layer({ server: url, size }))
+    const services = yield* Layer.build(DevTools.layer({ server: url }))
     const app = yield* play(capture).pipe(Effect.provide(services))
     yield* wait(150)
     return app
@@ -364,17 +364,16 @@ describe("DevToolsServer", { concurrent: false }, () => {
         const page = yield* Layer.build(
           MessageLog.socket(
             DevToolsServer.url({ port }).replace("http", "ws") + "/log",
-            {
-              buffer: 1
-            }
+            { buffer: 1 }
           ).pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))
         )
         const log = Context.get(page, MessageLog.MessageLog)
+        const def = Query.defOf(GetNote)
         const note = (id: string) =>
           Query.makeSnapshot(
-            Query.defOf(GetNote),
+            def,
             "note",
-            { args: { id }, argsKey: Query.defOf(GetNote).argsKey({ id }) },
+            { args: { id }, argsKey: def.argsKey({ id }) },
             AsyncResult.success("Note " + id, { timestamp: 0 })
           )
         const base = (seq: number) => ({
