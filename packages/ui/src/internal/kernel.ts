@@ -53,6 +53,9 @@ export interface Host<N = any> {
   readonly parentOf: (node: N) => N
   readonly nextOf: (node: N) => N | null
   readonly commit?: (() => void) | undefined
+  readonly unmounting?:
+    | ((container: N, nodes: ReadonlyArray<N>) => void)
+    | undefined
   readonly controlled?: ReadonlySet<string> | undefined
   readonly runsMounts?: boolean | undefined
   readonly head?: ((head: unknown) => void) | undefined

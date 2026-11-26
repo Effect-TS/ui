@@ -5401,35 +5401,6 @@ describe("Runtime", () => {
       provideHost
     ))
 
-  it.effect("Renderer.mount closes every instance before it removes the root nodes", () =>
-    provideHost(Effect.gen(function*() {
-      const testHost = yield* TestHost.TestHost
-      const container = testHost.host.createElement(
-        "#app"
-      ) as TestHost.TestElement
-      let childrenAtRelease = -1
-      const App = Component.provide(
-        Component.define({
-          name: "App",
-          model: Schema.Number,
-          message: Schema.Never
-        }).make({
-          init: () => 0,
-          update: ($) => $.model,
-          view: (h) => h.el("div", "still here")
-        }),
-        Layer.effectDiscard(Effect.addFinalizer(() =>
-          Effect.sync(() => {
-            childrenAtRelease = container.children.length
-          })
-        ))
-      )
-      yield* Effect.scoped(Renderer.mount(App, {}, container))
-      yield* TestHost.settle
-      assert.strictEqual(childrenAtRelease, 1)
-      assert.strictEqual(container.children.length, 0)
-    })))
-
   // A paragraph whose Layer runs `release` when the mount closes.
   const line = (text: string, release: Effect.Effect<void>) =>
     Component.provide(
@@ -5445,19 +5416,35 @@ describe("Runtime", () => {
       Layer.effectDiscard(Effect.addFinalizer(() => release))
     )
 
+  it.effect("Renderer.mount closes every instance before it removes the root nodes", () =>
+    provideHost(Effect.gen(function*() {
+      const testHost = yield* TestHost.TestHost
+      const container = testHost.host.createElement(
+        "#app"
+      ) as TestHost.TestElement
+      let childrenAtRelease = -1
+      const App = line(
+        "still here",
+        Effect.sync(() => {
+          childrenAtRelease = container.children.length
+        })
+      )
+      yield* Effect.scoped(Renderer.mount(App, {}, container))
+      yield* TestHost.settle
+      assert.strictEqual(childrenAtRelease, 1)
+      assert.strictEqual(container.children.length, 0)
+    })))
+
   it.effect("Renderer.mount passes the host its attached nodes before it tears down, leaving a mount sharing the container alone", () => {
     const events: Array<string> = []
     const base = TestHost.makeHost()
     const container = base.createElement("#app") as TestHost.TestElement
+    base.onCommit(() => events.push("commit"))
     const host: Renderer.Host<TestHost.TestNode> = {
       ...base,
       remove(node) {
         events.push(`remove ${Locator.textOf(node)}`)
         base.remove(node)
-      },
-      commit() {
-        events.push("commit")
-        base.commit?.()
       },
       unmounting(into, nodes) {
         events.push(
@@ -5520,13 +5507,10 @@ describe("Runtime", () => {
       yield* TestHost.settle
       const commits = base.commits()
       const closed = yield* Effect.exit(Scope.close(scope, Exit.void))
-      const defect = Exit.isFailure(closed) && Cause.hasDies(closed.cause)
-        ? Cause.squash(closed.cause)
-        : closed
-      assert.deepStrictEqual(
-        [container.children.length, base.commits() > commits, released, defect],
-        [0, true, true, error]
-      )
+      assert.deepStrictEqual(closed, Exit.die(error))
+      assert.strictEqual(container.children.length, 0)
+      assert.isAbove(base.commits(), commits)
+      assert.isTrue(released)
     }).pipe(Effect.provide(Renderer.layer(host)), provideHost)
   })
 

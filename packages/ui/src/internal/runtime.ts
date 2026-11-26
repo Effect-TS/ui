@@ -192,7 +192,10 @@ const bridge = (
     : undefined,
   transitions: host.viewTransition === undefined
     ? undefined
-    : transitionRun.make(host.viewTransition)
+    : transitionRun.make(host.viewTransition),
+  unmounting: host.unmounting === undefined
+    ? undefined
+    : (container, nodes) => host.unmounting!(container, nodes)
 })
 
 const reportTo =
@@ -372,7 +375,6 @@ interface HostInput {
   ) => {
     readonly base: Kernel.Host
     readonly dom: (Kernel.Host & { readonly dispose: () => void }) | undefined
-    readonly unmounting?: ((nodes: ReadonlyArray<unknown>) => void) | undefined
   }
 }
 
@@ -385,13 +387,7 @@ const fromRenderer = (ctx: Context.Context<any>): HostInput => {
         head: ownsHead,
         step
       })
-      return dom !== undefined ? { base: dom, dom } : {
-        base: bridge(host, step, ownsHead),
-        dom,
-        unmounting: host.unmounting === undefined
-          ? undefined
-          : (nodes) => host.unmounting!(container, nodes)
-      }
+      return { base: dom ?? bridge(host, step, ownsHead), dom }
     }
   }
 }
@@ -585,11 +581,7 @@ const start = (
     return count
   }
   const ownsHead = options?.head !== false
-  const { base, dom, unmounting } = hostInput.make(
-    container,
-    ownsHead,
-    recording.step
-  )
+  const { base, dom } = hostInput.make(container, ownsHead, recording.step)
   const deferred = new Set<Kernel.Instance>()
   let hydrating: hydrateRun.Session | undefined
   const routing: routeRun.Routed | undefined = hooks?.kernel?.(hooks, {
@@ -805,7 +797,7 @@ const start = (
       // A throwing hook still lets the mount close and clean up, then dies.
       let failed: Effect.Effect<void> = Effect.void
       try {
-        unmounting?.(Kernel.nodesOf(instance.rendered!, []))
+        base.unmounting?.(container, Kernel.nodesOf(instance.rendered!, []))
       } catch (error) {
         failed = Effect.die(error)
       }
