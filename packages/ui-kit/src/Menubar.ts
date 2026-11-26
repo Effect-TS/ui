@@ -334,7 +334,7 @@ export const Menubar = Html.component({
   message: MenubarMessage,
   shares: {
     // A menu applies the `DirectionProvider` it reads on top of `rtl`.
-    value: (model, props) => ({
+    value: ({ model, props }) => ({
       ...stateOf(model, props),
       rtl: model.rtl,
       current: model.current,

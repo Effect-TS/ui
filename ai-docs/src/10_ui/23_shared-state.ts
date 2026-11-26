@@ -41,7 +41,7 @@ export const TooltipProvider = Html.component({
   // `receives` lists what `$.send(TooltipProvider, message)` takes. They are
   // facts, named like any other message.
   shares: {
-    value: (model) => ({ open: model.open }),
+    value: ({ model }) => ({ open: model.open }),
     receives: ["FocusedTooltip", "BlurredTooltip"]
   },
 
@@ -141,7 +141,7 @@ export const Toolbar = Html.component({
 // A scene of a reader, with no owner mounted
 // ---------------------------------------------------------------------------
 
-// The reader sees the provider's default, `shares(init(props).model, props)`,
+// The reader sees the provider's default, `shares({ model: init(props).model, props, reads })`,
 // until `shared` gives it a value. Sends to the owner are in `sent` until a
 // `sent` step acknowledges them, and the scene never runs the owner's `update`.
 // A test runs this with `it.effect`, which provides the scope `Scene.make` needs.
@@ -182,7 +182,7 @@ export const PanelGroup = Html.component({
   message: PanelGroupMessage,
 
   shares: {
-    value: (model) => ({ anyOpen: model.anyOpen }),
+    value: ({ model }) => ({ anyOpen: model.anyOpen }),
     schema: Schema.Struct({ anyOpen: Schema.Boolean }),
     collects: {
       schema: Schema.Boolean,
@@ -309,7 +309,7 @@ export const Menu = Html.component({
   events: MenuEvents,
 
   shares: {
-    value: (_, props) => ({ open: props.open }),
+    value: ({ props }) => ({ open: props.open }),
     receives: ["PickedItem"],
     collects: {
       schema: Schema.Number,
@@ -376,7 +376,7 @@ export const nestedMenu = Effect.gen(function*() {
 // An owner that derives what it shares from the owner above it
 // ---------------------------------------------------------------------------
 
-// `shares` gets the component's reads as its third argument, so a nested
+// `shares` takes `{ model, props, reads }`, so a nested
 // lock is locked while the one around it is, and a reader reads only the
 // nearest lock. A value that reads its own kind would refer to its own type,
 // so it needs a `schema` or an annotated return.
@@ -386,7 +386,7 @@ export const Lock = Html.component({
   model: Schema.Null,
   message: Schema.Never,
   shares: {
-    value: (_, props, reads) => ({
+    value: ({ props, reads }) => ({
       locked: props.locked === true || reads.parent?.locked === true
     }),
     schema: Schema.Struct({ locked: Schema.Boolean })

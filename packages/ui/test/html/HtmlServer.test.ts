@@ -255,7 +255,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         model: Schema.Number,
         message: message as typeof Plain,
         shares: {
-          value: (count) => count,
+          value: ({ model: count }) => count,
           collects: {
             schema: Schema.Boolean,
             onChange: (collected) =>
@@ -1941,7 +1941,7 @@ describe("HtmlServer", { concurrent: false }, () => {
           model: Schema.Number,
           message: Changed,
           shares: {
-            value: (count) => count,
+            value: ({ model: count }) => count,
             collects: {
               schema: Schema.Boolean,
               onChange: (collected) =>

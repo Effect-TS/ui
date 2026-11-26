@@ -130,7 +130,7 @@ export const DirectionProvider = Html.component({
   model: Schema.Struct({}),
   message: Schema.Never,
   shares: {
-    value: (_model, props) => ({ direction: props.direction ?? "ltr" }),
+    value: ({ props }) => ({ direction: props.direction ?? "ltr" }),
     schema: Schema.Struct({ direction: DirectionProviderDirection })
   }
 }).make({

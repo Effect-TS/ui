@@ -16,7 +16,7 @@ export const CodeGroup = Html.component({
   model: Schema.Struct({ openRows: Schema.Array(Schema.Number) }),
   message: CodeGroupMessage,
   shares: {
-    value: (model) => ({ openRows: model.openRows }),
+    value: ({ model }) => ({ openRows: model.openRows }),
     receives: ["RequestedSetRow"]
   }
 }).make({

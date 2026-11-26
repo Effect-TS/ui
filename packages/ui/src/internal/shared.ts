@@ -98,11 +98,11 @@ export const ownerValue = (
   props: unknown,
   lookup: Component.SharedLookup | undefined
 ): unknown =>
-  definition.shares!(
+  definition.shares!({
     model,
     props,
-    values(definition.name, readsOf(definition), lookup)
-  )
+    reads: values(definition.name, readsOf(definition), lookup)
+  })
 
 /** @internal */
 export const record = (

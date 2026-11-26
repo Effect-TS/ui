@@ -1288,7 +1288,7 @@ export const Dialog = Html.component({
   message: DialogMessage,
   events: DialogEvents,
   shares: {
-    value: (_, props) => ({ open: props.open }),
+    value: ({ props }) => ({ open: props.open }),
     collects: {
       schema: Schema.Number,
       onChange: (counts) =>

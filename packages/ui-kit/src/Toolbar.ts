@@ -440,7 +440,7 @@ export const Toolbar = Html.component({
   message: ToolbarMessage,
   restore: false,
   shares: {
-    value: (_model, props) => ({
+    value: ({ props }) => ({
       disabled: props.disabled === true,
       orientation: props.orientation ?? "horizontal",
       disabledItems: props.items.filter((item) => disabledOf(props, item)).map((

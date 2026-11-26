@@ -14,7 +14,7 @@ const TipsProvider = Component.define({
   props: Schema.Struct({ delay: Schema.optional(Schema.Number) }),
   model: Schema.Struct({ open: Schema.NullOr(Schema.String) }),
   message: TipsMessage,
-  shares: { value: (model) => ({ open: model.open }), receives: ["Enter"] }
+  shares: { value: ({ model }) => ({ open: model.open }), receives: ["Enter"] }
 }).make({
   init: () => ({ open: null }),
   update: ($) => $.model
@@ -139,14 +139,16 @@ describe("shared state", () => {
     expect(Component.define).type.toBeCallableWith({
       ...options,
       shares: {
-        value: (model: { readonly n: number }) => model.n,
+        value: ({ model }: { readonly model: { readonly n: number } }) =>
+          model.n,
         schema: Schema.Number
       }
     })
     expect(Component.define).type.not.toBeCallableWith({
       ...options,
       shares: {
-        value: (model: { readonly n: number }) => model.n,
+        value: ({ model }: { readonly model: { readonly n: number } }) =>
+          model.n,
         schema: Schema.String
       }
     })
@@ -262,13 +264,13 @@ describe("a component that reads its own kind", () => {
   })
 
   it("reads its own shares and reports its own collects, with no requirement", () => {
-    const Nest = Component.define({
+    const NestDef = Component.define({
       name: "Nest",
       props: Schema.Struct({ open: Schema.Boolean }),
       model: Schema.Number,
       message: NestMessage,
       shares: {
-        value: (_, props) => ({ open: props.open }),
+        value: ({ props }) => ({ open: props.open }),
         collects: {
           schema: Schema.Number,
           onChange: (counts) =>
@@ -289,7 +291,14 @@ describe("a component that reads its own kind", () => {
           }
         }
       }
-    }).make({
+    })
+    expect(NestDef.reads!.parent.report).type.toBe<
+      (below: number, props: { readonly open: boolean }) => number
+    >()
+    expect(NestDef.reads!.parent.onChange).type.toBeAssignableTo<
+      (value: { open: boolean }) => { readonly _tag: "ChangedAbove" }
+    >()
+    const Nest = NestDef.make({
       init: () => 0,
       update: ($) => $.model,
       parts: (p) => {
@@ -302,11 +311,11 @@ describe("a component that reads its own kind", () => {
 
   it("reads the owners above it in shares, with a schema or an annotated return for its own kind", () => {
     const Lock = Schema.Struct({ disabled: Schema.Boolean })
-    Component.define({
+    const above = Component.define({
       name: "Above",
       model: Schema.Null,
       message: NestMessage,
-      shares: (_, __, reads) => {
+      shares: ({ reads }) => {
         expect(reads.tips).type.toBe<{ open: string | null }>()
         expect(reads.maybe).type.toBe<{ open: string | null } | undefined>()
         return reads.tips.open
@@ -316,6 +325,11 @@ describe("a component that reads its own kind", () => {
         maybe: { owner: TipsProvider, optional: true }
       }
     })
+    expect(above.reads!.tips).type.toBe<typeof TipsProvider>()
+    expect(above.reads!.maybe).type.toBe<{
+      owner: typeof TipsProvider
+      optional: true
+    }>()
     Component.define({
       name: "Schema",
       props: Schema.Struct({ disabled: Schema.Boolean }),
@@ -323,7 +337,9 @@ describe("a component that reads its own kind", () => {
       message: NestMessage,
       reads: { parent: { owner: "self", optional: true } },
       shares: {
-        value: (_, props, reads) => {
+        value: ({ model, props, reads }) => {
+          expect(model).type.toBe<null>()
+          expect(props).type.toBe<{ readonly disabled: boolean }>()
           expect(reads.parent).type.toBe<
             { readonly disabled: boolean } | undefined
           >()
@@ -336,7 +352,7 @@ describe("a component that reads its own kind", () => {
       name: "Annotated",
       model: Schema.Null,
       message: NestMessage,
-      shares: (_, __, reads): { disabled: boolean } => {
+      shares: ({ reads }): { disabled: boolean } => {
         expect(reads.parent).type.toBe<{ disabled: boolean } | undefined>()
         return { disabled: reads.parent?.disabled === true }
       },
@@ -346,7 +362,7 @@ describe("a component that reads its own kind", () => {
       name: "Neither",
       model: Schema.Null,
       message: NestMessage,
-      shares: (_, __, reads) => ({
+      shares: ({ reads }) => ({
         // @ts-expect-error Give shares a schema, or annotate what value returns, to read its own kind in it
         disabled: reads.parent?.disabled === true
       }),

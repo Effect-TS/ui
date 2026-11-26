@@ -2343,7 +2343,7 @@ type Listed<SR> = (<T>() => T extends SR ? 1 : 2) extends
 type ReportId = PartsHelper<never, unknown, any>["id"]
 
 // One entry of `reads`, for the owner inferred for it: `report` and `onChange` take their parameter types from
-// here. `SR` holds what's written, and `optional` with it, and this checks it against the owner. An entry for
+// here. `E` is the owner when the entry is written as one, and this checks it against the owner. An entry for
 // `"self"` reads the component's own `shares`, `SV` and `Rp`, and is optional.
 type SharedEntry<E, O, Model, Props, Msg, SV, Rp> = [E] extends [Headless.Any] ?
   O
@@ -2374,17 +2374,18 @@ type SelfAbove<SV> = [SV] extends [never] ?
   "Give shares a schema, or annotate what value returns, to read its own kind in it"
   : SV
 
-type SharesReads<SR, SO, SA> = {
+type SharesReads<SO, SOpt, SA> = {
   readonly [K in keyof SO]: [SO[K]] extends ["self"] ? SA | undefined
-    : IsOptional<SR[K & keyof SR]> extends true ?
-      Shared.Value<SO[K]> | undefined
+    : [SOpt[K & keyof SOpt]] extends [true] ? Shared.Value<SO[K]> | undefined
     : Shared.Value<SO[K]>
 }
 
-type SharesValue<Model, Props, SR, SO, SA, SV> = (
-  model: Model,
-  props: Props,
-  reads: SharesReads<SR, SO, SA>
+type SharesValue<Model, Props, SO, SOpt, SA, SV> = (
+  $: {
+    readonly model: Model
+    readonly props: Props
+    readonly reads: SharesReads<SO, SOpt, SA>
+  }
 ) => SV
 
 // An owner listed in `reads` is a headless component with `shares`, or the component itself. `make` checks
@@ -2529,7 +2530,11 @@ export interface Definition<
   readonly reads: SR | undefined
   /** What an owner shares with the components below it, from its Model, props and reads: the `value` of `shares`. */
   readonly shares:
-    | ((model: Model, props: Props, reads: SharedValues<SR>) => SV)
+    | (($: {
+      readonly model: Model
+      readonly props: Props
+      readonly reads: SharedValues<SR>
+    }) => SV)
     | undefined
   /** The Schema of what an owner shares: the `schema` of `shares`. */
   readonly sharesSchema: Schema.Codec<SV, any> | undefined
@@ -2818,7 +2823,11 @@ export declare namespace Definition {
     readonly reads: SharedReads | undefined
     /** What the component shares as an owner, or `undefined` when it isn't one. */
     readonly shares:
-      | ((model: any, props: any, reads: any) => unknown)
+      | (($: {
+        readonly model: any
+        readonly props: any
+        readonly reads: any
+      }) => unknown)
       | undefined
     /** The Schema of what the component shares, or `undefined` when its `shares` gives none. */
     readonly sharesSchema: Schema.Codec<any, any> | undefined
@@ -3005,9 +3014,10 @@ export interface DefineOptions<
   Tags extends TagOf<Msg>,
   Sl extends string,
   SR extends SharedReads,
+  SO extends { readonly [name: string]: Headless.Any | Any | "self" },
+  SOpt,
   SV,
   Rp,
-  SO extends { readonly [name: string]: Headless.Any | "self" },
   SA = SelfAbove<SV>
 > {
   readonly name: Name
@@ -3061,8 +3071,16 @@ export interface DefineOptions<
     | (
       & SR
       & {
+        readonly [K in keyof SOpt]:
+          | (SOpt[K] & Headless.Any)
+          | {
+            readonly owner: unknown
+            readonly optional?: SOpt[K] | undefined
+          }
+      }
+      & {
         readonly [K in keyof SO]: SharedEntry<
-          SR[K & keyof SR],
+          SOpt[K & keyof SOpt],
           SO[K],
           Model,
           Props,
@@ -3081,15 +3099,15 @@ export interface DefineOptions<
    * value changes, so keep it small. `schema` encodes the value in a reader's `Update` on the
    * Wire. Without it the value is sent best effort, as `MessageLog.structural` encodes it.
    *
-   * `value` also gets the component's reads, as `p.reads` holds them, so an owner can share what it
-   * derives from the owners above it. To read its own kind there, give `schema` or annotate what
-   * `value` returns.
+   * `value` takes `{ model, props, reads }`, with `reads` as `p.reads` holds them, so an owner can
+   * share what it derives from the owners above it. To read its own kind there, give `schema` or
+   * annotate what `value` returns.
    */
   readonly shares?:
-    | SharesValue<Model, Props, SR, SO, SA, SV>
+    | SharesValue<Model, Props, SO, SOpt, SA, SV>
     | {
       /** What the readers below read, from the owner's Model, props and reads. */
-      readonly value: SharesValue<Model, Props, SR, SO, SA, SV>
+      readonly value: SharesValue<Model, Props, SO, SOpt, SA, SV>
       /** The Schema of the value. */
       readonly schema?: Schema.Codec<SV, any> | undefined
       /**
@@ -3099,7 +3117,7 @@ export interface DefineOptions<
       readonly receives?: ReadonlyArray<Tags> | undefined
     }
     | {
-      readonly value: SharesValue<Model, Props, SR, SO, SA, SV>
+      readonly value: SharesValue<Model, Props, SO, SOpt, SA, SV>
       readonly schema?: Schema.Codec<SV, any> | undefined
       readonly receives?: ReadonlyArray<Tags> | undefined
       /** What the owner collects from the readers below it. */
@@ -3196,9 +3214,10 @@ export interface Define<V extends View.Elements> {
     const Tags extends TagOf<Msg> = never,
     const Sl extends string = never,
     SR extends SharedReads = SharedReads,
+    SO extends { readonly [name: string]: Headless.Any | Any | "self" } = {},
+    SOpt = {},
     SV = never,
     Rp = never,
-    SO extends { readonly [name: string]: Headless.Any | "self" } = {},
     SA = SelfAbove<SV>
   >(
     options: DefineOptions<
@@ -3213,9 +3232,10 @@ export interface Define<V extends View.Elements> {
       Tags,
       Sl,
       SR,
+      SO,
+      SOpt,
       SV,
       Rp,
-      SO,
       SA
     >
   ): Defined<Name, Props, Model, Msg, Events, V, L, Tags, Sl, SR, SV, Rp>
@@ -3491,13 +3511,14 @@ export const define = <
   V extends View.Elements = never,
   const Tags extends TagOf<Msg> = never,
   const Sl extends string = never,
-  // What `reads` lists, as written. It defaults to its constraint, which stands for no `reads`: a `{}` default
-  // would be fixed before `optional` is read.
+  // What `reads` lists, as written; defaults to its constraint so `Listed<SR>` detects omission.
   SR extends SharedReads = SharedReads,
+  // Each `reads` entry's owner, inferred before `shares`, `report` and `onChange`.
+  SO extends { readonly [name: string]: Headless.Any | Any | "self" } = {},
+  // Each entry's `optional`, or its owner when written as shorthand.
+  SOpt = {},
   SV = never,
   Rp = never,
-  // The owner of each entry of `reads`, inferred before `report` and `onChange` are typed.
-  SO extends { readonly [name: string]: Headless.Any | "self" } = {},
   // Only inferred: typing `shares`'s self read by `SV` directly would fix `SV` to `never`.
   SA = SelfAbove<SV>
 >(
@@ -3514,9 +3535,10 @@ export const define = <
       Tags,
       Sl,
       SR,
+      SO,
+      SOpt,
       SV,
       Rp,
-      SO,
       SA
     >
     & {

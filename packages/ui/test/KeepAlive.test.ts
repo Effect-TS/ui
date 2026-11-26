@@ -1011,7 +1011,7 @@ describe("keep-alive children of a headless child", () => {
         model: Schema.Struct({ anyOpen: Schema.Boolean }),
         message: GroupMsg,
         shares: {
-          value: (model) => ({ anyOpen: model.anyOpen }),
+          value: ({ model }) => ({ anyOpen: model.anyOpen }),
           collects: {
             schema: Schema.Boolean,
             onChange: (collected) =>
@@ -1549,7 +1549,7 @@ describe("keep-alive children that read shared state", () => {
           props: Schema.Struct({ name: Schema.String }),
           model: Schema.String,
           message: Schema.Never,
-          shares: { value: (name) => ({ name }) }
+          shares: { value: ({ model: name }) => ({ name }) }
         }).make({
           init: ($) => $.props.name,
           update: ($) => $.model,
@@ -2276,7 +2276,7 @@ describe("keep-alive children written into closed slots", () => {
         model: Schema.Number,
         message: GroupMsg,
         shares: {
-          value: (count) => ({ count }),
+          value: ({ model: count }) => ({ count }),
           collects: {
             schema: Schema.Boolean,
             onChange: (reports) => GroupMsg.Counted({ count: reports.length })
@@ -3042,7 +3042,7 @@ describe("keep-alive children that report to shared state", () => {
         model: Schema.Number,
         message: CountMsg,
         shares: {
-          value: (count) => ({ count }),
+          value: ({ model: count }) => ({ count }),
           collects: {
             schema: Schema.Boolean,
             onChange: (reports) => CountMsg.Counted({ count: reports.length })

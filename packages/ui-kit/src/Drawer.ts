@@ -1780,7 +1780,7 @@ export const DrawerProvider = Html.component({
   model: DrawerProviderModel,
   message: DrawerProviderMessage,
   shares: {
-    value: (model) => ({ indent: model.indent }),
+    value: ({ model }) => ({ indent: model.indent }),
     collects: {
       schema: Schema.Boolean,
       onChange: (reports) =>
@@ -1866,7 +1866,7 @@ export const Drawer = Html.component({
   message: DrawerMessage,
   events: DrawerEvents,
   shares: {
-    value: (_, props) => ({ open: props.open }),
+    value: ({ props }) => ({ open: props.open }),
     collects: {
       schema: NestedReport,
       onChange: (reports) =>
