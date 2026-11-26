@@ -2,4 +2,4 @@
 "@effect/ui-kit": patch
 ---
 
-Opening a Select with the mouse now keeps focus in the popup, so the arrow keys work straight away and an aligned popup no longer closes before the button is released.
+Keep focus in Select popups opened with the mouse so arrow keys navigate the options immediately. Popups aligned with the trigger no longer close before the mouse button is released.

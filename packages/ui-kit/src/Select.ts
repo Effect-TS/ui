@@ -1089,9 +1089,9 @@ const watch = (
       }
     }
 
-    // The press that opened the popup focuses the trigger once its dispatch
-    // ends, which would take focus from the popup and close an aligned one.
-    // A press that ended before the open has an earlier timeStamp.
+    // Opening during capture lets this listener cancel the same press before
+    // its default action moves focus back to the trigger. The timestamp check
+    // leaves later presses alone if the popup opened after dispatch ended.
     const keepFocus = () => {
       const openedAt = performance.now()
       const onMouseDown = (event: Event) => {
@@ -1388,8 +1388,8 @@ const scrolling =
  *
  * The trigger and the popup cancel the keys they handle. The positioner's
  * mount places the popup, moves focus into it, scrolls it and listens for
- * presses and focus outside it. It also cancels the `mousedown` that opened
- * the popup, so the browser doesn't move focus back to the trigger.
+ * presses and focus outside it. If it opens during `mousedown`, it cancels
+ * the default action to keep focus in the popup.
  *
  * It emits `RequestedOpen`, `RequestedClose`, `Picked` and `Settled`.
  *
