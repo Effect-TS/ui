@@ -1,6 +1,7 @@
 import { Component, Mount, UiSchema, View } from "@effect/ui"
 import {
   type DirectionProvider,
+  makeTabs,
   Tabs,
   type TabsActivationDirection,
   type TabsEvents
@@ -124,6 +125,39 @@ describe("Tabs", () => {
         expect(tabs.panel).type.not.toBeCallableWith(h.div)
         return tabs.root(h.div)
       }
+    })
+  })
+
+  it("makeTabs types the value, tabs, parts and Selected with its schema", () => {
+    const Section = Schema.Literals(["general", "billing"])
+    const SectionMsg = UiSchema.TaggedEnum({ Opened: { section: Section } })
+    const h = View.makeHelper<typeof SectionMsg.Type, {}, Html.Elements>(
+      {},
+      Html
+    )
+    const SectionTabs = makeTabs({ value: Section })
+    const tabs = Section.literals.map((value) => ({ value }))
+    SectionTabs(h, {
+      props: { value: "general", tabs },
+      onEmit: {
+        Selected: ({ value }) => SectionMsg.Opened({ section: value })
+      },
+      view: (tabs) => {
+        expect(tabs.value).type.toBe<typeof Section.Type | null>()
+        expect(tabs.tab).type.not.toBeCallableWith({
+          element: h.button,
+          value: "other"
+        })
+        return tabs.root(h.div)
+      }
+    })
+    expect(SectionTabs).type.not.toBeCallableWith(h, {
+      props: { value: "other", tabs },
+      view: () => h.div
+    })
+    expect(SectionTabs).type.not.toBeCallableWith(h, {
+      props: { value: null, tabs: [{ value: "other" }] },
+      view: () => h.div
     })
   })
 })

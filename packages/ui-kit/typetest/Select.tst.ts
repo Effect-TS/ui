@@ -1,6 +1,7 @@
-import { type Component, UiSchema } from "@effect/ui"
+import { type Component, UiSchema, View } from "@effect/ui"
 import {
   Field,
+  makeSelect,
   Select,
   type SelectEvents,
   type SelectValue
@@ -155,6 +156,40 @@ describe("Select", () => {
         })
         return h.div
       }
+    })
+  })
+
+  it("makeSelect types the value, items, parts and Picked with its schema", () => {
+    const Theme = Schema.Literals(["light", "dark"])
+    const ThemeMsg = UiSchema.TaggedEnum({
+      PickedTheme: {
+        theme: Schema.NullOr(Schema.Union([Theme, Schema.Array(Theme)]))
+      }
+    })
+    const h = View.makeHelper<typeof ThemeMsg.Type, {}, Html.Elements>(
+      {},
+      Html
+    )
+    const ThemeSelect = makeSelect({ value: Theme })
+    const items = Theme.literals.map((value) => ({ value, label: value }))
+    ThemeSelect(h, {
+      props: { open: false, value: "light", items },
+      onEmit: { Picked: ({ value }) => ThemeMsg.PickedTheme({ theme: value }) },
+      view: (select) => {
+        expect(select.item).type.not.toBeCallableWith({
+          element: h.div,
+          value: "sepia"
+        })
+        return select.trigger(h.button)
+      }
+    })
+    expect(ThemeSelect).type.not.toBeCallableWith(h, {
+      props: { open: false, value: "sepia", items },
+      view: () => h.div
+    })
+    expect(ThemeSelect).type.not.toBeCallableWith(h, {
+      props: { open: false, items: [{ value: "sepia", label: "Sepia" }] },
+      view: () => h.div
     })
   })
 })

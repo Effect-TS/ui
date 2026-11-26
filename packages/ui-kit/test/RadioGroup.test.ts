@@ -3,6 +3,7 @@ import { Component as C, View } from "@effect/ui"
 import {
   DirectionProvider,
   Field,
+  makeRadioGroup,
   RadioGroup,
   type RadioGroupProps
 } from "@effect/ui-kit"
@@ -100,6 +101,33 @@ const expectFocus = (
 }
 
 describe("RadioGroup", () => {
+  it.effect("makeRadioGroup emits the picked item's value", () =>
+    Effect.gen(function*() {
+      const Scope = Schema.Literals(["All", "League", "Cup"])
+      const items = Scope.literals.map((value) => ({ value }))
+      const scene = yield* HtmlScene.make(
+        makeRadioGroup({ value: Scope }),
+        { value: "All", items },
+        {
+          elements: Html,
+          view: (radioGroup, h) =>
+            radioGroup.root(h.div).children(
+              ...items.map(({ value }) =>
+                radioGroup.radio({
+                  element: h.button.attr("aria-label", value),
+                  value
+                })
+              )
+            )
+        }
+      )
+      scene.expectMount(mountOf(scene, root))
+      scene.fire(radio("Cup"), "click").emitted({
+        _tag: "Picked",
+        value: "Cup"
+      })
+    }))
+
   it.effect("clicking picks an unchecked enabled radio, ignores the checked one, and respects disabled and readOnly", () =>
     Effect.gen(function*() {
       const scene = yield* openScene()

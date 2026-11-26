@@ -1,5 +1,5 @@
-import { type Component, UiSchema, type View } from "@effect/ui"
-import { ToggleGroup } from "@effect/ui-kit"
+import { type Component, UiSchema, View } from "@effect/ui"
+import { makeToggleGroup, ToggleGroup } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Context, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
@@ -101,6 +101,38 @@ describe("ToggleGroup", () => {
           }
         })
       }
+    })
+  })
+
+  it("makeToggleGroup types the value, items, parts and Toggled with its schema", () => {
+    const Align = Schema.Literals(["left", "right"])
+    const AlignMsg = UiSchema.TaggedEnum({
+      Aligned: { value: Schema.Array(Align) }
+    })
+    const h = View.makeHelper<typeof AlignMsg.Type, {}, Html.Elements>(
+      {},
+      Html
+    )
+    const AlignToggleGroup = makeToggleGroup({ value: Align })
+    const items = Align.literals.map((value) => ({ value }))
+    AlignToggleGroup(h, {
+      props: { value: ["left"], items },
+      onEmit: ({ value }) => AlignMsg.Aligned({ value }),
+      view: (toggleGroup) => {
+        expect(toggleGroup.item).type.not.toBeCallableWith({
+          element: h.button,
+          value: "center"
+        })
+        return toggleGroup.root(h.div)
+      }
+    })
+    expect(AlignToggleGroup).type.not.toBeCallableWith(h, {
+      props: { value: ["center"], items },
+      view: () => h.div
+    })
+    expect(AlignToggleGroup).type.not.toBeCallableWith(h, {
+      props: { value: [], items: [{ value: "center" }] },
+      view: () => h.div
     })
   })
 })
