@@ -50,6 +50,7 @@ const minusSigns = "-−－‒–—﹣"
 const plusSigns = "+＋﹢"
 const percentSigns = "%٪％﹪"
 const permilleSigns = "‰؉"
+const apostropheSigns = "'’"
 const strayMarks = "，٬" + percentSigns + permilleSigns
 const nonAsciiDigit = /[٠-٩۰-۹０-９]/
 const anyNumeral = charClass("0-9٠-٩۰-۹０-９" + hanNumerals)
@@ -65,7 +66,8 @@ const strayDot = new RegExp(
 const strayMark = charClass(strayMarks, "g")
 const baseSymbols = [".", ",", "．", "，", "٫", "٬"]
 const spaceSeparator = /\p{Zs}/u
-const apostrophe = /['’]/
+const apostrophe = charClass(apostropheSigns)
+const apostrophes = charClass(apostropheSigns, "g")
 const formatControl = /\p{Cf}/u
 const formatControls = /\p{Cf}/gu
 const anyMinus = charClass(minusSigns)
@@ -230,7 +232,7 @@ export const parseNumber = (
       spaceSeparator.test(group)
         ? /\p{Zs}/gu
         : apostrophe.test(group)
-        ? /['’]/g
+        ? apostrophes
         : group,
       ""
     )
@@ -288,7 +290,7 @@ export const typingOf = (
     }
     // Either apostrophe is read as the group, so either can be typed.
     if (details.group !== undefined && apostrophe.test(details.group)) {
-      add("'’")
+      add(apostropheSigns)
     }
     add(digitsOf(locale, format))
     const style = format?.style
