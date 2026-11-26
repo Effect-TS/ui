@@ -524,10 +524,12 @@ an `onChange` only when `update` has to react to a new result, such as
 moving focus once a query fails. It returns a message, which `update` gets
 after the result is written.
 
-New args start at `Initial`, both while `debounce` waits and while the
-fetch runs. `h.previous` holds a `query` entry's last value as an
-`Option`, so match it in `onInitial` to keep the old results on screen,
-marked busy, instead of showing a loading message on every keystroke:
+Unless the new args have a fresh cached result, the query is `Initial`
+while `debounce` waits. With no cached result it stays `Initial` through
+the fetch; a stale one shows, with `waiting`, while it refetches.
+`h.previous` holds a `query` entry's last value as an `Option`, so match
+it in `onInitial` to keep the old results on screen, marked busy, instead
+of showing a loading message on every keystroke:
 
 ```ts
 AsyncResult.match(h.queries.results, {
