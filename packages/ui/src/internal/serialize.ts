@@ -146,7 +146,7 @@ export const snapshot = (
       }
       case "Child": {
         if (at.kids === undefined) return instance(at.inst)
-        // A fallback the author holds, even in a headless child's closure, is no failed child.
+        // The author also holds fallbacks drawn in a headless child's closure.
         const failedChild = at.inst !== Kernel.authorOf(owner)
         return {
           _tag: "Fallback",

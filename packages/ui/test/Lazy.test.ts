@@ -55,7 +55,7 @@ const makeApp = (
       )
   })
 
-// Lazy children drawn away from their author: in a headless child's closure, kept or not, and in a slot.
+// Lazy children in a headless child's closure, kept or not, and in a slot.
 const makePlacedApp = (
   load: () => Promise<typeof Page> = () => later(Page)
 ) => {

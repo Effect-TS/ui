@@ -882,7 +882,7 @@ const loadsOf = (
   return out
 }
 
-// `under` is the path a child drawn at `rec` mounts under, as the kernel's `slot` is.
+// `under` is the path a child drawn at `rec` mounts under.
 const loadsIn = (
   under: string,
   rec: Kernel.Rec,
@@ -900,7 +900,7 @@ const loadsIn = (
     view._tag === "Child" && lazy.isLazy(view.component) &&
     lazy.stateOf(view.component)._tag === "Loading"
   ) {
-    // A kept child mounts under the instance holding its fallback.
+    // A kept child mounts under its holder.
     if (view.alive !== undefined) under = rec.inst.path
     out.push({
       path: under + "/" + segment(view),
