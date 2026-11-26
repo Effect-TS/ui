@@ -96,10 +96,8 @@ export const elements = <N extends Node>(root: N): ReadonlyArray<N> => {
 }
 
 /**
- * Visits `root` and the nodes under it in document order, without a call
- * frame per level, entering a node's children when `visit` returns true.
- * Children go on last-first so the first comes off next; holes in a sparse
- * array are skipped.
+ * Visits nodes in document order without recursion. Returning false from
+ * `visit` skips that node's children.
  */
 const preorder = (root: Node, visit: (node: Node) => boolean): void => {
   const pending: Array<Node> = [root]
