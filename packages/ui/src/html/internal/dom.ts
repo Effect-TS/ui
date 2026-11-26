@@ -122,19 +122,20 @@ const ignore = () => {}
 // Chromium blurs a focused element that a render detaches, to remove or to
 // move it, while the node is still in place and with no `relatedTarget`.
 // The HTML standard and other browsers don't. So only such an event from
-// inside the outgoing node is dropped. One with a destination, from outside
-// it, or after it has gone, such as a reconnected element sending focus into
-// an iframe, is a real exit. `from` is 1 when only the children go, and
-// then the first child shows whether they have. Module-level, because
+// inside the outgoing node is dropped, until `done` says it has gone or
+// arrived. One with a destination, from outside it, or after that, such as
+// a reconnected element sending focus into an iframe, is a real exit.
+// `from` is 1 when only the children go. Module-level, because
 // `BrowserHost` detaches through one host while another one listens.
 let leaving: ((path: Array<globalThis.Node>) => boolean) | undefined
-const detach = (node: globalThis.Node, f: () => void, from = 0): void => {
+const detach = (
+  node: globalThis.Node,
+  f: () => void,
+  done: () => boolean,
+  from = 0
+): void => {
   const outer = leaving
-  const going = (from && node.firstChild) || node
-  const { nextSibling, parentNode } = going
-  leaving = (path) =>
-    going.parentNode === parentNode && going.nextSibling === nextSibling &&
-    path.indexOf(node) >= from
+  leaving = (path) => !done() && path.indexOf(node) >= from
   try {
     f()
   } finally {
@@ -840,17 +841,32 @@ export const makeHost = (
       if (eventOptions.dragstart !== undefined) listen("dragend")
     },
     insert(parent, node, before) {
-      if (node.isConnected) {
-        detach(node, () => parent.insertBefore(node, before))
-      } else parent.insertBefore(node, before)
+      // A move is done once the node is where it's going. One already there
+      // isn't moved, so Chromium doesn't blur it.
+      const there = () =>
+        node.parentNode === parent && node.nextSibling === before
+      if (!node.isConnected) parent.insertBefore(node, before)
+      else if (!there()) {
+        detach(node, () => parent.insertBefore(node, before), there)
+      }
     },
     remove(parent, node) {
       if (shown.size > 0) closeShownIn(node, true)
-      detach(node, () => parent.removeChild(node))
+      detach(
+        node,
+        () => parent.removeChild(node),
+        () => node.parentNode !== parent
+      )
     },
     clear(parent) {
       if (shown.size > 0) closeShownIn(parent, false)
-      detach(parent, () => parent.textContent = "", 1)
+      const first = parent.firstChild
+      detach(
+        parent,
+        () => parent.textContent = "",
+        () => first?.parentNode !== parent,
+        1
+      )
     },
     parentOf: (node) => node.parentNode!,
     nextOf: (node) => node.nextSibling,

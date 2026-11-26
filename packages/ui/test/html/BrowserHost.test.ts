@@ -1865,12 +1865,12 @@ describe("BrowserHost", { concurrent: false }, () => {
         chromium = false
         yield* next()
         expect(root.model()).toEqual({ step: 4, left: 4 })
-        // A removed element's blur changes its label and sends focus to a sibling that stays, then out of the document. Only the sibling's exit counts.
+        // A removed element's blur adds a hint after it and sends focus to a sibling that stays, then out of the document. Only the sibling's exit counts.
         const removed = document.getElementById("a")!
         removed.focus()
         chromium = true
         removed.addEventListener("blur", () => {
-          removed.textContent = "Saved"
+          removed.insertAdjacentHTML("afterend", "<small>Required</small>")
           const sibling = document.getElementById("b")!
           sibling.focus()
           sibling.blur()
