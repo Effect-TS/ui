@@ -43,6 +43,8 @@ const marks: {
   ring: ["var(--faint)", "<circle cx='6' cy='6' r='3.2'/>"]
 }
 
+const caret = glyph("<path d='M4.5 2.5 8.5 6l-4 3.5z' fill='black'/>")
+
 const markRules = Object.entries(marks).map(([name, [color, body]]) =>
   ".mk-" + name + " { color: " + color + "; -webkit-mask-image: " +
   glyph(body) + "; mask-image: " + glyph(body) + "; }"
@@ -150,15 +152,20 @@ ${markRules}
 .ilist { --cap: calc(var(--vh, 100vh) * .25); max-height: var(--cap); min-height: min(var(--slots, 0) * 26px, var(--cap)); overflow: auto; overscroll-behavior: contain; }
 .iitem { display: flex; align-items: center; height: 26px; }
 .iitem.split { border-top: 1px solid var(--line); }
+.iitem:hover, .iitem.on { background: var(--sel); }
+.iitem.on { box-shadow: inset 2px 0 0 var(--ink); }
+.tree-list .iitem { padding-left: calc(8px + var(--depth) * 16px); }
 .irow { display: flex; align-items: center; flex: 1; min-width: 0; height: 26px; padding: 0 20px 0 14px; white-space: nowrap; }
 .irow .imark { margin-right: 6px; }
 .tree-list .irow { padding-left: 2px; }
-.irow:hover, .irow.on { background: var(--sel); }
-.irow.on { box-shadow: inset 2px 0 0 var(--ink); }
 .irow.owner .iname { font-weight: 600; }
 .irow .id { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .irow .in { color: var(--faint); font-size: 12px; margin-left: 2px; }
-.iitem .chev { width: 14px; height: 26px; font-size: 10px; text-align: center; }
+.iitem .chev { display: grid; place-items: center; width: 20px; height: 26px; }
+.iitem button.chev::before { content: ""; width: 12px; height: 12px; background: currentColor; -webkit-mask: ${caret} center / contain no-repeat; mask: ${caret} center / contain no-repeat; }
+.iitem .chev[aria-expanded=true]::before { rotate: 90deg; }
+.iitem button.chev:hover { color: var(--ink); }
+@media (forced-colors: active) { .iitem button.chev::before { forced-color-adjust: none; background: ButtonText; } }
 .status { flex: 0 1 auto; min-width: 0; max-width: 62%; color: var(--muted); white-space: nowrap; font-size: 12px; padding-left: 10px; overflow: hidden; text-overflow: ellipsis; }
 .rollup { flex: none; display: flex; align-items: center; gap: 10px; padding-left: 10px; font-size: 12px; font-variant-numeric: tabular-nums; }
 .rollup .under { color: var(--faint); }

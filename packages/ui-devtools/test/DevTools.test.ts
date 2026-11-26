@@ -809,14 +809,20 @@ describe("DevTools overlay", { concurrent: false }, () => {
 
       yield* selectClickedSave(root)
       yield* click(instance(root, "Editor[n2]"))
-      assert.isFalse(instance(root, "Editor[n2]").classList.contains("on"))
+      assert.strictEqual(
+        instance(root, "Editor[n2]").getAttribute("aria-pressed"),
+        "false"
+      )
       assert.strictEqual(
         instance(root, "Editor[n2]").getAttribute("aria-current"),
         "true"
       )
       assert.isNull(instance(root, "Editor[n1]").getAttribute("aria-current"))
       yield* click(instance(root, "Editor[n2]"))
-      assert.isTrue(instance(root, "Editor[n2]").classList.contains("on"))
+      assert.strictEqual(
+        instance(root, "Editor[n2]").getAttribute("aria-pressed"),
+        "true"
+      )
 
       assert.strictEqual(headline(root), "ClickedSave")
       assert.match(subtitle(root), /^Update #\d+, \d+ ms after start$/)
