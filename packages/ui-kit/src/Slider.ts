@@ -30,9 +30,9 @@
  *
  * The kit sets no layout. `thumb` gets `--slider-thumb-position` and
  * `indicator` gets `--slider-indicator-start` and
- * `--slider-indicator-size`, each a percentage along the control, from the
- * left or, when vertical, from the bottom. A horizontal right-to-left slider
- * has `min` on the right; its percentages still count from the left. The hidden input fills the
+ * `--slider-indicator-size`, each a percentage along the control, rounded to
+ * 3 decimal places, from the left or, when vertical, from the bottom. A
+ * horizontal right-to-left slider has `min` on the right; its percentages still count from the left. The hidden input fills the
  * thumb with `position: absolute`, so give the thumb a position. For
  * dragging by touch, give the control `touch-action: none`.
  *
@@ -188,7 +188,7 @@ import {
   watchDirectionScoped
 } from "./internal/direction.ts"
 import { focusVisible } from "./internal/dom.ts"
-import { clamp } from "./internal/range.ts"
+import { clamp, cssPercent } from "./internal/range.ts"
 import type { WithRequirements } from "./internal/requirements.ts"
 
 // One number, or one per thumb.
@@ -1040,7 +1040,8 @@ export const Slider = Html.component({
             "style",
             withStyle(
               node.elementAttrs.style,
-              "--slider-thumb-position:" + positionOf(s, s.values[index]!) + "%"
+              "--slider-thumb-position:" +
+                cssPercent(positionOf(s, s.values[index]!))
             )
           )
         )
@@ -1069,8 +1070,8 @@ export const Slider = Html.component({
             "style",
             withStyle(
               node.elementAttrs.style,
-              "--slider-indicator-start:" + start +
-                "%;--slider-indicator-size:" + (end - start) + "%"
+              "--slider-indicator-start:" + cssPercent(start) +
+                ";--slider-indicator-size:" + cssPercent(end - start)
             )
           )
         )

@@ -26,10 +26,15 @@ export const placeInRange = (
 export const percentText = (percentage: number): string =>
   `${Math.round(percentage)}%`
 
+// A percentage for CSS, rounded to at most 3 decimal places so the server
+// and the browser write the same short string, as `33.333%`.
+export const cssPercent = (percentage: number): string =>
+  `${Math.round(percentage * 1000) / 1000}%`
+
 // What the indicator adds to its inline style, after the consumer's, to be
 // as wide as the percentage.
 export const indicatorSize = (percentage: number): string =>
-  `inset-inline-start:0;height:inherit;width:${percentage}%`
+  `inset-inline-start:0;height:inherit;width:${cssPercent(percentage)}`
 
 // The value part's text, unless there is none or the consumer gave the part
 // children of its own. Run in `forward`, so it reads the children chained
