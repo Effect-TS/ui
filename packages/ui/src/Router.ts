@@ -730,7 +730,7 @@ export const subscription = <U extends Routes, Msg>(
   const have = union.print(held)
   const same = (route: { readonly _tag: string }) =>
     route._tag === held._tag && union.print(route) === have
-  /** Whether a static render of the held route also stands for the route: same path, or both not found. */
+  /** Whether a static render of the held route also serves the route: same path, or both the 404. */
   const staticMatch = (route: { readonly _tag: string }) =>
     route._tag === held._tag &&
     (union.printPath(route) === union.printPath(held) ||

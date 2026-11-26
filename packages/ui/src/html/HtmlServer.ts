@@ -155,8 +155,8 @@ const serverHtmlHost: Context.Service.Shape<typeof Html.Host> = {
  * prerendered without search params, such as `/search`, may be served for
  * `/search?q=x`, and a 404 prerendered at `/404` for any unknown path:
  * `Router.subscription` then delivers the Router's route without reporting
- * `RouteMismatch`. The default is HTML rendered per
- * request, whose entries hydrate fresh.
+ * `RouteMismatch`. The default is HTML rendered per request, whose entries
+ * hydrate fresh.
  *
  * **Gotchas**
  *

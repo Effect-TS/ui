@@ -407,7 +407,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
         SearchRoute.NotFound({ params: { "*": "a/b" } }),
         true
       )
-      // Captures "other/", and the trailing slash makes the Router replace the URL with "/other".
+      // Captures "other/"; the Router strips the trailing slash, giving "/other".
       window.history.replaceState(null, "", "/other%2F/")
       const context = yield* Layer.build(
         BrowserRouter.layer({ routes: SearchRoute })
