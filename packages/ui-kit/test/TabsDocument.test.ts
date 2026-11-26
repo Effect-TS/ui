@@ -159,6 +159,18 @@ describe("Tabs in a document", { concurrent: false }, () => {
       )
     }).pipe(Effect.scoped))
 
+  it.effect("without a DirectionProvider, a direction change under a focused tab applies to the next key", () =>
+    Effect.gen(function*() {
+      const { get } = yield* mountPage
+      get("b").focus()
+      yield* tick
+      get("root").style.direction = "rtl"
+      yield* tick
+      assert.isTrue(key(get("b"), "ArrowLeft"))
+      yield* tick
+      assert.strictEqual(document.activeElement, get("c"))
+    }).pipe(Effect.scoped))
+
   it.effect("with activateOnFocus, focus during a secondary press doesn't select, and focus after the press ends does", () =>
     Effect.gen(function*() {
       const { get } = yield* mountPageWith({ activateOnFocus: true })
@@ -229,7 +241,7 @@ describe("Tabs in a document", { concurrent: false }, () => {
       assert.strictEqual(mousedowns, 0)
     }).pipe(Effect.scoped))
 
-  it.effect("Space clicks a tab once, with its modifiers, and Enter is left native except on an <a> without an href", () =>
+  it.effect("Space clicks a tab once, even held, with its modifiers, and Enter is left native except on an <a> without an href", () =>
     Effect.gen(function*() {
       const { get } = yield* mountPage
       const clicks: Array<string> = []
@@ -243,6 +255,7 @@ describe("Tabs in a document", { concurrent: false }, () => {
       )
 
       assert.isTrue(key(get("b"), " "))
+      assert.isTrue(key(get("b"), " ", { repeat: true }))
       assert.isTrue(key(get("b"), " ", {}, "keyup"))
       yield* tick
       assert.deepStrictEqual(clicks, ["b"])
@@ -264,6 +277,7 @@ describe("Tabs in a document", { concurrent: false }, () => {
       assert.isFalse(key(get("a"), "Enter"))
       assert.isFalse(key(get("c"), "Enter"))
       assert.isTrue(key(get("e"), "Enter"))
+      assert.isTrue(key(get("e"), "Enter", { repeat: true }))
       yield* tick
       assert.deepStrictEqual(clicks, ["b", "c+ctrl", "d", "e"])
       assert.strictEqual(get("e").getAttribute("aria-selected"), "true")

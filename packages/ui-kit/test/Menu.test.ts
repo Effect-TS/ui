@@ -8,6 +8,7 @@ import {
   View
 } from "@effect/ui"
 import {
+  DirectionProvider,
   Menu,
   type MenuEvents,
   menuFilter,
@@ -542,7 +543,7 @@ describe("Menu", () => {
       assert.strictEqual(partsOf(scene).highlighted, "docs")
     }))
 
-  it.effect("arrow keys, Home and End move the highlight, wrap unless loopFocus is false, and follow orientation", () =>
+  it.effect("arrow keys, Home and End move the highlight, wrap unless loopFocus is false, and follow orientation and a DirectionProvider", () =>
     Effect.gen(function*() {
       const scene = yield* open()
       const step = (k: string, expected: string) => {
@@ -576,6 +577,9 @@ describe("Menu", () => {
       step("ArrowRight", "copy")
       scene.fire(popup, "keydown", key("ArrowDown"))
       step("ArrowLeft", "undo")
+      scene.shared(DirectionProvider, { direction: "rtl" })
+      step("ArrowLeft", "copy")
+      step("ArrowRight", "undo")
     }))
 
   it.effect("the pointer highlights the item it's over, unless highlightItemOnHover is false", () =>

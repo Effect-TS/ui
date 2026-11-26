@@ -71,8 +71,8 @@
  * `openOnHover` and `delay` don't apply in a menubar. The menubar's
  * `modal` does, and the triggers and the empty parts of the bar stay
  * clickable over the modal layer. A disabled menubar disables every menu
- * in it. The writing direction is read from the root's computed
- * `direction`.
+ * in it. The menubar follows the nearest `DirectionProvider` above it or,
+ * without one, the root's CSS `direction`.
  *
  * **Example** (A File and an Edit menu, with the open one in the consumer's Model)
  *
@@ -151,7 +151,9 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
+import { DirectionProvider } from "./DirectionProvider.ts"
 import { flag } from "./internal/attributes.ts"
+import { isRtl, rightToLeft } from "./internal/direction.ts"
 import { isHTMLElement } from "./internal/dom.ts"
 import { arrowKeys, Orientation, stepped } from "./internal/list.ts"
 import {
@@ -200,6 +202,7 @@ export type MenubarProps = typeof MenubarProps.Type
 const MenubarModel = Schema.Struct({
   menus: Schema.Array(MenubarMenu),
   triggers: Schema.Array(Schema.String),
+  // The root's CSS `direction` is right-to-left.
   rtl: Schema.Boolean,
   highlighted: Schema.NullOr(Schema.String),
   current: Schema.NullOr(Schema.String),
@@ -243,7 +246,7 @@ const TrackMenubar = Mount.makeStream(
           )
         const scan = () => {
           const triggers = enabled().map((trigger) => trigger.id)
-          const rtl = view?.getComputedStyle(node).direction === "rtl"
+          const rtl = isRtl(node)
           const next = JSON.stringify([triggers, rtl])
           if (next === found) return
           found = next
@@ -329,6 +332,7 @@ export const Menubar = Html.component({
   model: MenubarModel,
   message: MenubarMessage,
   shares: {
+    // A menu applies the `DirectionProvider` it reads on top of `rtl`.
     value: (model, props) => ({
       ...stateOf(model, props),
       rtl: model.rtl,
@@ -342,6 +346,9 @@ export const Menubar = Html.component({
       schema: MenubarMenu,
       onChange: (menus) => MenubarMessage.ChangedMenus({ menus })
     }
+  },
+  reads: {
+    provider: { owner: DirectionProvider, optional: true }
   },
   restore: false
 }).make({
@@ -385,7 +392,10 @@ export const Menubar = Html.component({
       const last = triggers.length - 1
       const start = from ?? $.model.current ?? $.model.highlighted
       const at = start === null ? -1 : triggers.indexOf(start)
-      const nav = arrowKeys(orientationOf(props), $.model.rtl)
+      const nav = arrowKeys(
+        orientationOf(props),
+        rightToLeft($.reads.provider, $.model.rtl)
+      )
       const index = key === "Home"
         ? 0
         : key === "End"

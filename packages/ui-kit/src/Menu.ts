@@ -109,8 +109,9 @@
  * arrow keys of its `orientation`, Home and End move between items,
  * disabled ones included, and typing moves to the next item whose label
  * starts with what's typed. Enter and Space pick the highlighted item.
- * On a submenu trigger, the arrow key towards the submenu, Enter and
- * Space open it, and in the submenu the arrow key back closes it. Escape
+ * On a submenu trigger, the arrow key towards the submenu in the parent's
+ * direction, Enter and Space open it, and in the submenu the arrow key
+ * back in the submenu's direction closes it. Escape
  * closes the popup, or with `closeParentOnEsc` the whole menu, and Tab
  * closes it and moves focus on from the trigger.
  *
@@ -148,7 +149,8 @@
  * `triggerId`, so draw the content for that trigger. `filter` picks a
  * built-in match; for another, pass `filter: null` and draw only the
  * items that match. `MenuTrigger` draws a trigger outside the view. The
- * writing direction is read from the trigger's computed `direction`.
+ * menu follows the nearest `DirectionProvider` above it or, without one,
+ * the trigger's CSS `direction`.
  *
  * **Example** (An edit menu with a checkbox item and a submenu, with the open states in the consumer's Model)
  *
@@ -257,6 +259,7 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
+import { DirectionProvider } from "./DirectionProvider.ts"
 import {
   type Attributed,
   attrSelector,
@@ -270,6 +273,7 @@ import {
   withTokens
 } from "./internal/attributes.ts"
 import { backdropBox, blockers, cutPath } from "./internal/blocker.ts"
+import { isRtl, provided, rightToLeft } from "./internal/direction.ts"
 import { focusFinal, override } from "./internal/dom.ts"
 import { type TextFilter, textFilter } from "./internal/filter.ts"
 import { methodOf, onEscape } from "./internal/interaction.ts"
@@ -667,6 +671,8 @@ const ParentState = Schema.Struct({
   open: Schema.Boolean,
   active: Schema.NullOr(Schema.String),
   reason: Schema.NullOr(MenuChangeReason),
+  // The menu's direction: its `DirectionProvider`'s, or else its CSS one.
+  // A submenu applies the provider it reads on top.
   rtl: Schema.Boolean,
   orientation: Orientation,
   disabled: Schema.Boolean,
@@ -763,7 +769,8 @@ const MenuMessage = UiSchema.TaggedEnum({
     key: Schema.String,
     triggerId: Schema.NullOr(Schema.String)
   },
-  ChangedMenubar: { menubar: MenubarShared }
+  ChangedMenubar: { menubar: MenubarShared },
+  ChangedProvider: { rtl: Schema.NullOr(Schema.Boolean) }
 })
 
 type MenuMessage = typeof MenuMessage.Type
@@ -793,6 +800,7 @@ const MenuModel = Schema.Struct({
   pressing: Schema.Boolean,
   releaseAllowed: Schema.Boolean,
   pressedItem: Schema.Boolean,
+  // The trigger's CSS `direction` is right-to-left.
   rtl: Schema.Boolean,
   submenus: Schema.Array(Submenu),
   instant: Schema.NullOr(Instant),
@@ -813,7 +821,9 @@ const MenuModel = Schema.Struct({
   ),
   justOpened: Schema.Boolean,
   releaseArmed: Schema.Boolean,
-  barCurrent: Schema.NullOr(Schema.String)
+  barCurrent: Schema.NullOr(Schema.String),
+  // The nearest `DirectionProvider`'s direction, for the submenus to share.
+  provided: Schema.NullOr(Schema.Boolean)
 })
 
 type MenuModel = typeof MenuModel.Type
@@ -822,6 +832,7 @@ type Base = Component.Step<MenuModel, MenuMessage, MenuEvents, never>
 interface Shared {
   readonly parent?: ParentState | undefined
   readonly menubar?: MenubarShared | undefined
+  readonly provider?: { readonly direction: string } | undefined
 }
 
 type MenuUpdate =
@@ -876,6 +887,11 @@ const parentOf = ({ props, reads }: Reads): ParentState | undefined =>
 
 const barOf = ({ props, reads }: Reads): MenubarShared | undefined =>
   props.parentItem === undefined ? reads.menubar : undefined
+
+// The CSS `direction` a menu, its parent or its menubar found, unless a
+// `DirectionProvider` decides.
+const rtlOf = ({ reads }: { readonly reads: Shared }, css: boolean) =>
+  rightToLeft(reads.provider, css)
 
 const disabledOf = (input: Reads): boolean => {
   const parent = parentOf(input)
@@ -1101,7 +1117,9 @@ const navigate = (model: MenuModel, $: MenuUpdate, key: string) => {
     ? -1
     : items.findIndex((item) => item.value === model.active)
   const direction =
-    key === keys(props.orientation ?? "vertical", model.rtl).next ? 1 : -1
+    key === keys(props.orientation ?? "vertical", rtlOf($, model.rtl)).next
+      ? 1
+      : -1
   const index = key === "Home"
     ? 0
     : key === "End"
@@ -1156,12 +1174,13 @@ const toSibling = (
   const bar = $.reads.menubar
   if (bar === undefined) return undefined
   const nested = $.props.parentItem !== undefined
+  const rtl = rtlOf($, bar.rtl)
   if (bar.orientation === "vertical") {
-    return !nested && key === keys("vertical", bar.rtl).close
+    return !nested && key === keys("vertical", rtl).close
       ? dismiss(model, $, "list-navigation", "keyboard")
       : undefined
   }
-  const along = arrowKeys("horizontal", bar.rtl)
+  const along = arrowKeys("horizontal", rtl)
   if (key !== along.next && key !== along.previous) return undefined
   if (
     key === opens && model.active !== null && isSubmenu(model, model.active)
@@ -1180,7 +1199,7 @@ const pressKey = (
   const props = $.props
   if (!props.open) return $.set(model)
   const parent = parentOf($)
-  const nav = keys(props.orientation ?? "vertical", model.rtl)
+  const nav = keys(props.orientation ?? "vertical", rtlOf($, model.rtl))
   if (
     key === nav.next || key === nav.previous || key === "Home" || key === "End"
   ) return navigate(model, $, key)
@@ -1190,7 +1209,8 @@ const pressKey = (
       : dismiss(model, $, "escape-key", "keyboard")
   }
   if (
-    parent !== undefined && key === keys(parent.orientation, parent.rtl).close
+    parent !== undefined &&
+    key === keys(parent.orientation, rtlOf($, parent.rtl)).close
   ) {
     return dismiss(model, $, "list-navigation", "keyboard")
   }
@@ -1339,7 +1359,7 @@ const shares = (model: MenuModel, props: MenuProps): ParentState => ({
   open: props.open,
   active: model.active,
   reason: model.closeReason,
-  rtl: model.rtl,
+  rtl: model.provided ?? model.rtl,
   orientation: props.orientation ?? "vertical",
   disabled: props.disabled === true,
   disabledItems: props.items.filter((item) => item.disabled === true).map((
@@ -1365,6 +1385,8 @@ const TrackMenuArgs = {
   closeMethod: Schema.NullOr(MenuInteraction),
   hoverClose: Schema.Boolean,
   rtl: Schema.Boolean,
+  // The nearest `DirectionProvider`'s direction, which wins over `rtl`.
+  provider: Schema.NullOr(Schema.Boolean),
   trigger: Schema.NullOr(Schema.String),
   popupId: Schema.String,
   inputId: Schema.NullOr(Schema.String),
@@ -1506,7 +1528,7 @@ const watch = (
 
     let rtl = args.rtl
     const direction = (anchor: HTMLElement | null) => {
-      const next = view?.getComputedStyle(anchor ?? node).direction === "rtl"
+      const next = isRtl(anchor ?? node)
       if (next !== rtl) {
         rtl = next
         send(MenuMessage.ChangedDirection({ rtl }))
@@ -1661,7 +1683,7 @@ const watch = (
         item.click()
         return
       }
-      const nav = keys(current.orientation, rtl)
+      const nav = keys(current.orientation, current.provider ?? rtl)
       if (
         current.orientation === "vertical" &&
         (event.key === nav.next || event.key === nav.previous)
@@ -1689,7 +1711,8 @@ const watch = (
       }
       if (
         plain && current.nested &&
-        event.key === keys(current.parentOrientation, rtl).close &&
+        event.key ===
+          keys(current.parentOrientation, current.provider ?? rtl).close &&
         (!hasValue || atStart)
       ) {
         event.preventDefault()
@@ -1803,7 +1826,8 @@ const watch = (
       const side = current.side
       const top = side === "top"
       const left = side === "left" ||
-        side === (current.rtl ? "inline-end" : "inline-start")
+        side ===
+          ((current.provider ?? current.rtl) ? "inline-end" : "inline-start")
       if (!top && !left) return
       unanchor = override(popup(), {
         position: "absolute",
@@ -1923,6 +1947,9 @@ const watch = (
       if (next.popupId !== previous.popupId) {
         selectors = selectorsOf(next.popupId)
       }
+      if (next.provider !== previous.provider) {
+        send(MenuMessage.ChangedProvider({ rtl: next.provider }))
+      }
       if (
         next.open !== previous.open || next.lock !== previous.lock ||
         next.touch !== previous.touch
@@ -1960,7 +1987,9 @@ const watch = (
         viewportKey = next.trigger
       }
       if (
-        next.open && (next.side !== previous.side || next.rtl !== previous.rtl)
+        next.open &&
+        (next.side !== previous.side || next.rtl !== previous.rtl ||
+          next.provider !== previous.provider)
       ) {
         anchorPopup()
       }
@@ -2026,6 +2055,10 @@ const watch = (
         node.addEventListener("contextmenu", (event) => {
           if (current.context) event.preventDefault()
         }, { signal })
+        // For the submenus, which share the menu's direction.
+        if (current.provider !== null) {
+          send(MenuMessage.ChangedProvider({ rtl: current.provider }))
+        }
         hold()
         raiseAbove(node)
         if (current.open) {
@@ -2577,7 +2610,8 @@ export const Menu = Html.component({
       }),
       onChange: (menubar) => MenuMessage.ChangedMenubar({ menubar })
     },
-    toolbar: { owner: Toolbar, optional: true }
+    toolbar: { owner: Toolbar, optional: true },
+    provider: { owner: DirectionProvider, optional: true }
   },
   restore: false
 }).make({
@@ -2619,7 +2653,8 @@ export const Menu = Html.component({
     longPress: null,
     justOpened: false,
     releaseArmed: false,
-    barCurrent: null
+    barCurrent: null,
+    provided: null
   }),
   update: {
     PressedTrigger: ($, { key, pointerType, triggerId }) =>
@@ -2810,6 +2845,7 @@ export const Menu = Html.component({
     AllowedRelease: ($) =>
       $.model.pressing ? $.evolve({ releaseAllowed: true }) : $.model,
     ChangedSubmenus: ($, { submenus }) => $.evolve({ submenus }),
+    ChangedProvider: ($, { rtl }) => $.evolve({ provided: rtl }),
     ChangedParent: ($, { parent }) => {
       if ($.props.parentItem === undefined) return $.model
       const next = UiStruct.evolve($.model, { rtl: parent.rtl })
@@ -2851,7 +2887,7 @@ export const Menu = Html.component({
       const next = UiStruct.evolve($.model, { keyboard: true })
       if (!props.open || modified) return next
       const hasValue = (props.query ?? "") !== ""
-      const nav = keys(props.orientation ?? "vertical", $.model.rtl)
+      const nav = keys(props.orientation ?? "vertical", rtlOf($, $.model.rtl))
       if (key === nav.next || key === nav.previous) {
         if (
           props.orientation === "horizontal" && hasValue &&
@@ -2931,7 +2967,8 @@ export const Menu = Html.component({
     const disabled = disabledOf(p)
     const arrowsOpen = p.reads.toolbar?.orientation !== "vertical"
     const orientation = props.orientation ?? "vertical"
-    const rtl = nested ? parent.rtl : model.rtl
+    const cssRtl = nested ? parent.rtl : model.rtl
+    const rtl = rtlOf(p, cssRtl)
     const hover = hoverOf(props, nested)
     const openReason = props.openReason ?? model.reason
     const openMethod = props.openMethod ?? model.openMethod
@@ -3035,7 +3072,8 @@ export const Menu = Html.component({
       })
       const vertical = pressed === "ArrowDown" || pressed === "ArrowUp"
       if (bar === undefined) return vertical && arrowsOpen ? opens : undefined
-      const along = arrowKeys(bar.orientation, bar.rtl)
+      const barRtl = rtlOf(p, bar.rtl)
+      const along = arrowKeys(bar.orientation, barRtl)
       if (
         pressed === along.next || pressed === along.previous ||
         pressed === "Home" || pressed === "End"
@@ -3043,7 +3081,7 @@ export const Menu = Html.component({
         return MenuMessage.PressedBarKey({ key: pressed, trigger: key })
       }
       const across = bar.orientation === "vertical"
-        ? pressed === keys("vertical", bar.rtl).open
+        ? pressed === keys("vertical", barRtl).open
         : vertical
       return across ? opens : undefined
     }
@@ -3194,7 +3232,11 @@ export const Menu = Html.component({
     )
 
     const submenuTriggerPart = p.part("div", (b) => {
-      const parentKeys = keys(parent?.orientation ?? "vertical", rtl)
+      // The trigger is an item of the parent, so the parent's direction.
+      const parentKeys = keys(
+        parent?.orientation ?? "vertical",
+        parent?.rtl ?? rtl
+      )
       const own = pressable(
         triggerAttrs(b, popupId, open, shown).attr(
           "data-disabled",
@@ -3294,7 +3336,8 @@ export const Menu = Html.component({
           focusLeft: model.focusLeft,
           closeMethod: model.closeMethod,
           hoverClose: open && hovered,
-          rtl,
+          rtl: cssRtl,
+          provider: provided(p.reads.provider),
           trigger: activeTrigger,
           popupId,
           inputId: filtering ? inputId : null,

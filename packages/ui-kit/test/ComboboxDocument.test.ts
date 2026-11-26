@@ -86,7 +86,9 @@ const Config = Schema.Struct({
   multiple: Schema.Boolean,
   inputInPopup: Schema.Boolean,
   required: Schema.Boolean,
-  dialog: Schema.Boolean
+  dialog: Schema.Boolean,
+  rtlPopup: Schema.Boolean,
+  grid: Schema.Boolean
 })
 type Config = typeof Config.Type
 
@@ -154,7 +156,8 @@ const Page = Html.component({
             multiple,
             inputInPopup: inPopup,
             name: "fruit",
-            required: h.props.required
+            required: h.props.required,
+            grid: h.props.grid
           },
           onEmit: {
             RequestedOpen: ({ reason }) => Message.RequestedOpen({ reason }),
@@ -208,7 +211,12 @@ const Page = Html.component({
                   input,
                   combobox.trigger(h.button.attr("id", "trigger")).children("▾")
                 ),
-              combobox.positioner(h.div.attr("id", "positioner")).children(
+              combobox.positioner(
+                h.div.attrs({
+                  id: "positioner",
+                  style: h.props.rtlPopup ? "direction:rtl" : undefined
+                })
+              ).children(
                 combobox.popup(h.div.attr("id", "popup")).children(
                   ...(inPopup ? [input] : []),
                   list
@@ -254,6 +262,8 @@ const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
       inputInPopup: false,
       required: false,
       dialog: false,
+      rtlPopup: false,
+      grid: false,
       ...config
     },
     app
@@ -412,9 +422,9 @@ describe("Combobox in a document", { concurrent: false }, () => {
       assert.strictEqual(new FormData(form).get("fruit"), "grape")
     }).pipe(Effect.scoped))
 
-  it.effect("chips: ArrowLeft at the start of the input reaches the chips, and Backspace removes one", () =>
+  it.effect("chips: ArrowLeft at the start of the input reaches the chips, and Backspace removes one, whatever the popup's direction", () =>
     Effect.gen(function*() {
-      const { log, root } = yield* mountPage({ multiple: true })
+      const { log, root } = yield* mountPage({ multiple: true, rtlPopup: true })
       root.send(Message.Picked({ value: ["apple", "banana", "grape"] }))
       yield* tick
       assert.deepStrictEqual(
@@ -424,10 +434,22 @@ describe("Combobox in a document", { concurrent: false }, () => {
         ["apple", "banana", "grape"]
       )
       input().focus()
+      // The popup is right-to-left, the chips are not.
+      keydown(input(), "ArrowDown")
+      yield* tick
+      assert.isTrue(shown())
       input().setSelectionRange(0, 0)
       keydown(input(), "ArrowLeft")
       yield* tick
       assert.strictEqual(document.activeElement, item("chip-grape"))
+      keydown(item("chip-grape"), "ArrowLeft")
+      assert.strictEqual(document.activeElement, item("chip-banana"))
+      // A stylesheet alone turning the chips right-to-left applies at once.
+      const sheet = document.head.appendChild(document.createElement("style"))
+      sheet.textContent = "#group { direction: rtl }"
+      keydown(item("chip-banana"), "ArrowLeft")
+      assert.strictEqual(document.activeElement, item("chip-grape"))
+      sheet.remove()
       keydown(item("chip-grape"), "ArrowLeft")
       assert.strictEqual(document.activeElement, item("chip-banana"))
       keydown(item("chip-banana"), "Backspace")
@@ -440,9 +462,38 @@ describe("Combobox in a document", { concurrent: false }, () => {
       yield* tick
       assert.deepStrictEqual(log(), [
         "Picked apple,banana,grape",
+        "RequestedOpen list-navigation",
         "Picked apple,grape",
         "Picked apple"
       ])
+    }).pipe(Effect.scoped))
+
+  it.effect("a grid's Left and Right follow a direction change while focus stays in the input", () =>
+    Effect.gen(function*() {
+      yield* mountPage({ grid: true })
+      input().focus()
+      keydown(input(), "ArrowDown")
+      yield* tick
+      const highlighted = () =>
+        document.getElementById(
+          input().getAttribute("aria-activedescendant") ?? ""
+        )?.dataset.testid
+      assert.strictEqual(highlighted(), "apple")
+      byId("field").style.direction = "rtl"
+      yield* tick
+      keydown(input(), "ArrowLeft")
+      yield* tick
+      assert.strictEqual(highlighted(), "apricot")
+      // Reopened after a change while closed, it reads the direction again.
+      keydown(input(), "Escape")
+      yield* tick
+      byId("field").style.direction = "ltr"
+      keydown(input(), "ArrowDown")
+      yield* tick
+      assert.strictEqual(highlighted(), "apple")
+      keydown(input(), "ArrowRight")
+      yield* tick
+      assert.strictEqual(highlighted(), "apricot")
     }).pipe(Effect.scoped))
 
   it.effect("with the input in the popup, opening moves focus into it and closing returns it to the trigger", () =>

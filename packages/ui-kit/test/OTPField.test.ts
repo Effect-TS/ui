@@ -44,7 +44,8 @@ const idle = {
   edit: null,
   edits: 0,
   label: null,
-  android: false
+  android: false,
+  rtl: false
 }
 type Props = Omit<OTPFieldProps, "value"> & { readonly value: string }
 const redact = ({ value, ...rest }: Props): OTPFieldProps => ({
@@ -65,6 +66,7 @@ const makeScene = (props: Props, android = false) =>
   HtmlScene.make(OTPField, redact(props), standIn).pipe(
     Effect.map((scene) =>
       scene.mounted(mountOf(scene, slot(0)), { label: null, android })
+        .expectMount(mountOf(scene, root))
     )
   )
 type Scene = Effect.Success<ReturnType<typeof makeScene>>
@@ -322,6 +324,17 @@ describe("OTPField", () => {
         false
       )
       scene.keydown(slot(0), "7").expectIgnored().expectDefaultPrevented(false)
+      // Alt keeps the browser's shortcuts, and Shift selects text.
+      for (
+        const [key, modifiers] of [
+          ["ArrowLeft", { alt: true }],
+          ["Backspace", { alt: true }],
+          ["ArrowLeft", { shift: true }]
+        ] as const
+      ) {
+        scene.keydown(slot(2), key, modifiers).expectIgnored()
+          .expectDefaultPrevented(false)
+      }
 
       scene.keydown(slot(1), "Backspace").expectDefaultPrevented().emitted(
         updated("13", "keyboard")
@@ -350,6 +363,19 @@ describe("OTPField", () => {
       store(scene, "123").shared(DirectionProvider, { direction: "rtl" })
       assert.deepStrictEqual(press(1, "ArrowLeft"), focusOn(2))
       assert.deepStrictEqual(press(1, "ArrowRight"), focusOn(0))
+
+      // Without a provider, the root's CSS direction decides.
+      const css = yield* makeScene({ value: "123", length: 5 })
+      css.mounted(mountOf(css, root), true as never)
+      assert.deepStrictEqual(
+        commands(css.keydown(slot(1), "ArrowLeft").expectDefaultPrevented()),
+        focusOn(2)
+      )
+      css.shared(DirectionProvider, { direction: "ltr" })
+      assert.deepStrictEqual(
+        commands(css.keydown(slot(1), "ArrowLeft")),
+        focusOn(0)
+      )
     }))
 
   it.effect("pasted text and hidden-input autofill fill the slots and can submit the form, unless it was locked as the code completed", () =>

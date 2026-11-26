@@ -21,12 +21,14 @@
  * 0, and returns the builder. An index outside the field's `length`, or
  * drawn twice, fails the render.
  *
- * The root adds one element: a visually hidden `<input type="text">`, after
- * the consumer's children. It holds the whole code under the `name` prop,
- * so the form submits one value, carries `required` and the pattern so the
- * browser can refuse an incomplete code, and takes the browser's autofill.
- * It is absolutely positioned, so a flex or grid `gap` doesn't count it,
- * but `:last-child` and a selector such as `.otp input` do match it. Style
+ * The root adds elements after the consumer's children. First a `hidden`
+ * `<span>` for each slot, holding its position, such as "2 of 6", which the
+ * slot's name points at. Last a visually hidden `<input type="text">`. It
+ * holds the whole code under the `name` prop, so the form submits one
+ * value, carries `required` and the pattern so the browser can refuse an
+ * incomplete code, and takes the browser's autofill. None of them takes up
+ * room or counts in a flex or grid `gap`, but `:last-child`,
+ * `:nth-child` and a selector such as `.otp input` do match them. Style
  * the slots by a class of their own.
  *
  * Anything may sit between the slots, such as a `Separator` between two
@@ -59,10 +61,13 @@
  *
  * Removing a character moves the later ones one slot back, so the code has
  * no gaps, and focus never goes past the first empty slot. Only one slot is
- * in the Tab order: the focused one, or else the first empty one. Inside a
- * `DirectionProvider` with `direction: "rtl"`, Left and Right swap. A
- * read-only field keeps the navigation keys and drops the editing ones. A
- * disabled field handles none.
+ * in the Tab order: the focused one, or else the first empty one. In a
+ * right-to-left layout, Left and Right swap. The field follows the nearest
+ * `DirectionProvider` above it or, without one, the root's CSS `direction`.
+ * A key held with Alt does nothing and keeps its default, such as Back on
+ * Alt+Left, and so does a navigation key held with Shift, which selects
+ * text. A read-only field keeps the navigation keys and drops the editing
+ * ones. A disabled field handles none.
  *
  * **Usage**
  *
@@ -97,13 +102,17 @@
  * input method composes is entered once, when the composition ends.
  *
  * Name the field for assistive technology. The root is a `group`: give it
- * `aria-labelledby`, which `field.group` does from `field.legend`. Each slot
- * with no `aria-label` and no `aria-labelledby` of its own then takes the
- * root's, wherever it is drawn. Or use a `<label>`, around the first slot or
- * with `for` pointing at the `id` prop: it focuses the first slot, and the
- * field finds it when it mounts and names the root and every other slot by
- * it, giving it an `id` if it has none. Or give every slot an `aria-label`,
- * such as "Character 2 of 6".
+ * `aria-labelledby`, which `field.group` does from `field.legend`, or an
+ * `aria-label`. Or use a `<label>`, around the first slot or with `for`
+ * pointing at the `id` prop: it focuses the first slot, and the field finds
+ * it when it mounts and names the root by it, giving it an `id` if it has
+ * none. Each slot with no `aria-label` and no `aria-labelledby` of its own
+ * is then named by the group's name and its position, wherever it is drawn,
+ * such as "Verification code 2 of 6". It points `aria-labelledby` at the
+ * group's label, or at a root named by `aria-label`, which gets an `id` if
+ * it has none, and at the slot's hidden position. The position is in English.
+ * For another language, give every slot an `aria-label` of its own, such as
+ * "Chiffre 2 sur 6". A field with no name leaves the slots unnamed.
  *
  * In a `Field`, the root takes `field.group`, each slot's element takes
  * `field.member`, and the props take `disabled: field.disabled`. Apply the
@@ -138,17 +147,15 @@
  *       view: (otpField) =>
  *         otpField.root(h.div.class("otp").attr("aria-label", "Verification code")).children(
  *           Array.from({ length: otpField.length }, (_, index) =>
- *             otpField.input({
- *               element: h.input.class("slot").attr("aria-label", "Digit " + (index + 1) + " of 6"),
- *               index
- *             }))
+ *             otpField.input({ element: h.input.class("slot"), index }))
  *         )
  *     })
  * })
  *
- * // Six slots, two of them filled, and one hidden input that submits the code.
+ * // Six slots, two of them filled, each named with its position, and one hidden input that submits the code.
  * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(Verify, {}))
  * if (html.match(/<input class="slot"/g)?.length !== 6) throw new Error("the field doesn't draw six slots")
+ * if (!html.includes(">2 of 6</span>")) throw new Error("the second slot's position isn't there")
  * if (html.match(/<input class="slot"[^>]* data-filled/g)?.length !== 2) throw new Error("two slots aren't filled")
  * if (!/<input [^>]*name="code"[^>]* value="12"/.test(html)) throw new Error("the hidden input doesn't hold the code")
  * ```
@@ -171,6 +178,7 @@ import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { DirectionProvider } from "./DirectionProvider.ts"
 import { type Attributed, flag, visuallyHidden } from "./internal/attributes.ts"
+import { rightToLeft, TrackDirection } from "./internal/direction.ts"
 import { input } from "./internal/formInputs.ts"
 import { isAndroid } from "./internal/platform.ts"
 import { clamp } from "./internal/range.ts"
@@ -398,7 +406,8 @@ const OTPFieldMessage = UiSchema.TaggedEnum({
   CompletedInspectFirstSlot: {
     label: Schema.NullOr(Schema.String),
     android: Schema.Boolean
-  }
+  },
+  FoundDirection: { rtl: Schema.Boolean }
 })
 
 type OTPFieldMessage = typeof OTPFieldMessage.Type
@@ -418,7 +427,8 @@ const OTPFieldModel = Schema.Struct({
   })),
   edits: Schema.Number,
   label: Schema.NullOr(Schema.String),
-  android: Schema.Boolean
+  android: Schema.Boolean,
+  rtl: Schema.Boolean
 })
 
 type OTPFieldModel = typeof OTPFieldModel.Type
@@ -803,7 +813,7 @@ const named = <N extends View.Element<any, any>>(
 
 const checked = (
   node: View.Node<any, any>,
-  label: string | undefined,
+  label: (index: number) => string | undefined,
   slots: ReadonlyMap<string, number>,
   drawn: Set<number>
 ): View.Node<any, any> => {
@@ -821,7 +831,7 @@ const checked = (
       )
     }
     drawn.add(index)
-    return named(node, label)
+    return named(node, label(index))
   }
   let children: Array<View.Node<any, any>> | undefined
   node.children.forEach((child, at) => {
@@ -860,16 +870,19 @@ const checked = (
  * the consumer: a slot's own `type` is kept, and the field writes
  * `password` or `text` only on a slot with none; and a slot's
  * `aria-label` or `aria-labelledby` is kept, and the field names only a
- * slot with neither.
+ * slot with neither. A root with `aria-label` and no `aria-labelledby`
+ * keeps its `id`, and gets one if it has none.
  *
  * A slot handles `input`, `compositionend`, `keydown`, `paste`,
  * `mousedown`, `focus` and `blur` on a layer of its own, so the
  * consumer's handlers for them still run. It cancels the keys it handles,
  * every paste, and the mouse press, which would otherwise put a caret
- * beside the character.
+ * beside the character. A key held with Alt, and a navigation key held
+ * with Shift, keep their default.
  *
- * The field reads the nearest `DirectionProvider` above it, if there is
- * one, and swaps Left and Right in a right-to-left layout.
+ * The root has a mount, which reads its CSS `direction`. The field
+ * follows the nearest `DirectionProvider` above it or, without one, that
+ * direction, and swaps Left and Right in a right-to-left layout.
  *
  * History restore saves nothing of it: after Back, forward or a reload it
  * starts from `init`.
@@ -899,7 +912,8 @@ export const OTPField = Html.component({
     edit: null,
     edits: 0,
     label: null,
-    android: false
+    android: false,
+    rtl: false
   }),
   update: {
     UpdatedSlot: ($, { composing, index, value }) => {
@@ -949,7 +963,7 @@ export const OTPField = Html.component({
           "input-paste"
         ),
     PressedKey: ($, message) =>
-      pressKey($, message, $.reads.provider?.direction === "rtl"),
+      pressKey($, message, rightToLeft($.reads.provider, $.model.rtl)),
     PressedSlot: (
       $,
       { index }
@@ -1022,7 +1036,8 @@ export const OTPField = Html.component({
         ? $.evolve({ moving: (moving) => moving - 1 })
         : $.evolve({ moving: 0, target: null }),
     CompletedInspectFirstSlot: ($, { android, label }) =>
-      $.evolve({ android, label })
+      $.evolve({ android, label }),
+    FoundDirection: ($, { rtl }) => $.evolve({ rtl })
   },
   subscriptions: ({ model, props }) => [
     settled(model, props),
@@ -1050,6 +1065,22 @@ export const OTPField = Html.component({
     const slots = new Map(
       Array.from({ length }, (_, index) => [Slot.at(index).key, index])
     )
+    // A slot's name is the group's name and its position, such as "Code 2
+    // of 6". Hidden elements hold the positions, so they join the group's
+    // name by id, whether that comes from ids or from text.
+    const position = (index: number) => p.id("position", index)
+    const positions = Array.from(
+      { length },
+      (_, index) =>
+        new Html.Element<never>("span")
+          .attrs({ id: position(index), hidden: "" })
+          .children(index + 1 + " of " + length)
+    )
+    // A field with no name leaves its slots alone, so a `<label>` keeps
+    // naming the first one until the field finds it.
+    const slotLabel = (index: number) =>
+      inherited === undefined ? undefined : inherited + " " + position(index)
+    // Set once the root is built, to the ids that name the group.
     let inherited: string | undefined
     const state = <B extends Attributed<B>>(builder: B): B =>
       builder
@@ -1121,14 +1152,17 @@ export const OTPField = Html.component({
         .value(character)
         .on(
           "keydown",
-          ({ alt, composing, ctrl, key, meta }) =>
+          ({ alt, composing, ctrl, key, meta, shift }) =>
             composing || model.composing !== null ||
+              // Alt keeps the browser's shortcuts, such as Back on Alt+Left,
+              // and Shift keeps selecting text.
+              alt || (shift && navigationKeys.has(key)) ||
               !(navigationKeys.has(key) || (!readOnly && editingKeys.has(key)))
               ? undefined
               : OTPFieldMessage.PressedKey({
                 index,
                 key,
-                boundary: (ctrl || meta) && !alt
+                boundary: ctrl || meta
               }),
           { preventDefault: true }
         )
@@ -1170,9 +1204,10 @@ export const OTPField = Html.component({
             : node
           // Only a slot drawn inside another component finds a name here: that component renders after
           // the root is built. The root names the slots among its own children itself.
-          return inherited === undefined || isNamed(typed.elementAttrs)
+          const label = slotLabel(index)
+          return label === undefined || isNamed(typed.elementAttrs)
             ? typed
-            : typed.attr("aria-labelledby", inherited)
+            : typed.attr("aria-labelledby", label)
         })
     })
     return {
@@ -1187,13 +1222,29 @@ export const OTPField = Html.component({
       root: p.part((b) =>
         state(b)
           .attrs({ role: "group", "data-filled": flag(filled) })
+          .onMount(
+            TrackDirection().pipe(
+              Mount.map((rtl) => OTPFieldMessage.FoundDirection({ rtl }))
+            )
+          )
           .forward((node) => {
-            const root = View.build(node, [hiddenInput(input())])
-            const label = root.attrs["aria-labelledby"] ?? model.label ??
-              undefined
-            inherited = label
+            const built = View.build(node, [
+              ...positions,
+              hiddenInput(input())
+            ])
+            const own = built.attrs["aria-labelledby"]
+            const label = model.label ?? undefined
+            // A root named by `aria-label` names the slots through its id.
+            const id =
+              own === undefined && built.attrs["aria-label"] !== undefined
+                ? (built.attrs.id ?? p.id("group"))
+                : undefined
+            const root = id === undefined || built.attrs.id === id
+              ? built
+              : { ...built, attrs: { ...built.attrs, id } }
+            inherited = own ?? id ?? label
             return named(
-              checked(root, label, slots, new Set()) as typeof root,
+              checked(root, slotLabel, slots, new Set()) as typeof root,
               label
             )
           })

@@ -4,6 +4,7 @@ import {
   type ComboboxEvents,
   type ComboboxItem,
   type ComboboxProps,
+  DirectionProvider,
   makeComboboxFilter
 } from "@effect/ui-kit"
 import { Html, HtmlCommand } from "@effect/ui/html"
@@ -763,7 +764,7 @@ describe("Combobox", () => {
         )
     }))
 
-  it.effect("grid navigates rows and columns, flips horizontal arrows in RTL, and leaves the caret alone when unhighlighted", () =>
+  it.effect("grid navigates rows and columns, flips horizontal arrows by dir, then the DirectionProvider, then the CSS direction, and leaves the caret alone when unhighlighted", () =>
     Effect.gen(function*() {
       const grid = Array.from({ length: 7 }, (_, index) => ({
         value: "e" + index,
@@ -796,7 +797,18 @@ describe("Combobox", () => {
         highlighted("e6", 6)
       )
       scene.fire(input, "keydown", key("ArrowUp")).emitted(highlighted("e3", 3))
-      scene.props({ ...props, dir: "rtl" })
+      scene.props({ ...props, inline: true }).mounted(
+        trackedOn(list)(scene),
+        sent("FoundDirection", { rtl: true })
+      )
+      scene.fire(input, "keydown", key("ArrowLeft")).emitted(
+        highlighted("e4", 4)
+      )
+      scene.shared(DirectionProvider, { direction: "ltr" })
+      scene.fire(input, "keydown", key("ArrowLeft")).emitted(
+        highlighted("e3", 3)
+      )
+      scene.props({ ...props, inline: true, dir: "rtl" })
       scene.fire(input, "keydown", key("ArrowLeft")).emitted(
         highlighted("e4", 4)
       )

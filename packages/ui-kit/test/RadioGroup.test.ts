@@ -50,7 +50,8 @@ const parts = (props: RadioGroupProps) =>
       current: props.value,
       settled: props.value,
       mounted: [],
-      leaving: []
+      leaving: [],
+      rtl: false
     },
     props
   })
@@ -217,9 +218,17 @@ describe("RadioGroup", () => {
 
       scene.props({ value: "ssd", items })
       scene.expectMount(mountOf(scene, indicator("ssd")))
-      scene.shared(DirectionProvider, { direction: "rtl" })
+      // The root's CSS direction, unless a provider decides.
+      scene.mounted(
+        mountOf(scene, root),
+        { _tag: "FoundDirection", rtl: true } as never
+      )
       scene.fire(radio("ssd"), "keydown", { key: "ArrowLeft" })
         .expectDefaultPrevented()
+        .emitted({ _tag: "Picked", value: "nvme" })
+      expectFocus(scene, "nvme")
+      scene.shared(DirectionProvider, { direction: "ltr" })
+      scene.fire(radio("ssd"), "keydown", { key: "ArrowRight" })
         .emitted({ _tag: "Picked", value: "nvme" })
       expectFocus(scene, "nvme")
     }))

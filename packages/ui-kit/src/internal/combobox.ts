@@ -20,6 +20,14 @@ import {
   withStyle
 } from "./attributes.ts"
 import { backdropBox, blockers, cutPath } from "./blocker.ts"
+import {
+  type Directed,
+  isRtl,
+  provided,
+  rightToLeft,
+  watchDirection,
+  watchDirectionScoped
+} from "./direction.ts"
 import { byAttribute, focusFinal } from "./dom.ts"
 import { textFilter } from "./filter.ts"
 import {
@@ -200,7 +208,9 @@ export const Message = UiSchema.TaggedEnum({
   ChangedPlacement: { placement: Positioning.Placement },
   PressedOutside: { pointerType: Schema.String },
   FocusedOutside: {},
-  ReleasedPointer: { outside: Schema.Boolean }
+  ReleasedPointer: { outside: Schema.Boolean },
+  FoundDirection: { rtl: Schema.Boolean },
+  FoundChipsDirection: { rtl: Schema.Boolean }
 })
 
 export type Message = typeof Message.Type
@@ -225,7 +235,10 @@ export const Model = Schema.Struct({
   placement: Schema.NullOr(Positioning.Placement),
   completion: Schema.NullOr(
     Schema.Struct({ label: Schema.String, from: Schema.String })
-  )
+  ),
+  // The CSS `direction` of the list or its positioner, and of the chips.
+  rtl: Schema.Boolean,
+  chipsRtl: Schema.Boolean
 })
 
 export type Model = typeof Model.Type
@@ -248,7 +261,9 @@ export const init = (): Model => ({
   typedFrom: -1,
   matched: -1,
   placement: null,
-  completion: null
+  completion: null,
+  rtl: false,
+  chipsRtl: false
 })
 
 type Step<E> = Component.Step<Model, Message, E>
@@ -1015,6 +1030,11 @@ const watch = (
           capture: true,
           signal
         })
+        watchDirection(
+          node,
+          (rtl) => send(Message.FoundDirection({ rtl })),
+          signal
+        )
         node.addEventListener("focusin", onFocusIn, { signal })
         node.addEventListener("mousedown", onMouseDown, { signal })
         hold()
@@ -1063,9 +1083,13 @@ const TrackComboboxList = Mount.makeStream(
   "TrackComboboxList",
   { args: { list: ListArgs } },
   (node: HTMLElement, args, changes) =>
-    Stream.callback<Message>(() => {
+    Stream.callback<Message>((queue) => {
       const follow = following(node.ownerDocument, () => node)
-      return Effect.sync(() => follow(args.list)).pipe(
+      return watchDirectionScoped(
+        node,
+        (rtl) => Queue.offerUnsafe(queue, Message.FoundDirection({ rtl }))
+      ).pipe(
+        Effect.andThen(Effect.sync(() => follow(args.list))),
         Effect.andThen(Effect.forkScoped(Stream.runForEach(changes, (next) =>
           Effect.sync(() =>
             follow(next.list)
@@ -1077,7 +1101,12 @@ const TrackComboboxList = Mount.makeStream(
 const TrackComboboxChips = Mount.makeStream(
   "TrackComboboxChips",
   {
-    args: { owner: Schema.String, rtl: Schema.Boolean, locked: Schema.Boolean }
+    args: {
+      owner: Schema.String,
+      // Set by `dir` or a provider; else the chips' CSS as the key lands.
+      rtl: Schema.NullOr(Schema.Boolean),
+      locked: Schema.Boolean
+    }
   },
   (node: HTMLElement, args, changes) =>
     Stream.callback<Message>((queue) => {
@@ -1100,7 +1129,7 @@ const TrackComboboxChips = Mount.makeStream(
         if (index === -1) return
         const move = (target: HTMLElement | undefined) =>
           (target ?? input())?.focus()
-        const [previous, next] = current.rtl
+        const [previous, next] = (current.rtl ?? isRtl(node))
           ? ["ArrowRight", "ArrowLeft"]
           : ["ArrowLeft", "ArrowRight"]
         const key = event.key
@@ -1129,11 +1158,16 @@ const TrackComboboxChips = Mount.makeStream(
       }
       const controller = new AbortController()
       return Effect.acquireRelease(
-        Effect.sync(() =>
+        Effect.sync(() => {
+          watchDirection(
+            node,
+            (rtl) => send(Message.FoundChipsDirection({ rtl })),
+            controller.signal
+          )
           node.addEventListener("keydown", onKeyDown, {
             signal: controller.signal
           })
-        ).pipe(
+        }).pipe(
           Effect.tap(() =>
             Effect.forkScoped(Stream.runForEach(changes, (next) =>
               Effect.sync(() => {
@@ -1147,9 +1181,20 @@ const TrackComboboxChips = Mount.makeStream(
     })
 )
 
+type Update<P, E> = Component.Update<Model, Message, E, P> & Directed
+
+// The `dir` prop wins, then the nearest `DirectionProvider`, then the CSS
+// `direction` a mount found.
+const rtlOf = (
+  dir: "ltr" | "rtl" | undefined,
+  reads: Directed["reads"],
+  css: boolean
+): boolean =>
+  dir !== undefined ? dir === "rtl" : rightToLeft(reads.provider, css)
+
 type Handlers<P, E> = {
   readonly [K in Message["_tag"]]: (
-    $: Component.Update<Model, Message, E, P>,
+    $: Update<P, E>,
     message: Extract<Message, { readonly _tag: K }>
   ) => Model | Step<E>
 }
@@ -1158,9 +1203,16 @@ export const make = <P, E>(
   name: string,
   settingsOf: (props: P) => Settings<E>
 ) => {
-  const s = ($: { readonly props: P }): Settings<E> => settingsOf($.props)
+  // With `dir` resolved for the list's keys.
+  const s = ($: Update<P, E>): Settings<E> => {
+    const settings = settingsOf($.props)
+    return {
+      ...settings,
+      dir: rtlOf(settings.dir, $.reads, $.model.rtl) ? "rtl" : "ltr"
+    }
+  }
 
-  const focusInput = ($: Component.Update<Model, Message, E, P>) => {
+  const focusInput = ($: Update<P, E>) => {
     const props = s($)
     return focus(
       $,
@@ -1314,14 +1366,17 @@ export const make = <P, E>(
       if (!$.model.pressing) return $.model
       const next = $.evolve({ pressing: false })
       return outside ? dismiss(next, s($), "cancel-open", "mouse") : next
-    }
+    },
+    FoundDirection: ($, { rtl }) => $.evolve({ rtl }),
+    FoundChipsDirection: ($, { rtl }) => $.evolve({ chipsRtl: rtl })
   }
 
   const parts = (
-    p: Component.PartsHelper<Message, P, Html.Elements>,
+    p: Component.PartsHelper<Message, P, Html.Elements> & Directed,
     model: Model
   ) => {
     const props = settingsOf(p.props)
+    const chipsRtl = rtlOf(props.dir, p.reads, model.chipsRtl)
     const open = props.open
     const inline = props.inline === true
     const inPopup = props.inputInPopup === true
@@ -1474,7 +1529,7 @@ export const make = <P, E>(
           return (grid && navigable && highlighted !== null) ||
             (!readOnly && chipsDrawn && values.length > 0 &&
               selectionStart === 0 &&
-              key === (props.dir === "rtl" ? "ArrowRight" : "ArrowLeft"))
+              key === (chipsRtl ? "ArrowRight" : "ArrowLeft"))
         case "Enter":
           return navigable && highlighted !== null
         case " ":
@@ -1688,7 +1743,9 @@ export const make = <P, E>(
         .onMount(
           TrackComboboxChips({
             owner,
-            rtl: props.dir === "rtl",
+            rtl: props.dir !== undefined
+              ? props.dir === "rtl"
+              : provided(p.reads.provider),
             locked: disabled || readOnly
           })
         )

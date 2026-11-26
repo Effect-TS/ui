@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { UiSchema } from "@effect/ui"
-import { Menu, type MenuItem } from "@effect/ui-kit"
+import { DirectionProvider, Menu, type MenuItem } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -80,7 +80,9 @@ const Config = Schema.Struct({
   viewport: Schema.Boolean,
   closeParentOnEsc: Schema.Boolean,
   refuseClose: Schema.Boolean,
-  shareDisabled: Schema.Boolean
+  shareDisabled: Schema.Boolean,
+  rtlRoot: Schema.Boolean,
+  rtlShare: Schema.Boolean
 })
 type Config = typeof Config.Type
 
@@ -144,128 +146,141 @@ const Page = Html.component({
     ChangedModal: ($, { modal }) => ({ ...$.model, modal })
   },
   view: (h, model) =>
-    Menu(h, {
-      props: {
-        open: model.open,
-        items: h.props.shareDisabled
-          ? items.map((item) =>
-            item.value === "share" ? { ...item, disabled: true } : item
-          )
-          : items,
-        id: "menu",
-        modal: model.modal,
-        triggerId: h.props.viewport ? model.triggerId : undefined,
-        ...(h.props.filter ? { query: model.query } : {})
-      },
-      onEmit: {
-        RequestedOpen: ({ reason, triggerId }) =>
-          Message.RequestedOpen({ menu: "root", reason, triggerId }),
-        RequestedClose: ({ reason }) =>
-          Message.RequestedClose({ menu: "root", reason }),
-        Picked: ({ value }) => Message.Picked({ menu: "root", value }),
-        Highlighted: () => undefined,
-        RequestedQuery: ({ query }) => Message.RequestedQuery({ query }),
-        Settled: () => undefined
-      },
-      view: (menu) =>
-        h.div(
-          h.button.attrs({ id: "before", type: "button" }).children("Before"),
-          menu.trigger({ element: h.button.attr("id", "trigger") }).children(
-            "Edit"
-          ),
-          h.props.viewport
-            ? menu.trigger({
-              element: h.button.attr("id", "trigger-2"),
-              openOnHover: true,
-              delay: 0,
-              closeDelay: 300
-            })
-              .children("View")
-            : null,
-          h.props.viewport
-            ? menu.trigger({
-              element: h.button.attr("id", "trigger-3"),
-              disabled: true
-            }).children("Off")
-            : null,
-          menu.positioner(h.div.attr("id", "positioner")).children(
-            menu.popup(h.div).children(
+    DirectionProvider(h, {
+      props: { direction: h.props.rtlRoot ? "rtl" : "ltr" },
+      view: () =>
+        Menu(h, {
+          props: {
+            open: model.open,
+            items: h.props.shareDisabled
+              ? items.map((item) =>
+                item.value === "share" ? { ...item, disabled: true } : item
+              )
+              : items,
+            id: "menu",
+            modal: model.modal,
+            triggerId: h.props.viewport ? model.triggerId : undefined,
+            ...(h.props.filter ? { query: model.query } : {})
+          },
+          onEmit: {
+            RequestedOpen: ({ reason, triggerId }) =>
+              Message.RequestedOpen({ menu: "root", reason, triggerId }),
+            RequestedClose: ({ reason }) =>
+              Message.RequestedClose({ menu: "root", reason }),
+            Picked: ({ value }) => Message.Picked({ menu: "root", value }),
+            Highlighted: () => undefined,
+            RequestedQuery: ({ query }) => Message.RequestedQuery({ query }),
+            Settled: () => undefined
+          },
+          view: (menu) =>
+            h.div(
+              h.button.attrs({ id: "before", type: "button" }).children(
+                "Before"
+              ),
+              menu.trigger({ element: h.button.attr("id", "trigger") })
+                .children(
+                  "Edit"
+                ),
               h.props.viewport
-                ? menu.viewport(h.div.attr("id", "viewport")).children(
-                  h.span.children("Content")
-                )
+                ? menu.trigger({
+                  element: h.button.attr("id", "trigger-2"),
+                  openOnHover: true,
+                  delay: 0,
+                  closeDelay: 300
+                })
+                  .children("View")
                 : null,
-              h.props.filter
-                ? menu.input(h.input.attr("data-testid", "input"))
+              h.props.viewport
+                ? menu.trigger({
+                  element: h.button.attr("id", "trigger-3"),
+                  disabled: true
+                }).children("Off")
                 : null,
-              menu.item({
-                element: h.div.attr("data-testid", "copy"),
-                value: "copy"
-              }).children("Copy"),
-              menu.item({
-                element: h.div.attr("data-testid", "cut"),
-                value: "cut"
-              }).children("Cut"),
-              menu.item({
-                element: h.div.attr("data-testid", "paste"),
-                value: "paste"
-              }).children("Paste"),
-              Menu(h, {
-                props: {
-                  open: model.share,
-                  items: shareItems,
-                  parentItem: "share",
-                  id: "share-menu",
-                  closeParentOnEsc: h.props.closeParentOnEsc
-                },
-                onEmit: {
-                  RequestedOpen: ({ reason }) =>
-                    Message.RequestedOpen({
-                      menu: "share",
-                      reason,
-                      triggerId: null
-                    }),
-                  RequestedClose: ({ reason }) =>
-                    Message.RequestedClose({ menu: "share", reason }),
-                  Picked: ({ value }) =>
-                    Message.Picked({ menu: "share", value }),
-                  Highlighted: () => undefined,
-                  RequestedQuery: () => undefined,
-                  Settled: () => undefined
-                },
-                view: (share) =>
-                  h.div(
-                    menu.item({
-                      element: share.submenuTrigger(
-                        h.div.attr("data-testid", "share")
-                      ),
-                      value: "share"
-                    })
-                      .children("Share"),
-                    share.positioner(h.div.attr("id", "share-positioner"))
-                      .children(
-                        share.popup(h.div).children(
-                          share.item({
-                            element: h.div.attr("data-testid", "email"),
-                            value: "email"
-                          }).children("Email"),
-                          share.item({
-                            element: h.div.attr("data-testid", "link"),
-                            value: "link"
-                          }).children("Copy link")
-                        )
-                      )
-                  )
-              }),
-              h.props.filter
-                ? menu.empty(h.div.attr("data-testid", "empty"))?.children(
-                  "No matches"
+              menu.positioner(h.div.attr("id", "positioner")).children(
+                menu.popup(h.div).children(
+                  h.props.viewport
+                    ? menu.viewport(h.div.attr("id", "viewport")).children(
+                      h.span.children("Content")
+                    )
+                    : null,
+                  h.props.filter
+                    ? menu.input(h.input.attr("data-testid", "input"))
+                    : null,
+                  menu.item({
+                    element: h.div.attr("data-testid", "copy"),
+                    value: "copy"
+                  }).children("Copy"),
+                  menu.item({
+                    element: h.div.attr("data-testid", "cut"),
+                    value: "cut"
+                  }).children("Cut"),
+                  menu.item({
+                    element: h.div.attr("data-testid", "paste"),
+                    value: "paste"
+                  }).children("Paste"),
+                  DirectionProvider(h, {
+                    props: { direction: h.props.rtlShare ? "rtl" : "ltr" },
+                    view: () =>
+                      Menu(h, {
+                        props: {
+                          open: model.share,
+                          items: shareItems,
+                          parentItem: "share",
+                          id: "share-menu",
+                          closeParentOnEsc: h.props.closeParentOnEsc
+                        },
+                        onEmit: {
+                          RequestedOpen: ({ reason }) =>
+                            Message.RequestedOpen({
+                              menu: "share",
+                              reason,
+                              triggerId: null
+                            }),
+                          RequestedClose: ({ reason }) =>
+                            Message.RequestedClose({ menu: "share", reason }),
+                          Picked: ({ value }) =>
+                            Message.Picked({ menu: "share", value }),
+                          Highlighted: () => undefined,
+                          RequestedQuery: () => undefined,
+                          Settled: () => undefined
+                        },
+                        view: (share) =>
+                          h.div(
+                            menu.item({
+                              element: share.submenuTrigger(
+                                h.div.attr("data-testid", "share")
+                              ),
+                              value: "share"
+                            })
+                              .children("Share"),
+                            share.positioner(
+                              h.div.attr("id", "share-positioner")
+                            )
+                              .children(
+                                share.popup(h.div).children(
+                                  share.item({
+                                    element: h.div.attr("data-testid", "email"),
+                                    value: "email"
+                                  }).children("Email"),
+                                  share.item({
+                                    element: h.div.attr("data-testid", "link"),
+                                    value: "link"
+                                  }).children("Copy link")
+                                )
+                              )
+                          )
+                      })
+                  }),
+                  h.props.filter
+                    ? menu.empty(h.div.attr("data-testid", "empty"))?.children(
+                      "No matches"
+                    )
+                    : null
                 )
-                : null
+              ),
+              h.button.attrs({ id: "after", type: "button" }).children("After")
             )
-          ),
-          h.button.attrs({ id: "after", type: "button" }).children("After")
-        )
+        })
     })
 })
 
@@ -280,6 +295,8 @@ const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
     closeParentOnEsc: false,
     refuseClose: false,
     shareDisabled: false,
+    rtlRoot: false,
+    rtlShare: false,
     ...config
   }, app)
   yield* tick
@@ -587,6 +604,46 @@ describe("Menu in a document", { concurrent: false }, () => {
         "root RequestedClose item-press"
       ])
     }))
+
+  it.effect("a filtered menu opens a submenu under another direction with its own key, and the submenu's keys follow the submenu", () =>
+    Effect.forEach([false, true], (rtlRoot) =>
+      Effect.gen(function*() {
+        // Share's direction is the parent's reversed, so one key both opens
+        // and closes it.
+        const key = rtlRoot ? "ArrowLeft" : "ArrowRight"
+        const { log } = yield* mountPage({
+          filter: true,
+          rtlRoot,
+          rtlShare: !rtlRoot
+        })
+        mousedown(byId("trigger"))
+        yield* tick
+        const input = item("input") as HTMLInputElement
+        input.value = "sh"
+        input.dispatchEvent(new Event("input", { bubbles: true }))
+        yield* tick
+        keydown(input, "ArrowDown")
+        yield* tick
+        assert.strictEqual(
+          input.getAttribute("aria-activedescendant"),
+          item("share").id
+        )
+        input.setSelectionRange(2, 2)
+        // The parent's direction opens it.
+        assert.isTrue(keydown(input, key).defaultPrevented)
+        yield* tick
+        assert.isTrue(shown("share-positioner"))
+        assert.strictEqual(document.activeElement, item("email"))
+        // The submenu's direction closes it.
+        keydown(item("email"), key)
+        yield* tick
+        assert.isFalse(shown("share-positioner"))
+        assert.deepStrictEqual(log(), [
+          "root RequestedOpen trigger-press",
+          "share RequestedOpen list-navigation",
+          "share RequestedClose list-navigation"
+        ])
+      }).pipe(Effect.scoped)))
 
   it.effect("releasing an opening press outside cancels it, and releasing over an item picks it after 200ms", () =>
     Effect.gen(function*() {

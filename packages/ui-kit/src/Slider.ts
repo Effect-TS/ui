@@ -31,7 +31,8 @@
  * The kit sets no layout. `thumb` gets `--slider-thumb-position` and
  * `indicator` gets `--slider-indicator-start` and
  * `--slider-indicator-size`, each a percentage along the control, from the
- * left or, when vertical, from the bottom. The hidden input fills the
+ * left or, when vertical, from the bottom. A horizontal right-to-left slider
+ * has `min` on the right; its percentages still count from the left. The hidden input fills the
  * thumb with `position: absolute`, so give the thumb a position. For
  * dragging by touch, give the control `touch-action: none`.
  *
@@ -68,7 +69,8 @@
  *
  * Tab moves between the thumbs' inputs. On a focused thumb:
  *
- * - ArrowRight and ArrowUp add `step`; ArrowLeft and ArrowDown take it away
+ * - ArrowRight and ArrowUp add `step`; ArrowLeft and ArrowDown take it
+ *   away, with Left and Right swapped on a horizontal right-to-left slider
  * - Shift with an arrow, PageUp and PageDown move by `largeStep`
  * - Home and End go to `min` and `max`, or, with several thumbs, as far
  *   as the neighbouring thumb allows
@@ -79,11 +81,12 @@
  * top. A `value` off the grid shows at its nearest step, as the native
  * input shows it, and `values` and the events report that step.
  *
- * The arrows assume left-to-right text. The input's `keydown` handler
- * cancels the default of these keys only, so the input gets every
- * `keydown` while it has focus, and an ancestor's `keydown` handler never
- * sees them. To handle them, add a `keydown` handler to the input's
- * builder.
+ * A key held with Alt, Ctrl or Meta is left to the browser. The slider
+ * follows the nearest `DirectionProvider` above it or, without one, the
+ * control's CSS `direction`. The input's `keydown` handler cancels the
+ * default of the keys it handles only, so the input gets every `keydown`
+ * while it has focus, and an ancestor's `keydown` handler never sees them.
+ * To handle them, add a `keydown` handler to the input's builder.
  *
  * **Pointer**
  *
@@ -172,12 +175,18 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
+import { DirectionProvider } from "./DirectionProvider.ts"
 import {
   type Attributed,
   flag,
   ownStyle,
   withStyle
 } from "./internal/attributes.ts"
+import {
+  type Directed,
+  rightToLeft,
+  watchDirectionScoped
+} from "./internal/direction.ts"
 import { focusVisible } from "./internal/dom.ts"
 import { clamp } from "./internal/range.ts"
 import type { WithRequirements } from "./internal/requirements.ts"
@@ -200,7 +209,7 @@ type Value = typeof Value.Type
  * - `largeStep`: what Shift with an arrow, PageUp and PageDown move by,
  *   `10` by default.
  * - `minStepsBetweenValues`: how many steps apart two thumbs stay, `0` by
- *   default.
+ *   default. Part of a step counts as a whole one.
  * - `orientation`: `"horizontal"` by default.
  * - `thumbCollisionBehavior`: what a thumb dragged into another does.
  *   `"push"`, the default, pushes it along; `"swap"` passes it, and the
@@ -274,7 +283,8 @@ const SliderMessage = UiSchema.TaggedEnum({
   },
   UpdatedThumb: { index: Schema.Number, value: Schema.String },
   FocusedThumb: { index: Schema.Number },
-  BlurredThumb: { index: Schema.Number }
+  BlurredThumb: { index: Schema.Number },
+  FoundDirection: { rtl: Schema.Boolean }
 })
 
 type SliderMessage = typeof SliderMessage.Type
@@ -282,22 +292,21 @@ type SliderMessage = typeof SliderMessage.Type
 // `active`: the thumb whose input has focus, or -1. `pressed`: the thumb
 // the pointer is dragging, or -1. `pressedValues`: the values when the press
 // began, which a swap restores. `moved`: the last value the press reported,
-// which its release commits.
+// which its release commits. `rtl`: the control's CSS `direction` is
+// right-to-left.
 const SliderModel = Schema.Struct({
   active: Schema.Number,
   pressed: Schema.Number,
   pressedValues: Schema.Array(Schema.Number),
-  moved: Schema.NullOr(Value)
+  moved: Schema.NullOr(Value),
+  rtl: Schema.Boolean
 })
 
 type SliderModel = typeof SliderModel.Type
 
-type SliderUpdate = Component.Update<
-  SliderModel,
-  SliderMessage,
-  SliderEvents,
-  SliderProps
->
+type SliderUpdate =
+  & Component.Update<SliderModel, SliderMessage, SliderEvents, SliderProps>
+  & Directed
 
 // -- the value arithmetic ----------------------------------------------------
 
@@ -342,6 +351,8 @@ interface Settings {
   readonly largeStep: number
   readonly gap: number
   readonly vertical: boolean
+  // Horizontal in a right-to-left layout, so `min` is on the right.
+  readonly reversed: boolean
   readonly collision: "push" | "swap" | "none"
   // The value is an array, so the events carry one.
   readonly array: boolean
@@ -350,7 +361,7 @@ interface Settings {
   readonly disabled: boolean
 }
 
-const settingsOf = (props: SliderProps): Settings => {
+const settingsOf = (props: SliderProps, rtl: boolean): Settings => {
   const min = props.min ?? 0
   const max = props.max ?? 100
   const step = props.step ?? 1
@@ -367,8 +378,12 @@ const settingsOf = (props: SliderProps): Settings => {
     top,
     step,
     largeStep: props.largeStep ?? 10,
-    gap: exact(step * (props.minStepsBetweenValues ?? 0)),
+    // Whole steps, so a thumb the gap from another stays on the grid.
+    gap: exact(
+      step * Math.max(0, Math.ceil(exact(props.minStepsBetweenValues ?? 0)))
+    ),
     vertical: props.orientation === "vertical",
+    reversed: rtl && props.orientation !== "vertical",
     collision: props.thumbCollisionBehavior ?? "push",
     array,
     // At the step the native input shows, so the input, its ARIA value
@@ -387,6 +402,10 @@ const keepsGap = (s: Settings, values: ReadonlyArray<number>): boolean =>
 // Where a value sits between min and max, in percent.
 const percentOf = (s: Settings, value: number): number =>
   s.max === s.min ? 0 : ((value - s.min) / (s.max - s.min)) * 100
+
+// Where a value sits from the left, or from the bottom when vertical.
+const positionOf = (s: Settings, value: number): number =>
+  s.reversed ? 100 - percentOf(s, value) : percentOf(s, value)
 
 // The values with the thumb at `index` moved to `next`, pushing the
 // thumbs it meets along and keeping them `gap` apart. A thumb pushed back
@@ -484,24 +503,30 @@ const collide = (
   return { values: adjusted, index: target }
 }
 
-// The value at a point along the control, from 0 at the start to 1 at the
-// end.
+// The value at a point along the control, from 0 at the left or the bottom
+// to 1 at the right or the top.
 const valueAt = (s: Settings, fraction: number): number =>
-  snap(s.min + fraction * (s.max - s.min), s.step, s.min, s.top)
+  snap(
+    s.min + (s.reversed ? 1 - fraction : fraction) * (s.max - s.min),
+    s.step,
+    s.min,
+    s.top
+  )
 
-// The values with one thumb's input set to `next`, kept between its
-// neighbours.
+// The values with one thumb's input set to `next`, kept `gap` from its
+// neighbours and within the range. A thumb with no such place stays.
 const withThumb = (
   s: Settings,
   index: number,
   next: number
 ): ReadonlyArray<number> => {
+  const previous = s.values[index - 1]
+  const following = s.values[index + 1]
+  const low = previous === undefined ? s.min : exact(previous + s.gap)
+  const high = following === undefined ? s.top : exact(following - s.gap)
+  if (low > high) return s.values
   const values = s.values.slice()
-  values[index] = clamp(
-    next,
-    values[index - 1] ?? s.min,
-    values[index + 1] ?? s.top
-  )
+  values[index] = clamp(next, low, high)
   return values
 }
 
@@ -547,6 +572,15 @@ const sliderKeys = new Set([
   "End"
 ])
 
+// Keys with Alt, Ctrl or Meta are the browser's, such as Alt with an arrow
+// going back.
+const handles = (
+  key: string,
+  alt: boolean,
+  ctrl: boolean,
+  meta: boolean
+): boolean => !alt && !ctrl && !meta && sliderKeys.has(key)
+
 // Where an arrow, Page or Home and End key puts a thumb.
 const keyed = (
   s: Settings,
@@ -556,23 +590,18 @@ const keyed = (
 ): number | undefined => {
   const current = s.values[index]
   if (current === undefined) return undefined
-  const range = s.values.length > 1
-  if (key === "Home") {
-    return range && index > 0
-      ? exact(s.values[index - 1]! + s.gap)
-      : s.min
-  }
-  if (key === "End") {
-    return range && index < s.values.length - 1
-      ? exact(s.values[index + 1]! - s.gap)
-      : s.top
-  }
-  const direction =
-    key === "ArrowUp" || key === "ArrowRight" || key === "PageUp"
-      ? 1
-      : key === "ArrowDown" || key === "ArrowLeft" || key === "PageDown"
-      ? -1
-      : 0
+  // `withThumb` stops them at a neighbouring thumb.
+  if (key === "Home") return s.min
+  if (key === "End") return s.top
+  const direction = key === "ArrowUp" || key === "PageUp"
+    ? 1
+    : key === "ArrowDown" || key === "PageDown"
+    ? -1
+    : key === "ArrowRight"
+    ? s.reversed ? -1 : 1
+    : key === "ArrowLeft"
+    ? s.reversed ? 1 : -1
+    : 0
   if (direction === 0) return undefined
   const increment = shift || key === "PageUp" || key === "PageDown"
     ? s.largeStep
@@ -614,8 +643,13 @@ const released: SliderModel = {
   active: -1,
   pressed: -1,
   pressedValues: [],
-  moved: null
+  moved: null,
+  rtl: false
 }
+
+const settingsIn = (
+  $: { readonly props: SliderProps; readonly model: SliderModel } & Directed
+): Settings => settingsOf($.props, rightToLeft($.reads.provider, $.model.rtl))
 
 // -- the pointer -------------------------------------------------------------
 
@@ -644,7 +678,8 @@ const midpointOf = (element: Element, vertical: boolean): number => {
 }
 
 // Presses on the control, then the pointer's moves and its release
-// anywhere in the document, and the keys on a thumb a press focused. A
+// anywhere in the document, the keys on a thumb a press focused, and the
+// control's CSS `direction`. A
 // press on a thumb drags it from where it was grabbed. A press on the track
 // drags the nearest thumb. `pressed`: the thumb the Model drags, which gets
 // focus. `vertical`: measure along the height, from the bottom.
@@ -689,6 +724,11 @@ const TrackPointer = Mount.makeStream(
         }
         // The document's listeners for the press under way.
         let listening: AbortController | undefined
+        const readDirection = yield* watchDirectionScoped(
+          node,
+          (rtl) =>
+            Queue.offerUnsafe(queue, SliderMessage.FoundDirection({ rtl }))
+        )
         const release = () => {
           if (pointer === null) return
           if (node.hasPointerCapture?.(pointer)) {
@@ -748,6 +788,8 @@ const TrackPointer = Mount.makeStream(
           node.setPointerCapture?.(event.pointerId)
           listening = new AbortController()
           const { signal } = listening
+          // The press may come before focus, so the direction is read first.
+          readDirection()
           document.addEventListener("pointermove", onMove, { signal })
           document.addEventListener("pointerup", onUp, { signal })
           document.addEventListener("pointercancel", onUp, { signal })
@@ -768,7 +810,8 @@ const TrackPointer = Mount.makeStream(
           const input = event.target as HTMLInputElement
           const view = document.defaultView
           if (
-            view === null || !sliderKeys.has(event.key) || input.disabled
+            view === null || input.disabled ||
+            !handles(event.key, event.altKey, event.ctrlKey, event.metaKey)
           ) return
           if (!input.matches(":focus") || focusVisible(input)) return
           if (!thumbsIn(node).some((thumb) => thumb.input === input)) return
@@ -878,12 +921,15 @@ export const Slider = Html.component({
   model: SliderModel,
   message: SliderMessage,
   events: SliderEvents,
+  reads: {
+    provider: { owner: DirectionProvider, optional: true }
+  },
   restore: false
 }).make({
   init: () => released,
   update: {
     PressedPointer: ($, { fraction, index, onThumb }) => {
-      const s = settingsOf($.props)
+      const s = settingsIn($)
       if (s.disabled || index < 0 || index >= s.values.length) return $.model
       // Thumbs stacked at the end are dragged from the first of them, so
       // they can be pulled apart.
@@ -905,29 +951,34 @@ export const Slider = Html.component({
     MovedPointer: ($, { fraction }) =>
       $.model.pressed < 0 || $.props.disabled === true
         ? $.model
-        : drag($.model, $, settingsOf($.props), fraction),
+        : drag($.model, $, settingsIn($), fraction),
     ReleasedPointer: ($) => {
       if ($.model.pressed < 0) return $.model
-      const next = UiStruct.evolve(released, { active: $.model.active })
+      const next = UiStruct.evolve($.model, {
+        pressed: -1,
+        pressedValues: [],
+        moved: null
+      })
       return $.model.moved === null || $.props.disabled === true
         ? next
         : $.set(next).emit(SliderEvents.Committed({ value: $.model.moved }))
     },
     PressedKey: ($, { index, key, shift }) => {
-      const s = settingsOf($.props)
+      const s = settingsIn($)
       const next = keyed(s, index, key, shift)
       return next === undefined ? $.model : setThumb($, s, index, next)
     },
     UpdatedThumb: ($, { index, value }) =>
       value.trim() === ""
         ? $.model
-        : setThumb($, settingsOf($.props), index, Number(value)),
+        : setThumb($, settingsIn($), index, Number(value)),
     FocusedThumb: ($, { index }) => $.evolve({ active: index }),
     BlurredThumb: ($, { index }) =>
-      $.model.active === index ? $.evolve({ active: -1 }) : $.model
+      $.model.active === index ? $.evolve({ active: -1 }) : $.model,
+    FoundDirection: ($, { rtl }) => $.evolve({ rtl })
   },
   parts: (p, model) => {
-    const s = settingsOf(p.props)
+    const s = settingsIn({ props: p.props, model, reads: p.reads })
     const dragging = model.pressed >= 0 && !s.disabled
     const orientation = p.props.orientation ?? "horizontal"
     const state = <B extends Attributed<B>>(builder: B): B =>
@@ -937,10 +988,12 @@ export const Slider = Html.component({
           "data-orientation": orientation,
           "data-disabled": flag(s.disabled)
         })
-    const start = s.values.length > 1 ? percentOf(s, s.values[0]!) : 0
-    const end = s.values.length === 0
+    const low = s.values.length > 1 ? percentOf(s, s.values[0]!) : 0
+    const high = s.values.length === 0
       ? 0
       : percentOf(s, s.values[s.values.length - 1]!)
+    const start = s.reversed ? 100 - high : low
+    const end = s.reversed ? 100 - low : high
     const inputPart = p.part("input", (b, index: number) => {
       const value = s.values[index]!
       return b.attrs({
@@ -957,8 +1010,8 @@ export const Slider = Html.component({
         .value(String(value))
         .on(
           "keydown",
-          ({ key, shift }) =>
-            sliderKeys.has(key)
+          ({ alt, ctrl, key, meta, shift }) =>
+            handles(key, alt, ctrl, meta)
               ? SliderMessage.PressedKey({ index, key, shift })
               : undefined,
           // Only for the keys the slider handles: a key it doesn't keeps its
@@ -987,7 +1040,7 @@ export const Slider = Html.component({
             "style",
             withStyle(
               node.elementAttrs.style,
-              "--slider-thumb-position:" + percentOf(s, s.values[index]!) + "%"
+              "--slider-thumb-position:" + positionOf(s, s.values[index]!) + "%"
             )
           )
         )

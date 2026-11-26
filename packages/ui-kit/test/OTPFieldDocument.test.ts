@@ -153,6 +153,7 @@ const Frame = Html.component({
 
 const Labelled = Html.component({
   name: "Labelled",
+  props: Schema.Struct({ group: Schema.optional(Schema.String) }),
   model: Schema.Null,
   message: Schema.Never
 }).make({
@@ -170,7 +171,11 @@ const Labelled = Html.component({
           Rejected: () => undefined
         },
         view: (otpField) =>
-          otpField.root(h.div).children(
+          otpField.root(
+            h.props.group === undefined
+              ? h.div
+              : h.div.attr("aria-label", h.props.group)
+          ).children(
             otpField.input({ element: h.input, index: 0 }),
             otpField.input({
               element: h.input.attr("aria-label", "Second digit"),
@@ -256,8 +261,11 @@ describe("OTPField in a document", { concurrent: false }, () => {
         app.querySelector("#" + label)?.textContent,
         "Verification code"
       )
-      for (const slot of slots) {
-        assert.strictEqual(slot.getAttribute("aria-labelledby"), label)
+      for (const [index, slot] of slots.entries()) {
+        assert.strictEqual(
+          HtmlLocator.nameOf(app, slot),
+          "Verification code " + (index + 1) + " of 4"
+        )
         assert.strictEqual(
           slot.getAttribute("aria-describedby"),
           app.querySelector("p")!.id
@@ -351,8 +359,31 @@ describe("OTPField in a document", { concurrent: false }, () => {
       ])
     }).pipe(Effect.scoped))
 
-  it.effect("a label for the first slot names the group and every slot with no name of its own", () =>
+  it.effect("a label for the first slot or the group's aria-label names the group and, with its position, every slot with no name of its own", () =>
     Effect.gen(function*() {
+      // Scoped, so the ids of the two pages don't meet.
+      yield* Effect.gen(function*() {
+        const named = yield* container
+        yield* BrowserHost.mountEffect(
+          Labelled,
+          { group: "One-time code" },
+          named
+        )
+        yield* tick
+        assert.deepStrictEqual(
+          HtmlLocator.queryAllByRole(named, "textbox").map((slot) =>
+            HtmlLocator.nameOf(named, slot)
+          ),
+          [
+            "One-time code 1 of 5",
+            "Second digit",
+            "One-time code 3 of 5",
+            "Fourth digit",
+            "One-time code 5 of 5"
+          ]
+        )
+      }).pipe(Effect.scoped)
+
       const app = yield* container
       yield* BrowserHost.mountEffect(Labelled, {}, app)
       yield* tick
@@ -361,11 +392,11 @@ describe("OTPField in a document", { concurrent: false }, () => {
           HtmlLocator.nameOf(app, slot)
         )
       const expected = [
-        "Verification code",
+        "Verification code 1 of 5",
         "Second digit",
-        "Verification code",
+        "Verification code 3 of 5",
         "Fourth digit",
-        "Verification code"
+        "Verification code 5 of 5"
       ]
       assert.deepStrictEqual(names(), expected)
       assert.strictEqual(

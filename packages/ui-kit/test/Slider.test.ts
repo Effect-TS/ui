@@ -1,6 +1,11 @@
 import type { Component, Mount } from "@effect/ui"
 import { View } from "@effect/ui"
-import { Slider, type SliderEvents, type SliderProps } from "@effect/ui-kit"
+import {
+  DirectionProvider,
+  Slider,
+  type SliderEvents,
+  type SliderProps
+} from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator, Story } from "@effect/ui/testing"
@@ -37,7 +42,13 @@ const control = Locator.attr("class", "control")
 const indicator = Locator.attr("class", "indicator")
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
-const released = { active: -1, pressed: -1, pressedValues: [], moved: null }
+const released = {
+  active: -1,
+  pressed: -1,
+  pressedValues: [],
+  moved: null,
+  rtl: false
+}
 const parts = (props: SliderProps) =>
   Story.parts(Slider, { model: released, props })
 
@@ -136,14 +147,50 @@ describe("Slider", () => {
       scene.keydown(input(), "PageDown").emitted(...both(20))
       scene.keydown(input(), "Home").emitted(...both(0))
       scene.keydown(input(), "End").emitted(...both(100))
-      // Other keys keep their default, so Tab moves focus.
+      // Other keys keep their default, so Tab moves focus, and so do keys
+      // held with Alt, Ctrl or Meta, such as Alt+Left going back.
       scene.keydown(input(), "Tab").expectIgnored().expectDefaultPrevented(
         false
       )
+      for (const modifier of ["alt", "ctrl", "meta"]) {
+        scene.keydown(input(), "ArrowLeft", { [modifier]: true })
+          .expectIgnored().expectDefaultPrevented(false)
+      }
       // At the end, a key that would go past it reports nothing.
       scene.props({ value: 100 })
       scene.keydown(input(), "ArrowRight")
       quiet(scene)
+    }))
+
+  it.effect("right to left, Left adds, Right takes away, and the pointer and positions run from the right", () =>
+    Effect.gen(function*() {
+      const scene = yield* makeScene({ value: 40 })
+      scene.mounted(
+        tracked(scene),
+        { _tag: "FoundDirection", rtl: true } as never
+      )
+      assert.strictEqual(
+        scene.get(thumb()).attrs?.style,
+        "--slider-thumb-position:60%"
+      )
+      assert.strictEqual(
+        scene.get(indicator).attrs?.style,
+        "--slider-indicator-start:60%;--slider-indicator-size:40%"
+      )
+      scene.mounted(tracked(scene), pressed(0, 0.3)).emitted({
+        _tag: "Moved",
+        value: 70
+      })
+      scene.mounted(tracked(scene), releasedPointer).emitted({
+        _tag: "Committed",
+        value: 70
+      })
+      scene.keydown(input(), "ArrowLeft").emitted(...both(41))
+      scene.keydown(input(), "ArrowRight").emitted(...both(39))
+      scene.keydown(input(), "ArrowUp").emitted(...both(41))
+      // A provider decides over the CSS direction.
+      scene.shared(DirectionProvider, { direction: "ltr" })
+      scene.keydown(input(), "ArrowLeft").emitted(...both(39))
     }))
 
   it.effect("the input's own change is reported and committed, kept within the range", () =>
@@ -262,6 +309,19 @@ describe("Slider", () => {
       scene.props({ value: [65, 70], minStepsBetweenValues: 5 })
       scene.keydown(input(0), "ArrowRight")
       quiet(scene)
+      // A large step stops at the gap.
+      scene.props({ value: [60, 70], minStepsBetweenValues: 5 })
+      scene.keydown(input(0), "PageUp").emitted(...both([65, 70]))
+      scene.keydown(input(1), "ArrowLeft", { shift: true }).emitted(
+        ...both([60, 65])
+      )
+      // A thumb with no place both in range and the gap away stays.
+      scene.props({ value: [0, 2], minStepsBetweenValues: 5 })
+      scene.keydown(input(0), "PageUp")
+      quiet(scene)
+      // A gap of part of a step rounds up to a whole one.
+      scene.props({ value: [0, 10], step: 2, minStepsBetweenValues: 1.5 })
+      scene.keydown(input(0), "PageUp").emitted(...both([6, 10]))
       scene.focus(input(0)).parts((slider) =>
         assert.strictEqual(slider.activeThumbIndex, 0)
       )

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { UiSchema } from "@effect/ui"
-import { Menu, Menubar, type MenuItem } from "@effect/ui-kit"
+import { DirectionProvider, Menu, Menubar, type MenuItem } from "@effect/ui-kit"
 import { BrowserHost, Html, HtmlHydrate, HtmlServer } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -205,22 +205,40 @@ const Page = Html.component({
   }
 })
 
+const defaults: Config = {
+  orientation: "horizontal",
+  disabled: false,
+  fileDisabled: false,
+  independent: false,
+  rtl: false,
+  initial: [],
+  twin: false
+}
+
 const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
   yield* popovers
   yield* geometry
   const app = yield* container
   const root = yield* BrowserHost.mountEffect(Page, {
-    orientation: "horizontal",
-    disabled: false,
-    fileDisabled: false,
-    independent: false,
-    rtl: false,
-    initial: [],
-    twin: false,
+    ...defaults,
     ...config
   }, app)
   yield* tick
   return { root, log: () => root.model()?.log ?? [] }
+})
+
+const RightToLeftPage = Html.component({
+  name: "RightToLeftPage",
+  model: Schema.Struct({}),
+  message: Schema.Never
+}).make({
+  init: () => ({}),
+  update: ($) => $.model,
+  view: (h) =>
+    DirectionProvider(h, {
+      props: { direction: "rtl" },
+      view: () => Page(h, { props: defaults })
+    })
 })
 
 const item = (value: string) =>
@@ -449,6 +467,24 @@ describe("Menubar in a document", { concurrent: false }, () => {
       keydown(byId("edit"), "ArrowLeft")
       yield* tick
       assert.isTrue(shown("edit-positioner"))
+    }))
+
+  it.effect("a right-to-left DirectionProvider swaps the arrow keys over the root's CSS direction", () =>
+    Effect.gen(function*() {
+      yield* popovers
+      yield* geometry
+      yield* BrowserHost.mountEffect(RightToLeftPage, {}, yield* container)
+      yield* tick
+      byId("file").focus()
+      keydown(byId("file"), "ArrowLeft")
+      yield* tick
+      assert.strictEqual(document.activeElement, byId("edit"))
+      keydown(byId("edit"), "ArrowDown")
+      yield* tick
+      keydown(item("copy"), "ArrowLeft")
+      yield* tick
+      assert.isFalse(shown("edit-positioner"))
+      assert.isTrue(shown("view-positioner"))
     }))
 
   it.effect("a menu open from the start counts as open, so hovering another trigger switches to it", () =>
