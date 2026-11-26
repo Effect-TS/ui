@@ -332,6 +332,8 @@ describe("HtmlServer", { concurrent: false }, () => {
                 h.el("set").attr("attributeName", name).attr("to", to),
                 h.el("Animate").attr("attributename", "href")
                   .attr("values", "/a; javascript:;/b"),
+                h.el("animateTransform").attr("attributeName", "href")
+                  .attr("by", "javascript:"),
                 h.el("animate").attr("attributeName", "href")
                   .attr("values", "/a;/b"),
                 // A scalar endpoint is one URL: this is a relative path.
@@ -347,6 +349,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       expect(rendered.html).toBe(
         "<!--[/Animated--><div><svg><a><set attributename=\"href\"></set>" +
           "<Animate attributename=\"href\"></Animate>" +
+          "<animateTransform attributename=\"href\"></animateTransform>" +
           "<animate attributename=\"href\" values=\"/a;/b\"></animate>" +
           "<set attributename=\"href\" to=\"/docs;note=1;javascript:\"></set></a></svg>" +
           "<x-data attributename=\"href\" values=\"javascript:\"></x-data></div><!--]/Animated-->"

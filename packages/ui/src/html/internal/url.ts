@@ -33,7 +33,7 @@ const attributes: ReadonlySet<string> = new Set([
 ])
 
 // Match case-insensitively because the HTML parser folds tag names.
-const animation = /^(set|animate)$/i
+const animation = /^(set|animate(transform)?)$/i
 
 const properties: ReadonlySet<string> = new Set([
   "href",
