@@ -67,6 +67,7 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
         yield* play.type(search, "u")
         yield* play.expect(joins).toExist()
         yield* play.expect(refetching).toExist()
+        yield* play.expect(loading).toBeAbsent()
         yield* TestClock.adjust("200 millis")
         yield* play.type(search, "ui")
         yield* TestClock.adjust("299 millis")
@@ -79,17 +80,6 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
         yield* play.expect(becomes).toExist()
         yield* play.expect(joins).toBeAbsent()
         yield* play.expect(refetching).toBeAbsent()
-      }))
-
-    it.effect("keeps the previous posts on screen while new ones load", () =>
-      Effect.gen(function*() {
-        const play = yield* mount(PostsApi.layer)
-        yield* TestClock.adjust("300 millis")
-        yield* play.type(search, "ui")
-        yield* TestClock.adjust("299 millis")
-        yield* play.expect(joins).toExist()
-        yield* play.expect(refetching).toExist()
-        yield* play.expect(loading).toBeAbsent()
       }))
 
     it.effect("shows a fresh result at once, without a fetch", () =>

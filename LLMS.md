@@ -534,10 +534,10 @@ AsyncResult.match(h.queries.results, {
   onInitial: () =>
     Option.match(h.previous.results, {
       onNone: () => h.p("Searching…"),
-      onSome: (notes) => list(notes, { busy: true })
+      onSome: (notes) => list(notes, true)
     }),
   onFailure: () => h.p("The search failed."),
-  onSuccess: ({ value, waiting }) => list(value, { busy: waiting })
+  onSuccess: ({ value, waiting }) => list(value, waiting)
 })
 ```
 
