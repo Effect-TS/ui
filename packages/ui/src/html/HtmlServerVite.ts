@@ -160,11 +160,12 @@ export const plugin = (options: Options): Plugin => {
   let devServer: DevServer | undefined
   // The app's `index.html` in dev, and the client build's in a build.
   let templateFile = ""
-  // The dev server's module, the modules it has replaced, and the requests
-  // each module is still answering.
+  // The dev server's module, the modules it has seen, the requests each
+  // module is still answering, and the disposals still running.
   let current: ServerModule | undefined
   const seen = new WeakSet<ServerModule>()
   const active = new Map<ServerModule, number>()
+  const disposing = new Set<Promise<void>>()
 
   const template = async (context: LoadContext): Promise<string> => {
     const html = await fs.readFile(templateFile, "utf8")
@@ -173,20 +174,35 @@ export const plugin = (options: Options): Plugin => {
     return devServer.transformIndexHtml("/", html)
   }
 
-  /** Disposes a module once it is replaced and answers no request. */
-  const disposeIdle = (module: ServerModule) => {
-    if (module === current || active.has(module)) return
-    module.dispose().catch((error) =>
+  const dispose = (module: ServerModule) => {
+    const done = module.dispose().catch((error) =>
       devServer?.config.logger.error(
         `HtmlServerVite failed to dispose the server entry: ${error}`
       )
     )
+    disposing.add(done)
+    done.then(() => disposing.delete(done))
   }
 
-  const retire = (next?: ServerModule) => {
-    const previous = current
-    current = next
-    if (previous !== undefined) disposeIdle(previous)
+  /** Disposes a module once it is replaced and answers no request. */
+  const disposeIdle = (module: ServerModule) => {
+    if (module !== current && !active.has(module)) dispose(module)
+  }
+
+  /** Holds `module` while `serve` runs, so a reload can't dispose it. */
+  const hold = async (module: ServerModule, serve: () => Promise<void>) => {
+    active.set(module, (active.get(module) ?? 0) + 1)
+    try {
+      await serve()
+    } finally {
+      const count = active.get(module)! - 1
+      if (count > 0) {
+        active.set(module, count)
+      } else {
+        active.delete(module)
+        disposeIdle(module)
+      }
+    }
   }
 
   return {
@@ -239,7 +255,9 @@ export const plugin = (options: Options): Plugin => {
         // module that was already replaced never comes back.
         if (!seen.has(module)) {
           seen.add(module)
-          retire(module)
+          const previous = current
+          current = module
+          if (previous !== undefined) disposeIdle(previous)
         }
         return current!
       }
@@ -248,21 +266,29 @@ export const plugin = (options: Options): Plugin => {
         server.middlewares.use((request, response, next) => {
           load()
             .then((module) => {
-              // Held until the response ends or the client goes away.
-              active.set(module, (active.get(module) ?? 0) + 1)
-              response.once("close", () => {
-                const count = active.get(module)! - 1
-                if (count > 0) {
-                  active.set(module, count)
-                } else {
-                  active.delete(module)
-                  disposeIdle(module)
+              // The client left while the entry was loading.
+              if (response.destroyed) return
+              // A client that leaves aborts the request. The module is
+              // held until the handler and the body have settled.
+              const abort = new AbortController()
+              const leave = () => {
+                if (!response.writableFinished) abort.abort()
+              }
+              response.once("close", leave)
+              return hold(module, async () => {
+                try {
+                  const answer = await module.handler(
+                    toRequest(request, abort.signal)
+                  )
+                  await send(response, answer)
+                } finally {
+                  response.off("close", leave)
                 }
               })
-              return module.handler(toRequest(request))
             })
-            .then((answer) => send(response, answer))
-            .catch(next)
+            .catch((error) => {
+              if (!response.destroyed) next(error)
+            })
         })
       }
     },
@@ -310,7 +336,14 @@ export const plugin = (options: Options): Plugin => {
         await fs.rm(dir, { recursive: true, force: true })
       }
     },
-    buildEnd: async () => retire()
+    // On close, disposes every module, held or not, and waits for each.
+    async buildEnd() {
+      const modules = new Set([...active.keys(), current])
+      current = undefined
+      active.clear()
+      for (const module of modules) if (module !== undefined) dispose(module)
+      await Promise.all(disposing)
+    }
   }
 }
 
@@ -345,7 +378,10 @@ const write = async (
   await fs.writeFile(target, content)
 }
 
-const toRequest = (request: Http.IncomingMessage): Request => {
+const toRequest = (
+  request: Http.IncomingMessage,
+  signal: AbortSignal
+): Request => {
   const headers = new Headers()
   for (const [name, value] of Object.entries(request.headers)) {
     if (value === undefined || name.startsWith(":")) continue
@@ -360,6 +396,7 @@ const toRequest = (request: Http.IncomingMessage): Request => {
     {
       method,
       headers,
+      signal,
       ...(method === "GET" || method === "HEAD" ? {} : {
         body: Readable.toWeb(request) as ReadableStream,
         duplex: "half"
