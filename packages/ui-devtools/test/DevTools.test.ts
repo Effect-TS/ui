@@ -1,5 +1,12 @@
 // @vitest-environment happy-dom
-import { Command, Component, Feature, MessageLog, UiSchema } from "@effect/ui"
+import {
+  Command,
+  Component,
+  Feature,
+  MessageLog,
+  Mount,
+  UiSchema
+} from "@effect/ui"
 import { DevTools } from "@effect/ui-devtools"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlLocator } from "@effect/ui/html/testing"
@@ -189,6 +196,8 @@ const SlotView = Html.component({
   view: (h) => h.strong("ready")
 })
 
+const Measure = Mount.make("Measure", { args: {} }, () => Effect.void)
+
 const Shown = Html.component({
   name: "Shown",
   props: Schema.Struct({ n: Schema.Number }),
@@ -197,7 +206,10 @@ const Shown = Html.component({
 }).make({
   init: () => null,
   update: ($) => $.model,
-  view: (h) => h.span.children(String(h.props.n))
+  view: (h) =>
+    h.span.onMount(Measure().pipe(Mount.map(() => Component.noop))).children(
+      String(h.props.n)
+    )
 })
 
 const Pair = Html.component({
@@ -493,7 +505,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.isNull(root.querySelector(".paused"))
     }))
 
-  it.live("paints each instance's props past the buffer and notes feature slot fallbacks", () =>
+  it.live("paints each instance's props past the buffer and notes feature slot fallbacks and skipped mounts", () =>
     Effect.gen(function*() {
       const memory = MessageLog.makeMemory({ size: 500 })
       const services = yield* Layer.build(
@@ -549,13 +561,15 @@ describe("DevTools overlay", { concurrent: false }, () => {
       const notes = Array.from(
         root.querySelectorAll<HTMLDetailsElement>("details.pause-note")
       )
-      assert.strictEqual(notes.length, 1)
-      assert.isFalse(notes[0].open)
-      assert.include(text(notes[0].querySelector("summary")), "fallback")
       assert.deepStrictEqual(
-        Array.from(notes[0].querySelectorAll("li"), (node) => text(node)),
-        ["/Pair"]
+        notes.map((note) => [
+          note.open,
+          Array.from(note.querySelectorAll("li"), (node) => text(node))
+        ]),
+        [[false, ["/Pair"]], [false, ["/Pair/Shown[a]", "/Pair/Shown[b]"]]]
       )
+      assert.include(text(notes[0].querySelector("summary")), "fallback")
+      assert.include(text(notes[1].querySelector("summary")), "mount")
     }))
 
   it.live("uses same-cause mount state without borrowing past a superseding parent update", () =>
