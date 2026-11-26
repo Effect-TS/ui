@@ -3195,7 +3195,7 @@ type Defined<
 /**
  * The call signature of a vocabulary-bound component constructor such as
  * `Html.component` or `OpenTui.component`, supplying vocabulary `V`
- * automatically to `Component.define`.
+ * automatically to `Component.define`. `Component.withElements` makes one.
  *
  * @stability experimental
  * @category models
@@ -3607,6 +3607,31 @@ export const define = <
   sharedReads.check(definition as any)
   return definition
 }
+
+/**
+ * Binds an element vocabulary into a component constructor, as
+ * `Html.component` and `OpenTui.component` do. Each call is
+ * `Component.define({ ...options, elements })`.
+ *
+ * **Example** (A host's component constructor)
+ *
+ * ```ts import.meta.vitest
+ * import { Component } from "@effect/ui"
+ * import { Html } from "@effect/ui/html"
+ *
+ * export const component: Component.Define<Html.Elements> = Component.withElements(Html.vocabulary)
+ * ```
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const withElements = <V extends View.Elements>(
+  elements: View.Vocabulary<V>
+): Define<V> =>
+(options) =>
+  // Forwarded `options` infer `SR` as the whole `reads` intersection, hence the cast.
+  define({ ...options, elements }) as any
 
 // The cases of `message` with one of `tags`, or `Schema.Never` without any.
 const receivesOf = (

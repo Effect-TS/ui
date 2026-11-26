@@ -912,8 +912,8 @@ export const vocabulary: View.Vocabulary<Elements> = {
  * @category constructors
  * @since 0.1.0
  */
-export const component: Component.Define<Elements> = (options) =>
-  Component.define({ ...options, elements: vocabulary }) as any
+export const component: Component.Define<Elements> = Component
+  .withElements(vocabulary)
 
 /**
  * Declares a ref typed to the OpenTUI renderable of `tag`.

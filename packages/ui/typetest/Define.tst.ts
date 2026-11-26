@@ -1,8 +1,9 @@
-import { Command, type Component, Query, UiSchema, type View } from "@effect/ui"
+import { Command, Component, Query, UiSchema, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 import type { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
+import { Tiny } from "../test/fixtures/vocabulary.ts"
 
 const User = Schema.Struct({ id: Schema.String, name: Schema.String })
 
@@ -440,5 +441,11 @@ describe("Component.define", () => {
       return h.li(label)
     }
     NoteDef.view((h, model) => h.ul(row(h, model.body)))
+  })
+})
+
+describe("Component.withElements", () => {
+  it("binds a vocabulary into a Define of it", () => {
+    expect(Component.withElements(Tiny)).type.toBe<Component.Define<Tiny>>()
   })
 })
