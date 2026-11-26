@@ -600,16 +600,7 @@ export const map: {
     f: (a: A) => B
   ): Issued<B, R, Node, Source> => {
     const resolve = self.resolve
-    return makeIssued({
-      name: self.name,
-      args: self.args,
-      argsSchema: self.argsSchema,
-      stream: self.stream,
-      run: self.run,
-      resolve: (result) => f(resolve(result)),
-      paint: self.paint,
-      beforeCommit: self.beforeCommit
-    })
+    return makeIssued({ ...self, resolve: (result) => f(resolve(result)) })
   }
 )
 
