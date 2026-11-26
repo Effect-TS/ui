@@ -112,6 +112,12 @@ export * from "./Fieldset.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * from "./FileDrop.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Form.ts"
 
 /**
