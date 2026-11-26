@@ -998,7 +998,8 @@ describe("DevToolsServer", { concurrent: false }, () => {
           JSON.stringify({
             _tag: "State",
             sessions: ["s"],
-            paused: null
+            paused: null,
+            notRecording: []
           })
         )
         yield* wait(100)
@@ -1036,7 +1037,8 @@ describe("DevToolsServer", { concurrent: false }, () => {
           JSON.stringify({
             _tag: "State",
             sessions: ["s"],
-            paused: { session: "s", seq: 0, fellBack: [], fallbacks: [] }
+            paused: { session: "s", seq: 0, fellBack: [], fallbacks: [] },
+            notRecording: []
           })
         )
         yield* wait(100)

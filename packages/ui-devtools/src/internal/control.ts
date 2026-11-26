@@ -45,10 +45,7 @@ export const ToServer = Schema.Union([
   Schema.TaggedStruct("State", {
     sessions: Schema.Array(Schema.String),
     paused: Schema.NullOr(Paused),
-    // Absent from a page on an older version.
-    notRecording: Schema.Array(Schema.String).pipe(
-      Schema.withDecodingDefaultKey(Effect.succeed([]))
-    )
+    notRecording: Schema.Array(Schema.String)
   }),
   Schema.TaggedStruct("Reply", {
     id: Schema.Number,
