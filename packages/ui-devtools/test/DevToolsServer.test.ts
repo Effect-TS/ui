@@ -9,7 +9,7 @@ import { DevToolsServer, DevToolsVite } from "@effect/ui-devtools/node"
 import type * as BrowserHost from "@effect/ui/html/BrowserHost"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Schema, Stream } from "effect"
+import { Effect, Layer, Schedule, Schema, Stream } from "effect"
 import { McpClient, McpProtocol } from "effect/ai"
 import { HttpRouter } from "effect/http"
 import * as Socket from "effect/socket/Socket"
@@ -100,6 +100,23 @@ const makeAgent = Effect.fnUntraced(function*(base: string) {
       )
   }
 })
+
+// The page's frames reach the server asynchronously, so poll until it lists
+// the instance. list_instances dies until the session has connected.
+const instanceAt = (
+  agent: Effect.Success<ReturnType<typeof makeAgent>>,
+  path: string
+) =>
+  agent.call<ReadonlyArray<any>>("list_instances").pipe(
+    Effect.flatMap((instances) =>
+      Effect.fromNullishOr(
+        instances.find((instance) => instance.path === path)
+      )
+    ),
+    Effect.catchDefect(Effect.fail),
+    Effect.retry(Schedule.spaced("10 millis")),
+    Effect.timeout("2 seconds")
+  )
 
 const serve = Effect.fnUntraced(
   function*(options: DevToolsServer.Options & { readonly port: number }) {
@@ -296,12 +313,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
       Effect.gen(function*() {
         const { agent, url } = yield* serve({ port: 47742, size: 12 })
         yield* open(url, "open", 12)
-        const instances: ReadonlyArray<any> = yield* agent.call(
-          "list_instances"
-        )
-        const workspace = instances.find((instance) =>
-          instance.path === "/Workspace"
-        )
+        const workspace = yield* instanceAt(agent, "/Workspace")
         const state = yield* agent.call("get_state", {
           instance: workspace.instance
         })
