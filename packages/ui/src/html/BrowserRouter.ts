@@ -90,6 +90,7 @@ import type * as Fiber from "effect/Fiber"
 import * as Layer from "effect/Layer"
 import * as Option from "effect/Option"
 import * as services from "../internal/services.ts"
+import { decodeComponent } from "../internal/url.ts"
 import type * as Route from "../Route.ts"
 import * as Router from "../Router.ts"
 import * as submit from "./internal/submit.ts"
@@ -234,12 +235,8 @@ const make = (
     }
     const target = (hash: string): HTMLElement | null => {
       if (hash.length <= 1) return null
-      let id = hash.slice(1)
-      try {
-        id = decodeURIComponent(id)
-      } catch {
-        // A malformed escape, as in `#%`, names the element as written.
-      }
+      // A malformed escape, as in `#%`, names the element as written.
+      const id = decodeComponent(hash.slice(1)) ?? hash.slice(1)
       return document.getElementById(id) ??
         document.getElementsByName(id)[0] as HTMLElement | undefined ?? null
     }
@@ -296,11 +293,7 @@ const make = (
       else body.setAttribute("tabindex", tabindex)
     }
 
-    /** Stops waiting for a late-rendered initial `#hash` target. */
-    let stopWaiting = () => {}
-
     const onSettled = (settled: Router.Settled) => {
-      stopWaiting()
       const { action, hash } = settled.location
       if (settled.quiet) {
         // Within the page: no announcement and no focus move, and scroll only for a pop or when asked.
@@ -376,7 +369,6 @@ const make = (
       },
       onSettled,
       onHash: (hash, action, index) => {
-        stopWaiting()
         if (!scroll) return
         const saved = action === "pop" ? positions.get(index) : undefined
         if (saved !== undefined) window.scrollTo(saved.x, saved.y)
@@ -391,39 +383,41 @@ const make = (
 
     // --- late initial #hash ------------------------------------------------
     // Browsers only go to the fragment while the page loads. A client-rendered target appears later,
-    // so watch for it until it does, the location changes or the reader takes over.
-    const initialHash = location.hash
+    // so watch for it until it does, the location changes or the reader takes over. Every navigation
+    // and hash change replaces the location object.
+    const initial = router.location()
     if (
-      !inFragment && (scroll || focus) && initialHash.length > 1 &&
-      target(initialHash) === null
+      !inFragment && (scroll || focus) && initial.hash.length > 1 &&
+      target(initial.hash) === null
     ) {
-      const interactions = ["pointerdown", "keydown", "wheel", "touchstart"]
       const view = window as Window & typeof globalThis
+      const listening = new view.AbortController()
+      const stop = () => {
+        observer.disconnect()
+        listening.abort()
+      }
       const observer = new view.MutationObserver(() => {
-        const element = target(initialHash)
-        if (element === null || router.location().seq !== 0) return
-        stopWaiting()
+        if (router.location() !== initial) return stop()
+        const element = target(initial.hash)
+        if (element === null) return
+        stop()
         if (scroll) element.scrollIntoView()
         if (focus) focusTarget(element)
       })
-      const stop = () => {
-        stopWaiting = () => {}
-        observer.disconnect()
-        for (const type of interactions) {
-          window.removeEventListener(type, stop, true)
-        }
-      }
-      stopWaiting = stop
       observer.observe(document.documentElement, {
         childList: true,
         subtree: true,
         attributes: true,
         attributeFilter: ["id", "name"]
       })
-      for (const type of interactions) {
-        window.addEventListener(type, stop, { capture: true, passive: true })
+      for (const type of ["pointerdown", "keydown", "wheel", "touchstart"]) {
+        window.addEventListener(type, stop, {
+          capture: true,
+          passive: true,
+          signal: listening.signal
+        })
       }
-      yield* Effect.addFinalizer(() => Effect.sync(() => stopWaiting()))
+      yield* Effect.addFinalizer(() => Effect.sync(stop))
     }
 
     // --- interception ------------------------------------------------------

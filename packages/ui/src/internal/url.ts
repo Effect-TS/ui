@@ -6,6 +6,19 @@
  */
 import type * as Route from "../Route.ts"
 
+/**
+ * `text` percent-decoded, or `undefined` if it isn't valid percent-encoding.
+ *
+ * @internal
+ */
+export const decodeComponent = (text: string): string | undefined => {
+  try {
+    return decodeURIComponent(text)
+  } catch {
+    return undefined
+  }
+}
+
 /** The decoded key of a raw `key=value` search pair, or `undefined` if it isn't valid percent-encoding. */
 const decodeKey = (pair: string): string | undefined => {
   const at = pair.indexOf("=")
