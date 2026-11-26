@@ -13,8 +13,8 @@
  * form's `fields`. A handler set with `{ preventDefault: true }` cancels the
  * browser's default when it produces a message and leaves it alone when it
  * returns `undefined`, so it decides per event. A form's `submit` is always
- * cancelled when it has a handler. Without one, only a `post` or a
- * submission to another window goes to the browser. Nothing stops an event's
+ * cancelled when it has a handler. Without one, only POST or GET targeting
+ * another window goes to the browser. Nothing stops an event's
  * propagation: only the innermost element with a handler for an event gets
  * it.
  *

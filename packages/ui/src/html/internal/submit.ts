@@ -1,16 +1,19 @@
 /**
- * Submissions the host prevented only because it owns the form, with no
- * submit handler in the app. The browser Router still routes these.
+ * Shared form-submission rules for the host and browser Router.
  *
  * @internal
  */
 
-/** @internal */
+/**
+ * Same-window GETs cancelled by the host but left for the Router.
+ *
+ * @internal
+ */
 export const ownedUnhandled = new WeakSet<Event>()
 
 /**
- * A form's attribute. A control named `getAttribute` shadows the method on the
- * form itself, not on its prototype, which is also from the form's own window.
+ * Read an attribute through the form's own-window prototype, bypassing controls
+ * named `getAttribute` that shadow the method on the form.
  *
  * @internal
  */
@@ -19,8 +22,8 @@ export const attribute = (form: Element, name: string): string | null =>
 
 /**
  * Where an unhandled submission goes: `"dialog"` for the `dialog` method, `"get"`
- * for a same-window GET the Router can follow, and `"native"` for a POST or a
- * submission to another window. An invalid method counts as `get`, as in the
+ * for a same-window GET the Router can follow, and `"native"` for POST or GET
+ * targeting another window. An invalid method counts as `get`, as in the
  * browser.
  *
  * @internal

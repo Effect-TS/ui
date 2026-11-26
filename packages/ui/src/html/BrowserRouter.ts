@@ -463,8 +463,6 @@ const make = (
       if (href !== undefined) Effect.runSync(router.intent(href))
     }
     const onSubmit = (event: SubmitEvent) => {
-      // BrowserHost prevents a same-window GET of a form the app rendered even with no submit
-      // handler for it. That form is still the Router's to follow.
       const ownedUnhandled = submit.ownedUnhandled.has(event)
       if (event.defaultPrevented && !ownedUnhandled) return
       const form = event.target as HTMLFormElement | null
