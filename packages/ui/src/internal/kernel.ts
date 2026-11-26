@@ -256,6 +256,8 @@ export class Rec {
   declare node: any
   declare kids: Array<Rec> | undefined
   declare inst: Instance
+  /** The view under which no element sets a controlled property. */
+  declare plain: unknown
   constructor(
     v: View.Node<any, any>,
     node: unknown,
@@ -266,6 +268,7 @@ export class Rec {
     this.node = node
     this.kids = kids
     this.inst = inst
+    this.plain = undefined
   }
 }
 
@@ -1394,16 +1397,27 @@ export const replace = (
 
 const refreshed = {}
 
-const restore = (host: Host, rec: Rec): void => {
+// Any change below a record gives it a new view, so `plain` goes stale with it.
+const restore = (host: Host, rec: Rec): boolean => {
+  const view = rec.v as View.Element<any, any>
+  if (rec.plain === view) return false
+  let found = false
   const kids = rec.kids
   if (kids !== undefined) {
     for (let index = 0; index < kids.length; index++) {
       const kid = kids[index]!
-      if (kid.v._tag === "Element") restore(host, kid)
+      if (kid.v._tag === "Element" && restore(host, kid)) found = true
     }
   }
-  const props = (rec.v as View.Element<any, any>).props
-  if (props !== View.noFields) patchProps(host, rec.node, props, props)
+  const props = view.props
+  for (const name in props) {
+    if (host.controlled!.has(name)) {
+      host.setProp(rec.node, name, props[name])
+      found = true
+    }
+  }
+  if (!found) rec.plain = view
+  return found
 }
 
 const sameAttrs = (
