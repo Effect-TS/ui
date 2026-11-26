@@ -72,7 +72,7 @@ interface Snapshot {
 export const snapshot = (
   root: Kernel.Instance,
   deferred: ReadonlySet<Kernel.Instance>,
-  shippedQuery?: queryCore.ShippedLookup | undefined
+  shippedQuery?: queryCore.ShippedContext | undefined
 ): Snapshot => {
   const late: Array<Fiber.Fiber<Page, SchemaIssue.Issue>> = []
   const instance = (inst: Kernel.Instance): Snap => {

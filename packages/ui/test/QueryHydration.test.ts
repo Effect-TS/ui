@@ -134,8 +134,14 @@ describe("Query snapshots", () => {
     Effect.gen(function*() {
       const value = { id: "1", name: "Ann" }
       const shipped = AsyncResult.success(value, { timestamp: 5 })
-      const lookup: queryCore.ShippedLookup = (q, key) =>
-        q.name === def.name && key === at.argsKey ? shipped : undefined
+      const lookup: queryCore.ShippedContext = {
+        peek: (q, key) =>
+          q.name === def.name && key === at.argsKey ? shipped : undefined,
+        decode: (q, key) =>
+          q.name === def.name && key === at.argsKey
+            ? Effect.succeed(shipped)
+            : Effect.fail(new Error("missing"))
+      }
       const provide = <A, E>(effect: Effect.Effect<A, E>) =>
         Effect.provideService(effect, queryCore.Shipped, lookup)
 

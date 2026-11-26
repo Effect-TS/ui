@@ -541,8 +541,9 @@ export const ssr = <
         }
       }
     })
+    const hydrating = hydrateRun.hydrating(state, HtmlHydrate.adopt)
     const mounted = yield* runtime.mount(component as any, props, container, {
-      hydrate: hydrateRun.hydrating(state, HtmlHydrate.adopt),
+      hydrate: hydrating,
       query: options?.query,
       adoptionHead: true,
       recordEmitted: true
@@ -600,9 +601,7 @@ export const ssr = <
       entry._tag === "Mounted" && entry.adopted
     )
     const adopted = adoptedEntries.map((entry) => entry.path)
-    const shipped = state["~query"] === undefined
-      ? undefined
-      : Query.shippedOf(state["~query"])
+    const shipped = hydrating.shipped()
     for (const path of Object.keys(state)) {
       if (path.startsWith("~")) continue
       const entry = adoptedEntries.find((entry) => entry.path === path)

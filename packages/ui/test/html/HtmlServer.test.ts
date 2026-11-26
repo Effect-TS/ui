@@ -20,6 +20,7 @@ import { assert, expect, it } from "@effect/vitest"
 import {
   Clock,
   Context,
+  Deferred,
   Duration,
   Effect,
   Exit,
@@ -3859,5 +3860,183 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         })
         expect(app.textContent).toBe("loadingloading")
       }))
+  )
+
+  it.effect(
+    "adopts multiple readers once when a query's success decoder is async",
+    () =>
+      Effect.gen(function*() {
+        const payload = "async-decoded-note"
+        let gate: Effect.Effect<void> = Effect.void
+        let encodes = 0
+        let decodes = 0
+        const AsyncBody = Schema.String.pipe(Schema.decode({
+          decode: SchemaGetter.transformEffect((body: string) =>
+            Effect.andThen(
+              Effect.sync(() => {
+                decodes++
+              }),
+              Effect.as(Effect.suspend(() => gate), body)
+            )
+          ),
+          encode: SchemaGetter.transform((body: string) => {
+            encodes++
+            return body
+          })
+        }))
+        class GetAsyncNote extends Query.Service<GetAsyncNote>()(
+          "GetAsyncNote",
+          {
+            args: { id: Schema.String },
+            success: AsyncBody,
+            error: Schema.Never,
+            staleTime: "1 minute"
+          }
+        ) {
+          static readonly layer = this.toLayer(() => Effect.succeed(payload))
+        }
+        const Reader = Html.component({
+          name: "Reader",
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          queries: {
+            note: { query: GetAsyncNote, args: () => ({ id: "1" }) }
+          }
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) =>
+            h.p(
+              AsyncResult.isSuccess(h.queries.note)
+                ? h.queries.note.value
+                : "loading"
+            )
+        })
+        const Page = Html.component({
+          name: "Page",
+          model: Schema.Struct({}),
+          message: Schema.Never
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) =>
+            h.div(
+              Reader(h, { key: "a", props: {} }),
+              Reader(h, { key: "b", props: {} })
+            )
+        }).pipe(Component.provide(GetAsyncNote.layer))
+
+        const rendered = yield* HtmlServer.renderToHtml(Page, {})
+        const serialized = HtmlServer.serializeState(rendered.state)
+        expect(serialized.split(payload).length - 1).toBe(1)
+        expect(encodes).toBe(1)
+
+        const latch = yield* Deferred.make<void>()
+        gate = Deferred.await(latch)
+        const app = yield* container(rendered.html)
+        const served = [...app.querySelectorAll("p")]
+        const root = yield* HtmlHydrate.hydrateEffect(
+          Page,
+          {},
+          app,
+          JSON.parse(serialized)
+        ).pipe(Effect.provideService(Query.Problems, () => {}))
+        yield* Deferred.succeed(latch, undefined)
+        yield* root.adopted
+
+        const adopted = [...app.querySelectorAll("p")]
+        expect(adopted).toHaveLength(2)
+        expect(adopted[0]).toBe(served[0])
+        expect(adopted[1]).toBe(served[1])
+        expect(adopted.map((node) => node.textContent)).toEqual([
+          payload,
+          payload
+        ])
+        expect(decodes).toBe(1)
+      }).pipe(Effect.scoped)
+  )
+
+  it.effect(
+    "scopes the ~query decode memo to each hydration root",
+    () =>
+      Effect.gen(function*() {
+        let decodes = 0
+        const CountedDate = Schema.Date.pipe(Schema.decode({
+          decode: SchemaGetter.transform((date: Date) => {
+            decodes++
+            return date
+          }),
+          encode: SchemaGetter.passthrough()
+        }))
+        class GetDate extends Query.Service<GetDate>()("GetDate", {
+          args: {},
+          success: CountedDate,
+          error: Schema.Never,
+          staleTime: "1 minute"
+        }) {
+          static readonly layer = this.toLayer(() =>
+            Effect.succeed(new Date("2026-01-02T00:00:00.000Z"))
+          )
+        }
+        const seen: Array<Date> = []
+        const Reader = Html.component({
+          name: "Reader",
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          queries: {
+            when: { query: GetDate, args: () => ({}) }
+          }
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) => {
+            if (AsyncResult.isSuccess(h.queries.when)) {
+              seen.push(h.queries.when.value)
+            }
+            return h.p(
+              AsyncResult.isSuccess(h.queries.when)
+                ? String(h.queries.when.value.getUTCFullYear())
+                : "loading"
+            )
+          }
+        })
+        const Page = Html.component({
+          name: "Page",
+          model: Schema.Struct({}),
+          message: Schema.Never
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) =>
+            h.div(
+              Reader(h, { key: "a", props: {} }),
+              Reader(h, { key: "b", props: {} })
+            )
+        }).pipe(Component.provide(GetDate.layer))
+
+        const rendered = yield* HtmlServer.renderToHtml(Page, {})
+        const parsed = JSON.parse(HtmlServer.serializeState(rendered.state))
+
+        seen.length = 0
+        const app1 = yield* container(rendered.html)
+        const root1 = yield* HtmlHydrate.hydrateEffect(Page, {}, app1, parsed)
+        yield* root1.adopted
+        const root1Dates = seen.slice()
+
+        seen.length = 0
+        const app2 = yield* container(rendered.html)
+        const root2 = yield* HtmlHydrate.hydrateEffect(Page, {}, app2, parsed)
+        yield* root2.adopted
+        const root2Dates = seen.slice()
+
+        expect(root1Dates).toHaveLength(2)
+        expect(root2Dates).toHaveLength(2)
+        expect(root1Dates[0]).toBe(root1Dates[1])
+        expect(root2Dates[0]).toBe(root2Dates[1])
+        expect(root1Dates[0]).not.toBe(root2Dates[0])
+        root1Dates[0]!.setUTCFullYear(1999)
+        expect(root2Dates[0]!.getUTCFullYear()).toBe(2026)
+        expect(decodes).toBe(2)
+      }).pipe(Effect.scoped)
   )
 })
