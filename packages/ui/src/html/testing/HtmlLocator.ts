@@ -953,22 +953,35 @@ export const checked = (node: unknown): boolean | undefined =>
 export const popoverState = (node: unknown): "closed" | "open" =>
   popoverOpen(readerOf(node), node) ? "open" : "closed"
 
-/** Whether the user can't reach `element`: it's inside `inert`, or outside the topmost modal. */
-const isInert = (element: globalThis.Element): boolean => {
-  const modal = topModal(domReader, element.ownerDocument)
-  for (
-    let at: globalThis.Node | null = element;
-    at !== null;
-    at = at.parentNode
-  ) {
-    if (flag(domReader, at, "inert")) return true
+/**
+ * Whether `path`, an element and its ancestors innermost first, is out of
+ * the user's reach: inside `inert`, or outside the topmost modal under
+ * `root`. That modal escapes the inertness around it, not its own.
+ *
+ * @internal
+ */
+export const isInert = <N>(
+  path: ReadonlyArray<N>,
+  root: N | undefined = path[path.length - 1]
+): boolean => {
+  if (root === undefined) return false
+  const reader = readerOf(root) as Reader<N>
+  const modal = topModal(reader, root)
+  for (const at of path) {
+    if (flag(reader, at, "inert")) return true
     if (at === modal) return false
   }
   return modal !== undefined
 }
 
 const refuseInert = (step: string, element: globalThis.Element): void => {
-  if (isInert(element)) {
+  const path: Array<globalThis.Node> = []
+  for (
+    let at: globalThis.Node | null = element;
+    at !== null;
+    at = at.parentNode
+  ) path.push(at)
+  if (isInert(path, element.ownerDocument)) {
     throw new Error(`HtmlLocator.${step}: the element is inert`)
   }
 }

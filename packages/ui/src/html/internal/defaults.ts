@@ -261,28 +261,24 @@ export const isClickDisabled = (
     at.tag !== "fieldset" && isDisabled(at, path.slice(index))
   )
 
+/** The steps that send what the host delivers, which reaches an inert element. */
+const delivered: ReadonlySet<string> = new Set(["fire", "fireElement", "blur"])
+
 /**
- * Whether `path`, an element and its ancestors innermost first, is out of
- * the user's reach: inside `inert`, or outside the topmost modal, taken to
- * be the last open one in document order. That modal escapes the inertness
- * around it, not its own.
+ * Throws when `step` is a user's action on an inert element, with its
+ * ancestors innermost first in `path`.
  *
  * @internal
  */
-export const isInert = (path: ReadonlyArray<Locator.Node>): boolean => {
-  let modal: Locator.Node | undefined
-  const walk = (node: Locator.Node) => {
-    if (node.tag === "dialog" && HtmlLocator.dialogState(node) === "modal") {
-      modal = node
-    }
-    for (const child of node.children ?? []) walk(child)
+export const refuseInert = (
+  step: string,
+  name: string,
+  description: string,
+  path: ReadonlyArray<Locator.Node>
+): void => {
+  if (!delivered.has(step) && HtmlLocator.isInert(path)) {
+    throw new Error(`${name}: ${description} is inert`)
   }
-  if (path.length > 0) walk(path[path.length - 1]!)
-  for (const at of path) {
-    if (flag(at, "inert")) return true
-    if (at === modal) return false
-  }
-  return modal !== undefined
 }
 
 /** @internal */

@@ -88,6 +88,7 @@ import * as defaults from "../internal/defaults.ts"
 import { isCustomTag } from "../internal/elements.ts"
 import * as globalEvents from "../internal/globalEvents.ts"
 import { ownEvents } from "../internal/ownEvents.ts"
+import * as HtmlLocator from "./HtmlLocator.ts"
 import type * as HtmlScene from "./HtmlScene.ts"
 import * as TestGlobalEvents from "./TestGlobalEvents.ts"
 
@@ -220,27 +221,18 @@ class HtmlPlayCursor extends internal.PlayCursor {
   protected override bubbles(event: string): boolean {
     return !ownEvents.has(event)
   }
-  private refuseInert(
-    step: string,
+  protected override findOne(
     locator: Locator.Locator,
-    path: ReadonlyArray<TestHost.TestElement>
-  ): void {
-    if (defaults.isInert(path)) {
-      throw new Error(`${this.name(step)}: ${locator.description} is inert`)
-    }
-  }
-  /** `one` for a user's action, which can't reach an inert element. */
-  private operate<P>(
-    step: string,
-    locator: Locator.Locator,
-    event: string,
-    payload: (node: TestHost.TestElement) => P,
-    edit?: (node: TestHost.TestElement, payload: P) => void
-  ): Effect.Effect<void, Play.StepError> {
-    return this.one(step, locator, event, (node) => {
-      this.refuseInert(step, locator, internal.ancestors(node))
-      return payload(node)
-    }, edit)
+    step: string
+  ): TestHost.TestElement {
+    const node = super.findOne(locator, step)
+    defaults.refuseInert(
+      step,
+      this.name(step),
+      locator.description,
+      internal.ancestors(node)
+    )
+    return node
   }
   override click(
     target: string | Locator.Locator
@@ -267,11 +259,9 @@ class HtmlPlayCursor extends internal.PlayCursor {
         atSite(site, () => {
           this.checkReady(name)
           const node = this.findOne(locator, "click")
-          const path = internal.ancestors(node)
-          if (defaults.isClickDisabled(path)) {
+          if (defaults.isClickDisabled(internal.ancestors(node))) {
             throw new Error(`${name}: ${locator.description} is disabled`)
           }
-          this.refuseInert("click", locator, path)
           const skipMouse = send(node, "pointerdown")
           if (!skipMouse) send(node, "mousedown")
           return [node, skipMouse] as const
@@ -285,7 +275,7 @@ class HtmlPlayCursor extends internal.PlayCursor {
           const path = internal.ancestors(node)
           if (
             path.includes(container) && !defaults.isClickDisabled(path) &&
-            !defaults.isInert(path)
+            !HtmlLocator.isInert(path)
           ) {
             const plan = defaults.planClickDefaults(
               container,
@@ -330,7 +320,7 @@ class HtmlPlayCursor extends internal.PlayCursor {
     locator: Locator.Locator,
     value: string
   ): Effect.Effect<void, Play.StepError> {
-    return this.operate(
+    return this.one(
       "type",
       locator,
       "input",
@@ -344,7 +334,7 @@ class HtmlPlayCursor extends internal.PlayCursor {
     locator: Locator.Locator,
     value: string | Partial<Html.InputPayload>
   ): Effect.Effect<void, Play.StepError> {
-    return this.operate(
+    return this.one(
       "change",
       locator,
       "change",
@@ -380,7 +370,7 @@ class HtmlPlayCursor extends internal.PlayCursor {
         yield* this.settle
       })
     }
-    return this.operate(
+    return this.one(
       "keydown",
       target,
       "keydown",
@@ -389,10 +379,9 @@ class HtmlPlayCursor extends internal.PlayCursor {
   }
   submit(locator: Locator.Locator): Effect.Effect<void, Play.StepError> {
     return this.interact("submit", () => {
-      const path = internal.ancestors(this.findOne(locator, "submit"))
-      this.refuseInert("submit", locator, path)
+      const node = this.findOne(locator, "submit")
       const container = this.root.container
-      const form = defaults.formOf(path, container) as
+      const form = defaults.formOf(internal.ancestors(node), container) as
         | TestHost.TestElement
         | undefined
       if (form === undefined) {
@@ -409,7 +398,7 @@ class HtmlPlayCursor extends internal.PlayCursor {
     })
   }
   focus(locator: Locator.Locator): Effect.Effect<void, Play.StepError> {
-    return this.operate("focus", locator, "focus", () => ({}))
+    return this.one("focus", locator, "focus", () => ({}))
   }
   blur(locator: Locator.Locator): Effect.Effect<void, Play.StepError> {
     return this.one("blur", locator, "blur", () => ({}))
@@ -428,9 +417,9 @@ class HtmlPlayCursor extends internal.PlayCursor {
   ): Effect.Effect<void, Play.StepError> {
     const drop = defaults.drop(payload)
     return this.interact("drop", () => {
-      const path = internal.ancestors(this.findOne(locator, "drop"))
-      this.refuseInert("drop", locator, path)
-      const target = path.find((at) =>
+      const target = internal.ancestors(this.findOne(locator, "drop")).find((
+        at
+      ) =>
         Object.hasOwn(at.handlers, "drop") && drop.accepts(at.eventOptions.drop)
       )
       if (target === undefined) {

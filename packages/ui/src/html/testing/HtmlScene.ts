@@ -342,29 +342,19 @@ const ancestry = (
 ) => engine.ancestry(state, node) as ReadonlyArray<Locator.Node>
 
 class StepsImpl extends internal.SceneCursor {
-  private refuseInert(
-    step: string,
+  protected override findOne(
+    state: engine.State<any, any, any, any>,
     locator: Locator.Locator,
-    path: ReadonlyArray<Locator.Node>
-  ): void {
-    if (defaults.isInert(path)) {
-      throw new Error(`${this.name(step)}: ${locator.description} is inert`)
-    }
-  }
-  /** `one` for a user's action, which can't reach an inert element. */
-  private operate(
-    step: string,
-    locator: Locator.Locator,
-    event: string,
-    payload: (
-      node: Locator.Node,
-      state: engine.State<any, any, any, any>
-    ) => unknown
-  ): this {
-    return this.one(step, locator, event, (node, state) => {
-      this.refuseInert(step, locator, ancestry(state, node))
-      return payload(node, state)
-    })
+    step: string
+  ): Locator.Node {
+    const node = super.findOne(state, locator, step)
+    defaults.refuseInert(
+      step,
+      this.name(step),
+      locator.description,
+      ancestry(state, node)
+    )
+    return node
   }
   override click(target: string | Locator.Locator): this {
     const locator = typeof target === "string" ? Locator.text(target) : target
@@ -406,17 +396,15 @@ class StepsImpl extends internal.SceneCursor {
           const now = follow(root, node, out)
           if (now === undefined) return undefined
           const path = pathOf(now)
-          return defaults.isClickDisabled(path) || defaults.isInert(path)
+          return defaults.isClickDisabled(path) || HtmlLocator.isInert(path)
             ? undefined
             : now
         }
         const run = (): void => {
-          const found = engine.findOne(state, locator, step)
-          const path = pathOf(found)
-          if (defaults.isClickDisabled(path)) {
+          const found = this.findOne(state, locator, "click")
+          if (defaults.isClickDisabled(pathOf(found))) {
             throw new Error(`${step}: ${description} is disabled`)
           }
-          this.refuseInert("click", locator, path)
           const skipMouse = send(found, "pointerdown")
           if (!skipMouse) {
             const held = enabled(state.root, found)
@@ -469,7 +457,7 @@ class StepsImpl extends internal.SceneCursor {
     )
   }
   type(locator: Locator.Locator, value: string, details?: EditDetails): this {
-    return this.operate(
+    return this.one(
       "type",
       locator,
       "input",
@@ -480,7 +468,7 @@ class StepsImpl extends internal.SceneCursor {
     locator: Locator.Locator,
     value: string | Partial<Html.InputPayload>
   ): this {
-    return this.operate(
+    return this.one(
       "change",
       locator,
       "change",
@@ -488,7 +476,7 @@ class StepsImpl extends internal.SceneCursor {
     )
   }
   compositionEnd(locator: Locator.Locator, value?: string): this {
-    return this.operate(
+    return this.one(
       "compositionEnd",
       locator,
       "compositionend",
@@ -498,7 +486,7 @@ class StepsImpl extends internal.SceneCursor {
     )
   }
   keydown(locator: Locator.Locator, key: string, details?: KeyDetails): this {
-    return this.operate(
+    return this.one(
       "keydown",
       locator,
       "keydown",
@@ -508,9 +496,8 @@ class StepsImpl extends internal.SceneCursor {
   submit(locator: Locator.Locator): this {
     return this.interact("submit", (state) => {
       const step = this.name("submit")
-      const path = ancestry(state, engine.findOne(state, locator, step))
-      this.refuseInert("submit", locator, path)
-      const form = defaults.formOf(path, state.root)
+      const node = this.findOne(state, locator, "submit")
+      const form = defaults.formOf(ancestry(state, node), state.root)
       if (form === undefined) {
         throw new Error(`${step}: ${locator.description} isn't in a form`)
       }
@@ -523,12 +510,7 @@ class StepsImpl extends internal.SceneCursor {
     })
   }
   focus(locator: Locator.Locator): this {
-    return this.operate(
-      "focus",
-      locator,
-      "focus",
-      () => ({ focusVisible: true })
-    )
+    return this.one("focus", locator, "focus", () => ({ focusVisible: true }))
   }
   blur(locator: Locator.Locator): this {
     return this.one("blur", locator, "blur", () => ({}))
@@ -537,8 +519,7 @@ class StepsImpl extends internal.SceneCursor {
     const drop = defaults.drop(payload)
     return this.interact("drop", (state) => {
       const step = this.name("drop")
-      const node = engine.findOne(state, locator, step)
-      this.refuseInert("drop", locator, ancestry(state, node))
+      const node = this.findOne(state, locator, "drop")
       // Any layer's `dropTarget` makes a target, a part's included. The scene then decides which layers run.
       const target = engine.ancestry(state, node).find((
         at
