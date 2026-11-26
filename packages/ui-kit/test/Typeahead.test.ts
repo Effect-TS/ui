@@ -21,7 +21,8 @@ describe("Typeahead", () => {
       { label: "Apple" },
       { label: "Apricot", disabled: true },
       { label: "Avocado" },
-      { label: "New York" }
+      { label: "New York" },
+      { label: "Eel" }
     ]
 
     // Prefix matching & skipping disabled items
@@ -37,7 +38,8 @@ describe("Typeahead", () => {
     assert.strictEqual(miss.index, -1)
     assert.isFalse(Typeahead.isTyping(miss.state))
 
-    // Repeated letter cycles across enabled items starting with that letter
+    // Repeated letter cycles across enabled items starting with that letter,
+    // even when another letter is doubled ("Eel")
     const c1 = Typeahead.step(Typeahead.initial, "a", items, -1)
     const c2 = Typeahead.step(c1.state, "a", items, c1.index)
     const c3 = Typeahead.step(c2.state, "A", items, c2.index)

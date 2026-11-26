@@ -164,10 +164,7 @@ export const step = (
   let typedFrom = typed === "" ? from : state.typedFrom
   if (
     typed.toLowerCase() === key.toLowerCase() &&
-    items.every((item) =>
-      !available(item) ||
-      item.label[0]?.toLowerCase() !== item.label[1]?.toLowerCase()
-    )
+    matchOf(items, typed + key, 0) === -1
   ) {
     typed = ""
     typedFrom = state.matched
