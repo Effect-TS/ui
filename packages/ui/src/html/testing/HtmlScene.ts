@@ -71,6 +71,7 @@
 import type * as Effect from "effect/Effect"
 import type * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
+import type * as Types from "effect/Types"
 import type * as Component from "../../Component.ts"
 import { handle } from "../../internal/handler.ts"
 import * as internal from "../../internal/scene.ts"
@@ -719,4 +720,6 @@ export const start: {
   internal.begin(StepsImpl, "HtmlScene", component, props, options)
 
 /** The vocabulary a component's view builds from. */
-type VocabularyOf<C> = C extends { readonly "~V"?: infer V } ? V : never
+type VocabularyOf<C> = C extends { readonly "~V"?: Types.Covariant<infer V> } ?
+  V
+  : never

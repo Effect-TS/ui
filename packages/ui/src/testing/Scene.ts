@@ -66,6 +66,7 @@ import type * as Cause from "effect/Cause"
 import type * as Effect from "effect/Effect"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Scope from "effect/Scope"
+import type * as Types from "effect/Types"
 import type * as Component from "../Component.ts"
 import type * as Feature from "../Feature.ts"
 import { checkChildPaths, checkFallbackPaths } from "../internal/paths.ts"
@@ -414,7 +415,9 @@ export declare namespace Steps {
 }
 
 /** The vocabulary a component's view builds from. */
-type VocabularyOf<C> = C extends { readonly "~V"?: infer V } ? V : never
+type VocabularyOf<C> = C extends { readonly "~V"?: Types.Covariant<infer V> } ?
+  V
+  : never
 
 /**
  * Starts a scene: `init` with `props`, as a cursor in a scope. The test

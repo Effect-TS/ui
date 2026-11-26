@@ -1340,7 +1340,7 @@ export interface Members<
   readonly layerFailure:
     | ((failure: AsyncResult.Failure<never, any>) => Msg)
     | undefined
-  readonly "~V"?: V
+  readonly "~V"?: Types.Covariant<V>
   readonly "~L"?: L
 }
 

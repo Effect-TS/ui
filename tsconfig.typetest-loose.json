@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // tstyche's baseline enables `exactOptionalPropertyTypes`, which many consumers
+  // leave off. Type tests listed here run without it.
+  "files": ["packages/ui/typetest/LooseOptional.tst.ts"],
+  "compilerOptions": {
+    "strict": true,
+    "exactOptionalPropertyTypes": false,
+    "target": "ESNext",
+    "module": "NodeNext",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "lib": ["ESNext", "DOM"],
+    "types": ["node"]
+  }
+}

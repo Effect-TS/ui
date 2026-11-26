@@ -3,5 +3,5 @@
   "testFileMatch": [
     "packages/*/typetest/**/*.tst.*"
   ],
-  "tsconfig": "baseline"
+  "tsconfig": "./tsconfig.typetest-loose.json"
 }
