@@ -991,6 +991,10 @@ describe("Runtime", () => {
         const crashed = yield* Effect.flip(TestHost.settle)
         assert.strictEqual(crashed._tag, "RootCrashed")
         assert.strictEqual(root.text(), "Something went wrong")
+        assert.deepStrictEqual(root.frames(), [
+          "bomb-0+",
+          "Something went wrong"
+        ])
         assert.isUndefined(root.model())
         // The root has no parent, so its Failed entry is all a crash needs.
         assert.deepStrictEqual(tags(root, "/Page").slice(-2), [
