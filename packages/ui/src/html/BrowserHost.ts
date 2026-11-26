@@ -659,6 +659,8 @@ export interface Recorded {
  * a manual popover, and an auto popover as a manual one, so the copy never
  * makes the rest of the page inert, a tool's own UI included, and never
  * closes the live tree's popovers.
+ * An element mount with a `paint` option, such as
+ * `Canvas.view`'s, calls it once to draw its node from the painted state.
  *
  * The live root keeps running while it's hidden: its Commands,
  * Subscriptions and updates go on, and it renders into its hidden
@@ -759,8 +761,10 @@ export type Dispatched =
  * `fellBack` has the paths of the instances `state` returned nothing for,
  * which started from `init`. `fallbacks` has the path of each instance
  * whose view shows a feature slot's `fallback`, because the copy doesn't
- * build the provided Layer the feature's service comes from. Both may show
- * something the page never showed at that state.
+ * build the provided Layer the feature's service comes from. `skipped` has
+ * the path of each instance whose view puts an element mount on the copy
+ * that has no `paint`, or whose `paint` threw, so its node may be blank.
+ * All three may show something the page never showed at that state.
  *
  * @stability experimental
  * @category models
@@ -769,6 +773,7 @@ export type Dispatched =
 export interface Painted {
   readonly fellBack: ReadonlyArray<string>
   readonly fallbacks: ReadonlyArray<string>
+  readonly skipped: ReadonlyArray<string>
 }
 
 /**

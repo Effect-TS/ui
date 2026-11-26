@@ -195,7 +195,8 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
                     session,
                     seq,
                     fellBack: painted.fellBack,
-                    fallbacks: painted.fallbacks
+                    fallbacks: painted.fallbacks,
+                    skipped: painted.skipped
                   }
                 }
                 raise(frame, covered)

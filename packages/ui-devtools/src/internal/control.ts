@@ -27,7 +27,8 @@ export const Paused = Schema.Struct({
   session: Schema.String,
   seq: Schema.Number,
   fellBack: Schema.Array(Schema.String),
-  fallbacks: Schema.Array(Schema.String)
+  fallbacks: Schema.Array(Schema.String),
+  skipped: Schema.Array(Schema.String)
 })
 
 export type Paused = typeof Paused.Type

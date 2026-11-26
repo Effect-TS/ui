@@ -205,6 +205,7 @@ const ShowEntry = control(Tool.make("show_entry", {
   description:
     "Pauses the page and paints it as it was at an entry, beside the live page, which keeps running " +
     "hidden. The DevTools panel shows it as paused. fellBack lists instances with no state there, shown from init. " +
+    "skipped lists instances with an element mount that didn't run there, such as a canvas drawn by a worker, which may show blank. " +
     "Call resume to show the live page again.",
   parameters: Schema.Struct({ session: SessionParam, seq: Schema.Number }),
   success: Result,

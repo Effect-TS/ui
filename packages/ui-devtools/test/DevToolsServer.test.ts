@@ -369,7 +369,8 @@ describe("DevToolsServer", { concurrent: false }, () => {
         assert.deepStrictEqual(shown, {
           paused: seq,
           fellBack: [],
-          fallbacks: []
+          fallbacks: [],
+          skipped: ["/Workspace/Editor[n1]", "/Workspace/Editor[n2]"]
         })
         assert.strictEqual(app.style.display, "none")
         yield* until(() =>

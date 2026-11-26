@@ -602,6 +602,29 @@ export const PixelRatio = Schema.Union([Schema.Number, Schema.Literal("auto")])
  */
 export type PixelRatio = typeof PixelRatio.Type
 
+// Sizes the backing store to the pixel ratio, scales the context to match and paints the scene.
+const draw = (
+  canvas: HTMLCanvasElement,
+  context: CanvasRenderingContext2D | null,
+  args: {
+    readonly width: number
+    readonly height: number
+    readonly shapes: ReadonlyArray<Shape>
+    readonly pixelRatio: PixelRatio
+  }
+): void => {
+  if (context === null) return
+  const ratio = args.pixelRatio === "auto"
+    ? canvas.ownerDocument.defaultView?.devicePixelRatio ?? 1
+    : args.pixelRatio
+  const width = Math.round(args.width * ratio)
+  const height = Math.round(args.height * ratio)
+  if (canvas.width !== width) canvas.width = width
+  if (canvas.height !== height) canvas.height = height
+  context.setTransform(ratio, 0, 0, ratio, 0, 0)
+  paint(context, args)
+}
+
 /**
  * The mount `view` puts on its canvas. It paints the scene when the canvas
  * is added and whenever its args change, and reports the pointer events
@@ -620,6 +643,8 @@ export type PixelRatio = typeof PixelRatio.Type
  *   pointer, so a drag that ends outside the canvas still sends its
  *   `pointerup`. A `pointercancel`, such as a touch the browser turns into
  *   a scroll, is reported as `pointerup`.
+ * - On a copy of the page that runs no mounts, such as DevTools time
+ *   travel, it paints the scene once and reports nothing.
  *
  * A test asserts on the args with `expectMount` and sends a `Pointer`
  * with `mounted`.
@@ -637,7 +662,9 @@ export const Paint = Mount.makeStream(
       shapes: Schema.Array(Shape),
       pixelRatio: PixelRatio,
       listen: Schema.Array(PointerEvent)
-    }
+    },
+    paint: (canvas: HTMLCanvasElement, args) =>
+      draw(canvas, canvas.getContext("2d"), args)
   },
   (canvas: HTMLCanvasElement, initial, changes) =>
     Stream.callback<Pointer>((queue) =>
@@ -685,16 +712,7 @@ export const Paint = Mount.makeStream(
         yield* Stream.runForEach(changes, (next) =>
           Effect.sync(() => {
             args = next
-            if (context === null) return
-            const ratio = next.pixelRatio === "auto"
-              ? canvas.ownerDocument.defaultView?.devicePixelRatio ?? 1
-              : next.pixelRatio
-            const width = Math.round(next.width * ratio)
-            const height = Math.round(next.height * ratio)
-            if (canvas.width !== width) canvas.width = width
-            if (canvas.height !== height) canvas.height = height
-            context.setTransform(ratio, 0, 0, ratio, 0, 0)
-            paint(context, next)
+            draw(canvas, context, next)
           })).pipe(Effect.forkScoped)
       })
     )

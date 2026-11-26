@@ -1022,6 +1022,7 @@ const paintCore = (
   {
     readonly fellBack: ReadonlyArray<string>
     readonly fallbacks: ReadonlyArray<string>
+    readonly skipped: ReadonlyArray<string>
   },
   never,
   Scope.Scope
@@ -1030,6 +1031,7 @@ const paintCore = (
     const ctx = onScheduler(caller)
     const executor = Context.get(ctx, Executor.CurrentExecutor)
     const fellBack: Array<string> = []
+    const skipped = new Set<string>()
     let broke: { readonly error: unknown } | undefined
     const { base, dom } = hostOf(ctx).make(
       container,
@@ -1048,7 +1050,8 @@ const paintCore = (
         ...base,
         setEvents: () => {},
         transitions: () => unmoved,
-        inert: true
+        inert: true,
+        skipped: (path) => skipped.add(path)
       },
       {
         context: ctx,
@@ -1088,7 +1091,11 @@ const paintCore = (
         Context.get(ctx, Scope.Scope),
         Effect.sync(close)
       ),
-      { fellBack, fallbacks: Array.from(fallbacks) }
+      {
+        fellBack,
+        fallbacks: Array.from(fallbacks),
+        skipped: Array.from(skipped)
+      }
     )
   })
 
@@ -1103,6 +1110,7 @@ export const paint = (
   {
     readonly fellBack: ReadonlyArray<string>
     readonly fallbacks: ReadonlyArray<string>
+    readonly skipped: ReadonlyArray<string>
   },
   never,
   Scope.Scope | Renderer.Renderer
@@ -1120,6 +1128,7 @@ export const paintDom = (
   {
     readonly fellBack: ReadonlyArray<string>
     readonly fallbacks: ReadonlyArray<string>
+    readonly skipped: ReadonlyArray<string>
   },
   never,
   Scope.Scope
