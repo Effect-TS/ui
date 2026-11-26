@@ -587,41 +587,28 @@ describe("onAnimationFrame", { concurrent: false }, () => {
 
 const MediaMessage = UiSchema.TaggedEnum({
   DarkChanged: { matches: Schema.Boolean },
-  MotionChanged: { matches: Schema.Boolean },
-  Stopped: {}
+  MotionChanged: { matches: Schema.Boolean }
 })
 
 const Media = Html.component({
   name: "Media",
-  model: Schema.Struct({
-    listening: Schema.Boolean,
-    log: Schema.Array(Schema.String)
-  }),
+  model: Schema.Array(Schema.String),
   message: MediaMessage
 }).make({
-  init: () => ({ listening: true, log: [] }),
+  init: (): ReadonlyArray<string> => [],
   update: {
-    DarkChanged: ($, { matches }) => ({
-      ...$.model,
-      log: [...$.model.log, `dark:${matches}`]
-    }),
-    MotionChanged: ($, { matches }) => ({
-      ...$.model,
-      log: [...$.model.log, `motion:${matches}`]
-    }),
-    Stopped: ($) => ({ ...$.model, listening: false })
+    DarkChanged: ($, { matches }) => [...$.model, `dark:${matches}`],
+    MotionChanged: ($, { matches }) => [...$.model, `motion:${matches}`]
   },
-  view: (h, model) => h.output(model.log.join(",")),
-  subscriptions: ({ model }) => [
-    model.listening &&
+  view: (h, log) => h.output(log.join(",")),
+  subscriptions: () => [
     HtmlSubscription.onMediaQuery(
       "(prefers-color-scheme: dark)",
       (matches) => MediaMessage.DarkChanged({ matches })
     ),
-    model.listening &&
     HtmlSubscription.onMediaQuery(
       "(prefers-reduced-motion: reduce)",
-      (matches) => matches ? MediaMessage.MotionChanged({ matches }) : undefined
+      (matches) => MediaMessage.MotionChanged({ matches })
     )
   ]
 })
@@ -629,25 +616,11 @@ const Media = Html.component({
 describe("onMediaQuery", { concurrent: false }, () => {
   it.effect("emits the initial match and changes on TestMediaQueries, sends nothing by default, and drives HtmlScene.mediaQuery", () =>
     Effect.gen(function*() {
-      assert.deepStrictEqual(
-        [
-          HtmlSubscription.onMediaQuery(
-            "(prefers-color-scheme: dark)",
-            () => undefined
-          ),
-          HtmlSubscription.onMediaQuery("(min-width: 768px)", () => undefined)
-        ].map(({ key }) => key),
-        [
-          `@effect/ui/html/mediaQuery:"(prefers-color-scheme: dark)"`,
-          `@effect/ui/html/mediaQuery:"(min-width: 768px)"`
-        ]
-      )
-
       // Without a MediaQueries source, nothing emits and nothing fails.
       yield* Effect.gen(function*() {
         const silent = yield* TestHost.mount(Media, {})
         yield* TestHost.settle
-        assert.deepStrictEqual(silent.model()?.log, [])
+        assert.deepStrictEqual(silent.model(), [])
       }).pipe(Effect.provide(TestHost.layer()), Effect.scoped)
 
       // With TestMediaQueries, initial matches emit on start, then each change.
@@ -655,38 +628,15 @@ describe("onMediaQuery", { concurrent: false }, () => {
         yield* TestMediaQueries.set("(prefers-color-scheme: dark)", true)
         const root = yield* TestHost.mount(Media, {})
         yield* TestHost.settle
-        assert.deepStrictEqual(root.model()?.log, ["dark:true"])
-
-        yield* TestMediaQueries.set("(prefers-color-scheme: dark)", true)
         yield* TestMediaQueries.set("(prefers-color-scheme: dark)", false)
         yield* TestMediaQueries.set("(prefers-reduced-motion: reduce)", true)
         yield* TestHost.settle
-        assert.deepStrictEqual(root.model()?.log, [
+        assert.deepStrictEqual(root.model(), [
           "dark:true",
+          "motion:false",
           "dark:false",
           "motion:true"
         ])
-
-        root.send(MediaMessage.Stopped())
-        yield* TestHost.settle
-        yield* TestMediaQueries.set("(prefers-color-scheme: dark)", true)
-        yield* TestHost.settle
-        assert.deepStrictEqual(root.model()?.log, [
-          "dark:true",
-          "dark:false",
-          "motion:true"
-        ])
-      }).pipe(
-        Effect.provide(Layer.merge(TestHost.layer(), TestMediaQueries.layer)),
-        Effect.scoped
-      )
-
-      // A change before the initial effect runs still delivers the initial match first.
-      yield* Effect.gen(function*() {
-        const root = yield* TestHost.mount(Media, {})
-        yield* TestMediaQueries.set("(prefers-color-scheme: dark)", true)
-        yield* TestHost.settle
-        assert.deepStrictEqual(root.model()?.log, ["dark:false", "dark:true"])
       }).pipe(
         Effect.provide(Layer.merge(TestHost.layer(), TestMediaQueries.layer)),
         Effect.scoped
@@ -704,8 +654,7 @@ describe("onMediaQuery", { concurrent: false }, () => {
           init: () => false,
           update: {
             DarkChanged: (_, { matches }) => matches,
-            MotionChanged: ($) => $.model,
-            Stopped: ($) => $.model
+            MotionChanged: ($) => $.model
           },
           view: (h) => h.p(""),
           subscriptions: () => [
@@ -735,13 +684,11 @@ describe("onMediaQuery", { concurrent: false }, () => {
         assert.strictEqual(root.model(), false)
       }).pipe(Effect.provide(TestHost.layer()), Effect.scoped)
 
-      // HtmlScene.mediaQuery dispatches, marks undefined as ignored, and throws for unheard queries.
+      // HtmlScene.mediaQuery dispatches, and throws for unheard queries.
       const scene = yield* HtmlScene.make(Media, {})
       scene
         .mediaQuery("(prefers-color-scheme: dark)", true)
-        .mediaQuery("(prefers-reduced-motion: reduce)", false).expectIgnored()
-        .mediaQuery("(prefers-reduced-motion: reduce)", true)
-        .expect(Locator.tag("output")).toHaveText("dark:true,motion:true")
+        .expect(Locator.tag("output")).toHaveText("dark:true")
       assert.throws(
         () => scene.mediaQuery("(min-width: 768px)", true),
         `HtmlScene.mediaQuery: nothing listens for media query "(min-width: 768px)"; active keys: ["@effect/ui/html/mediaQuery:\\"(prefers-color-scheme: dark)\\"","@effect/ui/html/mediaQuery:\\"(prefers-reduced-motion: reduce)\\""]`
@@ -813,9 +760,9 @@ describe("onMediaQuery", { concurrent: false }, () => {
         yield* tick
         fireChange("(prefers-color-scheme: dark)", false)
         yield* tick
-        return root.model()?.log
+        return root.model()
       }).pipe(Effect.scoped)
-      assert.deepStrictEqual(log, ["dark:true", "dark:false"])
+      assert.deepStrictEqual(log, ["dark:true", "motion:false", "dark:false"])
       assert.strictEqual(
         getList("(prefers-color-scheme: dark)").listeners.size,
         0

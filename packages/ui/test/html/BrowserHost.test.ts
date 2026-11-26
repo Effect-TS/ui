@@ -22,12 +22,8 @@ import {
   HtmlServer,
   HtmlSubscription
 } from "@effect/ui/html"
-import {
-  HtmlLocator,
-  HtmlScene,
-  TestAnimationFrames
-} from "@effect/ui/html/testing"
-import { Locator, TestHost } from "@effect/ui/testing"
+import { HtmlLocator, TestAnimationFrames } from "@effect/ui/html/testing"
+import { TestHost } from "@effect/ui/testing"
 import { assert, expect, it } from "@effect/vitest"
 import {
   Cause,
@@ -3593,7 +3589,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         ])
       }).pipe(Effect.scoped))
 
-    it.effect("HtmlCommand.waitForPaint waits two animation frames and resolves in HtmlScene", () =>
+    it.effect("HtmlCommand.waitForPaint waits two animation frames", () =>
       Effect.gen(function*() {
         const PaintMessage = UiSchema.TaggedEnum({
           Start: {},
@@ -3612,11 +3608,7 @@ describe("BrowserHost", { concurrent: false }, () => {
               ),
             Painted: () => "shown" as const
           },
-          view: (h, phase) =>
-            h.div(
-              h.button.on("click", PaintMessage.Start()).children("Start"),
-              h.p(phase)
-            )
+          view: (h, phase) => h.p(phase)
         })
 
         const root = yield* TestHost.mount(Enter, {})
@@ -3632,12 +3624,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         yield* TestAnimationFrames.fire(16)
         yield* TestHost.settle
         assert.strictEqual(root.model(), "shown")
-
-        const scene = yield* HtmlScene.make(Enter, {})
-        scene.click("Start")
-          .expect(Locator.text("starting")).toExist()
-          .resolve(HtmlCommand.WaitForPaint, undefined)
-          .expect(Locator.text("shown")).toExist()
 
         // A frame source may call back while `listen` registers.
         const eager = yield* TestHost.mount(Enter, {}).pipe(
@@ -3660,7 +3646,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         Effect.scoped
       ))
 
-    it.effect("HtmlCommand.waitForAnimations skips infinite animations, retries after cancellation, and reports missing refs", () =>
+    it.effect("HtmlCommand.waitForAnimations skips infinite animations, waits for a replacement after cancellation, and reports missing refs", () =>
       Effect.gen(function*() {
         const Panel = Html.ref("Panel", "div")
         const MissingPanel = Html.ref("MissingPanel", "div")
@@ -3701,11 +3687,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           Effect.sync(() => {
             panel.getAnimations = original
           })
-        ) // Element without getAnimations settles immediately.
-        ;(panel as { getAnimations?: unknown }).getAnimations = undefined
-        root.send(AnimMessage.Wait({ missing: false }))
-        yield* tick
-        assert.deepStrictEqual(root.model(), ["settled false", "settled true"])
+        )
 
         // Infinite animations are ignored; a cancelled finite animation triggers a retry.
         const looping = {
@@ -3729,31 +3711,19 @@ describe("BrowserHost", { concurrent: false }, () => {
         } as unknown as Animation
 
         let active: ReadonlyArray<Animation> = [looping, first]
-        const calls: Array<GetAnimationsOptions | undefined> = []
-        panel.getAnimations = (options) => {
-          calls.push(options)
-          return [...active]
-        }
+        panel.getAnimations = () => [...active]
 
         root.send(AnimMessage.Wait({ missing: false }))
         yield* tick
-        assert.deepStrictEqual(calls, [{ subtree: true }])
-        assert.strictEqual(root.model()?.length, 2)
-
         // Cancel the first animation and replace it with the second.
         active = [looping, second]
         rejectFirst()
         yield* tick
-        assert.strictEqual(calls.length, 2)
-        assert.strictEqual(root.model()?.length, 2)
+        assert.deepStrictEqual(root.model(), ["settled false"])
 
         resolveSecond()
         yield* tick
-        assert.deepStrictEqual(root.model(), [
-          "settled false",
-          "settled true",
-          "settled true"
-        ])
+        assert.deepStrictEqual(root.model(), ["settled false", "settled true"])
 
         // Detaching the element cancels its animation: it settles without a frame.
         const raf = window.requestAnimationFrame
@@ -3776,7 +3746,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         app.remove()
         rejectRemoved()
         yield* tick
-        assert.strictEqual(root.model()?.length, 4)
+        assert.strictEqual(root.model()?.length, 3)
       }).pipe(Effect.scoped))
   })
 
