@@ -308,7 +308,6 @@ describe("Calendar", () => {
         "data-outside-month": undefined
       })
 
-      // Unavailable day (not natively disabled, aria-disabled="true")
       owns(scene, dayLoc("2026-11-18"), {
         disabled: undefined,
         "aria-disabled": "true",
@@ -378,7 +377,7 @@ describe("Calendar", () => {
         CalendarEvents.RequestedMonth({ month: utc("2026-02-01") })
       )
 
-      // Focus Jan 31, then change month to Feb 2026 (no value in Feb): clamps to Feb 28 (or max Feb 1)
+      // Preserve the day of the month, clamping to February's last day.
       scene.focus(dayLoc("2026-01-31"))
       syncMonth(
         scene,
@@ -389,7 +388,6 @@ describe("Calendar", () => {
         })
       )
       owns(scene, dayLoc("2026-02-28"), { tabindex: "0" })
-      // The focused day left with its month, so focus follows the tab stop
       assert.deepStrictEqual(focused(scene), ["2026-02-28"])
 
       // Changing month to one containing value moves focus stop to value
@@ -465,7 +463,6 @@ describe("Calendar", () => {
       scene.keydown(dayLoc("2026-11-15"), "Enter")
         .expectIgnored().expectDefaultPrevented(false)
 
-      // RTL swaps Left and Right
       scene.shared(DirectionProvider, { direction: "rtl" })
       assert.deepStrictEqual(
         focused(
@@ -588,7 +585,6 @@ describe("Calendar", () => {
         "data-focused": undefined
       })
 
-      // Update also suppresses every interaction
       scene.fire(dayLoc("2026-11-15"), "click")
       assert.deepStrictEqual(scene.current.emitted, [])
       scene.fire(loc("prev"), "click")

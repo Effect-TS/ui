@@ -69,7 +69,6 @@ export const CalendarDayRef = Html.ref("CalendarDay", "button")
 
 const dayMillis = 86_400_000
 
-// `DateTime.removeTime`, returning a date already at midnight UTC as it is.
 export const toDay = (date: DateTime.DateTime): DateTime.Utc =>
   DateTime.isUtc(date) && date.epochMilliseconds % dayMillis === 0
     ? date

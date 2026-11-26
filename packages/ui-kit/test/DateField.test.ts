@@ -53,7 +53,6 @@ describe("DateField", () => {
       quiet(scene)
       scene.blur(input).emitted(committed(utc("2026-11-26")))
 
-      // en-US mm/dd/yyyy on Enter, then blur does not commit again
       scene.props({ value: utc("2026-11-26"), locale: "en-US" })
       assert.strictEqual(text(scene), "11/26/2026")
       scene.type(input, "3/5/2026")
@@ -73,7 +72,7 @@ describe("DateField", () => {
         quiet(scene)
         assert.strictEqual(text(scene), "26/11/2026")
       }
-      // Field owns aria-invalid and id, so bad text leaves the consumer's
+      // DateField leaves validation attributes to the consumer or Field.
       assert.deepInclude(scene.get(input).attrs, {
         id: "mine",
         "aria-invalid": "false"

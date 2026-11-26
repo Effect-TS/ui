@@ -3,8 +3,7 @@
  * `value`, a `DateTime` or `null` for an empty field, and store the
  * `DateTime.Utc | null` that `Committed` carries. Your view supplies the
  * `<input>` builder; the component formats and parses its text for a locale.
- * It is a headless component because it keeps the draft text while the user
- * types.
+ * The component keeps draft text while the user types.
  *
  * **Anatomy**
  *
