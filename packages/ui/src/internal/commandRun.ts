@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
 import type * as Fiber from "effect/Fiber"
 import * as Option from "effect/Option"
+import * as Scheduler from "effect/Scheduler"
 import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import type * as Command from "../Command.ts"
@@ -281,7 +282,9 @@ class Runs implements Kernel.Runs {
       )
       const fiber = fork(
         tree,
-        context,
+        now
+          ? Context.add(context, Scheduler.PreventSchedulerYield, true)
+          : context,
         Effect.onExit(program, (exit) => Scope.close(scope, exit)),
         now
       )

@@ -405,8 +405,9 @@ export const isDefinition = (u: unknown): u is Definition.Any =>
  *   that falls behind gets only the latest.
  *
  * Starting the body, publishing new args to `changes` and closing the Scope
- * each run synchronously with the commit that causes them, up to the first
- * point where they wait.
+ * each run synchronously with the commit that causes them, until they first
+ * wait or reach `Scheduler.MaxOpsBeforeYield` steps. A body that needs a
+ * Layer still being built starts once it's built.
  *
  * The body ends with its own result, which a view maps to a message with
  * `map`. When there is nothing to report, return `Component.noop`: the log

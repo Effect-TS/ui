@@ -804,7 +804,10 @@ describe("BrowserHost", { concurrent: false }, () => {
           expect(history.entries()).toEqual(["/search?q=effect"])
           expect(writes).toEqual([])
         })
-      ).pipe(Effect.provide(HtmlScheduler.layer({ budget: 0 }))))
+      ).pipe(
+        Effect.provideService(Scheduler.MaxOpsBeforeYield, 8),
+        Effect.provide(HtmlScheduler.layer({ budget: 0 }))
+      ))
 
     it.effect("a rejected keystroke is put back", () =>
       withSearch(({ field, history, type }) =>
