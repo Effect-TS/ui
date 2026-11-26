@@ -519,6 +519,23 @@ describe("Scene", () => {
         )
       }))
 
+    it.effect("an unkeyed element's mount keeps running while a conditional sibling before it comes and goes", () =>
+      Effect.gen(function*() {
+        const Notice = Html.component({
+          name: "Notice",
+          props: Schema.Struct({ shown: Schema.Boolean }),
+          model: Schema.Null,
+          message: Schema.Never
+        }).make({
+          init: () => null,
+          update: ($) => $.model,
+          view: (h) =>
+            h.div(h.props.shown && h.p("notice"), h.ul.onMount(Hello()))
+        })
+        const scene = yield* Scene.make(Notice, { shown: true })
+        scene.mounted(Hello).props({ shown: false }).props({ shown: true })
+      }))
+
     it.effect("a root headless child with a new key is a new child, so its mounts are new, its view node cached or not", () =>
       Effect.gen(function*() {
         const Wrapper = Component.define({

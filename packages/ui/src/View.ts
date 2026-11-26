@@ -226,10 +226,10 @@ export const noFields: Readonly<Record<string, never>> = Object.freeze({})
  * decides the meaning of. `handlers` map an event name to its handler, so
  * re-rendering never touches listeners, and `eventOptions` holds the
  * `EventOptions` set with a handler. `key` keeps the element's node when
- * its siblings move. Unkeyed elements match by position counted from either
- * end, so an element keeps its node when siblings before or after it come
- * and go. `refKey` names the element for ref Commands, and `mount` is the
- * work started by `onMount`.
+ * its siblings move. Unkeyed elements match by position from either end,
+ * so an element keeps its node when siblings on one side of it come and go.
+ * `refKey` names the element for ref Commands, and `mount` is the work
+ * started by `onMount`.
  *
  * @stability experimental
  * @category models

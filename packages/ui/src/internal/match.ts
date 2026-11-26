@@ -69,12 +69,10 @@ export const patches = (
 
 /**
  * For each of `news`, the index of the old node it patches, or -1 when it's
- * created. A keyed node takes the old with its key, wherever it was; any
- * other node the unkeyed old at its own index. The olds no node takes are
- * removed.
- *
- * What the runtime's list patch decides, without its shortcuts for lists
- * that kept their order.
+ * created. The runtime's list patch: the common prefix and then the common
+ * suffix pair up in place, and in between a keyed node takes the old with
+ * its key, wherever it was, and any other node the unkeyed old at its own
+ * index. The olds no node takes are removed.
  *
  * @internal
  */
@@ -82,12 +80,26 @@ export const matchSiblings = (
   olds: ReadonlyArray<View.Node<any, any>>,
   news: ReadonlyArray<View.Node<any, any>>
 ): ReadonlyArray<number> => {
+  let start = 0
+  let oldEnd = olds.length - 1
+  let end = news.length - 1
+  while (
+    start <= oldEnd && start <= end && patches(olds[start]!, news[start]!)
+  ) start++
+  while (
+    start <= oldEnd && start <= end && patches(olds[oldEnd]!, news[end]!)
+  ) {
+    oldEnd--
+    end--
+  }
   let byKey: Map<string, number> | undefined
-  for (let index = 0; index < olds.length; index++) {
+  for (let index = start; index <= oldEnd; index++) {
     const old = olds[index]!
     if (isKeyed(old)) (byKey ??= new Map()).set(keyOf(old), index)
   }
   return news.map((view, index) => {
+    if (index < start) return index
+    if (index > end) return index + olds.length - news.length
     if (isKeyed(view)) {
       const found = byKey?.get(keyOf(view))
       if (found === undefined || !same(olds[found]!, view)) return -1
@@ -95,7 +107,7 @@ export const matchSiblings = (
       byKey!.delete(keyOf(view))
       return found
     }
-    const old = olds[index]
+    const old = index <= oldEnd ? olds[index] : undefined
     return old !== undefined && !isKeyed(old) && same(old, view) ? index : -1
   })
 }
