@@ -794,7 +794,7 @@ const start = (
       hot?.detach()
       dom?.dispose()
       if (frozen) tree.closed = false
-      // A throwing hook still lets the mount close and clean up, then dies.
+      // A hook's throw surfaces only after teardown and cleanup.
       let failed: Effect.Effect<void> = Effect.void
       try {
         base.unmounting?.(container, Kernel.nodesOf(instance.rendered!, []))

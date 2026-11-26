@@ -2,4 +2,4 @@
 "@effect/ui": minor
 ---
 
-Add an optional `Renderer.Host` member, `unmounting(container, nodes)`, which is called when a mount closes and before its nodes are removed. An inline terminal host can use it to keep the final frame on screen.
+Add an optional `Renderer.Host` hook, `unmounting(container, nodes)`, called before a closing mount's nodes are removed, so a terminal host can keep the final frame on screen.

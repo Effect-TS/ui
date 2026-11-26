@@ -162,16 +162,12 @@ export interface HostEvents<Node> {
  * nothing else in one step. A host without it gets `remove` for each node.
  *
  * `unmounting`, if given, is called once when a mount's Scope closes, before
- * any of its instances closes and before any of its nodes is removed. It gets
- * the container and the top-level nodes the mount is about to remove from it,
- * in order and still attached, so a host can keep the last frame, such as a
- * terminal leaving the final output on screen. These include placeholders:
- * a view that renders nothing still leaves an empty text node. A mount
- * sharing the container passes only its own nodes. Releases may still be
- * pending when it returns. If it throws, the nodes are still removed and
- * committed and the mount cleaned up, and closing the Scope dies with the
- * error. Mounts whose Scope closed before they placed anything, and the
- * `BrowserHost`'s DOM path, never call it.
+ * its instances close or its nodes are removed, so a host such as a terminal
+ * can keep the last frame. `nodes` are the mount's own top-level nodes in
+ * `container`, in order and still attached, including the empty text node a
+ * blank view leaves. If it throws, the mount still tears down and closing the
+ * Scope dies with the error. The `BrowserHost` DOM path, and a mount whose
+ * Scope closed before it placed anything, never call it.
  *
  * `viewTransition`, if given, is called for a flush that renders an update
  * whose step called `$.viewTransition`, before it renders, with the rest of

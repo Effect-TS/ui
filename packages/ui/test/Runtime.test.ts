@@ -5456,7 +5456,6 @@ describe("Runtime", () => {
             ).join(", ")
           }`
         )
-        // Only the first mount's close throws.
         if (throws) {
           throws = false
           throw error
