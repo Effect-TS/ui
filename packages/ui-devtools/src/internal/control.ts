@@ -1,4 +1,5 @@
 import * as MessageLog from "@effect/ui/MessageLog"
+import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 
 export const Request = Schema.Union([
@@ -28,7 +29,10 @@ export const Paused = Schema.Struct({
   seq: Schema.Number,
   fellBack: Schema.Array(Schema.String),
   fallbacks: Schema.Array(Schema.String),
-  skipped: Schema.Array(Schema.String)
+  // Absent from a page on an older version.
+  skipped: Schema.Array(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([]))
+  )
 })
 
 export type Paused = typeof Paused.Type

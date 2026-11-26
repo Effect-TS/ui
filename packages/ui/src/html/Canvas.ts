@@ -602,7 +602,8 @@ export const PixelRatio = Schema.Union([Schema.Number, Schema.Literal("auto")])
  */
 export type PixelRatio = typeof PixelRatio.Type
 
-// Sizes the backing store to the pixel ratio, scales the context to match and paints the scene.
+// Sizes the backing store to the pixel ratio, scales the context to match and paints the scene. False when
+// the canvas has no 2D context.
 const draw = (
   canvas: HTMLCanvasElement,
   args: {
@@ -611,9 +612,9 @@ const draw = (
     readonly shapes: ReadonlyArray<Shape>
     readonly pixelRatio: PixelRatio
   }
-): void => {
+): boolean => {
   const context = canvas.getContext("2d")
-  if (context === null) return
+  if (context === null) return false
   const ratio = args.pixelRatio === "auto"
     ? canvas.ownerDocument.defaultView?.devicePixelRatio ?? 1
     : args.pixelRatio
@@ -623,6 +624,7 @@ const draw = (
   if (canvas.height !== height) canvas.height = height
   context.setTransform(ratio, 0, 0, ratio, 0, 0)
   paint(context, args)
+  return true
 }
 
 /**
@@ -663,7 +665,9 @@ export const Paint = Mount.makeStream(
       pixelRatio: PixelRatio,
       listen: Schema.Array(PointerEvent)
     },
-    paint: draw
+    paint: (canvas: HTMLCanvasElement, args) => {
+      if (!draw(canvas, args)) throw new Error("no 2D context")
+    }
   },
   (canvas: HTMLCanvasElement, initial, changes) =>
     Stream.callback<Pointer>((queue) =>

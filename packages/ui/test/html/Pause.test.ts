@@ -151,6 +151,14 @@ it.effect("the copy's canvas is painted from the paused state, and pressing it s
     yield* tick
     expect(root.model()).toBe(0)
     yield* roots[0].resume
+
+    HTMLCanvasElement.prototype.getContext = () => null
+    expect(yield* roots[0].pause(() => ({ model: 5 }))).toEqual({
+      fellBack: [],
+      fallbacks: [],
+      skipped: ["/Sketch"]
+    })
+    yield* roots[0].resume
   }).pipe(Effect.scoped))
 
 const FieldMessage = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
