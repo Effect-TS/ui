@@ -797,6 +797,7 @@ const start = (
     deferred,
     idle,
     close: Effect.suspend(() => {
+      hydrating?.close()
       routing?.detach()
       hot?.detach()
       dom?.dispose()

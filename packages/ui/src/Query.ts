@@ -2105,6 +2105,10 @@ interface ListDef {
 interface QueryCodec {
   readonly encodeSuccess: (value: unknown) => unknown
   readonly decodeSuccess: (encoded: unknown) => unknown
+  readonly decodeSuccessEffect: (
+    encoded: unknown,
+    options?: SchemaAST.ParseOptions
+  ) => Effect.Effect<unknown, SchemaIssue.Issue>
   readonly encodeError: (error: unknown) => unknown
   readonly decodeError: (encoded: unknown) => unknown
   /** Whether a value is of the `success` Schema's type. */
@@ -2128,6 +2132,7 @@ const makeCodec = (
   return {
     encodeSuccess: Schema.encodeUnknownSync(successJson),
     decodeSuccess: Schema.decodeUnknownSync(successJson),
+    decodeSuccessEffect: SchemaParser.decodeUnknownEffect(successJson),
     encodeError: Schema.encodeUnknownSync(errorJson),
     decodeError: Schema.decodeUnknownSync(errorJson),
     isSuccess: Schema.is(success as Schema.Codec<unknown, unknown>),
@@ -3051,7 +3056,8 @@ const snapshotWire = (
   const decodeArgs = SchemaParser.decodeUnknownEffect(argsJson)
   const decodeSuccess = log
     ? undefined
-    : SchemaParser.decodeUnknownEffect(jsonCodec(def.success))
+    : (encoded: unknown, options: SchemaAST.ParseOptions) =>
+      def.codec().decodeSuccessEffect(encoded, options)
   // `args` here is the encoded side of the args Schema, so these see the args as the declaration passes them.
   const toKey = (
     args: unknown,
@@ -3822,6 +3828,29 @@ export const makeShipped = (
       )
     })
 
+  const trackPending = (
+    tuple: RawTuple,
+    def: QueryDef,
+    fiber: Fiber.Fiber<unknown, SchemaIssue.Issue>
+  ) => {
+    const pending: Extract<ShippedMemoEntry, { readonly _tag: "Pending" }> = {
+      _tag: "Pending",
+      def,
+      fiber,
+      waiters: 0
+    }
+    memo.set(tuple, pending)
+    fiber.addObserver((exit) => {
+      if (memo.get(tuple) !== pending) return
+      if (Exit.isSuccess(exit)) {
+        memo.set(tuple, { _tag: "Done", def, value: exit.value })
+      } else {
+        memo.delete(tuple)
+      }
+    })
+    return pending
+  }
+
   const lookup: queryCore.ShippedContext = {
     peek: (def: QueryDef, argsKey: string) => {
       const tuple = parsed.get(def.name)?.get(argsKey)
@@ -3859,22 +3888,7 @@ export const makeShipped = (
         memo.set(tuple, { _tag: "Done", def, value: ran.value })
         return Effect.succeed(toResult(ran.value))
       }
-      const pending: Extract<ShippedMemoEntry, { readonly _tag: "Pending" }> = {
-        _tag: "Pending",
-        def,
-        fiber: ran,
-        waiters: 0
-      }
-      memo.set(tuple, pending)
-      ran.addObserver((exit) => {
-        if (memo.get(tuple) !== pending) return
-        if (Exit.isSuccess(exit)) {
-          memo.set(tuple, { _tag: "Done", def, value: exit.value })
-        } else {
-          memo.delete(tuple)
-        }
-      })
-      return awaitPending(tuple, pending, toResult)
+      return awaitPending(tuple, trackPending(tuple, def, ran), toResult)
     }
   }
 
@@ -3884,9 +3898,23 @@ export const makeShipped = (
       if (hit._tag === "Done") return hit.value
       throw new Error("async success decoder")
     }
-    const value = def.codec().decodeSuccess(tuple[2])
-    memo.set(tuple, { _tag: "Done", def, value })
-    return value
+    const ran = runCodec(def.codec().decodeSuccessEffect(tuple[2]))
+    if (Exit.isExit(ran)) {
+      if (Exit.isFailure(ran)) throw Cause.squash(ran.cause)
+      memo.set(tuple, { _tag: "Done", def, value: ran.value })
+      return ran.value
+    }
+    trackPending(tuple, def, ran)
+    throw new Error("async success decoder")
+  }
+
+  const cancelPending = (all: boolean): void => {
+    for (const [tuple, entry] of memo) {
+      if (entry._tag === "Pending" && (all || entry.waiters === 0)) {
+        memo.delete(tuple)
+        entry.fiber.interruptUnsafe()
+      }
+    }
   }
 
   const inlineTuple = (def: QueryDef, tuple: unknown): unknown => {
@@ -3943,7 +3971,7 @@ export const makeShipped = (
     return next === undefined ? encoded : { ...state, queries: next }
   }
 
-  return { lookup, decodeRaw, inline }
+  return { lookup, decodeRaw, inline, cancelPending }
 }
 
 /**
