@@ -103,7 +103,6 @@ export class IsUsernameTaken extends Query.Service<IsUsernameTaken>()(
   {
     args: { username: Schema.String },
     success: Schema.Boolean,
-    error: Schema.Never,
     staleTime: "30 seconds"
   }
 ) {

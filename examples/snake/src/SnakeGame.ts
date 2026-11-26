@@ -4,7 +4,7 @@ import * as Position from "#domain/position"
 import * as Snake from "#domain/snake"
 import { Command, Head, Subscription, UiSchema } from "@effect/ui"
 import { Html, HtmlSubscription } from "@effect/ui/html"
-import { Array, Duration, Schema, Stream } from "effect"
+import { Array, Duration, Effect, Schema, Stream } from "effect"
 import { GAME, GAME_SPEED } from "./constants.ts"
 
 export const GameState = Schema.Literals([
@@ -35,15 +35,13 @@ export const SnakeGameMessage = UiSchema.TaggedEnum({
 export const GenerateApplePosition = Command.make(
   "GenerateApplePosition",
   { args: { snake: Snake.Snake } },
-  ({ snake }) => Apple.generatePosition(snake)
-)
-
-const generateApplePosition = (snake: Snake.Snake) =>
-  GenerateApplePosition.make({ snake }).pipe(
-    Command.map((position) =>
-      SnakeGameMessage.CompletedGenerateApplePosition({ position })
+  ({ snake }) =>
+    Apple.generatePosition(snake).pipe(
+      Effect.map((position) =>
+        SnakeGameMessage.CompletedGenerateApplePosition({ position })
+      )
     )
-  )
+)
 
 const NEW_GAME = {
   snake: Snake.create(GAME.INITIAL_POSITION),
@@ -102,7 +100,7 @@ export const SnakeGame = Html.component({
 }).make({
   init: ($) =>
     $.set({ ...NEW_GAME, apple: { x: 15, y: 15 }, highScore: 0 })
-      .run(generateApplePosition(NEW_GAME.snake)),
+      .run(GenerateApplePosition.make({ snake: NEW_GAME.snake })),
   update: {
     PressedKey: ($, { key }) => {
       const direction = MOVE_DIRECTIONS.get(key)
@@ -115,7 +113,9 @@ export const SnakeGame = Html.component({
         return $.evolve({ gameState: (gameState) => NEXT_ON_SPACE[gameState] })
       }
       if (key === "r") {
-        return $.evolve(NEW_GAME).run(generateApplePosition(NEW_GAME.snake))
+        return $.evolve(NEW_GAME).run(
+          GenerateApplePosition.make({ snake: NEW_GAME.snake })
+        )
       }
       return $.model
     },
@@ -150,7 +150,9 @@ export const SnakeGame = Html.component({
           ? $.model.points + GAME.POINTS_PER_APPLE
           : $.model.points
       }
-      return willEatApple ? $.set(next).run(generateApplePosition(snake)) : next
+      return willEatApple
+        ? $.set(next).run(GenerateApplePosition.make({ snake }))
+        : next
     },
 
     CompletedGenerateApplePosition: ($, { position }) =>

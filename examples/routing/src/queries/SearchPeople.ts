@@ -9,7 +9,6 @@ export class SearchPeople extends Query.Service<SearchPeople>()(
   {
     args: { searchText: Schema.String },
     success: Schema.Array(Person),
-    error: Schema.Never,
     staleTime: "Infinity"
   }
 ) {

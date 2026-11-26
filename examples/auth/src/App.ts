@@ -76,7 +76,7 @@ export class SaveSession extends Command.Service<SaveSession>()(
 
 export class ClearSession extends Command.Service<ClearSession>()(
   "auth/ClearSession",
-  { args: {}, success: Schema.Union([AppMessage, Component.Noop]) }
+  { success: Schema.Union([AppMessage, Component.Noop]) }
 ) {
   static readonly layer = this.toLayer(
     SessionStore.useSync((store) => () =>
@@ -135,7 +135,7 @@ export const AppNoDeps = Html.component({
 
     SignedOut: ($) =>
       $.set(AppModel.LoggedOut({ route: LoggedOutRoute.Home() })).run(
-        ClearSession.make({}),
+        ClearSession.make(),
         redirectTo(LoggedOutRoute.Home())
       ),
 

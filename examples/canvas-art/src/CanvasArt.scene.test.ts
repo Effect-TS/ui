@@ -7,6 +7,7 @@ import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
   CanvasArt,
+  CanvasArtMessage,
   GenerateBall
 } from "./CanvasArt.ts"
 
@@ -51,14 +52,17 @@ describe("CanvasArt", () => {
           x: 100,
           y: 100
         })
-        .resolve(GenerateBall, {
-          x: 100,
-          y: 100,
-          vx: 50,
-          vy: 0,
-          radius: 10,
-          color: "#ff2d55"
-        })
+        .resolve(
+          GenerateBall,
+          CanvasArtMessage.CompletedGenerateBall({
+            x: 100,
+            y: 100,
+            vx: 50,
+            vy: 0,
+            radius: 10,
+            color: "#ff2d55"
+          })
+        )
         .expect(Locator.text("1 balls")).toExist()
         .expectMount(
           paint([

@@ -40,7 +40,12 @@ describe("SnakeGame", () => {
         assert.strictEqual(story.model.gameState, "NotStarted")
         assert.deepStrictEqual(story.model.snake, initialSnake)
         story.expectExact(GenerateApplePosition.make({ snake: initialSnake }))
-          .resolve(GenerateApplePosition, { x: 3, y: 4 })
+          .resolve(
+            GenerateApplePosition,
+            SnakeGameMessage.CompletedGenerateApplePosition({
+              position: { x: 3, y: 4 }
+            })
+          )
         assert.deepStrictEqual(story.model.apple, { x: 3, y: 4 })
       }))
   })
@@ -128,7 +133,12 @@ describe("SnakeGame", () => {
         assert.strictEqual(story.model.points, 0)
         assert.strictEqual(story.model.direction, "Right")
         story.expectExact(GenerateApplePosition.make({ snake: initialSnake }))
-          .resolve(GenerateApplePosition, { x: 5, y: 5 })
+          .resolve(
+            GenerateApplePosition,
+            SnakeGameMessage.CompletedGenerateApplePosition({
+              position: { x: 5, y: 5 }
+            })
+          )
         assert.deepStrictEqual(story.model.apple, { x: 5, y: 5 })
       }))
   })
@@ -160,7 +170,12 @@ describe("SnakeGame", () => {
         const story = yield* Story.make(SnakeGame, {})
         story.given(aboutToEatModel)
           .subscription(gameClock, SnakeGameMessage.TickedClock())
-          .resolve(GenerateApplePosition, { x: 5, y: 5 })
+          .resolve(
+            GenerateApplePosition,
+            SnakeGameMessage.CompletedGenerateApplePosition({
+              position: { x: 5, y: 5 }
+            })
+          )
         assert.strictEqual(
           story.model.snake.length,
           aboutToEatModel.snake.length + 1

@@ -28,7 +28,7 @@ declare const createEditor: (node: HTMLElement) => Editor
 // the node it needs, so `onMount` rejects an element of another kind.
 export const Measure = Mount.make(
   "Measure",
-  { args: {} },
+  {},
   (node: HTMLElement) => Effect.sync(() => node.getBoundingClientRect().width)
 )
 

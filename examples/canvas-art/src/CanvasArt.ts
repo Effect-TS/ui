@@ -66,14 +66,14 @@ export const GenerateBall = Command.make(
     const color = PALETTE[
       yield* Random.nextIntBetween(0, PALETTE.length, { halfOpen: true })
     ]!
-    return {
+    return CanvasArtMessage.CompletedGenerateBall({
       x,
       y,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
       radius,
       color
-    }
+    })
   })
 )
 
@@ -120,12 +120,7 @@ export const CanvasArt = Html.component({
         balls: (balls) =>
           balls.map(advance(Math.min(delta, MAX_FRAME_MS) / 1000))
       }),
-    ClickedCanvas: ($, { x, y }) =>
-      $.run(
-        GenerateBall.make({ x, y }).pipe(
-          Command.map((ball) => CanvasArtMessage.CompletedGenerateBall(ball))
-        )
-      ),
+    ClickedCanvas: ($, { x, y }) => $.run(GenerateBall.make({ x, y })),
     CompletedGenerateBall: ($, { _tag, ...ball }) =>
       $.evolve({
         balls: [...$.model.balls, { id: $.model.nextId, ...ball }],

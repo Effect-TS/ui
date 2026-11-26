@@ -38,7 +38,7 @@ describe("AgentPrompts", () => {
           CopyPrompt,
           AgentPromptsMessage.SucceededCopyPrompt()
         )
-        .expectExact(ClearCopyFeedback.make({}))
+        .expectExact(ClearCopyFeedback.make())
         .expect(HtmlLocator.role("button", { name: "Copied" }))
         .toExist()
         .resolve(
@@ -70,7 +70,7 @@ describe("AgentPrompts", () => {
           })
         )
         .resolve(CopyPrompt, AgentPromptsMessage.FailedCopyPrompt())
-        .expectExact(ClearCopyFeedback.make({}))
+        .expectExact(ClearCopyFeedback.make())
         .expect(HtmlLocator.role("button", { name: "Couldn't copy" }))
         .toExist()
         .resolve(

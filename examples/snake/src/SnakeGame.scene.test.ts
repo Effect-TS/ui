@@ -89,7 +89,12 @@ describe("SnakeGame", () => {
         .expectDefaultPrevented()
         .subscription("gameClock:150", SnakeGameMessage.TickedClock())
         .expect(Locator.text("Score: 10")).toExist()
-        .resolve(GenerateApplePosition, { x: 0, y: 0 })
+        .resolve(
+          GenerateApplePosition,
+          SnakeGameMessage.CompletedGenerateApplePosition({
+            position: { x: 0, y: 0 }
+          })
+        )
     }))
 
   it.effect("keys the game doesn't handle keep their default", () =>
