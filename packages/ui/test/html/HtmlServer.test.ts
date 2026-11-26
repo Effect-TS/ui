@@ -1635,7 +1635,12 @@ describe("HtmlServer", { concurrent: false }, () => {
       class Store extends Context.Service<Store, string>()("test/KeyedStore") {}
       class ReadStore extends Command.Service<ReadStore>()(
         "test/ReadKeyedStore",
-        { args: {}, success: Schema.String, invalidates: () => [] }
+        {
+          args: {},
+          success: Schema.String,
+          error: Schema.Never,
+          invalidates: () => []
+        }
       ) {
         static readonly layer = this.toLayer(
           Store.useSync((store) => () => Effect.succeed(store))
@@ -3528,6 +3533,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       class Refresh extends Command.Service<Refresh>()("Refresh", {
         args: {},
         success: Message,
+        error: Schema.Never,
         invalidates: () => [GetItem]
       }) {
         static readonly layer = this.toLayer(() =>
@@ -3592,6 +3598,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       class Refresh extends Command.Service<Refresh>()("Refresh", {
         args: {},
         success: Message,
+        error: Schema.Never,
         invalidates: () => [GetItem]
       }) {
         static readonly layer = this.toLayer(() =>
@@ -3728,6 +3735,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         {
           args: {},
           success: Schema.Never,
+          error: Schema.Never,
           invalidates: () => [GetItem]
         }
       ) {

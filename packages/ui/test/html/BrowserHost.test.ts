@@ -4187,7 +4187,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         const Message = UiSchema.TaggedEnum({ Loaded: {} })
         class Load extends Command.Service<Load>()(
           "Load",
-          { args: { id: Schema.Number }, success: Message }
+          { args: { id: Schema.Number }, success: Message, error: Schema.Never }
         ) {
           static readonly layer = this.toLayer(() =>
             Effect.succeed(Message.Loaded())

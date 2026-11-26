@@ -172,6 +172,7 @@ export class Paint extends Command.Service<Paint>()(
   {
     args: { session: Schema.String, seq: Schema.NullOr(Schema.Number) },
     success: Schema.Union([OverlayMessage, Component.Noop]),
+    error: Schema.Never,
     mode: "switch"
   }
 ) {
@@ -194,7 +195,11 @@ export class Paint extends Command.Service<Paint>()(
 
 export class Clear extends Command.Service<Clear>()(
   "devtools/Clear",
-  { args: { session: Schema.String }, success: OverlayMessage }
+  {
+    args: { session: Schema.String },
+    success: OverlayMessage,
+    error: Schema.Never
+  }
 ) {
   static readonly layer = this.toLayer(
     Effect.gen(function*() {
@@ -207,12 +212,16 @@ export class Clear extends Command.Service<Clear>()(
 
 export class SaveOpen extends Command.Service<SaveOpen>()(
   "devtools/SaveOpen",
-  { args: { open: Schema.Boolean }, success: Component.Noop }
+  {
+    args: { open: Schema.Boolean },
+    success: Component.Noop,
+    error: Schema.Never
+  }
 ) {
   static readonly layer = this.toLayer(
     Effect.gen(function*() {
       const pages = yield* Pages
-      return ({ open }) => Effect.as(pages.setOpen(open), Component.noop)
+      return ({ open }) => pages.setOpen(open)
     })
   )
 }
@@ -235,13 +244,12 @@ export class SetRecording extends Command.Service<SetRecording>()(
 
 export class SavePosition extends Command.Service<SavePosition>()(
   "devtools/SavePosition",
-  { args: { position: Position }, success: Component.Noop }
+  { args: { position: Position }, success: Component.Noop, error: Schema.Never }
 ) {
   static readonly layer = this.toLayer(
     Effect.gen(function*() {
       const pages = yield* Pages
-      return ({ position }) =>
-        Effect.as(pages.setPosition(position), Component.noop)
+      return ({ position }) => pages.setPosition(position)
     })
   )
 }
