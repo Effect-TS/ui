@@ -1,5 +1,10 @@
 import { type Component, type Mount, UiSchema, type View } from "@effect/ui"
-import { Select, type SelectEvents, type SelectProps } from "@effect/ui-kit"
+import {
+  Select,
+  type SelectEvents,
+  type SelectProps,
+  Typeahead
+} from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { HtmlLocator, HtmlPlay, HtmlScene } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
@@ -378,32 +383,20 @@ describe("Select", () => {
       type("i", "dark")
       assert.deepStrictEqual(
         scene.current.pending.map(({ command }) => command.name),
-        ["WaitBeforeResetTyping"]
+        ["Typeahead.waitReset"]
       )
-      scene.resolve(
-        scene.current.pending[0]!.command,
-        sent("CompletedWaitBeforeResetTyping")
-      )
+      scene.resolve(Typeahead.WaitReset, undefined)
       type("d", "dark")
       type("s", "dark")
-      scene.resolve(
-        scene.current.pending[0]!.command,
-        sent("CompletedWaitBeforeResetTyping")
-      )
+      scene.resolve(Typeahead.WaitReset, undefined)
       type("s", "system")
       type("s", "solar")
       type("S", "system")
-      scene.resolve(
-        scene.current.pending[0]!.command,
-        sent("CompletedWaitBeforeResetTyping")
-      )
+      scene.resolve(Typeahead.WaitReset, undefined)
       type("S", "system")
       type("o", "solar")
       type(" ", "solar")
-      scene.resolve(
-        scene.current.pending[0]!.command,
-        sent("CompletedWaitBeforeResetTyping")
-      )
+      scene.resolve(Typeahead.WaitReset, undefined)
     }))
 
   it.effect("typing on the closed trigger picks the next matching item without opening", () =>
@@ -420,10 +413,7 @@ describe("Select", () => {
       scene.fire(trigger, "keydown", key("s", { ctrl: true })).expectIgnored()
       scene.props({ open: false, items, value: "system", readOnly: true })
       scene.fire(trigger, "keydown", key("l"))
-      scene.resolve(
-        scene.current.pending[0]!.command,
-        sent("CompletedWaitBeforeResetTyping")
-      )
+      scene.resolve(Typeahead.WaitReset, undefined)
     }))
 
   it.effect("a press opens on mousedown, and a release on an item picks it only after the press has been held", () =>

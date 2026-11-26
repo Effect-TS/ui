@@ -155,7 +155,6 @@ import { DirectionProvider } from "./DirectionProvider.ts"
 import { flag } from "./internal/attributes.ts"
 import { isRtl, rightToLeft } from "./internal/direction.ts"
 import { isHTMLElement } from "./internal/dom.ts"
-import { arrowKeys, Orientation, stepped } from "./internal/list.ts"
 import {
   barTriggers,
   MenubarMenu,
@@ -163,6 +162,7 @@ import {
   MenubarShared,
   triggerAttribute
 } from "./internal/menubar.ts"
+import * as ListNavigation from "./ListNavigation.ts"
 
 /**
  * The props of a `Menubar`.
@@ -185,7 +185,7 @@ import {
  * @since 0.1.0
  */
 export const MenubarProps = Schema.Struct({
-  orientation: Schema.optional(Orientation),
+  orientation: Schema.optional(ListNavigation.Orientation),
   modal: Schema.optional(Schema.Boolean),
   disabled: Schema.optional(Schema.Boolean),
   loopFocus: Schema.optional(Schema.Boolean)
@@ -390,26 +390,15 @@ export const Menubar = Html.component({
       const props = $.props
       if (props.disabled === true) return $.model
       const triggers = $.model.triggers
-      const last = triggers.length - 1
       const start = from ?? $.model.current ?? $.model.highlighted
-      const at = start === null ? -1 : triggers.indexOf(start)
-      const nav = arrowKeys(
-        orientationOf(props),
-        rightToLeft($.reads.provider, $.model.rtl)
-      )
-      const index = key === "Home"
-        ? 0
-        : key === "End"
-        ? last
-        : key === nav.next || key === nav.previous
-        ? stepped(
-          at,
-          last,
-          key === nav.next ? 1 : -1,
-          props.loopFocus !== false ? "wrap" : "none"
-        )
-        : -1
-      const target = triggers[index]
+      const index = ListNavigation.target(key, {
+        at: start === null ? -1 : triggers.indexOf(start),
+        last: triggers.length - 1,
+        orientation: orientationOf(props),
+        rtl: rightToLeft($.reads.provider, $.model.rtl),
+        loop: props.loopFocus !== false ? "wrap" : "none"
+      })
+      const target = index === undefined ? undefined : triggers[index]
       if (target === undefined || target === start) return $.model
       return {
         ...$.model,

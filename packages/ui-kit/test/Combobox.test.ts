@@ -5,7 +5,8 @@ import {
   type ComboboxItem,
   type ComboboxProps,
   DirectionProvider,
-  makeComboboxFilter
+  makeComboboxFilter,
+  Typeahead
 } from "@effect/ui-kit"
 import { Html, HtmlCommand } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
@@ -785,10 +786,7 @@ describe("Combobox", () => {
       })
       assert.deepInclude(scene.get(list).attrs, { "aria-labelledby": labelId })
       scene.fire(trigger, "keydown", key("g")).emitted(picked("grape", "none"))
-      scene.resolve(
-        scene.current.pending[0]!.command,
-        sent("CompletedWaitBeforeResetTyping")
-      )
+      scene.resolve(Typeahead.WaitReset, undefined)
       scene.props({ ...props, value: "grape" })
       assert.strictEqual(
         Locator.textOf(scene.get(Locator.attr("class", "value"))),

@@ -286,14 +286,7 @@ import { isRtl, provided, rightToLeft } from "./internal/direction.ts"
 import { focusFinal, override } from "./internal/dom.ts"
 import { type TextFilter, textFilter } from "./internal/filter.ts"
 import { methodOf, onEscape } from "./internal/interaction.ts"
-import {
-  arrowKeys,
-  available,
-  grouped,
-  keyed,
-  Orientation,
-  stepped
-} from "./internal/list.ts"
+import { grouped, keyed } from "./internal/list.ts"
 import {
   barTriggers,
   MenubarMessage,
@@ -316,10 +309,11 @@ import {
   statusOf,
   transitionAttrs
 } from "./internal/transition.ts"
-import { printable, typeahead } from "./internal/typeahead.ts"
+import * as ListNavigation from "./ListNavigation.ts"
 import { Menubar } from "./Menubar.ts"
 import * as Positioning from "./Positioning.ts"
 import { Toolbar } from "./Toolbar.ts"
+import * as Typeahead from "./Typeahead.ts"
 
 /**
  * One item of a `Menu`: the value it reports, the text typeahead and
@@ -563,7 +557,7 @@ export const MenuProps = Schema.Struct({
   disabled: Schema.optional(Schema.Boolean),
   modal: Schema.optional(Schema.Boolean),
   loopFocus: Schema.optional(Schema.Boolean),
-  orientation: Schema.optional(Orientation),
+  orientation: Schema.optional(ListNavigation.Orientation),
   highlightItemOnHover: Schema.optional(Schema.Boolean),
   closeParentOnEsc: Schema.optional(Schema.Boolean),
   openOnHover: Schema.optional(Schema.Boolean),
@@ -684,7 +678,7 @@ const ParentState = Schema.Struct({
   // The menu's direction: its `DirectionProvider`'s, or else its CSS one.
   // A submenu applies the provider it reads on top.
   rtl: Schema.Boolean,
-  orientation: Orientation,
+  orientation: ListNavigation.Orientation,
   disabled: Schema.Boolean,
   topLayer: Schema.Boolean,
   disabledItems: Schema.Array(Schema.String)
@@ -803,9 +797,7 @@ const MenuModel = Schema.Struct({
   stick: Schema.Boolean,
   active: Schema.NullOr(Schema.String),
   activeByKey: Schema.Boolean,
-  typed: Schema.String,
-  typedFrom: Schema.Number,
-  matched: Schema.Number,
+  typeahead: Typeahead.State,
   spaceDown: Schema.Boolean,
   placement: Schema.NullOr(Positioning.Placement),
   pressing: Schema.Boolean,
@@ -864,10 +856,6 @@ const wait = (name: string, completed: () => MenuMessage) =>
     ({ delay }) => Effect.as(Effect.sleep(Duration.millis(delay)), completed())
   )
 
-const WaitBeforeResetTyping = wait(
-  "WaitBeforeResetTyping",
-  MenuMessage.CompletedWaitBeforeResetTyping
-)
 const WaitBeforeHoverOpen = wait(
   "WaitBeforeHoverOpen",
   MenuMessage.CompletedWaitBeforeHoverOpen
@@ -941,7 +929,7 @@ const firstEnabled = (
   last = false
 ): MenuItem | undefined => {
   const ordered = last ? [...items].reverse() : items
-  return ordered.find(available) ?? ordered[0]
+  return ordered.find(ListNavigation.available) ?? ordered[0]
 }
 
 const autoHighlighted = (props: MenuProps, query: string): string | null => {
@@ -1003,7 +991,7 @@ const open = (
     stick: sticks,
     active,
     activeByKey: keyboard,
-    typed: "",
+    typeahead: Typeahead.reset(model.typeahead),
     spaceDown: false,
     pressing: context === null && reason === "trigger-press" &&
       (method === "mouse" || method === "pen"),
@@ -1090,7 +1078,7 @@ const activate = (
   const props = $.props
   const item = props.items.find((candidate) => candidate.value === action.value)
   if (
-    !props.open || !available(item) || disabledOf($) ||
+    !props.open || !ListNavigation.available(item) || disabledOf($) ||
     isSubmenu(model, action.value)
   ) {
     return $.set(model)
@@ -1123,26 +1111,25 @@ const activate = (
 const navigate = (model: MenuModel, $: MenuUpdate, key: string) => {
   const props = $.props
   const items = visibleOf(props)
-  if (items.length === 0) return $.set(model)
-  const last = items.length - 1
-  const at = model.active === null
-    ? -1
-    : items.findIndex((item) => item.value === model.active)
-  const direction =
-    key === keys(props.orientation ?? "vertical", rtlOf($, model.rtl)).next
-      ? 1
-      : -1
-  const index = key === "Home"
-    ? 0
-    : key === "End"
-    ? last
-    : stepped(at, last, direction, props.loopFocus !== false ? "wrap" : "none")
-  return commit(
-    $,
-    model,
-    UiStruct.evolve(model, { active: items[index]!.value, activeByKey: true }),
-    "keyboard"
-  )
+  const index = ListNavigation.target(key, {
+    at: model.active === null
+      ? -1
+      : items.findIndex((item) => item.value === model.active),
+    last: items.length - 1,
+    orientation: props.orientation ?? "vertical",
+    rtl: rtlOf($, model.rtl),
+    loop: props.loopFocus !== false ? "wrap" : "none"
+  })
+  if (index === undefined) return undefined
+  const item = items[index]
+  return item === undefined
+    ? $.set(model)
+    : commit(
+      $,
+      model,
+      UiStruct.evolve(model, { active: item.value, activeByKey: true }),
+      "keyboard"
+    )
 }
 
 const typeKey = (model: MenuModel, $: MenuUpdate, key: string) => {
@@ -1150,7 +1137,7 @@ const typeKey = (model: MenuModel, $: MenuUpdate, key: string) => {
   const from = model.active === null
     ? -1
     : items.findIndex((item) => item.value === model.active)
-  const { index, next } = typeahead(model, key, items, from)
+  const { index, state } = Typeahead.step(model.typeahead, key, items, from)
   const item = items[index]
   const moved = item === undefined
     ? {}
@@ -1158,20 +1145,20 @@ const typeKey = (model: MenuModel, $: MenuUpdate, key: string) => {
   return commit(
     $,
     model,
-    UiStruct.evolve(model, { ...next, ...moved }),
+    UiStruct.evolve(model, { typeahead: state, ...moved }),
     "keyboard"
   ).run(
-    WaitBeforeResetTyping.make({ delay: 500 })
+    Typeahead.waitReset(MenuMessage.CompletedWaitBeforeResetTyping, 500)
   )
 }
 
-const keys = (orientation: Orientation, rtl: boolean) => {
-  const cross = arrowKeys(
+const keys = (orientation: ListNavigation.Orientation, rtl: boolean) => {
+  const cross = ListNavigation.arrowKeys(
     orientation === "vertical" ? "horizontal" : "vertical",
     rtl
   )
   return {
-    ...arrowKeys(orientation, rtl),
+    ...ListNavigation.arrowKeys(orientation, rtl),
     open: cross.next,
     close: cross.previous
   }
@@ -1192,7 +1179,7 @@ const toSibling = (
       ? dismiss(model, $, "list-navigation", "keyboard")
       : undefined
   }
-  const along = arrowKeys("horizontal", rtl)
+  const along = ListNavigation.arrowKeys("horizontal", rtl)
   if (key !== along.next && key !== along.previous) return undefined
   if (
     key === opens && model.active !== null && isSubmenu(model, model.active)
@@ -1211,10 +1198,9 @@ const pressKey = (
   const props = $.props
   if (!props.open) return $.set(model)
   const parent = parentOf($)
+  const moved = navigate(model, $, key)
+  if (moved !== undefined) return moved
   const nav = keys(props.orientation ?? "vertical", rtlOf($, model.rtl))
-  if (
-    key === nav.next || key === nav.previous || key === "Home" || key === "End"
-  ) return navigate(model, $, key)
   if (key === "Escape") {
     return props.closeParentOnEsc === true && parent !== undefined
       ? closeTree(model, $, "escape-key", "keyboard")
@@ -1233,7 +1219,7 @@ const pressKey = (
       ? $.set(model)
       : activate(model, $, action, "keyboard")
   }
-  if (key === " " && model.typed === "") {
+  if (key === " " && !Typeahead.isTyping(model.typeahead)) {
     return $.set(model).evolve({ spaceDown: true })
   }
   if (key.length === 1 && !filteringOf(props)) return typeKey(model, $, key)
@@ -1407,8 +1393,8 @@ const TrackMenuArgs = {
   trigger: Schema.NullOr(Schema.String),
   popupId: Schema.String,
   inputId: Schema.NullOr(Schema.String),
-  orientation: Orientation,
-  parentOrientation: Orientation,
+  orientation: ListNavigation.Orientation,
+  parentOrientation: ListNavigation.Orientation,
   side: Schema.String,
   context: Schema.Boolean,
   release: Schema.Boolean,
@@ -2649,9 +2635,7 @@ export const Menu = Html.component({
     stick: false,
     active: null,
     activeByKey: false,
-    typed: "",
-    typedFrom: -1,
-    matched: -1,
+    typeahead: Typeahead.initial,
     spaceDown: false,
     placement: null,
     pressing: false,
@@ -2801,7 +2785,8 @@ export const Menu = Html.component({
         : $.model,
     ClickedItem: ($, { action, pointerType }) =>
       activate($.model, $, action, methodOf(pointerType)),
-    CompletedWaitBeforeResetTyping: ($) => $.evolve({ typed: "" }),
+    CompletedWaitBeforeResetTyping: ($) =>
+      $.evolve({ typeahead: Typeahead.reset }),
     ShowedPopup: ($) => {
       const props = $.props
       if (!props.open) return $.evolve({ mounted: true })
@@ -2914,11 +2899,11 @@ export const Menu = Html.component({
           props.orientation === "horizontal" && hasValue &&
           $.model.active === null
         ) return next
-        return navigate(next, $, key)
+        return navigate(next, $, key) ?? next
       }
       if (key === "Home" || key === "End") {
         return $.model.active !== null && !hasValue
-          ? navigate(next, $, key)
+          ? navigate(next, $, key) ?? next
           : next
       }
       if (key === "Escape") return pressKey(next, $, key, null)
@@ -3098,7 +3083,7 @@ export const Menu = Html.component({
       const vertical = pressed === "ArrowDown" || pressed === "ArrowUp"
       if (bar === undefined) return vertical && arrowsOpen ? opens : undefined
       const barRtl = rtlOf(p, bar.rtl)
-      const along = arrowKeys(bar.orientation, barRtl)
+      const along = ListNavigation.arrowKeys(bar.orientation, barRtl)
       if (
         pressed === along.next || pressed === along.previous ||
         pressed === "Home" || pressed === "End"
@@ -3379,14 +3364,13 @@ export const Menu = Html.component({
       })
 
     const keyMessage =
-      (action: ItemAction | null) =>
-      ({ alt, composing, ctrl, key, meta }: Html.KeyPayload) =>
-        composing || (key === "Enter" && action?.kind === "link")
+      (action: ItemAction | null) => (event: Html.KeyPayload) =>
+        event.composing || (event.key === "Enter" && action?.kind === "link")
           ? undefined
-          : key.startsWith("Arrow") || key === "Home" || key === "End" ||
-              key === "Enter" || key === "Escape" ||
-              printable(key, alt, ctrl, meta)
-          ? MenuMessage.PressedKey({ key, action })
+          : event.key.startsWith("Arrow") || event.key === "Home" ||
+              event.key === "End" || event.key === "Enter" ||
+              event.key === "Escape" || Typeahead.isPrintable(event)
+          ? MenuMessage.PressedKey({ key: event.key, action })
           : undefined
 
     const popup = p.part("div", (b) =>

@@ -114,7 +114,8 @@ import * as Schema from "effect/Schema"
 import { DirectionProvider } from "./DirectionProvider.ts"
 import { flag, pressedAttrs } from "./internal/attributes.ts"
 import { rightToLeft, TrackDirection } from "./internal/direction.ts"
-import { arrowKeys, available, stepped, valued } from "./internal/list.ts"
+import { valued } from "./internal/list.ts"
+import * as ListNavigation from "./ListNavigation.ts"
 import { Toolbar } from "./Toolbar.ts"
 
 /**
@@ -259,7 +260,7 @@ const itemDisabled = (
   toolbar: InToolbar | undefined,
   item: ToggleGroupItem
 ): boolean =>
-  disabledOf(props, toolbar) || !available(item) ||
+  disabledOf(props, toolbar) || !ListNavigation.available(item) ||
   toolbar?.disabledItems.includes(item.value) === true
 
 const enabledOf = (
@@ -352,23 +353,14 @@ export const ToggleGroup = Html.component({
     FocusedItem: ($, { value }) => $.evolve({ active: value }),
     PressedKey: ($, { key, value }) => {
       const items = enabledOf($.props, $.reads.toolbar)
-      const last = items.length - 1
-      const { next } = arrowKeys(
-        $.props.orientation ?? "horizontal",
-        rightToLeft($.reads.provider, $.model.rtl)
-      )
-      const target = items[
-        key === "Home"
-          ? 0
-          : key === "End"
-          ? last
-          : stepped(
-            items.findIndex((item) => item.value === value),
-            last,
-            key === next ? 1 : -1,
-            $.props.loopFocus !== false ? "wrap" : "none"
-          )
-      ]
+      const index = ListNavigation.target(key, {
+        at: items.findIndex((item) => item.value === value),
+        last: items.length - 1,
+        orientation: $.props.orientation ?? "horizontal",
+        rtl: rightToLeft($.reads.provider, $.model.rtl),
+        loop: $.props.loopFocus !== false ? "wrap" : "none"
+      })
+      const target = index === undefined ? undefined : items[index]
       if (target === undefined || target.value === value) return $.model
       return $.evolve({ active: target.value }).run(
         HtmlCommand.Focus.make({ ref: Item.at(target.value) }).pipe(
@@ -385,7 +377,6 @@ export const ToggleGroup = Html.component({
     const multiple = props.multiple === true
     const orientation = props.orientation ?? "horizontal"
     const tabStop = tabStopOf(model, props, toolbar)
-    const axis = arrowKeys(orientation, false)
     const item = p.part("button", (b, value: string) => {
       const entry = props.items.find((item) => item.value === value)
       if (entry === undefined) {
@@ -406,12 +397,10 @@ export const ToggleGroup = Html.component({
         .on("focus", ToggleGroupMessage.FocusedItem({ value }))
         .on(
           "keydown",
-          ({ alt, ctrl, key, meta, shift }) =>
-            alt || ctrl || meta || shift ||
-              !(key === axis.next || key === axis.previous || key === "Home" ||
-                key === "End")
-              ? undefined
-              : ToggleGroupMessage.PressedKey({ value, key }),
+          (event) =>
+            ListNavigation.isKey(event, orientation)
+              ? ToggleGroupMessage.PressedKey({ value, key: event.key })
+              : undefined,
           { preventDefault: true }
         )
     })
