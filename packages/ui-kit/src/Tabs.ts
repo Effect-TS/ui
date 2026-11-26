@@ -797,16 +797,13 @@ type Keyed<Tag extends string> = View.PartTarget<Tag> & {
 type TabOf<B extends View.PartTarget<"button" | "a">> = ReturnType<B["attr"]>
 
 /**
- * Makes `Tabs` whose values have the type of a schema, such as a
- * `Schema.Literals` union. The `value` prop, the tabs, the `tab` and
- * `panel` parts and `Selected` all use that type. `Tabs` is
- * `makeTabs({ value: Schema.String })`.
+ * Creates tabs whose selected value, tabs, `tab` and `panel` parts and
+ * `Selected` event use the supplied string-valued schema. `Selected` returns
+ * a value from `tabs`, not an unchecked DOM string.
  *
- * **Details**
- *
- * The schema must encode to a string, since values become DOM keys and ids.
- * `Selected` carries the value of an entry in `tabs`. Call `makeTabs`
- * once at module level, because each call makes a new component.
+ * The schema must encode to a string. Create the component once at module
+ * level: each call creates a new component. The existing `Tabs` export
+ * uses `Schema.String`.
  *
  * **Example** (Tabs typed by a literal union)
  *

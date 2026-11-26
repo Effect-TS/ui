@@ -1347,17 +1347,13 @@ const scrolling =
   "position:relative;max-height:100%;overflow-x:hidden;overflow-y:auto;scrollbar-width:none"
 
 /**
- * Makes a `Select` whose values have the type of a schema, such as a
- * `Schema.Literals` union. The `value` prop, the items, the `item` and
- * `itemIndicator` parts and `Picked` all use that type. `Select` is
- * `makeSelect({ value: Schema.String })`.
+ * Creates a select whose selected values, items, `item` and `itemIndicator`
+ * parts and `Picked` event use the supplied string-valued schema. Autofill
+ * selects only a matching item.
  *
- * **Details**
- *
- * The schema must encode to a string, since values become DOM ids and form
- * values. `Picked` carries values of entries in `items`, and autofill picks
- * only a value that matches one. Call `makeSelect` once at module level,
- * because each call makes a new component.
+ * The schema must encode to a string. Create the component once at module
+ * level: each call creates a new component. The existing `Select` export
+ * uses `Schema.String`.
  *
  * **Example** (A select typed by a literal union)
  *

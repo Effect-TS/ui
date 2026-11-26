@@ -648,18 +648,14 @@ export const makeComboboxFilter = (
 ): ComboboxFilter => textFilter(locale)
 
 /**
- * Makes a `Combobox` whose values have the type of a schema, such as a
- * `Schema.Literals` union. The `value` prop, the items, the parts that take
- * a `value`, `Picked` and `Highlighted` all use that type. The input text
- * stays a `string`. `Combobox` is `makeCombobox({ value: Schema.String })`.
+ * Creates a combobox whose selected values, items, value-taking parts and
+ * `Picked` and `Highlighted` events use the supplied string-valued schema.
+ * Input text remains a `string`. Selections come from `items` or `value`;
+ * autofill selects only a matching item.
  *
- * **Details**
- *
- * The schema must encode to a string, since values become DOM ids and form
- * values. `Picked` and `Highlighted` carry values of entries in `items`
- * or `value`, and autofill picks only a value that matches one. Call
- * `makeCombobox` once at module level, because each call makes a new
- * component.
+ * The schema must encode to a string. Create the component once at module
+ * level: each call creates a new component. The existing `Combobox` export
+ * uses `Schema.String`.
  *
  * **Example** (A combobox typed by a literal union)
  *

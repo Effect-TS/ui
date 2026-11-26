@@ -301,16 +301,12 @@ const tabStopOf = (
 }
 
 /**
- * Makes a `ToggleGroup` whose values have the type of a schema, such as a
- * `Schema.Literals` union. The `value` prop, the items, the `item` part
- * and `Toggled` all use that type. `ToggleGroup` is
- * `makeToggleGroup({ value: Schema.String })`.
+ * Creates a toggle group whose selected values, items, `item` part and
+ * `Toggled` event use the supplied string-valued schema.
  *
- * **Details**
- *
- * The schema must encode to a string, since values become DOM keys.
- * `Toggled` carries values of entries in `items`. Call `makeToggleGroup`
- * once at module level, because each call makes a new component.
+ * The schema must encode to a string. Create the component once at module
+ * level: each call creates a new component. The existing `ToggleGroup` export
+ * uses `Schema.String`.
  *
  * **Example** (A toggle group typed by a literal union)
  *

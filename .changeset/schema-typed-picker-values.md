@@ -2,4 +2,4 @@
 "@effect/ui-kit": minor
 ---
 
-Add `makeRadioGroup`, `makeTabs`, `makeToggleGroup`, `makeSelect` and `makeCombobox`, which take a string-encoded value schema such as `Schema.Literals` and type the selected value, the items, the value parts and the committed events with it. The existing exports are the `Schema.String` instances, so current code is unchanged.
+Add `makeRadioGroup`, `makeTabs`, `makeToggleGroup`, `makeSelect` and `makeCombobox` to preserve schema-defined string types across selected values, items, parts and selection events. Existing calls need no changes; the original components still use `Schema.String`.

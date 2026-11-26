@@ -423,17 +423,13 @@ type KeyedButton = View.PartTarget<"button"> & {
 }
 
 /**
- * Makes a `RadioGroup` whose values have the type of a schema, such as a
- * `Schema.Literals` union. The `value` prop, the items, the parts that take
- * a `value` and `Picked` all use that type. `RadioGroup` is
- * `makeRadioGroup({ value: Schema.String })`.
+ * Creates a radio group whose selected value, items, value-taking parts and
+ * `Picked` event use the supplied string-valued schema. `Picked` returns an
+ * item value, not an unchecked DOM string.
  *
- * **Details**
- *
- * The schema must encode to a string, since values become DOM keys and form
- * values. `Picked` carries the value of an entry in `items`. Call
- * `makeRadioGroup` once at module level, because each call makes a new
- * component.
+ * The schema must encode to a string. Create the component once at module
+ * level: each call creates a new component. The existing `RadioGroup` export
+ * uses `Schema.String`.
  *
  * **Example** (A radio group typed by a literal union)
  *
