@@ -2335,6 +2335,11 @@ type OnlyOwnersOmitParts<Sl, SV> = [Sl] extends [never]
   ? [SV] extends [never] ? { readonly parts: never } : unknown
   : { readonly parts: never }
 
+// The owners `reads` lists: none when it's left out, and `SR` is still exactly its constraint. A map with
+// a string index of its own is kept.
+type Listed<SR> = (<T>() => T extends SR ? 1 : 2) extends
+  (<T>() => T extends SharedReads ? 1 : 2) ? {} : SR
+
 type ReportId = PartsHelper<never, unknown, any>["id"]
 
 // One entry of `reads`, for the owner inferred for it: `report` and `onChange` take their parameter types from
@@ -2368,12 +2373,6 @@ type SharedEntry<E, O, Model, Props, Msg, SV, Rp> = [E] extends [Headless.Any] ?
 type SelfAbove<SV> = [SV] extends [never] ?
   "Give shares a schema, or annotate what value returns, to read its own kind in it"
   : SV
-
-type ReadsRecord<SO, SOpt> = {
-  readonly [K in keyof SO]: [SOpt[K & keyof SOpt]] extends [true]
-    ? { readonly owner: SO[K]; readonly optional: true }
-    : { readonly owner: SO[K] }
-}
 
 type SharesReads<SO, SOpt, SA> = {
   readonly [K in keyof SO]: [SO[K]] extends ["self"] ? SA | undefined
@@ -3014,6 +3013,7 @@ export interface DefineOptions<
   L,
   Tags extends TagOf<Msg>,
   Sl extends string,
+  SR extends SharedReads,
   SO extends { readonly [name: string]: Headless.Any | Any | "self" },
   SOpt,
   SV,
@@ -3069,6 +3069,7 @@ export interface DefineOptions<
    */
   readonly reads?:
     | (
+      & SR
       & {
         readonly [K in keyof SOpt]:
           | (SOpt[K] & Headless.Any)
@@ -3170,8 +3171,7 @@ type Defined<
   L,
   Tags,
   Sl extends string,
-  SO,
-  SOpt,
+  SR,
   SV,
   Rp
 > = Definition<
@@ -3185,7 +3185,7 @@ type Defined<
   Tagged<Msg, Tags>,
   Sl,
   ResolveSelf<
-    ReadsRecord<SO, SOpt>,
+    Listed<SR>,
     SelfOwner<Name, Props, Events, Tagged<Msg, Tags>, SV, Rp>
   >,
   SV,
@@ -3213,6 +3213,7 @@ export interface Define<V extends View.Elements> {
     L = QueryEntries<S, M>,
     const Tags extends TagOf<Msg> = never,
     const Sl extends string = never,
+    SR extends SharedReads = SharedReads,
     SO extends { readonly [name: string]: Headless.Any | Any | "self" } = {},
     SOpt = {},
     SV = never,
@@ -3230,13 +3231,14 @@ export interface Define<V extends View.Elements> {
       L,
       Tags,
       Sl,
+      SR,
       SO,
       SOpt,
       SV,
       Rp,
       SA
     >
-  ): Defined<Name, Props, Model, Msg, Events, V, L, Tags, Sl, SO, SOpt, SV, Rp>
+  ): Defined<Name, Props, Model, Msg, Events, V, L, Tags, Sl, SR, SV, Rp>
 }
 
 /**
@@ -3509,6 +3511,9 @@ export const define = <
   V extends View.Elements = never,
   const Tags extends TagOf<Msg> = never,
   const Sl extends string = never,
+  // What `reads` lists, as written. It defaults to its constraint, which stands for no `reads`: a `{}` default
+  // would be fixed before `optional` is read.
+  SR extends SharedReads = SharedReads,
   // `reads` is inferred by entry, never as a whole, so `shares` can be typed by it when it comes first.
   // The owner of each entry.
   SO extends { readonly [name: string]: Headless.Any | Any | "self" } = {},
@@ -3531,6 +3536,7 @@ export const define = <
       L,
       Tags,
       Sl,
+      SR,
       SO,
       SOpt,
       SV,
@@ -3540,21 +3546,7 @@ export const define = <
     & {
       readonly elements?: View.Vocabulary<V> | undefined
     }
-): Defined<
-  Name,
-  Props,
-  Model,
-  Msg,
-  Events,
-  V,
-  L,
-  Tags,
-  Sl,
-  SO,
-  SOpt,
-  SV,
-  Rp
-> => {
+): Defined<Name, Props, Model, Msg, Events, V, L, Tags, Sl, SR, SV, Rp> => {
   const shares = options.shares
   const definition: Defined<
     Name,
@@ -3566,8 +3558,7 @@ export const define = <
     L,
     Tags,
     Sl,
-    SO,
-    SOpt,
+    SR,
     SV,
     Rp
   > = {

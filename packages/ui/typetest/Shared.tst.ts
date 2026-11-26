@@ -264,7 +264,7 @@ describe("a component that reads its own kind", () => {
   })
 
   it("reads its own shares and reports its own collects, with no requirement", () => {
-    const Nest = Component.define({
+    const NestDef = Component.define({
       name: "Nest",
       props: Schema.Struct({ open: Schema.Boolean }),
       model: Schema.Number,
@@ -291,7 +291,14 @@ describe("a component that reads its own kind", () => {
           }
         }
       }
-    }).make({
+    })
+    expect(NestDef.reads!.parent.report).type.toBe<
+      (below: number, props: { readonly open: boolean }) => number
+    >()
+    expect(NestDef.reads!.parent.onChange).type.toBeAssignableTo<
+      (value: { open: boolean }) => { readonly _tag: "ChangedAbove" }
+    >()
+    const Nest = NestDef.make({
       init: () => 0,
       update: ($) => $.model,
       parts: (p) => {
@@ -304,7 +311,7 @@ describe("a component that reads its own kind", () => {
 
   it("reads the owners above it in shares, with a schema or an annotated return for its own kind", () => {
     const Lock = Schema.Struct({ disabled: Schema.Boolean })
-    Component.define({
+    const above = Component.define({
       name: "Above",
       model: Schema.Null,
       message: NestMessage,
@@ -318,6 +325,11 @@ describe("a component that reads its own kind", () => {
         maybe: { owner: TipsProvider, optional: true }
       }
     })
+    expect(above.reads!.tips).type.toBe<typeof TipsProvider>()
+    expect(above.reads!.maybe).type.toBe<{
+      owner: typeof TipsProvider
+      optional: true
+    }>()
     Component.define({
       name: "Schema",
       props: Schema.Struct({ disabled: Schema.Boolean }),
