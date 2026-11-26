@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { Mount, UiSchema, View } from "@effect/ui"
 import { BrowserHost, Html, HtmlCommand, HtmlServer } from "@effect/ui/html"
-import { Story } from "@effect/ui/testing"
+import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing"
+import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 
@@ -277,6 +278,55 @@ describe("forward", () => {
       clicked
     ])
   })
+
+  it.effect("handlers and drop options a part sets in forward go to the part's owner, beside the consumer's", () =>
+    Effect.gen(function*() {
+      const ChildMessage = UiSchema.TaggedEnum({ ChildPressed: {} })
+      const Child = Html.component({
+        name: "Child",
+        model: Schema.Number,
+        message: ChildMessage
+      }).make({
+        init: () => 0,
+        update: { ChildPressed: ($) => $.model + 1 },
+        parts: (p, pressed) => ({
+          pressed,
+          trigger: p.part(
+            "button",
+            (button) =>
+              button.forward((node) =>
+                node.on("click", ChildMessage.ChildPressed())
+                  .dropTarget({ accepts: ["text/plain"] })
+                  .on("drop", ChildMessage.ChildPressed())
+              )
+          )
+        })
+      })
+      const ParentMessage = UiSchema.TaggedEnum({ ParentPressed: {} })
+      const Parent = Html.component({
+        name: "Parent",
+        model: Schema.Number,
+        message: ParentMessage
+      }).make({
+        init: () => 0,
+        update: { ParentPressed: ($) => $.model + 1 },
+        view: (h, presses) =>
+          Child(h, {
+            view: (child) =>
+              h.div(
+                child.trigger(
+                  h.button.on("click", ParentMessage.ParentPressed())
+                ).children("Press"),
+                h.output(`${child.pressed}:${presses}`)
+              )
+          })
+      })
+      const parent = yield* HtmlPlay.make(Parent, {})
+      const press = HtmlLocator.role("button", { name: "Press" })
+      yield* parent.click(press)
+      yield* parent.drop(press, { data: { "text/plain": "x" } })
+      yield* parent.expect(Locator.tag("output")).toHaveText("2:1")
+    }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 })
 
 describe("forward on BrowserHost", { concurrent: false }, () => {

@@ -775,6 +775,43 @@ export type Forward = (
   node: any
 ) => Element<any, any> | ElementBuilder<any, any, any, any>
 
+const partForwardLayer = Symbol("partForwardLayer")
+type PartForward = Forward & { readonly [partForwardLayer]?: number }
+
+const forwardInPart = (place: Forward, layer: number): PartForward =>
+  Object.assign((node: any) => place(node), { [partForwardLayer]: layer })
+
+type OwnFields = Pick<Owned, "handlers" | "eventOptions" | "refKey" | "mount">
+
+/**
+ * Selects the fields for handlers, event options, refs and mounts. Inside a
+ * part's forward hook, these belong to the part, not the consumer.
+ *
+ * @internal
+ */
+export const ownFields = (
+  builder: ElementBuilder<any, any, any, any>
+): OwnFields => {
+  const index = builder[partForwardLayer]
+  return index === undefined ? builder : builder.owned[index]!
+}
+
+/**
+ * Copies the builder and updates the fields selected by `ownFields`.
+ *
+ * @internal
+ */
+export const withOwnFields = <B extends ElementBuilder<any, any, any, any>>(
+  builder: B,
+  fields: Partial<OwnFields>
+): B => {
+  const index = builder[partForwardLayer]
+  if (index === undefined) return withFields(builder, fields)
+  const owned = builder.owned.slice()
+  owned[index] = { ...owned[index]!, ...fields }
+  return withFields(builder, { owned })
+}
+
 // Builds a builder that holds hooks. The last hook set runs first. It gets
 // the finished builder: this one without that hook and without its key,
 // holding every child. Building that runs the hooks set before it. The key
@@ -791,7 +828,9 @@ const forwardTo = <Msg, R>(
   finished.hooks = hooks.length === 1 ? undefined : hooks.slice(0, -1)
   finished.content = content
   finished.elementKey = undefined
-  const out: Node<Msg, R> = toNode(hooks[hooks.length - 1]!(finished))
+  const hook: PartForward = hooks[hooks.length - 1]!
+  finished[partForwardLayer] = hook[partForwardLayer]
+  const out: Node<Msg, R> = toNode(hook(finished))
   if (out._tag !== "Element") {
     throw new Error(
       `forward: the <${builder.tag}> was built into a ${out._tag}, and its hook has to return an element`
@@ -813,7 +852,9 @@ export const withForward = <B extends ElementBuilder<any, any, any, any>>(
   place: Forward
 ): B => {
   const out = copyBuilder(builder) as Mutable<B>
-  out.hooks = builder.hooks === undefined ? [place] : [...builder.hooks, place]
+  const layer = builder[partForwardLayer]
+  const hook = layer === undefined ? place : forwardInPart(place, layer)
+  out.hooks = builder.hooks === undefined ? [hook] : [...builder.hooks, hook]
   return out
 }
 
@@ -984,9 +1025,9 @@ export const withFields = <B extends ElementBuilder<any, any, any, any>>(
  * copied by a constructor made for its class, which stores them one by one:
  * several times faster than a generic copy. A builder that holds another
  * field under a string key, from its class or added to it, is copied
- * generically. A field under a symbol isn't looked for, as asking for a
- * builder's symbols on every copy cost about as much as the rest of
- * building a view, so a copy leaves it behind.
+ * generically. The only field under a symbol, `partForwardLayer`, is copied
+ * by name, as asking for a builder's symbols on every copy costs about as
+ * much as the rest of building a view.
  */
 const copyBuilder = <B extends ElementBuilder<any, any, any, any>>(
   builder: B
@@ -994,7 +1035,6 @@ const copyBuilder = <B extends ElementBuilder<any, any, any, any>>(
   // Counted in place: `Object.keys` would make an array for every copy.
   let fields = 0
   for (const _ in builder) fields++
-  // A builder keeps no state under a symbol, so the count is the whole check.
   if (fields === builderFields.length) {
     const proto = Object.getPrototypeOf(builder)
     let copier = proto === lastProto ? lastCopier : copiers.get(proto)
@@ -1058,6 +1098,7 @@ const makeCopier = (
     this.owned = from.owned
     this.content = from.content
     this.hooks = from.hooks
+    this[partForwardLayer] = from[partForwardLayer]
     this.removals = from.removals
     this.tag = from.tag
   }
@@ -1165,7 +1206,8 @@ export const wrapPart = <
  * attributes and properties are written over the consumer's, except token
  * lists, and its handlers, event options, ref, mount and token lists become
  * one owned layer. The children it adds go after the ones the consumer's
- * builder holds, and what it sets with `forward` after the builder's.
+ * builder holds, and what it sets with `forward` after the builder's. The
+ * handlers, ref and mount its `forward` sets join its layer too.
  *
  * @internal
  */
@@ -1241,9 +1283,12 @@ export const makePart = (
       : children([...builder.content, ...patch.content])
   }
   if (patch.hooks !== undefined) {
+    const hooks = patch.hooks.map((hook) =>
+      forwardInPart(hook, builder.owned.length)
+    )
     ;(out as Mutable<typeof out>).hooks = builder.hooks === undefined
-      ? patch.hooks
-      : [...builder.hooks, ...patch.hooks]
+      ? hooks
+      : [...builder.hooks, ...hooks]
   }
   return out
 }
@@ -1334,6 +1379,7 @@ const blankFields = {
   owned: noOwned,
   content: undefined,
   hooks: undefined,
+  [partForwardLayer]: undefined,
   removals: undefined
 }
 
@@ -1459,6 +1505,12 @@ export class ElementBuilder<
    */
   readonly hooks: ReadonlyArray<Forward> | undefined = undefined
   /**
+   * While a part's forward hook runs, the index of that part's owned layer.
+   *
+   * @internal
+   */
+  readonly [partForwardLayer]: number | undefined = undefined
+  /**
    * On the blank builder a part decorates, the attributes the part
    * removed. `undefined` on every other builder.
    *
@@ -1514,17 +1566,19 @@ export class ElementBuilder<
     handler: Handler<Msg, Handlers[K]>,
     options?: EventOptions | undefined
   ): this {
-    const out = copyBuilder(this) as Mutable<this>
-    out.handlers = assoc(this.handlers, event, handler)
-    const eventOptions = this.eventOptions
+    const own = ownFields(this)
+    let eventOptions = own.eventOptions
     if (eventOptions === noFields) {
       if (options !== undefined) {
-        out.eventOptions = assoc(eventOptions, event, options)
+        eventOptions = assoc(eventOptions, event, options)
       }
     } else if (options !== undefined || Object.hasOwn(eventOptions, event)) {
-      out.eventOptions = withEntry(eventOptions, event, options)
+      eventOptions = withEntry(eventOptions, event, options)
     }
-    return out
+    return withOwnFields(this, {
+      handlers: assoc(own.handlers, event, handler),
+      eventOptions
+    })
   }
   /**
    * Keeps this element's node when its siblings move. Unique among siblings.
@@ -1621,9 +1675,7 @@ export class ElementBuilder<
    * @since 0.1.0
    */
   ref(ref: Renderer.Ref<HostNode>): this {
-    const out = copyBuilder(this) as Mutable<this>
-    out.refKey = ref.key
-    return out
+    return withOwnFields(this, { refKey: ref.key })
   }
   /**
    * Starts `mount` with this element's host node after it's committed, in a
@@ -1681,12 +1733,13 @@ export class ElementBuilder<
     >
   ): never
   onMount(mount: Mount<Msg>): any {
-    if (this.mount !== undefined) {
+    const current = ownFields(this).mount
+    if (current !== undefined) {
       throw new Error(
-        `onMount(${mount.name}): this element already has the mount ${this.mount.name}, and an element takes one`
+        `onMount(${mount.name}): this element already has the mount ${current.name}, and an element takes one`
       )
     }
-    return withFields(this, { mount })
+    return withOwnFields(this, { mount })
   }
   /**
    * Lets a chain land on an element that sits below the root of what is
