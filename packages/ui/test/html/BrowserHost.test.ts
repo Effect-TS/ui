@@ -1176,6 +1176,65 @@ describe("BrowserHost", { concurrent: false }, () => {
         ])
       }).pipe(Effect.scoped))
 
+    it.effect(
+      "skips a subtree it gives again with no controlled properties, restores one that gains them, and lets the old one go",
+      () =>
+        Effect.gen(function*() {
+          const RowDef = Html.component({
+            name: "Row",
+            model: Schema.Number,
+            message: LazyMessage
+          })
+          let reads = 0
+          let plain: WeakRef<object> | undefined
+          // Counts every read of the row's props, the field restoring looks at.
+          const row = (h: Component.Helper<typeof RowDef>, input: boolean) => {
+            const li = View.build(h.li, [
+              input ? h.input.value("fixed") : "row"
+            ])
+            plain ??= new WeakRef(li)
+            const props = li.props
+            return Object.defineProperty(li, "props", {
+              get: () => (reads++, props)
+            })
+          }
+          const Row = RowDef.make({
+            init: () => 0,
+            update: ($) => $.model + 1,
+            // The row gains its input on the third tick.
+            view: (h, ticks) =>
+              h.div(h.p(String(ticks)), h.lazy(row, ticks > 2))
+          })
+          const app = yield* container
+          const root = yield* BrowserHost.mountEffect(Row, {}, app)
+          const next = Effect.suspend(() => {
+            root.send(LazyMessage.Tick())
+            return tick
+          })
+          yield* next
+          reads = 0
+          yield* next
+          assert.strictEqual(app.querySelector("p")!.textContent, "2")
+          assert.strictEqual(reads, 0)
+          yield* next
+          const input = app.querySelector("input")!
+          for (let index = 0; index < 2; index++) {
+            // Changed by a script, with no event for the host to restore after.
+            input.value = "edited"
+            yield* next
+            assert.strictEqual(input.value, "fixed")
+          }
+          // collectGarbage uses Node's V8 flags, unavailable on Bun and Deno.
+          if (
+            process.versions.bun === undefined &&
+            process.versions.deno === undefined
+          ) {
+            yield* collectGarbage
+            assert.strictEqual(plain!.deref(), undefined)
+          }
+        }).pipe(Effect.scoped)
+    )
+
     it("builds again what a render that threw built", () => {
       let fails = true
       const Failing = ItemsDef.make({

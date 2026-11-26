@@ -260,6 +260,7 @@ export class Rec {
   declare node: any
   declare kids: Array<Rec> | undefined
   declare inst: Instance
+  declare plain: boolean
   constructor(
     v: View.Node<any, any>,
     node: unknown,
@@ -270,6 +271,7 @@ export class Rec {
     this.node = node
     this.kids = kids
     this.inst = inst
+    this.plain = false
   }
 }
 
@@ -1408,16 +1410,28 @@ export const replace = (
 
 const refreshed = {}
 
-const restore = (host: Host, rec: Rec): void => {
+// Only element descendants are scanned. Patching a changed element also patches
+// its element ancestors, clearing `plain` so the next restore scans them again.
+const restore = (host: Host, rec: Rec): boolean => {
+  if (rec.plain) return false
+  const view = rec.v as View.Element<any, any>
+  let found = false
   const kids = rec.kids
   if (kids !== undefined) {
     for (let index = 0; index < kids.length; index++) {
       const kid = kids[index]!
-      if (kid.v._tag === "Element") restore(host, kid)
+      if (kid.v._tag === "Element" && restore(host, kid)) found = true
     }
   }
-  const props = (rec.v as View.Element<any, any>).props
-  if (props !== View.noFields) patchProps(host, rec.node, props, props)
+  const props = view.props
+  for (const name in props) {
+    if (host.controlled!.has(name)) {
+      host.setProp(rec.node, name, props[name])
+      found = true
+    }
+  }
+  rec.plain = !found
+  return found
 }
 
 const sameAttrs = (
@@ -1484,6 +1498,7 @@ const patchElement = (
   const layers = view.owned?.length ? view.owned : prev.owned
   if (layers?.length) view = owned(inst, view, layers)
   rec.v = view
+  rec.plain = false
   if (prev.attrs !== view.attrs) patchAttrs(host, node, prev.attrs, view.attrs)
   if (
     view.handlers !== prev.handlers || view.eventOptions !== prev.eventOptions
