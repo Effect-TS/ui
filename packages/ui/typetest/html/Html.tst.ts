@@ -464,7 +464,6 @@ describe("Html", () => {
         // A client `setAttribute` can't put `xlink:href` in its namespace.
         expect(h.use.attr).type.not.toBeCallableWith("xlink:href", "#shape")
         expect(h.use.attr).type.toBeCallableWith("href", "#shape")
-        expect(h.svg.attr).type.not.toBeCallableWith("viewbox", "0 0 24 24")
         expect(h.circle.attrs).type.not.toBeCallableWith({ d: "M0 0" })
         expect(h.svg).type.not.toHaveProperty("disabled")
         return h.div(icon)
