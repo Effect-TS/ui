@@ -2,4 +2,4 @@
 "@effect/ui": patch
 ---
 
-`MessageLog.socket` now sends devtools that connect late the live state that left its buffer: each session's start, and each mounted instance's latest props, query results and Command runs.
+Fix `MessageLog.socket` replay so devtools that connect after older entries leave the buffer still show mounted instances, their current props and query results, and waiting or running commands. Replaying retained state no longer makes completed commands appear to be waiting.

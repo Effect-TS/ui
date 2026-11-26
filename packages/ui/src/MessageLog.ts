@@ -2234,12 +2234,10 @@ export const makeEncoded = (
 interface Sent {
   readonly seq: number
   readonly tag: WireEntry["_tag"]
-  /** The session, or the session and instance of an instance entry. */
   readonly owner: string
   /**
-   * What the frame sets for its instance, when it can be kept: a state
-   * frame's `seq`, `"props"`, `"query/<name>"`, or a Command run's
-   * `"<issued seq>/<index>"`. Empty otherwise.
+   * Identifies frames that replace one another during replay. State frames
+   * use their sequence number so queued commands can keep older frames alive.
    */
   readonly slot: string
   readonly frame: string
@@ -2276,14 +2274,15 @@ const slotOf = (entry: WireEntry): string => {
  *
  * Entries are encoded by `makeEncoded`. The Layer keeps the last `buffer`
  * frames (1,000 by default), which every new connection receives after its
- * `Hello`, so devtools that connect late see the recent past. Frames that
- * leave that ring are still sent first while they hold live state: each
- * session's `SessionStarted` and, until an instance's `Unmounted` leaves
- * the ring too, its `Mounted`, its latest state frame and any
- * `PropsChanged` and `QueryChanged` since, each state frame that issued a
- * run that hasn't started, the `CommandStarted` of each run still going, and
- * how each run those kept state frames issued ended. A lost connection is
- * retried with backoff, and one warning is logged.
+ * `Hello`. It also retains older frames needed to reconstruct mounted
+ * instances, their current state, and waiting or running commands. Retained
+ * command outcomes prevent completed commands from appearing as waiting.
+ * Older history may be missing.
+ *
+ * Session starts are retained for the lifetime of the layer. An instance
+ * releases its retained frames when its `Unmounted` leaves the buffer.
+ * Retained frames precede the buffer in sequence order on each connection.
+ * A lost connection is retried with backoff, and one warning is logged.
  *
  * @stability experimental
  * @category layers
@@ -2303,8 +2302,8 @@ export const socket = (url: string, options?: {
       // Frames that left `replay` and still hold live state.
       const sessions = new Map<string, Sent>()
       const live = new Map<string, Map<string, Sent>>()
-      // Each instance's Command runs that are logged as issued but haven't
-      // started or ended, by slot.
+      // A queued command has no CommandStarted yet; its issuing frame is
+      // the only record replay can use to restore it.
       const pending = new Map<string, Set<string>>()
       const hello = JSON.stringify({
         _tag: "Hello",
@@ -2328,10 +2327,9 @@ export const socket = (url: string, options?: {
         let kept = live.get(owner)
         if (isState(tag)) {
           if (kept === undefined) live.set(owner, kept = new Map())
-          // It holds the props and query results, and replaces the state
-          // frames before it, with how their runs ended. The `Mounted` stays,
-          // as it says the instance mounted, and so does a frame with a run
-          // that hasn't started, as it's that run's only record.
+          // State frames include props and query results, superseding earlier
+          // changes. Keep Mounted to establish the instance, and older state
+          // frames only while they are needed to restore queued commands.
           const replaced = new Set<string>()
           for (const [at, old] of kept) {
             if (at === "props" || at.startsWith("query/")) kept.delete(at)

@@ -130,7 +130,6 @@ const until = (check: () => boolean) =>
       : Effect.andThen(wait(10), Effect.suspend(loop))
   }).pipe(Effect.timeout("2 seconds"))
 
-// A port the OS just handed out, so a repeat doesn't wait on the last one's close.
 const freePort = Effect.promise(() =>
   new Promise<number>((resolve, reject) => {
     const server = createServer()
@@ -429,7 +428,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
             { _tag: "CommandStarted", ...run(2, 0) },
             { _tag: "CommandEnded", ...run(3, 0), silent: true },
             { _tag: "CommandStarted", ...run(4, 1) },
-            // Queued behind the run still going, so it hasn't started.
+            // Simulate a queued command with no CommandStarted yet.
             update(5, [Touch.make({ id: "b" })]),
             update(6, []),
             { _tag: "PropsChanged", ...base(7), props: { id: "c" } },
