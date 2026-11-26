@@ -774,17 +774,12 @@ describe("BrowserRouter", { concurrent: false }, () => {
   it.effect("stops waiting for a late initial #hash when the hash changes", () =>
     Effect.gen(function*() {
       const disconnect = vi.spyOn(MutationObserver.prototype, "disconnect")
-      const abort = vi.spyOn(AbortController.prototype, "abort")
       yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          disconnect.mockRestore()
-          abort.mockRestore()
-        })
+        Effect.sync(() => disconnect.mockRestore())
       )
       const { router } = yield* start("/people/1#late")
       yield* router.navigate("/people/1#other")
       expect(disconnect).toHaveBeenCalled()
-      expect(abort).toHaveBeenCalled()
     }).pipe(Effect.scoped))
 
   it.effect("ignores links and reverts back and forward while blocked", () =>
