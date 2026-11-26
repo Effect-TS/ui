@@ -1,4 +1,4 @@
-import { Command, type Component, Query, UiSchema, type View } from "@effect/ui"
+import { Command, Component, Query, UiSchema, type View } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 import type { AsyncResult } from "effect/reactivity"
@@ -440,5 +440,44 @@ describe("Component.define", () => {
       return h.li(label)
     }
     NoteDef.view((h, model) => h.ul(row(h, model.body)))
+  })
+})
+
+interface NativeTags<Msg> {
+  readonly view: View.ElementBuilder<Msg>
+}
+interface Native extends View.Elements {
+  readonly Tags: NativeTags<this["Msg"]>
+  readonly Host: { readonly NativeHost: unique symbol }
+}
+
+const Provider = Component.define({
+  name: "Provider",
+  model: Schema.Boolean,
+  message: Events,
+  shares: { value: ({ model }) => ({ open: model }) }
+}).make({ init: () => false, update: ($) => $.model })
+
+describe("Component.withElements", () => {
+  it("binds a vocabulary into a Define that keeps reads and the vocabulary's tags", () => {
+    const native: View.Vocabulary<Native> = { name: "native", tags: {} }
+    const component = Component.withElements(native)
+    expect(component).type.toBe<Component.Define<Native>>()
+
+    component({
+      name: "Reader",
+      model: Schema.Null,
+      message: Message,
+      reads: { provider: Provider }
+    }).view((h) => {
+      expect(h.reads.provider).type.toBe<{ open: boolean }>()
+      expect(h).type.not.toHaveProperty("div")
+      return h.view
+    })
+    component({ name: "Plain", model: Schema.Null, message: Message })
+      .view((h) => {
+        expect(h).type.not.toHaveProperty("reads")
+        return h.view
+      })
   })
 })
