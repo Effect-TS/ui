@@ -446,11 +446,13 @@ export const makeToggleGroup = <V extends string>(
             "data-multiple": flag(multiple)
           })
           // In a toolbar the toolbar's keys move focus.
-          return toolbar !== undefined ? root : root.onMount(
-            TrackDirection().pipe(
-              Mount.map((rtl) => ToggleGroupMessage.FoundDirection({ rtl }))
+          return toolbar !== undefined || p.reads.provider !== undefined
+            ? root
+            : root.onMount(
+              TrackDirection().pipe(
+                Mount.map((rtl) => ToggleGroupMessage.FoundDirection({ rtl }))
+              )
             )
-          )
         }),
         item: valued(item)
       }
