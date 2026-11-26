@@ -476,7 +476,7 @@ const make = (
         !submit.isSameWindow(form, submitter)
       ) return
       const action = submitter?.getAttribute("formaction") ??
-        form.getAttribute("action") ?? ""
+        submit.attribute(form, "action") ?? ""
       const url = new URL(action, document.baseURI)
       const data = new FormData(form, submitter ?? undefined)
       const search = new URLSearchParams()

@@ -653,7 +653,20 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(submitForm(app, "Sign out")).toBe(false)
       yield* tick
       expect(window.location.pathname).toBe("/")
-      expect(submitForm(app, "Search")).toBe(true)
+      // A control named `getAttribute` shadows the form's method in a browser.
+      // happy-dom reads `id` through it for its own form lookups.
+      const search = HtmlLocator.getByRole(app, "form", { name: "Search" })
+      Object.defineProperty(search, "getAttribute", {
+        value(this: Element, name: string) {
+          if (name !== "id") throw new TypeError("getAttribute is shadowed")
+          return Element.prototype.getAttribute.call(this, name)
+        },
+        configurable: true
+      })
+      const event = new Event("submit", { bubbles: true, cancelable: true })
+      search.dispatchEvent(event)
+      delete (search as { getAttribute?: unknown }).getAttribute
+      expect(event.defaultPrevented).toBe(true)
       yield* tick
       expect(window.location.pathname + window.location.search).toBe(
         "/search?q=ada"

@@ -8,9 +8,13 @@
 /** @internal */
 export const ownedUnhandled = new WeakSet<Event>()
 
-// A form control named `getAttribute` shadows the method on the form itself,
-// not on its prototype, which is also from the form's own window.
-const attribute = (form: Element, name: string): string | null =>
+/**
+ * A form's attribute. A control named `getAttribute` shadows the method on the
+ * form itself, not on its prototype, which is also from the form's own window.
+ *
+ * @internal
+ */
+export const attribute = (form: Element, name: string): string | null =>
   (Object.getPrototypeOf(form) as Element).getAttribute.call(form, name)
 
 /**
