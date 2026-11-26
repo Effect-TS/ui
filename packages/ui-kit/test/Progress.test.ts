@@ -88,6 +88,10 @@ describe("Progress", () => {
       assert.strictEqual(scene.get(label).attrs?.role, "presentation")
       assert.strictEqual(scene.get(value).attrs?.["aria-hidden"], "true")
       assert.strictEqual(Locator.textOf(scene.get(value)), "33%")
+      assert.strictEqual(
+        scene.get(indicator).attrs?.style,
+        "inset-inline-start:0;height:inherit;width:33.333%"
+      )
       for (const part of everyPart) {
         expectState(scene.get(part).attrs, "data-progressing")
       }

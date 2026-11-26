@@ -84,6 +84,13 @@ describe("Meter", () => {
         scene.get(indicator).attrs?.style,
         "background:red;width:1px;inset-inline-start:0;height:inherit;width:50%"
       )
+
+      scene.props({ value: 2, max: 3 })
+      assert.strictEqual(Locator.textOf(scene.get(value)), "67%")
+      assert.strictEqual(
+        scene.get(indicator).attrs?.style,
+        "background:red;width:1px;inset-inline-start:0;height:inherit;width:66.667%"
+      )
     }))
 
   it("a value outside the range is clamped, NaN counts as min, and an empty range is 0%", () => {
