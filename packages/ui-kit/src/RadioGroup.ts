@@ -126,6 +126,13 @@ import { keyed } from "./internal/list.ts"
 import { frameOf, whenFinished } from "./internal/transition.ts"
 import * as ListNavigation from "./ListNavigation.ts"
 
+const itemSchema = <S extends Schema.Codec<string, string>>(value: S) =>
+  Schema.Struct({
+    value,
+    disabled: Schema.optional(Schema.Boolean),
+    readOnly: Schema.optional(Schema.Boolean)
+  })
+
 /**
  * One option in a `RadioGroup`.
  *
@@ -141,11 +148,7 @@ import * as ListNavigation from "./ListNavigation.ts"
  * @category schemas
  * @since 0.1.0
  */
-export const RadioGroupItem = Schema.Struct({
-  value: Schema.String,
-  disabled: Schema.optional(Schema.Boolean),
-  readOnly: Schema.optional(Schema.Boolean)
-})
+export const RadioGroupItem = itemSchema(Schema.String)
 
 /**
  * One option in a `RadioGroup`.
@@ -154,7 +157,21 @@ export const RadioGroupItem = Schema.Struct({
  * @category models
  * @since 0.1.0
  */
-export type RadioGroupItem = typeof RadioGroupItem.Type
+export type RadioGroupItem<V extends string = string> = ReturnType<
+  typeof itemSchema<Schema.Codec<V, string>>
+>["Type"]
+
+const propsSchema = <S extends Schema.Codec<string, string>>(value: S) =>
+  Schema.Struct({
+    value: Schema.NullOr(value),
+    items: Schema.Array(itemSchema(value)),
+    disabled: Schema.optional(Schema.Boolean),
+    readOnly: Schema.optional(Schema.Boolean),
+    required: Schema.optional(Schema.Boolean),
+    invalid: Schema.optional(Schema.Boolean),
+    name: Schema.optional(Schema.String),
+    form: Schema.optional(Schema.String)
+  })
 
 /**
  * Props for controlling a `RadioGroup` and the value it submits.
@@ -179,16 +196,7 @@ export type RadioGroupItem = typeof RadioGroupItem.Type
  * @category schemas
  * @since 0.1.0
  */
-export const RadioGroupProps = Schema.Struct({
-  value: Schema.NullOr(Schema.String),
-  items: Schema.Array(RadioGroupItem),
-  disabled: Schema.optional(Schema.Boolean),
-  readOnly: Schema.optional(Schema.Boolean),
-  required: Schema.optional(Schema.Boolean),
-  invalid: Schema.optional(Schema.Boolean),
-  name: Schema.optional(Schema.String),
-  form: Schema.optional(Schema.String)
-})
+export const RadioGroupProps = propsSchema(Schema.String)
 
 /**
  * The props of a `RadioGroup`.
@@ -197,7 +205,12 @@ export const RadioGroupProps = Schema.Struct({
  * @category models
  * @since 0.1.0
  */
-export type RadioGroupProps = typeof RadioGroupProps.Type
+export type RadioGroupProps<V extends string = string> = ReturnType<
+  typeof propsSchema<Schema.Codec<V, string>>
+>["Type"]
+
+const eventsSchema = <S extends Schema.Codec<string, string>>(value: S) =>
+  UiSchema.TaggedEnum({ Picked: { value } })
 
 /**
  * `Picked` asks for the radio the user chose. Store `value` and pass it
@@ -207,9 +220,7 @@ export type RadioGroupProps = typeof RadioGroupProps.Type
  * @category schemas
  * @since 0.1.0
  */
-export const RadioGroupEvents = UiSchema.TaggedEnum({
-  Picked: { value: Schema.String }
-})
+export const RadioGroupEvents = eventsSchema(Schema.String)
 
 /**
  * What a `RadioGroup` emits.
@@ -218,7 +229,9 @@ export const RadioGroupEvents = UiSchema.TaggedEnum({
  * @category models
  * @since 0.1.0
  */
-export type RadioGroupEvents = typeof RadioGroupEvents.Type
+export type RadioGroupEvents<V extends string = string> = ReturnType<
+  typeof eventsSchema<Schema.Codec<V, string>>
+>["Type"]
 
 const RadioGroupModel = Schema.Struct({
   highlighted: Schema.NullOr(Schema.String),
@@ -385,10 +398,10 @@ const itemState = <B extends Attributed<B>>(
     "data-required": flag(required)
   })
 
-const itemOf = (
-  items: ReadonlyArray<RadioGroupItem>,
+const itemOf = <V extends string>(
+  items: ReadonlyArray<RadioGroupItem<V>>,
   value: string
-): RadioGroupItem | undefined => items.find((item) => item.value === value)
+): RadioGroupItem<V> | undefined => items.find((item) => item.value === value)
 
 const picks = (props: RadioGroupProps, item: RadioGroupItem): boolean =>
   props.readOnly !== true && item.readOnly !== true &&
@@ -407,6 +420,297 @@ const withValue = (
 
 type KeyedButton = View.PartTarget<"button"> & {
   readonly key: (key: string) => View.PartTarget<"button">
+}
+
+/**
+ * Creates a radio group whose selected value, items, value-taking parts and
+ * `Picked` event use the supplied string-valued schema. `Picked` returns an
+ * item value, not an unchecked DOM string.
+ *
+ * The schema must encode to a string. Create the component once at module
+ * level: each call creates a new component. The existing `RadioGroup` export
+ * uses `Schema.String`.
+ *
+ * **Example** (A radio group typed by a literal union)
+ *
+ * ```ts import.meta.vitest
+ * import { UiSchema } from "@effect/ui"
+ * import { Html, HtmlServer } from "@effect/ui/html"
+ * import { makeRadioGroup } from "@effect/ui-kit"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Scope = Schema.Literals(["All", "League", "Cup"])
+ * const ScopeRadioGroup = makeRadioGroup({ value: Scope })
+ * const items = Scope.literals.map((value) => ({ value }))
+ *
+ * const Message = UiSchema.TaggedEnum({ PickedScope: { scope: Scope } })
+ *
+ * const Filter = Html.component({
+ *   name: "Filter",
+ *   model: Schema.Struct({ scope: Scope }),
+ *   message: Message
+ * }).make({
+ *   init: () => ({ scope: "All" as const }),
+ *   update: {
+ *     PickedScope: ($, { scope }) => $.evolve({ scope })
+ *   },
+ *   view: (h, model) =>
+ *     ScopeRadioGroup(h, {
+ *       props: { value: model.scope, items },
+ *       // `value` is "All" | "League" | "Cup"
+ *       onEmit: { Picked: ({ value }) => Message.PickedScope({ scope: value }) },
+ *       view: (radioGroup) =>
+ *         radioGroup.root(h.div.attr("aria-label", "Scope")).children(
+ *           items.map(({ value }) =>
+ *             radioGroup.radio({ element: h.button, value }).children(value)
+ *           )
+ *         )
+ *     })
+ * })
+ *
+ * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(Filter, {}))
+ * if (!html.includes('aria-checked="true"')) throw new Error("no radio is checked")
+ * ```
+ *
+ * @stability experimental
+ * @category components
+ * @since 0.1.0
+ */
+export const makeRadioGroup = <V extends string>(
+  options: { readonly value: Schema.Codec<V, string> }
+) => {
+  const events = eventsSchema(options.value)
+  return Html.component({
+    name: "RadioGroup",
+    props: propsSchema(options.value),
+    model: RadioGroupModel,
+    message: RadioGroupMessage,
+    events,
+    reads: {
+      provider: { owner: DirectionProvider, optional: true }
+    },
+    restore: false
+  }).make({
+    init: ({ props }) => ({
+      highlighted: null,
+      current: props.value,
+      settled: props.value,
+      mounted: [],
+      leaving: [],
+      rtl: false
+    }),
+    update: {
+      ClickedRadio: ($, { value }) => {
+        const item = itemOf($.props.items, value)
+        if ($.props.disabled === true || !ListNavigation.available(item)) {
+          return $.model
+        }
+        const highlighted = $.evolve({ highlighted: value })
+        return picks($.props, item)
+          ? highlighted.emit(events.Picked({ value: item.value }))
+          : highlighted
+      },
+      FocusedRadio: ($, { value }) =>
+        $.props.disabled === true ||
+          !ListNavigation.available(itemOf($.props.items, value))
+          ? $.model
+          : $.evolve({ highlighted: value }),
+      PressedArrow: ($, { direction, value }) => {
+        const source = itemOf($.props.items, value)
+        if ($.props.disabled === true || !ListNavigation.available(source)) {
+          return $.model
+        }
+        const enabled = $.props.items.filter(ListNavigation.available)
+        const at = enabled.indexOf(source)
+        const target = enabled[
+          ListNavigation.step(at, enabled.length - 1, direction, "wrap")
+        ]
+        if (target === undefined) return $.model
+        const moved = $.evolve({ highlighted: target.value }).run(
+          focusRadio(target.value)
+        )
+        return source.readOnly !== true && picks($.props, target)
+          ? moved.emit(events.Picked({ value: target.value }))
+          : moved
+      },
+      PressedEnter: ($) => $.model,
+      SyncedValue: ($, { value }) => {
+        if ($.model.current === value) return $.evolve({ highlighted: null })
+        const prev = $.model.current
+        let leaving = prev !== null && $.model.mounted.includes(prev)
+          ? withValue($.model.leaving, prev)
+          : $.model.leaving
+        if (value !== null) leaving = without(leaving, value)
+        const settled = $.model.settled === value ? value : null
+        return $.evolve({ highlighted: null, current: value, settled, leaving })
+      },
+      MountedIndicator: ($, { value }) =>
+        $.evolve({ mounted: (mounted) => withValue(mounted, value) }),
+      UnmountedIndicator: ($, { value }) =>
+        $.evolve({
+          settled: $.model.settled === value ? null : $.model.settled,
+          mounted: (mounted) => without(mounted, value),
+          leaving: (leaving) => without(leaving, value)
+        }),
+      StartedIndicator: ($, { value }) =>
+        $.props.value !== value
+          ? $.model
+          : $.evolve({
+            settled: value,
+            leaving: (leaving) => without(leaving, value)
+          }),
+      EndedIndicator: ($, { value }) =>
+        $.props.value === value
+          ? $.model
+          : $.evolve({
+            settled: $.model.settled === value ? null : $.model.settled,
+            leaving: (leaving) => without(leaving, value)
+          }),
+      FoundDirection: ($, { rtl }) => $.evolve({ rtl })
+    },
+    subscriptions: ({ props }) => [synced(props.value)],
+    parts: (p, model) => {
+      const props = p.props
+      const disabled = props.disabled === true
+      const readOnly = props.readOnly === true
+      const required = props.required === true
+      const invalid = props.invalid === true
+      const rtl = rightToLeft(p.reads.provider, model.rtl)
+      const byValue = new Map<string, RadioGroupItem<V>>(
+        props.items.map((item) => [item.value, item])
+      )
+      const stateOf = (value: V) => {
+        const item = byValue.get(value)
+        if (item === undefined) {
+          throw new Error(
+            "RadioGroup: no item with value " + JSON.stringify(value)
+          )
+        }
+        const checked = props.value === value
+        return {
+          checked,
+          disabled: disabled || item.disabled === true,
+          readOnly: readOnly || item.readOnly === true,
+          starting: checked && model.settled !== value,
+          ending: !checked && (
+            model.leaving.includes(value) ||
+            (model.mounted.includes(value) &&
+              (model.current === value || model.settled === value))
+          )
+        }
+      }
+      const tabStop = disabled
+        ? null
+        : [model.highlighted, props.value].find((value) =>
+          value !== null && ListNavigation.available(byValue.get(value))
+        ) ??
+          props.items.find(ListNavigation.available)?.value ??
+          null
+      const checkedItem = props.value === null
+        ? undefined
+        : byValue.get(props.value)
+      const hidden = field({
+        checked: checkedItem !== undefined,
+        disabled: disabled || checkedItem?.disabled === true,
+        name: props.name,
+        value: checkedItem?.value,
+        form: props.form
+      })
+
+      const radioPart = keyed(p.part("button", (b, value: V) => {
+        const state = stateOf(value)
+        return itemState(b, state, required)
+          .ref(Radio.at(value))
+          .attrs({
+            type: "button",
+            role: "radio",
+            "aria-checked": String(state.checked),
+            "aria-disabled": undefined,
+            "aria-invalid": undefined,
+            tabindex: value === tabStop ? "0" : "-1"
+          })
+          .disabled(state.disabled)
+          .on("click", RadioGroupMessage.ClickedRadio({ value }))
+          .on("focus", RadioGroupMessage.FocusedRadio({ value }))
+          .on("keydown", ({ alt, ctrl, key, meta }) => {
+            if (key === "Enter") return RadioGroupMessage.PressedEnter()
+            if (ctrl || alt || meta) return undefined
+            if (key === "ArrowDown") {
+              return RadioGroupMessage.PressedArrow({ value, direction: 1 })
+            }
+            if (key === "ArrowUp") {
+              return RadioGroupMessage.PressedArrow({ value, direction: -1 })
+            }
+            if (key === "ArrowRight") {
+              return RadioGroupMessage.PressedArrow({
+                value,
+                direction: rtl ? -1 : 1
+              })
+            }
+            if (key === "ArrowLeft") {
+              return RadioGroupMessage.PressedArrow({
+                value,
+                direction: rtl ? 1 : -1
+              })
+            }
+            return undefined
+          }, { preventDefault: true })
+      }))
+
+      const indicatorPart = p.part("span", (b, value: V) => {
+        const { checked, ending, starting, ...state } = stateOf(value)
+        return itemState(b, { checked, ...state }, required)
+          .attrs({
+            "aria-hidden": "true",
+            "data-starting-style": flag(starting),
+            "data-ending-style": flag(ending)
+          })
+          .onMount(TrackIndicator({ value, checked, starting, ending }))
+      })
+
+      return {
+        value: props.value,
+        disabled,
+        readOnly,
+        required,
+        invalid,
+        root: p.part("div", (b) =>
+          b
+            .attrs({
+              role: "radiogroup",
+              "aria-required": required ? "true" : undefined,
+              "aria-disabled": disabled ? "true" : undefined,
+              "aria-readonly": readOnly ? "true" : undefined,
+              "aria-invalid": invalid ? "true" : undefined,
+              "data-disabled": flag(disabled),
+              "data-readonly": flag(readOnly),
+              "data-required": flag(required)
+            })
+            .children(hidden)
+            .onMount(TrackGroup())),
+        radio: View.wrapPart(
+          radioPart,
+          <B extends KeyedButton>(
+            { element, value }: { readonly element: B; readonly value: V }
+          ) => radioPart(element, value)
+        ),
+        indicator: View.wrapPart(
+          indicatorPart,
+          <B extends View.PartTarget<"span">>(
+            { element, keepMounted, value }: {
+              readonly element: B
+              readonly value: V
+              readonly keepMounted?: boolean | undefined
+            }
+          ): ReturnType<B["attr"]> | undefined => {
+            const built = indicatorPart(element, value)
+            const { checked, ending } = stateOf(value)
+            return checked || ending || keepMounted === true ? built : undefined
+          }
+        )
+      }
+    }
+  })
 }
 
 /**
@@ -440,231 +744,4 @@ type KeyedButton = View.PartTarget<"button"> & {
  * @category components
  * @since 0.1.0
  */
-export const RadioGroup = Html.component({
-  name: "RadioGroup",
-  props: RadioGroupProps,
-  model: RadioGroupModel,
-  message: RadioGroupMessage,
-  events: RadioGroupEvents,
-  reads: {
-    provider: { owner: DirectionProvider, optional: true }
-  },
-  restore: false
-}).make({
-  init: ({ props }) => ({
-    highlighted: null,
-    current: props.value,
-    settled: props.value,
-    mounted: [],
-    leaving: [],
-    rtl: false
-  }),
-  update: {
-    ClickedRadio: ($, { value }) => {
-      const item = itemOf($.props.items, value)
-      if ($.props.disabled === true || !ListNavigation.available(item)) {
-        return $.model
-      }
-      const highlighted = $.evolve({ highlighted: value })
-      return picks($.props, item)
-        ? highlighted.emit(RadioGroupEvents.Picked({ value }))
-        : highlighted
-    },
-    FocusedRadio: ($, { value }) =>
-      $.props.disabled === true ||
-        !ListNavigation.available(itemOf($.props.items, value))
-        ? $.model
-        : $.evolve({ highlighted: value }),
-    PressedArrow: ($, { direction, value }) => {
-      const source = itemOf($.props.items, value)
-      if ($.props.disabled === true || !ListNavigation.available(source)) {
-        return $.model
-      }
-      const enabled = $.props.items.filter(ListNavigation.available)
-      const at = enabled.indexOf(source)
-      const target =
-        enabled[ListNavigation.step(at, enabled.length - 1, direction, "wrap")]
-      if (target === undefined) return $.model
-      const moved = $.evolve({ highlighted: target.value }).run(
-        focusRadio(target.value)
-      )
-      return source.readOnly !== true && picks($.props, target)
-        ? moved.emit(RadioGroupEvents.Picked({ value: target.value }))
-        : moved
-    },
-    PressedEnter: ($) => $.model,
-    SyncedValue: ($, { value }) => {
-      if ($.model.current === value) return $.evolve({ highlighted: null })
-      const prev = $.model.current
-      let leaving = prev !== null && $.model.mounted.includes(prev)
-        ? withValue($.model.leaving, prev)
-        : $.model.leaving
-      if (value !== null) leaving = without(leaving, value)
-      const settled = $.model.settled === value ? value : null
-      return $.evolve({ highlighted: null, current: value, settled, leaving })
-    },
-    MountedIndicator: ($, { value }) =>
-      $.evolve({ mounted: (mounted) => withValue(mounted, value) }),
-    UnmountedIndicator: ($, { value }) =>
-      $.evolve({
-        settled: $.model.settled === value ? null : $.model.settled,
-        mounted: (mounted) => without(mounted, value),
-        leaving: (leaving) => without(leaving, value)
-      }),
-    StartedIndicator: ($, { value }) =>
-      $.props.value !== value
-        ? $.model
-        : $.evolve({
-          settled: value,
-          leaving: (leaving) => without(leaving, value)
-        }),
-    EndedIndicator: ($, { value }) =>
-      $.props.value === value
-        ? $.model
-        : $.evolve({
-          settled: $.model.settled === value ? null : $.model.settled,
-          leaving: (leaving) => without(leaving, value)
-        }),
-    FoundDirection: ($, { rtl }) => $.evolve({ rtl })
-  },
-  subscriptions: ({ props }) => [synced(props.value)],
-  parts: (p, model) => {
-    const props = p.props
-    const disabled = props.disabled === true
-    const readOnly = props.readOnly === true
-    const required = props.required === true
-    const invalid = props.invalid === true
-    const rtl = rightToLeft(p.reads.provider, model.rtl)
-    const byValue = new Map(props.items.map((item) => [item.value, item]))
-    const stateOf = (value: string) => {
-      const item = byValue.get(value)
-      if (item === undefined) {
-        throw new Error(
-          "RadioGroup: no item with value " + JSON.stringify(value)
-        )
-      }
-      const checked = props.value === value
-      return {
-        checked,
-        disabled: disabled || item.disabled === true,
-        readOnly: readOnly || item.readOnly === true,
-        starting: checked && model.settled !== value,
-        ending: !checked && (
-          model.leaving.includes(value) ||
-          (model.mounted.includes(value) &&
-            (model.current === value || model.settled === value))
-        )
-      }
-    }
-    const tabStop = disabled
-      ? null
-      : [model.highlighted, props.value].find((value) =>
-        value !== null && ListNavigation.available(byValue.get(value))
-      ) ??
-        props.items.find(ListNavigation.available)?.value ??
-        null
-    const checkedItem = props.value === null
-      ? undefined
-      : byValue.get(props.value)
-    const hidden = field({
-      checked: checkedItem !== undefined,
-      disabled: disabled || checkedItem?.disabled === true,
-      name: props.name,
-      value: checkedItem?.value,
-      form: props.form
-    })
-
-    const radioPart = keyed(p.part("button", (b, value: string) => {
-      const state = stateOf(value)
-      return itemState(b, state, required)
-        .ref(Radio.at(value))
-        .attrs({
-          type: "button",
-          role: "radio",
-          "aria-checked": String(state.checked),
-          "aria-disabled": undefined,
-          "aria-invalid": undefined,
-          tabindex: value === tabStop ? "0" : "-1"
-        })
-        .disabled(state.disabled)
-        .on("click", RadioGroupMessage.ClickedRadio({ value }))
-        .on("focus", RadioGroupMessage.FocusedRadio({ value }))
-        .on("keydown", ({ alt, ctrl, key, meta }) => {
-          if (key === "Enter") return RadioGroupMessage.PressedEnter()
-          if (ctrl || alt || meta) return undefined
-          if (key === "ArrowDown") {
-            return RadioGroupMessage.PressedArrow({ value, direction: 1 })
-          }
-          if (key === "ArrowUp") {
-            return RadioGroupMessage.PressedArrow({ value, direction: -1 })
-          }
-          if (key === "ArrowRight") {
-            return RadioGroupMessage.PressedArrow({
-              value,
-              direction: rtl ? -1 : 1
-            })
-          }
-          if (key === "ArrowLeft") {
-            return RadioGroupMessage.PressedArrow({
-              value,
-              direction: rtl ? 1 : -1
-            })
-          }
-          return undefined
-        }, { preventDefault: true })
-    }))
-
-    const indicatorPart = p.part("span", (b, value: string) => {
-      const { checked, ending, starting, ...state } = stateOf(value)
-      return itemState(b, { checked, ...state }, required)
-        .attrs({
-          "aria-hidden": "true",
-          "data-starting-style": flag(starting),
-          "data-ending-style": flag(ending)
-        })
-        .onMount(TrackIndicator({ value, checked, starting, ending }))
-    })
-
-    return {
-      value: props.value,
-      disabled,
-      readOnly,
-      required,
-      invalid,
-      root: p.part("div", (b) =>
-        b
-          .attrs({
-            role: "radiogroup",
-            "aria-required": required ? "true" : undefined,
-            "aria-disabled": disabled ? "true" : undefined,
-            "aria-readonly": readOnly ? "true" : undefined,
-            "aria-invalid": invalid ? "true" : undefined,
-            "data-disabled": flag(disabled),
-            "data-readonly": flag(readOnly),
-            "data-required": flag(required)
-          })
-          .children(hidden)
-          .onMount(TrackGroup())),
-      radio: View.wrapPart(
-        radioPart,
-        <B extends KeyedButton>(
-          { element, value }: { readonly element: B; readonly value: string }
-        ) => radioPart(element, value)
-      ),
-      indicator: View.wrapPart(
-        indicatorPart,
-        <B extends View.PartTarget<"span">>(
-          { element, keepMounted, value }: {
-            readonly element: B
-            readonly value: string
-            readonly keepMounted?: boolean | undefined
-          }
-        ): ReturnType<B["attr"]> | undefined => {
-          const built = indicatorPart(element, value)
-          const { checked, ending } = stateOf(value)
-          return checked || ending || keepMounted === true ? built : undefined
-        }
-      )
-    }
-  }
-})
+export const RadioGroup = makeRadioGroup({ value: Schema.String })

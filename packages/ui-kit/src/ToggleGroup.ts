@@ -139,6 +139,9 @@ export const ToggleGroupOrientation = Schema.Literals([
  */
 export type ToggleGroupOrientation = typeof ToggleGroupOrientation.Type
 
+const itemSchema = <S extends Schema.Codec<string, string>>(value: S) =>
+  Schema.Struct({ value, disabled: Schema.optional(Schema.Boolean) })
+
 /**
  * One item of a toggle group: the `value` its `item` part is drawn with,
  * and whether it is disabled.
@@ -147,10 +150,7 @@ export type ToggleGroupOrientation = typeof ToggleGroupOrientation.Type
  * @category schemas
  * @since 0.1.0
  */
-export const ToggleGroupItem = Schema.Struct({
-  value: Schema.String,
-  disabled: Schema.optional(Schema.Boolean)
-})
+export const ToggleGroupItem = itemSchema(Schema.String)
 
 /**
  * One item of a toggle group.
@@ -159,7 +159,19 @@ export const ToggleGroupItem = Schema.Struct({
  * @category models
  * @since 0.1.0
  */
-export type ToggleGroupItem = typeof ToggleGroupItem.Type
+export type ToggleGroupItem<V extends string = string> = ReturnType<
+  typeof itemSchema<Schema.Codec<V, string>>
+>["Type"]
+
+const propsSchema = <S extends Schema.Codec<string, string>>(value: S) =>
+  Schema.Struct({
+    value: Schema.Array(value),
+    items: Schema.Array(itemSchema(value)),
+    disabled: Schema.optional(Schema.Boolean),
+    multiple: Schema.optional(Schema.Boolean),
+    orientation: Schema.optional(ToggleGroupOrientation),
+    loopFocus: Schema.optional(Schema.Boolean)
+  })
 
 /**
  * Props for the state of a `ToggleGroup`.
@@ -182,14 +194,7 @@ export type ToggleGroupItem = typeof ToggleGroupItem.Type
  * @category schemas
  * @since 0.1.0
  */
-export const ToggleGroupProps = Schema.Struct({
-  value: Schema.Array(Schema.String),
-  items: Schema.Array(ToggleGroupItem),
-  disabled: Schema.optional(Schema.Boolean),
-  multiple: Schema.optional(Schema.Boolean),
-  orientation: Schema.optional(ToggleGroupOrientation),
-  loopFocus: Schema.optional(Schema.Boolean)
-})
+export const ToggleGroupProps = propsSchema(Schema.String)
 
 /**
  * The props of a `ToggleGroup`.
@@ -198,7 +203,12 @@ export const ToggleGroupProps = Schema.Struct({
  * @category models
  * @since 0.1.0
  */
-export type ToggleGroupProps = typeof ToggleGroupProps.Type
+export type ToggleGroupProps<V extends string = string> = ReturnType<
+  typeof propsSchema<Schema.Codec<V, string>>
+>["Type"]
+
+const eventsSchema = <S extends Schema.Codec<string, string>>(value: S) =>
+  UiSchema.TaggedEnum({ Toggled: { value: Schema.Array(value) } })
 
 /**
  * What a toggle group emits.
@@ -215,9 +225,7 @@ export type ToggleGroupProps = typeof ToggleGroupProps.Type
  * @category schemas
  * @since 0.1.0
  */
-export const ToggleGroupEvents = UiSchema.TaggedEnum({
-  Toggled: { value: Schema.Array(Schema.String) }
-})
+export const ToggleGroupEvents = eventsSchema(Schema.String)
 
 /**
  * What a `ToggleGroup` emits.
@@ -226,7 +234,9 @@ export const ToggleGroupEvents = UiSchema.TaggedEnum({
  * @category models
  * @since 0.1.0
  */
-export type ToggleGroupEvents = typeof ToggleGroupEvents.Type
+export type ToggleGroupEvents<V extends string = string> = ReturnType<
+  typeof eventsSchema<Schema.Codec<V, string>>
+>["Type"]
 
 const ToggleGroupMessage = UiSchema.TaggedEnum({
   ClickedItem: { value: Schema.String },
@@ -263,22 +273,16 @@ const itemDisabled = (
   disabledOf(props, toolbar) || !ListNavigation.available(item) ||
   toolbar?.disabledItems.includes(item.value) === true
 
-const enabledOf = (
-  props: ToggleGroupProps,
+const enabledOf = <V extends string>(
+  props: ToggleGroupProps<V>,
   toolbar: InToolbar | undefined
-): ReadonlyArray<ToggleGroupItem> =>
+): ReadonlyArray<ToggleGroupItem<V>> =>
   props.items.filter((item) => !itemDisabled(props, toolbar, item))
 
-const enabled = (
-  props: ToggleGroupProps,
-  toolbar: InToolbar | undefined,
-  value: string
-): boolean => enabledOf(props, toolbar).some((item) => item.value === value)
-
-const toggled = (
-  props: ToggleGroupProps,
-  value: string
-): ReadonlyArray<string> => {
+const toggled = <V extends string>(
+  props: ToggleGroupProps<V>,
+  value: V
+): ReadonlyArray<V> => {
   const pressed = props.value.includes(value)
   if (props.multiple !== true) return pressed ? [] : [value]
   return pressed
@@ -294,6 +298,164 @@ const tabStopOf = (
   const items = enabledOf(props, toolbar)
   return (items.find((item) => item.value === model.active) ?? items[0])
     ?.value ?? null
+}
+
+/**
+ * Creates a toggle group whose selected values, items, `item` part and
+ * `Toggled` event use the supplied string-valued schema.
+ *
+ * The schema must encode to a string. Create the component once at module
+ * level: each call creates a new component. The existing `ToggleGroup` export
+ * uses `Schema.String`.
+ *
+ * **Example** (A toggle group typed by a literal union)
+ *
+ * ```ts import.meta.vitest
+ * import { UiSchema } from "@effect/ui"
+ * import { Html, HtmlServer } from "@effect/ui/html"
+ * import { makeToggleGroup } from "@effect/ui-kit"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Align = Schema.Literals(["left", "center", "right"])
+ * const AlignToggleGroup = makeToggleGroup({ value: Align })
+ * const items = Align.literals.map((value) => ({ value }))
+ *
+ * const Message = UiSchema.TaggedEnum({ Aligned: { align: Schema.Array(Align) } })
+ *
+ * const Editor = Html.component({
+ *   name: "Editor",
+ *   model: Schema.Struct({ align: Schema.Array(Align) }),
+ *   message: Message
+ * }).make({
+ *   init: () => ({ align: ["left" as const] }),
+ *   update: {
+ *     Aligned: ($, { align }) => $.evolve({ align })
+ *   },
+ *   view: (h, model) =>
+ *     AlignToggleGroup(h, {
+ *       props: { value: model.align, items },
+ *       // `value` is ReadonlyArray<"left" | "center" | "right">
+ *       onEmit: ({ value }) => Message.Aligned({ align: value }),
+ *       view: (toggleGroup) =>
+ *         toggleGroup.root(h.div.attr("aria-label", "Alignment")).children(
+ *           items.map(({ value }) =>
+ *             toggleGroup.item({ element: h.button, value }).children(value)
+ *           )
+ *         )
+ *     })
+ * })
+ *
+ * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(Editor, {}))
+ * if (!html.includes('aria-pressed="true"')) throw new Error("no item is pressed")
+ * ```
+ *
+ * @stability experimental
+ * @category components
+ * @since 0.1.0
+ */
+export const makeToggleGroup = <V extends string>(
+  options: { readonly value: Schema.Codec<V, string> }
+) => {
+  const events = eventsSchema(options.value)
+  return Html.component({
+    name: "ToggleGroup",
+    props: propsSchema(options.value),
+    model: ToggleGroupModel,
+    message: ToggleGroupMessage,
+    events,
+    restore: false,
+    reads: {
+      provider: { owner: DirectionProvider, optional: true },
+      toolbar: { owner: Toolbar, optional: true }
+    }
+  }).make({
+    init: () => ({ active: null, rtl: false }),
+    update: {
+      ClickedItem: ($, { value }) => {
+        const item = enabledOf($.props, $.reads.toolbar).find((item) =>
+          item.value === value
+        )
+        return item === undefined
+          ? $.model
+          : $.emit(events.Toggled({ value: toggled($.props, item.value) }))
+      },
+      FocusedItem: ($, { value }) => $.evolve({ active: value }),
+      PressedKey: ($, { key, value }) => {
+        const items = enabledOf($.props, $.reads.toolbar)
+        const index = ListNavigation.target(key, {
+          at: items.findIndex((item) => item.value === value),
+          last: items.length - 1,
+          orientation: $.props.orientation ?? "horizontal",
+          rtl: rightToLeft($.reads.provider, $.model.rtl),
+          loop: $.props.loopFocus !== false ? "wrap" : "none"
+        })
+        const target = index === undefined ? undefined : items[index]
+        if (target === undefined || target.value === value) return $.model
+        return $.evolve({ active: target.value }).run(
+          HtmlCommand.Focus.make({ ref: Item.at(target.value) }).pipe(
+            Command.asNoop
+          )
+        )
+      },
+      FoundDirection: ($, { rtl }) => $.evolve({ rtl })
+    },
+    parts: (p, model) => {
+      const props = p.props
+      const toolbar = p.reads.toolbar
+      const disabled = disabledOf(props, toolbar)
+      const multiple = props.multiple === true
+      const orientation = props.orientation ?? "horizontal"
+      const tabStop = tabStopOf(model, props, toolbar)
+      const item = p.part("button", (b, value: V) => {
+        const entry = props.items.find((item) => item.value === value)
+        if (entry === undefined) {
+          throw new Error(
+            "ToggleGroup: no item with value \"" + value + "\" in items"
+          )
+        }
+        const pressed = pressedAttrs(
+          b,
+          props.value.includes(value),
+          itemDisabled(props, toolbar, entry)
+        )
+          .on("click", ToggleGroupMessage.ClickedItem({ value }))
+        if (toolbar !== undefined) return pressed
+        return pressed
+          .attr("tabindex", value === tabStop ? "0" : "-1")
+          .ref(Item.at(value))
+          .on("focus", ToggleGroupMessage.FocusedItem({ value }))
+          .on(
+            "keydown",
+            (event) =>
+              ListNavigation.isKey(event, orientation)
+                ? ToggleGroupMessage.PressedKey({ value, key: event.key })
+                : undefined,
+            { preventDefault: true }
+          )
+      })
+      return {
+        value: props.value,
+        disabled,
+        multiple,
+        orientation,
+        root: p.part("div", (b) => {
+          const root = b.attrs({
+            role: "group",
+            "data-orientation": orientation,
+            "data-disabled": flag(disabled),
+            "data-multiple": flag(multiple)
+          })
+          // In a toolbar the toolbar's keys move focus.
+          return toolbar !== undefined ? root : root.onMount(
+            TrackDirection().pipe(
+              Mount.map((rtl) => ToggleGroupMessage.FoundDirection({ rtl }))
+            )
+          )
+        }),
+        item: valued(item)
+      }
+    }
+  })
 }
 
 /**
@@ -332,98 +494,4 @@ const tabStopOf = (
  * @category components
  * @since 0.1.0
  */
-export const ToggleGroup = Html.component({
-  name: "ToggleGroup",
-  props: ToggleGroupProps,
-  model: ToggleGroupModel,
-  message: ToggleGroupMessage,
-  events: ToggleGroupEvents,
-  restore: false,
-  reads: {
-    provider: { owner: DirectionProvider, optional: true },
-    toolbar: { owner: Toolbar, optional: true }
-  }
-}).make({
-  init: () => ({ active: null, rtl: false }),
-  update: {
-    ClickedItem: ($, { value }) =>
-      enabled($.props, $.reads.toolbar, value)
-        ? $.emit(ToggleGroupEvents.Toggled({ value: toggled($.props, value) }))
-        : $.model,
-    FocusedItem: ($, { value }) => $.evolve({ active: value }),
-    PressedKey: ($, { key, value }) => {
-      const items = enabledOf($.props, $.reads.toolbar)
-      const index = ListNavigation.target(key, {
-        at: items.findIndex((item) => item.value === value),
-        last: items.length - 1,
-        orientation: $.props.orientation ?? "horizontal",
-        rtl: rightToLeft($.reads.provider, $.model.rtl),
-        loop: $.props.loopFocus !== false ? "wrap" : "none"
-      })
-      const target = index === undefined ? undefined : items[index]
-      if (target === undefined || target.value === value) return $.model
-      return $.evolve({ active: target.value }).run(
-        HtmlCommand.Focus.make({ ref: Item.at(target.value) }).pipe(
-          Command.asNoop
-        )
-      )
-    },
-    FoundDirection: ($, { rtl }) => $.evolve({ rtl })
-  },
-  parts: (p, model) => {
-    const props = p.props
-    const toolbar = p.reads.toolbar
-    const disabled = disabledOf(props, toolbar)
-    const multiple = props.multiple === true
-    const orientation = props.orientation ?? "horizontal"
-    const tabStop = tabStopOf(model, props, toolbar)
-    const item = p.part("button", (b, value: string) => {
-      const entry = props.items.find((item) => item.value === value)
-      if (entry === undefined) {
-        throw new Error(
-          "ToggleGroup: no item with value \"" + value + "\" in items"
-        )
-      }
-      const pressed = pressedAttrs(
-        b,
-        props.value.includes(value),
-        itemDisabled(props, toolbar, entry)
-      )
-        .on("click", ToggleGroupMessage.ClickedItem({ value }))
-      if (toolbar !== undefined) return pressed
-      return pressed
-        .attr("tabindex", value === tabStop ? "0" : "-1")
-        .ref(Item.at(value))
-        .on("focus", ToggleGroupMessage.FocusedItem({ value }))
-        .on(
-          "keydown",
-          (event) =>
-            ListNavigation.isKey(event, orientation)
-              ? ToggleGroupMessage.PressedKey({ value, key: event.key })
-              : undefined,
-          { preventDefault: true }
-        )
-    })
-    return {
-      value: props.value,
-      disabled,
-      multiple,
-      orientation,
-      root: p.part("div", (b) => {
-        const root = b.attrs({
-          role: "group",
-          "data-orientation": orientation,
-          "data-disabled": flag(disabled),
-          "data-multiple": flag(multiple)
-        })
-        // In a toolbar the toolbar's keys move focus.
-        return toolbar !== undefined ? root : root.onMount(
-          TrackDirection().pipe(
-            Mount.map((rtl) => ToggleGroupMessage.FoundDirection({ rtl }))
-          )
-        )
-      }),
-      item: valued(item)
-    }
-  }
-})
+export const ToggleGroup = makeToggleGroup({ value: Schema.String })

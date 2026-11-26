@@ -1,5 +1,11 @@
 import { Component, Mount, UiSchema, View } from "@effect/ui"
-import { Field, RadioGroup, type RadioGroupEvents } from "@effect/ui-kit"
+import {
+  Field,
+  makeRadioGroup,
+  RadioGroup,
+  type RadioGroupEvents,
+  RadioGroupItem
+} from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Context, Effect, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
@@ -36,6 +42,11 @@ type Span<R> = Html.Element<
 const h = View.makeHelper<Msg, {}, Html.Elements>({}, Html)
 
 describe("RadioGroup", () => {
+  it("the exported schemas keep their concrete field schemas", () => {
+    expect(RadioGroupItem.fields.value).type.toBe<typeof Schema.String>()
+    expect(RadioGroupItem.make).type.not.toBeCallableWith({ value: 42 })
+  })
+
   it("needs no provider: its read of a DirectionProvider is optional", () => {
     expect<Component.Headless.Requirements<typeof RadioGroup>>().type.toBe<
       never
@@ -126,6 +137,26 @@ describe("RadioGroup", () => {
         })
         return radioGroup.root(h.div)
       }
+    })
+  })
+
+  it("makeRadioGroup types the items and Picked with its schema", () => {
+    const Scope = Schema.Literals(["All", "League", "Cup"])
+    const ScopeMsg = UiSchema.TaggedEnum({ PickedScope: { scope: Scope } })
+    const h = View.makeHelper<typeof ScopeMsg.Type, {}, Html.Elements>(
+      {},
+      Html
+    )
+    const ScopeRadioGroup = makeRadioGroup({ value: Scope })
+    const items = Scope.literals.map((value) => ({ value }))
+    ScopeRadioGroup(h, {
+      props: { value: "All", items },
+      onEmit: { Picked: ({ value }) => ScopeMsg.PickedScope({ scope: value }) },
+      view: (radioGroup) => radioGroup.root(h.div)
+    })
+    expect(ScopeRadioGroup).type.not.toBeCallableWith(h, {
+      props: { value: null, items: [{ value: "Other" }] },
+      view: () => h.div
     })
   })
 })

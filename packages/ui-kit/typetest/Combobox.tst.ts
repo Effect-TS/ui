@@ -1,9 +1,10 @@
-import { type Component, UiSchema } from "@effect/ui"
+import { type Component, UiSchema, View } from "@effect/ui"
 import {
   Combobox,
   type ComboboxEvents,
   type ComboboxValue,
-  Field
+  Field,
+  makeCombobox
 } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
@@ -174,6 +175,51 @@ describe("Combobox", () => {
         })
         return h.div
       }
+    })
+  })
+
+  it("makeCombobox types the items, groups, Picked and Highlighted with its schema, but not the input text", () => {
+    const Fruit = Schema.Literals(["apple", "pear"])
+    const FruitMsg = UiSchema.TaggedEnum({
+      PickedFruit: {
+        fruit: Schema.NullOr(Schema.Union([Fruit, Schema.Array(Fruit)]))
+      },
+      HighlightedFruit: { fruit: Schema.NullOr(Fruit) },
+      Typed: { text: Schema.String }
+    })
+    const h = View.makeHelper<typeof FruitMsg.Type, {}, Html.Elements>(
+      {},
+      Html
+    )
+    const FruitCombobox = makeCombobox({ value: Fruit })
+    const items = Fruit.literals.map((value) => ({ value, label: value }))
+    FruitCombobox(h, {
+      props: { open: false, inputValue: "", value: "apple", items },
+      onEmit: {
+        Picked: ({ value }) => FruitMsg.PickedFruit({ fruit: value }),
+        Highlighted: ({ value }) => FruitMsg.HighlightedFruit({ fruit: value }),
+        RequestedInputValue: ({ inputValue }) => {
+          expect(inputValue).type.toBe<string>()
+          return FruitMsg.Typed({ text: inputValue })
+        },
+        RequestedOpen: () => undefined,
+        RequestedClose: () => undefined,
+        Settled: () => undefined
+      },
+      view: (combobox) => {
+        const group = combobox.groups[0]!
+        expect(group.items[0]!.value).type.toBe<"apple" | "pear">()
+        expect(group.rows[0]![0]!.value).type.toBe<"apple" | "pear">()
+        return combobox.input(h.input)
+      }
+    })
+    expect(FruitCombobox).type.not.toBeCallableWith(h, {
+      props: {
+        open: false,
+        inputValue: "",
+        items: [{ value: "plum", label: "Plum" }]
+      },
+      view: () => h.div
     })
   })
 })
