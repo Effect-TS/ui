@@ -1,6 +1,6 @@
 import * as Html from "@effect/ui/html/Html"
 import * as View from "@effect/ui/View"
-import { noSelect } from "./attributes.ts"
+import { flag, noSelect, visuallyHidden } from "./attributes.ts"
 
 export const blockers = (attribute: string) => {
   const blocker = new Html.Element<never>("div")
@@ -25,6 +25,23 @@ export const backdropStyle = (topLayer: boolean, pressable: boolean): string =>
   "position:" + (topLayer ? "fixed" : "absolute") +
   ";inset:0;width:auto;height:auto;max-width:none;max-height:none;margin:0;" +
   noSelect + (pressable ? "" : ";pointer-events:none")
+
+// A close button for screen readers, which can't press outside the popup.
+export const dismissAttrs = (label: string | undefined, open: boolean) => ({
+  role: "button",
+  "aria-label": label ?? "Dismiss",
+  hidden: flag(!open),
+  style: visuallyHidden
+})
+
+export const dismissSpan = () =>
+  new Html.Element<
+    never,
+    never,
+    Html.EventsOf<"span">,
+    HTMLSpanElement,
+    "span"
+  >("span")
 
 export const cutPath = (holes: ReadonlyArray<DOMRect>): string =>
   "polygon(0% 0%,100% 0%,100% 100%,0% 100%,0% 0%," +

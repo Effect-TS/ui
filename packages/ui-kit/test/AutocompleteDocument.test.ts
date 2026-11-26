@@ -115,6 +115,55 @@ const Page = Html.component({
     )
 })
 
+const Inline = Html.component({
+  name: "Inline",
+  props: Schema.Struct({
+    type: Schema.String,
+    label: Schema.optional(Schema.String)
+  }),
+  model: FormModel,
+  message: Message
+}).make({
+  init: () => ({ open: false, value: "", log: [] }),
+  update: formUpdate,
+  view: (h, model) =>
+    Autocomplete(h, {
+      props: {
+        open: model.open,
+        value: model.value,
+        items: h.props.label === undefined
+          ? items
+          : [{ value: "only", label: h.props.label }],
+        mode: "both"
+      },
+      onEmit: {
+        RequestedOpen: ({ reason }) => Message.RequestedOpen({ reason }),
+        RequestedClose: ({ reason }) => Message.RequestedClose({ reason }),
+        Updated: ({ reason, value }) => Message.Updated({ value, reason }),
+        Highlighted: () => undefined,
+        Settled: () => undefined
+      },
+      view: (autocomplete) =>
+        h.div(
+          autocomplete.input(
+            h.input.class("input").attrs({
+              "aria-label": "Fruit",
+              type: h.props.type
+            })
+          ),
+          autocomplete.positioner(h.div.attr("id", "positioner")).children(
+            autocomplete.popup(h.div).children(
+              autocomplete.list(h.div).children(
+                ...autocomplete.items.map(({ label, value }) =>
+                  autocomplete.item({ element: h.div, value }).children(label)
+                )
+              )
+            )
+          )
+        )
+    })
+})
+
 const InPopup = Html.component({
   name: "InPopup",
   model: FormModel,
@@ -364,6 +413,62 @@ describe("Autocomplete in a document", { concurrent: false }, () => {
         "RequestedClose item-press",
         "Submitted \"Banana\""
       ])
+    }).pipe(Effect.scoped))
+
+  it.effect("with mode both, arrowing to an item selects the suffix after the typed text, in any case or Unicode form", () =>
+    Effect.gen(function*() {
+      yield* popovers
+      const cases = [
+        ["NFC", "NFD", 4],
+        ["NFD", "NFC", 5]
+      ] as const
+      for (const [labelForm, typedForm, from] of cases) {
+        yield* Effect.gen(function*() {
+          const label = "Café noir".normalize(labelForm)
+          yield* BrowserHost.mountEffect(
+            Inline,
+            { type: "text", label },
+            yield* container
+          )
+          yield* tick
+          type("café".normalize(typedForm))
+          yield* tick
+          input().dispatchEvent(
+            new KeyboardEvent("keydown", {
+              key: "ArrowDown",
+              bubbles: true,
+              cancelable: true
+            })
+          )
+          yield* tick
+          assert.strictEqual(input().value, label)
+          assert.strictEqual(input().selectionStart, from)
+          assert.strictEqual(input().selectionEnd, label.length)
+        }).pipe(Effect.scoped)
+      }
+    }).pipe(Effect.scoped))
+
+  it.effect("with mode both, an input that can't select text keeps what was typed", () =>
+    Effect.gen(function*() {
+      yield* popovers
+      yield* BrowserHost.mountEffect(
+        Inline,
+        { type: "email" },
+        yield* container
+      )
+      yield* tick
+      // "pp" isn't the start of "Apple", so there's no suffix to select.
+      type("pp")
+      yield* tick
+      input().dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "ArrowDown",
+          bubbles: true,
+          cancelable: true
+        })
+      )
+      yield* tick
+      assert.strictEqual(input().value, "pp")
     }).pipe(Effect.scoped))
 
   it.effect("with inputInPopup, picking submits a form named by form once, with the picked label", () =>

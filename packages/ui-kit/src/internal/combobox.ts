@@ -14,13 +14,23 @@ import * as Positioning from "../Positioning.ts"
 import {
   type Attributed,
   attrSelector,
+  defaults,
+  fallbackLabel,
+  fallbackLabelledBy,
   flag,
+  type Named,
   ownStyle,
   separatorAttrs,
   visuallyHidden,
   withStyle
 } from "./attributes.ts"
-import { backdropStyle, blockers, cutPath } from "./blocker.ts"
+import {
+  backdropStyle,
+  blockers,
+  cutPath,
+  dismissAttrs,
+  dismissSpan
+} from "./blocker.ts"
 import {
   type Directed,
   isRtl,
@@ -29,7 +39,7 @@ import {
   watchDirection,
   watchDirectionScoped
 } from "./direction.ts"
-import { byAttribute, focusFinal } from "./dom.ts"
+import { byAttribute, focusFinal, trapTab } from "./dom.ts"
 import { textFilter } from "./filter.ts"
 import {
   autofillMatch,
@@ -40,7 +50,7 @@ import {
 } from "./formInputs.ts"
 import { methodOf } from "./interaction.ts"
 import { available, grouped, type Loop, stepped, valued } from "./list.ts"
-import { hideOthers, holdScroll, nextLayerOrder } from "./modal.ts"
+import { holdLayer, nextLayerOrder } from "./modal.ts"
 import { listenOutside, releasedOutside } from "./outside.ts"
 import { fillValue } from "./range.ts"
 import { layered, raiseAbove } from "./topLayer.ts"
@@ -168,6 +178,8 @@ export interface Settings<E> extends Positioning.PositionerOptions {
   readonly id?: string | undefined
   readonly dir?: "ltr" | "rtl" | undefined
   readonly modal?: boolean | undefined
+  readonly dismissLabel?: string | undefined
+  readonly removedLabel?: string | undefined
   readonly finalFocus?: boolean | undefined
   readonly holdExit?: boolean | undefined
 }
@@ -239,7 +251,10 @@ export const Model = Schema.Struct({
   ),
   // The CSS `direction` of the list or its positioner, and of the chips.
   rtl: Schema.Boolean,
-  chipsRtl: Schema.Boolean
+  chipsRtl: Schema.Boolean,
+  removing: Schema.NullOr(
+    Schema.Struct({ value: Schema.String, label: Schema.String })
+  )
 })
 
 export type Model = typeof Model.Type
@@ -264,7 +279,8 @@ export const init = (): Model => ({
   placement: null,
   completion: null,
   rtl: false,
-  chipsRtl: false
+  chipsRtl: false,
+  removing: null
 })
 
 type Step<E> = Component.Step<Model, Message, E>
@@ -412,7 +428,7 @@ const picked = <E>(
 ): Step<E> =>
   props.emits.picked === undefined
     ? step
-    : step.emit(props.emits.picked(value, reason))
+    : step.evolve({ removing: null }).emit(props.emits.picked(value, reason))
 
 const rewrite = <E>(
   step: Step<E>,
@@ -730,7 +746,7 @@ const removeChip = <E>(
     props,
     values.filter((other) => other !== value),
     reason
-  )
+  ).evolve({ removing: { value, label: itemOf(props, value)?.label ?? value } })
   return reason === "chip-remove-press" ? focus(removed, Input) : removed
 }
 
@@ -799,7 +815,11 @@ const ListArgs = Schema.Struct({
   active: Schema.NullOr(Schema.String),
   scroll: Schema.Boolean,
   query: Schema.String,
-  virtualized: Schema.Boolean
+  virtualized: Schema.Boolean,
+  owner: Schema.String,
+  completed: Schema.NullOr(
+    Schema.Struct({ text: Schema.String, from: Schema.Number })
+  )
 })
 
 type ListArgs = typeof ListArgs.Type
@@ -808,6 +828,42 @@ const scrollsY = (element: HTMLElement): boolean => {
   const view = element.ownerDocument.defaultView
   return view !== null && element.scrollHeight - element.clientHeight > 1 &&
     /auto|scroll|overlay/.test(view.getComputedStyle(element).overflowY)
+}
+
+// The input types `setSelectionRange` works on.
+const selectingTypes = new Set(["text", "search", "url", "tel", "password"])
+
+const folded = (text: string): string => text.normalize("NFC").toLowerCase()
+
+// The offset in `text` where `prefix` ends, ignoring case and Unicode form
+// and never between a letter and its marks.
+const prefixEnd = (text: string, prefix: string): number | null => {
+  const target = folded(prefix)
+  for (let end = 0; end <= text.length; end++) {
+    const head = folded(text.slice(0, end))
+    if (head === target && !/^\p{M}/u.test(text.slice(end))) return end
+    if (head.length > target.length + 1) return null
+  }
+  return null
+}
+
+const selectSuffix = (
+  document: Document,
+  owner: string,
+  completed: NonNullable<ListArgs["completed"]>,
+  frame: (f: () => void) => void
+) => {
+  const input = byAttribute(document, "data-combobox-input", owner)
+  if (
+    !(input instanceof HTMLInputElement) || !selectingTypes.has(input.type)
+  ) return
+  const select = () => {
+    if (input.value === completed.text && document.activeElement === input) {
+      input.setSelectionRange(completed.from, completed.text.length)
+    }
+  }
+  if (input.value === completed.text) select()
+  else frame(select)
 }
 
 const following = (document: Document, list: () => HTMLElement | null) => {
@@ -833,6 +889,12 @@ const following = (document: Document, list: () => HTMLElement | null) => {
   return (next: ListArgs | null) => {
     const previous = current
     current = next
+    const completed = next?.completed ?? null
+    const before = previous?.completed
+    if (
+      next !== null && completed !== null &&
+      (before?.text !== completed.text || before.from !== completed.from)
+    ) selectSuffix(document, next.owner, completed, frame)
     if (next === null || next.virtualized) return
     if (previous === null) reveal()
     else {
@@ -865,6 +927,9 @@ const TrackComboboxArgs = {
 type TrackComboboxArgs = Schema.Struct<typeof TrackComboboxArgs>["Type"]
 
 const blocking = blockers("data-combobox-blocker")
+
+const removedStatus = new Html.Element<Message>("span")
+  .attrs({ role: "status", style: visuallyHidden })
 
 const watch = (
   node: HTMLElement,
@@ -908,14 +973,13 @@ const watch = (
     let release: (() => void) | undefined
     const hold = () => {
       release?.()
-      release = undefined
-      if (!current.open) return
-      const unlock = current.modal ? holdScroll(node, current.touch) : undefined
-      const shown = current.hide ? hideOthers(node, order, owned()) : undefined
-      release = () => {
-        unlock?.()
-        shown?.()
-      }
+      release = current.open
+        ? holdLayer(node, order, {
+          scroll: current.modal,
+          touch: current.touch,
+          hide: current.hide ? owned() : undefined
+        })
+        : undefined
     }
 
     const opening = () => {
@@ -990,6 +1054,12 @@ const watch = (
         event.target instanceof Node && blocking.owns(node, event.target)
       ) event.preventDefault()
     }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key === "Tab" && !event.defaultPrevented && current.open &&
+        current.inputInPopup && current.modal
+      ) trapTab(event, popup())
+    }
 
     const transition = settling(node, popup, frame, (open) =>
       send(Message.FinishedTransition({ open })))
@@ -1038,6 +1108,7 @@ const watch = (
         )
         node.addEventListener("focusin", onFocusIn, { signal })
         node.addEventListener("mousedown", onMouseDown, { signal })
+        node.addEventListener("keydown", onKeyDown, { signal })
         hold()
         raiseAbove(node)
         if (current.open) opening()
@@ -1442,7 +1513,13 @@ export const make = <P, E>(
       active: highlighted === null ? null : itemId(highlighted),
       scroll: model.activeByKey,
       query: props.inputValue,
-      virtualized: props.virtualized === true
+      virtualized: props.virtualized === true,
+      owner,
+      completed: (() => {
+        if (displayed === props.inputValue) return null
+        const from = prefixEnd(displayed, props.inputValue)
+        return from === null ? null : { text: displayed, from }
+      })()
     }
     const dismissable = !inline && (!inPopup || modal)
     let labelled = false
@@ -1450,6 +1527,8 @@ export const make = <P, E>(
 
     const inside = <B extends Attributed<B>>(builder: B): B =>
       builder.attr("data-combobox-inside", owner)
+    const labelledBy = <B extends Attributed<B> & Named>(node: B): B =>
+      fallbackLabelledBy(node, labelled ? labelId : undefined)
     const states = <B extends Attributed<B>>(builder: B): B =>
       transitionAttrs(builder, open, transitionStatus)
     const placed = <B extends Attributed<B>>(builder: B): B =>
@@ -1486,12 +1565,7 @@ export const make = <P, E>(
 
     const dismissPart = p.part("span", (b) =>
       inside(b)
-        .attrs({
-          role: "button",
-          "aria-label": "Dismiss",
-          hidden: flag(!open),
-          style: visuallyHidden
-        })
+        .attrs(dismissAttrs(props.dismissLabel, open))
         .on("click", Message.PressedDismiss()))
 
     const label = p.part("div", (b) => {
@@ -1632,9 +1706,12 @@ export const make = <P, E>(
         })
         : focusable
       return field.forward((node) => {
-        const named = node.elementAttrs.id === undefined
-          ? node.attr("id", inputId)
+        // The next key couldn't replace a completion it can't select.
+        const kept = displayed !== props.inputValue &&
+            !selectingTypes.has(node.elementAttrs.type ?? "text")
+          ? node.attr("value", props.inputValue).value(props.inputValue)
           : node
+        const named = defaults(labelledBy(kept), { id: inputId })
         return inPopup || inputs.length === 0
           ? named
           : inputsBox.children(named, ...inputs)
@@ -1650,7 +1727,7 @@ export const make = <P, E>(
           "data-required": flag(required),
           "data-placeholder": flag(placeholding),
           "aria-expanded": String(open),
-          "aria-haspopup": inPopup ? "dialog" : "listbox",
+          "aria-haspopup": inPopup ? "dialog" : grid ? "grid" : "listbox",
           "aria-controls": open ? (inPopup ? popupId : listId) : undefined,
           "aria-disabled": undefined
         })
@@ -1684,7 +1761,11 @@ export const make = <P, E>(
               : undefined,
           { preventDefault: true }
         )
-      if (!inPopup) return decorated.attr("tabindex", "-1")
+      if (!inPopup) {
+        return decorated.attr("tabindex", "-1").forward(
+          fallbackLabel("Open popup")
+        )
+      }
       return (selectable ? decorated : decorated.attr("form", props.form))
         .attrs({
           role: "combobox",
@@ -1692,11 +1773,9 @@ export const make = <P, E>(
           "aria-readonly": readOnly ? "true" : undefined
         })
         .forward((node) => {
-          const named = node.attrs({
-            id: node.elementAttrs.id ?? triggerId,
-            "aria-labelledby": node.elementAttrs["aria-labelledby"] ??
-              (labelled ? labelId : undefined)
-          })
+          const named = labelledBy(
+            node.attr("id", node.elementAttrs.id ?? triggerId)
+          )
           return inputs.length === 0
             ? named
             : inputsBox.children(named, ...inputs)
@@ -1720,7 +1799,8 @@ export const make = <P, E>(
         })
         .disabled(disabled)
         .on("mousedown", () => undefined, { preventDefault: "always" })
-        .on("click", Message.PressedClear()))
+        .on("click", Message.PressedClear())
+        .forward(fallbackLabel("Clear")))
     const clearButton = View.wrapPart(
       clearPart,
       <B extends View.PartTarget<"button">>(
@@ -1742,6 +1822,17 @@ export const make = <P, E>(
           "data-combobox-chips": owner
         })
         .on("mousedown", pressGroup, { preventDefault: true })
+        .forward((node) =>
+          node.children(
+            removedStatus.children(
+              // Announced once `value` drops it, not on the request.
+              model.removing === null || chosen.has(model.removing.value)
+                ? ""
+                : model.removing.label + ", " +
+                  (props.removedLabel ?? "removed")
+            )
+          )
+        )
         .onMount(
           TrackComboboxChips({
             owner,
@@ -1757,9 +1848,10 @@ export const make = <P, E>(
       b.ref(Chip.at(value))
         .attrs({
           tabindex: "-1",
+          "aria-keyshortcuts": disabled || readOnly
+            ? undefined
+            : "Backspace Delete",
           "data-combobox-chip": value,
-          "aria-disabled": disabled ? "true" : undefined,
-          "aria-readonly": readOnly ? "true" : undefined,
           "data-disabled": flag(disabled)
         }))
     const chip = valued(chipPart)
@@ -1777,7 +1869,8 @@ export const make = <P, E>(
         .on(
           "click",
           Message.RequestedChipRemoval({ value, reason: "chip-remove-press" })
-        ))
+        )
+        .forward(fallbackLabel("Remove")))
     const chipRemove = View.wrapPart(
       chipRemovePart,
       <B extends View.PartTarget<"button">>(
@@ -1810,17 +1903,7 @@ export const make = <P, E>(
             withStyle(node.elementAttrs.style, positionerStyle)
           )
           return dismissable
-            ? styled.children(
-              dismissPart(
-                new Html.Element<
-                  never,
-                  never,
-                  Html.EventsOf<"span">,
-                  HTMLSpanElement,
-                  "span"
-                >("span")
-              )
-            )
+            ? styled.children(dismissPart(dismissSpan()))
             : styled
         })
       const blocked = modal
@@ -1855,6 +1938,7 @@ export const make = <P, E>(
         .attrs({
           id: popupId,
           role: inPopup ? "dialog" : "presentation",
+          "aria-modal": inPopup ? String(modal) : undefined,
           tabindex: "-1",
           "data-anchor-hidden": flag(shown && model.placement?.anchorHidden),
           "data-empty": flag(listEmpty)
@@ -1867,14 +1951,7 @@ export const make = <P, E>(
               : undefined,
           { preventDefault: true }
         )
-        .forward((node) =>
-          inPopup && labelled
-            ? node.attr(
-              "aria-labelledby",
-              node.elementAttrs["aria-labelledby"] ?? labelId
-            )
-            : node
-        ))
+        .forward((node) => inPopup ? labelledBy(node) : node))
 
     const arrowStyle = Positioning.arrowStyle(side)
     const arrow = p.part("div", (b) =>
@@ -1894,9 +1971,9 @@ export const make = <P, E>(
         role: grid ? "grid" : "listbox",
         tabindex: "-1",
         "aria-multiselectable": multiple ? "true" : undefined,
-        "aria-readonly": !grid && readOnly ? "true" : undefined,
+        "aria-readonly": readOnly ? "true" : undefined,
         "data-empty": flag(listEmpty)
-      })
+      }).forward(labelledBy)
       return inline
         ? decorated.onMount(TrackComboboxList({ list: listArgs }))
         : decorated

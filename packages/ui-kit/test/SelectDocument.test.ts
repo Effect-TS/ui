@@ -682,6 +682,28 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.isFalse(touched())
     }).pipe(Effect.scoped))
 
+  it.effect("a modal select hides the page from screen readers, and its dismiss button closes it", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage()
+      const hidden = (id: string) =>
+        byId(id).closest("[aria-hidden=true]") !== null
+      keydown(byId("trigger"), "ArrowDown")
+      yield* tick
+      assert.isTrue(hidden("before"))
+      assert.isFalse(hidden("trigger"))
+      assert.isFalse(hidden("positioner"))
+      const dismiss = byId("positioner").querySelector<HTMLElement>(
+        "[role=button][aria-label=Dismiss]"
+      )!
+      dismiss.click()
+      yield* tick
+      assert.isFalse(hidden("before"))
+      assert.deepStrictEqual(log(), [
+        "RequestedOpen list-navigation",
+        "RequestedClose close-press"
+      ])
+    }).pipe(Effect.scoped))
+
   it.effect("in a modal dialog, Escape closes only the select", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage({ dialog: true })

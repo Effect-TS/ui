@@ -8,6 +8,7 @@ import {
   byId,
   click,
   container,
+  emptyEditable,
   focusability,
   focusVisibility,
   holdExits,
@@ -787,6 +788,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
 
   it.effect("Tab reaches editing hosts, media controls and a details without a summary, skipping a details with a summary or what a closed details hides", () =>
     Effect.gen(function*() {
+      yield* emptyEditable
       yield* mountPage({})
       const popup = document.querySelector(".popup-a")!
       for (

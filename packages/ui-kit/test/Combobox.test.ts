@@ -11,7 +11,7 @@ import { Html, HtmlCommand } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 
 type Parts = Component.Headless.Parts<typeof Combobox>
 type H = View.Helper<never, ComboboxProps> & View.Tags<Html.Elements, never>
@@ -23,6 +23,17 @@ const fruits: ReadonlyArray<ComboboxItem> = [
   { value: "cherry", label: "Cherry", disabled: true },
   { value: "grape", label: "Grape" }
 ]
+
+// A child component the trigger can't see into.
+const Icon = Html.component({
+  name: "Icon",
+  model: Schema.Null,
+  message: Schema.Never
+}).make({
+  init: () => null,
+  update: ($) => $.model,
+  view: (h) => h.span.attr("aria-hidden", "true").children("▾")
+})
 
 const standIn = {
   elements: Html,
@@ -123,6 +134,7 @@ const gridStandIn = {
   view: (combobox: Parts, h: H) =>
     h.div(
       combobox.input(h.input.class("input")),
+      combobox.trigger(h.button.class("trigger")).attr("aria-label", "Emoji"),
       combobox.list(h.div.class("list")).children(
         ...combobox.groups.flatMap((group) =>
           group.rows.map((cells) =>
@@ -247,7 +259,8 @@ describe("Combobox", () => {
       assert.deepInclude(scene.get(trigger).attrs, {
         type: "button",
         tabindex: "-1",
-        "aria-expanded": "false"
+        "aria-expanded": "false",
+        "aria-label": "Open popup"
       })
       assert.deepInclude(scene.get(list).attrs, {
         role: "listbox",
@@ -274,6 +287,7 @@ describe("Combobox", () => {
       assert.deepInclude(scene.get(clearButton).attrs, {
         type: "button",
         tabindex: "-1",
+        "aria-label": "Clear",
         "data-visible": ""
       })
       scene.fire(clearButton, "mousedown", pointer("mouse")).expectIgnored()
@@ -287,17 +301,28 @@ describe("Combobox", () => {
       assert.isUndefined(scene.query(clearButton))
     }))
 
-  it.effect("keeps the name, form and required a consumer puts on the input", () =>
+  it.effect("keeps the name, form and required a consumer puts on the input, and a button's text name", () =>
     Effect.gen(function*() {
-      const scene = yield* HtmlScene.make(Combobox, base, {
+      const scene = yield* HtmlScene.make(Combobox, {
+        ...base,
+        value: "banana"
+      }, {
         elements: Html,
         view: (combobox: Parts, h: H) =>
-          combobox.input(
-            h.input.class("input").attrs({
-              name: "query",
-              form: "search",
-              required: ""
-            })
+          h.div(
+            combobox.input(
+              h.input.class("input").attrs({
+                name: "query",
+                form: "search",
+                required: ""
+              })
+            ),
+            combobox.trigger(h.button.class("trigger")).children(
+              h.span.children("Show fruits")
+            ),
+            combobox.clear({ element: h.button.class("clear") })?.children(
+              h.span.attr("aria-hidden", "true").children("Clear text")
+            )
           )
       })
       assert.deepInclude(scene.get(input).attrs, {
@@ -305,6 +330,20 @@ describe("Combobox", () => {
         form: "search",
         required: ""
       })
+      // Its text names the trigger, so it gets no fallback name, but hidden
+      // text doesn't name the clear button.
+      assert.isUndefined(scene.get(trigger).attrs?.["aria-label"])
+      assert.deepInclude(scene.get(clearButton).attrs, {
+        "aria-label": "Clear"
+      })
+      // A child component may or may not name it, so the fallback is a title.
+      const withIcon = yield* HtmlScene.make(Combobox, base, {
+        elements: Html,
+        view: (combobox: Parts, h: H) =>
+          combobox.trigger(h.button.class("trigger")).children(Icon(h, {}))
+      })
+      assert.isUndefined(withIcon.get(trigger).attrs?.["aria-label"])
+      assert.strictEqual(withIcon.get(trigger).attrs?.title, "Open popup")
     }))
 
   it.effect("typing opens and filters; autofill reports without opening; composition waits for compositionend", () =>
@@ -663,11 +702,21 @@ describe("Combobox", () => {
       )
       scene.props({ ...base, multiple: true, value: ["apple", "grape"] })
       assert.deepInclude(scene.get(item("chip-apple")).attrs, {
-        tabindex: "-1"
+        tabindex: "-1",
+        "aria-keyshortcuts": "Backspace Delete"
       })
+      assert.deepInclude(scene.get(item("remove-apple")).attrs, {
+        "aria-label": "Remove"
+      })
+      const removal = Locator.attr("role", "status")
       scene.fire(input, "keydown", key("Backspace")).emitted(
         picked(["apple"], "none")
       )
+      // Only a removal the selection takes is announced.
+      assert.strictEqual(Locator.textOf(scene.get(removal)), "")
+      scene.props({ ...base, multiple: true, value: ["apple"] })
+      assert.strictEqual(Locator.textOf(scene.get(removal)), "Grape, removed")
+      scene.props({ ...base, multiple: true, value: ["apple", "grape"] })
       scene.fire(
         input,
         "keydown",
@@ -692,8 +741,20 @@ describe("Combobox", () => {
         inputValue: "a"
       })
       scene.fire(input, "keydown", key("Backspace")).expectIgnored()
-      scene.props({ ...base, multiple: true, value: ["apple"], readOnly: true })
+      scene.props({
+        ...base,
+        multiple: true,
+        value: ["apple"],
+        readOnly: true,
+        disabled: true
+      })
       scene.fire(input, "keydown", key("Backspace")).expectIgnored()
+      // A chip has no role, so ARIA allows it no aria-disabled or aria-readonly.
+      assert.isUndefined(scene.get(item("chip-apple")).attrs?.["aria-disabled"])
+      assert.isUndefined(scene.get(item("chip-apple")).attrs?.["aria-readonly"])
+      assert.isUndefined(
+        scene.get(item("chip-apple")).attrs?.["aria-keyshortcuts"]
+      )
     }))
 
   it.effect("inputInPopup makes the trigger the combobox, supports typeahead, and cancels an outside release", () =>
@@ -716,7 +777,13 @@ describe("Combobox", () => {
         Locator.textOf(scene.get(Locator.attr("class", "value"))),
         "Pick a fruit"
       )
-      assert.deepInclude(scene.get(popup).attrs, { role: "dialog" })
+      const labelId = scene.get(Locator.attr("class", "label")).attrs?.id
+      assert.deepInclude(scene.get(popup).attrs, {
+        role: "dialog",
+        "aria-modal": "false",
+        "aria-labelledby": labelId
+      })
+      assert.deepInclude(scene.get(list).attrs, { "aria-labelledby": labelId })
       scene.fire(trigger, "keydown", key("g")).emitted(picked("grape", "none"))
       scene.resolve(
         scene.current.pending[0]!.command,
@@ -774,6 +841,10 @@ describe("Combobox", () => {
       const props = { ...base, items: grid, grid: true, open: true }
       const scene = yield* HtmlScene.make(Combobox, props, gridStandIn)
       assert.deepInclude(scene.get(input).attrs, { "aria-haspopup": "grid" })
+      assert.deepInclude(scene.get(trigger).attrs, {
+        "aria-haspopup": "grid",
+        "aria-label": "Emoji"
+      })
       assert.deepInclude(scene.get(list).attrs, { role: "grid" })
       assert.strictEqual(scene.all(Locator.attr("class", "row")).length, 3)
       assert.deepInclude(scene.all(Locator.attr("class", "row"))[0]!.attrs, {
@@ -812,6 +883,8 @@ describe("Combobox", () => {
       scene.fire(input, "keydown", key("ArrowLeft")).emitted(
         highlighted("e4", 4)
       )
+      scene.props({ ...props, readOnly: true })
+      assert.deepInclude(scene.get(list).attrs, { "aria-readonly": "true" })
     }))
 
   it.effect("inline stays expanded, navigates while closed, restores highlight on focus, and clears on Escape keyup", () =>
@@ -981,7 +1054,26 @@ describe("makeComboboxFilter", () => {
     assert.isTrue(filter.contains("Crème brûlée", "creme"))
     assert.isTrue(filter.startsWith("Éclair", "ecl"))
     assert.isTrue(filter.endsWith("Apple", "PLE"))
+    assert.isTrue(filter.contains("Co-op", "coop"))
+    assert.isTrue(filter.endsWith("Co-op", "oop"))
+    assert.isTrue(filter.contains("e\u0301clair", "eclair"))
     assert.isFalse(filter.contains("Apple", "x"))
     assert.isTrue(filter.contains("Apple", ""))
+  })
+
+  it("keeps a mark with its letter, in either Unicode form", () => {
+    const swedish = makeComboboxFilter("sv")
+    const spanish = makeComboboxFilter("es")
+    for (const form of ["NFC", "NFD"] as const) {
+      const city = "Göteborg".normalize(form)
+      // Swedish "ö" isn't "o", and Spanish "ñ" isn't "n", even where the
+      // query stops right after the letter.
+      assert.isFalse(swedish.startsWith(city, "Go"))
+      assert.isFalse(spanish.contains("mañana".normalize(form), "mana"))
+      assert.isTrue(swedish.contains(city, "Göt".normalize("NFD")))
+      assert.isTrue(
+        makeComboboxFilter("en").startsWith("éclair".normalize(form), "eclair")
+      )
+    }
   })
 })
