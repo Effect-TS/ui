@@ -3,10 +3,10 @@ import { inSafeArea, type Point } from "./safeArea.ts"
 
 // Watches whether the pointer is in a popup's hover area: on `node`, on an
 // element that matches `triggers`, or in the triangle between the point
-// where it left a trigger and `node`. A fast move reports the leave where
-// the pointer already is, so that point is clamped to the trigger's box.
-// `report` hears `true` when the pointer leaves the area and `false` when
-// it comes back, only on a change.
+// where it left a trigger and `node`. Fast moves can report a departure
+// point outside the trigger, so the point is clamped to the trigger's box.
+// `report` receives `true` outside the area and `false` inside it. After
+// the first report, it is called only when that value changes.
 // The listeners stay until `signal` aborts.
 export const watchHoverArea = (
   node: HTMLElement,

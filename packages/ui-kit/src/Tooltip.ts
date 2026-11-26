@@ -14,7 +14,7 @@
  * open: keyboard focus, `closeDelay`, or a consumer that opened it itself.
  *
  * A tooltip is a visual label for sighted mouse and keyboard users. Screen
- * readers and touch users don't get it, so the trigger still needs its own
+ * readers don't get it by default, so the trigger still needs its own
  * accessible name, such as an `aria-label` that matches the tooltip's text.
  * A tooltip that adds to the label, such as a shortcut or why the trigger is
  * disabled, can be the trigger's accessible description with
@@ -84,11 +84,10 @@
  * **Keyboard**
  *
  * Focusing the trigger with the keyboard opens the tooltip without a delay,
- * and moving focus away closes it. Only focus that shows a focus ring, as
- * `:focus-visible` tells, opens it or keeps it open after the pointer
- * leaves. So focus that follows a mouse press on the trigger doesn't, nor
- * does focus a dialog closed with the mouse gives back to it. Escape closes
- * an open tooltip wherever focus is, so a tooltip opened by hovering can be
+ * and moving focus away closes it. The trigger must match `:focus-visible`
+ * when it receives focus to open the tooltip or keep it open after the
+ * pointer leaves. Other focus events are ignored. Escape closes an open
+ * tooltip wherever focus is, so a tooltip opened by hovering can be
  * dismissed without moving the pointer. Activating the trigger with Enter
  * or Space closes it, as a click does.
  *
@@ -236,9 +235,9 @@ export type TooltipAlign = typeof TooltipAlign.Type
  *   Space, closes the tooltip, true by default.
  * - `disableHoverablePopup`: the pointer on the popup doesn't keep the
  *   tooltip open, and the positioner takes no pointer events.
- * - `describesTrigger`: the popup is the trigger's accessible description,
- *   for a tooltip that adds to the trigger's label rather than repeating it.
- *   False by default.
+ * - `describesTrigger`: makes the popup the trigger's accessible description
+ *   unless `disabled`. Use it for text that adds to the trigger's label
+ *   rather than repeating it. False by default.
  * - `side`: the side of the trigger the popup shows on, `"top"` by default.
  *   `"inline-start"` and `"inline-end"` follow the writing direction.
  * - `align`: how the popup lines up with the trigger along that side,
@@ -316,10 +315,7 @@ export const TooltipEvents = UiSchema.TaggedEnum({
 export type TooltipEvents = typeof TooltipEvents.Type
 
 // Pointer, focus and key facts from the trigger, the positioner and the
-// document, and the ends of the two timers. `visible`: the focus shows a
-// focus ring. The positioner's mount reports the pointer leaving and coming
-// back to the hover area: the trigger, the positioner and the triangle
-// between them, and that it started, as the tooltip shows.
+// document, and the ends of the two timers.
 const TooltipMessage = UiSchema.TaggedEnum({
   EnteredTrigger: {},
   LeftTrigger: {},
@@ -343,11 +339,8 @@ const TooltipMessage = UiSchema.TaggedEnum({
 })
 
 // Only the pointer and focus, which the consumer would never store.
-// `onTrigger`, `onPositioner`: the pointer is on that part. `inArea`: the
-// pointer came into the hover area of a hoverable tooltip that shows and
-// hasn't left it. A hidden positioner hears no leave, so both positioner
-// flags start over when it shows again, and are kept when the consumer
-// declines a close. `focused`: the trigger has focus that shows a focus ring.
+// A hidden positioner hears no leave, so `onPositioner` and `inArea` reset
+// when it shows again. Both flags are kept when the consumer declines a close.
 // `instant` is why the last change skips its transition, as
 // `data-instant` reports it: `delay` when a TooltipProvider let it skip the
 // hover delay. `turn` orders the shown tooltips of a provider's group: the
@@ -387,8 +380,6 @@ const WaitBeforeClosing = Command.make(
     )
 )
 
-// The positioner's mount while the tooltip shows: it places the positioner
-// and watches the hover area.
 const TrackTooltip = Mount.makeStream(
   "TrackTooltip",
   {
@@ -688,17 +679,16 @@ export const TooltipProvider = Html.component({
  * such as a ui-kit Button's. The positioner and the popup can stay in the
  * view while the tooltip is closed: the popover hides them.
  *
- * With `describesTrigger`, the popup gets a generated `id` and
- * `role="tooltip"`, and the trigger's `aria-describedby` names it next to
- * the consumer's own ids. Keep the positioner and the popup in the view
- * while the tooltip is closed: a hidden popover still describes the
- * trigger, so a screen reader reads the description before the tooltip
- * opens.
+ * With `describesTrigger`, unless `disabled`, the popup gets a generated
+ * `id` and `role="tooltip"`. The trigger's `aria-describedby` includes that
+ * ID alongside the consumer's own IDs. Keep the positioner and the popup
+ * in the view while the tooltip is closed so the description remains
+ * available to screen readers before the tooltip opens.
  *
  * The tooltip's own attributes win over the ones the consumer set on the
  * builder it passes in: the data attributes on every part, `popover` and
  * `role="presentation"` on the positioner, `aria-hidden` on the arrow, and
- * the popup's `id` and `role` with `describesTrigger`.
+ * the popup's `id` and `role` with `describesTrigger` unless `disabled`.
  * That includes the ones a state leaves absent, so a `data-open` on the
  * consumer's popup is removed while the tooltip is closed. The
  * positioner's placement and the arrow's offset are added after the
@@ -783,9 +773,6 @@ export const Tooltip = Html.component({
       hoverableBy($.props)
         ? $.evolve({ inArea: true }).run(Command.interrupt(WaitBeforeClosing))
         : $.model,
-    // Focus without a focus ring, such as after a mouse press or when a
-    // dialog closed by the mouse gives focus back, neither opens the tooltip
-    // nor holds it open.
     FocusedTrigger: ($, { visible }) => {
       if (!visible) return $.model
       const focused = $.evolve({ focused: true })
@@ -843,7 +830,6 @@ export const Tooltip = Html.component({
     const triggerId = p.id("trigger")
     const triggerSelector = attrSelector("data-tooltip-trigger", triggerId)
     const arrowId = p.id("arrow")
-    // The popup is the trigger's accessible description.
     const popupId =
       p.props.describesTrigger === true && p.props.disabled !== true
         ? p.id("popup")
