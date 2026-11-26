@@ -119,11 +119,11 @@ describe("HtmlLocator", () => {
       expect(clicks).toBe(0)
     })
 
-    it("DOM actions follow the flat tree through shadow hosts and slots, and a modal in a shadow root blocks the rest", () => {
+    it("DOM queries and actions follow the flat tree through shadow hosts and slots, and a modal in a shadow root blocks the rest", () => {
       const app = document.body.appendChild(document.createElement("div"))
       const clicked: Array<string> = []
-      const button = (parent: ParentNode, name: string) => {
-        const button = parent.appendChild(document.createElement("button"))
+      const button = (parent: ParentNode, name: string, tag = "button") => {
+        const button = parent.appendChild(document.createElement(tag))
         button.addEventListener("click", () => clicked.push(name))
         return button
       }
@@ -134,18 +134,19 @@ describe("HtmlLocator", () => {
       }
       const inertHost = host(app)
       inertHost.inert = true
-      const slotted = host(app, "<section inert><slot></slot></section>")
-      for (
-        const target of [
-          button(inertHost.shadowRoot!, "A"),
-          button(slotted, "B")
-        ]
-      ) {
+      const slotted = button(
+        host(app, "<section inert><slot></slot></section>"),
+        "B"
+      )
+      expect(HtmlLocator.queryAllByRole(app, "button")).toEqual([])
+      for (const target of [button(inertHost.shadowRoot!, "A"), slotted]) {
         expect(() => HtmlLocator.click(target)).toThrow("is inert")
       }
-      const dialog = host(app, "<dialog></dialog>").shadowRoot!.querySelector(
-        "dialog"
-      )!
+      const link = app.appendChild(document.createElement("a"))
+      link.href = "#here"
+      HtmlLocator.click(button(link, "Link", "span"))
+      const modalHost = host(app, "<dialog><slot></slot></dialog>")
+      const dialog = modalHost.shadowRoot!.querySelector("dialog")!
       dialog.showModal()
       // happy-dom never matches `:modal`; a browser does here.
       const matches = dialog.matches.bind(dialog)
@@ -153,12 +154,12 @@ describe("HtmlLocator", () => {
         ((selector: string) =>
           selector === ":modal" || matches(selector)) as typeof dialog.matches
       const behind = button(app, "Behind")
-      expect(HtmlLocator.queryAllByRole(document, "button")).not.toContain(
-        behind
-      )
+      const inModal = button(modalHost, "Slotted")
+      expect(HtmlLocator.queryAllByRole(document, "button")).toEqual([inModal])
       expect(() => HtmlLocator.click(behind)).toThrow("is inert")
+      HtmlLocator.click(inModal)
       HtmlLocator.click(button(host(dialog).shadowRoot!, "Inside"))
-      expect(clicked).toEqual(["Inside"])
+      expect(clicked).toEqual(["Link", "Slotted", "Inside"])
       app.remove()
     })
 

@@ -6,8 +6,7 @@
  * real DOM tree. `role`, `label` and `placeholder` return a `Locator`, so
  * they combine with `Locator.inside` on the first two. On the DOM, `click`,
  * `type`, `keydown` and `submit` act as the user would, through real DOM
- * events, and refuse an inert element, judged along the flat tree through
- * shadow hosts and slots.
+ * events, and refuse an inert element.
  *
  * Hidden elements (`hidden`, `aria-hidden="true"`, `<input type="hidden">`)
  * and everything inside them are left out of role queries unless
@@ -15,7 +14,9 @@
  * and, while a modal dialog is open, those outside the topmost one, taken to
  * be the last open modal in document order. On the DOM a modal is a dialog
  * matching `:modal`, open shadow roots included, which some test
- * environments never match.
+ * environments never match, and inertness follows the flat tree through
+ * shadow hosts and slots. Queries don't look inside shadow roots for
+ * matches.
  *
  * On a structural tree a match is typed `Locator.Node`, since it can be any
  * node of the tree. On `TestHost`, `root.all(HtmlLocator.role(...))` keeps the
@@ -386,8 +387,23 @@ const buildIndex = <N>(root: N): Index<N> => {
     }
     const childLabels = tag === "label" ? [node, ...labels] : labels
     const childSection = inSection || sectioning.has(tag)
+    const host = isDom(node) &&
+      (node as unknown as globalThis.Element).shadowRoot != null
     for (const child of reader.children(node)) {
-      walk(child, isHiddenHere, inertHere, childLabels, childSection)
+      walk(
+        child,
+        isHiddenHere,
+        host
+          ? slottedInert(
+            node as globalThis.Node,
+            child as globalThis.Node,
+            inertHere,
+            modal as globalThis.Node | undefined
+          )
+          : inertHere,
+        childLabels,
+        childSection
+      )
     }
   }
   walk(root, false, modal !== undefined, [], false)
@@ -989,7 +1005,30 @@ const flatParent = (node: globalThis.Node): globalThis.Node | null => {
       if (slot.assignedNodes().includes(node as ChildNode)) return slot
     }
   }
-  return (parent as ShadowRoot | null)?.host ?? parent
+  return parent?.nodeType === 11
+    ? (parent as ShadowRoot).host ?? parent
+    : parent
+}
+
+/**
+ * What a shadow host's light child inherits from its slot: the inertness along the flat tree up to
+ * `host`, else the host's own.
+ */
+const slottedInert = (
+  host: globalThis.Node,
+  child: globalThis.Node,
+  hostInert: boolean,
+  modal: globalThis.Node | undefined
+): boolean => {
+  for (
+    let at = flatParent(child);
+    at !== null && at !== host;
+    at = flatParent(at)
+  ) {
+    if (flag(domReader, at, "inert")) return true
+    if (at === modal) return false
+  }
+  return hostInert
 }
 
 const refuseInert = (step: string, element: globalThis.Element): void => {
