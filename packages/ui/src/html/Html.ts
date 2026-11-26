@@ -120,7 +120,6 @@
  * ```ts import.meta.vitest
  * import { Html } from "@effect/ui/html"
  *
- * // A view function, so any component can draw it.
  * const ArrowIcon = <M>(h: Html.H<M>) =>
  *   h.svg
  *     .class("icon")
@@ -1450,7 +1449,7 @@ export type VoidTag = typeof voidTags[number]
 // ---------------------------------------------------------------------------
 
 /**
- * The SVG tags, each a builder on `h` that renders in the SVG namespace.
+ * Tags with named builders on `h` that render in the SVG namespace.
  *
  * @stability experimental
  * @category svg
@@ -1468,8 +1467,7 @@ export const svgTags = elements.svgTags
 export type SvgTag = typeof svgTags[number]
 
 /**
- * The events of an SVG element: the pointer, mouse, keyboard and focus
- * events of `Events`.
+ * Pointer, mouse, keyboard and focus events supported by SVG builders.
  *
  * @stability experimental
  * @category svg
@@ -1637,18 +1635,10 @@ interface SvgOwnAttributes {
 }
 
 /**
- * The attribute names `attr` and `attrs` accept on an SVG tag: the global
- * ones (`id`, `class`, `style`, `lang`, `tabindex`, `role`, `aria-*`,
- * `data-*`), the presentation attributes such as `fill` and
- * `stroke-width`, and the tag's own, such as `d` on `path` and `viewBox`
- * on `svg`.
- *
- * **Details**
- *
- * SVG attribute names are case-sensitive and mix camelCase with hyphens, so
- * `viewbox` or `strokeWidth` is a type error rather than an attribute the
- * browser ignores. For a name the list lacks, pass a
- * `Record<string, string>` to `attrs`, or use `h.el(tag)`.
+ * Attribute names accepted by an SVG tag's `attr` and `attrs`: global and
+ * presentation attributes, plus tag-specific names such as `d` on `path`.
+ * Names are case-sensitive: use `viewBox`, not `viewbox`. For an unlisted
+ * name, pass a `Record<string, string>` to `attrs`, or use `h.el(tag)`.
  *
  * @stability experimental
  * @category svg
@@ -1660,17 +1650,12 @@ export type SvgAttribute<Tag extends SvgTag> =
   | SvgOwnAttributes[Tag]
 
 /**
- * The builder of an SVG element, such as `h.svg` or `h.path`: the core
- * builder plus `id`, `class` and `style` as on HTML elements, with
- * attribute names checked by tag.
+ * An SVG builder with `id`, `class`, `style` and attribute names checked
+ * by tag. HTML-only helpers such as `value` and `disabled` are excluded.
+ * Root builders on `h` are callable as shorthand for `children`.
  *
- * **Details**
- *
- * `Node` is the DOM element, so `ref` and `onMount` are typed, and
- * `Tag` the tag, which picks the attributes. The HTML-only helpers, such as
- * `value`, `disabled` and `popover`, aren't here. Every SVG tag takes
- * children, and its root builder on `h` is also callable as shorthand for
- * `children`. See the module docs for an icon.
+ * `Node` types the DOM element for `ref` and `onMount`; `Tag` selects the
+ * attribute names. See the module example for an icon.
  *
  * @stability experimental
  * @category svg
@@ -1703,19 +1688,19 @@ export interface SvgElement<
    */
   id(id: string): this
   /**
-   * Sets the `class` attribute from class tokens, as `Element.class` does.
+   * Sets the `class` attribute from class tokens.
    *
    * @since 0.1.0
    */
   class(...tokens: ReadonlyArray<ClassToken>): this
   /**
-   * Sets inline CSS, as `Element.style` does.
+   * Sets inline CSS.
    *
    * @since 0.1.0
    */
   style(style: Style): this
   /**
-   * Adds children after the ones the builder holds, and returns the builder.
+   * Appends children.
    *
    * @since 0.1.0
    */

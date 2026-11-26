@@ -8,8 +8,7 @@
 import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 
-// An icon is a view function, like any reusable piece of view. Its stroke
-// uses currentColor, so it takes the color of the text around it.
+// currentColor gives the icon the surrounding text color.
 const CheckIcon = <M>(h: Html.H<M>) =>
   h.svg
     .class("icon")
@@ -24,10 +23,8 @@ const CheckIcon = <M>(h: Html.H<M>) =>
     })
     .children(h.path.attr("d", "M5 12l5 5L20 7"))
 
-// SVG attribute names are case-sensitive and mix camelCase (viewBox) with
-// hyphens (stroke-width). A typo such as `viewbox` or `strok-width` is a
-// type error, where the browser would silently ignore it. Values are
-// strings, as with every attribute.
+// Attribute names are case-sensitive: use viewBox and stroke-width.
+// Attribute values are strings.
 const Ring = <M>(h: Html.H<M>, done: number, total: number) => {
   const r = 16
   const length = 2 * Math.PI * r
@@ -56,7 +53,6 @@ const Ring = <M>(h: Html.H<M>, done: number, total: number) => {
       "stroke-dasharray": `${length * shown} ${length}`,
       transform: "rotate(-90 20 20)"
     }),
-    // `h.svgText` is SVG's <text> element.
     h.svgText.attrs({
       x: "20",
       y: "24",
@@ -79,7 +75,6 @@ export const Checklist = Html.component({
   view: (h, { done, total }) =>
     h.div.children(
       Ring(h, done, total),
-      // SVG builders are ordinary children of HTML elements.
       h.button.on("click", "ClickedDone").children(CheckIcon(h), "Done")
     )
 })
