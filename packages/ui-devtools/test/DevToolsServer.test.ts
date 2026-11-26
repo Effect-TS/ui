@@ -9,7 +9,7 @@ import { DevToolsServer, DevToolsVite } from "@effect/ui-devtools/node"
 import type * as BrowserHost from "@effect/ui/html/BrowserHost"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Schedule, Schema, Stream } from "effect"
+import { Effect, Layer, Schema, Stream } from "effect"
 import { McpClient, McpProtocol } from "effect/ai"
 import { HttpRouter } from "effect/http"
 import * as Socket from "effect/socket/Socket"
@@ -101,23 +101,6 @@ const makeAgent = Effect.fnUntraced(function*(base: string) {
   }
 })
 
-// The page's frames reach the server asynchronously, so poll until it lists
-// the instance. list_instances dies until the session has connected.
-const instanceAt = (
-  agent: Effect.Success<ReturnType<typeof makeAgent>>,
-  path: string
-) =>
-  agent.call<ReadonlyArray<any>>("list_instances").pipe(
-    Effect.flatMap((instances) =>
-      Effect.fromNullishOr(
-        instances.find((instance) => instance.path === path)
-      )
-    ),
-    Effect.catchDefect(Effect.fail),
-    Effect.retry(Schedule.spaced("10 millis")),
-    Effect.timeout("2 seconds")
-  )
-
 const serve = Effect.fnUntraced(
   function*(options: DevToolsServer.Options & { readonly port: number }) {
     yield* Layer.build(DevToolsServer.layer(options))
@@ -127,11 +110,9 @@ const serve = Effect.fnUntraced(
 )
 
 const open = Effect.fnUntraced(
-  function*(url: string, capture: Capture, size?: number) {
+  function*(url: string, capture: Capture) {
     localStorage.clear()
-    const services = yield* Layer.build(
-      DevTools.layer({ server: url, ...(size === undefined ? {} : { size }) })
-    )
+    const services = yield* Layer.build(DevTools.layer({ server: url }))
     const app = yield* play(capture).pipe(Effect.provide(services))
     yield* wait(150)
     return app
@@ -311,9 +292,16 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "keeps the state of an instance whose entries the ring dropped",
     () =>
       Effect.gen(function*() {
+        // Only the server's ring is small. The page's replay buffer must still
+        // hold /Workspace's Mounted frame when the socket connects.
         const { agent, url } = yield* serve({ port: 47742, size: 12 })
-        yield* open(url, "open", 12)
-        const workspace = yield* instanceAt(agent, "/Workspace")
+        yield* open(url, "open")
+        const instances: ReadonlyArray<any> = yield* agent.call(
+          "list_instances"
+        )
+        const workspace = instances.find((instance) =>
+          instance.path === "/Workspace"
+        )
         const state = yield* agent.call("get_state", {
           instance: workspace.instance
         })
