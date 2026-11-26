@@ -83,6 +83,42 @@ describe("HtmlLocator", () => {
         .toHaveLength(3)
     })
 
+    it("inert elements and those outside the topmost modal are left out unless asked for, and the DOM click refuses them", () => {
+      const tree = el(
+        "div",
+        {},
+        el("section", { inert: "" }, el("button", {}, text("Delete"))),
+        {
+          tag: "section",
+          props: { inert: true },
+          children: [el("button", {}, text("Archive"))]
+        },
+        el("button", {}, text("Behind")),
+        {
+          tag: "dialog",
+          props: { open: "modal" },
+          children: [el("button", {}, text("Inside"))]
+        }
+      )
+      expect(
+        HtmlLocator.queryAllByRole(tree, "button").map((node) =>
+          Locator.textOf(node)
+        )
+      ).toEqual(["Inside"])
+      expect(HtmlLocator.queryAllByRole(tree, "button", { hidden: true }))
+        .toHaveLength(4)
+      const container = document.createElement("div")
+      container.innerHTML = "<section inert><button>Delete</button></section>"
+      const button = container.querySelector("button")!
+      let clicks = 0
+      button.addEventListener("click", () => clicks++)
+      expect(HtmlLocator.queryAllByRole(container, "button")).toEqual([])
+      expect(() => HtmlLocator.click(button)).toThrow(
+        "HtmlLocator.click: the element is inert"
+      )
+      expect(clicks).toBe(0)
+    })
+
     it.effect("a closed dialog and what's in it are hidden, and dialogState tells closed, open and modal apart", () =>
       Effect.gen(function*() {
         const dialog = HtmlLocator.role("dialog", { name: "Delete note?" })

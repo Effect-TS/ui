@@ -86,6 +86,57 @@ const Shortcuts = Html.component({
 })
 
 describe("HtmlPlay", () => {
+  it.effect("click and type refuse inert targets however they are found, and fire still delivers", () =>
+    Effect.gen(function*() {
+      const Guarded = Html.component({
+        name: "Guarded",
+        model: Schema.Array(Schema.String),
+        message: Schema.String
+      }).make({
+        init: (): ReadonlyArray<string> => [],
+        update: ($, message) => [...$.model, message],
+        view: (h, entries) =>
+          h.div(
+            h.section.attr("inert", "").children(
+              h.button.on("click", "delete").children("Delete"),
+              h.input.attr("aria-label", "Name").on(
+                "input",
+                ({ value }) => `name:${value}`
+              )
+            ),
+            h.button.on("click", "behind").children("Behind"),
+            h.dialog.attr("aria-label", "Modal").modal(true).children(
+              h.button.on("click", "inside").children("Inside")
+            ),
+            h.output(entries.join("|"))
+          )
+      })
+      const p = yield* HtmlPlay.make(Guarded, {})
+      const deleteButton = HtmlLocator.role("button", {
+        name: "Delete",
+        hidden: true
+      })
+      for (
+        const step of [
+          p.click(deleteButton),
+          p.type(
+            HtmlLocator.role("textbox", { name: "Name", hidden: true }),
+            "x"
+          ),
+          p.click("Behind")
+        ]
+      ) {
+        const exit = yield* Effect.exit(step)
+        assert.match(
+          Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "",
+          /is inert/
+        )
+      }
+      yield* p.click("Inside")
+      yield* p.fire(deleteButton, "click")
+      yield* p.expect(log).toHaveText("inside|delete")
+    }).pipe(play))
+
   it.effect("type, keydown and a click's defaults send what BrowserHost sends", () =>
     Effect.gen(function*() {
       const browser = yield* inBrowser(Settings, (app) => {
