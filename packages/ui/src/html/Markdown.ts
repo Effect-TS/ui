@@ -763,8 +763,7 @@ export const defaultViews: DefaultViews = {
       "title",
       Option.getOrUndefined(title)
     ),
-  Heading: (h, { level }, content) =>
-    h[headingTags[level - 1]].children(content),
+  Heading: (h, { level }, content) => h.el(headingTags[level - 1], content),
   Paragraph: (h, _paragraph, content) => h.p.children(content),
   CodeBlock: (h, { value }) => h.pre.children(h.code.children(value)),
   List: (h, { isOrdered, startNumber }, items) =>
@@ -780,9 +779,12 @@ export const defaultViews: DefaultViews = {
   Table: (h, _table, headerRow, bodyRows) =>
     h.table.children(h.thead.children(headerRow), h.tbody.children(bodyRows)),
   TableRow: (h, _tableRow, cells) => h.tr.children(cells),
-  TableCell: (h, _tableCell, content, alignment, isHeader) =>
-    (isHeader ? h.th : h.td).style({ textAlign: textAlign[alignment] })
-      .children(content)
+  TableCell: (h, _tableCell, content, alignment, isHeader) => {
+    const style = { textAlign: textAlign[alignment] }
+    return isHeader
+      ? h.th.style(style).children(content)
+      : h.td.style(style).children(content)
+  }
 }
 
 const warned = new Set<string>()
