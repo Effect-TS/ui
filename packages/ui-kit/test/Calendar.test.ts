@@ -255,7 +255,6 @@ describe("Calendar", () => {
       owns(scene, loc("weekday-0"), { scope: "col", abbr: "Monday" })
       owns(scene, loc("weekday-6"), { scope: "col", abbr: "Sunday" })
 
-      // Selected day (also initial tab stop)
       owns(scene, cellLoc("2026-11-15"), {
         role: "gridcell",
         "aria-selected": "true"
@@ -276,7 +275,6 @@ describe("Calendar", () => {
         "data-custom": "2026-11-15"
       })
 
-      // Today
       owns(scene, cellLoc("2026-11-26"), {
         role: "gridcell",
         "aria-selected": "false"
@@ -288,7 +286,6 @@ describe("Calendar", () => {
         "data-selected": undefined
       })
 
-      // Outside-month & below min (disabled)
       owns(scene, dayLoc("2026-10-26"), {
         disabled: "",
         tabindex: "-1",
@@ -297,7 +294,6 @@ describe("Calendar", () => {
         "data-disabled": ""
       })
 
-      // Above max (disabled)
       owns(scene, dayLoc("2026-11-29"), {
         disabled: "",
         tabindex: "-1",
@@ -313,7 +309,6 @@ describe("Calendar", () => {
         "data-disabled": undefined
       })
 
-      // Focus sets data-focused on that day only
       scene.focus(dayLoc("2026-11-20"))
       owns(scene, dayLoc("2026-11-20"), { "data-focused": "", tabindex: "0" })
       owns(scene, dayLoc("2026-11-15"), {
@@ -330,7 +325,6 @@ describe("Calendar", () => {
       const fa = yield* makeScene(baseProps({ locale: "fa-IR" }))
       fa.parts((cal) => assert.include(cal.title, "۲۰۲۶"))
 
-      // Invalid weekday index and wrong element tags fail at runtime
       const h = V.makeHelper<never, {}, Html.Elements>({}, Html)
       const p = Story.parts(Calendar, {
         model: {
@@ -366,12 +360,10 @@ describe("Calendar", () => {
       // Initial tab stop is today when value is null
       owns(scene, dayLoc("2026-01-10"), { tabindex: "0" })
 
-      // Clicking a day emits Picked with normalized UTC midnight
       scene.click(dayLoc("2026-01-31")).emitted(
         CalendarEvents.Picked({ date: utc("2026-01-31") })
       )
 
-      // Previous and next emit RequestedMonth with first of target month
       scene.click(loc("prev")).emitted(
         CalendarEvents.RequestedMonth({ month: utc("2025-12-01") })
       )
@@ -509,7 +501,6 @@ describe("Calendar", () => {
 
       scene.focus(dayLoc("2026-11-15"))
 
-      // ArrowRight (+1d), ArrowLeft (-1d), ArrowDown (+7d), ArrowUp (-7d)
       assert.deepStrictEqual(
         focused(
           scene.keydown(dayLoc("2026-11-15"), "ArrowRight")
@@ -539,7 +530,6 @@ describe("Calendar", () => {
         ["2026-11-15"]
       )
 
-      // Home (start of week) and End (end of week)
       assert.deepStrictEqual(
         focused(
           scene.keydown(dayLoc("2026-11-18"), "Home").expectDefaultPrevented()
@@ -553,7 +543,6 @@ describe("Calendar", () => {
         ["2026-11-21"]
       )
 
-      // Modified or unhandled keys are ignored
       scene.keydown(dayLoc("2026-11-15"), "ArrowRight", { alt: true })
         .expectIgnored().expectDefaultPrevented(false)
       scene.keydown(dayLoc("2026-11-15"), "Enter")
@@ -601,7 +590,6 @@ describe("Calendar", () => {
       assert.deepStrictEqual(focused(scene), ["2026-12-30"])
       owns(scene, dayLoc("2026-12-30"), { tabindex: "0" })
 
-      // PageUp (-1 month), Shift+PageUp (-1 year), Shift+PageDown (+1 year)
       scene.keydown(dayLoc("2026-12-30"), "PageUp")
         .expectDefaultPrevented()
         .emitted(CalendarEvents.RequestedMonth({ month: utc("2026-11-01") }))
@@ -751,7 +739,6 @@ describe("Calendar", () => {
       owns(scene, dayLoc("2026-11-26"), { "data-today": undefined })
       owns(scene, dayLoc("2026-11-27"), { "data-today": "" })
 
-      // Emitted Picked date is normalized midnight UTC
       scene.click(dayLoc("2026-11-25")).emitted(
         CalendarEvents.Picked({ date: utc("2026-11-25") })
       )

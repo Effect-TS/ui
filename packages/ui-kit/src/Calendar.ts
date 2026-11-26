@@ -1,11 +1,9 @@
 /**
  * A controlled single-month calendar grid for picking a date. Pass the
  * selected date as `value`, the visible month as `month` and the current day
- * as `today`, and update them when the calendar emits `Picked` and
- * `RequestedMonth`. Your view supplies the markup; the component owns the
- * grid dates, roving focus, keyboard navigation, and ARIA and data
- * attributes. `Calendar` is a headless component, because it keeps the
- * focused day and moves focus with a Command.
+ * as `today`. Handle `Picked` to update `value` and `RequestedMonth` to
+ * update `month`. Your view supplies the markup; the component computes
+ * the grid dates and attributes and manages keyboard navigation and focus.
  *
  * **Anatomy**
  *
@@ -42,7 +40,7 @@
  * gives the UTC day, obtain `today` from `DateTime.nowInCurrentZone` or
  * another zoned `DateTime`. Every date the component emits or exposes in part
  * values is a normalized `DateTime.Utc`, and all localized formatting uses
- * `timeZone: "UTC"` so a day can never shift.
+ * `timeZone: "UTC"` so formatting preserves the normalized day.
  *
  * **Data attributes**
  *
@@ -55,8 +53,8 @@
  *
  * **Keyboard**
  *
- * One enabled day sits in the page's Tab order (`tabindex="0"`); the rest
- * have `tabindex="-1"`.
+ * When the grid has an enabled day, one day sits in the page's Tab order
+ * (`tabindex="0"`); the rest have `tabindex="-1"`.
  *
  * - ArrowLeft / ArrowRight move by one day (swapped in a right-to-left layout)
  * - ArrowUp / ArrowDown move by one week
@@ -70,7 +68,9 @@
  * and `max` are natively `disabled`, and keyboard navigation clamps to the
  * range. Moves that leave the shown month emit `RequestedMonth`; if the
  * consumer leaves `month` unchanged, focus stays in the shown month. When
- * `month` changes while a day has focus, focus moves into the new month.
+ * `month` changes while a day has focus, focus follows the new tab stop.
+ * If no day in the new month is in range, a visible day from an adjacent
+ * month can receive focus.
  *
  * **Usage**
  *
@@ -220,7 +220,7 @@ export type CalendarWeekday = CalendarWeekdayName
  *   server HTML matches the client. Prefer `DateTime.nowInCurrentZone` or
  *   another zoned `DateTime`.
  * - `min` and `max`: optional inclusive date bounds. Days outside the range
- *   are natively `disabled` and keyboard focus clamps to them.
+ *   are natively `disabled` and keyboard focus clamps to the bounds.
  * - `firstDayOfWeek`: `0` (Sunday) to `6` (Saturday). Defaults to the
  *   locale's first day via `Intl.Locale#getWeekInfo` (including a `-u-fw-`
  *   extension), or Monday (`1`) when unavailable.

@@ -117,8 +117,6 @@ export const clampDate = (
   return max === null ? lower : DateTime.min(lower, max)
 }
 
-// Whether the month `months` (-1 or 1) away from `monthStart` has a day in
-// range.
 export const canStepMonth = (
   monthStart: DateTime.Utc,
   months: -1 | 1,
@@ -318,7 +316,6 @@ const withDayInMonth = (
   return DateTime.setPartsUtc(monthStart, { day: Math.min(dayNumber, maxDay) })
 }
 
-// `date` when it is in the shown month and in range, else `null`.
 const shown = (
   context: FocusContext,
   date: DateTime.Utc | null
@@ -352,7 +349,6 @@ export const focusInMonth = (
 
 type Weeks = ReadonlyArray<ReadonlyArray<DateTime.Utc>>
 
-// `date` when it is rendered and in range, else `null`.
 const rendered = (
   context: FocusContext,
   weeks: Weeks,
