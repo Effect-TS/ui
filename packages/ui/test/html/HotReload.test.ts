@@ -679,7 +679,7 @@ describe("hot reload", { concurrent: false }, () => {
         }))
     }))
 
-  it.live("saves a live root after a second copy's root unmounts", () =>
+  it.live("saves a live root after a second copy's root unmounts, even from an older version", () =>
     Effect.gen(function*() {
       sessionStorage.clear()
       const app = (html: typeof Html, name: string) =>
@@ -699,13 +699,20 @@ describe("hot reload", { concurrent: false }, () => {
               import("@effect/ui/html/Html")
             ])
           )
-          yield* inContainer("copy-b", (b) =>
-            Effect.scoped(Host.mountEffect(app(Html2, "CopyB"), {}, b)))
-          triggerHotSave()
-          assert.include(
-            sessionStorage.getItem("@effect/ui/hot") ?? "",
-            "/CopyA"
-          )
+          for (const older of [false, true]) {
+            // Older versions' save hooks have no `live`.
+            if (older) {
+              delete (window as any)[hotKey].live
+            }
+            sessionStorage.clear()
+            yield* inContainer("copy-b", (b) =>
+              Effect.scoped(Host.mountEffect(app(Html2, "CopyB"), {}, b)))
+            triggerHotSave()
+            assert.include(
+              sessionStorage.getItem("@effect/ui/hot") ?? "",
+              "/CopyA"
+            )
+          }
         }))
     }))
 })

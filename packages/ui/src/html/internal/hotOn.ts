@@ -119,11 +119,13 @@ const saveWindow = (view: Window, state: WindowState): void => {
 
 type SaveHook = (() => void) & { readonly live?: () => boolean }
 
-// Another copy of this module may own the hooks. Take them over only once its
-// roots have all unmounted, so a mounted app keeps saving.
+// Another copy of this module may own the hooks. Take them over only once it
+// reports no mounted roots, so a mounted app keeps saving. Older versions
+// can't report, so they keep them.
 const claimHooks = (view: Window, state: WindowState): void => {
   const hooks = view as unknown as Record<symbol, unknown>
-  if ((hooks[hotKey] as SaveHook | undefined)?.live?.() === true) return
+  const owner = hooks[hotKey] as SaveHook | undefined
+  if (owner !== undefined && owner.live?.() !== false) return
   const save: SaveHook = Object.assign(() => saveWindow(view, state), {
     live: () => state.roots.size > 0
   })
