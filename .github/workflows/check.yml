@@ -70,19 +70,28 @@ jobs:
         # A base that cannot be measured leaves no file, and the report shows absolute sizes only.
         continue-on-error: true
         run: |
+          mkdir -p "$RUNNER_TEMP/bundle-size"
           git worktree add --detach "$RUNNER_TEMP/bundle-base" HEAD^1
           cd "$RUNNER_TEMP/bundle-base"
           pnpm install
           pnpm build
-          env -u GITHUB_STEP_SUMMARY pnpm bundle-size --json "$RUNNER_TEMP/base-size.json"
+          env -u GITHUB_STEP_SUMMARY pnpm bundle-size --json "$RUNNER_TEMP/bundle-size/base.json"
       - name: Report bundle size
         run: |
-          base="$RUNNER_TEMP/base-size.json"
-          if [[ -f "$base" ]]; then
-            pnpm bundle-size --base "$base"
-          else
-            pnpm bundle-size
-          fi
+          dir="$RUNNER_TEMP/bundle-size"
+          mkdir -p "$dir"
+          args=(--json "$dir/head.json")
+          if [[ -f "$dir/base.json" ]]; then args+=(--base "$dir/base.json"); fi
+          pnpm bundle-size "${args[@]}"
+      # Fork PRs get a read-only token here, so the Bundle size comment workflow posts the sizes.
+      - name: Upload sizes
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: bundle-size
+          path: ${{ runner.temp }}/bundle-size
+          retention-days: 7
+          if-no-files-found: error
 
   test:
     name: Test (${{ matrix.runtime }})
