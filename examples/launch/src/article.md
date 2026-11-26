@@ -2,7 +2,7 @@
 title: Introducing Effect UI
 ---
 
-Effect UI is a frontend library built on Effect and the Elm Architecture: isolated Components with explicit state transitions and side effects as values. It continues the work of Foldkit 0.x ([foldkit.dev](https://foldkit.dev)), which we announced as the "new frontend foundation" in [Foldkit Joins Effect](https://foldkit.dev/blog/foldkit-joins-effect).
+Effect UI is a frontend library built on Effect and the Elm Architecture: self-contained Components with explicit state transitions and side effects as values. It continues the work of Foldkit 0.x ([foldkit.dev](https://foldkit.dev)), which we announced as the "new frontend foundation" in [Foldkit Joins Effect](https://foldkit.dev/blog/foldkit-joins-effect).
 
 Effect UI is in public preview. If you're building with Foldkit 0.x, **the migration will be an upgrade, not a rewrite.**
 
