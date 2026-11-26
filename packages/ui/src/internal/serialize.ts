@@ -87,13 +87,11 @@ export const snapshot = (
     }
     const encoded = shipped
       ? runCodec(
-        shippedQuery === undefined
-          ? encodePage(component, inst.model, inst.results, inst.owning)
-          : Effect.provideService(
-            encodePage(component, inst.model, inst.results, inst.owning),
-            queryCore.Shipped,
-            shippedQuery
-          )
+        Effect.provideService(
+          encodePage(component, inst.model, inst.results, inst.owning),
+          queryCore.Shipped,
+          shippedQuery
+        )
       )
       : undefined
     if (encoded !== undefined && !Exit.isExit(encoded)) late.push(encoded)

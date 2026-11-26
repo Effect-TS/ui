@@ -2106,8 +2106,7 @@ interface QueryCodec {
   readonly encodeSuccess: (value: unknown) => unknown
   readonly decodeSuccess: (encoded: unknown) => unknown
   readonly decodeSuccessEffect: (
-    encoded: unknown,
-    options?: SchemaAST.ParseOptions
+    encoded: unknown
   ) => Effect.Effect<unknown, SchemaIssue.Issue>
   readonly encodeError: (error: unknown) => unknown
   readonly decodeError: (encoded: unknown) => unknown
@@ -2965,6 +2964,19 @@ const snapshotIssue = (def: QueryDef, message: string) =>
     message: "a snapshot of " + quote(def.name) + ": " + message
   })
 
+/** Whether an unpatched Success is the one `~query` ships at its args key, by identity. */
+const isShipped = (
+  ctx: Context.Context<never>,
+  def: QueryDef,
+  argsKey: string,
+  result: Settled
+): boolean => {
+  if (result._tag !== "Success") return false
+  const shipped = Context.get(ctx, queryCore.Shipped)?.peek(def, argsKey)
+  return shipped !== undefined && shipped.value === result.value &&
+    shipped.timestamp === result.timestamp
+}
+
 /** Checks a snapshot against the query's Schemas, the type parameters. */
 const snapshotRun = (def: QueryDef, label: string, decoding: boolean) => {
   const is = isSnapshotOf(def, label)
@@ -2985,59 +2997,53 @@ const snapshotRun = (def: QueryDef, label: string, decoding: boolean) => {
       const data = input[SnapshotTypeId]
       if (data.result === undefined) return Effect.succeed(input)
       const result = data.result
-      return Effect.flatMap(Effect.context(), (ctx) => {
-        const shipped = data.patched || result._tag !== "Success" ||
-            data.argsKey === undefined
-          ? undefined
-          : Context.get(ctx, queryCore.Shipped)?.peek(def, data.argsKey)
-        const sameShipped = result._tag === "Success" &&
-          shipped !== undefined &&
-          shipped.value === result.value &&
-          shipped.timestamp === result.timestamp
-        // The key stays as it is: it is the snapshot's identity. A decoded snapshot is accepted only when its
-        // args, decoded all the way, key back to it, so it never names an entry other than the one it was taken from.
-        return Effect.flatMap(
-          Effect.all([
-            args(data.args, options),
-            // A patched value is used as it is: a patch that fails `success` is reported as `PatchInvalid`, and a
-            // check of a query result mustn't throw on it. A value matching the shipped `~query` entry was already
-            // validated by its codec and keeps its object identity for reference encoding and shared hydration.
-            settledMap(
-              result,
-              (u) =>
-                data.patched || sameShipped
-                  ? Effect.succeed(u)
-                  : success(u, options),
-              (u) => error(u, options)
-            ),
-            // A failed load more holds a typed error too, which the message log's form carries.
-            data.more?._tag === "Failed"
-              ? Effect.map(
-                error(data.more.error, options),
-                (error): More<unknown> => ({ _tag: "Failed", error })
-              )
-              : Effect.succeed(data.more)
-          ]),
-          ([args, result, more]) => {
-            if (decoding) {
-              let back: string | undefined
-              try {
-                back = def.argsKey(args)
-              } catch {
-                back = undefined
-              }
-              if (back !== data.argsKey) {
-                return Effect.fail(
-                  snapshotIssue(def, "the args key isn't the key of its args")
-                )
-              }
-            }
-            return Effect.succeed(
-              new SnapshotImpl({ ...data, args, result, more })
+      // The key stays as it is: it is the snapshot's identity. A decoded snapshot is accepted only when its
+      // args, decoded all the way, key back to it, so it never names an entry other than the one it was taken from.
+      return Effect.flatMap(
+        Effect.all([
+          args(data.args, options),
+          // A patched value is used as it is: a patch that fails `success` is reported as `PatchInvalid`, and a
+          // check of a query result mustn't throw on it. The value `~query` ships keeps its identity, so it can
+          // be referenced and is shared across readers.
+          settledMap(
+            result,
+            (u) =>
+              data.patched ? Effect.succeed(u) : Effect.flatMap(
+                Effect.context(),
+                (ctx) =>
+                  isShipped(ctx, def, data.argsKey!, result)
+                    ? Effect.succeed(u)
+                    : success(u, options)
+              ),
+            (u) => error(u, options)
+          ),
+          // A failed load more holds a typed error too, which the message log's form carries.
+          data.more?._tag === "Failed"
+            ? Effect.map(
+              error(data.more.error, options),
+              (error): More<unknown> => ({ _tag: "Failed", error })
             )
+            : Effect.succeed(data.more)
+        ]),
+        ([args, result, more]) => {
+          if (decoding) {
+            let back: string | undefined
+            try {
+              back = def.argsKey(args)
+            } catch {
+              back = undefined
+            }
+            if (back !== data.argsKey) {
+              return Effect.fail(
+                snapshotIssue(def, "the args key isn't the key of its args")
+              )
+            }
           }
-        )
-      })
+          return Effect.succeed(
+            new SnapshotImpl({ ...data, args, result, more })
+          )
+        }
+      )
     }
   }
 }
@@ -3056,10 +3062,6 @@ const snapshotWire = (
   const argsJson = Schema.toCodecJson(args as Schema.Codec<unknown, unknown>)
   const encodeArgs = SchemaParser.encodeUnknownEffect(argsJson)
   const decodeArgs = SchemaParser.decodeUnknownEffect(argsJson)
-  const decodeSuccess = log
-    ? undefined
-    : (encoded: unknown, options: SchemaAST.ParseOptions) =>
-      def.codec().decodeSuccessEffect(encoded, options)
   // `args` here is the encoded side of the args Schema, so these see the args as the declaration passes them.
   const toKey = (
     args: unknown,
@@ -3142,7 +3144,7 @@ const snapshotWire = (
         }
         return Effect.flatMap(fromKey(key, options), (args) =>
           Effect.map(
-            shipped.decode(def, key, decodeSuccess!, options),
+            shipped.decode(def, key),
             (hit) =>
               new SnapshotImpl({
                 def,
@@ -3248,49 +3250,42 @@ const snapshotWire = (
         : data.more._tag === "Failed"
         ? { Failed: data.more.error }
         : data.more._tag
-      return Effect.flatMap(Effect.context(), (ctx) => {
-        const lookup = log ? undefined : Context.get(ctx, queryCore.Shipped)
-        return Effect.map(toKey(data.args, options), (key) => {
-          if (result._tag === "Success") {
-            const shipped = data.patched ? undefined : lookup?.peek(def, key)
-            if (
-              shipped !== undefined &&
-              shipped.value === result.value &&
-              shipped.timestamp === result.timestamp
-            ) {
-              return def.list === undefined
-                ? [key, 2]
-                : [key, 2, data.more !== undefined && data.more._tag !== "End"]
+      return Effect.flatMap(
+        Effect.context(),
+        (ctx) =>
+          Effect.map(toKey(data.args, options), (key) => {
+            const hasMore = data.more !== undefined && data.more._tag !== "End"
+            if (!log && !data.patched && isShipped(ctx, def, key, result)) {
+              return def.list === undefined ? [key, 2] : [key, 2, hasMore]
             }
-          }
-          const tuple: Array<unknown> = result._tag === "Success"
-            ? def.list === undefined
-              ? [key, 0, result.value, result.timestamp, data.patched]
+            const tuple: Array<unknown> = result._tag === "Success"
+              ? def.list === undefined
+                ? [key, 0, result.value, result.timestamp, data.patched]
+                : [
+                  key,
+                  0,
+                  result.value,
+                  result.timestamp,
+                  data.patched,
+                  hasMore
+                ]
               : [
                 key,
-                0,
-                result.value,
-                result.timestamp,
-                data.patched,
-                data.more !== undefined && data.more._tag !== "End"
+                1,
+                result.cause.reasons.filter(Cause.isFailReason).map((reason) =>
+                  reason.error
+                ),
+                Option.isSome(result.previousSuccess)
+                  ? [
+                    result.previousSuccess.value.value,
+                    result.previousSuccess.value.timestamp
+                  ]
+                  : null
               ]
-            : [
-              key,
-              1,
-              result.cause.reasons.filter(Cause.isFailReason).map((reason) =>
-                reason.error
-              ),
-              Option.isSome(result.previousSuccess)
-                ? [
-                  result.previousSuccess.value.value,
-                  result.previousSuccess.value.timestamp
-                ]
-                : null
-            ]
-          if (log) tuple.push([result.waiting, more])
-          return tuple
-        })
-      })
+            if (log) tuple.push([result.waiting, more])
+            return tuple
+          })
+      )
     }
   }
 }
@@ -3776,14 +3771,16 @@ const parseRaw = (
   return out
 }
 
+interface PendingDecode {
+  readonly _tag: "Pending"
+  readonly def: QueryDef
+  readonly fiber: Fiber.Fiber<unknown, SchemaIssue.Issue>
+  waiters: number
+}
+
 type ShippedMemoEntry =
   | { readonly _tag: "Done"; readonly def: QueryDef; readonly value: unknown }
-  | {
-    readonly _tag: "Pending"
-    readonly def: QueryDef
-    readonly fiber: Fiber.Fiber<unknown, SchemaIssue.Issue>
-    waiters: number
-  }
+  | PendingDecode
 
 /**
  * Builds per-hydration state over a `~query` payload: a memoized lookup for
@@ -3802,57 +3799,41 @@ export const makeShipped = (
   // Set once adoption ends: no reader can join a cache-only decode after that.
   let swept = false
 
-  const awaitPending = (
-    tuple: RawTuple,
-    pending: Extract<ShippedMemoEntry, { readonly _tag: "Pending" }>,
-    toResult: (value: unknown) => AsyncResult.Success<any, any>
-  ): Effect.Effect<AsyncResult.Success<any, any>, SchemaIssue.Issue> =>
-    Effect.suspend(() => {
-      pending.waiters++
-      let released = false
-      const release = () => {
-        if (released) return
-        released = true
-        if (--pending.waiters === 0 && memo.get(tuple) === pending) {
-          memo.delete(tuple)
-          pending.fiber.interruptUnsafe()
-        }
-      }
-      return Effect.flatMap(
-        Effect.onInterrupt(
-          Fiber.await(pending.fiber),
-          () => Effect.sync(release)
-        ),
-        (exit) => {
-          released = true
-          return Exit.isSuccess(exit)
-            ? Effect.succeed(toResult(exit.value))
-            : Effect.failCause(exit.cause)
-        }
-      )
-    })
-
-  const trackPending = (
-    tuple: RawTuple,
+  /** A tuple's decoded value, or its decode in flight, which this starts if no one has. */
+  const decodeOf = (
     def: QueryDef,
-    fiber: Fiber.Fiber<unknown, SchemaIssue.Issue>
-  ) => {
-    const pending: Extract<ShippedMemoEntry, { readonly _tag: "Pending" }> = {
+    tuple: RawTuple
+  ): Exit.Exit<unknown, SchemaIssue.Issue> | PendingDecode => {
+    const hit = memo.get(tuple)
+    if (hit !== undefined && hit.def === def) {
+      return hit._tag === "Done" ? Exit.succeed(hit.value) : hit
+    }
+    const ran = runCodec(def.codec().decodeSuccessEffect(tuple[2]))
+    if (Exit.isExit(ran)) {
+      if (Exit.isSuccess(ran)) {
+        memo.set(tuple, { _tag: "Done", def, value: ran.value })
+      }
+      return ran
+    }
+    const pending: PendingDecode = {
       _tag: "Pending",
       def,
-      fiber,
+      fiber: ran,
       waiters: 0
     }
     memo.set(tuple, pending)
-    fiber.addObserver((exit) => {
+    ran.addObserver((exit) => {
       if (memo.get(tuple) !== pending) return
       if (Exit.isSuccess(exit)) {
         memo.set(tuple, { _tag: "Done", def, value: exit.value })
-      } else {
-        memo.delete(tuple)
-      }
+      } else memo.delete(tuple)
     })
     return pending
+  }
+
+  const cancel = (tuple: RawTuple, pending: PendingDecode): void => {
+    memo.delete(tuple)
+    pending.fiber.interruptUnsafe()
   }
 
   const lookup: queryCore.ShippedContext = {
@@ -3864,15 +3845,7 @@ export const makeShipped = (
         ? AsyncResult.success(hit.value, { timestamp: tuple[3] })
         : undefined
     },
-    decode: (
-      def: QueryDef,
-      argsKey: string,
-      decodeSuccess: (
-        encoded: unknown,
-        options: SchemaAST.ParseOptions
-      ) => Effect.Effect<unknown, SchemaIssue.Issue>,
-      options: SchemaAST.ParseOptions
-    ) => {
+    decode: (def: QueryDef, argsKey: string) => {
       const tuple = parsed.get(def.name)?.get(argsKey)
       if (tuple === undefined || tuple[1] !== 0) {
         return Effect.fail(
@@ -3881,44 +3854,42 @@ export const makeShipped = (
       }
       const toResult = (value: unknown) =>
         AsyncResult.success(value, { timestamp: tuple[3] })
-      const hit = memo.get(tuple)
-      if (hit !== undefined && hit.def === def) {
-        if (hit._tag === "Done") return Effect.succeed(toResult(hit.value))
-        return awaitPending(tuple, hit, toResult)
-      }
-      const ran = runCodec(decodeSuccess(tuple[2], options))
-      if (Exit.isExit(ran)) {
-        if (Exit.isFailure(ran)) return Effect.failCause(ran.cause)
-        memo.set(tuple, { _tag: "Done", def, value: ran.value })
-        return Effect.succeed(toResult(ran.value))
-      }
-      return awaitPending(tuple, trackPending(tuple, def, ran), toResult)
+      const decoded = decodeOf(def, tuple)
+      if (decoded._tag !== "Pending") return Effect.map(decoded, toResult)
+      // Readers share the decode, and the last one to be interrupted interrupts it.
+      return Effect.suspend(() => {
+        decoded.waiters++
+        return Effect.flatMap(
+          Effect.onInterrupt(
+            Fiber.await(decoded.fiber),
+            () =>
+              Effect.sync(() => {
+                if (--decoded.waiters === 0 && memo.get(tuple) === decoded) {
+                  cancel(tuple, decoded)
+                }
+              })
+          ),
+          (exit) => Effect.map(exit, toResult)
+        )
+      })
     }
   }
 
   const decodeRaw = (def: QueryDef, tuple: RawTuple): unknown => {
-    const hit = memo.get(tuple)
-    if (hit !== undefined && hit.def === def) {
-      if (hit._tag === "Done") return hit.value
+    const decoded = decodeOf(def, tuple)
+    if (decoded._tag === "Pending") {
+      if (swept && decoded.waiters === 0) cancel(tuple, decoded)
       throw new Error("async success decoder")
     }
-    const ran = runCodec(def.codec().decodeSuccessEffect(tuple[2]))
-    if (Exit.isExit(ran)) {
-      if (Exit.isFailure(ran)) throw Cause.squash(ran.cause)
-      memo.set(tuple, { _tag: "Done", def, value: ran.value })
-      return ran.value
-    }
-    if (swept) ran.interruptUnsafe()
-    else trackPending(tuple, def, ran)
-    throw new Error("async success decoder")
+    if (Exit.isFailure(decoded)) throw Cause.squash(decoded.cause)
+    return decoded.value
   }
 
   const cancelPending = (all: boolean): void => {
     swept = true
     for (const [tuple, entry] of memo) {
       if (entry._tag === "Pending" && (all || entry.waiters === 0)) {
-        memo.delete(tuple)
-        entry.fiber.interruptUnsafe()
+        cancel(tuple, entry)
       }
     }
   }
@@ -3940,43 +3911,23 @@ export const makeShipped = (
     const bound = queryCore.boundOf(
       component as { readonly "~queries": unknown }
     )
+    const queries = (encoded as { readonly queries?: unknown } | null)?.queries
     if (
-      bound === undefined || typeof encoded !== "object" || encoded === null
+      bound === undefined || typeof queries !== "object" || queries === null
     ) {
       return encoded
     }
-    const state = encoded as {
-      readonly model?: unknown
-      readonly queries?: unknown
-    }
-    const queries = state.queries
-    if (typeof queries !== "object" || queries === null) return encoded
-    const record = queries as Record<string, unknown>
-    let next: Record<string, unknown> | undefined
+    const out: Record<string, unknown> = { ...queries }
     for (const entry of bound.entries) {
       const def = defOf(entry.query)
-      const field = record[entry.name]
-      if (entry.keyed) {
-        if (!Array.isArray(field)) continue
-        let changed = false
-        const out = field.map((item) => {
-          const mapped = inlineTuple(def, item)
-          if (mapped !== item) changed = true
-          return mapped
-        })
-        if (changed) {
-          next ??= { ...record }
-          next[entry.name] = out
-        }
-      } else {
-        const mapped = inlineTuple(def, field)
-        if (mapped !== field) {
-          next ??= { ...record }
-          next[entry.name] = mapped
-        }
-      }
+      const field = out[entry.name]
+      out[entry.name] = !entry.keyed
+        ? inlineTuple(def, field)
+        : Array.isArray(field)
+        ? field.map((tuple) => inlineTuple(def, tuple))
+        : field
     }
-    return next === undefined ? encoded : { ...state, queries: next }
+    return { ...(encoded as object), queries: out }
   }
 
   return { lookup, decodeRaw, inline, cancelPending }

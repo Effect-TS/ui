@@ -225,12 +225,7 @@ export interface ShippedContext {
   ) => AsyncResult.Success<any, any> | undefined
   readonly decode: (
     def: any,
-    argsKey: string,
-    decodeSuccess: (
-      encoded: unknown,
-      options: any
-    ) => Effect.Effect<unknown, any>,
-    options: any
+    argsKey: string
   ) => Effect.Effect<AsyncResult.Success<any, any>, any>
 }
 
