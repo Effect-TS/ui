@@ -767,6 +767,12 @@ export const draw = (
 const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
   try {
     const tree = draw(inst, inst.component, inst)
+    // JavaScript can return an array, which would otherwise draw nothing.
+    if (Array.isArray(tree)) {
+      throw new Error(
+        "A view must return one node. Wrap multiple children in `h.div(items)`."
+      )
+    }
     if (dev && tree !== undefined) {
       const author = checkPaths(inst, tree)
       if (author !== undefined) inst.tree.schedule(() => recheckPlaced(author))
