@@ -47,19 +47,21 @@ jobs:
           fi
           gh run download "$RUN_ID" --name bundle-size --dir sizes
           [[ -f sizes/base.json ]] || echo null > sizes/base.json
-          jq -r --slurpfile base sizes/base.json '
-            def size: if type == "number" and . == floor and . >= 0 and . < 1e9 then . else error("invalid size") end;
-            def apps: [.apps[] | {
-              name: (.name | if IN("counter", "features", "routing") then . else error("unknown app") end),
-              chunks: (.chunks | size), raw: (.raw | size), gzip: (.gzip | size)
-            }];
+          # Invalid head data fails the job. An unreadable base only turns the deltas into n/a, as in the Check report.
+          jq -r --rawfile base sizes/base.json '
+            def valid: type == "number" and . == floor and . >= 0 and . < 1e9;
+            def size: if valid then . else error("invalid size") end;
             def signed: if . > 0 then "+\(.)" else tostring end;
             def row: "| " + (map(tostring) | join(" | ")) + " |";
-            (.baselineGzip | size) as $baseline
-            | apps as $head
-            | ($base[0] | if . == null then null else (try (apps | map({key: .name, value: .}) | from_entries) catch {}) end) as $before
+            .development as $development
+            | (.baselineGzip | size) as $baseline
+            | [.apps[] | {
+                name: (.name | if IN("counter", "features", "routing") then . else error("unknown app") end),
+                variant, chunks: (.chunks | size), raw: (.raw | size), gzip: (.gzip | size)
+              }] as $head
+            | ($base | try fromjson catch {}) as $before
             | (["App", "Chunks", "Raw bytes", "Gzip bytes", "Added gzip B"]
-              + if $before then ["Δ raw bytes", "Δ gzip bytes"] else [] end) as $headers
+              + if $before == null then [] else ["Δ raw bytes", "Δ gzip bytes"] end) as $headers
             | env.MARKER,
               "### Bundle size",
               "",
@@ -69,9 +71,13 @@ jobs:
               ($headers | map("---") | row),
               ($head[] | . as $app
                 | [.name, .chunks, .raw, .gzip, .gzip - $baseline]
-                  + if $before == null then []
-                    elif $before[.name] then [($app.raw - $before[.name].raw | signed), ($app.gzip - $before[.name].gzip | signed)]
-                    else ["n/a", "n/a"] end
+                  + if $before == null then [] else
+                    (first($before | objects | select(.development == $development) | .apps | arrays | .[] | objects
+                      | select(.name == $app.name and .variant == $app.variant)) // null) as $old
+                    | if ($old.raw | valid) and ($old.gzip | valid)
+                      then [($app.raw - $old.raw | signed), ($app.gzip - $old.gzip | signed)]
+                      else ["n/a", "n/a"] end
+                  end
                 | row)
           ' sizes/head.json > body.md
           ids=$(gh api --paginate "repos/$GH_REPO/issues/$pr/comments?per_page=100" \
