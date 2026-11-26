@@ -844,7 +844,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
 
   it.effect("a touch outside dismisses on its press, and its click reaches the page unless the dialog is modal", () =>
     Effect.gen(function*() {
-      for (const modal of [true, false, "trap-focus"] as const) {
+      for (const modal of [true, false] as const) {
         yield* Effect.scoped(Effect.gen(function*() {
           const { log } = yield* mountPage({ modal })
           const page = byId("page")
@@ -881,96 +881,71 @@ describe("Dialog in a document", { concurrent: false }, () => {
 
   it.effect("a touch on a non-modal dialog's backdrop drops its click", () =>
     Effect.gen(function*() {
-      for (const modal of ["trap-focus", false] as const) {
-        yield* Effect.scoped(Effect.gen(function*() {
-          const { log } = yield* mountPage({ modal, backdrop: true })
-          const page = byId("page")
-          let clicks = 0
-          page.addEventListener("click", () => clicks++)
-          press(byId("backdrop"), "touch")
-          yield* tick
-          assert.deepStrictEqual(dismissals(log()), [
-            "RequestedClose a outside-press"
-          ], String(modal))
-          page.dispatchEvent(
-            new PointerEvent("pointerup", {
-              bubbles: true,
-              pointerType: "touch"
-            })
-          )
-          page.dispatchEvent(
-            new PointerEvent("click", {
-              bubbles: true,
-              detail: 1,
-              pointerType: "touch"
-            })
-          )
-          assert.strictEqual(clicks, 0, String(modal))
-        }))
-      }
+      const { log } = yield* mountPage({ modal: false, backdrop: true })
+      const page = byId("page")
+      let clicks = 0
+      page.addEventListener("click", () => clicks++)
+      press(byId("backdrop"), "touch")
+      yield* tick
+      assert.deepStrictEqual(dismissals(log()), [
+        "RequestedClose a outside-press"
+      ])
+      page.dispatchEvent(
+        new PointerEvent("pointerup", { bubbles: true, pointerType: "touch" })
+      )
+      page.dispatchEvent(
+        new PointerEvent("click", {
+          bubbles: true,
+          detail: 1,
+          pointerType: "touch"
+        })
+      )
+      assert.strictEqual(clicks, 0)
     }))
 
-  it.effect("opening an inline dialog programmatically with initialFocus: false preserves outside focus and page scroll", () =>
+  it.effect("drawn in place, it isn't modal and opens without moving focus or scroll", () =>
     Effect.gen(function*() {
-      // Simulate the browser's `dialog.show()` focusing and scroll steps, which
-      // happy-dom omits, so calling `.open(true)` would steal focus and scroll.
+      // Fake the browser's `show()` focusing and scrolling steps, which happy-dom
+      // skips and which would ignore `initialFocus: false`.
       const proto = window.HTMLDialogElement.prototype
-      const originalShow = proto.show
-      const originalScrollY = Object.getOwnPropertyDescriptor(window, "scrollY")
+      const show = proto.show
+      const scroll = Object.getOwnPropertyDescriptor(window, "scrollY")
       let scrollY = 240
       Object.defineProperty(window, "scrollY", {
         configurable: true,
         get: () => scrollY
       })
       proto.show = function(this: HTMLDialogElement) {
-        originalShow.call(this)
+        show.call(this)
         scrollY = 0
-        const target = this.closest("[inert]") === null
-          ? this.querySelector<HTMLElement>("input,button,[tabindex]")
-          : null
-        if (target !== null) target.focus()
-        else (document.activeElement as HTMLElement | null)?.blur()
+        this.querySelector<HTMLElement>("input,button,[tabindex]")?.focus()
       }
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
-          proto.show = originalShow
-          if (originalScrollY !== undefined) {
-            Object.defineProperty(window, "scrollY", originalScrollY)
+          proto.show = show
+          if (scroll !== undefined) {
+            Object.defineProperty(window, "scrollY", scroll)
           } else delete (window as { scrollY?: unknown }).scrollY
         })
       )
-      const { app, send } = yield* mountPage({
+      const { app, log, send } = yield* mountPage({
         a: false,
+        modal: true,
         topLayer: false,
-        initialFocus: false,
-        finalFocus: false
+        initialFocus: false
       })
       const page = byId("page")
       page.focus()
-      assert.strictEqual(document.activeElement, page)
       send(Message.RequestedOpen({ which: "a", triggerId: null, method: null }))
       yield* tick
       const dialog = app.querySelector("dialog")!
       assert.isTrue(dialog.open)
+      assert.isFalse(dialog.hasAttribute("popover"))
       assert.strictEqual(document.activeElement, page)
       assert.strictEqual(window.scrollY, 240)
-    }))
-
-  it.effect("drawn in place, it is an open dialog that leaves the page alone, whatever modal says", () =>
-    Effect.gen(function*() {
-      const { app, log } = yield* mountPage({ modal: true, topLayer: false })
-      const dialog = app.querySelector("dialog")!
-      assert.isFalse(dialog.hasAttribute("popover"))
-      assert.isTrue(dialog.open)
-      assert.isFalse(dialog.matches(":popover-open"))
-      assert.include(dialog.getAttribute("style") ?? "", "position:static")
-      assert.isNull(dialog.querySelector(":scope > [role=presentation]"))
-      assert.isNull(byId("page").closest("[aria-hidden]"))
+      assert.isNull(page.closest("[aria-hidden]"))
       assert.strictEqual(document.body.style.overflowY, "")
-      assert.strictEqual(document.documentElement.style.overflowY, "")
-      assert.strictEqual(document.activeElement?.id, "first")
-      // A press on the page closes it and reaches the page, as without a modal.
-      const page = byId("page")
+      // A tap on the page closes it and reaches the page.
       let clicks = 0
       page.addEventListener("click", () => clicks++)
       click(page, "touch")

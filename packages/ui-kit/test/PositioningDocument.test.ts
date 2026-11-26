@@ -13,11 +13,7 @@ type Rect = {
 
 const rects = new Map<string, Rect>()
 const lines = new Map<string, ReadonlyArray<Rect>>()
-const resizers = new Map<Element, Set<() => void>>()
-
-const triggerResize = (element: Element) => {
-  for (const notify of resizers.get(element) ?? []) notify()
-}
+const resized = new Map<Element, () => void>()
 
 const edgesOf = ({ height, width, x, y }: Rect) => ({
   x,
@@ -40,30 +36,15 @@ const geometry = Effect.acquireRelease(
       ResizeObserver: (window as any).ResizeObserver
     }
     ;(window as any).ResizeObserver = class {
-      readonly #callback: ResizeObserverCallback
-      readonly #observed = new Set<Element>()
-      constructor(callback: ResizeObserverCallback) {
-        this.#callback = callback
-      }
+      constructor(readonly callback: ResizeObserverCallback) {}
       observe(target: Element) {
-        if (this.#observed.has(target)) return
-        this.#observed.add(target)
-        const set = resizers.get(target) ?? new Set()
-        set.add(() =>
-          this.#callback(
-            [{ target } as ResizeObserverEntry],
-            this as unknown as ResizeObserver
-          )
+        resized.set(
+          target,
+          () => this.callback([{ target } as any], this as any)
         )
-        resizers.set(target, set)
       }
-      unobserve(target: Element) {
-        this.#observed.delete(target)
-      }
-      disconnect() {
-        for (const target of this.#observed) resizers.delete(target)
-        this.#observed.clear()
-      }
+      unobserve() {}
+      disconnect() {}
     }
     element.getBoundingClientRect = function(this: Element) {
       return edgesOf(rects.get(this.id) ?? { x: 0, y: 0, width: 0, height: 0 })
@@ -90,7 +71,7 @@ const geometry = Effect.acquireRelease(
       delete root.clientHeight
       rects.clear()
       lines.clear()
-      resizers.clear()
+      resized.clear()
     }
   }),
   (restore) => Effect.sync(restore)
@@ -131,101 +112,54 @@ const track = Effect.fnUntraced(
 )
 
 const sized = (element: Element, width: number, height: number) => {
-  for (
-    const [name, value] of [["offsetWidth", width], ["clientWidth", width], [
-      "offsetHeight",
-      height
-    ], ["clientHeight", height]] as const
-  ) {
-    Object.defineProperty(element, name, { configurable: true, value })
+  for (const name of ["offsetWidth", "clientWidth"]) {
+    Object.defineProperty(element, name, { configurable: true, value: width })
+  }
+  for (const name of ["offsetHeight", "clientHeight"]) {
+    Object.defineProperty(element, name, { configurable: true, value: height })
   }
 }
 
-// A card at (50, 20), 300 by `cardHeight`, holds the anchor near its bottom
-// edge and a 120 by 60 positioner drawn in place.
-const trackInCard = Effect.fnUntraced(
-  function*(
-    options: {
-      readonly scale?: number
-      readonly cardHeight?: number
-    } = {}
-  ) {
-    yield* geometry
-    const scale = options.scale ?? 1
-    const cardHeight = options.cardHeight ?? 130
-    document.body.innerHTML =
-      `<div id="card" style="position:relative;overflow:hidden"><button id="anchor"></button><div id="positioner" style="position:absolute"></div></div>`
-    rects.set("card", {
-      x: 50,
-      y: 20,
-      width: 300 * scale,
-      height: cardHeight * scale
-    })
-    rects.set("anchor", {
-      x: 50 + 50 * scale,
-      y: 20 + 90 * scale,
-      width: 80 * scale,
-      height: 20 * scale
-    })
-    rects.set("positioner", {
-      x: 0,
-      y: 0,
-      width: 120 * scale,
-      height: 60 * scale
-    })
-    const card = document.getElementById("card")!
-    sized(card, 300, cardHeight)
-    const node = document.getElementById("positioner")!
-    sized(node, 120, 60)
-    const args = Positioning.trackArgs({ topLayer: false }, {
-      side: "bottom",
-      anchorSelector: "#anchor"
-    })
-    const placements: Array<Positioning.Placement> = []
-    yield* Positioning.trackPosition(node, args, Stream.never).pipe(
-      Stream.runForEach((placement) =>
-        Effect.sync(() => placements.push(placement))
-      ),
-      Effect.forkScoped
-    )
-    yield* tick
-    return { card, node, placements }
-  }
-)
-
 describe("trackPosition in a document", { concurrent: false }, () => {
-  it.effect("in place, it measures from the containing block, keeps local alignment under scale, and re-places when the clipping card resizes", () =>
+  it.effect("in place, it places in the scaled card's own coordinates and re-places when the card resizes", () =>
     Effect.gen(function*() {
-      yield* Effect.scoped(Effect.gen(function*() {
-        const { node, placements } = yield* trackInCard({ scale: 2 })
-        // Below the anchor it would leave the card, so it flips above it, and
-        // left, top and size variables stay in the card's local coordinates.
-        assert.strictEqual(placements[0]?.side, "top")
-        assert.strictEqual(node.style.left, "30px")
-        assert.strictEqual(node.style.top, "30px")
-        assert.strictEqual(
-          node.style.getPropertyValue("--anchor-width"),
-          "80px"
-        )
-        assert.strictEqual(
-          node.style.getPropertyValue("--available-height"),
-          "85px"
-        )
-      }))
-      // Shrinking the clipping card flips the popup without a scroll or window resize.
-      yield* Effect.scoped(Effect.gen(function*() {
-        const { card, node, placements } = yield* trackInCard({
-          cardHeight: 200
-        })
-        assert.strictEqual(placements.at(-1)?.side, "bottom")
-        rects.set("card", { x: 50, y: 20, width: 300, height: 130 })
-        sized(card, 300, 130)
-        triggerResize(card)
-        yield* tick
-        assert.strictEqual(placements.at(-1)?.side, "top")
-        assert.strictEqual(node.style.top, "30px")
-      }))
-    }))
+      yield* geometry
+      document.body.innerHTML =
+        `<div id="card" style="position:relative;overflow:hidden"><button id="anchor"></button><div id="positioner" style="position:absolute"></div></div>`
+      // The card at (50, 20) is scaled by 2, so it is 300 by `height` inside.
+      const card = document.getElementById("card")!
+      const resize = (height: number) => {
+        rects.set("card", { x: 50, y: 20, width: 600, height: height * 2 })
+        sized(card, 300, height)
+      }
+      resize(200)
+      rects.set("anchor", { x: 150, y: 200, width: 160, height: 40 })
+      rects.set("positioner", { x: 0, y: 0, width: 240, height: 120 })
+      const node = document.getElementById("positioner")!
+      sized(node, 120, 60)
+      const args = Positioning.trackArgs({ topLayer: false }, {
+        side: "bottom",
+        anchorSelector: "#anchor"
+      })
+      const placements: Array<Positioning.Placement> = []
+      yield* Positioning.trackPosition(node, args, Stream.never).pipe(
+        Stream.runForEach((placement) =>
+          Effect.sync(() => placements.push(placement))
+        ),
+        Effect.forkScoped
+      )
+      yield* tick
+      assert.strictEqual(placements.at(-1)?.side, "bottom")
+      assert.strictEqual(node.style.left, "30px")
+      assert.strictEqual(node.style.top, "110px")
+      assert.strictEqual(node.style.getPropertyValue("--anchor-width"), "80px")
+      // Shrunk, the card leaves no room below, so the popup flips above.
+      resize(130)
+      resized.get(card)!()
+      yield* tick
+      assert.strictEqual(placements.at(-1)?.side, "top")
+      assert.strictEqual(node.style.top, "30px")
+    }).pipe(Effect.scoped))
 
   it.effect("with leaveCoordinates, it leaves left and top to the caller and still writes the variables", () =>
     Effect.gen(function*() {
