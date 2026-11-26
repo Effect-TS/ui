@@ -569,32 +569,35 @@ export const Toolbar = Html.component({
         { preventDefault: true }
       )
 
-    const buttonPart = p.part("button", (b, value: string) => {
-      const entry = entryOf(value)
-      const off = disabledOf(props, entry)
-      const focusable = entry.focusableWhenDisabled !== false
-      const own = disabledAttrs(movesFocus(b, value), off, focusable)
-        .attrs({ type: "button", "data-focusable": flag(focusable) })
-      return (off && focusable ? cancelClick(own) : own).forward((node) =>
-        disabledAttrs(node, off, focusable)
-      )
-    })
+    const buttonPart = p.part(
+      "button",
+      (b, value: string, off: boolean, focusable: boolean) => {
+        const own = disabledAttrs(movesFocus(b, value), off, focusable)
+          .attrs({ type: "button", "data-focusable": flag(focusable) })
+        return off && focusable ? cancelClick(own) : own
+      }
+    )
 
-    // A disabled focusable button also cancels the consumer's click. The
-    // part's own forward would add the cancel beside it, so this one goes
-    // on the consumer's side.
+    // On the consumer's side of the part, so a disabled focusable button
+    // replaces the consumer's click rather than adding a cancel beside it.
     const button = View.wrapPart(
       buttonPart,
       <B extends Keyed<"button">>(
         { element, value }: { readonly element: B; readonly value: string }
       ): ReturnType<B["attr"]> => {
         const entry = entryOf(value)
-        const decorated = buttonPart(element.key(value), value)
-        return disabledOf(props, entry) && entry.focusableWhenDisabled !== false
-          ? decorated.forward((node: typeof decorated) =>
-            node.handlers.click === undefined ? node : cancelClick(node)
+        const off = disabledOf(props, entry)
+        const focusable = entry.focusableWhenDisabled !== false
+        const decorated = buttonPart(element.key(value), value, off, focusable)
+        return decorated.forward((node: typeof decorated) =>
+          disabledAttrs(
+            off && focusable && node.handlers.click !== undefined
+              ? cancelClick(node)
+              : node,
+            off,
+            focusable
           )
-          : decorated
+        )
       }
     )
 
