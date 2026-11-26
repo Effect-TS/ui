@@ -128,6 +128,20 @@ export const restoreQueries = (
   return out
 }
 
+/** The results history saves: an entry with `restore: false` holds its empty result. */
+const savedResults = <R>(component: Component.Any, results: R): R => {
+  const bound = queryCore.boundOf(component)
+  if (bound === undefined || results === undefined) return results
+  let out: Record<string, unknown> | undefined
+  for (const entry of bound.entries) {
+    if (entry.restore === false) {
+      ;(out ??= { ...results as componentQueries.Results })[entry.name] =
+        bound.empty[entry.name]
+    }
+  }
+  return (out ?? results) as R
+}
+
 /** @internal */
 export const make = (options: Options): StateRestore => {
   const {
@@ -182,7 +196,14 @@ export const make = (options: Options): StateRestore => {
     settle(
       inst,
       out,
-      runCodec(encodePage(component, model, inst.results, inst.owning))
+      runCodec(
+        encodePage(
+          component,
+          model,
+          savedResults(component, inst.results),
+          inst.owning
+        )
+      )
     )
   }
   const keptIn = (out: Saved, top: Saved, author: string): Saved =>
@@ -275,7 +296,10 @@ export const make = (options: Options): StateRestore => {
       runCodec(
         Effect.flatMapEager(codec.decode(state), (decoded) =>
           Effect.mapEager(
-            codec.encode(restore(decoded.model, view.props), decoded.results),
+            codec.encode(
+              restore(decoded.model, view.props),
+              savedResults(component, decoded.results)
+            ),
             (state) => ({ state, reported: found.reported })
           ))
       ) as never

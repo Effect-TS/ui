@@ -41,6 +41,8 @@ export interface Entry {
   /** From `debounce`: how many milliseconds a fetch for changed args waits. */
   readonly debounce: number | undefined
   readonly onChange: ((...args: Array<any>) => unknown) | undefined
+  /** From `restore: false`: history saves the empty result instead. */
+  readonly restore: false | undefined
 }
 
 /**
@@ -255,10 +257,8 @@ const parse = (component: string, queries: unknown): ReadonlyArray<Entry> => {
     if (typeof entry !== "object" || entry === null) {
       throw fail("must be { query, args } or { queryMany, args }.")
     }
-    const { args, debounce, query, queryMany, onChange } = entry as Record<
-      string,
-      unknown
-    >
+    const fields = entry as Record<string, unknown>
+    const { args, debounce, query, queryMany, onChange, restore } = fields
     if ((query === undefined) === (queryMany === undefined)) {
       throw fail("must have exactly one of query and queryMany.")
     }
@@ -273,6 +273,9 @@ const parse = (component: string, queries: unknown): ReadonlyArray<Entry> => {
     if (typeof args !== "function") throw fail("must have an args function.")
     if (onChange !== undefined && typeof onChange !== "function") {
       throw fail("has an onChange that isn't a function.")
+    }
+    if (restore !== undefined && restore !== false) {
+      throw fail("has a restore that isn't false.")
     }
     const list = queryModule().defOf(definition).list !== undefined
     if (queryMany !== undefined && list) {
@@ -289,7 +292,8 @@ const parse = (component: string, queries: unknown): ReadonlyArray<Entry> => {
       debounce: debounce === undefined
         ? undefined
         : Duration.toMillis(debounce as Duration.Input),
-      onChange: onChange as Entry["onChange"]
+      onChange: onChange as Entry["onChange"],
+      restore
     }
   })
 }
