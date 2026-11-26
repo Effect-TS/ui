@@ -561,9 +561,18 @@ export interface InitStep<
   /** Changes some fields of the Model, as `Step.evolve` does. */
   evolve(fields: UiStruct.EvolveFields<Model>): InitStep<Model, Msg, Events, R>
   /** Runs Commands owned by this instance, as `Step.run` does. */
-  run<const C extends ReadonlyArray<Command.Command<Msg | Noop, any>>>(
+  run<
+    This extends InitStep<Model, Msg, Events, any>,
+    const C extends ReadonlyArray<Command.Command<Msg | Noop, any>>
+  >(
+    this: This,
     ...commands: C
-  ): InitStep<Model, Msg, Events, R | Command.Requirements<C[number]>>
+  ): InitStep<
+    Model,
+    Msg,
+    Events,
+    RawStepRequirements<This> | Command.Requirements<C[number]>
+  >
   /** Reports to the parent. */
   emit(...emitted: ReadonlyArray<Events>): InitStep<Model, Msg, Events, R>
 }
@@ -614,9 +623,19 @@ export interface Step<
    * messages, so a Command whose result isn't this component's message or
    * `Component.noop` is rejected. A result of `Component.noop` sends nothing.
    */
-  run<const C extends ReadonlyArray<Command.Command<Msg | Noop, any>>>(
+  run<
+    This extends InitStep<Model, Msg, Events, any>,
+    const C extends ReadonlyArray<Command.Command<Msg | Noop, any>>
+  >(
+    this: This,
     ...commands: C
-  ): Step<Model, Msg, Events, R | Command.Requirements<C[number]>, L>
+  ): Step<
+    Model,
+    Msg,
+    Events,
+    RawStepRequirements<This> | Command.Requirements<C[number]>,
+    L
+  >
   /** Reports to the parent. */
   emit(...emitted: ReadonlyArray<Events>): Step<Model, Msg, Events, R, L>
   /**
