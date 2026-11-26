@@ -25,6 +25,11 @@
  * for a path ending in `/`, and a 404 to `404.html`. Any other status
  * fails the build. The server build isn't kept.
  *
+ * **Gotchas**
+ *
+ * Only a root `base` is supported. Vite prefixes the asset URLs with
+ * `base`, but the app's routes and the links it renders don't carry it.
+ *
  * **Example** (Configuring the plugin)
  *
  * ```ts
@@ -99,7 +104,10 @@ interface OutputFile {
 }
 
 interface DevServer {
-  readonly config: { readonly root: string }
+  readonly config: {
+    readonly root: string
+    readonly logger: { error(message: string): void }
+  }
   readonly middlewares: {
     use(
       handler: (
@@ -152,7 +160,11 @@ export const plugin = (options: Options): Plugin => {
   let devServer: DevServer | undefined
   // The app's `index.html` in dev, and the client build's in a build.
   let templateFile = ""
+  // The dev server's module, the modules it has replaced, and the requests
+  // each module is still answering.
   let current: ServerModule | undefined
+  const seen = new WeakSet<ServerModule>()
+  const active = new Map<ServerModule, number>()
 
   const template = async (context: LoadContext): Promise<string> => {
     const html = await fs.readFile(templateFile, "utf8")
@@ -161,12 +173,20 @@ export const plugin = (options: Options): Plugin => {
     return devServer.transformIndexHtml("/", html)
   }
 
-  /** Makes `next` the dev server's module and disposes the one it replaces. */
-  const swap = async (next?: ServerModule) => {
-    if (next === current) return
+  /** Disposes a module once it is replaced and answers no request. */
+  const disposeIdle = (module: ServerModule) => {
+    if (module === current || active.has(module)) return
+    module.dispose().catch((error) =>
+      devServer?.config.logger.error(
+        `HtmlServerVite failed to dispose the server entry: ${error}`
+      )
+    )
+  }
+
+  const retire = (next?: ServerModule) => {
     const previous = current
     current = next
-    await previous?.dispose()
+    if (previous !== undefined) disposeIdle(previous)
   }
 
   return {
@@ -215,15 +235,32 @@ export const plugin = (options: Options): Plugin => {
           throw new Error("HtmlServerVite needs a runnable ssr environment")
         }
         const module = (await runner.import(serverId)) as ServerModule
-        // An edit re-evaluates the server entry, with a new handler.
-        await swap(module)
-        return module
+        // An edit re-evaluates the server entry, with a new handler. A
+        // module that was already replaced never comes back.
+        if (!seen.has(module)) {
+          seen.add(module)
+          retire(module)
+        }
+        return current!
       }
       // Returned, so it runs after Vite's own middlewares.
       return () => {
         server.middlewares.use((request, response, next) => {
           load()
-            .then((module) => module.handler(toRequest(request)))
+            .then((module) => {
+              // Held until the response ends or the client goes away.
+              active.set(module, (active.get(module) ?? 0) + 1)
+              response.once("close", () => {
+                const count = active.get(module)! - 1
+                if (count > 0) {
+                  active.set(module, count)
+                } else {
+                  active.delete(module)
+                  disposeIdle(module)
+                }
+              })
+              return module.handler(toRequest(request))
+            })
             .then((answer) => send(response, answer))
             .catch(next)
         })
@@ -252,7 +289,8 @@ export const plugin = (options: Options): Plugin => {
           pathToFileURL(path.join(dir, entry.fileName)).href
         )) as ServerModule
         try {
-          await Promise.all(
+          // Settled, so no render outlives the handler when one fails.
+          const results = await Promise.allSettled(
             (await module.prerender()).map(async (url) => {
               const target = new URL(url, origin)
               const response = await module.handler(new Request(target))
@@ -263,6 +301,8 @@ export const plugin = (options: Options): Plugin => {
               )
             })
           )
+          const failed = results.find((result) => result.status === "rejected")
+          if (failed !== undefined) throw failed.reason
         } finally {
           await module.dispose()
         }
@@ -270,7 +310,7 @@ export const plugin = (options: Options): Plugin => {
         await fs.rm(dir, { recursive: true, force: true })
       }
     },
-    buildEnd: () => swap()
+    buildEnd: async () => retire()
   }
 }
 
@@ -281,7 +321,14 @@ const fileName = (pathname: string, status: number): string => {
   if (status !== 200) {
     throw new Error(`Prerendering ${pathname} answered ${status}`)
   }
-  const file = decodeURIComponent(pathname)
+  const segments = pathname.split("/").map((segment) => {
+    const name = decodeURIComponent(segment)
+    if (/[/\\\0]/.test(name) || name === "." || name === "..") {
+      throw new Error(`Prerendering ${pathname} has no file name`)
+    }
+    return name
+  })
+  const file = segments.join("/")
   return file.endsWith("/") ? `${file}index.html` : `${file}.html`
 }
 
@@ -291,6 +338,9 @@ const write = async (
   content: string | Uint8Array
 ) => {
   const target = path.join(dir, file)
+  if (!target.startsWith(dir + path.sep)) {
+    throw new Error(`${file} is outside ${dir}`)
+  }
   await fs.mkdir(path.dirname(target), { recursive: true })
   await fs.writeFile(target, content)
 }

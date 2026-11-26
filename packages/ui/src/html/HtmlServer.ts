@@ -240,8 +240,8 @@ export const serializeState = (state: Renderer.State): string =>
  *
  * **Details**
  *
- * It appends `htmlAttributes` and `bodyAttributes` to the opening `<html>`
- * and `<body>` tags, puts `head` before `</head>`, replaces the
+ * It adds `htmlAttributes` and `bodyAttributes` right after the `<html>`
+ * and `<body>` tag names, puts `head` before `</head>`, replaces the
  * `<!--app-html-->` marker with `html`, and adds the state as
  * `<script type="application/json" id="state">` before `</body>`.
  *
@@ -281,8 +281,12 @@ export const document = (
   if (!template.includes(appMarker)) {
     throw new Error(`The document template has no ${appMarker} marker`)
   }
-  let html = withAttributes(template, /<html\b[^>]*/i, rendered.htmlAttributes)
-  html = withAttributes(html, /<body\b[^>]*/i, rendered.bodyAttributes)
+  let html = withAttributes(
+    template,
+    /<html(?=[\s/>])/i,
+    rendered.htmlAttributes
+  )
+  html = withAttributes(html, /<body(?=[\s/>])/i, rendered.bodyAttributes)
   html = insertBefore(html, "</head>", rendered.head)
   html = insertBefore(
     html,

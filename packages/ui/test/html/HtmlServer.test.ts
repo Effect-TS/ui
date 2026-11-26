@@ -4095,6 +4095,15 @@ describe("HtmlServer.document", () => {
     )
   })
 
+  it("adds attributes after the tag name, past quoted >", () => {
+    expect(
+      HtmlServer.document(
+        "<html data-label=\"a>b\"><head></head><body><!--app-html--></body></html>",
+        rendered
+      )
+    ).toMatch(/^<html lang="en" data-label="a>b">/)
+  })
+
   it("throws when the template has no app marker", () => {
     expect(() =>
       HtmlServer.document("<html><head></head><body></body></html>", rendered)
