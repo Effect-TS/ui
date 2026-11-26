@@ -6,8 +6,8 @@ const ignored = /[\u0000-\u0020]/g
 const schemePattern = /^[a-zA-Z][a-zA-Z0-9+.-]*$/
 
 /**
- * The lowercase scheme of `url`, or `undefined` for a relative URL. ASCII
- * controls and spaces are ignored, as browsers ignore them.
+ * The lowercase scheme of `url`, ignoring ASCII controls and spaces, or
+ * `undefined` when no scheme is recognized.
  *
  * @internal
  */
@@ -41,8 +41,7 @@ const properties: ReadonlySet<string> = new Set([
 ])
 
 /**
- * Whether the normalized attribute `name` holds a `javascript:` or
- * `vbscript:` URL, which the renderers omit.
+ * Whether a URL is blocked for the normalized attribute `name`.
  *
  * @internal
  */
@@ -50,9 +49,7 @@ export const blockedAttribute = (name: string, value: string): boolean =>
   attributes.has(name) && isScript(value)
 
 /**
- * Whether property `name` of a built-in `tag` would be set to a
- * `javascript:` or `vbscript:` URL. The renderers remove the attribute it
- * reflects, `name.toLowerCase()`, instead.
+ * Whether a URL is blocked for property `name` of a built-in `tag`.
  *
  * @internal
  */

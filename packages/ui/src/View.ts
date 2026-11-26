@@ -1605,9 +1605,9 @@ export class ElementBuilder<
     return out
   }
   /**
-   * Sets a property. The host decides what it means. The HTML host removes
-   * the attribute behind a URL property set to a `javascript:` or
-   * `vbscript:` URL; see `Html`.
+   * Sets a property. The host decides what it means. For built-in elements,
+   * the HTML host removes the reflected attribute when a URL property is set
+   * to a `javascript:` or `vbscript:` URL; see `Html`.
    *
    * @since 0.1.0
    */
