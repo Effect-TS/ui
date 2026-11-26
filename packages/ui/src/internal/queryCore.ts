@@ -244,6 +244,7 @@ export interface ShippedHydration {
   readonly lookup: ShippedContext
   readonly decodeRaw: (def: any, tuple: any) => unknown
   readonly inline: (component: unknown, encoded: unknown) => unknown
+  readonly cancelPending: (all: boolean) => void
 }
 
 /** @internal */

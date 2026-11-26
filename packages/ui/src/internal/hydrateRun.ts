@@ -46,6 +46,7 @@ export interface Hydration {
   readonly parked: (inst: Kernel.Instance) => boolean
   readonly held: () => ReadonlyArray<string>
   readonly end: () => void
+  readonly close: () => void
   readonly settled: () => boolean
 }
 
@@ -196,6 +197,7 @@ export const make = (
     if (pass || held.size > 0) return
     for (const owner of owners.splice(0)) restored(owner)
     started.clear()
+    shipped()?.cancelPending(false)
     settled()
   }
   const fallback = host.hold
@@ -417,6 +419,11 @@ export const make = (
       root?.done()
       finish()
     },
+    close() {
+      for (const [, drop] of drops.values()) drop()
+      drops.clear()
+      shipped()?.cancelPending(true)
+    },
     settled: () => !pass && held.size === 0
   }
 }
@@ -558,6 +565,7 @@ export interface Session {
   readonly onCache: (cache: queryCore.Cache) => void
   readonly closeWindow: () => void
   readonly end: () => void
+  readonly close: () => void
   readonly finish: (head: () => unknown) => void
   readonly adopted: Effect.Effect<void>
   readonly adoptionHead: () => unknown
@@ -670,6 +678,7 @@ export const hydrating = (
           firstHeld = hydration.held().length
           hydration.end()
         },
+        close: () => hydration.close(),
         finish: (head) => {
           headOf = head
           if (firstHeld === 0) adoptionHead = head()
