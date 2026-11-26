@@ -1,43 +1,78 @@
 import { Icon } from "#components/Icon"
-import type { View } from "@effect/ui"
+import {
+  Component,
+  Mount,
+  Subscription,
+  UiSchema,
+  type View
+} from "@effect/ui"
 import {
   Accordion,
   AccordionItem,
+  Autocomplete,
   Avatar,
   Button,
   Checkbox,
   CheckboxGroup,
   Collapsible,
+  Combobox,
+  ContextMenu,
+  Dialog,
   DirectionProvider,
+  Drawer,
   Field,
   Fieldset,
   Form,
   Input,
+  Menu,
+  Menubar,
   Meter,
   NavigationMenu,
   NumberField,
   OTPField,
+  Popover,
+  PreviewCard,
   Progress,
   RadioGroup,
+  ScrollArea,
+  Select,
   Separator,
   Slider,
   Switch,
   Tabs,
+  ToastProvider,
   Toggle,
   ToggleGroup,
-  Toolbar
+  Toolbar,
+  Tooltip,
+  VirtualList
 } from "@effect/ui-kit"
-import type { Html } from "@effect/ui/html"
-import { Redacted } from "effect"
+import { Html } from "@effect/ui/html"
+import { Effect, Redacted, Schema, Stream } from "effect"
 import type { Module } from "./components.ts"
+import { floating, keyboardCover, stage } from "./geometry.ts"
 
 // The small picture in each tile of the kit wall. `on` is true while
-// the tile plays. Where the kit has the component as something that
-// draws in place, the picture is that component, with `on` passed in
-// its props, and its data attributes drive the CSS. A component that
-// opens over the page, such as a Dialog or a Menu, would open over
-// the article, so its picture is drawn with plain elements in the
-// shape of its parts, and `data-playing` on the tile drives it.
+// the tile plays. Most pictures are the kit's own component, with `on`
+// passed in its props, and its data attributes drive the CSS.
+//
+// The popups (Dialog, Drawer, Popover, Tooltip, PreviewCard, Menu,
+// Menubar, ContextMenu, Select, Combobox, Autocomplete and the Toast
+// viewport) take `topLayer: false`, so they open in place inside their
+// tile, which is their containing block, and never as modals: they
+// lock no scroll, hide nothing from screen readers and block no
+// presses. The dialogs also leave focus where it is as they open and
+// close. The picture is `inert`, so nothing in it takes focus.
+//
+// Positioning and VirtualKeyboard draw nothing themselves, so their
+// pictures draw what the kit computes: Positioning places a box with
+// the pure `place`, and VirtualKeyboard works out the keyboard's band
+// with the pure `step`, from made-up viewport sizes (see geometry.ts).
+//
+// AlertDialog alone isn't the kit. It is always modal and always in
+// the top layer, so it would block the article. Its picture is plain
+// elements in the shape of its parts, and `data-playing` on the tile
+// drives them.
 
 type Picture = <M>(h: Html.H<M>, on: boolean) => View.Content<M>
 
@@ -50,6 +85,113 @@ const lines = <M>(h: Html.H<M>, widths: ReadonlyArray<number>) =>
   widths.map((width) => bar(h, width))
 
 const fruits = ["apple", "pear", "plum"]
+
+const menuItems = ["cut", "copy", "paste"].map((value) => ({
+  value,
+  label: value
+}))
+
+const regions = ["us-east-1", "eu-west-1"].map((value) => ({
+  value,
+  label: value
+}))
+
+const packages = ["effect", "effect/ui", "effect/ui-kit"].map((
+  value
+) => ({
+  value,
+  label: value
+}))
+
+// A popup drawn in place, with the side and the alignment the picture
+// gives it. In place, the collision boundary is the part of the page in
+// view, so a tile near the window's edge would flip its popup out of the
+// tile. It never flips.
+const inTile = {
+  topLayer: false,
+  collisionAvoidance: {
+    side: "none",
+    align: "none",
+    fallbackAxisSide: "none"
+  }
+} as const
+
+// A dialog drawn in place that leaves focus alone and ignores presses
+// outside it.
+const quietDialog = {
+  topLayer: false,
+  initialFocus: false,
+  finalFocus: false,
+  disablePointerDismissal: true
+} as const
+
+// The pictures ignore what the components ask for: `on` alone decides.
+const none = () => undefined
+
+const prefersReducedMotion = () =>
+  globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")
+    .matches ??
+    false
+
+// ScrollArea has no controlled scroll position, so this mount scrolls
+// its viewport, and the kit's own mount moves the thumb to follow.
+// Scrolling an element never scrolls the page.
+const ScrollTo = Mount.make(
+  "ScrollTo",
+  { args: { top: Schema.Number } },
+  (node: HTMLElement, _args, changes) =>
+    Stream.runForEach(
+      changes,
+      ({ top }) =>
+        Effect.sync(() =>
+          node.scrollTo({
+            top,
+            behavior: prefersReducedMotion() ? "instant" : "smooth"
+          })
+        )
+    ).pipe(Effect.as(Component.noop))
+)
+
+const ToastPosterMessage = UiSchema.TaggedEnum({
+  ChangedOn: { on: Schema.Boolean }
+})
+
+// Toasts are posted to the provider from below it, so this posts one
+// while the tile plays and closes it after. Nothing is dispatched when
+// a prop changes, so a Subscription keyed on `on` sends the change. It
+// also draws the page the toast shows over.
+const ToastPoster = Html.component({
+  name: "ToastPoster",
+  props: Schema.Struct({ on: Schema.Boolean }),
+  model: Schema.Null,
+  message: ToastPosterMessage
+}).make({
+  init: () => null,
+  update: {
+    ChangedOn: ($, { on }) =>
+      $.send(
+        ToastProvider,
+        on
+          ? {
+            _tag: "RequestedAdd",
+            toast: {
+              id: "deployed",
+              title: "Deployed",
+              type: "success"
+            }
+          }
+          : { _tag: "RequestedClose", id: "deployed" }
+      )
+  },
+  subscriptions: ({ props }) => [
+    Subscription.make(
+      "on",
+      props.on,
+      (on) => Stream.make(ToastPosterMessage.ChangedOn({ on }))
+    )
+  ],
+  view: (h) => h.div.class("kit-stack").children(lines(h, [44, 30]))
+})
 
 // A Record over every module, so a module added to the kit fails the
 // build until it has a picture.
@@ -89,11 +231,36 @@ const pictures: Record<Module, Picture> = {
         )
       )
     ),
-  Autocomplete: (h) =>
-    h.div.class("kit-input kit-autocomplete").children(
-      h.span.children("effect"),
-      h.span.class("kit-completion").children("/ui-kit")
-    ),
+  Autocomplete: (h, on) =>
+    Autocomplete(h, {
+      key: "Autocomplete",
+      props: {
+        open: on,
+        value: on ? "effect/ui-" : "",
+        items: packages,
+        ...inTile,
+        sideOffset: 3
+      },
+      onEmit: none,
+      view: (autocomplete) =>
+        h.div.class("kit-overlay kit-top").children(
+          autocomplete.input(h.input.class("kit-input kit-typing")),
+          autocomplete.positioner(h.div.class("kit-positioner"))
+            .children(
+              autocomplete.popup(h.div.class("kit-popup kit-list"))
+                .children(
+                  autocomplete.list(h.div).children(
+                    autocomplete.items.map(({ label, value }) =>
+                      autocomplete.item({ element: h.div, value })
+                        .children(
+                          label
+                        )
+                    )
+                  )
+                )
+            )
+        )
+    }),
   Avatar: (h) =>
     h.div.class("kit-avatars").children(
       ["MB", "TK"].map((initials) =>
@@ -168,32 +335,127 @@ const pictures: Record<Module, Picture> = {
           )
         )
     }),
-  Combobox: (h) =>
-    h.div.class("kit-input kit-combobox").children(
-      h.span.class("kit-chip").children("ui"),
-      h.span.class("kit-chip kit-chip-new").children("kit")
-    ),
-  ContextMenu: (h) =>
-    h.div.class("kit-overlay kit-context-area").children(
-      h.span.class("kit-pointer"),
-      h.div.class("kit-pop kit-menu kit-context-menu").children(
-        lines(h, [28, 22, 30])
-      )
-    ),
-  Dialog: (h) =>
-    h.div.class("kit-overlay").children(
-      lines(h, [50, 64]),
-      h.div.class("kit-backdrop"),
-      h.div.class("kit-pop kit-dialog").children(
-        bar(h, 40, true),
-        bar(h, 30)
-      )
-    ),
-  Drawer: (h) =>
-    h.div.class("kit-overlay").children(
-      lines(h, [56, 40]),
-      h.div.class("kit-sheet")
-    ),
+  Combobox: (h, on) =>
+    Combobox(h, {
+      key: "Combobox",
+      props: {
+        open: on,
+        inputValue: "",
+        value: on ? ["ui", "kit"] : ["ui"],
+        multiple: true,
+        items: [{ value: "ui", label: "ui" }, {
+          value: "kit",
+          label: "kit"
+        }],
+        ...inTile,
+        // Against the chips, not the input after them.
+        anchor: "kit-combobox-chips",
+        align: "start",
+        sideOffset: 3
+      },
+      onEmit: none,
+      view: (combobox) =>
+        h.div.class("kit-overlay kit-top").children(
+          combobox.chips(
+            h.div.class("kit-input kit-combobox").attr(
+              "id",
+              "kit-combobox-chips"
+            )
+          ).children(
+            combobox.selectedItems.map(({ label, value }) =>
+              combobox.chip({
+                element: h.div.class("kit-chip"),
+                value
+              })
+                .children(label)
+            ),
+            combobox.input(h.input)
+          ),
+          combobox.positioner(h.div.class("kit-positioner")).children(
+            combobox.popup(h.div.class("kit-popup kit-list"))
+              .children(
+                combobox.list(h.div).children(
+                  combobox.items.map(({ label, value }) =>
+                    combobox.item({ element: h.div, value }).children(
+                      label,
+                      combobox.itemIndicator({
+                        element: h.span,
+                        value
+                      })
+                        ?.children("✓")
+                    )
+                  )
+                )
+              )
+          )
+        )
+    }),
+  ContextMenu: (h, on) =>
+    ContextMenu(h, {
+      key: "ContextMenu",
+      props: {
+        open: on,
+        items: menuItems,
+        ...inTile,
+        anchor: "kit-context-point"
+      },
+      onEmit: none,
+      view: (contextMenu) =>
+        contextMenu.trigger(
+          h.div.class("kit-overlay kit-context-area")
+        )
+          .children(
+            h.span.class("kit-pointer").attr(
+              "id",
+              "kit-context-point"
+            ),
+            contextMenu.positioner(h.div.class("kit-positioner"))
+              .children(
+                contextMenu.popup(h.div.class("kit-popup kit-menu"))
+                  .children(
+                    menuItems.map(({ value }, index) =>
+                      contextMenu.item({ element: h.div, value })
+                        .children(
+                          bar(h, [28, 22, 30][index]!)
+                        )
+                    )
+                  )
+              )
+          )
+    }),
+  Dialog: (h, on) =>
+    Dialog(h, {
+      key: "Dialog",
+      props: { open: on, ...quietDialog },
+      onEmit: none,
+      view: (dialog) =>
+        h.div.class("kit-overlay").children(
+          lines(h, [50, 64]),
+          dialog.portal(h.dialog)?.children(
+            dialog.backdrop(h.div.class("kit-backdrop")),
+            dialog.popup(h.div.class("kit-popup kit-dialog"))
+              .children(
+                bar(h, 40, true),
+                bar(h, 30)
+              )
+          )
+        )
+    }),
+  Drawer: (h, on) =>
+    Drawer(h, {
+      key: "Drawer",
+      props: { open: on, ...quietDialog },
+      onEmit: none,
+      view: (drawer) =>
+        h.div.class("kit-overlay").children(
+          lines(h, [56, 40]),
+          drawer.portal(h.dialog)?.children(
+            drawer.viewport(h.div.class("kit-viewport")).children(
+              drawer.popup(h.div.class("kit-sheet"))
+            )
+          )
+        )
+    }),
   Field: (h, on) =>
     Field(h, {
       key: "Field",
@@ -236,20 +498,76 @@ const pictures: Record<Module, Picture> = {
   Input: (h, on) =>
     Input(h, { props: { value: on ? "Hello, kit" : "" } })
       .class("kit-input kit-typing"),
-  Menu: (h) =>
-    h.div.class("kit-overlay kit-top").children(
-      h.span.class("kit-button").children("Edit ▾"),
-      h.div.class("kit-pop kit-menu kit-dropdown").children(
-        bar(h, 40),
-        bar(h, 30, true),
-        bar(h, 44)
-      )
-    ),
-  Menubar: (h) =>
-    h.div.class("kit-menubar").children(
-      h.span.class("kit-highlight"),
-      lines(h, [22, 22, 22])
-    ),
+  Menu: (h, on) =>
+    Menu(h, {
+      key: "Menu",
+      props: {
+        open: on,
+        items: menuItems,
+        ...inTile,
+        align: "start",
+        sideOffset: 3,
+        finalFocus: false
+      },
+      onEmit: none,
+      view: (menu) =>
+        h.div.class("kit-overlay kit-top").children(
+          menu.trigger({
+            element: h.button.class("kit-button self-start")
+          })
+            .children("Edit ▾"),
+          menu.positioner(h.div.class("kit-positioner")).children(
+            menu.popup(h.div.class("kit-popup kit-menu kit-dropdown"))
+              .children(
+                menuItems.map(({ value }, index) =>
+                  menu.item({ element: h.div, value }).children(
+                    bar(h, [40, 30, 44][index]!, index === 1)
+                  )
+                )
+              )
+          )
+        )
+    }),
+  Menubar: (h, on) =>
+    Menubar(h, {
+      key: "Menubar",
+      props: {},
+      view: (menubar) =>
+        menubar.root(h.div.class("kit-menubar")).children(
+          ["file", "edit", "view"].map((name, index) =>
+            Menu(h, {
+              key: name,
+              props: {
+                open: on && index === 1,
+                items: menuItems,
+                ...inTile,
+                align: "start",
+                sideOffset: 3,
+                finalFocus: false
+              },
+              onEmit: none,
+              view: (menu) =>
+                h.div.children(
+                  menu.trigger({ element: h.button }).children(
+                    bar(h, 22)
+                  ),
+                  menu.positioner(h.div.class("kit-positioner"))
+                    .children(
+                      menu.popup(h.div.class("kit-popup kit-menu"))
+                        .children(
+                          menuItems.map(({ value }, item) =>
+                            menu.item({ element: h.div, value })
+                              .children(
+                                bar(h, [28, 20, 24][item]!)
+                              )
+                          )
+                        )
+                    )
+                )
+            })
+          )
+        )
+    }),
   Meter: (h, on) =>
     Meter(h, {
       key: "Meter",
@@ -305,19 +623,58 @@ const pictures: Record<Module, Picture> = {
           )
         )
     }),
-  Popover: (h) =>
-    h.div.class("kit-overlay kit-under").children(
-      h.div.class("kit-pop kit-popover").children(bar(h, 40)),
-      h.span.class("kit-button").children("Share")
-    ),
-  PreviewCard: (h) =>
-    h.div.class("kit-overlay kit-under").children(
-      h.div.class("kit-pop kit-preview").children(
-        h.span.class("kit-thumb"),
-        bar(h, 34)
-      ),
-      h.span.class("kit-link").children("effect.website")
-    ),
+  Popover: (h, on) =>
+    Popover(h, {
+      key: "Popover",
+      props: {
+        open: on,
+        ...inTile,
+        initialFocus: false,
+        finalFocus: false,
+        side: "top",
+        sideOffset: 4
+      },
+      onEmit: none,
+      view: (popover) =>
+        h.div.class("kit-overlay kit-under").children(
+          popover.trigger({ element: h.button.class("kit-button") })
+            .children("Share"),
+          popover.portal(h.dialog)?.children(
+            popover.positioner(h.div.class("kit-positioner"))
+              .children(
+                popover.popup(h.div.class("kit-popup kit-popover"))
+                  .children(bar(h, 40))
+              )
+          )
+        )
+    }),
+  PreviewCard: (h, on) =>
+    PreviewCard(h, {
+      key: "PreviewCard",
+      props: {
+        open: on,
+        ...inTile,
+        side: "top",
+        align: "start",
+        sideOffset: 4
+      },
+      onEmit: none,
+      view: (previewCard) =>
+        h.div.class("kit-overlay kit-under").children(
+          previewCard.trigger({
+            element: h.a.class("kit-link").attr("href", "#ui-kit")
+          }).children("effect.website"),
+          previewCard.portal(h.div)?.children(
+            previewCard.positioner(h.div.class("kit-positioner"))
+              .children(
+                previewCard.popup(
+                  h.div.class("kit-popup kit-preview")
+                )
+                  .children(h.span.class("kit-thumb"), bar(h, 34))
+              )
+          )
+        )
+    }),
   Progress: (h, on) =>
     Progress(h, {
       key: "Progress",
@@ -349,24 +706,61 @@ const pictures: Record<Module, Picture> = {
           )
         )
     }),
-  ScrollArea: (h) =>
-    h.div.class("kit-scroll").children(
-      h.div.class("kit-scroll-content").children(
-        lines(h, [60, 44, 56, 38, 60, 48, 52])
-      ),
-      h.span.class("kit-scroll-thumb")
-    ),
-  Select: (h) =>
-    h.div.class("kit-overlay kit-top").children(
-      h.div.class("kit-input kit-select").children(
-        h.span.children("eu-west-1"),
-        h.span.children("▾")
-      ),
-      h.div.class("kit-pop kit-menu kit-select-popup").children(
-        h.span.children("us-east-1"),
-        h.span.class("kit-selected").children("eu-west-1 ✓")
-      )
-    ),
+  ScrollArea: (h, on) =>
+    ScrollArea(h, {
+      key: "ScrollArea",
+      view: (scrollArea) =>
+        // The root writes its own `position: relative`, so a layer
+        // around it holds it to the picture.
+        h.div.class("kit-scroll").children(
+          scrollArea.root(h.div.class("kit-scroll-area")).children(
+            scrollArea.viewport(h.div.class("kit-scroll-viewport"))
+              .onMount(ScrollTo({ top: on ? 24 : 0 }))
+              .children(
+                scrollArea.content(h.div.class("kit-scroll-content"))
+                  .children(
+                    lines(h, [60, 44, 56, 38, 60, 48, 52, 40, 58])
+                  )
+              ),
+            scrollArea.scrollbar({
+              element: h.div.class("kit-scrollbar"),
+              thumb: h.div.class("kit-scroll-thumb")
+            })
+          )
+        )
+    }),
+  Select: (h, on) =>
+    Select(h, {
+      key: "Select",
+      props: {
+        open: on,
+        value: "eu-west-1",
+        items: regions,
+        ...inTile,
+        sideOffset: 3,
+        finalFocus: false
+      },
+      onEmit: none,
+      view: (select) =>
+        h.div.class("kit-overlay kit-top").children(
+          select.trigger(h.button.class("kit-input kit-select"))
+            .children(
+              select.value(h.span),
+              select.icon(h.span).children("▾")
+            ),
+          select.positioner(h.div.class("kit-positioner")).children(
+            select.popup(h.div.class("kit-popup kit-list")).children(
+              regions.map(({ label, value }) =>
+                select.item({ element: h.div, value }).children(
+                  select.itemText(h.div).children(label),
+                  select.itemIndicator({ element: h.span, value })
+                    ?.children("✓")
+                )
+              )
+            )
+          )
+        )
+    }),
   Separator: (h) =>
     h.div.class("kit-stack").children(
       bar(h, 50),
@@ -417,11 +811,24 @@ const pictures: Record<Module, Picture> = {
           )
         )
     }),
-  Toast: (h) =>
-    h.div.class("kit-overlay").children(
-      lines(h, [44, 30]),
-      h.div.class("kit-toast").children(h.i, h.span)
-    ),
+  Toast: (h, on) =>
+    ToastProvider(h, {
+      key: "Toast",
+      props: { topLayer: false, timeout: 0 },
+      view: (toastProvider) =>
+        h.div.class("kit-overlay").children(
+          ToastPoster(h, { props: { on } }),
+          toastProvider.viewport(h.div.class("kit-toasts")).children(
+            toastProvider.toasts.map((toast) =>
+              toastProvider.root({
+                element: h.div.class("kit-toast"),
+                toast
+              })
+                .children(h.i, h.span)
+            )
+          )
+        )
+    }),
   Toggle: (h, on) =>
     h.div.class("kit-row").children(
       Toggle(h, { props: { pressed: on } }).class(
@@ -464,13 +871,20 @@ const pictures: Record<Module, Picture> = {
             )
           )
     }),
-  Tooltip: (h) =>
-    h.div.class("kit-overlay kit-under").children(
-      h.div.class("kit-pop kit-tooltip"),
-      h.span.class("kit-button").children(
-        Icon(h, "copy", { class: "size-2.5" })
-      )
-    ),
+  Tooltip: (h, on) =>
+    Tooltip(h, {
+      key: "Tooltip",
+      props: { open: on, ...inTile, sideOffset: 4 },
+      onEmit: none,
+      view: (tooltip) =>
+        h.div.class("kit-overlay kit-under").children(
+          tooltip.trigger(h.button.class("kit-button")).children(
+            Icon(h, "copy", { class: "size-2.5" })
+          ),
+          tooltip.positioner(h.div.class("kit-positioner kit-fade"))
+            .children(tooltip.popup(h.div.class("kit-tooltip")))
+        )
+    }),
   DirectionProvider: (h, on) =>
     DirectionProvider(h, {
       props: { direction: on ? "rtl" : "ltr" },
@@ -485,31 +899,66 @@ const pictures: Record<Module, Picture> = {
             bar(h, 18)
           )
     }),
-  Positioning: (h) =>
-    h.div.class("kit-positioning").children(
-      h.span.class("kit-anchor"),
-      h.span.class("kit-floating"),
-      h.span.class("kit-edge")
-    ),
-  VirtualKeyboard: (h) =>
+  Positioning: (h, on) => {
+    const { anchor, box, side } = floating(on)
+    const at = (
+      rect: { readonly x: number; readonly y: number }
+    ) => ({
+      left: `${rect.x}px`,
+      top: `${rect.y}px`
+    })
+    return h.div.class("kit-positioning").attr(
+      "data-flipped",
+      side === "bottom" ? undefined : ""
+    ).style({
+      width: `${stage.width}px`,
+      height: `${stage.height}px`
+    })
+      .children(
+        h.span.class("kit-anchor").style(at(anchor)),
+        h.span.class("kit-floating").style(at(box)),
+        h.span.class("kit-edge")
+      )
+  },
+  VirtualKeyboard: (h, on) =>
     h.div.class("kit-overlay kit-keyboard").children(
       h.div.class("kit-input").children(h.span.class("kit-caret")),
-      h.div.class("kit-keys").children(
-        Array.from({ length: 12 }, () => h.span)
+      // The keyboard covers as much of the picture as the band it
+      // leaves would of the phone's screen.
+      h.div.class("kit-keys").style({
+        height: `${Math.round(keyboardCover(on) * 100)}%`
+      }).children(
+        h.div.children(Array.from({ length: 12 }, () => h.span))
       )
     ),
-  VirtualList: (h) =>
-    h.div.class("kit-scroll").children(
-      h.div.class("kit-scroll-content kit-rows").children(
-        Array.from({ length: 7 }, (_, index) =>
-          h.div.children(
-            h.span.children(
-              String((index + 1) * 1873).padStart(5, "0")
-            ),
-            bar(h, 30 + ((index * 7) % 20))
-          ))
-      )
-    )
+  VirtualList: (h, on) =>
+    VirtualList(h, {
+      key: "VirtualList",
+      props: {
+        count: 10_000,
+        itemSize: 10,
+        measure: false,
+        initialCount: 5,
+        scrollTo: on
+          ? { target: { _tag: "Index", index: 1873 } }
+          : { target: { _tag: "Offset", offset: 0 } }
+      },
+      view: (virtualList) =>
+        virtualList.viewport(h.div.class("kit-scroll kit-virtual"))
+          .children(
+            virtualList.list(h.div.class("kit-rows")).children(
+              virtualList.items.map((index) =>
+                virtualList.item({
+                  element: h.div.key(String(index)),
+                  index
+                }).children(
+                  h.span.children(String(index + 1).padStart(5, "0")),
+                  bar(h, 30 + ((index * 7) % 20))
+                )
+              )
+            )
+          )
+    })
 }
 
 export const tile = <M>(h: Html.H<M>, name: Module, on: boolean) =>

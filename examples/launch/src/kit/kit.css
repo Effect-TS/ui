@@ -1,7 +1,6 @@
 /* The kit wall. Each tile is drawn with the kit, and moves between
-   two states: its component's own data attributes drive the tiles
-   drawn with a kit component, and `data-playing` on the tile drives
-   the rest. */
+   two states: its component's own data attributes drive it, with
+   `data-playing` on the tile for what the component doesn't mark. */
 
 @layer components {
   .kit {
@@ -128,7 +127,8 @@
     transition-duration: 1.2s !important;
   }
 
-  /* An element that opens over the page, at rest until its tile plays. */
+  /* A layer over the whole picture, the containing block of the
+     popups drawn in place inside it. */
   .kit-overlay {
     @apply absolute inset-0 flex flex-col justify-center gap-1;
   }
@@ -145,11 +145,48 @@
     @apply items-center justify-end;
   }
 
+  /* A popup the kit opens in place, with `topLayer: false`: the
+     positioner the kit places, and the popup it marks with
+     `data-starting-style` as it opens and `data-ending-style` as it
+     closes. */
+  .kit-positioner {
+    @apply z-1;
+  }
+
+  .kit-popup,
   .kit-pop {
-    @apply absolute z-1 rounded-sm border border-border bg-card opacity-0;
+    @apply rounded-sm border border-border bg-card;
     box-shadow: 0 6px 16px -8px rgb(0 0 0 / 0.5);
-    transform: scale(0.92) translateY(3px);
     transition-property: opacity, transform;
+  }
+
+  .kit-popup {
+    &[data-starting-style],
+    &[data-ending-style] {
+      @apply opacity-0;
+      transform: scale(0.92) translateY(3px);
+    }
+  }
+
+  /* A positioner the kit shows and hides with `hidden`, and no
+     transition attributes. */
+  .kit-fade {
+    transition-property: opacity, display;
+    transition-behavior: allow-discrete;
+
+    &[hidden] {
+      @apply opacity-0;
+    }
+
+    @starting-style {
+      @apply opacity-0;
+    }
+  }
+
+  /* A popup drawn with plain elements, at rest until its tile plays. */
+  .kit-pop {
+    @apply absolute z-1 opacity-0;
+    transform: scale(0.92) translateY(3px);
 
     [data-playing] & {
       @apply opacity-100;
@@ -161,8 +198,16 @@
     @apply absolute -inset-0.5 rounded-sm;
     transition-property: background-color;
 
+    /* The kit's backdrop, open while it is shown, or the drawn one
+       while its tile plays. */
+    &[data-open],
     [data-playing] & {
       background: rgb(0 0 0 / 0.3);
+    }
+
+    &[data-starting-style],
+    &[data-ending-style] {
+      background: transparent;
     }
   }
 
@@ -171,6 +216,18 @@
 
     .kit-bar {
       @apply h-1;
+    }
+  }
+
+  .kit-list {
+    @apply grid min-w-(--anchor-width) gap-0.5 p-0.5 text-[0.5625rem] whitespace-nowrap;
+
+    [role="option"] {
+      @apply flex justify-between gap-1 rounded-sm px-0.5;
+    }
+
+    [data-selected] {
+      @apply bg-muted;
     }
   }
 
@@ -201,7 +258,7 @@
   }
 
   .kit-dialog {
-    @apply grid gap-1 p-1;
+    @apply absolute grid gap-1 p-1;
     top: 50%;
     left: 50%;
     width: 56px;
@@ -221,24 +278,6 @@
     background: var(--color-negative);
   }
 
-  .kit-autocomplete span:first-child {
-    @apply inline-block max-w-2 overflow-hidden;
-    transition-property: max-width;
-
-    [data-playing] & {
-      @apply max-w-12;
-    }
-  }
-
-  .kit-completion {
-    @apply text-muted-foreground opacity-0;
-    transition-property: opacity;
-    transition-delay: 0.25s;
-
-    [data-playing] & {
-      @apply opacity-100;
-    }
-  }
 
   .kit-avatars {
     @apply flex;
@@ -299,16 +338,18 @@
     }
   }
 
-  .kit-combobox .kit-chip {
-    @apply rounded-sm bg-muted px-1 text-[0.5625rem];
+  .kit-combobox {
+    input {
+      @apply w-0 min-w-0 flex-1 bg-transparent;
+    }
   }
 
-  .kit-chip-new {
-    @apply max-w-0 overflow-hidden px-0! opacity-0;
+  .kit-chip {
+    @apply max-w-8 overflow-hidden rounded-sm bg-muted px-1 text-[0.5625rem];
     transition-property: max-width, padding, opacity;
 
-    [data-playing] & {
-      @apply max-w-8 px-1! opacity-100;
+    @starting-style {
+      @apply max-w-0 px-0 opacity-0;
     }
   }
 
@@ -316,33 +357,32 @@
     @apply rounded-sm border border-dashed border-border;
   }
 
+  /* The point the context menu opens at, pressed as it opens. */
   .kit-pointer {
     @apply absolute size-1.5 rounded-full bg-foreground;
-    left: 20%;
-    top: 60%;
-    transition-property: left, top;
+    left: 30%;
+    top: 24%;
+    transition-property: transform;
 
     [data-playing] & {
-      left: 34%;
-      top: 28%;
+      transform: scale(0.6);
     }
   }
 
   .kit-dropdown {
-    top: 22px;
-    left: 0;
     width: 56px;
   }
 
-  .kit-context-menu {
-    left: 38%;
-    top: 32%;
+  .kit-context-area .kit-menu {
     width: 40px;
+  }
+
+  .kit-viewport {
+    @apply absolute inset-0;
   }
 
   .kit-sheet {
     @apply absolute right-1.5 -bottom-0.5 left-1.5 h-[22px] rounded-t-md border border-border bg-card;
-    transform: translateY(105%);
     transition-property: transform;
 
     &::before {
@@ -350,8 +390,9 @@
       content: "";
     }
 
-    [data-playing] & {
-      transform: none;
+    &[data-starting-style],
+    &[data-ending-style] {
+      transform: translateY(105%);
     }
   }
 
@@ -413,19 +454,19 @@
   }
 
   .kit-menubar {
-    @apply relative flex flex-1 items-center gap-2;
+    @apply flex flex-1 self-start;
+
+    button {
+      @apply flex h-4 items-center rounded-sm px-1;
+      transition-property: background-color;
+
+      &[data-popup-open] {
+        @apply bg-muted;
+      }
+    }
 
     .kit-bar {
-      @apply relative z-1 h-1;
-    }
-  }
-
-  .kit-highlight {
-    @apply absolute -top-1.5 -left-1 h-4 w-[30px] rounded-sm bg-muted;
-    transition-property: left;
-
-    [data-playing] & {
-      left: 26px;
+      @apply h-1;
     }
   }
 
@@ -512,26 +553,18 @@
   }
 
   .kit-popover {
-    bottom: 24px;
-    left: 50%;
-    margin-left: -25px;
     width: 50px;
     padding: 3px;
   }
 
   .kit-tooltip {
-    @apply border-0 bg-foreground;
-    bottom: 24px;
-    left: 50%;
-    margin-left: -24px;
+    @apply rounded-sm bg-foreground;
     width: 48px;
     height: 12px;
   }
 
   .kit-preview {
     @apply flex items-center gap-1 p-[3px];
-    bottom: 22px;
-    left: 4px;
     width: 64px;
   }
 
@@ -572,52 +605,43 @@
   }
 
   .kit-scroll {
-    @apply absolute inset-0 flex items-start overflow-hidden;
+    @apply absolute inset-0 overflow-hidden;
+  }
+
+  .kit-scroll-area,
+  .kit-scroll-viewport {
+    @apply h-full;
   }
 
   .kit-scroll-content {
-    @apply grid flex-1 gap-[3px];
-    transition-property: transform;
-    transition-duration: 1.2s !important;
+    @apply grid gap-[3px];
+  }
 
-    [data-playing] & {
-      transform: translateY(-20px);
-    }
+  .kit-scrollbar {
+    @apply absolute top-0 right-0 bottom-0 w-[3px];
   }
 
   .kit-scroll-thumb {
-    @apply absolute top-0 right-0 h-3.5 w-[3px] rounded-full bg-muted-foreground;
-    transition-property: top;
-    transition-duration: 1.2s !important;
+    @apply w-full rounded-full bg-muted-foreground;
+    height: var(--scroll-area-thumb-height);
+  }
 
-    [data-playing] & {
-      top: 16px;
-    }
+  .kit-virtual {
+    @apply overflow-y-scroll;
+    scrollbar-width: none;
   }
 
   .kit-rows {
-    @apply gap-0.5 font-mono text-[0.5rem] text-muted-foreground;
+    @apply grid gap-0.5 font-mono text-[0.5rem] text-muted-foreground;
     font-feature-settings: normal;
 
     div {
-      @apply flex h-2.5 items-center gap-1;
-    }
-
-    [data-playing] & {
-      transform: translateY(-36px);
+      @apply flex items-center gap-1;
     }
   }
 
   .kit-select {
     @apply justify-between;
-  }
-
-  .kit-select-popup {
-    @apply top-[22px] right-0 left-0 gap-0.5 text-[0.5625rem];
-  }
-
-  .kit-selected {
-    @apply rounded-sm bg-muted px-0.5;
   }
 
   .kit-separator {
@@ -676,9 +700,16 @@
     }
   }
 
+  .kit-tile:has(.kit-toasts) .kit-picture {
+    @apply overflow-hidden;
+  }
+
+  .kit-toasts {
+    @apply absolute right-0 bottom-0;
+  }
+
   .kit-toast {
-    @apply absolute right-0 bottom-0 flex h-[18px] w-[66px] items-center gap-1 rounded-sm bg-foreground px-1 opacity-0;
-    transform: translateX(120%);
+    @apply flex h-[18px] w-[66px] items-center gap-1 rounded-sm bg-foreground px-1;
     transition-property: transform, opacity;
 
     i {
@@ -689,14 +720,11 @@
       @apply h-1 flex-1 rounded-sm bg-background opacity-50;
     }
 
-    [data-playing] & {
-      @apply opacity-100;
-      transform: none;
+    &[data-starting-style],
+    &[data-ending-style] {
+      @apply opacity-0;
+      transform: translateX(120%);
     }
-  }
-
-  .kit-tile:has(.kit-toast) .kit-picture {
-    @apply overflow-hidden;
   }
 
   .kit-toggle {
@@ -751,30 +779,32 @@
     }
   }
 
+  /* The anchor and the box sit where `Positioning.place` puts them,
+     inside a box as big as the boundary it was given. */
   .kit-positioning {
-    @apply relative flex-1 self-stretch;
+    @apply relative mx-auto;
+  }
+
+  .kit-anchor,
+  .kit-floating {
+    @apply absolute h-2.5 rounded-sm;
+    transition-property: left, top;
   }
 
   .kit-anchor {
-    @apply absolute top-1/2 left-1/2 -mt-1.5 -ml-2.5 h-2.5 w-[18px] rounded-sm bg-accent;
+    @apply w-[18px] bg-accent;
   }
 
   .kit-floating {
-    @apply absolute left-1/2 -ml-[18px] h-2.5 w-9 rounded-sm border border-border bg-card;
-    top: 26px;
-    transition-property: top;
-
-    [data-playing] & {
-      top: 0;
-    }
+    @apply w-9 border border-border bg-card;
   }
 
   .kit-edge {
-    @apply absolute right-0 -bottom-0.5 left-0 h-px opacity-0;
+    @apply absolute right-0 bottom-0 left-0 h-px opacity-0;
     background: var(--color-negative);
     transition-property: opacity;
 
-    [data-playing] & {
+    [data-flipped] > & {
       @apply opacity-70;
     }
   }
@@ -797,17 +827,18 @@
     animation: kit-blink 1s steps(1) infinite;
   }
 
+  /* The keyboard's height is the share of the screen `step` says it
+     covers. */
   .kit-keys {
-    @apply absolute right-0 -bottom-0.5 left-0 grid grid-cols-6 gap-0.5 rounded-t-sm bg-muted p-0.5;
-    transform: translateY(105%);
-    transition-property: transform;
+    @apply absolute right-0 bottom-0 left-0 overflow-hidden rounded-t-sm bg-muted;
+    transition-property: height;
+
+    div {
+      @apply grid grid-cols-6 gap-0.5 p-0.5;
+    }
 
     span {
       @apply h-1.5 rounded-[1px] bg-background;
-    }
-
-    [data-playing] & {
-      transform: none;
     }
   }
 }
