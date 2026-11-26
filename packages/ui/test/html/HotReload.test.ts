@@ -716,7 +716,8 @@ describe("hot reload", { concurrent: false }, () => {
         (a) =>
           inContainer("copy-b", (b) =>
             Effect.gen(function*() {
-              const scopeA = yield* Scope.make()
+              // Closes A if an assertion fails before the explicit close.
+              const scopeA = yield* Scope.fork(yield* Effect.scope)
               yield* BrowserHost.mountEffect(app(Html, "CopyA"), {}, a).pipe(
                 Scope.provide(scopeA)
               )

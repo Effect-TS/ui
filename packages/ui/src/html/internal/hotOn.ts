@@ -58,6 +58,7 @@ interface WindowState {
     next: Exports,
     names: ReadonlyArray<string>
   ) => boolean
+  readonly claim: () => void
 }
 
 const states = new WeakMap<Window, WindowState>()
@@ -132,19 +133,17 @@ const stateOf = (view: Window): WindowState => {
       pending: undefined,
       scroll: undefined,
       saveHook: () => saveWindow(view, made),
-      swapHook: (first, next, names) => swap(made, first, next, names)
+      swapHook: (first, next, names) => swap(made, first, next, names),
+      claim: () => claimHooks(view, made)
     }
     states.set(view, state = made)
-    view.addEventListener(releasedEvent, () => {
-      if (made.roots.size > 0) claimHooks(view, made)
-    })
   }
   return state
 }
 
 // Copies of this module in one window share its hooks. The first copy to mount
 // a root owns them until its last root detaches, then hands them to a copy
-// that still has mounted roots.
+// that still has mounted roots. Only copies with roots listen for the handoff.
 const claimHooks = (view: Window, state: WindowState): void => {
   const hooks = view as unknown as Record<symbol, unknown>
   if (hooks[hotKey] !== undefined) return
@@ -153,8 +152,9 @@ const claimHooks = (view: Window, state: WindowState): void => {
 }
 
 const releaseHooks = (view: Window, state: WindowState): void => {
+  view.removeEventListener(releasedEvent, state.claim)
   const hooks = view as unknown as Record<symbol, unknown>
-  if (state.roots.size > 0 || hooks[hotKey] !== state.saveHook) return
+  if (hooks[hotKey] !== state.saveHook) return
   delete hooks[hotKey]
   delete hooks[swapKey]
   view.dispatchEvent(new Event(releasedEvent))
@@ -444,7 +444,8 @@ export const open = (
       instance = inst
       restore.watch(inst.tree)
       windowState.roots.set(inst, capture)
-      claimHooks(view, windowState)
+      view.addEventListener(releasedEvent, windowState.claim)
+      windowState.claim()
     },
     flushed: (buildsPendingSince) => {
       if (
@@ -463,7 +464,7 @@ export const open = (
     detach: () => {
       if (instance !== undefined) windowState.roots.delete(instance)
       instance = undefined
-      releaseHooks(view, windowState)
+      if (windowState.roots.size === 0) releaseHooks(view, windowState)
     }
   }
 }
