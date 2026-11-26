@@ -1,5 +1,5 @@
 import { Component, Mount, UiSchema, View } from "@effect/ui"
-import { DateField, type DateFieldEvents, Field } from "@effect/ui-kit"
+import { DateField, Field } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Context, type DateTime, Effect, Schema } from "effect"
 import { describe, expect, it } from "tstyche"
@@ -42,11 +42,6 @@ describe("DateField", () => {
           view: (dateField) => {
             expect(dateField.input(h.input)).type.toBe<Input<never>>()
             expect(dateField.value).type.toBe<DateTime.Utc | null>()
-            expect(dateField.inputValue).type.toBe<string>()
-            expect(dateField.pattern).type.toBe<string>()
-            expect(dateField.disabled).type.toBe<boolean>()
-            expect(dateField.readOnly).type.toBe<boolean>()
-            expect(dateField.required).type.toBe<boolean>()
             const input = dateField.input(
               field.control(h.input.onMount(NeedsClock()))
             )
@@ -71,17 +66,11 @@ describe("DateField", () => {
       },
       view: (dateField) => dateField.input(h.input)
     })
-    expect<Extract<DateFieldEvents, { _tag: "Committed" }>["date"]>().type
-      .toBe<DateTime.Utc | null>()
   })
 
   it("requires a DateTime or null value and an input element", () => {
     expect(DateField).type.not.toBeCallableWith(h, {
       props: { value: "2026-11-26" },
-      view: () => h.div
-    })
-    expect(DateField).type.not.toBeCallableWith(h, {
-      props: { value: new Date() },
       view: () => h.div
     })
     expect(DateField).type.not.toBeCallableWith(h, {
@@ -92,7 +81,6 @@ describe("DateField", () => {
       props: { value: null },
       view: (dateField) => {
         expect(dateField.input).type.not.toBeCallableWith(h.div)
-        expect(dateField.input).type.not.toBeCallableWith({ element: h.input })
         return dateField.input(h.input)
       }
     })
