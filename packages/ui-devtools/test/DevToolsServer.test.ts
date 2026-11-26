@@ -9,7 +9,7 @@ import { DevToolsServer, DevToolsVite } from "@effect/ui-devtools/node"
 import type * as BrowserHost from "@effect/ui/html/BrowserHost"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Schema, Stream } from "effect"
+import { Effect, Layer, Schedule, Schema, Stream } from "effect"
 import { McpClient, McpProtocol } from "effect/ai"
 import { HttpRouter } from "effect/http"
 import * as Socket from "effect/socket/Socket"
@@ -296,12 +296,22 @@ describe("DevToolsServer", { concurrent: false }, () => {
         // hold /Workspace's Mounted frame when the socket connects.
         const { agent, url } = yield* serve({ port: 47742, size: 12 })
         yield* open(url, "open")
+        // Replay reaches the server frame by frame. Wait until the ring has
+        // dropped SessionStarted (#0) and /Workspace's Mounted (#1).
+        const [session] = yield* agent.call<ReadonlyArray<any>>(
+          "list_sessions"
+        ).pipe(
+          Effect.filterOrFail(([session]) => session?.first > 1),
+          Effect.retry(Schedule.spaced("10 millis")),
+          Effect.timeout("2 seconds")
+        )
         const instances: ReadonlyArray<any> = yield* agent.call(
           "list_instances"
         )
         const workspace = instances.find((instance) =>
           instance.path === "/Workspace"
         )
+        assert.isBelow(workspace.mounted, session.first)
         const state = yield* agent.call("get_state", {
           instance: workspace.instance
         })
