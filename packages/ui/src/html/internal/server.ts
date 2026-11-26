@@ -128,6 +128,8 @@ const animationTags: ReadonlySet<string> = new Set(["set", "animate"])
 const isAnimation = (tag: string): boolean =>
   animationTags.has(tag.toLowerCase())
 
+const animationValues = ["to", "from", "by", "values"] as const
+
 /**
  * Drops the animation values that would set a blocked URL on the attribute
  * named by `attributename`. A `values` list is dropped whole.
@@ -135,17 +137,14 @@ const isAnimation = (tag: string): boolean =>
 const dropBlockedAnimation = (attributes: Map<string, string>): void => {
   const target = attributes.get("attributename")?.trim()
   if (target === undefined) return
-  for (const name of ["to", "from", "by"]) {
+  for (const name of animationValues) {
     const value = attributes.get(name)
-    if (value !== undefined && url.blockedAttribute(target, value)) {
+    if (value === undefined) continue
+    const urls = name === "values" ? value.split(";") : [value]
+    if (urls.some((item) => url.blockedAttribute(target, item))) {
       attributes.delete(name)
     }
   }
-  const values = attributes.get("values")
-  if (
-    values !== undefined &&
-    values.split(";").some((item) => url.blockedAttribute(target, item))
-  ) attributes.delete("values")
 }
 
 const written = (attributes: Map<string, string>): string => {
@@ -178,9 +177,8 @@ const plainAttributes = (
   if (props !== View.noFields) {
     for (const _ in props) return undefined
   }
-  if (tag === "option") return undefined
+  if (tag === "option" || isAnimation(tag)) return undefined
   if (attrs === View.noFields) return ""
-  if (isAnimation(tag)) return undefined
   let out = ""
   for (const name in attrs) {
     if (elements.attributeName(name, false) !== name) {
