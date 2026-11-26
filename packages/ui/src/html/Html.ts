@@ -1026,8 +1026,8 @@ export class VoidElement<
       data,
       effectAllowed: options?.effectAllowed
     }
-    return View.withFields(this, {
-      eventOptions: { ...this.eventOptions, dragstart: source }
+    return View.withOwnFields(this, {
+      eventOptions: { ...View.ownFields(this).eventOptions, dragstart: source }
     }).attr(
       "draggable",
       "true"
@@ -1047,7 +1047,7 @@ export class VoidElement<
     options?: View.EventOptions | undefined
   ): this {
     if (options === undefined && (event === "dragstart" || event === "drop")) {
-      const set = this.eventOptions[event]
+      const set = View.ownFields(this).eventOptions[event]
       const key = event === "dragstart" ? "data" : "accepts"
       if (set !== undefined && key in set) options = set
     }
@@ -1105,8 +1105,8 @@ export class VoidElement<
    */
   dropTarget(options: Omit<DropTargetOptions, "preventDefault">): this {
     const target: DropTargetOptions = { ...options, preventDefault: "always" }
-    return View.withFields(this, {
-      eventOptions: { ...this.eventOptions, drop: target }
+    return View.withOwnFields(this, {
+      eventOptions: { ...View.ownFields(this).eventOptions, drop: target }
     })
   }
 }

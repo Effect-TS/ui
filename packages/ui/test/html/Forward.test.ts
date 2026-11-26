@@ -279,16 +279,16 @@ describe("forward", () => {
     ])
   })
 
-  it.effect("a handler a part sets in forward goes to the part's owner, beside the consumer's", () =>
+  it.effect("handlers and drop options a part sets in forward go to the part's owner, beside the consumer's", () =>
     Effect.gen(function*() {
       const ChildMessage = UiSchema.TaggedEnum({ ChildPressed: {} })
       const Child = Html.component({
         name: "Child",
-        model: Schema.Boolean,
+        model: Schema.Number,
         message: ChildMessage
       }).make({
-        init: () => false,
-        update: { ChildPressed: () => true },
+        init: () => 0,
+        update: { ChildPressed: ($) => $.model + 1 },
         parts: (p, pressed) => ({
           pressed,
           trigger: p.part(
@@ -296,6 +296,8 @@ describe("forward", () => {
             (button) =>
               button.forward((node) =>
                 node.on("click", ChildMessage.ChildPressed())
+                  .dropTarget({ accepts: ["text/plain"] })
+                  .on("drop", ChildMessage.ChildPressed())
               )
           )
         })
@@ -320,8 +322,10 @@ describe("forward", () => {
           })
       })
       const parent = yield* HtmlPlay.make(Parent, {})
-      yield* parent.click(HtmlLocator.role("button", { name: "Press" }))
-      yield* parent.expect(Locator.tag("output")).toHaveText("true:1")
+      const press = HtmlLocator.role("button", { name: "Press" })
+      yield* parent.click(press)
+      yield* parent.drop(press, { data: { "text/plain": "x" } })
+      yield* parent.expect(Locator.tag("output")).toHaveText("2:1")
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 })
 

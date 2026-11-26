@@ -785,12 +785,25 @@ const forwardInPart = (place: Forward, layer: number): PartForward =>
 
 type OwnFields = Pick<Owned, "handlers" | "eventOptions" | "refKey" | "mount">
 
-const ownFields = (builder: ElementBuilder<any, any, any, any>): OwnFields => {
+/**
+ * The handlers, event options, ref and mount a chain call on `builder`
+ * writes: the builder's own, or, in a part's forward hook, that part's layer.
+ *
+ * @internal
+ */
+export const ownFields = (
+  builder: ElementBuilder<any, any, any, any>
+): OwnFields => {
   const index = builder[partForwardLayer]
   return index === undefined ? builder : builder.owned[index]!
 }
 
-const withOwnFields = <B extends ElementBuilder<any, any, any, any>>(
+/**
+ * A copy of `builder` with `fields` written where `ownFields` reads them.
+ *
+ * @internal
+ */
+export const withOwnFields = <B extends ElementBuilder<any, any, any, any>>(
   builder: B,
   fields: Partial<OwnFields>
 ): B => {
