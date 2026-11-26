@@ -699,11 +699,7 @@ describe("hot reload", { concurrent: false }, () => {
               import("@effect/ui/html/Html")
             ])
           )
-          for (const older of [false, true]) {
-            // Older versions' save hooks have no `live`.
-            if (older) {
-              delete (window as any)[hotKey].live
-            }
+          const savesA = Effect.gen(function*() {
             sessionStorage.clear()
             yield* inContainer("copy-b", (b) =>
               Effect.scoped(Host.mountEffect(app(Html2, "CopyB"), {}, b)))
@@ -712,7 +708,15 @@ describe("hot reload", { concurrent: false }, () => {
               sessionStorage.getItem("@effect/ui/hot") ?? "",
               "/CopyA"
             )
-          }
+          })
+          yield* savesA
+          // Older versions' save hooks have no `live`.
+          const hook = (window as any)[hotKey]
+          const live = hook.live
+          delete hook.live
+          yield* savesA.pipe(Effect.ensuring(Effect.sync(() => {
+            hook.live = live
+          })))
         }))
     }))
 })
