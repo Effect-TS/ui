@@ -151,7 +151,9 @@ const formatterOf = (
     () =>
       new Intl.DateTimeFormat(
         locale as string | Array<string> | undefined,
-        { ...options, timeZone: "UTC" }
+        // The grid is Gregorian, so labels must be too, whatever the locale's
+        // default calendar.
+        { ...options, calendar: "gregory", timeZone: "UTC" }
       )
   )
 
@@ -160,8 +162,12 @@ const weekStarts = new Map<string, CalendarWeekdayNumber>()
 export const firstDayOfWeek = (locale: Locale): CalendarWeekdayNumber =>
   cached(weekStarts, { locale }, () => {
     try {
+      // `supportedLocalesOf` keeps a `-u-fw-` override that a resolved locale
+      // drops.
       const loc = new Intl.Locale(
-        formatterOf(locale, {}).resolvedOptions().locale
+        Intl.DateTimeFormat.supportedLocalesOf(
+          locale as string | Array<string> | undefined
+        )[0] ?? formatterOf(locale, {}).resolvedOptions().locale
       ) as LocaleWithWeekInfo
       const info = typeof loc.getWeekInfo === "function"
         ? loc.getWeekInfo()
@@ -372,14 +378,13 @@ export const syncMonthPhase = (
   const focusedDay = model.focusedDay === null
     ? null
     : focusInMonth(context, model.focusedDay)
+  // The focused day left the DOM with its month, so focus follows the tab stop.
+  const refocus = model.focused && focusedDay !== null
   return {
     focusedDay,
-    focused: model.focused &&
-      focusedDay !== null &&
-      model.focusedDay !== null &&
-      sameDay(focusedDay, model.focusedDay),
+    focused: refocus,
     pendingFocus: null,
-    shouldFocus: false
+    shouldFocus: refocus
   }
 }
 
@@ -390,13 +395,19 @@ export const tabStopOf = (
 ): DateTime.Utc | null => {
   const first = weeks[0]?.[0]
   const last = weeks.at(-1)?.at(-1)
-  return focusedDay !== null &&
+  // `date` when it is rendered and in range, else `null`.
+  const rendered = (date: DateTime.Utc | null) =>
+    date !== null &&
       first !== undefined &&
       last !== undefined &&
-      !isOutOfRange(focusedDay, first, last) &&
-      !isOutOfRange(focusedDay, context.min, context.max)
-    ? focusedDay
-    : focusInMonth(context, focusedDay)
+      !isOutOfRange(date, first, last) &&
+      !isOutOfRange(date, context.min, context.max)
+      ? date
+      : null
+  return rendered(focusedDay) ??
+    focusInMonth(context, focusedDay) ??
+    // No day of the shown month is in range: the rendered day nearest to it.
+    rendered(clampDate(context.monthStart, context.min, context.max))
 }
 
 export const dayAttrs = <

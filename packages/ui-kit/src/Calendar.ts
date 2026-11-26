@@ -69,7 +69,8 @@
  * skipped by arrow keys, and emit nothing when pressed. Days outside `min`
  * and `max` are natively `disabled`, and keyboard navigation clamps to the
  * range. Moves that leave the shown month emit `RequestedMonth`; if the
- * consumer leaves `month` unchanged, focus stays in the shown month.
+ * consumer leaves `month` unchanged, focus stays in the shown month. When
+ * `month` changes while a day has focus, focus moves into the new month.
  *
  * **Usage**
  *
@@ -221,10 +222,11 @@ export type CalendarWeekday = CalendarWeekdayName
  * - `min` and `max`: optional inclusive date bounds. Days outside the range
  *   are natively `disabled` and keyboard focus clamps to them.
  * - `firstDayOfWeek`: `0` (Sunday) to `6` (Saturday). Defaults to the
- *   locale's first day via `Intl.Locale#getWeekInfo`, or Monday (`1`) when
- *   unavailable.
+ *   locale's first day via `Intl.Locale#getWeekInfo` (including a `-u-fw-`
+ *   extension), or Monday (`1`) when unavailable.
  * - `locale`: BCP 47 locale tag or tags for month titles, weekday names and
- *   day labels. Defaults to the runtime's default locale.
+ *   day labels, which always use the Gregorian calendar of the grid. Defaults
+ *   to the runtime's default locale.
  * - `disabled`: disables every button and suppresses all interaction.
  * - `readOnly`: allows focus, keyboard navigation and month requests while
  *   suppressing `Picked`.

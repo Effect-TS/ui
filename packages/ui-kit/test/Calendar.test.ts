@@ -326,6 +326,12 @@ describe("Calendar", () => {
       us.parts((cal) => assert.strictEqual(cal.weekdays[0]!.long, "Sunday"))
       const gb = yield* makeScene(baseProps({ locale: "en-GB" }))
       gb.parts((cal) => assert.strictEqual(cal.weekdays[0]!.long, "Monday"))
+      // A `-u-fw-` override in the locale wins over its region's default
+      const fw = yield* makeScene(baseProps({ locale: "en-US-u-fw-mon" }))
+      fw.parts((cal) => assert.strictEqual(cal.weekdays[0]!.long, "Monday"))
+      // Labels use the grid's Gregorian months, in the locale's digits
+      const fa = yield* makeScene(baseProps({ locale: "fa-IR" }))
+      fa.parts((cal) => assert.include(cal.title, "۲۰۲۶"))
 
       // Invalid weekday index and wrong element tags fail at runtime
       const h = V.makeHelper<never, {}, Html.Elements>({}, Html)
@@ -388,7 +394,8 @@ describe("Calendar", () => {
         })
       )
       owns(scene, dayLoc("2026-02-28"), { tabindex: "0" })
-      assert.deepStrictEqual(focused(scene), [])
+      // The focused day left with its month, so focus follows the tab stop
+      assert.deepStrictEqual(focused(scene), ["2026-02-28"])
 
       // Changing month to one containing value moves focus stop to value
       syncMonth(
@@ -400,6 +407,7 @@ describe("Calendar", () => {
         })
       )
       owns(scene, dayLoc("2026-03-12"), { tabindex: "0" })
+      assert.deepStrictEqual(focused(scene), ["2026-03-12"])
 
       // History restore drops transient focus state while preserving controlled value/month
       const PageRoute = Route.union({
@@ -631,6 +639,12 @@ describe("Calendar", () => {
         ["2026-11-10"]
       )
       assert.deepStrictEqual(bounded.current.emitted, [])
+
+      // With no day of the shown month in range, a rendered day in range is the tab stop
+      const later = yield* makeScene(
+        baseProps({ value: null, firstDayOfWeek: 0, min: utc("2026-12-01") })
+      )
+      owns(later, dayLoc("2026-12-01"), { tabindex: "0" })
     }))
 
   it.effect("unavailable days stay focusable and reachable by arrow keys, with aria-disabled, and never emit Picked", () =>
