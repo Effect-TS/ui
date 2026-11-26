@@ -697,7 +697,9 @@ export const props = <U extends Routes>(
  * `RouteMismatch` is reported if the Router has not navigated (sequence 0).
  * Hydrated hash roots skip that report, and so do roots hydrated from a
  * `static: true` render whose route differs from the Router's in its search
- * only, as a page prerendered at `/search` and opened at `/search?q=x`.
+ * only, as a page prerendered at `/search` and opened at `/search?q=x`, or
+ * where both are the catch-all `"/*"` route, as a 404 prerendered at `/404`
+ * and served at `/some/old-link`.
  * Later locations are always delivered, and the held route is delivered
  * again when a link to it is followed.
  * The key stays stable as the held route changes. A subset only sees its own
@@ -728,9 +730,11 @@ export const subscription = <U extends Routes, Msg>(
   const have = union.print(held)
   const same = (route: { readonly _tag: string }) =>
     route._tag === held._tag && union.print(route) === have
-  /** Whether the route differs from the held one in its search only. */
-  const samePath = (route: { readonly _tag: string }) =>
-    route._tag === held._tag && union.printPath(route) === union.printPath(held)
+  /** Whether a static render of the held route also stands for the route: same path, or both not found. */
+  const staticMatch = (route: { readonly _tag: string }) =>
+    route._tag === held._tag &&
+    (union.printPath(route) === union.printPath(held) ||
+      Option.exists(union.resolve(have), (resolved) => resolved.notFound))
   const mismatch = (route: { readonly _tag: string }) => {
     const router = union.print(route)
     return new RouteMismatch({
@@ -753,9 +757,10 @@ export const subscription = <U extends Routes, Msg>(
     if (initial) {
       if (same(route.value)) return Option.none()
       // A hydrated hash root rendered a shell, and a root hydrated from a static render was prerendered
-      // without the search: neither could hold the Router's route.
+      // without the search, or as the 404 for every unknown path: none could hold the Router's route.
       const exempt = root?.hydrated === true &&
-        (router.routes.base() === "#" || (root.static && samePath(route.value)))
+        (router.routes.base() === "#" ||
+          (root.static && staticMatch(route.value)))
       if (location.seq === 0 && !exempt) {
         try {
           report(mismatch(route.value))
