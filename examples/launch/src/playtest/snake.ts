@@ -1,43 +1,39 @@
 import type { HtmlHead } from "@effect/ui/html"
-import { HtmlPlay, TestGlobalEvents } from "@effect/ui/html/testing"
+import { HtmlPlay } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { Effect, Layer, Random } from "effect"
 import { TestClock } from "effect/testing"
 import { SnakeGame } from "snake/SnakeGame"
 import { formatMs, type Frame, record, type Step } from "./trace.ts"
 
-// The locators and the helper of examples/snake/src/SnakeGame.play.test.ts.
+// The locators of examples/snake/src/SnakeGame.play.test.ts.
 const scored = Locator.text("Score: 10")
 const paused = Locator.text("Paused - SPACE to continue")
-
-const press = (key: string) =>
-  TestGlobalEvents.fire("document", "keydown", { key }).pipe(
-    Effect.andThen(TestHost.settle)
-  )
 
 const mount = HtmlPlay.make(SnakeGame, {})
 
 type Play = Effect.Success<typeof mount>
 
-type Services = Effect.Services<ReturnType<typeof press>>
-
 /**
  * The `yield*` lines after `HtmlPlay.make` in "steers to the apple,
  * eats it and pauses", each run as the test runs it.
  */
-const steps: ReadonlyArray<Step<Play, Services>> = [
-  { source: "yield* press(\" \")", run: () => press(" ") },
+const steps: ReadonlyArray<Step<Play, never>> = [
   {
-    source: "yield* press(\"ArrowUp\")",
-    run: () => press("ArrowUp")
+    source: "yield* play.keydown(\"document\", \" \")",
+    run: (play) => play.keydown("document", " ")
+  },
+  {
+    source: "yield* play.keydown(\"document\", \"ArrowUp\")",
+    run: (play) => play.keydown("document", "ArrowUp")
   },
   {
     source: "yield* TestClock.adjust(\"150 millis\")",
     run: () => TestClock.adjust("150 millis")
   },
   {
-    source: "yield* press(\"ArrowRight\")",
-    run: () => press("ArrowRight")
+    source: "yield* play.keydown(\"document\", \"ArrowRight\")",
+    run: (play) => play.keydown("document", "ArrowRight")
   },
   {
     source: "yield* TestClock.adjust(\"900 millis\")",
@@ -49,7 +45,10 @@ const steps: ReadonlyArray<Step<Play, Services>> = [
     checks: true,
     run: (play) => play.expect(scored).toExist()
   },
-  { source: "yield* press(\" \")", run: () => press(" ") },
+  {
+    source: "yield* play.keydown(\"document\", \" \")",
+    run: (play) => play.keydown("document", " ")
+  },
   {
     source: "yield* TestClock.adjust(\"10 seconds\")",
     run: () => TestClock.adjust("10 seconds")
@@ -125,8 +124,7 @@ export const run: Effect.Effect<ReadonlyArray<Frame>> = record({
   Effect.provide(
     Layer.mergeAll(
       TestHost.layer({ flush: "queued" }),
-      TestClock.layer(),
-      TestGlobalEvents.layer
+      TestClock.layer()
     )
   ),
   Effect.orElseSucceed(() => []),

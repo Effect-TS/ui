@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 import type { Component } from "@effect/ui"
-import { BrowserHost, Html } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlSubscription } from "@effect/ui/html"
 import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Cause, Effect, Exit, Schema, type Scope } from "effect"
+import { Cause, Clock, Effect, Exit, Schema, type Scope } from "effect"
 import { Menu } from "./fixtures/headless.ts"
 import { Settings } from "./fixtures/settings.ts"
 
@@ -71,6 +71,19 @@ const inBrowser = Effect.fnUntraced(function*(
 const play = <A, E>(
   test: Effect.Effect<A, E, TestHost.TestHost | Scope.Scope>
 ) => test.pipe(Effect.scoped, Effect.provide(TestHost.layer()))
+
+const Shortcuts = Html.component({
+  name: "Shortcuts",
+  model: Schema.String,
+  message: Schema.String
+}).make({
+  init: () => "",
+  update: (_, key) => key,
+  view: (h, key) => h.output(key),
+  subscriptions: () => [
+    HtmlSubscription.onDocument("keydown", ({ key }) => key)
+  ]
+})
 
 describe("HtmlPlay", () => {
   it.effect("type, keydown and a click's defaults send what BrowserHost sends", () =>
@@ -297,6 +310,21 @@ describe("HtmlPlay", () => {
       assert.match(
         Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "",
         /nothing handles "click"/
+      )
+    }).pipe(play))
+
+  it.effect("keydown on the document settles without advancing TestClock, and fails when nothing listens", () =>
+    Effect.gen(function*() {
+      const start = yield* Clock.currentTimeMillis
+      const p = yield* HtmlPlay.make(Shortcuts, {})
+      yield* p.keydown("document", "ArrowUp")
+      assert.strictEqual(p.root.text(), "ArrowUp")
+      assert.strictEqual(yield* Clock.currentTimeMillis, start)
+      const quiet = yield* HtmlPlay.make(Checkout, {})
+      const missing = yield* Effect.exit(quiet.keydown("document", "a"))
+      assert.match(
+        Exit.isFailure(missing) ? Cause.pretty(missing.cause) : "",
+        /nothing listens for "keydown" on the document/
       )
     }).pipe(play))
 })

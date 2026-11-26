@@ -20,10 +20,9 @@ const listings = {
       "a successful login saves the session and lands on the dashboard"
     )
   )(read("../../../auth/src/App.play.test.ts")),
-  snake: all(
-    declaration("press"),
-    test("steers to the apple, eats it and pauses")
-  )(read("../../../snake/src/SnakeGame.play.test.ts"))
+  snake: test("steers to the apple, eats it and pauses")(
+    read("../../../snake/src/SnakeGame.play.test.ts")
+  )
 }
 
 const textOf = (frame: Frame, tag: string) =>

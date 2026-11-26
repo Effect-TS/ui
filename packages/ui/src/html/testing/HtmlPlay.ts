@@ -69,6 +69,7 @@
  * @since 0.1.0
  */
 import * as Effect from "effect/Effect"
+import * as Option from "effect/Option"
 import type * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../../Component.ts"
@@ -82,10 +83,13 @@ import type * as Play from "../../testing/Play.ts"
 import * as TestHost from "../../testing/TestHost.ts"
 import type * as View from "../../View.ts"
 import type * as Html from "../Html.ts"
+import * as HtmlSubscription from "../HtmlSubscription.ts"
 import * as defaults from "../internal/defaults.ts"
 import { isCustomTag } from "../internal/elements.ts"
+import * as globalEvents from "../internal/globalEvents.ts"
 import { ownEvents } from "../internal/ownEvents.ts"
 import type * as HtmlScene from "./HtmlScene.ts"
+import * as TestGlobalEvents from "./TestGlobalEvents.ts"
 
 /**
  * The assertions `expect(locator)` offers in an `HtmlPlay`: the Play's,
@@ -98,6 +102,9 @@ import type * as HtmlScene from "./HtmlScene.ts"
 export type Expect = HtmlScene.Expect<Effect.Effect<void, Play.StepError>>
 
 type KeyDetails = Partial<Omit<Html.KeyPayload, "key">>
+type DocumentKeyDetails = Partial<
+  Omit<HtmlSubscription.GlobalPayload<Html.KeyPayload>, "key">
+>
 
 /**
  * A cursor over an HTML tree on `TestHost`: the Play's steps, plus a step
@@ -150,6 +157,19 @@ export interface HtmlPlay<Model, Msg, Events>
     details?: KeyDetails
   ): Effect.Effect<void, Play.StepError>
   /**
+   * Dispatches `keydown` on the document and settles the resulting UI work
+   * without advancing `TestClock`. With `TestGlobalEvents` provided, the key
+   * reaches every root sharing that source. Missing payload fields default
+   * as for an element keydown, with `editable` and `defaultPrevented` false.
+   * Fails if no document keydown listener is registered, but only the fake
+   * created by `TestGlobalEvents.make` can report missing listeners.
+   */
+  keydown(
+    target: "document",
+    key: string,
+    details?: DocumentKeyDetails
+  ): Effect.Effect<void, Play.StepError>
+  /**
    * Submits the form `locator` matches, or the one the matched element is
    * in, as pressing Enter in it would: `submit` goes to the form with the
    * fields read from the tree. No button counts as the submitter.
@@ -189,6 +209,7 @@ export interface HtmlPlay<Model, Msg, Events>
 }
 
 class HtmlPlayCursor extends internal.PlayCursor {
+  documentKeys!: DocumentKeys
   protected override bubbles(event: string): boolean {
     return !ownEvents.has(event)
   }
@@ -301,13 +322,33 @@ class HtmlPlayCursor extends internal.PlayCursor {
     )
   }
   keydown(
-    locator: Locator.Locator,
+    target: "document" | Locator.Locator,
     key: string,
-    details?: KeyDetails
+    details?: DocumentKeyDetails
   ): Effect.Effect<void, Play.StepError> {
+    if (target === "document") {
+      const site = callSite(this.keydown)
+      const name = this.name("keydown")
+      return Effect.gen({ self: this }, function*() {
+        yield* this.settle
+        yield* Effect.sync(() =>
+          atSite(site, () => {
+            this.checkReady(name)
+            const handled = this.documentKeys.down({ ...details, key })
+            if (handled === undefined) {
+              throw new Error(
+                `${name}: nothing listens for "keydown" on the document`
+              )
+            }
+            this.recordInteraction("keydown", handled)
+          })
+        )
+        yield* this.settle
+      })
+    }
     return this.one(
       "keydown",
-      locator,
+      target,
       "keydown",
       (node) => defaults.keyPayload(key, details, internal.ancestors(node))
     )
@@ -373,6 +414,46 @@ class HtmlPlayCursor extends internal.PlayCursor {
   }
 }
 
+interface DocumentKeys {
+  readonly source: HtmlSubscription.GlobalEvents
+  /**
+   * Fires `keydown` on the shared `TestGlobalEvents` document if there is
+   * one, else at the listeners added through `source`. Returns whether a
+   * listener produced a message, or `undefined` when the source reports that
+   * none heard it. A custom source that doesn't report counts as heard.
+   */
+  readonly down: (
+    payload: Partial<HtmlSubscription.GlobalPayload<Html.KeyPayload>>
+  ) => boolean | undefined
+}
+
+// A listener is added to `upstream` too, so the events a test fires there still arrive.
+const documentKeys = (
+  upstream: HtmlSubscription.GlobalEvents,
+  shared: TestGlobalEvents.TestGlobalEvents | undefined
+): DocumentKeys => {
+  const own = TestGlobalEvents.make()
+  const document = shared ?? own
+  return {
+    source: {
+      listen: (target, event, options, listener) => {
+        const offUpstream = upstream.listen(target, event, options, listener)
+        const offOwn = own.listen(target, event, options, listener)
+        return () => {
+          offOwn()
+          offUpstream()
+        }
+      }
+    },
+    down: (payload) => {
+      const result = globalEvents.observe(() => {
+        document.fire("document", "keydown", payload)
+      })
+      return result.heard === false ? undefined : result.handled
+    }
+  }
+}
+
 const htmlHost = (
   base: Renderer.Host<TestHost.TestNode>
 ): Renderer.Host<TestHost.TestNode> => {
@@ -433,8 +514,17 @@ export const make = <
   )
   return Effect.gen(function*() {
     const { host } = yield* TestHost.TestHost
-    return yield* Effect.provideService(started, Renderer.Renderer, {
-      host: htmlHost(host)
-    })
+    const keys = documentKeys(
+      yield* HtmlSubscription.GlobalEvents,
+      Option.getOrUndefined(
+        yield* Effect.serviceOption(TestGlobalEvents.TestGlobalEvents)
+      )
+    )
+    const play = yield* started.pipe(
+      Effect.provideService(Renderer.Renderer, { host: htmlHost(host) }),
+      Effect.provideService(HtmlSubscription.GlobalEvents, keys.source)
+    )
+    play.documentKeys = keys
+    return play
   }) as any
 }

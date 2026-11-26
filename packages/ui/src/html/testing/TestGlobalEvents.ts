@@ -51,6 +51,7 @@ import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as HtmlSubscription from "../HtmlSubscription.ts"
 import * as fireGlobal from "../internal/fireGlobal.ts"
+import * as globalEvents from "../internal/globalEvents.ts"
 
 /**
  * The events `fire` takes for each target, with their payloads.
@@ -130,17 +131,20 @@ interface Entry {
 export const make = (): HtmlSubscription.GlobalEvents & TestGlobalEvents => {
   const entries = new Set<Entry>()
   const fire = (target: string, event: string, payload: object | undefined) =>
-    fireGlobal.fire(event, payload, function*(capture) {
-      // Copied as the phase starts. A listener an earlier one's message removed is skipped.
-      for (const entry of Array.from(entries)) {
-        if (
-          entry.target === target && entry.event === event &&
-          entry.capture === capture && entries.has(entry)
-        ) {
-          yield entry.listener
+    globalEvents.dispatch((heard) =>
+      fireGlobal.fire(event, payload, function*(capture) {
+        // Copied as the phase starts. A listener an earlier one's message removed is skipped.
+        for (const entry of Array.from(entries)) {
+          if (
+            entry.target === target && entry.event === event &&
+            entry.capture === capture && entries.has(entry)
+          ) {
+            heard()
+            yield entry.listener
+          }
         }
-      }
-    })
+      })
+    )
   return {
     listen: (target, event, { capture }, listener) => {
       const entry: Entry = { target, event, capture, listener }
