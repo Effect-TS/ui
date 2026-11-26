@@ -105,13 +105,12 @@ const makeAgent = Effect.fnUntraced(function*(base: string) {
   }
 })
 
-const serve = Effect.fnUntraced(
-  function*(options: DevToolsServer.Options & { readonly port: number }) {
-    yield* Layer.build(DevToolsServer.layer(options))
-    const url = DevToolsServer.url(options)
-    return { url, agent: yield* makeAgent(url) }
-  }
-)
+const serve = Effect.fnUntraced(function*(options?: DevToolsServer.Options) {
+  const port = options?.port ?? (yield* freePort)
+  yield* Layer.build(DevToolsServer.layer({ ...options, port }))
+  const url = DevToolsServer.url({ port })
+  return { url, agent: yield* makeAgent(url) }
+})
 
 const open = Effect.fnUntraced(
   function*(url: string, capture: Capture) {
@@ -130,6 +129,7 @@ const until = (check: () => boolean) =>
       : Effect.andThen(wait(10), Effect.suspend(loop))
   }).pipe(Effect.timeout("2 seconds"))
 
+// A fixed port can collide with one the OS hands out.
 const freePort = Effect.promise(() =>
   new Promise<number>((resolve, reject) => {
     const server = createServer()
@@ -159,11 +159,8 @@ const Note = Html.component({
   queries: { note: { query: GetNote, args: ({ props }) => ({ id: props.id }) } }
 }).make({ init: () => ({}), update: ($) => $.model, view: (h) => h.div() })
 
-const serveFast = Effect.fnUntraced(function*(
-  port: number,
-  timeout: number,
-  size = 100
-) {
+const serveFast = Effect.fnUntraced(function*(timeout: number, size = 100) {
+  const http = createServer()
   const { routes, server } = Server.make({
     size,
     dispatch: true,
@@ -176,11 +173,11 @@ const serveFast = Effect.fnUntraced(function*(
       disableListenLog: true
     }).pipe(
       Layer.provide(
-        NodeHttpServer.layer(createServer, { port, host: "127.0.0.1" })
+        NodeHttpServer.layer(() => http, { port: 0, host: "127.0.0.1" })
       )
     )
   )
-  const url = "http://127.0.0.1:" + port
+  const url = "http://127.0.0.1:" + (http.address() as AddressInfo).port
   return { url, agent: yield* makeAgent(url) }
 })
 
@@ -253,7 +250,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "answers why a save never finished from the server's copy of the log",
     () =>
       Effect.gen(function*() {
-        const { agent, url } = yield* serve({ port: 47741 })
+        const { agent, url } = yield* serve()
         yield* open(url, "interrupted")
 
         assert.deepStrictEqual(agent.tools.map((tool) => tool.name), [
@@ -348,7 +345,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "reads and sets the page's choice of what to record",
     () =>
       Effect.gen(function*() {
-        const { agent, url } = yield* serve({ port: 47755 })
+        const { agent, url } = yield* serve()
         localStorage.clear()
         sessionStorage.clear()
         const services = yield* Layer.build(
@@ -384,7 +381,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "keeps the state of an instance whose entries the ring dropped",
     () =>
       Effect.gen(function*() {
-        const { agent, url } = yield* serve({ port: 47742, size: 12 })
+        const { agent, url } = yield* serve({ size: 12 })
         yield* open(url, "open")
         // Wait for eviction, not just the socket connection.
         const [session] = yield* agent.call<ReadonlyArray<any>>(
@@ -523,7 +520,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "refuses browser origins on /mcp and foreign origins on the WebSocket routes",
     () =>
       Effect.gen(function*() {
-        const { agent, url } = yield* serve({ port: 47743 })
+        const { agent, url } = yield* serve()
         const mcpStatus = yield* probeStatus(
           url + "/mcp",
           {
@@ -561,7 +558,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "shares one pause between an agent and the overlay",
     () =>
       Effect.gen(function*() {
-        const { agent, url } = yield* serve({ port: 47744 })
+        const { agent, url } = yield* serve()
         const app = yield* open(url, "open")
         const root = overlay()
         const { rows } = yield* agent.call("list_entries", {
@@ -642,7 +639,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "dispatches decoded messages to an instance and waits for their Commands",
     () =>
       Effect.gen(function*() {
-        const { agent, url } = yield* serve({ port: 47745, dispatch: true })
+        const { agent, url } = yield* serve({ dispatch: true })
         const app = yield* open(url, "open")
         const instances: ReadonlyArray<any> = yield* agent.call(
           "list_instances"
@@ -716,7 +713,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "keeps a closed session readable but not controllable",
     () =>
       Effect.gen(function*() {
-        const { agent, url } = yield* serve({ port: 47746, keep: 1 })
+        const { agent, url } = yield* serve({ keep: 1 })
         yield* open(url, "open").pipe(Effect.scoped)
         yield* wait(100)
         const [closed] = yield* agent.call("list_sessions")
@@ -745,7 +742,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "keeps a truncated query map opaque when a query changes",
     () =>
       Effect.gen(function*() {
-        const { agent, url } = yield* serve({ port: 47747, size: 3 })
+        const { agent, url } = yield* serve({ size: 3 })
         const socket = new WebSocket(url.replace("http", "ws") + "/log")
         yield* Effect.callback<void>((resume) =>
           socket.addEventListener("open", () => resume(Effect.void))
@@ -788,7 +785,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "scrubs the root an agent paused when the page has two",
     () =>
       Effect.gen(function*() {
-        const { agent, url } = yield* serve({ port: 47748 })
+        const { agent, url } = yield* serve()
         localStorage.clear()
         const services = yield* Layer.build(DevTools.layer({ server: url }))
         const older = yield* play("open").pipe(Effect.provide(services))
@@ -838,23 +835,27 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "adds no meta tag when the plugin's port is taken, and injects overlay and hot modules unless disabled",
     () =>
       Effect.gen(function*() {
-        yield* serve({ port: 47749 })
-        const start = (options: DevToolsVite.Options) => {
-          let close = () => {}
-          const warnings: Array<string> = []
-          const plugin = DevToolsVite.plugin(options)
-          plugin.configureServer({
-            config: {
-              logger: {
-                info: () => {},
-                warn: (message) => warnings.push(message)
-              }
-            },
-            httpServer: { once: (_, listener) => close = listener }
-          })
-          return { plugin, warnings, close: () => close() }
-        }
-        const taken = start({ port: 47749, overlay: { position: "TopLeft" } })
+        const port = yield* freePort
+        yield* serve({ port })
+        const start = Effect.fnUntraced(
+          function*(options: DevToolsVite.Options) {
+            let close = () => {}
+            const warnings: Array<string> = []
+            const plugin = DevToolsVite.plugin(options)
+            plugin.configureServer({
+              config: {
+                logger: {
+                  info: () => {},
+                  warn: (message) => warnings.push(message)
+                }
+              },
+              httpServer: { once: (_, listener) => close = listener }
+            })
+            yield* Effect.addFinalizer(() => Effect.sync(close))
+            return { plugin, warnings }
+          }
+        )
+        const taken = yield* start({ port, overlay: { position: "TopLeft" } })
         const takenTags = yield* Effect.promise(() =>
           taken.plugin.transformIndexHtml()
         )
@@ -882,28 +883,29 @@ describe("DevToolsServer", { concurrent: false }, () => {
           taken.plugin.load(resolvedDevTools!)!,
           "DevTools.attach({\"position\":\"TopLeft\"})"
         )
-        assert.match(
-          taken.warnings[0]!,
-          /could not start on http:\/\/127\.0\.0\.1:47749/
+        assert.include(
+          taken.warnings[0],
+          "could not start on http://127.0.0.1:" + port
         )
-        const off = start({ port: 47749, hot: false, overlay: false })
+        const off = yield* start({ port, hot: false, overlay: false })
         assert.deepStrictEqual(
           yield* Effect.promise(() => off.plugin.transformIndexHtml()),
           []
         )
         assert.isUndefined(off.plugin.resolveId("/@effect-ui/hot"))
         assert.isUndefined(off.plugin.resolveId("/@effect-ui/devtools"))
-        const free = start({ port: 47750 })
+        const freed = yield* freePort
+        const free = yield* start({ port: freed })
         const tags = yield* Effect.promise(() =>
           free.plugin.transformIndexHtml()
         )
+        assert.deepStrictEqual(free.warnings, [])
         assert.strictEqual(
           JSON.parse(tags[0]!.attrs.content!).url,
-          "http://127.0.0.1:47750"
+          "http://127.0.0.1:" + freed
         )
         assert.strictEqual(tags[1]!.attrs.src, "/@effect-ui/devtools")
         assert.strictEqual(tags[2]!.attrs.src, "/@effect-ui/hot")
-        free.close()
       }).pipe(Effect.scoped),
     30_000
   )
@@ -946,7 +948,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "returns the outcomes of a batch that ran out of time, and what it didn't send",
     () =>
       Effect.gen(function*() {
-        const { agent, url } = yield* serveFast(47751, 1_000)
+        const { agent, url } = yield* serveFast(1_000)
         const applied: Array<number> = []
         yield* fakePage(url, (log, message) =>
           Effect.gen(function*() {
@@ -984,7 +986,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "tells the agent any message may have applied when the page's reply is lost",
     () =>
       Effect.gen(function*() {
-        const { agent, url } = yield* serveFast(47752, 300)
+        const { agent, url } = yield* serveFast(300)
         const log = yield* connectSocket(url.replace("http", "ws") + "/log")
         log.send(JSON.stringify({ _tag: "Hello", version: 1, host: "test" }))
         log.send(
@@ -1024,7 +1026,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "accepts a pause from a page that reports no skipped mounts",
     () =>
       Effect.gen(function*() {
-        const { agent, url } = yield* serveFast(47754, 300)
+        const { agent, url } = yield* serveFast(300)
         const log = yield* connectSocket(url.replace("http", "ws") + "/log")
         log.send(JSON.stringify({ _tag: "Hello", version: 1, host: "test" }))
         log.send(
@@ -1054,7 +1056,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "tells a coalesced excluded update from a skipped one, and replays the kept one to a late viewer as the next diff's baseline",
     () =>
       Effect.gen(function*() {
-        const { agent, url } = yield* serveFast(47756, 1_000)
+        const { agent, url } = yield* serveFast(1_000)
         const log = yield* fakePage(url, (log, message) =>
           Effect.sync(() => {
             const seq = 2 + (message as { n: number }).n
@@ -1095,7 +1097,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "reports a dispatched entry the server will never hold when a later frame arrives, inside or before the kept window",
     () =>
       Effect.gen(function*() {
-        const { agent, url } = yield* serveFast(47753, 1_000, 1)
+        const { agent, url } = yield* serveFast(1_000, 1)
         let first = true
         yield* fakePage(url, (log) => {
           // Seq 2 is kept as the hidden baseline of 4, so 3 is inside the window.
