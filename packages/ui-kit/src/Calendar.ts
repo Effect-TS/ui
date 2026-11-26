@@ -68,7 +68,8 @@
  * and `max` are natively `disabled`, and keyboard navigation clamps to the
  * range. Moves that leave the shown month emit `RequestedMonth`; if the
  * consumer leaves `month` unchanged, focus stays in the shown month. When
- * `month` changes while a day has focus, focus follows the new tab stop.
+ * `month` changes while a day has focus, focus follows the new tab stop,
+ * passing through the grid so it never leaves the calendar.
  * If no day in the new month is in range, a visible day from an adjacent
  * month can receive focus.
  *
@@ -161,6 +162,7 @@
  */
 import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
+import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
 import * as Mount from "@effect/ui/Mount"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -285,6 +287,7 @@ const CalendarMessage = UiSchema.TaggedEnum({
   BlurredDay: {},
   PressedKey: { date: Schema.DateTimeUtc, move: CalendarGridKey },
   SyncedMonth: {},
+  ParkedFocus: { date: Schema.DateTimeUtc },
   FoundDirection: { rtl: Schema.Boolean }
 })
 
@@ -302,8 +305,13 @@ const disabledWhileFocused = Subscription.make(
   Stream.make(CalendarMessage.BlurredDay())
 )
 
-const contextOf = (props: CalendarProps) => ({
-  monthStart: startOfMonth(DateTime.removeTime(props.month)),
+const CalendarGridRef = Html.ref("CalendarGrid", "table")
+
+const contextOf = (
+  props: CalendarProps,
+  monthStart = startOfMonth(DateTime.removeTime(props.month))
+) => ({
+  monthStart,
   preferred: normalizeOptional(props.value),
   today: DateTime.removeTime(props.today),
   min: normalizeOptional(props.min),
@@ -359,7 +367,7 @@ const navigate = (
  * - `previous`, `next`: `type="button"`, `disabled`, `aria-disabled` and
  *   `data-disabled` (plus a fallback `aria-label` when the button has no
  *   accessible name)
- * - `grid`: `role="grid"`, `aria-labelledby` (appending the heading's id),
+ * - `grid`: `role="grid"`, `tabindex="-1"`, `aria-labelledby` (appending the heading's id),
  *   `aria-disabled`, `aria-readonly`, `data-disabled` and `data-readonly`
  * - `weekday`: `scope="col"` and `abbr`
  * - `cell`: `role="gridcell"` and `aria-selected`
@@ -443,11 +451,30 @@ export const Calendar = Html.component({
         context,
         weeksOf($.props, context.monthStart)
       )
-      const next = $.evolve({ ...phase, shownMonth: context.monthStart })
-      return shouldFocus && phase.focusedDay !== null
-        ? next.run(focusDay(phase.focusedDay))
-        : next
+      const date = phase.focusedDay
+      if (!shouldFocus || date === null) {
+        return $.evolve({ ...phase, shownMonth: context.monthStart })
+      }
+      // Removing the focused day would blur it to `<body>`, so focus moves
+      // to the grid while the old month is still shown.
+      return $.model.focused
+        ? $.run(
+          HtmlCommand.focus(
+            CalendarGridRef,
+            () => CalendarMessage.ParkedFocus({ date }),
+            { preventScroll: true }
+          )
+        )
+        : $.evolve({ ...phase, shownMonth: context.monthStart }).run(
+          focusDay(date)
+        )
     },
+    ParkedFocus: ($, { date }) =>
+      $.evolve({
+        focusedDay: date,
+        pendingFocus: null,
+        shownMonth: contextOf($.props).monthStart
+      }).run(focusDay(date)),
     FoundDirection: ($, { rtl }) => $.evolve({ rtl })
   },
   subscriptions: ({ model, props }) => {
@@ -467,7 +494,10 @@ export const Calendar = Html.component({
     const disabled = props.disabled === true
     const readOnly = props.readOnly === true
     const rtl = rightToLeft(p.reads.provider, model.rtl)
-    const context = contextOf(props)
+    // A focused day keeps its month on screen until focus is parked.
+    const context = model.focused
+      ? contextOf(props, model.shownMonth)
+      : contextOf(props)
     const { max, min, monthStart, preferred: value, today } = context
     const weekStartsOn = props.firstDayOfWeek ?? firstDayOfWeek(props.locale)
     const weeks = weeksOfMonth(monthStart, weekStartsOn)
@@ -591,14 +621,17 @@ export const Calendar = Html.component({
       previous: step(-1, "Previous month"),
       next: step(1, "Next month"),
       grid: p.part("table", (b) =>
-        b.attrs({
-          role: "grid",
-          "aria-labelledby": headingId,
-          "aria-disabled": disabled ? "true" : undefined,
-          "aria-readonly": readOnly ? "true" : undefined,
-          "data-disabled": flag(disabled),
-          "data-readonly": flag(readOnly)
-        })),
+        b
+          .attrs({
+            role: "grid",
+            tabindex: "-1",
+            "aria-labelledby": headingId,
+            "aria-disabled": disabled ? "true" : undefined,
+            "aria-readonly": readOnly ? "true" : undefined,
+            "data-disabled": flag(disabled),
+            "data-readonly": flag(readOnly)
+          })
+          .ref(CalendarGridRef)),
       weekday: View.wrapPart(
         weekdayPart,
         <B extends Keyed<"th">>(
