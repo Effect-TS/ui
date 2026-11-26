@@ -26,7 +26,9 @@ const SearchRoute = Route.union({
   Search: Route.make("/search", {
     search: { q: Schema.optional(Schema.String) }
   }),
-  Other: Route.make("/other")
+  Other: Route.make("/other"),
+  Page: Route.make("/a/b"),
+  NotFound: Route.make("/*")
 })
 
 /** A root that holds a route with an optional search. */
@@ -130,6 +132,37 @@ const container = Effect.acquireRelease(
   Effect.sync(() => document.body.appendChild(document.createElement("div"))),
   (element) => Effect.sync(() => element.remove())
 )
+
+/** Renders `SearchApp` at `url` on the server. */
+const prerender = (
+  url: string,
+  route: typeof SearchRoute.Type,
+  isStatic: boolean
+) =>
+  HtmlServer.renderToHtml(SearchApp, { route }, { static: isStatic }).pipe(
+    Effect.provide(Router.static({ routes: SearchRoute, url }))
+  )
+
+/** Hydrates a `SearchApp` render from the route of the Router in `context`. */
+const hydrate = Effect.fnUntraced(function*(
+  context: Context.Context<Router.Services>,
+  rendered: HtmlServer.Rendered<unknown>
+) {
+  const element = yield* container
+  element.innerHTML = rendered.html
+  const root = yield* Effect.flatMap(
+    Router.currentRoute(SearchRoute),
+    (route) =>
+      HtmlHydrate.hydrateEffect(
+        SearchApp,
+        { route },
+        element,
+        rendered.state
+      )
+  ).pipe(Effect.provideContext(context))
+  yield* tick
+  return root
+})
 
 /** Mounts the app at `url` under a browser Router, for the life of the returned Scope. */
 const start = Effect.fnUntraced(
@@ -326,33 +359,6 @@ describe("BrowserRouter", { concurrent: false }, () => {
   it.effect("exempts roots hydrated from a static render when only the search differs", () => {
     const problems: Array<Query.Problem.Any> = []
     const search = SearchRoute.Search({ search: {} })
-    const prerender = (
-      url: string,
-      route: typeof SearchRoute.Type,
-      isStatic: boolean
-    ) =>
-      HtmlServer.renderToHtml(SearchApp, { route }, { static: isStatic }).pipe(
-        Effect.provide(Router.static({ routes: SearchRoute, url }))
-      )
-    const hydrate = Effect.fnUntraced(function*(
-      context: Context.Context<Router.Services>,
-      rendered: HtmlServer.Rendered<unknown>
-    ) {
-      const element = yield* container
-      element.innerHTML = rendered.html
-      const root = yield* Effect.flatMap(
-        Router.currentRoute(SearchRoute),
-        (route) =>
-          HtmlHydrate.hydrateEffect(
-            SearchApp,
-            { route },
-            element,
-            rendered.state
-          )
-      ).pipe(Effect.provideContext(context))
-      yield* tick
-      return root
-    })
     const mismatches = () =>
       problems.filter((problem) => problem._tag === "RouteMismatch").length
     return Effect.gen(function*() {
@@ -387,6 +393,31 @@ describe("BrowserRouter", { concurrent: false }, () => {
         SearchRoute.Search({ search: { q: "x" } })
       )
       assert.strictEqual(mismatches(), 2)
+    }).pipe(
+      Effect.provideService(Query.Problems, (problem) => problems.push(problem))
+    )
+  })
+
+  it.effect("exempts roots hydrated from a static 404 at another unknown path", () => {
+    const problems: Array<Query.Problem.Any> = []
+    return Effect.gen(function*() {
+      // Captures "a/b", which prints as the path of `Page`.
+      const rendered = yield* prerender(
+        "/a%2Fb",
+        SearchRoute.NotFound({ params: { "*": "a/b" } }),
+        true
+      )
+      // Captures "other/"; the Router strips the trailing slash, giving "/other".
+      window.history.replaceState(null, "", "/other%2F/")
+      const context = yield* Layer.build(
+        BrowserRouter.layer({ routes: SearchRoute })
+      )
+      const root = yield* hydrate(context, rendered)
+      assert.deepStrictEqual(
+        root.model(),
+        SearchRoute.NotFound({ params: { "*": "other/" } })
+      )
+      assert.deepStrictEqual(problems, [])
     }).pipe(
       Effect.provideService(Query.Problems, (problem) => problems.push(problem))
     )

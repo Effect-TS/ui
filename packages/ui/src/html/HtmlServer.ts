@@ -153,9 +153,10 @@ const serverHtmlHost: Context.Service.Shape<typeof Html.Host> = {
  * invalidated at hydration, and refetched once, unless its query's
  * `staleTime` is `"Infinity"`. There is no fetch-free window. A page
  * prerendered without search params, such as `/search`, may be served for
- * `/search?q=x`: `Router.subscription` then delivers the Router's route
- * without reporting `RouteMismatch`. The default is HTML rendered per
- * request, whose entries hydrate fresh.
+ * `/search?q=x`, and a 404 prerendered at `/404` for any unknown path:
+ * `Router.subscription` then delivers the Router's route without reporting
+ * `RouteMismatch`. The default is HTML rendered per request, whose entries
+ * hydrate fresh.
  *
  * **Gotchas**
  *
