@@ -43,8 +43,6 @@ const marks: {
   ring: ["var(--faint)", "<circle cx='6' cy='6' r='3.2'/>"]
 }
 
-const caret = glyph("<path d='M4.5 2.5 8.5 6l-4 3.5z' fill='black'/>")
-
 const markRules = Object.entries(marks).map(([name, [color, body]]) =>
   ".mk-" + name + " { color: " + color + "; -webkit-mask-image: " +
   glyph(body) + "; mask-image: " + glyph(body) + "; }"
@@ -88,7 +86,6 @@ ${markRules}
 [data-dragging] .launcher { cursor: grabbing; user-select: none; }
 .launch .paused { padding: 0 4px 0 10px; border-left: 1px solid var(--line); }
 .lockup { flex: none; width: 37.25px; height: 18px; background: currentColor; -webkit-mask: ${lockup} center / contain no-repeat; mask: ${lockup} center / contain no-repeat; }
-@media (forced-colors: active) { .lockup { forced-color-adjust: none; background: ButtonText; } }
 .alert { display: flex; align-items: center; gap: 5px; align-self: stretch; padding: 0 12px 0 10px; border-left: 1px solid var(--line); color: var(--bad); font-weight: 500; font-variant-numeric: tabular-nums; }
 .launcher-count { color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1; text-box: trim-both cap alphabetic; }
 .panel { position: relative; width: min(var(--panel-w, 920px), calc(var(--vw, 100vw) - 24px)); height: min(var(--panel-h, 560px), calc(var(--vh, 100vh) - 24px)); display: grid; grid-template-rows: 44px minmax(0, 1fr); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); container: panel / inline-size; }
@@ -154,7 +151,6 @@ ${markRules}
 .iitem.split { border-top: 1px solid var(--line); }
 .iitem:hover, .iitem.on { background: var(--sel); }
 .iitem.on { box-shadow: inset 2px 0 0 var(--ink); }
-.tree-list .iitem { padding-left: calc(8px + var(--depth) * 16px); }
 .irow { display: flex; align-items: center; flex: 1; min-width: 0; height: 26px; padding: 0 20px 0 14px; white-space: nowrap; }
 .irow .imark { margin-right: 6px; }
 .tree-list .irow { padding-left: 2px; }
@@ -162,10 +158,10 @@ ${markRules}
 .irow .id { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .irow .in { color: var(--faint); font-size: 12px; margin-left: 2px; }
 .iitem .chev { display: grid; place-items: center; width: 20px; height: 26px; }
-.iitem button.chev::before { content: ""; width: 12px; height: 12px; background: currentColor; -webkit-mask: ${caret} center / contain no-repeat; mask: ${caret} center / contain no-repeat; }
+.iitem button.chev::before { content: ""; width: 6px; height: 9px; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); }
 .iitem .chev[aria-expanded=true]::before { rotate: 90deg; }
-.iitem button.chev:hover { color: var(--ink); }
-@media (forced-colors: active) { .iitem button.chev::before { forced-color-adjust: none; background: ButtonText; } }
+.iitem .chev:hover { color: var(--ink); }
+@media (forced-colors: active) { .lockup, .iitem button.chev::before { forced-color-adjust: none; background: ButtonText; } }
 .status { flex: 0 1 auto; min-width: 0; max-width: 62%; color: var(--muted); white-space: nowrap; font-size: 12px; padding-left: 10px; overflow: hidden; text-overflow: ellipsis; }
 .rollup { flex: none; display: flex; align-items: center; gap: 10px; padding-left: 10px; font-size: 12px; font-variant-numeric: tabular-nums; }
 .rollup .under { color: var(--faint); }

@@ -741,7 +741,9 @@ const InstanceList = (
                 model.scope === row.summary.instance && "on"
               ).attr(
                 "style",
-                mode === "tree" ? "--depth:" + row.depth : undefined
+                mode === "tree"
+                  ? "padding-left:" + (8 + row.depth * 16) + "px"
+                  : undefined
               ),
               index
             }).children(
