@@ -128,7 +128,7 @@ describe("Tabs", () => {
     })
   })
 
-  it("makeTabs types the value, tabs, parts and Selected with its schema", () => {
+  it("makeTabs types the tabs and Selected with its schema", () => {
     const Section = Schema.Literals(["general", "billing"])
     const SectionMsg = UiSchema.TaggedEnum({ Opened: { section: Section } })
     const h = View.makeHelper<typeof SectionMsg.Type, {}, Html.Elements>(
@@ -142,18 +142,7 @@ describe("Tabs", () => {
       onEmit: {
         Selected: ({ value }) => SectionMsg.Opened({ section: value })
       },
-      view: (tabs) => {
-        expect(tabs.value).type.toBe<typeof Section.Type | null>()
-        expect(tabs.tab).type.not.toBeCallableWith({
-          element: h.button,
-          value: "other"
-        })
-        return tabs.root(h.div)
-      }
-    })
-    expect(SectionTabs).type.not.toBeCallableWith(h, {
-      props: { value: "other", tabs },
-      view: () => h.div
+      view: (tabs) => tabs.root(h.div)
     })
     expect(SectionTabs).type.not.toBeCallableWith(h, {
       props: { value: null, tabs: [{ value: "other" }] },

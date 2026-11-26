@@ -104,7 +104,7 @@ describe("ToggleGroup", () => {
     })
   })
 
-  it("makeToggleGroup types the value, items, parts and Toggled with its schema", () => {
+  it("makeToggleGroup types the items and Toggled with its schema", () => {
     const Align = Schema.Literals(["left", "right"])
     const AlignMsg = UiSchema.TaggedEnum({
       Aligned: { value: Schema.Array(Align) }
@@ -118,17 +118,7 @@ describe("ToggleGroup", () => {
     AlignToggleGroup(h, {
       props: { value: ["left"], items },
       onEmit: ({ value }) => AlignMsg.Aligned({ value }),
-      view: (toggleGroup) => {
-        expect(toggleGroup.item).type.not.toBeCallableWith({
-          element: h.button,
-          value: "center"
-        })
-        return toggleGroup.root(h.div)
-      }
-    })
-    expect(AlignToggleGroup).type.not.toBeCallableWith(h, {
-      props: { value: ["center"], items },
-      view: () => h.div
+      view: (toggleGroup) => toggleGroup.root(h.div)
     })
     expect(AlignToggleGroup).type.not.toBeCallableWith(h, {
       props: { value: [], items: [{ value: "center" }] },

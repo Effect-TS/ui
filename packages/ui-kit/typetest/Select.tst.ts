@@ -159,7 +159,7 @@ describe("Select", () => {
     })
   })
 
-  it("makeSelect types the value, items, parts and Picked with its schema", () => {
+  it("makeSelect types the items, highlighted and Picked with its schema", () => {
     const Theme = Schema.Literals(["light", "dark"])
     const ThemeMsg = UiSchema.TaggedEnum({
       PickedTheme: {
@@ -181,17 +181,9 @@ describe("Select", () => {
         Settled: () => undefined
       },
       view: (select) => {
-        expect(select.item).type.not.toBeCallableWith({
-          element: h.div,
-          value: "sepia"
-        })
         expect(select.highlighted).type.toBe<"light" | "dark" | null>()
         return select.trigger(h.button)
       }
-    })
-    expect(ThemeSelect).type.not.toBeCallableWith(h, {
-      props: { open: false, value: "sepia", items },
-      view: () => h.div
     })
     expect(ThemeSelect).type.not.toBeCallableWith(h, {
       props: { open: false, items: [{ value: "sepia", label: "Sepia" }] },

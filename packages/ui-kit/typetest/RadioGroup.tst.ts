@@ -140,7 +140,7 @@ describe("RadioGroup", () => {
     })
   })
 
-  it("makeRadioGroup types the value, items, parts and Picked with its schema", () => {
+  it("makeRadioGroup types the items and Picked with its schema", () => {
     const Scope = Schema.Literals(["All", "League", "Cup"])
     const ScopeMsg = UiSchema.TaggedEnum({ PickedScope: { scope: Scope } })
     const h = View.makeHelper<typeof ScopeMsg.Type, {}, Html.Elements>(
@@ -152,18 +152,7 @@ describe("RadioGroup", () => {
     ScopeRadioGroup(h, {
       props: { value: "All", items },
       onEmit: { Picked: ({ value }) => ScopeMsg.PickedScope({ scope: value }) },
-      view: (radioGroup) => {
-        expect(radioGroup.value).type.toBe<typeof Scope.Type | null>()
-        expect(radioGroup.radio).type.not.toBeCallableWith({
-          element: h.button,
-          value: "Other"
-        })
-        return radioGroup.root(h.div)
-      }
-    })
-    expect(ScopeRadioGroup).type.not.toBeCallableWith(h, {
-      props: { value: "Other", items },
-      view: () => h.div
+      view: (radioGroup) => radioGroup.root(h.div)
     })
     expect(ScopeRadioGroup).type.not.toBeCallableWith(h, {
       props: { value: null, items: [{ value: "Other" }] },

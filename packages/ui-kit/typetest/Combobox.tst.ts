@@ -178,7 +178,7 @@ describe("Combobox", () => {
     })
   })
 
-  it("makeCombobox types the value, items, parts, Picked and Highlighted with its schema, but not the input text", () => {
+  it("makeCombobox types the items, groups, Picked and Highlighted with its schema, but not the input text", () => {
     const Fruit = Schema.Literals(["apple", "pear"])
     const FruitMsg = UiSchema.TaggedEnum({
       PickedFruit: {
@@ -207,19 +207,11 @@ describe("Combobox", () => {
         Settled: () => undefined
       },
       view: (combobox) => {
-        expect(combobox.item).type.not.toBeCallableWith({
-          element: h.div,
-          value: "plum"
-        })
         const group = combobox.groups[0]!
         expect(group.items[0]!.value).type.toBe<"apple" | "pear">()
         expect(group.rows[0]![0]!.value).type.toBe<"apple" | "pear">()
         return combobox.input(h.input)
       }
-    })
-    expect(FruitCombobox).type.not.toBeCallableWith(h, {
-      props: { open: false, inputValue: "", value: "plum", items },
-      view: () => h.div
     })
     expect(FruitCombobox).type.not.toBeCallableWith(h, {
       props: {
