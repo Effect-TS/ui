@@ -288,7 +288,7 @@ const sharedState: Scenario = {
     {
       id: "foldkit",
       title: "Foldkit 0.x",
-      subtitle: "The shared value lives in the root Model",
+      subtitle: "The root Model holds the shared value",
       rootName: "Root",
       roles: {
         Root: "Owns the value",
@@ -361,7 +361,7 @@ const sharedState: Scenario = {
     {
       id: "effect",
       title: "Effect UI",
-      subtitle: "The shared value lives in a Provider's Model",
+      subtitle: "A Provider's Model holds the shared value",
       rootName: "Provider",
       roles: {
         Root: "Owns the value",

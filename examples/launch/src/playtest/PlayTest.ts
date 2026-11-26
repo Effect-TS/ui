@@ -33,8 +33,6 @@ export const RunPlayTest = Command.make(
     )
 )
 
-const before = "Drag the slider to run the test one line at a time."
-
 const PlayTestModel = Schema.Struct({
   selected: ScenarioId,
   frames: Schema.Array(Frame),
@@ -215,29 +213,6 @@ const Controls = (
   )
 }
 
-// What the line that just ran did. Every note is in one cell, so the
-// tallest sets the height and nothing moves from one line to the next.
-const Note = (
-  h: Html.H<PlayTestMessage>,
-  model: PlayTestModel,
-  notes: ReadonlyArray<string>
-) => {
-  const shown = model.position === null ? 0 : model.position + 1
-  return h.p.class(
-    "grid border-t border-border bg-card px-3.5 py-2.5 text-sm",
-    "text-muted-foreground",
-    "@max-[939px]/playtest:order-2 @max-[939px]/playtest:border-t-0",
-    "@max-[939px]/playtest:border-b"
-  ).attr("aria-hidden", "true").children(
-    [before, ...notes].map((text, index) =>
-      h.span.key(String(index)).class(
-        "col-start-1 row-start-1 text-pretty",
-        index !== shown && "invisible"
-      ).children(text)
-    )
-  )
-}
-
 export const PlayTest = Html.component({
   name: "PlayTest",
   props: Schema.Struct({
@@ -357,7 +332,7 @@ export const PlayTest = Html.component({
             tests.map(({ id, snippet }) =>
               tabs.panel({
                 element: h.div.key(id).class(
-                  "@max-[939px]/playtest:order-3"
+                  "@max-[939px]/playtest:order-2"
                 ),
                 value: id
               })
@@ -381,16 +356,21 @@ export const PlayTest = Html.component({
                       "@min-[940px]/playtest:border-b-0",
                       "@min-[940px]/playtest:border-l"
                     ).children(
-                      Bar(h, "On the test host", "Sketch"),
+                      Bar(h, "Test host tree", "Visualization"),
                       Stage(h, model)
                     )
                   )
                 )
             ),
-            Note(h, model, notes),
             Controls(h, model, sources)
           )
       }),
+      h.figcaption.class(
+        "mx-auto w-full max-w-(--column) text-sm text-pretty",
+        "text-muted-foreground"
+      ).children(
+        "Play tests render nothing and use no browser. This figure sketches the test host's in-memory tree after each line."
+      ),
       h.p.class(srOnly).attr("aria-live", "polite").children(
         model.position === null ? "" : notes[model.position]
       )

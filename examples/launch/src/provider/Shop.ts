@@ -28,12 +28,13 @@ const CartCount = Html.component({
   name: "CartCount",
   model: Schema.Null,
   message: Schema.Never,
-  // Lists the Provider to read. Its value is h.reads.cart, and
-  // CartCount renders again when that value changes.
+  // Lists the Provider to read from.
   reads: { cart: CartProvider }
 }).make({
   init: () => null,
   update: ($) => $.model,
+  // h.reads.cart holds CartProvider's shared value. CartCount
+  // renders again when that value changes.
   view: (h) => h.output(`${h.reads.cart.count} in cart`)
 })
 

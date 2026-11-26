@@ -37,7 +37,7 @@ const features: Readonly<
     "checklist"
   ],
   "Tests that account for every Command": ["kept", "checklist"],
-  "A message log you can inspect and replay": ["kept", "checklist"]
+  "A Message log you can inspect and replay": ["kept", "checklist"]
 }
 
 /** The label of every bullet that has an icon. */

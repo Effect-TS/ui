@@ -62,7 +62,7 @@ const diagram = (name: keyof typeof scenarios) => {
   const choice = choices.includes("A1") ? "A1" : choices[0]
   return sides.map((side) =>
     [
-      `**${side.title}** (${side.subtitle}). ${label}: ${choice}.`,
+      `**${side.title}.** ${side.subtitle}. ${label}: ${choice}.`,
       "",
       ...side.steps(choice).map((step, index) =>
         `${index + 1}. ${step.text}`
@@ -102,11 +102,11 @@ export const toMarkdown = (source: string, snippets: Snippets) => {
       case "PlayTest":
         return [
           files(snippets.play),
-          "An interactive figure runs this test in the browser, on the test host with a TestClock. A slider steps through it one line at a time and shows the app as the test host holds it, the TestClock and whether DelayReset is running. The test clicks +1 and Reset: the count is 1 and DelayReset is asleep. It moves the clock to 999 ms, and the count is still 1. It moves the clock one more millisecond: DelayReset finishes, the runtime delivers CompletedDelayReset, and the count is 0.",
+          "An interactive figure runs this test in the browser, on the test host with a TestClock. A slider steps through it one line at a time and shows the app as the test host holds it, the TestClock and whether DelayReset is running. The test clicks +1 and Reset, so the count is 1 and DelayReset is asleep. It advances the clock to 999 ms, and the count is still 1. It advances the clock one more millisecond. DelayReset finishes, the runtime delivers CompletedDelayReset, and the count is 0.",
           files(snippets.playSignIn),
-          "A second tab runs this test of the sign-in flow in `examples/auth`. The router and the session store keep their data in memory. The test types an email and a password, and the form enables its button. It clicks Sign In: the real sign-in Command starts a request that takes one second, and the button reads \"Signing in...\". It moves the clock one second: the app shows the dashboard, the session is in the store and the URL is /dashboard.",
+          "A second tab runs this test of the sign-in flow in `examples/auth`. The router and the session store keep their data in memory. The test types an email and a password, and the form enables its button. It clicks Sign In. The real sign-in Command starts a request that takes one second, and the button reads \"Signing in...\". It advances the clock one second. The app shows the dashboard, the session is in the store and the URL is /dashboard.",
           files(snippets.playSnake),
-          "A third tab runs this test of the Snake game in `examples/snake`. A seed fixes where the apple appears. The test presses Space to start the game and the up arrow to turn, then moves the TestClock 150 ms, which is one move. It presses the right arrow and moves the clock 900 ms, which is six moves: the snake reaches the apple and the score is 10. It presses Space to pause and moves the clock ten seconds, and the snake doesn't move."
+          "A third tab runs this test of the Snake game in `examples/snake`. A seed fixes where the apple appears. The test presses Space to start the game and the up arrow to turn, then advances the TestClock 150 ms, which is one move. It presses the right arrow and advances the clock 900 ms, which is six moves. The snake reaches the apple and the score is 10. It presses Space to pause and advances the clock ten seconds, and the snake doesn't move."
         ].join("\n\n")
       case "Kit":
         return [
@@ -115,7 +115,7 @@ export const toMarkdown = (source: string, snippets: Snippets) => {
         ].join("\n\n")
       case "PerformanceChart":
         return [
-          "| Library | JavaScript time, as a multiple of vanilla JS |",
+          "| Entry | JavaScript time, as a multiple of vanilla JavaScript |",
           "| --- | ---: |",
           ...summary.map((entry) =>
             `| ${names[entry.framework]} | ${

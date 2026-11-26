@@ -99,7 +99,7 @@ export const PerformanceChart = <M>(h: Html.H<M>) =>
         })
       ),
       h.figcaption.class(caption).children(
-        "Time spent running JavaScript across the nine operations, as a multiple of vanilla JS (geometric mean). Shorter is faster. Read the ",
+        "Geometric mean of JavaScript time across the nine operations, as a multiple of vanilla JavaScript. Shorter is faster. Read the ",
         h.a.class("underline").attr("href", links.methodology)
           .children("methodology"),
         " or the ",
@@ -205,7 +205,7 @@ export const AllResults = Html.component({
             )
           )
             .children(
-              "Results for all seven frameworks, where lower is better",
+              "Results for all seven entries, where lower is better",
               h.span.class(
                 "ml-2 flex size-6 shrink-0 items-center justify-center",
                 "bg-muted text-muted-foreground",
