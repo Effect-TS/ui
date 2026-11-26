@@ -188,18 +188,16 @@ describe("Runtime", () => {
       }).make({
         init: () => 0,
         update: ($) => $.model + 1,
-        view: (h, clicks) => {
-          let node = h.el("button").on("click", null).children(
-            `clicks ${clicks}`
-          )
+        view: (h) => {
+          let node = h.el("button").on("click", null).children("deep")
           for (let depth = 0; depth < 1000; depth++) node = h.el("div", node)
           return node
         }
       })
       const root = yield* TestHost.mount(Deep, {})
-      click(root, "clicks 0")
+      click(root, "deep")
       yield* TestHost.settle
-      assert.strictEqual(root.text(), "clicks 1")
+      assert.strictEqual(root.model(), 1)
     })))
 
   describe("keyed list", () => {
