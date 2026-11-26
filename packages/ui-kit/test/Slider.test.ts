@@ -328,6 +328,15 @@ describe("Slider", () => {
       scene.blur(input(0)).parts((slider) =>
         assert.strictEqual(slider.activeThumbIndex, -1)
       )
+      scene.props({ value: [1, 2], max: 3 })
+      assert.strictEqual(
+        scene.get(thumb(0)).attrs?.style,
+        "--slider-thumb-position:33.333%"
+      )
+      assert.strictEqual(
+        scene.get(indicator).attrs?.style,
+        "--slider-indicator-start:33.333%;--slider-indicator-size:33.333%"
+      )
     }))
 
   it.effect("a track press drags the selected thumb and a pushed neighbour stays put on reversal", () =>
