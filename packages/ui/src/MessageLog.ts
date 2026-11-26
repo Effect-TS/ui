@@ -2232,6 +2232,41 @@ export const makeEncoded = (
     }
   })
 
+interface Sent {
+  readonly seq: number
+  readonly tag: WireEntry["_tag"]
+  readonly owner: string
+  /**
+   * Identifies frames that replace one another during replay. State frames
+   * use their sequence number so queued commands can keep older frames alive.
+   */
+  readonly slot: string
+  readonly frame: string
+}
+
+const slotOf = (entry: WireEntry): string => {
+  switch (entry._tag) {
+    case "Waiting":
+    case "Mounted":
+    case "Update":
+      return String(entry.seq)
+    case "PropsChanged":
+      return "props"
+    case "QueryChanged":
+      return "query/" + entry.name
+    case "Failed":
+    case "CommandStarted":
+    case "CommandEnded":
+    case "CommandInterrupted":
+    case "CommandDropped":
+      return entry.issued === undefined
+        ? ""
+        : entry.issued.seq + "/" + entry.issued.index
+    default:
+      return ""
+  }
+}
+
 /**
  * Streams entries to a devtools process over a WebSocket, as newline-free
  * JSON Wire frames, one per message.
@@ -2240,8 +2275,15 @@ export const makeEncoded = (
  *
  * Entries are encoded by `makeEncoded`. The Layer keeps the last `buffer`
  * frames (1,000 by default), which every new connection receives after its
- * `Hello`, so devtools that connect late see the recent past. A lost
- * connection is retried with backoff, and one warning is logged.
+ * `Hello`. It also retains older frames needed to reconstruct mounted
+ * instances, their current state, and waiting or running commands. Retained
+ * command outcomes prevent completed commands from appearing as waiting.
+ * Older history may be missing.
+ *
+ * Session starts are retained for the lifetime of the layer. An instance
+ * releases its retained frames when its `Unmounted` leaves the buffer.
+ * Retained frames precede the buffer in sequence order on each connection.
+ * A lost connection is retried with backoff, and one warning is logged.
  *
  * @stability experimental
  * @category layers
@@ -2257,35 +2299,109 @@ export const socket = (url: string, options?: {
     Effect.gen(function*() {
       const size = Math.max(1, options?.buffer ?? 1_000)
       const outbox = yield* Queue.unbounded<string>()
-      const replay: Array<string> = []
+      const replay: Array<Sent> = []
+      // Frames that left `replay` and still hold live state.
+      const sessions = new Map<string, Sent>()
+      const live = new Map<string, Map<string, Sent>>()
+      // A queued command has no CommandStarted yet; its issuing frame is
+      // the only record replay can use to restore it.
+      const pending = new Map<string, Set<string>>()
       const hello = JSON.stringify({
         _tag: "Hello",
         version: wireVersion,
         host: options?.host ?? "browser"
       })
 
+      const isState = (tag: WireEntry["_tag"]) =>
+        tag === "Waiting" || tag === "Mounted" || tag === "Update"
+      const issues = (owner: string, slot: string) => {
+        for (const run of pending.get(owner) ?? []) {
+          if (run.startsWith(slot + "/")) return true
+        }
+        return false
+      }
+
+      const keep = (sent: Sent) => {
+        const { tag, owner, slot } = sent
+        if (tag === "SessionStarted") return void sessions.set(owner, sent)
+        if (tag === "Unmounted") return void live.delete(owner)
+        let kept = live.get(owner)
+        if (isState(tag)) {
+          if (kept === undefined) live.set(owner, kept = new Map())
+          // State frames include props and query results, superseding earlier
+          // changes. Keep Mounted to establish the instance, and older state
+          // frames only while they are needed to restore queued commands.
+          const replaced = new Set<string>()
+          for (const [at, old] of kept) {
+            if (at === "props" || at.startsWith("query/")) kept.delete(at)
+            else if (
+              isState(old.tag) && old.tag !== "Mounted" && !issues(owner, at)
+            ) replaced.add(at)
+          }
+          for (const [at, old] of kept) {
+            if (
+              replaced.has(at) ||
+              (old.tag !== "CommandStarted" && replaced.has(at.split("/")[0]))
+            ) kept.delete(at)
+          }
+          kept.set(slot, sent)
+        } else if (kept === undefined || slot === "") {
+          return
+        } else if (
+          tag === "CommandStarted" || tag === "PropsChanged" ||
+          tag === "QueryChanged" ||
+          // A run's end is kept while the frame that issued it is, so
+          // replaying that frame doesn't open the run again.
+          kept.has(slot.slice(0, slot.indexOf("/")))
+        ) kept.set(slot, sent)
+        else kept.delete(slot)
+      }
+
       const log = yield* makeEncoded(
         (batch) =>
           Effect.sync(() => {
             for (const encoded of batch) {
               const frame = JSON.stringify(encoded)
-              replay.push(frame)
-              if (replay.length > size) replay.shift()
+              const owner = "instance" in encoded
+                ? encoded.session + "/" + encoded.instance
+                : encoded.session
+              const slot = slotOf(encoded)
+              if (encoded._tag === "Unmounted") pending.delete(owner)
+              else if ("commands" in encoded) {
+                encoded.commands.forEach((command, index) => {
+                  if (command._tag === "Interrupt") return
+                  let runs = pending.get(owner)
+                  if (runs === undefined) pending.set(owner, runs = new Set())
+                  runs.add(slot + "/" + index)
+                })
+              } else if (slot !== "") pending.get(owner)?.delete(slot)
+              replay.push({
+                seq: encoded.seq,
+                tag: encoded._tag,
+                owner,
+                slot,
+                frame
+              })
+              if (replay.length > size) keep(replay.shift()!)
               Queue.offerUnsafe(outbox, frame)
             }
           }),
         { maxEntryBytes: options?.maxEntryBytes }
       )
 
+      const replayed = () => {
+        const kept = Array.from(sessions.values())
+        for (const instance of live.values()) kept.push(...instance.values())
+        kept.sort((a, b) => a.seq - b.seq)
+        return [hello, ...kept.concat(replay).map((sent) => sent.frame)]
+      }
+
       const connection = Effect.gen(function*() {
         const ws = yield* Socket.makeWebSocket(url)
         const writer = yield* ws.writer
         const reader = yield* ws.reader
         // What's queued is already in the replay buffer, so it's sent from there.
-        const backlog = yield* Effect.map(
-          Queue.clear(outbox),
-          () => [hello, ...replay]
-        )
+        const backlog = yield* Effect.map(Queue.clear(outbox), replayed)
         yield* Effect.forEach(backlog, (frame) => writer.write(frame), {
           discard: true
         })

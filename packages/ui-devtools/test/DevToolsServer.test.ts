@@ -1,19 +1,23 @@
 // @vitest-environment happy-dom
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer"
+import { Command, MessageLog, Query, UiSchema } from "@effect/ui"
 import { DevTools } from "@effect/ui-devtools"
 import * as Mcp from "@effect/ui-devtools/internal/mcp"
 import * as Remote from "@effect/ui-devtools/internal/remote"
 import * as Server from "@effect/ui-devtools/internal/server"
 import { DevToolsServer, DevToolsVite } from "@effect/ui-devtools/node"
+import { Html } from "@effect/ui/html"
 import type * as BrowserHost from "@effect/ui/html/BrowserHost"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Schedule, Schema, Stream } from "effect"
+import { Context, Effect, Layer, Schedule, Schema, Stream } from "effect"
 import { McpClient, McpProtocol } from "effect/ai"
 import { HttpRouter } from "effect/http"
+import { AsyncResult } from "effect/reactivity"
 import * as Socket from "effect/socket/Socket"
 import { createServer, request } from "node:http"
+import type { AddressInfo } from "node:net"
 import { type Capture, play } from "./fixtures/TwoEditors.ts"
 
 const wait = (ms: number) =>
@@ -125,6 +129,35 @@ const until = (check: () => boolean) =>
       ? Effect.void
       : Effect.andThen(wait(10), Effect.suspend(loop))
   }).pipe(Effect.timeout("2 seconds"))
+
+const freePort = Effect.promise(() =>
+  new Promise<number>((resolve, reject) => {
+    const server = createServer()
+    server.on("error", reject)
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address() as AddressInfo
+      server.close(() => resolve(port))
+    })
+  })
+)
+
+class GetNote extends Query.Service<GetNote>()("notes/GetNote", {
+  args: { id: Schema.String },
+  success: Schema.String,
+  error: Schema.Never,
+  staleTime: "30 seconds"
+}) {}
+class Touch extends Command.Service<Touch>()("notes/Touch", {
+  args: { id: Schema.String },
+  success: Schema.Void
+}) {}
+const Note = Html.component({
+  name: "Note",
+  props: Schema.Struct({ id: Schema.String }),
+  model: Schema.Struct({}),
+  message: UiSchema.TaggedEnum({ Click: {} }),
+  queries: { note: { query: GetNote, args: ({ props }) => ({ id: props.id }) } }
+}).make({ init: () => ({}), update: ($) => $.model, view: (h) => h.div() })
 
 const serveFast = Effect.fnUntraced(function*(port: number, timeout: number) {
   const { routes, server } = Server.make({
@@ -292,7 +325,6 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "keeps the state of an instance whose entries the ring dropped",
     () =>
       Effect.gen(function*() {
-        // Keep the page buffer large enough to replay /Workspace's mount to a late socket.
         const { agent, url } = yield* serve({ port: 47742, size: 12 })
         yield* open(url, "open")
         // Wait for eviction, not just the socket connection.
@@ -319,6 +351,111 @@ describe("DevToolsServer", { concurrent: false }, () => {
           at: 0
         })
         assert.include(message, "older than the last 12 entries")
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
+    "shows live state that left the page's buffer before the server started",
+    () =>
+      Effect.gen(function*() {
+        const port = yield* freePort
+        const page = yield* Layer.build(
+          MessageLog.socket(
+            DevToolsServer.url({ port }).replace("http", "ws") + "/log",
+            { buffer: 1 }
+          ).pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))
+        )
+        const log = Context.get(page, MessageLog.MessageLog)
+        const def = Query.defOf(GetNote)
+        const note = (id: string) =>
+          Query.makeSnapshot(
+            def,
+            "note",
+            { args: { id }, argsKey: def.argsKey({ id }) },
+            AsyncResult.success("Note " + id, { timestamp: 0 })
+          )
+        const base = (seq: number) => ({
+          seq,
+          at: 0,
+          session: "s",
+          path: "/Note",
+          instance: 1,
+          component: Note
+        })
+        const run = (seq: number, index: number) => ({
+          ...base(seq),
+          name: "notes/Touch",
+          issued: { seq: 1, index },
+          spanId: "span",
+          traceId: "trace"
+        })
+        const update = (
+          seq: number,
+          commands: ReadonlyArray<Command.Command<any, any>>
+        ) => ({
+          _tag: "Update",
+          ...base(seq),
+          source: { _tag: "Dispatch" },
+          message: { _tag: "Click" },
+          props: { id: "b" },
+          model: {},
+          queries: { note: note("b") },
+          commands,
+          events: [],
+          lists: [],
+          sends: []
+        })
+        for (
+          const entry of [
+            {
+              _tag: "SessionStarted",
+              seq: 0,
+              at: 0,
+              session: "s",
+              app: "Note"
+            },
+            {
+              _tag: "Mounted",
+              ...base(1),
+              props: { id: "a" },
+              model: {},
+              queries: { note: note("a") },
+              commands: [Touch.make({ id: "a" }), Touch.make({ id: "b" })],
+              events: [],
+              adopted: false
+            },
+            { _tag: "CommandStarted", ...run(2, 0) },
+            { _tag: "CommandEnded", ...run(3, 0), silent: true },
+            { _tag: "CommandStarted", ...run(4, 1) },
+            // Simulate a queued command with no CommandStarted yet.
+            update(5, [Touch.make({ id: "b" })]),
+            update(6, []),
+            { _tag: "PropsChanged", ...base(7), props: { id: "c" } },
+            {
+              _tag: "QueryChanged",
+              ...base(8),
+              name: "note",
+              result: note("c")
+            },
+            { _tag: "Drawn", ...base(9) }
+          ] as ReadonlyArray<MessageLog.Entry>
+        ) log.record(entry)
+
+        const { agent } = yield* serve({ port })
+        const [session] = yield* agent.call<ReadonlyArray<any>>(
+          "list_sessions"
+        ).pipe(
+          Effect.filterOrFail(([session]) => session?.last === 9),
+          Effect.retry(Schedule.spaced("10 millis")),
+          Effect.timeout("5 seconds")
+        )
+        assert.strictEqual(session.app, "Note")
+        const [instance] = yield* agent.call("list_instances")
+        assert.strictEqual(instance.status, "1 ended, 1 running, 1 waiting")
+        const state = yield* agent.call("get_state", { instance: 1 })
+        assert.deepStrictEqual(state.props, { id: "c" })
+        assert.strictEqual(state.queries.note[2], "Note c")
       }).pipe(Effect.scoped),
     30_000
   )
