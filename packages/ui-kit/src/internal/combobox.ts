@@ -35,10 +35,8 @@ import {
 import {
   type Directed,
   isRtl,
-  provided,
   rightToLeft,
-  watchDirection,
-  watchDirectionScoped
+  watchDirectionWhile
 } from "./direction.ts"
 import { byAttribute, focusFinal, trapTab } from "./dom.ts"
 import { textFilter } from "./filter.ts"
@@ -938,7 +936,9 @@ const TrackComboboxArgs = {
   owner: Schema.String,
   popupId: Schema.String,
   listId: Schema.String,
-  list: ListArgs
+  list: ListArgs,
+  // No `dir` prop or `DirectionProvider` decides the direction.
+  css: Schema.Boolean
 }
 
 type TrackComboboxArgs = Schema.Struct<typeof TrackComboboxArgs>["Type"]
@@ -1118,11 +1118,6 @@ const watch = (
           capture: true,
           signal
         })
-        watchDirection(
-          node,
-          (rtl) => send(Message.FoundDirection({ rtl })),
-          signal
-        )
         node.addEventListener("focusin", onFocusIn, { signal })
         node.addEventListener("mousedown", onMouseDown, { signal })
         node.addEventListener("keydown", onKeyDown, { signal })
@@ -1138,6 +1133,14 @@ const watch = (
               changes,
               (next) => Effect.sync(() => onChange(next))
             )
+          )
+        ),
+        Effect.tap(() =>
+          watchDirectionWhile(
+            node,
+            args,
+            changes,
+            (rtl) => send(Message.FoundDirection({ rtl }))
           )
         )
       ),
@@ -1170,12 +1173,14 @@ const TrackCombobox = Mount.makeStream(
 
 const TrackComboboxList = Mount.makeStream(
   "TrackComboboxList",
-  { args: { list: ListArgs } },
+  { args: { list: ListArgs, css: Schema.Boolean } },
   (node: HTMLElement, args, changes) =>
     Stream.callback<Message>((queue) => {
       const follow = following(node.ownerDocument, () => node)
-      return watchDirectionScoped(
+      return watchDirectionWhile(
         node,
+        args,
+        changes,
         (rtl) => Queue.offerUnsafe(queue, Message.FoundDirection({ rtl }))
       ).pipe(
         Effect.andThen(Effect.sync(() => follow(args.list))),
@@ -1194,6 +1199,7 @@ const TrackComboboxChips = Mount.makeStream(
       owner: Schema.String,
       // Set by `dir` or a provider; else the chips' CSS as the key lands.
       rtl: Schema.NullOr(Schema.Boolean),
+      css: Schema.Boolean,
       locked: Schema.Boolean
     }
   },
@@ -1256,11 +1262,6 @@ const TrackComboboxChips = Mount.makeStream(
       const controller = new AbortController()
       return Effect.acquireRelease(
         Effect.sync(() => {
-          watchDirection(
-            node,
-            (rtl) => send(Message.FoundChipsDirection({ rtl })),
-            controller.signal
-          )
           node.addEventListener("keydown", onKeyDown, {
             signal: controller.signal
           })
@@ -1270,10 +1271,18 @@ const TrackComboboxChips = Mount.makeStream(
               Effect.sync(() => {
                 current = next
               })))
+          ),
+          Effect.tap(() =>
+            watchDirectionWhile(
+              node,
+              args,
+              changes,
+              (rtl) =>
+                send(Message.FoundChipsDirection({ rtl }))
+            )
           )
         ),
-        () =>
-          Effect.sync(() => controller.abort())
+        () => Effect.sync(() => controller.abort())
       )
     })
 )
@@ -1479,6 +1488,7 @@ export const make = <P, E, V extends string = string>(
   ) => {
     const props = settingsOf(p.props)
     const chipsRtl = rtlOf(props.dir, p.reads, model.chipsRtl)
+    const css = props.dir === undefined && p.reads.provider === undefined
     const open = props.open
     const inline = props.inline === true
     const inPopup = props.inputInPopup === true
@@ -1866,9 +1876,8 @@ export const make = <P, E, V extends string = string>(
         .onMount(
           TrackComboboxChips({
             owner,
-            rtl: props.dir !== undefined
-              ? props.dir === "rtl"
-              : provided(p.reads.provider),
+            rtl: css ? null : chipsRtl,
+            css,
             locked: disabled || readOnly
           })
         )
@@ -1958,7 +1967,8 @@ export const make = <P, E, V extends string = string>(
           owner,
           popupId,
           listId,
-          list: listArgs
+          list: listArgs,
+          css
         })
       )
     })
@@ -2005,7 +2015,7 @@ export const make = <P, E, V extends string = string>(
         "data-empty": flag(listEmpty)
       }).forward(labelledBy)
       return inline
-        ? decorated.onMount(TrackComboboxList({ list: listArgs }))
+        ? decorated.onMount(TrackComboboxList({ list: listArgs, css }))
         : decorated
     })
 

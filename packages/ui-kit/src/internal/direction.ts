@@ -1,6 +1,7 @@
 import * as Mount from "@effect/ui/Mount"
 import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
+import type * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import { isElement } from "./dom.ts"
 
@@ -88,16 +89,20 @@ const observe = (node: Element, read: () => void, signal: AbortSignal) => {
   }
 }
 
-// Sends the element's CSS `direction`, `true` for right-to-left, on mount
+interface Watch {
+  readonly read: () => void
+  readonly stop: () => void
+}
+
+// Sends the element's CSS `direction`, `true` for right-to-left, on start
 // and whenever it changes: when `dir`, `style` or
 // `class` changes on it or above it, and when focus enters, for a change
-// a stylesheet alone made. Returns the read, for a pointer press to send
-// it before its own message.
-export const watchDirection = (
+// a stylesheet alone made.
+const watchDirection = (
   node: Element,
-  send: (rtl: boolean) => void,
-  signal: AbortSignal
-): () => void => {
+  send: (rtl: boolean) => void
+): Watch => {
+  const controller = new AbortController()
   // Sent even when left-to-right, so a remount replaces an earlier reading.
   let rtl = isRtl(node)
   send(rtl)
@@ -107,29 +112,54 @@ export const watchDirection = (
     rtl = next
     send(rtl)
   }
-  observe(node, read, signal)
-  node.addEventListener("focusin", read, { signal })
-  return read
+  observe(node, read, controller.signal)
+  node.addEventListener("focusin", read, { signal: controller.signal })
+  return { read, stop: () => controller.abort() }
 }
 
-export const watchDirectionScoped = (
-  node: Element,
-  send: (rtl: boolean) => void
-) =>
-  Effect.acquireRelease(
-    Effect.sync(() => new AbortController()),
-    (controller) => Effect.sync(() => controller.abort())
-  ).pipe(
-    Effect.map((controller) => watchDirection(node, send, controller.signal))
-  )
+interface Css {
+  readonly css: boolean
+}
 
+// Callers enable `css` when neither a provider nor a `dir` prop supplies direction.
+// The returned function refreshes an active watcher before a pointer message.
+export const watchDirectionWhile = (
+  node: Element,
+  args: Css,
+  changes: Stream.Stream<Css>,
+  send: (rtl: boolean) => void
+): Effect.Effect<() => void, never, Scope.Scope> =>
+  Effect.suspend(() => {
+    let watch: Watch | undefined
+    const toggle = (css: boolean) => {
+      if (css === (watch !== undefined)) return
+      watch?.stop()
+      watch = css ? watchDirection(node, send) : undefined
+    }
+    toggle(args.css)
+    const follow = Stream.runForEach(
+      changes,
+      (next) => Effect.sync(() => toggle(next.css))
+    )
+    return Effect.addFinalizer(() => Effect.sync(() => toggle(false))).pipe(
+      Effect.andThen(Effect.forkScoped(follow)),
+      Effect.as(() => watch?.read())
+    )
+  })
+
+// Views omit this mount when a `DirectionProvider` supplies direction.
 export const TrackDirection = Mount.makeStream(
   "TrackDirection",
   { args: {} },
   (node: unknown) =>
     Stream.callback<boolean>((queue) =>
       isElement(node)
-        ? watchDirectionScoped(node, (rtl) => Queue.offerUnsafe(queue, rtl))
+        ? Effect.acquireRelease(
+          Effect.sync(() =>
+            watchDirection(node, (rtl) => Queue.offerUnsafe(queue, rtl))
+          ),
+          (watch) => Effect.sync(watch.stop)
+        )
         : Effect.void
     )
 )

@@ -149,7 +149,7 @@ import { type Attributed, flag, withTokens } from "./internal/attributes.ts"
 import {
   type Directed,
   rightToLeft,
-  watchDirection
+  watchDirectionWhile
 } from "./internal/direction.ts"
 import { isHTMLElement } from "./internal/dom.ts"
 import { keyed } from "./internal/list.ts"
@@ -502,8 +502,8 @@ const clickFrom = (tab: HTMLElement, event: KeyboardEvent) => {
 
 const ActivateFromKeys = Mount.makeStream(
   "ActivateFromKeys",
-  { args: {} },
-  (node: unknown) =>
+  { args: { css: Schema.Boolean } },
+  (node: unknown, args, changes) =>
     Stream.callback<TabsMessage>((queue) =>
       Effect.acquireRelease(
         Effect.sync(() => {
@@ -531,12 +531,6 @@ const ActivateFromKeys = Mount.makeStream(
           }
           const controller = new AbortController()
           if (isHTMLElement(node)) {
-            watchDirection(
-              node,
-              (rtl) =>
-                Queue.offerUnsafe(queue, TabsMessage.FoundDirection({ rtl })),
-              controller.signal
-            )
             node.addEventListener("keydown", onKeyDown, {
               signal: controller.signal
             })
@@ -547,6 +541,18 @@ const ActivateFromKeys = Mount.makeStream(
           return controller
         }),
         (controller) => Effect.sync(() => controller.abort())
+      ).pipe(
+        Effect.andThen(
+          isHTMLElement(node)
+            ? watchDirectionWhile(
+              node,
+              args,
+              changes,
+              (rtl) =>
+                Queue.offerUnsafe(queue, TabsMessage.FoundDirection({ rtl }))
+            )
+            : Effect.void
+        )
       )
     )
 )
@@ -1065,7 +1071,7 @@ export const makeTabs = <V extends string>(
                 ? "vertical"
                 : undefined
             })
-            .onMount(ActivateFromKeys({}))
+            .onMount(ActivateFromKeys({ css: p.reads.provider === undefined }))
         ),
         tab: View.wrapPart(
           tabPart,
