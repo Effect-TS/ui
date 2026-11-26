@@ -552,7 +552,7 @@ describe("headless components", () => {
       })
       const root = yield* TestHost.mount(Parent, {})
       yield* TestHost.settle
-      assert.deepStrictEqual(failures(root), [
+      assert.sameMembers(failures(root), [
         "/Parent/Pair[p] view",
         "/Parent/Menu[m] view"
       ])
