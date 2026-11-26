@@ -22,6 +22,8 @@
  * which no Layer build begun since is still pending), the router scrolls,
  * announces the page in a live region and moves focus. A push goes to the top
  * or to its `#hash` element, and back and forward restore the saved position.
+ * An initial `#hash` whose element renders after load is scrolled to and
+ * focused when it appears, unless the reader interacts or navigates first.
  * A quiet navigation (see `Router.Settled`), such as `Router.patchSearch`,
  * stays on the page: nothing is announced and focus stays. Back and forward
  * still restore the saved position, and a `patchSearch` given
@@ -119,11 +121,14 @@ export interface Options {
    * says whether it's the base, as with an i18n prefix like `/en`.
    */
   readonly base?: string | ((segment: string) => boolean) | undefined
-  /** Scroll to the top, a `#hash` or the saved position after a navigation. Defaults to `true`. */
+  /**
+   * Scroll to the top, a `#hash` or the saved position after a navigation,
+   * and to an initial `#hash` element rendered after load. Defaults to `true`.
+   */
   readonly scroll?: boolean | undefined
   /** Announce each navigation in a live region. Defaults to `true`. */
   readonly announce?: boolean | undefined
-  /** Move focus after each navigation. Defaults to `true`. */
+  /** Move focus after each navigation, and to an initial `#hash` element rendered after load. Defaults to `true`. */
   readonly focus?: boolean | undefined
   /** The window to run in. Defaults to the global `window`. */
   readonly window?: Window | undefined
@@ -229,7 +234,12 @@ const make = (
     }
     const target = (hash: string): HTMLElement | null => {
       if (hash.length <= 1) return null
-      const id = decodeURIComponent(hash.slice(1))
+      let id = hash.slice(1)
+      try {
+        id = decodeURIComponent(id)
+      } catch {
+        // A malformed escape, as in `#%`, names the element as written.
+      }
       return document.getElementById(id) ??
         document.getElementsByName(id)[0] as HTMLElement | undefined ?? null
     }
@@ -268,6 +278,12 @@ const make = (
     // --- focus -------------------------------------------------------------
     const focusOn = (element: HTMLElement) =>
       element.focus({ preventScroll: true })
+    const focusTarget = (element: HTMLElement) => {
+      if (element.tabIndex < 0 && !element.hasAttribute("tabindex")) {
+        element.setAttribute("tabindex", "-1")
+      }
+      focusOn(element)
+    }
     const resetFocus = () => {
       const body = document.body
       if (
@@ -280,7 +296,11 @@ const make = (
       else body.setAttribute("tabindex", tabindex)
     }
 
+    /** Stops waiting for a late-rendered initial `#hash` target. */
+    let stopWaiting = () => {}
+
     const onSettled = (settled: Router.Settled) => {
+      stopWaiting()
       const { action, hash } = settled.location
       if (settled.quiet) {
         // Within the page: no announcement and no focus move, and scroll only for a pop or when asked.
@@ -308,12 +328,8 @@ const make = (
       }
       if (focus) {
         if (autofocus !== null) focusOn(autofocus)
-        else if (hashTarget !== null) {
-          if (
-            hashTarget.tabIndex < 0 && !hashTarget.hasAttribute("tabindex")
-          ) hashTarget.setAttribute("tabindex", "-1")
-          focusOn(hashTarget)
-        } else resetFocus()
+        else if (hashTarget !== null) focusTarget(hashTarget)
+        else resetFocus()
       }
       if (region !== undefined) {
         const live = region
@@ -360,6 +376,7 @@ const make = (
       },
       onSettled,
       onHash: (hash, action, index) => {
+        stopWaiting()
         if (!scroll) return
         const saved = action === "pop" ? positions.get(index) : undefined
         if (saved !== undefined) window.scrollTo(saved.x, saved.y)
@@ -371,6 +388,43 @@ const make = (
     })
     const context = yield* Layer.build(routerLayer)
     const router = Context.get(context, Router.Router)
+
+    // --- late initial #hash ------------------------------------------------
+    // Browsers only go to the fragment while the page loads. A client-rendered target appears later,
+    // so watch for it until it does, the location changes or the reader takes over.
+    const initialHash = location.hash
+    if (
+      !inFragment && (scroll || focus) && initialHash.length > 1 &&
+      target(initialHash) === null
+    ) {
+      const interactions = ["pointerdown", "keydown", "wheel", "touchstart"]
+      const view = window as Window & typeof globalThis
+      const observer = new view.MutationObserver(() => {
+        const element = target(initialHash)
+        if (element === null || router.location().seq !== 0) return
+        stopWaiting()
+        if (scroll) element.scrollIntoView()
+        if (focus) focusTarget(element)
+      })
+      const stop = () => {
+        stopWaiting = () => {}
+        observer.disconnect()
+        for (const type of interactions) {
+          window.removeEventListener(type, stop, true)
+        }
+      }
+      stopWaiting = stop
+      observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["id", "name"]
+      })
+      for (const type of interactions) {
+        window.addEventListener(type, stop, { capture: true, passive: true })
+      }
+      yield* Effect.addFinalizer(() => Effect.sync(() => stopWaiting()))
+    }
 
     // --- interception ------------------------------------------------------
     /** The href the routes see for an absolute URL, or undefined when it leaves this app. */
