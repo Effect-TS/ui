@@ -22,8 +22,9 @@
  * - an instance was still waiting for its Layer when the budget was spent;
  * - a problem was reported, on either side.
  *
- * In browser tests, hydration uses an off-screen iframe so popovers and modal
- * dialogs can open. The iframe is removed when the Scope closes.
+ * In browser tests, a page the server rendered with an open popover or a
+ * modal dialog hydrates in an off-screen iframe, where they can open. The
+ * iframe is removed when the Scope closes.
  *
  * **Example** (Checking a page hydrates)
  *
@@ -87,7 +88,7 @@ import * as server from "../internal/server.ts"
  * `html`, `model` and `head` are the server's. `state` is the server's
  * state as the client read it, after `HtmlServer.serializeState` and
  * `JSON.parse`. `document` is the hydrated page and `container` the app's
- * element in it. In a browser both belong to `ssr`'s iframe, so
+ * element in it. When `ssr` hydrated in an iframe, both belong to it, so
  * `container instanceof HTMLElement` is `false`: use
  * `document.defaultView.HTMLElement`. `root` is the client tree, registered
  * with `TestHost` so `TestHost.settle` waits for it; `root.fetches()` lists
@@ -343,6 +344,10 @@ const stepLimit = 10_000
  * Any problem fails `ssr`, including `Command.ServerCommandIssued` on the
  * server. To test one, render with `Renderer.prerender` instead.
  *
+ * In a browser, a popover or a modal dialog that first opens after hydration
+ * throws `InvalidStateError`: the page only has a window when the server
+ * rendered one open.
+ *
  * @stability experimental
  * @category constructors
  * @since 0.1.0
@@ -447,11 +452,19 @@ export const ssr = <
       { readonly query: string; readonly logKey: string }
     > = []
     const writer = server.makeWriter()
+    // Whether the server rendered a popover or a modal dialog open: only those need a window to hydrate in.
+    let topLayer = false
     const serverFiber = yield* runtime.prerender(component as any, props, {
       budget,
       elements: [Html.name],
       static: isStatic,
-      sink: writer,
+      sink: {
+        ...writer,
+        open(tag, attrs, props) {
+          topLayer ||= props.popoverOpen === true || props.open === "modal"
+          writer.open(tag, attrs, props)
+        }
+      },
       onFinish: (cache) => {
         serverCache = cache
         misses = cache.misses()
@@ -497,9 +510,8 @@ export const ssr = <
     }><head>${server.headTags(serverHead)}</head><body ${
       server.attributes(server.bodyOwned(serverHead))
     }><div id="app">${html}</div></body></html>`
-    const document = yield* liveDocument(
-      new DOMParser().parseFromString(page, "text/html")
-    )
+    const parsed = new DOMParser().parseFromString(page, "text/html")
+    const document = topLayer ? yield* liveDocument(parsed) : parsed
     const container = document.getElementById("app")!
     const before = serverNodes(container)
     const project = options?.frames ??
