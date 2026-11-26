@@ -64,22 +64,22 @@ const use = (target: Kernel.Host, from: Kernel.Host): void => {
 
 const shippedOf = (
   state: Renderer.State
-): () => queryCore.ShippedLookup | undefined => {
+): () => queryCore.ShippedHydration | undefined => {
   const raw = state["~query"]
   if (raw === undefined) return () => undefined
-  let resolved: queryCore.ShippedLookup | undefined | null = null
+  let resolved: queryCore.ShippedHydration | undefined | null = null
   return () => {
     if (resolved !== null) return resolved
     const loaded = queryCore.loaded
     if (loaded === undefined) return undefined
-    return resolved = loaded.shippedOf(raw)
+    return resolved = loaded.makeShipped(raw)
   }
 }
 
 const decode = (
   component: Kernel.Runnable,
   encoded: unknown,
-  shipped?: queryCore.ShippedLookup | undefined
+  shipped?: queryCore.ShippedContext | undefined
 ): Exit.Exit<Decoded, unknown> | Fiber.Fiber<Decoded, unknown> => {
   const effect = stateCodecOf(component as unknown as Component.Any).decode(
     encoded
@@ -95,7 +95,7 @@ const decodeRoot = (
   component: Kernel.Runnable,
   state: Renderer.State,
   path: string,
-  shipped?: queryCore.ShippedLookup | undefined
+  shipped?: queryCore.ShippedContext | undefined
 ): Exit.Exit<Decoded, unknown> | Fiber.Fiber<Decoded, unknown> | undefined =>
   state["~deferred"]?.includes(path) === true || !Object.hasOwn(state, path)
     ? undefined
@@ -119,7 +119,7 @@ export const make = (
     path: string,
     found: { readonly state: unknown; readonly reported: unknown }
   ) => () => void,
-  shipped: () => queryCore.ShippedLookup | undefined = shippedOf(state)
+  shipped: () => queryCore.ShippedHydration | undefined = shippedOf(state)
 ): Hydration => {
   const deferred = new Set(state["~deferred"])
   const adopting = new WeakSet<Kernel.Instance>()
@@ -237,7 +237,7 @@ export const make = (
       active?.has(path) === false
     const exit = behind
       ? undefined
-      : decode(component, from[path], shipped())
+      : decode(component, from[path], shipped()?.lookup)
     if (exit !== undefined && Exit.isExit(exit) && !away) {
       if (!served && Exit.isFailure(exit)) {
         return fallback?.(owner, rec, at, component) === true
@@ -249,7 +249,7 @@ export const make = (
     if (served && !away) active?.hold(path)
     held.set(rec, path)
     const unwait = waits?.(owner, rec, path, {
-      state: from[path],
+      state: shipped()?.inline(component, from[path]) ?? from[path],
       reported: from["~reported"]?.[path]
     })
     const go = (exit: Exit.Exit<Decoded, unknown>) => {
@@ -293,7 +293,11 @@ export const make = (
         if (!waiting) return
         waiting = false
         if (rec.inst !== owner || receiver!.closed) return go(Exit.interrupt())
-        const exit = decode(component, from[path], shipped())
+        const exit = decode(
+          component,
+          from[path],
+          shipped()?.lookup
+        )
         if (Exit.isExit(exit)) go(exit)
         else exit.addObserver(go)
       }
@@ -371,7 +375,7 @@ export const make = (
         got = decoded.get(path)
         decoded.delete(path)
       } else {
-        const exit = decode(inst.component, state[path], shipped())
+        const exit = decode(inst.component, state[path], shipped()?.lookup)
         if (Exit.isExit(exit) && Exit.isSuccess(exit)) got = exit.value
       }
       if (got === undefined) return undefined
@@ -572,6 +576,7 @@ export interface Session {
 /** @internal */
 export interface Hydrating {
   readonly static: boolean
+  readonly shipped: () => queryCore.ShippedContext | undefined
   readonly decode: <A, E, R>(
     component: Kernel.Runnable,
     path: string,
@@ -601,8 +606,9 @@ export const hydrating = (
   const shipped = shippedOf(state)
   return {
     static: state["~static"] === true,
+    shipped: () => shipped()?.lookup,
     decode: (component, path, go) => {
-      const decoded = decodeRoot(component, state, path, shipped())
+      const decoded = decodeRoot(component, state, path, shipped()?.lookup)
       return decoded === undefined || Exit.isExit(decoded)
         ? go(decoded)
         : Effect.flatMap(Fiber.await(decoded), go)
@@ -658,9 +664,13 @@ export const hydrating = (
           return hydration.init(inst, first)
         },
         onCache: (cache) => {
-          const shipped = state["~query"]
-          if (shipped !== undefined) {
-            cache.hydrate(shipped, { static: fromStatic, at: input.at })
+          const raw = state["~query"]
+          if (raw !== undefined) {
+            cache.hydrate(raw, {
+              static: fromStatic,
+              at: input.at,
+              decodeSuccess: shipped()?.decodeRaw
+            })
             if (windowClosed) cache.closeWindow()
           }
         },

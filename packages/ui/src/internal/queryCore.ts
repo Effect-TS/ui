@@ -50,8 +50,8 @@ export interface Loaded extends
     | "internals"
     | "makeSnapshot"
     | "makeSnapshotMap"
+    | "makeShipped"
     | "sameMore"
-    | "shippedOf"
     | "snapshotData"
     | "snapshotMapData"
     | "snapshotMapSchema"
@@ -218,14 +218,37 @@ export const Problems: Context.Reference<(problem: Query.Problem.Any) => void> =
  *
  * @internal
  */
-export type ShippedLookup = (
-  def: any,
-  argsKey: string
-) => AsyncResult.Success<any, any> | undefined
+export interface ShippedContext {
+  readonly peek: (
+    def: any,
+    argsKey: string
+  ) => AsyncResult.Success<any, any> | undefined
+  readonly decode: (
+    def: any,
+    argsKey: string,
+    decodeSuccess: (
+      encoded: unknown,
+      options: any
+    ) => Effect.Effect<unknown, any>,
+    options: any
+  ) => Effect.Effect<AsyncResult.Success<any, any>, any>
+}
+
+/**
+ * Per-hydration state over `state["~query"]`, shared between that hydration's
+ * instance decoders, its cache's `decodeRaw`, and held-child history handoffs.
+ *
+ * @internal
+ */
+export interface ShippedHydration {
+  readonly lookup: ShippedContext
+  readonly decodeRaw: (def: any, tuple: any) => unknown
+  readonly inline: (component: unknown, encoded: unknown) => unknown
+}
 
 /** @internal */
-export const Shipped: Context.Reference<ShippedLookup | undefined> =
-  Context.Reference<ShippedLookup | undefined>("@effect/ui/Query/Shipped", {
+export const Shipped: Context.Reference<ShippedContext | undefined> =
+  Context.Reference<ShippedContext | undefined>("@effect/ui/Query/Shipped", {
     defaultValue: () => undefined
   })
 

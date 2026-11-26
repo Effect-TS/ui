@@ -1054,4 +1054,88 @@ describe("history restore of a page whose hydration hasn't settled", {
       Effect.provide(Router.make({ routes: Routes, history }))
     )
   })
+
+  it.effect.each([
+    ["without custom restore", undefined, "server:billing"],
+    [
+      "with custom restore",
+      (model: string) => `filtered:${model}`,
+      "filtered:server:billing"
+    ]
+  ] as const)(
+    "Back restores a held child's model and settled query when a push interrupts decode (%s)",
+    ([, restore, expected]) => {
+      const history = Router.memoryHistory("/")
+      const Child = Html.component({
+        name: "HeldQueryForm",
+        model: Late,
+        message: Schema.Never,
+        queries: { tab: { query: GetTab, args: () => ({}) } },
+        restore
+      }).make({
+        init: () => inits++ === 0 ? "server" : "client",
+        update: ($) => $.model,
+        view: (h, text) =>
+          h.p(
+            `${text}:${
+              AsyncResult.isSuccess(h.queries.tab)
+                ? h.queries.tab.value
+                : "loading"
+            }`
+          )
+      }).pipe(Component.provide(GetTab.layer))
+      const App = Html.component({
+        name: "App",
+        props: Schema.Struct({ route: Routes }),
+        model: Routes,
+        message: Msg
+      }).make({
+        init: ($) => $.props.route,
+        update: ($, message) =>
+          Msg.match(message, {
+            Changed: (changed) => changed.route,
+            Go: () =>
+              $.run(
+                Router.push(Routes, Routes.Away()).pipe(
+                  Command.map(() => Msg.Went())
+                )
+              ),
+            Next: () => $.model,
+            Went: () => $.model
+          }),
+        subscriptions: (
+          { model: route }
+        ) => [
+          Router.subscription(Routes, route, (changed) =>
+            Msg.Changed({ route: changed }))
+        ],
+        view: (h, route) =>
+          h.main(route._tag === "Away" ? h.p("away") : Child(h, { key: "f" }))
+      })
+      return Effect.gen(function*() {
+        const props = Router.props(Routes)
+        const { app, open, state } = yield* serve(
+          HtmlServer.renderToHtml(App, props),
+          false
+        )
+        assert.deepStrictEqual(
+          (state["/App/HeldQueryForm[f]"] as any).queries,
+          { tab: ["{}", 2] }
+        )
+        const root = yield* HtmlHydrate.hydrateEffect(App, props, app, state)
+        yield* tick
+        // Push before `Late` finishes decoding.
+        root.send(Msg.Go())
+        yield* tick
+        yield* open
+        yield* tick
+        history.go(-1)
+        yield* tick
+        assert.strictEqual(app.querySelector("p")!.textContent, expected)
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(Router.make({ routes: Routes, history }))
+      )
+    }
+  )
 })
