@@ -3511,13 +3511,11 @@ export const define = <
   V extends View.Elements = never,
   const Tags extends TagOf<Msg> = never,
   const Sl extends string = never,
-  // What `reads` lists, as written. It defaults to its constraint, which stands for no `reads`: a `{}` default
-  // would be fixed before `optional` is read.
+  // What `reads` lists, as written; defaults to its constraint so `Listed<SR>` detects omission.
   SR extends SharedReads = SharedReads,
-  // `reads` is inferred by entry, never as a whole, so `shares` can be typed by it when it comes first.
-  // The owner of each entry.
+  // Each `reads` entry's owner, inferred before `shares`, `report` and `onChange`.
   SO extends { readonly [name: string]: Headless.Any | Any | "self" } = {},
-  // Each entry's `optional`, or its owner when the entry is written as one.
+  // Each entry's `optional`, or its owner when written as shorthand.
   SOpt = {},
   SV = never,
   Rp = never,
