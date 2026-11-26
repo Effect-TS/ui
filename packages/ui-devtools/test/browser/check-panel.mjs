@@ -286,6 +286,7 @@ await run("panel", async ({ browser, expect, failures, url }) => {
       viewport: { width: 390, height: 844 }
     })
     const { frame, page } = await setup(context, "?capture=interrupted")
+    await frame.getByRole("button", { name: "Show active instances" }).click()
     await frame.locator("[data-instance=\"Editor[n2]\"]").click()
     await frame.locator(".row-button[aria-label$=\"Update ClickedSave\"]")
       .last()

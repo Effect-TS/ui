@@ -26,7 +26,7 @@ Effect.runFork(Layer.launch(Main))
 The overlay starts as a button, with a count of the failures logged since the panel was last closed. Opened, it shows:
 
 - the timeline, newest first, filtered by kind or by instance and everything under it, with a rail marking the selected entry's chain
-- the instances that have something to report, failed and interrupted first, then running, then the ones that took a message, each with how its Command runs ended: ended, interrupted with a reason, failed, running, or unmounted. A find field searches every instance by name or component, and **Browse all** opens the whole tree with a count of what failed or is running under each branch
+- the instance tree, opened down to the selected entry's instance, with a count of what failed or is running under each branch. **Show active instances** lists only the instances with something to report, failed and interrupted first, each with how its Command runs ended, and **Browse all** goes back to the tree. A find field searches every instance by name or component
 - the path of the selected entry's instance, each segment a button that scopes the timeline to it
 - the causal chain of the selected entry, from what sent the message to where each Command it issued stopped and what stopped it, every `#n` a link to that entry
 - the entry's Model with what changed since that instance's previous entry, marked with `~`, a struck-out old value and a CHANGED badge, so it reads without colour; its message, Commands, events and raw frame

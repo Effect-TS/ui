@@ -72,6 +72,11 @@ const click = Effect.fnUntraced(function*(element: Element) {
   yield* settle
 })
 
+const showActive = (root: HTMLElement) =>
+  click(
+    HtmlLocator.getByRole(root, "button", { name: "Show active instances" })
+  )
+
 const instance = (root: HTMLElement, name: string) =>
   root.querySelector(`[data-instance="${name}"]`)!
 
@@ -492,6 +497,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
     Effect.gen(function*() {
       const { app, root } = yield* mount("closed")
       yield* open(root)
+      yield* showActive(root)
       const copy = () =>
         app.nextElementSibling?.hasAttribute("inert") === true
           ? app.nextElementSibling
@@ -553,6 +559,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
     Effect.gen(function*() {
       const { app, root, services } = yield* mount("closed")
       yield* open(root)
+      yield* showActive(root)
       const inert = () => document.querySelectorAll("[inert]").length
       yield* selectClickedSave(root)
       yield* click(
@@ -778,6 +785,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
     Effect.gen(function*() {
       const { memory, root } = yield* mount("interrupted")
       yield* open(root)
+      yield* showActive(root)
 
       assert.strictEqual(status(root, "Editor[n1]"), "1 ended")
       assert.strictEqual(status(root, "Editor[n2]"), "1 interrupted, unmounted")
@@ -914,6 +922,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       yield* Effect.scoped(Effect.gen(function*() {
         const { root } = yield* mount("closed")
         yield* open(root)
+        yield* showActive(root)
         assert.strictEqual(
           status(root, "Editor[n2]"),
           "1 interrupted (unmount), unmounted"
@@ -929,6 +938,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       yield* Effect.scoped(Effect.gen(function*() {
         const { root } = yield* mount("switched")
         yield* open(root)
+        yield* showActive(root)
         assert.strictEqual(
           status(root, "Editor[n2]"),
           "1 interrupted (switch), 1 running"
@@ -947,6 +957,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
       yield* Effect.scoped(Effect.gen(function*() {
         const { root } = yield* mount("open")
         yield* open(root)
+        yield* showActive(root)
         assert.strictEqual(status(root, "Editor[n1]"), "1 ended")
         assert.strictEqual(status(root, "Editor[n2]"), "1 running")
         const running = Array.from(root.querySelectorAll(".row")).filter((
@@ -1028,9 +1039,6 @@ describe("DevTools overlay", { concurrent: false }, () => {
         yield* click(ping())
         yield* click(entry(root, /Pinged/)[0])
 
-        yield* click(
-          HtmlLocator.getByRole(root, "button", { name: /^Browse all/ })
-        )
         const rows = () =>
           Array.from(root.querySelectorAll(".iitem"), (item) =>
             [
@@ -1049,6 +1057,17 @@ describe("DevTools overlay", { concurrent: false }, () => {
         assert.deepStrictEqual(rows().slice(-4), [
           "Pane[p] true",
           "Leaf[l] - unmounted",
+          "Pane[p] true",
+          "Leaf[l] -"
+        ])
+
+        yield* showActive(root)
+        yield* click(
+          HtmlLocator.getByRole(root, "button", { name: /^Browse all/ })
+        )
+        assert.deepStrictEqual(rows(), [
+          "Host true",
+          "Pane[p] false",
           "Pane[p] true",
           "Leaf[l] -"
         ])
@@ -1201,6 +1220,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
         "1 failure"
       )
       yield* open(root)
+      yield* showActive(root)
 
       assert.strictEqual(
         status(root, "Uploader[uploader]"),
@@ -1290,6 +1310,7 @@ describe("DevTools overlay", { concurrent: false }, () => {
     Effect.gen(function*() {
       const { memory, root } = yield* mount("open")
       yield* open(root)
+      yield* showActive(root)
       yield* selectClickedSave(root)
       yield* tab(root, /Raw/)
       const copy = HtmlLocator.getByRole(root, "button", { name: "Copy frame" })
