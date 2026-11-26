@@ -34,7 +34,7 @@
  *
  * class Save extends Command.Service<Save>()(
  *   "todos/Save",
- *   { args: {}, success: Message, error: Schema.Never }
+ *   { args: {}, success: Message }
  * ) {
  *   static readonly layer = this.toLayer(() => Effect.succeed(Message.CompletedSave()))
  * }

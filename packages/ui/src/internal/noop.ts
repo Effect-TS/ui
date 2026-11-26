@@ -1,5 +1,11 @@
 import * as Predicate from "effect/Predicate"
-import type { Noop, NoopSchemaTypeId, NoopTypeId } from "../Component.ts"
+import * as Schema from "effect/Schema"
+import type {
+  Noop,
+  NoopSchema,
+  NoopSchemaTypeId,
+  NoopTypeId
+} from "../Component.ts"
 
 // The same strings as `Component.NoopTypeId` and `Component.NoopSchemaTypeId`. Declared here too so this
 // module needs `Component.ts` for types only.
@@ -19,8 +25,18 @@ export const isNoop = (u: unknown): u is Noop =>
   Predicate.hasProperty(u, TypeId) && u[TypeId] === TypeId
 
 /**
- * Checks the same property `Component.NoopSchema` types, so the runtime silences exactly the Services whose
- * `toLayer` takes any result.
+ * `Component.Noop`, here so `Command.Service` can default `success` to it.
+ *
+ * @internal
+ */
+export const noopSchema: NoopSchema = /* @__PURE__ */ Object.assign(
+  /* @__PURE__ */ Schema.declare(isNoop, { identifier: "Component.Noop" }),
+  { [SchemaTypeId]: SchemaTypeId } as const
+)
+
+/**
+ * Checks the property `Component.NoopSchema` types, so the runtime silences exactly the Services whose body
+ * may return anything.
  *
  * @internal
  */

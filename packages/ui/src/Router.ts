@@ -291,8 +291,7 @@ export class Push extends Command.Service<Push>()(
   "@effect/ui/Router/Push",
   {
     args: { route: RouteValue },
-    success: Outcome,
-    error: Schema.Never
+    success: Outcome
   }
 ) {
   static readonly layer = this.toLayer(
@@ -312,8 +311,7 @@ export class Replace extends Command.Service<Replace>()(
   "@effect/ui/Router/Replace",
   {
     args: { route: RouteValue },
-    success: Outcome,
-    error: Schema.Never
+    success: Outcome
   }
 ) {
   static readonly layer = this.toLayer(
@@ -387,8 +385,7 @@ export class PatchSearch extends Command.Service<PatchSearch>()(
       history: Schema.Literals(["push", "replace"]),
       scroll: Schema.Boolean
     },
-    success: PatchOutcome,
-    error: Schema.Never
+    success: PatchOutcome
   }
 ) {
   static readonly layer = this.toLayer(
@@ -482,8 +479,7 @@ export class Back extends Command.Service<Back>()(
   "@effect/ui/Router/Back",
   {
     args: {},
-    success: Outcome,
-    error: Schema.Never
+    success: Outcome
   }
 ) {
   static readonly layer = this.toLayer(
@@ -502,8 +498,7 @@ export class Forward extends Command.Service<Forward>()(
   "@effect/ui/Router/Forward",
   {
     args: {},
-    success: Outcome,
-    error: Schema.Never
+    success: Outcome
   }
 ) {
   static readonly layer = this.toLayer(
@@ -522,8 +517,7 @@ export class Load extends Command.Service<Load>()(
   "@effect/ui/Router/Load",
   {
     args: { href: Schema.String },
-    success: Outcome,
-    error: Schema.Never
+    success: Outcome
   }
 ) {
   static readonly layer = this.toLayer(

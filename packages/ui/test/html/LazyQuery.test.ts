@@ -41,12 +41,7 @@ const lateSave = Effect.gen(function*() {
   let write: ((saved: string) => any) | undefined
   class Save extends Command.Service<Save>()(
     "lazy/LateSave",
-    {
-      args: {},
-      success: Schema.String,
-      error: Schema.Never,
-      writes: (saved) => [write!(saved)]
-    }
+    { args: {}, success: Schema.String, writes: (saved) => [write!(saved)] }
   ) {
     static readonly layer = this.toLayer(() =>
       Effect.promise(async () => {
@@ -86,12 +81,7 @@ const lateSave = Effect.gen(function*() {
   }
   class Replace extends Command.Service<Replace>()(
     "lazy/Replace",
-    {
-      args: {},
-      success: Schema.String,
-      error: Schema.Never,
-      writes: (saved) => [write!(saved)]
-    }
+    { args: {}, success: Schema.String, writes: (saved) => [write!(saved)] }
   ) {
     static readonly layer = this.toLayer(() => Effect.succeed("new"))
   }
@@ -164,7 +154,7 @@ const savedWith = Effect.fnUntraced(
       )
     class Save extends Command.Service<Save>()(
       "lazy/PlainSave",
-      { args: {}, success: Schema.String, error: Schema.Never, writes }
+      { args: {}, success: Schema.String, writes }
     ) {
       static readonly layer = this.toLayer(() => Effect.succeed("saved"))
     }
@@ -381,7 +371,6 @@ describe("Query loaded after the mount", { concurrent: false }, () => {
         {
           args: {},
           success: Schema.String,
-          error: Schema.Never,
           writes: (saved) => {
             calls.writes++
             return [write!(saved)]

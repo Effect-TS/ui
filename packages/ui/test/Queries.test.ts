@@ -47,7 +47,6 @@ const makeApp = () => {
     {
       args: { id: Schema.String },
       success: Schema.Void,
-      error: Schema.Never,
       invalidates: ({ id }) => [GetNote.entry({ id })]
     }
   ) {

@@ -399,11 +399,7 @@ describe("Validation", () => {
     })
     class CreateAccount extends Command.Service<CreateAccount>()(
       "accounts/CreateAccount",
-      {
-        args: { username: Schema.String },
-        success: Message,
-        error: Schema.Never
-      }
+      { args: { username: Schema.String }, success: Message }
     ) {}
     const Account = Validation.make({
       username: { required: "Pick a username", rules: [Rule.minLength(3)] }

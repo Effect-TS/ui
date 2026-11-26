@@ -179,12 +179,7 @@ const makeApp = (options?: {
   }
   class Warm extends Command.Service<Warm>()(
     "Warm",
-    {
-      args: { id: Schema.String },
-      success: Schema.Void,
-      error: Schema.Never,
-      invalidates: () => []
-    }
+    { args: { id: Schema.String }, success: Schema.Void, invalidates: () => [] }
   ) {
     static readonly layer = this.toLayer(
       Effect.map(
@@ -1576,7 +1571,6 @@ describe("Query results", () => {
       {
         args: { id: Schema.String },
         success: Schema.Never,
-        error: Schema.Never,
         invalidates: () => [],
         // The patched value fails the query's success Schema.
         optimistic: (

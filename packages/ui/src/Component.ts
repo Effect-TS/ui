@@ -26,7 +26,7 @@
  *
  * class SaveTodo extends Command.Service<SaveTodo>()(
  *   "todos/SaveTodo",
- *   { args: Todo, success: Schema.Void, error: Schema.Never }
+ *   { args: Todo, success: Schema.Void }
  * ) {}
  *
  * const TodoItem = Component.define({
@@ -160,9 +160,9 @@ export type NoopSchemaTypeId = typeof NoopSchemaTypeId
  *
  * **Details**
  *
- * A `Command.Service` whose `success` is `Component.Noop` ignores its
- * body's result. A Schema built from it, such as
- * `Schema.suspend(() => Component.Noop)`, doesn't, so its body must return
+ * A `Command.Service` whose `success` is `Component.Noop`, or omitted, is
+ * silent and its body may return anything. A Schema built from it, such as
+ * `Schema.suspend(() => Component.Noop)`, isn't, so its body must return
  * `Component.noop` itself.
  *
  * @stability experimental
@@ -180,10 +180,7 @@ export interface NoopSchema extends Schema.declare<Noop> {
  * @category schemas
  * @since 0.1.0
  */
-export const Noop: NoopSchema = Object.assign(
-  Schema.declare(internalNoop.isNoop, { identifier: "Component.Noop" }),
-  { [NoopSchemaTypeId]: NoopSchemaTypeId } as const
-)
+export const Noop: NoopSchema = internalNoop.noopSchema
 
 /**
  * The message value that sends nothing.
@@ -4323,7 +4320,7 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F }
  *
  * class SaveTodo extends Command.Service<SaveTodo>()(
  *   "todos/SaveTodo",
- *   { args: { id: Schema.String }, success: Schema.Void, error: Schema.Never }
+ *   { args: { id: Schema.String }, success: Schema.Void }
  * ) {
  *   static readonly layer = this.toLayer(() => Effect.void)
  * }
@@ -4369,7 +4366,7 @@ type HandlerOf<O> = O extends { readonly onFailure?: infer F }
  *
  * class JoinRoom extends Command.Service<JoinRoom>()(
  *   "rooms/JoinRoom",
- *   { args: {}, success: RoomMessage, error: Schema.Never }
+ *   { args: {}, success: RoomMessage }
  * ) {
  *   static readonly layer = this.toLayer(
  *     Chat.useSync((chat) => () => Effect.succeed(RoomMessage.CompletedJoinRoom({ room: chat.room })))

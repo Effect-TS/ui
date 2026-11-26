@@ -58,8 +58,7 @@ export class SaveSession extends Command.Service<SaveSession>()(
   "auth/SaveSession",
   {
     args: { session: Session },
-    success: Schema.Union([AppMessage, Component.Noop]),
-    error: Schema.Never
+    success: Schema.Union([AppMessage, Component.Noop])
   }
 ) {
   static readonly layer = this.toLayer(
@@ -77,11 +76,7 @@ export class SaveSession extends Command.Service<SaveSession>()(
 
 export class ClearSession extends Command.Service<ClearSession>()(
   "auth/ClearSession",
-  {
-    args: {},
-    success: Schema.Union([AppMessage, Component.Noop]),
-    error: Schema.Never
-  }
+  { args: {}, success: Schema.Union([AppMessage, Component.Noop]) }
 ) {
   static readonly layer = this.toLayer(
     SessionStore.useSync((store) => () =>

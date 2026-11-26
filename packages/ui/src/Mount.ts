@@ -91,10 +91,9 @@ export type DefinitionTypeId = typeof DefinitionTypeId
  *
  * **Details**
  *
- * `args` is required: a fields record or a `Schema.Struct`. A mount with no
- * args writes `args: {}`. The log encodes a mount's args through it,
- * redacting `Schema.Redacted` fields, and the runtime uses its equivalence
- * to tell whether a render changed them.
+ * `args`: a fields record or a `Schema.Struct`, none when omitted. The log
+ * encodes a mount's args through it, redacting `Schema.Redacted` fields, and
+ * the runtime uses its equivalence to tell whether a render changed them.
  *
  * The optional `paint` callback draws the node synchronously from its args
  * on a copy of the page that runs no mounts, such as DevTools time travel.
@@ -117,7 +116,7 @@ export interface Options<
   Node = unknown,
   R = never
 > {
-  readonly args: In
+  readonly args?: In | undefined
   readonly paint?:
     | ((node: Node, args: Command.ArgsOf<In>) => void)
     | undefined
@@ -391,8 +390,8 @@ export const isDefinition = (u: unknown): u is Definition.Any =>
  *
  * **Details**
  *
- * Requires an `args` Schema and returns a factory that takes the args struct
- * and issues the mount: `h.canvas.onMount(DrawChart({ points }))`. The body
+ * Takes an optional `args` Schema and returns a factory that takes the args
+ * struct and issues the mount: `h.canvas.onMount(DrawChart({ points }))`. The body
  * runs once per element, after it's committed (or just before, with
  * `beforeCommit`), in a Scope that closes when the element goes. It gets:
  *
@@ -423,7 +422,7 @@ export const isDefinition = (u: unknown): u is Definition.Any =>
  *
  * const Message = UiSchema.TaggedEnum({ CompletedMeasure: { width: Schema.Number } })
  *
- * const Measure = Mount.make("Measure", { args: {} }, (node: HTMLElement) =>
+ * const Measure = Mount.make("Measure", {}, (node: HTMLElement) =>
  *   Effect.sync(() => node.getBoundingClientRect().width))
  *
  * // In a view
@@ -436,8 +435,8 @@ export const isDefinition = (u: unknown): u is Definition.Any =>
  */
 export const make = <
   const Name extends string,
-  const In extends Command.ArgsInput,
   A,
+  const In extends Command.ArgsInput = {},
   Node = unknown,
   R = never
 >(
@@ -511,8 +510,8 @@ export const make = <
  */
 export const makeStream = <
   const Name extends string,
-  const In extends Command.ArgsInput,
   A,
+  const In extends Command.ArgsInput = {},
   Node = unknown,
   R = never
 >(
@@ -540,7 +539,7 @@ const define = (
 ): any => {
   const argsSchema = Schema.isSchema(options.args)
     ? options.args as Schema.Top
-    : Schema.Struct(options.args as Schema.Struct.Fields)
+    : Schema.Struct((options.args ?? {}) as Schema.Struct.Fields)
   const factory = (args: unknown = {}) =>
     makeIssued({
       name,

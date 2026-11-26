@@ -392,7 +392,6 @@ class Greet extends Command.Service<Greet>()(
   {
     args: { name: Schema.String },
     success: Schema.String,
-    error: Schema.Never,
     invalidates: () => []
   }
 ) {

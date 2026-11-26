@@ -27,7 +27,7 @@
  *
  * class SaveTodo extends Command.Service<SaveTodo>()(
  *   "todos/SaveTodo",
- *   { args: { id: Schema.String }, success: Message, error: Schema.Never }
+ *   { args: { id: Schema.String }, success: Message }
  * ) {}
  *
  * const TodoItem = Component.define({

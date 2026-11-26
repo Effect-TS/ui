@@ -12,22 +12,11 @@ const St = Command.make(
 )
 class SA extends Command.Service<SA>()(
   "SA",
-  {
-    args: {},
-    success: Schema.String,
-    error: Schema.Never,
-    invalidates: () => []
-  }
+  { args: {}, success: Schema.String, invalidates: () => [] }
 ) {}
 class SB extends Command.Service<SB>()(
   "SB",
-  {
-    args: {},
-    success: Schema.Number,
-    error: Schema.Never,
-    stream: true,
-    invalidates: () => []
-  }
+  { args: {}, success: Schema.Number, stream: true, invalidates: () => [] }
 ) {}
 class SaveFailed extends Schema.TaggedError<SaveFailed>()("SaveFailed", {
   reason: Schema.String
@@ -184,14 +173,12 @@ describe("Command", () => {
       expect(service).type.not.toBeCallableWith("Load", {
         args: {},
         success: Schema.Number,
-        error: Schema.Never,
         invalidates: () => [],
         server: true
       })
       expect(service).type.not.toBeCallableWith("Load", {
         args: {},
         success: Schema.Number,
-        error: Schema.Never,
         invalidates: () => [],
         stream: true,
         server: true
@@ -202,31 +189,40 @@ describe("Command", () => {
       }, () => Effect.succeed(1))
     })
 
-    it("requires args, success and error, allows omitted invalidates", () => {
-      const service = Command.Service<"Load">()
-      expect(service).type.toBeCallableWith("Load", {
-        args: {},
-        success: Schema.Number,
-        error: Schema.Never
-      })
-      expect(service).type.not.toBeCallableWith("Load", {
-        args: {},
-        error: Schema.Never
-      })
-      expect(service).type.not.toBeCallableWith("Load", {
-        args: {},
-        success: Schema.Number
-      })
-      expect(service).type.not.toBeCallableWith("Load", {
-        success: Schema.Number,
-        error: Schema.Never,
-        invalidates: () => []
-      })
-      expect(Command.make).type.not.toBeCallableWith(
-        "Fx",
-        {},
-        () => Effect.succeed(1)
+    it("defaults args to none, success to Component.Noop and error to Schema.Never", () => {
+      class Ping extends Command.Service<Ping>()("Ping") {}
+      expect(Ping.make()).type.toBe<
+        Command.Issued<Component.Noop, Ping, Component.Noop, "Effect">
+      >()
+      expect(Ping.success).type.toBe<Component.NoopSchema>()
+      expect(Ping.error).type.toBe<typeof Schema.Never>()
+      expect(Command.make("Fx", {}, () => Effect.succeed(1)).make).type
+        .toBeCallableWith()
+    })
+
+    it("a silent Service's body may return anything, a message Service's body may not", () => {
+      class Implicit extends Command.Service<Implicit>()("Implicit") {}
+      class Explicit extends Command.Service<Explicit>()("Explicit", {
+        success: Component.Noop
+      }) {}
+      for (const toLayer of [Implicit.toLayer, Explicit.toLayer]) {
+        expect(toLayer).type.toBeCallableWith(() => Effect.void)
+        expect(toLayer).type.toBeCallableWith(() => Effect.succeed(true))
+      }
+      const serviceOf = <S extends Schema.Top>(success: S) =>
+        Command.Service<"S">()("S", { success })
+      const body = () => Effect.succeed(true)
+      expect(serviceOf(Message).toLayer).type.not.toBeCallableWith(
+        () => Effect.void
       )
+      expect(serviceOf(Message).make().effect).type.toBe<
+        Effect.Effect<typeof Message.Type, never, "S">
+      >()
+      expect(serviceOf(Schema.Union([Message, Component.Noop])).toLayer).type
+        .not.toBeCallableWith(body)
+      // The runtime doesn't silence a Schema built from Noop, so its body stays strict.
+      expect(serviceOf(Schema.suspend(() => Component.Noop)).toLayer).type.not
+        .toBeCallableWith(body)
     })
 
     it("types the body's args and writes from the Schemas, and make takes them", () => {
@@ -236,7 +232,6 @@ describe("Command", () => {
       Command.Service<"WithWrites">()("WithWrites", {
         args: { id: Schema.String },
         success: Schema.Number,
-        error: Schema.Never,
         writes: (count, args) => {
           expect(count).type.toBe<number>()
           expect(args).type.toBe<{ readonly id: string }>()
@@ -280,19 +275,6 @@ describe("Command", () => {
       expect(SA.toLayer).type.not.toBeCallableWith(() =>
         Db.use((db) => db.save)
       )
-    })
-
-    it("toLayer takes any result only when success is Component.Noop itself", () => {
-      const serviceOf = <S extends Schema.Top>(success: S) =>
-        Command.Service<"S">()("S", { args: {}, success, error: Schema.Never })
-      const body = () => Effect.succeed(true)
-      expect(serviceOf(Component.Noop).toLayer).type.toBeCallableWith(body)
-      expect(serviceOf(Schema.Union([Message, Component.Noop])).toLayer).type
-        .not
-        .toBeCallableWith(body)
-      // The runtime doesn't silence a wrapped Noop, so its body stays strict.
-      expect(serviceOf(Schema.suspend(() => Component.Noop)).toLayer).type.not
-        .toBeCallableWith(body)
     })
 
     it("preserves success and error Schema types on the class", () => {

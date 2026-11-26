@@ -46,7 +46,6 @@ export class SaveNote extends Command.Service<SaveNote>()(
   {
     args: { note: Note },
     success: NoteEditorMessage,
-    error: Schema.Never,
     // Saves from one editor run one at a time, in order.
     mode: "queue",
     // Optional. Returns the tags of the queries a run makes stale.

@@ -35,8 +35,7 @@ export class SimulateAuthRequest extends Command.Service<SimulateAuthRequest>()(
   "auth/SimulateAuthRequest",
   {
     args: { email: Schema.String, password: Schema.Redacted(Schema.String) },
-    success: LoginPageMessage,
-    error: Schema.Never
+    success: LoginPageMessage
   }
 ) {
   static readonly layer = this.toLayer(

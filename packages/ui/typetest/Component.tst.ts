@@ -31,11 +31,11 @@ class B
 
 class CA extends Command.Service<CA>()(
   "CA",
-  { args: {}, success: Message, error: Schema.Never, invalidates: () => [] }
+  { args: {}, success: Message, invalidates: () => [] }
 ) {}
 class CB extends Command.Service<CB>()(
   "CB",
-  { args: {}, success: Message, error: Schema.Never, invalidates: () => [] }
+  { args: {}, success: Message, invalidates: () => [] }
 ) {}
 
 declare const NeedsRuntime: Component.Component<

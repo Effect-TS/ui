@@ -1,7 +1,7 @@
 import { Command, Component, MessageLog, UiSchema } from "@effect/ui"
 import { Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Layer, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 
 const Message = UiSchema.TaggedEnum({
@@ -57,8 +57,7 @@ const commands: Record<
   AllQuiet: () => AllQuiet.make(),
   Empty: () => Empty.make(),
   Loud: () => Loud.make(),
-  LoudAsNoop: () => Loud.make().pipe(Command.asNoop),
-  QuietAsGot: () => Quiet.make().pipe(Command.as(got(7)))
+  LoudAsNoop: () => Loud.make().pipe(Command.asNoop)
 }
 
 /** Records every message it gets, and runs the Command a `Fire` names. */
@@ -206,14 +205,6 @@ describe("Component.noop", () => {
       assert.deepStrictEqual(root.pending(), [])
     })))
 
-  it.effect("a mapper turns a Command's Component.noop into a message", () =>
-    run(Effect.gen(function*() {
-      const root = yield* TestHost.mount(Recorder, {})
-      root.send(Message.Fire({ command: "QuietAsGot" }))
-      yield* TestHost.settle
-      assert.deepStrictEqual(root.model(), ["Fire", "Got 7"])
-    })))
-
   it.effect("a story resolves a run with Component.noop, or with a result its mapper turns into it, and sends nothing", () =>
     Effect.gen(function*() {
       const story = yield* Story.make(Recorder, {})
@@ -243,30 +234,33 @@ describe("Component.noop", () => {
       story.resolve(Quiet, Component.noop).expectNone()
     }))
 
-  it.effect("a Component.Noop Service ignores its body's result and is silent", () =>
+  it.effect("a Service with success omitted or Component.Noop is silent, whatever its body returns", () =>
     run(Effect.gen(function*() {
-      class Toggle extends Command.Service<Toggle>()("test/Toggle", {
-        args: {},
-        success: Component.Noop,
-        error: Schema.Never
+      class Implicit extends Command.Service<Implicit>()("test/Implicit") {}
+      class Explicit extends Command.Service<Explicit>()("test/Explicit", {
+        success: Component.Noop
       }) {}
-      const Toggler = Component.provide(
+      const Runner = Component.provide(
         Component.define({
-          name: "Toggler",
+          name: "Runner",
           model: Schema.Null,
           message: Schema.Never
         }).make({
-          init: ($) => $.set(null).run(Toggle.make()),
+          init: ($) => $.set(null).run(Implicit.make()).run(Explicit.make()),
           update: ($) => $.model,
           view: (h) => h.text("")
         }),
-        Toggle.toLayer(() => Effect.succeed(true))
+        Layer.mergeAll(
+          Implicit.toLayer(() => Effect.void),
+          // A fake that skips `toLayer` is silenced too.
+          Layer.succeed(Explicit, () => Effect.succeed(true))
+        )
       )
-      const root = yield* TestHost.mount(Toggler, {})
+      const root = yield* TestHost.mount(Runner, {})
       yield* TestHost.settle
       assert.deepStrictEqual(
         ended(root).map((entry) => [entry.name, entry.silent]),
-        [["test/Toggle", true]]
+        [["test/Implicit", true], ["test/Explicit", true]]
       )
     })))
 
@@ -274,12 +268,7 @@ describe("Component.noop", () => {
     run(Effect.gen(function*() {
       class Slow extends Command.Service<Slow>()(
         "test/Slow",
-        {
-          args: {},
-          success: Schema.Void,
-          error: Schema.Never,
-          invalidates: () => []
-        }
+        { args: {}, success: Schema.Void, invalidates: () => [] }
       ) {
         static readonly layer = this.toLayer(() => Effect.sleep("1 second"))
       }
