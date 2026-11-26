@@ -3618,19 +3618,8 @@ export const define = <
  * ```ts import.meta.vitest
  * import { Component } from "@effect/ui"
  * import { Html } from "@effect/ui/html"
- * import { Schema } from "effect"
  *
- * const component = Component.withElements(Html.vocabulary)
- *
- * export const Counter = component({
- *   name: "Counter",
- *   model: Schema.Number,
- *   message: Schema.Literal("ClickedIncrement")
- * }).make({
- *   init: () => 0,
- *   update: ($) => $.model + 1,
- *   view: (h, count) => h.button.on("click", "ClickedIncrement").children(String(count))
- * })
+ * export const component: Component.Define<Html.Elements> = Component.withElements(Html.vocabulary)
  * ```
  *
  * @stability experimental
@@ -3641,7 +3630,7 @@ export const withElements = <V extends View.Elements>(
   elements: View.Vocabulary<V>
 ): Define<V> =>
 (options) =>
-  // Forwarding `options` infers `SR` as the whole `reads` intersection, so the result needs the cast.
+  // Forwarded `options` infer `SR` as the whole `reads` intersection, hence the cast.
   define({ ...options, elements }) as any
 
 // The cases of `message` with one of `tags`, or `Schema.Never` without any.
