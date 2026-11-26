@@ -105,11 +105,11 @@ const preorder = (root: Node, visit: (node: Node) => boolean): void => {
   const pending: Array<Node> = [root]
   while (pending.length > 0) {
     const node = pending.pop()!
+    if (!visit(node)) continue
     const children = node.children
-    if (visit(node) && children !== undefined) {
-      for (let index = children.length - 1; index >= 0; index--) {
-        if (index in children) pending.push(children[index]!)
-      }
+    if (children === undefined) continue
+    for (let index = children.length - 1; index >= 0; index--) {
+      if (index in children) pending.push(children[index]!)
     }
   }
 }
@@ -118,10 +118,15 @@ const preorder = (root: Node, visit: (node: Node) => boolean): void => {
  * The elements directly under `node`. A node with children but no tag, such
  * as the content a story shows under a child's slots, is seen through.
  */
-const childElements = (node: Node): ReadonlyArray<Node> =>
-  (node.children ?? []).flatMap((child) =>
-    child.tag !== undefined ? [child] : childElements(child)
-  )
+const childElements = (node: Node): ReadonlyArray<Node> => {
+  const out: Array<Node> = []
+  preorder(node, (child) => {
+    if (child === node || child.tag === undefined) return true
+    out.push(child)
+    return false
+  })
+  return out
+}
 
 const make = (
   description: string,
