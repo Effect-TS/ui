@@ -190,7 +190,6 @@ import {
 } from "./internal/direction.ts"
 import { focusVisible } from "./internal/dom.ts"
 import { clamp, cssPercent } from "./internal/range.ts"
-import type { WithRequirements } from "./internal/requirements.ts"
 
 // One number, or one per thumb.
 const Value = Schema.Union([Schema.Number, Schema.Array(Schema.Number)])
@@ -878,10 +877,7 @@ const TrackPointer = Mount.makeStream(
 type ThumbOf<
   B extends View.PartTarget<string>,
   I extends View.PartTarget<"input">
-> = WithRequirements<
-  ReturnType<B["attr"]>,
-  View.Requirements<I>
->
+> = View.WithRequirements<B, View.Requirements<I>>
 
 // Visually hidden, the size of the thumb, so a screen reader's focus ring
 // matches the thumb.

@@ -147,7 +147,6 @@ import * as Context from "effect/Context"
 import * as Schema from "effect/Schema"
 import * as Component from "../Component.ts"
 import { handle } from "../internal/handler.ts"
-import type * as Mount from "../Mount.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
 import type * as HtmlHead from "./HtmlHead.ts"
@@ -802,37 +801,11 @@ export class VoidElement<
   out Tag extends string = string
 > extends View.ElementBuilder<Msg, R, E, Node, Tag> {
   /**
-   * Like `View.ElementBuilder.onMount`, keeping the HTML methods.
+   * Phantom: keeps the HTML methods through `View.WithRequirements`.
    *
    * @since 0.1.0
    */
-  override onMount<R2>(
-    mount: Mount.Issued<Msg | Component.Noop, R2, Node, never>
-  ): VoidElement<Msg, R | R2, E, Node, Tag>
-  /**
-   * Rejects any other mount result, with a type error that says what to end
-   * it with.
-   *
-   * @since 0.1.0
-   */
-  override onMount(
-    mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>
-  ): never
-  override onMount(mount: View.Mount<Msg>): any {
-    return (super.onMount as any)(mount)
-  }
-  /**
-   * Like `View.ElementBuilder.forward`, keeping the HTML methods.
-   *
-   * @since 0.1.0
-   */
-  override forward<R2 = never>(
-    place: (
-      node: VoidElement<Msg, R, E, Node, Tag>
-    ) => View.Element<Msg, R2> | View.ElementBuilder<Msg, R2, any, any>
-  ): VoidElement<Msg, R | R2, E, Node, Tag> {
-    return View.withForward(this, place) as any
-  }
+  declare readonly "~With"?: VoidElement<Msg, R | this["~Add"], E, Node, Tag>
   /**
    * Sets the `id` attribute.
    *
@@ -1175,26 +1148,11 @@ export class Element<
   out Tag extends string = string
 > extends VoidElement<Msg, R, E, Node, Tag> {
   /**
-   * Like `View.ElementBuilder.onMount`, keeping the HTML methods and
-   * `children`.
+   * Phantom: keeps `children` through `View.WithRequirements`.
    *
    * @since 0.1.0
    */
-  override onMount<R2>(
-    mount: Mount.Issued<Msg | Component.Noop, R2, Node, never>
-  ): Element<Msg, R | R2, E, Node, Tag>
-  /**
-   * Rejects any other mount result, with a type error that says what to end
-   * it with.
-   *
-   * @since 0.1.0
-   */
-  override onMount(
-    mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>
-  ): never
-  override onMount(mount: View.Mount<Msg>): any {
-    return (super.onMount as any)(mount)
-  }
+  declare readonly "~With"?: Element<Msg, R | this["~Add"], E, Node, Tag>
   /**
    * Adds children after the ones the builder holds, and returns the
    * builder: nodes, builders, text, arrays to flatten, and holes (`false`,
@@ -1202,23 +1160,12 @@ export class Element<
    *
    * @since 0.1.0
    */
-  children<const C extends ReadonlyArray<View.Input<Msg, unknown>>>(
+  children<This, const C extends ReadonlyArray<View.Input<Msg, unknown>>>(
+    this: This,
     ...inputs: C
-  ): Element<Msg, R | View.Requirements<C[number]>, E, Node, Tag> {
-    return View.withContent(this, inputs) as any
-  }
-  /**
-   * Like `View.ElementBuilder.forward`, keeping the HTML methods and
-   * `children`.
-   *
-   * @since 0.1.0
-   */
-  override forward<R2 = never>(
-    place: (
-      node: Element<Msg, R, E, Node, Tag>
-    ) => View.Element<Msg, R2> | View.ElementBuilder<Msg, R2, any, any>
-  ): Element<Msg, R | R2, E, Node, Tag> {
-    return View.withForward(this, place) as any
+  ): View.WithRequirements<This, View.Requirements<C[number]>>
+  children(...inputs: ReadonlyArray<View.Input<Msg, unknown>>): unknown {
+    return View.withContent(this, inputs)
   }
 }
 
@@ -1704,40 +1651,11 @@ export interface SvgElement<
    */
   style(style: Style): this
   /**
-   * Appends children.
+   * Phantom: keeps the SVG methods through `View.WithRequirements`.
    *
    * @since 0.1.0
    */
-  children<const C extends ReadonlyArray<View.Input<Msg, any>>>(
-    ...inputs: C
-  ): SvgElement<Msg, R | View.Requirements<C[number]>, Node, Tag>
-  /**
-   * Like `View.ElementBuilder.onMount`, keeping the SVG methods.
-   *
-   * @since 0.1.0
-   */
-  onMount<R2>(
-    mount: Mount.Issued<Msg | Component.Noop, R2, Node, never>
-  ): SvgElement<Msg, R | R2, Node, Tag>
-  /**
-   * Rejects any other mount result, with a type error that says what to end
-   * it with.
-   *
-   * @since 0.1.0
-   */
-  onMount(
-    mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>
-  ): never
-  /**
-   * Like `View.ElementBuilder.forward`, keeping the SVG methods.
-   *
-   * @since 0.1.0
-   */
-  forward<R2 = never>(
-    place: (
-      node: SvgElement<Msg, R, Node, Tag>
-    ) => View.Element<Msg, R2> | View.ElementBuilder<Msg, R2, any, any>
-  ): SvgElement<Msg, R | R2, Node, Tag>
+  readonly "~With"?: SvgElement<Msg, R | this["~Add"], Node, Tag>
 }
 
 /**
@@ -2004,52 +1922,11 @@ export class CustomElementBuilder<
     return super.prop(name, value)
   }
   /**
-   * Like `Element.children`, keeping the property methods.
+   * Phantom: keeps the property methods through `View.WithRequirements`.
    *
    * @since 0.1.0
    */
-  override children<const C extends ReadonlyArray<View.Input<Msg, unknown>>>(
-    ...inputs: C
-  ): CustomElement<Msg, R | View.Requirements<C[number]>, P, E, Tag> {
-    return View.withContent(this, inputs) as any
-  }
-  /**
-   * Like `Element.onMount`, keeping the property methods.
-   *
-   * @since 0.1.0
-   */
-  override onMount<R2>(
-    mount: Mount.Issued<Msg | Component.Noop, R2, HTMLElement, never>
-  ): CustomElement<Msg, R | R2, P, E, Tag>
-  /**
-   * Rejects any other mount result, with a type error that says what to end
-   * it with.
-   *
-   * @since 0.1.0
-   */
-  override onMount(
-    mount: Mount.Issued<
-      Msg | Component.Noop | View.MountHint,
-      any,
-      HTMLElement,
-      never
-    >
-  ): never
-  override onMount(mount: View.Mount<Msg>): any {
-    return (super.onMount as any)(mount)
-  }
-  /**
-   * Like `Element.forward`, keeping the property methods.
-   *
-   * @since 0.1.0
-   */
-  override forward<R2 = never>(
-    place: (
-      node: CustomElement<Msg, R, P, E, Tag>
-    ) => View.Element<Msg, R2> | View.ElementBuilder<Msg, R2, any, any>
-  ): CustomElement<Msg, R | R2, P, E, Tag> {
-    return View.withForward(this, place as any) as any
-  }
+  declare readonly "~With"?: CustomElement<Msg, R | this["~Add"], P, E, Tag>
 }
 
 type Undeclared<P, K extends string> = K extends keyof P ? never : unknown

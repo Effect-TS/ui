@@ -6,7 +6,7 @@ import {
   Router,
   type Subscription,
   UiSchema,
-  type View
+  View
 } from "@effect/ui"
 import {
   BrowserHost,
@@ -284,6 +284,37 @@ describe("Html", () => {
         return framed
       }
     })
+  })
+
+  it("a builder chosen by a condition keeps the requirements of its children and mount", () => {
+    Html.component({
+      name: "Either",
+      model: Schema.Boolean,
+      message: Msg
+    }).make({
+      init: () => false,
+      update: ($) => $.model,
+      view: (h, inline) => {
+        type Either<R> =
+          | Html.Element<Msg, R, Html.EventsOf<"div">, HTMLDivElement, "div">
+          | Html.Element<Msg, R, Html.EventsOf<"span">, HTMLSpanElement, "span">
+        const needsClock = {} as View.Node<Msg, Clock>
+        const root = inline ? h.span : h.div
+        expect(
+          root.attr("id", "x").onMount(LogUp()).children(needsClock)
+        ).type.toBe<Either<Logger | Clock>>()
+        // @ts-expect-error This expression is not callable
+        root(needsClock)
+        return root
+      }
+    })
+  })
+
+  it("only a builder whose children returns its builder is a shorthand", () => {
+    const built = {} as View.ElementBuilder<Msg> & {
+      readonly children: (...inputs: Array<View.Input<Msg>>) => View.Node<Msg>
+    }
+    expect(View.shorthand).type.not.toBeCallableWith(built)
   })
 
   it("errors point at the offending child", () => {
@@ -707,13 +738,6 @@ describe("Html", () => {
       Component.Component<"Page", {}, null, Msg, never, Clock, Html.Elements>
     >()
     expect<View.Requirements<any>>().type.toBe<any>()
-  })
-
-  it("a union of builders requires unknown, not any", () => {
-    const h = {} as Html.H<Msg>
-    const wide = false as boolean
-    const node = (wide ? h.div : h.section)({} as View.Node<Msg, Clock>)
-    expect<View.Requirements<typeof node>>().type.toBe<unknown>()
   })
 
   it("style accepts typed CSS properties and preserves the element type", () => {

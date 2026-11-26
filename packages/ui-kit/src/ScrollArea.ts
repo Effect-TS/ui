@@ -129,7 +129,6 @@ import { isRtl } from "./internal/direction.ts"
 import { override } from "./internal/dom.ts"
 import { isWebKit } from "./internal/platform.ts"
 import { clamp } from "./internal/range.ts"
-import type { WithRequirements } from "./internal/requirements.ts"
 import { finite } from "./internal/transition.ts"
 
 const SCROLL_TIMEOUT = 500
@@ -906,10 +905,7 @@ const TrackScrollArea = Mount.makeStream(
 type ScrollbarOf<
   B extends View.PartTarget<"div">,
   T extends View.PartTarget<"div">
-> = WithRequirements<
-  ReturnType<B["attr"]>,
-  View.Requirements<T>
->
+> = View.WithRequirements<B, View.Requirements<T>>
 
 const overflowData = <B extends Attributed<B>>(
   builder: B,
