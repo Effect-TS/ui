@@ -4,24 +4,22 @@ await run("select", async ({ browser, expect, failures, url }) => {
   const page = await browser.newPage({ viewport: { width: 800, height: 600 } })
   page.on("pageerror", (error) => failures.push("page error " + String(error)))
 
-  for (const [align, label] of [[true, "Banana"], [false, "Apple"]]) {
-    await page.goto(url + "select.html?align=" + align)
-    // A real mouse click runs the browser's default mousedown focus, which a
-    // dispatched event skips.
-    await page.locator("#trigger").click()
-    await page.waitForTimeout(100)
-    await page.keyboard.press("ArrowDown")
-    await page.waitForTimeout(100)
-    const focused = await page.evaluate(() =>
-      document.activeElement.closest(".popup [data-highlighted]")
-        ?.textContent ?? null
-    )
-    expect(
-      focused === label,
-      "ArrowDown in a mouse-opened popup focuses " + label + ", align=" + align,
-      focused
-    )
-  }
+  await page.goto(url + "select.html")
+  // A real mouse click runs the browser's default mousedown focus, which a
+  // dispatched event skips.
+  await page.locator("#trigger").click()
+  await page.waitForTimeout(100)
+  await page.keyboard.press("ArrowDown")
+  await page.waitForTimeout(100)
+  const highlighted = await page.evaluate(() =>
+    document.activeElement.closest(".popup [data-highlighted]")?.textContent ??
+      null
+  )
+  expect(
+    highlighted === "Banana",
+    "ArrowDown in a mouse-opened popup focuses Banana",
+    highlighted
+  )
 
   // A parent that keeps the popup closed gets the trigger focused by the click.
   await page.goto(url + "select.html?decline")

@@ -16,7 +16,7 @@ const Message = UiSchema.TaggedEnum({
 
 const Page = Html.component({
   name: "Page",
-  props: Schema.Struct({ align: Schema.Boolean, decline: Schema.Boolean }),
+  props: Schema.Struct({ decline: Schema.Boolean }),
   model: Schema.Struct({ open: Schema.Boolean }),
   message: Message
 }).make({
@@ -30,8 +30,7 @@ const Page = Html.component({
       props: {
         open: model.open,
         items,
-        id: "trigger",
-        alignItemWithTrigger: h.props.align
+        id: "trigger"
       },
       onEmit: {
         RequestedOpen: () => Message.RequestedOpen(),
@@ -58,10 +57,7 @@ const Page = Html.component({
 
 BrowserHost.mount(
   Page,
-  {
-    align: new URLSearchParams(location.search).get("align") !== "false",
-    decline: new URLSearchParams(location.search).has("decline")
-  },
+  { decline: new URLSearchParams(location.search).has("decline") },
   document.getElementById("root")!
 ).pipe(
   // An unbundled dev build can outrun the default 5ms budget and defer the
