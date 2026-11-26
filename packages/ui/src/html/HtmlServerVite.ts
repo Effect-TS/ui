@@ -78,16 +78,11 @@ export interface Plugin {
   readonly sharedDuringBuild: true
   config(
     config: unknown,
-    env: { readonly command: string; readonly isPreview?: boolean | undefined }
+    env: { readonly isPreview?: boolean | undefined }
   ): object
   resolveId(source: string): string | undefined
   load(this: LoadContext, id: string): Promise<string | undefined>
   configureServer(server: DevServer): () => void
-  writeBundle(
-    this: { readonly environment: { readonly name: string } },
-    options: unknown,
-    bundle: { readonly [fileName: string]: OutputFile }
-  ): void
   buildApp(builder: Builder): Promise<void>
   buildEnd(): Promise<void>
 }
@@ -97,7 +92,6 @@ interface LoadContext {
 }
 
 interface OutputFile {
-  readonly type: "asset" | "chunk"
   readonly fileName: string
   readonly isEntry?: boolean
   readonly code?: string
@@ -156,29 +150,33 @@ const serverId = "virtual:@effect/ui/server"
 export const plugin = (options: Options): Plugin => {
   const origin = options.origin ?? "http://localhost"
   let devServer: DevServer | undefined
-  let builtTemplate: string | undefined
+  // The app's `index.html` in dev, and the client build's in a build.
+  let templateFile = ""
   let current: ServerModule | undefined
 
   const template = async (context: LoadContext): Promise<string> => {
-    if (devServer !== undefined) {
-      const file = path.join(devServer.config.root, "index.html")
-      context.addWatchFile(file)
-      return devServer.transformIndexHtml("/", await fs.readFile(file, "utf8"))
-    }
-    if (builtTemplate === undefined) {
-      throw new Error(`${documentId} needs the client build's index.html`)
-    }
-    return builtTemplate
+    const html = await fs.readFile(templateFile, "utf8")
+    if (devServer === undefined) return html
+    context.addWatchFile(templateFile)
+    return devServer.transformIndexHtml("/", html)
+  }
+
+  /** Makes `next` the dev server's module and disposes the one it replaces. */
+  const swap = async (next?: ServerModule) => {
+    if (next === current) return
+    const previous = current
+    current = next
+    await previous?.dispose()
   }
 
   return {
     name: "effect-ui-html-server",
-    // The server build reads the template the client build captured.
+    // The server build reads the template file `buildApp` sets.
     sharedDuringBuild: true,
-    config: (_, { command, isPreview }) => ({
+    config: (_, { isPreview }) => ({
       // In dev, page requests that Vite doesn't answer reach the server
       // entry. A preview serves `/about` from `about.html`.
-      appType: command === "serve" && !isPreview ? "custom" : "mpa",
+      appType: isPreview ? "mpa" : "custom",
       builder: {},
       ssr: { noExternal: [/^@effect\/ui/] },
       environments: {
@@ -210,6 +208,7 @@ export const plugin = (options: Options): Plugin => {
     },
     configureServer(server) {
       devServer = server
+      templateFile = path.join(server.config.root, "index.html")
       const load = async () => {
         const runner = server.environments.ssr.runner
         if (runner === undefined) {
@@ -217,11 +216,7 @@ export const plugin = (options: Options): Plugin => {
         }
         const module = (await runner.import(serverId)) as ServerModule
         // An edit re-evaluates the server entry, with a new handler.
-        if (module !== current) {
-          const previous = current
-          current = module
-          await previous?.dispose()
-        }
+        await swap(module)
         return module
       }
       // Returned, so it runs after Vite's own middlewares.
@@ -234,19 +229,15 @@ export const plugin = (options: Options): Plugin => {
         })
       }
     },
-    writeBundle(_, bundle) {
-      const html = bundle["index.html"]
-      if (this.environment.name === "client" && html?.type === "asset") {
-        builtTemplate = String(html.source)
-      }
-    },
     async buildApp(builder) {
       const { client, ssr } = builder.environments
+      const { cacheDir, root } = ssr.config
+      const outDir = path.resolve(root, client.config.build.outDir)
       await builder.build(client)
+      templateFile = path.join(outDir, "index.html")
       const output = (await builder.build(ssr)) as {
         readonly output: ReadonlyArray<OutputFile>
       }
-      const { cacheDir, root } = ssr.config
       await fs.mkdir(cacheDir, { recursive: true })
       // Inside the project, so the bundle's external imports resolve.
       const dir = await fs.mkdtemp(path.join(cacheDir, "effect-ui-server-"))
@@ -261,15 +252,13 @@ export const plugin = (options: Options): Plugin => {
           pathToFileURL(path.join(dir, entry.fileName)).href
         )) as ServerModule
         try {
-          const outDir = path.resolve(root, client.config.build.outDir)
           await Promise.all(
             (await module.prerender()).map(async (url) => {
-              const response = await module.handler(
-                new Request(new URL(url, origin))
-              )
+              const target = new URL(url, origin)
+              const response = await module.handler(new Request(target))
               await write(
                 outDir,
-                fileName(url, response.status),
+                fileName(target.pathname, response.status),
                 await response.text()
               )
             })
@@ -281,23 +270,19 @@ export const plugin = (options: Options): Plugin => {
         await fs.rm(dir, { recursive: true, force: true })
       }
     },
-    async buildEnd() {
-      const previous = current
-      current = undefined
-      await previous?.dispose()
-    }
+    buildEnd: () => swap()
   }
 }
 
-const fileName = (url: string, status: number): string => {
+const fileName = (pathname: string, status: number): string => {
   if (status === 404) {
     return "404.html"
   }
   if (status !== 200) {
-    throw new Error(`Prerendering ${url} answered ${status}`)
+    throw new Error(`Prerendering ${pathname} answered ${status}`)
   }
-  const pathname = decodeURIComponent(new URL(url, "http://localhost").pathname)
-  return pathname.endsWith("/") ? `${pathname}index.html` : `${pathname}.html`
+  const file = decodeURIComponent(pathname)
+  return file.endsWith("/") ? `${file}index.html` : `${file}.html`
 }
 
 const write = async (

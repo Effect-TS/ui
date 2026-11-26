@@ -167,6 +167,9 @@ const snippets = (loadSnippets?: () => Promise<Snippets>): Plugin => {
   let root = ""
   return {
     name: "launch:snippets",
+    // One instance for the client and server builds, so the snippets are
+    // tokenized once.
+    sharedDuringBuild: true,
     configResolved(config) {
       root = config.root
     },
@@ -195,6 +198,7 @@ const articleText = (
     )
   return {
     name: "launch:article-text",
+    sharedDuringBuild: true,
     configResolved(config) {
       root = config.root
     },

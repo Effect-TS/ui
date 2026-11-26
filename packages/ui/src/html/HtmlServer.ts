@@ -281,8 +281,8 @@ export const document = (
   if (!template.includes(appMarker)) {
     throw new Error(`The document template has no ${appMarker} marker`)
   }
-  let html = withAttributes(template, "html", rendered.htmlAttributes)
-  html = withAttributes(html, "body", rendered.bodyAttributes)
+  let html = withAttributes(template, /<html\b[^>]*/i, rendered.htmlAttributes)
+  html = withAttributes(html, /<body\b[^>]*/i, rendered.bodyAttributes)
   html = insertBefore(html, "</head>", rendered.head)
   html = insertBefore(
     html,
@@ -297,13 +297,10 @@ export const document = (
 
 const appMarker = "<!--app-html-->"
 
-const withAttributes = (html: string, tag: string, attributes: string) =>
+const withAttributes = (html: string, open: RegExp, attributes: string) =>
   attributes === ""
     ? html
-    : html.replace(
-      new RegExp(`<${tag}\\b[^>]*`, "i"),
-      (open) => `${open} ${attributes}`
-    )
+    : html.replace(open, (tag) => `${tag} ${attributes}`)
 
 const insertBefore = (html: string, tag: string, content: string) => {
   const index = html.indexOf(tag)
