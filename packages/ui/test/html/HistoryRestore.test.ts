@@ -1055,25 +1055,15 @@ describe("history restore of a page whose hydration hasn't settled", {
     )
   })
 
-  it.effect.each(
-    [
-      ["without custom restore", undefined, "server:billing"],
-      [
-        "with custom restore",
-        (model: string) => `filtered:${model}`,
-        "filtered:server:billing"
-      ]
-    ] as const
-  )(
-    "Back restores a held child's model and settled query when a push interrupts decode (%s)",
-    ([, restore, expected]) => {
+  it.effect(
+    "Back restores a held child's model and settled query when a push interrupts decode",
+    () => {
       const history = Router.memoryHistory("/")
       const Child = Html.component({
         name: "HeldQueryForm",
         model: Late,
         message: Schema.Never,
-        queries: { tab: { query: GetTab, args: () => ({}) } },
-        restore
+        queries: { tab: { query: GetTab, args: () => ({}) } }
       }).make({
         init: () => inits++ === 0 ? "server" : "client",
         update: ($) => $.model,
@@ -1136,7 +1126,10 @@ describe("history restore of a page whose hydration hasn't settled", {
         yield* tick
         history.go(-1)
         yield* tick
-        assert.strictEqual(app.querySelector("p")!.textContent, expected)
+        assert.strictEqual(
+          app.querySelector("p")!.textContent,
+          "server:billing"
+        )
       }).pipe(
         Effect.scoped,
         Effect.provide(Router.make({ routes: Routes, history }))

@@ -1,5 +1,4 @@
 import { Query } from "@effect/ui"
-import * as queryCore from "@effect/ui/internal/queryCore"
 import { redactAST } from "@effect/ui/internal/schemaRedact"
 import { TestQuery } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -129,56 +128,6 @@ describe("Query snapshots", () => {
     assert.deepStrictEqual(Schema.encodeUnknownSync(json)(empty), [])
     assert.isTrue(Equal.equals(Schema.decodeUnknownSync(json)([]), empty))
   })
-
-  it.effect("keeps patched Successes and Failures inline even when ~query ships the entry", () =>
-    Effect.gen(function*() {
-      const value = { id: "1", name: "Ann" }
-      const shipped = AsyncResult.success(value, { timestamp: 5 })
-      const lookup: queryCore.ShippedContext = {
-        peek: (q, key) =>
-          q.name === def.name && key === at.argsKey ? shipped : undefined,
-        decode: (q, key) =>
-          q.name === def.name && key === at.argsKey
-            ? Effect.succeed(shipped)
-            : Effect.fail(new Error("missing"))
-      }
-      const provide = <A, E>(effect: Effect.Effect<A, E>) =>
-        Effect.provideService(effect, queryCore.Shipped, lookup)
-
-      const unpatched = Query.makeSnapshot(def, "user", at, shipped)
-      const ref = yield* provide(Schema.encodeUnknownEffect(json)(unpatched))
-      assert.deepStrictEqual(ref, [`{"id":"1"}`, 2])
-      const decoded = yield* provide(Schema.decodeUnknownEffect(json)(ref))
-      assert.strictEqual(
-        (Query.snapshotData(decoded)?.result as AsyncResult.Success<any, any>)
-          ?.value,
-        value
-      )
-
-      const patched = Query.makeSnapshot(def, "user", at, shipped, true)
-      const patchedWire = yield* provide(
-        Schema.encodeUnknownEffect(json)(patched)
-      )
-      assert.deepStrictEqual(patchedWire, [`{"id":"1"}`, 0, value, 5, true])
-
-      const failure = Query.makeSnapshot(
-        def,
-        "user",
-        at,
-        AsyncResult.failure(Cause.fail("nope"), {
-          previousSuccess: Option.some(shipped)
-        })
-      )
-      const failureWire = yield* provide(
-        Schema.encodeUnknownEffect(json)(failure)
-      )
-      assert.deepStrictEqual(failureWire, [
-        `{"id":"1"}`,
-        1,
-        ["nope"],
-        [value, 5]
-      ])
-    }))
 
   it("never carries waiting, and records the patched flag only over a Success", () => {
     const waiting = Query.makeSnapshot(

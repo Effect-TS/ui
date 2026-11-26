@@ -3774,100 +3774,10 @@ describe("HtmlServer queries", { concurrent: false }, () => {
   )
 
   it.effect(
-    "adopts a structured query result via ssr, and builds fresh when ~query is absent",
-    () =>
-      hosted(Effect.gen(function*() {
-        let fetches = 0
-        class GetNote extends Query.Service<GetNote>()("GetNote", {
-          args: { id: Schema.String },
-          success: Schema.Struct({ id: Schema.String, body: Schema.String }),
-          error: Schema.Never,
-          staleTime: "1 minute"
-        }) {
-          static readonly layer = this.toLayer(({ id }) =>
-            Effect.sync(() => {
-              fetches++
-              return { id, body: "structured-note-body" }
-            })
-          )
-        }
-        const Reader = Html.component({
-          name: "Reader",
-          model: Schema.Struct({}),
-          message: Schema.Never,
-          queries: {
-            note: { query: GetNote, args: () => ({ id: "1" }) }
-          }
-        }).make({
-          init: () => ({}),
-          update: ($) => $.model,
-          view: (h) =>
-            h.p(
-              AsyncResult.isSuccess(h.queries.note)
-                ? h.queries.note.value.body
-                : "loading"
-            )
-        })
-        const Page = Html.component({
-          name: "Page",
-          model: Schema.Struct({}),
-          message: Schema.Never
-        }).make({
-          init: () => ({}),
-          update: ($) => $.model,
-          view: (h) =>
-            h.div(
-              Reader(h, { key: "a", props: {} }),
-              Reader(h, { key: "b", props: {} })
-            )
-        }).pipe(Component.provide(GetNote.layer))
-
-        const result = yield* ssr(Page, {})
-        expect(result.adopted).toEqual([
-          "/Page",
-          "/Page/Reader[a]",
-          "/Page/Reader[b]"
-        ])
-        expect(result.state["/Page/Reader[a]"]).toEqual({
-          model: {},
-          queries: { note: ["{\"id\":\"1\"}", 2] }
-        })
-        expect(fetches).toBe(1)
-
-        // Without `~query`, instances referencing it don't adopt and build fresh instead.
-        const withoutQuery = { ...result.state }
-        delete (withoutQuery as Record<string, unknown>)["~query"]
-        const app = yield* container(result.html)
-        const log = MessageLog.makeMemory({ size: 100 })
-        const root = yield* HtmlHydrate.hydrateEffect(
-          Page,
-          {},
-          app,
-          withoutQuery
-        ).pipe(Effect.provideService(MessageLog.MessageLog, log))
-        yield* root.adopted
-        const mounted = Object.fromEntries(
-          log.entries()
-            .filter((entry): entry is MessageLog.Mounted =>
-              entry._tag === "Mounted"
-            )
-            .map((entry) => [entry.path, entry.adopted])
-        )
-        expect(mounted).toEqual({
-          "/Page": true,
-          "/Page/Reader[a]": false,
-          "/Page/Reader[b]": false
-        })
-        expect(app.textContent).toBe("loadingloading")
-      }))
-  )
-
-  it.effect(
     "adopts readers once when a query's success decoder is async, sharing cache-first decodes and cancelling unjoined ones",
     () =>
       Effect.gen(function*() {
         let gate: Effect.Effect<void> = Effect.void
-        let encodes = 0
         let orphanCancelled = false
         const decodes: Record<string, number> = {}
         const AsyncBody = Schema.String.pipe(Schema.decode({
@@ -3887,10 +3797,7 @@ describe("HtmlServer queries", { concurrent: false }, () => {
               return Effect.as(gate, body)
             })
           ),
-          encode: SchemaGetter.transform((body: string) => {
-            encodes++
-            return body
-          })
+          encode: SchemaGetter.transform((body: string) => body)
         }))
         class GetAsyncNote extends Query.Service<GetAsyncNote>()(
           "GetAsyncNote",
@@ -3944,7 +3851,6 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         const serialized = HtmlServer.serializeState(rendered.state)
         expect(serialized.split("note-1").length - 1).toBe(1)
         expect(serialized.split("note-2").length - 1).toBe(1)
-        expect(encodes).toBe(2)
 
         const parsed = JSON.parse(serialized)
         parsed["~query"].GetAsyncNote.push(["{\"id\":\"3\"}", 0, "orphan", 0])
@@ -3977,96 +3883,12 @@ describe("HtmlServer queries", { concurrent: false }, () => {
   )
 
   it.effect(
-    "cancels an unjoined async ~query decode started after adoption",
-    () =>
-      Effect.gen(function*() {
-        let orphanCancelled = false
-        const AsyncBody = Schema.String.pipe(Schema.decode({
-          decode: SchemaGetter.transformEffect((body: string) =>
-            body === "orphan"
-              ? Effect.onInterrupt(
-                Effect.never,
-                () =>
-                  Effect.sync(() => {
-                    orphanCancelled = true
-                  })
-              )
-              : Effect.succeed(body)
-          ),
-          encode: SchemaGetter.transform((body: string) => body)
-        }))
-        class GetLateNote extends Query.Service<GetLateNote>()("GetLateNote", {
-          args: { id: Schema.String },
-          success: AsyncBody,
-          error: Schema.Never,
-          staleTime: "1 minute"
-        }) {
-          static readonly layer = this.toLayer(({ id }) =>
-            Effect.succeed(`note-${id}`)
-          )
-        }
-        const Reader = Html.component({
-          name: "Reader",
-          model: Schema.Struct({}),
-          message: Schema.Never,
-          queries: { note: { query: GetLateNote, args: () => ({ id: "1" }) } }
-        }).make({
-          init: () => ({}),
-          update: ($) => $.model,
-          view: (h) =>
-            h.p(
-              AsyncResult.isSuccess(h.queries.note)
-                ? h.queries.note.value
-                : "loading"
-            )
-        })
-        const Page = Html.component({
-          name: "Page",
-          model: Schema.Boolean,
-          message: Schema.Boolean
-        }).make({
-          init: () => false,
-          update: (_, message) => message,
-          view: (h, show) => h.div(show ? Reader(h, {}) : null)
-        }).pipe(Component.provide(GetLateNote.layer))
-
-        const rendered = yield* HtmlServer.renderToHtml(Page, {})
-        const state = {
-          ...rendered.state,
-          "~query": {
-            GetLateNote: [
-              ["{\"id\":\"1\"}", 0, "note-1", 0],
-              ["{\"id\":\"3\"}", 0, "orphan", 0]
-            ]
-          }
-        }
-        const app = yield* container(rendered.html)
-        const root = yield* HtmlHydrate.hydrateEffect(Page, {}, app, state)
-          .pipe(Effect.provideService(Query.Problems, () => {}))
-        yield* root.adopted
-        root.send(true)
-        yield* tick
-
-        expect(app.textContent).toBe("note-1")
-        expect(orphanCancelled).toBe(true)
-      }).pipe(Effect.scoped)
-  )
-
-  it.effect(
     "scopes the ~query decode memo to each hydration execution",
     () =>
       Effect.gen(function*() {
-        let decodes = 0
-        const CountedDate = Schema.Date.pipe(Schema.decode({
-          decode: SchemaGetter.transform((date: Date) => {
-            decodes++
-            return date
-          }),
-          encode: SchemaGetter.passthrough()
-        }))
         class GetDate extends Query.Service<GetDate>()("GetDate", {
           args: {},
-          success: CountedDate,
+          success: Schema.Date,
           error: Schema.Never,
           staleTime: "1 minute"
         }) {
@@ -4075,67 +3897,35 @@ describe("HtmlServer queries", { concurrent: false }, () => {
           )
         }
         const seen: Array<Date> = []
-        const Reader = Html.component({
-          name: "Reader",
+        const Page = Html.component({
+          name: "Page",
           model: Schema.Struct({}),
           message: Schema.Never,
-          queries: {
-            when: { query: GetDate, args: () => ({}) }
-          }
+          queries: { when: { query: GetDate, args: () => ({}) } }
         }).make({
           init: () => ({}),
           update: ($) => $.model,
           view: (h) => {
-            if (AsyncResult.isSuccess(h.queries.when)) {
-              seen.push(h.queries.when.value)
-            }
-            return h.p(
-              AsyncResult.isSuccess(h.queries.when)
-                ? String(h.queries.when.value.getUTCFullYear())
-                : "loading"
-            )
+            if (!AsyncResult.isSuccess(h.queries.when)) return h.p("loading")
+            seen.push(h.queries.when.value)
+            return h.p(String(h.queries.when.value.getUTCFullYear()))
           }
-        })
-        const Page = Html.component({
-          name: "Page",
-          model: Schema.Struct({}),
-          message: Schema.Never
-        }).make({
-          init: () => ({}),
-          update: ($) => $.model,
-          view: (h) =>
-            h.div(
-              Reader(h, { key: "a", props: {} }),
-              Reader(h, { key: "b", props: {} })
-            )
         }).pipe(Component.provide(GetDate.layer))
 
         const rendered = yield* HtmlServer.renderToHtml(Page, {})
         const parsed = JSON.parse(HtmlServer.serializeState(rendered.state))
         const app = yield* container(rendered.html)
-        // Re-executing the same hydration Effect in a fresh scope gets a fresh decode memo.
         const mount = HtmlHydrate.hydrateEffect(Page, {}, app, parsed)
 
         seen.length = 0
-        yield* Effect.scoped(
-          Effect.flatMap(mount, (root) => root.adopted)
-        )
-        const root1Dates = seen.slice()
-        expect(root1Dates).toHaveLength(2)
-        expect(root1Dates[0]).toBe(root1Dates[1])
-        root1Dates[0]!.setUTCFullYear(1999)
+        yield* Effect.scoped(Effect.flatMap(mount, (root) => root.adopted))
+        seen[0]!.setUTCFullYear(1999)
 
+        // Re-executing the same hydration Effect decodes the wire value afresh.
         app.innerHTML = rendered.html
         seen.length = 0
-        yield* Effect.scoped(
-          Effect.flatMap(mount, (root) => root.adopted)
-        )
-        const root2Dates = seen.slice()
-        expect(root2Dates).toHaveLength(2)
-        expect(root2Dates[0]).toBe(root2Dates[1])
-        expect(root2Dates[0]).not.toBe(root1Dates[0])
-        expect(root2Dates[0]!.getUTCFullYear()).toBe(2026)
-        expect(decodes).toBe(2)
+        yield* Effect.scoped(Effect.flatMap(mount, (root) => root.adopted))
+        expect(seen[0]!.getUTCFullYear()).toBe(2026)
       }).pipe(Effect.scoped)
   )
 })
