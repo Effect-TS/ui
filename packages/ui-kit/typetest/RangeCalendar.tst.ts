@@ -95,6 +95,7 @@ describe("RangeCalendar", () => {
     RangeCalendar(h, {
       props: { value: null, month: utc, today: utc },
       view: (rangeCalendar) => {
+        expect(rangeCalendar.grid).type.not.toBeCallableWith(h.div)
         expect(rangeCalendar.cell).type.not.toBeCallableWith({
           element: h.div,
           date: utc

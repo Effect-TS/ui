@@ -59,7 +59,9 @@ const Stay = Html.component({
         },
         view: (rangeCalendar) =>
           rangeCalendar.root(h.div).children(
-            rangeCalendar.grid(h.table).children(
+            rangeCalendar.grid(
+              h.table.class("grid").attr("aria-multiselectable", "false")
+            ).children(
               h.tbody(
                 ...rangeCalendar.weeks.map((week) =>
                   h.tr(
@@ -138,6 +140,12 @@ describe("RangeCalendar", () => {
     Effect.gen(function*() {
       const play = yield* HtmlPlay.make(Stay, {})
       shows(play, span(2, 4), span(2, 4))
+      assert.strictEqual(
+        play.root.get(Locator.attr("class", "grid")).attrs?.[
+          "aria-multiselectable"
+        ],
+        "true"
+      )
 
       yield* play.click(day(12))
       shows(play, span(2, 4), [12])

@@ -249,6 +249,7 @@ const inRange = (date: DateTime.Utc, range: Range | null): boolean =>
  * The parts write what `Calendar`'s do, and these over the values the
  * consumer set on the builder before applying the part:
  *
+ * - `grid`: `aria-multiselectable="true"`
  * - `cell`: `aria-selected`, `"true"` for every day in the selected range
  * - `day`: `data-selected`, `data-range-start`, `data-range-end` and
  *   `data-in-range`
@@ -297,6 +298,11 @@ export const RangeCalendar = Html.component({
     const preview = (date: DateTime.Utc) =>
       draft === null ? undefined : RangeCalendarMessage.PreviewedDay({ date })
 
+    const gridPart = p.part(
+      "table",
+      (b) => b.attr("aria-multiselectable", "true")
+    )
+
     const cellPart = p.part(
       "td",
       (b, date: DateTime.Utc) =>
@@ -336,6 +342,12 @@ export const RangeCalendar = Html.component({
       parts: (calendar) => ({
         ...calendar,
         anchor,
+        grid: View.wrapPart(
+          gridPart,
+          <B extends View.PartTarget<"table">>(
+            element: B
+          ): ReturnType<B["attr"]> => gridPart(calendar.grid(element))
+        ),
         cell: View.wrapPart(
           cellPart,
           <B extends Keyed<"td">>(
