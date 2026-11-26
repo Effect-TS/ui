@@ -2,7 +2,7 @@
 title: Introducing Effect UI
 ---
 
-Effect UI is the new frontend library that continues the work of Foldkit 0.x, the framework at [foldkit.dev](https://foldkit.dev). We announced it as the "new frontend foundation" in [Foldkit Joins Effect](https://foldkit.dev/blog/foldkit-joins-effect).
+Effect UI is a frontend library built on Effect and the Elm Architecture: isolated Components with explicit state transitions, side effects as values and browserless testing. It continues the work of Foldkit 0.x ([foldkit.dev](https://foldkit.dev)), which we announced as the "new frontend foundation" in [Foldkit Joins Effect](https://foldkit.dev/blog/foldkit-joins-effect).
 
 Effect UI is in public preview. If you're building with Foldkit 0.x, **the migration will be an upgrade, not a rewrite.**
 
@@ -22,7 +22,7 @@ Not reading all that? Copy a prompt to explore it with an AI agent.
 
 ## What this article covers
 
-This article covers the main changes from Foldkit 0.x to Effect UI, not every API change:
+Here's how Effect UI works, and the main changes from Foldkit 0.x:
 
 - [Components](#components)
 - [State and data](#state-and-data)
@@ -117,9 +117,7 @@ A Model holds only the state that its own update changes, not everything the vie
 
 ### Parts for headless Components
 
-The components in Foldkit UI were headless. Each one managed behavior, keyboard handling and ARIA while you wrote the markup. Your `toView` callback received bundles of attributes, and you spread each bundle onto the element it belonged to.
-
-In Effect UI, a headless Component gives your view parts instead. You apply each part to an element you write, then add your own classes and children. Here, `Details` renders a `Disclosure`:
+Headless Components in Effect UI manage behavior, keyboard handling and ARIA while you write the markup. Instead of returning markup of its own, a headless Component gives your view parts that you apply to your own elements, classes and children. Here, `Details` renders a `Disclosure`:
 
 ::Listing{code="partsUse"}
 
@@ -139,7 +137,7 @@ Here is the full set of 41 components. Hover or tap to animate.
 
 ### Host-agnostic rendering
 
-In Foldkit 0.x, the runtime rendered straight to the browser DOM. Effect UI renders through a host instead: the browser host renders DOM nodes, the server host writes HTML and the test host builds an in-memory tree, all from the same HTML Components.
+Effect UI renders through a host instead of tying Components to the browser DOM. The browser host renders DOM nodes, the server host writes HTML and the test host builds an in-memory tree, all from the same HTML Components.
 
 Other platforms bring their own elements and host, like `@effect/ui-opentui` for the terminal, sharing the Component runtime without translating views across platforms. You pick the host when mounting the app, and the host interface is public if you want to write your own.
 
@@ -149,7 +147,7 @@ Other platforms bring their own elements and host, like `@effect/ui-opentui` for
 
 ### Story and Scene tests
 
-A Story test sends Messages to update, and a Scene test does the same through the view. In Foldkit 0.x, you passed those functions and a starting Model with `given`. In Effect UI, you pass the Component, and the test starts from the Model its init returns. To start from a different state, you can replace that Model with `given`.
+A Story test sends Messages directly to a Component's update, and a Scene test drives it through the view. You pass the Component, and the test starts from its init Model, or a state you supply with `given`.
 
 ::Listing{code="tests"}
 
@@ -190,7 +188,7 @@ In [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark),
 ## Also new
 
 - **Services per Component:** `Component.provide` gives services to a Component and everything below it. Its Commands and Subscriptions use them, and TypeScript reports a missing service at compile time.
-- **Code splitting:** Load a Component from a chunk of its own with `Component.lazy`. The browser loads the chunk the first time the Component renders, so it stays out of the initial bundle. In Foldkit 0.x, an app's Model, update and view all loaded in one bundle.
+- **Code splitting:** Load a Component from a chunk of its own with `Component.lazy`. The browser loads the chunk the first time the Component renders, so it stays out of the initial bundle.
 - **Control overlapping Commands:** When an update issues a Command that is still running, use `concurrent` to run both, `switch` to interrupt the earlier run or `queue` to wait for it.
 
 ## What stays the same
