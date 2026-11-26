@@ -232,7 +232,12 @@ import {
   dismissAttrs,
   dismissSpan
 } from "./internal/blocker.ts"
-import { focusFinal, override } from "./internal/dom.ts"
+import {
+  focusFinal,
+  isElement,
+  isHTMLElement,
+  override
+} from "./internal/dom.ts"
 import {
   autofillMatch,
   filledOf,
@@ -1102,7 +1107,7 @@ const watch = (
           lost,
           current.closeMethod === "keyboard"
         )
-      } else if (focused instanceof HTMLElement && node.contains(focused)) {
+      } else if (isHTMLElement(focused) && node.contains(focused)) {
         focused.blur()
       }
       node.inert = true
@@ -1162,7 +1167,7 @@ const watch = (
         event.pointerType !== "mouse" || event.buttons !== 1 || dragged
       ) return
       if (
-        !(event.target instanceof Element) ||
+        !isElement(event.target) ||
         event.target.closest("[role=\"option\"]") === null
       ) return
       dragY += event.movementY
@@ -1172,7 +1177,7 @@ const watch = (
       }
     }
     const onMouseMove = (event: MouseEvent) => {
-      const arrow = event.target instanceof Element
+      const arrow = isElement(event.target)
         ? event.target.closest("[data-select-scroll-arrow]")
         : null
       if (arrow === null || !node.contains(arrow)) return stopArrow()
@@ -1184,7 +1189,7 @@ const watch = (
       scrollBy(arrow, arrow.getAttribute("data-select-scroll-arrow") === "up")
     }
     const onMouseDown = (event: MouseEvent) => {
-      if (event.target instanceof Node && blocking.is(event.target)) {
+      if (blocking.is(event.target)) {
         event
           .preventDefault()
       }

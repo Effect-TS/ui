@@ -1748,7 +1748,7 @@ export const trackPosition = (
 
     const onScroll = (event: Event): void => {
       if (
-        !(event.target instanceof Node && node.contains(event.target))
+        !node.contains(event.target as Node | null)
       ) update()
     }
 
