@@ -16,6 +16,7 @@ const hotKey = Symbol.for("@effect/ui/hot")
 const swapKey = Symbol.for("@effect/ui/hot/swap")
 const devToolsKey = Symbol.for("@effect/ui/devtools")
 const storageKey = "@effect/ui/hot"
+const releasedEvent = "@effect/ui/hot/released"
 
 export interface DevToolsHook {
   readonly messageLog: MessageLog.MessageLog
@@ -134,12 +135,16 @@ const stateOf = (view: Window): WindowState => {
       swapHook: (first, next, names) => swap(made, first, next, names)
     }
     states.set(view, state = made)
+    view.addEventListener(releasedEvent, () => {
+      if (made.roots.size > 0) claimHooks(view, made)
+    })
   }
   return state
 }
 
 // Copies of this module in one window share its hooks. The first copy to mount
-// a root owns them until its last root detaches.
+// a root owns them until its last root detaches, then hands them to a copy
+// that still has mounted roots.
 const claimHooks = (view: Window, state: WindowState): void => {
   const hooks = view as unknown as Record<symbol, unknown>
   if (hooks[hotKey] !== undefined) return
@@ -152,6 +157,7 @@ const releaseHooks = (view: Window, state: WindowState): void => {
   if (state.roots.size > 0 || hooks[hotKey] !== state.saveHook) return
   delete hooks[hotKey]
   delete hooks[swapKey]
+  view.dispatchEvent(new Event(releasedEvent))
 }
 
 const loadPending = (

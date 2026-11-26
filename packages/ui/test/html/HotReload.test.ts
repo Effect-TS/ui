@@ -8,7 +8,16 @@ import {
   HtmlServer
 } from "@effect/ui/html"
 import { assert, describe, it, vi } from "@effect/vitest"
-import { Deferred, Effect, Layer, Redacted, Schema, SchemaGetter } from "effect"
+import {
+  Deferred,
+  Effect,
+  Exit,
+  Layer,
+  Redacted,
+  Schema,
+  SchemaGetter,
+  Scope
+} from "effect"
 
 const hotKey = Symbol.for("@effect/ui/hot")
 const swapKey = Symbol.for("@effect/ui/hot/swap")
@@ -702,16 +711,21 @@ describe("hot reload", { concurrent: false }, () => {
       )
       const mountB = (b: HTMLDivElement) =>
         Host.mountEffect(app(Html2, "CopyB"), {}, b)
-      yield* inContainer("copy-a", (a) =>
-        Effect.gen(function*() {
-          yield* BrowserHost.mountEffect(app(Html, "CopyA"), {}, a)
-          yield* inContainer("copy-b", mountB)
-          assert.include(saved(), "/CopyA")
-        }))
-      yield* inContainer("copy-b", (b) =>
-        Effect.gen(function*() {
-          yield* mountB(b)
-          assert.include(saved(), "/CopyB")
-        }))
+      yield* inContainer(
+        "copy-a",
+        (a) =>
+          inContainer("copy-b", (b) =>
+            Effect.gen(function*() {
+              const scopeA = yield* Scope.make()
+              yield* BrowserHost.mountEffect(app(Html, "CopyA"), {}, a).pipe(
+                Scope.provide(scopeA)
+              )
+              yield* Effect.scoped(mountB(b))
+              assert.include(saved(), "/CopyA")
+              yield* mountB(b)
+              yield* Scope.close(scopeA, Exit.void)
+              assert.include(saved(), "/CopyB")
+            }))
+      )
     }))
 })
