@@ -261,12 +261,12 @@ export const isClickDisabled = (
     at.tag !== "fieldset" && isDisabled(at, path.slice(index))
   )
 
-/** The steps that send what the host delivers, which reaches an inert element. */
+/** Host-delivered events can reach inert targets. */
 const delivered: ReadonlySet<string> = new Set(["fire", "fireElement", "blur"])
 
 /**
- * Throws when `step` is a user's action on an inert element, with its
- * ancestors innermost first in `path`.
+ * Rejects simulated user actions on inert targets. `path` lists the target
+ * and its ancestors, innermost first.
  *
  * @internal
  */

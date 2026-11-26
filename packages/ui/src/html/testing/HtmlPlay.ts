@@ -112,10 +112,10 @@ type DocumentKeyDetails = Partial<
  * per user action the browser host turns into an event. Each one is an
  * interaction.
  *
- * The steps a user performs throw on an inert element, one inside `inert`
- * or outside the topmost modal, however it was found: `click`, `type`,
- * `change`, `keydown` on an element, `submit`, `focus` and `drop`. `fire`,
- * `blur` and `fireElement` send what the host delivers, so they reach it.
+ * Simulated user actions (`click`, `type`, `change`, `keydown` on an element,
+ * `submit`, `focus` and `drop`) throw on inert targets, regardless of how
+ * they were found. Raw events (`fire`, `fireElement`) and `blur` still reach
+ * inert targets.
  *
  * @stability experimental
  * @category models
@@ -127,8 +127,8 @@ export interface HtmlPlay<Model, Msg, Events>
   /**
    * Clicks the one element `target` matches, as a browser does: `pointerdown`
    * and `mousedown` run, the tree settles, then `mouseup`, `click` and the
-   * defaults run unless the press removed, disabled or made inert the element,
-   * as opening a modal does to what's behind it. Cancelling
+   * defaults run unless the press removed the element, disabled it or made
+   * it inert. Cancelling
    * `pointerdown` skips `mousedown` and `mouseup` (not `click`); cancelling
    * `mousedown` or `mouseup` skips nothing; only a cancelled `click` skips the
    * defaults. A string means `Locator.text(target)`. Throws on a disabled

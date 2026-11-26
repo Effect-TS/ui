@@ -9,14 +9,15 @@
  * events, and refuse an inert element.
  *
  * Hidden elements (`hidden`, `aria-hidden="true"`, `<input type="hidden">`)
- * and everything inside them are left out of role queries unless
- * `hidden: true` is passed. So are inert elements: those inside `inert`,
- * and, while a modal dialog is open, those outside the topmost one, taken to
- * be the last open modal in document order. On the DOM a modal is a dialog
- * matching `:modal`, open shadow roots included, which some test
- * environments never match, and inertness follows the flat tree through
- * shadow hosts and slots. Queries don't look inside shadow roots for
- * matches.
+ * and their descendants are excluded from role queries, as are inert
+ * elements. `hidden: true` includes both, but does not make inert elements
+ * interactive.
+ *
+ * Inertness comes from `inert` on an element or ancestor, or being outside
+ * the topmost modal. The last open modal in document order is treated as
+ * topmost. DOM modal detection uses `:modal`, including open shadow roots;
+ * some test environments never match it. DOM inertness follows shadow hosts
+ * and slots, but queries do not search inside shadow roots.
  *
  * On a structural tree a match is typed `Locator.Node`, since it can be any
  * node of the tree. On `TestHost`, `root.all(HtmlLocator.role(...))` keeps the
@@ -256,14 +257,14 @@ const notShown = <N>(reader: Reader<N>, node: N): boolean => {
     (popover && popoverOpen(reader, node)))
 }
 
-/** An attribute set, or a property set to `true`. */
+/** A defined property takes precedence over the attribute. */
 const flag = <N>(reader: Reader<N>, node: N, name: string): boolean => {
   const prop = reader.prop(node, name)
   return prop === true ||
     (prop === undefined && reader.attr(node, name) !== undefined)
 }
 
-/** The last open modal dialog in document order under `root`, open shadow roots included, which a tree can't tell from the topmost. */
+/** Approximates top-layer order with document order, including open shadow roots. */
 const topModal = <N>(reader: Reader<N>, root: N): N | undefined => {
   let modal: N | undefined
   const walk = (node: N) => {
@@ -590,8 +591,8 @@ const levelOf = <N>(reader: Reader<N>, node: N): number | undefined => {
  * `name` matches the accessible name exactly (after collapsing whitespace),
  * or tests it with a RegExp. `checked` matches a checkbox or radio button's
  * live state, and `level` a heading's. `hidden: true` includes hidden and
- * inert elements, to inspect them: the steps that act as a user refuse inert
- * ones.
+ * inert elements for inspection; simulated user actions still refuse inert
+ * targets.
  *
  * @stability experimental
  * @category models
@@ -976,9 +977,9 @@ export const popoverState = (node: unknown): "closed" | "open" =>
   popoverOpen(readerOf(node), node) ? "open" : "closed"
 
 /**
- * Whether `path`, an element and its ancestors innermost first, is out of
- * the user's reach: inside `inert`, or outside the topmost modal under
- * `root`. That modal escapes the inertness around it, not its own.
+ * Whether the element is inert or outside the topmost modal under `root`.
+ * `path` lists the element and its ancestors, innermost first. The modal
+ * escapes ancestor inertness, but not its own.
  *
  * @internal
  */
@@ -1011,8 +1012,8 @@ const flatParent = (node: globalThis.Node): globalThis.Node | null => {
 }
 
 /**
- * What a shadow host's light child inherits from its slot: the inertness along the flat tree up to
- * `host`, else the host's own.
+ * Inherits inertness through the child's slot up to `host`, falling back to
+ * the host's inertness.
  */
 const slottedInert = (
   host: globalThis.Node,

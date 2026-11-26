@@ -122,11 +122,10 @@ type EditDetails = Partial<Pick<Html.InputPayload, "composing" | "inputType">>
  * A cursor over one HTML scene: the scene's steps, plus a step per user
  * action the browser host turns into an event. Each one is an interaction.
  *
- * The steps a user performs throw on an inert element, one inside `inert`
- * or outside the topmost modal, however it was found: `click`, `type`,
- * `change`, `compositionEnd`, `keydown`, `submit`, `focus` and `drop`.
- * `fire`, `blur` and `fireElement` send what the host delivers, so they
- * reach it.
+ * Simulated user actions (`click`, `type`, `change`, `compositionEnd`,
+ * `keydown`, `submit`, `focus` and `drop`) throw on inert targets, regardless
+ * of how they were found. Raw events (`fire`, `fireElement`) and `blur` still
+ * reach inert targets.
  *
  * @stability experimental
  * @category models
@@ -150,9 +149,9 @@ export interface Steps<C extends AnyComponent, Parts = never>
    *   `click` skips the defaults, and only `click` and its defaults set
    *   `defaultPrevented`.
    * - A disabled `button`, `input`, `select` or `textarea`, or one inside a
-   *   disabled `fieldset`, throws: the browser sends it nothing. So does an
-   *   inert element. If the press removes the element, disables it or makes
-   *   it inert, as opening a modal does, the rest of the click isn't sent.
+   *   disabled `fieldset`, throws, as does an inert element. If the press
+   *   removes the element, disables it or makes it inert, the rest of the
+   *   click is not sent.
    * - A submit button submits its form: `submit` goes to the form with the
    *   fields read from the view, the button's own name and value included.
    * - A checkbox fires `input` and `change` with `checked` flipped, and an

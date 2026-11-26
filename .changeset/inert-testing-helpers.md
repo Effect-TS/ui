@@ -2,4 +2,4 @@
 "@effect/ui": patch
 ---
 
-Leave inert elements out of `HtmlLocator` role queries unless `hidden: true` is passed: elements inside `inert`, and those outside the topmost modal dialog. User steps in `HtmlPlay`, `HtmlScene` and the DOM actions now throw on inert elements, while `fire` still delivers to them.
+Exclude inert elements from `HtmlLocator` role queries unless `hidden: true` is passed for inspection. Simulated user actions in `HtmlPlay`, `HtmlScene` and `HtmlLocator` now reject inert targets, while raw events still reach them.
