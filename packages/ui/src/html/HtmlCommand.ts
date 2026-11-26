@@ -429,14 +429,14 @@ export const WaitForPaint: Command.Factory<{}, void> = Command.make(
 )
 
 /**
- * Waits until the committed render has painted, then sends `f`'s message.
+ * Waits two animation frames after the render commit, then sends `f`'s message.
  *
  * **When to use**
  *
  * Use when an enter transition needs the from-state (such as a
  * `data-starting-style` attribute) to paint before `update` applies the
- * to-state. Layout reads like `measure` and `scrollIntoView` already run after
- * commit and do not need this.
+ * to-state. `measure` and `scrollIntoView` already run after commit and do not
+ * need this wait.
  *
  * **Details**
  *
@@ -479,8 +479,7 @@ const finite = (animation: Animation): boolean => {
 
 const settled: Found = { found: true }
 
-// A cancelled or replaced animation rejects `finished`. A removed element has
-// settled; otherwise look again on the next frame, once a replacement started.
+// Cancellation rejects `finished`; wait a frame before looking for replacements.
 const animationsSettled = (element: globalThis.Element): Effect.Effect<Found> =>
   Effect.suspend(() => {
     const running =
@@ -524,8 +523,8 @@ export const WaitForAnimations: Command.Factory<
 )
 
 /**
- * Waits until all finite CSS animations and transitions on the element `ref`
- * names and its subtree have finished, then sends `f`'s message.
+ * Waits for finite animations on `ref`'s element and its descendants, then sends
+ * `f`'s message.
  *
  * **When to use**
  *
@@ -534,13 +533,15 @@ export const WaitForAnimations: Command.Factory<
  *
  * **Details**
  *
- * After commit, it looks up `ref` and awaits `.finished` on every finite
- * animation returned by `element.getAnimations({ subtree: true })`. Infinite
- * animations (such as spinners) are skipped. If an animation is cancelled or
- * replaced while the element is connected, it collects the animations again
- * on the next frame of `HtmlSubscription.AnimationFrames`. A ref that isn't
- * rendered gives `{ found: false }`, and a disconnected element or one
- * without `getAnimations` counts as settled.
+ * After commit, it awaits `.finished` on the finite animations returned by
+ * `element.getAnimations({ subtree: true })`, including CSS transitions.
+ * Infinite animations, such as spinners, are skipped. If an animation is
+ * cancelled or replaced, it collects animations again on the next
+ * `HtmlSubscription.AnimationFrames` frame, unless the element has disconnected.
+ *
+ * A missing ref returns `{ found: false }`. An element with no finite animations
+ * or no `getAnimations` returns `{ found: true }`. If an animation rejects after
+ * the element disconnects, it returns `{ found: true }` without waiting a frame.
  *
  * **Example** (Keeping a panel mounted during its exit animation)
  *

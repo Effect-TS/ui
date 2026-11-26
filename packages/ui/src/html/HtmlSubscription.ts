@@ -593,7 +593,7 @@ const attachFrames: Direct = (context, emit, fail, enter) => {
 const noop = () => {}
 
 /**
- * The source of CSS media query matches, which `onMediaQuery` listens to.
+ * Supplies the current match and change notifications for `onMediaQuery`.
  *
  * **Details**
  *
@@ -603,10 +603,8 @@ const noop = () => {}
  * function it returns is called.
  *
  * `BrowserHost.layer` provides one over its document's `defaultView.matchMedia`.
- * The default never fires and sends nothing, so a host without a window, and a
- * test that doesn't drive media queries, need nothing. A test drives them with
- * `HtmlScene`'s `mediaQuery`, or with `TestMediaQueries` from
- * `@effect/ui/html/testing`.
+ * The default returns `undefined` and never notifies listeners. In tests, use
+ * `HtmlScene.mediaQuery` or `TestMediaQueries` from `@effect/ui/html/testing`.
  *
  * @stability experimental
  * @category services
@@ -645,8 +643,7 @@ export const MediaQueries: Context.Reference<MediaQueries> =
  * `handler` is a message or a function of `matches: boolean`. The source is
  * `MediaQueries`, which `BrowserHost.layer` provides over
  * `defaultView.matchMedia`. The server never runs Subscriptions, so `init`
- * picks the default and the first emit corrects it once mounted in the
- * browser.
+ * chooses the initial state. The first browser emission updates that state.
  *
  * The key is `@effect/ui/html/mediaQuery` with `query` as its dep, e.g.
  * `@effect/ui/html/mediaQuery:"(prefers-color-scheme: dark)"`, so different
@@ -712,7 +709,7 @@ export const onMediaQuery = <Msg>(
       for (let i = 0; i < queue.length; i++) send(queue[i])
       queue = undefined
     }
-    // Read now and sent first, before any change that fires before `initial`.
+    // Deliver the captured match before changes, even if they precede `initial`.
     let first = source.matches(query)
     const takeFirst = (): Array<boolean> => {
       const initial = first

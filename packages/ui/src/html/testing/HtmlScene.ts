@@ -289,9 +289,8 @@ export interface Steps<C extends AnyComponent, Parts = never>
    */
   frame(delta?: number): this
   /**
-   * Sends `matches` for CSS media query `query`, as the browser host delivers
-   * the initial match or a `change` to the component's
-   * `HtmlSubscription.onMediaQuery`, and dispatches what its handler returns.
+   * Sends `matches` to the component's `HtmlSubscription.onMediaQuery` handler
+   * for `query`, simulating an initial match or a change.
    *
    * It throws when nothing listens for `query`, listing the active keys, and
    * is ignored when the handler returns `undefined`.
@@ -619,7 +618,6 @@ class StepsImpl extends internal.SceneCursor {
       }
     )
   }
-  // Dispatches what the first declared handler `handlerOf` finds returns.
   private fireDeclared<A>(
     step: string,
     what: string,

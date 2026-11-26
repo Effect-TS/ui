@@ -1,6 +1,5 @@
 /**
- * A fake `HtmlSubscription.MediaQueries` for whole-app tests, so a test drives
- * CSS media queries without a window, in Node too.
+ * A fake `HtmlSubscription.MediaQueries` for whole-app tests without a window.
  *
  * Provide `layer` next to `TestHost.layer()`, and update a query's match state
  * with `set`. Call `set` before mounting to choose a query's initial value
@@ -53,7 +52,7 @@ import * as Layer from "effect/Layer"
 import * as HtmlSubscription from "../HtmlSubscription.ts"
 
 /**
- * The `TestMediaQueries` service: the fake's control.
+ * Controls the fake media query source.
  *
  * @stability experimental
  * @category services
@@ -61,9 +60,9 @@ import * as HtmlSubscription from "../HtmlSubscription.ts"
  */
 export interface TestMediaQueries {
   /**
-   * Sets whether `query` matches. When the value changes, every listener
-   * listening for `query` as it starts runs in the order it was added, except
-   * one an earlier listener's message removed.
+   * Sets whether `query` matches. On a change, notifies listeners registered
+   * at the start of this call in registration order, skipping any removed
+   * before their turn.
    */
   readonly set: (query: string, matches: boolean) => void
 }
