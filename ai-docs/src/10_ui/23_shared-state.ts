@@ -376,10 +376,10 @@ export const nestedMenu = Effect.gen(function*() {
 // An owner that derives what it shares from the owner above it
 // ---------------------------------------------------------------------------
 
-// `shares` gets the component's reads as its third argument. A nested lock
-// is locked while the one around it is, so a reader below reads only the
-// nearest lock. A value that reads its own kind refers to its own type, so
-// it needs a `schema` or an annotated return.
+// `shares` gets the component's reads as its third argument, so a nested
+// lock is locked while the one around it is, and a reader reads only the
+// nearest lock. A value that reads its own kind would refer to its own type,
+// so it needs a `schema` or an annotated return.
 export const Lock = Html.component({
   name: "Lock",
   props: Schema.Struct({ locked: Schema.optional(Schema.Boolean) }),

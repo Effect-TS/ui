@@ -2368,11 +2368,12 @@ type SharedEntry<E, O, Model, Props, Msg, SV, Rp> = [E] extends [Headless.Any] ?
     readonly onChange?: ((value: Shared.Value<O>) => Msg) | undefined
   }
 
+// What `shares` reads of its own kind: `SV` once a `schema` or an annotated return fixes it. Inferred from
+// `value` alone it would be circular, so the read is an error naming the fix.
 type SelfAbove<SV> = [SV] extends [never] ?
   "Give shares a schema, or annotate what value returns, to read its own kind in it"
   : SV
 
-// What `shares` reads, by local name: `SA` for its own kind.
 type SharesReads<SR, SO, SA> = {
   readonly [K in keyof SO]: [SO[K]] extends ["self"] ? SA | undefined
     : IsOptional<SR[K & keyof SR]> extends true ?
@@ -2380,7 +2381,6 @@ type SharesReads<SR, SO, SA> = {
     : Shared.Value<SO[K]>
 }
 
-// The `value` of `shares`.
 type SharesValue<Model, Props, SR, SO, SA, SV> = (
   model: Model,
   props: Props,
@@ -3081,9 +3081,9 @@ export interface DefineOptions<
    * value changes, so keep it small. `schema` encodes the value in a reader's `Update` on the
    * Wire. Without it the value is sent best effort, as `MessageLog.structural` encodes it.
    *
-   * `value` also gets what `reads` lists, as `p.reads` holds it, so an owner can pass on what
-   * it derives from the owners above it, such as a nested fieldset that is disabled while the one
-   * around it is. To read its own kind there, give `schema` or annotate what `value` returns.
+   * `value` also gets the component's reads, as `p.reads` holds them, so an owner can share what it
+   * derives from the owners above it. To read its own kind there, give `schema` or annotate what
+   * `value` returns.
    */
   readonly shares?:
     | SharesValue<Model, Props, SR, SO, SA, SV>
@@ -3498,7 +3498,7 @@ export const define = <
   Rp = never,
   // The owner of each entry of `reads`, inferred before `report` and `onChange` are typed.
   SO extends { readonly [name: string]: Headless.Any | "self" } = {},
-  // What `shares` reads of its own kind. Only inferred: typing it by `SV` would fix `SV` to `never`.
+  // Only inferred: typing `shares`'s self read by `SV` directly would fix `SV` to `never`.
   SA = SelfAbove<SV>
 >(
   options:

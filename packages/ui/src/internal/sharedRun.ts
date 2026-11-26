@@ -264,8 +264,8 @@ const refresh = (inst: Inst, seq: number | undefined | void): boolean => {
 /**
  * @internal
  *
- * An owner that reads others refreshes as it renders, when its props are final too: refreshing when an owner
- * above changes would give its readers' `onChange` a value made from its old props.
+ * An owner that reads others refreshes as it renders, once its props are final. Refreshing when an owner above
+ * changes would give its readers' `onChange` a value made from old props.
  */
 export const rendered = (inst: Inst): void => {
   if (inst.owning !== undefined && inst.reading !== undefined) {

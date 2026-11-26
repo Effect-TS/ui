@@ -655,13 +655,12 @@ entry is `optional: true`, and the component must have `shares` itself. Write
 `shares` before `reads`, so `report` and `onChange` are typed by it. In a
 `Scene`, the component itself is the owner: `s.shared(Menu, value)`.
 
-An owner's `shares` gets its `reads` as a third argument, so it can share
-what it derives from the owners above it. A nested fieldset is disabled while
-the one around it is:
+`shares` gets the component's `reads` as a third argument, so an owner can
+share what it derives from the owners above it. A nested fieldset is disabled
+while the one around it is, and its fields read only the nearest fieldset:
 `value: (_, props, reads) => ({ disabled: props.disabled || reads.parent?.disabled === true })`.
-The fields inside read only the nearest fieldset. To read its own kind in
-`shares`, give it a `schema` or annotate what it returns, as the value's
-type would refer to itself.
+A value that reads its own kind would refer to its own type, so give `shares`
+a `schema` or annotate what it returns.
 
 Every owner update re-runs its closure, and headless children in it
 re-render each time, so put normal components directly under an owner.

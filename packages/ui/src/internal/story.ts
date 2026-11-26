@@ -352,8 +352,8 @@ export const withShared = (
 }
 
 /**
- * What `owner` shares with no instance of it in the story: from `init` with no props, if it takes none,
- * reading the values given, as it stands above the story.
+ * What `owner` shares with no instance of it in the story: from `init` with no props, if it takes none.
+ * It stands above the story, so it reads only the given values.
  */
 const sharedDefault = (
   owner: Component.Headless.Any,
