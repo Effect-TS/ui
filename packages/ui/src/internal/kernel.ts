@@ -256,7 +256,6 @@ export class Rec {
   declare node: any
   declare kids: Array<Rec> | undefined
   declare inst: Instance
-  /** Set when a restore found no controlled property at or below it, until `v` changes. */
   declare plain: boolean
   constructor(
     v: View.Node<any, any>,
@@ -1397,8 +1396,8 @@ export const replace = (
 
 const refreshed = {}
 
-// Walks elements only: a change to one patches every element above it, which
-// clears `plain`.
+// Only element descendants are scanned. Patching a changed element also patches
+// its element ancestors, clearing `plain` so the next restore scans them again.
 const restore = (host: Host, rec: Rec): boolean => {
   if (rec.plain) return false
   const view = rec.v as View.Element<any, any>

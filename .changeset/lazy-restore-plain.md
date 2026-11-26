@@ -2,4 +2,4 @@
 "@effect/ui": patch
 ---
 
-Updates stop scanning a reused subtree, such as an unchanged `h.lazy` row, once it has been found to have no controlled properties. Subtrees that have them are still restored.
+Skip repeated restoration scans of unchanged subtrees, such as `h.lazy` rows, after the first scan finds no controlled properties. Subtrees with controlled properties still restore their values on each update.
