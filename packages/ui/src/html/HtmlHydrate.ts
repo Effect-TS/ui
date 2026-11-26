@@ -690,7 +690,7 @@ export const hydrateEffect = <
   props: Props | Effect.Effect<Props, never, RP>,
   container: globalThis.Element,
   state: Renderer.State,
-  options?: BrowserHost.MountOptions<V, RF>
+  options?: BrowserHost.MountOptions<V, RF, Events>
 ): Effect.Effect<
   Renderer.Root<Model, Msg>,
   never,
@@ -727,12 +727,13 @@ export const hydrateEffect = <
  * included, is as `BrowserHost.mount`.
  *
  * Each instance adopts its server Model and replays `init` only to recover
- * its Commands; server Commands the Model already has the result of are
- * skipped, and those that missed the budget run now. `onMount` fires on
- * adoption. Where an instance's view stops matching the server's nodes, the
- * nodes before stay adopted and the rest is built fresh, and an instance the
- * server deferred is built fresh. An instance whose state decodes only
- * asynchronously keeps the server's nodes until it has.
+ * its Commands, so the events `init` emits are dropped; server Commands the
+ * Model already has the result of are skipped, and those that missed the
+ * budget run now. `onMount` fires on adoption. Where an instance's view
+ * stops matching the server's nodes, the nodes before stay adopted and the
+ * rest is built fresh, and an instance the server deferred is built fresh.
+ * An instance whose state decodes only asynchronously keeps the server's
+ * nodes until it has.
  *
  * An instance the server rendered with its provided Layer ready, whose
  * Layer is still building here, keeps the server's nodes until the Layer is
@@ -795,7 +796,7 @@ export const hydrate = <
   props: Props | Effect.Effect<Props, never, RP>,
   container: globalThis.Element,
   state: Renderer.State,
-  options?: BrowserHost.MountOptions<V, RF>
+  options?: BrowserHost.MountOptions<V, RF, Events>
 ): Layer.Layer<never, never, Exclude<R | RF | RP, Html.Host>> =>
   Layer.effectDiscard(
     hydrateEffect(component, props, container, state, options)

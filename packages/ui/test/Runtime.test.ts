@@ -6575,44 +6575,85 @@ describe("Runtime", () => {
       )
     }).pipe(Effect.scoped, provideHost))
 
-  it.effect("records root emitted events from init and updates in order on TestHost", () =>
-    provideHost(
-      Effect.gen(function*() {
-        const Events = UiSchema.TaggedEnum({
-          Ready: {},
-          Stepped: { value: Schema.Number }
+  describe("root events", () => {
+    const Events = UiSchema.TaggedEnum({
+      Ready: {},
+      Stepped: { value: Schema.Number }
+    })
+    const Message = UiSchema.TaggedEnum({ Step: {} })
+    const Emitter = Component.define({
+      name: "Emitter",
+      model: Schema.Number,
+      message: Message,
+      events: Events
+    }).make({
+      init: ($) => $.set(0).emit(Events.Ready()),
+      update: ($) => {
+        const next = $.model + 1
+        return $.set(next).emit(
+          Events.Stepped({ value: next }),
+          Events.Stepped({ value: next * 10 })
+        )
+      },
+      view: (h, n) =>
+        h.el("button").on("click", Message.Step()).children(String(n))
+    })
+    const container = Effect.map(
+      TestHost.TestHost,
+      (testHost) => testHost.host.createElement("#app") as TestHost.TestElement
+    )
+
+    it.effect("records root emitted events from init and updates in order on TestHost", () =>
+      provideHost(
+        Effect.gen(function*() {
+          const root = yield* TestHost.mount(Emitter, {})
+          assert.deepStrictEqual(root.emitted, [Events.Ready()])
+          click(root, "0")
+          yield* TestHost.settle
+          root.send(Message.Step())
+          yield* TestHost.settle
+          assert.deepStrictEqual(root.emitted, [
+            Events.Ready(),
+            Events.Stepped({ value: 1 }),
+            Events.Stepped({ value: 10 }),
+            Events.Stepped({ value: 2 }),
+            Events.Stepped({ value: 20 })
+          ])
+        }).pipe(Effect.scoped)
+      ))
+
+    it.effect("Renderer.mount's onEmit receives the root's typed events from init, before mount returns, and from updates in order", () =>
+      provideHost(Effect.gen(function*() {
+        const received: Array<typeof Events.Type> = []
+        const root = yield* Renderer.mount(Emitter, {}, yield* container, {
+          onEmit: (event) => {
+            received.push(event)
+          }
         })
-        const Message = UiSchema.TaggedEnum({ Step: {} })
-        const Emitter = Component.define({
-          name: "Emitter",
-          model: Schema.Number,
-          message: Message,
-          events: Events
-        }).make({
-          init: ($) => $.set(0).emit(Events.Ready()),
-          update: ($) => {
-            const next = $.model + 1
-            return $.set(next).emit(
-              Events.Stepped({ value: next }),
-              Events.Stepped({ value: next * 10 })
-            )
-          },
-          view: (h, n) =>
-            h.el("button").on("click", Message.Step()).children(String(n))
-        })
-        const root = yield* TestHost.mount(Emitter, {})
-        assert.deepStrictEqual(root.emitted, [Events.Ready()])
-        click(root, "0")
-        yield* TestHost.settle
+        assert.deepStrictEqual(received, [Events.Ready()])
         root.send(Message.Step())
-        yield* TestHost.settle
-        assert.deepStrictEqual(root.emitted, [
+        assert.deepStrictEqual(received, [
           Events.Ready(),
           Events.Stepped({ value: 1 }),
-          Events.Stepped({ value: 10 }),
-          Events.Stepped({ value: 2 }),
-          Events.Stepped({ value: 20 })
+          Events.Stepped({ value: 10 })
         ])
-      }).pipe(Effect.scoped)
-    ))
+      })))
+
+    it.effect("a Renderer.mount onEmit that throws fails the root in onEmit and shows mount's fallback", () =>
+      provideHost(Effect.gen(function*() {
+        const testHost = yield* TestHost.TestHost
+        const app = yield* container
+        yield* Renderer.mount(Emitter, {}, app, {
+          onEmit: () => {
+            throw new Error("listener broke")
+          },
+          fallback: (_, h) => h.el("h1", "down")
+        })
+        assert.strictEqual(Locator.textOf(app), "down")
+        const failed = testHost.log.entries().find((entry) =>
+          entry._tag === "Failed"
+        ) as MessageLog.Failed
+        assert.strictEqual(failed.in, "onEmit")
+      })))
+  })
 })

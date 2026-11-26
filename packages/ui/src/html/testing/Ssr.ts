@@ -541,12 +541,13 @@ export const ssr = <
         }
       }
     })
+    const emitted: Array<unknown> = []
     const hydrating = hydrateRun.hydrating(state, HtmlHydrate.adopt)
     const mounted = yield* runtime.mount(component as any, props, container, {
       hydrate: hydrating,
       query: options?.query,
       adoptionHead: true,
-      recordEmitted: true
+      onEmit: (event) => emitted.push(event)
     }).pipe(
       Effect.provideContext(
         Context.make(Renderer.Renderer, { host }).pipe(
@@ -563,20 +564,22 @@ export const ssr = <
       never,
       Exclude<R | RP, Html.Host> | Scope.Scope
     >
-    const root = yield* TestHost.register(testHost, mounted, clientLog, () =>
-      frames.slice())
+    const root = yield* TestHost.register(
+      testHost,
+      mounted,
+      clientLog,
+      () => frames.slice(),
+      emitted
+    )
     let adoptedDone = false
     yield* Effect.forkChild(Effect.andThen(
       mounted.adopted,
-      Effect.sync(() =>
-        adoptedDone = true
-      )
+      Effect.sync(() => adoptedDone = true)
     ))
     const deadline = now() + budget
     const adoptedOrFallback = Effect.gen(function*() {
       if (
-        yield* stepUntil(() =>
-          adoptedDone, deadline)
+        yield* stepUntil(() => adoptedDone, deadline)
       ) return true
       // A sleep the tree's clock didn't see: the budget is spent whole.
       if (now() < deadline) yield* TestClock.setTime(deadline)

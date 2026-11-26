@@ -60,7 +60,6 @@ export interface Root {
   readonly path: string
   readonly session: string
   readonly instance: Instance
-  readonly emitted: ReadonlyArray<unknown>
   readonly model: () => unknown
   readonly send: (message: unknown) => void
   readonly find: (born: number) => Instance | undefined
@@ -306,7 +305,7 @@ interface Options {
   readonly head?: boolean | undefined
   readonly adoptionHead?: boolean | undefined
   readonly scheduler?: Scheduler.Scheduler | undefined
-  readonly recordEmitted?: boolean | undefined
+  readonly onEmit?: Kernel.Tree["onEmit"]
 }
 
 const makeCell = (
@@ -510,9 +509,6 @@ const start = (
   const session = `${clock.currentTimeMillisUnsafe().toString(36)}-k${
     (sessions++).toString(36)
   }`
-  const emitted: Array<unknown> | undefined = options?.recordEmitted === true
-    ? []
-    : undefined
   let flushes = 0
   let inFlush = true
   const since = () => inFlush ? flushes : flushes + 1
@@ -531,13 +527,6 @@ const start = (
       const next = hydrating.record(inst, draft)
       if (!("_tag" in next)) return next.seq
       draft = next
-    }
-    if (
-      emitted !== undefined &&
-      inst.parent === undefined &&
-      (draft._tag === "Update" || draft._tag === "Mounted")
-    ) {
-      emitted.push(...(draft.events as ReadonlyArray<unknown>))
     }
     if (
       draft._tag === "Mounted" &&
@@ -699,6 +688,7 @@ const start = (
           return routing === undefined ? first : routing.init(inst, first)
         },
         log: record,
+        onEmit: options?.onEmit,
         schedule: (task) => {
           const run = recording.follow()
           executor.schedule(() => {
@@ -747,7 +737,6 @@ const start = (
     path: instance.path,
     session,
     instance: instance as unknown as Instance,
-    emitted: emitted ?? noCommands,
     model: () => instance.failure === undefined ? instance.model : undefined,
     send: (message: unknown) => recording.step(() => mounted.send(message)),
     find: (born: number) =>
