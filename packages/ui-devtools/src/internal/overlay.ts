@@ -682,15 +682,8 @@ const InstanceItem = (
         .on(
           "click",
           OverlayMessage.ToggledBranch({ instance: summary.instance })
-        )
-        .children(
-          row.expanded ? "▾" : "▸"
         ),
-    h.button.class(
-      "irow",
-      scoped && "on",
-      owner === summary.instance && "owner"
-    )
+    h.button.class("irow", owner === summary.instance && "owner")
       .attr("aria-pressed", String(scoped))
       .attr("aria-current", owner === summary.instance ? "true" : undefined)
       .attr("data-instance", name)
@@ -757,11 +750,12 @@ const InstanceList = (
             return list.item({
               element: h.li.key(keys[index]!).class(
                 "iitem",
-                row.split && "split"
+                row.split && "split",
+                model.scope === row.summary.instance && "on"
               ).attr(
                 "style",
                 mode === "tree"
-                  ? "padding-left:" + (8 + row.depth * 14) + "px"
+                  ? "padding-left:" + (8 + row.depth * 16) + "px"
                   : undefined
               ),
               index
