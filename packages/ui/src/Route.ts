@@ -277,6 +277,8 @@ export declare namespace Union {
   {
     /** The route definitions, by tag. */
     readonly routes: Routes
+    /** The tag of the catch-all route, the first declared `"/*"`, if any. */
+    readonly catchAll: (keyof Routes & string) | undefined
     /** Parses a URL path, with its search, into a route value, resolving redirects. */
     readonly parse: (url: string) => Option.Option<this["Type"]>
     /** Like `parse`, and also reports whether the URL was redirected or normalised. */
@@ -364,6 +366,7 @@ export interface AnyUnion {
   ) => Option.Option<Resolved<{ readonly _tag: string }>>
   readonly print: (route: any) => string
   readonly printPath: (route: any) => string
+  readonly catchAll: string | undefined
   readonly base: () => string
   readonly setBase: (base: string) => void
 }
@@ -892,6 +895,7 @@ const build = (
 
   const result: Record<string, any> = Object.assign(union, {
     routes,
+    catchAll: notFound,
     resolve,
     parse: (url: string) =>
       Option.map(resolve(url), (resolved) => resolved.route),
@@ -928,17 +932,18 @@ const build = (
  *
  * The result is a `Schema.TaggedUnion` whose values are
  * `{ _tag, params, search }`, with `make`, `match`, `guards` and `isAnyOf`,
- * plus `parse`, `resolve`, `print`, `printPath` and `subset`, and one
- * constructor per route: `AppRoute.Home()`,
+ * plus `parse`, `resolve`, `print`, `printPath`, `subset` and `catchAll`,
+ * and one constructor per route: `AppRoute.Home()`,
  * `AppRoute.Person({ params: { id: 1 } })`. A constructor is `make` with the
  * tag filled in, and `make` stays for a tag held in a variable. Both fill in
  * `params` and `search` when no field needs a value, and a field's decoding
  * default when it's left out.
  *
- * Declare a catch-all `"/*"` route, conventionally `NotFound`: it ranks
- * last, and a required search field that fails to decode resolves to it, so `parse` returns
- * a route for every URL under the base and the Model never holds an
- * `Option`. Without one, `parse` returns `Option.none()` for such URLs.
+ * Declare a catch-all `"/*"` route, conventionally `NotFound`, whose tag is
+ * `catchAll`: it ranks last, and a required search field that fails to
+ * decode resolves to it, so `parse` returns a route for every URL under the
+ * base and the Model never holds an `Option`. Without one, `parse` returns
+ * `Option.none()` for such URLs and `catchAll` is `undefined`.
  *
  * **Gotchas**
  *

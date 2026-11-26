@@ -102,6 +102,13 @@ describe("Route", () => {
     // oxlint-disable-next-line unicorn/no-thenable
     expect(Route.union).type.not.toBeCallableWith({ then: Route.make("/") })
     expect(Route.union).type.toBeCallableWith({ Parse: Route.make("/") })
+    expect(Route.union).type.not.toBeCallableWith({ catchAll: Route.make("/") })
+  })
+
+  it("types catchAll as a tag of the union", () => {
+    expect(AppRoute.catchAll).type.toBe<
+      "Home" | "Person" | "Files" | "NotFound" | undefined
+    >()
   })
 
   it("prints only the union's own route values", () => {
