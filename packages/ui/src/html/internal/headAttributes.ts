@@ -2,6 +2,7 @@
 import { attributeName } from "../../internal/attributeName.ts"
 import { emptyHtml } from "../../internal/heads.ts"
 import type * as HtmlHead from "../HtmlHead.ts"
+import * as url from "./url.ts"
 
 /** @internal */
 export const marker = "data-eui"
@@ -12,14 +13,16 @@ export const name = (name: string): string | undefined => {
   return normalized === marker ? undefined : normalized
 }
 
-/** Canonical names with last-write wins; the ownership marker is host-managed. @internal */
+/** Canonical names with last-write wins, without script URLs; the ownership marker is host-managed. @internal */
 export const normalize = (
   pairs: ReadonlyArray<readonly [string, string]>
 ): ReadonlyArray<readonly [string, string]> => {
   const out = new Map<string, string>()
   for (const [key, value] of pairs) {
     const normalized = name(key)
-    if (normalized !== undefined) out.set(normalized, value)
+    if (normalized === undefined) continue
+    if (url.blockedAttribute(normalized, value)) out.delete(normalized)
+    else out.set(normalized, value)
   }
   return [...out]
 }

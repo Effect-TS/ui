@@ -14,6 +14,7 @@ import {
 } from "./payload.ts"
 import { pointerTypeOf } from "./pointer.ts"
 import * as submit from "./submit.ts"
+import * as url from "./url.ts"
 
 /** @internal */
 export const SVG = "http://www.w3.org/2000/svg"
@@ -704,6 +705,9 @@ export const makeHost = (
       const element = node as HTMLElement
       const normalized = attributeOf(element, name)
       if (normalized === undefined) return
+      if (value !== undefined && url.blockedAttribute(normalized, value)) {
+        value = undefined
+      }
       if (
         normalized !== "style" || element.style === undefined ||
         element.getAttribute("style") === (previous ?? null)
@@ -786,6 +790,11 @@ export const makeHost = (
         }
         if (element[name] !== value) writeControlled(element, name, value)
         if (name === "value" && !composing.has(node)) edits.delete(node)
+        return
+      }
+      // Writing `""` would still navigate, so the reflected attribute goes.
+      if (url.blockedProperty(name, value) && !isCustomTag(element.localName)) {
+        element.removeAttribute(name.toLowerCase())
         return
       }
       element[name] = value === undefined

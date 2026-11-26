@@ -46,6 +46,13 @@
  * reports it, and the Model must follow. Position a popover next to its
  * trigger with CSS anchor positioning.
  *
+ * A `javascript:` or `vbscript:` URL is never written. The `href`, `src`,
+ * `action`, `formaction`, `xlink:href` and `data` attributes, and the
+ * `href`, `src`, `action`, `formAction` and `data` properties of built-in
+ * elements, are omitted when they hold one, on the server, in the browser and
+ * in the head. The scheme is read as browsers read it, ignoring case, ASCII
+ * controls and spaces. Relative URLs and other schemes are written unchanged.
+ *
  * **Example** (A controlled text field)
  *
  * ```ts import.meta.vitest
