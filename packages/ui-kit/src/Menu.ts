@@ -283,7 +283,12 @@ import {
 } from "./internal/attributes.ts"
 import { backdropStyle, blockers, cutPath } from "./internal/blocker.ts"
 import { isRtl, provided, rightToLeft } from "./internal/direction.ts"
-import { focusFinal, isElement, override } from "./internal/dom.ts"
+import {
+  focusFinal,
+  isElement,
+  isHTMLElement,
+  override
+} from "./internal/dom.ts"
 import { type TextFilter, textFilter } from "./internal/filter.ts"
 import { methodOf, onEscape } from "./internal/interaction.ts"
 import { grouped, keyed } from "./internal/list.ts"
@@ -1560,7 +1565,7 @@ const watch = (
     let tabbing: ReturnType<typeof setTimeout> | undefined
     const opening = () => {
       const focused = document.activeElement
-      before = current.context && focused instanceof HTMLElement &&
+      before = current.context && isHTMLElement(focused) &&
           !node.contains(focused)
         ? focused
         : null
@@ -1589,7 +1594,7 @@ const watch = (
       clearTimeout(timer)
       leftAt = null
       unblockParent()
-      const focused = document.activeElement
+      const focused = document.activeElement as HTMLElement | null
       const lost = focused === null || focused === document.body ||
         node.contains(focused)
       if (current.finalFocus && (lost || !current.focusLeft)) {
@@ -1601,9 +1606,7 @@ const watch = (
         if (current.menubar && !current.nested) {
           queueMicrotask(() => siblingOpened(target) || restore())
         } else restore()
-      } else if (focused instanceof HTMLElement && node.contains(focused)) {
-        focused.blur()
-      }
+      } else if (node.contains(focused)) focused!.blur()
       node.inert = true
       uncut()
     }
@@ -1622,10 +1625,9 @@ const watch = (
       const point = current.position.anchorRect
       const moved = point == null || Math.abs(event.clientX - point.x) > 1 ||
         Math.abs(event.clientY - point.y) > 1
-      const item =
-        mac && moved && event.button === 2 && target instanceof Element
-          ? target.closest<HTMLElement>("[data-menu-item]")
-          : null
+      const item = mac && moved && event.button === 2 && isElement(target)
+        ? target.closest<HTMLElement>("[data-menu-item]")
+        : null
       if (
         item !== null && node.contains(item) && item.localName !== "a" &&
         !item.hasAttribute("aria-haspopup")
@@ -1757,7 +1759,7 @@ const watch = (
       ) return
       const target = event.target
       if (
-        !(target instanceof Node) || node.contains(target) ||
+        !isElement(target) || node.contains(target) ||
         trigger()?.contains(target) === true
       ) return
       if (
@@ -1771,7 +1773,7 @@ const watch = (
       const target = event.target as Node | null
       const anchor = trigger()
       const point = { x: event.clientX, y: event.clientY }
-      const onTrigger = target instanceof Element &&
+      const onTrigger = isElement(target) &&
         target.closest(selectors.enabled) !== null
       if (
         target !== null &&
@@ -2004,7 +2006,7 @@ const watch = (
 
     const onTriggerLeave = (event: MouseEvent) => {
       if (
-        event.target instanceof Element &&
+        isElement(event.target) &&
         event.target.matches(selectors.active)
       ) {
         leftAt = { x: event.clientX, y: event.clientY }
@@ -2025,7 +2027,9 @@ const watch = (
           pressed: (pointerType) =>
             send(MenuMessage.PressedOutside({ pointerType })),
           focused: () => {
-            if (tabbing === undefined) send(MenuMessage.FocusedOutside())
+            if (tabbing === undefined) {
+              send(MenuMessage.FocusedOutside())
+            }
           }
         })
         document.addEventListener("mouseup", onMouseUp, {
@@ -2056,7 +2060,9 @@ const watch = (
           }
         }, { signal })
         node.addEventListener("contextmenu", (event) => {
-          if (current.context) event.preventDefault()
+          if (current.context) {
+            event.preventDefault()
+          }
         }, { signal })
         // For the submenus, which share the menu's direction.
         if (current.provider !== null) {

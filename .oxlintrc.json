@@ -46,5 +46,28 @@
     "rules": {
       "eslint/no-restricted-imports": "off"
     }
+  }, {
+    // A node from another window fails these, so use the guards in ui-kit's internal/dom.ts.
+    "files": ["packages/ui-kit/src/**"],
+    "rules": {
+      "unicorn/no-instanceof-builtins": ["error", {
+        "include": [
+          "Node",
+          "Element",
+          "HTMLElement",
+          "HTMLInputElement",
+          "HTMLTextAreaElement",
+          "SVGElement",
+          "Document",
+          "ShadowRoot",
+          "Text",
+          "Event",
+          "MouseEvent",
+          "PointerEvent",
+          "KeyboardEvent",
+          "FocusEvent"
+        ]
+      }]
+    }
   }]
 }

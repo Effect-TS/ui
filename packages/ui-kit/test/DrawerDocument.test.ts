@@ -7,6 +7,7 @@ import { Effect, Schema } from "effect"
 import {
   container,
   holdExits,
+  inIframe,
   popovers,
   tick,
   visualViewport
@@ -168,7 +169,7 @@ const drag = (
   pointer(target, "pointerdown", from[0], from[1])
   for (let i = 1; i <= steps; i++) {
     pointer(
-      document,
+      target.ownerDocument,
       "pointermove",
       from[0] + (to[0] - from[0]) * i / steps,
       from[1] + (to[1] - from[1]) * i / steps
@@ -227,9 +228,12 @@ const swipeTouch = (
 const movement = () =>
   popup().style.getPropertyValue("--drawer-swipe-movement-y")
 
-const mount = Effect.fnUntraced(function*(overrides: Partial<Config>) {
+const mount = Effect.fnUntraced(function*(
+  overrides: Partial<Config>,
+  into: typeof container = container
+) {
   yield* popovers
-  const app = yield* container
+  const app = yield* into
   const root = yield* BrowserHost.mountEffect(Page, config(overrides), app)
   yield* tick
   return root
@@ -299,22 +303,34 @@ describe("Drawer in a document", { concurrent: false }, () => {
       assert.notStrictEqual(document.activeElement?.id, "button")
     }))
 
-  it.effect("starts nothing from the content, a button or an ignored element", () =>
-    Effect.gen(function*() {
-      const root = yield* mount({})
-      sized(popup(), 300, 200)
-      for (const id of ["content", "button"]) {
-        drag(document.getElementById(id)!, [10, 10], [10, 150])
-        pointer(document, "pointerup", 10, 150, 0)
-      }
-      document.getElementById("handle")!.setAttribute("data-swipe-ignore", "")
-      drag(document.getElementById("handle")!, [10, 10], [10, 150])
-      pointer(document, "pointerup", 10, 150, 0)
-      yield* tick
-      assert.isTrue(root.model()!.open)
-      assert.notInclude(root.model()!.events, "RequestedClose:swipe")
-      assert.strictEqual(movement(), "0px")
-    }))
+  const places = { "": container, ", in an iframe": inIframe }
+  for (const [where, into] of Object.entries(places)) {
+    it.effect(
+      "starts nothing from the content, a button or an ignored element" + where,
+      () =>
+        Effect.gen(function*() {
+          const app = yield* into
+          const root = yield* mount({}, Effect.succeed(app))
+          const doc = app.ownerDocument
+          const popup = doc.querySelector<HTMLElement>("[data-drawer-popup]")!
+          sized(popup, 300, 200)
+          for (const id of ["content", "button"]) {
+            drag(doc.getElementById(id)!, [10, 10], [10, 150])
+            pointer(doc, "pointerup", 10, 150, 0)
+          }
+          doc.getElementById("handle")!.setAttribute("data-swipe-ignore", "")
+          drag(doc.getElementById("handle")!, [10, 10], [10, 150])
+          pointer(doc, "pointerup", 10, 150, 0)
+          yield* tick
+          assert.isTrue(root.model()!.open)
+          assert.notInclude(root.model()!.events, "RequestedClose:swipe")
+          assert.strictEqual(
+            popup.style.getPropertyValue("--drawer-swipe-movement-y"),
+            "0px"
+          )
+        })
+    )
+  }
 
   it.effect("takes the swipe back when the consumer keeps the drawer open", () =>
     Effect.gen(function*() {

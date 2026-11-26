@@ -686,7 +686,7 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.isFalse(touched())
     }).pipe(Effect.scoped))
 
-  it.effect("driven from the parent window in an iframe, a quick drag picks an item, and a backdrop press closes it", () =>
+  it.effect("driven from the parent window in an iframe, a quick drag picks an item, a scrollbar press keeps it open, and a backdrop press closes it", () =>
     Effect.gen(function*() {
       const { app, log } = yield* mountPage({}, inIframe)
       const doc = app.ownerDocument
@@ -709,6 +709,24 @@ describe("Select in a document", { concurrent: false }, () => {
       yield* tick
       keydown(byId("trigger", doc), "ArrowDown")
       yield* tick
+      const page = doc.documentElement
+      for (
+        const [name, value] of [
+          ["clientWidth", 1000],
+          ["clientHeight", 800],
+          ["scrollHeight", 2000]
+        ] as const
+      ) Object.defineProperty(page, name, { value })
+      const scrollbar = new PointerEvent("pointerdown", {
+        bubbles: true,
+        isPrimary: true,
+        pointerType: "mouse",
+        button: 0
+      })
+      Object.defineProperty(scrollbar, "offsetX", { value: 1005 })
+      page.dispatchEvent(scrollbar)
+      yield* tick
+      assert.isTrue(byId("positioner", doc).matches(":popover-open"))
       const blocker = byId("positioner", doc).querySelector(
         "[data-select-blocker]"
       )!

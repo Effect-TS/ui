@@ -1091,7 +1091,7 @@ const watch = (
     const closing = () => {
       clearTimeout(timer)
       stopArrow()
-      const focused = document.activeElement
+      const focused = document.activeElement as HTMLElement | null
       const lost = focused === null || focused === document.body ||
         node.contains(focused)
       if (current.finalFocus && (lost || !current.focusLeft)) {
@@ -1102,9 +1102,7 @@ const watch = (
           lost,
           current.closeMethod === "keyboard"
         )
-      } else if (focused instanceof HTMLElement && node.contains(focused)) {
-        focused.blur()
-      }
+      } else if (node.contains(focused)) focused!.blur()
       node.inert = true
     }
 
@@ -1172,7 +1170,7 @@ const watch = (
       }
     }
     const onMouseMove = (event: MouseEvent) => {
-      const arrow = event.target instanceof Element
+      const arrow = isElement(event.target)
         ? event.target.closest("[data-select-scroll-arrow]")
         : null
       if (arrow === null || !node.contains(arrow)) return stopArrow()

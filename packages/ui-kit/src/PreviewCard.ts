@@ -893,10 +893,10 @@ const TrackPreviewCardPresence = Mount.makeStream(
         (open) => send(PreviewCardMessage.FinishedTransition({ open }))
       )
       const closing = () => {
-        const focused = document.activeElement
-        if (focused instanceof HTMLElement && node.contains(focused)) {
+        const focused = document.activeElement as HTMLElement | null
+        if (node.contains(focused)) {
           const trigger = document.querySelector<HTMLElement>(current.trigger)
-          if (trigger === null) focused.blur()
+          if (trigger === null) focused!.blur()
           else returnFocus(trigger)
         }
         node.inert = true

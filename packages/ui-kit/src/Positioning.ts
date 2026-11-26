@@ -129,6 +129,7 @@ import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { idSelector } from "./internal/attributes.ts"
+import { isElement } from "./internal/dom.ts"
 import {
   inlineEdges,
   lineAt,
@@ -1748,7 +1749,7 @@ export const trackPosition = (
 
     const onScroll = (event: Event): void => {
       if (
-        !(event.target instanceof Node && node.contains(event.target))
+        !(isElement(event.target) && node.contains(event.target))
       ) update()
     }
 

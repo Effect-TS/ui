@@ -2,6 +2,7 @@ import type * as Html from "@effect/ui/html/Html"
 import * as HtmlSubscription from "@effect/ui/html/HtmlSubscription"
 import type * as Subscription from "@effect/ui/Subscription"
 import * as Schema from "effect/Schema"
+import { isHTMLElement } from "./dom.ts"
 
 export const Point = Schema.Struct({ x: Schema.Number, y: Schema.Number })
 
@@ -49,7 +50,7 @@ export const onScrollbar = (
   target: EventTarget | null,
   event: MouseEvent
 ): boolean => {
-  if (!(target instanceof HTMLElement)) return false
+  if (!isHTMLElement(target)) return false
   const document = target.ownerDocument
   const style = document.defaultView?.getComputedStyle(target)
   if (style === undefined) return false

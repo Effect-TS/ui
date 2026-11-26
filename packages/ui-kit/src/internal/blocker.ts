@@ -10,13 +10,13 @@ export const blockers = (attribute: string) => {
       [attribute]: "",
       style: "position:fixed;inset:0;z-index:-1;" + noSelect
     })
-  const is = (target: EventTarget | null): boolean =>
+  const is = (target: EventTarget | null): target is Element =>
     isElement(target) && target.hasAttribute(attribute)
   return {
     open: View.toNode(blocker),
     closed: View.toNode(blocker.attr("inert", "")),
     is,
-    owns: (layer: Node, target: Node): boolean =>
+    owns: (layer: Node, target: EventTarget | null): boolean =>
       is(target) && target.parentNode === layer
   }
 }

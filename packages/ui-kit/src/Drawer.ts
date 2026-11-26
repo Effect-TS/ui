@@ -194,7 +194,14 @@ import * as Stream from "effect/Stream"
 import * as Struct from "effect/Struct"
 import { Dialog, DialogDismissReason, DialogProps } from "./Dialog.ts"
 import { flag, idOf, withStyle } from "./internal/attributes.ts"
-import { byAttribute, onRange, saved } from "./internal/dom.ts"
+import {
+  byAttribute,
+  elementOf,
+  isElement,
+  isHTMLElement,
+  onRange,
+  saved
+} from "./internal/dom.ts"
 import {
   popupAttribute,
   trackKeyboard,
@@ -838,9 +845,9 @@ const scrollableAncestor = (
   root: HTMLElement,
   horizontal: boolean
 ): HTMLElement | null => {
-  let node = target instanceof Element ? target : null
+  let node = isElement(target) ? target : null
   while (node !== null && node !== root) {
-    if (node instanceof HTMLElement && scrollable(node, horizontal)) return node
+    if (isHTMLElement(node) && scrollable(node, horizontal)) return node
     node = node.parentElement
   }
   return null
@@ -873,18 +880,11 @@ const canSwipeFromEdge = (
   (fromStartEdge(direction) ? delta > 0 : delta < 0) &&
   atSwipeEdge(element, direction)
 
-const elementOf = (node: Node | null | undefined): Element | null =>
-  node === null || node === undefined
-    ? null
-    : node instanceof Element
-    ? node
-    : node.parentElement
-
 const selectedIn = (document: Document, root: HTMLElement): boolean => {
-  const active = document.activeElement
+  const active = document.activeElement as HTMLInputElement | null
   if (
-    (active instanceof HTMLInputElement ||
-      active instanceof HTMLTextAreaElement) && root.contains(active)
+    (active?.localName === "input" || active?.localName === "textarea") &&
+    root.contains(active)
   ) {
     try {
       const { selectionEnd, selectionStart } = active
