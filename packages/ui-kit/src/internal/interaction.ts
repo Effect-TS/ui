@@ -27,6 +27,24 @@ export const onEscape = <M>(message: M): Subscription.Subscription<M> =>
     repeat: true
   }])
 
+/**
+ * Tracks input-method composition until `signal` aborts. Treats keyCode 229
+ * and keydowns within 20 ms of compositionend as composing too, covering
+ * browsers that clear isComposing before the final keydown.
+ */
+export const trackComposing = (
+  document: Document,
+  signal: AbortSignal
+): (event: KeyboardEvent) => boolean => {
+  let ended = Number.NEGATIVE_INFINITY
+  document.addEventListener("compositionend", (event) => {
+    ended = event.timeStamp
+  }, { capture: true, signal })
+  return (event) =>
+    event.isComposing || event.keyCode === 229 ||
+    event.timeStamp - ended < 20
+}
+
 export const onScrollbar = (
   target: EventTarget | null,
   event: MouseEvent

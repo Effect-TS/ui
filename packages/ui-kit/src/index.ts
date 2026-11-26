@@ -89,6 +89,7 @@ export * from "./ContextMenu.ts"
  * @since 0.1.0
  */
 export * from "./DateField.ts"
+export * from "./DatePicker.ts"
 
 /**
  * @stability experimental

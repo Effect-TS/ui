@@ -255,7 +255,11 @@ import {
   perDocument,
   tabbablesIn
 } from "./internal/dom.ts"
-import { methodOf, onScrollbar } from "./internal/interaction.ts"
+import {
+  methodOf,
+  onScrollbar,
+  trackComposing
+} from "./internal/interaction.ts"
 import {
   hideOthers,
   lockScroll,
@@ -744,21 +748,11 @@ const TrackDialog = Mount.makeStream(
         }
       }
 
-      // Safari sends `compositionend` before the `keydown` that ends a composition,
-      // so an Escape just after one is still the input method's.
-      let composed = Number.NEGATIVE_INFINITY
-      const onCompositionEnd = (event: CompositionEvent) => {
-        composed = event.timeStamp
-      }
-
       const onKeyDown = (event: KeyboardEvent) => {
         if (event.defaultPrevented || !current.open || !topmost()) return
         const target = event.target as Node | null
         if (event.key === "Escape") {
-          if (
-            event.isComposing || event.keyCode === 229 ||
-            event.timeStamp - composed < 20
-          ) return
+          if (composing(event)) return
           if (target !== null && inOtherLayer(node, target)) return
           event.preventDefault()
           send(DialogMessage.PressedEscape())
@@ -1037,6 +1031,7 @@ const TrackDialog = Mount.makeStream(
 
       const controller = new AbortController()
       const { signal } = controller
+      const composing = trackComposing(document, signal)
       let showed = false
       const shows = () => {
         if (showed || signal.aborted) return
@@ -1049,10 +1044,6 @@ const TrackDialog = Mount.makeStream(
         Effect.sync(() => {
           stack.showing.push(entry)
           document.addEventListener("keydown", onKeyDown, { signal })
-          document.addEventListener("compositionend", onCompositionEnd, {
-            capture: true,
-            signal
-          })
           document.addEventListener("pointerdown", onPointerDown, {
             capture: true,
             signal
