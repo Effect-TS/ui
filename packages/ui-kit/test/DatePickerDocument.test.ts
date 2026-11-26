@@ -8,6 +8,7 @@ import {
   byId,
   click,
   container,
+  inIframe,
   popovers,
   press,
   tick
@@ -228,6 +229,20 @@ describe("DatePicker in a document", { concurrent: false }, () => {
         "RequestedOpen trigger-press",
         "RequestedClose focus-out"
       ])
+    }).pipe(Effect.scoped))
+
+  it.effect("driven from the parent window in an iframe, a press in the input keeps it open", () =>
+    Effect.gen(function*() {
+      yield* popovers
+      const app = yield* inIframe
+      yield* BrowserHost.mountEffect(Page, { topLayer: true }, app)
+      yield* tick
+      const find = (id: string) => app.ownerDocument.getElementById(id)!
+      click(find("trigger"))
+      yield* tick
+      press(find("input"))
+      yield* tick
+      assert.strictEqual(find("log").textContent, "RequestedOpen trigger-press")
     }).pipe(Effect.scoped))
 
   for (const topLayer of [true, false]) {

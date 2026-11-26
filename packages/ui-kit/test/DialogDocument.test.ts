@@ -12,6 +12,7 @@ import {
   focusability,
   focusVisibility,
   holdExits,
+  inIframe,
   popovers,
   press,
   tick
@@ -350,40 +351,6 @@ const elsewhere = Effect.acquireRelease(
     return other.body.appendChild(other.createElement("div"))
   }),
   (element) => Effect.sync(() => element.remove())
-)
-
-const inIframe = Effect.acquireRelease(
-  Effect.sync(() => {
-    const iframe = document.createElement("iframe")
-    iframe.srcdoc = "<!doctype html><html><body></body></html>"
-    document.body.appendChild(iframe)
-    const doc = iframe.contentDocument!
-    const view = iframe.contentWindow!
-    const RealHTMLElement = globalThis.HTMLElement
-    // happy-dom shares HTMLElement across frames; give the parent realm its own constructor.
-    class ParentHTMLElement extends RealHTMLElement {}
-    Object.defineProperty(view, "HTMLElement", {
-      value: RealHTMLElement,
-      configurable: true
-    })
-    Object.defineProperty(globalThis, "HTMLElement", {
-      value: ParentHTMLElement,
-      configurable: true
-    })
-    return {
-      app: doc.body.appendChild(doc.createElement("div")),
-      iframe,
-      RealHTMLElement
-    }
-  }),
-  ({ RealHTMLElement, iframe }) =>
-    Effect.sync(() => {
-      Object.defineProperty(globalThis, "HTMLElement", {
-        value: RealHTMLElement,
-        configurable: true
-      })
-      iframe.remove()
-    })
 )
 
 const closeWatchers = (
@@ -1448,7 +1415,7 @@ describe("Dialog in a document", { concurrent: false }, () => {
   it.effect("focus goes back to what had it before the open, and stays there without initialFocus, in an iframe", () =>
     Effect.gen(function*() {
       yield* popovers
-      const { app } = yield* inIframe
+      const app = yield* inIframe
       const other = app.ownerDocument
       yield* mountPage({ detached: true, a: false }, app)
       other.getElementById("page")!.focus()

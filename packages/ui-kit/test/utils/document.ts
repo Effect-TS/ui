@@ -13,6 +13,46 @@ export const container = Effect.acquireRelease(
 
 export const byId = (id: string) => document.getElementById(id)!
 
+/**
+ * An element to mount in inside a same-origin iframe, removed as the scope
+ * closes. happy-dom shares DOM constructors across frames, so this window
+ * gets its own, which the iframe's nodes aren't instances of, as in a browser.
+ * Acquire it after any helper that patches `window.Element.prototype`.
+ */
+export const inIframe = Effect.acquireRelease(
+  Effect.sync(() => {
+    const iframe = document.createElement("iframe")
+    iframe.srcdoc = "<!doctype html><html><body></body></html>"
+    document.body.appendChild(iframe)
+    const view = iframe.contentWindow!
+    const names = ["Node", "Element", "HTMLElement"] as const
+    const saved = names.map((name) =>
+      [name, Object.getOwnPropertyDescriptor(globalThis, name)!] as const
+    )
+    for (const name of names) {
+      const Real = globalThis[name] as unknown as new() => object
+      Object.defineProperty(view, name, { value: Real, configurable: true })
+      Object.defineProperty(globalThis, name, {
+        value: class extends Real {},
+        configurable: true
+      })
+    }
+    const doc = iframe.contentDocument!
+    return {
+      iframe,
+      saved,
+      app: doc.body.appendChild(doc.createElement("div"))
+    }
+  }),
+  ({ iframe, saved }) =>
+    Effect.sync(() => {
+      for (const [name, descriptor] of saved) {
+        Object.defineProperty(globalThis, name, descriptor)
+      }
+      iframe.remove()
+    })
+).pipe(Effect.map(({ app }) => app))
+
 export const holdExits = Effect.acquireRelease(
   Effect.sync(() => {
     const original = Element.prototype.getAnimations
