@@ -14,12 +14,12 @@ export const CounterMessage = UiSchema.TaggedEnum({
   Ticked: {}
 })
 
-// Defines a Command: its name, the Schema fields of its args (none
-// here) and its body. DelayReset.make({}) creates one to run, and
-// the Message its Effect returns goes to update.
+// Defines a Command: its name, its options (no args here) and its
+// body. DelayReset.make() creates one to run, and the Message its
+// Effect returns goes to update.
 export const DelayReset = Command.make(
   "DelayReset",
-  { args: {} },
+  {},
   () =>
     Effect.sleep("1 second").pipe(
       Effect.as(CounterMessage.CompletedDelayReset())
@@ -47,7 +47,7 @@ export const Counter = Html.component({
     // Runs the Command without changing the Model. To do both,
     // chain them: $.evolve({ ... }).run(...). In Foldkit 0.x,
     // update returned { model, commands } instead.
-    ClickedResetAfterDelay: ($) => $.run(DelayReset.make({})),
+    ClickedResetAfterDelay: ($) => $.run(DelayReset.make()),
     CompletedDelayReset: ($) => $.evolve({ count: 0 }),
     ClickedToggleAutoCount: ($) =>
       $.evolve({

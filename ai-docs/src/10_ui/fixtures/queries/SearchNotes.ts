@@ -10,7 +10,6 @@ export class SearchNotes extends Query.Service<SearchNotes>()(
   {
     args: { q: Schema.String, page: Schema.Number, sort: NoteSort },
     success: NoteResults,
-    error: Schema.Never,
     staleTime: "30 seconds",
     tags: [NotesTag]
   }

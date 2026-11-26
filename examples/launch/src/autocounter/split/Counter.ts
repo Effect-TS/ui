@@ -26,7 +26,7 @@ const update = CounterDef.update(($, message) =>
   CounterMessage.match(message, {
     ClickedAdd: ({ amount }) =>
       $.evolve({ count: (count) => count + amount }),
-    ClickedResetAfterDelay: () => $.run(DelayReset.make({})),
+    ClickedResetAfterDelay: () => $.run(DelayReset.make()),
     CompletedDelayReset: () => $.evolve({ count: 0 }),
     ClickedToggleAutoCount: () =>
       $.evolve({

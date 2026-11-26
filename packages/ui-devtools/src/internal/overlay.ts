@@ -207,12 +207,12 @@ export class Clear extends Command.Service<Clear>()(
 
 export class SaveOpen extends Command.Service<SaveOpen>()(
   "devtools/SaveOpen",
-  { args: { open: Schema.Boolean }, success: Component.Noop }
+  { args: { open: Schema.Boolean } }
 ) {
   static readonly layer = this.toLayer(
     Effect.gen(function*() {
       const pages = yield* Pages
-      return ({ open }) => Effect.as(pages.setOpen(open), Component.noop)
+      return ({ open }) => pages.setOpen(open)
     })
   )
 }
@@ -235,13 +235,12 @@ export class SetRecording extends Command.Service<SetRecording>()(
 
 export class SavePosition extends Command.Service<SavePosition>()(
   "devtools/SavePosition",
-  { args: { position: Position }, success: Component.Noop }
+  { args: { position: Position } }
 ) {
   static readonly layer = this.toLayer(
     Effect.gen(function*() {
       const pages = yield* Pages
-      return ({ position }) =>
-        Effect.as(pages.setPosition(position), Component.noop)
+      return ({ position }) => pages.setPosition(position)
     })
   )
 }

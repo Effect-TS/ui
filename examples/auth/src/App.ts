@@ -76,7 +76,7 @@ export class SaveSession extends Command.Service<SaveSession>()(
 
 export class ClearSession extends Command.Service<ClearSession>()(
   "auth/ClearSession",
-  { args: {}, success: Schema.Union([AppMessage, Component.Noop]) }
+  { success: Schema.Union([AppMessage, Component.Noop]) }
 ) {
   static readonly layer = this.toLayer(
     SessionStore.useSync((store) => () =>
@@ -91,11 +91,14 @@ export class ClearSession extends Command.Service<ClearSession>()(
   )
 }
 
-export const LogError = Command.make(
-  "LogError",
-  { args: { entries: Schema.Array(Schema.String) } },
-  ({ entries }) => Console.error(...entries).pipe(Effect.as(Component.noop))
-)
+export class LogError extends Command.Service<LogError>()(
+  "auth/LogError",
+  { args: { entries: Schema.Array(Schema.String) } }
+) {
+  static readonly layer = this.toLayer(({ entries }) =>
+    Console.error(...entries)
+  )
+}
 
 const redirectTo = (route: AppRoute) =>
   Router.replace(AppRoute, route).pipe(Command.asNoop)
@@ -135,7 +138,7 @@ export const AppNoDeps = Html.component({
 
     SignedOut: ($) =>
       $.set(AppModel.LoggedOut({ route: LoggedOutRoute.Home() })).run(
-        ClearSession.make({}),
+        ClearSession.make(),
         redirectTo(LoggedOutRoute.Home())
       ),
 
@@ -182,5 +185,5 @@ export const AppNoDeps = Html.component({
 })
 
 export const App = AppNoDeps.pipe(
-  Component.provide([SaveSession.layer, ClearSession.layer])
+  Component.provide([SaveSession.layer, ClearSession.layer, LogError.layer])
 )

@@ -5,9 +5,11 @@
  * feeds its result back to the instance as a message, so `update` stays pure
  * and a story test can read what was issued without running anything. A
  * Command with nothing to tell the component ends with `Component.noop`, or
- * is piped through `Command.asNoop`, and sends nothing.
+ * is piped through `Command.asNoop`, and sends nothing. A `Command.Service`
+ * that omits `success`, or declares `success: Component.Noop`, is always
+ * silent, whatever its body returns.
  *
- * Both constructors take a name and options with a required `args` Schema:
+ * Both constructors take a name and options. `args` defaults to none:
  *
  * - `Command.make(name, { args }, body)` for Commands that need nothing beyond
  *   the framework services. Issue one with `RollDie.make({ sides: 6 })`. Its
@@ -82,6 +84,7 @@ import * as Stream from "effect/Stream"
 import type * as Types from "effect/Types"
 import type * as Component from "./Component.ts"
 import * as commandRun from "./internal/commandRun.ts"
+import type { Given } from "./internal/given.ts"
 import type * as Kernel from "./internal/kernel.ts"
 import * as internalNoop from "./internal/noop.ts"
 import { canonical } from "./internal/queryCore.ts"
@@ -253,9 +256,9 @@ export type MakeArgs<Args> = {} extends Args ? [args?: Args] : [args: Args]
  *
  * **Details**
  *
- * - `args` is required: a fields record or a `Schema.Struct`. The body gets
- *   one decoded struct. A Command with no args writes `args: {}`. The log
- *   encodes a run's args through it, redacting `Schema.Redacted` fields.
+ * - `args`: a fields record or a `Schema.Struct`, none when omitted. The
+ *   body gets one decoded struct. The log encodes a run's args through it,
+ *   redacting `Schema.Redacted` fields.
  * - `stream: true` declares a Stream Command, so a story test knows the kind
  *   without building a Layer.
  * - `mode` defaults to `"concurrent"`.
@@ -269,7 +272,7 @@ export type MakeArgs<Args> = {} extends Args ? [args?: Args] : [args: Args]
  * @since 0.1.0
  */
 export interface Options<In extends ArgsInput, G extends string> {
-  readonly args: In
+  readonly args?: In | undefined
   readonly stream?: boolean | undefined
   readonly mode?: Mode | undefined
   readonly group?: ReadonlyArray<G> | undefined
@@ -744,21 +747,32 @@ export interface Service<
   Context.ServiceClass<
     Self,
     Key,
-    Service.Implementation<Args, Success["Type"], IsStream, Error["Type"]>
+    Service.Implementation<Args, BodyResult<Success>, IsStream, Error["Type"]>
   >,
   Definition<Args, Success["Type"], IsStream, Error["Type"], G>
 {
   /** Builds a Layer providing this Command's implementation. */
   toLayer<LE = never, LR = never>(
     build:
-      | Service.Implementation<Args, Success["Type"], IsStream, Error["Type"]>
+      | Service.Implementation<
+        Args,
+        BodyResult<Success>,
+        IsStream,
+        Error["Type"]
+      >
       | Effect.Effect<
-        Service.Implementation<Args, Success["Type"], IsStream, Error["Type"]>,
+        Service.Implementation<
+          Args,
+          BodyResult<Success>,
+          IsStream,
+          Error["Type"]
+        >,
         LE,
         LR
       >
   ): Layer.Layer<Self, LE, Exclude<LR, Scope.Scope>>
   readonly args: Schema.Top
+  /** Defaults to `Component.Noop`. */
   readonly success: Success
   /** Defaults to `Schema.Never`. */
   readonly error: Error
@@ -782,6 +796,10 @@ export interface Service<
     >
 }
 
+/** A silent Service's body may return anything: the runtime replaces it with `Component.noop`. */
+type BodyResult<Success extends Schema.Top> = [Success] extends
+  [Component.NoopSchema] ? unknown : Success["Type"]
+
 /**
  * Helper types for `Service`.
  *
@@ -792,6 +810,7 @@ export declare namespace Service {
   /**
    * The value behind a Command service: a function of the args struct that
    * returns the body's result. It may use framework services on each call.
+   * For a silent Service, `A` is `unknown`.
    *
    * @category models
    * @since 0.1.0
@@ -808,8 +827,10 @@ export declare namespace Service {
    *
    * On top of `Options`:
    *
-   * - `success`: Schema for the body's result.
-   * - `error`: optional failure Schema; defaults to `Schema.Never`.
+   * - `success`: Schema for the body's result. Omitted or `Component.Noop`,
+   *   the Command is silent and the body may return anything.
+   * - `error`: Schema for the body's typed failure, `Schema.Never` when
+   *   omitted.
    * - `invalidates` is optional: what a run invalidates, from the args
    *   only, so it's known at issue. It's applied on every exit of a started
    *   run. Omitting it invalidates nothing.
@@ -825,7 +846,7 @@ export declare namespace Service {
     Error extends Schema.Top,
     G extends string
   > extends CommandOptions<In, G> {
-    readonly success: Success
+    readonly success?: Success | undefined
     readonly error?: Error | undefined
     readonly invalidates?:
       | ((args: ArgsOf<In>) => ReadonlyArray<Query.Target>)
@@ -843,6 +864,11 @@ export declare namespace Service {
 }
 
 type CommandOptions<In extends ArgsInput, G extends string> = Options<In, G>
+
+type ServiceGiven<In, Success, Error> =
+  & Given<"args", In, {}>
+  & Given<"success", Success, Component.NoopSchema>
+  & Given<"error", Error, Schema.Never>
 
 const identity = (result: any) => result
 
@@ -919,10 +945,12 @@ const makeIssued = (fields: Fields, unmatched = false): any => {
 
 const noTargets: ReadonlyArray<never> = []
 
-const argsSchemaOf = (args: ArgsInput): Schema.Struct<Schema.Struct.Fields> =>
+const argsSchemaOf = (
+  args: ArgsInput | undefined
+): Schema.Struct<Schema.Struct.Fields> =>
   Schema.isSchema(args)
     ? args as Schema.Struct<Schema.Struct.Fields>
-    : Schema.Struct(args as Schema.Struct.Fields)
+    : Schema.Struct((args ?? {}) as Schema.Struct.Fields)
 
 /**
  * A Command's group: its key, and the `group` fields it was made from, so the
@@ -1086,9 +1114,9 @@ export const groupKeyOf = (
  *
  * **Details**
  *
- * Requires an `args` Schema and returns a definition whose `make` method takes
- * the args struct and issues a Command. Story tests can inspect its `args`
- * without running the Effect. The body can't fail. Its requirements may only
+ * Takes an optional `args` Schema and returns a definition whose `make`
+ * method takes the args struct and issues a Command. Story tests can inspect
+ * its `args` without running the Effect. The body can't fail. Its requirements may only
  * be framework services, which are removed from `R`. A body that requires
  * anything else doesn't compile, and the error names `FrameworkService` rather
  * than the missing service. With `stream: true` the body returns a `Stream`
@@ -1120,24 +1148,28 @@ export const groupKeyOf = (
 export const make: {
   <
     const Name extends string,
-    const In extends ArgsInput,
-    Msg,
+    const In extends ArgsInput = {},
+    Msg = never,
     R extends FrameworkService = never,
     const G extends GroupField<In> = never
   >(
     name: Name,
-    options: Options<In, G> & { readonly stream?: false | undefined },
+    options: Options<In, G> & NoInfer<Given<"args", In, {}>> & {
+      readonly stream?: false | undefined
+    },
     run: (args: ArgsOf<In>) => Effect.Effect<Msg, never, R>
   ): Factory<ArgsOf<In>, Msg, false, G>
   <
     const Name extends string,
-    const In extends ArgsInput,
-    Msg,
+    const In extends ArgsInput = {},
+    Msg = never,
     R extends FrameworkService = never,
     const G extends GroupField<In> = never
   >(
     name: Name,
-    options: Options<In, G> & { readonly stream: true },
+    options: Options<In, G> & NoInfer<Given<"args", In, {}>> & {
+      readonly stream: true
+    },
     run: (args: ArgsOf<In>) => Stream.Stream<Msg, never, R>
   ): Factory<ArgsOf<In>, Msg, true, G>
 } = (
@@ -1165,8 +1197,12 @@ export const make: {
  *
  * **Details**
  *
- * Takes a key (the Command's name in logs and stories) and options (`args`,
- * `success`, optional `error` defaulting to `Schema.Never`). Attach the body
+ * Takes a key (the Command's name in logs and stories) and options, all
+ * optional: `args` (none by default), `success` and `error` (`Schema.Never`
+ * by default). Set `success` to the Message Schema of the component that
+ * consumes the result. Without it, or with `success: Component.Noop`, every
+ * run is silent and the body may return anything, with no
+ * `Effect.as(Component.noop)`. Attach the body
  * with `toLayer`, passing a function or an Effect that runs once per Layer
  * build to capture its dependencies; components then require only this class,
  * and tests can fake it with `X.toLayer(fn)`.
@@ -1232,17 +1268,32 @@ export const make: {
  * @since 0.1.0
  */
 export const Service: <Self>() => {
+  <const Key extends string>(
+    key: Key,
+    options?: undefined
+  ): Service<
+    Self,
+    Key,
+    ArgsOf<{}>,
+    Component.NoopSchema,
+    false,
+    Schema.Never,
+    never
+  >
   <
     const Key extends string,
-    const In extends ArgsInput,
-    Success extends Schema.Top,
+    const In extends ArgsInput = {},
+    Success extends Schema.Top = Component.NoopSchema,
     Error extends Schema.Top = Schema.Never,
     const G extends GroupField<In> = never
   >(
     key: Key,
-    options: Service.Options<In, Success, Error, G> & {
-      readonly stream?: false | undefined
-    }
+    options:
+      & Service.Options<In, Success, Error, G>
+      & NoInfer<ServiceGiven<In, Success, Error>>
+      & {
+        readonly stream?: false | undefined
+      }
   ): Service<
     Self,
     Key,
@@ -1254,16 +1305,19 @@ export const Service: <Self>() => {
   >
   <
     const Key extends string,
-    const In extends ArgsInput,
-    Success extends Schema.Top,
+    const In extends ArgsInput = {},
+    Success extends Schema.Top = Component.NoopSchema,
     Error extends Schema.Top = Schema.Never,
     const G extends GroupField<In> = never
   >(
     key: Key,
-    options: Service.Options<In, Success, Error, G> & {
-      readonly stream: true
-      readonly writes?: undefined
-    }
+    options:
+      & Service.Options<In, Success, Error, G>
+      & NoInfer<ServiceGiven<In, Success, Error>>
+      & {
+        readonly stream: true
+        readonly writes?: undefined
+      }
   ): Service<
     Self,
     Key,
@@ -1276,14 +1330,22 @@ export const Service: <Self>() => {
 } = () =>
 (
   key: string,
-  options: Service.Options<ArgsInput, Schema.Top, Schema.Top, string>
+  options: Service.Options<ArgsInput, Schema.Top, Schema.Top, string> = {}
 ): any => {
   const Base = Context.Service<any, any>()(key)
-  const { error, invalidates, optimistic, stream, success, writes } = options
+  const {
+    error = Schema.Never,
+    invalidates,
+    optimistic,
+    stream,
+    success = internalNoop.noopSchema,
+    writes
+  } = options
   const service = Base as Effect.Effect<(args: unknown) => any, never, any>
+  const silent = internalNoop.isNoopSchema(success)
   class CommandService extends Base {
     static readonly success = success
-    static readonly error = error ?? Schema.Never
+    static readonly error = error
     static toLayer(
       build: ((args: any) => any) | Effect.Effect<(args: any) => any, any, any>
     ): Layer.Layer<any, any, any> {
@@ -1301,9 +1363,19 @@ export const Service: <Self>() => {
       writes: writes === undefined
         ? undefined
         : (value) => writes(value, args),
+      // Silenced here rather than in `toLayer`, so a `Layer.succeed` fake is too.
       work: stream
-        ? Stream.unwrap(Effect.map(service, (run) => run(args)))
-        : Effect.flatMap(service, (run) => run(args))
+        ? Stream.unwrap(
+          Effect.map(
+            service,
+            (run) =>
+              silent ? Stream.as(run(args), internalNoop.noop) : run(args)
+          )
+        )
+        : Effect.flatMap(
+          service,
+          (run) => silent ? Effect.as(run(args), internalNoop.noop) : run(args)
+        )
     }))
   )
 }
@@ -1417,6 +1489,7 @@ export const as: {
  *
  * Use when a Command's result doesn't matter to the component, such as a
  * navigation or a focus, instead of adding a no-op variant to its Message. It's shorthand for `Command.as(Component.noop)`.
+ * A `Command.Service` that never reports anything omits `success` instead.
  *
  * **Details**
  *

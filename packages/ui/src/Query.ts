@@ -74,6 +74,7 @@ import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import type * as Types from "effect/Types"
 import { runCodec } from "./internal/codecRun.ts"
+import type { Given } from "./internal/given.ts"
 import * as componentQueries from "./internal/queries.ts"
 import * as queryCore from "./internal/queryCore.ts"
 import { addListener, NonJsonLeaf } from "./internal/queryCore.ts"
@@ -322,10 +323,9 @@ export declare namespace Service {
  *
  * **Details**
  *
- * - `args` is a fields record or any Schema. The cache derives an entry's key
- *   from the encoded arguments, so a query with no arguments writes `args: {}`.
- * - `success` and `error` are required Schemas. A query that can't fail
- *   writes `error: Schema.Never`.
+ * - `args` is a fields record or any Schema, none when omitted. The cache
+ *   derives an entry's key from the encoded arguments.
+ * - `success` is required. `error` defaults to `Schema.Never`.
  * - `staleTime` is required. Zero means always stale and `"Infinity"` means
  *   never stale by age. A stale entry is still served at once; it refetches
  *   when its first watcher arrives, on `get` or `prefetch`, on a host edge,
@@ -417,35 +417,41 @@ export const Service: <Self>() => <
   const Name extends string,
   const Args extends Service.NoServices | {
     readonly [x: string]: Service.NoServices
-  },
-  Success extends Service.NoServices,
-  Error extends Service.NoServices
+  } = {},
+  Success extends Service.NoServices = never,
+  Error extends Service.NoServices = Schema.Never
 >(
   name: Name,
-  options: {
-    readonly args: Args
-    readonly success: Success
-    readonly error: Error
-    readonly staleTime: Duration.Input
-    readonly idleTimeToLive?: Duration.Input | undefined
-    readonly refetchInterval?:
-      | RefetchInterval<Service.ArgsType<Args>, Success["Type"], Error["Type"]>
-      | undefined
-    readonly tags?: ReadonlyArray<Tag> | undefined
-  }
+  options:
+    & NoInfer<Given<"args", Args, {}> & Given<"error", Error, Schema.Never>>
+    & {
+      readonly args?: Args | undefined
+      readonly success: Success
+      readonly error?: Error | undefined
+      readonly staleTime: Duration.Input
+      readonly idleTimeToLive?: Duration.Input | undefined
+      readonly refetchInterval?:
+        | RefetchInterval<
+          Service.ArgsType<Args>,
+          Success["Type"],
+          Error["Type"]
+        >
+        | undefined
+      readonly tags?: ReadonlyArray<Tag> | undefined
+    }
 ) => Service<
   Self,
   Name,
   Service.ArgsType<Args>,
   Success["Type"],
   Error["Type"]
-> = () =>
+> = (): any =>
 (
   name: string,
   options: {
-    readonly args: Schema.Top | Schema.Struct.Fields
+    readonly args?: Schema.Top | Schema.Struct.Fields | undefined
     readonly success: Schema.Top
-    readonly error: Schema.Top
+    readonly error?: Schema.Top | undefined
     readonly staleTime: Duration.Input
     readonly idleTimeToLive?: Duration.Input | undefined
     readonly refetchInterval?: RefetchInterval<any, any, any> | undefined
@@ -953,35 +959,37 @@ export const InfiniteService: <Self>() => <
   const Name extends string,
   const Args extends Service.NoServices | {
     readonly [x: string]: Service.NoServices
-  },
-  PageSchema extends Service.NoServices,
-  Item,
-  CursorSchema extends Service.NoServices,
-  Error extends Service.NoServices
+  } = {},
+  PageSchema extends Service.NoServices = never,
+  Item = unknown,
+  CursorSchema extends Service.NoServices = never,
+  Error extends Service.NoServices = Schema.Never
 >(
   name: Name,
-  options: {
-    readonly args: Args
-    readonly page: PageSchema
-    readonly items: (page: PageSchema["Type"]) => ReadonlyArray<Item>
-    readonly key: (item: NoInfer<Item>) => string
-    readonly error: Error
-    readonly cursor: CursorSchema
-    readonly next: (
-      lastPage: PageSchema["Type"],
-      allPages: readonly [PageSchema["Type"], ...Array<PageSchema["Type"]>]
-    ) => Option.Option<CursorSchema["Type"]>
-    readonly staleTime: Duration.Input
-    readonly idleTimeToLive?: Duration.Input | undefined
-    readonly refetchInterval?:
-      | RefetchInterval<
-        Service.ArgsType<Args>,
-        ReadonlyArray<PageSchema["Type"]>,
-        Error["Type"]
-      >
-      | undefined
-    readonly tags?: ReadonlyArray<Tag> | undefined
-  }
+  options:
+    & NoInfer<Given<"args", Args, {}> & Given<"error", Error, Schema.Never>>
+    & {
+      readonly args?: Args | undefined
+      readonly page: PageSchema
+      readonly items: (page: PageSchema["Type"]) => ReadonlyArray<Item>
+      readonly key: (item: NoInfer<Item>) => string
+      readonly error?: Error | undefined
+      readonly cursor: CursorSchema
+      readonly next: (
+        lastPage: PageSchema["Type"],
+        allPages: readonly [PageSchema["Type"], ...Array<PageSchema["Type"]>]
+      ) => Option.Option<CursorSchema["Type"]>
+      readonly staleTime: Duration.Input
+      readonly idleTimeToLive?: Duration.Input | undefined
+      readonly refetchInterval?:
+        | RefetchInterval<
+          Service.ArgsType<Args>,
+          ReadonlyArray<PageSchema["Type"]>,
+          Error["Type"]
+        >
+        | undefined
+      readonly tags?: ReadonlyArray<Tag> | undefined
+    }
 ) => InfiniteService<
   Self,
   Name,
@@ -990,15 +998,15 @@ export const InfiniteService: <Self>() => <
   Item,
   CursorSchema["Type"],
   Error["Type"]
-> = () =>
+> = (): any =>
 (
   name: string,
   options: {
-    readonly args: Schema.Top | Schema.Struct.Fields
+    readonly args?: Schema.Top | Schema.Struct.Fields | undefined
     readonly page: Schema.Top
     readonly items: (page: any) => ReadonlyArray<any>
     readonly key: (item: any) => string
-    readonly error: Schema.Top
+    readonly error?: Schema.Top | undefined
     readonly cursor: Schema.Top
     readonly next: (lastPage: any, allPages: any) => Option.Option<any>
     readonly staleTime: Duration.Input
@@ -2172,9 +2180,9 @@ const parseInterval = (input: Duration.Input): number | "invalid" => {
  * Builds a query's data, and throws on what a definition may not say.
  */
 const makeDef = (name: string, options: {
-  readonly args: Schema.Top | Schema.Struct.Fields
+  readonly args?: Schema.Top | Schema.Struct.Fields | undefined
   readonly success: Schema.Top
-  readonly error: Schema.Top
+  readonly error?: Schema.Top | undefined
   readonly staleTime: Duration.Input
   readonly idleTimeToLive?: Duration.Input | undefined
   readonly refetchInterval?: RefetchInterval<any, any, any> | undefined
@@ -2200,7 +2208,8 @@ const makeDef = (name: string, options: {
   }
   const args: Schema.Top = Schema.isSchema(options.args)
     ? options.args
-    : Schema.Struct(options.args)
+    : Schema.Struct(options.args ?? {})
+  const error = options.error ?? Schema.Never
   // Built on first use: deriving a codec walks the Schema.
   const encodeArgs = lazy(() => argsEncoder(args.ast))
   const encodeLogArgs = lazy(() => {
@@ -2209,7 +2218,7 @@ const makeDef = (name: string, options: {
     return redacted === args.ast ? undefined : argsEncoder(redacted)
   })
   const drop = lazy(() => dropUndefinedOf(args.ast))
-  const codec = lazy(() => makeCodec(args, options.success, options.error))
+  const codec = lazy(() => makeCodec(args, options.success, error))
   const argsKey = (value: unknown): string => {
     const encode = encodeArgs()
     let encoded: unknown
@@ -2251,7 +2260,7 @@ const makeDef = (name: string, options: {
       return dropFrom === null ? value : dropFrom(value)
     },
     success: options.success,
-    error: options.error,
+    error,
     codec,
     staleMs,
     idleMs,

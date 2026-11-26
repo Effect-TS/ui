@@ -30,7 +30,7 @@ export const CopyPrompt = Command.make(
 
 export const ClearCopyFeedback = Command.make(
   "ClearCopyFeedback",
-  { args: {} },
+  {},
   () =>
     Effect.sleep("2 seconds").pipe(
       Effect.as(AgentPromptsMessage.ClearedCopyFeedback())
@@ -89,9 +89,9 @@ export const AgentPrompts = Html.component({
         : $.run(CopyPrompt.make({ text: shown.prompt }))
     },
     SucceededCopyPrompt: ($) =>
-      $.evolve({ status: "Copied" }).run(ClearCopyFeedback.make({})),
+      $.evolve({ status: "Copied" }).run(ClearCopyFeedback.make()),
     FailedCopyPrompt: ($) =>
-      $.evolve({ status: "Failed" }).run(ClearCopyFeedback.make({})),
+      $.evolve({ status: "Failed" }).run(ClearCopyFeedback.make()),
     ClearedCopyFeedback: ($) => $.evolve({ status: "Idle" }),
     RequestedOpenTip: ($) => $.evolve({ isTipOpen: true }),
     RequestedCloseTip: ($) => $.evolve({ isTipOpen: false })

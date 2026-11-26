@@ -19,23 +19,29 @@ describe("CanvasArt", () => {
       story.given(empty)
         .send(CanvasArtMessage.ClickedCanvas({ x: 150, y: 200 }))
         .expectExact(GenerateBall.make({ x: 150, y: 200 }))
-        .resolve(GenerateBall, {
-          x: 150,
-          y: 200,
-          vx: 10,
-          vy: -10,
-          radius: 12,
-          color: "#ff2d55"
-        })
+        .resolve(
+          GenerateBall,
+          CanvasArtMessage.CompletedGenerateBall({
+            x: 150,
+            y: 200,
+            vx: 10,
+            vy: -10,
+            radius: 12,
+            color: "#ff2d55"
+          })
+        )
         .send(CanvasArtMessage.ClickedCanvas({ x: 1, y: 2 }))
-        .resolve(GenerateBall, {
-          x: 1,
-          y: 2,
-          vx: 0,
-          vy: 0,
-          radius: 8,
-          color: "#fff"
-        })
+        .resolve(
+          GenerateBall,
+          CanvasArtMessage.CompletedGenerateBall({
+            x: 1,
+            y: 2,
+            vx: 0,
+            vy: 0,
+            radius: 8,
+            color: "#fff"
+          })
+        )
       assert.deepStrictEqual(story.model.balls.map(({ id, x }) => [id, x]), [[
         0,
         150
