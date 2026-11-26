@@ -2,7 +2,7 @@ import { type NoteResults, NoteSort } from "#domain/Note"
 import { SearchNotes } from "#queries/SearchNotes"
 import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Layer, Option, Schema } from "effect"
+import { Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { Notes } from "../../notes/services/Notes.ts"
 import { AppRoute } from "../../routes.ts"
@@ -121,14 +121,11 @@ export const SearchPageNoDeps = Html.component({
           h.option.attr("value", "asc").children("A to Z"),
           h.option.attr("value", "desc").children("Z to A")
         ),
+      // While new args wait or load, the result keeps the last results,
+      // waiting, so the list stays on screen instead of flashing
+      // "Searching…", which shows only on the first search.
       AsyncResult.match(h.queries.results, {
-        // While a fetch waits or runs, `h.previous` holds the last results,
-        // so the list stays on screen instead of flashing a loading state.
-        onInitial: () =>
-          Option.match(h.previous.results, {
-            onNone: () => h.p("Searching…"),
-            onSome: resultsView
-          }),
+        onInitial: () => h.p("Searching…"),
         onFailure: () => h.p("The search failed."),
         onSuccess: ({ value }) => resultsView(value)
       })

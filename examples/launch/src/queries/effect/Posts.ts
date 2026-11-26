@@ -1,6 +1,6 @@
 import { Component, Query, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Effect, Option, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { Post, PostsApi } from "../Posts.ts"
 
@@ -44,31 +44,26 @@ export const Posts = Html.component({
 }).make({
   init: () => ({ search: "" }),
   update: { UpdatedSearch: ($, { search }) => $.evolve({ search }) },
-  view: (h, model) => {
-    const list = (posts: ReadonlyArray<Post>, busy: boolean) =>
-      h.ul.attr("aria-busy", String(busy)).children(
-        posts.map((post) => h.li.key(post.id).children(post.title))
-      )
-    return h.div.children(
+  view: (h, model) =>
+    h.div.children(
       h.input.attr("aria-label", "Search posts").value(model.search)
-        .on(
-          "input",
-          ({ value }) => PostsMessage.UpdatedSearch({ search: value })
-        ),
+        .on("input", ({ value }) =>
+          PostsMessage.UpdatedSearch({ search: value })),
       // The result for the current args, as an AsyncResult.
       AsyncResult.match(h.queries.posts, {
-        // No result for these args yet: the wait or the fetch is running.
-        // h.previous holds the last posts, which stay on screen, busy.
+        // No result yet: the first fetch is running.
         onInitial: () =>
-          Option.match(h.previous.posts, {
-            onNone: () => h.p.children("Loading posts"),
-            onSome: (posts) => list(posts, true)
-          }),
+          h.p.children("Loading posts"),
         onFailure: () => h.p.children("Could not load posts"),
-        // waiting is true while a stale result is being refetched.
-        onSuccess: ({ value, waiting }) => list(value, waiting)
+        // waiting is true while newer posts load: a refetch of stale
+        // posts, or the last posts kept while a new search waits or loads.
+        onSuccess: ({ value, waiting }) =>
+          h.ul.attr("aria-busy", String(waiting)).children(
+            value.map((post) =>
+              h.li.key(post.id).children(post.title)
+            )
+          )
       })
     )
-  }
   // SearchPosts.layer needs PostsApi, which the app provides.
 }).pipe(Component.provide(SearchPosts.layer))

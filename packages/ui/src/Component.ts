@@ -1824,16 +1824,9 @@ export type PartTag<T> = T extends
  *
  * `queries` holds each query's result, as `$.queries` does in `update`.
  *
- * `previous` holds, per single or infinite query, the Success value its result
- * holds for args other than the query's current ones. It's `Some` only while
- * the query is enabled, so it is `None` whenever `h.queries` has the stored
- * result.
- *
  * `patched` tells, per single or infinite query, whether the value includes an
  * optimistic patch the server hasn't confirmed. It is per entry, not per
- * instance.
- *
- * `previous` and `patched` have no `queryMany` query.
+ * instance, and has no `queryMany` query.
  *
  * @stability experimental
  * @category utility types
@@ -1841,13 +1834,6 @@ export type PartTag<T> = T extends
  */
 export type QueryHelpers<L> = [keyof L] extends [never] ? {} : {
   readonly queries: QueryResults<L>
-  readonly previous: {
-    readonly [K in SingleNames<L>]: L[K] extends QueryOne<infer R> ?
-      R extends Query.InfiniteQuery.Any ?
-        Option.Option<Omit<InfiniteData<R>, "more">>
-      : Option.Option<Query.Query.Success<R>>
-      : never
-  }
   readonly patched: { readonly [K in SingleNames<L>]: boolean }
 }
 
@@ -2014,6 +2000,9 @@ export type QuerySpec = {
 type OneQuery<M> = [M] extends [Query.Query.Any] ?
   { readonly "~error": "an entry takes one of query and queryMany" }
   : unknown
+// `dropPrevious` is for a `query` entry: a `queryMany` entry never keeps a previous result.
+type DropPrevious<M> = [M] extends [Query.Query.Any] ? never
+  : boolean | undefined
 type ManyQuery<R> = [R] extends [Query.InfiniteQuery.Any] ?
   { readonly "~error": "an infinite query takes query, not queryMany" }
   : unknown
@@ -2030,8 +2019,7 @@ export type Queries<C> = C extends { readonly "~L"?: infer L }
   : {}
 
 /**
- * The names of the single and infinite queries: those `h.previous` and
- * `h.patched` have.
+ * The names of the single and infinite queries: those `h.patched` has.
  *
  * @stability experimental
  * @category utility types
@@ -2091,7 +2079,8 @@ type ServiceOf<D> = D extends
  * A single query opens to an `AsyncResult` of its `Query`'s success and error,
  * an infinite query to an `AsyncResult` of its `InfiniteData`, and a `queryMany`
  * query to its entries in the order of its args. A single or infinite query
- * holds the result it took at the query's current args, and otherwise
+ * holds the result it took at the query's current args. Until there is one,
+ * it holds the last Success it took for other args, waiting, and otherwise
  * `Initial`, waiting while the query is enabled.
  *
  * @stability experimental
@@ -3045,6 +3034,8 @@ export interface DefineOptions<
           readonly debounce?: Duration.Input | undefined
           /** `false` keeps the result out of history. */
           readonly restore?: false | undefined
+          /** `true` opens changed args as `Initial`, not the last Success. A `query` entry only. */
+          readonly dropPrevious?: DropPrevious<M[K & keyof M]>
           readonly onChange?:
             | OnChange<S[K], M[K & keyof M], NoInfer<Msg>>
             | undefined
@@ -3297,10 +3288,18 @@ export interface Define<V extends View.Elements> {
  * An entry's `debounce` delays a fetch for changed args by a
  * `Duration.Input` on the Clock. Only a fetch waits: the first args at
  * mount, the server render, args whose cache entry is fresh or already being
- * fetched, and a change to `undefined` go through at once. While the fetch
- * waits, `h.queries` is `Initial`, waiting, and `h.previous` holds the last
- * value. Args that change again restart the wait. A `queryMany` query's new
- * keys wait each on their own.
+ * fetched, and a change to `undefined` go through at once. Args that change
+ * again restart the wait. A `queryMany` query's new keys wait each on their
+ * own.
+ *
+ * When a `query` entry's args change, its result keeps the last Success it
+ * took for other args, with `waiting` set, until a result for the new args
+ * is stored, through a `debounce` wait and the fetch. `$.queries`, `head`,
+ * `subscriptions` and `onChange` see the same result. A kept list's `more`
+ * is `Loading`. Only a Success is kept: after a Failure, or with none
+ * stored, the result is `Initial`, waiting. `dropPrevious: true` opens
+ * changed args as `Initial` instead, for a component that must not show one
+ * item's value under another's args.
  *
  * An entry's `onChange` returns a message to send when its result changes, for
  * a component that has to react in `update`. A `query` entry's gets its
@@ -3778,7 +3777,6 @@ const finish = (
           if (bound !== undefined) {
             const context = bound.context(model, props, results)
             h.queries = context.queries
-            h.previous = context.previous
             h.patched = context.patched
           }
           if (reads.length > 0) {
@@ -3830,7 +3828,6 @@ const finish = (
           if (bound !== undefined) {
             const opened = bound.context(model, props, context.queries)
             p.queries = opened.queries
-            p.previous = opened.previous
             p.patched = opened.patched
           }
           if (reads.length > 0) {

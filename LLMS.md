@@ -524,29 +524,13 @@ an `onChange` only when `update` has to react to a new result, such as
 moving focus once a query fails. It returns a message, which `update` gets
 after the result is written.
 
-Unless the new args have a fresh cached result, the query is `Initial`
-while `debounce` waits. With no cached result it stays `Initial` through
-the fetch; a stale one shows, with `waiting`, while it refetches.
-`h.previous` holds a `query` entry's last value as an `Option`, so match
-it in `onInitial` to keep the old results on screen, marked busy, instead
-of showing a loading message on every keystroke:
-
-```ts
-const list = (notes: ReadonlyArray<Note>, busy: boolean) =>
-  h.ul.attr("aria-busy", String(busy)).children(
-    notes.map((note) => h.li.key(note.id).children(note.title))
-  )
-
-AsyncResult.match(h.queries.results, {
-  onInitial: () =>
-    Option.match(h.previous.results, {
-      onNone: () => h.p("Searching…"),
-      onSome: (notes) => list(notes, true)
-    }),
-  onFailure: () => h.p("The search failed."),
-  onSuccess: ({ value, waiting }) => list(value, waiting)
-})
-```
+When a `query` entry's args change, its result keeps the last Success,
+with `waiting` set, until the new args have a result: through the
+`debounce` wait and the fetch. So `onSuccess` keeps the old results on
+screen, marked busy, and `onInitial` shows only before the first result.
+Only a Success is kept, and a kept list's `more` is `Loading`. Give the
+entry `dropPrevious: true` to open new args as `Initial` instead, where a
+value shown under other args would mislead.
 
 The cache never retries a failed fetch: a fetcher that should retry does so
 itself.

@@ -160,6 +160,33 @@ describe("Infinite queries", () => {
     )
   })
 
+  it.effect("a list kept for changed args shows more as Loading until the new args' pages are here", () => {
+    const app = makeApp()
+    const RoomMessage = UiSchema.TaggedEnum({ Moved: { room: Schema.String } })
+    const Room = Html.component({
+      name: "Room",
+      model: Schema.String,
+      message: RoomMessage
+    }).make({
+      init: () => "a",
+      update: (_, { room }) => room,
+      view: (h, room) => app.Chat(h, { key: "chat", props: { room } })
+    })
+    return run(
+      app.layer,
+      Effect.gen(function*() {
+        const root = yield* TestHost.mount(Room, {})
+        yield* page
+        assert.strictEqual(root.text(), "a0 /1 Available")
+        root.send(RoomMessage.Moved({ room: "b" }))
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "a0 /1 Loading")
+        yield* page
+        assert.strictEqual(root.text(), "b0 /1 Available")
+      })
+    )
+  })
+
   it.effect("a failed load more keeps the pages and shows Failed, and the next one clears it", () => {
     const app = makeApp()
     return run(

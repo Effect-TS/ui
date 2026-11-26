@@ -366,18 +366,12 @@ export const ListPage = Html.component({
     ListPageMessage.match(message, {
       GoTo: ({ page }) => ({ ...$.model, page })
     }),
-  view: (h, model) => {
-    const current = h.queries.users
-    if (AsyncResult.isFailure(current)) {
-      return h.p("The users couldn't be loaded.")
-    }
-    // The requested page once it is here. Until then the page the query still holds, if any.
-    const shown = AsyncResult.isSuccess(current)
-      ? Option.some(current.value)
-      : h.previous.users
-    return Option.match(shown, {
-      onNone: () => h.p("Loading users…"),
-      onSome: ({ page, pages, users }) =>
+  view: (h, model) =>
+    // Until the requested page is here, the result keeps the page it holds, waiting.
+    AsyncResult.match(h.queries.users, {
+      onInitial: () => h.p("Loading users…"),
+      onFailure: () => h.p("The users couldn't be loaded."),
+      onSuccess: ({ value: { page, pages, users } }) =>
         h.section(
           h.ul(
             users.map((user) =>
@@ -402,7 +396,6 @@ export const ListPage = Html.component({
           )
         )
     })
-  }
 })
 
 // App: the layout, which holds the route

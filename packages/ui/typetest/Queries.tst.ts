@@ -107,15 +107,10 @@ const Card = Html.component({
     expect(h.queries.user).type.toBe<
       AsyncResult.AsyncResult<typeof User.Type, string>
     >()
-    expect(h.previous.user).type.toBe<Option.Option<typeof User.Type>>()
+    expect(h).type.not.toHaveProperty("previous")
     expect(h.patched.team).type.toBe<boolean>()
     return AsyncResult.match(h.queries.user, {
-      onInitial: () =>
-        h.p(
-          Option.isSome(h.previous.user)
-            ? h.previous.user.value.name
-            : "Loading"
-        ),
+      onInitial: () => h.p("Loading"),
       onFailure: () => h.p("Missing"),
       onSuccess: ({ value }) =>
         h.p.on("click", Message.Bump()).children(
@@ -166,10 +161,6 @@ describe("Component queries", () => {
       readonly queries: {
         readonly user: AsyncResult.AsyncResult<typeof User.Type, string>
         readonly team: AsyncResult.AsyncResult<typeof Team.Type, never>
-      }
-      readonly previous: {
-        readonly user: Option.Option<typeof User.Type>
-        readonly team: Option.Option<typeof Team.Type>
       }
       readonly patched: { readonly user: boolean; readonly team: boolean }
     }>()
@@ -470,10 +461,27 @@ describe("Keyed queries", () => {
       .toBe<{ readonly id: string }>()
   })
 
-  it("have no previous or patched view", () => {
+  it("have no patched view, and no dropPrevious", () => {
     type L = Component.Queries<typeof List>
-    expect<Component.QueryHelpers<L>["previous"]>().type.toBe<{}>()
     expect<Component.QueryHelpers<L>["patched"]>().type.toBe<{}>()
+    Component.define({
+      name: "KeyedDrop",
+      model: Schema.Struct({}),
+      message: Message,
+      queries: {
+        users: {
+          queryMany: GetUser,
+          args: () => [{ id: "1" }],
+          // @ts-expect-error Type 'true' is not assignable to type 'never'
+          dropPrevious: true
+        },
+        team: { query: GetTeam, args: () => ({ id: "1" }), dropPrevious: true }
+      }
+    }).make({
+      init: () => ({}),
+      update: ($) => $.model,
+      view: () => null as never
+    })
   })
 
   it("a keyed query's results doesn't have its own name", () => {
@@ -657,9 +665,6 @@ const Chat = Html.component({
         Component.InfiniteData<typeof ListMessages>,
         string
       >
-    >()
-    expect(h.previous.messages).type.toBe<
-      Option.Option<Omit<Component.InfiniteData<typeof ListMessages>, "more">>
     >()
     expect(h.patched.messages).type.toBe<boolean>()
     return h.p("")
