@@ -177,8 +177,8 @@ const asSibling = (node: View.Node<any, any>): View.Node<any, any> =>
   engine.expansionOf.get(node)?.[0]?.child ?? node
 
 /**
- * A matching child starts new mounts when it switches from its view to its fallback,
- * even if both roots have the same tag.
+ * Whether `node` patches `old` once matched, as the runtime decides. A child that
+ * switches from its view to its fallback is new: the runtime creates the fallback.
  */
 const continues = (
   old: View.Node<any, any>,

@@ -14,9 +14,9 @@
  * builder is itself a valid child or view, with the children it holds.
  * Arrays of children are flattened, and `false`, `null` and
  * `undefined` render nothing. Adjacent text merges into one text node when
- * the view is built, and empty text is dropped. Use `.key("list")` to keep
- * an element's node when a preceding conditional sibling has the same tag;
- * without a key, the element can reuse that sibling's node.
+ * the view is built, and empty text is dropped. Key an element when a
+ * conditional sibling before it has the same tag; otherwise it can take
+ * that sibling's node.
  *
  * **Example** (A host-neutral view)
  *
