@@ -34,15 +34,23 @@ const hydrate = Effect.gen(function*() {
   // Field edits made before an instance adopts reach its handlers; clicks and
   // submits don't.
   //
-  // To keep early clicks and submits, an app can print an inline script at
-  // the start of `<body>` that cancels them inside the container, in the
-  // capture phase, and records each target. Remove its listeners before
-  // calling `hydrateEffect`, or a click on an instance that is already live
-  // would be handled and then replayed. After `root.adopted`, call `click()`
-  // or `form.requestSubmit(submitter)` on the recorded nodes that are still
-  // connected and enabled. A node hydration rebuilt is no longer connected.
-  // Replay waits for the slowest instance, and if the client bundle fails to
-  // load, the cancelled submits leave the forms doing nothing.
+  // To keep clicks and submits made before hydration starts, an app can print
+  // an inline script at the start of `<body>` that cancels them inside the
+  // container, in the capture phase, and records each click's target and each
+  // submit's form with its `submitter`. Remove its listeners before calling
+  // `hydrateEffect`, or a click on an instance that is already live would be
+  // handled and then replayed. After that, a waiting instance behaves as
+  // above: its clicks do nothing and its forms submit natively, and nothing
+  // replays them.
+  //
+  // After `root.adopted`, replay only what is still connected and enabled; a
+  // node hydration rebuilt is no longer connected. Call `click()` on a
+  // recorded button. For a submit, call `form.requestSubmit()` when it had no
+  // submitter, or `form.requestSubmit(submitter)` when the button still
+  // belongs to that form, since its name and value are part of the
+  // submission, and skip the submit when the button is stale. Replay waits
+  // for the slowest instance, and if the client bundle fails to load, the
+  // cancelled submits leave the forms doing nothing.
   yield* root.adopted
   return yield* Effect.never
 }).pipe(
