@@ -797,8 +797,7 @@ export const Tooltip = Html.component({
         : blurred
     },
     // A mouse press stops a pending open. The click that follows, or the
-    // native click from Enter or Space on a button or Enter on a link,
-    // closes an open tooltip.
+    // native click a key fires, closes an open tooltip.
     PressedTrigger: ($) =>
       $.props.closeOnClick !== false
         ? $.run(Command.interrupt(WaitBeforeOpening))
