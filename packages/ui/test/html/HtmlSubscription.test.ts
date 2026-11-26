@@ -692,7 +692,7 @@ describe("onMediaQuery", { concurrent: false }, () => {
         Effect.scoped
       )
 
-      // A change made while the initial match is delivered follows it once.
+      // A change made while the initial match is delivered is dispatched after it.
       yield* Effect.gen(function*() {
         let change: (matches: boolean) => void = () => {}
         const log: Array<boolean> = []
@@ -719,7 +719,7 @@ describe("onMediaQuery", { concurrent: false }, () => {
             )
           ]
         })
-        yield* TestHost.mount(Reentrant, {}).pipe(
+        const root = yield* TestHost.mount(Reentrant, {}).pipe(
           Effect.provideService(HtmlSubscription.MediaQueries, {
             matches: () => false,
             listen: (_, listener) => {
@@ -730,6 +730,7 @@ describe("onMediaQuery", { concurrent: false }, () => {
         )
         yield* TestHost.settle
         assert.deepStrictEqual(log, [false, true])
+        assert.strictEqual(root.model(), true)
       }).pipe(Effect.provide(TestHost.layer()), Effect.scoped)
 
       // HtmlScene.mediaQuery dispatches, marks undefined as ignored, and throws for unheard queries.
