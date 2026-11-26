@@ -158,8 +158,8 @@ export interface Expect<S> {
    */
   toHaveText(text: string | RegExp): S
   /**
-   * Asserts that exactly one element matches and has attribute `name`, with
-   * value `value` when given, or doesn't have it with `false`.
+   * Asserts that exactly one element matches. Omit `value` to check attribute
+   * presence, pass a string or `RegExp` to check its value, or `false` for absence.
    */
   toHaveAttribute(name: string, value?: string | RegExp | false): S
   /** Asserts that exactly `count` elements match. */
