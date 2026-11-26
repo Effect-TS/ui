@@ -40,10 +40,10 @@
  * **Indicator width**
  *
  * `indicator` adds `inset-inline-start:0;height:inherit;width:<percentage>%`
- * after the consumer's inline style, with the percentage rounded to 3 decimal
- * places, so its width wins and the consumer's other declarations stay. To
- * draw the meter another way, such as vertically or as a ring, skip
- * `indicator` and use `meter.percentage`.
+ * after the consumer's inline style, so its width wins and other declarations
+ * stay. Only the CSS percentage is rounded, to at most 3 decimal places. To
+ * draw the meter vertically or as a ring, skip `indicator` and use the
+ * unrounded `meter.percentage`.
  *
  * **Example** (A labelled storage meter)
  *

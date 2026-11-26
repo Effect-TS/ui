@@ -328,7 +328,6 @@ describe("Slider", () => {
       scene.blur(input(0)).parts((slider) =>
         assert.strictEqual(slider.activeThumbIndex, -1)
       )
-      // Positions are written to 3 decimal places.
       scene.props({ value: [1, 2], max: 3 })
       assert.strictEqual(
         scene.get(thumb(0)).attrs?.style,

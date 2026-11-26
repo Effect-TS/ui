@@ -2,4 +2,4 @@
 "@effect/ui-kit": patch
 ---
 
-Progress and Meter indicator widths and Slider's `--slider-*` positions now round percentages to 3 decimal places, as `33.333%` instead of `33.333333333333336%`.
+Round CSS percentages for Progress and Meter indicator widths and Slider thumb and indicator positions and sizes to at most 3 decimal places. Only CSS output is rounded; underlying values and displayed labels are unchanged.

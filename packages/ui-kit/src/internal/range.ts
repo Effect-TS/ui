@@ -26,8 +26,6 @@ export const placeInRange = (
 export const percentText = (percentage: number): string =>
   `${Math.round(percentage)}%`
 
-// A percentage for CSS, rounded to at most 3 decimal places so the server
-// and the browser write the same short string, as `33.333%`.
 export const cssPercent = (percentage: number): string =>
   `${Math.round(percentage * 1000) / 1000}%`
 

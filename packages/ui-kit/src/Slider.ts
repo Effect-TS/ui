@@ -30,9 +30,10 @@
  *
  * The kit sets no layout. `thumb` gets `--slider-thumb-position` and
  * `indicator` gets `--slider-indicator-start` and
- * `--slider-indicator-size`, each a percentage along the control, rounded to
- * 3 decimal places, from the left or, when vertical, from the bottom. A
- * horizontal right-to-left slider has `min` on the right; its percentages still count from the left. The hidden input fills the
+ * `--slider-indicator-size`. These CSS percentages are rounded to at most
+ * 3 decimal places and count from the left or, when vertical, from the bottom.
+ * A horizontal right-to-left slider has `min` on the right; its percentages
+ * still count from the left. The hidden input fills the
  * thumb with `position: absolute`, so give the thumb a position. For
  * dragging by touch, give the control `touch-action: none`.
  *

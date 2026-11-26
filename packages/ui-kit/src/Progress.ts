@@ -40,11 +40,11 @@
  * **Indicator width**
  *
  * While the value is known, `indicator` adds
- * `inset-inline-start:0;height:inherit;width:<percentage>%`, with the
- * percentage rounded to 3 decimal places, after the consumer's inline style,
- * so its width wins and the consumer's other declarations stay. While
- * indeterminate it adds nothing. To draw the bar another way, such as
- * vertically or as a ring, skip `indicator` and use `progress.percentage`.
+ * `inset-inline-start:0;height:inherit;width:<percentage>%` after the consumer's
+ * inline style, so its width wins and other declarations stay. Only the CSS
+ * percentage is rounded, to at most 3 decimal places. While indeterminate,
+ * `indicator` adds nothing. To draw the bar vertically or as a ring, skip
+ * `indicator` and use the unrounded `progress.percentage`.
  *
  * **Example** (A labelled upload bar)
  *
