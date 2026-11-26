@@ -104,9 +104,10 @@
   }
 
   .article-header {
-    @apply relative isolate mx-auto max-w-(--column) border-y border-border py-9;
+    --header-grid: calc(var(--column) / 6);
+    @apply relative isolate -mx-[clamp(20px,5vw,48px)] border-y border-border px-[clamp(20px,5vw,48px)] py-9 rail:mx-auto rail:max-w-(--wide) rail:px-0;
     background-image: linear-gradient(to right, var(--color-border) 1px, transparent 1px);
-    background-size: calc(100% / 6) 100%;
+    background-size: var(--header-grid) 100%;
     background-position: center;
 
     /* A fade over the lines at the top and the bottom. */
@@ -134,7 +135,7 @@
       opacity: 0;
       background-image:
         linear-gradient(to right, var(--ring-line) 1px, transparent 1px), linear-gradient(var(--ring-fill), var(--ring-fill));
-      background-size: calc(100% / 6) 100%, 100% 100%;
+      background-size: var(--header-grid) 100%, 100% 100%;
       background-position: center;
       mask-image: radial-gradient(
         circle farthest-corner at center,
