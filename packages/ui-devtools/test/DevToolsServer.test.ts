@@ -430,18 +430,17 @@ describe("DevToolsServer", { concurrent: false }, () => {
             { _tag: "CommandStarted", ...run(2, 0) },
             { _tag: "CommandEnded", ...run(3, 0), silent: true },
             { _tag: "CommandStarted", ...run(4, 1) },
-            { _tag: "PropsChanged", ...base(5), props: { id: "b" } },
+            // Queued behind the run still going, so it hasn't started.
+            update(5, [Touch.make({ id: "b" })]),
+            update(6, []),
+            { _tag: "PropsChanged", ...base(7), props: { id: "c" } },
             {
               _tag: "QueryChanged",
-              ...base(6),
+              ...base(8),
               name: "note",
-              result: note("b")
+              result: note("c")
             },
-            { _tag: "Drawn", ...base(7) },
-            // Queued behind the run still going, so it hasn't started.
-            update(8, [Touch.make({ id: "b" })]),
-            update(9, []),
-            { _tag: "Drawn", ...base(10) }
+            { _tag: "Drawn", ...base(9) }
           ] as ReadonlyArray<MessageLog.Entry>
         ) log.record(entry)
 
@@ -449,7 +448,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
         const [session] = yield* agent.call<ReadonlyArray<any>>(
           "list_sessions"
         ).pipe(
-          Effect.filterOrFail(([session]) => session?.last === 10),
+          Effect.filterOrFail(([session]) => session?.last === 9),
           Effect.retry(Schedule.spaced("10 millis")),
           Effect.timeout("5 seconds")
         )
@@ -457,8 +456,8 @@ describe("DevToolsServer", { concurrent: false }, () => {
         const [instance] = yield* agent.call("list_instances")
         assert.strictEqual(instance.status, "1 ended, 1 running, 1 waiting")
         const state = yield* agent.call("get_state", { instance: 1 })
-        assert.deepStrictEqual(state.props, { id: "b" })
-        assert.strictEqual(state.queries.note[2], "Note b")
+        assert.deepStrictEqual(state.props, { id: "c" })
+        assert.strictEqual(state.queries.note[2], "Note c")
       }).pipe(Effect.scoped),
     30_000
   )
