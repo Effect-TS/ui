@@ -23,12 +23,16 @@ await run("select", async ({ browser, expect, failures, url }) => {
     )
   }
 
-  // A parent that keeps the popup closed still gets the trigger focused.
+  // A parent that keeps the popup closed gets the trigger focused by the click.
   await page.goto(url + "select.html?decline")
   await page.locator("#field").click()
+  await page.evaluate(() =>
+    addEventListener("click", () => {
+      globalThis.clicked = document.activeElement.id
+    }, { once: true })
+  )
   await page.locator("#trigger").click()
-  await page.waitForTimeout(100)
-  const focused = await page.evaluate(() => document.activeElement.id)
+  const focused = await page.evaluate(() => globalThis.clicked)
   expect(
     focused === "trigger",
     "A declined mouse open focuses the trigger",
