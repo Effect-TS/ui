@@ -385,8 +385,8 @@ const fromRenderer = (ctx: Context.Context<any>): HostInput => {
         head: ownsHead,
         step
       })
-      return {
-        base: dom ?? bridge(host, step, ownsHead),
+      return dom !== undefined ? { base: dom, dom } : {
+        base: bridge(host, step, ownsHead),
         dom,
         unmounting: host.unmounting === undefined
           ? undefined
@@ -796,23 +796,22 @@ const start = (
     root,
     deferred,
     idle,
-    // A host call that throws still lets the mount's fibers and query cache
-    // be cleaned up, and dies once they are.
-    close: Effect.ensuring(
-      Effect.sync(() => {
-        hydrating?.close()
-        routing?.detach()
-        hot?.detach()
-        dom?.dispose()
-        if (frozen) tree.closed = false
-        try {
-          unmounting?.(Kernel.nodesOf(instance.rendered!, []))
-        } finally {
-          mounted.close()
-        }
-      }),
-      Effect.andThen(awaitOwned, queries.dispose)
-    )
+    close: Effect.suspend(() => {
+      hydrating?.close()
+      routing?.detach()
+      hot?.detach()
+      dom?.dispose()
+      if (frozen) tree.closed = false
+      // A throwing hook still lets the mount close and clean up, then dies.
+      let failed: Effect.Effect<void> = Effect.void
+      try {
+        unmounting?.(Kernel.nodesOf(instance.rendered!, []))
+      } catch (error) {
+        failed = Effect.die(error)
+      }
+      mounted.close()
+      return Effect.andThen(awaitOwned, Effect.andThen(queries.dispose, failed))
+    })
   }
 }
 
