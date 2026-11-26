@@ -120,17 +120,19 @@ const canonicalAttrs = (
 const ignore = () => {}
 
 // Chromium blurs a focused element that a render detaches, to remove or to
-// move it. The HTML standard and other browsers don't. That blur has no
-// `relatedTarget`, so one during a detach is dropped, while focus moved to
-// another element still counts. Module-level, because `BrowserHost` detaches
-// through one host while another one listens.
-let detaching = 0
+// move it. The HTML standard and other browsers don't. That blur comes first
+// in the DOM call and has no `relatedTarget`, so only such a first `blur` or
+// `focusout` is dropped. A later one, such as a reconnected element sending
+// focus into an iframe, is a real exit. Module-level, because `BrowserHost`
+// detaches through one host while another one listens.
+let detaching: Partial<Record<string, Event>> | undefined
 const detach = (f: () => void): void => {
-  detaching++
+  const outer = detaching
+  detaching = {}
   try {
     f()
   } finally {
-    detaching--
+    detaching = outer
   }
 }
 
@@ -544,7 +546,8 @@ export const makeHost = (
   const listener = (event: Event): void => {
     const name = event.type
     if (
-      detaching > 0 && (name === "blur" || name === "focusout") &&
+      detaching !== undefined && (name === "blur" || name === "focusout") &&
+      (detaching[name] ??= event) === event &&
       (event as FocusEvent).relatedTarget === null
     ) return
     const path = event.composedPath() as Array<Node>

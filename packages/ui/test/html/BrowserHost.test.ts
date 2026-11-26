@@ -1817,15 +1817,10 @@ describe("BrowserHost", { concurrent: false }, () => {
             }
           )
         ]
-        const outside = yield* Effect.acquireRelease(
-          Effect.sync(() =>
-            document.body.appendChild(document.createElement("button"))
-          ),
-          (button) =>
-            Effect.sync(() => {
-              for (const spy of spies) spy.mockRestore()
-              button.remove()
-            })
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            for (const spy of spies) spy.mockRestore()
+          })
         )
         let steal = false
         customElements.define(
@@ -1834,7 +1829,8 @@ describe("BrowserHost", { concurrent: false }, () => {
             connectedCallback() {
               if (!steal) return
               this.focus()
-              outside.focus()
+              // Like focus moving into an iframe, it has no `relatedTarget`.
+              this.blur()
             }
           }
         )
@@ -1851,14 +1847,14 @@ describe("BrowserHost", { concurrent: false }, () => {
         document.getElementById("f")!.focus()
         yield* next()
         expect(root.model()).toEqual({ step: 2, left: 0 })
-        // Focus a moved element sends elsewhere as it reconnects, and a blur outside a render.
-        app.querySelector<HTMLElement>("x-steal")!.focus()
+        // A moved element that takes focus and sends it out as it reconnects, and a blur outside a render.
+        document.getElementById("a")!.focus()
         steal = true
         yield* next()
         document.getElementById("a")!.focus()
         document.getElementById("a")!.blur()
         yield* tick
-        expect(root.model()).toEqual({ step: 3, left: 2 })
+        expect(root.model()).toEqual({ step: 3, left: 3 })
       }).pipe(Effect.scoped))
 
     it.effect("focus says whether the element shows a focus ring", () =>
