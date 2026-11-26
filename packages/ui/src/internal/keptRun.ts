@@ -412,7 +412,7 @@ export const keeper: Kernel.Keeper = {
     }
     if (
       entry?.loading !== undefined &&
-      lazy.stateOf(view.component as any)._tag === "Loaded"
+      lazy.componentOf(view.component) !== undefined
     ) {
       end(table, named, entry)
       entry = undefined

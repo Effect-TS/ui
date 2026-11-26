@@ -6,7 +6,6 @@ import type * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
 import { runCodec } from "./codecRun.ts"
 import * as Kernel from "./kernel.ts"
-import * as lazy from "./lazy.ts"
 import { segmentOf } from "./paths.ts"
 import { boundOf, type Cache } from "./queryCore.ts"
 import { restored } from "./sharedRun.ts"
@@ -64,10 +63,10 @@ const use = (target: Kernel.Host, from: Kernel.Host): void => {
 }
 
 const decode = (
-  component: Component.Any | Kernel.Runnable,
+  component: Kernel.Runnable,
   encoded: unknown
 ): Exit.Exit<Decoded, unknown> | Fiber.Fiber<Decoded, unknown> =>
-  runCodec(stateCodecOf(component as Component.Any).decode(encoded))
+  runCodec(stateCodecOf(component as unknown as Component.Any).decode(encoded))
 
 const decodeRoot = (
   component: Kernel.Runnable,
@@ -175,7 +174,12 @@ export const make = (
     settled()
   }
   const fallback = host.hold
-  ;(host as { hold: Kernel.Host["hold"] }).hold = (owner, rec, at) => {
+  ;(host as { hold: Kernel.Host["hold"] }).hold = (
+    owner,
+    rec,
+    at,
+    component
+  ) => {
     const view = rec.v as View.Child<any, any>
     const path = (view.alive === undefined && at || owner.path) + "/" +
       segmentOf(view.component, view.key)
@@ -185,9 +189,8 @@ export const make = (
     const from = served
       ? state as Saved
       : supplyOf(owner, path, view.alive !== undefined)
-    const component = lazy.componentOf(view.component)
-    if (from?.[path] === undefined || component === undefined) {
-      return fallback?.(owner, rec, at) === true
+    if (from?.[path] === undefined) {
+      return fallback?.(owner, rec, at, component) === true
     }
     let receiver: Kernel.Instance | undefined
     for (
@@ -210,7 +213,7 @@ export const make = (
     const exit = behind ? undefined : decode(component, from[path])
     if (exit !== undefined && Exit.isExit(exit) && !away) {
       if (!served && Exit.isFailure(exit)) {
-        return fallback?.(owner, rec, at) === true
+        return fallback?.(owner, rec, at, component) === true
       }
       if (!served) given.set(path, from)
       decoded.set(path, Exit.isSuccess(exit) ? exit.value : undefined)

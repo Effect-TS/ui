@@ -612,8 +612,9 @@ const start = (
     ...base,
     hold: hot === undefined
       ? routing?.hold
-      : (owner, rec, at) =>
-        hot.hold(owner, rec, at) ?? routing?.hold(owner, rec, at) ?? false,
+      : (owner, rec, at, component) =>
+        hot.hold(owner, rec, at, component) ??
+          routing?.hold(owner, rec, at, component) ?? false,
     commit: () => {
       base.commit?.()
       hydrating?.commit()

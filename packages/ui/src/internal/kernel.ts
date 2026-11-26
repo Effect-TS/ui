@@ -20,7 +20,12 @@ import { segmentOf, slotSegment } from "./paths.ts"
 /** @internal */
 export interface Host<N = any> {
   readonly hold?:
-    | ((owner: Instance, rec: Rec, slot: string | undefined) => boolean)
+    | ((
+      owner: Instance,
+      rec: Rec,
+      slot: string | undefined,
+      component: Runnable
+    ) => boolean)
     | undefined
   readonly createElement: (tag: string) => N
   readonly createText: (text: string) => N
@@ -1034,7 +1039,7 @@ export const mountChild = (
         waiting: []
       }
     }
-  } else if (owner.tree.host.hold?.(owner, rec, at)) {
+  } else if (owner.tree.host.hold?.(owner, rec, at, component)) {
     held = create(owner, emptyText)
   }
   const child = rec.inst = held === undefined

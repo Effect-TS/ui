@@ -415,7 +415,8 @@ export const open = (
         : next
     },
     restored: restore.restored,
-    hold: (owner, rec, at) => active ? restore.hold(owner, rec, at) : undefined,
+    hold: (owner, rec, at, component) =>
+      active ? restore.hold(owner, rec, at, component) : undefined,
     attach: (inst) => {
       instance = inst
       restore.watch(inst.tree)

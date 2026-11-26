@@ -295,12 +295,10 @@ export const make = (options: Options): StateRestore => {
     string,
     readonly [services.PageState, Exit.Exit<Decoded, SchemaIssue.Issue>]
   >()
-  const hold: StateRestore["hold"] = (owner, rec, at) => {
+  const hold: StateRestore["hold"] = (owner, rec, at, resolved) => {
     const view = rec.v as View.Child<any, any>
-    const component = lazy.componentOf(view.component)
-    if (component === undefined || component.definition?.restore === false) {
-      return false
-    }
+    const component = resolved as unknown as Component.Any
+    if (component.definition?.restore === false) return false
     const path = (view.alive === undefined && at || owner.path) + "/" +
       segmentOf(view.component, view.key)
     let own: Saved | undefined
