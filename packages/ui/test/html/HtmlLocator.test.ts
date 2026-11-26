@@ -169,7 +169,7 @@ describe("HtmlLocator", () => {
         dialog({ popover: "manual" }, { popoverOpen: true }, "As popover"),
         dialog({ popover: "manual" }, { popoverOpen: false }, "Popover closed"),
         dialog({}, { open: false }, "Closed"),
-        dialog({}, { open: "modal" }, "Modal"),
+        dialog({}, { open: true }, "Open"),
         dialog(
           { popover: "manual", hidden: "" },
           { popoverOpen: true },
@@ -180,8 +180,8 @@ describe("HtmlLocator", () => {
         HtmlLocator.queryAllByRole(tree, role).map((node) =>
           HtmlLocator.nameOf(tree, node)
         )
-      expect(names("dialog")).toEqual(["As popover", "Modal"])
-      expect(names("button")).toEqual(["As popover", "Modal"])
+      expect(names("dialog")).toEqual(["As popover", "Open"])
+      expect(names("button")).toEqual(["As popover", "Open"])
       expect(HtmlLocator.queryAllByRole(tree, "dialog", { hidden: true }))
         .toHaveLength(5)
     })

@@ -111,6 +111,11 @@ type DocumentKeyDetails = Partial<
  * per user action the browser host turns into an event. Each one is an
  * interaction.
  *
+ * The steps a user performs throw on an inert element, one inside `inert`
+ * or outside the topmost modal, however it was found: `click`, `type`,
+ * `change`, `keydown` on an element, `submit`, `focus` and `drop`. `fire`,
+ * `blur` and `fireElement` send what the host delivers, so they reach it.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
@@ -121,11 +126,13 @@ export interface HtmlPlay<Model, Msg, Events>
   /**
    * Clicks the one element `target` matches, as a browser does: `pointerdown`
    * and `mousedown` run, the tree settles, then `mouseup`, `click` and the
-   * defaults run unless the press removed or disabled the element. Cancelling
+   * defaults run unless the press removed, disabled or made inert the element,
+   * as opening a modal does to what's behind it. Cancelling
    * `pointerdown` skips `mousedown` and `mouseup` (not `click`); cancelling
    * `mousedown` or `mouseup` skips nothing; only a cancelled `click` skips the
    * defaults. A string means `Locator.text(target)`. Throws on a disabled
-   * control, and when nothing handles any event of the click.
+   * control or an inert element, and when nothing handles any event of the
+   * click.
    */
   click(target: string | Locator.Locator): Effect.Effect<void, Play.StepError>
   /**
@@ -213,6 +220,28 @@ class HtmlPlayCursor extends internal.PlayCursor {
   protected override bubbles(event: string): boolean {
     return !ownEvents.has(event)
   }
+  private refuseInert(
+    step: string,
+    locator: Locator.Locator,
+    path: ReadonlyArray<TestHost.TestElement>
+  ): void {
+    if (defaults.isInert(path)) {
+      throw new Error(`${this.name(step)}: ${locator.description} is inert`)
+    }
+  }
+  /** `one` for a user's action, which can't reach an inert element. */
+  private operate<P>(
+    step: string,
+    locator: Locator.Locator,
+    event: string,
+    payload: (node: TestHost.TestElement) => P,
+    edit?: (node: TestHost.TestElement, payload: P) => void
+  ): Effect.Effect<void, Play.StepError> {
+    return this.one(step, locator, event, (node) => {
+      this.refuseInert(step, locator, internal.ancestors(node))
+      return payload(node)
+    }, edit)
+  }
   override click(
     target: string | Locator.Locator
   ): Effect.Effect<void, Play.StepError> {
@@ -238,9 +267,11 @@ class HtmlPlayCursor extends internal.PlayCursor {
         atSite(site, () => {
           this.checkReady(name)
           const node = this.findOne(locator, "click")
-          if (defaults.isClickDisabled(internal.ancestors(node))) {
+          const path = internal.ancestors(node)
+          if (defaults.isClickDisabled(path)) {
             throw new Error(`${name}: ${locator.description} is disabled`)
           }
+          this.refuseInert("click", locator, path)
           const skipMouse = send(node, "pointerdown")
           if (!skipMouse) send(node, "mousedown")
           return [node, skipMouse] as const
@@ -252,7 +283,10 @@ class HtmlPlayCursor extends internal.PlayCursor {
           const edited: Array<TestHost.TestElement> = []
           const container = this.root.container
           const path = internal.ancestors(node)
-          if (path.includes(container) && !defaults.isClickDisabled(path)) {
+          if (
+            path.includes(container) && !defaults.isClickDisabled(path) &&
+            !defaults.isInert(path)
+          ) {
             const plan = defaults.planClickDefaults(
               container,
               node,
@@ -296,7 +330,7 @@ class HtmlPlayCursor extends internal.PlayCursor {
     locator: Locator.Locator,
     value: string
   ): Effect.Effect<void, Play.StepError> {
-    return this.one(
+    return this.operate(
       "type",
       locator,
       "input",
@@ -310,7 +344,7 @@ class HtmlPlayCursor extends internal.PlayCursor {
     locator: Locator.Locator,
     value: string | Partial<Html.InputPayload>
   ): Effect.Effect<void, Play.StepError> {
-    return this.one(
+    return this.operate(
       "change",
       locator,
       "change",
@@ -346,7 +380,7 @@ class HtmlPlayCursor extends internal.PlayCursor {
         yield* this.settle
       })
     }
-    return this.one(
+    return this.operate(
       "keydown",
       target,
       "keydown",
@@ -355,9 +389,10 @@ class HtmlPlayCursor extends internal.PlayCursor {
   }
   submit(locator: Locator.Locator): Effect.Effect<void, Play.StepError> {
     return this.interact("submit", () => {
-      const node = this.findOne(locator, "submit")
+      const path = internal.ancestors(this.findOne(locator, "submit"))
+      this.refuseInert("submit", locator, path)
       const container = this.root.container
-      const form = defaults.formOf(internal.ancestors(node), container) as
+      const form = defaults.formOf(path, container) as
         | TestHost.TestElement
         | undefined
       if (form === undefined) {
@@ -374,7 +409,7 @@ class HtmlPlayCursor extends internal.PlayCursor {
     })
   }
   focus(locator: Locator.Locator): Effect.Effect<void, Play.StepError> {
-    return this.one("focus", locator, "focus", () => ({}))
+    return this.operate("focus", locator, "focus", () => ({}))
   }
   blur(locator: Locator.Locator): Effect.Effect<void, Play.StepError> {
     return this.one("blur", locator, "blur", () => ({}))
@@ -393,9 +428,9 @@ class HtmlPlayCursor extends internal.PlayCursor {
   ): Effect.Effect<void, Play.StepError> {
     const drop = defaults.drop(payload)
     return this.interact("drop", () => {
-      const target = internal.ancestors(this.findOne(locator, "drop")).find((
-        at
-      ) =>
+      const path = internal.ancestors(this.findOne(locator, "drop"))
+      this.refuseInert("drop", locator, path)
+      const target = path.find((at) =>
         Object.hasOwn(at.handlers, "drop") && drop.accepts(at.eventOptions.drop)
       )
       if (target === undefined) {

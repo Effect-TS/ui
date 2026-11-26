@@ -6,10 +6,14 @@
  * real DOM tree. `role`, `label` and `placeholder` return a `Locator`, so
  * they combine with `Locator.inside` on the first two. On the DOM, `click`,
  * `type`, `keydown` and `submit` act as the user would, through real DOM
- * events.
+ * events, and refuse an inert element.
  *
  * Hidden elements (`hidden`, `aria-hidden="true"`, `<input type="hidden">`)
- * and everything inside them are left out unless `hidden: true` is passed.
+ * and everything inside them are left out of role queries unless
+ * `hidden: true` is passed. So are inert elements: those inside `inert`,
+ * and, while a modal dialog is open, those outside the topmost one, taken to
+ * be the last open modal in document order. On the DOM a modal is a dialog
+ * matching `:modal`, which some test environments never match.
  *
  * On a structural tree a match is typed `Locator.Node`, since it can be any
  * node of the tree. On `TestHost`, `root.all(HtmlLocator.role(...))` keeps the
@@ -249,6 +253,27 @@ const notShown = <N>(reader: Reader<N>, node: N): boolean => {
     (popover && popoverOpen(reader, node)))
 }
 
+/** An attribute set, or a property set to `true`. */
+const flag = <N>(reader: Reader<N>, node: N, name: string): boolean => {
+  const prop = reader.prop(node, name)
+  return prop === true ||
+    (prop === undefined && reader.attr(node, name) !== undefined)
+}
+
+/** The last open modal dialog in document order under `root`, which a tree can't tell from the topmost. */
+const topModal = <N>(reader: Reader<N>, root: N): N | undefined => {
+  let modal: N | undefined
+  const walk = (node: N) => {
+    if (
+      reader.isElement(node) && reader.tag(node) === "dialog" &&
+      dialogState(node) === "modal"
+    ) modal = node
+    for (const child of reader.children(node)) walk(child)
+  }
+  walk(root)
+  return modal
+}
+
 const isHidden = <N>(reader: Reader<N>, node: N): boolean =>
   reader.attr(node, "hidden") !== undefined ||
   reader.attr(node, "aria-hidden") === "true" ||
@@ -309,9 +334,11 @@ const buildIndex = <N>(root: N): Index<N> => {
     labelsFor: new Map()
   }
   const entries = index.entries as Array<Entry<N>>
+  const modal = topModal(reader, root)
   const walk = (
     node: N,
     hidden: boolean,
+    inert: boolean,
     labels: ReadonlyArray<N>,
     inSection: boolean
   ) => {
@@ -319,12 +346,15 @@ const buildIndex = <N>(root: N): Index<N> => {
       // A document, a fragment or a structural wrapper isn't indexed, but what it holds is.
       if (reader.text(node) === undefined) {
         for (const child of reader.children(node)) {
-          walk(child, hidden, labels, inSection)
+          walk(child, hidden, inert, labels, inSection)
         }
       }
       return
     }
     const tag = reader.tag(node)
+    // The topmost modal escapes the inertness around it, not its own.
+    const inertHere = flag(reader, node, "inert") ||
+      (inert && node !== modal)
     const isHiddenHere = hidden || isHidden(reader, node)
     const explicit = reader.attr(node, "role")?.trim().split(/\s+/)[0]
     const entry: Entry<N> = {
@@ -332,7 +362,7 @@ const buildIndex = <N>(root: N): Index<N> => {
       role: explicit !== undefined && explicit !== ""
         ? explicit
         : implicitRole(reader, node, inSection),
-      hidden: isHiddenHere,
+      hidden: isHiddenHere || inertHere,
       labels,
       inSection
     }
@@ -351,10 +381,10 @@ const buildIndex = <N>(root: N): Index<N> => {
     const childLabels = tag === "label" ? [node, ...labels] : labels
     const childSection = inSection || sectioning.has(tag)
     for (const child of reader.children(node)) {
-      walk(child, isHiddenHere, childLabels, childSection)
+      walk(child, isHiddenHere, inertHere, childLabels, childSection)
     }
   }
-  walk(root, false, [], false)
+  walk(root, false, modal !== undefined, [], false)
   return index
 }
 
@@ -537,8 +567,9 @@ const levelOf = <N>(reader: Reader<N>, node: N): number | undefined => {
  *
  * `name` matches the accessible name exactly (after collapsing whitespace),
  * or tests it with a RegExp. `checked` matches a checkbox or radio button's
- * live state, and `level` a heading's. `hidden: true` includes hidden
- * elements.
+ * live state, and `level` a heading's. `hidden: true` includes hidden and
+ * inert elements, to inspect them: the steps that act as a user refuse inert
+ * ones.
  *
  * @stability experimental
  * @category models
@@ -922,27 +953,50 @@ export const checked = (node: unknown): boolean | undefined =>
 export const popoverState = (node: unknown): "closed" | "open" =>
   popoverOpen(readerOf(node), node) ? "open" : "closed"
 
+/** Whether the user can't reach `element`: it's inside `inert`, or outside the topmost modal. */
+const isInert = (element: globalThis.Element): boolean => {
+  const modal = topModal(domReader, element.ownerDocument)
+  for (
+    let at: globalThis.Node | null = element;
+    at !== null;
+    at = at.parentNode
+  ) {
+    if (flag(domReader, at, "inert")) return true
+    if (at === modal) return false
+  }
+  return modal !== undefined
+}
+
+const refuseInert = (step: string, element: globalThis.Element): void => {
+  if (isInert(element)) {
+    throw new Error(`HtmlLocator.${step}: the element is inert`)
+  }
+}
+
 /**
  * Clicks `element` as the user would: a button submits its form, and a
  * checkbox or radio button changes and fires `input` and `change`.
+ * Throws on an inert element.
  *
  * @stability experimental
  * @category actions
  * @since 0.1.0
  */
 export const click = (element: globalThis.Element): void => {
+  refuseInert("click", element)
   ;(element as HTMLElement).click()
 }
 
 /**
  * Types into a text field as the user would: replaces its value with `value`
- * and fires `input`, then `change`.
+ * and fires `input`, then `change`. Throws on an inert element.
  *
  * @stability experimental
  * @category actions
  * @since 0.1.0
  */
 export const type = (element: globalThis.Element, value: string): void => {
+  refuseInert("type", element)
   const field = element as HTMLInputElement
   const view = field.ownerDocument.defaultView
   field.value = value
@@ -959,7 +1013,8 @@ export const type = (element: globalThis.Element, value: string): void => {
 }
 
 /**
- * Presses `key` on `element`: fires `keydown`, then `keyup`.
+ * Presses `key` on `element`: fires `keydown`, then `keyup`. Throws on an
+ * inert element.
  *
  * @stability experimental
  * @category actions
@@ -975,6 +1030,7 @@ export const keydown = (
     readonly meta?: boolean | undefined
   }
 ): void => {
+  refuseInert("keydown", element)
   const view = element.ownerDocument.defaultView
   const Keyboard = view?.KeyboardEvent ?? KeyboardEvent
   const init = {
@@ -992,13 +1048,14 @@ export const keydown = (
 
 /**
  * Submits `form`, or the form `element` belongs to, as pressing Enter in it
- * would.
+ * would. Throws on an inert element.
  *
  * @stability experimental
  * @category actions
  * @since 0.1.0
  */
 export const submit = (element: globalThis.Element): void => {
+  refuseInert("submit", element)
   const form = element.localName === "form"
     ? element as HTMLFormElement
     : (element as HTMLInputElement).form ?? element.closest("form")

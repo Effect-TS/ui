@@ -425,7 +425,8 @@ describe("DevTools overlay", { concurrent: false }, () => {
       )
       assert.lengthOf(
         HtmlLocator.queryAllByRole(copy() as HTMLElement, "button", {
-          name: "Close n2"
+          name: "Close n2",
+          hidden: true
         }),
         1
       )

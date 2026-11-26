@@ -261,6 +261,30 @@ export const isClickDisabled = (
     at.tag !== "fieldset" && isDisabled(at, path.slice(index))
   )
 
+/**
+ * Whether `path`, an element and its ancestors innermost first, is out of
+ * the user's reach: inside `inert`, or outside the topmost modal, taken to
+ * be the last open one in document order. That modal escapes the inertness
+ * around it, not its own.
+ *
+ * @internal
+ */
+export const isInert = (path: ReadonlyArray<Locator.Node>): boolean => {
+  let modal: Locator.Node | undefined
+  const walk = (node: Locator.Node) => {
+    if (node.tag === "dialog" && HtmlLocator.dialogState(node) === "modal") {
+      modal = node
+    }
+    for (const child of node.children ?? []) walk(child)
+  }
+  if (path.length > 0) walk(path[path.length - 1]!)
+  for (const at of path) {
+    if (flag(at, "inert")) return true
+    if (at === modal) return false
+  }
+  return modal !== undefined
+}
+
 /** @internal */
 export const planClickDefaults = (
   root: Locator.Node,
