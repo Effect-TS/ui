@@ -11,22 +11,24 @@ The packages are experimental and not yet on npm: install them from [snapshots](
 
 ## Quick start
 
+`src/Counter.ts`:
+
 ```ts
 import { UiSchema } from "@effect/ui"
-import { BrowserHost, Html } from "@effect/ui/html"
-import { Effect, Layer, Schema } from "effect"
+import { Html } from "@effect/ui/html"
+import { Schema } from "effect"
 
 const CounterModel = Schema.Struct({
   count: Schema.Number
 })
 
-const CounterMessage = UiSchema.TaggedEnum({
+export const CounterMessage = UiSchema.TaggedEnum({
   ClickedDecrement: {},
   ClickedIncrement: {},
   ClickedReset: {}
 })
 
-const Counter = Html.component({
+export const Counter = Html.component({
   name: "Counter",
   model: CounterModel,
   message: CounterMessage
@@ -45,11 +47,21 @@ const Counter = Html.component({
       h.button.on("click", CounterMessage.ClickedIncrement()).children("+")
     )
 })
+```
 
-const Main = BrowserHost.mount(Counter, {}, document.getElementById("root")!)
+`src/main.ts`:
+
+```ts
+import { BrowserHost } from "@effect/ui/html"
+import { Effect, Layer } from "effect"
+import { Counter } from "./Counter.ts"
+
+const Main = BrowserHost.mount(Counter, {}, document.getElementById("app")!)
 
 Layer.launch(Main).pipe(Effect.runFork)
 ```
+
+To run it, see [Start a new app](#start-a-new-app).
 
 ## Packages
 
@@ -101,6 +113,25 @@ pnpm add effect @opentui/core@^0.9.9 \
 pnpm reports unmet `@effect/*` peers for these packages, because a URL doesn't satisfy their `^0.0.0` range. They still use the snapshots you installed, so you can ignore the warning.
 
 `@effect/ui-devtools/node` also requires `@effect/platform-node`, and `@effect/ui-opentui` has its own [runtime requirements](packages/ui-opentui/README.md#requirements).
+
+### Start a new app
+
+Vite's `vanilla-ts` template is enough to run the quick start:
+
+```sh
+pnpm create vite my-app --template vanilla-ts --no-interactive
+cd my-app
+pnpm add effect @effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@main
+pnpm add -D vitest @effect/vitest happy-dom
+```
+
+1. Add `strict` and `exactOptionalPropertyTypes` to `tsconfig.json`, as in [Requirements](#requirements).
+2. Delete `src/counter.ts`, then add the quick start's `src/Counter.ts` and overwrite `src/main.ts` with the quick start's.
+3. Run `pnpm dev` to open the app, and `pnpm build` to type check and build it.
+
+Tests need no Vitest config: `pnpm vitest` runs Stories, Scenes and Plays in Node. Both Play and `ssr` tests need `TestHost.layer()`, and a file that calls `ssr` also needs a `// @vitest-environment happy-dom` comment at its top. [`Counter.story.test.ts`](examples/counter/src/Counter.story.test.ts) is a Story test of this counter, and [`50_testing.ts`](ai-docs/src/10_ui/50_testing.ts) shows each kind of test.
+
+`@effect/ui` ships `LLMS.md` as `node_modules/@effect/ui/AGENTS.md`, matching the version you installed. Point your own `AGENTS.md` or `CLAUDE.md` at it so a coding agent reads it.
 
 ## Examples
 
