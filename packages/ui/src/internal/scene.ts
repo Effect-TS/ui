@@ -92,22 +92,17 @@ export const matchers = {
     name: string,
     expected?: string | RegExp | false
   ): Matcher =>
-    single((node) => {
-      const attrs = node.attrs
+    single(({ attrs }) => {
       const value = attrs !== undefined && Object.hasOwn(attrs, name)
         ? attrs[name]
         : undefined
-      if (expected === false) {
-        return value === undefined
-          ? undefined
-          : `its ${JSON.stringify(name)} attribute is ${JSON.stringify(value)}`
-      }
-      if (value === undefined) {
-        return `it has no ${JSON.stringify(name)} attribute`
-      }
-      if (expected === undefined) return undefined
-      return matches(value, expected)
-        ? undefined
+      const pass = expected === false
+        ? value === undefined
+        : value !== undefined &&
+          (expected === undefined || matches(value, expected))
+      if (pass) return undefined
+      return value === undefined
+        ? `it has no ${JSON.stringify(name)} attribute`
         : `its ${JSON.stringify(name)} attribute is ${JSON.stringify(value)}`
     })
 }
