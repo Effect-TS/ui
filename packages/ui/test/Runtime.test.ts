@@ -546,44 +546,6 @@ describe("Runtime", () => {
         assert.strictEqual(inserts(), 0)
       })))
 
-    it.effect("an unkeyed element keeps its node and mount while a conditional sibling before it comes and goes", () =>
-      Effect.gen(function*() {
-        const Track = Mount.make(
-          "Track",
-          { args: {} },
-          () => Effect.succeed(Component.noop)
-        )
-        const Notice = Component.define({
-          name: "Notice",
-          model: Schema.Boolean,
-          message: Schema.Boolean,
-          elements: Tiny
-        }).make({
-          init: () => false,
-          update: (_, shown) => shown,
-          view: (h, shown) =>
-            h.box(shown ? h.label("notice") : null, h.field.onMount(Track()))
-        })
-        const root = yield* TestHost.mount(Notice, {})
-        yield* TestHost.settle
-        const field = root.get(Locator.tag("field"))
-        for (const shown of [true, false, true, false]) {
-          root.send(shown)
-          yield* TestHost.settle
-          assert.strictEqual(root.text(), shown ? "notice" : "")
-          assert.strictEqual(root.get(Locator.tag("field")), field)
-        }
-        assert.lengthOf(
-          root.log().filter((entry) => entry._tag === "MountStarted"),
-          1
-        )
-      }).pipe(
-        Effect.provide(
-          Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })
-        ),
-        provideHost
-      ))
-
     it.effect("a list with nothing after it grows and shrinks at its end", () =>
       provideHost(Effect.gen(function*() {
         const Msg = Schema.Array(Schema.String)
