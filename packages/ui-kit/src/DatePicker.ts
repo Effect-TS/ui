@@ -175,6 +175,8 @@ import {
 import {
   CalendarDate,
   CalendarGridPropsFields,
+  isOutOfRange,
+  normalizeOptional,
   sameMonth,
   startOfMonth
 } from "./internal/calendar.ts"
@@ -192,7 +194,8 @@ import * as Positioning from "./Positioning.ts"
  * - `value`: the date, any `DateTime`, or `null` for none.
  * - `open`: whether the popup shows. Required: the consumer owns it.
  * - `month`, `today`, `min`, `max`, `firstDayOfWeek`: as `Calendar` takes
- *   them.
+ *   them. A typed date outside `min` or `max` asks for nothing, and the
+ *   input shows `value` again.
  * - `locale`: the locale of both the input and the calendar.
  * - `name`, `form`, `required`: as `DateField` takes them.
  * - `disabled`: disables the input, the trigger and the calendar, and
@@ -260,8 +263,9 @@ export type DatePickerChangeReason = typeof DatePickerChangeReason.Type
  *
  * **Details**
  *
- * - `Picked`: asks for `value` to be `date`, from a typed date the user
- *   committed or a day they pressed. `null` when the input was cleared.
+ * - `Picked`: asks for `value` to be `date`, from a typed date within
+ *   `min` and `max` the user committed or a day they pressed. `null` when
+ *   the input was cleared.
  * - `RequestedOpen` and `RequestedClose`: ask for `open` to change, with
  *   the reason. A day press emits `Picked`, then `RequestedClose`.
  * - `RequestedMonth`: asks for the calendar to show `month`, the first of
@@ -438,7 +442,15 @@ export const DatePicker = Html.component({
 }).make({
   init: () => ({ placement: null }),
   update: {
-    CommittedDateField: ($, { date }) => pick($, date),
+    CommittedDateField: ($, { date }) =>
+      date !== null &&
+        isOutOfRange(
+          date,
+          normalizeOptional($.props.min),
+          normalizeOptional($.props.max)
+        )
+        ? $.model
+        : pick($, date),
     PickedCalendar: ($, { date }) =>
       pick($, date).emit(
         DatePickerEvents.RequestedClose({ reason: "day-press" })
