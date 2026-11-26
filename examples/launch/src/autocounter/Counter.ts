@@ -44,8 +44,9 @@ export const Counter = Html.component({
     // The Message's payload is the handler's second argument.
     ClickedAdd: ($, { amount }) =>
       $.evolve({ count: (count) => count + amount }),
-    // $.run keeps the Model as it is and runs the Command. In
-    // Foldkit 0.x, update returned { model, commands } instead.
+    // Runs the Command without changing the Model. To do both,
+    // chain them: $.evolve({ ... }).run(...). In Foldkit 0.x,
+    // update returned { model, commands } instead.
     ClickedResetAfterDelay: ($) => $.run(DelayReset.make({})),
     CompletedDelayReset: ($) => $.evolve({ count: 0 }),
     ClickedToggleAutoCount: ($) =>
@@ -73,12 +74,14 @@ export const Counter = Html.component({
       h.output.class("counter-value").children(String(model.count)),
       // Button is a view function from the UI kit, not a Component.
       // It returns a <button> builder, and a press sends onPress.
+      Button(h, {
+        onPress: CounterMessage.ClickedAdd({ amount: -1 })
+      })
+        .class("counter-button counter-add")
+        .children("−1"),
       Button(h, { onPress: CounterMessage.ClickedAdd({ amount: 1 }) })
         .class("counter-button counter-add")
         .children("+1"),
-      Button(h, { onPress: CounterMessage.ClickedAdd({ amount: 5 }) })
-        .class("counter-button counter-add")
-        .children("+5"),
       Button(h, {
         props: {
           // h.isRunning is true while a DelayReset Command is

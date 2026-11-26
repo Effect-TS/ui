@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { bodies, none } from "./Fold.ts"
+import { before, bodies, none } from "./Fold.ts"
 
 const source = `const Def = Html.component({
   name: "Counter"
@@ -84,5 +84,29 @@ describe("bodies", () => {
 describe("none", () => {
   it("folds nothing", () => {
     expect(none(source)).toEqual([])
+  })
+})
+
+describe("before", () => {
+  it("folds every line before the matching prefix", () => {
+    const snippet =
+      `import { it } from "@effect/vitest"\n\nconst x = 1\n\nit.effect("runs", () => {})`
+    expect(before("it.effect(", "Imports and setup")(snippet))
+      .toEqual([
+        { label: "Imports and setup", start: 0, end: 4 }
+      ])
+  })
+
+  it("returns no folds when the prefix is on the first line", () => {
+    expect(
+      before("it.effect(", "Setup")(`it.effect("runs", () => {})`)
+    )
+      .toEqual([])
+  })
+
+  it("rejects a prefix that does not appear", () => {
+    expect(() => before("it.effect(", "Setup")(source)).toThrow(
+      "No line starting with \"it.effect(\""
+    )
   })
 })

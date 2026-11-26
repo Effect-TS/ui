@@ -1,8 +1,9 @@
 import type { Snippet } from "#domain/Snippet"
+import { Html } from "@effect/ui/html"
 import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { Comparison } from "./Comparison.ts"
 import { TestLayer } from "./testing.ts"
 
@@ -28,6 +29,21 @@ const sides = [
   }
 ]
 
+// A parent for the Comparison, which fills its example slot.
+const Parent = Html.component({
+  name: "Parent",
+  model: Schema.Null,
+  message: Schema.Never
+}).make({
+  init: () => null,
+  update: ($) => $.model,
+  view: (h) =>
+    Comparison(h, {
+      props: { sides },
+      slots: { example: h.p.children("The running app") }
+    })
+})
+
 const tab = (name: string) => HtmlLocator.role("tab", { name })
 const show = HtmlLocator.role("button", { name: "Show code" })
 const hide = HtmlLocator.role("button", { name: "Hide code" })
@@ -35,7 +51,8 @@ const hide = HtmlLocator.role("button", { name: "Hide code" })
 it.layer(TestLayer, { buildPerTest: true })("Comparison", (it) => {
   it.effect("shows the last side first, and the other on its tab", () =>
     Effect.gen(function*() {
-      const play = yield* HtmlPlay.make(Comparison, { sides })
+      const play = yield* HtmlPlay.make(Parent, {})
+      yield* play.expect(Locator.text("The running app")).toExist()
       yield* play.expect(Locator.text("The new way")).toExist()
       yield* play.expect(Locator.text("After.ts")).toExist()
       yield* play.expect(Locator.text("Before.ts")).toBeAbsent()
@@ -48,7 +65,7 @@ it.layer(TestLayer, { buildPerTest: true })("Comparison", (it) => {
 
   it.effect("keeps a file open when the other side shows", () =>
     Effect.gen(function*() {
-      const play = yield* HtmlPlay.make(Comparison, { sides })
+      const play = yield* HtmlPlay.make(Parent, {})
       yield* play.click(show)
       yield* play.expect(hide).toExist()
       yield* play.click(tab("Before"))

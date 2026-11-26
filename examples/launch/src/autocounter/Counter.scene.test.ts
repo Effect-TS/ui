@@ -11,7 +11,6 @@ const reset = HtmlLocator.role("button", {
 describe("Counter", () => {
   it.effect("resets after the delay", () =>
     Effect.gen(function*() {
-      // reset and count are role locators declared above the test.
       const scene = yield* HtmlScene.make(Counter, {})
       scene.given({ count: 5, isAutoCounting: false })
         .click(reset)

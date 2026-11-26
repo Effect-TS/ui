@@ -24,11 +24,13 @@ export const Islands = {
   // A still picture of one app in each architecture.
   Architecture: Schema.Struct({}),
   Diagram: Schema.Struct({ scenario: ScenarioName }),
+  // `example` names an app to run above the code.
   Compare: Schema.Struct({
     foldkit: Code,
     foldkitTitle: Schema.String,
     effect: Code,
-    effectTitle: Schema.String
+    effectTitle: Schema.String,
+    example: Schema.optional(Schema.Literal("counter"))
   }),
   Counter: Schema.Struct({ code: Code, label: Schema.String }),
   // `whole` shows a long file in full, for one whose point is below
@@ -37,7 +39,11 @@ export const Islands = {
     code: Code,
     whole: Schema.optional(Schema.Literal("true"))
   }),
+  // The components of the UI kit.
+  Kit: Schema.Struct({}),
   PlayTest: Schema.Struct({}),
+  // Text that an arrow to the DevTools button goes with.
+  LauncherPointer: Schema.Struct({}),
   PerformanceChart: Schema.Struct({}),
   AllResults: Schema.Struct({}),
   Footer: Schema.Struct({})

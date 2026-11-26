@@ -103,7 +103,7 @@ export const Nav = Html.component({
                 h.nav.class(
                   "sticky top-0 z-10 leading-[1.4]",
                   "rail:max-h-screen rail:w-(--nav-rail) rail:self-start",
-                  "rail:justify-self-end rail:overflow-y-auto",
+                  "rail:overflow-y-auto",
                   "rail:pt-12 rail:pb-6 rail:pl-5"
                 ).attr("aria-label", "On this page")
               )

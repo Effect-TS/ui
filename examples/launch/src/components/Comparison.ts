@@ -24,12 +24,16 @@ export type Side = typeof Side.Type
  * The same code written two ways, one side at a time, with a tab for
  * each side. The files are in a CodeGroup, so a file that is open
  * stays open when the other side shows.
+ *
+ * The `example` slot is for the app the code builds, running. It goes
+ * above the tabs, because it's the same app on both sides.
  */
 export const Comparison = Html.component({
   name: "Comparison",
   props: Schema.Struct({ sides: Schema.Array(Side) }),
   model: Schema.Struct({ selected: Schema.String }),
-  message: ComparisonMessage
+  message: ComparisonMessage,
+  slots: ["example"]
 }).make({
   // The last side is the new way, which shows first.
   init: ($) => $.set({ selected: $.props.sides.at(-1)?.label ?? "" }),
@@ -68,6 +72,7 @@ export const Comparison = Html.component({
                 "[&_.code-window]:[box-shadow:none]"
               )
             ).children(
+              h.slots.example,
               h.div.class(TabStrip.strip).children(
                 tabs.list(
                   h.div.class(TabStrip.list).attr(
@@ -88,7 +93,9 @@ export const Comparison = Html.component({
               ),
               sides.map((side) =>
                 tabs.panel({
-                  element: h.div.key(side.label),
+                  element: h.div.key(side.label).class(
+                    "data-[ending-style]:hidden"
+                  ),
                   value: side.label
                 })?.children(
                   h.p.class("px-4 py-3 text-sm text-muted-foreground")

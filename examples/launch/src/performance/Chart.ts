@@ -42,6 +42,16 @@ const label = `${cell} text-start`
 const amount = `${cell} ps-3 text-end whitespace-nowrap`
 const header = "border-b border-border-strong text-muted-foreground"
 
+// The Effect UI column: tinted from the header to the last row, with
+// room between the figures and the edge of the tint.
+const ours = [
+  "pe-3 font-semibold",
+  "bg-[color-mix(in_oklab,var(--color-accent)_10%,transparent)]"
+].join(" ")
+
+// The column before it keeps its figures off the tint.
+const beforeOurs = columns[columns.indexOf("effect-ui") - 1]
+
 const Label = <M>(h: Html.H<M>, row: Row) =>
   h.th.class(label).attr("scope", "row").children(
     row.label,
@@ -57,6 +67,7 @@ export const PerformanceChart = <M>(h: Html.H<M>) =>
   h.figure.class("mx-auto max-w-(--column) [p+&]:mt-[1.1em]")
     .children(
       h.ol.class(
+        "chart-bars",
         "grid grid-cols-[max-content_minmax(0,1fr)_max-content]",
         "gap-x-3.5 gap-y-2.5 text-sm tabular-nums"
       ).attr("role", "list").children(
@@ -88,7 +99,7 @@ export const PerformanceChart = <M>(h: Html.H<M>) =>
         })
       ),
       h.figcaption.class(caption).children(
-        "Time spent running JavaScript across the nine operations, as a multiple of vanilla JS (geometric mean). Shorter is faster. Read the ",
+        "Geometric mean of JavaScript time across the nine operations, as a multiple of vanilla JavaScript. Shorter is faster. Read the ",
         h.a.class("underline").attr("href", links.methodology)
           .children("methodology"),
         " or the ",
@@ -128,9 +139,12 @@ const Full = <M>(
             "Workload"
           ),
           columns.map((framework) =>
-            h.th.class(amount, header).attr("scope", "col").children(
-              names[framework]
-            )
+            h.th.class(
+              amount,
+              header,
+              framework === "effect-ui" && `${ours} text-foreground`,
+              framework === beforeOurs && "pe-3"
+            ).attr("scope", "col").children(names[framework])
           )
         )
       ),
@@ -143,7 +157,8 @@ const Full = <M>(
             columns.map((framework) =>
               h.td.class(
                 amount,
-                framework === "effect-ui" && "font-semibold"
+                framework === "effect-ui" && ours,
+                framework === beforeOurs && "pe-3"
               )
                 .children(Amount(h, row, framework))
             )
@@ -190,7 +205,7 @@ export const AllResults = Html.component({
             )
           )
             .children(
-              "Results for all seven frameworks, where lower is better",
+              "Results for all seven entries, where lower is better",
               h.span.class(
                 "ml-2 flex size-6 shrink-0 items-center justify-center",
                 "bg-muted text-muted-foreground",

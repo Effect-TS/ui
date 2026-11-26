@@ -2,9 +2,9 @@ import { srOnly, wide } from "#components/Classes"
 import { Icon } from "#components/Icon"
 import { Scrubber } from "#components/Scrubber"
 import * as TabStrip from "#components/TabStrip"
-import { Snippet } from "#domain/Snippet"
+import { type Fold, Snippet } from "#domain/Snippet"
 import { Command, Subscription, UiSchema } from "@effect/ui"
-import { Button, Tabs } from "@effect/ui-kit"
+import { Button, Collapsible, Tabs } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Effect, Schema, Stream } from "effect"
 import { ScenarioId, scenarios } from "./scenarios.ts"
@@ -17,6 +17,7 @@ export const PlayTestMessage = UiSchema.TaggedEnum({
   Scrubbed: { value: Schema.Number },
   ClickedPlay: {},
   ClickedPause: {},
+  ClickedFold: { index: Schema.Number },
   Ticked: {}
 })
 type PlayTestMessage = typeof PlayTestMessage.Type
@@ -33,15 +34,15 @@ export const RunPlayTest = Command.make(
     )
 )
 
-const before = "Drag the slider to run the test one line at a time."
-
 const PlayTestModel = Schema.Struct({
   selected: ScenarioId,
   frames: Schema.Array(Frame),
+  cache: Schema.Record(Schema.String, Schema.Array(Frame)),
   /** The line last run, or null before the first. */
   position: Schema.NullOr(Schema.Number),
   isPlaying: Schema.Boolean,
-  runs: Schema.Number
+  runs: Schema.Number,
+  expandedFolds: Schema.Array(Schema.Number)
 })
 type PlayTestModel = typeof PlayTestModel.Type
 
@@ -53,12 +54,16 @@ const mono =
 // What else the test can read after the line it just ran, such as the
 // TestClock. Before the first line, these are the values it starts
 // with.
-const Facts = (h: Html.H<PlayTestMessage>, model: PlayTestModel) =>
+const Facts = (
+  h: Html.H<PlayTestMessage>,
+  frames: ReadonlyArray<Frame>,
+  position: number | null
+) =>
   h.dl.class(
     "grid min-h-[3.75rem] grid-cols-3 gap-3 border-b border-border",
     "bg-card px-3.5 py-3"
   ).children(
-    (model.frames[model.position ?? 0]?.facts ?? []).map((fact) =>
+    (frames[position ?? 0]?.facts ?? []).map((fact) =>
       h.div.key(fact.part).class("flex min-w-0 flex-col gap-0.5")
         .children(
           h.dt.class(
@@ -86,12 +91,64 @@ const Bar = (h: Html.H<PlayTestMessage>, name: string, tag: string) =>
     )
   )
 
+const foldLineCount = (
+  lines: Snippet["lines"],
+  { end, start }: Fold
+) => {
+  let trimmed = end
+  while (
+    trimmed > start &&
+    lines[trimmed - 1]!.every((token) => token.text.trim() === "")
+  ) {
+    trimmed--
+  }
+  const n = trimmed - start
+  return n === 1 ? "1 line" : `${n} lines`
+}
+
+const Line = (
+  h: Html.H<PlayTestMessage>,
+  tokens: Snippet["lines"][number],
+  index: number,
+  shown: number | undefined
+) =>
+  h.span.key(String(index)).class(
+    "block border-l-2 border-transparent ps-3 pe-3.5",
+    "data-[current]:border-accent data-[current]:bg-wash",
+    "motion-safe:transition-[background-color,border-color]",
+    "motion-safe:duration-200"
+  ).attr("data-current", index === shown ? "" : undefined)
+    .children(
+      tokens.map((token) =>
+        h.span.style({ color: token.color }).children(token.text)
+      ),
+      "\n"
+    )
+
+const Run = (
+  h: Html.H<PlayTestMessage>,
+  key: string,
+  lines: Snippet["lines"],
+  start: number,
+  end: number,
+  shown: number | undefined
+) =>
+  end > start &&
+  h.pre.key(key).class("wrap-anywhere whitespace-pre-wrap").children(
+    h.code.children(
+      lines.slice(start, end).map((tokens, offset) =>
+        Line(h, tokens, start + offset, shown)
+      )
+    )
+  )
+
 const Lines = (
   h: Html.H<PlayTestMessage>,
   snippet: Snippet,
   sources: ReadonlyArray<string>,
-  position: number | null
+  model: PlayTestModel
 ) => {
+  const { expandedFolds, position } = model
   const current = position === null ? undefined : sources[position]
   // A test can run the same line twice, so the line on show is found
   // by how many times it has come up.
@@ -108,27 +165,82 @@ const Lines = (
     texts.flatMap((text, index) =>
       text === current ? [index] : []
     )[earlier]
-  return h.pre.class(
-    "py-3 text-code wrap-anywhere whitespace-pre-wrap",
-    "[font-variant-ligatures:none]"
-  ).children(
-    h.code.children(
-      snippet.lines.map((tokens, index) =>
-        h.span.key(String(index)).class(
-          "block border-l-2 border-transparent ps-3 pe-3.5",
-          "data-[current]:border-accent data-[current]:bg-wash",
-          "motion-safe:transition-[background-color,border-color]",
-          "motion-safe:duration-200"
-        ).attr("data-current", index === shown ? "" : undefined)
-          .children(
-            tokens.map((token) =>
-              h.span.style({ color: token.color }).children(
-                token.text
-              )
-            ),
-            "\n"
-          )
+  if (snippet.folds.length === 0) {
+    return h.pre.class(
+      "py-3 text-code wrap-anywhere whitespace-pre-wrap",
+      "[font-variant-ligatures:none]"
+    ).children(
+      h.code.children(
+        snippet.lines.map((tokens, index) =>
+          Line(h, tokens, index, shown)
+        )
       )
+    )
+  }
+  return h.div.class(
+    "py-3 font-mono text-code [font-variant-ligatures:none]"
+  ).children(
+    snippet.folds.flatMap((fold, index) => {
+      const linesLabel = foldLineCount(snippet.lines, fold)
+      return [
+        Run(
+          h,
+          `run-${index}`,
+          snippet.lines,
+          snippet.folds[index - 1]?.end ?? 0,
+          fold.start,
+          shown
+        ),
+        Collapsible(h, {
+          key: `${snippet.id}-fold-${index}`,
+          props: { open: expandedFolds.includes(index) },
+          onEmit: {
+            Toggled: () => PlayTestMessage.ClickedFold({ index }),
+            Settled: () => undefined
+          },
+          view: (collapsible) =>
+            collapsible.root(h.div).children(
+              collapsible.trigger(
+                h.button.attr(
+                  "aria-label",
+                  `${fold.label}, ${linesLabel}`
+                ).class(
+                  "mb-2 flex w-full cursor-pointer items-center gap-1.5",
+                  "px-3.5 py-0.5 text-start text-muted-foreground",
+                  "select-none hover:bg-muted hover:text-foreground",
+                  "aria-[expanded=false]:bg-muted",
+                  "aria-[expanded=false]:hover:bg-border",
+                  "focus-visible:-outline-offset-2",
+                  "before:size-3.5 before:flex-none before:bg-current",
+                  "before:content-['']",
+                  "before:[mask:var(--icon-chevron)_center/contain_no-repeat]",
+                  "before:transform-[rotate(-90deg)]",
+                  "aria-expanded:before:transform-none",
+                  "motion-safe:before:transition-[transform]",
+                  "motion-safe:before:duration-150"
+                )
+              ).children(`${fold.label}, ${linesLabel}`),
+              collapsible.panel(h.div)?.children(
+                Run(
+                  h,
+                  "body",
+                  snippet.lines,
+                  fold.start,
+                  fold.end,
+                  shown
+                )
+              )
+            )
+        })
+      ]
+    }),
+    Run(
+      h,
+      "rest",
+      snippet.lines,
+      snippet.folds.at(-1)?.end ?? 0,
+      snippet.lines.length,
+      shown
     )
   )
 }
@@ -138,21 +250,25 @@ const cell = "col-start-1 row-start-1"
 // The app as the test host holds it after the line that just ran.
 // Every frame is drawn in one cell, so the tallest sets the height and
 // nothing moves from one line to the next.
-const Stage = (h: Html.H<PlayTestMessage>, model: PlayTestModel) =>
+const Stage = (
+  h: Html.H<PlayTestMessage>,
+  frames: ReadonlyArray<Frame>,
+  position: number | null
+) =>
   h.div.class("grid px-3.5 py-4").attr("aria-hidden", "true")
     .children(
       h.p.key("empty").class(
         cell,
         "text-[0.8125rem]/[1.5] text-muted-foreground",
-        model.position !== null && "invisible"
+        position !== null && "invisible"
       ).children("Nothing is mounted yet."),
-      model.frames.map((frame, index) =>
+      frames.map((frame, index) =>
         h.div.key(String(index)).class(
           cell,
-          index !== model.position && "invisible"
+          index !== position && "invisible"
         ).attr(
           "data-part",
-          index === model.position ? "stage" : undefined
+          index === position ? "stage" : undefined
         )
           .children(Wireframe(h, frame.nodes))
       )
@@ -174,7 +290,10 @@ const Controls = (
     // the page's bar while the figure scrolls by.
     "@max-[939px]/playtest:sticky @max-[939px]/playtest:top-(--nav-bar)",
     "@max-[939px]/playtest:z-1 @max-[939px]/playtest:order-1",
-    "@max-[939px]/playtest:border-t-0 @max-[939px]/playtest:border-b"
+    "@max-[939px]/playtest:border-t-0 @max-[939px]/playtest:border-b",
+    // There it's right under the tabs, so it has the active tab's
+    // background and the two read as one sheet.
+    "@max-[939px]/playtest:bg-card"
   ).children(
     Button(h, {
       onPress: model.isPlaying
@@ -212,29 +331,6 @@ const Controls = (
   )
 }
 
-// What the line that just ran did. Every note is in one cell, so the
-// tallest sets the height and nothing moves from one line to the next.
-const Note = (
-  h: Html.H<PlayTestMessage>,
-  model: PlayTestModel,
-  notes: ReadonlyArray<string>
-) => {
-  const shown = model.position === null ? 0 : model.position + 1
-  return h.p.class(
-    "grid border-t border-border bg-card px-3.5 py-2.5 text-sm",
-    "text-muted-foreground",
-    "@max-[939px]/playtest:order-2 @max-[939px]/playtest:border-t-0",
-    "@max-[939px]/playtest:border-b"
-  ).attr("aria-hidden", "true").children(
-    [before, ...notes].map((text, index) =>
-      h.span.key(String(index)).class(
-        "col-start-1 row-start-1 text-pretty",
-        index !== shown && "invisible"
-      ).children(text)
-    )
-  )
-}
-
 export const PlayTest = Html.component({
   name: "PlayTest",
   props: Schema.Struct({
@@ -250,22 +346,38 @@ export const PlayTest = Html.component({
     return $.set({
       selected,
       frames: [],
+      cache: {},
       position: null,
       isPlaying: false,
-      runs: 0
-    }).run(RunPlayTest.make({ scenario: selected }))
+      runs: 0,
+      expandedFolds: []
+    }).run(
+      ...$.props.tests.map(({ id }) =>
+        RunPlayTest.make({ scenario: id })
+      )
+    )
   },
   update: {
-    SelectedScenario: ($, { id }) =>
-      $.evolve({
+    SelectedScenario: ($, { id }) => {
+      const cached = $.model.cache[id]
+      const next = $.evolve({
         selected: id,
-        frames: [],
+        frames: cached ?? [],
         position: null,
-        isPlaying: false
-      }).run(RunPlayTest.make({ scenario: id })),
-    // A run of a test that is no longer the one on show is dropped.
+        isPlaying: false,
+        expandedFolds: []
+      })
+      return cached === undefined
+        ? next.run(RunPlayTest.make({ scenario: id }))
+        : next
+    },
     CompletedRun: ($, { frames, scenario }) =>
-      scenario === $.model.selected ? $.evolve({ frames }) : $.model,
+      $.evolve({
+        cache: { ...$.model.cache, [scenario]: frames },
+        frames: scenario === $.model.selected
+          ? frames
+          : $.model.frames
+      }),
     Scrubbed: ($, { value }) => {
       const line = Math.min(value, $.model.frames.length)
       return $.evolve({
@@ -283,6 +395,13 @@ export const PlayTest = Html.component({
         runs: $.model.runs + 1
       }),
     ClickedPause: ($) => $.evolve({ isPlaying: false }),
+    ClickedFold: ($, { index }) =>
+      $.evolve({
+        expandedFolds: (expanded) =>
+          expanded.includes(index)
+            ? expanded.filter((other) => other !== index)
+            : [...expanded, index]
+      }),
     Ticked: ($) => {
       const position = Math.min(
         ($.model.position ?? -1) + 1,
@@ -351,15 +470,22 @@ export const PlayTest = Html.component({
                 )
               )
             ),
-            tests.map(({ id, snippet }) =>
-              tabs.panel({
+            tests.map(({ id, snippet }) => {
+              const frames = id === model.selected
+                ? model.frames
+                : (model.cache[id] ?? [])
+              const position = id === model.selected
+                ? model.position
+                : null
+              return tabs.panel({
                 element: h.div.key(id).class(
-                  "@max-[939px]/playtest:order-3"
+                  "@max-[939px]/playtest:order-2",
+                  "data-[ending-style]:hidden"
                 ),
                 value: id
               })
                 ?.children(
-                  Facts(h, model),
+                  Facts(h, frames, position),
                   // The test and the app it drives, side by side
                   // where there is room.
                   h.div.class(
@@ -368,7 +494,7 @@ export const PlayTest = Html.component({
                   ).children(
                     h.div.class("min-w-0").children(
                       Bar(h, snippet.name, "TypeScript"),
-                      Lines(h, snippet, sources, model.position)
+                      Lines(h, snippet, sources, model)
                     ),
                     // First where the two are stacked: the app is
                     // what changes as the slider moves.
@@ -378,16 +504,21 @@ export const PlayTest = Html.component({
                       "@min-[940px]/playtest:border-b-0",
                       "@min-[940px]/playtest:border-l"
                     ).children(
-                      Bar(h, "On the test host", "Sketch"),
-                      Stage(h, model)
+                      Bar(h, "Test host tree", "Visualization"),
+                      Stage(h, frames, position)
                     )
                   )
                 )
-            ),
-            Note(h, model, notes),
+            }),
             Controls(h, model, sources)
           )
       }),
+      h.figcaption.class(
+        "mx-auto w-full max-w-(--column) text-sm text-pretty",
+        "text-muted-foreground"
+      ).children(
+        "Play tests render nothing and use no browser. This figure sketches the test host's in-memory tree after each line."
+      ),
       h.p.class(srOnly).attr("aria-live", "polite").children(
         model.position === null ? "" : notes[model.position]
       )

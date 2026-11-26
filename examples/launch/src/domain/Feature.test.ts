@@ -10,9 +10,19 @@ const { document } = MarkdownParser.parseMarkdownWithFrontmatter(
   { islands: Islands, frontmatter: Frontmatter }
 )
 
-const lists = document.blocks.filter(
-  (block): block is Markdown.List => block._tag === "List"
-)
+// The article's lists, with the ones inside an island.
+const listsIn = (
+  blocks: ReadonlyArray<Markdown.Block>
+): ReadonlyArray<Markdown.List> =>
+  blocks.flatMap((block) =>
+    block._tag === "List"
+      ? [block]
+      : block._tag === "Island"
+      ? listsIn(block.blocks)
+      : []
+  )
+
+const lists = listsIn(document.blocks)
 
 describe("Feature", () => {
   it("lays every bullet of a list out the same way", () => {

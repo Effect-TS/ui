@@ -1,0 +1,48 @@
+// The modules of @effect/ui-kit: every component in Base UI, and a few
+// of the kit's own. components.test.ts checks this list against the
+// package's source.
+export const modules = [
+  "Accordion",
+  "AlertDialog",
+  "Autocomplete",
+  "Avatar",
+  "Button",
+  "Checkbox",
+  "CheckboxGroup",
+  "Collapsible",
+  "Combobox",
+  "ContextMenu",
+  "Dialog",
+  "DirectionProvider",
+  "Drawer",
+  "Field",
+  "Fieldset",
+  "Form",
+  "Input",
+  "Menu",
+  "Menubar",
+  "Meter",
+  "NavigationMenu",
+  "NumberField",
+  "OTPField",
+  "Popover",
+  "Positioning",
+  "PreviewCard",
+  "Progress",
+  "RadioGroup",
+  "ScrollArea",
+  "Select",
+  "Separator",
+  "Slider",
+  "Switch",
+  "Tabs",
+  "Toast",
+  "Toggle",
+  "ToggleGroup",
+  "Toolbar",
+  "Tooltip",
+  "VirtualKeyboard",
+  "VirtualList"
+] as const
+
+export type Module = (typeof modules)[number]
