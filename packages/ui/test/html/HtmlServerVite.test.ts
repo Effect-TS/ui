@@ -57,6 +57,12 @@ describe("HtmlServerVite.plugin", () => {
         const module = await get("/src/entry.client.ts")
         expect(module.status).toBe(200)
         expect(module.headers.get("content-type")).toContain("javascript")
+
+        // Closing the old server leaves the restarted one serving pages.
+        await server.restart()
+        const restarted = await get("/")
+        expect(restarted.status).toBe(200)
+        expect(await restarted.text()).toContain("<h1>Home</h1>")
       } finally {
         await server.close()
       }

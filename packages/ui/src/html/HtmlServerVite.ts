@@ -89,7 +89,7 @@ export interface Plugin {
   load(this: LoadContext, id: string): Promise<string | undefined>
   configureServer(server: DevServer): () => void
   buildApp(builder: Builder): Promise<void>
-  buildEnd(): Promise<void>
+  buildEnd(this: { readonly environment: object }): Promise<void>
 }
 
 interface LoadContext {
@@ -118,6 +118,7 @@ interface DevServer {
     ): unknown
   }
   readonly environments: {
+    readonly client: object
     readonly ssr: {
       readonly runner?: { import(url: string): Promise<unknown> }
     }
@@ -160,56 +161,15 @@ export const plugin = (options: Options): Plugin => {
   let devServer: DevServer | undefined
   // The app's `index.html` in dev, and the client build's in a build.
   let templateFile = ""
-  // The dev server's module, the modules it has seen, the requests each
-  // module is still answering, the requests in flight, and the disposals
-  // still running.
-  let current: ServerModule | undefined
-  let closing = false
-  const seen = new WeakSet<ServerModule>()
-  const active = new Map<ServerModule, number>()
-  const inflight = new Set<Promise<void>>()
-  const disposing = new Set<Promise<void>>()
-
-  const track = (set: Set<Promise<void>>, promise: Promise<void>) => {
-    set.add(promise)
-    promise.then(() => set.delete(promise))
-  }
+  // Closes each dev server, by its client environment. A restart
+  // configures the new server before it closes the old one.
+  const closers = new WeakMap<object, () => Promise<void>>()
 
   const template = async (context: LoadContext): Promise<string> => {
     const html = await fs.readFile(templateFile, "utf8")
     if (devServer === undefined) return html
     context.addWatchFile(templateFile)
     return devServer.transformIndexHtml("/", html)
-  }
-
-  const dispose = (module: ServerModule) => {
-    const done = module.dispose().catch((error) =>
-      devServer?.config.logger.error(
-        `HtmlServerVite failed to dispose the server entry: ${error}`
-      )
-    )
-    track(disposing, done)
-  }
-
-  /** Disposes a module once it is replaced and answers no request. */
-  const disposeIdle = (module: ServerModule) => {
-    if (module !== current && !active.has(module)) dispose(module)
-  }
-
-  /** Holds `module` while `serve` runs, so a reload can't dispose it. */
-  const hold = async (module: ServerModule, serve: () => Promise<void>) => {
-    active.set(module, (active.get(module) ?? 0) + 1)
-    try {
-      await serve()
-    } finally {
-      const count = active.get(module)! - 1
-      if (count > 0) {
-        active.set(module, count)
-      } else {
-        active.delete(module)
-        disposeIdle(module)
-      }
-    }
   }
 
   return {
@@ -252,12 +212,61 @@ export const plugin = (options: Options): Plugin => {
     configureServer(server) {
       devServer = server
       templateFile = path.join(server.config.root, "index.html")
+      // Vite moves a restarted server's fields onto the old server object.
+      const { client, ssr } = server.environments
+      const { logger } = server.config
+      // This server's module, the modules it has seen, the requests each
+      // module is still answering, the requests in flight, and the
+      // disposals still running.
+      let current: ServerModule | undefined
+      let closing = false
+      const seen = new WeakSet<ServerModule>()
+      const active = new Map<ServerModule, number>()
+      const inflight = new Set<Promise<void>>()
+      const disposing = new Set<Promise<void>>()
+
+      const track = (set: Set<Promise<void>>, promise: Promise<void>) => {
+        set.add(promise)
+        promise.then(() => set.delete(promise))
+      }
+
+      const dispose = (module: ServerModule) => {
+        track(
+          disposing,
+          module.dispose().catch((error) =>
+            logger.error(
+              `HtmlServerVite failed to dispose the server entry: ${error}`
+            )
+          )
+        )
+      }
+
+      /** Disposes a module once it is replaced and answers no request. */
+      const disposeIdle = (module: ServerModule) => {
+        if (module !== current && !active.has(module)) dispose(module)
+      }
+
+      /** Holds `module` while `serve` runs, so a reload can't dispose it. */
+      const hold = async (module: ServerModule, serve: () => Promise<void>) => {
+        active.set(module, (active.get(module) ?? 0) + 1)
+        try {
+          await serve()
+        } finally {
+          const count = active.get(module)! - 1
+          if (count > 0) {
+            active.set(module, count)
+          } else {
+            active.delete(module)
+            disposeIdle(module)
+          }
+        }
+      }
+
       const load = async () => {
-        const runner = server.environments.ssr.runner
-        if (runner === undefined) {
+        if (ssr.runner === undefined) {
           throw new Error("HtmlServerVite needs a runnable ssr environment")
         }
-        const module = (await runner.import(serverId)) as ServerModule
+        const module = (await ssr.runner.import(serverId)) as ServerModule
         // An edit re-evaluates the server entry, with a new handler. A
         // module that was already replaced never comes back.
         if (!seen.has(module)) {
@@ -268,6 +277,7 @@ export const plugin = (options: Options): Plugin => {
         }
         return current!
       }
+
       const serve = (
         request: Http.IncomingMessage,
         response: Http.ServerResponse,
@@ -298,6 +308,18 @@ export const plugin = (options: Options): Plugin => {
           .catch((error) => {
             if (!response.destroyed) next(error)
           })
+
+      // Takes no new request, lets the ones in flight settle, which
+      // disposes the replaced modules, then disposes the current one.
+      closers.set(client, async () => {
+        closing = true
+        await Promise.all(inflight)
+        const last = current
+        current = undefined
+        if (last !== undefined) dispose(last)
+        await Promise.all(disposing)
+      })
+
       // Returned, so it runs after Vite's own middlewares.
       return () => {
         server.middlewares.use((request, response, next) => {
@@ -354,15 +376,9 @@ export const plugin = (options: Options): Plugin => {
         await fs.rm(dir, { recursive: true, force: true })
       }
     },
-    // On close, takes no new request, lets the ones in flight settle, which
-    // disposes the replaced modules, then disposes the current one.
+    // Dev only. In dev, Vite calls it for the client environment.
     async buildEnd() {
-      closing = true
-      await Promise.all(inflight)
-      const last = current
-      current = undefined
-      if (last !== undefined) dispose(last)
-      await Promise.all(disposing)
+      await closers.get(this.environment)?.()
     }
   }
 }
