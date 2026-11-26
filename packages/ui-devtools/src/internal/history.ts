@@ -20,7 +20,7 @@ export interface History {
   readonly holds: (session: string, seq: number) => boolean
   /** An entry held, shown or excluded. */
   readonly entry: (session: string, seq: number) => Entry | undefined
-  /** The last seq recorded, shown or not. */
+  /** Includes excluded updates, even though they have no visible row. */
   readonly latest: (session: string) => number | undefined
   /**
    * Why a seq up to `latest` isn't held: older than every entry kept, in a

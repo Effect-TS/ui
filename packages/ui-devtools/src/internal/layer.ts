@@ -147,7 +147,6 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
           return
         }
       }
-      // Choices made at runtime override `exclude` for the rest of the tab.
       const chosen = load(recordingKey, "sessionStorage")
       const choices = new Map<string, boolean>()
       const stopped = new Set(options.exclude)

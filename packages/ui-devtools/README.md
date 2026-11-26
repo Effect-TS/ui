@@ -46,7 +46,9 @@ It follows the latest entry until one is selected, and remembers whether the pan
 
 `DevTools.layer` accepts `position`, `size` (1,000 shown entries by default) and `exclude` (message `_tag` values matched across every component). Excluded updates add no rows and coalesce per instance between shown entries so high-frequency bursts do not evict the buffer, while keeping the next shown entry's Model diff and Time travel state accurate. `exclude` is not a way to hide sensitive data: later entries still carry whatever an excluded message changed in the Model — use `Schema.Redacted` for sensitive values.
 
-`exclude` is where recording starts, and it can change while the app runs. **Stop recording**, at the top of a selected update, treats its message `_tag` as excluded from the next update on, and the **Not recording** strip under the filters lists the stopped tags, configured ones too. Click a tag to record it again. Entries already evicted don't come back. The choices last for the tab, through reloads, and win over `exclude` for the tags they name. The page marks each excluded update in its Wire frame, so the Node server's copy and the agent tools coalesce the same entries.
+`exclude` sets the initial recording policy. To change it while the app runs, select an update and click **Stop recording** to exclude future updates with its message `_tag`. The **Not recording** strip under the filters lists stopped tags, including configured exclusions. Click a tag to resume recording it.
+
+These choices override `exclude` for the selected tags and persist through reloads until the tab closes. They affect future updates, not existing entries, and cannot recover evicted history. Excluded Wire frames carry the same policy to the Node server and its agent tools.
 
 It is mounted in an iframe with `MessageLog.noop`, so the page's styles don't reach it, a key pressed or a click in it never reaches the app's document and window listeners, and it never logs its own updates. Its theme follows `prefers-color-scheme`.
 

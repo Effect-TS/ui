@@ -97,12 +97,12 @@ export type WebMcpOptions = internal.WebMcpOptions
  * later entries still carry whatever an excluded message changed in the
  * Model. Use `Schema.Redacted` for sensitive values.
  *
- * `exclude` is only where recording starts. Stop recording on a selected
- * update, or the `set_recording` tool, stops recording its `_tag` from the
- * next update, and the Not recording strip starts a stopped tag again. These
- * choices win over `exclude` and are kept in `sessionStorage`, so they last
- * through reloads until the tab closes. The page marks each excluded update's
- * Wire frame, so a DevTools server coalesces the same entries.
+ * `exclude` sets the initial recording policy. Select an update and click
+ * Stop recording to exclude future updates with its `_tag`. Click a tag in
+ * the Not recording strip to resume, or use the `set_recording` MCP tool
+ * for either action. These choices override `exclude` and persist through
+ * reloads in `sessionStorage` until the tab closes. Excluded Wire frames
+ * carry the same policy to the DevTools server.
  *
  * Clear empties the timeline while keeping mounted instances and each
  * instance's pre-clear state for the next entry's diff and Time travel. Clear

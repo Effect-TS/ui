@@ -222,8 +222,8 @@ const Resume = control(Tool.make("resume", {
 const SetRecording = control(Tool.make("set_recording", {
   description:
     "Stops or starts recording the updates of a message _tag on the session's page, from its next update. " +
-    "A stopped tag's updates get no rows and take one slot per instance, so a noisy one such as a timer " +
-    "tick can't push other entries out. The choice overrides the page's exclude and lasts until the tab " +
+    "Stopped updates get no rows and coalesce into one slot per instance between shown entries. " +
+    "The choice overrides the page's exclude and lasts until the tab " +
     "closes. Returns the tags the page is not recording.",
   parameters: Schema.Struct({
     session: SessionParam,
@@ -314,8 +314,8 @@ export const Tools = Toolkit.make(
 export const instructions =
   "Inspects a running Effect UI app in development. Start with list_sessions and list_instances. " +
   "list_entries and get_chain explain what happened and why; get_state and diff_state show state at any entry. " +
-  "show_entry paints the page at an entry, resume returns to the live page. set_recording stops recording a " +
-  "noisy message _tag so it can't push other entries out. dispatch sends messages when " +
+  "show_entry paints the page at an entry, resume returns to the live page. set_recording stops or resumes " +
+  "recording a message _tag. dispatch sends messages when " +
   "enabled, and wait lets the Commands they start finish."
 
 const select = (

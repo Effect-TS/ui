@@ -308,9 +308,9 @@ export interface Update extends InstanceBase {
    */
   readonly boundary?: number | undefined
   /**
-   * Set by a log that keeps runs of this `Update` out of its history, such as
-   * DevTools for a message `_tag` it isn't recording. Readers give it no row,
-   * and the instance's next excluded `Update` replaces it.
+   * Marks an update for coalescing, such as a message `_tag` that DevTools
+   * has stopped recording. DevTools hides its row and replaces it with the
+   * instance's next excluded update unless a shown entry intervenes.
    */
   readonly excluded?: boolean | undefined
 }
