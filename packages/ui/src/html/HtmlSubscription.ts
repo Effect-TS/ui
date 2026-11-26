@@ -706,25 +706,25 @@ export const onMediaQuery = <Msg>(
     // A change that fires while a handler runs is queued, so messages
     // dispatch in the order the values arrived.
     let queue: Array<boolean> | undefined
-    const deliver = (matches: boolean) => {
-      if (queue !== undefined) return void queue.push(matches)
-      queue = [matches]
+    const deliver = (values: Array<boolean>) => {
+      if (queue !== undefined) return void queue.push(...values)
+      queue = values
       for (let i = 0; i < queue.length; i++) send(queue[i])
       queue = undefined
     }
     // Read now and sent first, before any change that fires before `initial`.
     let first = source.matches(query)
-    const start = () => {
+    const takeFirst = (): Array<boolean> => {
       const initial = first
       first = undefined
-      if (initial !== undefined) deliver(initial)
+      return initial === undefined ? [] : [initial]
     }
     return {
-      initial: Effect.sync(start),
-      close: source.listen(query, (matches) => {
-        start()
-        deliver(matches)
-      })
+      initial: Effect.sync(() => deliver(takeFirst())),
+      close: source.listen(
+        query,
+        (matches) => deliver([...takeFirst(), matches])
+      )
     }
   }
   return Object.assign(

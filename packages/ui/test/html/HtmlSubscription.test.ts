@@ -692,7 +692,7 @@ describe("onMediaQuery", { concurrent: false }, () => {
         Effect.scoped
       )
 
-      // A change made while the initial match is delivered is dispatched after it.
+      // Early and reentrant changes are dispatched in the order they arrive.
       yield* Effect.gen(function*() {
         let change: (matches: boolean) => void = () => {}
         const log: Array<boolean> = []
@@ -712,8 +712,8 @@ describe("onMediaQuery", { concurrent: false }, () => {
             HtmlSubscription.onMediaQuery(
               "(prefers-color-scheme: dark)",
               (matches) => {
-                log.push(matches)
-                if (!matches) change(true)
+                // The first delivery changes the query back.
+                if (log.push(matches) === 1) change(false)
                 return MediaMessage.DarkChanged({ matches })
               }
             )
@@ -728,9 +728,11 @@ describe("onMediaQuery", { concurrent: false }, () => {
             }
           })
         )
+        // A change before `initial` runs starts delivery early.
+        change(true)
         yield* TestHost.settle
-        assert.deepStrictEqual(log, [false, true])
-        assert.strictEqual(root.model(), true)
+        assert.deepStrictEqual(log, [false, true, false])
+        assert.strictEqual(root.model(), false)
       }).pipe(Effect.provide(TestHost.layer()), Effect.scoped)
 
       // HtmlScene.mediaQuery dispatches, marks undefined as ignored, and throws for unheard queries.
