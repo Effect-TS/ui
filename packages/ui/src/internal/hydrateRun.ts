@@ -65,7 +65,6 @@ const use = (target: Kernel.Host, from: Kernel.Host): void => {
 
 interface Shipped {
   (): queryCore.ShippedHydration | undefined
-  /** Sweeps now, or when Query loads if it hasn't yet. */
   readonly cancelPending: (all: boolean) => void
 }
 
