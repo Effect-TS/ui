@@ -706,8 +706,9 @@ export const onMediaQuery = <Msg>(
     // Read now and sent first, before any change that fires before `initial`.
     let first = source.matches(query)
     const start = () => {
-      if (first !== undefined) send(first)
+      const initial = first
       first = undefined
+      if (initial !== undefined) send(initial)
     }
     return {
       initial: Effect.sync(start),

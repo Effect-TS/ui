@@ -479,8 +479,8 @@ const finite = (animation: Animation): boolean => {
 
 const settled: Found = { found: true }
 
-// A cancelled or replaced animation rejects `finished`: look again on the
-// next frame, once its replacement has started.
+// A cancelled or replaced animation rejects `finished`. A removed element has
+// settled; otherwise look again on the next frame, once a replacement started.
 const animationsSettled = (element: globalThis.Element): Effect.Effect<Found> =>
   Effect.suspend(() => {
     const running =
@@ -496,7 +496,7 @@ const animationsSettled = (element: globalThis.Element): Effect.Effect<Found> =>
         )
       ),
       (finished) =>
-        finished
+        finished || !element.isConnected
           ? Effect.succeed(settled)
           : Effect.andThen(frames.nextFrame, animationsSettled(element))
     )
@@ -537,10 +537,10 @@ export const WaitForAnimations: Command.Factory<
  * After commit, it looks up `ref` and awaits `.finished` on every finite
  * animation returned by `element.getAnimations({ subtree: true })`. Infinite
  * animations (such as spinners) are skipped. If an animation is cancelled or
- * replaced, it collects the animations again on the next frame of
- * `HtmlSubscription.AnimationFrames` and keeps waiting while the element
- * remains connected. A ref that isn't rendered gives `{ found: false }`,
- * and an element without `getAnimations` counts as settled.
+ * replaced while the element is connected, it collects the animations again
+ * on the next frame of `HtmlSubscription.AnimationFrames`. A ref that isn't
+ * rendered gives `{ found: false }`, and a disconnected element or one
+ * without `getAnimations` counts as settled.
  *
  * **Example** (Keeping a panel mounted during its exit animation)
  *

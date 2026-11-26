@@ -19,10 +19,16 @@ const still: HtmlSubscription.AnimationFrames = {
 /** @internal */
 export const nextFrame: Effect.Effect<void> = AnimationFrames.use((source) =>
   Effect.callback<void>((resume) => {
-    const off = source.listen(() => {
-      off()
+    // The source may call back before `listen` returns `off`.
+    let fired = false
+    let off: (() => void) | undefined = undefined
+    off = source.listen(() => {
+      if (fired) return
+      fired = true
+      off?.()
       resume(Effect.void)
     })
+    if (fired) off()
     return Effect.sync(off)
   })
 )

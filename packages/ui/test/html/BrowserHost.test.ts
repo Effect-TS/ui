@@ -3638,6 +3638,21 @@ describe("BrowserHost", { concurrent: false }, () => {
           .expect(Locator.text("starting")).toExist()
           .resolve(HtmlCommand.WaitForPaint, undefined)
           .expect(Locator.text("shown")).toExist()
+
+        // A frame source may call back while `listen` registers.
+        const eager = yield* TestHost.mount(Enter, {}).pipe(
+          Effect.provideService(HtmlSubscription.AnimationFrames, {
+            now: () => 0,
+            listen: (listener) => {
+              listener(0)
+              return () => {}
+            }
+          })
+        )
+        yield* TestHost.settle
+        eager.send(PaintMessage.Start())
+        yield* TestHost.settle
+        assert.strictEqual(eager.model(), "shown")
       }).pipe(
         Effect.provide(
           Layer.merge(TestHost.layer(), TestAnimationFrames.layer)
@@ -3739,6 +3754,29 @@ describe("BrowserHost", { concurrent: false }, () => {
           "settled true",
           "settled true"
         ])
+
+        // Detaching the element cancels its animation: it settles without a frame.
+        const raf = window.requestAnimationFrame
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            window.requestAnimationFrame = raf
+          })
+        )
+        window.requestAnimationFrame = () => 0
+        let rejectRemoved!: () => void
+        active = [{
+          effect: { getComputedTiming: () => ({ endTime: 150 }) },
+          finished: new Promise<void>((_, reject) => {
+            rejectRemoved = () =>
+              reject(new DOMException("cancelled", "AbortError"))
+          })
+        } as unknown as Animation]
+        root.send(AnimMessage.Wait({ missing: false }))
+        yield* tick
+        app.remove()
+        rejectRemoved()
+        yield* tick
+        assert.strictEqual(root.model()?.length, 4)
       }).pipe(Effect.scoped))
   })
 

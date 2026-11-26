@@ -692,6 +692,46 @@ describe("onMediaQuery", { concurrent: false }, () => {
         Effect.scoped
       )
 
+      // A change made while the initial match is delivered follows it once.
+      yield* Effect.gen(function*() {
+        let change: (matches: boolean) => void = () => {}
+        const log: Array<boolean> = []
+        const Reentrant = Html.component({
+          name: "Reentrant",
+          model: Schema.Boolean,
+          message: MediaMessage
+        }).make({
+          init: () => false,
+          update: {
+            DarkChanged: (_, { matches }) => matches,
+            MotionChanged: ($) => $.model,
+            Stopped: ($) => $.model
+          },
+          view: (h) => h.p(""),
+          subscriptions: () => [
+            HtmlSubscription.onMediaQuery(
+              "(prefers-color-scheme: dark)",
+              (matches) => {
+                log.push(matches)
+                if (!matches) change(true)
+                return MediaMessage.DarkChanged({ matches })
+              }
+            )
+          ]
+        })
+        yield* TestHost.mount(Reentrant, {}).pipe(
+          Effect.provideService(HtmlSubscription.MediaQueries, {
+            matches: () => false,
+            listen: (_, listener) => {
+              change = listener
+              return () => {}
+            }
+          })
+        )
+        yield* TestHost.settle
+        assert.deepStrictEqual(log, [false, true])
+      }).pipe(Effect.provide(TestHost.layer()), Effect.scoped)
+
       // HtmlScene.mediaQuery dispatches, marks undefined as ignored, and throws for unheard queries.
       const scene = yield* HtmlScene.make(Media, {})
       scene
