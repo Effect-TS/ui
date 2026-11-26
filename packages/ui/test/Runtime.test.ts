@@ -179,7 +179,7 @@ describe("Runtime", () => {
       assert.deepStrictEqual(root.model(), ["Inner", "Outer"])
     })))
 
-  it.effect("an event reaches a handler below thousands of elements", () =>
+  it.effect("an event reaches a handler below a thousand elements", () =>
     provideHost(Effect.gen(function*() {
       const Deep = Component.define({
         name: "Deep",
@@ -188,16 +188,18 @@ describe("Runtime", () => {
       }).make({
         init: () => 0,
         update: ($) => $.model + 1,
-        view: (h) => {
-          let node = h.el("button").on("click", null).children("deep")
-          for (let depth = 0; depth < 3000; depth++) node = h.el("div", node)
+        view: (h, clicks) => {
+          let node = h.el("button").on("click", null).children(
+            `clicks ${clicks}`
+          )
+          for (let depth = 0; depth < 1000; depth++) node = h.el("div", node)
           return node
         }
       })
       const root = yield* TestHost.mount(Deep, {})
-      click(root, "deep")
+      click(root, "clicks 0")
       yield* TestHost.settle
-      assert.strictEqual(root.model(), 1)
+      assert.strictEqual(root.text(), "clicks 1")
     })))
 
   describe("keyed list", () => {

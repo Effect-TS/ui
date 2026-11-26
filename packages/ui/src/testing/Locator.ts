@@ -69,10 +69,15 @@ export interface Locator {
  * @category getters
  * @since 0.1.0
  */
-export const textOf = (node: Node): string =>
-  node.text !== undefined && node.tag === undefined
-    ? node.text
-    : (node.children ?? []).map(textOf).join("")
+export const textOf = (node: Node): string => {
+  let text = ""
+  preorder(node, (node) => {
+    if (node.text === undefined || node.tag !== undefined) return true
+    text += node.text
+    return false
+  })
+  return text
+}
 
 /**
  * Every element under `root`, `root` included, in document order.
@@ -83,12 +88,30 @@ export const textOf = (node: Node): string =>
  */
 export const elements = <N extends Node>(root: N): ReadonlyArray<N> => {
   const out: Array<N> = []
-  const walk = (node: N) => {
-    if (node.tag !== undefined) out.push(node)
-    for (const child of node.children ?? []) walk(child as N)
-  }
-  walk(root)
+  preorder(root, (node) => {
+    if (node.tag !== undefined) out.push(node as N)
+    return true
+  })
   return out
+}
+
+/**
+ * Visits `root` and the nodes under it in document order, without a call
+ * frame per level, entering a node's children when `visit` returns true.
+ * Children go on last-first so the first comes off next; holes in a sparse
+ * array are skipped.
+ */
+const preorder = (root: Node, visit: (node: Node) => boolean): void => {
+  const pending: Array<Node> = [root]
+  while (pending.length > 0) {
+    const node = pending.pop()!
+    const children = node.children
+    if (visit(node) && children !== undefined) {
+      for (let index = children.length - 1; index >= 0; index--) {
+        if (index in children) pending.push(children[index]!)
+      }
+    }
+  }
 }
 
 /**
