@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { readFile } from "node:fs/promises"
 import * as path from "node:path"
 import { codeToTokens } from "shiki"
-import { defineConfig, type Plugin } from "vite"
+import { createServer, defineConfig, type Plugin } from "vite"
 import { toMarkdown } from "./src/domain/ArticleText.ts"
 import {
   all,
@@ -162,7 +162,7 @@ const tokenizeAll = async (root: string): Promise<Snippets> => {
   )
 }
 
-const snippets = (): Plugin => {
+const snippets = (loadSnippets?: () => Promise<Snippets>): Plugin => {
   let root = ""
   return {
     name: "launch:snippets",
@@ -175,19 +175,22 @@ const snippets = (): Plugin => {
     async load(module) {
       if (module !== resolved) return
       files(root).forEach((file) => this.addWatchFile(file))
-      return `export const snippets = ${
-        JSON.stringify(await tokenizeAll(root))
-      }\n`
+      const data = loadSnippets
+        ? await loadSnippets()
+        : await tokenizeAll(root)
+      return `export const snippets = ${JSON.stringify(data)}\n`
     }
   }
 }
 
-const articleText = (): Plugin => {
+const articleText = (
+  loadSnippets?: () => Promise<Snippets>
+): Plugin => {
   let root = ""
   const render = async () =>
     toMarkdown(
       await readFile(path.join(root, "src/article.md"), "utf8"),
-      await tokenizeAll(root)
+      loadSnippets ? await loadSnippets() : await tokenizeAll(root)
     )
   return {
     name: "launch:article-text",
@@ -215,11 +218,72 @@ const articleText = (): Plugin => {
   }
 }
 
-export default defineConfig({
-  plugins: [
-    tailwindcss(),
-    snippets(),
-    articleText(),
-    markdown({ islands: Islands, frontmatter: Frontmatter })
-  ]
+const prerender = (loadSnippets: () => Promise<Snippets>): Plugin => {
+  let root = ""
+  return {
+    name: "launch:prerender",
+    apply: "build",
+    configResolved(config) {
+      root = config.root
+    },
+    transformIndexHtml: {
+      order: "post",
+      async handler(html) {
+        const server = await createServer({
+          configFile: false,
+          root,
+          mode: "production",
+          logLevel: "error",
+          server: { middlewareMode: true, ws: false },
+          appType: "custom",
+          ssr: { noExternal: [/^@effect\/ui/] },
+          plugins: [
+            snippets(loadSnippets),
+            markdown({ islands: Islands, frontmatter: Frontmatter })
+          ]
+        })
+        try {
+          const mod = (await server.ssrLoadModule(
+            "/src/prerender.ts"
+          )) as {
+            readonly render: () => Promise<{
+              readonly html: string
+              readonly state: string
+            }>
+          }
+          const rendered = await mod.render()
+          const rootTag = `<div id="root"></div>`
+          if (!html.includes(rootTag)) {
+            throw new Error(
+              `Expected ${rootTag} in index.html for prerendering`
+            )
+          }
+          return html.replace(
+            rootTag,
+            () =>
+              `<div id="root">${rendered.html}</div>\n    <script type="application/json" id="state">${rendered.state}</script>`
+          )
+        } finally {
+          await server.close()
+        }
+      }
+    }
+  }
+}
+
+export default defineConfig(({ command }) => {
+  let cachedSnippets: Promise<Snippets> | undefined
+  const loadSnippets = command === "build"
+    ? () => (cachedSnippets ??= tokenizeAll(import.meta.dirname))
+    : undefined
+
+  return {
+    plugins: [
+      tailwindcss(),
+      snippets(loadSnippets),
+      articleText(loadSnippets),
+      ...(loadSnippets ? [prerender(loadSnippets)] : []),
+      markdown({ islands: Islands, frontmatter: Frontmatter })
+    ]
+  }
 })
