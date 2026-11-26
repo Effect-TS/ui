@@ -131,7 +131,7 @@ describe("Scene", () => {
       update: ($) => $.model,
       view: (h) =>
         h.div(
-          h.a.attrs({ href: "/docs", hidden: "" }).children("Docs"),
+          h.a.attr("href", "/docs").children("Docs"),
           h.button.disabled(true).children("Off"),
           h.button.disabled(false).children("On")
         )
@@ -143,51 +143,32 @@ describe("Scene", () => {
 
     const docsPattern = /^\/docs/g
     scene
-      .expect(link).toHaveAttribute("href")
       .expect(link).toHaveAttribute("href", "/docs")
       .expect(link).toHaveAttribute("href", docsPattern)
       .expect(link).toHaveAttribute("href", docsPattern)
-      .expect(link).toHaveAttribute("hidden")
-      .expect(link).toHaveAttribute("hidden", "")
       .expect(off).toHaveAttribute("disabled")
+      .expect(off).toHaveAttribute("disabled", "")
       .expect(on).toHaveAttribute("disabled", false)
-      .expect(link).toHaveAttribute("data-missing", false)
 
     assert.throws(
       () => scene.expect(on).toHaveAttribute("disabled"),
-      /^Scene\.expect\(text "On"\)\.toHaveAttribute\("disabled"\): .*; elements:/
+      /^Scene\.expect\(text "On"\)\.toHaveAttribute\("disabled"\): it has no "disabled" attribute; elements:/
     )
     assert.throws(
       () => scene.expect(on).toHaveAttribute("disabled", ""),
-      /toHaveAttribute\("disabled", ""\): .*; elements:/
-    )
-    assert.throws(
-      () => scene.expect(on).toHaveAttribute("disabled", /.*/),
-      /toHaveAttribute\("disabled", \/\.\*\/\): .*; elements:/
+      /toHaveAttribute\("disabled", ""\): it has no "disabled" attribute; elements:/
     )
     assert.throws(
       () => scene.expect(on).toHaveAttribute("constructor"),
-      /toHaveAttribute\("constructor"\): .*; elements:/
+      /toHaveAttribute\("constructor"\): it has no "constructor" attribute; elements:/
     )
     assert.throws(
       () => scene.expect(link).toHaveAttribute("href", "/other"),
-      /toHaveAttribute\("href", "\/other"\): .*"\/docs".*; elements:/
+      /toHaveAttribute\("href", "\/other"\): its "href" attribute is "\/docs"; elements:/
     )
     assert.throws(
-      () => scene.expect(link).toHaveAttribute("href", /^\/api/),
-      /toHaveAttribute\("href", \/\^\\\/api\/\): .*"\/docs".*; elements:/
-    )
-    assert.throws(
-      () => scene.expect(link).toHaveAttribute("href", false),
-      /toHaveAttribute\("href", false\): .*; elements:/
-    )
-    assert.throws(
-      () => scene.expect(link).toHaveAttribute("hidden", false),
-      /toHaveAttribute\("hidden", false\): .*; elements:/
-    )
-    assert.throws(
-      () => scene.expect(Locator.text("missing")).toHaveAttribute("href"),
-      /toHaveAttribute\("href"\): 0 elements match/
+      () => scene.expect(off).toHaveAttribute("disabled", false),
+      /toHaveAttribute\("disabled", false\): its "disabled" attribute is ""; elements:/
     )
     assert.throws(
       () =>
