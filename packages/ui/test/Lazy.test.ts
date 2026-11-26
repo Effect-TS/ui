@@ -56,8 +56,10 @@ const makeApp = (
   })
 
 // Lazy children drawn away from their author: in a headless child's closure, kept or not, and in a slot.
-const makePlacedApp = () => {
-  const LazyPage = Component.lazy("LazyPage", () => later(Page))
+const makePlacedApp = (
+  load: () => Promise<typeof Page> = () => later(Page)
+) => {
+  const LazyPage = Component.lazy("LazyPage", load)
   return Component.define({
     name: "App",
     model: Schema.Null,
@@ -152,6 +154,15 @@ describe("Component.lazy", () => {
         yield* TestHost.settle
         assert.strictEqual(root.text(), "page:apage:bpage:c")
       }))
+    }))
+
+  it.effect("the server ships a failed load's fallback drawn away from its author without deferring the author", () =>
+    Effect.gen(function*() {
+      const rendered = yield* HtmlServer.renderToHtml(
+        makePlacedApp(() => Promise.reject(new Error("offline"))),
+        {}
+      )
+      assert.deepStrictEqual(rendered.state["~deferred"], [])
     }))
 
   it.effect("shows the fallback's Failure branch when the load fails, and a retry shows the component in every slot", () =>

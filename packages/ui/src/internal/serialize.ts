@@ -7,7 +7,7 @@ import type * as Component from "../Component.ts"
 import type * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
 import { runCodec, warnOnce, warnUnencoded } from "./codecRun.ts"
-import type * as Kernel from "./kernel.ts"
+import * as Kernel from "./kernel.ts"
 import { segment, slotSegment } from "./paths.ts"
 import * as queryCore from "./queryCore.ts"
 import type * as services from "./services.ts"
@@ -146,7 +146,8 @@ export const snapshot = (
       }
       case "Child": {
         if (at.kids === undefined) return instance(at.inst)
-        const failedChild = at.inst !== owner
+        // A fallback the author holds, even in a headless child's closure, is no failed child.
+        const failedChild = at.inst !== Kernel.authorOf(owner)
         return {
           _tag: "Fallback",
           path: failedChild
