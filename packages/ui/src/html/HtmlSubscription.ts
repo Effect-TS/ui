@@ -694,9 +694,9 @@ export const onMediaQuery = <Msg>(
     enter
   ) => {
     const source = Context.get(context, MediaQueries)
-    let sent = false
+    const first = source.matches(query)
+    let started = false
     const deliver = (matches: boolean) => {
-      sent = true
       enter((latest) => {
         try {
           const entry = mediaQueries.listenerOf(latest) ?? declared
@@ -707,13 +707,17 @@ export const onMediaQuery = <Msg>(
         }
       })
     }
+    const start = () => {
+      if (started) return
+      started = true
+      if (first !== undefined) deliver(first)
+    }
     return {
-      initial: Effect.sync(() => {
-        if (sent) return
-        const current = source.matches(query)
-        if (current !== undefined) deliver(current)
-      }),
-      close: source.listen(query, deliver)
+      initial: Effect.sync(start),
+      close: source.listen(query, (matches) => {
+        start()
+        deliver(matches)
+      })
     }
   }
   return Object.assign(

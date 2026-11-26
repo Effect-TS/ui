@@ -681,6 +681,17 @@ describe("onMediaQuery", { concurrent: false }, () => {
         Effect.scoped
       )
 
+      // A change before the initial effect runs still delivers the initial match first.
+      yield* Effect.gen(function*() {
+        const root = yield* TestHost.mount(Media, {})
+        yield* TestMediaQueries.set("(prefers-color-scheme: dark)", true)
+        yield* TestHost.settle
+        assert.deepStrictEqual(root.model()?.log, ["dark:false", "dark:true"])
+      }).pipe(
+        Effect.provide(Layer.merge(TestHost.layer(), TestMediaQueries.layer)),
+        Effect.scoped
+      )
+
       // HtmlScene.mediaQuery dispatches, marks undefined as ignored, and throws for unheard queries.
       const scene = yield* HtmlScene.make(Media, {})
       scene

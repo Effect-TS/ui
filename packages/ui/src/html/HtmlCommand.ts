@@ -602,30 +602,42 @@ export const WaitForAnimations: Command.Factory<
  * const Message = UiSchema.TaggedEnum({
  *   Opened: {},
  *   Closed: {},
- *   ExitSettled: {}
+ *   ExitSettled: { generation: Schema.Number }
  * })
  *
  * const Drawer = Html.component({
  *   name: "Drawer",
- *   model: Schema.Literals(["closed", "open", "closing"]),
+ *   model: Schema.Struct({
+ *     phase: Schema.Literals(["closed", "open", "closing"]),
+ *     generation: Schema.Number
+ *   }),
  *   message: Message
  * }).make({
- *   init: () => "closed" as const,
+ *   init: () => ({ phase: "closed" as const, generation: 0 }),
  *   update: {
- *     Opened: () => "open" as const,
- *     Closed: ($) =>
- *       $.model === "open"
- *         ? $.set("closing" as const).run(
- *           HtmlCommand.waitForAnimations(Panel, () => Message.ExitSettled())
+ *     Opened: ($) => $.evolve({ phase: "open" as const }),
+ *     Closed: ($) => {
+ *       if ($.model.phase !== "open") return $.model
+ *       const generation = $.model.generation + 1
+ *       return $.set({ phase: "closing" as const, generation }).run(
+ *         HtmlCommand.waitForAnimations(Panel, () =>
+ *           Message.ExitSettled({ generation })
  *         )
- *         : $.model,
- *     // Ignore a stale settle if the user reopened while closing.
- *     ExitSettled: ($) => $.model === "closing" ? "closed" as const : $.model
+ *       )
+ *     },
+ *     // Ignore a stale settle if the drawer reopened or started a newer close.
+ *     ExitSettled: ($, { generation }) =>
+ *       $.model.phase === "closing" && generation === $.model.generation
+ *         ? $.evolve({ phase: "closed" as const })
+ *         : $.model
  *   },
- *   view: (h, phase) =>
+ *   view: (h, { phase }) =>
  *     phase === "closed"
  *       ? h.div()
- *       : h.div.ref(Panel).attr("data-ending-style", phase === "closing" ? "" : undefined)
+ *       : h.div.ref(Panel).attr(
+ *         "data-ending-style",
+ *         phase === "closing" ? "" : undefined
+ *       )
  * })
  * ```
  *
