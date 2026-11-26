@@ -137,7 +137,6 @@
  * @stability experimental
  * @since 0.1.0
  */
-import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
@@ -213,29 +212,18 @@ export const RangeCalendarEvents = UiSchema.TaggedEnum({
 export type RangeCalendarEvents = typeof RangeCalendarEvents.Type
 
 const RangeCalendarModel = Schema.Struct({
-  anchor: Schema.NullOr(Schema.DateTimeUtc),
-  // The day the preview runs to: the last one hovered or focused.
-  target: Schema.NullOr(Schema.DateTimeUtc)
+  // The range in progress: its first day, and the day last hovered or focused.
+  draft: Schema.NullOr(
+    Schema.Struct({ anchor: Schema.DateTimeUtc, target: Schema.DateTimeUtc })
+  )
 })
-
-type RangeCalendarModel = typeof RangeCalendarModel.Type
 
 const RangeCalendarMessage = UiSchema.TaggedEnum({
   PickedDay: { date: Schema.DateTimeUtc },
   RequestedMonth: { month: Schema.DateTimeUtc },
-  EnteredDay: { date: Schema.DateTimeUtc },
-  FocusedDay: { date: Schema.DateTimeUtc },
+  PreviewedDay: { date: Schema.DateTimeUtc },
   PressedEscape: {}
 })
-
-type RangeCalendarMessage = typeof RangeCalendarMessage.Type
-
-type RangeCalendarUpdate = Component.Update<
-  RangeCalendarModel,
-  RangeCalendarMessage,
-  RangeCalendarEvents,
-  RangeCalendarProps
->
 
 interface Range {
   readonly start: DateTime.Utc
@@ -250,11 +238,6 @@ const rangeOf = (a: DateTime.DateTime, b: DateTime.DateTime): Range => {
 
 const inRange = (date: DateTime.Utc, range: Range | null): boolean =>
   range !== null && !isOutOfRange(date, range.start, range.end)
-
-const point = (
-  $: RangeCalendarUpdate,
-  { date }: { readonly date: DateTime.Utc }
-) => $.evolve({ target: date })
 
 /**
  * A headless range calendar grid. Call it with the consumer's `h`, the
@@ -285,30 +268,34 @@ export const RangeCalendar = Html.component({
   events: RangeCalendarEvents,
   restore: false
 }).make({
-  init: () => ({ anchor: null, target: null }),
+  init: () => ({ draft: null }),
   update: {
     PickedDay: ($, { date }) =>
-      $.model.anchor === null
-        ? $.evolve({ anchor: date, target: date })
-        : $.evolve({ anchor: null }).emit(
-          RangeCalendarEvents.Picked(rangeOf($.model.anchor, date))
+      $.model.draft === null
+        ? $.evolve({ draft: { anchor: date, target: date } })
+        : $.evolve({ draft: null }).emit(
+          RangeCalendarEvents.Picked(rangeOf($.model.draft.anchor, date))
         ),
     RequestedMonth: ($, { month }) =>
       $.emit(RangeCalendarEvents.RequestedMonth({ month })),
-    EnteredDay: point,
-    FocusedDay: point,
-    PressedEscape: ($) =>
-      $.model.anchor === null ? $.model : $.evolve({ anchor: null })
+    PreviewedDay: ($, { date }) =>
+      $.model.draft === null
+        ? $.model
+        : $.evolve({ draft: { anchor: $.model.draft.anchor, target: date } }),
+    PressedEscape: ($) => $.evolve({ draft: null })
   },
   parts: (p, model) => {
     const { value, ...props } = p.props
     const selected = value === null ? null : rangeOf(value.start, value.end)
-    const anchor = props.disabled === true || props.readOnly === true
+    const draft = props.disabled === true || props.readOnly === true
       ? null
-      : model.anchor
-    const shown = anchor === null
+      : model.draft
+    const anchor = draft?.anchor ?? null
+    const shown = draft === null
       ? selected
-      : rangeOf(anchor, model.target ?? anchor)
+      : rangeOf(draft.anchor, draft.target)
+    const preview = (date: DateTime.Utc) =>
+      draft === null ? undefined : RangeCalendarMessage.PreviewedDay({ date })
 
     const cellPart = p.part(
       "td",
@@ -326,18 +313,20 @@ export const RangeCalendar = Html.component({
           "data-range-end": flag(shown !== null && sameDay(date, shown.end)),
           "data-in-range": flag(inRange(date, shown))
         })
-        .on("mouseenter", RangeCalendarMessage.EnteredDay({ date }))
-        .on("focus", RangeCalendarMessage.FocusedDay({ date }))
+        .on("mouseenter", () => preview(date))
+        .on("focus", () => preview(date))
         .on(
           "keydown",
           ({ key }) =>
-            key === "Escape" && anchor !== null
+            key === "Escape" && draft !== null
               ? RangeCalendarMessage.PressedEscape()
               : undefined,
           { preventDefault: true }
         ))
 
     return p.child(Calendar, {
+      // Calendar's value only places the tab stop: the parts below override its
+      // selection attributes.
       props: { ...props, value: anchor ?? selected?.start ?? null },
       onEmit: {
         Picked: ({ date }) => RangeCalendarMessage.PickedDay({ date }),
@@ -354,11 +343,10 @@ export const RangeCalendar = Html.component({
               readonly element: B
               readonly date: DateTime.DateTime
             }
-          ): ReturnType<B["attr"]> =>
-            cellPart(
-              calendar.cell({ element, date }),
-              DateTime.removeTime(date)
-            )
+          ): ReturnType<B["attr"]> => {
+            const day = DateTime.removeTime(date)
+            return cellPart(calendar.cell({ element, date: day }), day)
+          }
         ),
         day: View.wrapPart(
           dayPart,
@@ -368,11 +356,13 @@ export const RangeCalendar = Html.component({
               readonly date: DateTime.DateTime
               readonly unavailable?: boolean | undefined
             }
-          ): ReturnType<B["attr"]> =>
-            dayPart(
-              calendar.day({ element, date, unavailable }),
-              DateTime.removeTime(date)
+          ): ReturnType<B["attr"]> => {
+            const day = DateTime.removeTime(date)
+            return dayPart(
+              calendar.day({ element, date: day, unavailable }),
+              day
             )
+          }
         )
       })
     })
