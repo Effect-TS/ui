@@ -292,12 +292,10 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "keeps the state of an instance whose entries the ring dropped",
     () =>
       Effect.gen(function*() {
-        // Only the server's ring is small. The page's replay buffer must still
-        // hold /Workspace's Mounted frame when the socket connects.
+        // Keep the page buffer large enough to replay /Workspace's mount to a late socket.
         const { agent, url } = yield* serve({ port: 47742, size: 12 })
         yield* open(url, "open")
-        // Replay reaches the server frame by frame. Wait until the ring has
-        // dropped SessionStarted (#0) and /Workspace's Mounted (#1).
+        // Wait for eviction, not just the socket connection.
         const [session] = yield* agent.call<ReadonlyArray<any>>(
           "list_sessions"
         ).pipe(
