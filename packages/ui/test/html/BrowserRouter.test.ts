@@ -407,14 +407,15 @@ describe("BrowserRouter", { concurrent: false }, () => {
         SearchRoute.NotFound({ params: { "*": "a/b" } }),
         true
       )
-      window.history.replaceState(null, "", "/some/old-link")
+      // Captures "other/", and the trailing slash makes the Router replace the URL with "/other".
+      window.history.replaceState(null, "", "/other%2F/")
       const context = yield* Layer.build(
         BrowserRouter.layer({ routes: SearchRoute })
       )
       const root = yield* hydrate(context, rendered)
       assert.deepStrictEqual(
         root.model(),
-        SearchRoute.NotFound({ params: { "*": "some/old-link" } })
+        SearchRoute.NotFound({ params: { "*": "other/" } })
       )
       assert.deepStrictEqual(problems, [])
     }).pipe(

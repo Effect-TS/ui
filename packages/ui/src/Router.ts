@@ -730,11 +730,11 @@ export const subscription = <U extends Routes, Msg>(
   const have = union.print(held)
   const same = (route: { readonly _tag: string }) =>
     route._tag === held._tag && union.print(route) === have
-  /** Whether a static render of the held route also stands for the route at `url`: same path, or both not found. */
-  const staticMatch = (route: { readonly _tag: string }, url: string) =>
+  /** Whether a static render of the held route also stands for the route: same path, or both the catch-all. */
+  const staticMatch = (route: { readonly _tag: string }) =>
     route._tag === held._tag &&
     (union.printPath(route) === union.printPath(held) ||
-      Option.exists(union.resolve(url), (resolved) => resolved.notFound))
+      (union as Partial<UnionInternals>).routes?.[held._tag]?.path === "/*")
   const mismatch = (route: { readonly _tag: string }) => {
     const router = union.print(route)
     return new RouteMismatch({
@@ -760,7 +760,7 @@ export const subscription = <U extends Routes, Msg>(
       // without the search, or as the 404 for every unknown path: none could hold the Router's route.
       const exempt = root?.hydrated === true &&
         (router.routes.base() === "#" ||
-          (root.static && staticMatch(route.value, location.url)))
+          (root.static && staticMatch(route.value)))
       if (location.seq === 0 && !exempt) {
         try {
           report(mismatch(route.value))
