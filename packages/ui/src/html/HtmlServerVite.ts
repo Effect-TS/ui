@@ -161,11 +161,19 @@ export const plugin = (options: Options): Plugin => {
   // The app's `index.html` in dev, and the client build's in a build.
   let templateFile = ""
   // The dev server's module, the modules it has seen, the requests each
-  // module is still answering, and the disposals still running.
+  // module is still answering, the requests in flight, and the disposals
+  // still running.
   let current: ServerModule | undefined
+  let closing = false
   const seen = new WeakSet<ServerModule>()
   const active = new Map<ServerModule, number>()
+  const inflight = new Set<Promise<void>>()
   const disposing = new Set<Promise<void>>()
+
+  const track = (set: Set<Promise<void>>, promise: Promise<void>) => {
+    set.add(promise)
+    promise.then(() => set.delete(promise))
+  }
 
   const template = async (context: LoadContext): Promise<string> => {
     const html = await fs.readFile(templateFile, "utf8")
@@ -180,8 +188,7 @@ export const plugin = (options: Options): Plugin => {
         `HtmlServerVite failed to dispose the server entry: ${error}`
       )
     )
-    disposing.add(done)
-    done.then(() => disposing.delete(done))
+    track(disposing, done)
   }
 
   /** Disposes a module once it is replaced and answers no request. */
@@ -261,34 +268,45 @@ export const plugin = (options: Options): Plugin => {
         }
         return current!
       }
+      const serve = (
+        request: Http.IncomingMessage,
+        response: Http.ServerResponse,
+        next: (error?: unknown) => void
+      ): Promise<void> =>
+        load()
+          .then((module) => {
+            // The client left while the entry was loading.
+            if (response.destroyed) return
+            // A client that leaves aborts the request. The module is
+            // held until the handler and the body have settled.
+            const abort = new AbortController()
+            const leave = () => {
+              if (!response.writableFinished) abort.abort()
+            }
+            response.once("close", leave)
+            return hold(module, async () => {
+              try {
+                const answer = await module.handler(
+                  toRequest(request, abort.signal)
+                )
+                await send(response, answer)
+              } finally {
+                response.off("close", leave)
+              }
+            })
+          })
+          .catch((error) => {
+            if (!response.destroyed) next(error)
+          })
       // Returned, so it runs after Vite's own middlewares.
       return () => {
         server.middlewares.use((request, response, next) => {
-          load()
-            .then((module) => {
-              // The client left while the entry was loading.
-              if (response.destroyed) return
-              // A client that leaves aborts the request. The module is
-              // held until the handler and the body have settled.
-              const abort = new AbortController()
-              const leave = () => {
-                if (!response.writableFinished) abort.abort()
-              }
-              response.once("close", leave)
-              return hold(module, async () => {
-                try {
-                  const answer = await module.handler(
-                    toRequest(request, abort.signal)
-                  )
-                  await send(response, answer)
-                } finally {
-                  response.off("close", leave)
-                }
-              })
-            })
-            .catch((error) => {
-              if (!response.destroyed) next(error)
-            })
+          if (closing) {
+            response.statusCode = 503
+            response.end()
+            return
+          }
+          track(inflight, serve(request, response, next))
         })
       }
     },
@@ -336,12 +354,14 @@ export const plugin = (options: Options): Plugin => {
         await fs.rm(dir, { recursive: true, force: true })
       }
     },
-    // On close, disposes every module, held or not, and waits for each.
+    // On close, takes no new request, lets the ones in flight settle, which
+    // disposes the replaced modules, then disposes the current one.
     async buildEnd() {
-      const modules = new Set([...active.keys(), current])
+      closing = true
+      await Promise.all(inflight)
+      const last = current
       current = undefined
-      active.clear()
-      for (const module of modules) if (module !== undefined) dispose(module)
+      if (last !== undefined) dispose(last)
       await Promise.all(disposing)
     }
   }

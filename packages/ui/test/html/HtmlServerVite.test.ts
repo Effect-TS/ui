@@ -91,7 +91,7 @@ describe("HtmlServerVite.plugin", () => {
   }, 60_000)
 
   it(
-    "disposes a replaced server entry once its requests end, and waits for it on close",
+    "disposes a server entry once its requests end, on reload and on close",
     async () => {
       const evaluating = deferred()
       const resume = deferred()
@@ -100,9 +100,12 @@ describe("HtmlServerVite.plugin", () => {
         deferred(),
         deferred()
       ]
+      const responding = deferred()
+      const release = deferred()
       const finish = deferred()
       const events: Array<string> = []
       let evaluations = 0
+      let holdNext = false
       const gates: Gates = {
         evaluate: async () => {
           const version = ++evaluations
@@ -114,7 +117,16 @@ describe("HtmlServerVite.plugin", () => {
           }
           return version
         },
+        respond: async (version) => {
+          if (!holdNext) return
+          holdNext = false
+          responding.resolve()
+          await release.promise
+          events.push(`handled v${version}`)
+          setImmediate(() => finish.resolve())
+        },
         finalize: async (version) => {
+          events.push(`finalizing v${version}`)
           finalizing[version - 1]!.resolve()
           if (version === 2) await finish.promise
           events.push(`finalized v${version}`)
@@ -159,14 +171,24 @@ describe("HtmlServerVite.plugin", () => {
       expect(await get()).toBe("v2")
       await finalizing[0]!.promise
 
-      // Lets v2's finalizer finish only once the HTTP server has closed.
-      once(server.httpServer!, "close").then(() =>
-        setImmediate(() => finish.resolve())
-      )
+      // A request still running when the server closes. Its handler goes on
+      // once the HTTP server has closed, and v2's finalizer a tick after it.
+      holdNext = true
+      const held = fetch(origin).catch(() => {})
+      await responding.promise
+      once(server.httpServer!, "close").then(() => release.resolve())
       const closing = server.close().then(() => events.push("closed"))
       await finalizing[1]!.promise
       await closing
-      expect(events).toEqual(["finalized v1", "finalized v2", "closed"])
+      await held
+      expect(events).toEqual([
+        "finalizing v1",
+        "finalized v1",
+        "handled v2",
+        "finalizing v2",
+        "finalized v2",
+        "closed"
+      ])
     },
     60_000
   )
