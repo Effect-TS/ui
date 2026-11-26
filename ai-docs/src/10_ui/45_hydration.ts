@@ -35,13 +35,16 @@ const hydrate = Effect.gen(function*() {
   // submits don't.
   //
   // To keep clicks and submits made before hydration starts, an app can print
-  // an inline script at the start of `<body>` that cancels them inside the
-  // container, in the capture phase, and records each click's target and each
-  // submit's form with its `submitter`. Remove its listeners before calling
-  // `hydrateEffect`, or a click on an instance that is already live would be
-  // handled and then replayed. After that, a waiting instance behaves as
-  // above: its clicks do nothing and its forms submit natively, and nothing
-  // replays them.
+  // an inline script at the start of `<body>` that listens in the capture
+  // phase inside the container. For a click, it finds the button with
+  // `target.closest("button")`, since the target may be a child such as an
+  // icon, and if that is a button the app means to replay, cancels the click
+  // and records the button. Other clicks, such as on links, are left alone.
+  // For a submit, it cancels it and records the form with its `submitter`.
+  // Remove its listeners before calling `hydrateEffect`, or a click on an
+  // instance that is already live would be handled and then replayed. After
+  // that, a waiting instance behaves as above: its click handlers don't run,
+  // its forms submit natively, and nothing replays them.
   //
   // After `root.adopted`, replay only what is still connected and enabled; a
   // node hydration rebuilt is no longer connected. Call `click()` on a
