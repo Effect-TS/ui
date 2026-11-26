@@ -34,12 +34,12 @@ describe("article", () => {
         "utf8"
       )
       const urls = Array.from(source.matchAll(
-        /(\S*)(https:\/\/pkg\.pr\.new\/Effect-TS\/ui\/(@effect\/[\w-]+)@\S*)/g
+        /[^\s"']*(https:\/\/pkg\.pr\.new\/Effect-TS\/ui\/(@effect\/[\w-]+)@[^\s"']*)/g
       ))
       assert.isNotEmpty(urls)
       assert.deepStrictEqual(
         urls.map(([arg]) => arg),
-        urls.map(([, , url, name]) => `${name}@${url}`),
+        urls.map(([, url, name]) => `${name}@${url}`),
         doc
       )
     }
