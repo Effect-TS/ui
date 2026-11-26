@@ -84,6 +84,12 @@ const bar = <M>(h: Html.H<M>, width: number, accent = false) =>
 const lines = <M>(h: Html.H<M>, widths: ReadonlyArray<number>) =>
   widths.map((width) => bar(h, width))
 
+const avatarPortrait = `data:image/svg+xml,${
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="9.5" r="3.75" fill="white" fill-opacity="0.92"/><path d="M4 24c.8-4.6 4-7.5 8-7.5s7.2 2.9 8 7.5Z" fill="white" fill-opacity="0.92"/></svg>`
+  )
+}`
+
 const fruits = ["apple", "pear", "plum"]
 
 const menuItems = ["cut", "copy", "paste"].map((value) => ({
@@ -96,7 +102,7 @@ const regions = ["us-east-1", "eu-west-1"].map((value) => ({
   label: value
 }))
 
-const packages = ["effect", "effect/ui", "effect/ui-kit"].map((
+const packages = ["effect/ui", "effect/ui-kit"].map((
   value
 ) => ({
   value,
@@ -207,12 +213,17 @@ const pictures: Record<Module, Picture> = {
               key: value,
               props: { value, index },
               view: (item) =>
-                item.root(h.div).children(
+                item.root(h.div.class("kit-accordion-item")).children(
                   item.trigger(h.button).children(
-                    bar(h, 40, index === 0)
+                    bar(h, index === 0 ? 40 : 34, index === 0),
+                    Icon(h, "chevron", {
+                      class: "kit-chevron size-2"
+                    })
                   ),
                   item.panel(h.div.class("kit-panel"))?.children(
-                    lines(h, [56, 40])
+                    h.div.class("kit-panel-body").children(
+                      lines(h, [58, 42])
+                    )
                   )
                 )
             })
@@ -236,15 +247,21 @@ const pictures: Record<Module, Picture> = {
       key: "Autocomplete",
       props: {
         open: on,
-        value: on ? "effect/ui-" : "",
+        value: on ? "effect/ui" : "",
         items: packages,
         ...inTile,
+        anchor: "kit-autocomplete-input",
         sideOffset: 3
       },
       onEmit: none,
       view: (autocomplete) =>
         h.div.class("kit-overlay kit-top").children(
-          autocomplete.input(h.input.class("kit-input kit-typing")),
+          h.div.class("kit-input kit-typing-wrap").attr(
+            "id",
+            "kit-autocomplete-input"
+          ).children(
+            autocomplete.input(h.input.class("kit-typing"))
+          ),
           autocomplete.positioner(h.div.class("kit-positioner"))
             .children(
               autocomplete.popup(h.div.class("kit-popup kit-list"))
@@ -261,37 +278,35 @@ const pictures: Record<Module, Picture> = {
             )
         )
     }),
-  Avatar: (h) =>
-    h.div.class("kit-avatars").children(
-      ["MB", "TK"].map((initials) =>
-        Avatar(h, {
-          key: initials,
-          props: {},
-          view: (avatar) =>
-            avatar.root(h.span.class("kit-avatar")).children(
-              avatar.fallback(h.span)?.children(initials)
-            )
-        })
-      )
-    ),
+  Avatar: (h, on) =>
+    Avatar(h, {
+      key: "Avatar",
+      props: { src: on ? avatarPortrait : undefined },
+      view: (avatar) =>
+        avatar.root(h.span.class("kit-avatar mx-auto")).children(
+          avatar.image(
+            h.img.class("kit-avatar-img").attr("alt", "")
+          ),
+          avatar.fallback(h.span)?.children("MB")
+        )
+    }),
   Button: (h) =>
-    Button(h, {}).class("kit-button kit-button-primary").children(
-      "Deploy"
-    ),
+    Button(h, {}).class("kit-button kit-button-primary mx-auto")
+      .children(
+        "Deploy"
+      ),
   Checkbox: (h, on) =>
-    h.div.class("kit-row").children(
-      Checkbox(h, {
-        key: "Checkbox",
-        props: { checked: on },
-        view: (checkbox) =>
-          checkbox.root(h.button.class("kit-checkbox")).children(
+    Checkbox(h, {
+      key: "Checkbox",
+      props: { checked: on },
+      view: (checkbox) =>
+        checkbox.root(h.button.class("kit-checkbox mx-auto"))
+          .children(
             checkbox.indicator(h.span.class("kit-tick"))?.children(
-              "✓"
+              Icon(h, "check", { class: "size-2.5 stroke-3" })
             )
           )
-      }),
-      bar(h, 44)
-    ),
+    }),
   CheckboxGroup: (h, on) =>
     CheckboxGroup(h, {
       key: "CheckboxGroup",
@@ -306,7 +321,11 @@ const pictures: Record<Module, Picture> = {
                 checkbox.root(h.button.class("kit-checkbox"))
                   .children(
                     checkbox.indicator(h.span.class("kit-tick"))
-                      ?.children("✓")
+                      ?.children(
+                        Icon(h, "check", {
+                          class: "size-2.5 stroke-3"
+                        })
+                      )
                   )
             }),
             fruits.map((fruit) =>
@@ -317,7 +336,11 @@ const pictures: Record<Module, Picture> = {
                   checkbox.root(h.button.class("kit-checkbox"))
                     .children(
                       checkbox.indicator(h.span.class("kit-tick"))
-                        ?.children("✓")
+                        ?.children(
+                          Icon(h, "check", {
+                            class: "size-2.5 stroke-3"
+                          })
+                        )
                     )
               })
             )
@@ -329,9 +352,14 @@ const pictures: Record<Module, Picture> = {
       props: { open: on },
       view: (collapsible) =>
         collapsible.root(h.div.class("kit-collapsible")).children(
-          collapsible.trigger(h.button).children(bar(h, 50, true)),
+          collapsible.trigger(h.button).children(
+            bar(h, 50, true),
+            Icon(h, "chevron", { class: "kit-chevron size-2" })
+          ),
           collapsible.panel(h.div.class("kit-panel"))?.children(
-            lines(h, [64, 48])
+            h.div.class("kit-panel-body").children(
+              lines(h, [64, 48])
+            )
           )
         )
     }),
@@ -431,7 +459,7 @@ const pictures: Record<Module, Picture> = {
       view: (dialog) =>
         h.div.class("kit-overlay").children(
           lines(h, [50, 64]),
-          dialog.portal(h.dialog)?.children(
+          dialog.portal(h.dialog.class("kit-portal"))?.children(
             dialog.backdrop(h.div.class("kit-backdrop")),
             dialog.popup(h.div.class("kit-popup kit-dialog"))
               .children(
@@ -449,9 +477,13 @@ const pictures: Record<Module, Picture> = {
       view: (drawer) =>
         h.div.class("kit-overlay").children(
           lines(h, [56, 40]),
-          drawer.portal(h.dialog)?.children(
+          drawer.portal(h.dialog.class("kit-portal"))?.children(
             drawer.viewport(h.div.class("kit-viewport")).children(
-              drawer.popup(h.div.class("kit-sheet"))
+              drawer.popup(h.div.class("kit-sheet")).children(
+                bar(h, 34, true),
+                bar(h, 54),
+                bar(h, 40)
+              )
             )
           )
         )
@@ -496,8 +528,10 @@ const pictures: Record<Module, Picture> = {
         )
     }),
   Input: (h, on) =>
-    Input(h, { props: { value: on ? "Hello, kit" : "" } })
-      .class("kit-input kit-typing"),
+    h.div.class("kit-input kit-typing-wrap").children(
+      Input(h, { props: { value: on ? "Hello, kit" : "" } })
+        .class("kit-typing")
+    ),
   Menu: (h, on) =>
     Menu(h, {
       key: "Menu",
@@ -639,7 +673,7 @@ const pictures: Record<Module, Picture> = {
         h.div.class("kit-overlay kit-under").children(
           popover.trigger({ element: h.button.class("kit-button") })
             .children("Share"),
-          popover.portal(h.dialog)?.children(
+          popover.portal(h.dialog.class("kit-portal"))?.children(
             popover.positioner(h.div.class("kit-positioner"))
               .children(
                 popover.popup(h.div.class("kit-popup kit-popover"))
@@ -664,7 +698,7 @@ const pictures: Record<Module, Picture> = {
           previewCard.trigger({
             element: h.a.class("kit-link").attr("href", "#ui-kit")
           }).children("effect.website"),
-          previewCard.portal(h.div)?.children(
+          previewCard.portal(h.div.class("kit-portal"))?.children(
             previewCard.positioner(h.div.class("kit-positioner"))
               .children(
                 previewCard.popup(
@@ -830,7 +864,7 @@ const pictures: Record<Module, Picture> = {
         )
     }),
   Toggle: (h, on) =>
-    h.div.class("kit-row").children(
+    h.div.class("kit-row mx-auto").children(
       Toggle(h, { props: { pressed: on } }).class(
         "kit-button kit-toggle"
       )
@@ -936,15 +970,14 @@ const pictures: Record<Module, Picture> = {
       key: "VirtualList",
       props: {
         count: 10_000,
-        itemSize: 10,
+        itemSize: 12,
         measure: false,
-        initialCount: 5,
-        scrollTo: on
-          ? { target: { _tag: "Index", index: 1873 } }
-          : { target: { _tag: "Offset", offset: 0 } }
+        overscan: 20,
+        initialCount: 5
       },
       view: (virtualList) =>
         virtualList.viewport(h.div.class("kit-scroll kit-virtual"))
+          .onMount(ScrollTo({ top: on ? 12 * 16 : 0 }))
           .children(
             virtualList.list(h.div.class("kit-rows")).children(
               virtualList.items.map((index) =>

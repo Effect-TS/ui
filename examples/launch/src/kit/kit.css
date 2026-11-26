@@ -6,56 +6,36 @@
   .kit {
     --kit-ease: cubic-bezier(0.16, 1, 0.3, 1);
     --kit-line: color-mix(in oklab, var(--color-muted-foreground) 26%, transparent);
-    @apply mx-auto my-8 max-w-(--column) rounded-lg border border-border bg-card p-4 [p+&]:mt-[1.4em];
-  }
-
-  .kit-head {
-    @apply mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3;
-  }
-
-  .kit-count {
-    @apply m-0 flex items-baseline gap-3 text-sm text-muted-foreground;
-
-    strong {
-      @apply text-[2.75rem] leading-none font-bold tracking-[-0.03em] text-foreground tabular-nums;
-    }
-  }
-
-  .kit-pause {
-    @apply flex-none rounded-md border border-border-strong bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground;
-
-    &[data-pressed] {
-      @apply border-foreground text-foreground;
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      display: none;
-    }
+    @apply mx-auto my-8 max-w-(--column) [p+&]:mt-[1.4em];
   }
 
   .kit-wall {
-    @apply m-0 grid list-none gap-1.5 p-0;
+    @apply m-0 grid list-none gap-x-2.5 gap-y-4 p-0;
     grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
   }
 
   .kit-tile {
-    @apply m-0 grid h-[84px] gap-1 rounded-[7px] border border-border bg-background p-2;
-    grid-template-rows: 1fr auto;
-    transition: border-color 0.6s;
+    @apply m-0 grid gap-1.5;
+    grid-template-rows: auto auto;
+  }
 
-    &[data-playing] {
-      border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-border));
-    }
+  .kit-card {
+    @apply grid h-[64px] rounded-[7px] bg-card p-2;
+  }
+
+  .kit-card:has(
+    .kit-sheet,
+    .kit-toasts,
+    .kit-keyboard,
+    .kit-backdrop,
+    .kit-scroll
+  ) {
+    @apply overflow-hidden;
   }
 
   .kit-name {
-    @apply truncate font-mono text-[0.625rem] text-muted-foreground;
+    @apply truncate text-left font-mono text-[0.625rem] leading-tight text-foreground;
     font-feature-settings: normal;
-    transition: color 0.6s;
-
-    [data-playing] > & {
-      @apply text-foreground;
-    }
   }
 
   .kit-picture {
@@ -104,12 +84,16 @@
   }
 
   .kit-button {
-    @apply inline-flex h-[18px] items-center rounded-sm border border-border bg-background px-1.5 text-[0.625rem];
+    @apply inline-flex h-[18px] items-center justify-center rounded-sm border border-border bg-background px-1.5 text-[0.625rem] leading-none;
     transition-property: transform, background-color, border-color, color, opacity;
+
+    &:not(:has(svg)) {
+      @apply pb-px;
+    }
   }
 
   .kit-button-primary {
-    @apply border-foreground bg-foreground text-background;
+    @apply mx-auto border-foreground bg-foreground text-background;
 
     [data-playing] & {
       transform: scale(0.9);
@@ -146,9 +130,13 @@
   }
 
   /* A popup the kit opens in place, with `topLayer: false`: the
-     positioner the kit places, and the popup it marks with
-     `data-starting-style` as it opens and `data-ending-style` as it
-     closes. */
+     portal stays out of the overlay's flex layout, the positioner is
+     placed by the kit, and the popup gets `data-starting-style` as it
+     opens and `data-ending-style` as it closes. */
+  .kit-portal {
+    @apply contents;
+  }
+
   .kit-positioner {
     @apply z-1;
   }
@@ -195,7 +183,7 @@
   }
 
   .kit-backdrop {
-    @apply absolute -inset-0.5 rounded-sm;
+    @apply absolute -inset-2;
     transition-property: background-color;
 
     /* The kit's backdrop, open while it is shown, or the drawn one
@@ -235,26 +223,53 @@
 
   .kit-accordion,
   .kit-collapsible {
-    @apply flex flex-1 flex-col justify-center gap-1;
+    @apply flex w-full flex-1 flex-col self-start pt-0.5;
 
     button {
-      @apply flex w-full;
+      @apply flex w-full items-center justify-between py-0.5;
+    }
+  }
+
+  .kit-accordion-item + .kit-accordion-item {
+    @apply border-t border-border;
+  }
+
+  .kit-chevron {
+    @apply text-muted-foreground;
+    transition-property: transform, color;
+
+    [data-panel-open] > & {
+      @apply text-foreground;
+      transform: rotate(180deg);
     }
   }
 
   .kit-panel {
-    @apply grid gap-1 overflow-hidden;
+    @apply overflow-hidden;
     height: var(--collapsible-panel-height);
-    transition-property: height;
+    transition-property: height, opacity;
 
     &[data-starting-style],
     &[data-ending-style] {
+      @apply opacity-0;
       height: 0;
     }
   }
 
-  .kit-collapsible .kit-panel {
-    @apply pt-1;
+  .kit-panel-body {
+    @apply grid gap-[3px] pt-0.5 pb-1;
+
+    .kit-bar {
+      @apply h-1;
+    }
+  }
+
+  .kit-collapsible {
+    @apply pt-1.5;
+
+    .kit-panel-body {
+      @apply gap-1 pt-1 pb-0;
+    }
   }
 
   .kit-dialog {
@@ -279,36 +294,22 @@
   }
 
 
-  .kit-avatars {
-    @apply flex;
+  .kit-avatar {
+    @apply relative grid size-[26px] place-items-center overflow-hidden rounded-full bg-muted text-[0.5625rem] leading-none font-semibold;
   }
 
-  .kit-avatar {
-    @apply relative grid size-[22px] place-items-center overflow-hidden rounded-full bg-muted text-[0.5rem] font-semibold;
+  .kit-avatar-img {
+    @apply absolute inset-0 size-full bg-accent object-cover;
+    transition: opacity 0.45s var(--kit-ease);
 
-    & + & {
-      @apply ml-1;
-    }
-
-    &::after {
-      @apply absolute inset-0 opacity-0;
-      content: "";
-      background: linear-gradient(135deg, var(--color-accent), var(--color-accent-text));
-      transition: opacity 0.6s;
-    }
-
-    [data-playing] &::after {
-      @apply opacity-100;
-    }
-
-    & + &::after {
-      transition-delay: 0.2s;
+    @starting-style {
+      @apply opacity-0;
     }
   }
 
   .kit-checkbox,
   .kit-radio {
-    @apply grid size-3 flex-none place-items-center rounded-[3px] border border-muted-foreground text-[0.5rem] text-accent-foreground;
+    @apply grid size-3 flex-none place-items-center rounded-[3px] border border-muted-foreground text-accent-foreground;
     transition-property: background-color, border-color;
 
     &[data-checked] {
@@ -317,35 +318,43 @@
   }
 
   .kit-tick {
+    @apply grid place-items-center;
     transition-property: opacity;
+    transition-delay: inherit;
 
     :not([data-checked]) > & {
       @apply opacity-0;
     }
   }
 
-  .kit-checkbox-group .kit-checkbox {
-    &[data-parent] {
-      @apply mr-1;
-    }
+  .kit-checkbox-group {
+    @apply mx-auto;
 
-    &:nth-child(3) {
-      transition-delay: 0.12s;
-    }
+    .kit-checkbox {
+      &:nth-child(2) {
+        transition-delay: 0.08s;
+      }
 
-    &:nth-child(4) {
-      transition-delay: 0.24s;
+      &:nth-child(3) {
+        transition-delay: 0.16s;
+      }
+
+      &:nth-child(4) {
+        transition-delay: 0.24s;
+      }
     }
   }
 
   .kit-combobox {
+    @apply gap-[3px] px-[3px];
+
     input {
       @apply w-0 min-w-0 flex-1 bg-transparent;
     }
   }
 
   .kit-chip {
-    @apply max-w-8 overflow-hidden rounded-sm bg-muted px-1 text-[0.5625rem];
+    @apply inline-flex h-[12px] max-w-8 items-center overflow-hidden rounded-[2px] bg-muted px-1 text-[0.5rem] leading-none;
     transition-property: max-width, padding, opacity;
 
     @starting-style {
@@ -382,12 +391,16 @@
   }
 
   .kit-sheet {
-    @apply absolute right-1.5 -bottom-0.5 left-1.5 h-[22px] rounded-t-md border border-border bg-card;
+    @apply absolute -right-1 -bottom-2 -left-1 flex h-[44px] flex-col gap-1 rounded-t-md border-x border-t border-border bg-card px-2 pt-[5px];
     transition-property: transform;
 
     &::before {
-      @apply mx-auto my-[3px] block h-0.5 w-3.5 rounded-full bg-muted-foreground;
+      @apply mx-auto mb-1 block h-0.5 w-4 flex-none rounded-full bg-muted-foreground;
       content: "";
+    }
+
+    .kit-bar {
+      @apply h-1;
     }
 
     &[data-starting-style],
@@ -396,15 +409,12 @@
     }
   }
 
-  .kit-tile:has(.kit-sheet) .kit-picture {
-    @apply overflow-hidden;
-  }
-
   .kit-field {
-    @apply flex flex-1 flex-col justify-center gap-1;
+    @apply grid min-w-0 flex-1 gap-1;
+    grid-template-rows: auto auto 0.25rem;
 
     .kit-input {
-      @apply h-4 flex-none;
+      @apply h-4;
     }
   }
 
@@ -423,6 +433,10 @@
 
     [data-playing] & {
       @apply w-[55%];
+
+      @starting-style {
+        @apply w-0;
+      }
     }
   }
 
@@ -447,9 +461,19 @@
     }
   }
 
-  .kit-typing {
+  .kit-typing-wrap {
+    @apply p-0;
+
     [data-playing] & {
-      animation: kit-type 0.9s steps(10) both;
+      border-color: color-mix(in oklab, var(--color-accent) 55%, var(--color-border));
+    }
+  }
+
+  .kit-typing {
+    @apply size-full min-w-0 flex-1 bg-transparent px-1.5 text-inherit;
+
+    [data-playing] & {
+      animation: kit-type 0.8s steps(14) both;
     }
   }
 
@@ -493,18 +517,24 @@
     }
   }
 
-  .kit-nav a {
-    @apply relative pb-1.5;
-
-    &::after {
-      @apply absolute right-0 bottom-0 left-0 h-0.5 bg-accent;
-      content: "";
-      transform: scaleX(0);
-      transition: transform 0.5s var(--kit-ease);
+  .kit-nav {
+    ul {
+      @apply justify-center pb-0;
     }
 
-    &[data-active]::after {
-      transform: none;
+    a {
+      @apply relative pb-1.5;
+
+      &::after {
+        @apply absolute right-0 bottom-0 left-0 h-0.5 bg-accent;
+        content: "";
+        transform: scaleX(0);
+        transition: transform 0.5s var(--kit-ease);
+      }
+
+      &[data-active]::after {
+        transform: none;
+      }
     }
   }
 
@@ -519,16 +549,20 @@
     transition-property: left, width;
   }
 
-  .kit-number .kit-input {
-    @apply justify-between font-mono;
+  .kit-number {
+    @apply mx-auto;
 
-    input {
-      @apply w-5 bg-transparent text-center;
+    .kit-input {
+      @apply justify-between font-mono;
+
+      input {
+        @apply w-5 bg-transparent text-center;
+      }
     }
   }
 
   .kit-otp {
-    @apply flex gap-[3px];
+    @apply mx-auto flex gap-[3px];
 
     input {
       @apply h-[18px] w-[13px] rounded-[3px] border border-border bg-transparent text-center font-mono text-[0.5625rem] text-transparent;
@@ -553,8 +587,8 @@
   }
 
   .kit-popover {
+    @apply grid place-items-center p-[3px];
     width: 50px;
-    padding: 3px;
   }
 
   .kit-tooltip {
@@ -582,7 +616,7 @@
   }
 
   .kit-radios {
-    @apply gap-2;
+    @apply mx-auto gap-2;
   }
 
   .kit-radio {
@@ -605,7 +639,7 @@
   }
 
   .kit-scroll {
-    @apply absolute inset-0 overflow-hidden;
+    @apply absolute -top-2 right-0 -bottom-2 left-0 overflow-hidden;
   }
 
   .kit-scroll-area,
@@ -614,11 +648,11 @@
   }
 
   .kit-scroll-content {
-    @apply grid gap-[3px];
+    @apply grid gap-[3px] py-2;
   }
 
   .kit-scrollbar {
-    @apply absolute top-0 right-0 bottom-0 w-[3px];
+    @apply absolute top-1.5 right-0 bottom-1.5 w-[3px];
   }
 
   .kit-scroll-thumb {
@@ -632,11 +666,13 @@
   }
 
   .kit-rows {
-    @apply grid gap-0.5 font-mono text-[0.5rem] text-muted-foreground;
+    @apply mt-1.5 font-mono text-[0.5rem] leading-none text-muted-foreground;
     font-feature-settings: normal;
+    transition: none;
 
     div {
-      @apply flex items-center gap-1;
+      @apply flex h-[12px] items-center gap-1;
+      transition: none;
     }
   }
 
@@ -683,7 +719,7 @@
   }
 
   .kit-switch {
-    @apply relative h-4 w-7 flex-none rounded-full border border-border bg-muted;
+    @apply relative mx-auto h-4 w-7 flex-none rounded-full border border-border bg-muted;
     transition-property: background-color, border-color;
 
     span {
@@ -700,12 +736,8 @@
     }
   }
 
-  .kit-tile:has(.kit-toasts) .kit-picture {
-    @apply overflow-hidden;
-  }
-
   .kit-toasts {
-    @apply absolute right-0 bottom-0;
+    @apply absolute -right-0.5 -bottom-0.5;
   }
 
   .kit-toast {
@@ -723,7 +755,7 @@
     &[data-starting-style],
     &[data-ending-style] {
       @apply opacity-0;
-      transform: translateX(120%);
+      transform: translateX(calc(100% + 12px));
     }
   }
 
@@ -746,10 +778,10 @@
   }
 
   .kit-segments {
-    @apply relative flex rounded-sm border border-border;
+    @apply relative mx-auto flex rounded-sm border border-border;
 
     button {
-      @apply grid h-4 w-[18px] place-items-center rounded-[3px] text-[0.5625rem];
+      @apply grid h-4 w-[18px] place-items-center rounded-[3px] text-[0.5625rem] leading-none;
       transition-property: background-color, color, box-shadow;
     }
 
@@ -810,14 +842,14 @@
   }
 
   .kit-keyboard {
-    @apply justify-start overflow-hidden;
+    @apply -inset-2 px-2;
 
     .kit-input {
       @apply h-3.5 flex-none;
       transition-property: transform;
 
       [data-playing] & {
-        transform: translateY(-2px);
+        transform: translateY(-12px);
       }
     }
   }
@@ -830,11 +862,11 @@
   /* The keyboard's height is the share of the screen `step` says it
      covers. */
   .kit-keys {
-    @apply absolute right-0 bottom-0 left-0 overflow-hidden rounded-t-sm bg-muted;
+    @apply absolute right-0 bottom-0 left-0 overflow-hidden bg-muted;
     transition-property: height;
 
     div {
-      @apply grid grid-cols-6 gap-0.5 p-0.5;
+      @apply grid grid-cols-6 gap-1 p-1.5;
     }
 
     span {

@@ -22,16 +22,8 @@ describe("Kit", () => {
       const story = yield* Story.make(Kit, {})
       // At step 0 the timer plays the first tile.
       const [first] = playingAt(0)
-      story.given({ step: 0, isPaused: false, hovered: [] })
+      story.given({ step: 0, hovered: [] })
         .send(KitMessage.EnteredTile({ name: first! }))
       assert.deepStrictEqual(story.model.hovered, [])
-    }))
-
-  it.effect("stops ticking while paused", () =>
-    Effect.gen(function*() {
-      const story = yield* Story.make(Kit, {})
-      assert.deepStrictEqual(story.subscriptions, ["tick"])
-      story.send(KitMessage.ToggledPause({ pressed: true }))
-      assert.deepStrictEqual(story.subscriptions, [])
     }))
 })

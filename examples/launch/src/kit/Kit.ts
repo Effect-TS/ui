@@ -1,5 +1,4 @@
 import { Command, Subscription, UiSchema } from "@effect/ui"
-import { Toggle } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Effect, Schema, Stream } from "effect"
 import { type Module, modules } from "./components.ts"
@@ -38,7 +37,6 @@ const ModuleName = Schema.Literals(modules)
 
 export const KitMessage = UiSchema.TaggedEnum({
   Ticked: {},
-  ToggledPause: { pressed: Schema.Boolean },
   EnteredTile: { name: ModuleName },
   FinishedHoverPlay: { name: ModuleName }
 })
@@ -46,7 +44,6 @@ type KitMessage = typeof KitMessage.Type
 
 const KitModel = Schema.Struct({
   step: Schema.Number,
-  isPaused: Schema.Boolean,
   // Tiles the pointer set playing, each for as long as a tile the
   // timer starts.
   hovered: Schema.Array(ModuleName)
@@ -78,10 +75,12 @@ const Tile = (
   ).on("mouseenter", KitMessage.EnteredTile({ name })).children(
     // The pictures are for looking at: the name below each one is
     // what a screen reader reads, and nothing inside takes focus.
-    h.div.class("kit-picture").attr("aria-hidden", "true").attr(
+    h.div.class("kit-card").attr("aria-hidden", "true").attr(
       "inert",
       ""
-    ).children(tile(h, name, playing)),
+    ).children(
+      h.div.class("kit-picture").children(tile(h, name, playing))
+    ),
     h.span.class("kit-name").children(name)
   )
 }
@@ -95,10 +94,9 @@ export const Kit = Html.component({
   model: KitModel,
   message: KitMessage
 }).make({
-  init: () => ({ step: -1, isPaused: false, hovered: [] }),
+  init: () => ({ step: -1, hovered: [] }),
   update: {
     Ticked: ($) => $.evolve({ step: (step) => step + 1 }),
-    ToggledPause: ($, { pressed }) => $.evolve({ isPaused: pressed }),
     // A tile that is already playing ignores the pointer.
     EnteredTile: ($, { name }) =>
       isPlaying($.model, name) ? $.model : $.evolve({
@@ -109,8 +107,7 @@ export const Kit = Html.component({
         hovered: (hovered) => hovered.filter((tile) => tile !== name)
       })
   },
-  subscriptions: ({ model }) => [
-    !model.isPaused &&
+  subscriptions: () => [
     Subscription.make(
       "tick",
       Stream.tick(`${tickMs} millis`).pipe(
@@ -124,21 +121,6 @@ export const Kit = Html.component({
       "aria-label",
       "The modules of the UI kit"
     ).children(
-      h.div.class("kit-head").children(
-        h.p.class("kit-count").children(
-          h.strong.children(String(modules.length)),
-          h.span.children(
-            "headless components, ready on day one."
-          )
-        ),
-        Toggle(h, {
-          props: { pressed: model.isPaused },
-          onToggle: ({ pressed }) =>
-            KitMessage.ToggledPause({ pressed })
-        }).class("kit-pause").children(
-          "Pause motion"
-        )
-      ),
       h.ul.class("kit-wall").children(
         modules.map((name) => Tile(h, name, model))
       )
