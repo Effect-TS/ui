@@ -4,6 +4,8 @@ import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
+import { Frame } from "./fixtures/prefetch.ts"
+import { Dialog } from "./html/fixtures/headless.ts"
 
 const PageEvents = UiSchema.TaggedEnum({ Saved: { title: Schema.String } })
 
@@ -53,6 +55,39 @@ const makeApp = (
       )
   })
 
+// Lazy children in a headless child's closure, kept or not, and in a slot.
+const makePlacedApp = (
+  load: () => Promise<typeof Page> = () => later(Page)
+) => {
+  const LazyPage = Component.lazy("LazyPage", load)
+  return Component.define({
+    name: "App",
+    model: Schema.Null,
+    message: Schema.Never
+  }).make({
+    init: () => null,
+    update: ($) => $.model,
+    view: (h) =>
+      h.el(
+        "div",
+        Dialog(h, {
+          props: { label: "page" },
+          view: () =>
+            h.el(
+              "div",
+              LazyPage(h, { props: { title: "a" } }),
+              h.keepAlive((s) =>
+                LazyPage(s, { key: "b", props: { title: "b" } })
+              )
+            )
+        }),
+        Frame(h, {
+          slots: { body: LazyPage(h, { key: "c", props: { title: "c" } }) }
+        })
+      )
+  })
+}
+
 const lifecycle = (
   root: { readonly log: () => ReadonlyArray<MessageLog.Entry> },
   path: string
@@ -99,6 +134,30 @@ describe("Component.lazy", () => {
       assert.strictEqual(again.text(), "app:page:a")
       assert.strictEqual(loads, 1)
     })))
+
+  it.effect("settle waits for lazy children drawn in a headless child's view closure or in a slot", () =>
+    provideHost(Effect.gen(function*() {
+      const root = yield* TestHost.mount(makePlacedApp(), {})
+      assert.deepStrictEqual(
+        root.pending().map((load) => load.path),
+        [
+          "/App/Dialog[]/LazyPage[]",
+          "/App/LazyPage[b]",
+          "/App/Frame[]/[body]/LazyPage[c]"
+        ]
+      )
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "page:apage:bpage:c")
+    })))
+
+  it.effect("the server ships a failed load's fallback drawn away from its author without deferring the author", () =>
+    Effect.gen(function*() {
+      const rendered = yield* HtmlServer.renderToHtml(
+        makePlacedApp(() => Promise.reject(new Error("offline"))),
+        {}
+      )
+      assert.deepStrictEqual(rendered.state["~deferred"], [])
+    }))
 
   it.effect("shows the fallback's Failure branch when the load fails, and a retry shows the component in every slot", () =>
     provideHost(Effect.gen(function*() {

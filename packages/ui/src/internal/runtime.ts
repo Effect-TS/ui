@@ -24,7 +24,7 @@ import * as Kernel from "./kernel.ts"
 import * as lazy from "./lazy.ts"
 import * as messageLog from "./messageLog.ts"
 import type * as partsRun from "./partsRun.ts"
-import { childName, segment } from "./paths.ts"
+import { childName, segment, slotSegment } from "./paths.ts"
 import * as queryCore from "./queryCore.ts"
 import type * as Recorder from "./recorder.ts"
 import type * as routeRun from "./routeRun.ts"
@@ -864,15 +864,16 @@ const loadsOf = (
   inst: Kernel.Instance,
   out: Array<Load> = []
 ): Array<Load> => {
-  if (inst.rendered !== undefined) loadsIn(inst, inst.rendered, out)
+  if (inst.rendered !== undefined) loadsIn(inst.path, inst.rendered, out)
   if (inst.kept !== undefined) {
-    for (const rec of inst.kept.parked()) loadsIn(inst, rec, out)
+    for (const rec of inst.kept.parked()) loadsIn(inst.path, rec, out)
   }
   return out
 }
 
+// `under` is the path a child drawn at `rec` mounts under.
 const loadsIn = (
-  inst: Kernel.Instance,
+  under: string,
   rec: Kernel.Rec,
   out: Array<Load>
 ): void => {
@@ -882,16 +883,20 @@ const loadsIn = (
     if (view._tag === "Child" && !rec.inst.closed) loadsOf(rec.inst, out)
     return
   }
-  if (
-    view._tag === "Child" && rec.inst === inst && lazy.isLazy(view.component) &&
+  if (view._tag === "Outlet") {
+    under = rec.inst.path + "/" + slotSegment(view.name)
+  } else if (
+    view._tag === "Child" && lazy.isLazy(view.component) &&
     lazy.stateOf(view.component)._tag === "Loading"
   ) {
+    // A kept child mounts under its holder.
+    if (view.alive !== undefined) under = rec.inst.path
     out.push({
-      path: inst.path + "/" + segment(view),
+      path: under + "/" + segment(view),
       name: childName(view.component)
     })
   }
-  for (const kid of kids) loadsIn(inst, kid, out)
+  for (const kid of kids) loadsIn(under, kid, out)
 }
 
 const onScheduler = (
