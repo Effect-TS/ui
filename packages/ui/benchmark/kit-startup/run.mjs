@@ -210,40 +210,38 @@ async function bundle(root, name, source, minify = "oxc") {
     const syntax = chunk.code.match(/\bimport\.meta\b|^\s*(import|export)\b.*/m)
     assert.ok(syntax === null, name + ": module syntax: " + syntax?.[0])
   }
-  const kit = Object.entries(chunk.modules).filter(([id]) =>
+  return chunk
+}
+
+const kitModules = (chunk) =>
+  Object.entries(chunk.modules).filter(([id]) =>
     id.includes("/@effect/ui-kit/")
   )
-  // Statement level: each kit module's top-level bindings that the unminified chunk still declares.
-  // Rolldown suffixes a name with $n when it would collide.
-  const kept = {}
-  if (!minify) {
-    for (const [id] of kit) {
-      const declared = [
-        ...fs.readFileSync(id, "utf8").matchAll(
+const kitPath = (id) => id.replace(/^.*\/@effect\/ui-kit\/dist\//, "")
+
+// Statement level: each kit module's top-level bindings that an unminified chunk still declares.
+// Rolldown suffixes a name with $n when it would collide; \w stops before the suffix.
+function keptBindings(chunk) {
+  const inChunk = new Set(
+    Array.from(
+      chunk.code.matchAll(/\b(?:const|let|var|function\*?|class) (\w+)/g),
+      (match) => match[1]
+    )
+  )
+  return Object.fromEntries(
+    kitModules(chunk).map(([id]) => {
+      const declared = Array.from(
+        fs.readFileSync(id, "utf8").matchAll(
           /^(?:export )?(?:const|let|function\*?|class) (\w+)/gm
-        )
-      ]
-        .map((match) => match[1])
-      kept[id.replace(/^.*\/@effect\/ui-kit\/dist\//, "")] = {
+        ),
+        (match) => match[1]
+      )
+      return [kitPath(id), {
         declared: declared.length,
-        dropped: declared.filter((name) =>
-          !new RegExp(
-            "\\b(?:const|let|var|function\\*?|class) " + name +
-              "(?:\\$\\d+)?\\b"
-          ).test(chunk.code)
-        )
-      }
-    }
-  }
-  return {
-    kept,
-    code: chunk.code,
-    raw: Buffer.byteLength(chunk.code),
-    gzip: gzipSync(chunk.code, { level: 9 }).length,
-    kitModules: kit.map((
-      [id, info]
-    ) => [id.replace(/^.*\/@effect\/ui-kit\/dist\//, ""), info.renderedLength])
-  }
+        dropped: declared.filter((name) => !inChunk.has(name))
+      }]
+    })
+  )
 }
 
 // The shell starts after __t1, so eval covers module evaluation only.
@@ -264,6 +262,9 @@ async function gc(cdp) {
   await cdp.send("HeapProfiler.collectGarbage")
   return (await cdp.send("Runtime.getHeapUsage")).usedSize
 }
+
+const settle = (page) =>
+  page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 50)))
 
 // One page load in a fresh context. delay > 0 serves the chunk as a module script after that many ms.
 async function sample(
@@ -297,7 +298,7 @@ async function sample(
       globalThis.__t1 !== undefined &&
       document.querySelector("#app button")?.textContent === "0"
     )
-    await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 50)))
+    await settle(page)
     const result = await page.evaluate(() => ({
       eval: globalThis.__t1 - globalThis.__t0,
       script: globalThis.__t1 - globalThis.__tPre,
@@ -320,9 +321,7 @@ async function sample(
           globalThis.__mount()
         })
       )
-      await page.evaluate(() =>
-        new Promise((resolve) => setTimeout(resolve, 50))
-      )
+      await settle(page)
       result.mountHeap = (await gc(cdp)) - result.heap
     }
     assert.deepEqual(errors, [], "page errors")
@@ -366,15 +365,29 @@ const stat = (values) => {
     max: sorted.at(-1)
   }
 }
+const column = (runs, key) => stat(runs.map((run) => run[key]))
+const sum = (values) => values.reduce((a, b) => a + b, 0)
+const fixed = (value) => value.toFixed(2)
 const ms = ({ median, min, max }) =>
-  median.toFixed(2) + " (" + min.toFixed(2) + "-" + max.toFixed(2) + ")"
+  fixed(median) + " (" + fixed(min) + "-" + fixed(max) + ")"
 const kib = (bytes) => (bytes / 1024).toFixed(0)
 const kb = ({ median, min, max }) =>
   kib(median) + " (" + kib(min) + "-" + kib(max) + ")"
+// A figure's two cells: its stat, then its median minus the baseline's.
+const versus = (runs, baseline, key, format, delta) => {
+  const figure = column(runs, key)
+  return [
+    format(figure),
+    delta(figure.median - column(baseline, key).median)
+  ]
+}
 const table = (headers, rows) =>
   [headers, headers.map(() => "---"), ...rows].map((cells) =>
     "| " + cells.join(" | ") + " |"
   ).join("\n")
+const report = []
+const section = (title, ...body) =>
+  report.push("", "#### " + title, "", ...body)
 
 for (const directory of [ui, uiKit]) {
   assert.ok(
@@ -384,21 +397,34 @@ for (const directory of [ui, uiKit]) {
 }
 const root = fs.mkdtempSync(path.join(tmpdir(), "ui-kit-startup-"))
 const result = { vite, effect, node: process.version, samples }
-const report = []
 try {
   install(root, pack(ui, root), "@effect/ui")
   install(root, pack(uiKit, root), "@effect/ui-kit")
   fs.symlinkSync(effectDir, path.join(root, "node_modules/effect"))
 
+  // Each page minified, to measure, and unminified (plain), for binding and constructor names.
   const pages = {}
+  const plain = {}
+  result.pages = {}
   for (const [name, source] of Object.entries(variants)) {
     pages[name] = await bundle(root, name, source + shell)
-    pages[name].kept =
-      (await bundle(root, "plain-" + name, source + shell, false)).kept
+    plain[name] = await bundle(root, "plain-" + name, source + shell, false)
+    const { code } = pages[name]
+    result.pages[name] = {
+      kept: keptBindings(plain[name]),
+      raw: Buffer.byteLength(code),
+      gzip: gzipSync(code, { level: 9 }).length,
+      kitModules: kitModules(pages[name]).map((
+        [id, info]
+      ) => [kitPath(id), info.renderedLength])
+    }
   }
-  const mountPages = {}
+  const order = Object.entries(pages).map((
+    [name, page]
+  ) => ["runs", name, page.code])
   for (const [name, source] of Object.entries(mounts)) {
-    mountPages[name] = await bundle(root, "mount-" + name, shell + source)
+    const page = await bundle(root, "mount-" + name, shell + source)
+    order.push(["mountRuns", name, page.code])
   }
 
   const browser = await chromium.launch({
@@ -416,7 +442,7 @@ try {
   )
 
   // The timer check: serving the chunk as a module script 250 ms late moves __t0, not eval.
-  const check = {}
+  result.timerCheck = {}
   for (
     const [mode, delay] of [["inline classic script", 0], [
       "module script, served 250 ms late",
@@ -427,95 +453,66 @@ try {
     for (let i = 0; i < 10; i++) {
       runs.push(await sample(browser, pages.all.code, { delay }))
     }
-    check[mode] = {
-      eval: stat(runs.map((r) => r.eval)),
-      before: stat(runs.map((r) => r.before))
-    }
+    const before = column(runs, "before")
+    assert.ok(before.min >= delay, "the delayed chunk ran before its delay")
+    result.timerCheck[mode] = { eval: column(runs, "eval"), before }
   }
-  assert.ok(
-    Object.values(check)[1].before.min >= 250,
-    "the delayed chunk ran before its delay"
-  )
 
-  const measured = {}
   for (const rate of [1, 4]) {
-    const runs = Object.fromEntries(
-      Object.keys(pages).map((name) => [name, []])
-    )
-    const mountRuns = Object.fromEntries(
-      Object.keys(mountPages).map((name) => [name, []])
-    )
-    const order = [
-      ...Object.keys(pages).map((name) => [runs[name], pages[name], false]),
-      ...Object.keys(mountPages).map((
-        name
-      ) => [mountRuns[name], mountPages[name], true])
-    ]
+    const measured = result["x" + rate] = { runs: {}, mountRuns: {} }
     for (let round = 0; round < samples; round++) {
       for (let i = 0; i < order.length; i++) {
-        const [into, page, mount] = order[(i + round) % order.length]
-        into.push(await sample(browser, page.code, { rate, mount }))
+        const [kind, name, code] = order[(i + round) % order.length]
+        ;(measured[kind][name] ??= []).push(
+          await sample(browser, code, { rate, mount: kind === "mountRuns" })
+        )
       }
     }
-    measured[rate] = { runs, mountRuns }
   }
 
-  // Heap snapshots of unminified builds, for constructor names.
-  const snapBase = (await sample(
-    browser,
-    (await bundle(root, "plain-baseline", shell, false)).code,
-    {
-      snapshot: true
-    }
-  )).snapshot
-  const snapAll = (await sample(
-    browser,
-    (await bundle(root, "plain-all", variants.all + shell, false)).code,
-    {
-      snapshot: true
-    }
-  )).snapshot
+  const snapshot = async (name) =>
+    (await sample(browser, plain[name].code, { snapshot: true })).snapshot
+  const snapBase = await snapshot("baseline")
+  const snapAll = await snapshot("all")
   await browser.close()
 
-  const median = (values) => stat(values).median
-  const base = pages.baseline
-  report.push("", "#### What the bundler kept", "")
-  report.push(table(
-    [
-      "Page",
-      "Raw B",
-      "Gzip B",
-      "+gzip B",
-      "Kit modules",
-      "Kit rendered B",
-      "Kit top-level bindings kept"
-    ],
-    Object.entries(pages).map(([name, page]) => {
-      const kept = Object.values(page.kept)
-      const declared = kept.reduce((sum, module) => sum + module.declared, 0)
-      return [
-        name,
-        page.raw,
-        page.gzip,
-        page.gzip - base.gzip,
-        page.kitModules.length,
-        page.kitModules.reduce((sum, [, length]) => sum + length, 0),
-        declared - kept.reduce((sum, module) =>
-          sum + module.dropped.length, 0) +
-        " of " + declared
-      ]
-    })
-  ))
+  section(
+    "What the bundler kept",
+    table(
+      [
+        "Page",
+        "Raw B",
+        "Gzip B",
+        "+gzip B",
+        "Kit modules",
+        "Kit rendered B",
+        "Kit top-level bindings kept"
+      ],
+      Object.entries(result.pages).map(([name, page]) => {
+        const kept = Object.values(page.kept)
+        const declared = sum(kept.map((module) => module.declared))
+        return [
+          name,
+          page.raw,
+          page.gzip,
+          page.gzip - result.pages.baseline.gzip,
+          page.kitModules.length,
+          sum(page.kitModules.map(([, length]) => length)),
+          declared - sum(kept.map((module) => module.dropped.length)) +
+          " of " + declared
+        ]
+      })
+    )
+  )
   for (const name of ["checkbox", "combobox", "eight"]) {
-    const dropped = Object.entries(pages[name].kept).filter(([, module]) =>
+    const page = result.pages[name]
+    const dropped = Object.entries(page.kept).filter(([, module]) =>
       module.dropped.length > 0
     )
     report.push(
       "",
       name + " kit modules (rendered B): " +
-        pages[name].kitModules.map(([id, length]) => id + " " + length).join(
-          ", "
-        ),
+        page.kitModules.map(([id, length]) => id + " " + length).join(", "),
       "",
       name + " dropped bindings: " +
         (dropped.map(([id, module]) =>
@@ -523,81 +520,58 @@ try {
         ).join("; ") || "none")
     )
   }
-  result.pages = Object.fromEntries(
-    Object.entries(pages).map(([name, { code, ...page }]) => [name, page])
+
+  section(
+    "Timer check (all page, 1x, 10 samples)",
+    table(
+      ["Delivery", "eval ms", "__tPre to __t0 ms"],
+      Object.entries(result.timerCheck).map((
+        [mode, { eval: e, before }]
+      ) => [mode, ms(e), ms(before)])
+    )
   )
 
-  report.push("", "#### Timer check (all page, 1x, 10 samples)", "")
-  report.push(table(
-    ["Delivery", "eval ms", "__tPre to __t0 ms"],
-    Object.entries(check).map((
-      [mode, { eval: e, before }]
-    ) => [mode, ms(e), ms(before)])
-  ))
-  result.timerCheck = check
-
   for (const rate of [1, 4]) {
-    const { mountRuns, runs } = measured[rate]
-    const baseEval = median(runs.baseline.map((r) => r.eval))
-    const baseScript = median(runs.baseline.map((r) => r.script))
-    const baseHeap = median(runs.baseline.map((r) => r.heap))
-    report.push("", "#### Evaluation and retained heap, " + rate + "x CPU", "")
-    report.push(table(
-      [
-        "Page",
-        "eval ms",
-        "+eval ms",
-        "script ms",
-        "+script ms",
-        "heap KiB",
-        "+heap KiB"
-      ],
-      Object.entries(runs).map(([name, list]) => {
-        const e = stat(list.map((r) => r.eval))
-        const s = stat(list.map((r) => r.script))
-        const h = stat(list.map((r) => r.heap))
-        return [
+    const { mountRuns, runs } = result["x" + rate]
+    section(
+      "Evaluation and retained heap, " + rate + "x CPU",
+      table(
+        [
+          "Page",
+          "eval ms",
+          "+eval ms",
+          "script ms",
+          "+script ms",
+          "heap KiB",
+          "+heap KiB"
+        ],
+        Object.entries(runs).map(([name, list]) => [
           name,
-          ms(e),
-          (e.median - baseEval).toFixed(2),
-          ms(s),
-          (s.median - baseScript).toFixed(2),
-          kb(h),
-          kib(h.median - baseHeap)
-        ]
-      })
-    ))
-    const baseMount = median(mountRuns.baseline.map((r) => r.mount))
-    const baseMountHeap = median(mountRuns.baseline.map((r) => r.mountHeap))
-    report.push(
-      "",
-      "#### First mount, " + rate +
-        "x CPU (the baseline mounts a plain button)",
-      ""
+          ...versus(list, runs.baseline, "eval", ms, fixed),
+          ...versus(list, runs.baseline, "script", ms, fixed),
+          ...versus(list, runs.baseline, "heap", kb, kib)
+        ])
+      )
     )
-    report.push(table(
-      [
-        "Page",
-        "mount ms",
-        "+mount ms",
-        "mount heap KiB",
-        "+mount heap KiB",
-        "page eval ms"
-      ],
-      Object.entries(mountRuns).map(([name, list]) => {
-        const m = stat(list.map((r) => r.mount))
-        const h = stat(list.map((r) => r.mountHeap))
-        return [
+    section(
+      "First mount, " + rate + "x CPU (the baseline mounts a plain button)",
+      table(
+        [
+          "Page",
+          "mount ms",
+          "+mount ms",
+          "mount heap KiB",
+          "+mount heap KiB",
+          "page eval ms"
+        ],
+        Object.entries(mountRuns).map(([name, list]) => [
           name,
-          ms(m),
-          (m.median - baseMount).toFixed(2),
-          kb(h),
-          kib(h.median - baseMountHeap),
-          ms(stat(list.map((r) => r.eval)))
-        ]
-      })
-    ))
-    result["x" + rate] = measured[rate]
+          ...versus(list, mountRuns.baseline, "mount", ms, fixed),
+          ...versus(list, mountRuns.baseline, "mountHeap", kb, kib),
+          ms(column(list, "eval"))
+        ])
+      )
+    )
   }
 
   const diff = [...new Set([...snapBase.keys(), ...snapAll.keys()])].map(
@@ -607,23 +581,18 @@ try {
       return [key, b.count - a.count, b.size - a.size]
     }
   ).sort((a, b) => b[2] - a[2])
-  report.push(
-    "",
-    "#### Heap snapshot, all minus baseline (unminified builds, 1x, one sample each)",
-    ""
-  )
-  report.push(
-    "Self size difference: " + kib(diff.reduce((sum, [, , size]) =>
-      sum + size, 0)) +
+  section(
+    "Heap snapshot, all minus baseline (unminified builds, 1x, one sample each)",
+    "Self size difference: " + kib(sum(diff.map(([, , size]) => size))) +
       " KiB.",
-    ""
+    "",
+    table(
+      ["Node", "+count", "+KiB"],
+      diff.slice(0, 20).map((
+        [key, count, size]
+      ) => [key.replaceAll("|", "\\|"), count, (size / 1024).toFixed(1)])
+    )
   )
-  report.push(table(
-    ["Node", "+count", "+KiB"],
-    diff.slice(0, 20).map((
-      [key, count, size]
-    ) => [key.replaceAll("|", "\\|"), count, (size / 1024).toFixed(1)])
-  ))
   result.snapshotDiff = diff.slice(0, 50)
 } finally {
   fs.rmSync(root, { recursive: true, force: true })
