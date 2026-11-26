@@ -32,7 +32,7 @@ const attributes: ReadonlySet<string> = new Set([
   "data"
 ])
 
-/** SVG `set` and `animate`, as the HTML parser folds their case. */
+// Match case-insensitively because the HTML parser folds tag names.
 const animation = /^(set|animate)$/i
 
 const properties: ReadonlySet<string> = new Set([
@@ -44,9 +44,9 @@ const properties: ReadonlySet<string> = new Set([
 ])
 
 /**
- * Whether a URL is blocked for the normalized attribute `name` of `tag`. An
- * animation value is blocked whatever attribute it targets; `values` is a
- * `;`-separated list, blocked when any item is.
+ * Whether `value` is blocked for the normalized attribute `name` of `tag`.
+ * Animation checks do not depend on `attributeName`, which can change
+ * independently of the value.
  *
  * @internal
  */

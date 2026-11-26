@@ -51,11 +51,12 @@
  * a built-in element's `href`, `src`, `action`, `formAction` or `data` property
  * to a blocked URL removes its reflected attribute instead. Custom element
  * properties are unchanged. These checks apply to server rendering, browser
- * updates, hydration and head attributes. They also omit a `set` or
- * `animate` element's `to`, `from` or `by` holding a blocked URL, and its
- * `values` when any `;`-separated item is one, whatever its `attributeName`
- * targets. Scheme checks ignore case, ASCII controls and spaces; relative
- * URLs and other schemes pass through unchanged.
+ * updates, hydration and head attributes. For `set` and `animate` elements,
+ * the renderers also omit `to`, `from` and `by` attributes containing blocked
+ * URLs, and the entire `values` attribute if any semicolon-separated item
+ * is blocked. These animation checks apply regardless of `attributeName`.
+ * Scheme checks ignore case, ASCII controls and spaces; relative URLs and
+ * other schemes pass through unchanged.
  *
  * **Example** (A controlled text field)
  *

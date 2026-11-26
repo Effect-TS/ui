@@ -2,4 +2,4 @@
 "@effect/ui": patch
 ---
 
-Server rendering, hydration and browser updates now omit a `set` or `animate` element's `to`, `from`, `by` or `values` when it holds a `javascript:` or `vbscript:` URL, so an animation can't put a blocked URL on a link.
+Prevent SVG `set` and `animate` elements from assigning `javascript:` or `vbscript:` URLs to links during server rendering, hydration and browser updates. Omit blocked `to`, `from` and `by` attributes, and the entire `values` attribute if any semicolon-separated item is blocked.
