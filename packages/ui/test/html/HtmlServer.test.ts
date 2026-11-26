@@ -315,6 +315,40 @@ describe("HtmlServer", { concurrent: false }, () => {
       }
     }).pipe(Effect.scoped))
 
+  it.effect("drops animation values that would set a blocked URL", () =>
+    Effect.gen(function*() {
+      const Page = Html.component({
+        name: "Animated",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          h.el("svg").children(
+            h.el("a").children(
+              h.el("set").attr("attributeName", "href").attr(
+                "to",
+                "javascript:"
+              ),
+              h.el("animate").attr("attributeName", "xlink:href")
+                .attr("from", "/a").attr("by", " VBScript:"),
+              h.el("animate").attr("attributename", "href")
+                .attr("values", "/a; javascript:;/b"),
+              h.el("animate").attr("attributeName", "href")
+                .attr("values", "/a;/b")
+            )
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toBe(
+        "<!--[/Animated--><svg><a><set attributename=\"href\"></set>" +
+          "<animate attributename=\"xlink:href\" from=\"/a\"></animate>" +
+          "<animate attributename=\"href\"></animate>" +
+          "<animate attributename=\"href\" values=\"/a;/b\"></animate></a></svg><!--]/Animated-->"
+      )
+    }))
+
   it.effect("a blocked URL property removes only the attribute it reflects, and adoption drops a stale blocked URL", () =>
     Effect.gen(function*() {
       let sets = 0
