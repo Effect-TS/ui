@@ -85,7 +85,7 @@ export type OpenTuiRoot<V> = [Renderer.HostOf<V>] extends [OpenTui.Host]
 export interface MountOptions<
   V extends View.Elements,
   RF = never,
-  Events = never
+  Events = unknown
 > {
   /** Receives the root's events in emission order, as for `Renderer.mount`. */
   readonly onEmit?: ((event: Events) => void) | undefined

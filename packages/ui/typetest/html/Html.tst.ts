@@ -833,6 +833,32 @@ describe("BrowserHost", () => {
     >()
   })
 
+  it("onEmit is typed by the root's events, and named options without it still fit an emitting root", () => {
+    const Events = UiSchema.TaggedEnum({ Finished: { answer: Schema.Number } })
+    const Picker = Html.component({
+      name: "Picker",
+      model: Schema.Number,
+      message: Msg,
+      events: Events
+    }).make({
+      init: () => 0,
+      update: ($) => $.model,
+      view: (h) => h.button("pick")
+    })
+    BrowserHost.mountEffect(Picker, {}, document.body, {
+      onEmit: (event) => {
+        expect(event).type.toBe<typeof Events.Type>()
+      }
+    })
+    const options: BrowserHost.MountOptions<Html.Elements> = { head: false }
+    expect(BrowserHost.mountEffect).type.toBeCallableWith(
+      Picker,
+      {},
+      document.body,
+      options
+    )
+  })
+
   it("mount rejects a root of another vocabulary", () => {
     const Native: View.Vocabulary<Native> = { name: "native", tags: {} }
     const App = Component.define({

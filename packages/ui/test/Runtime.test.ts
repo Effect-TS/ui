@@ -6658,7 +6658,6 @@ describe("Runtime", () => {
         })
         assert.deepStrictEqual(received, [Events.Ready()])
         root.send(Message.Step())
-        yield* TestHost.settle
         assert.deepStrictEqual(received, [
           Events.Ready(),
           Events.Stepped({ value: 1 }),

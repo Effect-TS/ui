@@ -568,8 +568,9 @@ export type HostOf<V> = [V] extends [never] ? never
  * arrive before `mount` returns, and an update's arrive inside `send`, both
  * before the view is placed, so don't read the container from the callback.
  * A callback that throws fails the root, logged `in` `"onEmit"`, and the
- * transition's remaining events are dropped. A hydrated root's `init` events
- * are never delivered.
+ * transition's remaining events are dropped. A hydrated root that adopts
+ * server state drops its `init` events; one hydration builds fresh delivers
+ * them.
  *
  * The mount owns the head: on every flush that changed a view it folds the
  * placed tree's head with the root vocabulary's merge, and gives it to the
