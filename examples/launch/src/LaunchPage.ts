@@ -190,10 +190,9 @@ const hashTarget = () => {
   }
 }
 
-// The page is rendered on the client after initial HTML load, so the
-// browser's own fragment scroll runs before the headings exist. Jump
-// straight to the target once mounted, and re-align after webfonts
-// settle if the user hasn't scrolled away.
+// Align to the initial URL hash after mount (for client-rendered dev
+// loads where headings aren't in the initial HTML) and again once
+// webfonts settle if the user hasn't scrolled away.
 const ScrollToInitialHash = Subscription.make(
   "initial-hash",
   Stream.fromEffect(
