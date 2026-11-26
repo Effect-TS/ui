@@ -433,7 +433,12 @@ describe("DevTools overlay", { concurrent: false }, () => {
         HtmlLocator.queryAllByRole(app, "button", { name: "Close n2" }),
         0
       )
-      assert.isNull(root.querySelector(".pause-note"))
+      const note = root.querySelector(".pause-note")!
+      assert.include(text(note.querySelector("summary")), "mount")
+      assert.deepStrictEqual(
+        Array.from(note.querySelectorAll("li"), (node) => text(node)),
+        ["/Workspace/Editor[n1]", "/Workspace/Editor[n2]"]
+      )
 
       yield* click(oldest(root, /Update UpdatedDraft$/))
       assert.strictEqual(document.querySelectorAll("[inert]").length, 1)

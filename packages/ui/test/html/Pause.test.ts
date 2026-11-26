@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { Component, Feature, MessageLog, Mount, UiSchema } from "@effect/ui"
-import { BrowserHost, Html } from "@effect/ui/html"
+import { BrowserHost, Canvas, Html } from "@effect/ui/html"
 import { expect, it } from "@effect/vitest"
 import { Effect, Exit, Schema } from "effect"
 
@@ -55,7 +55,11 @@ it.effect("pause paints a frozen copy beside the hidden container, and resume sh
     const painted = yield* pausable.pause((path) =>
       path === "/Counter" ? { model: 7 } : undefined
     )
-    expect(painted).toEqual({ fellBack: [], fallbacks: [] })
+    expect(painted).toEqual({
+      fellBack: [],
+      fallbacks: [],
+      skipped: ["/Counter"]
+    })
     const copy = app.nextElementSibling as HTMLElement
     expect(copy.outerHTML).toBe(
       "<main class=\"app\" style=\"display: grid;\" inert=\"\"><button>clicked 7</button></main>"
@@ -79,6 +83,69 @@ it.effect("pause paints a frozen copy beside the hidden container, and resume sh
     expect(page.querySelectorAll("[inert]").length).toBe(0)
     expect(app.style.getPropertyValue("display")).toBe("grid")
     expect(app.textContent).toBe("clicked 1")
+  }).pipe(Effect.scoped))
+
+const Sketch = Html.component({
+  name: "Sketch",
+  model: Schema.Number,
+  message: UiSchema.TaggedEnum({})
+}).make({
+  init: () => 0,
+  update: ($) => $.model,
+  view: (h, width) =>
+    Canvas.view(h, {
+      width: 30,
+      height: 20,
+      pixelRatio: 2,
+      shapes: [Canvas.Rect({ x: 0, y: 0, width, height: 1, fill: "red" })]
+    })
+})
+
+it.effect("the copy's canvas is painted from the paused state, or reported as skipped without a 2D context", () =>
+  Effect.gen(function*() {
+    const drawn = new Map<HTMLCanvasElement, Array<string>>()
+    const getContext = HTMLCanvasElement.prototype.getContext
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        HTMLCanvasElement.prototype.getContext = function(
+          this: HTMLCanvasElement
+        ) {
+          const calls: Array<string> = []
+          drawn.set(this, calls)
+          return new Proxy({}, {
+            get: (_, name: string) => (...args: Array<unknown>) =>
+              void calls.push(`${name}(${args.join(",")})`),
+            set: (_, name: string, value) => {
+              calls.push(`${name}=${value}`)
+              return true
+            }
+          })
+        } as any
+      }),
+      () =>
+        Effect.sync(() => HTMLCanvasElement.prototype.getContext = getContext)
+    )
+    const { app } = yield* place()
+    const roots: Array<BrowserHost.Controllable> = []
+    yield* BrowserHost.mountEffect(Sketch, {}, app).pipe(register(roots))
+    yield* tick
+
+    const painted = yield* roots[0].pause(() => ({ model: 5 }))
+    const canvas = app.nextElementSibling!.querySelector("canvas")!
+    expect([canvas.width, canvas.height]).toEqual([60, 40])
+    expect(drawn.get(canvas)).toEqual(
+      expect.arrayContaining(["setTransform(2,0,0,2,0,0)", "fillRect(0,0,5,1)"])
+    )
+    expect(painted).toEqual({ fellBack: [], fallbacks: [], skipped: [] })
+    yield* roots[0].resume
+
+    HTMLCanvasElement.prototype.getContext = () => null
+    expect(yield* roots[0].pause(() => ({ model: 5 }))).toEqual({
+      fellBack: [],
+      fallbacks: [],
+      skipped: ["/Sketch"]
+    })
+    yield* roots[0].resume
   }).pipe(Effect.scoped))
 
 const FieldMessage = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
@@ -177,7 +244,11 @@ it.effect("pause reports the instances whose feature slot shows its fallback in 
 
     const painted = yield* roots[0].pause(() => ({ model: null }))
     expect(app.nextElementSibling!.textContent).toBe("loadingnotenote")
-    expect(painted).toEqual({ fellBack: [], fallbacks: ["/Page/Pane[p]"] })
+    expect(painted).toEqual({
+      fellBack: [],
+      fallbacks: ["/Page/Pane[p]"],
+      skipped: []
+    })
     yield* roots[0].resume
   }).pipe(Effect.scoped))
 

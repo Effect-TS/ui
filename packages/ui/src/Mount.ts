@@ -96,12 +96,22 @@ export type DefinitionTypeId = typeof DefinitionTypeId
  * redacting `Schema.Redacted` fields, and the runtime uses its equivalence
  * to tell whether a render changed them.
  *
+ * The optional `paint` callback draws the node synchronously from its args
+ * on a copy of the page that runs no mounts, such as DevTools time travel.
+ * The runtime calls it once after the node is attached, without `send` or
+ * a Scope. Only draw: do not attach listeners or acquire resources.
+ * If `paint` is absent or throws, the copy reports the instance as skipped;
+ * without `paint`, the node stays as the view rendered it.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Options<In extends Command.ArgsInput> {
+export interface Options<In extends Command.ArgsInput, Node = unknown> {
   readonly args: In
+  readonly paint?:
+    | ((node: Node, args: Command.ArgsOf<In>) => void)
+    | undefined
 }
 
 /**
@@ -228,6 +238,12 @@ export interface Issued<
    */
   readonly resolve: (result: Source) => Msg
   /**
+   * The definition's `paint`, for a copy of the page that runs no mounts.
+   *
+   * @internal
+   */
+  readonly paint: ((node: Node, args: any) => void) | undefined
+  /**
    * What keeps a running mount's args and gives their changes. A runtime
    * reaches it through the mount, so an app that issues none ships none of
    * it.
@@ -325,6 +341,7 @@ interface Fields {
   readonly stream: boolean
   readonly run: Issued<any, any, any, any>["run"]
   readonly resolve: (result: any) => any
+  readonly paint: Issued<any, any, any, any>["paint"]
 }
 
 const makeIssued = (fields: Fields): any =>
@@ -411,7 +428,7 @@ export const make = <
   R = never
 >(
   name: Name,
-  options: Options<In>,
+  options: Options<In, Node>,
   run: (
     node: Node,
     args: Command.ArgsOf<In>,
@@ -486,7 +503,7 @@ export const makeStream = <
   R = never
 >(
   name: Name,
-  options: Options<In>,
+  options: Options<In, Node>,
   run: (
     node: Node,
     args: Command.ArgsOf<In>,
@@ -503,7 +520,7 @@ export const makeStream = <
 
 const define = (
   name: string,
-  options: Options<Command.ArgsInput>,
+  options: Options<Command.ArgsInput, any>,
   stream: boolean,
   run: Fields["run"]
 ): any => {
@@ -511,7 +528,15 @@ const define = (
     ? options.args as Schema.Top
     : Schema.Struct(options.args as Schema.Struct.Fields)
   const factory = (args: unknown = {}) =>
-    makeIssued({ name, args, argsSchema, stream, run, resolve: identity })
+    makeIssued({
+      name,
+      args,
+      argsSchema,
+      stream,
+      run,
+      resolve: identity,
+      paint: options.paint
+    })
   Object.defineProperty(factory, "name", { value: name })
   return Object.assign(factory, {
     [DefinitionTypeId]: DefinitionTypeId,
@@ -560,7 +585,8 @@ export const map: {
       argsSchema: self.argsSchema,
       stream: self.stream,
       run: self.run,
-      resolve: (result) => f(resolve(result))
+      resolve: (result) => f(resolve(result)),
+      paint: self.paint
     })
   }
 )

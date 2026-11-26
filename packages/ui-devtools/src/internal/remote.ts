@@ -100,7 +100,8 @@ export const makeHandler = (
             painted !== undefined
               ? Effect.succeed({
                 fellBack: [...painted.fellBack],
-                fallbacks: [...painted.fallbacks]
+                fallbacks: [...painted.fallbacks],
+                skipped: [...painted.skipped]
               })
               : Effect.fail(
                 controller.roots.has(request.session)

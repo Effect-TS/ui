@@ -59,6 +59,7 @@ export interface Host<N = any> {
   readonly transitions?: ((tree: Tree) => Transitions) | undefined
   readonly server?: Server | undefined
   readonly inert?: boolean | undefined
+  readonly skipped?: ((path: string) => void) | undefined
 }
 
 /** @internal */

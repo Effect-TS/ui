@@ -365,6 +365,11 @@ const PausedBar = (
       "fallback",
       " showing a feature slot fallback, Layer not built on the painted page",
       paused.fallbacks
+    ],
+    [
+      "skipped",
+      " with a mount that didn't run on the painted page",
+      paused.skipped
     ]
   ] as const).filter(([, , list]) => list.length > 0)
   return h.section.class("pausebar").attr(

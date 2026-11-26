@@ -369,7 +369,8 @@ describe("DevToolsServer", { concurrent: false }, () => {
         assert.deepStrictEqual(shown, {
           paused: seq,
           fellBack: [],
-          fallbacks: []
+          fallbacks: [],
+          skipped: ["/Workspace/Editor[n1]", "/Workspace/Editor[n2]"]
         })
         assert.strictEqual(app.style.display, "none")
         yield* until(() =>
@@ -808,6 +809,35 @@ describe("DevToolsServer", { concurrent: false }, () => {
           "Any of the messages may have been applied, or none"
         )
         assert.include(message, "after #1")
+        log.close()
+        control.close()
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
+    "accepts a pause from a page that reports no skipped mounts",
+    () =>
+      Effect.gen(function*() {
+        const { agent, url } = yield* serveFast(47754, 300)
+        const log = yield* connectSocket(url.replace("http", "ws") + "/log")
+        log.send(JSON.stringify({ _tag: "Hello", version: 1, host: "test" }))
+        log.send(
+          JSON.stringify({ _tag: "SessionStarted", ...at, seq: 0, app: "App" })
+        )
+        const control = yield* connectSocket(
+          url.replace("http", "ws") + "/control"
+        )
+        control.send(
+          JSON.stringify({
+            _tag: "State",
+            sessions: ["s"],
+            paused: { session: "s", seq: 0, fellBack: [], fallbacks: [] }
+          })
+        )
+        yield* wait(100)
+        const [session] = yield* agent.call("list_sessions")
+        assert.strictEqual(session.paused, 0)
         log.close()
         control.close()
       }).pipe(Effect.scoped),

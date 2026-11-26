@@ -133,7 +133,10 @@ const running = new WeakMap<Kernel.Rec, Running>()
 /** @internal */
 export const attach = (mount: Mount.Any, rec: Kernel.Rec): void => {
   const tree = rec.inst.tree
-  if (tree.host.runsMounts !== true) return
+  if (tree.host.runsMounts !== true) {
+    if (tree.host.inert === true) afterCommit(tree, () => still(mount, rec))
+    return
+  }
   const current = running.get(rec)
   if (current !== undefined && current.mount.name === mount.name) {
     return current.update(mount)
@@ -143,6 +146,17 @@ export const attach = (mount: Mount.Any, rec: Kernel.Rec): void => {
   running.set(rec, next)
   const from = follow(tree)
   afterCommit(tree, () => next.start(from))
+}
+
+const still = (mount: Mount.Any, rec: Kernel.Rec): void => {
+  const inst = rec.inst
+  if (inst.closed) return
+  if (mount.paint !== undefined) {
+    try {
+      return mount.paint(rec.node as never, mount.args)
+    } catch {}
+  }
+  inst.tree.host.skipped?.(inst.path)
 }
 
 /** @internal */
