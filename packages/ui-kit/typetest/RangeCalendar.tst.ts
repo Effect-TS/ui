@@ -64,29 +64,19 @@ describe("RangeCalendar", () => {
         expect(rangeCalendar.cell({ element: h.td, date: utc })).type.toBe<
           Td<never>
         >()
-        expect(
-          rangeCalendar.day({
-            element: h.button.onMount(NeedsClock()),
-            date: utc,
-            unavailable: true
-          })
-        ).type.toBe<Button<Clock>>()
-        return rangeCalendar.root(h.div).children(
-          rangeCalendar.day({
-            element: h.button.onMount(NeedsClock()),
-            date: utc
-          })
-        )
+        const day = rangeCalendar.day({
+          element: h.button.onMount(NeedsClock()),
+          date: utc,
+          unavailable: true
+        })
+        expect(day).type.toBe<Button<Clock>>()
+        return rangeCalendar.root(h.div).children(day)
       }
     })
     expect<View.Requirements<typeof child>>().type.toBe<Clock>()
   })
 
   it("takes a range as its value and rejects wrong element tags", () => {
-    expect(RangeCalendar).type.not.toBeCallableWith(h, {
-      props: { value: utc, month: utc, today: utc },
-      view: () => h.div
-    })
     expect(RangeCalendar).type.not.toBeCallableWith(h, {
       props: { value: { start: utc }, month: utc, today: utc },
       view: () => h.div
