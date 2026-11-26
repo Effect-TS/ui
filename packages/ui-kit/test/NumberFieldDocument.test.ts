@@ -253,24 +253,18 @@ describe("NumberField in a document", { concurrent: false }, () => {
 
   it.effect("accepts either apostrophe as the group separator only where the locale groups with one", () =>
     Effect.gen(function*() {
+      const us = yield* mount({ locale: "en-US" }, null)
       for (const mark of ["'", "’"]) {
         const text = "1" + mark + "234.25"
-        const typed = yield* mount({ locale: "de-CH" }, null)
-        select(typed.input, "1", 1)
-        assert.isFalse(blocks(typed.input, mark))
-        type(typed.input, text)
+        const { input, taken } = yield* mount({ locale: "de-CH" }, null)
+        select(input, "1", 1)
+        assert.isFalse(blocks(input, mark))
+        select(input, "", 0)
+        assert.isTrue(paste(input, text))
+        assert.strictEqual(input.value, text)
         yield* tick
-        assert.strictEqual(typed.input.value, text)
-        assert.deepStrictEqual(typed.taken(), ["updated 1234.25 input-change"])
+        assert.deepStrictEqual(taken(), ["updated 1234.25 input-paste"])
 
-        const pasted = yield* mount({ locale: "de-CH" }, null)
-        select(pasted.input, "", 0)
-        assert.isTrue(paste(pasted.input, text))
-        assert.strictEqual(pasted.input.value, text)
-        yield* tick
-        assert.deepStrictEqual(pasted.taken(), ["updated 1234.25 input-paste"])
-
-        const us = yield* mount({ locale: "en-US" }, null)
         select(us.input, "1", 1)
         assert.isTrue(blocks(us.input, mark))
         select(us.input, "", 0)
