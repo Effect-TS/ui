@@ -36,19 +36,20 @@ const hydrate = Effect.gen(function*() {
   //
   // To keep those made before hydration starts, an app can print an inline
   // script at the start of `<body>` with capture-phase listeners on
-  // `document` for targets inside the container. A click whose `target.closest("button")` is a button the app
-  // replays is cancelled and that button recorded; other clicks, such as on
-  // links, are left alone. A submit is cancelled and its form recorded with
-  // its `submitter`. Remove the listeners before calling `hydrateEffect`, or
-  // a click on an instance that is already live would run twice. From then on
-  // a waiting instance's click handlers don't run and its forms submit
-  // natively.
+  // `document` for targets inside the container. A click whose
+  // `target.closest("button")` is a button the app replays is cancelled and
+  // that button recorded; other clicks, such as on links, are left alone. A
+  // submit is cancelled and its form recorded with its `submitter`. Remove
+  // the listeners before calling `hydrateEffect`, or a click on an instance
+  // that is already live would run twice. From then on a waiting instance's
+  // click handlers don't run and its forms submit natively.
   //
   // After `root.adopted`, skip anything no longer connected or enabled
   // (hydration disconnects the nodes it rebuilt). Call `click()` on each
   // recorded button, and `form.requestSubmit(submitter)` for each submit, or
-  // `form.requestSubmit()` when it had no submitter. Skip a submit whose
-  // submitter has left its form, since its name and value are part of the
+  // `form.requestSubmit()` when it had no submitter. Skip a submit if its
+  // recorded submitter is no longer a submit button for that form:
+  // `requestSubmit` throws for it, and its name and value are part of the
   // submission. Replay waits for the slowest instance, and if the client
   // bundle fails to load, the cancelled submits leave the forms doing nothing.
   yield* root.adopted
