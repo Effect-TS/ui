@@ -310,6 +310,12 @@ const contextOf = (props: CalendarProps) => ({
   max: normalizeOptional(props.max)
 })
 
+const weeksOf = (props: CalendarProps, monthStart: DateTime.Utc) =>
+  weeksOfMonth(
+    monthStart,
+    props.firstDayOfWeek ?? firstDayOfWeek(props.locale)
+  )
+
 const navigate = (
   $: CalendarUpdate,
   date: DateTime.Utc,
@@ -432,7 +438,11 @@ export const Calendar = Html.component({
     PressedKey: ($, { date, move }) => navigate($, date, move),
     SyncedMonth: ($) => {
       const context = contextOf($.props)
-      const { shouldFocus, ...phase } = syncMonthPhase($.model, context)
+      const { shouldFocus, ...phase } = syncMonthPhase(
+        $.model,
+        context,
+        weeksOf($.props, context.monthStart)
+      )
       const next = $.evolve({ ...phase, shownMonth: context.monthStart })
       return shouldFocus && phase.focusedDay !== null
         ? next.run(focusDay(phase.focusedDay))
@@ -463,7 +473,7 @@ export const Calendar = Html.component({
     const weeks = weeksOfMonth(monthStart, weekStartsOn)
     const weekdays = weekdayNames(props.locale, weekStartsOn)
     const title = formatMonthTitle(monthStart, props.locale)
-    const phase = syncMonthPhase(model, context)
+    const phase = syncMonthPhase(model, context, weeks)
     const tabStop = tabStopOf(phase.focusedDay, context, weeks)
     const fullDate = fullDateFormatter(props.locale)
     const headingId = p.id("heading")

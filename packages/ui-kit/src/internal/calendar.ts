@@ -350,9 +350,43 @@ export const focusInMonth = (
     shown(context, context.today) ??
     clampedShown(context, context.monthStart)
 
+type Weeks = ReadonlyArray<ReadonlyArray<DateTime.Utc>>
+
+// `date` when it is rendered and in range, else `null`.
+const rendered = (
+  context: FocusContext,
+  weeks: Weeks,
+  date: DateTime.Utc | null
+): DateTime.Utc | null => {
+  const first = weeks[0]?.[0]
+  const last = weeks.at(-1)?.at(-1)
+  return date !== null &&
+      first !== undefined &&
+      last !== undefined &&
+      !isOutOfRange(date, first, last) &&
+      !isOutOfRange(date, context.min, context.max)
+    ? date
+    : null
+}
+
+// `focusInMonth`, or when no day of the shown month is in range, the rendered
+// day nearest to it.
+const focusInGrid = (
+  context: FocusContext,
+  weeks: Weeks,
+  previousFocusedDay: DateTime.Utc | null
+): DateTime.Utc | null =>
+  focusInMonth(context, previousFocusedDay) ??
+    rendered(
+      context,
+      weeks,
+      clampDate(context.monthStart, context.min, context.max)
+    )
+
 export const syncMonthPhase = (
   model: CalendarGridModel,
-  context: FocusContext
+  context: FocusContext,
+  weeks: Weeks
 ): CalendarGridPhase => {
   if (sameMonth(model.shownMonth, context.monthStart)) {
     return {
@@ -377,7 +411,7 @@ export const syncMonthPhase = (
   }
   const focusedDay = model.focusedDay === null
     ? null
-    : focusInMonth(context, model.focusedDay)
+    : focusInGrid(context, weeks, model.focusedDay)
   // The focused day left the DOM with its month, so focus follows the tab stop.
   const refocus = model.focused && focusedDay !== null
   return {
@@ -391,24 +425,10 @@ export const syncMonthPhase = (
 export const tabStopOf = (
   focusedDay: DateTime.Utc | null,
   context: FocusContext,
-  weeks: ReadonlyArray<ReadonlyArray<DateTime.Utc>>
-): DateTime.Utc | null => {
-  const first = weeks[0]?.[0]
-  const last = weeks.at(-1)?.at(-1)
-  // `date` when it is rendered and in range, else `null`.
-  const rendered = (date: DateTime.Utc | null) =>
-    date !== null &&
-      first !== undefined &&
-      last !== undefined &&
-      !isOutOfRange(date, first, last) &&
-      !isOutOfRange(date, context.min, context.max)
-      ? date
-      : null
-  return rendered(focusedDay) ??
-    focusInMonth(context, focusedDay) ??
-    // No day of the shown month is in range: the rendered day nearest to it.
-    rendered(clampDate(context.monthStart, context.min, context.max))
-}
+  weeks: Weeks
+): DateTime.Utc | null =>
+  rendered(context, weeks, focusedDay) ??
+    focusInGrid(context, weeks, focusedDay)
 
 export const dayAttrs = <
   B extends Attributed<B> & { readonly disabled: (disabled: boolean) => B }
