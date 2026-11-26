@@ -398,7 +398,13 @@ export type HtmlRoot<V> = [Renderer.HostOf<V>] extends [Html.Host] ? unknown
  * @category models
  * @since 0.1.0
  */
-export interface MountOptions<V extends View.Elements, RF = never> {
+export interface MountOptions<
+  V extends View.Elements,
+  RF = never,
+  Events = never
+> {
+  /** Receives the root's events in emission order, as for `Renderer.mount`. */
+  readonly onEmit?: ((event: Events) => void) | undefined
   /** Shown in the root's place when the root itself fails. */
   readonly fallback?:
     | ((
@@ -493,7 +499,7 @@ export const mount = <
     & HtmlRoot<V>,
   props: Props | Effect.Effect<Props, never, RP>,
   container: globalThis.Element,
-  options?: MountOptions<V, RF>
+  options?: MountOptions<V, RF, Events>
 ): Layer.Layer<never, never, Exclude<R | RF | RP, Html.Host>> =>
   Layer.effectDiscard(mountEffect(component, props, container, options)) as any
 
@@ -532,7 +538,7 @@ export const mountEffect = <
     & HtmlRoot<V>,
   props: Props | Effect.Effect<Props, never, RP>,
   container: globalThis.Element,
-  options?: MountOptions<V, RF>
+  options?: MountOptions<V, RF, Events>
 ): Effect.Effect<
   Renderer.Root<Model, Msg>,
   never,
@@ -551,7 +557,7 @@ export const mountRoot = (
   component: Component.Any,
   props: unknown,
   container: globalThis.Element,
-  options: MountOptions<any, any> | undefined,
+  options: MountOptions<any, any, any> | undefined,
   hydrate: hydrateRun.Hydrating | undefined
 ): Effect.Effect<Renderer.Root<any, any>, never, Scope.Scope> =>
   Effect.gen(function*() {

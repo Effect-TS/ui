@@ -659,7 +659,7 @@ export interface Root<out Model, in Msg, out Events> {
   readonly model: () => Model | undefined
   /** Sends a message to the root. The log shows it as a `Dispatch`. */
   readonly send: (message: Msg) => void
-  /** What the root emitted, in order. */
+  /** The events the root delivered, in order, as a parent's `onEmit` gets them. */
   readonly emitted: ReadonlyArray<Events>
   /** This mount's log entries, oldest first. */
   readonly log: () => ReadonlyArray<MessageLog.Entry>
@@ -775,11 +775,12 @@ export const mount = <
     }
     const offCommit = testHost.host.onCommit(frame)
     yield* Effect.addFinalizer(() => Effect.sync(offCommit))
+    const emitted: Array<unknown> = []
     const root = yield* runtime.mount(
       component as any,
       props,
       container,
-      { ...options, recordEmitted: true } as any
+      { ...options, onEmit: (event: unknown) => emitted.push(event) } as any
     ).pipe(
       Effect.provideService(
         Clock.Clock,
@@ -793,7 +794,8 @@ export const mount = <
       testHost,
       root,
       testHost.log,
-      () => frames.slice()
+      () => frames.slice(),
+      emitted
     )
     testRoot = {
       ...neutral,
@@ -818,7 +820,8 @@ export const register = (
   testHost: TestHost,
   root: runtime.Root & Renderer.Root<any, any>,
   log: MessageLog.Memory,
-  frames: () => ReadonlyArray<string>
+  frames: () => ReadonlyArray<string>,
+  emitted: ReadonlyArray<unknown>
 ): Effect.Effect<Root<any, any, any>, never, Scope.Scope> =>
   Effect.gen(function*() {
     const pending = (): ReadonlyArray<Pending> => [
@@ -846,7 +849,7 @@ export const register = (
       session: root.session,
       model: root.model,
       send: root.send,
-      emitted: root.emitted,
+      emitted,
       log: entries,
       pending,
       fetches: () =>

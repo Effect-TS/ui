@@ -563,6 +563,14 @@ export type HostOf<V> = [V] extends [never] ? never
  * It builds every node fresh. A server render is hydrated with
  * `HtmlHydrate.hydrate`.
  *
+ * `onEmit` receives the root's own events in emission order, as a parent's
+ * `onEmit` would, and nothing is retained without it. Events from `init`
+ * arrive before `mount` returns, and an update's arrive inside `send`, both
+ * before the view is placed, so don't read the container from the callback.
+ * A callback that throws fails the root, logged `in` `"onEmit"`, and the
+ * transition's remaining events are dropped. A hydrated root's `init` events
+ * are never delivered.
+ *
  * The mount owns the head: on every flush that changed a view it folds the
  * placed tree's head with the root vocabulary's merge, and gives it to the
  * host's `head` once every instance has adopted. Two siblings that set one
@@ -603,6 +611,8 @@ export const mount: <
       | undefined
     readonly query?: QueryOptions | undefined
     readonly head?: boolean | undefined
+    /** Receives the root's events in emission order. */
+    readonly onEmit?: ((event: Events) => void) | undefined
   }
 ) => Effect.Effect<
   Root<Model, Msg>,

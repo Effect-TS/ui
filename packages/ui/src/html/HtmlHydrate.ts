@@ -690,7 +690,7 @@ export const hydrateEffect = <
   props: Props | Effect.Effect<Props, never, RP>,
   container: globalThis.Element,
   state: Renderer.State,
-  options?: BrowserHost.MountOptions<V, RF>
+  options?: BrowserHost.MountOptions<V, RF, Events>
 ): Effect.Effect<
   Renderer.Root<Model, Msg>,
   never,
@@ -795,7 +795,7 @@ export const hydrate = <
   props: Props | Effect.Effect<Props, never, RP>,
   container: globalThis.Element,
   state: Renderer.State,
-  options?: BrowserHost.MountOptions<V, RF>
+  options?: BrowserHost.MountOptions<V, RF, Events>
 ): Layer.Layer<never, never, Exclude<R | RF | RP, Html.Host>> =>
   Layer.effectDiscard(
     hydrateEffect(component, props, container, state, options)

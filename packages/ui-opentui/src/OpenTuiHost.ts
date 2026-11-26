@@ -82,7 +82,13 @@ export type OpenTuiRoot<V> = [Renderer.HostOf<V>] extends [OpenTui.Host]
  * @category models
  * @since 0.1.0
  */
-export interface MountOptions<V extends View.Elements, RF = never> {
+export interface MountOptions<
+  V extends View.Elements,
+  RF = never,
+  Events = never
+> {
+  /** Receives the root's events in emission order, as for `Renderer.mount`. */
+  readonly onEmit?: ((event: Events) => void) | undefined
   readonly fallback?:
     | ((
       failure: AsyncResult.Failure<never, unknown>,
@@ -935,7 +941,7 @@ export const mountEffect = <
     & Component.Members<Name, Props, Model, Msg, Events, R, V, any>
     & OpenTuiRoot<V>,
   props: Props | Effect.Effect<Props, never, RP>,
-  options?: MountOptions<V, RF> | undefined
+  options?: MountOptions<V, RF, Events> | undefined
 ): Effect.Effect<
   Renderer.Root<Model, Msg>,
   never,
@@ -973,7 +979,7 @@ export const mount = <
     & Component.Members<Name, Props, Model, Msg, Events, R, V, any>
     & OpenTuiRoot<V>,
   props: Props | Effect.Effect<Props, never, RP>,
-  options?: MountOptions<V, RF> | undefined
+  options?: MountOptions<V, RF, Events> | undefined
 ): Layer.Layer<never, never, Exclude<R | RF | RP, OpenTui.Host>> =>
   Layer.effectDiscard(mountEffect(component, props, options)) as any
 
@@ -1000,7 +1006,7 @@ export const run = <
     & Component.Members<Name, Props, Model, Msg, Events, R, V, any>
     & OpenTuiRoot<V>,
   props: Props | Effect.Effect<Props, never, RP>,
-  options?: MountOptions<V, RF> | undefined
+  options?: MountOptions<V, RF, Events> | undefined
 ): Effect.Effect<void, never, Exclude<R | RF | RP, OpenTui.Host>> =>
   Effect.scoped(
     Effect.gen(function*() {

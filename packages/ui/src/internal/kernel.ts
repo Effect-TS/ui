@@ -212,6 +212,7 @@ export interface Tree {
     cause: Cause.Cause<unknown>
   ) => void
   readonly init: (inst: Instance) => Next
+  readonly onEmit?: ((event: unknown) => unknown) | undefined
   readonly log?: Recorder | undefined
   readonly fallback?:
     | ((cause: Cause.Cause<unknown>) => View.Node<any, any>)
@@ -626,20 +627,23 @@ const applied = (
   if (inst.closed) return
   inst.component["~sync"]?.(inst, next, seq)
   const events = next.events
-  if (events.length === 0 || inst.at === undefined) return
-  const parent = upOf(inst)
+  if (events.length === 0) return
+  const at = inst.at
+  const to = at === undefined ? inst : upOf(inst)
   for (let index = 0; index < events.length; index++) {
     if (inst.closed) return
-    const onEmit = (inst.at!.v as View.Child<any, any>).onEmit
+    const onEmit = at === undefined
+      ? inst.tree.onEmit
+      : (at.v as View.Child<any, any>).onEmit
     if (onEmit === undefined) return
     let message: unknown
     try {
       message = onEmit(events[index])
     } catch (error) {
-      fail(parent, "onEmit", Cause.die(error))
+      fail(to, "onEmit", Cause.die(error))
       return
     }
-    if (message !== undefined) send(parent, message, inst)
+    if (at !== undefined && message !== undefined) send(to, message, inst)
   }
 }
 
@@ -1696,6 +1700,7 @@ export interface Options {
   readonly log?: Recorder | undefined
   readonly fallback?: Tree["fallback"]
   readonly init?: Tree["init"] | undefined
+  readonly onEmit?: Tree["onEmit"]
   readonly schedule?: Tree["schedule"] | undefined
   readonly follow?: Tree["follow"] | undefined
 }
