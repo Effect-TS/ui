@@ -1,5 +1,6 @@
 import { Command, Component, type Query, UiSchema, type View } from "@effect/ui"
-import type { Steps } from "@effect/ui/testing"
+import type { HtmlPlay, HtmlScene } from "@effect/ui/html/testing"
+import type { Play, Steps } from "@effect/ui/testing"
 import { Scene, Story } from "@effect/ui/testing"
 import { Effect, Schema, type Scope, Stream } from "effect"
 import { describe, expect, it } from "tstyche"
@@ -18,6 +19,10 @@ import {
 declare const counter: Story.Steps<typeof Counter>
 declare const todoItem: Story.Steps<typeof TodoItem>
 declare const searchBox: Story.Steps<typeof SearchBox>
+declare const sceneExpect: Scene.Expect<Scene.Steps<typeof Counter>>
+declare const htmlSceneExpect: HtmlScene.Expect<Scene.Steps<typeof Counter>>
+declare const playExpect: Play.Expect
+declare const htmlPlayExpect: HtmlPlay.Expect
 const increment = CounterMessage.Increment()
 
 describe("Story", () => {
@@ -30,6 +35,23 @@ describe("Story", () => {
     const scene = Scene.start(Counter, { initial: 0 })
     expect(scene).type.not.toHaveProperty("send")
     expect(scene.current).type.not.toHaveProperty("model")
+  })
+
+  it("expect.toHaveAttribute is on Scene, Play, HtmlScene and HtmlPlay Expect", () => {
+    expect(sceneExpect.toHaveAttribute).type.toBeCallableWith("href")
+    expect(sceneExpect.toHaveAttribute).type.toBeCallableWith("href", "/docs")
+    expect(sceneExpect.toHaveAttribute).type.toBeCallableWith("href", /^\/docs/)
+    expect(sceneExpect.toHaveAttribute).type.toBeCallableWith("disabled", false)
+    expect(sceneExpect.toHaveAttribute).type.not.toBeCallableWith(
+      "disabled",
+      true
+    )
+    expect(htmlSceneExpect.toHaveAttribute).type.toBeCallableWith(
+      "disabled",
+      false
+    )
+    expect(playExpect.toHaveAttribute).type.toBeCallableWith("href", "/docs")
+    expect(htmlPlayExpect.toHaveAttribute).type.toBeCallableWith("disabled")
   })
 
   it("a scene's child steps take the component, then a key only when the child has one", () => {

@@ -91,6 +91,7 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Play", (it) => {
   it.effect("a failed expectation lists the tree's elements", () =>
     Effect.gen(function*() {
       const play = yield* Play.make(Page, {})
+      yield* play.expect(saves).toHaveAttribute("data-missing", false)
       assert.match(
         failureOf(
           yield* Effect.exit(play.expect(saves).toHaveText("saves: 9"))

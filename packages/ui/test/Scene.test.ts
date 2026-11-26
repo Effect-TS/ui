@@ -121,6 +121,83 @@ describe("Scene", () => {
     )
   })
 
+  it("expect.toHaveAttribute checks presence, value, absence, empty attributes, and single match", () => {
+    const Card = Html.component({
+      name: "Card",
+      model: Schema.Null,
+      message: Schema.Never
+    }).make({
+      init: () => null,
+      update: ($) => $.model,
+      view: (h) =>
+        h.div(
+          h.a.attrs({ href: "/docs", hidden: "" }).children("Docs"),
+          h.button.disabled(true).children("Off"),
+          h.button.disabled(false).children("On")
+        )
+    })
+    const scene = Scene.start(Card, {})
+    const link = Locator.tag("a")
+    const off = Locator.text("Off")
+    const on = Locator.text("On")
+
+    scene
+      .expect(link).toHaveAttribute("href")
+      .expect(link).toHaveAttribute("href", "/docs")
+      .expect(link).toHaveAttribute("href", /^\/docs/)
+      .expect(link).toHaveAttribute("hidden")
+      .expect(link).toHaveAttribute("hidden", "")
+      .expect(off).toHaveAttribute("disabled")
+      .expect(on).toHaveAttribute("disabled", false)
+      .expect(link).toHaveAttribute("data-missing", false)
+
+    assert.throws(
+      () => scene.expect(on).toHaveAttribute("disabled"),
+      /^Scene\.expect\(text "On"\)\.toHaveAttribute\("disabled"\): .*; elements:/
+    )
+    assert.throws(
+      () => scene.expect(on).toHaveAttribute("disabled", ""),
+      /toHaveAttribute\("disabled", ""\): .*; elements:/
+    )
+    assert.throws(
+      () => scene.expect(on).toHaveAttribute("disabled", /.*/),
+      /toHaveAttribute\("disabled", \/\.\*\/\): .*; elements:/
+    )
+    assert.throws(
+      () => scene.expect(on).toHaveAttribute("constructor"),
+      /toHaveAttribute\("constructor"\): .*; elements:/
+    )
+    assert.throws(
+      () => scene.expect(link).toHaveAttribute("href", "/other"),
+      /toHaveAttribute\("href", "\/other"\): .*"\/docs".*; elements:/
+    )
+    assert.throws(
+      () => scene.expect(link).toHaveAttribute("href", /^\/api/),
+      /toHaveAttribute\("href", \/\^\\\/api\/\): .*"\/docs".*; elements:/
+    )
+    assert.throws(
+      () => scene.expect(link).toHaveAttribute("href", false),
+      /toHaveAttribute\("href", false\): .*; elements:/
+    )
+    assert.throws(
+      () => scene.expect(link).toHaveAttribute("hidden", false),
+      /toHaveAttribute\("hidden", false\): .*; elements:/
+    )
+    assert.throws(
+      () => scene.expect(Locator.text("missing")).toHaveAttribute("href"),
+      /toHaveAttribute\("href"\): 0 elements match/
+    )
+    assert.throws(
+      () =>
+        scene.expect(Locator.text("missing")).toHaveAttribute("href", false),
+      /toHaveAttribute\("href", false\): 0 elements match/
+    )
+    assert.throws(
+      () => scene.expect(Locator.tag("button")).toHaveAttribute("disabled"),
+      /toHaveAttribute\("disabled"\): 2 elements match/
+    )
+  })
+
   it("fire throws when nothing handles the event, submit included", () => {
     const scene = Scene.start(Note, {})
     assert.throws(
