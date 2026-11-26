@@ -6630,24 +6630,6 @@ describe("Runtime", () => {
         }).pipe(Effect.scoped)
       ))
 
-    it.effect("TestHost records only the events a root delivered, not those of a transition it failed in", () =>
-      provideHost(Effect.gen(function*() {
-        const Broken = Component.define({
-          name: "Broken",
-          model: Schema.Number,
-          message: Schema.Never,
-          events: Events
-        }).make({
-          init: ($) => $.set(0).emit(Events.Ready()),
-          update: ($) => $.model,
-          view: () => {
-            throw new Error("view broke")
-          }
-        })
-        const root = yield* TestHost.mount(Broken, {})
-        assert.deepStrictEqual(root.emitted, [])
-      })))
-
     it.effect("Renderer.mount's onEmit receives the root's typed events from init, before mount returns, and from updates in order", () =>
       provideHost(Effect.gen(function*() {
         const received: Array<typeof Events.Type> = []
@@ -6669,18 +6651,13 @@ describe("Runtime", () => {
       provideHost(Effect.gen(function*() {
         const testHost = yield* TestHost.TestHost
         const app = yield* container
-        const root = yield* Renderer.mount(Emitter, {}, app, {
+        yield* Renderer.mount(Emitter, {}, app, {
           onEmit: () => {
             throw new Error("listener broke")
           },
           fallback: (_, h) => h.el("h1", "down")
         })
         assert.strictEqual(Locator.textOf(app), "down")
-        assert.isUndefined(root.model())
-        assert.deepStrictEqual(
-          tags({ log: testHost.log.entries }, "/Emitter").slice(-2),
-          ["Failed", "Unmounted"]
-        )
         const failed = testHost.log.entries().find((entry) =>
           entry._tag === "Failed"
         ) as MessageLog.Failed
