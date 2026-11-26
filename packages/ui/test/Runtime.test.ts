@@ -524,34 +524,65 @@ describe("Runtime", () => {
         yield* TestHost.settle
         const testHost = yield* TestHost.TestHost
         const items = () => root.all(Locator.tag("li"))
-        const before = items()
-        const structural = () =>
+        const [head, a, b, c, d, foot] = items()
+        const inserts = () =>
           testHost.host.operations().filter((op) =>
-            op.startsWith("insert") || op.startsWith("remove") ||
-            op.startsWith("create")
-          )
+            op.startsWith("insert <li>")
+          ).length
 
-        // `foot` has no key, so it is matched by position and made again where the count changes.
         testHost.host.clearOperations()
         root.send(RowsMessage.Show({ ids: ["a", "b", "c", "d", "e", "f"] }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "headabcdeffoot")
-        assert.deepStrictEqual(items().slice(0, 5), before.slice(0, 5))
-        assert.strictEqual(
-          structural().filter((op) => op.startsWith("insert <li>")).length,
-          3
-        )
+        assert.deepStrictEqual(items().slice(0, 5), [head, a, b, c, d])
+        assert.strictEqual(items().at(-1), foot)
+        assert.strictEqual(inserts(), 2)
 
         testHost.host.clearOperations()
         root.send(RowsMessage.Show({ ids: ["a", "b"] }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "headabfoot")
-        assert.deepStrictEqual(items().slice(0, 3), before.slice(0, 3))
-        assert.strictEqual(
-          structural().filter((op) => op.startsWith("insert <li>")).length,
+        assert.deepStrictEqual(items(), [head, a, b, foot])
+        assert.strictEqual(inserts(), 0)
+      })))
+
+    it.effect("an unkeyed element keeps its node and mount while a conditional sibling before it comes and goes", () =>
+      Effect.gen(function*() {
+        const Track = Mount.make(
+          "Track",
+          { args: {} },
+          () => Effect.succeed(Component.noop)
+        )
+        const Notice = Component.define({
+          name: "Notice",
+          model: Schema.Boolean,
+          message: Schema.Boolean,
+          elements: Tiny
+        }).make({
+          init: () => false,
+          update: (_, shown) => shown,
+          view: (h, shown) =>
+            h.box(shown ? h.label("notice") : null, h.field.onMount(Track()))
+        })
+        const root = yield* TestHost.mount(Notice, {})
+        yield* TestHost.settle
+        const field = root.get(Locator.tag("field"))
+        for (const shown of [true, false, true, false]) {
+          root.send(shown)
+          yield* TestHost.settle
+          assert.strictEqual(root.text(), shown ? "notice" : "")
+          assert.strictEqual(root.get(Locator.tag("field")), field)
+        }
+        assert.lengthOf(
+          root.log().filter((entry) => entry._tag === "MountStarted"),
           1
         )
-      })))
+      }).pipe(
+        Effect.provide(
+          Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })
+        ),
+        provideHost
+      ))
 
     it.effect("a list with nothing after it grows and shrinks at its end", () =>
       provideHost(Effect.gen(function*() {
@@ -750,26 +781,25 @@ describe("Runtime", () => {
         yield* TestHost.settle
         const testHost = yield* TestHost.TestHost
         const items = () => root.all(Locator.tag("li"))
-        const [head, a, b, c, d] = items()
-        // Without `foot`, which has no key and is made again where the count changes.
+        const [head, a, b, c, d, foot] = items()
         const moves = () =>
           testHost.host.operations().filter((op) =>
             op.startsWith("insert <li>")
-          ).length - 1
+          ).length
 
         testHost.host.clearOperations()
         root.send(RowsMessage.Show({ ids: ["a", "b", "x", "c", "d"] }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "headabxcdfoot")
         const x = items()[3]
-        assert.deepStrictEqual(items().slice(0, 6), [head, a, b, x, c, d])
+        assert.deepStrictEqual(items(), [head, a, b, x, c, d, foot])
         assert.strictEqual(moves(), 1)
 
         testHost.host.clearOperations()
         root.send(RowsMessage.Show({ ids: ["a", "x", "d"] }))
         yield* TestHost.settle
         assert.strictEqual(root.text(), "headaxdfoot")
-        assert.deepStrictEqual(items().slice(0, 4), [head, a, x, d])
+        assert.deepStrictEqual(items(), [head, a, x, d, foot])
         assert.strictEqual(moves(), 0)
 
         // The key of a row before the change, used again after it.
