@@ -13,8 +13,9 @@
  * when the routes parse its href and it has no modifier key, `target` or
  * `download`. Anything else is a full page load. `<form method="get">` is
  * intercepted by the same test. Following either to the current route sends a
- * message without scrolling to the top, announcing or moving focus. A change
- * to the hash still scrolls as usual. Both work the same in a root mounted
+ * message without scrolling to the top, announcing or moving focus. A link
+ * with a `#hash` still scrolls to it, even when it's the current one, and a
+ * bare `#` scrolls to the top. Both work the same in a root mounted
  * inside a shadow root, open or closed. An unhandled POST, or a GET
  * targeting another window, submits natively.
  *
@@ -210,10 +211,13 @@ const make = (
       )
     } else routes.setBase("")
 
+    /** A URL's `#hash`, keeping a bare `#` that `hash` reports as empty. */
+    const hashOf = (url: URL | Location) =>
+      url.href.endsWith("#") ? "#" : url.hash
     const currentUrl = () =>
       inFragment
         ? (location.hash === "" ? "#/" : location.hash)
-        : location.pathname + location.search + location.hash
+        : location.pathname + location.search + hashOf(location)
 
     // --- scroll ------------------------------------------------------------
     const positions = new Map<
@@ -376,7 +380,7 @@ const make = (
     /** The href the routes see for an absolute URL, or undefined when it leaves this app. */
     const local = (url: URL): string | undefined => {
       if (url.origin !== location.origin) return undefined
-      if (!inFragment) return url.pathname + url.search + url.hash
+      if (!inFragment) return url.pathname + url.search + hashOf(url)
       return url.pathname === location.pathname &&
           url.search === location.search && url.hash !== ""
         ? url.hash

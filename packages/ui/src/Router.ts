@@ -195,7 +195,8 @@ export type SearchPatch<R> = [R] extends [{ readonly search: infer Q }] ?
  * `navigate` takes an href: one the routes parse is pushed (or replaced), and
  * anything else is a full page load. An href to the current route, with the
  * same tag and printed route, isn't a navigation: the URL keeps its
- * undeclared params, only a new `#hash` is written and no sequence is bumped.
+ * undeclared params, only a new `#hash` is written and no sequence is bumped;
+ * `onHash` is still called for an href to the current `#hash`.
  * `changes` emits the current location again, so the root hears that a link
  * to its own page was followed. `push` and `replace` of the current route
  * emit nothing.
@@ -1204,8 +1205,9 @@ export interface Options {
   /** Called once per navigation, when it settles. */
   readonly onSettled?: ((settled: Settled) => void) | undefined
   /**
-   * Called for a change to the `#hash` alone within the same route, with the
-   * index of the history entry it moved to. `onLeave` was called for the entry
+   * Called for a change to the `#hash` alone within the same route, or an
+   * href to the current `#hash`, with the index of the history entry it moved
+   * to. `onLeave` was called for the entry
    * it left, so a pop can restore that entry's scroll position.
    */
   readonly onHash?:
@@ -1839,6 +1841,9 @@ const build = (
             history.push(current.url + hash, writeState({ index }))
           }
           current = { ...current, hash }
+          options.onHash?.(hash, "push", index)
+        } else if (source === "href" && hash !== "") {
+          // Following the current hash again goes back to it, without a new entry.
           options.onHash?.(hash, "push", index)
         }
         // A followed href delivers the location again, with the same sequence: a navigation that is

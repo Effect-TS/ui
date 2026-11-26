@@ -707,10 +707,12 @@ describe("BrowserRouter", { concurrent: false }, () => {
       // Happy DOM has no layout; make a scroll back to the anchor observable.
       app.querySelector<HTMLElement>("#bio")!.scrollIntoView = () =>
         window.scrollTo(0, 300)
-      window.scrollTo(0, 100)
+      window.scrollTo(0, 0)
+      // Following the current #hash again scrolls back to it.
       clickReporting(link(app, "Person 2 bio"))
       yield* tick
-      expect(window.scrollY).toBe(100)
+      expect(window.scrollY).toBe(300)
+      window.scrollTo(0, 100)
       yield* router.navigate("/people/2#top")
       yield* tick
       window.scrollTo(0, 40)
@@ -739,6 +741,18 @@ describe("BrowserRouter", { concurrent: false }, () => {
       const bio = document.getElementById("bio")!
       expect(document.activeElement).toBe(bio)
       expect(bio.getAttribute("tabindex")).toBe("-1")
+    }).pipe(Effect.scoped))
+
+  it.effect("a bare # link keeps the # and scrolls to the top", () =>
+    Effect.gen(function*() {
+      yield* start("/people/2")
+      const top = (yield* container).appendChild(document.createElement("a"))
+      top.setAttribute("href", "#")
+      window.scrollTo(0, 1500)
+      expect(clickReporting(top)).toBe(true)
+      yield* tick
+      expect(window.location.href).toBe(`${window.location.origin}/people/2#`)
+      expect(window.scrollY).toBe(0)
     }).pipe(Effect.scoped))
 
   it.effect("ignores links and reverts back and forward while blocked", () =>
