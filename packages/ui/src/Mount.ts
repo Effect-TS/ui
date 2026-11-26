@@ -404,6 +404,11 @@ export const isDefinition = (u: unknown): u is Definition.Any =>
  *   one, when a render's args differ by the Schema's equivalence. A reader
  *   that falls behind gets only the latest.
  *
+ * The commit that renders the element starts the body, a commit that
+ * changes the args publishes them to `changes`, and the commit that removes
+ * the element closes the Scope. Each runs in that commit's task until it first
+ * waits, even when the Scheduler has no budget left.
+ *
  * The body ends with its own result, which a view maps to a message with
  * `map`. When there is nothing to report, return `Component.noop`: the log
  * records `MountEnded` with `silent: true` instead of an `Update`. The body's

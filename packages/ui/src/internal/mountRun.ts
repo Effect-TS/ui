@@ -6,7 +6,7 @@ import * as Fiber from "effect/Fiber"
 import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import type * as Mount from "../Mount.ts"
-import { follow, fork, servicesOf } from "./fork.ts"
+import { follow, fork, inlined, servicesOf } from "./fork.ts"
 import * as Kernel from "./kernel.ts"
 import type * as mountArgs from "./mountArgs.ts"
 import { isNoop } from "./noop.ts"
@@ -73,13 +73,15 @@ class Running {
     })
     const scope = this.scope
     this.ctx = ctx
-    const fiber = this.fiber = fork(
-      tree,
-      Context.add(Context.add(ctx, Scope.Scope, scope), Refs, refsOf(inst)),
-      Effect.suspend(() =>
-        this.mount.run(this.rec.node as never, args, changes, send)
-      ),
-      true
+    const fiber = this.fiber = inlined(() =>
+      fork(
+        tree,
+        Context.add(Context.add(ctx, Scope.Scope, scope), Refs, refsOf(inst)),
+        Effect.suspend(() =>
+          this.mount.run(this.rec.node as never, args, changes, send)
+        ),
+        true
+      )
     )
     Effect.runSync(Scope.addFinalizer(scope, Fiber.interrupt(fiber)))
     fiber.addObserver((exit) => {
@@ -114,7 +116,8 @@ class Running {
     if (previous === mount) return
     this.mount = mount
     if (this.args !== undefined && !previous["~sameArgs"](mount)) {
-      mount["~args"].publish(this.args, mount.args)
+      const args = this.args
+      inlined(() => mount["~args"].publish(args, mount.args))
     }
   }
   stop(): void {
@@ -124,8 +127,9 @@ class Running {
     const closer = tree.closed ? Fiber.getCurrent() : undefined
     if (closer !== undefined) this.fiber?.interruptUnsafe(closer.id)
     const close = Scope.close(this.scope, Exit.void)
-    if (this.ctx === undefined) Effect.runSync(close)
-    else fork(tree, this.ctx, close, true)
+    const ctx = this.ctx
+    if (ctx === undefined) Effect.runSync(close)
+    else inlined(() => fork(tree, ctx, close, true))
   }
 }
 

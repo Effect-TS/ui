@@ -8,6 +8,33 @@ import type * as Kernel from "./kernel.ts"
 /** @internal */
 export const now = <A>(f: () => A): A => f()
 
+let inline = false
+
+/**
+ * Runs `f` with fibers yielding only after `maxOpsBeforeYield` steps, so the
+ * work it starts runs in this task up to its first async step.
+ *
+ * @internal
+ */
+export const inlined = <A>(f: () => A): A => {
+  if (inline) return f()
+  inline = true
+  try {
+    return f()
+  } finally {
+    inline = false
+  }
+}
+
+/** @internal */
+export const yields = (
+  scheduler: Scheduler.Scheduler,
+  fiber: Fiber.Fiber<unknown, unknown>
+): boolean =>
+  inline
+    ? fiber.currentOpCount >= fiber.cache.maxOpsBeforeYield
+    : scheduler.shouldYield(fiber)
+
 /** @internal */
 export const follow = (
   tree: Kernel.Tree,

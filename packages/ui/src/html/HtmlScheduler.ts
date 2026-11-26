@@ -43,6 +43,8 @@ export interface Options {
  * task of this Scheduler, by a `fetch` for example, runs in what is left of
  * the last budget. Once that is spent it starts a budget of its own, unless
  * fiber work is already waiting for a task, in which case it joins that work.
+ * A commit in `BrowserHost` is the exception: it starts, updates and closes
+ * mounts in its own task, until they first wait.
  *
  * Tasks are posted with `scheduler.postTask` where the browser has it,
  * `MessageChannel` otherwise, and `setTimeout` in environments that have
