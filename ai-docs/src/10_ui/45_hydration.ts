@@ -34,26 +34,23 @@ const hydrate = Effect.gen(function*() {
   // Field edits made before an instance adopts reach its handlers; clicks and
   // submits don't.
   //
-  // To keep clicks and submits made before hydration starts, an app can print
-  // an inline script at the start of `<body>` that listens in the capture
-  // phase inside the container. For a click, it finds the button with
-  // `target.closest("button")`, since the target may be a child such as an
-  // icon, and if that is a button the app means to replay, cancels the click
-  // and records the button. Other clicks, such as on links, are left alone.
-  // For a submit, it cancels it and records the form with its `submitter`.
-  // Remove its listeners before calling `hydrateEffect`, or a click on an
-  // instance that is already live would be handled and then replayed. After
-  // that, a waiting instance behaves as above: its click handlers don't run,
-  // its forms submit natively, and nothing replays them.
+  // To keep those made before hydration starts, an app can print an inline
+  // script at the start of `<body>` with capture-phase listeners on
+  // `document` for targets inside the container. A click whose `target.closest("button")` is a button the app
+  // replays is cancelled and that button recorded; other clicks, such as on
+  // links, are left alone. A submit is cancelled and its form recorded with
+  // its `submitter`. Remove the listeners before calling `hydrateEffect`, or
+  // a click on an instance that is already live would run twice. From then on
+  // a waiting instance's click handlers don't run and its forms submit
+  // natively.
   //
-  // After `root.adopted`, replay only what is still connected and enabled; a
-  // node hydration rebuilt is no longer connected. Call `click()` on a
-  // recorded button. For a submit, call `form.requestSubmit()` when it had no
-  // submitter, or `form.requestSubmit(submitter)` when the button still
-  // belongs to that form, since its name and value are part of the
-  // submission, and skip the submit when the button is stale. Replay waits
-  // for the slowest instance, and if the client bundle fails to load, the
-  // cancelled submits leave the forms doing nothing.
+  // After `root.adopted`, skip anything no longer connected or enabled
+  // (hydration disconnects the nodes it rebuilt). Call `click()` on each
+  // recorded button, and `form.requestSubmit(submitter)` for each submit, or
+  // `form.requestSubmit()` when it had no submitter. Skip a submit whose
+  // submitter has left its form, since its name and value are part of the
+  // submission. Replay waits for the slowest instance, and if the client
+  // bundle fails to load, the cancelled submits leave the forms doing nothing.
   yield* root.adopted
   return yield* Effect.never
 }).pipe(
