@@ -84,6 +84,7 @@ import * as Stream from "effect/Stream"
 import type * as Types from "effect/Types"
 import type * as Component from "./Component.ts"
 import * as commandRun from "./internal/commandRun.ts"
+import type { Given } from "./internal/given.ts"
 import type * as Kernel from "./internal/kernel.ts"
 import * as internalNoop from "./internal/noop.ts"
 import { canonical } from "./internal/queryCore.ts"
@@ -864,6 +865,11 @@ export declare namespace Service {
 
 type CommandOptions<In extends ArgsInput, G extends string> = Options<In, G>
 
+type ServiceGiven<In, Success, Error> =
+  & Given<"args", In, {}>
+  & Given<"success", Success, Component.NoopSchema>
+  & Given<"error", Error, Schema.Never>
+
 const identity = (result: any) => result
 
 const variance = {
@@ -1142,24 +1148,28 @@ export const groupKeyOf = (
 export const make: {
   <
     const Name extends string,
-    Msg,
     const In extends ArgsInput = {},
+    Msg = never,
     R extends FrameworkService = never,
     const G extends GroupField<In> = never
   >(
     name: Name,
-    options: Options<In, G> & { readonly stream?: false | undefined },
+    options: Options<In, G> & NoInfer<Given<"args", In, {}>> & {
+      readonly stream?: false | undefined
+    },
     run: (args: ArgsOf<In>) => Effect.Effect<Msg, never, R>
   ): Factory<ArgsOf<In>, Msg, false, G>
   <
     const Name extends string,
-    Msg,
     const In extends ArgsInput = {},
+    Msg = never,
     R extends FrameworkService = never,
     const G extends GroupField<In> = never
   >(
     name: Name,
-    options: Options<In, G> & { readonly stream: true },
+    options: Options<In, G> & NoInfer<Given<"args", In, {}>> & {
+      readonly stream: true
+    },
     run: (args: ArgsOf<In>) => Stream.Stream<Msg, never, R>
   ): Factory<ArgsOf<In>, Msg, true, G>
 } = (
@@ -1266,9 +1276,12 @@ export const Service: <Self>() => {
     const G extends GroupField<In> = never
   >(
     key: Key,
-    options?: Service.Options<In, Success, Error, G> & {
-      readonly stream?: false | undefined
-    }
+    options?:
+      & Service.Options<In, Success, Error, G>
+      & NoInfer<ServiceGiven<In, Success, Error>>
+      & {
+        readonly stream?: false | undefined
+      }
   ): Service<
     Self,
     Key,
@@ -1286,10 +1299,13 @@ export const Service: <Self>() => {
     const G extends GroupField<In> = never
   >(
     key: Key,
-    options: Service.Options<In, Success, Error, G> & {
-      readonly stream: true
-      readonly writes?: undefined
-    }
+    options:
+      & Service.Options<In, Success, Error, G>
+      & NoInfer<ServiceGiven<In, Success, Error>>
+      & {
+        readonly stream: true
+        readonly writes?: undefined
+      }
   ): Service<
     Self,
     Key,

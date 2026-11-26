@@ -200,6 +200,25 @@ describe("Command", () => {
         .toBeCallableWith()
     })
 
+    it("rejects an option that may be absent, since the runtime would use its default", () => {
+      const opts: { success?: typeof Schema.String } = {}
+      expect(Command.Service<"T">()).type.not.toBeCallableWith("T", opts)
+      const args: { args?: { id: typeof Schema.String } } = {}
+      expect(Command.make).type.not.toBeCallableWith(
+        "Fx",
+        args,
+        () => Effect.void
+      )
+    })
+
+    it("keeps explicit type arguments in their order", () => {
+      expect(Command.make<"Roll", {}, number>).type.toBeCallableWith(
+        "Roll",
+        {},
+        () => Effect.succeed(1)
+      )
+    })
+
     it("a silent Service's body may return anything, a message Service's body may not", () => {
       class Implicit extends Command.Service<Implicit>()("Implicit") {}
       class Explicit extends Command.Service<Explicit>()("Explicit", {

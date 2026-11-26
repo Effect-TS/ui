@@ -79,6 +79,7 @@ import * as queryCore from "./internal/queryCore.ts"
 import { addListener, NonJsonLeaf } from "./internal/queryCore.ts"
 import * as queryRun from "./internal/queryRun.ts"
 import { holdsRedacted, redactAST } from "./internal/schemaRedact.ts"
+import type { Given } from "./internal/given.ts"
 
 /**
  * Identifies a query: a class made by `Service`.
@@ -414,31 +415,37 @@ export declare namespace Service {
  */
 export const Service: <Self>() => <
   const Name extends string,
-  Success extends Service.NoServices,
   const Args extends Service.NoServices | {
     readonly [x: string]: Service.NoServices
   } = {},
+  Success extends Service.NoServices = never,
   Error extends Service.NoServices = Schema.Never
 >(
   name: Name,
-  options: {
-    readonly args?: Args | undefined
-    readonly success: Success
-    readonly error?: Error | undefined
-    readonly staleTime: Duration.Input
-    readonly idleTimeToLive?: Duration.Input | undefined
-    readonly refetchInterval?:
-      | RefetchInterval<Service.ArgsType<Args>, Success["Type"], Error["Type"]>
-      | undefined
-    readonly tags?: ReadonlyArray<Tag> | undefined
-  }
+  options:
+    & NoInfer<Given<"args", Args, {}> & Given<"error", Error, Schema.Never>>
+    & {
+      readonly args?: Args | undefined
+      readonly success: Success
+      readonly error?: Error | undefined
+      readonly staleTime: Duration.Input
+      readonly idleTimeToLive?: Duration.Input | undefined
+      readonly refetchInterval?:
+        | RefetchInterval<
+          Service.ArgsType<Args>,
+          Success["Type"],
+          Error["Type"]
+        >
+        | undefined
+      readonly tags?: ReadonlyArray<Tag> | undefined
+    }
 ) => Service<
   Self,
   Name,
   Service.ArgsType<Args>,
   Success["Type"],
   Error["Type"]
-> = () =>
+> = (): any =>
 (
   name: string,
   options: {
@@ -950,37 +957,39 @@ export interface InfiniteService<
  */
 export const InfiniteService: <Self>() => <
   const Name extends string,
-  PageSchema extends Service.NoServices,
-  Item,
-  CursorSchema extends Service.NoServices,
   const Args extends Service.NoServices | {
     readonly [x: string]: Service.NoServices
   } = {},
+  PageSchema extends Service.NoServices = never,
+  Item = unknown,
+  CursorSchema extends Service.NoServices = never,
   Error extends Service.NoServices = Schema.Never
 >(
   name: Name,
-  options: {
-    readonly args?: Args | undefined
-    readonly page: PageSchema
-    readonly items: (page: PageSchema["Type"]) => ReadonlyArray<Item>
-    readonly key: (item: NoInfer<Item>) => string
-    readonly error?: Error | undefined
-    readonly cursor: CursorSchema
-    readonly next: (
-      lastPage: PageSchema["Type"],
-      allPages: readonly [PageSchema["Type"], ...Array<PageSchema["Type"]>]
-    ) => Option.Option<CursorSchema["Type"]>
-    readonly staleTime: Duration.Input
-    readonly idleTimeToLive?: Duration.Input | undefined
-    readonly refetchInterval?:
-      | RefetchInterval<
-        Service.ArgsType<Args>,
-        ReadonlyArray<PageSchema["Type"]>,
-        Error["Type"]
-      >
-      | undefined
-    readonly tags?: ReadonlyArray<Tag> | undefined
-  }
+  options:
+    & NoInfer<Given<"args", Args, {}> & Given<"error", Error, Schema.Never>>
+    & {
+      readonly args?: Args | undefined
+      readonly page: PageSchema
+      readonly items: (page: PageSchema["Type"]) => ReadonlyArray<Item>
+      readonly key: (item: NoInfer<Item>) => string
+      readonly error?: Error | undefined
+      readonly cursor: CursorSchema
+      readonly next: (
+        lastPage: PageSchema["Type"],
+        allPages: readonly [PageSchema["Type"], ...Array<PageSchema["Type"]>]
+      ) => Option.Option<CursorSchema["Type"]>
+      readonly staleTime: Duration.Input
+      readonly idleTimeToLive?: Duration.Input | undefined
+      readonly refetchInterval?:
+        | RefetchInterval<
+          Service.ArgsType<Args>,
+          ReadonlyArray<PageSchema["Type"]>,
+          Error["Type"]
+        >
+        | undefined
+      readonly tags?: ReadonlyArray<Tag> | undefined
+    }
 ) => InfiniteService<
   Self,
   Name,
@@ -989,7 +998,7 @@ export const InfiniteService: <Self>() => <
   Item,
   CursorSchema["Type"],
   Error["Type"]
-> = () =>
+> = (): any =>
 (
   name: string,
   options: {

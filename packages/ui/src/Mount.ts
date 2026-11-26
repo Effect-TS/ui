@@ -46,6 +46,7 @@ import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import type * as Types from "effect/Types"
 import type * as Command from "./Command.ts"
+import type { Given } from "./internal/given.ts"
 import type * as Kernel from "./internal/kernel.ts"
 import * as mountArgs from "./internal/mountArgs.ts"
 import * as mountRun from "./internal/mountRun.ts"
@@ -435,13 +436,13 @@ export const isDefinition = (u: unknown): u is Definition.Any =>
  */
 export const make = <
   const Name extends string,
-  A,
   const In extends Command.ArgsInput = {},
+  A = never,
   Node = unknown,
   R = never
 >(
   name: Name,
-  options: Options<In, Node, R>,
+  options: Options<In, Node, R> & NoInfer<Given<"args", In, {}>>,
   run: (
     node: Node,
     args: Command.ArgsOf<In>,
@@ -510,13 +511,13 @@ export const make = <
  */
 export const makeStream = <
   const Name extends string,
-  A,
   const In extends Command.ArgsInput = {},
+  A = never,
   Node = unknown,
   R = never
 >(
   name: Name,
-  options: Options<In, Node, R>,
+  options: Options<In, Node, R> & NoInfer<Given<"args", In, {}>>,
   run: (
     node: Node,
     args: Command.ArgsOf<In>,
@@ -533,7 +534,11 @@ export const makeStream = <
 
 const define = (
   name: string,
-  options: Options<Command.ArgsInput, any, any>,
+  options: {
+    readonly args?: Command.ArgsInput | undefined
+    readonly paint?: ((node: any, args: any) => void) | undefined
+    readonly beforeCommit?: boolean | undefined
+  },
   stream: boolean,
   run: Fields["run"]
 ): any => {

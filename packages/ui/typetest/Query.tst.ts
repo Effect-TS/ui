@@ -105,6 +105,12 @@ describe("Query", () => {
     expect(Now.get).type.toBe<
       (args: {}) => Effect.Effect<number, never, Now | Query.Cache>
     >()
+    const args: { args?: { id: typeof Schema.String } } = {}
+    expect(Query.Service<"Q">()).type.not.toBeCallableWith("Q", {
+      ...args,
+      success: Schema.Number,
+      staleTime: 0
+    })
   })
 
   it("toLayer infers fakes and failures, rejects mismatched fetchers, and Layer.succeed still works", () => {
