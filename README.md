@@ -83,7 +83,7 @@ pnpm add effect @opentui/core@^0.9.9 \
   @effect/ui-opentui@https://pkg.pr.new/Effect-TS/ui/@effect/ui-opentui@<sha>
 ```
 
-pnpm reports an unmet `@effect/ui` peer for these packages, because a URL doesn't satisfy their `^0.0.0` range. They still use the `@effect/ui` snapshot you installed, so you can ignore the warning.
+pnpm reports unmet `@effect/*` peers for these packages, because a URL doesn't satisfy their `^0.0.0` range. They still use the snapshots you installed, so you can ignore the warning.
 
 `@effect/ui-devtools/node` also requires `@effect/platform-node`, and `@effect/ui-opentui` has its own [runtime requirements](packages/ui-opentui/README.md#requirements).
 
