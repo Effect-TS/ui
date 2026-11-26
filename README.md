@@ -60,6 +60,21 @@ Layer.launch(Main).pipe(Effect.runFork)
 | [`@effect/ui-devtools`](packages/ui-devtools/README.md) | Message log inspector for `@effect/ui`: in-page overlay with Time travel, Node MCP server (with optional `dispatch`), experimental WebMCP, and `DevToolsHeadless` for terminals |
 | [`@effect/ui-opentui`](packages/ui-opentui/README.md)   | OpenTUI terminal vocabulary and host for `@effect/ui`                                                                                                                           |
 
+## Requirements
+
+`@effect/ui` needs `strict` and `exactOptionalPropertyTypes` in your `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "exactOptionalPropertyTypes": true
+  }
+}
+```
+
+Without `exactOptionalPropertyTypes`, some types are inferred too widely. For example, mounting a root defined with `Component.define` and no `elements` fails to type-check, because its host requirement is inferred as `unknown`.
+
 ## Snapshots
 
 Every pull request and every push to `main` publishes snapshot builds of all four packages to [pkg.pr.new](https://pkg.pr.new/~/Effect-TS/ui). Install `@effect/ui` with a commit's short SHA alongside `effect` v4:
