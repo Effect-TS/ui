@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "compilerOptions": {
+    "rootDir": "../..",
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "composite": false,
+    "incremental": false,
+    "lib": ["ES2022", "DOM"],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "plugins": [],
+    "paths": { "@effect/ui/*": ["../../packages/ui/src/*.ts"] }
+  }
+}
