@@ -47,7 +47,7 @@
       "eslint/no-restricted-imports": "off"
     }
   }, {
-    // A node from another window fails these, so use the guards in ui-kit's internal/dom.ts.
+    // An object from another window fails these. For nodes, use the guards in ui-kit's internal/dom.ts.
     "files": ["packages/ui-kit/src/**"],
     "rules": {
       "unicorn/no-instanceof-builtins": ["error", {

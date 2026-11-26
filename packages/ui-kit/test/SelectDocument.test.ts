@@ -318,6 +318,16 @@ const keyup = (target: Element, key: string) =>
   target.dispatchEvent(
     new KeyboardEvent("keyup", { key, bubbles: true, cancelable: true })
   )
+const pressAt = (target: Element, offsetX: number) => {
+  const event = new PointerEvent("pointerdown", {
+    bubbles: true,
+    isPrimary: true,
+    pointerType: "mouse",
+    button: 0
+  })
+  Object.defineProperty(event, "offsetX", { value: offsetX })
+  target.dispatchEvent(event)
+}
 const mousedown = (target: Element) =>
   target.dispatchEvent(
     new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 })
@@ -636,20 +646,10 @@ describe("Select in a document", { concurrent: false }, () => {
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => delete (page as any).scrollHeight)
       )
-      const pressPage = (offsetX: number) => {
-        const event = new PointerEvent("pointerdown", {
-          bubbles: true,
-          isPrimary: true,
-          pointerType: "mouse",
-          button: 0
-        })
-        Object.defineProperty(event, "offsetX", { value: offsetX })
-        page.dispatchEvent(event)
-      }
-      pressPage(1005)
+      pressAt(page, 1005)
       yield* tick
       assert.isTrue(shown())
-      pressPage(500)
+      pressAt(page, 500)
       yield* tick
       assert.isFalse(shown())
       assert.deepStrictEqual(log(), [
@@ -710,21 +710,12 @@ describe("Select in a document", { concurrent: false }, () => {
       keydown(byId("trigger", doc), "ArrowDown")
       yield* tick
       const page = doc.documentElement
-      for (
-        const [name, value] of [
-          ["clientWidth", 1000],
-          ["clientHeight", 800],
-          ["scrollHeight", 2000]
-        ] as const
-      ) Object.defineProperty(page, name, { value })
-      const scrollbar = new PointerEvent("pointerdown", {
-        bubbles: true,
-        isPrimary: true,
-        pointerType: "mouse",
-        button: 0
+      Object.defineProperties(page, {
+        clientWidth: { value: 1000 },
+        clientHeight: { value: 800 },
+        scrollHeight: { value: 2000 }
       })
-      Object.defineProperty(scrollbar, "offsetX", { value: 1005 })
-      page.dispatchEvent(scrollbar)
+      pressAt(page, 1005)
       yield* tick
       assert.isTrue(byId("positioner", doc).matches(":popover-open"))
       const blocker = byId("positioner", doc).querySelector(

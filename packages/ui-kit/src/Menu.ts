@@ -283,12 +283,7 @@ import {
 } from "./internal/attributes.ts"
 import { backdropStyle, blockers, cutPath } from "./internal/blocker.ts"
 import { isRtl, provided, rightToLeft } from "./internal/direction.ts"
-import {
-  focusFinal,
-  isElement,
-  isHTMLElement,
-  override
-} from "./internal/dom.ts"
+import { focusFinal, isElement, override } from "./internal/dom.ts"
 import { type TextFilter, textFilter } from "./internal/filter.ts"
 import { methodOf, onEscape } from "./internal/interaction.ts"
 import { grouped, keyed } from "./internal/list.ts"
@@ -1564,11 +1559,8 @@ const watch = (
     let timer: ReturnType<typeof setTimeout> | undefined
     let tabbing: ReturnType<typeof setTimeout> | undefined
     const opening = () => {
-      const focused = document.activeElement
-      before = current.context && isHTMLElement(focused) &&
-          !node.contains(focused)
-        ? focused
-        : null
+      const focused = document.activeElement as HTMLElement | null
+      before = current.context && !node.contains(focused) ? focused : null
       send(MenuMessage.ShowedPopup())
       node.inert = false
       clearTimeout(timer)

@@ -225,21 +225,22 @@ const swipeTouch = (
   return moves
 }
 
-const movement = () =>
-  popup().style.getPropertyValue("--drawer-swipe-movement-y")
+const movement = (doc = document) =>
+  popup(doc).style.getPropertyValue("--drawer-swipe-movement-y")
 
 const mount = Effect.fnUntraced(function*(
   overrides: Partial<Config>,
-  into: typeof container = container
+  into?: Element
 ) {
   yield* popovers
-  const app = yield* into
+  const app = into ?? (yield* container)
   const root = yield* BrowserHost.mountEffect(Page, config(overrides), app)
   yield* tick
   return root
 })
 
-const popup = () => document.querySelector<HTMLElement>("[data-drawer-popup]")!
+const popup = (doc = document) =>
+  doc.querySelector<HTMLElement>("[data-drawer-popup]")!
 
 describe("Drawer in a document", { concurrent: false }, () => {
   it.effect("writes movement during a drag, settles on a short or reversed release, and dismisses on a long release", () =>
@@ -310,10 +311,9 @@ describe("Drawer in a document", { concurrent: false }, () => {
       () =>
         Effect.gen(function*() {
           const app = yield* into
-          const root = yield* mount({}, Effect.succeed(app))
+          const root = yield* mount({}, app)
           const doc = app.ownerDocument
-          const popup = doc.querySelector<HTMLElement>("[data-drawer-popup]")!
-          sized(popup, 300, 200)
+          sized(popup(doc), 300, 200)
           for (const id of ["content", "button"]) {
             drag(doc.getElementById(id)!, [10, 10], [10, 150])
             pointer(doc, "pointerup", 10, 150, 0)
@@ -324,10 +324,7 @@ describe("Drawer in a document", { concurrent: false }, () => {
           yield* tick
           assert.isTrue(root.model()!.open)
           assert.notInclude(root.model()!.events, "RequestedClose:swipe")
-          assert.strictEqual(
-            popup.style.getPropertyValue("--drawer-swipe-movement-y"),
-            "0px"
-          )
+          assert.strictEqual(movement(doc), "0px")
         })
     )
   }

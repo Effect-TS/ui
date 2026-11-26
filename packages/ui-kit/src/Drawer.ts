@@ -197,7 +197,6 @@ import { flag, idOf, withStyle } from "./internal/attributes.ts"
 import {
   byAttribute,
   elementOf,
-  isElement,
   isHTMLElement,
   onRange,
   saved
@@ -841,11 +840,11 @@ const scrollable = (element: HTMLElement, horizontal: boolean): boolean => {
 }
 
 const scrollableAncestor = (
-  target: EventTarget | null,
+  target: Element,
   root: HTMLElement,
   horizontal: boolean
 ): HTMLElement | null => {
-  let node = isElement(target) ? target : null
+  let node: Element | null = target
   while (node !== null && node !== root) {
     if (isHTMLElement(node) && scrollable(node, horizontal)) return node
     node = node.parentElement
@@ -854,7 +853,7 @@ const scrollableAncestor = (
 }
 
 const scrollTargetOf = (
-  target: EventTarget | null,
+  target: Element,
   root: HTMLElement,
   horizontal: boolean
 ): HTMLElement | null =>
@@ -1076,7 +1075,7 @@ const TrackSwipe = Mount.makeStream(
             : [args.direction]
         const snapDown = () => args.snapping && args.direction === "down"
         const inOwn = (target: EventTarget | null): Element | null => {
-          const element = elementOf(target as Node | null)
+          const element = elementOf(target)
           return element !== null && node.contains(element) &&
               element.closest("dialog") === portal()
             ? element

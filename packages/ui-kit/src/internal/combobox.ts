@@ -864,7 +864,7 @@ const selectSuffix = (
     "data-combobox-input",
     owner
   ) as HTMLInputElement | null
-  if (input?.localName !== "input" || !selectingTypes.has(input.type)) return
+  if (input === null || !selectingTypes.has(input.type)) return
   const select = () => {
     if (input.value === completed.text && document.activeElement === input) {
       input.setSelectionRange(completed.from, completed.text.length)
