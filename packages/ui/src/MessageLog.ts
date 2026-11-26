@@ -564,7 +564,8 @@ export interface SubscriptionStopped extends InstanceBase {
 }
 
 /**
- * An element's mount body started after commit, with these args.
+ * An element's mount body started, with these args: after the commit, or
+ * just before it for a mount made with `beforeCommit`.
  *
  * @stability experimental
  * @category models

@@ -4979,6 +4979,55 @@ describe("Runtime", () => {
         provideHost
       ))
 
+    it.effect("a beforeCommit mount starts before the host's commit, and another after it", () => {
+      const order: Array<string> = []
+      const host = TestHost.makeHost()
+      const Before = Mount.make(
+        "Before",
+        { args: {}, beforeCommit: true },
+        () => Effect.sync(() => (order.push("before"), Component.noop))
+      )
+      const After = Mount.make(
+        "After",
+        { args: {} },
+        () => Effect.sync(() => (order.push("after"), Component.noop))
+      )
+      const Msg = UiSchema.TaggedEnum({ Show: {} })
+      const Shows = Component.define({
+        name: "Shows",
+        model: Schema.Boolean,
+        message: Msg,
+        elements: Tiny
+      }).make({
+        init: () => false,
+        update: () => true,
+        view: (h, shown) =>
+          shown
+            ? h.box(h.field.onMount(After()), h.field.onMount(Before()))
+            : h.box()
+      })
+      return Effect.gen(function*() {
+        const root = yield* TestHost.mount(Shows, {})
+        yield* TestHost.settle
+        order.length = 0
+        root.send(Msg.Show())
+        yield* TestHost.settle
+        assert.deepStrictEqual(order, ["before", "commit", "after"])
+      }).pipe(
+        Effect.provide(
+          Renderer.layer({
+            ...host,
+            runsMounts: true,
+            commit: () => {
+              order.push("commit")
+              host.commit?.()
+            }
+          })
+        ),
+        provideHost
+      )
+    })
+
     it.effect("a reader of a mount's args that outlives the mount ends when the element is removed", () =>
       Effect.gen(function*() {
         const seen: Array<number> = []

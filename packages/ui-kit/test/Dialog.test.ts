@@ -6,6 +6,7 @@ import {
   DialogTrigger
 } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
+import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing"
 import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
@@ -149,7 +150,7 @@ describe("Dialog", () => {
       assert.strictEqual(partsOf(scene).openMethod, "touch")
       assert.deepInclude(scene.get(portal).props, {
         open: false,
-        popoverOpen: false
+        popoverOpen: true
       })
       scene.mounted(tracked(scene), sent("ShowedPortal"))
       const dialog = scene.get(portal)
@@ -248,6 +249,47 @@ describe("Dialog", () => {
         .mounted(tracked(scene), sent("FocusedOutside"))
       assert.deepStrictEqual(scene.current.emitted, [])
     }))
+
+  for (const topLayer of [true, false]) {
+    it.effect(`opens and closes in HtmlPlay with topLayer: ${topLayer}`, () =>
+      Effect.gen(function*() {
+        const Msg = UiSchema.TaggedEnum({ Opened: {}, Closed: {} })
+        const Settings = Html.component({
+          name: "Settings",
+          model: Schema.Boolean,
+          message: Msg
+        }).make({
+          init: () => false,
+          update: { Opened: () => true, Closed: () => false },
+          view: (h, open) =>
+            Dialog(h, {
+              props: { open, topLayer },
+              onEmit: {
+                RequestedOpen: () => Msg.Opened(),
+                RequestedClose: () => Msg.Closed(),
+                Settled: () => undefined
+              },
+              view: (dialog) =>
+                h.div(
+                  dialog.trigger(h.button).children("Settings"),
+                  dialog.portal(h.dialog)?.children(
+                    dialog.popup(h.div).children(
+                      dialog.title(h.h2).children("Settings"),
+                      dialog.close(h.button).children("Close")
+                    )
+                  )
+                )
+            })
+        })
+        const play = yield* HtmlPlay.make(Settings, {})
+        const settings = HtmlLocator.role("button", { name: "Settings" })
+        yield* play.click(settings)
+        yield* play.expect(HtmlLocator.role("dialog", { name: "Settings" }))
+          .toExist()
+        yield* play.click(HtmlLocator.role("button", { name: "Close" }))
+        yield* play.expect(settings).toHaveAttribute("aria-expanded", "false")
+      }).pipe(Effect.provide(TestHost.layer())))
+  }
 
   it.effect("reports transition state and waits for holdExit to be released before settling", () =>
     Effect.gen(function*() {

@@ -236,6 +236,7 @@ export interface Tree {
   drawn?: ((inst: Instance, drawn: boolean) => void) | undefined
   ended?: ((author: Instance, path: string) => void) | undefined
   work?: ((idle: boolean) => boolean) | undefined
+  committing?: Array<() => void> | undefined
   committed?: Array<() => void> | undefined
   head?:
     | { readonly value: unknown; readonly title: string | undefined }
@@ -727,7 +728,16 @@ export const flush = (tree: Tree): void => {
     }
     const batch = tree.dirty
     if (tree.work?.(batch.length === 0)) continue
-    if (batch.length === 0) break
+    if (batch.length === 0) {
+      // Include renders triggered by `beforeCommit` mounts in this flush.
+      const committing = tree.committing
+      if (committing === undefined) break
+      tree.committing = undefined
+      for (let index = 0; index < committing.length; index++) {
+        committing[index]!()
+      }
+      continue
+    }
     tree.dirty = []
     if (batch.length > 1) batch.sort(byDepth)
     for (let index = 0; index < batch.length; index++) {

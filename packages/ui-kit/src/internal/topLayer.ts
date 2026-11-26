@@ -36,6 +36,19 @@ export const raiseAbove = (shown: Element): void => {
   }
 }
 
+// A view transition can delay showing the portal until after its mount starts.
+// Raise kept elements only after the portal enters the top layer.
+export const raiseAboveShown = (shown: Element, signal: AbortSignal): void => {
+  if (!shown.hasAttribute("popover")) return
+  if (showing(shown as HTMLElement)) return raiseAbove(shown)
+  const opens = (event: Event) => {
+    if ((event as ToggleEvent).newState !== "open") return
+    shown.removeEventListener("beforetoggle", opens)
+    queueMicrotask(() => raiseAbove(shown))
+  }
+  shown.addEventListener("beforetoggle", opens, { signal })
+}
+
 const boxReset =
   "max-width:none;max-height:none;margin:0;padding:0;border:0;overflow:visible;background:transparent;color:inherit"
 

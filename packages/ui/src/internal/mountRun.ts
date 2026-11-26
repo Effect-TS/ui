@@ -30,7 +30,8 @@ class Running {
     const env = inst.env
     let ctx = env.ctx
     if (ctx === undefined) {
-      if (env.cause === undefined) {
+      // A `beforeCommit` mount needs no services, so it doesn't wait for a Layer above it.
+      if (env.cause === undefined && this.mount.beforeCommit !== true) {
         env.waiting.push(() => env.cause === undefined && this.start(from))
         return
       }
@@ -145,7 +146,10 @@ export const attach = (mount: Mount.Any, rec: Kernel.Rec): void => {
   const next = new Running(rec, mount)
   running.set(rec, next)
   const from = follow(tree)
-  afterCommit(tree, () => next.start(from))
+  const start = () => next.start(from)
+  if (mount.beforeCommit === true && tree.scheduled) {
+    ;(tree.committing ??= []).push(start)
+  } else afterCommit(tree, start)
 }
 
 const still = (mount: Mount.Any, rec: Kernel.Rec): void => {

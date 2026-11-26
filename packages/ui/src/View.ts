@@ -1686,11 +1686,11 @@ export class ElementBuilder<
     return withOwnFields(this, { refKey: ref.key })
   }
   /**
-   * Starts `mount` with this element's host node after it's committed, in a
-   * Scope that closes when the element goes and survives patches. A message
-   * it ends with comes back to the component, and one that ends with
-   * `Component.noop` sends nothing and logs no `Update`. Its requirements
-   * join the component's.
+   * Starts `mount` with this element's host node after it's committed (just
+   * before, for a mount made with `beforeCommit`), in a Scope that closes
+   * when the element goes and survives patches. A message it ends with comes
+   * back to the component, and one that ends with `Component.noop` sends
+   * nothing and logs no `Update`. Its requirements join the component's.
    *
    * **Details**
    *

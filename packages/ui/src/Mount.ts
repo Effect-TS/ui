@@ -103,15 +103,26 @@ export type DefinitionTypeId = typeof DefinitionTypeId
  * If `paint` is absent or throws, the copy reports the instance as skipped;
  * without `paint`, the node stays as the view rendered it.
  *
+ * With `beforeCommit: true`, the body starts once its node is in the
+ * document but before the host commit shows popovers and modal dialogs.
+ * Use it to capture focus before a dialog moves focus inside. The body must
+ * require no services, so it can start without waiting for an ancestor Layer.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Options<In extends Command.ArgsInput, Node = unknown> {
+export interface Options<
+  In extends Command.ArgsInput,
+  Node = unknown,
+  R = never
+> {
   readonly args: In
   readonly paint?:
     | ((node: Node, args: Command.ArgsOf<In>) => void)
     | undefined
+  readonly beforeCommit?: [R] extends [never] ? boolean | undefined
+    : false | undefined
 }
 
 /**
@@ -243,6 +254,8 @@ export interface Issued<
    * @internal
    */
   readonly paint: ((node: Node, args: any) => void) | undefined
+  /** @internal */
+  readonly beforeCommit: boolean | undefined
   /**
    * What keeps a running mount's args and gives their changes. A runtime
    * reaches it through the mount, so an app that issues none ships none of
@@ -342,6 +355,7 @@ interface Fields {
   readonly run: Issued<any, any, any, any>["run"]
   readonly resolve: (result: any) => any
   readonly paint: Issued<any, any, any, any>["paint"]
+  readonly beforeCommit: boolean | undefined
 }
 
 const makeIssued = (fields: Fields): any =>
@@ -379,8 +393,8 @@ export const isDefinition = (u: unknown): u is Definition.Any =>
  *
  * Requires an `args` Schema and returns a factory that takes the args struct
  * and issues the mount: `h.canvas.onMount(DrawChart({ points }))`. The body
- * runs once per element, after it's committed, in a Scope that closes when
- * the element goes. It gets:
+ * runs once per element, after it's committed (or just before, with
+ * `beforeCommit`), in a Scope that closes when the element goes. It gets:
  *
  * - `node`, the host node. Annotate it with the node the body needs, and
  *   `onMount` then rejects an element that renders to another kind of node.
@@ -428,7 +442,7 @@ export const make = <
   R = never
 >(
   name: Name,
-  options: Options<In, Node>,
+  options: Options<In, Node, R>,
   run: (
     node: Node,
     args: Command.ArgsOf<In>,
@@ -503,7 +517,7 @@ export const makeStream = <
   R = never
 >(
   name: Name,
-  options: Options<In, Node>,
+  options: Options<In, Node, R>,
   run: (
     node: Node,
     args: Command.ArgsOf<In>,
@@ -520,7 +534,7 @@ export const makeStream = <
 
 const define = (
   name: string,
-  options: Options<Command.ArgsInput, any>,
+  options: Options<Command.ArgsInput, any, any>,
   stream: boolean,
   run: Fields["run"]
 ): any => {
@@ -535,7 +549,8 @@ const define = (
       stream,
       run,
       resolve: identity,
-      paint: options.paint
+      paint: options.paint,
+      beforeCommit: options.beforeCommit
     })
   Object.defineProperty(factory, "name", { value: name })
   return Object.assign(factory, {
@@ -579,15 +594,7 @@ export const map: {
     f: (a: A) => B
   ): Issued<B, R, Node, Source> => {
     const resolve = self.resolve
-    return makeIssued({
-      name: self.name,
-      args: self.args,
-      argsSchema: self.argsSchema,
-      stream: self.stream,
-      run: self.run,
-      resolve: (result) => f(resolve(result)),
-      paint: self.paint
-    })
+    return makeIssued({ ...self, resolve: (result) => f(resolve(result)) })
   }
 )
 

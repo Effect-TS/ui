@@ -918,8 +918,11 @@ export const PopoverTrigger = <Msg, R = never>(
  *
  * It emits `RequestedOpen`, `RequestedClose` and `Settled`.
  *
- * On the server and on a host that doesn't run mounts, the popover renders
- * closed, isn't placed and doesn't open on hover from a `PopoverTrigger`.
+ * On a host that doesn't run mounts, such as `TestHost`, an open popover
+ * shows, so `HtmlPlay` finds it. On the server, an open popover in place
+ * renders `open`, and one in the top layer stays hidden until the client's
+ * first commit. On both, the popover isn't placed and doesn't open on hover
+ * from a `PopoverTrigger`.
  *
  * History restore saves nothing of it: after Back, forward or a reload it
  * starts from `init`.
