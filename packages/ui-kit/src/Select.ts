@@ -218,13 +218,21 @@ import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import {
   type Attributed,
+  fallbackLabelledBy,
   flag,
   idSelector,
+  type Named,
   ownStyle,
   separatorAttrs,
   withStyle
 } from "./internal/attributes.ts"
-import { backdropStyle, blockers, cutPath } from "./internal/blocker.ts"
+import {
+  backdropStyle,
+  blockers,
+  cutPath,
+  dismissAttrs,
+  dismissSpan
+} from "./internal/blocker.ts"
 import { focusFinal, override } from "./internal/dom.ts"
 import {
   autofillMatch,
@@ -235,7 +243,7 @@ import {
 } from "./internal/formInputs.ts"
 import { methodOf } from "./internal/interaction.ts"
 import { available, grouped, stepped, valued } from "./internal/list.ts"
-import { holdScroll } from "./internal/modal.ts"
+import { holdLayer, nextLayerOrder } from "./internal/modal.ts"
 import { listenOutside, releasedOutside } from "./internal/outside.ts"
 import { clamp, fillValue } from "./internal/range.ts"
 import { layered, raiseAbove } from "./internal/topLayer.ts"
@@ -330,6 +338,8 @@ export type SelectInteraction = typeof SelectInteraction.Type
  * - `"escape-key"`: Escape in the popup
  * - `"focus-out"`: focus left the trigger and the popup, or Shift+Tab in
  *   the popup
+ * - `"close-press"`: the visually hidden dismiss button in a `modal`
+ *   popup, for screen readers
  * - `"cancel-open"`: the press that opened it was released away from the
  *   trigger and the popup
  * - `"window-resize"`: the window resized while the popup covered the
@@ -348,6 +358,7 @@ export const SelectChangeReason = Schema.Literals([
   "outside-press",
   "escape-key",
   "focus-out",
+  "close-press",
   "cancel-open",
   "window-resize",
   "none"
@@ -380,8 +391,11 @@ export type SelectChangeReason = typeof SelectChangeReason.Type
  *   A read-only select opens and can be browsed but not changed.
  * - `name`, `form`, `autoComplete`: the form field.
  * - `id`: the trigger's id. Generated when left out.
- * - `modal`: while open, the page doesn't scroll and a press outside only
- *   closes the popup. True when left out.
+ * - `modal`: while open, the page doesn't scroll, a press outside only
+ *   closes the popup, and screen readers see only the trigger and the
+ *   popup. True when left out.
+ * - `dismissLabel`: the name of the visually hidden dismiss button in a
+ *   `modal` popup. `"Dismiss"` when left out.
  * - `highlightItemOnHover`: the pointer highlights the item it's over.
  *   True when left out.
  * - `alignItemWithTrigger`: the popup covers the trigger, with the
@@ -415,6 +429,7 @@ export const SelectProps = Schema.Struct({
   autoComplete: Schema.optional(Schema.String),
   id: Schema.optional(Schema.String),
   modal: Schema.optional(Schema.Boolean),
+  dismissLabel: Schema.optional(Schema.String),
   highlightItemOnHover: Schema.optional(Schema.Boolean),
   alignItemWithTrigger: Schema.optional(Schema.Boolean),
   finalFocus: Schema.optional(Schema.Boolean),
@@ -493,6 +508,7 @@ const SelectMessage = UiSchema.TaggedEnum({
   FinishedTransition: { open: Schema.Boolean },
   ChangedPlacement: { placement: Positioning.Placement },
   PressedOutside: { pointerType: Schema.String },
+  PressedDismiss: {},
   FocusedOutside: {},
   FocusedTrigger: {},
   ReleasedPointer: { outside: Schema.Boolean },
@@ -774,6 +790,7 @@ const TrackSelectArgs = {
   holdExit: Schema.Boolean,
   aligned: Schema.Boolean,
   lock: Schema.Boolean,
+  modal: Schema.Boolean,
   touch: Schema.Boolean,
   active: Schema.NullOr(Schema.String),
   scroll: Schema.Boolean,
@@ -1050,11 +1067,18 @@ const watch = (
         }
       })
 
+    const order = nextLayerOrder()
     let release: (() => void) | undefined
     const hold = () => {
       release?.()
-      release = current.open && current.lock
-        ? holdScroll(node, current.touch)
+      release = current.open
+        ? holdLayer(node, order, {
+          scroll: current.lock,
+          touch: current.touch,
+          hide: current.modal
+            ? [trigger()].filter((anchor) => anchor !== null)
+            : undefined
+        })
         : undefined
     }
 
@@ -1204,7 +1228,7 @@ const watch = (
       current = next
       if (
         next.open !== previous.open || next.lock !== previous.lock ||
-        next.touch !== previous.touch
+        next.modal !== previous.modal || next.touch !== previous.touch
       ) hold()
       if (previous.aligned && !next.aligned) {
         clear()
@@ -1333,10 +1357,11 @@ const scrolling =
  * - `backdrop`, `positioner`: `role="presentation"` and
  *   `popover="manual"`
  * - `popup`: `id`, `tabindex="-1"`, and `role="listbox"`,
- *   `aria-multiselectable` and `aria-readonly`, or `role="presentation"`
- *   when a `list` is drawn inside it
+ *   `aria-multiselectable`, `aria-readonly` and `aria-labelledby`
+ *   pointing at `label` unless the builder has a name, or
+ *   `role="presentation"` when a `list` is drawn inside it
  * - `list`: `id`, `role="listbox"`, `aria-multiselectable`,
- *   `aria-readonly`
+ *   `aria-readonly`, and `aria-labelledby` as on the popup
  * - `item`: `id`, `role="option"`, `aria-selected`, `aria-disabled`,
  *   and `tabindex`, `"0"` while it's highlighted in an open popup and
  *   `"-1"` otherwise
@@ -1346,6 +1371,9 @@ const scrolling =
  * - `icon`, `arrow`, `itemIndicator`, `scrollUpArrow`,
  *   `scrollDownArrow`: `aria-hidden="true"`, and `id` on the arrow
  * - `separator`: `role="separator"`, `aria-orientation="horizontal"`
+ *
+ * With `modal`, the positioner also holds a visually hidden Dismiss button
+ * for screen readers.
  *
  * The parts handle these events on a layer of their own, so the
  * consumer's handlers for them still run:
@@ -1513,6 +1541,7 @@ export const Select = Html.component({
     ChangedPlacement: ($, { placement }) => $.evolve({ placement }),
     PressedOutside: ($, { pointerType }) =>
       dismiss($.model, $, "outside-press", methodOf(pointerType)),
+    PressedDismiss: ($) => dismiss($.model, $, "close-press", null),
     FocusedOutside: ($) => dismiss($.model, $, "focus-out", null, true),
     FocusedTrigger: ($) =>
       alignedOf($.model, $.props) ? dismiss($.model, $, "none", null) : $.model,
@@ -1694,6 +1723,13 @@ export const Select = Html.component({
           .forward(ownStyle(backdropStyle(topLayer, open)))
     )
 
+    const dismissPart = p.part(
+      "span",
+      (b) =>
+        b.attrs(dismissAttrs(props.dismissLabel, open))
+          .on("click", SelectMessage.PressedDismiss())
+    )
+
     const positionerStyle = aligned
       ? alignedBox
       : Positioning.positionerStyle(tracked.positionMethod)
@@ -1708,12 +1744,13 @@ export const Select = Html.component({
         topLayer,
         shown
       )
-        .forward((node) =>
-          node.attr(
+        .forward((node) => {
+          const styled = node.attr(
             "style",
             withStyle(node.elementAttrs.style, positionerStyle)
           )
-        )
+          return modal ? styled.children(dismissPart(dismissSpan())) : styled
+        })
       const blocked = modal
         ? decorated.children(open ? blocking.open : blocking.closed)
         : decorated
@@ -1729,6 +1766,7 @@ export const Select = Html.component({
           holdExit: props.holdExit === true,
           aligned,
           lock: open && (modal || aligned),
+          modal,
           touch,
           active: open && highlighted !== null && items.has(highlighted)
             ? itemId(highlighted)
@@ -1753,6 +1791,8 @@ export const Select = Html.component({
           "aria-multiselectable": multiple ? "true" : undefined,
           "aria-readonly": readOnly ? "true" : undefined
         })
+    const named = <B extends Attributed<B> & Named>(node: B): B =>
+      fallbackLabelledBy(node, labelled ? labelId : undefined)
 
     const popup = p.part("div", (b) =>
       placed(b)
@@ -1773,7 +1813,9 @@ export const Select = Html.component({
         .on("keyup", ({ key }) =>
           key === " " ? SelectMessage.ReleasedSpace() : undefined)
         .forward((node) => {
-          const own = listed ? node.attr("role", "presentation") : listbox(node)
+          const own = listed
+            ? node.attr("role", "presentation")
+            : named(listbox(node))
           return aligned && !listed
             ? own.attr("style", withStyle(node.elementAttrs.style, scrolling))
             : own
@@ -1784,9 +1826,12 @@ export const Select = Html.component({
       const own = listbox(b).attr("id", listId)
       return aligned
         ? own.forward((node) =>
-          node.attr("style", withStyle(node.elementAttrs.style, scrolling))
+          named(node).attr(
+            "style",
+            withStyle(node.elementAttrs.style, scrolling)
+          )
         )
-        : own
+        : own.forward(named)
     })
 
     const arrowStyle = Positioning.arrowStyle(side)

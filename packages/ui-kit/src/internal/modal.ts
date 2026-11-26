@@ -212,6 +212,26 @@ export const holdScroll = (node: HTMLElement, touch: boolean): () => void => {
   return wide ? lockScroll(node.ownerDocument) : () => {}
 }
 
+// With `hide`, screen readers see only `node` and those elements.
+export const holdLayer = (
+  node: HTMLElement,
+  order: number,
+  options: {
+    readonly scroll: boolean
+    readonly touch: boolean
+    readonly hide: ReadonlyArray<Element> | undefined
+  }
+): () => void => {
+  const unlock = options.scroll ? holdScroll(node, options.touch) : undefined
+  const shown = options.hide === undefined
+    ? undefined
+    : hideOthers(node, order, options.hide)
+  return () => {
+    unlock?.()
+    shown?.()
+  }
+}
+
 export const lockScroll = (document: Document): () => void => {
   const stack = stackOf(document)
   if (stack.locks++ === 0) stack.unlock = lock(document)

@@ -88,7 +88,8 @@ const Config = Schema.Struct({
   required: Schema.Boolean,
   dialog: Schema.Boolean,
   rtlPopup: Schema.Boolean,
-  grid: Schema.Boolean
+  grid: Schema.Boolean,
+  modal: Schema.Boolean
 })
 type Config = typeof Config.Type
 
@@ -157,7 +158,8 @@ const Page = Html.component({
             inputInPopup: inPopup,
             name: "fruit",
             required: h.props.required,
-            grid: h.props.grid
+            grid: h.props.grid,
+            ...(h.props.modal ? { modal: true } : {})
           },
           onEmit: {
             RequestedOpen: ({ reason }) => Message.RequestedOpen({ reason }),
@@ -219,6 +221,26 @@ const Page = Html.component({
               ).children(
                 combobox.popup(h.div.attr("id", "popup")).children(
                   ...(inPopup ? [input] : []),
+                  ...(h.props.modal
+                    ? [
+                      h.button.attrs({
+                        id: "shown",
+                        type: "button",
+                        tabindex: "1"
+                      }),
+                      h.button.attrs({
+                        id: "unseen",
+                        type: "button",
+                        style: "visibility:hidden"
+                      }),
+                      h.div.attrs({ id: "notes", contenteditable: "TRUE" }),
+                      h.div.attrs({
+                        id: "skipped",
+                        contenteditable: "true",
+                        tabindex: "-1"
+                      })
+                    ]
+                    : []),
                   list
                 )
               )
@@ -264,6 +286,7 @@ const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
       dialog: false,
       rtlPopup: false,
       grid: false,
+      modal: false,
       ...config
     },
     app
@@ -526,6 +549,31 @@ describe("Combobox in a document", { concurrent: false }, () => {
         "RequestedClose item-press",
         "RequestedInputValue \"\" input-clear"
       ])
+    }).pipe(Effect.scoped))
+
+  it.effect("with the input in the popup and modal, the popup is a modal dialog that Tab doesn't leave", () =>
+    Effect.gen(function*() {
+      yield* mountPage({ inputInPopup: true, modal: true })
+      byId("trigger").focus()
+      keydown(byId("trigger"), "ArrowDown")
+      yield* tick
+      assert.strictEqual(
+        input().closest("[role=dialog]")?.getAttribute("aria-modal"),
+        "true"
+      )
+      assert.strictEqual(document.activeElement, input())
+      // Tab order: the button with tabindex="1", then the input and the
+      // editing host. The hidden button and the editor with tabindex="-1"
+      // are no stops.
+      const order = [byId("shown"), input(), byId("notes")]
+      for (const shiftKey of [false, false, false, true, true, true]) {
+        const at = order.indexOf(document.activeElement as HTMLElement)
+        assert.isTrue(keydown(order[at]!, "Tab", { shiftKey }).defaultPrevented)
+        assert.strictEqual(
+          document.activeElement,
+          order.at((at + (shiftKey ? -1 : 1)) % order.length)
+        )
+      }
     }).pipe(Effect.scoped))
 
   it.effect("with the input in the popup, Escape gives focus back to the trigger as the close starts, and the popup is inert", () =>

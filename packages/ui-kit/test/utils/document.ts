@@ -106,6 +106,29 @@ export const focusability = Effect.acquireRelease(
   (restore) => Effect.sync(restore)
 )
 
+/** happy-dom reads an empty `contenteditable` as `inherit`, not `true`. */
+export const emptyEditable = Effect.acquireRelease(
+  Effect.sync(() => {
+    const proto = window.HTMLElement.prototype
+    const descriptor = Object.getOwnPropertyDescriptor(
+      proto,
+      "contentEditable"
+    )!
+    Object.defineProperty(proto, "contentEditable", {
+      ...descriptor,
+      get(this: HTMLElement) {
+        return this.getAttribute("contenteditable") === ""
+          ? "true"
+          : descriptor.get!.call(this)
+      }
+    })
+    return () => {
+      Object.defineProperty(proto, "contentEditable", descriptor)
+    }
+  }),
+  (restore) => Effect.sync(restore)
+)
+
 /**
  * happy-dom has no popover API. Showing one sends `beforetoggle`, and focuses
  * an `autofocus` element in it, or in a `<dialog>` the first field, as a

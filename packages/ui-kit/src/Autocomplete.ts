@@ -21,6 +21,7 @@
  * | `trigger`    | `<button>` that toggles the popup                     |
  * | `icon`       | `<span>` inside the trigger                           |
  * | `clear`      | `<button>` that clears the text                       |
+ * | `label`      | `<div>` that names the input, the list and the popup |
  * | `value`      | `<span>` that shows the text                          |
  * | `backdrop`   | `<div>`, a manual popover under the positioner        |
  * | `positioner` | `<div>`, a manual popover placed by the autocomplete  |
@@ -61,7 +62,9 @@
  * show the highlighted item's label in the input until the user types,
  * picks or closes the popup; `value` keeps the typed text, which is what
  * filters. `"inline"` shows the label the same way without filtering, and
- * `"none"` neither filters nor shows it.
+ * `"none"` neither filters nor shows it. When the typed text starts the
+ * label, the rest is selected so the next key replaces it. Input types
+ * that can't select text, such as `"email"`, keep the typed text.
  *
  * With `inline`, the list is drawn without a popup, as in a command
  * palette: it's always expanded, and the arrow keys move through it while
@@ -428,7 +431,10 @@ export type AutocompleteMode = typeof AutocompleteMode.Type
  *   left out, the nearest `DirectionProvider`'s or, without one, the CSS
  *   `direction` of the popup or an inline list.
  * - `modal`: while open, the page doesn't scroll and a press outside only
- *   closes the popup. False when left out.
+ *   closes the popup. With `inputInPopup`, the popup is also a modal
+ *   dialog that Tab doesn't leave. False when left out.
+ * - `dismissLabel`: the name of the visually hidden dismiss button in the
+ *   popup. `"Dismiss"` when left out.
  * - `holdExit`: keeps the closing popup shown, for an exit animation the
  *   consumer ends by clearing it.
  * - the `Positioning.PositionerFields`, for the popup, `topLayer: false`
@@ -469,6 +475,7 @@ export const AutocompleteProps = Schema.Struct({
   id: Schema.optional(Schema.String),
   dir: Schema.optional(Schema.Literals(["ltr", "rtl"])),
   modal: Schema.optional(Schema.Boolean),
+  dismissLabel: Schema.optional(Schema.String),
   holdExit: Schema.optional(Schema.Boolean),
   ...Positioning.PositionerFields
 })
@@ -651,7 +658,6 @@ export const Autocomplete = Html.component({
       "selectedItems",
       "placeholder",
       "multiple",
-      "label",
       "chips",
       "chip",
       "chipRemove",

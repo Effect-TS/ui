@@ -27,6 +27,7 @@ const standIn = {
   elements: Html,
   view: (autocomplete: Parts, h: H) =>
     h.div(
+      autocomplete.label(h.div.class("label")).children("Fruit"),
       autocomplete.inputGroup(h.div.class("group")).children(
         autocomplete.input(h.input.class("input")),
         autocomplete.clear({ element: h.button.class("clear") })?.children("×"),
@@ -342,6 +343,15 @@ describe("Autocomplete", () => {
         inputInPopup: true
       }
       const scene = yield* shown(props)
+      const labelId = scene.get(Locator.attr("class", "label")).attrs?.id
+      assert.isString(labelId)
+      assert.deepInclude(scene.get(trigger).attrs, {
+        "aria-labelledby": labelId
+      })
+      assert.deepInclude(scene.get(Locator.attr("class", "popup")).attrs, {
+        role: "dialog",
+        "aria-labelledby": labelId
+      })
       scene.fire(input, "keydown", key("ArrowDown")).emitted(
         highlighted("banana", 0)
       )

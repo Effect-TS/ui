@@ -36,7 +36,7 @@ export const typeahead = (
     !available(item) ||
     item.label[0]?.toLowerCase() !== item.label[1]?.toLowerCase()
   )
-  if (cycles && typed === key) {
+  if (cycles && typed.toLowerCase() === key.toLowerCase()) {
     typed = ""
     typedFrom = state.matched
   }

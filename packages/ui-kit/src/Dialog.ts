@@ -249,10 +249,11 @@ import {
 } from "./internal/attributes.ts"
 import {
   byAttribute,
+  focusable,
   isElement,
   isHTMLElement,
   perDocument,
-  radioGroup
+  tabbablesIn
 } from "./internal/dom.ts"
 import { methodOf, onScrollbar } from "./internal/interaction.ts"
 import {
@@ -507,26 +508,6 @@ const blocker = new Html.Element<never>("div").attrs({
 const layer = View.toNode(blocker)
 const inertLayer = View.toNode(blocker.attr("inert", ""))
 
-const editable = ["", "true", "plaintext-only"]
-  .map((value) => `[contenteditable="${value}"]`)
-  .join(",")
-
-const tabbableSelector = [
-  "a[href]",
-  "area[href]",
-  "button",
-  "input:not([type=\"hidden\"])",
-  "select",
-  "textarea",
-  "iframe",
-  "summary",
-  "details",
-  "audio[controls]",
-  "video[controls]",
-  "[tabindex]",
-  editable
-].join(",")
-
 const closestOf = (
   target: Node,
   selector: string
@@ -536,45 +517,8 @@ const closestOf = (
 const inNested = (dialog: Element, element: Element): boolean =>
   element.parentElement?.closest("dialog") !== dialog
 
-const radioOut = (element: HTMLElement): boolean => {
-  const radio = element as HTMLInputElement
-  if (
-    radio.localName !== "input" || radio.type !== "radio" ||
-    radio.name === "" || radio.checked
-  ) {
-    return false
-  }
-  const group = radioGroup(radio)
-  return group.some((other) => other.checked) || group[0] !== radio
-}
-
-// Chromium reports layout boxes for content hidden by closed `<details>`,
-// even though Tab skips that content.
-const collapsed = "details:not([open]) > :not(summary:first-of-type)"
-
-const focusable = (element: HTMLElement): boolean =>
-  element.isConnected && element.getClientRects().length > 0 &&
-  element.closest(collapsed) === null &&
-  !element.matches(":disabled") && element.closest("[inert]") === null &&
-  element.ownerDocument.defaultView?.getComputedStyle(element).visibility !==
-    "hidden"
-
-// Chromium reports a `tabIndex` of -1 for an editing host and for a
-// `<details>` without a summary, though Tab reaches both.
-const inTabOrder = (element: HTMLElement): boolean =>
-  element.tabIndex >= 0 ||
-  (!element.hasAttribute("tabindex") &&
-    (element.localName === "details"
-      ? element.querySelector(":scope > summary") === null
-      : element.matches(editable) &&
-        element.parentElement?.isContentEditable !== true))
-
 const tabbables = (dialog: Element, root: Element): Array<HTMLElement> =>
-  Array.from(root.querySelectorAll<HTMLElement>(tabbableSelector))
-    .filter((element) =>
-      inTabOrder(element) && !inNested(dialog, element) &&
-      focusable(element) && !radioOut(element)
-    )
+  tabbablesIn(root).filter((element) => !inNested(dialog, element))
 
 const TrackDialogArgs = {
   modal: DialogModal,

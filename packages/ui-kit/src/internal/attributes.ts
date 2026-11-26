@@ -64,11 +64,69 @@ export interface Attributed<B> {
   ) => B
 }
 
-export const defaults = <
-  B extends Attributed<B> & {
-    readonly elementAttrs: Readonly<Record<string, string>>
+export type Named = { readonly elementAttrs: Readonly<Record<string, string>> }
+
+const namedOf = (node: Named): boolean =>
+  node.elementAttrs["aria-label"] !== undefined ||
+  node.elementAttrs["aria-labelledby"] !== undefined
+
+const wordy = /[\p{L}\p{N}]/u
+
+// Text with a letter or digit names an element, an icon such as "×" doesn't.
+// A child component or slot is "unknown", as its output can't be seen here.
+const namingOf = (
+  children: ReadonlyArray<View.Node<unknown, any>>
+): "named" | "unnamed" | "unknown" => {
+  let naming: "unnamed" | "unknown" = "unnamed"
+  for (const child of children) {
+    switch (child._tag) {
+      case "Text":
+        if (wordy.test(child.text)) return "named"
+        break
+      case "Element": {
+        const attrs = child.attrs
+        if (attrs["aria-hidden"] === "true" || attrs.hidden !== undefined) break
+        if ((attrs["aria-label"] ?? attrs.alt ?? "").trim() !== "") {
+          return "named"
+        }
+        const inner = namingOf(child.children)
+        if (inner === "named") return "named"
+        if (inner === "unknown") naming = "unknown"
+        break
+      }
+      default:
+        naming = "unknown"
+    }
   }
->(
+  return naming
+}
+
+// With unknown children it's a `title`, which names the element only when
+// they don't. Apply it in `forward`, so a name given after the part wins.
+export const fallbackLabel = (label: string) =>
+<
+  B extends Attributed<B> & Named & {
+    readonly content: ReadonlyArray<View.Node<unknown, any>> | undefined
+  }
+>(node: B): B => {
+  if (namedOf(node) || node.elementAttrs.title !== undefined) return node
+  switch (namingOf(node.content ?? [])) {
+    case "named":
+      return node
+    case "unknown":
+      return node.attr("title", label)
+    case "unnamed":
+      return node.attr("aria-label", label)
+  }
+}
+
+export const fallbackLabelledBy = <B extends Attributed<B> & Named>(
+  node: B,
+  id: string | undefined
+): B =>
+  id === undefined || namedOf(node) ? node : node.attr("aria-labelledby", id)
+
+export const defaults = <B extends Attributed<B> & Named>(
   node: B,
   attrs: Readonly<Record<string, string>>
 ): B =>

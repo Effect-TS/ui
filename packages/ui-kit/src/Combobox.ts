@@ -23,7 +23,7 @@
  * | `chips`         | `<div>` around the chips and the input, with `multiple` |
  * | `chip`          | `<div>`, one per selected value                          |
  * | `chipRemove`    | `<button>` inside a chip                                 |
- * | `label`         | `<div>` that names the trigger, with `inputInPopup`     |
+ * | `label`         | `<div>` that names the input, the list and the popup  |
  * | `value`         | `<span>` inside the trigger, with `inputInPopup`        |
  * | `backdrop`      | `<div>`, a manual popover under the positioner           |
  * | `positioner`    | `<div>`, a manual popover placed by the combobox         |
@@ -464,7 +464,12 @@ export type ComboboxFilterMode = typeof ComboboxFilterMode.Type
  *   `direction` of the chips for the chip keys, and of the popup or an
  *   inline list for the item keys.
  * - `modal`: while open, the page doesn't scroll and a press outside only
- *   closes the popup. False when left out.
+ *   closes the popup. With `inputInPopup`, the popup is also a modal
+ *   dialog that Tab doesn't leave. False when left out.
+ * - `dismissLabel`: the name of the visually hidden dismiss button in the
+ *   popup. `"Dismiss"` when left out.
+ * - `removedLabel`: announced after a chip's label once `value` drops
+ *   it. `"removed"` when left out.
  * - `finalFocus`: with `inputInPopup`, on close, focus goes back to the
  *   trigger, or to a `finalFocus` part. False leaves it where it is. True
  *   when left out.
@@ -507,6 +512,8 @@ export const ComboboxProps = Schema.Struct({
   id: Schema.optional(Schema.String),
   dir: Schema.optional(Schema.Literals(["ltr", "rtl"])),
   modal: Schema.optional(Schema.Boolean),
+  dismissLabel: Schema.optional(Schema.String),
+  removedLabel: Schema.optional(Schema.String),
   finalFocus: Schema.optional(Schema.Boolean),
   holdExit: Schema.optional(Schema.Boolean),
   ...Positioning.PositionerFields
@@ -671,25 +678,33 @@ const engine = Engine.make(
  *   `autocorrect` and `autocapitalize`. Its `id` is the one already on
  *   the builder, as from `field.control`. Otherwise it's the `id` prop, or
  *   a generated one with `inputInPopup`.
- * - `trigger`: `type="button"`, `aria-expanded`, `aria-haspopup`,
- *   `aria-controls` while open, `disabled`, and `tabindex="-1"` without
- *   `inputInPopup`. With `inputInPopup` it takes focus and is a combobox
+ * - `trigger`: `type="button"`, `aria-expanded`, `aria-haspopup`
+ *   (`"dialog"` with `inputInPopup`, else as on the input),
+ *   `aria-controls` while open, `disabled`, and `tabindex="-1"` and a
+ *   fallback `aria-label="Open popup"` without `inputInPopup`. With `inputInPopup` it takes focus and is a combobox
  *   as well as the input: `role="combobox"`, `aria-required`,
  *   `aria-readonly`, an `id`, the one on the builder or else the `id`
  *   prop, and `aria-labelledby` pointing at `label` when the builder has
  *   none.
  * - `inputGroup`: `role="group"`
- * - `clear`, `chipRemove`: `type="button"`, `tabindex="-1"`, `disabled`
- * - `chips`: `role="toolbar"` while a value is selected
- * - `chip`: `tabindex="-1"`, `aria-disabled`, `aria-readonly`
+ * - `clear`, `chipRemove`: `type="button"`, `tabindex="-1"`, `disabled`,
+ *   and a fallback `aria-label="Clear"` or `aria-label="Remove"`. It's
+ *   left out when the builder has a name or text children, and is a
+ *   `title` when a child is a component, so text the component renders
+ *   still wins
+ * - `chips`: `role="toolbar"` while a value is selected, and a visually
+ *   hidden `role="status"` that says which chip `value` lost last
+ * - `chip`: `tabindex="-1"`, and `aria-keyshortcuts="Backspace Delete"`
+ *   unless `disabled` or `readOnly`
  * - `label`: `id`
  * - `backdrop`, `positioner`: `role="presentation"` and
  *   `popover="manual"`
  * - `popup`: `id`, `tabindex="-1"` and `role="presentation"`, or with
- *   `inputInPopup` `role="dialog"` and `aria-labelledby` pointing at
- *   `label` unless the builder has one
+ *   `inputInPopup` `role="dialog"`, `aria-modal` and `aria-labelledby`
+ *   pointing at `label`
  * - `list`: `id`, `role="listbox"`, or `"grid"` with `grid`,
- *   `tabindex="-1"`, `aria-multiselectable`, `aria-readonly`
+ *   `tabindex="-1"`, `aria-multiselectable`, `aria-readonly`, and
+ *   `aria-labelledby` pointing at `label`
  * - `row`: `role="row"`
  * - `item`: `id`, `role="option"`, or `"gridcell"` with `grid`,
  *   `aria-selected`, `aria-disabled`
@@ -703,11 +718,10 @@ const engine = Engine.make(
  *   `aria-atomic="true"`
  *
  * A part adds the ids it lists in `aria-controls`, and a group's
- * `aria-labelledby`, to the consumer's. The `aria-labelledby` of the
- * trigger and the popup is a fallback instead: it points at `label` only
- * when the builder has none, and the consumer's wins. Except with `inline`,
- * or with `inputInPopup` and not `modal`, the positioner also holds a
- * visually hidden Dismiss button for screen readers.
+ * `aria-labelledby`, to the consumer's. Other names are fallbacks, left
+ * out when the builder has an `aria-label` or `aria-labelledby`. Except
+ * with `inline`, or with `inputInPopup` and not `modal`, the positioner
+ * also holds a visually hidden Dismiss button for screen readers.
  *
  * The parts handle these events on a layer of their own, so the
  * consumer's handlers for them still run:

@@ -168,7 +168,8 @@ describe("Select", () => {
       assert.deepInclude(scene.get(positioner).attrs, { role: "presentation" })
       assert.deepInclude(scene.get(popup).attrs, {
         role: "listbox",
-        tabindex: "-1"
+        tabindex: "-1",
+        "aria-labelledby": scene.get(label).attrs?.id
       })
       assert.isUndefined(scene.get(item("dark")).attrs?.["data-selected"])
       assert.isUndefined(scene.get(item("dark")).attrs?.["data-highlighted"])
@@ -195,7 +196,7 @@ describe("Select", () => {
 
   it.effect("a mouse press on the trigger opens it, and the popup is a listbox of options", () =>
     Effect.gen(function*() {
-      const scene = yield* open({ value: "system" })
+      const scene = yield* open({ value: "system", dismissLabel: "Fermer" })
       assert.isTrue(scene.get(positioner).props?.popoverOpen)
       const popupId = scene.get(popup).attrs?.id
       assert.deepInclude(scene.get(trigger).attrs, {
@@ -236,6 +237,9 @@ describe("Select", () => {
       })
       assert.isUndefined(scene.query(arrow))
       assert.strictEqual(partsOf(scene).openMethod, "mouse")
+      const close = Locator.attr("aria-label", "Fermer")
+      assert.deepInclude(scene.get(close).attrs, { role: "button" })
+      scene.fire(close, "click", pointer("")).emitted(dismissed("close-press"))
     }))
 
   it.effect("a touch tap opens it next to the trigger, where the arrow shows", () =>
@@ -388,7 +392,7 @@ describe("Select", () => {
       )
       type("s", "system")
       type("s", "solar")
-      type("s", "system")
+      type("S", "system")
       scene.resolve(
         scene.current.pending[0]!.command,
         sent("CompletedWaitBeforeResetTyping")

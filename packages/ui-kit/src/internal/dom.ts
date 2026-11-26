@@ -58,6 +58,98 @@ export const onRange = (event: Event): boolean =>
     (target as HTMLInputElement).type === "range"
   )
 
+const tabbableSelector = [
+  "a[href]",
+  "area[href]",
+  "button",
+  "input:not([type=\"hidden\"])",
+  "select",
+  "textarea",
+  "iframe",
+  "summary",
+  "details",
+  "audio[controls]",
+  "video[controls]",
+  "[tabindex]",
+  "[contenteditable]"
+].join(",")
+
+// An unchecked radio Tab skips: one in a named group that has a checked
+// radio, or that isn't the group's first.
+const radioOut = (element: HTMLElement): boolean => {
+  const radio = element as HTMLInputElement
+  if (
+    radio.localName !== "input" || radio.type !== "radio" ||
+    radio.name === "" || radio.checked
+  ) {
+    return false
+  }
+  const group = radioGroup(radio)
+  return group.some((other) => other.checked) || group[0] !== radio
+}
+
+// Chromium reports layout boxes for content hidden by closed `<details>`,
+// even though Tab skips that content.
+const collapsed = "details:not([open]) > :not(summary:first-of-type)"
+
+export const focusable = (element: HTMLElement): boolean =>
+  element.isConnected && element.getClientRects().length > 0 &&
+  element.closest(collapsed) === null &&
+  !element.matches(":disabled") && element.closest("[inert]") === null &&
+  element.ownerDocument.defaultView?.getComputedStyle(element).visibility !==
+    "hidden"
+
+// Chromium reports `tabIndex` -1 for an editing host and for a `<details>`
+// without a summary, but Tab still stops on both.
+const tabOrder = (element: HTMLElement): number => {
+  if (element.hasAttribute("tabindex")) return element.tabIndex
+  const host = element.localName === "details"
+    ? element.querySelector(":scope > summary") === null
+    : element.isContentEditable &&
+      !(element.parentElement?.isContentEditable ?? false)
+  return host ? 0 : element.tabIndex
+}
+
+const tabbable = (element: HTMLElement): boolean =>
+  tabOrder(element) >= 0 && focusable(element) && !radioOut(element)
+
+export const tabbablesIn = (root: Element): Array<HTMLElement> =>
+  Array.from(root.querySelectorAll<HTMLElement>(tabbableSelector))
+    .filter(tabbable)
+
+// Moves focus itself, as the browser's next stop after a positive
+// `tabindex` can be outside `root`.
+export const trapTab = (event: KeyboardEvent, root: HTMLElement): void => {
+  event.preventDefault()
+  const found = tabbablesIn(root)
+  const items = [
+    ...found.filter((element) => tabOrder(element) > 0)
+      .sort((a, b) => tabOrder(a) - tabOrder(b)),
+    ...found.filter((element) => tabOrder(element) === 0)
+  ]
+  if (items.length === 0) return
+  const focused = activeOf(root.ownerDocument)
+  const at = items.findIndex((element) => element === focused)
+  const step = event.shiftKey ? -1 : 1
+  let next: number
+  if (at !== -1) next = at + step
+  else if (focused === null || focused === root || !root.contains(focused)) {
+    next = event.shiftKey ? -1 : 0
+  } else {
+    // Focus is on a non-stop inside `root`, such as the list.
+    const after = items.findIndex((element) =>
+      (focused.compareDocumentPosition(element) &
+        Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+    )
+    next = after === -1
+      ? (event.shiftKey ? -1 : 0)
+      : event.shiftKey
+      ? after - 1
+      : after
+  }
+  items.at(next % items.length)?.focus({ preventScroll: true })
+}
+
 export const byAttribute = (
   document: Document,
   name: string,
