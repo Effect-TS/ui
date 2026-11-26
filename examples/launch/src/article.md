@@ -55,23 +55,17 @@ This counter shows the core parts of a Component. One definition holds its Model
 
 Click "+1", then click the Effect UI button in the bottom-right corner. [DevTools](#devtools) lists the Message you sent and what it changed.
 
-`Html.component` defines a Component whose view builds HTML elements. Each platform has its own set of elements, called a vocabulary. `OpenTui.component`, from `@effect/ui-opentui`, defines a Component whose view builds terminal elements. **A Component has the same parts on every platform.** The view depends on the platform, and so do the effects that work with its elements. For example, `HtmlCommand.focus` focuses an HTML element, and `OpenTuiCommand.focus` focuses a terminal one.
+**A Component works the same on every platform.** Only the view elements and platform Commands change: `Html.component` builds HTML views with Commands like `HtmlCommand.focus`, while `OpenTui.component` in `@effect/ui-opentui` builds terminal views with `OpenTuiCommand.focus`.
 
 ### How Foldkit 0.x and Effect UI handle Messages
 
-In Foldkit 0.x, the root update handled every Message. When a Message belonged to a Submodel, the root update passed it down to that Submodel's update. The Submodel returned its next state, the root update wrote it back into the application Model, and the runtime ran the view from the root.
-
-In Effect UI, the runtime delivers a Message to that Component's update, skipping every parent. It stores the Component's new Model and runs its view. You keep the Elm Architecture's explicit state transitions without writing the wiring to pass Messages through each parent.
+In Foldkit 0.x, every Message went through the root update and re-ran the view from the root. In Effect UI, the runtime delivers a Message straight to its Component's update and re-runs only that Component's view, skipping every parent.
 
 ::Diagram{scenario="messages"}
 
 ### Foldkit 0.x and Effect UI in code
 
-Both examples below build the same app: a `Page` that shows or hides a `Counter`.
-
-In the Foldkit 0.x version, `Page` stores `Counter`'s Model inside its own Model. It wraps each `Counter` Message in a `Page` Message and forwards it to `Counter`'s update. In the Effect UI version, `Page` calls `Counter` in its view and passes it props. **A parent no longer stores, wraps or forwards anything for its children.** Here, `Page` drops from 62 lines to 34.
-
-When `Page`'s view runs, `Counter`'s view runs again only if its props changed.
+Both examples below build a `Page` that shows or hides a `Counter`. **A parent no longer stores, wraps or forwards anything for its children.** Here, `Page` drops from 62 lines to 34, and `Counter`'s view only re-runs when its props change.
 
 ::Compare{foldkit="counterFoldkit" foldkitTitle="Foldkit 0.x: Page stores and forwards for Counter" effect="counterEffect" effectTitle="Effect UI: Page renders Counter" example="counter"}
 
@@ -87,7 +81,7 @@ As a Component grows, you can still move init, update, subscriptions and view in
 
 In Foldkit 0.x, a shared parent held state that several Submodels needed in its Model. Every parent between them passed that state down. To change it, a Submodel returned an OutMessage, and every parent forwarded it back up to the owner.
 
-In Effect UI, a Provider shares part of its Model with Components inside it, at any depth. In this example, `CartProvider` holds the cart count. `CartCount` reads that count, and `AddToCart` sends `CartProvider` a Message to change it. `Shop` renders both and passes neither one a cart value or a Message. Only `CartProvider`'s update changes the count.
+In Effect UI, a Provider shares part of its Model with Components inside it, at any depth. Components inside read that state and send the Provider Messages directly, without passing anything through the parents in between.
 
 ::Listing{code="provider"}
 
@@ -129,11 +123,11 @@ In Effect UI, a headless Component gives your view parts instead. You apply each
 
 ::Listing{code="partsUse"}
 
-To write a headless Component, you define `parts` instead of a view. The Component has its own Model, Messages and update, so it can keep its own state. This is the `Disclosure` that `Details` renders, with its open state in its own Model:
+To write one, define `parts` instead of a view:
 
 ::Listing{code="partsDefine" whole="true"}
 
-A Component owns the behavior, keyboard handling and ARIA while you control every element and class. You can package your own behavior the same way and reuse it.
+You can package your own reusable behavior the same way.
 
 ### The UI kit
 
@@ -145,13 +139,9 @@ Here is the full set of 41 components. Hover or tap to animate.
 
 ### Host-agnostic rendering
 
-In Foldkit 0.x, the runtime rendered a view by patching the browser DOM.
+In Foldkit 0.x, the runtime rendered straight to the browser DOM. Effect UI renders through a host instead: the browser host renders DOM nodes, the server host writes HTML and the test host builds an in-memory tree, all from the same HTML Components.
 
-Effect UI renders through a host instead, and each host handles one vocabulary of elements. For HTML, the browser host creates DOM nodes, the server host writes HTML and the test host creates plain objects. The same HTML Components run on all three.
-
-Other platforms have their own vocabulary and host, such as the terminal host in `@effect/ui-opentui`. The test host accepts any vocabulary. An HTML Component won't render in a terminal, because Effect UI doesn't translate one view across platforms. You write views for each platform's own elements, with the same Component runtime.
-
-You choose the host when mounting the app. The entry point below uses `BrowserHost.mount`. The host interface is public, so you can also implement your own.
+Other platforms bring their own elements and host, like `@effect/ui-opentui` for the terminal, sharing the Component runtime without translating views across platforms. You pick the host when mounting the app, and the host interface is public if you want to write your own.
 
 ::Listing{code="mount"}
 
@@ -173,7 +163,7 @@ Play is a new kind of test in Effect UI. In Story and Scene tests, you resolve e
 
 **A Play test can cover a whole flow.** It clicks a button, lets the real Command run and checks what is on screen afterwards, with no browser and no DOM.
 
-`TestClock` controls time, so the delayed-reset Play test below can check that the count is 1 at 999 ms and changes to 0 at 1,000 ms.
+`TestClock` controls time, so delayed flows run instantly without waiting in real time.
 
 ::PlayTest
 
@@ -229,11 +219,9 @@ The [examples](https://github.com/Effect-TS/ui/tree/main/examples) in the reposi
 
 ## What happens next
 
-We're making Effect UI public before it's finished so you can help shape it. It doesn't have everything Foldkit 0.x has yet, but you can try the new APIs and tell us what you think.
-
-**If you're building with Foldkit 0.x, keep going!** Feature work has moved to Effect UI, but Foldkit 0.x will get critical bug fixes at least until Effect UI ships with an upgrade guide. Migrating will be an upgrade, not a rewrite.
-
-We develop Effect UI in [Effect-TS/ui](https://github.com/Effect-TS/ui). We'll transfer Foldkit issues and pull requests that apply to Effect UI there, so you don't need to open them again.
+- **Public preview:** Effect UI doesn't have everything Foldkit 0.x has yet, and we're sharing it early so you can try the APIs and help shape it.
+- **Keep building on Foldkit 0.x:** Feature work has moved to Effect UI, and Foldkit 0.x will keep getting critical bug fixes until Effect UI ships with an upgrade guide.
+- **Issues and PRs:** Development happens in [Effect-TS/ui](https://github.com/Effect-TS/ui). We'll transfer relevant Foldkit issues and PRs there, so you don't need to open them again.
 
 Thank you to everyone building with Foldkit 0.x. What you've made with it, and what you've told us along the way, is what Effect UI is built on.
 
