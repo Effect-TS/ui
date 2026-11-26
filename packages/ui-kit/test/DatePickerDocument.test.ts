@@ -237,12 +237,15 @@ describe("DatePicker in a document", { concurrent: false }, () => {
       const app = yield* inIframe
       yield* BrowserHost.mountEffect(Page, { topLayer: true }, app)
       yield* tick
-      const find = (id: string) => app.ownerDocument.getElementById(id)!
-      click(find("trigger"))
+      const doc = app.ownerDocument
+      click(byId("trigger", doc))
       yield* tick
-      press(find("input"))
+      press(byId("input", doc))
       yield* tick
-      assert.strictEqual(find("log").textContent, "RequestedOpen trigger-press")
+      assert.strictEqual(
+        byId("log", doc).textContent,
+        "RequestedOpen trigger-press"
+      )
     }).pipe(Effect.scoped))
 
   for (const topLayer of [true, false]) {

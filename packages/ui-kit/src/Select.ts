@@ -232,12 +232,7 @@ import {
   dismissAttrs,
   dismissSpan
 } from "./internal/blocker.ts"
-import {
-  focusFinal,
-  isElement,
-  isHTMLElement,
-  override
-} from "./internal/dom.ts"
+import { focusFinal, isElement, override } from "./internal/dom.ts"
 import {
   autofillMatch,
   filledOf,
@@ -1107,7 +1102,7 @@ const watch = (
           lost,
           current.closeMethod === "keyboard"
         )
-      } else if (isHTMLElement(focused) && node.contains(focused)) {
+      } else if (focused instanceof HTMLElement && node.contains(focused)) {
         focused.blur()
       }
       node.inert = true
@@ -1177,7 +1172,7 @@ const watch = (
       }
     }
     const onMouseMove = (event: MouseEvent) => {
-      const arrow = isElement(event.target)
+      const arrow = event.target instanceof Element
         ? event.target.closest("[data-select-scroll-arrow]")
         : null
       if (arrow === null || !node.contains(arrow)) return stopArrow()
@@ -1189,7 +1184,7 @@ const watch = (
       scrollBy(arrow, arrow.getAttribute("data-select-scroll-arrow") === "up")
     }
     const onMouseDown = (event: MouseEvent) => {
-      if (blocking.is(event.target)) {
+      if (event.target instanceof Node && blocking.is(event.target)) {
         event
           .preventDefault()
       }

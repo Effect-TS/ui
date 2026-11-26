@@ -689,9 +689,9 @@ describe("Select in a document", { concurrent: false }, () => {
   it.effect("driven from the parent window in an iframe, a quick drag picks an item, and a backdrop press closes it", () =>
     Effect.gen(function*() {
       const { app, log } = yield* mountPage({}, inIframe)
-      const find = (id: string) => app.ownerDocument.getElementById(id)!
-      press(find("trigger"))
-      mousedown(find("trigger"))
+      const doc = app.ownerDocument
+      press(byId("trigger", doc))
+      mousedown(byId("trigger", doc))
       yield* tick
       const dark = app.querySelector("[data-testid=dark]")!
       dark.dispatchEvent(
@@ -707,9 +707,9 @@ describe("Select in a document", { concurrent: false }, () => {
         new MouseEvent("mouseup", { bubbles: true, button: 0 })
       )
       yield* tick
-      keydown(find("trigger"), "ArrowDown")
+      keydown(byId("trigger", doc), "ArrowDown")
       yield* tick
-      press(find("positioner").querySelector("[data-select-blocker]")!)
+      press(byId("positioner", doc).querySelector("[data-select-blocker]")!)
       yield* tick
       assert.deepStrictEqual(log(), [
         "RequestedOpen trigger-press",

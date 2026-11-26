@@ -726,10 +726,10 @@ describe("Menu in a document", { concurrent: false }, () => {
   it.effect("driven from the parent window in an iframe, a modal menu's backdrop takes a press outside and closes it", () =>
     Effect.gen(function*() {
       const { app, log } = yield* mountPage({}, inIframe)
-      const find = (id: string) => app.ownerDocument.getElementById(id)!
-      mousedown(find("trigger"))
+      const doc = app.ownerDocument
+      mousedown(byId("trigger", doc))
       yield* tick
-      const blocker = find("positioner").querySelector<HTMLElement>(
+      const blocker = byId("positioner", doc).querySelector<HTMLElement>(
         "[data-menu-blocker]"
       )!
       assert.isFalse(blocker.inert)
