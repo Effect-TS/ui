@@ -41,6 +41,7 @@ A component that doesn't need an instance, such as `Switch`, is a plain view fun
 - [DrawerProvider](src/Drawer.ts): scales the page behind the drawers inside it while one is open, as a native sheet does.
 - [Field](src/Field.ts): a label, a description and an error for a form control or a group of them, such as a range slider, with its validity, touched and focused state.
 - [Fieldset](src/Fieldset.ts): a native fieldset named by a legend, around several fields, which disables every control and every `Field` inside it at once.
+- [FileDrop](src/FileDrop.ts): a file drop zone and picker trigger with shared `accept` and `multiple` filtering, drag-over state, and `Picked` / `Rejected` events.
 - [Form](src/Form.ts): a native form that focuses its first invalid control after a submit.
 - [Input](src/Input.ts): a native text input whose value lives in your Model.
 - [Menu](src/Menu.ts): a button that opens a list of actions, checkbox and radio items and submenus, whose open state lives in your Model, with typeahead, a filter input, several triggers and a viewport that resizes the popup as it moves between them.
