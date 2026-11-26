@@ -99,10 +99,15 @@ describe("DateField", () => {
       scene.type(input, "27.11.2026 г.")
       scene.blur(input).emitted(committed(utc("2026-11-27")))
 
-      scene.props({ value: utc("2026-11-26"), locale: "ky" })
-      assert.strictEqual(text(scene), "2026-26-11")
-      scene.type(input, "2026-27-11")
-      scene.blur(input).emitted(committed(utc("2026-11-27")))
+      // ky prints yyyy-dd-mm, so it shows "/" to keep "-" for ISO
+      scene.props({ value: utc("2026-03-05"), locale: "ky" })
+      assert.strictEqual(text(scene), "2026/05/03")
+      assert.strictEqual(scene.get(input).attrs?.placeholder, "yyyy/dd/mm")
+      scene.type(input, "2026/06/03")
+      scene.blur(input).emitted(committed(utc("2026-03-06")))
+      scene.props({ value: utc("2026-03-06"), locale: "ky" })
+      scene.type(input, "2026-03-07")
+      scene.blur(input).emitted(committed(utc("2026-03-07")))
 
       scene.props({ value: utc("0007-11-26"), locale: "en-GB" })
       assert.strictEqual(text(scene), "26/11/0007")

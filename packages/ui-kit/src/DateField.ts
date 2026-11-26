@@ -66,9 +66,11 @@
  * editing on blur or Enter and the parsed date differs from the current
  * normalized `value`. Parsing accepts the locale's numeric order (derived from
  * `Intl.DateTimeFormat#formatToParts`, with 4-digit years and the locale's
- * optional suffix, such as Bulgarian `г.`) and ISO `YYYY-MM-DD`, rejecting
- * calendar dates that do not exist (such as `31/02/2026`). Years display with
- * 4 digits, so the shown text always parses back. Empty or whitespace-only text
+ * optional suffix, such as Bulgarian `г.`) and ISO `YYYY-MM-DD`, which wins
+ * when both read the text, rejecting calendar dates that do not exist (such as
+ * `31/02/2026`). Years display with 4 digits, and a locale whose dates look
+ * like ISO in another order (Kyrgyz `yyyy-dd-mm`) displays `/` in place of
+ * `-`, so the shown text always parses back. Empty or whitespace-only text
  * commits `null`. Text that does not parse commits nothing and reverts to the
  * current value's formatted text on blur.
  *
@@ -258,6 +260,7 @@ interface LocaleInfo {
   readonly order: ReadonlyArray<DatePart>
   readonly pattern: string
   readonly suffix: string
+  readonly slashes: boolean
 }
 
 const formatControls = /\p{Cf}/gu
@@ -300,7 +303,19 @@ const localeOf = (locale: LocaleOption): LocaleInfo =>
       minimumIntegerDigits: 4,
       useGrouping: false
     })
-    return { formatter, year, order, pattern, suffix: suffix.trim() }
+    // A `yyyy-dd-mm` date would read as ISO, so show it with "/".
+    const slashes = order.join() !== "year,month,day" &&
+      isoDate.test(
+        formatter.format(sampleDate).replace(formatControls, "")
+      )
+    return {
+      formatter,
+      year,
+      order,
+      pattern: slashes ? pattern.replaceAll("-", "/") : pattern,
+      suffix: suffix.trim(),
+      slashes
+    }
   })
 
 const normalize = (value: DateTime.DateTime | null): DateTime.Utc | null =>
@@ -311,10 +326,12 @@ const formatDate = (
   locale: LocaleOption
 ): string => {
   if (value === null) return ""
-  const { formatter, year } = localeOf(locale)
+  const { formatter, slashes, year } = localeOf(locale)
   return formatter.formatToParts(DateTime.toDateUtc(value)).map((part) =>
     part.type === "year"
       ? year.format(DateTime.getPartUtc(value, "year"))
+      : slashes && part.type === "literal"
+      ? part.value.replaceAll("-", "/")
       : part.value
   ).join("")
 }
@@ -357,17 +374,15 @@ const parseLocaleDate = (
     : makeDate(Number(by.year), Number(by.month), Number(by.day))
 }
 
-// The locale's order goes first, since some locales print `yyyy-dd-mm`.
 const parseDate = (
   text: string,
   locale: LocaleOption
 ): DateTime.Utc | null => {
-  const date = parseLocaleDate(text, locale)
-  if (date !== null) return date
   const iso = isoDate.exec(text)
-  return iso === null
+  const date = iso === null
     ? null
     : makeDate(Number(iso[1]), Number(iso[2]), Number(iso[3]))
+  return date ?? parseLocaleDate(text, locale)
 }
 
 const isLocked = (props: DateFieldProps): boolean =>
