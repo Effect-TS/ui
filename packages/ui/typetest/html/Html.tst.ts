@@ -434,6 +434,41 @@ describe("Html", () => {
     })
   })
 
+  it("SVG tags have named builders with checked attributes", () => {
+    expect(Html.ref("Icon", "svg")).type.toBe<Renderer.Ref<SVGSVGElement>>()
+    Html.component({
+      name: "Icon",
+      model: Schema.String,
+      message: Msg
+    }).make({
+      init: () => "",
+      update: ($) => $.model,
+      view: (h) => {
+        const icon = h.svg
+          .class("icon")
+          .style({ width: "1em" })
+          .id("arrow")
+          .attrs({ viewBox: "0 0 24 24", "stroke-width": "2" })
+          .on("click", Msg.Mounted())
+          .children(
+            h.path.attr("d", "M5 12h14"),
+            h.circle.attrs({ cx: "12", cy: "12", r: "10" }),
+            h.svgText("label")
+          )
+        expect(icon).type.toBe<
+          Html.SvgElement<Msg, never, SVGSVGElement, "svg">
+        >()
+        // `h.text` stays the text-node helper; the element is `h.svgText`.
+        expect(h.text("label")).type.toBe<View.Text>()
+        expect(h.path.attr).type.not.toBeCallableWith("strok-width", "2")
+        expect(h.svg.attr).type.not.toBeCallableWith("viewbox", "0 0 24 24")
+        expect(h.circle.attrs).type.not.toBeCallableWith({ d: "M0 0" })
+        expect(h.svg).type.not.toHaveProperty("disabled")
+        return h.div(icon)
+      }
+    })
+  })
+
   it("refs and onMount are typed by tag", () => {
     expect(Field).type.toBe<Renderer.Ref<HTMLInputElement>>()
     const Focus = Mount.make(
