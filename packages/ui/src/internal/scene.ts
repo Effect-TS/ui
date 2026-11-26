@@ -520,6 +520,13 @@ export class SceneCursor extends Cursor {
       })
     )
   }
+  protected findOne(
+    state: engine.State<any, any, any, any>,
+    locator: Locator.Locator,
+    step: string
+  ): Locator.Node {
+    return engine.findOne(state, locator, this.name(step))
+  }
   /** An interaction of one event, on the one element `locator` matches. */
   protected one(
     step: string,
@@ -531,7 +538,7 @@ export class SceneCursor extends Cursor {
     ) => unknown
   ): this {
     return this.interact(step, (state) => {
-      const node = engine.findOne(state, locator, this.name(step))
+      const node = this.findOne(state, locator, step)
       return [{
         node: () => node,
         description: locator.description,

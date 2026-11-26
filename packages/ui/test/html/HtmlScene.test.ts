@@ -5,6 +5,7 @@ import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Schema } from "effect"
+import { Confirm } from "./fixtures/confirm.ts"
 import { Settings } from "./fixtures/settings.ts"
 
 const Board = Html.component({
@@ -323,6 +324,18 @@ describe("HtmlScene", () => {
     assert.throws(
       () => scene.click("Later"),
       /^HtmlScene\.click: text "Later" is disabled/
+    )
+  })
+
+  it("clicking a control behind a modal throws", () => {
+    const scene = HtmlScene.start(Confirm, {
+      state: "closed",
+      acceptEscape: false
+    })
+    scene.click("Ask")
+    assert.throws(
+      () => scene.click("Remove"),
+      /^HtmlScene\.click: text "Remove" is inert/
     )
   })
 

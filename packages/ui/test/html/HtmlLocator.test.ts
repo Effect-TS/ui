@@ -83,6 +83,73 @@ describe("HtmlLocator", () => {
         .toHaveLength(3)
     })
 
+    it("inert elements and those outside the topmost modal are left out unless asked for", () => {
+      const tree = el(
+        "div",
+        {},
+        el("button", {}, text("Behind")),
+        {
+          tag: "dialog",
+          props: { open: "modal" },
+          children: [
+            el("section", { inert: "" }, el("button", {}, text("Delete"))),
+            {
+              tag: "section",
+              props: { inert: true },
+              children: [el("button", {}, text("Archive"))]
+            },
+            el("button", {}, text("Inside"))
+          ]
+        }
+      )
+      expect(
+        HtmlLocator.queryAllByRole(tree, "button").map((node) =>
+          Locator.textOf(node)
+        )
+      ).toEqual(["Inside"])
+      expect(HtmlLocator.queryAllByRole(tree, "button", { hidden: true }))
+        .toHaveLength(4)
+    })
+
+    it("DOM queries and actions follow the flat tree through shadow hosts and slots, and a modal in a shadow root blocks the rest", () => {
+      const app = document.body.appendChild(document.createElement("div"))
+      const clicked: Array<string> = []
+      const button = (parent: ParentNode, name: string, tag = "button") => {
+        const button = parent.appendChild(document.createElement(tag))
+        button.addEventListener("click", () => clicked.push(name))
+        return button
+      }
+      const host = (parent: ParentNode, html = "") => {
+        const host = parent.appendChild(document.createElement("div"))
+        host.attachShadow({ mode: "open" }).innerHTML = html
+        return host
+      }
+      const inertHost = host(app)
+      inertHost.inert = true
+      button(host(app, "<section inert><slot></slot></section>"), "Slotted")
+      expect(HtmlLocator.queryAllByRole(app, "button")).toEqual([])
+      expect(() => HtmlLocator.click(button(inertHost.shadowRoot!, "A")))
+        .toThrow("HtmlLocator.click: the element is inert")
+      const link = app.appendChild(document.createElement("a"))
+      link.href = "#here"
+      HtmlLocator.click(button(link, "Link", "span"))
+      const modalHost = host(app, "<dialog><slot></slot></dialog>")
+      const dialog = modalHost.shadowRoot!.querySelector("dialog")!
+      dialog.showModal()
+      // happy-dom never matches `:modal`; a browser does here.
+      const matches = dialog.matches.bind(dialog)
+      dialog.matches =
+        ((selector: string) =>
+          selector === ":modal" || matches(selector)) as typeof dialog.matches
+      const behind = button(app, "Behind")
+      const inModal = button(modalHost, "In modal")
+      expect(HtmlLocator.queryAllByRole(document, "button")).toEqual([inModal])
+      expect(() => HtmlLocator.click(behind)).toThrow("is inert")
+      HtmlLocator.click(inModal)
+      expect(clicked).toEqual(["Link", "In modal"])
+      app.remove()
+    })
+
     it.effect("a closed dialog and what's in it are hidden, and dialogState tells closed, open and modal apart", () =>
       Effect.gen(function*() {
         const dialog = HtmlLocator.role("dialog", { name: "Delete note?" })
@@ -133,7 +200,7 @@ describe("HtmlLocator", () => {
         dialog({ popover: "manual" }, { popoverOpen: true }, "As popover"),
         dialog({ popover: "manual" }, { popoverOpen: false }, "Popover closed"),
         dialog({}, { open: false }, "Closed"),
-        dialog({}, { open: "modal" }, "Modal"),
+        dialog({}, { open: true }, "Open"),
         dialog(
           { popover: "manual", hidden: "" },
           { popoverOpen: true },
@@ -144,8 +211,8 @@ describe("HtmlLocator", () => {
         HtmlLocator.queryAllByRole(tree, role).map((node) =>
           HtmlLocator.nameOf(tree, node)
         )
-      expect(names("dialog")).toEqual(["As popover", "Modal"])
-      expect(names("button")).toEqual(["As popover", "Modal"])
+      expect(names("dialog")).toEqual(["As popover", "Open"])
+      expect(names("button")).toEqual(["As popover", "Open"])
       expect(HtmlLocator.queryAllByRole(tree, "dialog", { hidden: true }))
         .toHaveLength(5)
     })

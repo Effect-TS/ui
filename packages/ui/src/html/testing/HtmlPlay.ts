@@ -88,6 +88,7 @@ import * as defaults from "../internal/defaults.ts"
 import { isCustomTag } from "../internal/elements.ts"
 import * as globalEvents from "../internal/globalEvents.ts"
 import { ownEvents } from "../internal/ownEvents.ts"
+import * as HtmlLocator from "./HtmlLocator.ts"
 import type * as HtmlScene from "./HtmlScene.ts"
 import * as TestGlobalEvents from "./TestGlobalEvents.ts"
 
@@ -111,6 +112,11 @@ type DocumentKeyDetails = Partial<
  * per user action the browser host turns into an event. Each one is an
  * interaction.
  *
+ * Simulated user actions (`click`, `type`, `change`, `keydown` on an element,
+ * `submit`, `focus` and `drop`) throw on inert targets, regardless of how
+ * they were found. Raw events (`fire`, `fireElement`) and `blur` still reach
+ * inert targets.
+ *
  * @stability experimental
  * @category models
  * @since 0.1.0
@@ -121,11 +127,13 @@ export interface HtmlPlay<Model, Msg, Events>
   /**
    * Clicks the one element `target` matches, as a browser does: `pointerdown`
    * and `mousedown` run, the tree settles, then `mouseup`, `click` and the
-   * defaults run unless the press removed or disabled the element. Cancelling
+   * defaults run unless the press removed the element, disabled it or made
+   * it inert. Cancelling
    * `pointerdown` skips `mousedown` and `mouseup` (not `click`); cancelling
    * `mousedown` or `mouseup` skips nothing; only a cancelled `click` skips the
    * defaults. A string means `Locator.text(target)`. Throws on a disabled
-   * control, and when nothing handles any event of the click.
+   * control or an inert element, and when nothing handles any event of the
+   * click.
    */
   click(target: string | Locator.Locator): Effect.Effect<void, Play.StepError>
   /**
@@ -213,6 +221,19 @@ class HtmlPlayCursor extends internal.PlayCursor {
   protected override bubbles(event: string): boolean {
     return !ownEvents.has(event)
   }
+  protected override findOne(
+    locator: Locator.Locator,
+    step: string
+  ): TestHost.TestElement {
+    const node = super.findOne(locator, step)
+    defaults.refuseInert(
+      step,
+      this.name(step),
+      locator.description,
+      internal.ancestors(node)
+    )
+    return node
+  }
   override click(
     target: string | Locator.Locator
   ): Effect.Effect<void, Play.StepError> {
@@ -252,7 +273,10 @@ class HtmlPlayCursor extends internal.PlayCursor {
           const edited: Array<TestHost.TestElement> = []
           const container = this.root.container
           const path = internal.ancestors(node)
-          if (path.includes(container) && !defaults.isClickDisabled(path)) {
+          if (
+            path.includes(container) && !defaults.isClickDisabled(path) &&
+            !HtmlLocator.isInert(path)
+          ) {
             const plan = defaults.planClickDefaults(
               container,
               node,

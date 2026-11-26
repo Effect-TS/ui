@@ -6,10 +6,18 @@
  * real DOM tree. `role`, `label` and `placeholder` return a `Locator`, so
  * they combine with `Locator.inside` on the first two. On the DOM, `click`,
  * `type`, `keydown` and `submit` act as the user would, through real DOM
- * events.
+ * events, and refuse an inert element.
  *
  * Hidden elements (`hidden`, `aria-hidden="true"`, `<input type="hidden">`)
- * and everything inside them are left out unless `hidden: true` is passed.
+ * and their descendants are excluded from role queries, as are inert
+ * elements. `hidden: true` includes both, but does not make inert elements
+ * interactive.
+ *
+ * Inertness comes from `inert` on an element or ancestor, or being outside
+ * the topmost modal. The last open modal in document order is treated as
+ * topmost. DOM modal detection uses `:modal`, including open shadow roots;
+ * some test environments never match it. DOM inertness follows shadow hosts
+ * and slots, but queries do not search inside shadow roots.
  *
  * On a structural tree a match is typed `Locator.Node`, since it can be any
  * node of the tree. On `TestHost`, `root.all(HtmlLocator.role(...))` keeps the
@@ -249,6 +257,31 @@ const notShown = <N>(reader: Reader<N>, node: N): boolean => {
     (popover && popoverOpen(reader, node)))
 }
 
+/** A defined property takes precedence over the attribute. */
+const flag = <N>(reader: Reader<N>, node: N, name: string): boolean => {
+  const prop = reader.prop(node, name)
+  return prop === true ||
+    (prop === undefined && reader.attr(node, name) !== undefined)
+}
+
+/** Approximates top-layer order with document order, including open shadow roots. */
+const topModal = <N>(reader: Reader<N>, root: N): N | undefined => {
+  let modal: N | undefined
+  const walk = (node: N) => {
+    if (
+      reader.isElement(node) && reader.tag(node) === "dialog" &&
+      dialogState(node) === "modal"
+    ) modal = node
+    const shadow = isDom(node)
+      ? (node as unknown as globalThis.Element).shadowRoot
+      : null
+    if (shadow != null) walk(shadow as N)
+    for (const child of reader.children(node)) walk(child)
+  }
+  walk(root)
+  return modal
+}
+
 const isHidden = <N>(reader: Reader<N>, node: N): boolean =>
   reader.attr(node, "hidden") !== undefined ||
   reader.attr(node, "aria-hidden") === "true" ||
@@ -309,9 +342,11 @@ const buildIndex = <N>(root: N): Index<N> => {
     labelsFor: new Map()
   }
   const entries = index.entries as Array<Entry<N>>
+  const modal = topModal(reader, root)
   const walk = (
     node: N,
     hidden: boolean,
+    inert: boolean,
     labels: ReadonlyArray<N>,
     inSection: boolean
   ) => {
@@ -319,12 +354,15 @@ const buildIndex = <N>(root: N): Index<N> => {
       // A document, a fragment or a structural wrapper isn't indexed, but what it holds is.
       if (reader.text(node) === undefined) {
         for (const child of reader.children(node)) {
-          walk(child, hidden, labels, inSection)
+          walk(child, hidden, inert, labels, inSection)
         }
       }
       return
     }
     const tag = reader.tag(node)
+    // The topmost modal escapes the inertness around it, not its own.
+    const inertHere = flag(reader, node, "inert") ||
+      (inert && node !== modal)
     const isHiddenHere = hidden || isHidden(reader, node)
     const explicit = reader.attr(node, "role")?.trim().split(/\s+/)[0]
     const entry: Entry<N> = {
@@ -332,7 +370,7 @@ const buildIndex = <N>(root: N): Index<N> => {
       role: explicit !== undefined && explicit !== ""
         ? explicit
         : implicitRole(reader, node, inSection),
-      hidden: isHiddenHere,
+      hidden: isHiddenHere || inertHere,
       labels,
       inSection
     }
@@ -350,11 +388,26 @@ const buildIndex = <N>(root: N): Index<N> => {
     }
     const childLabels = tag === "label" ? [node, ...labels] : labels
     const childSection = inSection || sectioning.has(tag)
+    const host = isDom(node) &&
+      (node as unknown as globalThis.Element).shadowRoot != null
     for (const child of reader.children(node)) {
-      walk(child, isHiddenHere, childLabels, childSection)
+      walk(
+        child,
+        isHiddenHere,
+        host
+          ? slottedInert(
+            node as globalThis.Node,
+            child as globalThis.Node,
+            inertHere,
+            modal as globalThis.Node | undefined
+          )
+          : inertHere,
+        childLabels,
+        childSection
+      )
     }
   }
-  walk(root, false, [], false)
+  walk(root, false, modal !== undefined, [], false)
   return index
 }
 
@@ -537,8 +590,9 @@ const levelOf = <N>(reader: Reader<N>, node: N): number | undefined => {
  *
  * `name` matches the accessible name exactly (after collapsing whitespace),
  * or tests it with a RegExp. `checked` matches a checkbox or radio button's
- * live state, and `level` a heading's. `hidden: true` includes hidden
- * elements.
+ * live state, and `level` a heading's. `hidden: true` includes hidden and
+ * inert elements for inspection; simulated user actions still refuse inert
+ * targets.
  *
  * @stability experimental
  * @category models
@@ -923,26 +977,97 @@ export const popoverState = (node: unknown): "closed" | "open" =>
   popoverOpen(readerOf(node), node) ? "open" : "closed"
 
 /**
+ * Whether the element is inert or outside the topmost modal under `root`.
+ * `path` lists the element and its ancestors, innermost first. The modal
+ * escapes ancestor inertness, but not its own.
+ *
+ * @internal
+ */
+export const isInert = <N>(
+  path: ReadonlyArray<N>,
+  root: N | undefined = path[path.length - 1]
+): boolean => {
+  if (root === undefined) return false
+  const reader = readerOf(root) as Reader<N>
+  const modal = topModal(reader, root)
+  for (const at of path) {
+    if (flag(reader, at, "inert")) return true
+    if (at === modal) return false
+  }
+  return modal !== undefined
+}
+
+/** A node's parent in the flat tree: the slot it is assigned to, a shadow root's host, or its parent. */
+const flatParent = (node: globalThis.Node): globalThis.Node | null => {
+  const parent = node.parentNode
+  const shadow = (parent as globalThis.Element | null)?.shadowRoot
+  if (shadow != null) {
+    for (const slot of shadow.querySelectorAll("slot")) {
+      if (slot.assignedNodes().includes(node as ChildNode)) return slot
+    }
+  }
+  return parent?.nodeType === 11
+    ? (parent as ShadowRoot).host ?? parent
+    : parent
+}
+
+/**
+ * Inherits inertness through the child's slot up to `host`, falling back to
+ * the host's inertness.
+ */
+const slottedInert = (
+  host: globalThis.Node,
+  child: globalThis.Node,
+  hostInert: boolean,
+  modal: globalThis.Node | undefined
+): boolean => {
+  for (
+    let at = flatParent(child);
+    at !== null && at !== host;
+    at = flatParent(at)
+  ) {
+    if (flag(domReader, at, "inert")) return true
+    if (at === modal) return false
+  }
+  return hostInert
+}
+
+const refuseInert = (step: string, element: globalThis.Element): void => {
+  const path: Array<globalThis.Node> = []
+  for (
+    let at: globalThis.Node | null = element;
+    at !== null;
+    at = flatParent(at)
+  ) path.push(at)
+  if (isInert(path, element.ownerDocument)) {
+    throw new Error(`HtmlLocator.${step}: the element is inert`)
+  }
+}
+
+/**
  * Clicks `element` as the user would: a button submits its form, and a
  * checkbox or radio button changes and fires `input` and `change`.
+ * Throws on an inert element.
  *
  * @stability experimental
  * @category actions
  * @since 0.1.0
  */
 export const click = (element: globalThis.Element): void => {
+  refuseInert("click", element)
   ;(element as HTMLElement).click()
 }
 
 /**
  * Types into a text field as the user would: replaces its value with `value`
- * and fires `input`, then `change`.
+ * and fires `input`, then `change`. Throws on an inert element.
  *
  * @stability experimental
  * @category actions
  * @since 0.1.0
  */
 export const type = (element: globalThis.Element, value: string): void => {
+  refuseInert("type", element)
   const field = element as HTMLInputElement
   const view = field.ownerDocument.defaultView
   field.value = value
@@ -959,7 +1084,8 @@ export const type = (element: globalThis.Element, value: string): void => {
 }
 
 /**
- * Presses `key` on `element`: fires `keydown`, then `keyup`.
+ * Presses `key` on `element`: fires `keydown`, then `keyup`. Throws on an
+ * inert element.
  *
  * @stability experimental
  * @category actions
@@ -975,6 +1101,7 @@ export const keydown = (
     readonly meta?: boolean | undefined
   }
 ): void => {
+  refuseInert("keydown", element)
   const view = element.ownerDocument.defaultView
   const Keyboard = view?.KeyboardEvent ?? KeyboardEvent
   const init = {
@@ -992,13 +1119,14 @@ export const keydown = (
 
 /**
  * Submits `form`, or the form `element` belongs to, as pressing Enter in it
- * would.
+ * would. Throws on an inert element.
  *
  * @stability experimental
  * @category actions
  * @since 0.1.0
  */
 export const submit = (element: globalThis.Element): void => {
+  refuseInert("submit", element)
   const form = element.localName === "form"
     ? element as HTMLFormElement
     : (element as HTMLInputElement).form ?? element.closest("form")

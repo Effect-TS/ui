@@ -261,6 +261,26 @@ export const isClickDisabled = (
     at.tag !== "fieldset" && isDisabled(at, path.slice(index))
   )
 
+/** Host-delivered events can reach inert targets. */
+const delivered: ReadonlySet<string> = new Set(["fire", "fireElement", "blur"])
+
+/**
+ * Rejects simulated user actions on inert targets. `path` lists the target
+ * and its ancestors, innermost first.
+ *
+ * @internal
+ */
+export const refuseInert = (
+  step: string,
+  name: string,
+  description: string,
+  path: ReadonlyArray<Locator.Node>
+): void => {
+  if (!delivered.has(step) && HtmlLocator.isInert(path)) {
+    throw new Error(`${name}: ${description} is inert`)
+  }
+}
+
 /** @internal */
 export const planClickDefaults = (
   root: Locator.Node,
