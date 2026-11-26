@@ -3,4 +3,4 @@
 "@effect/ui-kit": patch
 ---
 
-Handlers, refs and mounts that a headless part sets in `forward` now belong to the part's component, beside the consumer's, instead of replacing them and going to the consumer.
+Fix handlers installed by a headless part's `forward` callback dispatching to the consuming component instead of the part's component. Forwarded handlers, refs and mounts now use the part's ownership layer without replacing the consumer's.

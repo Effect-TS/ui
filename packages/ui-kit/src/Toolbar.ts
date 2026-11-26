@@ -578,8 +578,8 @@ export const Toolbar = Html.component({
       }
     )
 
-    // On the consumer's side of the part, so a disabled focusable button
-    // replaces the consumer's click rather than adding a cancel beside it.
+    // Decorate the consumer's layer so a disabled focusable button replaces
+    // the consumer's click handler instead of adding a separate cancel handler.
     const button = View.wrapPart(
       buttonPart,
       <B extends Keyed<"button">>(

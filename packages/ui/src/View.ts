@@ -775,8 +775,6 @@ export type Forward = (
   node: any
 ) => Element<any, any> | ElementBuilder<any, any, any, any>
 
-// On a hook a part set, and on the builder its hook gets, the index of that
-// part's owned layer: what the hook sets with `on`, `ref` and `onMount` goes there.
 const partForwardLayer = Symbol("partForwardLayer")
 type PartForward = Forward & { readonly [partForwardLayer]?: number }
 
@@ -786,8 +784,8 @@ const forwardInPart = (place: Forward, layer: number): PartForward =>
 type OwnFields = Pick<Owned, "handlers" | "eventOptions" | "refKey" | "mount">
 
 /**
- * The handlers, event options, ref and mount a chain call on `builder`
- * writes: the builder's own, or, in a part's forward hook, that part's layer.
+ * Selects the fields for handlers, event options, refs and mounts. Inside a
+ * part's forward hook, these belong to the part, not the consumer.
  *
  * @internal
  */
@@ -799,7 +797,7 @@ export const ownFields = (
 }
 
 /**
- * A copy of `builder` with `fields` written where `ownFields` reads them.
+ * Copies the builder and updates the fields selected by `ownFields`.
  *
  * @internal
  */
