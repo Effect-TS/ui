@@ -160,6 +160,14 @@ export const App = Html.component({
           .on("submit", Message.Filter()).children(
             h.input.attrs({ name: "q", value: "x" }),
             h.button.attr("type", "submit").children("Filter")
+          ),
+        h.form
+          .attrs({
+            method: "post",
+            action: "/sign-out",
+            "aria-label": "Sign out"
+          }).children(
+            h.button.attr("type", "submit").children("Sign out")
           )
       ),
       AppRoute.match(route, {

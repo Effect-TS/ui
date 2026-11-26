@@ -191,10 +191,11 @@ const manualFrames = () => {
 
 const link = (app: Element, name: string) =>
   HtmlLocator.getByRole(app, "link", { name })
-const submitForm = (app: Element, name: string) =>
-  HtmlLocator.getByRole(app, "form", { name }).dispatchEvent(
-    new Event("submit", { bubbles: true, cancelable: true })
-  )
+const submitForm = (app: Element, name: string) => {
+  const event = new Event("submit", { bubbles: true, cancelable: true })
+  HtmlLocator.getByRole(app, "form", { name }).dispatchEvent(event)
+  return event.defaultPrevented
+}
 const intentsOf = (router: Router.Router) => {
   const intents: Array<string> = []
   const intent = router.intent
@@ -645,13 +646,14 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(intents).toEqual(["/people/1", "/slow", "/"])
     }).pipe(Effect.scoped))
 
-  it.effect("follows a GET form the app has no submit handler for, and leaves a handled one alone", () =>
+  it.effect("follows a GET form the app has no submit handler for, and leaves handled and POST forms alone", () =>
     Effect.gen(function*() {
       const { app, root } = yield* start("/")
-      submitForm(app, "Filter")
+      expect(submitForm(app, "Filter")).toBe(true)
+      expect(submitForm(app, "Sign out")).toBe(false)
       yield* tick
       expect(window.location.pathname).toBe("/")
-      submitForm(app, "Search")
+      expect(submitForm(app, "Search")).toBe(true)
       yield* tick
       expect(window.location.pathname + window.location.search).toBe(
         "/search?q=ada"

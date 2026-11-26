@@ -2214,30 +2214,72 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(root.model()).toEqual(["submit Hello [a,b]"])
       }).pipe(Effect.scoped))
 
-    it.effect("a form without a submit handler is still prevented; a form outside the app isn't", () =>
+    it.effect("an unhandled form is prevented only for same-window GET and dialog; handled forms always are; forms outside the app aren't", () =>
       Effect.gen(function*() {
         const app = yield* container
         const outside = yield* container
         outside.innerHTML = "<form></form>"
         // `Events` handles submit on its own form, so the document listener is already there.
         yield* BrowserHost.mountEffect(Events, {}, app)
-        const Bare = Html.component({
-          name: "Bare",
+        const Forms = Html.component({
+          name: "Forms",
           model: Schema.Null,
-          message: Schema.Never
+          message: Schema.Literal("Submitted")
         }).make({
           init: () => null,
           update: ($) => $.model,
-          view: (h) => h.form(h.input.attr("name", "q"))
+          view: (h) =>
+            h.div(
+              h.form.attr("aria-label", "Bare").children(
+                h.input.attr("name", "q"),
+                h.button.attrs({ type: "submit", formmethod: "post" })
+                  .children("Post"),
+                h.button.attrs({ type: "submit", formtarget: "_blank" })
+                  .children("New tab")
+              ),
+              h.form.attrs({ "aria-label": "Invalid", method: "put" }),
+              h.form.attrs({ "aria-label": "Dialog", method: "dialog" }),
+              h.form.attrs({ "aria-label": "Post", method: "post" }),
+              h.form.attrs({ "aria-label": "Blank", target: "_blank" }),
+              h.form.attrs({ "aria-label": "Handled post", method: "post" })
+                .on("submit", "Submitted")
+            )
         })
-        const bare = yield* container
-        yield* BrowserHost.mountEffect(Bare, {}, bare)
-        const submitted = (form: HTMLFormElement) => {
-          const event = new Event("submit", { bubbles: true, cancelable: true })
+        const mounted = yield* container
+        yield* BrowserHost.mountEffect(Forms, {}, mounted)
+        const submitted = (
+          form: HTMLFormElement,
+          submitter?: HTMLElement | null
+        ) => {
+          const event = new SubmitEvent("submit", {
+            bubbles: true,
+            cancelable: true,
+            submitter: submitter ?? null
+          })
           form.dispatchEvent(event)
           return event.defaultPrevented
         }
-        expect(submitted(bare.querySelector("form")!)).toBe(true)
+        const form = (name: string) =>
+          HtmlLocator.getByRole(mounted, "form", { name }) as HTMLFormElement
+        const bare = form("Bare")
+        expect(submitted(bare)).toBe(true)
+        expect(
+          submitted(
+            bare,
+            HtmlLocator.getByRole(bare, "button", { name: "Post" })
+          )
+        ).toBe(false)
+        expect(
+          submitted(
+            bare,
+            HtmlLocator.getByRole(bare, "button", { name: "New tab" })
+          )
+        ).toBe(false)
+        expect(submitted(form("Invalid"))).toBe(true)
+        expect(submitted(form("Dialog"))).toBe(true)
+        expect(submitted(form("Post"))).toBe(false)
+        expect(submitted(form("Blank"))).toBe(false)
+        expect(submitted(form("Handled post"))).toBe(true)
         expect(submitted(outside.querySelector("form")!)).toBe(false)
         // The tag as the author wrote it isn't what makes it a form.
         const Upper = Html.component({
