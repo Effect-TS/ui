@@ -3,6 +3,7 @@ import { Html } from "@effect/ui/html"
 import { Schema } from "effect"
 import type { AsyncResult } from "effect/reactivity"
 import { describe, expect, it } from "tstyche"
+import { Tiny } from "../test/fixtures/vocabulary.ts"
 
 const User = Schema.Struct({ id: Schema.String, name: Schema.String })
 
@@ -443,14 +444,6 @@ describe("Component.define", () => {
   })
 })
 
-interface NativeTags<Msg> {
-  readonly view: View.ElementBuilder<Msg>
-}
-interface Native extends View.Elements {
-  readonly Tags: NativeTags<this["Msg"]>
-  readonly Host: { readonly NativeHost: unique symbol }
-}
-
 const Provider = Component.define({
   name: "Provider",
   model: Schema.Boolean,
@@ -460,9 +453,8 @@ const Provider = Component.define({
 
 describe("Component.withElements", () => {
   it("binds a vocabulary into a Define that keeps reads and the vocabulary's tags", () => {
-    const native: View.Vocabulary<Native> = { name: "native", tags: {} }
-    const component = Component.withElements(native)
-    expect(component).type.toBe<Component.Define<Native>>()
+    const component = Component.withElements(Tiny)
+    expect(component).type.toBe<Component.Define<Tiny>>()
 
     component({
       name: "Reader",
@@ -472,12 +464,12 @@ describe("Component.withElements", () => {
     }).view((h) => {
       expect(h.reads.provider).type.toBe<{ open: boolean }>()
       expect(h).type.not.toHaveProperty("div")
-      return h.view
+      return h.field
     })
     component({ name: "Plain", model: Schema.Null, message: Message })
       .view((h) => {
         expect(h).type.not.toHaveProperty("reads")
-        return h.view
+        return h.field
       })
   })
 })
