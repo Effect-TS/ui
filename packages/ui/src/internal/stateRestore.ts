@@ -129,17 +129,12 @@ export const restoreQueries = (
 }
 
 /** The results history saves: an entry with `restore: false` holds its empty result. */
-const savedResults = <R>(component: Component.Any, results: R): R => {
-  const bound = queryCore.boundOf(component)
-  if (bound === undefined || results === undefined) return results
-  let out: Record<string, unknown> | undefined
-  for (const entry of bound.entries) {
-    if (entry.restore === false) {
-      ;(out ??= { ...results as componentQueries.Results })[entry.name] =
-        bound.empty[entry.name]
-    }
-  }
-  return (out ?? results) as R
+const savedResults = (
+  component: Component.Any,
+  results: componentQueries.Results | undefined
+): componentQueries.Results | undefined => {
+  const unsaved = queryCore.boundOf(component)?.unsaved
+  return unsaved && results ? { ...results, ...unsaved } : results
 }
 
 /** @internal */
@@ -200,7 +195,7 @@ export const make = (options: Options): StateRestore => {
         encodePage(
           component,
           model,
-          savedResults(component, inst.results),
+          savedResults(component, inst.results as never),
           inst.owning
         )
       )

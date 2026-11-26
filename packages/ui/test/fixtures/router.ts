@@ -108,6 +108,9 @@ export const CountVisit = Command.make(
   () => Effect.succeed(PersonMessage.Visited())
 )
 
+const nameOf = (result: AsyncResult.AsyncResult<string, string>) =>
+  AsyncResult.isSuccess(result) ? result.value : "Loading"
+
 export const Person = Html.component({
   name: "Person",
   props: Schema.Struct({ id: Schema.Number }),
@@ -122,10 +125,7 @@ export const Person = Html.component({
     person: {
       query: GetPerson,
       args: ({ props }) => ({ id: props.id }),
-      onChange: (result) =>
-        PersonMessage.Loaded({
-          name: AsyncResult.isSuccess(result) ? result.value : "Loading"
-        })
+      onChange: (result) => PersonMessage.Loaded({ name: nameOf(result) })
     }
   }
 }).make({
@@ -163,9 +163,6 @@ export const Person = Html.component({
       h.el("button").on("click", PersonMessage.Rename()).children("Rename")
     )
 }).pipe(Component.provide(Layer.merge(GetPerson.layer, RenamePerson.layer)))
-
-const nameOf = (result: AsyncResult.AsyncResult<string, string>) =>
-  AsyncResult.isSuccess(result) ? result.value : "Loading"
 
 /** Shows a person and their friend, neither of which history saves, and counts clicks. */
 export const Card = Html.component({

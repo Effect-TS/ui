@@ -257,8 +257,8 @@ const parse = (component: string, queries: unknown): ReadonlyArray<Entry> => {
     if (typeof entry !== "object" || entry === null) {
       throw fail("must be { query, args } or { queryMany, args }.")
     }
-    const fields = entry as Record<string, unknown>
-    const { args, debounce, query, queryMany, onChange, restore } = fields
+    const { args, debounce, query, queryMany, onChange, restore } =
+      entry as Record<string, unknown>
     if ((query === undefined) === (queryMany === undefined)) {
       throw fail("must have exactly one of query and queryMany.")
     }
@@ -350,6 +350,8 @@ export interface Bound {
   readonly byName: ReadonlyMap<string, Entry>
   /** Every result empty: an instance's results before a query writes one. */
   readonly empty: Results
+  /** The empty result of every `restore: false` entry, which history saves over its result. */
+  readonly unsaved: Results | undefined
   /** The Schema of the results for page state and history: a field per query, by name. */
   readonly schema: ResultsSchema
   /**
@@ -396,6 +398,7 @@ export const bind = (
   if (entries.length === 0) return undefined
   const byName = new Map(entries.map((entry) => [entry.name, entry]))
   const empty: Record<string, unknown> = {}
+  let unsaved: Record<string, unknown> | undefined
   const fields: Record<string, Schema.Top> = {}
   const logFields: Record<string, Schema.Top> = {}
   for (const entry of entries) {
@@ -409,6 +412,9 @@ export const bind = (
     logFields[entry.name] = entry.keyed
       ? queryModule().snapshotMapSchema(entry.query, entry.name, true)
       : queryModule().snapshotSchema(entry.query, entry.name, true)
+    if (entry.restore === false) {
+      ;(unsaved ??= {})[entry.name] = empty[entry.name]
+    }
   }
   Object.freeze(empty)
   const stateKey = Symbol()
@@ -586,6 +592,7 @@ export const bind = (
     entries,
     byName,
     empty,
+    unsaved,
     schema: Schema.Struct(fields) as unknown as ResultsSchema,
     logSchema: Schema.Struct(logFields) as unknown as ResultsSchema,
     context: (model, props, results = empty) => {
