@@ -32,6 +32,9 @@ const attributes: ReadonlySet<string> = new Set([
   "data"
 ])
 
+// Match case-insensitively because the HTML parser folds tag names.
+const animation = /^(set|animate(transform)?)$/i
+
 const properties: ReadonlySet<string> = new Set([
   "href",
   "src",
@@ -41,12 +44,23 @@ const properties: ReadonlySet<string> = new Set([
 ])
 
 /**
- * Whether a URL is blocked for the normalized attribute `name`.
+ * Whether `value` is blocked for the normalized attribute `name` of `tag`.
+ * Animation checks do not depend on `attributeName`, which can change
+ * independently of the value.
  *
  * @internal
  */
-export const blockedAttribute = (name: string, value: string): boolean =>
-  attributes.has(name) && isScript(value)
+export const blockedAttribute = (
+  tag: string,
+  name: string,
+  value: string
+): boolean =>
+  attributes.has(name)
+    ? isScript(value)
+    : name === "values"
+    ? animation.test(tag) && value.split(";").some(isScript)
+    : (name === "to" || name === "from" || name === "by") &&
+      animation.test(tag) && isScript(value)
 
 /**
  * Whether a URL is blocked for property `name` of a built-in `tag`.

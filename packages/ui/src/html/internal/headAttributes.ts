@@ -21,7 +21,7 @@ export const normalize = (
   for (const [key, value] of pairs) {
     const normalized = name(key)
     if (normalized === undefined) continue
-    if (url.blockedAttribute(normalized, value)) out.delete(normalized)
+    if (url.blockedAttribute("", normalized, value)) out.delete(normalized)
     else out.set(normalized, value)
   }
   return [...out]

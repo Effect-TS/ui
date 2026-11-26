@@ -94,7 +94,7 @@ const elementAttributes = (
   for (const [name, value] of Object.entries(attrs)) {
     const normalized = elements.attributeName(name, svg)
     if (normalized === undefined) continue
-    if (url.blockedAttribute(normalized, value)) out.delete(normalized)
+    if (url.blockedAttribute(tag, normalized, value)) out.delete(normalized)
     else out.set(normalized, value)
   }
   if (elements.isCustomTag(tag)) return out
@@ -162,7 +162,7 @@ const plainAttributes = (
       ) return undefined
     }
     const value = attrs[name]!
-    if (url.blockedAttribute(name, value)) continue
+    if (url.blockedAttribute(tag, name, value)) continue
     out += value === "" ? ` ${name}` : ` ${name}="${escapeAttribute(value)}"`
   }
   return out

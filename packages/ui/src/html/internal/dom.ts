@@ -705,7 +705,10 @@ export const makeHost = (
       const element = node as HTMLElement
       const normalized = attributeOf(element, name)
       if (normalized === undefined) return
-      if (value !== undefined && url.blockedAttribute(normalized, value)) {
+      if (
+        value !== undefined &&
+        url.blockedAttribute(element.localName, normalized, value)
+      ) {
         value = undefined
       }
       if (

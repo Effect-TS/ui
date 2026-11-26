@@ -315,6 +315,67 @@ describe("HtmlServer", { concurrent: false }, () => {
       }
     }).pipe(Effect.scoped))
 
+  it.effect("drops animation values that would set a blocked URL on the server, on hydration and on update", () =>
+    Effect.gen(function*() {
+      const Target = Schema.Struct({ name: Schema.String, to: Schema.String })
+      const Page = Html.component({
+        name: "Animated",
+        model: Target,
+        message: Target
+      }).make({
+        init: () => ({ name: "href", to: "javascript:" }),
+        update: (_, message) => message,
+        view: (h, { name, to }) =>
+          h.div.children(
+            h.el("svg").children(
+              h.el("a").children(
+                h.el("set").attr("attributeName", name).attr("to", to),
+                h.el("Animate").attr("attributename", "href")
+                  .attr("values", "/a; javascript:;/b"),
+                h.el("animateTransform").attr("attributeName", "href")
+                  .attr("by", "javascript:"),
+                h.el("animate").attr("attributeName", "href")
+                  .attr("values", "/a;/b"),
+                // A scalar endpoint is one URL: this is a relative path.
+                h.el("set").attr("attributeName", "href")
+                  .attr("to", "/docs;note=1;javascript:")
+              )
+            ),
+            h.el("x-data").attr("attributename", "href")
+              .attr("values", "javascript:")
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toBe(
+        "<!--[/Animated--><div><svg><a><set attributename=\"href\"></set>" +
+          "<Animate attributename=\"href\"></Animate>" +
+          "<animateTransform attributename=\"href\"></animateTransform>" +
+          "<animate attributename=\"href\" values=\"/a;/b\"></animate>" +
+          "<set attributename=\"href\" to=\"/docs;note=1;javascript:\"></set></a></svg>" +
+          "<x-data attributename=\"href\" values=\"javascript:\"></x-data></div><!--]/Animated-->"
+      )
+      const app = yield* container(rendered.html)
+      const root = yield* HtmlHydrate.hydrateEffect(
+        Page,
+        {},
+        app,
+        rendered.state
+      )
+      const set = app.querySelector("set")!
+      expect(set.hasAttribute("to")).toBe(false)
+      for (
+        const [name, to, expected] of [
+          ["href", "/a", "/a"],
+          // Blocked whatever the target, so retargeting can't reveal it.
+          ["fill", "vbscript:", null]
+        ] as const
+      ) {
+        root.send({ name, to })
+        yield* tick
+        expect(set.getAttribute("to")).toBe(expected)
+      }
+    }).pipe(Effect.scoped))
+
   it.effect("a blocked URL property removes only the attribute it reflects, and adoption drops a stale blocked URL", () =>
     Effect.gen(function*() {
       let sets = 0
