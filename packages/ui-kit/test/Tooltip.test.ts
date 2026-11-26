@@ -584,6 +584,24 @@ describe("Tooltip", () => {
       )
     }))
 
+  it.effect("a link trigger keeps its href and closes on activation without cancelling navigation", () =>
+    Effect.gen(function*() {
+      const scene = yield* HtmlScene.make(Tooltip, { open: true }, {
+        elements: Html,
+        view: (tooltip, h) =>
+          h.span(
+            tooltip.trigger(h.a.attr("href", "#retention")),
+            tooltip.positioner(h.div).children(tooltip.popup(h.div))
+          )
+      })
+      const link = Locator.tag("a")
+      assert.strictEqual(scene.get(link).attrs?.href, "#retention")
+      scene.mounted(tracking(scene), placed())
+        .fire(link, "click")
+        .expectDefaultPrevented(false)
+        .emitted({ _tag: "RequestedClose" })
+    }))
+
   it.effect("the placement the positioner reports reaches every part", () =>
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(

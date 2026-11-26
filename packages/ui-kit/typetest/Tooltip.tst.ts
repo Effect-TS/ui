@@ -15,6 +15,13 @@ type Button = Html.Element<
   "button"
 >
 type Div = Html.Element<Msg, never, Html.EventsOf<"div">, HTMLDivElement, "div">
+type Anchor = Html.Element<
+  Msg,
+  never,
+  Html.EventsOf<"a">,
+  HTMLAnchorElement,
+  "a"
+>
 
 describe("Tooltip", () => {
   it("needs no provider: its read of a TooltipProvider is optional", () => {
@@ -55,7 +62,7 @@ describe("Tooltip", () => {
     })
   })
 
-  it("the trigger takes only a button, and the other parts only a div", () => {
+  it("the trigger takes a button or a link, and the other parts only a div", () => {
     Html.component({
       name: "App",
       model: Schema.Null,
@@ -68,7 +75,8 @@ describe("Tooltip", () => {
           key: "t",
           props: { open: false },
           view: (tooltip) => {
-            expect(tooltip.trigger).type.not.toBeCallableWith(h.a)
+            expect(tooltip.trigger(h.a)).type.toBe<Anchor>()
+            expect(tooltip.trigger).type.not.toBeCallableWith(h.span)
             expect(tooltip.positioner).type.not.toBeCallableWith(h.span)
             expect(tooltip.popup).type.not.toBeCallableWith(h.span)
             expect(tooltip.arrow).type.not.toBeCallableWith(h.span)

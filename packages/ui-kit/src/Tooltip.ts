@@ -25,7 +25,7 @@
  *
  * | Part         | Element                                        |
  * | :----------- | :--------------------------------------------- |
- * | `trigger`    | `<button>` the tooltip describes               |
+ * | `trigger`    | `<button>` or `<a href>` the tooltip describes |
  * | `positioner` | `<div>`, a manual popover placed by the tooltip  |
  * | `popup`      | `<div>` inside the positioner                  |
  * | `arrow`      | `<div>` inside the popup                       |
@@ -92,8 +92,10 @@
  * when it receives focus to open the tooltip or keep it open after the
  * pointer leaves. Other focus events are ignored. Escape closes an open
  * tooltip wherever focus is, so a tooltip opened by hovering can be
- * dismissed without moving the pointer. Activating the trigger with Enter
- * or Space closes it, as a click does.
+ * dismissed without moving the pointer. Activating the trigger closes it:
+ * a click, or the keys the element activates on (Enter or Space on a
+ * button, Enter on a link). A link trigger needs an `href`: without one it
+ * isn't focusable and isn't a link.
  *
  * **Placement and timing**
  *
@@ -236,8 +238,8 @@ export type TooltipAlign = typeof TooltipAlign.Type
  * - `closeDelay`: milliseconds after the pointer leaves the trigger, the
  *   positioner and the triangle between them before the tooltip closes, 0
  *   by default.
- * - `closeOnClick`: whether activating the trigger, by a click, Enter or
- *   Space, closes the tooltip, true by default.
+ * - `closeOnClick`: whether activating the trigger, by a click or the keys
+ *   the element activates on, closes the tooltip, true by default.
  * - `disableHoverablePopup`: the pointer on the popup doesn't keep the
  *   tooltip open, and the positioner takes no pointer events.
  * - `describesTrigger`: makes the popup the trigger's accessible description
@@ -794,8 +796,8 @@ export const Tooltip = Html.component({
         ? blurred.emit(requestedClose)
         : blurred
     },
-    // A mouse press stops a pending open. The click that follows, or Enter
-    // or Space on the native button, closes an open tooltip.
+    // A mouse press stops a pending open. The click that follows, or the
+    // native click a key fires, closes an open tooltip.
     PressedTrigger: ($) =>
       $.props.closeOnClick !== false
         ? $.run(Command.interrupt(WaitBeforeOpening))
@@ -866,7 +868,7 @@ export const Tooltip = Html.component({
     const instant = <B extends Attributed<B>>(builder: B): B =>
       placed(builder).attr("data-instant", instantBy ?? undefined)
     const trigger = p.part(
-      "button",
+      ["button", "a"],
       (b) =>
         b.attrs({
           "data-popup-open": flag(shown),
