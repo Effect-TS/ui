@@ -90,12 +90,11 @@ describe("DateField", () => {
         standIn
       )
       // ICU prints U+0020 or U+202F before "г." depending on its version.
-      const shown = text(scene) as string
-      assert.match(shown, /^26\.11\.2026[ \u202f]г\.$/)
-      scene.type(input, shown.replace("26.", "28."))
-      scene.blur(input).emitted(committed(utc("2026-11-28")))
+      assert.match(text(scene) as string, /^26\.11\.2026[ \u202f]г\.$/)
       scene.type(input, "27.11.2026 г.")
       scene.blur(input).emitted(committed(utc("2026-11-27")))
+      scene.type(input, "28.11.2026\u202fг.")
+      scene.blur(input).emitted(committed(utc("2026-11-28")))
 
       // ky prints yyyy-dd-mm, so it shows "/" to keep "-" for ISO
       scene.props({ value: utc("2026-03-05"), locale: "ky" })
