@@ -15,8 +15,8 @@
  * intercepted by the same test. Following either to the current route sends a
  * message without scrolling to the top, announcing or moving focus. A change
  * to the hash still scrolls as usual. Both work the same in a root mounted
- * inside a shadow root, open or closed. A `post` form, or one with a
- * `target`, that has no `submit` handler submits natively.
+ * inside a shadow root, open or closed. An unhandled POST, or a GET
+ * targeting another window, submits natively.
  *
  * Once a navigation settles (the first flush after the root received it in
  * which no Layer build begun since is still pending), the router scrolls,

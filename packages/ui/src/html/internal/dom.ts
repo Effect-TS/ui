@@ -616,15 +616,19 @@ export const makeHost = (
           )
     )
     if (owned) {
-      const form = event.target as globalThis.Element
-      const submitter = (event as SubmitEvent).submitter ?? null
-      const method = submit.methodOf(form, submitter)
-      // A handled or `dialog` form never submits natively. With no handler, a
-      // same-window GET is the Router's to follow; anything else is the browser's.
-      if (handled || method === "dialog") event.preventDefault()
-      else if (method === "get" && submit.isSameWindow(form, submitter)) {
-        event.preventDefault()
-        submit.ownedUnhandled.add(event)
+      submit.ownedUnhandled.delete(event)
+      if (handled) event.preventDefault()
+      else {
+        const form = event.target as globalThis.Element
+        const submitter = (event as SubmitEvent).submitter ?? null
+        const method = submit.methodOf(form, submitter)
+        // A `dialog` form never submits natively. A same-window GET is the
+        // Router's to follow; anything else is the browser's.
+        if (method === "dialog") event.preventDefault()
+        else if (method === "get" && submit.isSameWindow(form, submitter)) {
+          event.preventDefault()
+          submit.ownedUnhandled.add(event)
+        }
       }
     }
     if (name === "dragend") endTargets()

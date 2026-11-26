@@ -8,6 +8,11 @@
 /** @internal */
 export const ownedUnhandled = new WeakSet<Event>()
 
+// A form control named `getAttribute` shadows the method on the form itself,
+// not on its prototype, which is also from the form's own window.
+const attribute = (form: Element, name: string): string | null =>
+  (Object.getPrototypeOf(form) as Element).getAttribute.call(form, name)
+
 /**
  * The submission's method as the browser reads it: an invalid value counts as
  * `get`.
@@ -19,7 +24,7 @@ export const methodOf = (
   submitter: Element | null
 ): "get" | "post" | "dialog" => {
   const method = (submitter?.getAttribute("formmethod") ??
-    form.getAttribute("method") ?? "").toLowerCase()
+    attribute(form, "method") ?? "").toLowerCase()
   return method === "post" || method === "dialog" ? method : "get"
 }
 
@@ -29,6 +34,6 @@ export const isSameWindow = (
   submitter: Element | null
 ): boolean => {
   const target = submitter?.getAttribute("formtarget") ??
-    form.getAttribute("target")
+    attribute(form, "target")
   return target === null || target === "" || target.toLowerCase() === "_self"
 }

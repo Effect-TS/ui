@@ -662,6 +662,16 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(HtmlLocator.getByRole(app, "heading").textContent).toBe(
         "Search ada"
       )
+      // The same event dispatched again on a handled form isn't the Router's.
+      const again = new Event("submit", { bubbles: true, cancelable: true })
+      HtmlLocator.getByRole(app, "form", { name: "Search" }).dispatchEvent(
+        again
+      )
+      HtmlLocator.getByRole(app, "form", { name: "Filter" }).dispatchEvent(
+        again
+      )
+      yield* tick
+      expect(window.location.search).toBe("?q=ada")
     }).pipe(Effect.scoped))
 
   it.effect("follows GET forms and reports each composed touch intent once in a closed shadow root", () =>
