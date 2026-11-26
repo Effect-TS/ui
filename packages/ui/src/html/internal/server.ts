@@ -97,7 +97,7 @@ const elementAttributes = (
     if (url.blockedAttribute(normalized, value)) out.delete(normalized)
     else out.set(normalized, value)
   }
-  dropBlockedAnimation(out)
+  if (isAnimation(tag)) dropBlockedAnimation(out)
   if (elements.isCustomTag(tag)) return out
   for (const [name, value] of Object.entries(props)) {
     switch (name) {
@@ -122,7 +122,11 @@ const elementAttributes = (
   return out
 }
 
-const animationValues = ["to", "from", "by", "values"] as const
+const animationTags: ReadonlySet<string> = new Set(["set", "animate"])
+
+/** Whether `tag` is an SVG animation, as the HTML parser folds its case. */
+const isAnimation = (tag: string): boolean =>
+  animationTags.has(tag.toLowerCase())
 
 /**
  * Drops the animation values that would set a blocked URL on the attribute
@@ -131,13 +135,17 @@ const animationValues = ["to", "from", "by", "values"] as const
 const dropBlockedAnimation = (attributes: Map<string, string>): void => {
   const target = attributes.get("attributename")?.trim()
   if (target === undefined) return
-  for (const name of animationValues) {
+  for (const name of ["to", "from", "by"]) {
     const value = attributes.get(name)
-    if (
-      value !== undefined &&
-      value.split(";").some((item) => url.blockedAttribute(target, item))
-    ) attributes.delete(name)
+    if (value !== undefined && url.blockedAttribute(target, value)) {
+      attributes.delete(name)
+    }
   }
+  const values = attributes.get("values")
+  if (
+    values !== undefined &&
+    values.split(";").some((item) => url.blockedAttribute(target, item))
+  ) attributes.delete("values")
 }
 
 const written = (attributes: Map<string, string>): string => {
@@ -172,10 +180,9 @@ const plainAttributes = (
   }
   if (tag === "option") return undefined
   if (attrs === View.noFields) return ""
+  if (isAnimation(tag)) return undefined
   let out = ""
   for (const name in attrs) {
-    // An animation target needs every value checked: `elementAttributes` does it.
-    if (name === "attributename") return undefined
     if (elements.attributeName(name, false) !== name) {
       if (
         !elements.svgTags.has(tag) ||

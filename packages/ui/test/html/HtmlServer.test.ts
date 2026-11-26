@@ -325,27 +325,36 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => null,
         update: ($) => $.model,
         view: (h) =>
-          h.el("svg").children(
-            h.el("a").children(
-              h.el("set").attr("attributeName", "href").attr(
-                "to",
-                "javascript:"
-              ),
-              h.el("animate").attr("attributeName", "xlink:href")
-                .attr("from", "/a").attr("by", " VBScript:"),
-              h.el("animate").attr("attributename", "href")
-                .attr("values", "/a; javascript:;/b"),
-              h.el("animate").attr("attributeName", "href")
-                .attr("values", "/a;/b")
-            )
+          h.div.children(
+            h.el("svg").children(
+              h.el("a").children(
+                h.el("set").attr("attributeName", "href").attr(
+                  "to",
+                  "javascript:"
+                ),
+                h.el("animate").attr("attributeName", "xlink:href")
+                  .attr("from", "/a").attr("by", " VBScript:"),
+                h.el("Animate").attr("attributename", "href")
+                  .attr("values", "/a; javascript:;/b"),
+                h.el("animate").attr("attributeName", "href")
+                  .attr("values", "/a;/b"),
+                // A scalar endpoint is one URL: this is a relative path.
+                h.el("set").attr("attributeName", "href")
+                  .attr("to", "/docs;note=1;javascript:")
+              )
+            ),
+            h.el("x-data").attr("attributename", "href")
+              .attr("values", "javascript:")
           )
       })
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
       expect(rendered.html).toBe(
-        "<!--[/Animated--><svg><a><set attributename=\"href\"></set>" +
+        "<!--[/Animated--><div><svg><a><set attributename=\"href\"></set>" +
           "<animate attributename=\"xlink:href\" from=\"/a\"></animate>" +
-          "<animate attributename=\"href\"></animate>" +
-          "<animate attributename=\"href\" values=\"/a;/b\"></animate></a></svg><!--]/Animated-->"
+          "<Animate attributename=\"href\"></Animate>" +
+          "<animate attributename=\"href\" values=\"/a;/b\"></animate>" +
+          "<set attributename=\"href\" to=\"/docs;note=1;javascript:\"></set></a></svg>" +
+          "<x-data attributename=\"href\" values=\"javascript:\"></x-data></div><!--]/Animated-->"
       )
     }))
 
