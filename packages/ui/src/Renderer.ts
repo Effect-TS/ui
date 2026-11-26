@@ -133,7 +133,8 @@ export interface HostEvents<Node> {
  *
  * `elements` lists the vocabularies the host shows, by name, or is `"any"`.
  * `controlled` lists the properties re-applied after every patch, since the
- * user may have changed them; the host skips a no-op. `runsMounts` is `false`
+ * user may have changed them; the host skips a no-op. Its members must not
+ * change once the host renders. `runsMounts` is `false`
  * on hosts that never run `onMount` work. `commit` is called once at the end
  * of each flush and after mounting, for hosts that apply changes in a batch.
  *

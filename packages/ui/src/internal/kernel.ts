@@ -256,8 +256,8 @@ export class Rec {
   declare node: any
   declare kids: Array<Rec> | undefined
   declare inst: Instance
-  /** `v` when a restore last found no controlled property at or below it. */
-  declare plain: unknown
+  /** Set when a restore found no controlled property at or below it, until `v` changes. */
+  declare plain: boolean
   constructor(
     v: View.Node<any, any>,
     node: unknown,
@@ -268,7 +268,7 @@ export class Rec {
     this.node = node
     this.kids = kids
     this.inst = inst
-    this.plain = undefined
+    this.plain = false
   }
 }
 
@@ -1397,11 +1397,11 @@ export const replace = (
 
 const refreshed = {}
 
-// Walks elements only: a change to one gives every element above it a new
-// view, so `plain` goes stale with it.
+// Walks elements only: a change to one patches every element above it, which
+// clears `plain`.
 const restore = (host: Host, rec: Rec): boolean => {
+  if (rec.plain) return false
   const view = rec.v as View.Element<any, any>
-  if (rec.plain === view) return false
   let found = false
   const kids = rec.kids
   if (kids !== undefined) {
@@ -1417,7 +1417,7 @@ const restore = (host: Host, rec: Rec): boolean => {
       found = true
     }
   }
-  if (!found) rec.plain = view
+  rec.plain = !found
   return found
 }
 
@@ -1485,6 +1485,7 @@ const patchElement = (
   const layers = view.owned?.length ? view.owned : prev.owned
   if (layers?.length) view = owned(inst, view, layers)
   rec.v = view
+  rec.plain = false
   if (prev.attrs !== view.attrs) patchAttrs(host, node, prev.attrs, view.attrs)
   if (
     view.handlers !== prev.handlers || view.eventOptions !== prev.eventOptions
