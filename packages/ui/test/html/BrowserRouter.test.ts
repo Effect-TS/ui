@@ -741,6 +741,36 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(bio.getAttribute("tabindex")).toBe("-1")
     }).pipe(Effect.scoped))
 
+  /** Appends `<h2 id="late">` to `app`, as data arriving after load would render it. */
+  const renderLate = (app: Element) => {
+    const late = app.appendChild(document.createElement("h2"))
+    // Happy DOM has no layout; make the scroll to it observable.
+    late.scrollIntoView = () => window.scrollTo(0, 300)
+    late.id = "late"
+    return late
+  }
+
+  it.effect("goes to an initial #hash rendered after load and moves focus there", () =>
+    Effect.gen(function*() {
+      window.scrollTo(0, 0)
+      const { app } = yield* start("/people/1#late")
+      const late = renderLate(app)
+      yield* tick
+      expect(window.scrollY).toBe(300)
+      expect(document.activeElement).toBe(late)
+    }).pipe(Effect.scoped))
+
+  it.effect("leaves a late initial #hash alone once the reader has interacted", () =>
+    Effect.gen(function*() {
+      window.scrollTo(0, 0)
+      const { app } = yield* start("/people/1#late")
+      app.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))
+      const late = renderLate(app)
+      yield* tick
+      expect(window.scrollY).toBe(0)
+      expect(document.activeElement).not.toBe(late)
+    }).pipe(Effect.scoped))
+
   it.effect("ignores links and reverts back and forward while blocked", () =>
     Effect.gen(function*() {
       const { app, root } = yield* start("/")
