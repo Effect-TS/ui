@@ -13,8 +13,10 @@
  * form's `fields`. A handler set with `{ preventDefault: true }` cancels the
  * browser's default when it produces a message and leaves it alone when it
  * returns `undefined`, so it decides per event. A form's `submit` is always
- * cancelled, with or without a handler. Nothing stops an event's propagation:
- * only the innermost element with a handler for an event gets it.
+ * cancelled when it has a handler. Without one, only a `post` or a
+ * submission to another window goes to the browser. Nothing stops an event's
+ * propagation: only the innermost element with a handler for an event gets
+ * it.
  *
  * Use `draggable(data)` for a drag source and
  * `dropTarget({ accepts }).on("drop", handler)` for a drop target. The host

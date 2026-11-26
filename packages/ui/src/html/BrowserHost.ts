@@ -6,8 +6,10 @@
  * document, and each element stores its handlers as data, so re-rendering
  * never touches listeners. An event goes to the innermost element with a
  * handler for it, and its handler gets a plain payload built from the DOM
- * event, never the event itself. A form the app renders never submits
- * natively, whether or not it has a `submit` handler.
+ * event, never the event itself. A form the app renders submits natively
+ * only when it has no `submit` handler and its submission is a `post` or
+ * targets another window. Any other submission is cancelled, and a same-window
+ * GET is left to the Router.
  *
  * A `dialog` set with `modal(true)` is shown with `showModal()` at the commit
  * after it's in the document, and closed with `close()`. Dialogs shown in

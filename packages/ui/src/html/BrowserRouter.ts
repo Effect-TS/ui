@@ -15,7 +15,8 @@
  * intercepted by the same test. Following either to the current route sends a
  * message without scrolling to the top, announcing or moving focus. A change
  * to the hash still scrolls as usual. Both work the same in a root mounted
- * inside a shadow root, open or closed.
+ * inside a shadow root, open or closed. A `post` form, or one with a
+ * `target`, that has no `submit` handler submits natively.
  *
  * Once a navigation settles (the first flush after the root received it in
  * which no Layer build begun since is still pending), the router scrolls,
@@ -462,26 +463,18 @@ const make = (
       if (href !== undefined) Effect.runSync(router.intent(href))
     }
     const onSubmit = (event: SubmitEvent) => {
-      // BrowserHost prevents every submission of a form the app rendered. If the app has no
-      // submit handler for it, the form is still the Router's to follow.
+      // BrowserHost prevents a same-window GET of a form the app rendered even with no submit
+      // handler for it. That form is still the Router's to follow.
       const ownedUnhandled = submit.ownedUnhandled.has(event)
       if (event.defaultPrevented && !ownedUnhandled) return
       const form = event.target as HTMLFormElement | null
       if (form === null || form.localName !== "form") return
       flushHistory()
       const submitter = event.submitter as HTMLButtonElement | null
-      const method =
-        (submitter?.getAttribute("formmethod") ?? form.getAttribute("method") ??
-          "get").toLowerCase()
-      const targetAttribute = submitter?.getAttribute("formtarget") ??
-        form.getAttribute("target")
       if (
-        method !== "get" ||
-        (targetAttribute !== null && targetAttribute !== "" &&
-          targetAttribute !== "_self")
-      ) {
-        return
-      }
+        submit.methodOf(form, submitter) !== "get" ||
+        !submit.isSameWindow(form, submitter)
+      ) return
       const action = submitter?.getAttribute("formaction") ??
         form.getAttribute("action") ?? ""
       const url = new URL(action, document.baseURI)
