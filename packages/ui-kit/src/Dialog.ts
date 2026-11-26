@@ -271,7 +271,7 @@ import {
   inKept,
   inPlaceBox,
   portalBox,
-  raiseAbove
+  raiseAboveShown
 } from "./internal/topLayer.ts"
 import {
   frameOf,
@@ -1037,8 +1037,7 @@ const TrackDialog = Mount.makeStream(
       const shows = () => {
         if (showed || signal.aborted) return
         showed = true
-        // TrackDialog can start before the commit shows the portal.
-        queueMicrotask(() => raiseAbove(node))
+        raiseAboveShown(node, signal)
         opening(active)
       }
 

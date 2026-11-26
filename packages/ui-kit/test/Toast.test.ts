@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { UiSchema } from "@effect/ui"
+import { Mount, UiSchema } from "@effect/ui"
 import { Dialog, ToastProvider } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { TestGlobalEvents } from "@effect/ui/html/testing"
@@ -340,18 +340,34 @@ describe("ToastProvider", { concurrent: false }, () => {
     }))
 })
 
-const AboveMessage = UiSchema.TaggedEnum({ Opened: {}, Replaced: {} })
+const AboveMessage = UiSchema.TaggedEnum({
+  Opened: {},
+  Replaced: {},
+  Transitioned: {}
+})
+// Starts beside the replaced portal's TrackDialog and holds that flush's
+// commit in a view transition.
+const Transition = Mount.make(
+  "Transition",
+  { args: {}, beforeCommit: true },
+  () => Effect.succeed(AboveMessage.Transitioned())
+)
 const Above = Html.component({
   name: "Above",
-  model: Schema.Literals(["closed", "open", "replaced"]),
+  model: Schema.Struct({
+    state: Schema.Literals(["closed", "open", "replaced"]),
+    transitioned: Schema.Boolean
+  }),
   message: AboveMessage
 }).make({
-  init: () => "closed" as const,
+  init: () => ({ state: "closed" as const, transitioned: false }),
   update: {
-    Opened: () => "open" as const,
-    Replaced: () => "replaced" as const
+    Opened: ($) => $.evolve({ state: "open" }),
+    Replaced: ($) => $.evolve({ state: "replaced" }),
+    Transitioned: ($) =>
+      $.evolve({ transitioned: true }).viewTransition(["replace"])
   },
-  view: (h, state) =>
+  view: (h, { state, transitioned }) =>
     ToastProvider(h, {
       view: (toastProvider) =>
         h.div(
@@ -360,6 +376,9 @@ const Above = Html.component({
           h.button.attr("id", "replace").on("click", AboveMessage.Replaced())
             .children("Replace"),
           toastProvider.viewport(h.div.attr("id", "toasts")),
+          state === "replaced" && !transitioned
+            ? h.span.onMount(Transition())
+            : null,
           Dialog(h, {
             props: { open: state !== "closed" },
             view: (dialog) => {
@@ -378,6 +397,22 @@ describe("ToastProvider above a dialog", { concurrent: false }, () => {
   it.effect("the viewport is a popover, shown again after a dialog opens", () =>
     Effect.gen(function*() {
       yield* popovers
+      const transitions: Array<() => void> = []
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          ;(document as any).startViewTransition = (update: () => void) => {
+            transitions.push(update)
+            const done = Promise.resolve()
+            return {
+              ready: done,
+              finished: done,
+              updateCallbackDone: done,
+              skipTransition: () => {}
+            }
+          }
+        }),
+        () => Effect.sync(() => delete (document as any).startViewTransition)
+      )
       const shown: Array<string> = []
       const proto = window.HTMLElement.prototype as any
       const show = proto.showPopover
@@ -401,7 +436,11 @@ describe("ToastProvider above a dialog", { concurrent: false }, () => {
       yield* tick
       assert.deepStrictEqual(shown, ["dialog", "div"])
       shown.length = 0
+      // The new portal shows only once the held transition runs its update.
       container.querySelector<HTMLElement>("#replace")!.click()
+      yield* tick
+      assert.deepStrictEqual(shown, [])
+      transitions.shift()!()
       yield* tick
       assert.deepStrictEqual(shown, ["dialog", "div"])
     }))

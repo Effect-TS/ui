@@ -36,6 +36,19 @@ export const raiseAbove = (shown: Element): void => {
   }
 }
 
+// Raises the kept elements above `shown` once it shows: now, or right after
+// the commit that shows it, which a view transition can hold.
+export const raiseAboveShown = (shown: Element, signal: AbortSignal): void => {
+  if (!shown.hasAttribute("popover")) return
+  if (showing(shown as HTMLElement)) return raiseAbove(shown)
+  const opens = (event: Event) => {
+    if ((event as ToggleEvent).newState !== "open") return
+    shown.removeEventListener("beforetoggle", opens)
+    queueMicrotask(() => raiseAbove(shown))
+  }
+  shown.addEventListener("beforetoggle", opens, { signal })
+}
+
 const boxReset =
   "max-width:none;max-height:none;margin:0;padding:0;border:0;overflow:visible;background:transparent;color:inherit"
 
