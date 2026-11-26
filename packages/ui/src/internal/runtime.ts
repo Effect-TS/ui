@@ -372,6 +372,7 @@ interface HostInput {
   ) => {
     readonly base: Kernel.Host
     readonly dom: (Kernel.Host & { readonly dispose: () => void }) | undefined
+    readonly unmounting?: ((nodes: ReadonlyArray<unknown>) => void) | undefined
   }
 }
 
@@ -384,7 +385,13 @@ const fromRenderer = (ctx: Context.Context<any>): HostInput => {
         head: ownsHead,
         step
       })
-      return { base: dom ?? bridge(host, step, ownsHead), dom }
+      return {
+        base: dom ?? bridge(host, step, ownsHead),
+        dom,
+        unmounting: host.unmounting === undefined
+          ? undefined
+          : (nodes) => host.unmounting!(container, nodes)
+      }
     }
   }
 }
@@ -578,7 +585,11 @@ const start = (
     return count
   }
   const ownsHead = options?.head !== false
-  const { base, dom } = hostInput.make(container, ownsHead, recording.step)
+  const { base, dom, unmounting } = hostInput.make(
+    container,
+    ownsHead,
+    recording.step
+  )
   const deferred = new Set<Kernel.Instance>()
   let hydrating: hydrateRun.Session | undefined
   const routing: routeRun.Routed | undefined = hooks?.kernel?.(hooks, {
@@ -785,15 +796,23 @@ const start = (
     root,
     deferred,
     idle,
-    close: Effect.suspend(() => {
-      hydrating?.close()
-      routing?.detach()
-      hot?.detach()
-      dom?.dispose()
-      if (frozen) tree.closed = false
-      mounted.close()
-      return Effect.andThen(awaitOwned, queries.dispose)
-    })
+    // A host call that throws still lets the mount's fibers and query cache
+    // be cleaned up, and dies once they are.
+    close: Effect.ensuring(
+      Effect.sync(() => {
+        hydrating?.close()
+        routing?.detach()
+        hot?.detach()
+        dom?.dispose()
+        if (frozen) tree.closed = false
+        try {
+          unmounting?.(Kernel.nodesOf(instance.rendered!, []))
+        } finally {
+          mounted.close()
+        }
+      }),
+      Effect.andThen(awaitOwned, queries.dispose)
+    )
   }
 }
 

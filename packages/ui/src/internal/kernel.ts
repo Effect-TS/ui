@@ -973,7 +973,8 @@ const remove = (inst: Instance, parent: unknown, rec: Rec): void => {
   for (const node of nodes) inst.tree.host.remove(parent, node)
 }
 
-const nodesOf = (rec: Rec, out: Array<unknown>): Array<unknown> => {
+/** @internal */
+export const nodesOf = (rec: Rec, out: Array<unknown>): Array<unknown> => {
   if (rec.node !== undefined) out.push(rec.node)
   else if (rec.kids === undefined) nodesOf(rec.inst.rendered!, out)
   else {for (let index = 0; index < rec.kids.length; index++) {

@@ -161,6 +161,17 @@ export interface HostEvents<Node> {
  * removes every node of a list, so a host can clear a parent that holds
  * nothing else in one step. A host without it gets `remove` for each node.
  *
+ * `unmounting`, if given, is called once when a mount's Scope closes, before
+ * any of its instances closes and before any of its nodes is removed. It gets
+ * the container and the nodes the mount placed in it, in order and still
+ * attached, so a host can keep the last frame, such as a terminal leaving
+ * the final output on screen. A mount sharing the container passes only its
+ * own nodes, and one that rendered nothing passes none. Releases may still be
+ * pending when it returns. If it throws, the nodes are still removed and
+ * committed and the mount cleaned up, and closing the Scope dies with the
+ * error. Mounts whose Scope closed before they placed anything, and the
+ * `BrowserHost`'s DOM path, never call it.
+ *
  * `viewTransition`, if given, is called for a flush that renders an update
  * whose step called `$.viewTransition`, before it renders, with the rest of
  * the flush as `update` and the types the steps asked for. The host calls
@@ -227,6 +238,9 @@ export interface Host<Node> {
   readonly events?: HostEvents<Node> | undefined
   readonly viewTransition?:
     | ((update: () => void, types: ReadonlyArray<string>) => void)
+    | undefined
+  readonly unmounting?:
+    | ((container: Node, nodes: ReadonlyArray<Node>) => void)
     | undefined
 }
 
