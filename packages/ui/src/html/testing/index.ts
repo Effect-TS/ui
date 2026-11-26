@@ -65,3 +65,9 @@ export * as TestGlobalEvents from "./TestGlobalEvents.ts"
  * @since 0.1.0
  */
 export * as TestImages from "./TestImages.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as TestMediaQueries from "./TestMediaQueries.ts"

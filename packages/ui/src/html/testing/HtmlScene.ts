@@ -85,6 +85,7 @@ import * as defaults from "../internal/defaults.ts"
 import * as fireGlobal from "../internal/fireGlobal.ts"
 import * as frames from "../internal/frames.ts"
 import * as globalEvents from "../internal/globalEvents.ts"
+import * as mediaQueries from "../internal/mediaQueries.ts"
 import * as HtmlLocator from "./HtmlLocator.ts"
 
 /**
@@ -287,6 +288,14 @@ export interface Steps<C extends AnyComponent, Parts = never>
    * is ignored when the handler returns `undefined`.
    */
   frame(delta?: number): this
+  /**
+   * Sends `matches` to the component's `HtmlSubscription.onMediaQuery` handler
+   * for `query`, simulating an initial match or a change.
+   *
+   * It throws when nothing listens for `query`, listing the active keys, and
+   * is ignored when the handler returns `undefined`.
+   */
+  mediaQuery(query: string, matches: boolean): this
 
   /** Asserts on the elements `locator` matches in the current view. */
   expect(locator: Locator.Locator): Expect<this>
@@ -591,21 +600,43 @@ class StepsImpl extends internal.SceneCursor {
     )
   }
   frame(delta = 16): this {
+    return this.fireDeclared(
+      "frame",
+      "animation frames",
+      delta,
+      frames.handlerOf
+    )
+  }
+  mediaQuery(query: string, matches: boolean): this {
+    return this.fireDeclared(
+      "mediaQuery",
+      `media query ${JSON.stringify(query)}`,
+      matches,
+      (subscription) => {
+        const declared = mediaQueries.listenerOf(subscription)
+        return declared?.query === query ? declared.handler : undefined
+      }
+    )
+  }
+  private fireDeclared<A>(
+    step: string,
+    what: string,
+    payload: A,
+    handlerOf: (subscription: object) => View.Handler<unknown, A> | undefined
+  ): this {
     let handled = false
-    return this.act("frame", "message", (state) => {
-      const handler = state.declared().map(frames.handlerOf).find((handler) =>
+    return this.act(step, "message", (state) => {
+      const handler = state.declared().map(handlerOf).find((handler) =>
         handler !== undefined
       )
       if (handler === undefined) {
         throw new Error(
-          `${
-            this.name("frame")
-          }: nothing listens for animation frames; active keys: ${
+          `${this.name(step)}: nothing listens for ${what}; active keys: ${
             JSON.stringify(state.subscriptions())
           }`
         )
       }
-      const message = handle(handler, delta)
+      const message = handle(handler, payload)
       if (message === undefined) return state
       handled = true
       return engine.dispatch(state, message)

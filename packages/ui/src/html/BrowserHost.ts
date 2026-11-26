@@ -347,15 +347,17 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
  * Provides the browser host as the `Renderer`, `Html.Host`, the document's
  * `Query.Visibility` and `Query.Connectivity`, its events as
  * `HtmlSubscription.GlobalEvents`, its window's frames as
- * `HtmlSubscription.AnimationFrames`, and an `HtmlImages.Images` and
+ * `HtmlSubscription.AnimationFrames`, its window's media queries as
+ * `HtmlSubscription.MediaQueries`, and an `HtmlImages.Images` and
  * `HtmlFiles.Files` over it, for the life of the Layer.
  *
  * **Details**
  *
  * `document` defaults to the global `document`. Closing the Layer removes the
  * host's listeners. The signals, `HtmlSubscription.GlobalEvents`,
- * `HtmlSubscription.AnimationFrames`, `HtmlImages.Images` and `HtmlFiles.Files`
- * use the document and its `defaultView`, never globals.
+ * `HtmlSubscription.AnimationFrames`, `HtmlSubscription.MediaQueries`,
+ * `HtmlImages.Images` and `HtmlFiles.Files` use the document and its
+ * `defaultView`, never globals.
  *
  * @stability experimental
  * @category layers

@@ -22,7 +22,7 @@ import {
   HtmlServer,
   HtmlSubscription
 } from "@effect/ui/html"
-import { HtmlLocator } from "@effect/ui/html/testing"
+import { HtmlLocator, TestAnimationFrames } from "@effect/ui/html/testing"
 import { TestHost } from "@effect/ui/testing"
 import { assert, expect, it } from "@effect/vitest"
 import {
@@ -3629,6 +3629,166 @@ describe("BrowserHost", { concurrent: false }, () => {
           "submitted true",
           "submitted false"
         ])
+      }).pipe(Effect.scoped))
+
+    it.effect("HtmlCommand.waitForPaint waits two animation frames", () =>
+      Effect.gen(function*() {
+        const PaintMessage = UiSchema.TaggedEnum({
+          Start: {},
+          Painted: {}
+        })
+        const Enter = Html.component({
+          name: "Enter",
+          model: Schema.Literals(["idle", "starting", "shown"]),
+          message: PaintMessage
+        }).make({
+          init: () => "idle" as const,
+          update: {
+            Start: ($) =>
+              $.set("starting" as const).run(
+                HtmlCommand.waitForPaint(() => PaintMessage.Painted())
+              ),
+            Painted: () => "shown" as const
+          },
+          view: (h, phase) => h.p(phase)
+        })
+
+        const root = yield* TestHost.mount(Enter, {})
+        yield* TestHost.settle
+        root.send(PaintMessage.Start())
+        yield* TestHost.settle
+        assert.strictEqual(root.model(), "starting")
+
+        yield* TestAnimationFrames.fire(16)
+        yield* TestHost.settle
+        assert.strictEqual(root.model(), "starting")
+
+        yield* TestAnimationFrames.fire(16)
+        yield* TestHost.settle
+        assert.strictEqual(root.model(), "shown")
+
+        // A frame source may call back while `listen` registers.
+        const eager = yield* TestHost.mount(Enter, {}).pipe(
+          Effect.provideService(HtmlSubscription.AnimationFrames, {
+            now: () => 0,
+            listen: (listener) => {
+              listener(0)
+              return () => {}
+            }
+          })
+        )
+        yield* TestHost.settle
+        eager.send(PaintMessage.Start())
+        yield* TestHost.settle
+        assert.strictEqual(eager.model(), "shown")
+      }).pipe(
+        Effect.provide(
+          Layer.merge(TestHost.layer(), TestAnimationFrames.layer)
+        ),
+        Effect.scoped
+      ))
+
+    it.effect("HtmlCommand.waitForAnimations skips infinite animations, waits for a replacement after cancellation, and reports missing refs", () =>
+      Effect.gen(function*() {
+        const Panel = Html.ref("Panel", "div")
+        const MissingPanel = Html.ref("MissingPanel", "div")
+        const AnimMessage = UiSchema.TaggedEnum({
+          Wait: { missing: Schema.Boolean },
+          Settled: { found: Schema.Boolean }
+        })
+        const Drawer = Html.component({
+          name: "Drawer",
+          model: Schema.Array(Schema.String),
+          message: AnimMessage
+        }).make({
+          init: (): ReadonlyArray<string> => [],
+          update: {
+            Wait: ($, { missing }) =>
+              $.run(
+                HtmlCommand.waitForAnimations(
+                  missing ? MissingPanel : Panel,
+                  ({ found }) => AnimMessage.Settled({ found })
+                )
+              ),
+            Settled: ($, { found }) => [...$.model, `settled ${found}`]
+          },
+          view: (h) => h.div.attr("id", "anim-panel").ref(Panel)
+        })
+
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Drawer, {}, app)
+        yield* tick
+
+        root.send(AnimMessage.Wait({ missing: true }))
+        yield* tick
+        assert.deepStrictEqual(root.model(), ["settled false"])
+
+        const panel = app.querySelector("#anim-panel")!
+        const original = panel.getAnimations
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            panel.getAnimations = original
+          })
+        )
+
+        // Infinite animations are ignored; a cancelled finite animation triggers a retry.
+        const looping = {
+          effect: { getComputedTiming: () => ({ endTime: Infinity }) },
+          finished: new Promise(() => {})
+        } as unknown as Animation
+        let rejectFirst!: () => void
+        let resolveSecond!: () => void
+        const first = {
+          effect: { getComputedTiming: () => ({ endTime: 150 }) },
+          finished: new Promise<void>((_, reject) => {
+            rejectFirst = () =>
+              reject(new DOMException("cancelled", "AbortError"))
+          })
+        } as unknown as Animation
+        const second = {
+          effect: { getComputedTiming: () => ({ endTime: 150 }) },
+          finished: new Promise<void>((resolve) => {
+            resolveSecond = resolve
+          })
+        } as unknown as Animation
+
+        let active: ReadonlyArray<Animation> = [looping, first]
+        panel.getAnimations = () => [...active]
+
+        root.send(AnimMessage.Wait({ missing: false }))
+        yield* tick
+        // Cancel the first animation and replace it with the second.
+        active = [looping, second]
+        rejectFirst()
+        yield* tick
+        assert.deepStrictEqual(root.model(), ["settled false"])
+
+        resolveSecond()
+        yield* tick
+        assert.deepStrictEqual(root.model(), ["settled false", "settled true"])
+
+        // Detaching the element cancels its animation: it settles without a frame.
+        const raf = window.requestAnimationFrame
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            window.requestAnimationFrame = raf
+          })
+        )
+        window.requestAnimationFrame = () => 0
+        let rejectRemoved!: () => void
+        active = [{
+          effect: { getComputedTiming: () => ({ endTime: 150 }) },
+          finished: new Promise<void>((_, reject) => {
+            rejectRemoved = () =>
+              reject(new DOMException("cancelled", "AbortError"))
+          })
+        } as unknown as Animation]
+        root.send(AnimMessage.Wait({ missing: false }))
+        yield* tick
+        app.remove()
+        rejectRemoved()
+        yield* tick
+        assert.strictEqual(root.model()?.length, 3)
       }).pipe(Effect.scoped))
   })
 

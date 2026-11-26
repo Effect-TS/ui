@@ -3,13 +3,13 @@
  * `onDocument` for a game's arrow keys or a press outside a popup,
  * `shortcuts` for a table of keyboard shortcuts, `onCustomEvent` for a
  * `CustomEvent` dispatched on the document, `onWindow` for the window's
- * focus, and `onAnimationFrame` for animation.
+ * focus, `onAnimationFrame` for animation, and `onMediaQuery` for CSS media
+ * queries.
  *
- * Their sources are the `GlobalEvents` and `AnimationFrames` services,
- * which `BrowserHost.layer` provides. Nothing listens on the server, and a
- * test fires events and frames with `HtmlScene`, or with
- * `TestGlobalEvents` and `TestAnimationFrames` from
- * `@effect/ui/html/testing`.
+ * Their sources are the `GlobalEvents`, `AnimationFrames` and `MediaQueries`
+ * services, which `BrowserHost.layer` provides. Nothing listens on the server,
+ * and a test drives them with `HtmlScene`, or with `TestGlobalEvents`,
+ * `TestAnimationFrames` and `TestMediaQueries` from `@effect/ui/html/testing`.
  *
  * @stability experimental
  * @since 0.1.0
@@ -26,6 +26,7 @@ import type * as Html from "./Html.ts"
 import * as HtmlKeyboard from "./HtmlKeyboard.ts"
 import * as frames from "./internal/frames.ts"
 import * as globalEvents from "./internal/globalEvents.ts"
+import * as mediaQueries from "./internal/mediaQueries.ts"
 
 /**
  * The events `onDocument` listens for, with their payloads: the same ones
@@ -556,29 +557,175 @@ export const onAnimationFrame = <Msg>(
     { [frames.frame]: handler, [services.direct]: attachFrames }
   )
 
-const attachFrames: NonNullable<services.Direct[typeof services.direct]> = (
-  context,
-  emit,
-  fail,
-  enter
-) => {
+type Direct = NonNullable<services.Direct[typeof services.direct]>
+
+// Sends what the latest declaration's handler returns for `value`.
+const sendLatest = <A>(
+  emit: Parameters<Direct>[1],
+  fail: Parameters<Direct>[2],
+  enter: Parameters<Direct>[3],
+  handlerOf: (latest: object) => View.Handler<unknown, A>
+) =>
+(value: A): void =>
+  enter((latest) => {
+    try {
+      const message = handle(handlerOf(latest), value)
+      if (message !== undefined) emit(message, noop)
+    } catch (error) {
+      fail(Cause.die(error))
+    }
+  })
+
+const attachFrames: Direct = (context, emit, fail, enter) => {
   const source = Context.get(context, AnimationFrames)
+  const send = sendLatest(emit, fail, enter, frames.handlerOf)
   let last = source.now()
   return {
     initial: Effect.void,
     close: source.listen((time) => {
       const delta = Math.max(0, time - last)
       last = time
-      enter((latest) => {
-        try {
-          const message = handle(frames.handlerOf(latest), delta)
-          if (message !== undefined) emit(message, noop)
-        } catch (error) {
-          fail(Cause.die(error))
-        }
-      })
+      send(delta)
     })
   }
 }
 
 const noop = () => {}
+
+/**
+ * Supplies the current match and change notifications for `onMediaQuery`.
+ *
+ * **Details**
+ *
+ * `matches` returns whether `query` currently matches, or `undefined` when no
+ * source is available so `onMediaQuery` sends nothing on start. `listen` calls
+ * the listener on each `change` with the new `matches` value, until the
+ * function it returns is called.
+ *
+ * `BrowserHost.layer` provides one over its document's `defaultView.matchMedia`.
+ * The default returns `undefined` and never notifies listeners. In tests, use
+ * `HtmlScene.mediaQuery` or `TestMediaQueries` from `@effect/ui/html/testing`.
+ *
+ * @stability experimental
+ * @category services
+ * @since 0.1.0
+ */
+export interface MediaQueries {
+  readonly matches: (query: string) => boolean | undefined
+  readonly listen: (
+    query: string,
+    listener: (matches: boolean) => void
+  ) => () => void
+}
+
+/**
+ * The source of CSS media query matches. It defaults to one that never fires
+ * and sends nothing.
+ *
+ * @stability experimental
+ * @category references
+ * @since 0.1.0
+ */
+export const MediaQueries: Context.Reference<MediaQueries> =
+  mediaQueries.MediaQueries
+
+/**
+ * A Subscription that tracks a CSS media query: it sends the current `matches`
+ * value when it starts, then each `change`.
+ *
+ * **When to use**
+ *
+ * Use to react to viewport breakpoints, color-scheme preferences, or
+ * reduced-motion settings in component state.
+ *
+ * **Details**
+ *
+ * `handler` is a message or a function of `matches: boolean`. The source is
+ * `MediaQueries`, which `BrowserHost.layer` provides over
+ * `defaultView.matchMedia`. The server never runs Subscriptions, so `init`
+ * chooses the initial state. The first browser emission updates that state.
+ *
+ * The key is `@effect/ui/html/mediaQuery` with `query` as its dep, e.g.
+ * `@effect/ui/html/mediaQuery:"(prefers-color-scheme: dark)"`, so different
+ * queries run side by side.
+ *
+ * **Example** (Following the user's color scheme)
+ *
+ * ```ts import.meta.vitest
+ * import { UiSchema } from "@effect/ui"
+ * import { Html, HtmlSubscription } from "@effect/ui/html"
+ * import { HtmlScene } from "@effect/ui/html/testing"
+ * import { Locator } from "@effect/ui/testing"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Message = UiSchema.TaggedEnum({ ChangedScheme: { dark: Schema.Boolean } })
+ *
+ * const Theme = Html.component({
+ *   name: "Theme",
+ *   model: Schema.Boolean,
+ *   message: Message
+ * }).make({
+ *   init: () => false,
+ *   update: { ChangedScheme: (_, { dark }) => dark },
+ *   view: (h, dark) => h.p(dark ? "dark" : "light"),
+ *   subscriptions: () => [
+ *     HtmlSubscription.onMediaQuery(
+ *       "(prefers-color-scheme: dark)",
+ *       (dark) => Message.ChangedScheme({ dark })
+ *     )
+ *   ]
+ * })
+ *
+ * Effect.gen(function*() {
+ *   const s = yield* HtmlScene.make(Theme, {})
+ *   s.mediaQuery("(prefers-color-scheme: dark)", true)
+ *     .expect(Locator.text("dark")).toExist()
+ * }).pipe(Effect.scoped, Effect.runSync)
+ * ```
+ *
+ * @stability experimental
+ * @category subscriptions
+ * @since 0.1.0
+ */
+export const onMediaQuery = <Msg>(
+  query: string,
+  handler: View.Handler<Msg, boolean>
+): Subscription.Subscription<Msg> => {
+  const declared: mediaQueries.Listener = { query, handler }
+  const direct: Direct = (context, emit, fail, enter) => {
+    const source = Context.get(context, MediaQueries)
+    const send = sendLatest(
+      emit,
+      fail,
+      enter,
+      (latest) => (mediaQueries.listenerOf(latest) ?? declared).handler
+    )
+    // A change that fires while a handler runs is queued, so messages
+    // dispatch in the order the values arrived.
+    let queue: Array<boolean> | undefined
+    const deliver = (values: Array<boolean>) => {
+      if (queue !== undefined) return void queue.push(...values)
+      queue = values
+      for (let i = 0; i < queue.length; i++) send(queue[i])
+      queue = undefined
+    }
+    // Deliver the captured match before changes, even if they precede `initial`.
+    let first = source.matches(query)
+    const takeFirst = (): Array<boolean> => {
+      const initial = first
+      first = undefined
+      return initial === undefined ? [] : [initial]
+    }
+    return {
+      initial: Effect.sync(() => deliver(takeFirst())),
+      close: source.listen(
+        query,
+        (matches) => deliver([...takeFirst(), matches])
+      )
+    }
+  }
+  return Object.assign(
+    Subscription.make("@effect/ui/html/mediaQuery", query, () => Stream.never),
+    { [mediaQueries.mediaQuery]: declared, [services.direct]: direct }
+  )
+}

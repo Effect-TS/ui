@@ -10,7 +10,7 @@ A frontend library for Effect. Each component is an Elm Architecture program of 
 | `@effect/ui/html/HtmlServerHttp`  | Serving a routed app's pages through `effect/http`                                                                                                                                                                                                  |
 | `@effect/ui/html/MarkdownVite`    | Vite plugin that compiles `.md` files into document modules at build time                                                                                                                                                                           |
 | `@effect/ui/html/MarkdownContent` | TypeScript module types for `*.md` imports compiled by `MarkdownVite`                                                                                                                                                                               |
-| `@effect/ui/html/testing`         | `HtmlLocator`, `HtmlPlay`, `HtmlScene`, `Ssr` (`ssr`), `TestAnimationFrames`, `TestFiles`, `TestGlobalEvents`, `TestImages`                                                                                                                         |
+| `@effect/ui/html/testing`         | `HtmlLocator`, `HtmlPlay`, `HtmlScene`, `Ssr` (`ssr`), `TestAnimationFrames`, `TestFiles`, `TestGlobalEvents`, `TestImages`, `TestMediaQueries`                                                                                                     |
 
 The HTML entries listed above need DOM lib types; `@effect/ui` and `@effect/ui/testing` do not.
 
