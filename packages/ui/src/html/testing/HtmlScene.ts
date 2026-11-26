@@ -85,6 +85,7 @@ import * as defaults from "../internal/defaults.ts"
 import * as fireGlobal from "../internal/fireGlobal.ts"
 import * as frames from "../internal/frames.ts"
 import * as globalEvents from "../internal/globalEvents.ts"
+import * as mediaQueries from "../internal/mediaQueries.ts"
 import * as HtmlLocator from "./HtmlLocator.ts"
 
 /**
@@ -287,6 +288,15 @@ export interface Steps<C extends AnyComponent, Parts = never>
    * is ignored when the handler returns `undefined`.
    */
   frame(delta?: number): this
+  /**
+   * Sends `matches` for CSS media query `query`, as the browser host delivers
+   * the initial match or a `change` to the component's
+   * `HtmlSubscription.onMediaQuery`, and dispatches what its handler returns.
+   *
+   * It throws when nothing listens for `query`, listing the active keys, and
+   * is ignored when the handler returns `undefined`.
+   */
+  mediaQuery(query: string, matches: boolean): this
 
   /** Asserts on the elements `locator` matches in the current view. */
   expect(locator: Locator.Locator): Expect<this>
@@ -606,6 +616,25 @@ class StepsImpl extends internal.SceneCursor {
         )
       }
       const message = handle(handler, delta)
+      if (message === undefined) return state
+      handled = true
+      return engine.dispatch(state, message)
+    }, () => ({ interaction: handled ? "handled" : "ignored" }))
+  }
+  mediaQuery(query: string, matches: boolean): this {
+    let handled = false
+    return this.act("mediaQuery", "message", (state) => {
+      const declared = state.declared().map(mediaQueries.listenerOf).find((
+        declared
+      ) => declared !== undefined && declared.query === query)
+      if (declared === undefined) {
+        throw new Error(
+          `${this.name("mediaQuery")}: nothing listens for media query ${
+            JSON.stringify(query)
+          }; active keys: ${JSON.stringify(state.subscriptions())}`
+        )
+      }
+      const message = handle(declared.handler, matches)
       if (message === undefined) return state
       handled = true
       return engine.dispatch(state, message)

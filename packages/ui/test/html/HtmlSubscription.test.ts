@@ -4,7 +4,8 @@ import { BrowserHost, Html, HtmlSubscription } from "@effect/ui/html"
 import {
   HtmlScene,
   TestAnimationFrames,
-  TestGlobalEvents
+  TestGlobalEvents,
+  TestMediaQueries
 } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -581,5 +582,189 @@ describe("onAnimationFrame", { concurrent: false }, () => {
       }).pipe(Effect.scoped)
       assert.strictEqual(deltas, 2)
       assert.strictEqual(pending.size, 0)
+    }).pipe(Effect.scoped))
+})
+
+const MediaMessage = UiSchema.TaggedEnum({
+  DarkChanged: { matches: Schema.Boolean },
+  MotionChanged: { matches: Schema.Boolean },
+  Stopped: {}
+})
+
+const Media = Html.component({
+  name: "Media",
+  model: Schema.Struct({
+    listening: Schema.Boolean,
+    log: Schema.Array(Schema.String)
+  }),
+  message: MediaMessage
+}).make({
+  init: () => ({ listening: true, log: [] }),
+  update: {
+    DarkChanged: ($, { matches }) => ({
+      ...$.model,
+      log: [...$.model.log, `dark:${matches}`]
+    }),
+    MotionChanged: ($, { matches }) => ({
+      ...$.model,
+      log: [...$.model.log, `motion:${matches}`]
+    }),
+    Stopped: ($) => ({ ...$.model, listening: false })
+  },
+  view: (h, model) => h.output(model.log.join(",")),
+  subscriptions: ({ model }) => [
+    model.listening &&
+    HtmlSubscription.onMediaQuery(
+      "(prefers-color-scheme: dark)",
+      (matches) => MediaMessage.DarkChanged({ matches })
+    ),
+    model.listening &&
+    HtmlSubscription.onMediaQuery(
+      "(prefers-reduced-motion: reduce)",
+      (matches) => matches ? MediaMessage.MotionChanged({ matches }) : undefined
+    )
+  ]
+})
+
+describe("onMediaQuery", { concurrent: false }, () => {
+  it.effect("emits the initial match and changes on TestMediaQueries, sends nothing by default, and drives HtmlScene.mediaQuery", () =>
+    Effect.gen(function*() {
+      assert.deepStrictEqual(
+        [
+          HtmlSubscription.onMediaQuery(
+            "(prefers-color-scheme: dark)",
+            () => undefined
+          ),
+          HtmlSubscription.onMediaQuery("(min-width: 768px)", () => undefined)
+        ].map(({ key }) => key),
+        [
+          `@effect/ui/html/mediaQuery:"(prefers-color-scheme: dark)"`,
+          `@effect/ui/html/mediaQuery:"(min-width: 768px)"`
+        ]
+      )
+
+      // Without a MediaQueries source, nothing emits and nothing fails.
+      yield* Effect.gen(function*() {
+        const silent = yield* TestHost.mount(Media, {})
+        yield* TestHost.settle
+        assert.deepStrictEqual(silent.model()?.log, [])
+      }).pipe(Effect.provide(TestHost.layer()), Effect.scoped)
+
+      // With TestMediaQueries, initial matches emit on start, then each change.
+      yield* Effect.gen(function*() {
+        yield* TestMediaQueries.set("(prefers-color-scheme: dark)", true)
+        const root = yield* TestHost.mount(Media, {})
+        yield* TestHost.settle
+        assert.deepStrictEqual(root.model()?.log, ["dark:true"])
+
+        yield* TestMediaQueries.set("(prefers-color-scheme: dark)", true)
+        yield* TestMediaQueries.set("(prefers-color-scheme: dark)", false)
+        yield* TestMediaQueries.set("(prefers-reduced-motion: reduce)", true)
+        yield* TestHost.settle
+        assert.deepStrictEqual(root.model()?.log, [
+          "dark:true",
+          "dark:false",
+          "motion:true"
+        ])
+
+        root.send(MediaMessage.Stopped())
+        yield* TestHost.settle
+        yield* TestMediaQueries.set("(prefers-color-scheme: dark)", true)
+        yield* TestHost.settle
+        assert.deepStrictEqual(root.model()?.log, [
+          "dark:true",
+          "dark:false",
+          "motion:true"
+        ])
+      }).pipe(
+        Effect.provide(Layer.merge(TestHost.layer(), TestMediaQueries.layer)),
+        Effect.scoped
+      )
+
+      // HtmlScene.mediaQuery dispatches, marks undefined as ignored, and throws for unheard queries.
+      const scene = yield* HtmlScene.make(Media, {})
+      scene
+        .mediaQuery("(prefers-color-scheme: dark)", true)
+        .mediaQuery("(prefers-reduced-motion: reduce)", false).expectIgnored()
+        .mediaQuery("(prefers-reduced-motion: reduce)", true)
+        .expect(Locator.tag("output")).toHaveText("dark:true,motion:true")
+      assert.throws(
+        () => scene.mediaQuery("(min-width: 768px)", true),
+        `HtmlScene.mediaQuery: nothing listens for media query "(min-width: 768px)"; active keys: ["@effect/ui/html/mediaQuery:\\"(prefers-color-scheme: dark)\\"","@effect/ui/html/mediaQuery:\\"(prefers-reduced-motion: reduce)\\""]`
+      )
+    }).pipe(Effect.scoped))
+
+  it.effect("on BrowserHost, emits initial matchMedia state, hears changes, and removes listeners on unmount", () =>
+    Effect.gen(function*() {
+      const lists = new Map<
+        string,
+        {
+          matches: boolean
+          listeners: Set<(event: MediaQueryListEvent) => void>
+        }
+      >()
+      const getList = (query: string) => {
+        let entry = lists.get(query)
+        if (entry === undefined) {
+          entry = { matches: false, listeners: new Set() }
+          lists.set(query, entry)
+        }
+        return entry
+      }
+      const original = window.matchMedia
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          getList("(prefers-color-scheme: dark)").matches = true
+          window.matchMedia = ((query: string) => {
+            const entry = getList(query)
+            return {
+              media: query,
+              get matches() {
+                return entry.matches
+              },
+              addEventListener: (
+                type: string,
+                listener: (event: MediaQueryListEvent) => void
+              ) => {
+                if (type === "change") entry.listeners.add(listener)
+              },
+              removeEventListener: (
+                type: string,
+                listener: (event: MediaQueryListEvent) => void
+              ) => {
+                if (type === "change") entry.listeners.delete(listener)
+              }
+            } as unknown as MediaQueryList
+          }) as typeof window.matchMedia
+        }),
+        () =>
+          Effect.sync(() => {
+            window.matchMedia = original
+          })
+      )
+      const fireChange = (query: string, matches: boolean) => {
+        const entry = getList(query)
+        entry.matches = matches
+        for (const listener of Array.from(entry.listeners)) {
+          listener({ matches, media: query } as MediaQueryListEvent)
+        }
+      }
+      const tick = Effect.promise(() =>
+        new Promise<void>((resolve) => setTimeout(resolve, 30))
+      )
+      const log = yield* Effect.gen(function*() {
+        const app = document.body.appendChild(document.createElement("div"))
+        yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+        const root = yield* BrowserHost.mountEffect(Media, {}, app)
+        yield* tick
+        fireChange("(prefers-color-scheme: dark)", false)
+        yield* tick
+        return root.model()?.log
+      }).pipe(Effect.scoped)
+      assert.deepStrictEqual(log, ["dark:true", "dark:false"])
+      assert.strictEqual(
+        getList("(prefers-color-scheme: dark)").listeners.size,
+        0
+      )
     }).pipe(Effect.scoped))
 })

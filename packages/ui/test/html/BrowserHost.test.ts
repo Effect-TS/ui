@@ -22,8 +22,12 @@ import {
   HtmlServer,
   HtmlSubscription
 } from "@effect/ui/html"
-import { HtmlLocator } from "@effect/ui/html/testing"
-import { TestHost } from "@effect/ui/testing"
+import {
+  HtmlLocator,
+  HtmlScene,
+  TestAnimationFrames
+} from "@effect/ui/html/testing"
+import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, expect, it } from "@effect/vitest"
 import {
   Cause,
@@ -3586,6 +3590,154 @@ describe("BrowserHost", { concurrent: false }, () => {
           "sent 7",
           "submitted true",
           "submitted false"
+        ])
+      }).pipe(Effect.scoped))
+
+    it.effect("HtmlCommand.waitForPaint waits two animation frames and resolves in HtmlScene", () =>
+      Effect.gen(function*() {
+        const PaintMessage = UiSchema.TaggedEnum({
+          Start: {},
+          Painted: {}
+        })
+        const Enter = Html.component({
+          name: "Enter",
+          model: Schema.Literals(["idle", "starting", "shown"]),
+          message: PaintMessage
+        }).make({
+          init: () => "idle" as const,
+          update: {
+            Start: ($) =>
+              $.set("starting" as const).run(
+                HtmlCommand.waitForPaint(() => PaintMessage.Painted())
+              ),
+            Painted: () => "shown" as const
+          },
+          view: (h, phase) =>
+            h.div(
+              h.button.on("click", PaintMessage.Start()).children("Start"),
+              h.p(phase)
+            )
+        })
+
+        const root = yield* TestHost.mount(Enter, {})
+        yield* TestHost.settle
+        root.send(PaintMessage.Start())
+        yield* TestHost.settle
+        assert.strictEqual(root.model(), "starting")
+
+        yield* TestAnimationFrames.fire(16)
+        yield* TestHost.settle
+        assert.strictEqual(root.model(), "starting")
+
+        yield* TestAnimationFrames.fire(16)
+        yield* TestHost.settle
+        assert.strictEqual(root.model(), "shown")
+
+        const scene = yield* HtmlScene.make(Enter, {})
+        scene.click("Start")
+          .expect(Locator.text("starting")).toExist()
+          .resolve(HtmlCommand.WaitForPaint, undefined)
+          .expect(Locator.text("shown")).toExist()
+      }).pipe(
+        Effect.provide(
+          Layer.merge(TestHost.layer(), TestAnimationFrames.layer)
+        ),
+        Effect.scoped
+      ))
+
+    it.effect("HtmlCommand.waitForAnimations skips infinite animations, retries after cancellation, and reports missing refs", () =>
+      Effect.gen(function*() {
+        const Panel = Html.ref("Panel", "div")
+        const MissingPanel = Html.ref("MissingPanel", "div")
+        const AnimMessage = UiSchema.TaggedEnum({
+          Wait: { missing: Schema.Boolean },
+          Settled: { found: Schema.Boolean }
+        })
+        const Drawer = Html.component({
+          name: "Drawer",
+          model: Schema.Array(Schema.String),
+          message: AnimMessage
+        }).make({
+          init: (): ReadonlyArray<string> => [],
+          update: {
+            Wait: ($, { missing }) =>
+              $.run(
+                HtmlCommand.waitForAnimations(
+                  missing ? MissingPanel : Panel,
+                  ({ found }) => AnimMessage.Settled({ found })
+                )
+              ),
+            Settled: ($, { found }) => [...$.model, `settled ${found}`]
+          },
+          view: (h) => h.div.attr("id", "anim-panel").ref(Panel)
+        })
+
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Drawer, {}, app)
+        yield* tick
+
+        root.send(AnimMessage.Wait({ missing: true }))
+        yield* tick
+        assert.deepStrictEqual(root.model(), ["settled false"])
+
+        const panel = app.querySelector("#anim-panel")!
+        const original = panel.getAnimations
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            panel.getAnimations = original
+          })
+        ) // Element without getAnimations settles immediately.
+        ;(panel as { getAnimations?: unknown }).getAnimations = undefined
+        root.send(AnimMessage.Wait({ missing: false }))
+        yield* tick
+        assert.deepStrictEqual(root.model(), ["settled false", "settled true"])
+
+        // Infinite animations are ignored; a cancelled finite animation triggers a retry.
+        const looping = {
+          effect: { getComputedTiming: () => ({ endTime: Infinity }) },
+          finished: new Promise(() => {})
+        } as unknown as Animation
+        let rejectFirst!: () => void
+        let resolveSecond!: () => void
+        const first = {
+          effect: { getComputedTiming: () => ({ endTime: 150 }) },
+          finished: new Promise<void>((_, reject) => {
+            rejectFirst = () =>
+              reject(new DOMException("cancelled", "AbortError"))
+          })
+        } as unknown as Animation
+        const second = {
+          effect: { getComputedTiming: () => ({ endTime: 150 }) },
+          finished: new Promise<void>((resolve) => {
+            resolveSecond = resolve
+          })
+        } as unknown as Animation
+
+        let active: ReadonlyArray<Animation> = [looping, first]
+        const calls: Array<GetAnimationsOptions | undefined> = []
+        panel.getAnimations = (options) => {
+          calls.push(options)
+          return [...active]
+        }
+
+        root.send(AnimMessage.Wait({ missing: false }))
+        yield* tick
+        assert.deepStrictEqual(calls, [{ subtree: true }])
+        assert.strictEqual(root.model()?.length, 2)
+
+        // Cancel the first animation and replace it with the second.
+        active = [looping, second]
+        rejectFirst()
+        yield* tick
+        assert.strictEqual(calls.length, 2)
+        assert.strictEqual(root.model()?.length, 2)
+
+        resolveSecond()
+        yield* tick
+        assert.deepStrictEqual(root.model(), [
+          "settled false",
+          "settled true",
+          "settled true"
         ])
       }).pipe(Effect.scoped))
   })

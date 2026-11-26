@@ -3,13 +3,13 @@
  * `onDocument` for a game's arrow keys or a press outside a popup,
  * `shortcuts` for a table of keyboard shortcuts, `onCustomEvent` for a
  * `CustomEvent` dispatched on the document, `onWindow` for the window's
- * focus, and `onAnimationFrame` for animation.
+ * focus, `onAnimationFrame` for animation, and `onMediaQuery` for CSS media
+ * queries.
  *
- * Their sources are the `GlobalEvents` and `AnimationFrames` services,
- * which `BrowserHost.layer` provides. Nothing listens on the server, and a
- * test fires events and frames with `HtmlScene`, or with
- * `TestGlobalEvents` and `TestAnimationFrames` from
- * `@effect/ui/html/testing`.
+ * Their sources are the `GlobalEvents`, `AnimationFrames` and `MediaQueries`
+ * services, which `BrowserHost.layer` provides. Nothing listens on the server,
+ * and a test drives them with `HtmlScene`, or with `TestGlobalEvents`,
+ * `TestAnimationFrames` and `TestMediaQueries` from `@effect/ui/html/testing`.
  *
  * @stability experimental
  * @since 0.1.0
@@ -26,6 +26,7 @@ import type * as Html from "./Html.ts"
 import * as HtmlKeyboard from "./HtmlKeyboard.ts"
 import * as frames from "./internal/frames.ts"
 import * as globalEvents from "./internal/globalEvents.ts"
+import * as mediaQueries from "./internal/mediaQueries.ts"
 
 /**
  * The events `onDocument` listens for, with their payloads: the same ones
@@ -582,3 +583,141 @@ const attachFrames: NonNullable<services.Direct[typeof services.direct]> = (
 }
 
 const noop = () => {}
+
+/**
+ * The source of CSS media query matches, which `onMediaQuery` listens to.
+ *
+ * **Details**
+ *
+ * `matches` returns whether `query` currently matches, or `undefined` when no
+ * source is available so `onMediaQuery` sends nothing on start. `listen` calls
+ * the listener on each `change` with the new `matches` value, until the
+ * function it returns is called.
+ *
+ * `BrowserHost.layer` provides one over its document's `defaultView.matchMedia`.
+ * The default never fires and sends nothing, so a host without a window, and a
+ * test that doesn't drive media queries, need nothing. A test drives them with
+ * `HtmlScene`'s `mediaQuery`, or with `TestMediaQueries` from
+ * `@effect/ui/html/testing`.
+ *
+ * @stability experimental
+ * @category services
+ * @since 0.1.0
+ */
+export interface MediaQueries {
+  readonly matches: (query: string) => boolean | undefined
+  readonly listen: (
+    query: string,
+    listener: (matches: boolean) => void
+  ) => () => void
+}
+
+/**
+ * The source of CSS media query matches. It defaults to one that never fires
+ * and sends nothing.
+ *
+ * @stability experimental
+ * @category references
+ * @since 0.1.0
+ */
+export const MediaQueries: Context.Reference<MediaQueries> =
+  mediaQueries.MediaQueries
+
+/**
+ * A Subscription that tracks a CSS media query: it sends the current `matches`
+ * value when it starts, then each `change`.
+ *
+ * **When to use**
+ *
+ * Use to react to viewport breakpoints, color-scheme preferences, or
+ * reduced-motion settings in component state.
+ *
+ * **Details**
+ *
+ * `handler` is a message or a function of `matches: boolean`. The source is
+ * `MediaQueries`, which `BrowserHost.layer` provides over
+ * `defaultView.matchMedia`. The server never runs Subscriptions, so `init`
+ * picks the default and the first emit corrects it once mounted in the
+ * browser.
+ *
+ * The key is `@effect/ui/html/mediaQuery` with `query` as its dep, e.g.
+ * `@effect/ui/html/mediaQuery:"(prefers-color-scheme: dark)"`, so different
+ * queries run side by side.
+ *
+ * **Example** (Following the user's color scheme)
+ *
+ * ```ts import.meta.vitest
+ * import { UiSchema } from "@effect/ui"
+ * import { Html, HtmlSubscription } from "@effect/ui/html"
+ * import { HtmlScene } from "@effect/ui/html/testing"
+ * import { Locator } from "@effect/ui/testing"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Message = UiSchema.TaggedEnum({ ChangedScheme: { dark: Schema.Boolean } })
+ *
+ * const Theme = Html.component({
+ *   name: "Theme",
+ *   model: Schema.Boolean,
+ *   message: Message
+ * }).make({
+ *   init: () => false,
+ *   update: { ChangedScheme: (_, { dark }) => dark },
+ *   view: (h, dark) => h.p(dark ? "dark" : "light"),
+ *   subscriptions: () => [
+ *     HtmlSubscription.onMediaQuery(
+ *       "(prefers-color-scheme: dark)",
+ *       (dark) => Message.ChangedScheme({ dark })
+ *     )
+ *   ]
+ * })
+ *
+ * Effect.gen(function*() {
+ *   const s = yield* HtmlScene.make(Theme, {})
+ *   s.mediaQuery("(prefers-color-scheme: dark)", true)
+ *     .expect(Locator.text("dark")).toExist()
+ * }).pipe(Effect.scoped, Effect.runSync)
+ * ```
+ *
+ * @stability experimental
+ * @category subscriptions
+ * @since 0.1.0
+ */
+export const onMediaQuery = <Msg>(
+  query: string,
+  handler: View.Handler<Msg, boolean>
+): Subscription.Subscription<Msg> => {
+  const declared: mediaQueries.Listener = { query, handler }
+  const direct: NonNullable<services.Direct[typeof services.direct]> = (
+    context,
+    emit,
+    fail,
+    enter
+  ) => {
+    const source = Context.get(context, MediaQueries)
+    let sent = false
+    const deliver = (matches: boolean) => {
+      sent = true
+      enter((latest) => {
+        try {
+          const entry = mediaQueries.listenerOf(latest) ?? declared
+          const message = handle(entry.handler, matches)
+          if (message !== undefined) emit(message, noop)
+        } catch (error) {
+          fail(Cause.die(error))
+        }
+      })
+    }
+    return {
+      initial: Effect.sync(() => {
+        if (sent) return
+        const current = source.matches(query)
+        if (current !== undefined) deliver(current)
+      }),
+      close: source.listen(query, deliver)
+    }
+  }
+  return Object.assign(
+    Subscription.make("@effect/ui/html/mediaQuery", query, () => Stream.never),
+    { [mediaQueries.mediaQuery]: declared, [services.direct]: direct }
+  )
+}

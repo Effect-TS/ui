@@ -1,11 +1,13 @@
 /**
- * The Commands that take a rendered element's ref, from `Html.ref` or
- * `Row.at`: `focus`, `blur`, `scrollIntoView`, `measure`, `select`,
- * `requestSubmit` and `showPicker`.
+ * The HTML Commands: element ref operations (`focus`, `blur`,
+ * `scrollIntoView`, `measure`, `select`, `requestSubmit`, `showPicker`,
+ * `waitForAnimations`) and `waitForPaint`.
  *
- * A Command runs once the render the issuing `update` caused is committed,
- * and reaches the element through `Html.Host`, which a test on `TestHost`
- * fakes with `Layer.succeed(Html.Host, ...)`.
+ * A Command runs once the render the issuing `update` caused is committed.
+ * Element operations reach the element through `Html.Host`, which a test on
+ * `TestHost` fakes with `Layer.succeed(Html.Host, ...)`. `waitForAnimations`
+ * reads `getAnimations` on the element directly, and `waitForPaint` waits on
+ * `HtmlSubscription.AnimationFrames`.
  *
  * @stability experimental
  * @since 0.1.0
@@ -17,6 +19,7 @@ import * as Schema from "effect/Schema"
 import * as Command from "../Command.ts"
 import * as Renderer from "../Renderer.ts"
 import * as Html from "./Html.ts"
+import * as frames from "./internal/frames.ts"
 
 /**
  * What `focus`, `blur`, `scrollIntoView` and `select` report: whether the
@@ -407,3 +410,231 @@ export const showPicker = <N extends HTMLInputElement | HTMLSelectElement, Msg>(
   f: (result: Opened) => Msg
 ): Command.Mapped<Command.Issued<Opened, never, Opened, "Effect">, Msg> =>
   Command.map(ShowPicker.make({ ref }), f)
+
+/**
+ * The Command behind `waitForPaint`, for a story's
+ * `.resolve(HtmlCommand.WaitForPaint, undefined)`.
+ *
+ * @stability experimental
+ * @category commands
+ * @since 0.1.0
+ */
+export const WaitForPaint: Command.Factory<{}, void> = Command.make(
+  "HtmlCommand.waitForPaint",
+  { args: {} },
+  () =>
+    frames.AnimationFrames.use((source) =>
+      Effect.callback<void>((resume) => {
+        let remaining = 2
+        let off: (() => void) | undefined
+        off = source.listen(() => {
+          remaining -= 1
+          if (remaining <= 0) {
+            off?.()
+            resume(Effect.void)
+          }
+        })
+        if (remaining <= 0) off()
+        return Effect.sync(() => {
+          if (remaining > 0) {
+            remaining = 0
+            off?.()
+          }
+        })
+      })
+    )
+)
+
+/**
+ * Waits until the committed render has painted, then sends `f`'s message.
+ *
+ * **When to use**
+ *
+ * Use when an enter transition needs the from-state (such as a
+ * `data-starting-style` attribute) to paint before `update` applies the
+ * to-state. Layout reads like `measure` and `scrollIntoView` already run after
+ * commit and do not need this.
+ *
+ * **Details**
+ *
+ * Like every Command, this starts after the render commit, then waits two
+ * frames on `HtmlSubscription.AnimationFrames`: the renderer flushes in a
+ * microtask rather than inside `requestAnimationFrame`, so the first frame
+ * arrives before the commit's paint.
+ *
+ * **Gotchas**
+ *
+ * The default `HtmlSubscription.AnimationFrames` never fires. A whole-app test
+ * provides `TestAnimationFrames.layer` and fires two frames; a `Story` or
+ * `HtmlScene` resolves the Command with
+ * `.resolve(HtmlCommand.WaitForPaint, undefined)`.
+ *
+ * **Example** (Triggering an enter transition after paint)
+ *
+ * ```ts
+ * import { HtmlCommand } from "@effect/ui/html"
+ * import { UiSchema } from "@effect/ui"
+ *
+ * const Message = UiSchema.TaggedEnum({ Opened: {}, Painted: {} })
+ *
+ * const command = HtmlCommand.waitForPaint(() => Message.Painted())
+ * ```
+ *
+ * @stability experimental
+ * @category commands
+ * @since 0.1.0
+ */
+export const waitForPaint = <Msg>(
+  f: () => Msg
+): Command.Mapped<Command.Issued<void, never, void, "Effect">, Msg> =>
+  Command.map(WaitForPaint.make({}), f)
+
+const finite = (animation: Animation): boolean => {
+  const end = animation.effect?.getComputedTiming().endTime
+  return typeof end === "number" && Number.isFinite(end)
+}
+
+const waitForElementAnimations = (
+  element: globalThis.Element
+): Effect.Effect<Found> =>
+  Effect.callback((resume) => {
+    if (typeof element.getAnimations !== "function") {
+      resume(Effect.succeed({ found: true }))
+      return
+    }
+    let stopped = false
+    let cancelNext: (() => void) | undefined
+    const schedule = (f: () => void) => {
+      const view = element.ownerDocument?.defaultView ?? null
+      if (view !== null && typeof view.requestAnimationFrame === "function") {
+        const id = view.requestAnimationFrame(f)
+        cancelNext = () => view.cancelAnimationFrame(id)
+      } else {
+        const id = setTimeout(f, 0)
+        cancelNext = () => clearTimeout(id)
+      }
+    }
+    const check = () => {
+      if (stopped) return
+      if (element.isConnected === false) {
+        resume(Effect.succeed({ found: true }))
+        return
+      }
+      const running = element.getAnimations({ subtree: true }).filter(finite)
+      if (running.length === 0) {
+        resume(Effect.succeed({ found: true }))
+        return
+      }
+      Promise.all(running.map((animation) => animation.finished)).then(
+        () => {
+          if (!stopped) resume(Effect.succeed({ found: true }))
+        },
+        () => {
+          if (stopped) return
+          if (element.isConnected === false) {
+            resume(Effect.succeed({ found: true }))
+            return
+          }
+          schedule(() => {
+            cancelNext = undefined
+            check()
+          })
+        }
+      )
+    }
+    check()
+    return Effect.sync(() => {
+      stopped = true
+      cancelNext?.()
+      cancelNext = undefined
+    })
+  })
+
+/**
+ * The Command behind `waitForAnimations`, for a story's
+ * `.resolve(HtmlCommand.WaitForAnimations, { found })`.
+ *
+ * @stability experimental
+ * @category commands
+ * @since 0.1.0
+ */
+export const WaitForAnimations: Command.Factory<
+  { readonly ref: Renderer.Ref<any> },
+  Found
+> = Command.make(
+  "HtmlCommand.waitForAnimations",
+  { args: { ref: Renderer.Ref } },
+  ({ ref }) =>
+    Renderer.Refs.use((refs) =>
+      Effect.flatMap(refs.lookup(ref), (node) =>
+        Option.isNone(node)
+          ? Effect.succeed<Found>({ found: false })
+          : waitForElementAnimations(node.value as globalThis.Element))
+    )
+)
+
+/**
+ * Waits until all finite CSS animations and transitions on the element `ref`
+ * names and its subtree have finished, then sends `f`'s message.
+ *
+ * **When to use**
+ *
+ * Use to keep an exiting element mounted until its exit transition finishes,
+ * then remove it in `update`.
+ *
+ * **Details**
+ *
+ * After commit, it looks up `ref` and awaits `.finished` on every finite
+ * animation returned by `element.getAnimations({ subtree: true })`. Infinite
+ * animations (such as spinners) are skipped. If an animation is cancelled or
+ * replaced, it collects the animations again and keeps waiting while the
+ * element remains connected. A ref that isn't rendered gives `{ found: false }`,
+ * and an element without `getAnimations` counts as settled.
+ *
+ * **Example** (Keeping a panel mounted during its exit animation)
+ *
+ * ```ts
+ * import { Html, HtmlCommand } from "@effect/ui/html"
+ * import { UiSchema } from "@effect/ui"
+ * import { Schema } from "effect"
+ *
+ * const Panel = Html.ref("Panel", "div")
+ * const Message = UiSchema.TaggedEnum({
+ *   Opened: {},
+ *   Closed: {},
+ *   ExitSettled: {}
+ * })
+ *
+ * const Drawer = Html.component({
+ *   name: "Drawer",
+ *   model: Schema.Literals(["closed", "open", "closing"]),
+ *   message: Message
+ * }).make({
+ *   init: () => "closed" as const,
+ *   update: {
+ *     Opened: () => "open" as const,
+ *     Closed: ($) =>
+ *       $.model === "open"
+ *         ? $.set("closing" as const).run(
+ *           HtmlCommand.waitForAnimations(Panel, () => Message.ExitSettled())
+ *         )
+ *         : $.model,
+ *     // Ignore a stale settle if the user reopened while closing.
+ *     ExitSettled: ($) => $.model === "closing" ? "closed" as const : $.model
+ *   },
+ *   view: (h, phase) =>
+ *     phase === "closed"
+ *       ? h.div()
+ *       : h.div.ref(Panel).attr("data-ending-style", phase === "closing" ? "" : undefined)
+ * })
+ * ```
+ *
+ * @stability experimental
+ * @category commands
+ * @since 0.1.0
+ */
+export const waitForAnimations = <N extends globalThis.Element, Msg>(
+  ref: Renderer.Ref<N>,
+  f: (result: Found) => Msg
+): Command.Mapped<Command.Issued<Found, never, Found, "Effect">, Msg> =>
+  Command.map(WaitForAnimations.make({ ref }), f)

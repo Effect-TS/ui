@@ -7,6 +7,7 @@ import * as files from "./files.ts"
 import * as frames from "./frames.ts"
 import * as globalEvents from "./globalEvents.ts"
 import * as images from "./images.ts"
+import * as mediaQueries from "./mediaQueries.ts"
 import { payloadOf } from "./payload.ts"
 
 const signals = (document: Document) => {
@@ -83,6 +84,27 @@ const framesOf = (document: Document): HtmlSubscription.AnimationFrames => {
   }
 }
 
+const mediaQueriesOf = (
+  document: Document
+): HtmlSubscription.MediaQueries => {
+  const view = document.defaultView
+  return {
+    matches: (query) =>
+      view === null || typeof view.matchMedia !== "function"
+        ? undefined
+        : view.matchMedia(query).matches,
+    listen: (query, listener) => {
+      if (view === null || typeof view.matchMedia !== "function") {
+        return () => {}
+      }
+      const list = view.matchMedia(query)
+      const onChange = (event: MediaQueryListEvent) => listener(event.matches)
+      list.addEventListener("change", onChange)
+      return () => list.removeEventListener("change", onChange)
+    }
+  }
+}
+
 /** @internal */
 export const make = (
   document: Document,
@@ -97,6 +119,7 @@ export const make = (
         Context.add(queryCore.Connectivity, signal.connectivity),
         Context.add(globalEvents.GlobalEvents, globalEventsOf(document, held)),
         Context.add(frames.AnimationFrames, framesOf(document)),
+        Context.add(mediaQueries.MediaQueries, mediaQueriesOf(document)),
         Context.add(images.Images, {
           load: (source) => images.loader!(document, source)
         }),
