@@ -1657,10 +1657,16 @@ export const Select = Html.component({
           "data-placeholder": flag(!filled)
         })
         .disabled(disabled)
-        .on("mousedown", ({ button, pointerType }) =>
-          button === 0 && pointerType !== "touch"
-            ? SelectMessage.PressedTrigger({ pointerType })
-            : undefined)
+        .on(
+          "mousedown",
+          ({ button, pointerType }) =>
+            button === 0 && pointerType !== "touch"
+              ? SelectMessage.PressedTrigger({ pointerType })
+              : undefined,
+          // The opening press keeps focus in the popup: the default focus
+          // would land on the trigger and dismiss an aligned popup.
+          { preventDefault: !open }
+        )
         .on("mouseup", SelectMessage.ReleasedTrigger())
         .on("click", ({ pointerType }) =>
           pointerType === "" || pointerType === "touch"
