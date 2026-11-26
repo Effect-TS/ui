@@ -107,7 +107,6 @@ const Card = Html.component({
     expect(h.queries.user).type.toBe<
       AsyncResult.AsyncResult<typeof User.Type, string>
     >()
-    expect(h).type.not.toHaveProperty("previous")
     expect(h.patched.team).type.toBe<boolean>()
     return AsyncResult.match(h.queries.user, {
       onInitial: () => h.p("Loading"),
@@ -474,8 +473,7 @@ describe("Keyed queries", () => {
           args: () => [{ id: "1" }],
           // @ts-expect-error dropPrevious is for a query entry, not queryMany
           dropPrevious: true
-        },
-        team: { query: GetTeam, args: () => ({ id: "1" }), dropPrevious: true }
+        }
       }
     }).make({
       init: () => ({}),

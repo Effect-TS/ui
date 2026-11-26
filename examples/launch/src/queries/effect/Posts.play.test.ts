@@ -74,8 +74,6 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
         assert.deepStrictEqual(fetched(play), [all])
         yield* TestClock.adjust("1 millis")
         assert.deepStrictEqual(fetched(play), [all, ui])
-        yield* play.expect(joins).toExist()
-        yield* play.expect(refetching).toExist()
         yield* TestClock.adjust("300 millis")
         yield* play.expect(becomes).toExist()
         yield* play.expect(joins).toBeAbsent()

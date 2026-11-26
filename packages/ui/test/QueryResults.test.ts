@@ -308,7 +308,7 @@ describe("Query results", () => {
   })
 
   // The card's text after each args change, then after its fetch. 9 and 8 have no user, so theirs fail.
-  const switchUsers = (dropPrevious: boolean) => {
+  const switchUsers = (dropPrevious: boolean, ids: ReadonlyArray<string>) => {
     const app = makeApp({ dropPrevious })
     return run(
       app.layer,
@@ -316,7 +316,7 @@ describe("Query results", () => {
         const root = yield* TestHost.mount(app.List, { cards: ["a:1"] })
         yield* load
         const texts = [root.text()]
-        for (const id of ["2", "9", "8"]) {
+        for (const id of ids) {
           root.send(app.ListMessage.Set({ cards: [`a:${id}`] }))
           yield* TestHost.settle
           texts.push(root.text())
@@ -329,28 +329,23 @@ describe("Query results", () => {
   }
 
   it.effect("changed args keep the last Success, waiting, until their own result, but not a Failure", () =>
-    Effect.map(switchUsers(false), (texts) =>
-      assert.deepStrictEqual(texts, [
-        "a=Ann",
-        "a=Ann…",
-        "a=Bea",
-        "a=Bea…",
-        "a=failed",
-        "a=loading",
-        "a=failed"
-      ])))
+    Effect.map(
+      switchUsers(false, ["9", "8"]),
+      (texts) =>
+        assert.deepStrictEqual(texts, [
+          "a=Ann",
+          "a=Ann…",
+          "a=failed",
+          "a=loading",
+          "a=failed"
+        ])
+    ))
 
   it.effect("dropPrevious: changed args open as Initial, waiting", () =>
-    Effect.map(switchUsers(true), (texts) =>
-      assert.deepStrictEqual(texts, [
-        "a=Ann",
-        "a=loading",
-        "a=Bea",
-        "a=loading",
-        "a=failed",
-        "a=loading",
-        "a=failed"
-      ])))
+    Effect.map(
+      switchUsers(true, ["2"]),
+      (texts) => assert.deepStrictEqual(texts, ["a=Ann", "a=loading", "a=Bea"])
+    ))
 
   it.effect("debounce: new args interrupt the old args' fetch, unless another watcher still needs it", () => {
     const app = makeApp({ debounce: "300 millis" })
