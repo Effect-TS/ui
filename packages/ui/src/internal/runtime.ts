@@ -305,7 +305,7 @@ interface Options {
   readonly head?: boolean | undefined
   readonly adoptionHead?: boolean | undefined
   readonly scheduler?: Scheduler.Scheduler | undefined
-  readonly onEmit?: ((event: any) => void) | undefined
+  readonly onEmit?: Kernel.Tree["onEmit"]
 }
 
 const makeCell = (

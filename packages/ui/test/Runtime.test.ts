@@ -6677,14 +6677,14 @@ describe("Runtime", () => {
         })
         assert.strictEqual(Locator.textOf(app), "down")
         assert.isUndefined(root.model())
-        const entries = testHost.log.entries().filter((entry) =>
-          "path" in entry && entry.path === "/Emitter"
+        assert.deepStrictEqual(
+          tags({ log: testHost.log.entries }, "/Emitter").slice(-2),
+          ["Failed", "Unmounted"]
         )
-        assert.deepStrictEqual(entries.slice(-2).map((entry) => entry._tag), [
-          "Failed",
-          "Unmounted"
-        ])
-        assert.strictEqual((entries.at(-2) as MessageLog.Failed).in, "onEmit")
+        const failed = testHost.log.entries().find((entry) =>
+          entry._tag === "Failed"
+        ) as MessageLog.Failed
+        assert.strictEqual(failed.in, "onEmit")
       })))
   })
 })
