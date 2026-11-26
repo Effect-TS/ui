@@ -88,6 +88,33 @@ describe("DateField", () => {
       }
     }))
 
+  it.effect("reads back the text it displays, including a locale suffix and early years", () =>
+    Effect.gen(function*() {
+      const scene = yield* HtmlScene.make(
+        DateField,
+        { value: utc("2026-11-26"), locale: "bg" },
+        standIn
+      )
+      assert.strictEqual(text(scene), "26.11.2026 г.")
+      scene.type(input, "27.11.2026 г.")
+      scene.blur(input).emitted(committed(utc("2026-11-27")))
+
+      scene.props({ value: utc("2026-11-26"), locale: "ky" })
+      assert.strictEqual(text(scene), "2026-26-11")
+      scene.type(input, "2026-27-11")
+      scene.blur(input).emitted(committed(utc("2026-11-27")))
+
+      scene.props({ value: utc("0007-11-26"), locale: "en-GB" })
+      assert.strictEqual(text(scene), "26/11/0007")
+      scene.type(input, "27/11/0007")
+      scene.blur(input).emitted(committed(utc("0007-11-27")))
+
+      scene.props({ value: utc("0000-11-26"), locale: "en-GB" })
+      assert.strictEqual(text(scene), "26/11/0000")
+      scene.blur(input)
+      quiet(scene)
+    }))
+
   it.effect("commits null when cleared and keeps quiet on unchanged blur", () =>
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(

@@ -14,10 +14,11 @@
  * | `input` | `<input>`, the editable date field     |
  *
  * `input` takes the consumer's `<input>` builder and returns it, so you can
- * chain classes, attributes and handlers. When `name` is set, `input` wraps
- * the element and a hidden `<input type="hidden">` in a `<span style="display:contents">`
- * when built, so the form submits the ISO date (`YYYY-MM-DD`) without affecting
- * layout.
+ * chain classes, attributes and handlers. When built, `input` wraps the
+ * element in a `<span style="display:contents">`, which also holds a hidden
+ * `<input type="hidden">` when `name` is set, so the form submits the ISO date
+ * (`YYYY-MM-DD`) without affecting layout, and setting `name` mid-edit keeps
+ * focus.
  *
  * The parts also return `value` (normalized `DateTime.Utc | null`),
  * `inputValue` (the text the input currently shows), `pattern` (the locale's
@@ -64,11 +65,12 @@
  * `Committed` carries `{ date: DateTime.Utc | null }` when the user finishes
  * editing on blur or Enter and the parsed date differs from the current
  * normalized `value`. Parsing accepts the locale's numeric order (derived from
- * `Intl.DateTimeFormat#formatToParts`, with 4-digit years) and ISO
- * `YYYY-MM-DD`, rejecting calendar dates that do not exist (such as
- * `31/02/2026`). Empty or whitespace-only text commits `null`. Text that does
- * not parse commits nothing and reverts to the current value's formatted text
- * on blur.
+ * `Intl.DateTimeFormat#formatToParts`, with 4-digit years and the locale's
+ * optional suffix, such as Bulgarian `г.`) and ISO `YYYY-MM-DD`, rejecting
+ * calendar dates that do not exist (such as `31/02/2026`). Years display with
+ * 4 digits, so the shown text always parses back. Empty or whitespace-only text
+ * commits `null`. Text that does not parse commits nothing and reverts to the
+ * current value's formatted text on blur.
  *
  * **Forms**
  *
@@ -252,8 +254,10 @@ type DatePart = "year" | "month" | "day"
 
 interface LocaleInfo {
   readonly formatter: Intl.DateTimeFormat
+  readonly year: Intl.NumberFormat
   readonly order: ReadonlyArray<DatePart>
   readonly pattern: string
+  readonly suffix: string
 }
 
 const formatControls = /\p{Cf}/gu
@@ -278,15 +282,25 @@ const localeOf = (locale: LocaleOption): LocaleInfo =>
     )
     const order: Array<DatePart> = []
     let pattern = ""
+    let suffix = ""
     for (const { type, value } of formatter.formatToParts(sampleDate)) {
       if (type === "year" || type === "month" || type === "day") {
         order.push(type)
         pattern += patternOf[type]
+        suffix = ""
       } else if (type === "literal") {
-        pattern += value.replace(formatControls, "")
+        const literal = value.replace(formatControls, "")
+        pattern += literal
+        suffix += literal
       }
     }
-    return { formatter, order, pattern }
+    // `year: "numeric"` prints year 7 as "7" and year 0 as "1", so pad it.
+    const year = new Intl.NumberFormat(locale as string | Array<string>, {
+      numberingSystem: formatter.resolvedOptions().numberingSystem,
+      minimumIntegerDigits: 4,
+      useGrouping: false
+    })
+    return { formatter, year, order, pattern, suffix: suffix.trim() }
   })
 
 const normalize = (value: DateTime.DateTime | null): DateTime.Utc | null =>
@@ -295,8 +309,15 @@ const normalize = (value: DateTime.DateTime | null): DateTime.Utc | null =>
 const formatDate = (
   value: DateTime.Utc | null,
   locale: LocaleOption
-): string =>
-  value === null ? "" : DateTime.formatIntl(value, localeOf(locale).formatter)
+): string => {
+  if (value === null) return ""
+  const { formatter, year } = localeOf(locale)
+  return formatter.formatToParts(DateTime.toDateUtc(value)).map((part) =>
+    part.type === "year"
+      ? year.format(DateTime.getPartUtc(value, "year"))
+      : part.value
+  ).join("")
+}
 
 // `DateTime.make` rolls an out-of-range month or day over, so a date that
 // doesn't read back as the same parts doesn't exist.
@@ -313,26 +334,40 @@ const makeDate = (
     : null
 }
 
-const parseDate = (
+const parseLocaleDate = (
   text: string,
   locale: LocaleOption
 ): DateTime.Utc | null => {
-  const iso = isoDate.exec(text)
-  if (iso !== null) {
-    return makeDate(Number(iso[1]), Number(iso[2]), Number(iso[3]))
-  }
-  const match = numericDate.exec(text)
+  const { order, suffix } = localeOf(locale)
+  const match = numericDate.exec(
+    suffix !== "" && text.endsWith(suffix)
+      ? text.slice(0, -suffix.length).trimEnd()
+      : text
+  )
   if (match === null || (match[5] !== undefined && match[2] !== ".")) {
     return null
   }
   const tokens = [match[1]!, match[3]!, match[4]!]
   const by = {} as Record<DatePart, string>
-  localeOf(locale).order.forEach((part, i) => {
+  order.forEach((part, i) => {
     by[part] = tokens[i]!
   })
   return by.year.length !== 4 || by.month.length > 2 || by.day.length > 2
     ? null
     : makeDate(Number(by.year), Number(by.month), Number(by.day))
+}
+
+// The locale's order goes first, since some locales print `yyyy-dd-mm`.
+const parseDate = (
+  text: string,
+  locale: LocaleOption
+): DateTime.Utc | null => {
+  const date = parseLocaleDate(text, locale)
+  if (date !== null) return date
+  const iso = isoDate.exec(text)
+  return iso === null
+    ? null
+    : makeDate(Number(iso[1]), Number(iso[2]), Number(iso[3]))
 }
 
 const isLocked = (props: DateFieldProps): boolean =>
@@ -465,12 +500,9 @@ export const DateField = Html.component({
               ? DateFieldMessage.PressedEnter()
               : undefined)
           .forward((node) => {
-            const decorated = defaults(node, textInputDefaults)
-            return hidden === undefined
-              ? decorated
-              : new Html.Element<DateFieldMessage>("span")
-                .attr("style", "display:contents")
-                .children(decorated, hidden)
+            return new Html.Element<DateFieldMessage>("span")
+              .attr("style", "display:contents")
+              .children(defaults(node, textInputDefaults), hidden)
           }))
     }
   }
