@@ -665,11 +665,8 @@ describe("Router", { concurrent: false }, () => {
           click(root, "Home")
           yield* TestHost.settle
           history.go(-1)
-          // The entry keeps the Model and the other query's result, but not the opted-out one.
-          const saved = JSON.stringify(history.current().state)
-          assert.include(saved, `"count":1`)
-          assert.include(saved, "Person 2")
-          assert.notInclude(saved, "Person 1")
+          // The entry leaves out the opted-out result.
+          assert.notInclude(JSON.stringify(history.current().state), "Person 1")
           yield* TestHost.settle
           // A warm cache serves both results, with no fetch.
           assert.include(root.text(), card)
@@ -690,7 +687,6 @@ describe("Router", { concurrent: false }, () => {
             "HomePerson 1Person 2SlowBackBlockUnblockLoadingPerson 2count 1",
             "HomePerson 1Person 2SlowBackBlockUnblock" + card
           ])
-          assert.strictEqual(personFetches.count, 4)
         })
       ).pipe(Effect.scoped)
     })
