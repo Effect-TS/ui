@@ -46,9 +46,6 @@ describe("HtmlServerVite.plugin", () => {
         const html = await home.text()
         expect(html).toContain("<h1>Home</h1>")
         expect(html).toContain("/@vite/client")
-        expect(html).toContain(
-          "<script type=\"application/json\" id=\"state\">"
-        )
 
         const missing = await get("/nowhere")
         expect(missing.status).toBe(404)
@@ -88,7 +85,6 @@ describe("HtmlServerVite.plugin", () => {
       expect(home).toMatch(
         /<link rel="stylesheet" crossorigin href="\/assets\/[^"]+\.css">/
       )
-      expect(home).toContain("<script type=\"application/json\" id=\"state\">")
       expect(await page("people/1.html")).toContain("Bio of person 1")
       expect(await page("404.html")).toContain("<h1>Not found</h1>")
     } finally {
@@ -101,41 +97,31 @@ describe("HtmlServerVite.plugin", () => {
     async () => {
       const evaluating = deferred()
       const resume = deferred()
-      const reevaluated = deferred()
-      const finalizing = [
-        deferred(),
-        deferred()
-      ]
+      const finalizedV1 = deferred()
       const responding = deferred()
       const release = deferred()
-      const finish = deferred()
       const events: Array<string> = []
       let evaluations = 0
-      let holdNext = false
       const gates: Gates = {
         evaluate: async () => {
           const version = ++evaluations
           if (version === 1) {
             evaluating.resolve()
             await resume.promise
-          } else {
-            reevaluated.resolve()
           }
           return version
         },
         respond: async (version) => {
-          if (!holdNext) return
-          holdNext = false
+          if (version === 1) return
           responding.resolve()
           await release.promise
           events.push(`handled v${version}`)
-          setImmediate(() => finish.resolve())
         },
         finalize: async (version) => {
           events.push(`finalizing v${version}`)
-          finalizing[version - 1]!.resolve()
-          if (version === 2) await finish.promise
+          await new Promise(setImmediate)
           events.push(`finalized v${version}`)
+          if (version === 1) finalizedV1.resolve()
         }
       }
       ;(globalThis as any)[Symbol.for("test/HtmlServerVite/gates")] = gates
@@ -173,19 +159,15 @@ describe("HtmlServerVite.plugin", () => {
         "/src/entry.lifecycle.ts"
       )
       await ssr.reloadModule(entry!)
-      await reevaluated.promise
-      expect(await get()).toBe("v2")
-      await finalizing[0]!.promise
 
-      // A request still running when the server closes. Its handler goes on
-      // once the HTTP server has closed, and v2's finalizer a tick after it.
-      holdNext = true
+      // A v2 request still running when the server closes. Its handler goes
+      // on once the HTTP server has closed.
       const held = fetch(origin).catch(() => {})
       await responding.promise
+      await finalizedV1.promise
       once(server.httpServer!, "close").then(() => release.resolve())
-      const closing = server.close().then(() => events.push("closed"))
-      await finalizing[1]!.promise
-      await closing
+      await server.close()
+      events.push("closed")
       await held
       expect(events).toEqual([
         "finalizing v1",

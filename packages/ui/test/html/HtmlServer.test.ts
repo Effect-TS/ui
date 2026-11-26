@@ -4082,26 +4082,17 @@ describe("HtmlServer.document", () => {
 
   it("fills an index.html template with the rendered page and its state", () => {
     const template =
-      "<!doctype html><html><head><meta charset=\"utf-8\"></head>" +
+      "<!doctype html><html data-label=\"a>b\"><head><meta charset=\"utf-8\"></head>" +
       "<body><div id=\"app\"><!--app-html--></div>" +
       "<script type=\"module\" src=\"/src/main.ts\"></script></body></html>"
 
     expect(HtmlServer.document(template, rendered)).toBe(
-      "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Home</title></head>" +
+      "<!doctype html><html lang=\"en\" data-label=\"a>b\"><head><meta charset=\"utf-8\"><title>Home</title></head>" +
         "<body><div id=\"app\"><h1>Home</h1></div>" +
         "<script type=\"module\" src=\"/src/main.ts\"></script>" +
         "<script type=\"application/json\" id=\"state\">{\"~static\":true,\"note\":\"\\u003c/script>\"}</script>" +
         "</body></html>"
     )
-  })
-
-  it("adds attributes after the tag name, past quoted >", () => {
-    expect(
-      HtmlServer.document(
-        "<html data-label=\"a>b\"><head></head><body><!--app-html--></body></html>",
-        rendered
-      )
-    ).toMatch(/^<html lang="en" data-label="a>b">/)
   })
 
   it("throws when the template has no app marker", () => {
