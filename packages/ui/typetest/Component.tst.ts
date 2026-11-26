@@ -166,6 +166,33 @@ describe("Component", () => {
       expect<Component.Requirements<typeof C>>().type.toBe<CA | CB>()
     })
 
+    it("keeps requirements when running a Command on a union of steps", () => {
+      type Msg = typeof Message.Type
+      const init = {} as
+        | Component.InitStep<{}, Msg, never>
+        | Component.InitStep<{}, Msg, never, CA>
+      expect(init.run(CB.make())).type.toBe<
+        Component.InitStep<{}, Msg, never, CA | CB>
+      >()
+      const Def = Component.define({
+        name: "C",
+        model: Schema.Struct({}),
+        message: Message
+      })
+      const base = ($: Component.Update<{}, Msg, never, {}>, message: Msg) =>
+        Message.match(message, {
+          X: () => $.set({}),
+          Y: () => $.run(CA.make()),
+          Done: () => $.set({})
+        })
+      const FromUpdate = Def.make({
+        init: () => ({}),
+        update: Def.update(($, message) => base($, message).run(CB.make())),
+        view: (h) => h.el("div")
+      })
+      expect<Component.Requirements<typeof FromUpdate>>().type.toBe<CA | CB>()
+    })
+
     it("covers every view branch", () => {
       const ChildA = Component.define({
         name: "ChildA",

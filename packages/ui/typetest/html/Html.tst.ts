@@ -672,6 +672,13 @@ describe("Html", () => {
     expect<View.Requirements<any>>().type.toBe<any>()
   })
 
+  it("a union of builders requires unknown, not any", () => {
+    const h = {} as Html.H<Msg>
+    const wide = false as boolean
+    const node = (wide ? h.div : h.section)({} as View.Node<Msg, Clock>)
+    expect<View.Requirements<typeof node>>().type.toBe<unknown>()
+  })
+
   it("style accepts typed CSS properties and preserves the element type", () => {
     const div = new Html.Element<
       Msg,

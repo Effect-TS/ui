@@ -1170,7 +1170,7 @@ export class Element<
    *
    * @since 0.1.0
    */
-  children<const C extends ReadonlyArray<View.Input<Msg, any>>>(
+  children<const C extends ReadonlyArray<View.Input<Msg, unknown>>>(
     ...inputs: C
   ): Element<Msg, R | View.Requirements<C[number]>, E, Node, Tag> {
     return View.withContent(this, inputs) as any
@@ -1671,7 +1671,7 @@ export class CustomElementBuilder<
    *
    * @since 0.1.0
    */
-  override children<const C extends ReadonlyArray<View.Input<Msg, any>>>(
+  override children<const C extends ReadonlyArray<View.Input<Msg, unknown>>>(
     ...inputs: C
   ): CustomElement<Msg, R | View.Requirements<C[number]>, P, E, Tag> {
     return View.withContent(this, inputs) as any

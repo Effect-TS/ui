@@ -1858,7 +1858,7 @@ export class ContainerBuilder<
    *
    * @since 0.1.0
    */
-  children<const C extends ReadonlyArray<Input<Msg, any>>>(
+  children<const C extends ReadonlyArray<Input<Msg, unknown>>>(
     ...inputs: C
   ): ContainerBuilder<
     Msg,
@@ -2316,7 +2316,7 @@ class NoTextBuilder<Msg> extends ContainerBuilder<Msg> {
     super(tag)
     this.vocabulary = vocabulary
   }
-  override children<const C extends ReadonlyArray<Input<Msg, any>>>(
+  override children<const C extends ReadonlyArray<Input<Msg, unknown>>>(
     ...inputs: C
   ): ContainerBuilder<Msg, Requirements<C[number]>> {
     return withNoTextContent(this, inputs, this.vocabulary) as any

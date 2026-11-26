@@ -610,7 +610,7 @@ export class LayoutElement<
    *
    * @since 0.1.0
    */
-  children<const C extends ReadonlyArray<NoTextInput<Msg, any>>>(
+  children<const C extends ReadonlyArray<NoTextInput<Msg, unknown>>>(
     ...inputs: C
   ): LayoutElement<
     Msg,
@@ -682,7 +682,7 @@ export class TextElement<
    *
    * @since 0.1.0
    */
-  children<const C extends ReadonlyArray<View.Input<Msg, any>>>(
+  children<const C extends ReadonlyArray<View.Input<Msg, unknown>>>(
     ...inputs: C
   ): TextElement<Msg, R | View.Requirements<C[number]>, E, Node, Tag, Options> {
     return View.withContent(this, inputs) as any
