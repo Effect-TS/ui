@@ -61,6 +61,7 @@ import * as TestClock from "effect/testing/TestClock"
 import type * as Component from "../../Component.ts"
 import * as domHost from "../../internal/domHost.ts"
 import * as hydrateRun from "../../internal/hydrateRun.ts"
+import * as queryCore from "../../internal/queryCore.ts"
 import * as runtime from "../../internal/runtime.ts"
 import * as MessageLog from "../../MessageLog.ts"
 import * as Query from "../../Query.ts"
@@ -540,8 +541,9 @@ export const ssr = <
         }
       }
     })
+    const hydrating = hydrateRun.hydrating(state, HtmlHydrate.adopt)
     const mounted = yield* runtime.mount(component as any, props, container, {
-      hydrate: hydrateRun.hydrating(state, HtmlHydrate.adopt),
+      hydrate: hydrating,
       query: options?.query,
       adoptionHead: true,
       recordEmitted: true
@@ -599,6 +601,7 @@ export const ssr = <
       entry._tag === "Mounted" && entry.adopted
     )
     const adopted = adoptedEntries.map((entry) => entry.path)
+    const shipped = hydrating.shipped()
     for (const path of Object.keys(state)) {
       if (path.startsWith("~")) continue
       const entry = adoptedEntries.find((entry) => entry.path === path)
@@ -607,7 +610,14 @@ export const ssr = <
         continue
       }
       const encoded = yield* Effect.option(
-        runtime.stateCodecOf(entry.component).encode(entry.model, entry.queries)
+        Effect.provideService(
+          runtime.stateCodecOf(entry.component).encode(
+            entry.model,
+            entry.queries
+          ),
+          queryCore.Shipped,
+          shipped
+        )
       )
       const json = encoded._tag === "Some"
         ? JSON.stringify(encoded.value)

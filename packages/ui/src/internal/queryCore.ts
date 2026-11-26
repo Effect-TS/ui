@@ -9,6 +9,7 @@
 import * as Context from "effect/Context"
 import type * as Duration from "effect/Duration"
 import type * as Effect from "effect/Effect"
+import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Query from "../Query.ts"
 import type * as componentQueries from "./queries.ts"
 import type * as queryRun from "./queryRun.ts"
@@ -49,6 +50,7 @@ export interface Loaded extends
     | "internals"
     | "makeSnapshot"
     | "makeSnapshotMap"
+    | "makeShipped"
     | "sameMore"
     | "snapshotData"
     | "snapshotMapData"
@@ -207,6 +209,43 @@ export const Problems: Context.Reference<(problem: Query.Problem.Any) => void> =
   >("@effect/ui/Query/Problems", {
     // oxlint-disable-next-line no-console
     defaultValue: () => (problem) => console.warn(problem.message)
+  })
+
+/**
+ * Looks up a settled Success already shipped in `~query`, by query definition
+ * and args key. Only provided when encoding or decoding page state so history,
+ * the message log and standalone codecs stay self-contained.
+ *
+ * @internal
+ */
+export interface ShippedContext {
+  readonly peek: (
+    def: any,
+    argsKey: string
+  ) => AsyncResult.Success<any, any> | undefined
+  readonly decode: (
+    def: any,
+    argsKey: string
+  ) => Effect.Effect<AsyncResult.Success<any, any>, any>
+}
+
+/**
+ * Per-hydration state over `state["~query"]`, shared between that hydration's
+ * instance decoders, its cache's `decodeRaw`, and held-child history handoffs.
+ *
+ * @internal
+ */
+export interface ShippedHydration {
+  readonly lookup: ShippedContext
+  readonly decodeRaw: (def: any, tuple: any) => unknown
+  readonly inline: (component: unknown, encoded: unknown) => unknown
+  readonly cancelPending: (all: boolean) => void
+}
+
+/** @internal */
+export const Shipped: Context.Reference<ShippedContext | undefined> = Context
+  .Reference<ShippedContext | undefined>("@effect/ui/Query/Shipped", {
+    defaultValue: () => undefined
   })
 
 /** @internal */

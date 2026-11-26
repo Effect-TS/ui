@@ -20,6 +20,7 @@ import { assert, expect, it } from "@effect/vitest"
 import {
   Clock,
   Context,
+  Deferred,
   Duration,
   Effect,
   Exit,
@@ -27,6 +28,7 @@ import {
   Layer,
   Option,
   Schema,
+  SchemaGetter,
   type Scope,
   Stream
 } from "effect"
@@ -2043,7 +2045,7 @@ describe("HtmlServer", { concurrent: false }, () => {
           ["/Page/Group[g]/Item[i]", null],
           ["/Page/Asks[a]", {
             model: null,
-            queries: { text: ["{}", 0, "data", 0, false] }
+            queries: { text: ["{}", 2] }
           }],
           ["~deferred", ["/Page/Off[o]"]],
           ["~status", { "/Page/Slow[s]": "Pending" }],
@@ -3225,11 +3227,11 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       expect(result.html).toContain(
         "<li>Item 1</li><li>failed</li><li>loading</li>"
       )
-      // The result is the settled keys' tuples; the entries ship as ordinary entries of the query.
+      // The result is the settled keys' tuples; Successes reference `~query` and Failures stay inline.
       expect(result.state["/List"]).toEqual({
         model: {},
         queries: {
-          items: [["{\"id\":1}", 0, "Item 1", 0, false], ["{\"id\":404}", 1, [
+          items: [["{\"id\":1}", 2], ["{\"id\":404}", 1, [
             "missing"
           ], null]]
         }
@@ -3677,5 +3679,253 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         expect(rendered.html).toContain("<p>text 1, text 2, text 3</p>")
         expect(renders).toBe(2)
       })
+  )
+
+  it.effect(
+    "ships, encodes and decodes a settled query result once across multiple readers",
+    () =>
+      Effect.gen(function*() {
+        const payload = "unique-shared-note-payload"
+        let fetches = 0
+        let encodes = 0
+        let decodes = 0
+        const NoteBody = Schema.String.pipe(Schema.decode({
+          decode: SchemaGetter.transform((body: string) => {
+            decodes++
+            return body
+          }),
+          encode: SchemaGetter.transform((body: string) => {
+            encodes++
+            return body
+          })
+        }))
+        class GetNote extends Query.Service<GetNote>()("GetNote", {
+          args: { id: Schema.String },
+          success: NoteBody,
+          error: Schema.Never,
+          staleTime: "1 minute"
+        }) {
+          static readonly layer = this.toLayer(() =>
+            Effect.sync(() => {
+              fetches++
+              return payload
+            })
+          )
+        }
+        const Reader = Html.component({
+          name: "Reader",
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          queries: {
+            note: { query: GetNote, args: () => ({ id: "1" }) }
+          }
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) =>
+            h.p(
+              AsyncResult.isSuccess(h.queries.note)
+                ? h.queries.note.value
+                : "loading"
+            )
+        })
+        const Page = Html.component({
+          name: "Page",
+          model: Schema.Struct({}),
+          message: Schema.Never
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) =>
+            h.div(
+              Reader(h, { key: "a", props: {} }),
+              Reader(h, { key: "b", props: {} })
+            )
+        }).pipe(Component.provide(GetNote.layer))
+
+        const rendered = yield* HtmlServer.renderToHtml(Page, {})
+        const serialized = HtmlServer.serializeState(rendered.state)
+        const copies = serialized.split(payload).length - 1
+        const app = yield* container(rendered.html)
+        const served = [...app.querySelectorAll("p")]
+        const root = yield* HtmlHydrate.hydrateEffect(
+          Page,
+          {},
+          app,
+          JSON.parse(serialized)
+        )
+        yield* root.adopted
+
+        const adopted = [...app.querySelectorAll("p")]
+        expect(adopted).toHaveLength(2)
+        expect(adopted[0]).toBe(served[0])
+        expect(adopted[1]).toBe(served[1])
+        expect(adopted.map((node) => node.textContent)).toEqual([
+          payload,
+          payload
+        ])
+        expect(fetches).toBe(1)
+        expect({ copies, encodes, decodes }).toEqual({
+          copies: 1,
+          encodes: 1,
+          decodes: 1
+        })
+      }).pipe(Effect.scoped)
+  )
+
+  it.effect(
+    "adopts readers once when a query's success decoder is async, sharing cache-first decodes and cancelling unjoined ones",
+    () =>
+      Effect.gen(function*() {
+        let gate: Effect.Effect<void> = Effect.void
+        let orphanCancelled = false
+        const decodes: Record<string, number> = {}
+        const AsyncBody = Schema.String.pipe(Schema.decode({
+          decode: SchemaGetter.transformEffect((body: string) =>
+            Effect.suspend(() => {
+              decodes[body] = (decodes[body] ?? 0) + 1
+              if (body === "note-1") return Effect.succeed(body)
+              if (body === "orphan") {
+                return Effect.onInterrupt(
+                  Effect.never,
+                  () =>
+                    Effect.sync(() => {
+                      orphanCancelled = true
+                    })
+                )
+              }
+              return Effect.as(gate, body)
+            })
+          ),
+          encode: SchemaGetter.transform((body: string) => body)
+        }))
+        class GetAsyncNote extends Query.Service<GetAsyncNote>()(
+          "GetAsyncNote",
+          {
+            args: { id: Schema.String },
+            success: AsyncBody,
+            error: Schema.Never,
+            staleTime: "1 minute"
+          }
+        ) {
+          static readonly layer = this.toLayer(({ id }) =>
+            Effect.succeed(`note-${id}`)
+          )
+        }
+        const Reader = Html.component({
+          name: "Reader",
+          props: Schema.Struct({ id: Schema.String }),
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          queries: {
+            note: {
+              query: GetAsyncNote,
+              args: ({ props }) => ({ id: props.id })
+            }
+          }
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) =>
+            h.p(
+              AsyncResult.isSuccess(h.queries.note)
+                ? h.queries.note.value
+                : "loading"
+            )
+        })
+        const Page = Html.component({
+          name: "Page",
+          model: Schema.Struct({}),
+          message: Schema.Never
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) =>
+            h.div(
+              Reader(h, { key: "a", props: { id: "1" } }),
+              Reader(h, { key: "b", props: { id: "2" } })
+            )
+        }).pipe(Component.provide(GetAsyncNote.layer))
+
+        const rendered = yield* HtmlServer.renderToHtml(Page, {})
+        const serialized = HtmlServer.serializeState(rendered.state)
+        expect(serialized.split("note-1").length - 1).toBe(1)
+        expect(serialized.split("note-2").length - 1).toBe(1)
+
+        const parsed = JSON.parse(serialized)
+        parsed["~query"].GetAsyncNote.push(["{\"id\":\"3\"}", 0, "orphan", 0])
+
+        const latch = yield* Deferred.make<void>()
+        gate = Deferred.await(latch)
+        const app = yield* container(rendered.html)
+        const served = [...app.querySelectorAll("p")]
+        const root = yield* HtmlHydrate.hydrateEffect(
+          Page,
+          {},
+          app,
+          parsed
+        ).pipe(Effect.provideService(Query.Problems, () => {}))
+        yield* Deferred.succeed(latch, undefined)
+        yield* root.adopted
+        yield* tick
+
+        const adopted = [...app.querySelectorAll("p")]
+        expect(adopted).toHaveLength(2)
+        expect(adopted[0]).toBe(served[0])
+        expect(adopted[1]).toBe(served[1])
+        expect(adopted.map((node) => node.textContent)).toEqual([
+          "note-1",
+          "note-2"
+        ])
+        expect(decodes).toEqual({ "note-1": 1, "note-2": 1, orphan: 1 })
+        expect(orphanCancelled).toBe(true)
+      }).pipe(Effect.scoped)
+  )
+
+  it.effect(
+    "scopes the ~query decode memo to each hydration execution",
+    () =>
+      Effect.gen(function*() {
+        class GetDate extends Query.Service<GetDate>()("GetDate", {
+          args: {},
+          success: Schema.Date,
+          error: Schema.Never,
+          staleTime: "1 minute"
+        }) {
+          static readonly layer = this.toLayer(() =>
+            Effect.succeed(new Date("2026-01-02T00:00:00.000Z"))
+          )
+        }
+        const seen: Array<Date> = []
+        const Page = Html.component({
+          name: "Page",
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          queries: { when: { query: GetDate, args: () => ({}) } }
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) => {
+            if (!AsyncResult.isSuccess(h.queries.when)) return h.p("loading")
+            seen.push(h.queries.when.value)
+            return h.p(String(h.queries.when.value.getUTCFullYear()))
+          }
+        }).pipe(Component.provide(GetDate.layer))
+
+        const rendered = yield* HtmlServer.renderToHtml(Page, {})
+        const parsed = JSON.parse(HtmlServer.serializeState(rendered.state))
+        const app = yield* container(rendered.html)
+        const mount = HtmlHydrate.hydrateEffect(Page, {}, app, parsed)
+
+        seen.length = 0
+        yield* Effect.scoped(Effect.flatMap(mount, (root) => root.adopted))
+        seen[0]!.setUTCFullYear(1999)
+
+        // Re-executing the same hydration Effect decodes the wire value afresh.
+        app.innerHTML = rendered.html
+        seen.length = 0
+        yield* Effect.scoped(Effect.flatMap(mount, (root) => root.adopted))
+        expect(seen[0]!.getUTCFullYear()).toBe(2026)
+      }).pipe(Effect.scoped)
   )
 })

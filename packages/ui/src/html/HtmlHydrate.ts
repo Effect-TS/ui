@@ -6,7 +6,7 @@
  * @stability experimental
  * @since 0.1.0
  */
-import type * as Effect from "effect/Effect"
+import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import type * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
@@ -690,12 +690,14 @@ export const hydrateEffect = <
   never,
   Exclude<R | RF | RP, Html.Host> | Scope.Scope
 > =>
-  BrowserHost.mountRoot(
-    component as unknown as Component.Any,
-    props,
-    container,
-    options,
-    hydrateRun.hydrating(state, adopt)
+  Effect.suspend(() =>
+    BrowserHost.mountRoot(
+      component as unknown as Component.Any,
+      props,
+      container,
+      options,
+      hydrateRun.hydrating(state, adopt)
+    )
   ) as any
 
 /**

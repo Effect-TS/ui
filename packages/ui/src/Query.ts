@@ -73,6 +73,7 @@ import * as SchemaTransformation from "effect/SchemaTransformation"
 import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import type * as Types from "effect/Types"
+import { runCodec } from "./internal/codecRun.ts"
 import * as componentQueries from "./internal/queries.ts"
 import * as queryCore from "./internal/queryCore.ts"
 import { addListener, NonJsonLeaf } from "./internal/queryCore.ts"
@@ -2104,6 +2105,9 @@ interface ListDef {
 interface QueryCodec {
   readonly encodeSuccess: (value: unknown) => unknown
   readonly decodeSuccess: (encoded: unknown) => unknown
+  readonly decodeSuccessEffect: (
+    encoded: unknown
+  ) => Effect.Effect<unknown, SchemaIssue.Issue>
   readonly encodeError: (error: unknown) => unknown
   readonly decodeError: (encoded: unknown) => unknown
   /** Whether a value is of the `success` Schema's type. */
@@ -2127,6 +2131,7 @@ const makeCodec = (
   return {
     encodeSuccess: Schema.encodeUnknownSync(successJson),
     decodeSuccess: Schema.decodeUnknownSync(successJson),
+    decodeSuccessEffect: SchemaParser.decodeUnknownEffect(successJson),
     encodeError: Schema.encodeUnknownSync(errorJson),
     decodeError: Schema.decodeUnknownSync(errorJson),
     isSuccess: Schema.is(success as Schema.Codec<unknown, unknown>),
@@ -2708,6 +2713,12 @@ interface CacheInternals {
    */
   readonly dehydrate: () => Dehydrated
   /**
+   * Looks up a Success that `dehydrate()` actually emitted into `~query`, by
+   * query definition and args key. Returns `undefined` before `dehydrate()`
+   * runs or for omitted entries.
+   */
+  readonly shipped: queryCore.ShippedContext
+  /**
    * Holds the `~query` payload's entries raw until their query registers.
    * Opens the fetch-free window unless `static`, where every entry has an
    * unknown age instead.
@@ -2718,6 +2729,10 @@ interface CacheInternals {
       readonly static?: boolean | undefined
       /** When the entries arrived, if before this call: they age from then. */
       readonly at?: number | undefined
+      /** Hydration-scoped Success decoder shared with instance snapshot decoding. */
+      readonly decodeSuccess?:
+        | ((def: QueryDef, tuple: RawTuple) => unknown)
+        | undefined
     } | undefined
   ) => void
   /** Closes the fetch-free window: unwatched hydrated Failures go, raw ones included. */
@@ -2900,9 +2915,10 @@ const settledMap = (
  * parameters are the query's `args`, `success` and `error` Schemas, so a walk
  * over the results' AST, such as the log's redaction, reaches what a snapshot
  * holds. On the wire a snapshot is a tuple: `[]` when empty,
- * `[argsKey, 0, value, timestamp, patched]` for a Success, and
- * `[argsKey, 1, [error, ...], [value, timestamp] | null]` for a Failure with
- * its previous Success.
+ * `[argsKey, 0, value, timestamp, patched]` for an inline Success (lists add
+ * `hasMore`), `[argsKey, 1, [error, ...], [value, timestamp] | null]` for a
+ * Failure with its previous Success, and in page state `[argsKey, 2]` (lists
+ * add `hasMore`) to reference an unpatched Success already shipped in `~query`.
  *
  * The args key on the wire is built through the `args` type parameter, so
  * it is the entry's key in page state and its log key under the log's
@@ -2948,6 +2964,18 @@ const snapshotIssue = (def: QueryDef, message: string) =>
     message: "a snapshot of " + quote(def.name) + ": " + message
   })
 
+const isShipped = (
+  ctx: Context.Context<never>,
+  def: QueryDef,
+  argsKey: string,
+  result: Settled
+): boolean => {
+  if (result._tag !== "Success") return false
+  const shipped = Context.get(ctx, queryCore.Shipped)?.peek(def, argsKey)
+  return shipped !== undefined && shipped.value === result.value &&
+    shipped.timestamp === result.timestamp
+}
+
 /** Checks a snapshot against the query's Schemas, the type parameters. */
 const snapshotRun = (def: QueryDef, label: string, decoding: boolean) => {
   const is = isSnapshotOf(def, label)
@@ -2974,10 +3002,18 @@ const snapshotRun = (def: QueryDef, label: string, decoding: boolean) => {
         Effect.all([
           args(data.args, options),
           // A patched value is used as it is: a patch that fails `success` is reported as `PatchInvalid`, and a
-          // check of a query result mustn't throw on it.
+          // check of a query result mustn't throw on it. The value `~query` ships keeps its identity, so it can
+          // be referenced and is shared across readers.
           settledMap(
             result,
-            (u) => data.patched ? Effect.succeed(u) : success(u, options),
+            (u) =>
+              data.patched ? Effect.succeed(u) : Effect.flatMap(
+                Effect.context(),
+                (ctx) =>
+                  isShipped(ctx, def, data.argsKey!, result)
+                    ? Effect.succeed(u)
+                    : success(u, options)
+              ),
             (u) => error(u, options)
           ),
           // A failed load more holds a typed error too, which the message log's form carries.
@@ -3097,6 +3133,34 @@ const snapshotWire = (
     options: SchemaAST.ParseOptions
   ): Effect.Effect<SnapshotImpl, SchemaIssue.Issue> => {
     const [key, tag, payload, fourth, fifth, sixth] = tuple
+    if (tag === 2) {
+      return Effect.flatMap(Effect.context(), (ctx) => {
+        const shipped = Context.get(ctx, queryCore.Shipped)
+        if (shipped === undefined) {
+          return Effect.fail(
+            invalid("the referenced ~query entry wasn't shipped")
+          )
+        }
+        return Effect.flatMap(fromKey(key, options), (args) =>
+          Effect.map(
+            shipped.decode(def, key),
+            (hit) =>
+              new SnapshotImpl({
+                def,
+                label,
+                argsKey: key as string,
+                args,
+                result: hit,
+                patched: false,
+                more: def.list === undefined
+                  ? undefined
+                  : payload === true
+                  ? moreAvailable
+                  : moreEnd
+              })
+          ))
+      })
+    }
     return Effect.map(fromKey(key, options), (args) => {
       const data = { def, label, argsKey: key as string, args }
       if (tag === 0) {
@@ -3157,7 +3221,14 @@ const snapshotWire = (
         Schema.Literal(1),
         Schema.Array(error),
         Schema.NullOr(Schema.Tuple([success, Schema.Number]))
-      ])
+      ]),
+      ...(log
+        ? []
+        : [
+          def.list === undefined
+            ? Schema.Tuple([Schema.String, Schema.Literal(2)])
+            : Schema.Tuple([Schema.String, Schema.Literal(2), Schema.Boolean])
+        ])
     ]),
     decode: (
       tuple: any,
@@ -3178,34 +3249,42 @@ const snapshotWire = (
         : data.more._tag === "Failed"
         ? { Failed: data.more.error }
         : data.more._tag
-      return Effect.map(toKey(data.args, options), (key) => {
-        const tuple: Array<unknown> = result._tag === "Success"
-          ? def.list === undefined
-            ? [key, 0, result.value, result.timestamp, data.patched]
-            : [
-              key,
-              0,
-              result.value,
-              result.timestamp,
-              data.patched,
-              data.more !== undefined && data.more._tag !== "End"
-            ]
-          : [
-            key,
-            1,
-            result.cause.reasons.filter(Cause.isFailReason).map((reason) =>
-              reason.error
-            ),
-            Option.isSome(result.previousSuccess)
-              ? [
-                result.previousSuccess.value.value,
-                result.previousSuccess.value.timestamp
+      return Effect.flatMap(
+        Effect.context(),
+        (ctx) =>
+          Effect.map(toKey(data.args, options), (key) => {
+            const hasMore = data.more !== undefined && data.more._tag !== "End"
+            if (!log && !data.patched && isShipped(ctx, def, key, result)) {
+              return def.list === undefined ? [key, 2] : [key, 2, hasMore]
+            }
+            const tuple: Array<unknown> = result._tag === "Success"
+              ? def.list === undefined
+                ? [key, 0, result.value, result.timestamp, data.patched]
+                : [
+                  key,
+                  0,
+                  result.value,
+                  result.timestamp,
+                  data.patched,
+                  hasMore
+                ]
+              : [
+                key,
+                1,
+                result.cause.reasons.filter(Cause.isFailReason).map((reason) =>
+                  reason.error
+                ),
+                Option.isSome(result.previousSuccess)
+                  ? [
+                    result.previousSuccess.value.value,
+                    result.previousSuccess.value.timestamp
+                  ]
+                  : null
               ]
-              : null
-          ]
-        if (log) tuple.push([result.waiting, more])
-        return tuple
-      })
+            if (log) tuple.push([result.waiting, more])
+            return tuple
+          })
+      )
     }
   }
 }
@@ -3689,6 +3768,166 @@ const parseRaw = (
     if (byKey.size > 0) out.set(name, byKey)
   }
   return out
+}
+
+interface PendingDecode {
+  readonly _tag: "Pending"
+  readonly def: QueryDef
+  readonly fiber: Fiber.Fiber<unknown, SchemaIssue.Issue>
+  waiters: number
+}
+
+type ShippedMemoEntry =
+  | { readonly _tag: "Done"; readonly def: QueryDef; readonly value: unknown }
+  | PendingDecode
+
+/**
+ * Shares decoded `~query` values and pending decodes between instance snapshots
+ * and the cache within one hydration. Inlines references in held child state
+ * before handing it to history.
+ *
+ * @internal
+ */
+export const makeShipped = (
+  input: unknown
+): queryCore.ShippedHydration | undefined => {
+  const parsed = parseRaw(input)
+  if (parsed === undefined) return undefined
+  const memo = new Map<RawTuple, ShippedMemoEntry>()
+  // After adoption, interrupt pending cache decodes that have no instance reader.
+  let swept = false
+
+  const decodeOf = (
+    def: QueryDef,
+    tuple: RawTuple
+  ): Exit.Exit<unknown, SchemaIssue.Issue> | PendingDecode => {
+    const hit = memo.get(tuple)
+    if (hit !== undefined && hit.def === def) {
+      return hit._tag === "Done" ? Exit.succeed(hit.value) : hit
+    }
+    const ran = runCodec(def.codec().decodeSuccessEffect(tuple[2]))
+    if (Exit.isExit(ran)) {
+      if (Exit.isSuccess(ran)) {
+        memo.set(tuple, { _tag: "Done", def, value: ran.value })
+      }
+      return ran
+    }
+    const pending: PendingDecode = {
+      _tag: "Pending",
+      def,
+      fiber: ran,
+      waiters: 0
+    }
+    memo.set(tuple, pending)
+    ran.addObserver((exit) => {
+      if (memo.get(tuple) !== pending) return
+      if (Exit.isSuccess(exit)) {
+        memo.set(tuple, { _tag: "Done", def, value: exit.value })
+      } else memo.delete(tuple)
+    })
+    return pending
+  }
+
+  const cancel = (tuple: RawTuple, pending: PendingDecode): void => {
+    memo.delete(tuple)
+    pending.fiber.interruptUnsafe()
+  }
+
+  const lookup: queryCore.ShippedContext = {
+    peek: (def: QueryDef, argsKey: string) => {
+      const tuple = parsed.get(def.name)?.get(argsKey)
+      if (tuple === undefined || tuple[1] !== 0) return undefined
+      const hit = memo.get(tuple)
+      return hit?._tag === "Done" && hit.def === def
+        ? AsyncResult.success(hit.value, { timestamp: tuple[3] })
+        : undefined
+    },
+    decode: (def: QueryDef, argsKey: string) => {
+      const tuple = parsed.get(def.name)?.get(argsKey)
+      if (tuple === undefined || tuple[1] !== 0) {
+        return Effect.fail(
+          snapshotIssue(def, "the referenced ~query entry wasn't shipped")
+        )
+      }
+      const toResult = (value: unknown) =>
+        AsyncResult.success(value, { timestamp: tuple[3] })
+      const decoded = decodeOf(def, tuple)
+      if (decoded._tag !== "Pending") return Effect.map(decoded, toResult)
+      // Readers share the decode, and the last one to be interrupted interrupts it.
+      return Effect.suspend(() => {
+        decoded.waiters++
+        return Effect.flatMap(
+          Effect.onInterrupt(
+            Fiber.await(decoded.fiber),
+            () =>
+              Effect.sync(() => {
+                if (--decoded.waiters === 0 && memo.get(tuple) === decoded) {
+                  cancel(tuple, decoded)
+                }
+              })
+          ),
+          (exit) => Effect.map(exit, toResult)
+        )
+      })
+    }
+  }
+
+  const decodeRaw = (def: QueryDef, tuple: RawTuple): unknown => {
+    const decoded = decodeOf(def, tuple)
+    if (decoded._tag === "Pending") {
+      if (swept && decoded.waiters === 0) cancel(tuple, decoded)
+      throw new Error("async success decoder")
+    }
+    if (Exit.isFailure(decoded)) throw Cause.squash(decoded.cause)
+    return decoded.value
+  }
+
+  const cancelPending = (all: boolean): void => {
+    swept = true
+    for (const [tuple, entry] of memo) {
+      if (entry._tag === "Pending" && (all || entry.waiters === 0)) {
+        cancel(tuple, entry)
+      }
+    }
+  }
+
+  const inlineTuple = (def: QueryDef, tuple: unknown): unknown => {
+    if (
+      !Array.isArray(tuple) || tuple[1] !== 2 || typeof tuple[0] !== "string"
+    ) {
+      return tuple
+    }
+    const raw = parsed.get(def.name)?.get(tuple[0])
+    if (raw === undefined || raw[1] !== 0) return tuple
+    return def.list === undefined
+      ? [raw[0], 0, raw[2], raw[3], false]
+      : [raw[0], 0, raw[2], raw[3], false, tuple[2] === true]
+  }
+
+  const inline = (component: unknown, encoded: unknown): unknown => {
+    const bound = queryCore.boundOf(
+      component as { readonly "~queries": unknown }
+    )
+    const queries = (encoded as { readonly queries?: unknown } | null)?.queries
+    if (
+      bound === undefined || typeof queries !== "object" || queries === null
+    ) {
+      return encoded
+    }
+    const out: Record<string, unknown> = { ...queries }
+    for (const entry of bound.entries) {
+      const def = defOf(entry.query)
+      const field = out[entry.name]
+      out[entry.name] = !entry.keyed
+        ? inlineTuple(def, field)
+        : Array.isArray(field)
+        ? field.map((tuple) => inlineTuple(def, tuple))
+        : field
+    }
+    return { ...(encoded as object), queries: out }
+  }
+
+  return { lookup, decodeRaw, inline, cancelPending }
 }
 
 /**
@@ -5771,6 +6010,7 @@ const buildCache = (
   }
 
   // -- hydration --------------------------------------------------------------
+  let hydrateDecode: ((def: QueryDef, tuple: RawTuple) => unknown) | undefined
   /** Decodes the raw hydrated entries of a query that just registered. */
   function decodeRaw(def: QueryDef): void {
     const byKey = raw.get(def.name)
@@ -5801,9 +6041,12 @@ const buildCache = (
       try {
         const codec = def.codec()
         result = tuple[1] === 0
-          ? AsyncResult.success(codec.decodeSuccess(tuple[2]), {
-            timestamp: tuple[3]
-          })
+          ? AsyncResult.success(
+            hydrateDecode !== undefined
+              ? hydrateDecode(def, tuple)
+              : codec.decodeSuccess(tuple[2]),
+            { timestamp: tuple[3] }
+          )
           : AsyncResult.failure(
             Cause.fromReasons(
               tuple[2].map((error) =>
@@ -5848,6 +6091,7 @@ const buildCache = (
     }
     hydratedAt = hydrateOptions?.at ?? now()
     hydratedStatic = hydrateOptions?.static === true
+    hydrateDecode = hydrateOptions?.decodeSuccess
     windowOpen = !hydratedStatic
     raw = parsed
     // Reads the cache has already seen decode at once.
@@ -5880,8 +6124,12 @@ const buildCache = (
       }
     }
   }
+  let emitted:
+    | Map<string, Map<string, AsyncResult.Success<any, any>>>
+    | undefined
   const dehydrate: CacheInternals["dehydrate"] = () => {
     const out: Dehydrated = {}
+    emitted = new Map()
     for (const entry of allEntries()) {
       if (entry.fetch !== undefined) dropFetch(entry, entry.fetch)
       resumeAll(entry.waiters, Exit.interrupt())
@@ -5916,6 +6164,13 @@ const buildCache = (
             entry.settledAt
           ]
         ;(out[entry.def.name] ??= []).push(tuple)
+        if (result._tag === "Success") {
+          let byKey = emitted.get(entry.def.name)
+          if (byKey === undefined) {
+            emitted.set(entry.def.name, byKey = new Map())
+          }
+          byKey.set(entry.argsKey, result)
+        }
       } catch {
         const logKey = logKeyOf(entry)
         report(
@@ -6062,6 +6317,12 @@ const buildCache = (
     invalidate,
     beginRun,
     dehydrate,
+    shipped: {
+      peek: (def: QueryDef, argsKey: string) =>
+        emitted?.get(def.name)?.get(argsKey),
+      decode: (def: QueryDef) =>
+        Effect.fail(snapshotIssue(def, "no client ~query payload"))
+    },
     hydrate,
     closeWindow,
     isWindowOpen: () => windowOpen,
@@ -6153,6 +6414,7 @@ queryCore.load({
   defOf,
   internals,
   run: queryRun,
+  makeShipped,
   makeSnapshot,
   makeSnapshotMap,
   sameMore,
