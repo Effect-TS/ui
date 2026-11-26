@@ -150,7 +150,7 @@ describe("Dialog", () => {
       assert.strictEqual(partsOf(scene).openMethod, "touch")
       assert.deepInclude(scene.get(portal).props, {
         open: false,
-        popoverOpen: false
+        popoverOpen: true
       })
       scene.mounted(tracked(scene), sent("ShowedPortal"))
       const dialog = scene.get(portal)

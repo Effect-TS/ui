@@ -340,27 +340,35 @@ describe("ToastProvider", { concurrent: false }, () => {
     }))
 })
 
-const AboveMessage = UiSchema.TaggedEnum({ Opened: {} })
+const AboveMessage = UiSchema.TaggedEnum({ Opened: {}, Replaced: {} })
 const Above = Html.component({
   name: "Above",
-  model: Schema.Boolean,
+  model: Schema.Literals(["closed", "open", "replaced"]),
   message: AboveMessage
 }).make({
-  init: () => false,
-  update: { Opened: () => true },
-  view: (h, open) =>
+  init: () => "closed" as const,
+  update: {
+    Opened: () => "open" as const,
+    Replaced: () => "replaced" as const
+  },
+  view: (h, state) =>
     ToastProvider(h, {
       view: (toastProvider) =>
         h.div(
           h.button.attr("id", "open").on("click", AboveMessage.Opened())
-            .children(
-              "Open"
-            ),
+            .children("Open"),
+          h.button.attr("id", "replace").on("click", AboveMessage.Replaced())
+            .children("Replace"),
           toastProvider.viewport(h.div.attr("id", "toasts")),
           Dialog(h, {
-            props: { open },
-            view: (dialog) =>
-              h.div(dialog.portal(h.dialog)?.children(dialog.popup(h.div)))
+            props: { open: state !== "closed" },
+            view: (dialog) => {
+              const portal = dialog.portal(h.dialog)?.children(
+                dialog.popup(h.div)
+              )
+              // A new parent gives the open dialog a new portal node.
+              return state === "replaced" ? h.section(portal) : h.div(portal)
+            }
           })
         )
     })
@@ -390,6 +398,10 @@ describe("ToastProvider above a dialog", { concurrent: false }, () => {
       assert.isTrue(viewport.matches(":popover-open"))
       shown.length = 0
       container.querySelector<HTMLElement>("#open")!.click()
+      yield* tick
+      assert.deepStrictEqual(shown, ["dialog", "div"])
+      shown.length = 0
+      container.querySelector<HTMLElement>("#replace")!.click()
       yield* tick
       assert.deepStrictEqual(shown, ["dialog", "div"])
     }))

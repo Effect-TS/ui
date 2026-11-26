@@ -621,9 +621,10 @@ const closeWatcherOf = (
       .CloseWatcher
     : undefined
 
+// Starts before the commit shows the portal, so it sees what had focus before the browser moves it in.
 const TrackDialog = Mount.makeStream(
   "TrackDialog",
-  { args: TrackDialogArgs },
+  { args: TrackDialogArgs, beforeCommit: true },
   (node: HTMLDialogElement, args, changes) =>
     Stream.callback<DialogMessage>((queue) => {
       const document = node.ownerDocument
@@ -1036,7 +1037,8 @@ const TrackDialog = Mount.makeStream(
       const shows = () => {
         if (showed || signal.aborted) return
         showed = true
-        raiseAbove(node)
+        // TrackDialog can start before the commit shows the portal.
+        queueMicrotask(() => raiseAbove(node))
         opening(active)
       }
 
@@ -1261,9 +1263,11 @@ export const DialogTrigger = <Msg, R = never>(
  * after the consumer's inline style. A handler the consumer adds to a part
  * runs after the dialog's own.
  *
- * On the server and on a host that doesn't run mounts, the dialog renders
- * closed, stays at `data-starting-style` and closes without waiting for a
- * transition.
+ * On a host that doesn't run mounts, such as `TestHost`, an open dialog
+ * shows, so `HtmlPlay` finds it. On the server, an open dialog in place
+ * renders `open`, and one in the top layer stays hidden until the client's
+ * first commit. On both, the dialog stays at `data-starting-style` and
+ * closes without waiting for a transition.
  *
  * History restore saves nothing of it: after Back, forward or a reload it
  * starts from `init`.
@@ -1420,11 +1424,10 @@ export const Dialog = Html.component({
       const identified = b
         .attr("id", portalId)
         .attr("aria-modal", modal === false ? "false" : undefined)
-      // Shown once TrackDialog has started, so it sees what had focus before the browser moves it in.
       // In place, set `open` directly: `.open()` calls `dialog.show()`, which ignores `initialFocus: false`.
       const placed = topLayer
-        ? identified.open(false).popover("manual", model.mounted)
-        : identified.attr("open", flag(model.mounted))
+        ? identified.open(false).popover("manual", shown)
+        : identified.attr("open", flag(shown))
       const dialog = placed
         .forward((node) =>
           node
