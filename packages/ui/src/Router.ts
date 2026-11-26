@@ -1831,7 +1831,8 @@ const build = (
         (route._tag === current.route._tag &&
           routes.print(route) === routes.print(current.route))
       ) {
-        if (hash !== current.hash) {
+        const changed = hash !== current.hash
+        if (changed) {
           // A change to the hash alone: a new entry, and no route change.
           if (replace) replaceNow(current.url + hash, writeState({ index }))
           else {
@@ -1841,9 +1842,9 @@ const build = (
             history.push(current.url + hash, writeState({ index }))
           }
           current = { ...current, hash }
-          options.onHash?.(hash, "push", index)
-        } else if (source === "href" && hash !== "") {
-          // Following the current hash again goes back to it, without a new entry.
+        }
+        // Following the current hash again goes back to it, without a new entry.
+        if (changed || (source === "href" && hash !== "")) {
           options.onHash?.(hash, "push", index)
         }
         // A followed href delivers the location again, with the same sequence: a navigation that is
