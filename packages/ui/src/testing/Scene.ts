@@ -157,6 +157,11 @@ export interface Expect<S> {
    * whitespace collapsed and trimmed, is `text`, or matches it.
    */
   toHaveText(text: string | RegExp): S
+  /**
+   * Asserts that exactly one element matches. Omit `value` to check attribute
+   * presence, pass a string or `RegExp` to check its value, or `false` for absence.
+   */
+  toHaveAttribute(name: string, value?: string | RegExp | false): S
   /** Asserts that exactly `count` elements match. */
   toHaveCount(count: number): S
 }

@@ -64,6 +64,11 @@ export const single = (
     ? check(nodes[0]!, root)
     : `${nodes.length} elements match`
 
+const matches = (value: string, expected: string | RegExp): boolean =>
+  typeof expected === "string"
+    ? value === expected
+    : new RegExp(expected).test(value)
+
 /**
  * The matchers every scene's `expect` has, each made from the arguments the test gave it.
  *
@@ -79,10 +84,26 @@ export const matchers = {
   toHaveText: (expected: string | RegExp): Matcher =>
     single((node) => {
       const text = Locator.textOf(node).replace(/\s+/g, " ").trim()
-      const pass = typeof expected === "string"
-        ? text === expected
-        : expected.test(text)
-      return pass ? undefined : `its text is ${JSON.stringify(text)}`
+      return matches(text, expected)
+        ? undefined
+        : `its text is ${JSON.stringify(text)}`
+    }),
+  toHaveAttribute: (
+    name: string,
+    expected?: string | RegExp | false
+  ): Matcher =>
+    single(({ attrs }) => {
+      const value = attrs !== undefined && Object.hasOwn(attrs, name)
+        ? attrs[name]
+        : undefined
+      const pass = expected === false
+        ? value === undefined
+        : value !== undefined &&
+          (expected === undefined || matches(value, expected))
+      if (pass) return undefined
+      return value === undefined
+        ? `it has no ${JSON.stringify(name)} attribute`
+        : `its ${JSON.stringify(name)} attribute is ${JSON.stringify(value)}`
     })
 }
 

@@ -290,6 +290,7 @@ describe("HtmlScene", () => {
         .expect(log).toHaveText("agree:true|agree:false")
         .expect(HtmlLocator.label("Off")).toBeDisabled()
         .expect(HtmlLocator.label("Agree")).toBeDisabled(false)
+        .expect(HtmlLocator.label("Off")).toHaveAttribute("disabled", "")
         .expect(HtmlLocator.label("Zip code")).toHaveAccessibleName("Zip code")
       const started = HtmlScene.start(Settings, {})
       assert.throws(

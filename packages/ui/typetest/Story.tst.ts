@@ -18,6 +18,7 @@ import {
 declare const counter: Story.Steps<typeof Counter>
 declare const todoItem: Story.Steps<typeof TodoItem>
 declare const searchBox: Story.Steps<typeof SearchBox>
+declare const sceneExpect: Scene.Expect<Scene.Steps<typeof Counter>>
 const increment = CounterMessage.Increment()
 
 describe("Story", () => {
@@ -30,6 +31,17 @@ describe("Story", () => {
     const scene = Scene.start(Counter, { initial: 0 })
     expect(scene).type.not.toHaveProperty("send")
     expect(scene.current).type.not.toHaveProperty("model")
+  })
+
+  it("expect.toHaveAttribute accepts presence, string, RegExp or false, not true", () => {
+    expect(sceneExpect.toHaveAttribute).type.toBeCallableWith("href")
+    expect(sceneExpect.toHaveAttribute).type.toBeCallableWith("href", "/docs")
+    expect(sceneExpect.toHaveAttribute).type.toBeCallableWith("href", /^\/docs/)
+    expect(sceneExpect.toHaveAttribute).type.toBeCallableWith("disabled", false)
+    expect(sceneExpect.toHaveAttribute).type.not.toBeCallableWith(
+      "disabled",
+      true
+    )
   })
 
   it("a scene's child steps take the component, then a key only when the child has one", () => {
