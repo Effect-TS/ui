@@ -1205,10 +1205,10 @@ export interface Options {
   /** Called once per navigation, when it settles. */
   readonly onSettled?: ((settled: Settled) => void) | undefined
   /**
-   * Called for a change to the `#hash` alone within the same route, or an
-   * href to the current `#hash`, with the index of the history entry it moved
-   * to. `onLeave` was called for the entry
-   * it left, so a pop can restore that entry's scroll position.
+   * Called for a change to the `#hash` alone within the same route, with the
+   * index of the history entry it moved to. `onLeave` was called for the entry
+   * it left, so a pop can restore that entry's scroll position. Also called for
+   * an href to the current `#hash`, with the current index and no `onLeave`.
    */
   readonly onHash?:
     | ((hash: string, action: "push" | "pop", index: number) => void)

@@ -746,7 +746,14 @@ describe("BrowserRouter", { concurrent: false }, () => {
   it.effect("a bare # link keeps the # and scrolls to the top", () =>
     Effect.gen(function*() {
       yield* start("/people/2")
-      const top = (yield* container).appendChild(document.createElement("a"))
+      const host = yield* container
+      // A fragment ending in # isn't bare.
+      const trailing = host.appendChild(document.createElement("a"))
+      trailing.setAttribute("href", "#bio#")
+      clickReporting(trailing)
+      yield* tick
+      expect(window.location.hash).toBe("#bio#")
+      const top = host.appendChild(document.createElement("a"))
       top.setAttribute("href", "#")
       window.scrollTo(0, 1500)
       expect(clickReporting(top)).toBe(true)

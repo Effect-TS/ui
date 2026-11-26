@@ -213,7 +213,7 @@ const make = (
 
     /** A URL's `#hash`, keeping a bare `#` that `hash` reports as empty. */
     const hashOf = (url: URL | Location) =>
-      url.href.endsWith("#") ? "#" : url.hash
+      url.hash || (url.href.endsWith("#") ? "#" : "")
     const currentUrl = () =>
       inFragment
         ? (location.hash === "" ? "#/" : location.hash)
