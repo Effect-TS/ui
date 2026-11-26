@@ -128,6 +128,18 @@ const until = (check: () => boolean) =>
       : Effect.andThen(wait(10), Effect.suspend(loop))
   }).pipe(Effect.timeout("2 seconds"))
 
+// Retries until the call succeeds with a result that passes the check.
+const poll = <A>(effect: Effect.Effect<A>, check: (a: A) => boolean) =>
+  Effect.suspend(function loop(): Effect.Effect<A> {
+    return Effect.flatMap(
+      Effect.exit(effect),
+      (exit) =>
+        exit._tag === "Success" && check(exit.value)
+          ? Effect.succeed(exit.value)
+          : Effect.andThen(wait(10), loop)
+    )
+  }).pipe(Effect.timeout("5 seconds"))
+
 const serveFast = Effect.fnUntraced(function*(port: number, timeout: number) {
   const { routes, server } = Server.make({
     size: 100,
@@ -294,14 +306,22 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "keeps the state of an instance whose entries the ring dropped",
     () =>
       Effect.gen(function*() {
-        const { agent, url } = yield* serve({ port: 47742, size: 12 })
-        yield* open(url, "open", 12)
-        const instances: ReadonlyArray<any> = yield* agent.call(
-          "list_instances"
+        // The page logs more than its ring holds before the server is up.
+        yield* open(DevToolsServer.url({ port: 47742 }), "open", 12)
+        const { agent } = yield* serve({ port: 47742, size: 12 })
+        const instances: ReadonlyArray<any> = yield* poll(
+          agent.call("list_instances"),
+          (instances: ReadonlyArray<any>) =>
+            instances.some((instance) =>
+              instance.path === "/Workspace/Editor[n2]"
+            )
         )
+        const [session] = yield* agent.call("list_sessions")
+        assert.strictEqual(session.app, "Workspace")
         const workspace = instances.find((instance) =>
           instance.path === "/Workspace"
         )
+        assert.isDefined(workspace)
         const state = yield* agent.call("get_state", {
           instance: workspace.instance
         })
