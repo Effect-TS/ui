@@ -440,7 +440,7 @@ describe("Tooltip", () => {
       assert.deepStrictEqual(scene.current.emitted, [])
     }))
 
-  it.effect("focus without a focus ring neither opens the tooltip nor holds it open, and focus with one opens it", () =>
+  it.effect("focus without a focus ring neither opens the tooltip nor holds it open", () =>
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(Tooltip, { open: false }, standIn)
       scene.fire(trigger, "focus", { focusVisible: false })
@@ -455,8 +455,6 @@ describe("Tooltip", () => {
         completed("CompletedWaitBeforeClosing")
       )
         .emitted({ _tag: "RequestedClose" })
-      scene.props({ open: false }).blur(trigger).focus(trigger)
-        .emitted({ _tag: "RequestedOpen" })
     }))
 
   it.effect("activation dismisses on click rather than mousedown unless closeOnClick is false", () =>

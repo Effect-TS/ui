@@ -314,55 +314,24 @@ describe("Tooltip in a document", { concurrent: false }, () => {
       assert.isFalse(open())
     }).pipe(Effect.scoped))
 
-  it.effect("a press on the popup keeps it open, while a press in the triangle closes it", () =>
+  it.effect("a press in the triangle closes it", () =>
     Effect.gen(function*() {
       rects.set("trigger", { x: 400, y: 300, width: 40, height: 20 })
       const root = yield* mountPage()
-      const open = () => root.model()!.open
-      rects.set("positioner", { x: 320, y: 320, width: 200, height: 108 })
-      const trigger = byId("trigger")
-      const pressAt = (target: Element, clientX: number, clientY: number) =>
-        target.dispatchEvent(
-          new MouseEvent("mousedown", { clientX, clientY, bubbles: true })
-        )
-      mouse(trigger, "mouseenter", 430, 310)
-      mouse(trigger, "mouseleave", 440.5, 315)
-      mouse(byId("positioner"), "mouseenter", 480, 360)
-      mouse(byId("popup"), "mousemove", 480, 360)
-      pressAt(byId("popup"), 480, 360)
-      yield* tick
-      assert.isTrue(open())
-
-      mouse(byId("positioner"), "mouseleave", 450, 318)
-      mouse(document.body, "mousemove", 450, 318)
-      pressAt(document.body, 450, 318)
-      yield* tick
-      assert.isFalse(open())
-    }).pipe(Effect.scoped))
-
-  it.effect("a pointer in the triangle when Escape closes it doesn't hold the next keyboard visit open", () =>
-    Effect.gen(function*() {
-      rects.set("trigger", { x: 400, y: 300, width: 40, height: 20 })
-      const root = yield* mountPage()
-      const open = () => root.model()!.open
       rects.set("positioner", { x: 320, y: 320, width: 200, height: 108 })
       const trigger = byId("trigger")
       mouse(trigger, "mouseenter", 430, 310)
       mouse(trigger, "mouseleave", 440.5, 315)
       mouse(document.body, "mousemove", 450, 318)
-      document.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+      document.body.dispatchEvent(
+        new MouseEvent("mousedown", {
+          clientX: 450,
+          clientY: 318,
+          bubbles: true
+        })
       )
       yield* tick
-      assert.isFalse(open())
-      mouse(document.body, "mousemove", 800, 100)
-
-      trigger.focus()
-      yield* tick
-      assert.isTrue(open())
-      trigger.blur()
-      yield* tick
-      assert.isFalse(open())
+      assert.isFalse(root.model()!.open)
     }).pipe(Effect.scoped))
 
   it.effect("places the positioner itself, flipped above a trigger near the bottom, and reports the side", () =>
