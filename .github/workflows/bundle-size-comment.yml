@@ -1,0 +1,55 @@
+name: Bundle size comment
+on:
+  workflow_run:
+    workflows: [Check]
+    types: [completed]
+
+# Runs for one PR branch are serialized so they cannot both create a comment.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+
+permissions: {}
+
+jobs:
+  comment:
+    name: Comment
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pull-requests: write
+    timeout-minutes: 5
+    steps:
+      # The report comes from PR code: never check out or run it, only post it as text.
+      - name: Create or update comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          artifacts=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID/artifacts" --jq '[.artifacts[] | select(.name == "bundle-size")] | length')
+          if [[ "$artifacts" == 0 ]]; then
+            echo "Run $RUN_ID has no bundle size report."
+            exit 0
+          fi
+          gh run download "$RUN_ID" --name bundle-size --dir report
+          pr=$(<report/pr)
+          if [[ ! "$pr" =~ ^[0-9]+$ ]]; then
+            echo "Invalid PR number."
+            exit 1
+          fi
+          # Fork runs carry no PR, so trust the artifact's number only if that PR's head is the commit measured.
+          head=$(gh api "repos/$GH_REPO/pulls/$pr" --jq .head.sha)
+          if [[ "$head" != "$HEAD_SHA" ]]; then
+            echo "PR #$pr is at $head, not $HEAD_SHA."
+            exit 0
+          fi
+          marker="<!-- bundle-size -->"
+          { echo "$marker"; cat report/report.md; } > body.md
+          ids=$(gh api --paginate "repos/$GH_REPO/issues/$pr/comments" --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id")
+          if [[ -n "$ids" ]]; then
+            gh api --method PATCH "repos/$GH_REPO/issues/comments/${ids%%$'\n'*}" -F body=@body.md --silent
+          else
+            gh api "repos/$GH_REPO/issues/$pr/comments" -F body=@body.md --silent
+          fi
