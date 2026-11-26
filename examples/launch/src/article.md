@@ -15,7 +15,7 @@ Not reading all that? Copy a prompt to explore it with an AI agent.
 :::
 
 :::AgentPrompts
-::AgentPrompt{label="TL;DR" about="Paste into any AI agent that can read a web page." prompt="Read $URL. In under 200 words, say what Effect UI is and how it relates to Foldkit 0.x. Then list the main changes for someone with a Foldkit 0.x app, one line each, followed by what stays the same. Use only what the page says, and say so when it doesn't cover something."}
+::AgentPrompt{label="TL;DR" about="Paste into any AI agent that can read a web page." prompt="Read $URL. In under 200 words, explain what Effect UI is and list its key ideas and features, one line each. End with one sentence on how it relates to Foldkit 0.x. Use only what the page says, and say so when it doesn't cover something."}
 
 ::AgentPrompt{label="Your Foldkit 0.x app" about="Paste into a coding agent that is open in your Foldkit 0.x project." prompt="Read $URL. Then look at this Foldkit 0.x project and find the three places where Effect UI would simplify the code most. For each, name the files and say what would go away. Then sketch the smallest one as an Effect UI Component, using only APIs the page shows. Don't edit any files. Effect UI is in public preview and has no upgrade guide yet."}
 :::
