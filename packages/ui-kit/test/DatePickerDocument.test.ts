@@ -262,8 +262,7 @@ describe("DatePicker in a document", { concurrent: false }, () => {
         yield* tick
         assert.isTrue(shown())
         assert.strictEqual(document.activeElement?.id, "2026-11-15")
-        // The consumer closes it on its own while a day has focus. Focus is
-        // back before a browser task could render and blur the hidden day.
+        // Check focus after the close commit, before the browser can render.
         yield* Effect.promise(async () => {
           send("close")
           await Promise.resolve()

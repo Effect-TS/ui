@@ -9,16 +9,14 @@ import type * as Kernel from "./kernel.ts"
 export const now = <A>(f: () => A): A => f()
 
 /**
- * Above 0 while `inlined` runs: fibers then yield only after
- * `maxOpsBeforeYield` steps.
+ * Nesting depth of `inlined` calls.
  *
  * @internal
  */
 export let inline = 0
 
 /**
- * Runs `f` so that the fiber work it starts runs in this task, up to its
- * first async step.
+ * Runs fiber work in this task until it waits or reaches the op limit.
  *
  * @internal
  */
