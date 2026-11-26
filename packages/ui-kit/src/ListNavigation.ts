@@ -2,14 +2,9 @@
  * Moves an index across a list of items in response to arrow keys, `Home` and
  * `End`, respecting orientation, text direction and looping.
  *
- * The kit's own list and toolbar controls, such as `Tabs`, `Toolbar`,
- * `ToggleGroup`, `Menubar`, `Select` and `Menu`, use this module to work out
- * which item a key moves to. Use it for a custom list, picker or roving-focus
- * control the kit doesn't have.
- *
- * Everything here works on plain indexes, so it fits both roving focus (where
- * `update` focuses the target element) and virtual highlight (such as
- * `aria-activedescendant` in a popup).
+ * `step` and `target` return indexes; the caller moves focus or updates a
+ * highlight such as `aria-activedescendant`. Filter disabled items with
+ * `available` before calculating indexes.
  *
  * **Example** (Navigating a horizontal right-to-left list)
  *
@@ -61,8 +56,6 @@ export type Orientation = typeof Orientation.Type
 /**
  * What `step` and `target` do at the ends of a list.
  *
- * **Details**
- *
  * - `"none"`: stay on the first or last item.
  * - `"wrap"`: jump from the last item to the first and back.
  * - `"escape"`: return `-1` past either end, so a highlight can clear before
@@ -109,8 +102,6 @@ export type KeyEvent = Pick<
 
 /**
  * Options for `target`.
- *
- * **Details**
  *
  * - `at`: the current index, or `-1` when no item is active.
  * - `last`: the last valid index (`items.length - 1`), or `-1` for an empty
@@ -195,13 +186,9 @@ export const step = (
  * Resolves a key press to the next list index, or `undefined` when `key` is
  * not a navigation key for the given `orientation`.
  *
- * **Details**
- *
  * Handles `Home`, `End`, and the arrow keys of `orientation` (swapped when
  * `rtl` is `true` for `"horizontal"`). Returns `-1` when the list is empty
- * (`last < 0`) or when `loop` is `"escape"` and the press leaves the list, so
- * callers can tell a handled navigation key (`!== undefined`) apart from an
- * unrelated key (`=== undefined`).
+ * (`last < 0`) or when `loop` is `"escape"` and the press leaves the list.
  *
  * @stability experimental
  * @category navigation
@@ -227,10 +214,8 @@ export const target = (
  * Returns `true` when a keydown payload is an unmodified, non-composing
  * navigation key (`Home`, `End`, or the arrow keys for `orientation`).
  *
- * **Details**
- *
  * Use it in a view or `parts` `keydown` handler with `{ preventDefault: true }`
- * so only real navigation keys send a message and cancel the browser default.
+ * to cancel the browser default only for matching keys.
  *
  * @stability experimental
  * @category guards

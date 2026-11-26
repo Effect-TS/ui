@@ -1,15 +1,10 @@
 /**
- * Type-to-jump matching over a list of labelled items: pressing characters
- * moves to the first enabled item whose label starts with what was typed,
- * repeating the same letter cycles through matching items, and a reset timer
- * clears the buffer after a pause.
- *
- * `Select`, `Menu`, `Combobox` and `Autocomplete` use this module. Use it in
- * any custom list, picker or trigger that needs keyboard typeahead.
+ * Matches typed prefixes against enabled items in a labelled list, with
+ * repeated-letter cycling. Use it to add type-to-jump navigation to a picker.
  *
  * Keep `Typeahead.State` in your component's Model, call `Typeahead.step` in
- * `update`, and schedule `Typeahead.waitReset` to clear the buffer after the
- * user stops typing.
+ * `update`, and use `Typeahead.waitReset` to send a message that resets the
+ * buffer after a pause.
  *
  * **Example** (Typing to jump and cycling on repeated letters)
  *
@@ -48,8 +43,7 @@ import { available } from "./ListNavigation.ts"
 const defaultDelay = 750
 
 /**
- * An item `step` can match: a `label` to match against, and an optional
- * `disabled` flag. Disabled items are skipped.
+ * A labelled item for `step`. Disabled items are skipped.
  *
  * @stability experimental
  * @category models
@@ -139,10 +133,9 @@ const matchOf = (
 }
 
 /**
- * Advances the typeahead `state` by one typed `key` over `items`, starting
- * after `from` (or from the start of `items` when `from` is `-1`).
- *
- * **Details**
+ * Appends `key` to the buffer and returns the next state and matching index
+ * (`-1` if no item matches). A new search starts after `from` (the start of
+ * `items` when `from` is `-1`).
  *
  * Matching is case-insensitive and skips disabled items. Pressing the same
  * single letter repeatedly cycles through items starting with that letter,
@@ -197,8 +190,6 @@ export const reset = (state: State): State =>
 /**
  * Returns `true` while characters are buffered in `state`.
  *
- * **Details**
- *
  * Use it to distinguish a Space pressed mid-word (part of typeahead) from a
  * standalone Space (which activates the highlighted item or opens a trigger).
  *
@@ -222,14 +213,11 @@ export const isPrintable = (event: KeyEvent): boolean =>
   !event.meta
 
 /**
- * The switch-mode Command behind `waitReset`, for a story's
+ * The reset timer Command. In stories, resolve it with
  * `.resolve(Typeahead.WaitReset, undefined)`.
  *
- * **Details**
- *
  * Waits `delay` milliseconds (750 ms when omitted). Each new
- * run interrupts the previous one in the same component instance, so the timer
- * restarts on every key press.
+ * run interrupts the previous one in the same component instance.
  *
  * @stability experimental
  * @category commands
@@ -245,8 +233,8 @@ export const WaitReset: Command.Factory<
 )
 
 /**
- * Waits `delay` milliseconds (750 ms when omitted) before
- * sending `onComplete`'s message, restarting the timer whenever issued again.
+ * Creates a Command that sends `onComplete`'s message after `delay`
+ * milliseconds (default: 750). Running it again restarts the timer.
  *
  * @stability experimental
  * @category commands
