@@ -10,7 +10,7 @@ export const blockers = (attribute: string) => {
       [attribute]: "",
       style: "position:fixed;inset:0;z-index:-1;" + noSelect
     })
-  const is = (target: Node): boolean =>
+  const is = (target: EventTarget | null): boolean =>
     isElement(target) && target.hasAttribute(attribute)
   return {
     open: View.toNode(blocker),

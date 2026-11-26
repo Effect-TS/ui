@@ -1184,7 +1184,7 @@ const watch = (
       scrollBy(arrow, arrow.getAttribute("data-select-scroll-arrow") === "up")
     }
     const onMouseDown = (event: MouseEvent) => {
-      if (event.target instanceof Node && blocking.is(event.target)) {
+      if (blocking.is(event.target)) {
         event
           .preventDefault()
       }

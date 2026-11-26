@@ -709,7 +709,12 @@ describe("Select in a document", { concurrent: false }, () => {
       yield* tick
       keydown(byId("trigger", doc), "ArrowDown")
       yield* tick
-      press(byId("positioner", doc).querySelector("[data-select-blocker]")!)
+      const blocker = byId("positioner", doc).querySelector(
+        "[data-select-blocker]"
+      )!
+      press(blocker)
+      // Prevented, so the press doesn't move focus out of the popup.
+      assert.isFalse(mousedown(blocker))
       yield* tick
       assert.deepStrictEqual(log(), [
         "RequestedOpen trigger-press",

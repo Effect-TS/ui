@@ -340,7 +340,7 @@ const mousedown = (target: Element) => {
       button: 0
     })
   )
-  target.dispatchEvent(
+  return target.dispatchEvent(
     new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 })
   )
 }
@@ -733,7 +733,8 @@ describe("Menu in a document", { concurrent: false }, () => {
         "[data-menu-blocker]"
       )!
       assert.isFalse(blocker.inert)
-      mousedown(blocker)
+      // Prevented, so the press doesn't move focus out of the menu.
+      assert.isFalse(mousedown(blocker))
       yield* tick
       assert.deepStrictEqual(log(), [
         "root RequestedOpen trigger-press",

@@ -2051,7 +2051,7 @@ const watch = (
         })
         node.addEventListener("keydown", onKeyDown, { capture: true, signal })
         node.addEventListener("mousedown", (event) => {
-          if (event.target instanceof Node && blocker.is(event.target)) {
+          if (blocker.is(event.target)) {
             event.preventDefault()
           }
         }, { signal })
