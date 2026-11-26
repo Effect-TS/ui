@@ -48,8 +48,6 @@ describe("FileDrop", () => {
         .emitted({ _tag: "Picked", files: [photo] })
       assert.isUndefined(scene.get(zone).attrs?.["data-drag-over"])
 
-      // Disabling mid-drag hides data-drag-over, sets disabled attributes,
-      // blocks drops, and still clears drag state on leave.
       scene.fire(zone, "dragenter")
         .props({ disabled: true })
       assert.isUndefined(scene.get(zone).attrs?.["data-drag-over"])
@@ -64,7 +62,6 @@ describe("FileDrop", () => {
         .props({ disabled: false })
       assert.isUndefined(scene.get(zone).attrs?.["data-drag-over"])
 
-      // A dragenter received while disabled does not surface on re-enable.
       scene.props({ disabled: true })
         .fire(zone, "dragenter")
         .props({ disabled: false })
@@ -84,7 +81,6 @@ describe("FileDrop", () => {
         standIn
       )
 
-      // Single-file mode rejects the raw multi-file batch before type filtering.
       scene.drop(zone, { files: [png, pdf] })
         .emitted({
           _tag: "Rejected",
@@ -92,7 +88,6 @@ describe("FileDrop", () => {
           reason: "too-many-files"
         })
 
-      // Multi-file mode splits mixed batches: Picked first, then Rejected.
       scene.props({ multiple: true, accept: ["image/*", ".json"] })
         .drop(zone, { files: [png, json, txt, pdf] })
         .emitted(
@@ -100,7 +95,6 @@ describe("FileDrop", () => {
           { _tag: "Rejected", files: [txt, pdf], reason: "invalid-type" }
         )
 
-      // Exact MIME strips parameters, and */* allows any file.
       scene.props({ multiple: true, accept: ["text/plain"] })
         .drop(zone, { files: [txt, pdf] })
         .emitted(
@@ -123,7 +117,6 @@ describe("FileDrop", () => {
         standIn
       )
 
-      // Dismissed and unopened pickers emit nothing, even if files are returned.
       scene.click(trigger)
         .expectExact(
           HtmlFiles.Pick.make({ accept: ["image/*"], multiple: true })

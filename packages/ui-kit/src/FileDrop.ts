@@ -1,30 +1,26 @@
 /**
- * A file drop zone and picker trigger that share `accept` and `multiple`
- * rules, manage drag-over state, and emit accepted and rejected file batches.
- *
- * `FileDrop` is a headless component: it keeps drag-over state and runs
- * `HtmlFiles.pick`. Values stay controlled by the consumer: keep plain facts
- * (such as names and sizes) in your Model and pass `File` values to Commands.
+ * A headless file drop zone and picker trigger with shared `accept` and
+ * `multiple` filtering, drag-over state, and `Picked` / `Rejected` events.
+ * Values stay controlled by the consumer: keep plain facts (names, sizes) in
+ * your Model and pass `File` values to Commands.
  *
  * **Anatomy**
  *
- * | Part      | Element                                        |
- * | :-------- | :--------------------------------------------- |
- * | `root`    | any element, usually a `<div>` or `<section>`  |
- * | `trigger` | `<button>` that opens the browser file picker  |
+ * | Part      | Element                                       |
+ * | :-------- | :-------------------------------------------- |
+ * | `root`    | any element, usually a `<div>` or `<section>` |
+ * | `trigger` | `<button>` that opens the browser file picker |
  *
- * Each part takes the consumer's builder and returns it, so the consumer goes
- * on chaining and adds children with `.children(...)`. No part adds markup.
- * Because `root` accepts any element, it can wrap `trigger` as a separate
- * container or stack with it on a single `<button>`:
+ * No part adds markup. Because `root` accepts any element, it can wrap
+ * `trigger` or stack with it on a single `<button>`:
  * `fileDrop.root(fileDrop.trigger(field.control(h.button)))`.
  *
- * Draw `trigger` for keyboard and screen-reader users: drag-and-drop alone has
- * no pointer-free equivalent.
+ * Always draw `trigger` for keyboard and screen-reader users: drag-and-drop
+ * alone has no pointer-free equivalent.
  *
  * **Data attributes**
  *
- * Each present with an empty value or absent:
+ * Present with an empty value or absent:
  *
  * - `root`: `data-drag-over`, `data-disabled`
  * - `trigger`: `data-disabled`
@@ -32,33 +28,29 @@
  * **Keyboard**
  *
  * `trigger` is a native `<button type="button">`, so Enter and Space open the
- * file picker and Tab moves focus without a key handler.
+ * picker and Tab moves focus.
  *
- * **Batch classification**
+ * **Batch rules**
  *
- * Dropped files and files returned by `HtmlFiles.pick` go through the same
- * classifier:
+ * Drops and `HtmlFiles.pick` results share one classifier:
  *
  * 1. Empty batches (dismissed or blocked pickers, empty drops) emit nothing.
  * 2. When `multiple` is not `true` and more than one file arrives, the whole
- *    raw batch is emitted as `Rejected` with `reason: "too-many-files"` before
- *    type filtering, and no `Picked` is emitted.
- * 3. Otherwise files are split by `accept`: matching files are emitted in
- *    `Picked`, and non-matching files in `Rejected` with
- *    `reason: "invalid-type"`. When both are present, `Picked` is emitted
- *    first so clearing an error on `Picked` and setting it on `Rejected` shows
- *    the rejection.
+ *    raw batch emits `Rejected` with `reason: "too-many-files"` before type
+ *    filtering, and no `Picked`.
+ * 3. Otherwise files are split by `accept`: matching files emit `Picked`, and
+ *    non-matching files emit `Rejected` with `reason: "invalid-type"`. On a
+ *    mixed batch, `Picked` emits first so clearing an error on `Picked` and
+ *    setting it on `Rejected` shows the rejection.
  *
  * **With `Field`, `Fieldset` and `Form`**
  *
- * Compose `trigger` with `field.control` and forward `disabled`:
- * `fileDrop.trigger(field.control(h.button))` with `disabled: field.disabled`
- * (or `disabled: fieldset.disabled` when used directly in a `Fieldset`). The
- * field's label, `aria-describedby` and `aria-invalid` land on the button, so
- * `Form` focuses it after an invalid submit. Unlike a `<button>`, the browser
- * does not natively block drops on a `<div>` inside `<fieldset disabled>`, so
- * always pass `disabled` through. No hidden input is rendered because
- * `Form`'s `Submitted` payload carries strings only.
+ * Compose `fileDrop.trigger(field.control(h.button))` with
+ * `disabled: field.disabled` (or `fieldset.disabled`). The field's label,
+ * `aria-describedby` and `aria-invalid` land on the button so `Form` focuses
+ * it after an invalid submit; pass `disabled` through because `<fieldset disabled>`
+ * does not block drops on a `<div>`. No hidden input is rendered because `Form`
+ * submits strings only.
  *
  * **Example** (A labelled image drop zone inside a `Field`)
  *
@@ -126,16 +118,14 @@ import { flag } from "./internal/attributes.ts"
  * **Details**
  *
  * - `accept`: file types allowed for drops and passed to `HtmlFiles.pick`,
- *   matching HTML `<input type="file" accept>` tokens: `.ext` (case-insensitive
- *   filename suffix), `type/*` (case-insensitive MIME prefix), a wildcard for
- *   any file, or `type/subtype` (case-insensitive exact MIME, ignoring
- *   parameters after `;`). Omitted or empty allows every file.
- * - `multiple`: whether more than one file may be dropped or picked at once.
- *   `false` by default.
- * - `disabled`: disables `trigger` natively, sets `data-disabled` on both
- *   parts, hides `data-drag-over` and ignores drags, drops and pick results.
- *   `root` keeps its drop target while disabled so the browser does not open a
- *   dropped file in the tab.
+ *   matched without case: `.ext` suffix, `type/*` prefix, wildcard for any
+ *   file, or exact `type/subtype` (ignoring `;...` parameters). Omitted or
+ *   empty allows every file.
+ * - `multiple`: allows more than one file per drop or pick (`false` by
+ *   default).
+ * - `disabled`: disables `trigger`, sets `data-disabled`, hides
+ *   `data-drag-over` and ignores drags, drops and picks. `root` keeps its drop
+ *   target so the browser does not open a dropped file in the tab.
  *
  * @stability experimental
  * @category schemas
@@ -268,23 +258,14 @@ const classify = (
 }
 
 /**
- * A headless file drop zone and picker trigger. Call it with the consumer's
- * `h`, `props`, `onEmit`, and a `view` closure that draws `root` and `trigger`.
+ * A headless file drop zone and picker trigger.
  *
  * **Details**
  *
- * The parts also return `dragOver` and `disabled` as booleans for conditional
- * markup.
- *
- * Each part's own attributes win over those set on the builder before the
- * part, including those a state leaves absent:
- *
- * - `root`: `data-drag-over`, `data-disabled`
- * - `trigger`: `type="button"`, `disabled`, `aria-disabled` (always removed,
- *   since native `disabled` reports it), `data-disabled`
- *
- * History restore is off (`restore: false`), since drag-over is transient DOM
- * state.
+ * `parts` also exposes `dragOver` and `disabled` booleans. Own attributes win
+ * over attributes set before the part: `data-drag-over` and `data-disabled` on
+ * `root`; `type="button"`, `disabled`, `aria-disabled` (removed) and
+ * `data-disabled` on `trigger`. History restore is off (`restore: false`).
  *
  * @stability experimental
  * @category components
