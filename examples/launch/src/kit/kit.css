@@ -20,7 +20,7 @@
   }
 
   .kit-card {
-    @apply grid h-[64px] rounded-[7px] bg-card p-2;
+    @apply grid h-[64px] rounded-[7px] border border-border bg-card p-2 dark:border-0;
   }
 
   .kit-card:has(
@@ -84,12 +84,9 @@
   }
 
   .kit-button {
-    @apply inline-flex h-[18px] items-center justify-center rounded-sm border border-border bg-background px-1.5 text-[0.625rem] leading-none;
+    @apply inline-flex h-[18px] items-center justify-center rounded-sm border border-border bg-background px-1.5 text-[0.625rem];
+    line-height: normal;
     transition-property: transform, background-color, border-color, color, opacity;
-
-    &:not(:has(svg)) {
-      @apply pb-px;
-    }
   }
 
   .kit-button-primary {
@@ -102,7 +99,7 @@
   }
 
   .kit-track {
-    @apply relative h-[5px] flex-1 overflow-hidden rounded-full bg-muted;
+    @apply relative h-[5px] flex-1 overflow-hidden rounded-full bg-border dark:bg-muted;
   }
 
   .kit-fill {
@@ -209,6 +206,10 @@
 
   .kit-list {
     @apply grid min-w-(--anchor-width) gap-0.5 p-0.5 text-[0.5625rem] whitespace-nowrap;
+
+    [role="listbox"] {
+      @apply grid gap-0.5;
+    }
 
     [role="option"] {
       @apply flex justify-between gap-1 rounded-sm px-0.5;

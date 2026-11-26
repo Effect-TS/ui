@@ -696,7 +696,7 @@ const pictures: Record<Module, Picture> = {
       view: (previewCard) =>
         h.div.class("kit-overlay kit-under").children(
           previewCard.trigger({
-            element: h.a.class("kit-link").attr("href", "#ui-kit")
+            element: h.a.class("kit-link").attr("href", "#the-ui-kit")
           }).children("effect.website"),
           previewCard.portal(h.div.class("kit-portal"))?.children(
             previewCard.positioner(h.div.class("kit-positioner"))

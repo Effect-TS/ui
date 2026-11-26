@@ -72,7 +72,10 @@ const Tile = (
   return h.li.key(name).class("kit-tile").attr(
     "data-playing",
     playing ? "" : undefined
-  ).on("mouseenter", KitMessage.EnteredTile({ name })).children(
+  ).on("mouseenter", KitMessage.EnteredTile({ name })).on(
+    "click",
+    KitMessage.EnteredTile({ name })
+  ).children(
     // The pictures are for looking at: the name below each one is
     // what a screen reader reads, and nothing inside takes focus.
     h.div.class("kit-card").attr("aria-hidden", "true").attr(

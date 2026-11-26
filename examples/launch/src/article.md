@@ -139,7 +139,7 @@ A Component owns the behavior, keyboard handling and ARIA while you control ever
 
 **`@effect/ui-kit` already ships 41 components**, so you don't have to build accessible UI from scratch. The kit has every component in [Base UI](https://base-ui.com/), plus VirtualList, VirtualKeyboard, DirectionProvider and Positioning. They're all headless. Each handles keyboard, focus and ARIA while you write the markup and styles.
 
-Here is the full set of 41 components.
+Here is the full set of 41 components. Hover or tap to animate.
 
 ::Kit
 
