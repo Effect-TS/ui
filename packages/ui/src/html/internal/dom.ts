@@ -124,16 +124,17 @@ const ignore = () => {}
 // The HTML standard and other browsers don't. So only such an event from
 // inside the outgoing node is dropped. One with a destination, from outside
 // it, or after it has gone, such as a reconnected element sending focus into
-// an iframe, is a real exit. `from` is 1 when only the children go.
-// Module-level, because `BrowserHost` detaches through one host while
-// another one listens.
+// an iframe, is a real exit. `from` is 1 when only the children go, and
+// then the first child shows whether they have. Module-level, because
+// `BrowserHost` detaches through one host while another one listens.
 let leaving: ((path: Array<globalThis.Node>) => boolean) | undefined
 const detach = (node: globalThis.Node, f: () => void, from = 0): void => {
   const outer = leaving
-  const { firstChild, nextSibling, parentNode } = node
+  const going = (from && node.firstChild) || node
+  const { nextSibling, parentNode } = going
   leaving = (path) =>
-    node.parentNode === parentNode && node.nextSibling === nextSibling &&
-    node.firstChild === firstChild && path.indexOf(node) >= from
+    going.parentNode === parentNode && going.nextSibling === nextSibling &&
+    path.indexOf(node) >= from
   try {
     f()
   } finally {
