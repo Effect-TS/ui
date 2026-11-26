@@ -4069,3 +4069,35 @@ describe("HtmlServer queries", { concurrent: false }, () => {
       }).pipe(Effect.scoped)
   )
 })
+
+describe("HtmlServer.document", () => {
+  const rendered: HtmlServer.Rendered<unknown> = {
+    html: "<h1>Home</h1>",
+    state: { "~static": true, note: "</script>" },
+    model: undefined,
+    head: "<title>Home</title>",
+    htmlAttributes: "lang=\"en\"",
+    bodyAttributes: ""
+  }
+
+  it("fills an index.html template with the rendered page and its state", () => {
+    const template =
+      "<!doctype html><html><head><meta charset=\"utf-8\"></head>" +
+      "<body><div id=\"app\"><!--app-html--></div>" +
+      "<script type=\"module\" src=\"/src/main.ts\"></script></body></html>"
+
+    expect(HtmlServer.document(template, rendered)).toBe(
+      "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Home</title></head>" +
+        "<body><div id=\"app\"><h1>Home</h1></div>" +
+        "<script type=\"module\" src=\"/src/main.ts\"></script>" +
+        "<script type=\"application/json\" id=\"state\">{\"~static\":true,\"note\":\"\\u003c/script>\"}</script>" +
+        "</body></html>"
+    )
+  })
+
+  it("throws when the template has no app marker", () => {
+    expect(() =>
+      HtmlServer.document("<html><head></head><body></body></html>", rendered)
+    ).toThrowError(/<!--app-html-->/)
+  })
+})
