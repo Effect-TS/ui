@@ -53,6 +53,9 @@ export interface Host<N = any> {
   readonly parentOf: (node: N) => N
   readonly nextOf: (node: N) => N | null
   readonly commit?: (() => void) | undefined
+  readonly unmounting?:
+    | ((container: N, nodes: ReadonlyArray<N>) => void)
+    | undefined
   readonly controlled?: ReadonlySet<string> | undefined
   readonly runsMounts?: boolean | undefined
   readonly head?: ((head: unknown) => void) | undefined
@@ -974,7 +977,8 @@ const remove = (inst: Instance, parent: unknown, rec: Rec): void => {
   for (const node of nodes) inst.tree.host.remove(parent, node)
 }
 
-const nodesOf = (rec: Rec, out: Array<unknown>): Array<unknown> => {
+/** @internal */
+export const nodesOf = (rec: Rec, out: Array<unknown>): Array<unknown> => {
   if (rec.node !== undefined) out.push(rec.node)
   else if (rec.kids === undefined) nodesOf(rec.inst.rendered!, out)
   else {for (let index = 0; index < rec.kids.length; index++) {

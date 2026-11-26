@@ -5405,6 +5405,21 @@ describe("Runtime", () => {
       provideHost
     ))
 
+  // A paragraph whose Layer runs `release` when the mount closes.
+  const line = (text: string, release: Effect.Effect<void>) =>
+    Component.provide(
+      Component.define({
+        name: "Line",
+        model: Schema.Number,
+        message: Schema.Never
+      }).make({
+        init: () => 0,
+        update: ($) => $.model,
+        view: (h) => h.el("p", text)
+      }),
+      Layer.effectDiscard(Effect.addFinalizer(() => release))
+    )
+
   it.effect("Renderer.mount closes every instance before it removes the root nodes", () =>
     provideHost(Effect.gen(function*() {
       const testHost = yield* TestHost.TestHost
@@ -5412,27 +5427,69 @@ describe("Runtime", () => {
         "#app"
       ) as TestHost.TestElement
       let childrenAtRelease = -1
-      const App = Component.provide(
-        Component.define({
-          name: "App",
-          model: Schema.Number,
-          message: Schema.Never
-        }).make({
-          init: () => 0,
-          update: ($) => $.model,
-          view: (h) => h.el("div", "still here")
-        }),
-        Layer.effectDiscard(Effect.addFinalizer(() =>
-          Effect.sync(() => {
-            childrenAtRelease = container.children.length
-          })
-        ))
+      const App = line(
+        "still here",
+        Effect.sync(() => {
+          childrenAtRelease = container.children.length
+        })
       )
       yield* Effect.scoped(Renderer.mount(App, {}, container))
       yield* TestHost.settle
       assert.strictEqual(childrenAtRelease, 1)
       assert.strictEqual(container.children.length, 0)
     })))
+
+  it.effect("Renderer.mount passes the host a mount's attached nodes before it tears down, and a throw from the host doesn't stop the teardown", () => {
+    const error = new Error("unmounting failed")
+    const events: Array<string> = []
+    const base = TestHost.makeHost()
+    const container = base.createElement("#app") as TestHost.TestElement
+    base.onCommit(() => events.push("commit"))
+    let throws = true
+    const host: Renderer.Host<TestHost.TestNode> = {
+      ...base,
+      remove(node) {
+        events.push(`remove ${Locator.textOf(node)}`)
+        base.remove(node)
+      },
+      unmounting(into, nodes) {
+        events.push(
+          `unmounting ${into === container} ${
+            nodes.map((node) =>
+              `${Locator.textOf(node)} attached=${node.parent === container}`
+            ).join(", ")
+          }`
+        )
+        if (throws) {
+          throws = false
+          throw error
+        }
+      }
+    }
+    return Effect.gen(function*() {
+      const scope = yield* Scope.make()
+      yield* Renderer.mount(
+        line("✔ Linked project", Effect.sync(() => events.push("released"))),
+        {},
+        container
+      ).pipe(Scope.provide(scope))
+      yield* Renderer.mount(line("Still mounted", Effect.void), {}, container)
+      yield* TestHost.settle
+      events.length = 0
+      const closed = yield* Effect.exit(Scope.close(scope, Exit.void))
+      assert.deepStrictEqual(closed, Exit.die(error))
+      // A copy: closing the other mount afterwards appends to `events`.
+      assert.deepStrictEqual([...events], [
+        "unmounting true ✔ Linked project attached=true",
+        "released",
+        "remove ✔ Linked project",
+        "commit"
+      ])
+      assert.deepStrictEqual(container.children.map(Locator.textOf), [
+        "Still mounted"
+      ])
+    }).pipe(Effect.scoped, Effect.provide(Renderer.layer(host)), provideHost)
+  })
 
   it.effect("Renderer.mount stopped at any yield point leaves nothing behind once its Scope closes", () =>
     Effect.gen(function*() {

@@ -192,7 +192,10 @@ const bridge = (
     : undefined,
   transitions: host.viewTransition === undefined
     ? undefined
-    : transitionRun.make(host.viewTransition)
+    : transitionRun.make(host.viewTransition),
+  unmounting: host.unmounting === undefined
+    ? undefined
+    : (container, nodes) => host.unmounting!(container, nodes)
 })
 
 const reportTo =
@@ -791,8 +794,15 @@ const start = (
       hot?.detach()
       dom?.dispose()
       if (frozen) tree.closed = false
+      // A hook's throw surfaces only after teardown and cleanup.
+      let failed: Effect.Effect<void> = Effect.void
+      try {
+        base.unmounting?.(container, Kernel.nodesOf(instance.rendered!, []))
+      } catch (error) {
+        failed = Effect.die(error)
+      }
       mounted.close()
-      return Effect.andThen(awaitOwned, queries.dispose)
+      return Effect.andThen(awaitOwned, Effect.andThen(queries.dispose, failed))
     })
   }
 }
