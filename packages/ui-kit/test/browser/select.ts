@@ -16,13 +16,13 @@ const Message = UiSchema.TaggedEnum({
 
 const Page = Html.component({
   name: "Page",
-  props: Schema.Struct({ align: Schema.Boolean }),
+  props: Schema.Struct({ align: Schema.Boolean, decline: Schema.Boolean }),
   model: Schema.Struct({ open: Schema.Boolean }),
   message: Message
 }).make({
   init: () => ({ open: false }),
   update: {
-    RequestedOpen: () => ({ open: true }),
+    RequestedOpen: ($) => ({ open: !$.props.decline }),
     RequestedClose: () => ({ open: false })
   },
   view: (h, model) =>
@@ -41,6 +41,7 @@ const Page = Html.component({
       },
       view: (select) =>
         h.div(
+          h.input.attr("id", "field"),
           select.trigger(h.button).children(select.value(h.span)),
           select.positioner(h.div).children(
             select.popup(h.div.class("popup")).children(
@@ -57,7 +58,10 @@ const Page = Html.component({
 
 BrowserHost.mount(
   Page,
-  { align: new URLSearchParams(location.search).get("align") !== "false" },
+  {
+    align: new URLSearchParams(location.search).get("align") !== "false",
+    decline: new URLSearchParams(location.search).has("decline")
+  },
   document.getElementById("root")!
 ).pipe(
   // An unbundled dev build can outrun the default 5ms budget and defer the

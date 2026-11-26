@@ -699,8 +699,10 @@ const typeKey = ($: SelectUpdate, key: string) => {
     : typed.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))
 }
 
-const focusTrigger = ($: SelectUpdate) =>
-  $.run(HtmlCommand.Focus.make({ ref: Trigger }).pipe(Command.asNoop))
+const focusTriggerCommand = HtmlCommand.Focus.make({ ref: Trigger }).pipe(
+  Command.asNoop
+)
+const focusTrigger = ($: SelectUpdate) => $.run(focusTriggerCommand)
 
 const tolerance = 1
 
@@ -1373,7 +1375,9 @@ const scrolling =
  * - `item`: `mouseenter`, `mouseleave`, `mousedown`, `mouseup` and
  *   `click`
  *
- * The trigger and the popup cancel the keys they handle. The positioner's
+ * The trigger and the popup cancel the keys they handle. The trigger also
+ * cancels the `mousedown` that opens the popup, and focuses itself on
+ * `mouseup` if the parent keeps the popup closed. The positioner's
  * mount places the popup, moves focus into it, scrolls it and listens for
  * presses and focus outside it.
  *
@@ -1418,7 +1422,14 @@ export const Select = Html.component({
   }),
   update: {
     PressedTrigger: ($, { pointerType }) => toggle($, methodOf(pointerType)),
-    ReleasedTrigger: ($) => $.evolve({ pressing: false }),
+    ReleasedTrigger: ($) => {
+      const released = $.evolve({ pressing: false })
+      // The opening press cancelled the trigger's focus, so a parent that
+      // kept the popup closed leaves it with the trigger.
+      return $.model.pressing && !$.props.open
+        ? released.run(focusTriggerCommand)
+        : released
+    },
     ClickedTrigger: ($, { pointerType }) => toggle($, methodOf(pointerType)),
     PressedTriggerKey: ($, { key }) => {
       const props = $.props
