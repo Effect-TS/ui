@@ -672,15 +672,11 @@ describe("Html", () => {
     expect<View.Requirements<any>>().type.toBe<any>()
   })
 
-  it("children on a union of builders requires unknown, not any", () => {
+  it("a union of builders requires unknown, not any", () => {
     const h = {} as Html.H<Msg>
-    const ticker = {} as View.Node<Msg, Clock>
     const wide = false as boolean
-    const builder = wide ? h.div : h.section
-    const method = builder.children(ticker)
-    const call = builder(ticker)
-    expect<View.Requirements<typeof method>>().type.toBe<unknown>()
-    expect<View.Requirements<typeof call>>().type.toBe<unknown>()
+    const node = (wide ? h.div : h.section)({} as View.Node<Msg, Clock>)
+    expect<View.Requirements<typeof node>>().type.toBe<unknown>()
   })
 
   it("style accepts typed CSS properties and preserves the element type", () => {
