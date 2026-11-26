@@ -174,20 +174,25 @@ const keyAnd = <A>(
 
 /** A node as its siblings match it: an expanded headless child by the outermost child it was. */
 const asSibling = (node: View.Node<any, any>): View.Node<any, any> =>
-  engine.expansionOf.get(node)?.[0] ?? node
+  engine.expansionOf.get(node)?.[0]?.child ?? node
 
 /**
  * Whether `node` patches `old` once matched with it, as the runtime decides: for an expanded headless
- * child, each child it stands for patches the old one, and then the closure's root patches the old root.
+ * child, each child it stands for patches the old one and shows its view or its fallback as before, and
+ * then the closure's root patches the old root.
  */
 const continues = (
   old: View.Node<any, any>,
   node: View.Node<any, any>
 ): boolean => {
-  const olds = [...(engine.expansionOf.get(old) ?? []), old]
-  const news = [...(engine.expansionOf.get(node) ?? []), node]
+  const olds = engine.expansionOf.get(old) ?? []
+  const news = engine.expansionOf.get(node) ?? []
   return olds.length === news.length &&
-    news.every((each, index) => match.patches(olds[index]!, each))
+    news.every((each, index) =>
+      each.fallback === olds[index]!.fallback &&
+      match.patches(olds[index]!.child, each.child)
+    ) &&
+    match.patches(old, node)
 }
 
 const childrenOf = (

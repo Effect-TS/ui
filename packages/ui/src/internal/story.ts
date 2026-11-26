@@ -239,15 +239,22 @@ const expandedChildren = new WeakMap<
 
 /**
  * The headless children an expanded closure or fallback stands for, by its root, outermost first: one per
- * child whose closure's root is the next child. The runtime matches each in turn, as it patches the child
+ * child whose closure's root is the next child, with whether it shows its fallback. The runtime matches each in turn, as it patches the child
  * and then its view's root.
  *
  * @internal
  */
 export const expansionOf = new WeakMap<
   object,
-  ReadonlyArray<View.Child<any, any>>
+  ReadonlyArray<Expansion>
 >()
+
+/** @internal */
+export interface Expansion {
+  readonly child: View.Child<any, any>
+  // The runtime creates a failed child's fallback anew: it never patches the child's view into it.
+  readonly fallback: boolean
+}
 
 /**
  * Each slot a slotted child's `children` shows, with how many nodes it placed, in order: the runtime
@@ -264,10 +271,11 @@ export const slotLengths = new WeakMap<
 // A copy per render: a closure may return a node it cached, and the identities are this render's.
 const standsFor = (
   child: View.Child<any, any>,
+  fallback: boolean,
   inner: View.Node<any, any>
 ): View.Node<any, any> => {
   const out = { ...inner } as View.Node<any, any>
-  expansionOf.set(out, [child, ...(expansionOf.get(inner) ?? [])])
+  expansionOf.set(out, [{ child, fallback }, ...(expansionOf.get(inner) ?? [])])
   const lengths = slotLengths.get(inner)
   if (lengths !== undefined) slotLengths.set(out, lengths)
   return out
@@ -618,6 +626,7 @@ const expandRoot = <Msg>(
             : View.toNode(node.fallback(result))
           return standsFor(
             node,
+            true,
             expand(shown, path, depth, own, owners, scope, undefined)
           )
         }
@@ -665,7 +674,7 @@ const expandRoot = <Msg>(
           (label) => checkChildPaths(label, tree),
           reads
         )
-        return standsFor(node, inner)
+        return standsFor(node, false, inner)
       }
     }
   }

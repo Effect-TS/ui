@@ -562,6 +562,36 @@ describe("Scene", () => {
         ).mounted(Hello)
       }))
 
+    it.effect("a headless child's fallback starts its own mounts, which then keep running", () =>
+      Effect.gen(function*() {
+        const Wrapper = Component.define({
+          name: "Wrapper",
+          model: Schema.Null,
+          message: Schema.Never
+        })
+          .make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
+        const Page = Html.component({
+          name: "Page",
+          model: Schema.Number,
+          message: Schema.Boolean
+        }).make({
+          init: () => 0,
+          update: ($) => $.model + 1,
+          view: (h, count) =>
+            h.section(
+              h.button.on("click", true).children(String(count)),
+              Wrapper(h, {
+                key: "b",
+                view: () => h.ul.onMount(Hello()),
+                fallback: () => h.ul.onMount(Hello())
+              })
+            )
+        })
+        const scene = yield* Scene.make(Page, {})
+        scene.mounted(Hello).childFailure(Wrapper, "b", Cause.die("boom"))
+          .mounted(Hello).click(Locator.tag("button"))
+      }))
+
     it.effect("a root headless child with a new key is a new child, so its mounts are new, its view node cached or not", () =>
       Effect.gen(function*() {
         const Wrapper = Component.define({
