@@ -218,72 +218,54 @@ const FileDropMessage = UiSchema.TaggedEnum({
   Left: {},
   Dropped: { files: FileArray },
   ClickedTrigger: {},
-  PickedFiles: {
-    opened: Schema.Boolean,
-    files: FileArray
-  }
+  CompletedPick: { files: FileArray }
 })
 
-const dropTargetOptions: Html.DropTargetOptions = {
+const dropTarget: Html.DropTargetOptions = {
   accepts: ["Files"],
   dropEffect: "copy",
   preventDefault: "always"
 }
 
-const normalizeMime = (mime: string): string =>
-  mime.split(";", 1)[0]!.trim().toLowerCase()
+const mimeOf = (file: File): string =>
+  file.type.split(";", 1)[0]!.trim().toLowerCase()
 
-const matchesToken = (file: File, token: string): boolean => {
+const matches = (name: string, mime: string, token: string): boolean => {
   if (token === "*/*") return true
-  if (token.startsWith(".")) return file.name.toLowerCase().endsWith(token)
-  const mime = normalizeMime(file.type)
+  if (token.startsWith(".")) return name.endsWith(token)
   if (mime === "") return false
   if (token.endsWith("/*")) return mime.startsWith(token.slice(0, -1))
   return mime === token
-}
-
-const matchesAccept = (
-  file: File,
-  accept: ReadonlyArray<string> | undefined
-): boolean => {
-  if (accept === undefined || accept.length === 0) return true
-  const tokens = accept
-    .map((token) => token.trim().toLowerCase())
-    .filter((token) => token !== "")
-  if (tokens.length === 0) return true
-  return tokens.some((token) => matchesToken(file, token))
 }
 
 const classify = (
   files: ReadonlyArray<File>,
   props: FileDropProps
 ): ReadonlyArray<FileDropEvents> => {
-  if (files.length === 0) return []
+  if (files.length === 0 || props.disabled === true) return []
   if (props.multiple !== true && files.length > 1) {
     return [FileDropEvents.Rejected({ files, reason: "too-many-files" })]
   }
-  const accepted: Array<File> = []
-  const rejected: Array<File> = []
-  for (const file of files) {
-    if (matchesAccept(file, props.accept)) accepted.push(file)
-    else rejected.push(file)
+  const tokens = (props.accept ?? [])
+    .map((token) => token.trim().toLowerCase())
+    .filter((token) => token !== "")
+  const allowed = (file: File): boolean => {
+    const name = file.name.toLowerCase()
+    const mime = mimeOf(file)
+    return tokens.length === 0 ||
+      tokens.some((token) => matches(name, mime, token))
   }
-  const events: Array<FileDropEvents> = []
-  if (accepted.length > 0) {
-    events.push(FileDropEvents.Picked({ files: accepted }))
-  }
-  if (rejected.length > 0) {
-    events.push(
-      FileDropEvents.Rejected({ files: rejected, reason: "invalid-type" })
-    )
-  }
-  return events
+  const accepted = files.filter(allowed)
+  const rejected = files.filter((file) => !allowed(file))
+  return [
+    ...(accepted.length > 0
+      ? [FileDropEvents.Picked({ files: accepted })]
+      : []),
+    ...(rejected.length > 0
+      ? [FileDropEvents.Rejected({ files: rejected, reason: "invalid-type" })]
+      : [])
+  ]
 }
-
-const pickOptionsOf = (props: FileDropProps): HtmlFiles.PickOptions => ({
-  ...(props.accept !== undefined ? { accept: props.accept } : {}),
-  ...(props.multiple !== undefined ? { multiple: props.multiple } : {})
-})
 
 /**
  * A headless file drop zone and picker trigger. Call it with the consumer's
@@ -318,36 +300,24 @@ export const FileDrop = Html.component({
 }).make({
   init: () => ({ dragOver: false }),
   update: {
-    Entered: ($) =>
-      $.props.disabled === true ? $.model : $.evolve({ dragOver: true }),
-    // Always clear dragOver so a leave while disabled cannot restore stale
-    // drag-over state if the component is re-enabled.
+    // The Model tracks the drag even while disabled, and `parts` hides it.
+    Entered: ($) => $.evolve({ dragOver: true }),
     Left: ($) => $.evolve({ dragOver: false }),
-    Dropped: ($, { files }) => {
-      const next = $.evolve({ dragOver: false })
-      if ($.props.disabled === true) return next
-      return classify(files, $.props).reduce(
-        (step, event) => step.emit(event),
-        next
-      )
-    },
+    Dropped: ($, { files }) =>
+      $.evolve({ dragOver: false }).emit(...classify(files, $.props)),
     ClickedTrigger: ($) =>
       $.props.disabled === true
         ? $.model
         : $.run(
           HtmlFiles.pick(
-            ({ opened, files }) =>
-              FileDropMessage.PickedFiles({ opened, files }),
-            pickOptionsOf($.props)
+            ({ files }) => FileDropMessage.CompletedPick({ files }),
+            {
+              accept: $.props.accept,
+              multiple: $.props.multiple
+            }
           )
         ),
-    PickedFiles: ($, { opened, files }) =>
-      !opened || $.props.disabled === true
-        ? $.model
-        : classify(files, $.props).reduce(
-          (step, event) => step.emit(event),
-          $.set($.model)
-        )
+    CompletedPick: ($, { files }) => $.emit(...classify(files, $.props))
   },
   parts: (p, model) => {
     const disabled = p.props.disabled === true
@@ -369,7 +339,7 @@ export const FileDrop = Html.component({
               FileDropMessage.Dropped({
                 files: (payload as Html.DropPayload).files
               }),
-            dropTargetOptions
+            dropTarget
           )
       ),
       trigger: p.part("button", (b) =>
@@ -380,8 +350,7 @@ export const FileDrop = Html.component({
             "data-disabled": flag(disabled)
           })
           .disabled(disabled)
-          .on("click", FileDropMessage.ClickedTrigger())
-      )
+          .on("click", FileDropMessage.ClickedTrigger()))
     }
   }
 })
