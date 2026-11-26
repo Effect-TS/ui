@@ -1,6 +1,6 @@
 # @effect/ui
 
-A frontend library for Effect built around the Elm Architecture. Each component is a self-contained program with Schemas for its props, Model, messages, and events, plus pure `init`, `update`, and `view` functions. Side effects are Commands and Subscriptions that the runtime runs, data comes from queries (`Query`), and services are provided with `Layer`s.
+A frontend library for Effect. Each component is an Elm Architecture program of its own, and you build an app by composing components. A component owns its Model (defined with `Schema` along with props, messages, and events), handles its messages with a pure `update`, and renders its Model with `view`. Side effects are Commands and Subscriptions that the runtime runs, data comes from queries (`Query`), and services are provided with `Layer`s.
 
 | Import                            | Holds                                                                                                                                                                                                                                               |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
