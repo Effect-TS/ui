@@ -120,26 +120,37 @@ const canonicalAttrs = (
 const ignore = () => {}
 
 // Chromium blurs a focused element that a render detaches, to remove or to
-// move it, while the node is still in place and with no `relatedTarget`.
-// The HTML standard and other browsers don't. So only such an event from
-// inside the outgoing node is dropped, until `done` says it has gone or
-// arrived. One with a destination, from outside it, or after that, such as
-// a reconnected element sending focus into an iframe, is a real exit.
-// `from` is 1 when only the children go. Module-level, because
-// `BrowserHost` detaches through one host while another one listens.
-let leaving: ((path: Array<globalThis.Node>) => boolean) | undefined
-const detach = (
-  node: globalThis.Node,
-  f: () => void,
-  done: () => boolean,
-  from = 0
-): void => {
-  const outer = leaving
-  leaving = (path) => !done() && path.indexOf(node) >= from
+// move it, before it goes. The HTML standard and other browsers don't. So
+// when focus is inside the outgoing node and the first blur comes while it
+// is still in place, that blur is dropped with its focusout: the first one
+// that leaves no blur open. Anything else, such as a reconnected element
+// sending focus into an iframe, is a real exit. With `kids`, only the
+// children go. Module-level, because `BrowserHost` detaches through one
+// host while another one listens.
+const dropped = new WeakSet<Event>()
+const detach = (node: globalThis.Node, f: () => void, kids?: boolean) => {
+  const root = node.getRootNode() as Document
+  if (!node.contains(root.activeElement)) return f()
+  const at = (kids && node.firstChild) || node
+  const { nextSibling, parentNode } = at
+  let open = -1
+  const watch = (event: Event) => {
+    if (open < 0) {
+      open = at.parentNode === parentNode && at.nextSibling === nextSibling
+        ? 1
+        : 0
+      if (open) dropped.add(event)
+    } else if (open && !(open += event.type === "blur" ? 1 : -1)) {
+      dropped.add(event)
+    }
+  }
+  root.addEventListener("blur", watch, true)
+  root.addEventListener("focusout", watch, true)
   try {
     f()
   } finally {
-    leaving = outer
+    root.removeEventListener("blur", watch, true)
+    root.removeEventListener("focusout", watch, true)
   }
 }
 
@@ -552,11 +563,8 @@ export const makeHost = (
 
   const listener = (event: Event): void => {
     const name = event.type
+    if (dropped.has(event)) return
     const path = event.composedPath() as Array<Node>
-    if (
-      (name === "blur" || name === "focusout") &&
-      (event as FocusEvent).relatedTarget === null && leaving?.(path)
-    ) return
     const custom = view !== null && event instanceof view.CustomEvent
     const detailFor = (node: Node) =>
       custom && isCustomTag((node as globalThis.Element).localName ?? "")
@@ -841,32 +849,19 @@ export const makeHost = (
       if (eventOptions.dragstart !== undefined) listen("dragend")
     },
     insert(parent, node, before) {
-      // A move is done once the node is where it's going. One already there
-      // isn't moved, so Chromium doesn't blur it.
-      const there = () =>
-        node.parentNode === parent && node.nextSibling === before
+      // One already in place isn't moved, so Chromium doesn't blur it.
       if (!node.isConnected) parent.insertBefore(node, before)
-      else if (!there()) {
-        detach(node, () => parent.insertBefore(node, before), there)
+      else if (node.parentNode !== parent || node.nextSibling !== before) {
+        detach(node, () => parent.insertBefore(node, before))
       }
     },
     remove(parent, node) {
       if (shown.size > 0) closeShownIn(node, true)
-      detach(
-        node,
-        () => parent.removeChild(node),
-        () => node.parentNode !== parent
-      )
+      detach(node, () => parent.removeChild(node))
     },
     clear(parent) {
       if (shown.size > 0) closeShownIn(parent, false)
-      const first = parent.firstChild
-      detach(
-        parent,
-        () => parent.textContent = "",
-        () => first?.parentNode !== parent,
-        1
-      )
+      detach(parent, () => parent.textContent = "", true)
     },
     parentOf: (node) => node.parentNode!,
     nextOf: (node) => node.nextSibling,

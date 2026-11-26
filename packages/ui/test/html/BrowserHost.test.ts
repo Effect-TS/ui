@@ -1833,6 +1833,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           class extends HTMLElement {
             connectedCallback() {
               if (!steal) return
+              this.insertAdjacentHTML("afterend", "<small>Required</small>")
               this.focus()
               // Like focus moving into an iframe, it has no `relatedTarget`.
               this.blur()
@@ -1852,19 +1853,19 @@ describe("BrowserHost", { concurrent: false }, () => {
         document.getElementById("f")!.focus()
         yield* next()
         expect(root.model()).toEqual({ step: 2, left: 0 })
-        // A moved element that takes focus and sends it out as it reconnects, and a blur outside a render.
-        document.getElementById("a")!.focus()
+        // A focused moved element that adds a hint, takes focus back and sends it out as it reconnects, and a blur outside a render.
+        app.querySelector<HTMLElement>("x-steal")!.focus()
         steal = true
         yield* next()
         document.getElementById("a")!.focus()
         document.getElementById("a")!.blur()
         yield* tick
-        expect(root.model()).toEqual({ step: 3, left: 3 })
+        expect(root.model()).toEqual({ step: 3, left: 2 })
         // The same exit, from a focused moved element, in a browser that doesn't blur on detach.
         app.querySelector<HTMLElement>("x-steal")!.focus()
         chromium = false
         yield* next()
-        expect(root.model()).toEqual({ step: 4, left: 4 })
+        expect(root.model()).toEqual({ step: 4, left: 3 })
         // A removed element's blur adds a hint after it and sends focus to a sibling that stays, then out of the document. Only the sibling's exit counts.
         const removed = document.getElementById("a")!
         removed.focus()
@@ -1876,7 +1877,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           sibling.blur()
         }, { once: true })
         yield* next()
-        expect(root.model()).toEqual({ step: 5, left: 5 })
+        expect(root.model()).toEqual({ step: 5, left: 4 })
       }).pipe(Effect.scoped))
 
     it.effect("focus says whether the element shows a focus ring", () =>
