@@ -1567,7 +1567,6 @@ const patchList = (
   }
   while (
     start <= oldEnd && start <= end &&
-    (olds.length === views.length || keyOf(views[end]!) !== undefined) &&
     pairs(olds[oldEnd]!.v, views[end]!)
   ) {
     oldEnd--

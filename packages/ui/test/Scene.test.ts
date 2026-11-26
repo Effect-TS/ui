@@ -519,6 +519,79 @@ describe("Scene", () => {
         )
       }))
 
+    it.effect("an unkeyed element's mount keeps running while a conditional sibling before it comes and goes", () =>
+      Effect.gen(function*() {
+        const Notice = Html.component({
+          name: "Notice",
+          props: Schema.Struct({ shown: Schema.Boolean }),
+          model: Schema.Null,
+          message: Schema.Never
+        }).make({
+          init: () => null,
+          update: ($) => $.model,
+          view: (h) =>
+            h.div(h.props.shown && h.p("notice"), h.ul.onMount(Hello()))
+        })
+        const scene = yield* Scene.make(Notice, { shown: true })
+        scene.mounted(Hello).props({ shown: false }).props({ shown: true })
+      }))
+
+    it.effect("an unkeyed element doesn't take over a keyed child's fallback of the same tag", () =>
+      Effect.gen(function*() {
+        const Page = Html.component({
+          name: "Page",
+          model: Schema.Boolean,
+          message: Schema.Boolean
+        }).make({
+          init: () => true,
+          update: (_, shown) => shown,
+          view: (h, shown) =>
+            h.section(
+              h.button.on("click", false).children("hide"),
+              shown
+                ? [
+                  h.p("notice"),
+                  Badge(h, { key: "b", fallback: () => h.ul.onMount(Hello()) })
+                ]
+                : h.ul.onMount(Hello())
+            )
+        })
+        const scene = yield* Scene.make(Page, {})
+        scene.childFailure(Badge, "b", Cause.fail("boom")).mounted(Hello).click(
+          Locator.tag("button")
+        ).mounted(Hello)
+      }))
+
+    it.effect("a headless child's fallback starts its own mounts, which then keep running", () =>
+      Effect.gen(function*() {
+        const Wrapper = Component.define({
+          name: "Wrapper",
+          model: Schema.Null,
+          message: Schema.Never
+        })
+          .make({ init: () => null, update: ($) => $.model, parts: () => ({}) })
+        const Page = Html.component({
+          name: "Page",
+          model: Schema.Number,
+          message: Schema.Boolean
+        }).make({
+          init: () => 0,
+          update: ($) => $.model + 1,
+          view: (h, count) =>
+            h.section(
+              h.button.on("click", true).children(String(count)),
+              Wrapper(h, {
+                key: "b",
+                view: () => h.ul.onMount(Hello()),
+                fallback: () => h.ul.onMount(Hello())
+              })
+            )
+        })
+        const scene = yield* Scene.make(Page, {})
+        scene.mounted(Hello).childFailure(Wrapper, "b", Cause.die("boom"))
+          .mounted(Hello).click(Locator.tag("button"))
+      }))
+
     it.effect("a root headless child with a new key is a new child, so its mounts are new, its view node cached or not", () =>
       Effect.gen(function*() {
         const Wrapper = Component.define({
