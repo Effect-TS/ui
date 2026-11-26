@@ -14,10 +14,22 @@ export interface Held {
 export type State = (path: string) => BrowserHost.Recorded | undefined
 
 export interface History {
-  readonly record: (entry: Entry, excluded?: boolean) => void
+  readonly record: (entry: Entry) => void
   readonly clear: (session: string, upTo: number) => void
   readonly drop: (session: string) => void
   readonly holds: (session: string, seq: number) => boolean
+  /** An entry held, shown or excluded. */
+  readonly entry: (session: string, seq: number) => Entry | undefined
+  /** The last seq recorded, excluded updates included. */
+  readonly latest: (session: string) => number | undefined
+  /**
+   * Why a seq up to `latest` isn't held: older than every entry kept, in a
+   * range that never arrived, or else an excluded update replaced since.
+   */
+  readonly missing: (
+    session: string,
+    seq: number
+  ) => "evicted" | "skipped" | "excluded"
   readonly at: (session: string, seq: number) => State | undefined
   readonly instanceAt: (
     session: string,
@@ -85,8 +97,10 @@ const isDirty = (dirty: ReadonlySet<string>, path: string) => {
 const makeSession = (size: number) => {
   const base = new Map<number, Held>()
   const entries: Array<Entry> = []
-  const shown = new Set<number>()
+  const shown = new Map<number, Entry>()
   const coalesced = new Map<number, Entry>()
+  // Ranges of seqs that never arrived, kept until older than the entries held.
+  const gaps: Array<readonly [number, number]> = []
   let floor = -Infinity
   let last = -Infinity
   const drop = () => {
@@ -97,6 +111,7 @@ const makeSession = (size: number) => {
       coalesced.delete(oldest.instance)
     }
     apply(base, oldest, false)
+    while (gaps.length > 0 && gaps[0]![1] < floor) gaps.shift()
   }
   const fold = (seq: number) => {
     const states = new Map(base)
@@ -107,10 +122,13 @@ const makeSession = (size: number) => {
     return states
   }
   return {
-    record: (entry: Entry, excluded = false) => {
+    record: (entry: Entry) => {
       if (entry.seq <= last) return
+      if (entry.seq > last + 1 && last !== -Infinity) {
+        gaps.push([last + 1, entry.seq - 1])
+      }
       last = entry.seq
-      if (excluded && entry._tag === "Update") {
+      if (entry._tag === "Update" && entry.excluded === true) {
         const replaced = coalesced.get(entry.instance)
         if (replaced !== undefined) {
           entries.splice(entries.lastIndexOf(replaced), 1)
@@ -127,13 +145,22 @@ const makeSession = (size: number) => {
       }
       coalesced.clear()
       entries.push(entry)
-      shown.add(entry.seq)
+      shown.set(entry.seq, entry)
       while (shown.size > size) drop()
     },
     clear: (upTo: number) => {
       while (entries.length > 0 && entries[0]!.seq <= upTo) drop()
     },
     holds: (seq: number) => shown.has(seq),
+    entry: (seq: number) =>
+      shown.get(seq) ?? entries.find((entry) => entry.seq === seq),
+    latest: () => last,
+    missing: (seq: number) =>
+      seq <= floor
+        ? "evicted" as const
+        : gaps.some(([from, to]) => from <= seq && seq <= to)
+        ? "skipped" as const
+        : "excluded" as const,
     at: (seq: number): State => {
       const states = fold(seq)
       const byPath = new Map<string, BrowserHost.Recorded>()
@@ -180,12 +207,12 @@ const makeSession = (size: number) => {
 export const make = (size: number): History => {
   const sessions = new Map<string, ReturnType<typeof makeSession>>()
   return {
-    record: (entry, excluded) => {
+    record: (entry) => {
       let session = sessions.get(entry.session)
       if (session === undefined) {
         sessions.set(entry.session, session = makeSession(size))
       }
-      session.record(entry, excluded)
+      session.record(entry)
     },
     clear: (session, upTo) => {
       sessions.get(session)?.clear(upTo)
@@ -194,6 +221,9 @@ export const make = (size: number): History => {
       sessions.delete(session)
     },
     holds: (session, seq) => sessions.get(session)?.holds(seq) ?? false,
+    entry: (session, seq) => sessions.get(session)?.entry(seq),
+    latest: (session) => sessions.get(session)?.latest(),
+    missing: (session, seq) => sessions.get(session)?.missing(seq) ?? "evicted",
     at: (session, seq) => {
       const held = sessions.get(session)
       return held === undefined || !held.holds(seq) ? undefined : held.at(seq)

@@ -143,7 +143,7 @@ export const matchTags =
 const makeSession = (
   id: string,
   size: number,
-  isExcluded: (entry: Entry) => boolean
+  isExcluded: ((entry: Entry) => boolean) | undefined
 ) => {
   const entries = new Map<number, Entry>()
   const hidden = new Set<number>()
@@ -593,10 +593,14 @@ const makeSession = (
 
   return {
     session,
+    frames: () => entries.values(),
     ingest: (entry: Entry) => {
       if (entry.seq <= last) return
       last = entry.seq
-      if (entry._tag === "Update" && isExcluded(entry)) {
+      if (
+        entry._tag === "Update" &&
+        (entry.excluded === true || isExcluded?.(entry) === true)
+      ) {
         const replaced = coalesced.get(entry.instance)
         if (replaced !== undefined) {
           const inst = instances.get(entry.instance)
@@ -624,8 +628,11 @@ const makeSession = (
 
 export const make = (options: {
   readonly size?: number | undefined
-  readonly isExcluded: (entry: Entry) => boolean
-}): Inspector.Inspector => {
+  readonly isExcluded?: ((entry: Entry) => boolean) | undefined
+}): Inspector.Inspector & {
+  /** Every entry held, excluded ones too, oldest first. */
+  readonly frames: (session: string) => Iterable<Entry>
+} => {
   const size = Math.max(1, options.size ?? 1_000)
   const sessions = new Map<string, ReturnType<typeof makeSession>>()
   return {
@@ -640,6 +647,7 @@ export const make = (options: {
       }
     },
     sessions: () => Array.from(sessions.values(), (state) => state.session),
+    frames: (session) => sessions.get(session)?.frames() ?? [],
     remove: (session) => {
       sessions.delete(session)
     }

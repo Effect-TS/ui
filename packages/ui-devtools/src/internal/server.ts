@@ -24,6 +24,7 @@ export interface Options {
 interface Page extends Tools.Page {
   readonly sessions: Set<string>
   paused: Control.Paused | null
+  notRecording: ReadonlyArray<string>
 }
 
 interface Meta {
@@ -40,10 +41,7 @@ const decodeWire = Schema.decodeUnknownOption(
 )
 
 export const make = (options: Options) => {
-  const inspector = InspectorInternal.make({
-    size: options.size,
-    isExcluded: () => false
-  })
+  const inspector = InspectorInternal.make({ size: options.size })
   const history = History.make(options.size)
   const meta = new Map<string, Meta>()
   const pages = new Set<Page>()
@@ -163,6 +161,7 @@ export const make = (options: Options) => {
       const page: Page = {
         sessions: new Set(),
         paused: null,
+        notRecording: [],
         request: (request) => {
           const at = ++id
           return Effect.gen(function*() {
@@ -213,6 +212,7 @@ export const make = (options: Options) => {
                 page.sessions.add(session)
               }
               page.paused = message.paused
+              page.notRecording = message.notRecording
               notify()
               return Effect.void
             }
@@ -244,7 +244,8 @@ export const make = (options: Options) => {
         if (started !== undefined) {
           Queue.offerUnsafe(outbox, JSON.stringify(started))
         }
-        for (const frame of session.entries()) {
+        // Excluded frames too, so the viewer's diffs match a live one's.
+        for (const frame of inspector.frames(session.id)) {
           Queue.offerUnsafe(outbox, JSON.stringify(frame))
         }
       }
@@ -267,11 +268,7 @@ export const make = (options: Options) => {
     pageOf: (session) =>
       Array.from(pages).reverse().find((page) => page.sessions.has(session)),
     until,
-    within: Math.round(timeout * 0.8),
-    latest: (id) =>
-      inspector.sessions().find((session) => session.id === id)?.entries()
-        .at(-1)?.seq,
-    gap: "skipped"
+    within: Math.round(timeout * 0.8)
   }
   return { server, routes: Layer.mergeAll(log, control, watch) }
 }

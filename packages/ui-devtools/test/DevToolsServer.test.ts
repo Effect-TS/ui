@@ -2,7 +2,7 @@
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer"
 import { Command, MessageLog, Query, UiSchema } from "@effect/ui"
-import { DevTools } from "@effect/ui-devtools"
+import { DevTools, Inspector } from "@effect/ui-devtools"
 import * as Mcp from "@effect/ui-devtools/internal/mcp"
 import * as Remote from "@effect/ui-devtools/internal/remote"
 import * as Server from "@effect/ui-devtools/internal/server"
@@ -159,9 +159,13 @@ const Note = Html.component({
   queries: { note: { query: GetNote, args: ({ props }) => ({ id: props.id }) } }
 }).make({ init: () => ({}), update: ($) => $.model, view: (h) => h.div() })
 
-const serveFast = Effect.fnUntraced(function*(port: number, timeout: number) {
+const serveFast = Effect.fnUntraced(function*(
+  port: number,
+  timeout: number,
+  size = 100
+) {
   const { routes, server } = Server.make({
-    size: 100,
+    size,
     dispatch: true,
     keep: 5,
     timeout
@@ -190,6 +194,22 @@ const at = { session: "s", at: 0, path: "/App", instance: 1, component: "App" }
 const propsAt = (seq: number) =>
   JSON.stringify({ _tag: "PropsChanged", ...at, seq, props: { seq } })
 
+const updateAt = (seq: number, excluded: boolean) =>
+  JSON.stringify({
+    _tag: "Update",
+    ...at,
+    seq,
+    source: { _tag: "DomEvent", name: "click" },
+    message: { _tag: excluded ? "Ticked" : "Clicked" },
+    props: {},
+    model: { seq },
+    commands: [],
+    events: [],
+    lists: [],
+    sends: [],
+    ...(excluded ? { excluded: true } : {})
+  })
+
 const fakePage = Effect.fnUntraced(function*(
   url: string,
   dispatch: (log: WebSocket, message: unknown) => Effect.Effect<
@@ -217,6 +237,8 @@ const fakePage = Effect.fnUntraced(function*(
     paused: () => undefined,
     paint: () => Effect.succeed(undefined),
     resume: Effect.void,
+    notRecording: () => [],
+    setRecording: () => {},
     changes: Stream.never
   }).pipe(Effect.provide(Socket.layerWebSocketConstructorGlobal))
   yield* wait(100)
@@ -245,6 +267,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
           "diff_state",
           "show_entry",
           "resume",
+          "set_recording",
           "get_message_schema",
           "dispatch",
           "wait"
@@ -317,6 +340,42 @@ describe("DevToolsServer", { concurrent: false }, () => {
         })
         assert.deepStrictEqual(entry, { _tag: "ClickedSave" })
         assert.notInclude(agent.results.join("\n"), token)
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
+    "reads and sets the page's choice of what to record",
+    () =>
+      Effect.gen(function*() {
+        const { agent, url } = yield* serve({ port: 47755 })
+        localStorage.clear()
+        sessionStorage.clear()
+        const services = yield* Layer.build(
+          DevTools.layer({ server: url, exclude: ["UpdatedDraft"] })
+        )
+        const app = yield* play("open").pipe(Effect.provide(services))
+        yield* wait(150)
+        const body = HtmlLocator.getByRole(app, "textbox", { name: "Body n1" })
+        const labels = Effect.map(
+          agent.call("list_entries", { filter: "messages", limit: 100 }),
+          ({ rows }) => rows.map((row: any) => row.label) as Array<string>
+        )
+
+        assert.notInclude(yield* labels, "UpdatedDraft")
+        const [session] = yield* agent.call("list_sessions")
+        assert.deepStrictEqual(session.notRecording, ["UpdatedDraft"])
+
+        assert.deepStrictEqual(
+          yield* agent.call("set_recording", {
+            tag: "UpdatedDraft",
+            recording: true
+          }),
+          []
+        )
+        HtmlLocator.type(body, "draft")
+        yield* wait(100)
+        assert.include(yield* labels, "UpdatedDraft")
       }).pipe(Effect.scoped),
     30_000
   )
@@ -939,7 +998,8 @@ describe("DevToolsServer", { concurrent: false }, () => {
           JSON.stringify({
             _tag: "State",
             sessions: ["s"],
-            paused: null
+            paused: null,
+            notRecording: []
           })
         )
         yield* wait(100)
@@ -977,7 +1037,8 @@ describe("DevToolsServer", { concurrent: false }, () => {
           JSON.stringify({
             _tag: "State",
             sessions: ["s"],
-            paused: { session: "s", seq: 0, fellBack: [], fallbacks: [] }
+            paused: { session: "s", seq: 0, fellBack: [], fallbacks: [] },
+            notRecording: []
           })
         )
         yield* wait(100)
@@ -990,33 +1051,92 @@ describe("DevToolsServer", { concurrent: false }, () => {
   )
 
   it.live(
-    "reports a dispatched entry the server will never hold when a later frame arrives",
+    "tells a coalesced excluded update from a skipped one, and replays the kept one to a late viewer as the next diff's baseline",
     () =>
       Effect.gen(function*() {
-        const { agent, url } = yield* serveFast(47753, 1_000)
-        yield* fakePage(url, (log) =>
+        const { agent, url } = yield* serveFast(47756, 1_000)
+        const log = yield* fakePage(url, (log, message) =>
           Effect.sync(() => {
-            log.send(propsAt(3))
-            return { _tag: "Updated", seq: 2 } as const
+            const seq = 2 + (message as { n: number }).n
+            log.send(updateAt(seq, true))
+            return { _tag: "Updated", seq } as const
           }))
+        const sent = yield* agent.call("dispatch", {
+          session: "s",
+          instance: 1,
+          messages: go(2)
+        })
+        assert.isUndefined(sent.unseen)
+        assert.deepStrictEqual(sent.unavailable, [{
+          seq: 2,
+          reason: "excluded"
+        }])
+
+        log.send(updateAt(4, false))
+        yield* wait(100)
+        const watch = yield* connectSocket(
+          url.replace("http", "ws") + "/watch"
+        )
+        yield* Effect.addFinalizer(() => Effect.sync(() => watch.close()))
+        const frames: Array<any> = []
+        watch.addEventListener("message", (event) => {
+          const frame = JSON.parse(String(event.data))
+          if (frame._tag !== "Held") frames.push(frame)
+        })
+        yield* until(() => frames.some((frame) => frame.seq === 4))
+        const viewer = Inspector.make()
+        viewer.ingest(frames)
+        assert.strictEqual(viewer.sessions()[0]!.previous(4)?.seq, 3)
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
+    "reports a dispatched entry the server will never hold when a later frame arrives, inside or before the kept window",
+    () =>
+      Effect.gen(function*() {
+        const { agent, url } = yield* serveFast(47753, 1_000, 1)
+        let first = true
+        yield* fakePage(url, (log) => {
+          // Seq 2 is kept as the hidden baseline of 4, so 3 is inside the window.
+          if (first) {
+            first = false
+            log.send(updateAt(2, true))
+            log.send(propsAt(4))
+            return Effect.succeed({ _tag: "Updated", seq: 3 } as const)
+          }
+          log.send(propsAt(5))
+          log.send(propsAt(6))
+          return Effect.as(wait(100), { _tag: "Updated", seq: 5 } as const)
+        })
         const sent = yield* agent.call("dispatch", {
           session: "s",
           instance: 1,
           messages: go(1)
         })
-        assert.deepStrictEqual(sent.outcomes, [{ _tag: "Updated", seq: 2 }])
+        assert.deepStrictEqual(sent.outcomes, [{ _tag: "Updated", seq: 3 }])
         assert.deepStrictEqual(sent.unavailable, [{
-          seq: 2,
+          seq: 3,
           reason: "skipped"
         }])
         assert.isUndefined(sent.unseen)
         assert.include(
           sent.note,
-          "#2 were logged by the page, but the server can't show them"
+          "#3 were logged by the page, but the server can't show them"
         )
-        yield* agent.fails("get_entry", { session: "s", seq: 2 })
-        const shown = yield* agent.call("get_entry", { session: "s", seq: 3 })
+        yield* agent.fails("get_entry", { session: "s", seq: 3 })
+        const shown = yield* agent.call("get_entry", { session: "s", seq: 4 })
         assert.strictEqual(shown._tag, "PropsChanged")
+
+        const old = yield* agent.call("dispatch", {
+          session: "s",
+          instance: 1,
+          messages: go(1)
+        })
+        assert.deepStrictEqual(old.unavailable, [{
+          seq: 5,
+          reason: "evicted"
+        }])
       }).pipe(Effect.scoped),
     30_000
   )

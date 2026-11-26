@@ -5,6 +5,10 @@ import * as Schema from "effect/Schema"
 export const Request = Schema.Union([
   Schema.TaggedStruct("Show", { session: Schema.String, seq: Schema.Number }),
   Schema.TaggedStruct("Resume", {}),
+  Schema.TaggedStruct("SetRecording", {
+    tag: Schema.String,
+    recording: Schema.Boolean
+  }),
   Schema.TaggedStruct("MessageSchema", {
     session: Schema.String,
     instance: Schema.Number,
@@ -40,7 +44,8 @@ export type Paused = typeof Paused.Type
 export const ToServer = Schema.Union([
   Schema.TaggedStruct("State", {
     sessions: Schema.Array(Schema.String),
-    paused: Schema.NullOr(Paused)
+    paused: Schema.NullOr(Paused),
+    notRecording: Schema.Array(Schema.String)
   }),
   Schema.TaggedStruct("Reply", {
     id: Schema.Number,

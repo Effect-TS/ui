@@ -12,7 +12,7 @@ import * as Control from "./control.ts"
 import * as History from "./history.ts"
 import * as InspectorInternal from "./inspector.ts"
 import { type Feed, mountOverlay, Pages, type Position } from "./overlay.ts"
-import { isFailure } from "./read.ts"
+import { isFailure, tagOf } from "./read.ts"
 import * as Remote from "./remote.ts"
 import { styles } from "./styles.ts"
 import * as Tools from "./tools.ts"
@@ -27,6 +27,7 @@ export interface WebMcpOptions {
 const sizeKey = "@effect/ui-devtools/size"
 const openKey = "@effect/ui-devtools/open"
 const positionKey = "@effect/ui-devtools/position"
+const recordingKey = "@effect/ui-devtools/recording"
 const devToolsKey = Symbol.for("@effect/ui/devtools")
 
 const positions = new Set<string>([
@@ -107,13 +108,7 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
       const modelContext = options.webMcp === false
         ? undefined
         : WebMcp.modelContext()
-      const isExcluded = InspectorInternal.matchTags(new Set(options.exclude))
-      const excluded = new Map<string, Set<number>>()
-      const inspector = InspectorInternal.make({
-        size,
-        isExcluded: (entry) =>
-          excluded.get(entry.session)?.delete(entry.seq) === true
-      })
+      const inspector = InspectorInternal.make({ size })
       const history = History.make(size)
       const wireHistory = modelContext && History.make(size)
       const roots = new Map<string, BrowserHost.Controllable>()
@@ -133,19 +128,44 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         PubSub.publishUnsafe(states, undefined)
       }
       const view = document.defaultView
-      const load = (key: string): unknown => {
+      type Store = "localStorage" | "sessionStorage"
+      const load = (key: string, store: Store = "localStorage"): unknown => {
         try {
-          return JSON.parse(view?.localStorage.getItem(key) ?? "null")
+          return JSON.parse(view?.[store].getItem(key) ?? "null")
         } catch {
           return null
         }
       }
-      const save = (key: string, value: unknown) => {
+      const save = (
+        key: string,
+        value: unknown,
+        store: Store = "localStorage"
+      ) => {
         try {
-          view?.localStorage.setItem(key, JSON.stringify(value))
+          view?.[store].setItem(key, JSON.stringify(value))
         } catch {
           return
         }
+      }
+      const chosen = load(recordingKey, "sessionStorage")
+      const choices = new Map<string, boolean>()
+      const stopped = new Set(options.exclude)
+      const choose = (tag: string, recording: boolean) => {
+        choices.set(tag, recording)
+        if (recording) stopped.delete(tag)
+        else stopped.add(tag)
+      }
+      if (typeof chosen === "object" && chosen !== null) {
+        for (const [tag, recording] of Object.entries(chosen)) {
+          if (typeof recording === "boolean") choose(tag, recording)
+        }
+      }
+      const isStopped = InspectorInternal.matchTags(stopped)
+      const notRecording = () => Array.from(stopped)
+      const setRecording = (tag: string, recording: boolean) => {
+        choose(tag, recording)
+        save(recordingKey, Object.fromEntries(choices), "sessionStorage")
+        changed()
       }
       const savedPosition = load(positionKey)
       let position: Position = isPosition(savedPosition)
@@ -160,7 +180,16 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         paused: () => paused?.at,
         failures: () => failures,
         open: load(openKey) === true,
-        position: () => position
+        position: () => position,
+        notRecording,
+        // The raw message's tag: an encoded one may be under another key.
+        stoppable: (session, seq) => {
+          const entry = history.entry(session, seq)
+          const tag = entry?._tag === "Update"
+            ? tagOf(entry.message)
+            : undefined
+          return tag === undefined || stopped.has(tag) ? undefined : tag
+        }
       }
       const unpause: Effect.Effect<void> = Effect.suspend(() => {
         const was = paused
@@ -220,6 +249,8 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
             notify()
           }),
         setOpen: (open) => Effect.sync(() => save(openKey, open)),
+        setRecording: (tag, recording) =>
+          Effect.sync(() => setRecording(tag, recording)),
         setPosition: (next) => Effect.sync(() => setPosition(next))
       })
       const controllables: BrowserHost.Controllables = {
@@ -449,10 +480,7 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
               origins.set(entry.session, entry.at)
             }
             latest.set(entry.session, entry.seq)
-            wireHistory?.record(
-              entry,
-              excluded.get(entry.session)?.has(entry.seq) === true
-            )
+            wireHistory?.record(entry)
           }
           inspector.ingest(batch)
           notify()
@@ -461,13 +489,7 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
       )
       const record = (entry: MessageLog.Entry) => {
         if (isFailure(entry)) failures++
-        const hide = isExcluded(entry)
-        if (hide) {
-          let seqs = excluded.get(entry.session)
-          if (seqs === undefined) excluded.set(entry.session, seqs = new Set())
-          seqs.add(entry.seq)
-        }
-        history.record(entry, hide)
+        history.record(entry)
       }
       const logs = [{ enabled: true, record }, encoded]
       const controller = {
@@ -475,7 +497,9 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         size,
         paused: () => paused?.at,
         paint,
-        resume
+        resume,
+        notRecording,
+        setRecording
       }
       if (server !== undefined) {
         const sent = yield* Layer.build(
@@ -508,15 +532,28 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
           }),
           pageOf: (session) =>
             roots.has(session)
-              ? { paused: paused?.at ?? null, request }
+              ? {
+                paused: paused?.at ?? null,
+                notRecording: notRecording(),
+                request
+              }
               : undefined,
           until,
-          within: 8_000,
-          latest: (session) => latest.get(session),
-          gap: "excluded"
+          within: 8_000
         })
       }
-      return Context.make(MessageLog.MessageLog, MessageLog.fanoutAll(logs))
+      const log = MessageLog.fanoutAll(logs)
+      // The flag carries the choice to every reader, the server's copy too.
+      const marked: MessageLog.MessageLog = {
+        enabled: true,
+        record: (entry) =>
+          log.record(
+            entry._tag === "Update" && isStopped(entry)
+              ? { ...entry, excluded: true }
+              : entry
+          )
+      }
+      return Context.make(MessageLog.MessageLog, marked)
         .pipe(
           Context.add(BrowserHost.Controllables, controllables)
         )

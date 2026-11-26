@@ -410,7 +410,8 @@ export const diff: (
  * a run of them takes one slot per instance: each replaces the instance's
  * earlier excluded entry while no shown entry of any instance sits between
  * them. Links to a replaced entry resolve to `Outside`. The next shown entry
- * is still compared with the latest excluded state.
+ * is still compared with the latest excluded state. `Update` frames marked
+ * `excluded: true` by `DevTools.layer` are also excluded.
  *
  * `exclude` is not a way to hide sensitive data: later entries still carry
  * whatever an excluded message changed in the Model. Use `Schema.Redacted`
