@@ -793,7 +793,7 @@ export const makeHost = (
         return
       }
       // Writing `""` would still navigate, so the reflected attribute goes.
-      if (url.blockedProperty(name, value) && !isCustomTag(element.localName)) {
+      if (url.blockedProperty(element.localName, name, value)) {
         element.removeAttribute(name.toLowerCase())
         return
       }

@@ -474,7 +474,8 @@ const between = (
       // An equal `href` property can still have its attribute, which the host removes.
       if (
         entry !== undefined && (node as any)[name] === value &&
-        base.controlled?.has(name) !== true && !url.blockedProperty(name, value)
+        base.controlled?.has(name) !== true &&
+        !url.blockedProperty((node as Element).localName, name, value)
       ) return
       base.setProp(node, name, value)
     },

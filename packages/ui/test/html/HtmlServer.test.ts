@@ -326,6 +326,18 @@ describe("HtmlServer", { concurrent: false }, () => {
 
   it.effect("a blocked URL property removes only the attribute it reflects", () =>
     Effect.gen(function*() {
+      let sets = 0
+      customElements.define(
+        "x-url-prop",
+        class extends HTMLElement {
+          get href() {
+            return "javascript:"
+          }
+          set href(_: string) {
+            sets++
+          }
+        }
+      )
       const Page = Html.component({
         name: "Props",
         props: Schema.Struct({}),
@@ -345,12 +357,13 @@ describe("HtmlServer", { concurrent: false }, () => {
             h.button.attr("formaction", "/save").prop(
               "formAction",
               "javascript:"
-            )
+            ),
+            h.el("x-url-prop").prop("href", "javascript:")
           )
       })
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
       expect(rendered.html).toBe(
-        "<!--[/Props--><div><a></a><a></a><button formaction=\"/save\"></button><button></button></div><!--]/Props-->"
+        "<!--[/Props--><div><a></a><a></a><button formaction=\"/save\"></button><button></button><x-url-prop></x-url-prop></div><!--]/Props-->"
       )
       for (const hydrate of [false, true]) {
         // Hydrates markup that still has the blocked href, as an older server wrote it.
@@ -360,10 +373,13 @@ describe("HtmlServer", { concurrent: false }, () => {
             : ""
         )
         const before = app.firstElementChild
+        sets = 0
         yield* (hydrate
           ? HtmlHydrate.hydrateEffect(Page, {}, app, rendered.state)
           : BrowserHost.mountEffect(Page, {}, app))
         if (hydrate) expect(app.firstElementChild).toBe(before)
+        // A custom element's equal property isn't written again on adoption.
+        expect(sets).toBe(hydrate ? 0 : 1)
         expect(
           Array.from(
             app.querySelectorAll("*"),

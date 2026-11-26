@@ -1,4 +1,5 @@
 /** URL scheme rules shared by `Markdown` and the HTML renderers. */
+import { isCustomTag } from "./elements.ts"
 
 // oxlint-disable-next-line no-control-regex
 const ignored = /[\u0000-\u0020]/g
@@ -49,11 +50,16 @@ export const blockedAttribute = (name: string, value: string): boolean =>
   attributes.has(name) && isScript(value)
 
 /**
- * Whether a built-in element's property `name` would be set to a
+ * Whether property `name` of a built-in `tag` would be set to a
  * `javascript:` or `vbscript:` URL. The renderers remove the attribute it
  * reflects, `name.toLowerCase()`, instead.
  *
  * @internal
  */
-export const blockedProperty = (name: string, value: unknown): boolean =>
-  typeof value === "string" && properties.has(name) && isScript(value)
+export const blockedProperty = (
+  tag: string,
+  name: string,
+  value: unknown
+): boolean =>
+  typeof value === "string" && properties.has(name) && !isCustomTag(tag) &&
+  isScript(value)

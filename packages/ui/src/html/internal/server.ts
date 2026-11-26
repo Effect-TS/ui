@@ -113,7 +113,9 @@ const elementAttributes = (
         else out.delete(name)
         break
       default:
-        if (url.blockedProperty(name, value)) out.delete(name.toLowerCase())
+        if (url.blockedProperty(tag, name, value)) {
+          out.delete(name.toLowerCase())
+        }
     }
   }
   return out
