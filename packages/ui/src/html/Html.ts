@@ -625,6 +625,9 @@ export interface FocusPayload {
  * the components below the disabled element have their new props, so a
  * handler reads it here and not from its own state.
  *
+ * A render that removes or moves the focused element sends no `blur`, as
+ * the HTML standard says, though Chromium fires one.
+ *
  * @stability experimental
  * @category events
  * @since 0.1.0

@@ -119,6 +119,21 @@ const canonicalAttrs = (
 
 const ignore = () => {}
 
+// Chromium blurs a focused element that a render detaches, to remove or to
+// move it. The HTML standard and other browsers don't. That blur has no
+// `relatedTarget`, so one during a detach is dropped, while focus moved to
+// another element still counts. Module-level, because `BrowserHost` detaches
+// through one host while another one listens.
+let detaching = 0
+const detach = (f: () => void): void => {
+  detaching++
+  try {
+    f()
+  } finally {
+    detaching--
+  }
+}
+
 type Node = globalThis.Node & { $r?: Kernel.Rec }
 
 /** @internal */
@@ -528,6 +543,10 @@ export const makeHost = (
 
   const listener = (event: Event): void => {
     const name = event.type
+    if (
+      detaching > 0 && (name === "blur" || name === "focusout") &&
+      (event as FocusEvent).relatedTarget === null
+    ) return
     const path = event.composedPath() as Array<Node>
     const custom = view !== null && event instanceof view.CustomEvent
     const detailFor = (node: Node) =>
@@ -813,15 +832,16 @@ export const makeHost = (
       if (eventOptions.dragstart !== undefined) listen("dragend")
     },
     insert(parent, node, before) {
-      parent.insertBefore(node, before)
+      if (node.isConnected) detach(() => parent.insertBefore(node, before))
+      else parent.insertBefore(node, before)
     },
     remove(parent, node) {
       if (shown.size > 0) closeShownIn(node, true)
-      parent.removeChild(node)
+      detach(() => parent.removeChild(node))
     },
     clear(parent) {
       if (shown.size > 0) closeShownIn(parent, false)
-      parent.textContent = ""
+      detach(() => parent.textContent = "")
     },
     parentOf: (node) => node.parentNode!,
     nextOf: (node) => node.nextSibling,

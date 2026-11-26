@@ -1768,6 +1768,99 @@ describe("BrowserHost", { concurrent: false }, () => {
         ])
       }).pipe(Effect.scoped))
 
+    it.effect("a render that detaches the focused element sends no blur", () =>
+      Effect.gen(function*() {
+        const Item = UiSchema.TaggedEnum({ Left: {}, Next: {} })
+        const keys = [
+          ["f", "a", "b"],
+          ["a", "b", "f"],
+          ["a", "b", "g", "s"],
+          ["s", "a", "b", "g"]
+        ]
+        const Items = Html.component({
+          name: "Items",
+          model: Schema.Struct({ step: Schema.Number, left: Schema.Number }),
+          message: Item
+        }).make({
+          init: () => ({ step: 0, left: 0 }),
+          update: {
+            Left: ($) => $.evolve({ left: $.model.left + 1 }),
+            Next: ($) => $.evolve({ step: $.model.step + 1 })
+          },
+          view: (h, { step }) =>
+            h.div.on("focusout", () => Item.Left()).children(
+              keys[step]!.map((key) =>
+                key === "s"
+                  ? h.el("x-steal").key(key).attr("tabindex", "0")
+                  : h.button.key(key).attr("id", key)
+              )
+            )
+        })
+        // Chromium blurs a focused element as it leaves the document, also to move. happy-dom doesn't.
+        const proto = window.Node.prototype
+        const { insertBefore, removeChild } = proto
+        const blurIn = (node: Node) => {
+          const active = document.activeElement as HTMLElement | null
+          if (active !== null && node.contains(active)) active.blur()
+        }
+        const spies = [
+          vi.spyOn(proto, "removeChild").mockImplementation(
+            function<T extends Node>(this: Node, child: T) {
+              blurIn(child)
+              return removeChild.call(this, child) as T
+            }
+          ),
+          vi.spyOn(proto, "insertBefore").mockImplementation(
+            function<T extends Node>(this: Node, node: T, child: Node | null) {
+              if (node.isConnected) blurIn(node)
+              return insertBefore.call(this, node, child) as T
+            }
+          )
+        ]
+        const outside = yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            document.body.appendChild(document.createElement("button"))
+          ),
+          (button) =>
+            Effect.sync(() => {
+              for (const spy of spies) spy.mockRestore()
+              button.remove()
+            })
+        )
+        let steal = false
+        customElements.define(
+          "x-steal",
+          class extends HTMLElement {
+            connectedCallback() {
+              if (!steal) return
+              this.focus()
+              outside.focus()
+            }
+          }
+        )
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Items, {}, app)
+        yield* tick
+        const next = () => {
+          root.send(Item.Next())
+          return tick
+        }
+        // A move, then a re-keyed replacement.
+        document.getElementById("f")!.focus()
+        yield* next()
+        document.getElementById("f")!.focus()
+        yield* next()
+        expect(root.model()).toEqual({ step: 2, left: 0 })
+        // Focus a moved element sends elsewhere as it reconnects, and a blur outside a render.
+        app.querySelector<HTMLElement>("x-steal")!.focus()
+        steal = true
+        yield* next()
+        document.getElementById("a")!.focus()
+        document.getElementById("a")!.blur()
+        yield* tick
+        expect(root.model()).toEqual({ step: 3, left: 2 })
+      }).pipe(Effect.scoped))
+
     it.effect("focus says whether the element shows a focus ring", () =>
       Effect.gen(function*() {
         const Seen = UiSchema.TaggedEnum({
