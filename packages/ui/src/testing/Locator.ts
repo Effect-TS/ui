@@ -69,10 +69,15 @@ export interface Locator {
  * @category getters
  * @since 0.1.0
  */
-export const textOf = (node: Node): string =>
-  node.text !== undefined && node.tag === undefined
-    ? node.text
-    : (node.children ?? []).map(textOf).join("")
+export const textOf = (node: Node): string => {
+  let text = ""
+  preorder(node, (node) => {
+    if (node.text === undefined || node.tag !== undefined) return true
+    text += node.text
+    return false
+  })
+  return text
+}
 
 /**
  * Every element under `root`, `root` included, in document order.
@@ -83,22 +88,44 @@ export const textOf = (node: Node): string =>
  */
 export const elements = <N extends Node>(root: N): ReadonlyArray<N> => {
   const out: Array<N> = []
-  const walk = (node: N) => {
-    if (node.tag !== undefined) out.push(node)
-    for (const child of node.children ?? []) walk(child as N)
-  }
-  walk(root)
+  preorder(root, (node) => {
+    if (node.tag !== undefined) out.push(node as N)
+    return true
+  })
   return out
+}
+
+/**
+ * Visits nodes in document order without recursion. Returning false from
+ * `visit` skips that node's children.
+ */
+const preorder = (root: Node, visit: (node: Node) => boolean): void => {
+  const pending: Array<Node> = [root]
+  while (pending.length > 0) {
+    const node = pending.pop()!
+    if (!visit(node)) continue
+    const children = node.children
+    if (children === undefined) continue
+    for (let index = children.length - 1; index >= 0; index--) {
+      const child = children[index]
+      if (child !== undefined) pending.push(child)
+    }
+  }
 }
 
 /**
  * The elements directly under `node`. A node with children but no tag, such
  * as the content a story shows under a child's slots, is seen through.
  */
-const childElements = (node: Node): ReadonlyArray<Node> =>
-  (node.children ?? []).flatMap((child) =>
-    child.tag !== undefined ? [child] : childElements(child)
-  )
+const childElements = (node: Node): ReadonlyArray<Node> => {
+  const out: Array<Node> = []
+  preorder(node, (child) => {
+    if (child === node || child.tag === undefined) return true
+    out.push(child)
+    return false
+  })
+  return out
+}
 
 const make = (
   description: string,

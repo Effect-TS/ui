@@ -22,6 +22,8 @@
  * which no Layer build begun since is still pending), the router scrolls,
  * announces the page in a live region and moves focus. A push goes to the top
  * or to its `#hash` element, and back and forward restore the saved position.
+ * An initial `#hash` element that renders after load is scrolled to and
+ * focused once it appears, unless the reader interacts or navigates first.
  * A quiet navigation (see `Router.Settled`), such as `Router.patchSearch`,
  * stays on the page: nothing is announced and focus stays. Back and forward
  * still restore the saved position, and a `patchSearch` given
@@ -88,6 +90,7 @@ import type * as Fiber from "effect/Fiber"
 import * as Layer from "effect/Layer"
 import * as Option from "effect/Option"
 import * as services from "../internal/services.ts"
+import { decodeComponent } from "../internal/url.ts"
 import type * as Route from "../Route.ts"
 import * as Router from "../Router.ts"
 import * as submit from "./internal/submit.ts"
@@ -229,7 +232,8 @@ const make = (
     }
     const target = (hash: string): HTMLElement | null => {
       if (hash.length <= 1) return null
-      const id = decodeURIComponent(hash.slice(1))
+      // A malformed escape, as in `#%`, is matched as written.
+      const id = decodeComponent(hash.slice(1)) ?? hash.slice(1)
       return document.getElementById(id) ??
         document.getElementsByName(id)[0] as HTMLElement | undefined ?? null
     }
@@ -268,6 +272,12 @@ const make = (
     // --- focus -------------------------------------------------------------
     const focusOn = (element: HTMLElement) =>
       element.focus({ preventScroll: true })
+    const focusTarget = (element: HTMLElement) => {
+      if (element.tabIndex < 0 && !element.hasAttribute("tabindex")) {
+        element.setAttribute("tabindex", "-1")
+      }
+      focusOn(element)
+    }
     const resetFocus = () => {
       const body = document.body
       if (
@@ -280,7 +290,11 @@ const make = (
       else body.setAttribute("tabindex", tabindex)
     }
 
+    /** Stops watching for a late initial `#hash` target. */
+    let stopWaiting = () => {}
+
     const onSettled = (settled: Router.Settled) => {
+      stopWaiting()
       const { action, hash } = settled.location
       if (settled.quiet) {
         // Within the page: no announcement and no focus move, and scroll only for a pop or when asked.
@@ -308,12 +322,8 @@ const make = (
       }
       if (focus) {
         if (autofocus !== null) focusOn(autofocus)
-        else if (hashTarget !== null) {
-          if (
-            hashTarget.tabIndex < 0 && !hashTarget.hasAttribute("tabindex")
-          ) hashTarget.setAttribute("tabindex", "-1")
-          focusOn(hashTarget)
-        } else resetFocus()
+        else if (hashTarget !== null) focusTarget(hashTarget)
+        else resetFocus()
       }
       if (region !== undefined) {
         const live = region
@@ -360,6 +370,7 @@ const make = (
       },
       onSettled,
       onHash: (hash, action, index) => {
+        stopWaiting()
         if (!scroll) return
         const saved = action === "pop" ? positions.get(index) : undefined
         if (saved !== undefined) window.scrollTo(saved.x, saved.y)
@@ -371,6 +382,46 @@ const make = (
     })
     const context = yield* Layer.build(routerLayer)
     const router = Context.get(context, Router.Router)
+
+    // --- late initial #hash ------------------------------------------------
+    // Browsers only go to the fragment during load, so watch for a target rendered later. The
+    // location check covers a navigation that renders before it settles.
+    const initial = router.location()
+    if (
+      !inFragment && (scroll || focus) && initial.hash.length > 1 &&
+      target(initial.hash) === null
+    ) {
+      const view = window as Window & typeof globalThis
+      const listening = new view.AbortController()
+      const stop = () => {
+        stopWaiting = () => {}
+        observer.disconnect()
+        listening.abort()
+      }
+      const observer = new view.MutationObserver(() => {
+        if (router.location() !== initial) return stop()
+        const element = target(initial.hash)
+        if (element === null) return
+        stop()
+        if (scroll) element.scrollIntoView()
+        if (focus) focusTarget(element)
+      })
+      observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["id", "name"]
+      })
+      stopWaiting = stop
+      for (const type of ["pointerdown", "keydown", "wheel", "touchstart"]) {
+        window.addEventListener(type, stop, {
+          capture: true,
+          passive: true,
+          signal: listening.signal
+        })
+      }
+      yield* Effect.addFinalizer(() => Effect.sync(stop))
+    }
 
     // --- interception ------------------------------------------------------
     /** The href the routes see for an absolute URL, or undefined when it leaves this app. */

@@ -270,6 +270,16 @@ describe("HtmlLocator", () => {
   })
 
   describe("trees", () => {
+    it("a structural tree tens of thousands of levels deep", () => {
+      const button = el("button", {}, text("OK"))
+      let wrapped: Locator.Node = button
+      for (let depth = 0; depth < 30_000; depth++) {
+        wrapped = { children: [wrapped] }
+      }
+      expect(Locator.get(el("div", {}, wrapped), Locator.text("OK")))
+        .toBe(button)
+    })
+
     it.effect("a scene's view value, field values included", () =>
       Effect.gen(function*() {
         const scene = yield* HtmlScene.make(TodoApp, {})

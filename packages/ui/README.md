@@ -14,4 +14,6 @@ A frontend library for Effect. Each component is an Elm Architecture program of 
 
 The HTML entries listed above need DOM lib types; `@effect/ui` and `@effect/ui/testing` do not.
 
+Every entry needs `strict` and `exactOptionalPropertyTypes` in your `tsconfig.json`: see [Requirements](../../README.md#requirements).
+
 The package is experimental and not yet on npm: see the [snapshot install instructions](../../README.md#snapshots) at the repository root. `LLMS.md` at the repository root has the guide and worked examples.

@@ -72,6 +72,7 @@ import * as Effect from "effect/Effect"
 import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
 import type * as Command from "./Command.ts"
+import { decodeComponent } from "./internal/url.ts"
 
 /**
  * Marks a route definition.
@@ -494,14 +495,6 @@ export const redirect = <const Path extends string>(
 // ---------------------------------------------------------------------------
 // URLs
 // ---------------------------------------------------------------------------
-
-const decodeComponent = (text: string): string | undefined => {
-  try {
-    return decodeURIComponent(text)
-  } catch {
-    return undefined
-  }
-}
 
 type RawSearch = Record<string, string | Array<string>>
 

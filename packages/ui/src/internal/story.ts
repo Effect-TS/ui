@@ -238,16 +238,21 @@ const expandedChildren = new WeakMap<
 >()
 
 /**
- * The headless children an expanded closure stands for, by the closure's root, outermost first: one per
- * child whose closure's root is the next child. The runtime matches each in turn, as it patches the child
- * and then its view's root.
+ * Tracks the declaring children of an expanded root, outermost first. Scene uses
+ * this identity rather than the rendered root to match headless siblings.
  *
  * @internal
  */
 export const expansionOf = new WeakMap<
   object,
-  ReadonlyArray<View.Child<any, any>>
+  ReadonlyArray<Expansion>
 >()
+
+/** @internal */
+export interface Expansion {
+  readonly child: View.Child<any, any>
+  readonly fallback: boolean
+}
 
 /**
  * Each slot a slotted child's `children` shows, with how many nodes it placed, in order: the runtime
@@ -259,6 +264,19 @@ export const slotLengths = new WeakMap<
   object,
   ReadonlyArray<readonly [string, number]>
 >()
+
+// A copy per render: a closure may return a node it cached, and the identities are this render's.
+const standsFor = (
+  child: View.Child<any, any>,
+  fallback: boolean,
+  inner: View.Node<any, any>
+): View.Node<any, any> => {
+  const out = { ...inner } as View.Node<any, any>
+  expansionOf.set(out, [{ child, fallback }, ...(expansionOf.get(inner) ?? [])])
+  const lengths = slotLengths.get(inner)
+  if (lengths !== undefined) slotLengths.set(out, lengths)
+  return out
+}
 
 // What a story of a slotted component passed for its slots, by the component `withSlots` made.
 const storySlots = new WeakMap<
@@ -603,7 +621,11 @@ const expandRoot = <Msg>(
           const shown = node.fallback === undefined
             ? emptyText
             : View.toNode(node.fallback(result))
-          return expand(shown, path, depth, own, owners, scope, undefined)
+          return standsFor(
+            node,
+            true,
+            expand(shown, path, depth, own, owners, scope, undefined)
+          )
         }
         if (node.slots !== undefined) {
           // A child's view isn't run, but what the parent passed for its slots is the parent's.
@@ -649,12 +671,7 @@ const expandRoot = <Msg>(
           (label) => checkChildPaths(label, tree),
           reads
         )
-        // A copy per render: a closure may return a node it cached, and the identities are this render's.
-        const out = { ...inner } as View.Node<any, any>
-        expansionOf.set(out, [node, ...(expansionOf.get(inner) ?? [])])
-        const lengths = slotLengths.get(inner)
-        if (lengths !== undefined) slotLengths.set(out, lengths)
-        return out
+        return standsFor(node, false, inner)
       }
     }
   }

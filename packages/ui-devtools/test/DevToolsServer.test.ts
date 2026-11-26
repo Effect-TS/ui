@@ -9,7 +9,7 @@ import { DevToolsServer, DevToolsVite } from "@effect/ui-devtools/node"
 import type * as BrowserHost from "@effect/ui/html/BrowserHost"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Schema, Stream } from "effect"
+import { Effect, Layer, Schedule, Schema, Stream } from "effect"
 import { McpClient, McpProtocol } from "effect/ai"
 import { HttpRouter } from "effect/http"
 import * as Socket from "effect/socket/Socket"
@@ -113,9 +113,7 @@ const serve = Effect.fnUntraced(
 const open = Effect.fnUntraced(
   function*(url: string, capture: Capture, size?: number) {
     localStorage.clear()
-    const services = yield* Layer.build(
-      DevTools.layer({ server: url, ...(size === undefined ? {} : { size }) })
-    )
+    const services = yield* Layer.build(DevTools.layer({ server: url, size }))
     const app = yield* play(capture).pipe(Effect.provide(services))
     yield* wait(150)
     return app
@@ -140,18 +138,6 @@ const freePort = Effect.promise(() =>
     })
   })
 )
-
-// Retries until the call succeeds with a result that passes the check.
-const poll = <A>(effect: Effect.Effect<A>, check: (a: A) => boolean) =>
-  Effect.suspend(function loop(): Effect.Effect<A> {
-    return Effect.flatMap(
-      Effect.exit(effect),
-      (exit) =>
-        exit._tag === "Success" && check(exit.value)
-          ? Effect.succeed(exit.value)
-          : Effect.andThen(wait(10), loop)
-    )
-  }).pipe(Effect.timeout("5 seconds"))
 
 const serveFast = Effect.fnUntraced(function*(port: number, timeout: number) {
   const { routes, server } = Server.make({
@@ -319,23 +305,23 @@ describe("DevToolsServer", { concurrent: false }, () => {
     "keeps the state of an instance whose entries the ring dropped",
     () =>
       Effect.gen(function*() {
-        // The page logs more than its ring holds before the server is up.
-        const port = yield* freePort
-        yield* open(DevToolsServer.url({ port }), "open", 12)
-        const { agent } = yield* serve({ port, size: 12 })
-        const instances: ReadonlyArray<any> = yield* poll(
-          agent.call("list_instances"),
-          (instances: ReadonlyArray<any>) =>
-            instances.some((instance) =>
-              instance.path === "/Workspace/Editor[n2]"
-            )
+        const { agent, url } = yield* serve({ port: 47742, size: 12 })
+        yield* open(url, "open")
+        // Wait for eviction, not just the socket connection.
+        const [session] = yield* agent.call<ReadonlyArray<any>>(
+          "list_sessions"
+        ).pipe(
+          Effect.filterOrFail(([session]) => session?.first > 1),
+          Effect.retry(Schedule.spaced("10 millis")),
+          Effect.timeout("2 seconds")
         )
-        const [session] = yield* agent.call("list_sessions")
-        assert.strictEqual(session.app, "Workspace")
+        const instances: ReadonlyArray<any> = yield* agent.call(
+          "list_instances"
+        )
         const workspace = instances.find((instance) =>
           instance.path === "/Workspace"
         )
-        assert.isDefined(workspace)
+        assert.isBelow(workspace.mounted, session.first)
         const state = yield* agent.call("get_state", {
           instance: workspace.instance
         })
@@ -345,6 +331,34 @@ describe("DevToolsServer", { concurrent: false }, () => {
           at: 0
         })
         assert.include(message, "older than the last 12 entries")
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
+    "shows live state that left the page's buffer before the server started",
+    () =>
+      Effect.gen(function*() {
+        const port = yield* freePort
+        yield* open(DevToolsServer.url({ port }), "open", 12)
+        const { agent } = yield* serve({ port })
+        const [session] = yield* agent.call<ReadonlyArray<any>>(
+          "list_sessions"
+        ).pipe(
+          Effect.filterOrFail(([session]) => session?.instances === 3),
+          Effect.retry(Schedule.spaced("10 millis")),
+          Effect.timeout("5 seconds")
+        )
+        assert.strictEqual(session.app, "Workspace")
+        const instances: ReadonlyArray<any> = yield* agent.call(
+          "list_instances"
+        )
+        const state = yield* agent.call("get_state", {
+          instance: instances.find((instance) =>
+            instance.path === "/Workspace"
+          ).instance
+        })
+        assert.deepStrictEqual(state.model, { open: ["n1", "n2"] })
       }).pipe(Effect.scoped),
     30_000
   )
