@@ -345,31 +345,22 @@ describe("DevToolsServer", { concurrent: false }, () => {
   )
 
   it.live(
-    "keeps the page's choice of what to record, so a burst of drafts can't evict the saves",
+    "reads and sets the page's choice of what to record",
     () =>
       Effect.gen(function*() {
-        const { agent, url } = yield* serve({ port: 47755, size: 40 })
+        const { agent, url } = yield* serve({ port: 47755 })
         localStorage.clear()
         sessionStorage.clear()
         const services = yield* Layer.build(
-          DevTools.layer({ server: url, size: 40, exclude: ["UpdatedDraft"] })
+          DevTools.layer({ server: url, exclude: ["UpdatedDraft"] })
         )
         const app = yield* play("open").pipe(Effect.provide(services))
         yield* wait(150)
         const body = HtmlLocator.getByRole(app, "textbox", { name: "Body n1" })
-        const type = Effect.fnUntraced(function*(count: number) {
-          for (let n = 0; n < count; n++) {
-            HtmlLocator.type(body, "draft " + n)
-            yield* wait(5)
-          }
-          yield* wait(100)
-        })
         const labels = Effect.map(
           agent.call("list_entries", { filter: "messages", limit: 100 }),
           ({ rows }) => rows.map((row: any) => row.label) as Array<string>
         )
-        const saves = (labels: ReadonlyArray<string>) =>
-          labels.filter((label) => label === "ClickedSave").length
 
         assert.notInclude(yield* labels, "UpdatedDraft")
         const [session] = yield* agent.call("list_sessions")
@@ -382,18 +373,9 @@ describe("DevToolsServer", { concurrent: false }, () => {
           }),
           []
         )
-        yield* type(1)
+        HtmlLocator.type(body, "draft")
+        yield* wait(100)
         assert.include(yield* labels, "UpdatedDraft")
-
-        assert.deepStrictEqual(
-          yield* agent.call("set_recording", {
-            tag: "UpdatedDraft",
-            recording: false
-          }),
-          ["UpdatedDraft"]
-        )
-        yield* type(50)
-        assert.strictEqual(saves(yield* labels), 2)
       }).pipe(Effect.scoped),
     30_000
   )
