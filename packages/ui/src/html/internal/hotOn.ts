@@ -127,8 +127,10 @@ const stateOf = (view: Window): WindowState => {
     }
     states.set(view, state = made)
     const hooks = view as unknown as Record<symbol, unknown>
-    hooks[hotKey] ??= () => saveWindow(view, made)
-    hooks[swapKey] ??= (
+    // Overwrite: if another copy of this module ran in the window, its hooks
+    // point at roots that no longer render.
+    hooks[hotKey] = () => saveWindow(view, made)
+    hooks[swapKey] = (
       first: Exports,
       next: Exports,
       names: ReadonlyArray<string>
