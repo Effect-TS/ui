@@ -107,7 +107,6 @@ export const matchSiblings = (
       byKey!.delete(keyOf(view))
       return found
     }
-    const old = index <= oldEnd ? olds[index] : undefined
-    return old !== undefined && !isKeyed(old) && same(old, view) ? index : -1
+    return index <= oldEnd && patches(olds[index]!, view) ? index : -1
   })
 }
