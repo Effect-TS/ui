@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { UiSchema } from "@effect/ui"
-import { Calendar } from "@effect/ui-kit"
+import { Calendar, Field } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Effect, Schema } from "effect"
@@ -80,6 +80,98 @@ const Page = Html.component({
     )
 })
 
+const FieldMessage = UiSchema.TaggedEnum({
+  Applied: {},
+  RequestedMonth: { month: Schema.DateTimeUtc }
+})
+
+// The parent holds a requested month until `apply` is clicked.
+const FieldPage = Html.component({
+  name: "FieldPage",
+  model: Schema.Struct({
+    month: Schema.DateTimeUtc,
+    requested: Schema.DateTimeUtc
+  }),
+  message: FieldMessage
+}).make({
+  init: () => ({ month: utc("2026-12-01"), requested: utc("2026-12-01") }),
+  update: {
+    Applied: ($) => $.evolve({ month: $.model.requested }),
+    RequestedMonth: ($, { month }) => $.evolve({ requested: month })
+  },
+  view: (h, model) =>
+    h.div(
+      h.button.attrs({ id: "apply", type: "button" }).on(
+        "click",
+        FieldMessage.Applied()
+      ),
+      Field(h, {
+        view: (field) =>
+          Calendar(h, {
+            props: {
+              value: null,
+              month: model.month,
+              today: utc("2026-12-15"),
+              locale: "en-US"
+            },
+            onEmit: {
+              Picked: () => undefined,
+              RequestedMonth: ({ month }) =>
+                FieldMessage.RequestedMonth({ month })
+            },
+            view: (calendar) =>
+              calendar.root(field.group(h.div.attr("id", "group"))).children(
+                // Keyed by month, so each month change replaces the grid.
+                calendar.grid(
+                  h.table.key(DateTime.formatIsoDateUtc(calendar.month))
+                ).children(
+                  h.tbody(
+                    ...calendar.weeks.map((week) =>
+                      h.tr(
+                        ...week.map((date) =>
+                          calendar.cell({ element: h.td, date }).children(
+                            calendar.day({
+                              element: field.member(
+                                h.button.attr(
+                                  "id",
+                                  DateTime.formatIsoDateUtc(date)
+                                )
+                              ),
+                              date
+                            })
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+          })
+      })
+    )
+})
+
+// A browser blurs an element that has focus as it leaves the document.
+const blurOnRemoval = Effect.acquireRelease(
+  Effect.sync(() => {
+    const proto = window.Node.prototype
+    const removeChild = proto.removeChild
+    proto.removeChild = function<T extends Node>(this: Node, child: T): T {
+      const active = document.activeElement as HTMLElement | null
+      if (active !== null && child.contains(active)) active.blur()
+      return removeChild.call(this, child) as T
+    }
+    return removeChild
+  }),
+  (removeChild) =>
+    Effect.sync(() => (window.Node.prototype.removeChild = removeChild))
+)
+
+const keydown = (id: string, key: string) =>
+  byId(id).dispatchEvent(
+    new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })
+  )
+
 describe("Calendar in a document", { concurrent: false }, () => {
   it.effect("a month change moves focus to the new tab stop, even outside the shown month", () =>
     Effect.gen(function*() {
@@ -98,14 +190,32 @@ describe("Calendar in a document", { concurrent: false }, () => {
       // The parent changes `month` on its own
       yield* landsOnFirst(() => click(byId("jump")))
       // The parent accepts a keyboard month request
-      yield* landsOnFirst(() =>
-        byId("2026-12-15").dispatchEvent(
-          new KeyboardEvent("keydown", {
-            key: "PageUp",
-            bubbles: true,
-            cancelable: true
-          })
-        )
-      )
+      yield* landsOnFirst(() => keydown("2026-12-15", "PageUp"))
+    }).pipe(Effect.scoped))
+
+  it.effect("a month change keeps focus inside the calendar, unless the user left", () =>
+    Effect.gen(function*() {
+      yield* blurOnRemoval
+      yield* BrowserHost.mountEffect(FieldPage, {}, yield* container)
+      yield* tick
+      byId("2026-12-15").focus()
+      yield* tick
+      keydown("2026-12-15", "PageDown")
+      yield* tick
+      // `click` sends the event without moving focus.
+      click(byId("apply"))
+      yield* tick
+      assert.strictEqual(document.activeElement?.id, "2027-01-15")
+      assert.isFalse(byId("group").hasAttribute("data-touched"))
+
+      keydown("2027-01-15", "PageDown")
+      yield* tick
+      byId("apply").focus()
+      yield* tick
+      assert.isTrue(byId("group").hasAttribute("data-touched"))
+      click(byId("apply"))
+      yield* tick
+      assert.isNotNull(document.getElementById("2027-02-15"))
+      assert.strictEqual(document.activeElement?.id, "apply")
     }).pipe(Effect.scoped))
 })

@@ -68,7 +68,9 @@
  * and `max` are natively `disabled`, and keyboard navigation clamps to the
  * range. Moves that leave the shown month emit `RequestedMonth`; if the
  * consumer leaves `month` unchanged, focus stays in the shown month. When
- * `month` changes while a day has focus, focus follows the new tab stop.
+ * `month` changes while a day has focus, focus moves through `root` to the
+ * new tab stop without leaving the calendar. Keep the same `root` element
+ * mounted across month changes; the grid and days can be replaced.
  * If no day in the new month is in range, a visible day from an adjacent
  * month can receive focus.
  *
@@ -159,9 +161,12 @@
  * @stability experimental
  * @since 0.1.0
  */
+import * as Command from "@effect/ui/Command"
 import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
+import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
 import * as Mount from "@effect/ui/Mount"
+import * as Renderer from "@effect/ui/Renderer"
 import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
@@ -285,6 +290,7 @@ const CalendarMessage = UiSchema.TaggedEnum({
   BlurredDay: {},
   PressedKey: { date: Schema.DateTimeUtc, move: CalendarGridKey },
   SyncedMonth: {},
+  ParkedFocus: { date: Schema.DateTimeUtc },
   FoundDirection: { rtl: Schema.Boolean }
 })
 
@@ -302,8 +308,13 @@ const disabledWhileFocused = Subscription.make(
   Stream.make(CalendarMessage.BlurredDay())
 )
 
-const contextOf = (props: CalendarProps) => ({
-  monthStart: startOfMonth(DateTime.removeTime(props.month)),
+const CalendarRootRef = Renderer.ref("CalendarRoot")
+
+const monthOf = (props: CalendarProps) =>
+  startOfMonth(DateTime.removeTime(props.month))
+
+const contextOf = (props: CalendarProps, monthStart = monthOf(props)) => ({
+  monthStart,
   preferred: normalizeOptional(props.value),
   today: DateTime.removeTime(props.today),
   min: normalizeOptional(props.min),
@@ -354,7 +365,7 @@ const navigate = (
  * builder before applying the part, including attributes a state leaves
  * absent:
  *
- * - `root`: `data-disabled` and `data-readonly`
+ * - `root`: `tabindex="-1"`, `data-disabled` and `data-readonly`
  * - `heading`: `id`, `aria-live="polite"`, `data-disabled` and `data-readonly`
  * - `previous`, `next`: `type="button"`, `disabled`, `aria-disabled` and
  *   `data-disabled` (plus a fallback `aria-label` when the button has no
@@ -391,7 +402,7 @@ export const Calendar = Html.component({
   init: ({ props }) => ({
     focusedDay: null,
     focused: false,
-    shownMonth: startOfMonth(DateTime.removeTime(props.month)),
+    shownMonth: monthOf(props),
     pendingFocus: null,
     rtl: false
   }),
@@ -443,15 +454,29 @@ export const Calendar = Html.component({
         context,
         weeksOf($.props, context.monthStart)
       )
-      const next = $.evolve({ ...phase, shownMonth: context.monthStart })
-      return shouldFocus && phase.focusedDay !== null
-        ? next.run(focusDay(phase.focusedDay))
-        : next
+      const date = phase.focusedDay
+      if (!shouldFocus || date === null) {
+        return $.evolve({ ...phase, shownMonth: context.monthStart })
+      }
+      // Focus the stable root before replacing the day to avoid focus
+      // falling to `<body>` and marking an enclosing Field touched.
+      return $.run(
+        HtmlCommand.Focus.make({
+          ref: CalendarRootRef,
+          options: { preventScroll: true }
+        }).pipe(Command.map(() => CalendarMessage.ParkedFocus({ date })))
+      )
     },
+    ParkedFocus: ($, { date }) =>
+      $.evolve({
+        focusedDay: date,
+        pendingFocus: null,
+        shownMonth: monthOf($.props)
+      }).run(focusDay(date)),
     FoundDirection: ($, { rtl }) => $.evolve({ rtl })
   },
   subscriptions: ({ model, props }) => {
-    const monthStart = startOfMonth(DateTime.removeTime(props.month))
+    const monthStart = monthOf(props)
     return [
       !sameMonth(monthStart, model.shownMonth) &&
       Subscription.make(
@@ -467,7 +492,11 @@ export const Calendar = Html.component({
     const disabled = props.disabled === true
     const readOnly = props.readOnly === true
     const rtl = rightToLeft(p.reads.provider, model.rtl)
-    const context = contextOf(props)
+    // Keep the focused day mounted until focus moves to the root.
+    const context = contextOf(
+      props,
+      model.focused ? model.shownMonth : monthOf(props)
+    )
     const { max, min, monthStart, preferred: value, today } = context
     const weekStartsOn = props.firstDayOfWeek ?? firstDayOfWeek(props.locale)
     const weeks = weeksOfMonth(monthStart, weekStartsOn)
@@ -571,9 +600,11 @@ export const Calendar = Html.component({
       root: p.part((b) =>
         b
           .attrs({
+            tabindex: "-1",
             "data-disabled": flag(disabled),
             "data-readonly": flag(readOnly)
           })
+          .ref(CalendarRootRef)
           .onMount(
             TrackDirection().pipe(
               Mount.map((rtl) => CalendarMessage.FoundDirection({ rtl }))
