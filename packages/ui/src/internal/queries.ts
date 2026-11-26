@@ -40,7 +40,6 @@ export interface Entry {
   readonly args: QueryFn
   /** From `debounce`: how many milliseconds a fetch for changed args waits. */
   readonly debounce: number | undefined
-  /** From `dropPrevious`: changed args open as `Initial`, not the last Success. */
   readonly dropPrevious: boolean
   readonly onChange: ((...args: Array<any>) => unknown) | undefined
   readonly restore: false | undefined
@@ -137,12 +136,7 @@ const openedLists = new WeakMap<object, AsyncResult.AsyncResult<any, any>>()
 /** One kept result per stored Success, so every read gets the same value. */
 const kept = new WeakMap<object, AsyncResult.AsyncResult<any, any>>()
 
-/**
- * A query's result as `h.queries` shows it: the one stored at its current
- * args, a list as `{ items, pages, more }`. Until one is stored, the Success
- * stored for other args, waiting, unless `dropPrevious`; else `Initial`,
- * waiting when enabled.
- */
+/** Keeps a stored Success while changed args load, unless `dropPrevious` is set. */
 const open = (
   snapshot: unknown,
   argsKey: string | undefined,
@@ -172,7 +166,7 @@ const open = (
   if (out === undefined) {
     out = AsyncResult.success(
       entry.list
-        // A kept list offers no more: `$.loadMore` loads the current args.
+        // Prevent pagination of the kept list; loadMore uses the current args.
         ? { ...listOf(def, result.value), more: { _tag: "Loading" } }
         : result.value,
       { waiting: true, timestamp: result.timestamp }

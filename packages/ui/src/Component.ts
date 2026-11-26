@@ -1826,7 +1826,7 @@ export type PartTag<T> = T extends
  *
  * `patched` tells, per single or infinite query, whether the value includes an
  * optimistic patch the server hasn't confirmed. It is per entry, not per
- * instance, and has no `queryMany` query.
+ * instance. `queryMany` entries have no `patched` flag.
  *
  * @stability experimental
  * @category utility types
@@ -1996,8 +1996,6 @@ export type QuerySpec = {
   readonly [name: string]: QueryOne<any> | QueryMany<any>
 }
 
-// Rejected: a `query` beside a `queryMany` in one entry, an infinite query under `queryMany`, and
-// `dropPrevious` on a `queryMany` entry, which keeps no previous result.
 type OneQuery<M> = [M] extends [Query.Query.Any] ?
   { readonly "~error": "an entry takes one of query and queryMany" }
   : unknown
@@ -2020,7 +2018,7 @@ export type Queries<C> = C extends { readonly "~L"?: infer L }
   : {}
 
 /**
- * The names of the single and infinite queries: those `h.patched` has.
+ * The names of single and infinite query entries, used as keys in `h.patched`.
  *
  * @stability experimental
  * @category utility types
@@ -2079,10 +2077,10 @@ type ServiceOf<D> = D extends
  *
  * A single query opens to an `AsyncResult` of its `Query`'s success and error,
  * an infinite query to an `AsyncResult` of its `InfiniteData`, and a `queryMany`
- * query to its entries in the order of its args. A single or infinite query
- * holds the result it took at the query's current args. Until there is one,
- * it holds the last Success it took for other args, waiting, and otherwise
- * `Initial`, waiting while the query is enabled.
+ * query to its entries in the order of its args. An enabled single or infinite
+ * query exposes the result for its current args. Until one is stored, it keeps
+ * the last Success with `waiting: true`, unless `dropPrevious` is set.
+ * Otherwise it returns `Initial`, waiting only while enabled.
  *
  * @stability experimental
  * @category utility types
@@ -3293,14 +3291,13 @@ export interface Define<V extends View.Elements> {
  * again restart the wait. A `queryMany` query's new keys wait each on their
  * own.
  *
- * When a `query` entry's args change, its result keeps the last Success it
- * took for other args, with `waiting` set, until a result for the new args
- * is stored, through a `debounce` wait and the fetch. `$.queries`, `head`
- * and `subscriptions` see the same result. A kept list's `more` is
- * `Loading`. Only a Success is kept: after a Failure, or with none
- * stored, the result is `Initial`, waiting. `dropPrevious: true` opens
- * changed args as `Initial` instead, for a component that must not show one
- * item's value under another's args.
+ * When an enabled `query` entry's args change, it keeps the last Success
+ * with `waiting: true` until the new args have a result, including during
+ * `debounce`. `$.queries`, `head` and `subscriptions` see the same result.
+ * A kept infinite list reports `more: Loading`. Without a stored Success,
+ * the result is `Initial`, waiting. A disabled query is `Initial`, not
+ * waiting. Set `dropPrevious: true` on the entry to show `Initial` instead
+ * when old results would mislead.
  *
  * An entry's `onChange` returns a message to send when its result changes, for
  * a component that has to react in `update`. It runs when a result is

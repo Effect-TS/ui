@@ -292,7 +292,6 @@ describe("Query results", () => {
           yield* TestHost.settle
           yield* TestClock.adjust("100 millis")
         }
-        // The old value, kept and waiting.
         assert.strictEqual(root.text(), "a=Ann…")
         assert.strictEqual(app.db.calls, 1)
         // 300 ms after the last change.
@@ -307,7 +306,7 @@ describe("Query results", () => {
     )
   })
 
-  // The card's text after each args change, then after its fetch. 9 and 8 have no user, so theirs fail.
+  // Users 9 and 8 do not exist, so their fetches fail.
   const switchUsers = (dropPrevious: boolean, ids: ReadonlyArray<string>) => {
     const app = makeApp({ dropPrevious })
     return run(

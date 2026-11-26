@@ -750,7 +750,7 @@ describe("Story", () => {
         }])
         scene.loaded("users", page(0, ["Ann", "Bea"]))
         assert.include(text(scene), "AnnBea")
-        // The next page: the result keeps the page it holds until the next is loaded.
+        // Keep the current page visible while the next loads.
         scene.click("Next")
         assert.deepStrictEqual(scene.queryInfo.map((query) => query.args), [{
           page: 1

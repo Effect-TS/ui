@@ -91,7 +91,7 @@ In Effect UI, a Provider shares part of its Model with Components inside it, at 
 
 In Foldkit 0.x, the Model held fetched data, and the parent managed the `Query`. The parent stored the query state, forwarded its Messages and decided when to load or refresh. In Effect UI, **you define a query once and list it on the Components that need it.** The runtime fetches the data and keeps it in one cache for every Component.
 
-- **Fetching:** The runtime fetches when the Component renders, and again when the query's arguments change. Setting `debounce` waits until the arguments stop changing. Until the new result arrives, the last one stays on screen, marked as waiting.
+- **Fetching:** The runtime fetches when the Component renders, and again when the query's arguments change. Setting `debounce` waits until the arguments stop changing. Until the new result arrives, the last Success stays on screen with `waiting: true`.
 - **Caching:** The runtime keeps one result per query and arguments. Components that ask for the same data share one fetch.
 - **Freshness:** A result older than `staleTime` stays on screen while the runtime refetches it.
 - **States:** Each result is an `AsyncResult`: either no result yet, failure or success.

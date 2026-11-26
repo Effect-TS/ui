@@ -49,14 +49,11 @@ export const Posts = Html.component({
       h.input.attr("aria-label", "Search posts").value(model.search)
         .on("input", ({ value }) =>
           PostsMessage.UpdatedSearch({ search: value })),
-      // The result for the current args, as an AsyncResult.
       AsyncResult.match(h.queries.posts, {
-        // No posts to keep: the first fetch, or a fetch after a failure.
         onInitial: () =>
           h.p.children("Loading posts"),
         onFailure: () => h.p.children("Could not load posts"),
-        // waiting is true while newer posts load: a refetch of stale
-        // posts, or the last posts kept while a new search waits or loads.
+        // waiting covers both a refetch and a changed search, including debounce.
         onSuccess: ({ value, waiting }) =>
           h.ul.attr("aria-busy", String(waiting)).children(
             value.map((post) =>

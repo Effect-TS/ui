@@ -507,14 +507,13 @@ an `onChange` only when `update` has to react to a new result, such as
 moving focus once a query fails. It returns a message, which `update` gets
 after the result is written.
 
-When a `query` entry's args change, its result keeps the last Success,
-with `waiting` set, until the new args have a result: through the
-`debounce` wait and the fetch. So `onSuccess` keeps the old results on
-screen, and the view can mark them busy from `waiting`. `onInitial` shows
-only when there's no Success to keep: before the first result, or after a
-Failure. A kept list's `more` is `Loading`. Give the
-entry `dropPrevious: true` to open new args as `Initial` instead, where a
-value shown under other args would mislead.
+When an enabled `query` entry's args change, it keeps the last Success
+with `waiting: true` until the new args have a result, including during
+`debounce`. `onSuccess` can keep the old results visible and mark them busy.
+Without a stored Success, the result is `Initial`; a disabled query is
+`Initial`, not waiting. A kept infinite list reports `more: Loading`.
+Set `dropPrevious: true` on the entry to show `Initial` instead when old
+results would mislead.
 
 The cache never retries a failed fetch: a fetcher that should retry does so
 itself.

@@ -2,4 +2,4 @@
 "@effect/ui": minor
 ---
 
-A `query` entry whose args change now keeps its last Success, with `waiting` set, until the new args have a result, instead of opening as `Initial`. Set `dropPrevious: true` on the entry to opt out. `h.previous` and `p.previous` are removed.
+A `query` entry now keeps its last Success with `waiting: true` while changed args debounce or fetch, replacing `h.previous` and `p.previous`. Set `dropPrevious: true` on the entry to show `Initial` instead.

@@ -367,7 +367,6 @@ export const ListPage = Html.component({
       GoTo: ({ page }) => ({ ...$.model, page })
     }),
   view: (h, model) =>
-    // Until the requested page is here, the result keeps the page it holds, waiting.
     AsyncResult.match(h.queries.users, {
       onInitial: () => h.p("Loading users…"),
       onFailure: () => h.p("The users couldn't be loaded."),
