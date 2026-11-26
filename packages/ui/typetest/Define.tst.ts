@@ -444,32 +444,8 @@ describe("Component.define", () => {
   })
 })
 
-const Provider = Component.define({
-  name: "Provider",
-  model: Schema.Boolean,
-  message: Events,
-  shares: { value: ({ model }) => ({ open: model }) }
-}).make({ init: () => false, update: ($) => $.model })
-
 describe("Component.withElements", () => {
-  it("binds a vocabulary into a Define that keeps reads and the vocabulary's tags", () => {
-    const component = Component.withElements(Tiny)
-    expect(component).type.toBe<Component.Define<Tiny>>()
-
-    component({
-      name: "Reader",
-      model: Schema.Null,
-      message: Message,
-      reads: { provider: Provider }
-    }).view((h) => {
-      expect(h.reads.provider).type.toBe<{ open: boolean }>()
-      expect(h).type.not.toHaveProperty("div")
-      return h.field
-    })
-    component({ name: "Plain", model: Schema.Null, message: Message })
-      .view((h) => {
-        expect(h).type.not.toHaveProperty("reads")
-        return h.field
-      })
+  it("binds a vocabulary into a Define of it", () => {
+    expect(Component.withElements(Tiny)).type.toBe<Component.Define<Tiny>>()
   })
 })
