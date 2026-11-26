@@ -2964,7 +2964,6 @@ const snapshotIssue = (def: QueryDef, message: string) =>
     message: "a snapshot of " + quote(def.name) + ": " + message
   })
 
-/** Whether an unpatched Success is the one `~query` ships at its args key, by identity. */
 const isShipped = (
   ctx: Context.Context<never>,
   def: QueryDef,
@@ -3783,10 +3782,9 @@ type ShippedMemoEntry =
   | PendingDecode
 
 /**
- * Builds per-hydration state over a `~query` payload: a memoized lookup for
- * decoding tag-2 instance snapshots (including async decoders), a matching
- * synchronous `decodeRaw` helper for the hydration's cache, and an `inline`
- * helper to make held child state self-contained before handing it to history.
+ * Shares decoded `~query` values and pending decodes between instance snapshots
+ * and the cache within one hydration. Inlines references in held child state
+ * before handing it to history.
  *
  * @internal
  */
@@ -3796,10 +3794,9 @@ export const makeShipped = (
   const parsed = parseRaw(input)
   if (parsed === undefined) return undefined
   const memo = new Map<RawTuple, ShippedMemoEntry>()
-  // Set once adoption ends: no reader can join a cache-only decode after that.
+  // After adoption, interrupt pending cache decodes that have no instance reader.
   let swept = false
 
-  /** A tuple's decoded value, or its decode in flight, which this starts if no one has. */
   const decodeOf = (
     def: QueryDef,
     tuple: RawTuple
