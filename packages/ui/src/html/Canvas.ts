@@ -605,7 +605,6 @@ export type PixelRatio = typeof PixelRatio.Type
 // Sizes the backing store to the pixel ratio, scales the context to match and paints the scene.
 const draw = (
   canvas: HTMLCanvasElement,
-  context: CanvasRenderingContext2D | null,
   args: {
     readonly width: number
     readonly height: number
@@ -613,6 +612,7 @@ const draw = (
     readonly pixelRatio: PixelRatio
   }
 ): void => {
+  const context = canvas.getContext("2d")
   if (context === null) return
   const ratio = args.pixelRatio === "auto"
     ? canvas.ownerDocument.defaultView?.devicePixelRatio ?? 1
@@ -663,8 +663,7 @@ export const Paint = Mount.makeStream(
       pixelRatio: PixelRatio,
       listen: Schema.Array(PointerEvent)
     },
-    paint: (canvas: HTMLCanvasElement, args) =>
-      draw(canvas, canvas.getContext("2d"), args)
+    paint: draw
   },
   (canvas: HTMLCanvasElement, initial, changes) =>
     Stream.callback<Pointer>((queue) =>
@@ -708,11 +707,10 @@ export const Paint = Mount.makeStream(
         canvas.addEventListener("pointercancel", report("pointerup"), {
           signal
         })
-        const context = canvas.getContext("2d")
         yield* Stream.runForEach(changes, (next) =>
           Effect.sync(() => {
             args = next
-            draw(canvas, context, next)
+            draw(canvas, next)
           })).pipe(Effect.forkScoped)
       })
     )

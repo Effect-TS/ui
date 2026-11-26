@@ -1012,6 +1012,12 @@ const unmoved: Kernel.Transitions = {
   settle: () => {}
 }
 
+interface Painted {
+  readonly fellBack: ReadonlyArray<string>
+  readonly fallbacks: ReadonlyArray<string>
+  readonly skipped: ReadonlyArray<string>
+}
+
 const paintCore = (
   component: Component.Any,
   rootProps: unknown,
@@ -1019,11 +1025,7 @@ const paintCore = (
   state: (path: string) => PaintState | undefined,
   hostOf: (ctx: Context.Context<any>) => HostInput
 ): Effect.Effect<
-  {
-    readonly fellBack: ReadonlyArray<string>
-    readonly fallbacks: ReadonlyArray<string>
-    readonly skipped: ReadonlyArray<string>
-  },
+  Painted,
   never,
   Scope.Scope
 > =>
@@ -1107,11 +1109,7 @@ export const paint = (
   container: unknown,
   state: (path: string) => PaintState | undefined
 ): Effect.Effect<
-  {
-    readonly fellBack: ReadonlyArray<string>
-    readonly fallbacks: ReadonlyArray<string>
-    readonly skipped: ReadonlyArray<string>
-  },
+  Painted,
   never,
   Scope.Scope | Renderer.Renderer
 > => paintCore(component, rootProps, container, state, fromRenderer)
@@ -1125,11 +1123,7 @@ export const paintDom = (
   makeDom: MakeDom,
   elements: ReadonlyArray<string> | "any"
 ): Effect.Effect<
-  {
-    readonly fellBack: ReadonlyArray<string>
-    readonly fallbacks: ReadonlyArray<string>
-    readonly skipped: ReadonlyArray<string>
-  },
+  Painted,
   never,
   Scope.Scope
 > =>
