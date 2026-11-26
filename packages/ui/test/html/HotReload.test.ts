@@ -709,8 +709,6 @@ describe("hot reload", { concurrent: false }, () => {
           import("@effect/ui/html/Html")
         ])
       )
-      const mountB = (b: HTMLDivElement) =>
-        Host.mountEffect(app(Html2, "CopyB"), {}, b)
       yield* inContainer(
         "copy-a",
         (a) =>
@@ -721,9 +719,8 @@ describe("hot reload", { concurrent: false }, () => {
               yield* BrowserHost.mountEffect(app(Html, "CopyA"), {}, a).pipe(
                 Scope.provide(scopeA)
               )
-              yield* Effect.scoped(mountB(b))
+              yield* Host.mountEffect(app(Html2, "CopyB"), {}, b)
               assert.include(saved(), "/CopyA")
-              yield* mountB(b)
               yield* Scope.close(scopeA, Exit.void)
               assert.include(saved(), "/CopyB")
             }))
