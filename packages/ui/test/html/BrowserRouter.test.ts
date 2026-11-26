@@ -27,6 +27,7 @@ const SearchRoute = Route.union({
     search: { q: Schema.optional(Schema.String) }
   }),
   Other: Route.make("/other"),
+  Page: Route.make("/a/b"),
   NotFound: Route.make("/*")
 })
 
@@ -400,9 +401,10 @@ describe("BrowserRouter", { concurrent: false }, () => {
   it.effect("exempts roots hydrated from a static 404 at another unknown path", () => {
     const problems: Array<Query.Problem.Any> = []
     return Effect.gen(function*() {
+      // Captures "a/b", which prints as the path of `Page`.
       const rendered = yield* prerender(
-        "/404",
-        SearchRoute.NotFound({ params: { "*": "404" } }),
+        "/a%2Fb",
+        SearchRoute.NotFound({ params: { "*": "a/b" } }),
         true
       )
       window.history.replaceState(null, "", "/some/old-link")

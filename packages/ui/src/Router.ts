@@ -730,11 +730,15 @@ export const subscription = <U extends Routes, Msg>(
   const have = union.print(held)
   const same = (route: { readonly _tag: string }) =>
     route._tag === held._tag && union.print(route) === have
+  // The catch-all route, as `Route.union` picks it: the first declared `"/*"`.
+  const notFound = Object.entries(
+    (union as Route.AnyUnion & UnionInternals).routes
+  )
+    .find(([, route]) => route.path === "/*")?.[0]
   /** Whether a static render of the held route also stands for the route: same path, or both not found. */
   const staticMatch = (route: { readonly _tag: string }) =>
     route._tag === held._tag &&
-    (union.printPath(route) === union.printPath(held) ||
-      Option.exists(union.resolve(have), (resolved) => resolved.notFound))
+    (held._tag === notFound || union.printPath(route) === union.printPath(held))
   const mismatch = (route: { readonly _tag: string }) => {
     const router = union.print(route)
     return new RouteMismatch({
