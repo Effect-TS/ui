@@ -401,7 +401,7 @@ export const syncMonthPhase = (
     sameMonth(model.pendingFocus, context.monthStart)
   ) {
     const target = clampedShown(context, model.pendingFocus) ??
-      focusInMonth(context, model.focusedDay)
+      focusInGrid(context, weeks, model.focusedDay)
     return {
       focusedDay: target,
       focused: model.focused && target !== null,
