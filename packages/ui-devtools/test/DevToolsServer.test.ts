@@ -1,17 +1,20 @@
 // @vitest-environment happy-dom
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer"
+import { Command, MessageLog, Query, UiSchema } from "@effect/ui"
 import { DevTools } from "@effect/ui-devtools"
 import * as Mcp from "@effect/ui-devtools/internal/mcp"
 import * as Remote from "@effect/ui-devtools/internal/remote"
 import * as Server from "@effect/ui-devtools/internal/server"
 import { DevToolsServer, DevToolsVite } from "@effect/ui-devtools/node"
+import { Html } from "@effect/ui/html"
 import type * as BrowserHost from "@effect/ui/html/BrowserHost"
 import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Schedule, Schema, Stream } from "effect"
+import { Context, Effect, Layer, Schedule, Schema, Stream } from "effect"
 import { McpClient, McpProtocol } from "effect/ai"
 import { HttpRouter } from "effect/http"
+import { AsyncResult } from "effect/reactivity"
 import * as Socket from "effect/socket/Socket"
 import { createServer, request } from "node:http"
 import type { AddressInfo } from "node:net"
@@ -138,6 +141,24 @@ const freePort = Effect.promise(() =>
     })
   })
 )
+
+class GetNote extends Query.Service<GetNote>()("notes/GetNote", {
+  args: { id: Schema.String },
+  success: Schema.String,
+  error: Schema.Never,
+  staleTime: "30 seconds"
+}) {}
+class Touch extends Command.Service<Touch>()("notes/Touch", {
+  args: { id: Schema.String },
+  success: Schema.Void
+}) {}
+const Note = Html.component({
+  name: "Note",
+  props: Schema.Struct({ id: Schema.String }),
+  model: Schema.Struct({}),
+  message: UiSchema.TaggedEnum({ Click: {} }),
+  queries: { note: { query: GetNote, args: ({ props }) => ({ id: props.id }) } }
+}).make({ init: () => ({}), update: ($) => $.model, view: (h) => h.div() })
 
 const serveFast = Effect.fnUntraced(function*(port: number, timeout: number) {
   const { routes, server } = Server.make({
@@ -340,25 +361,84 @@ describe("DevToolsServer", { concurrent: false }, () => {
     () =>
       Effect.gen(function*() {
         const port = yield* freePort
-        yield* open(DevToolsServer.url({ port }), "open", 12)
+        const page = yield* Layer.build(
+          MessageLog.socket(
+            DevToolsServer.url({ port }).replace("http", "ws") + "/log",
+            {
+              buffer: 1
+            }
+          ).pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))
+        )
+        const log = Context.get(page, MessageLog.MessageLog)
+        const note = (id: string) =>
+          Query.makeSnapshot(
+            Query.defOf(GetNote),
+            "note",
+            { args: { id }, argsKey: Query.defOf(GetNote).argsKey({ id }) },
+            AsyncResult.success("Note " + id, { timestamp: 0 })
+          )
+        const base = (seq: number) => ({
+          seq,
+          at: 0,
+          session: "s",
+          path: "/Note",
+          instance: 1,
+          component: Note
+        })
+        const run = (seq: number, index: number) => ({
+          ...base(seq),
+          name: "notes/Touch",
+          issued: { seq: 1, index },
+          spanId: "span",
+          traceId: "trace"
+        })
+        for (
+          const entry of [
+            {
+              _tag: "SessionStarted",
+              seq: 0,
+              at: 0,
+              session: "s",
+              app: "Note"
+            },
+            {
+              _tag: "Mounted",
+              ...base(1),
+              props: { id: "a" },
+              model: {},
+              queries: { note: note("a") },
+              commands: [Touch.make({ id: "a" }), Touch.make({ id: "b" })],
+              events: [],
+              adopted: false
+            },
+            { _tag: "CommandStarted", ...run(2, 0) },
+            { _tag: "CommandEnded", ...run(3, 0), silent: true },
+            { _tag: "CommandStarted", ...run(4, 1) },
+            { _tag: "PropsChanged", ...base(5), props: { id: "b" } },
+            {
+              _tag: "QueryChanged",
+              ...base(6),
+              name: "note",
+              result: note("b")
+            },
+            { _tag: "Drawn", ...base(7) }
+          ] as ReadonlyArray<MessageLog.Entry>
+        ) log.record(entry)
+
         const { agent } = yield* serve({ port })
         const [session] = yield* agent.call<ReadonlyArray<any>>(
           "list_sessions"
         ).pipe(
-          Effect.filterOrFail(([session]) => session?.instances === 3),
+          Effect.filterOrFail(([session]) => session?.last === 7),
           Effect.retry(Schedule.spaced("10 millis")),
           Effect.timeout("5 seconds")
         )
-        assert.strictEqual(session.app, "Workspace")
-        const instances: ReadonlyArray<any> = yield* agent.call(
-          "list_instances"
-        )
-        const state = yield* agent.call("get_state", {
-          instance: instances.find((instance) =>
-            instance.path === "/Workspace"
-          ).instance
-        })
-        assert.deepStrictEqual(state.model, { open: ["n1", "n2"] })
+        assert.strictEqual(session.app, "Note")
+        const [instance] = yield* agent.call("list_instances")
+        assert.strictEqual(instance.status, "1 ended, 1 running")
+        const state = yield* agent.call("get_state", { instance: 1 })
+        assert.deepStrictEqual(state.props, { id: "b" })
+        assert.strictEqual(state.queries.note[2], "Note b")
       }).pipe(Effect.scoped),
     30_000
   )

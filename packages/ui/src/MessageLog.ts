@@ -2232,10 +2232,40 @@ export const makeEncoded = (
   })
 
 interface Sent {
+  readonly seq: number
   readonly tag: WireEntry["_tag"]
   /** The session, or the session and instance of an instance entry. */
-  readonly key: string
+  readonly owner: string
+  /**
+   * What the frame sets for its instance, when it can be kept: a state
+   * frame's `seq`, `"props"`, `"query/<name>"`, or a Command run's
+   * `"<issued seq>/<index>"`. Empty otherwise.
+   */
+  readonly slot: string
   readonly frame: string
+}
+
+const slotOf = (entry: WireEntry): string => {
+  switch (entry._tag) {
+    case "Waiting":
+    case "Mounted":
+    case "Update":
+      return String(entry.seq)
+    case "PropsChanged":
+      return "props"
+    case "QueryChanged":
+      return "query/" + entry.name
+    case "Failed":
+    case "CommandStarted":
+    case "CommandEnded":
+    case "CommandInterrupted":
+    case "CommandDropped":
+      return entry.issued === undefined
+        ? ""
+        : entry.issued.seq + "/" + entry.issued.index
+    default:
+      return ""
+  }
 }
 
 /**
@@ -2248,9 +2278,11 @@ interface Sent {
  * frames (1,000 by default), which every new connection receives after its
  * `Hello`, so devtools that connect late see the recent past. Frames that
  * leave that ring are still sent first while they hold live state: each
- * session's `SessionStarted`, and each instance's `Mounted` and latest
- * `Update` or `Waiting` until its `Unmounted` leaves the ring too. A lost
- * connection is retried with backoff, and one warning is logged.
+ * session's `SessionStarted` and, until an instance's `Unmounted` leaves
+ * the ring too, its `Mounted`, its latest state frame and any
+ * `PropsChanged` and `QueryChanged` since, the `CommandStarted` of each
+ * run still going, and how each run those two state frames issued ended. A
+ * lost connection is retried with backoff, and one warning is logged.
  *
  * @stability experimental
  * @category layers
@@ -2267,26 +2299,54 @@ export const socket = (url: string, options?: {
       const size = Math.max(1, options?.buffer ?? 1_000)
       const outbox = yield* Queue.unbounded<string>()
       const replay: Array<Sent> = []
-      // Frames that left `replay` and still hold live state, in the order
-      // they left, which is the order a reader takes them in.
-      const kept = new Map<string, string>()
+      // Frames that left `replay` and still hold live state.
+      const sessions = new Map<string, Sent>()
+      const live = new Map<string, {
+        readonly kept: Map<string, Sent>
+        mounted?: string
+        state?: string
+      }>()
       const hello = JSON.stringify({
         _tag: "Hello",
         version: wireVersion,
         host: options?.host ?? "browser"
       })
 
-      const keep = ({ frame, key, tag }: Sent) => {
-        if (tag === "SessionStarted" || tag === "Mounted") {
-          kept.set(key, frame)
-        } else if (tag === "Update" || tag === "Waiting") {
-          // Deleted first, so the frame goes last.
-          kept.delete(key + "/state")
-          kept.set(key + "/state", frame)
-        } else if (tag === "Unmounted") {
-          kept.delete(key)
-          kept.delete(key + "/state")
-        }
+      const keep = (sent: Sent) => {
+        const { tag, owner, slot } = sent
+        if (tag === "SessionStarted") return void sessions.set(owner, sent)
+        if (tag === "Unmounted") return void live.delete(owner)
+        let instance = live.get(owner)
+        if (tag === "Waiting" || tag === "Mounted" || tag === "Update") {
+          if (instance === undefined) {
+            live.set(owner, instance = { kept: new Map() })
+          }
+          // It holds the props and query results, and replaces the state
+          // frame before it, with how that frame's runs ended, unless that
+          // is the `Mounted`, which still says the instance mounted.
+          const before = instance.state === instance.mounted
+            ? undefined
+            : instance.state
+          for (const [at, old] of instance.kept) {
+            if (
+              at === "props" || at.startsWith("query/") || at === before ||
+              (before !== undefined && old.tag !== "CommandStarted" &&
+                at.startsWith(before + "/"))
+            ) instance.kept.delete(at)
+          }
+          if (tag === "Mounted") instance.mounted = slot
+          instance.state = slot
+          instance.kept.set(slot, sent)
+        } else if (instance === undefined || slot === "") {
+          return
+        } else if (
+          tag === "CommandStarted" || tag === "PropsChanged" ||
+          tag === "QueryChanged" ||
+          // A run's end is kept while the frame that issued it is, so
+          // replaying that frame doesn't open the run again.
+          instance.kept.has(slot.slice(0, slot.indexOf("/")))
+        ) instance.kept.set(slot, sent)
+        else instance.kept.delete(slot)
       }
 
       const log = yield* makeEncoded(
@@ -2295,10 +2355,12 @@ export const socket = (url: string, options?: {
             for (const encoded of batch) {
               const frame = JSON.stringify(encoded)
               replay.push({
+                seq: encoded.seq,
                 tag: encoded._tag,
-                key: "instance" in encoded
+                owner: "instance" in encoded
                   ? encoded.session + "/" + encoded.instance
                   : encoded.session,
+                slot: slotOf(encoded),
                 frame
               })
               if (replay.length > size) keep(replay.shift()!)
@@ -2308,15 +2370,21 @@ export const socket = (url: string, options?: {
         { maxEntryBytes: options?.maxEntryBytes }
       )
 
+      const replayed = () => {
+        const kept = Array.from(sessions.values())
+        for (const instance of live.values()) {
+          kept.push(...instance.kept.values())
+        }
+        kept.sort((a, b) => a.seq - b.seq)
+        return [hello, ...kept.concat(replay).map((sent) => sent.frame)]
+      }
+
       const connection = Effect.gen(function*() {
         const ws = yield* Socket.makeWebSocket(url)
         const writer = yield* ws.writer
         const reader = yield* ws.reader
         // What's queued is already in the replay buffer, so it's sent from there.
-        const backlog = yield* Effect.map(
-          Queue.clear(outbox),
-          () => [hello, ...kept.values(), ...replay.map((sent) => sent.frame)]
-        )
+        const backlog = yield* Effect.map(Queue.clear(outbox), replayed)
         yield* Effect.forEach(backlog, (frame) => writer.write(frame), {
           discard: true
         })
