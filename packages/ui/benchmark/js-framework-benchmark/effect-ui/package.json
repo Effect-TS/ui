@@ -5,7 +5,7 @@
   "private": true,
   "type": "module",
   "js-framework-benchmark": {
-    "frameworkVersion": "0.0.0-6f86af8",
+    "frameworkVersion": "0.0.0",
     "frameworkHomeURL": "https://github.com/Effect-TS/ui",
     "language": "TypeScript",
     "repoURL": "https://github.com/Effect-TS/ui"

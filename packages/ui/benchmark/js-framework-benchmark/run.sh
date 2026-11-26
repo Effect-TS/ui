@@ -52,7 +52,8 @@ version="0.0.0-$(git -C "$repo" rev-parse --short=7 HEAD)"
 ' "$version")
 
 # Foldkit: the harness entry, moved to the latest Foldkit and the Effect that Effect UI uses.
-(cd frameworks/keyed/foldkit && npm install --save-exact foldkit@0.171.0 effect@4.1.6 @effect/platform-browser@4.1.6)
+effect=$(node -p 'require(process.argv[1]).dependencies.effect' "$entry/package.json")
+(cd frameworks/keyed/foldkit && npm install --save-exact foldkit@0.171.0 "effect@$effect" "@effect/platform-browser@$effect")
 
 for f in "${FRAMEWORKS[@]}"; do
   (cd "frameworks/keyed/$f" && if [ "$f" = effect-ui ]; then npm install; else npm ci; fi && npm run build-prod)
@@ -64,21 +65,16 @@ server=$!
 trap 'kill -- -$server' EXIT
 until curl -sf localhost:8080/ls > /dev/null; do sleep 1; done
 
-keyed=()
-for f in "${FRAMEWORKS[@]}"; do keyed+=("keyed/$f"); done
 cd webdriver-ts
-npm run isKeyed -- --headless --chromeBinary "$chromium" "${keyed[@]}"
+npm run isKeyed -- --headless --chromeBinary "$chromium" "${FRAMEWORKS[@]/#/keyed/}"
 rm -rf results && mkdir results
-order=("${keyed[@]}")
-if [ "${REVERSE:-}" = 1 ]; then
-  order=()
-  for ((i = ${#keyed[@]} - 1; i >= 0; i--)); do order+=("${keyed[i]}"); done
-fi
+order=("${FRAMEWORKS[@]}")
+if [ "${REVERSE:-}" = 1 ]; then mapfile -t order < <(printf '%s\n' "${FRAMEWORKS[@]}" | tac); fi
 load() { echo "$1 $(date -u +%FT%TZ) $(cut -d' ' -f1-3 /proc/loadavg)" >> results/load.txt; }
 # One framework at a time, in order: given several, the harness sorts them by name.
 for f in "${order[@]}"; do
-  load "${f#keyed/} start"
-  npm run bench -- --headless --chromeBinary "$chromium" "$@" --framework "$f"
+  load "$f start"
+  npm run bench -- --headless --chromeBinary "$chromium" "$@" --framework "keyed/$f"
 done
 load end
 node "$here/summarize.mjs" results
