@@ -29,6 +29,12 @@ export const checkPaths = (
   inst: Instance,
   tree: View.Node<any, any>
 ): Instance | undefined => {
+  // JavaScript can return an array, which would otherwise draw nothing.
+  if (Array.isArray(tree)) {
+    throw new Error(
+      "A view must return one node. Wrap multiple children in `h.div(items)`."
+    )
+  }
   const placed = checkChildPaths(inst.path, tree).placed
   if (placed === undefined) placedBy.delete(inst)
   else placedBy.set(inst, placed)
