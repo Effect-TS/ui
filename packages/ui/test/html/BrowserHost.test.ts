@@ -1176,6 +1176,69 @@ describe("BrowserHost", { concurrent: false }, () => {
         ])
       }).pipe(Effect.scoped))
 
+    it.effect("skips a subtree it gives again with no controlled properties, and restores one that gains them", () =>
+      Effect.gen(function*() {
+        const Message = UiSchema.TaggedEnum({ Tick: {}, Gain: {} })
+        const RowsDef = Html.component({
+          name: "Rows",
+          model: Schema.Struct({ ticks: Schema.Number, input: Schema.Boolean }),
+          message: Message
+        })
+        let reads = 0
+        // Counts every read of an element's props, the field restoring looks at.
+        const counted = <N extends View.Node<typeof Message.Type>>(
+          node: N
+        ): N => {
+          if (node._tag !== "Element") return node
+          const props = node.props
+          return Object.defineProperty(
+            { ...node, children: node.children.map(counted) },
+            "props",
+            { get: () => (reads++, props) }
+          )
+        }
+        const row = (h: Component.Helper<typeof RowsDef>, id: number) =>
+          counted(View.toNode(h.li(h.strong(String(id)), h.span("row"))))
+        const field = (h: Component.Helper<typeof RowsDef>, input: boolean) =>
+          h.li(input ? h.input.value("fixed") : h.span("none"))
+        const Rows = RowsDef.make({
+          init: () => ({ ticks: 0, input: false }),
+          update: ($, message) =>
+            Message.match(message, {
+              Tick: () => ({ ...$.model, ticks: $.model.ticks + 1 }),
+              Gain: () => ({ ...$.model, input: true })
+            }),
+          view: (h, model) =>
+            h.div(
+              h.p(String(model.ticks)),
+              h.ul(
+                [1, 2, 3].map((id) => h.lazy(row, id)),
+                h.lazy(field, model.input)
+              )
+            )
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Rows, {}, app)
+        const send = Effect.fnUntraced(function*(message: typeof Message.Type) {
+          root.send(message)
+          yield* tick
+        })
+        yield* send(Message.Tick())
+        reads = 0
+        yield* send(Message.Tick())
+        assert.strictEqual(app.querySelector("p")!.textContent, "2")
+        assert.strictEqual(reads, 0)
+        yield* send(Message.Gain())
+        const input = app.querySelector("input")!
+        for (let ticks = 3; ticks <= 4; ticks++) {
+          // Changed by a script, with no event for the host to restore after.
+          input.value = "edited"
+          yield* send(Message.Tick())
+          assert.strictEqual(app.querySelector("p")!.textContent, String(ticks))
+          assert.strictEqual(input.value, "fixed")
+        }
+      }).pipe(Effect.scoped))
+
     it("builds again what a render that threw built", () => {
       let fails = true
       const Failing = ItemsDef.make({
