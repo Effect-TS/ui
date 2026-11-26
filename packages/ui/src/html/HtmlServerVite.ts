@@ -2,8 +2,7 @@
  * A Vite plugin that renders an `@effect/ui` app on the server in
  * `vite dev` and prerenders its pages in `vite build`.
  *
- * It is a separate entry point, `@effect/ui/html/HtmlServerVite`, and
- * `@effect/ui/html` doesn't re-export it. It runs in Vite's Node process.
+ * `@effect/ui/html` doesn't re-export it.
  *
  * The app's server entry exports a `default` Layer that adds its routes to
  * `HttpRouter`, such as `HtmlServerHttp.layerHttp`, and `prerender`, the
@@ -174,7 +173,7 @@ export const plugin = (options: Options): Plugin => {
 
   return {
     name: "effect-ui-html-server",
-    // The server build reads the template file `buildApp` sets.
+    // Shared, so the server build sees the `templateFile` that `buildApp` sets.
     sharedDuringBuild: true,
     config: (_, { isPreview }) => ({
       // In dev, page requests that Vite doesn't answer reach the server
@@ -212,12 +211,9 @@ export const plugin = (options: Options): Plugin => {
     configureServer(server) {
       devServer = server
       templateFile = path.join(server.config.root, "index.html")
-      // Vite moves a restarted server's fields onto the old server object.
+      // Read now: on restart, Vite copies the new server's fields onto this one.
       const { client, ssr } = server.environments
       const { logger } = server.config
-      // This server's module, the modules it has seen, the requests each
-      // module is still answering, the requests in flight, and the
-      // disposals still running.
       let current: ServerModule | undefined
       let closing = false
       const seen = new WeakSet<ServerModule>()
@@ -267,8 +263,8 @@ export const plugin = (options: Options): Plugin => {
           throw new Error("HtmlServerVite needs a runnable ssr environment")
         }
         const module = (await ssr.runner.import(serverId)) as ServerModule
-        // An edit re-evaluates the server entry, with a new handler. A
-        // module that was already replaced never comes back.
+        // A new module means an edit re-evaluated the entry. A module that
+        // was already replaced never becomes current again.
         if (!seen.has(module)) {
           seen.add(module)
           const previous = current
@@ -287,7 +283,7 @@ export const plugin = (options: Options): Plugin => {
           .then((module) => {
             // The client left while the entry was loading.
             if (response.destroyed) return
-            // A client that leaves aborts the request. The module is
+            // A client that leaves aborts the request, but the module stays
             // held until the handler and the body have settled.
             const abort = new AbortController()
             const leave = () => {
@@ -309,8 +305,8 @@ export const plugin = (options: Options): Plugin => {
             if (!response.destroyed) next(error)
           })
 
-      // Takes no new request, lets the ones in flight settle, which
-      // disposes the replaced modules, then disposes the current one.
+      // Refuses new requests, lets in-flight ones settle (which disposes
+      // replaced modules), then disposes the current one.
       closers.set(client, async () => {
         closing = true
         await Promise.all(inflight)
@@ -376,7 +372,7 @@ export const plugin = (options: Options): Plugin => {
         await fs.rm(dir, { recursive: true, force: true })
       }
     },
-    // Dev only. In dev, Vite calls it for the client environment.
+    // Closes the dev server that owns this environment. Builds register none.
     async buildEnd() {
       await closers.get(this.environment)?.()
     }
