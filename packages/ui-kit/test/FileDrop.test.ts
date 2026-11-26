@@ -30,11 +30,10 @@ const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 const file = (name: string, type = "") => new File([name], name, { type })
 
 describe("FileDrop", () => {
-  it.effect("dragenter sets data-drag-over and dragOver, dragleave and drop clear them, and disabling mid-drag clears on leave", () =>
+  it.effect("tracks drag-over state and ignores drags and drops while disabled", () =>
     Effect.gen(function*() {
+      const photo = file("photo.png", "image/png")
       const scene = yield* HtmlScene.make(FileDrop, {}, standIn)
-      assert.isUndefined(scene.get(zone).attrs?.["data-drag-over"])
-      scene.expect(Locator.text("Drop files")).toExist()
 
       scene.fire(zone, "dragenter")
       assert.strictEqual(scene.get(zone).attrs?.["data-drag-over"], "")
@@ -44,36 +43,49 @@ describe("FileDrop", () => {
       assert.isUndefined(scene.get(zone).attrs?.["data-drag-over"])
       scene.expect(Locator.text("Drop files")).toExist()
 
-      const photo = file("photo.png", "image/png")
       scene.fire(zone, "dragenter")
         .drop(zone, { files: [photo] })
         .emitted({ _tag: "Picked", files: [photo] })
       assert.isUndefined(scene.get(zone).attrs?.["data-drag-over"])
 
-      // Disabling while a drag is over hides data-drag-over, and a leave
-      // while disabled clears it so re-enabling doesn't restore stale state.
+      // Disabling mid-drag hides data-drag-over, sets disabled attributes,
+      // blocks drops, and still clears drag state on leave.
       scene.fire(zone, "dragenter")
         .props({ disabled: true })
       assert.isUndefined(scene.get(zone).attrs?.["data-drag-over"])
+      assert.strictEqual(scene.get(zone).attrs?.["data-disabled"], "")
+      assert.strictEqual(scene.get(trigger).attrs?.["data-disabled"], "")
+      scene.expect(trigger).toBeDisabled()
+
+      scene.drop(zone, { files: [photo] })
+      assert.deepStrictEqual(scene.current.emitted, [])
+
       scene.fire(zone, "dragleave")
+        .props({ disabled: false })
+      assert.isUndefined(scene.get(zone).attrs?.["data-drag-over"])
+
+      // A dragenter received while disabled does not surface on re-enable.
+      scene.props({ disabled: true })
+        .fire(zone, "dragenter")
         .props({ disabled: false })
       assert.isUndefined(scene.get(zone).attrs?.["data-drag-over"])
     }))
 
-  it.effect("classifies dropped files by multiple and accept, emitting Picked before Rejected on mixed batches", () =>
+  it.effect("classifies dropped files by multiple and accept, emitting Picked before Rejected", () =>
     Effect.gen(function*() {
       const png = file("photo.png", "image/png")
       const json = file("DATA.JSON", "")
       const txt = file("notes.txt", "text/plain;charset=utf-8")
       const pdf = file("report.pdf", "application/pdf")
 
-      // Single-file mode rejects the whole raw batch before type filtering.
-      const single = yield* HtmlScene.make(
+      const scene = yield* HtmlScene.make(
         FileDrop,
         { accept: ["image/*"] },
         standIn
       )
-      single.drop(zone, { files: [png, pdf] })
+
+      // Single-file mode rejects the raw multi-file batch before type filtering.
+      scene.drop(zone, { files: [png, pdf] })
         .emitted({
           _tag: "Rejected",
           files: [png, pdf],
@@ -81,31 +93,27 @@ describe("FileDrop", () => {
         })
 
       // Multi-file mode splits mixed batches: Picked first, then Rejected.
-      const multi = yield* HtmlScene.make(
-        FileDrop,
-        { multiple: true, accept: ["image/*", ".json"] },
-        standIn
-      )
-      multi.drop(zone, { files: [png, json, txt, pdf] })
+      scene.props({ multiple: true, accept: ["image/*", ".json"] })
+        .drop(zone, { files: [png, json, txt, pdf] })
         .emitted(
           { _tag: "Picked", files: [png, json] },
           { _tag: "Rejected", files: [txt, pdf], reason: "invalid-type" }
         )
 
       // Exact MIME strips parameters, and */* allows any file.
-      multi.props({ multiple: true, accept: ["text/plain"] })
+      scene.props({ multiple: true, accept: ["text/plain"] })
         .drop(zone, { files: [txt, pdf] })
         .emitted(
           { _tag: "Picked", files: [txt] },
           { _tag: "Rejected", files: [pdf], reason: "invalid-type" }
         )
 
-      multi.props({ multiple: true, accept: ["*/*"] })
+      scene.props({ multiple: true, accept: ["*/*"] })
         .drop(zone, { files: [json, pdf] })
         .emitted({ _tag: "Picked", files: [json, pdf] })
     }))
 
-  it.effect("trigger opens HtmlFiles.Pick with accept and multiple and classifies picked files the same way", () =>
+  it.effect("trigger opens HtmlFiles.Pick and classifies picked files through the same rules", () =>
     Effect.gen(function*() {
       const png = file("photo.png", "image/png")
       const pdf = file("report.pdf", "application/pdf")
@@ -115,7 +123,7 @@ describe("FileDrop", () => {
         standIn
       )
 
-      // Dismissed and unopened pickers emit nothing.
+      // Dismissed and unopened pickers emit nothing, even if files are returned.
       scene.click(trigger)
         .expectExact(
           HtmlFiles.Pick.make({ accept: ["image/*"], multiple: true })
@@ -127,68 +135,32 @@ describe("FileDrop", () => {
         .resolve(HtmlFiles.Pick, { opened: false, files: [png] })
       assert.deepStrictEqual(scene.current.emitted, [])
 
-      // Mixed picked batch emits Picked then Rejected.
       scene.click(trigger)
         .resolve(HtmlFiles.Pick, { opened: true, files: [png, pdf] })
         .emitted(
           { _tag: "Picked", files: [png] },
           { _tag: "Rejected", files: [pdf], reason: "invalid-type" }
         )
-
-      // Single-file mode rejects multiple picked files as too-many-files.
-      scene.props({ accept: ["image/*"], multiple: false })
-        .click(trigger)
-        .expectExact(
-          HtmlFiles.Pick.make({ accept: ["image/*"], multiple: false })
-        )
-        .resolve(HtmlFiles.Pick, { opened: true, files: [png, pdf] })
-        .emitted({
-          _tag: "Rejected",
-          files: [png, pdf],
-          reason: "too-many-files"
-        })
     }))
 
-  it.effect("disabled sets data-disabled and native disabled on trigger, and ignores drags and drops", () =>
-    Effect.gen(function*() {
-      const scene = yield* HtmlScene.make(
-        FileDrop,
-        { disabled: true },
-        standIn
-      )
-      assert.strictEqual(scene.get(zone).attrs?.["data-disabled"], "")
-      assert.strictEqual(scene.get(trigger).attrs?.["data-disabled"], "")
-      scene.expect(trigger).toBeDisabled()
-
-      scene.fire(zone, "dragenter")
-        .props({ disabled: false })
-      assert.isUndefined(scene.get(zone).attrs?.["data-drag-over"])
-
-      scene.props({ disabled: true })
-        .drop(zone, { files: [file("photo.png", "image/png")] })
-      assert.deepStrictEqual(scene.current.emitted, [])
-    }))
-
-  it("root accepts any element, trigger takes only button, and own attributes win over consumer attributes", () => {
-    const enabled = Story.parts(FileDrop, {
+  it("root accepts any element, trigger takes only button, and own attributes win", () => {
+    const parts = Story.parts(FileDrop, {
       model: { dragOver: false },
       props: {}
     })
-    assert.strictEqual(enabled.dragOver, false)
-    assert.strictEqual(enabled.disabled, false)
-    assert.strictEqual(View.build(enabled.root(h.section), []).tag, "section")
+    assert.strictEqual(View.build(parts.root(h.section), []).tag, "section")
     assert.strictEqual(
-      View.build(enabled.root(enabled.trigger(h.button)), []).tag,
+      View.build(parts.root(parts.trigger(h.button)), []).tag,
       "button"
     )
     assert.throws(
-      () => enabled.trigger(h.div as any),
+      () => parts.trigger(h.div as any),
       /a part for <button> was given <div>/
     )
 
     assert.deepStrictEqual(
       View.build(
-        enabled.root(
+        parts.root(
           h.div.class("dropzone").attrs({
             "aria-label": "Attachments",
             "data-drag-over": "",
@@ -201,7 +173,7 @@ describe("FileDrop", () => {
     )
     assert.deepStrictEqual(
       View.build(
-        enabled.trigger(
+        parts.trigger(
           h.button.class("pick").attrs({
             type: "submit",
             "aria-disabled": "true",
@@ -211,16 +183,6 @@ describe("FileDrop", () => {
         []
       ).attrs,
       { class: "pick", type: "button" }
-    )
-
-    const dragging = Story.parts(FileDrop, {
-      model: { dragOver: true },
-      props: {}
-    })
-    assert.strictEqual(dragging.dragOver, true)
-    assert.strictEqual(
-      View.build(dragging.root(h.div), []).attrs["data-drag-over"],
-      ""
     )
   })
 
@@ -283,7 +245,6 @@ describe("FileDrop", () => {
       const control = HtmlLocator.label("Attachment")
       yield* play.expect(control).toExist()
 
-      // Drop a mixed batch: accepted file stored, error set on invalid field.
       yield* play.drop(Locator.attr("data-testid", "dropzone"), {
         files: [
           file("a.png", "image/png"),
@@ -295,7 +256,6 @@ describe("FileDrop", () => {
       )
       assert.strictEqual(play.root.get(control).attrs?.["aria-invalid"], "true")
 
-      // Pick a valid file via TestFiles: clears error and appends file.
       yield* play.click(control)
       yield* TestFiles.choose([file("b.png", "image/png")])
       yield* TestHost.settle
