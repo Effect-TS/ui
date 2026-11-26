@@ -8,6 +8,27 @@ import type * as Kernel from "./kernel.ts"
 /** @internal */
 export const now = <A>(f: () => A): A => f()
 
+/**
+ * Nesting depth of `inlined` calls.
+ *
+ * @internal
+ */
+export let inline = 0
+
+/**
+ * Runs fiber work in this task until it waits or reaches the op limit.
+ *
+ * @internal
+ */
+export const inlined = <A>(f: () => A): A => {
+  inline++
+  try {
+    return f()
+  } finally {
+    inline--
+  }
+}
+
 /** @internal */
 export const follow = (
   tree: Kernel.Tree,
@@ -20,13 +41,15 @@ export const fork = <A, E>(
   context: Context.Context<any>,
   effect: Effect.Effect<A, E, any>,
   now?: boolean
-): Fiber.Fiber<A, E> =>
-  owned(
+): Fiber.Fiber<A, E> => {
+  const run = Effect.runForkWith(withScheduler(context))
+  return owned(
     tree,
-    Effect.runForkWith(withScheduler(context))(
-      now ? effect : Effect.andThen(Effect.yieldNow, effect)
-    )
+    now
+      ? inlined(() => run(effect))
+      : run(Effect.andThen(Effect.yieldNow, effect))
   )
+}
 
 /** @internal */
 export const withScheduler = (

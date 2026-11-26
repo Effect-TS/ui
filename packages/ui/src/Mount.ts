@@ -404,6 +404,11 @@ export const isDefinition = (u: unknown): u is Definition.Any =>
  *   one, when a render's args differ by the Schema's equivalence. A reader
  *   that falls behind gets only the latest.
  *
+ * Mount startup, publishing new args to `changes` and Scope closure run
+ * synchronously with their triggering commit until the work waits or reaches
+ * `Scheduler.MaxOpsBeforeYield` steps. If a required Layer is still being
+ * built, the body starts once that Layer is ready.
+ *
  * The body ends with its own result, which a view maps to a message with
  * `map`. When there is nothing to report, return `Component.noop`: the log
  * records `MountEnded` with `silent: true` instead of an `Update`. The body's

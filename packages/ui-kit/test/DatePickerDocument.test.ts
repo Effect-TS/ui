@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { UiSchema } from "@effect/ui"
 import { DatePicker, DatePickerChangeReason, Field } from "@effect/ui-kit"
-import { BrowserHost, Html } from "@effect/ui/html"
+import { BrowserHost, Html, HtmlScheduler } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Effect, Schema } from "effect"
 import {
@@ -262,9 +262,11 @@ describe("DatePicker in a document", { concurrent: false }, () => {
         yield* tick
         assert.isTrue(shown())
         assert.strictEqual(document.activeElement?.id, "2026-11-15")
-        // The consumer closes it on its own while a day has focus
-        send("close")
-        yield* tick
+        // Check focus after the close commit, before the browser can render.
+        yield* Effect.promise(async () => {
+          send("close")
+          await Promise.resolve()
+        })
         assert.isFalse(shown())
         assert.strictEqual(document.activeElement?.id, "trigger")
         assert.isFalse(touched())
@@ -272,6 +274,9 @@ describe("DatePicker in a document", { concurrent: false }, () => {
           "RequestedOpen trigger-press",
           "RequestedClose escape-key"
         ])
-      }).pipe(Effect.scoped))
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(HtmlScheduler.layer({ budget: 0 }))
+      ))
   }
 })

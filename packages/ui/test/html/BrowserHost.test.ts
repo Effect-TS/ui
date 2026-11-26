@@ -804,7 +804,10 @@ describe("BrowserHost", { concurrent: false }, () => {
           expect(history.entries()).toEqual(["/search?q=effect"])
           expect(writes).toEqual([])
         })
-      ).pipe(Effect.provide(HtmlScheduler.layer({ budget: 0 }))))
+      ).pipe(
+        Effect.provideService(Scheduler.MaxOpsBeforeYield, 8),
+        Effect.provide(HtmlScheduler.layer({ budget: 0 }))
+      ))
 
     it.effect("a rejected keystroke is put back", () =>
       withSearch(({ field, history, type }) =>
@@ -4179,6 +4182,48 @@ describe("BrowserHost", { concurrent: false }, () => {
       const closer = yield* Effect.fiberId
       expect(interruptors).toEqual([[closer], [closer]])
     }).pipe(Effect.scoped))
+
+  it.effect("runs a mount's start, new args and release in the task that commits them", () =>
+    Effect.gen(function*() {
+      const log: Array<string> = []
+      const Logged = Mount.make(
+        "Logged",
+        { args: { n: Schema.Number } },
+        (_node, _args, changes) =>
+          Effect.addFinalizer(() => Effect.sync(() => log.push("release")))
+            .pipe(
+              Effect.andThen(
+                Stream.runForEach(
+                  changes,
+                  ({ n }) => Effect.sync(() => log.push(`args ${n}`))
+                )
+              ),
+              Effect.as(Component.noop)
+            )
+      )
+      const Page = Html.component({
+        name: "Page",
+        model: Schema.NullOr(Schema.Number),
+        message: Schema.NullOr(Schema.Number)
+      }).make({
+        init: () => null,
+        update: (_, message) => message,
+        view: (h, n) =>
+          n === null
+            ? h.span("none")
+            : h.p.onMount(Logged({ n })).children("held")
+      })
+      const app = yield* container
+      const root = yield* BrowserHost.mountEffect(Page, {}, app)
+      yield* tick
+      yield* Effect.promise(async () => {
+        for (const message of [1, 2, null]) {
+          root.send(message)
+          await Promise.resolve()
+        }
+      })
+      expect(log).toEqual(["args 1", "args 2", "release"])
+    }).pipe(Effect.scoped, Effect.provide(HtmlScheduler.layer({ budget: 0 }))))
 
   it.effect(
     "renders once for the Commands of one flush that end together",

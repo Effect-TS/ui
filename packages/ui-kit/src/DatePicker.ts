@@ -379,8 +379,7 @@ const TrackDatePicker = Mount.makeStream(
             })
             return controller
           }),
-          // When `open` turns false, restore focus before hiding the popup
-          // to avoid touching the Field. Leave outside focus unchanged.
+          // Restore focus before the browser blurs the hidden day and touches the Field.
           (controller) =>
             Effect.sync(() => {
               controller.abort()

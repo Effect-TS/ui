@@ -6,7 +6,7 @@ import * as Fiber from "effect/Fiber"
 import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import type * as Mount from "../Mount.ts"
-import { follow, fork, servicesOf } from "./fork.ts"
+import { follow, fork, inlined, servicesOf } from "./fork.ts"
 import * as Kernel from "./kernel.ts"
 import type * as mountArgs from "./mountArgs.ts"
 import { isNoop } from "./noop.ts"
@@ -113,8 +113,9 @@ class Running {
     const previous = this.mount
     if (previous === mount) return
     this.mount = mount
-    if (this.args !== undefined && !previous["~sameArgs"](mount)) {
-      mount["~args"].publish(this.args, mount.args)
+    const args = this.args
+    if (args !== undefined && !previous["~sameArgs"](mount)) {
+      inlined(() => mount["~args"].publish(args, mount.args))
     }
   }
   stop(): void {
