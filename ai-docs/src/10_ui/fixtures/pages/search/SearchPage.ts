@@ -2,7 +2,7 @@ import { type NoteResults, NoteSort } from "#domain/Note"
 import { SearchNotes } from "#queries/SearchNotes"
 import { Command, Component, Head, Router, UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
-import { Layer, Option, Schema } from "effect"
+import { Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { Notes } from "../../notes/services/Notes.ts"
 import { AppRoute } from "../../routes.ts"
@@ -80,9 +80,9 @@ export const SearchPageNoDeps = Html.component({
   view: (h) => {
     const { page, q, sort } = h.props.route.search
 
-    const resultsView = (results: NoteResults) =>
+    const resultsView = (results: NoteResults, waiting: boolean) =>
       h.div(
-        h.ul(
+        h.ul.attr("aria-busy", String(waiting)).children(
           results.notes.map((note) =>
             h.li.key(note.id).children(
               h.a.attr("href", noteUrl(note.id)).children(note.title)
@@ -93,7 +93,11 @@ export const SearchPageNoDeps = Html.component({
           h.button.attr("type", "button").disabled(page <= 1)
             .on("click", SearchPageMessage.ClickedPage({ page: page - 1 }))
             .children("Previous"),
-          h.span(`Page ${page} of ${results.pages}`),
+          h.span(
+            waiting
+              ? `Loading page ${page}…`
+              : `Page ${page} of ${results.pages}`
+          ),
           h.button.attr("type", "button").disabled(page >= results.pages)
             .on("click", SearchPageMessage.ClickedPage({ page: page + 1 }))
             .children("Next")
@@ -121,16 +125,11 @@ export const SearchPageNoDeps = Html.component({
           h.option.attr("value", "asc").children("A to Z"),
           h.option.attr("value", "desc").children("Z to A")
         ),
+      // Kept results still reach onSuccess while the next search loads.
       AsyncResult.match(h.queries.results, {
-        // While a fetch waits or runs, `h.previous` holds the last results,
-        // so the list stays on screen instead of flashing a loading state.
-        onInitial: () =>
-          Option.match(h.previous.results, {
-            onNone: () => h.p("Searching…"),
-            onSome: resultsView
-          }),
+        onInitial: () => h.p("Searching…"),
         onFailure: () => h.p("The search failed."),
-        onSuccess: ({ value }) => resultsView(value)
+        onSuccess: ({ value, waiting }) => resultsView(value, waiting)
       })
     )
   }

@@ -507,6 +507,14 @@ an `onChange` only when `update` has to react to a new result, such as
 moving focus once a query fails. It returns a message, which `update` gets
 after the result is written.
 
+When an enabled `query` entry's args change, it keeps the last Success
+with `waiting: true` until the new args have a result, including during
+`debounce`. `onSuccess` can keep the old results visible and mark them busy.
+Without a stored Success, the result is `Initial`; a disabled query is
+`Initial`, not waiting. A kept infinite list reports `more: Loading`.
+Set `dropPrevious: true` on the entry to show `Initial` instead when old
+results would mislead.
+
 The cache never retries a failed fetch: a fetcher that should retry does so
 itself.
 

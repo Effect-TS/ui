@@ -165,11 +165,9 @@ export class CreateAccount extends Command.Service<CreateAccount>()(
   )
 }
 
-// The form's fields, derived. The view, `update` and the tests all call it,
-// so they agree on what the form shows. The query's answer becomes the
-// username's errors. While it is loading, the username is `Validating` and
-// `value` is `None`, so a submit waits for it. A query keeps its result per
-// args, so an answer about an earlier username is never shown for this one.
+// Shared by the view, `update` and tests. A waiting result makes the username
+// `Validating` and the form's `value` None, blocking submission even when
+// the query keeps an earlier username's answer.
 export const validateSignup = (
   form: typeof SignupValidation.State.Type,
   usernameTaken: AsyncResult.AsyncResult<boolean>

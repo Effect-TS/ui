@@ -12,6 +12,7 @@ const makeApp = (options?: {
   readonly staleTime?: "30 seconds" | 0 | "Infinity"
   readonly interval?: boolean
   readonly debounce?: "300 millis"
+  readonly dropPrevious?: boolean
 }) => {
   const db = {
     calls: 0,
@@ -88,6 +89,7 @@ const makeApp = (options?: {
       user: {
         query: GetUser,
         debounce: options?.debounce,
+        dropPrevious: options?.dropPrevious,
         args: userArgs,
         // The result is written by the runtime: the message only lets update see the change.
         onChange: (result) => CardMessage.UserChanged({ state: result._tag })
@@ -114,12 +116,7 @@ const makeApp = (options?: {
       }),
     view: (h, model) => {
       const text = AsyncResult.match(h.queries.user, {
-        onInitial: (initial) =>
-          Option.isSome(h.previous.user)
-            ? `was ${h.previous.user.value.name}${initial.waiting ? "…" : ""}`
-            : initial.waiting
-            ? "loading"
-            : "idle",
+        onInitial: (initial) => initial.waiting ? "loading" : "idle",
         // "~": the value includes an unconfirmed patch. "…": a fetch is in flight.
         onSuccess: (success) =>
           success.value.name + (h.patched.user ? "~" : "") +
@@ -280,7 +277,7 @@ describe("Query results", () => {
     )
   })
 
-  it.effect("debounce: a burst of args changes shows the previous value, then fetches the last args once", () => {
+  it.effect("debounce: a burst of args changes keeps the previous value, then fetches the last args once", () => {
     const app = makeApp({ debounce: "300 millis" })
     const set = (...cards: Array<string>) => app.ListMessage.Set({ cards })
     return run(
@@ -295,8 +292,7 @@ describe("Query results", () => {
           yield* TestHost.settle
           yield* TestClock.adjust("100 millis")
         }
-        // Initial, waiting, with the old value as previous.
-        assert.strictEqual(root.text(), "a=was Ann…")
+        assert.strictEqual(root.text(), "a=Ann…")
         assert.strictEqual(app.db.calls, 1)
         // 300 ms after the last change.
         yield* TestClock.adjust("200 millis")
@@ -309,6 +305,46 @@ describe("Query results", () => {
       })
     )
   })
+
+  // Users 9 and 8 do not exist, so their fetches fail.
+  const switchUsers = (dropPrevious: boolean, ids: ReadonlyArray<string>) => {
+    const app = makeApp({ dropPrevious })
+    return run(
+      app.layer,
+      Effect.gen(function*() {
+        const root = yield* TestHost.mount(app.List, { cards: ["a:1"] })
+        yield* load
+        const texts = [root.text()]
+        for (const id of ids) {
+          root.send(app.ListMessage.Set({ cards: [`a:${id}`] }))
+          yield* TestHost.settle
+          texts.push(root.text())
+          yield* load
+          texts.push(root.text())
+        }
+        return texts
+      })
+    )
+  }
+
+  it.effect("changed args keep the last Success, waiting, until their own result, but not a Failure", () =>
+    Effect.map(
+      switchUsers(false, ["9", "8"]),
+      (texts) =>
+        assert.deepStrictEqual(texts, [
+          "a=Ann",
+          "a=Ann…",
+          "a=failed",
+          "a=loading",
+          "a=failed"
+        ])
+    ))
+
+  it.effect("dropPrevious: changed args open as Initial, waiting", () =>
+    Effect.map(
+      switchUsers(true, ["2"]),
+      (texts) => assert.deepStrictEqual(texts, ["a=Ann", "a=loading", "a=Bea"])
+    ))
 
   it.effect("debounce: new args interrupt the old args' fetch, unless another watcher still needs it", () => {
     const app = makeApp({ debounce: "300 millis" })

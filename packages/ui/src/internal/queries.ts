@@ -40,6 +40,7 @@ export interface Entry {
   readonly args: QueryFn
   /** From `debounce`: how many milliseconds a fetch for changed args waits. */
   readonly debounce: number | undefined
+  readonly dropPrevious: boolean
   readonly onChange: ((...args: Array<any>) => unknown) | undefined
   readonly restore: false | undefined
 }
@@ -106,41 +107,10 @@ export const boundOf: (
 /** @internal */
 export const isWatchKey: (key: string) => boolean = queryCore.isWatchKey
 
-/** Strict open: the stored result at the query's current args, else `Initial`, waiting when enabled. */
-const open = (
-  snapshot: unknown,
-  argsKey: string | undefined
-): AsyncResult.AsyncResult<any, any> => {
-  if (argsKey === undefined) return AsyncResult.initial(false)
-  const data = queryModule().snapshotData(snapshot)
-  if (data?.result === undefined || data.argsKey !== argsKey) {
-    return AsyncResult.initial(true)
-  }
-  return data.result
-}
-
 /** Whether the opened value includes an unconfirmed patch. */
 const patched = (snapshot: unknown, argsKey: string | undefined): boolean => {
   const data = queryModule().snapshotData(snapshot)
   return argsKey !== undefined && data?.argsKey === argsKey && data.patched
-}
-
-/** "Keep the previous page": a Success stored for other args, while the query is enabled. */
-const previous = (
-  snapshot: unknown,
-  argsKey: string | undefined
-): Option.Option<any> => {
-  if (argsKey === undefined) return Option.none()
-  const data = queryModule().snapshotData(snapshot)
-  if (
-    data?.result === undefined || data.argsKey === argsKey ||
-    data.result._tag !== "Success"
-  ) return Option.none()
-  return Option.some(
-    data.def.list === undefined
-      ? data.result.value
-      : listOf(data.def, data.result.value)
-  )
 }
 
 /** A list's pages, with their items: the dedupe runs once per page array. */
@@ -163,24 +133,47 @@ const listOf = (def: QueryDef, pages: ReadonlyArray<unknown>) => {
 /** One opened list per snapshot, so a view and `onChange` share it. */
 const openedLists = new WeakMap<object, AsyncResult.AsyncResult<any, any>>()
 
-/** A list's result opened as `h.queries` shows it: `{ items, pages, more }`. */
-const openList = (
+/** One kept result per stored Success, so every read gets the same value. */
+const kept = new WeakMap<object, AsyncResult.AsyncResult<any, any>>()
+
+/** Keeps a stored Success while changed args load, unless `dropPrevious` is set. */
+const open = (
   snapshot: unknown,
-  result: AsyncResult.AsyncResult<any, any>
+  argsKey: string | undefined,
+  entry: Entry
 ): AsyncResult.AsyncResult<any, any> => {
-  if (result._tag === "Initial") return result
-  const data = queryModule().snapshotData(snapshot)!
-  const cached = data.result === result
-    ? openedLists.get(snapshot as object)
-    : undefined
-  if (cached !== undefined) return cached
-  const more = data.more ?? { _tag: "End" }
-  const opened = AsyncResult.map(
-    result,
-    (pages: ReadonlyArray<unknown>) => ({ ...listOf(data.def, pages), more })
-  )
-  if (data.result === result) openedLists.set(snapshot as object, opened)
-  return opened
+  if (argsKey === undefined) return AsyncResult.initial(false)
+  const data = queryModule().snapshotData(snapshot)
+  if (data?.result === undefined) return AsyncResult.initial(true)
+  const { def, result } = data
+  if (data.argsKey === argsKey) {
+    if (!entry.list) return result
+    let opened = openedLists.get(snapshot as object)
+    if (opened === undefined) {
+      const more = data.more ?? { _tag: "End" }
+      opened = AsyncResult.map(
+        result,
+        (pages: ReadonlyArray<unknown>) => ({ ...listOf(def, pages), more })
+      )
+      openedLists.set(snapshot as object, opened)
+    }
+    return opened
+  }
+  if (entry.dropPrevious || result._tag !== "Success") {
+    return AsyncResult.initial(true)
+  }
+  let out = kept.get(result)
+  if (out === undefined) {
+    out = AsyncResult.success(
+      entry.list
+        // Prevent pagination of the kept list; loadMore uses the current args.
+        ? { ...listOf(def, result.value), more: { _tag: "Loading" } }
+        : result.value,
+      { waiting: true, timestamp: result.timestamp }
+    )
+    kept.set(result, out)
+  }
+  return out
 }
 
 /**
@@ -256,8 +249,15 @@ const parse = (component: string, queries: unknown): ReadonlyArray<Entry> => {
     if (typeof entry !== "object" || entry === null) {
       throw fail("must be { query, args } or { queryMany, args }.")
     }
-    const { args, debounce, query, queryMany, onChange, restore } =
-      entry as Record<string, unknown>
+    const {
+      args,
+      debounce,
+      dropPrevious,
+      query,
+      queryMany,
+      onChange,
+      restore
+    } = entry as Record<string, unknown>
     if ((query === undefined) === (queryMany === undefined)) {
       throw fail("must have exactly one of query and queryMany.")
     }
@@ -291,6 +291,7 @@ const parse = (component: string, queries: unknown): ReadonlyArray<Entry> => {
       debounce: debounce === undefined
         ? undefined
         : Duration.toMillis(debounce as Duration.Input),
+      dropPrevious: dropPrevious === true,
       onChange: onChange as Entry["onChange"],
       restore
     }
@@ -312,13 +313,12 @@ type Current =
 
 /**
  * The views of one `(model, props, results)`: each query runs at most once,
- * and the watches, `queries`, `previous` and `patched` share its args.
+ * and the watches, `queries` and `patched` share its args.
  *
  * @internal
  */
 export interface Context {
   readonly queries: Record<string, any>
-  readonly previous: Record<string, Option.Option<any>>
   readonly patched: Record<string, boolean>
   /** The watch markers and keyed groups of every query, which the runtime registers. */
   readonly watches: () => ReadonlyArray<Subscription.Subscription<any, any>>
@@ -452,7 +452,7 @@ export const bind = (
     state.memo.set(entry.name, current)
     return current
   }
-  // The three views share prototypes built once here, so a render defines no property.
+  // The two views share prototypes built once here, so a render defines no property.
   const view = (
     read: (
       snapshot: unknown,
@@ -492,11 +492,7 @@ export const bind = (
     }
     return opened
   }
-  const queriesProto = view((snapshot, argsKey, entry) => {
-    const result = open(snapshot, argsKey)
-    return entry.list ? openList(snapshot, result) : result
-  }, openKeyedResult)
-  const previousProto = view(previous, undefined)
+  const queriesProto = view(open, openKeyedResult)
   const patchedProto = view(patched, undefined)
   const viewOf = (proto: object, state: State) => {
     const out = Object.create(proto)
@@ -563,7 +559,6 @@ export const bind = (
     state.$ = { model, props, queries }
     return {
       queries,
-      previous: viewOf(previousProto, state),
       patched: viewOf(patchedProto, state),
       argsOf: (name) => argsOf(state, byName.get(name)!),
       watches: () => watchesOf(state),

@@ -859,8 +859,8 @@ export interface InfiniteService<
  *
  * Use when a new page appends to what the screen shows, such as an infinite
  * feed or a "load more" button, on a cursor API or an offset one. When a new
- * page replaces the old one, use an ordinary query with the page in its args
- * and `h.previous`, even on a cursor API.
+ * page replaces the old one, use an ordinary query with the page in its args,
+ * even on a cursor API: `h.queries` keeps the old page until the new one loads.
  *
  * **Details**
  *
