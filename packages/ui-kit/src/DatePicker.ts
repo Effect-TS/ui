@@ -50,11 +50,10 @@
  *
  * The trigger is a native button, so Enter and Space press it. Opening moves
  * focus to the calendar's focused day, and the calendar's keys work as
- * `Calendar` describes. Escape in the popup, the input or the trigger asks
- * to close it. Picking a day
- * or pressing Escape gives focus back to the trigger. A press outside the
- * input, the trigger and the popup, or Tab out of them, asks to close it and
- * leaves focus where it went.
+ * `Calendar` describes. Escape in the popup, the input or the trigger, a
+ * picked day, a press outside them and Tab out of them each ask to close it.
+ * When `open` turns false with focus still in the popup, focus goes back to
+ * the trigger. Focus that already left stays where it went.
  *
  * **Field**
  *
@@ -158,10 +157,8 @@
  * @stability experimental
  * @since 0.1.0
  */
-import * as Command from "@effect/ui/Command"
 import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
-import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
@@ -186,7 +183,7 @@ import {
   startOfMonth
 } from "./internal/calendar.ts"
 import { listenOutside } from "./internal/outside.ts"
-import { layered } from "./internal/topLayer.ts"
+import { layered, raiseAbove } from "./internal/topLayer.ts"
 import { frameOf } from "./internal/transition.ts"
 import * as Positioning from "./Positioning.ts"
 
@@ -322,8 +319,6 @@ type DatePickerUpdate = Component.Update<
   DatePickerProps
 >
 
-const Trigger = Html.ref("DatePickerTrigger", "button")
-
 const pick = ($: DatePickerUpdate, date: DateTime.Utc | null) => {
   const picked = $.emit(DatePickerEvents.Picked({ date }))
   return date === null ||
@@ -333,16 +328,6 @@ const pick = ($: DatePickerUpdate, date: DateTime.Utc | null) => {
       DatePickerEvents.RequestedMonth({ month: startOfMonth(date) })
     )
 }
-
-// Focus goes back to the trigger as the close is asked for, before the popup
-// hides, so focus never drops to the page and a field isn't touched.
-const close = (
-  $: DatePickerUpdate | ReturnType<DatePickerUpdate["emit"]>,
-  reason: DatePickerChangeReason
-) =>
-  $.emit(DatePickerEvents.RequestedClose({ reason })).run(
-    HtmlCommand.Focus.make({ ref: Trigger }).pipe(Command.asNoop)
-  )
 
 const leave = (
   $: DatePickerUpdate,
@@ -372,6 +357,7 @@ const TrackDatePicker = Mount.makeStream(
               node.contains(target) ||
               document.querySelector(args.input)?.contains(target) === true ||
               document.querySelector(args.trigger)?.contains(target) === true
+            raiseAbove(node)
             listenOutside(document, controller.signal, {
               open: () => true,
               inside,
@@ -400,7 +386,21 @@ const TrackDatePicker = Mount.makeStream(
             })
             return controller
           }),
-          (controller) => Effect.sync(() => controller.abort())
+          // The mount ends as `open` turns false. Focus still in the popup
+          // goes back to the trigger before the popup hides, so it never
+          // drops to the page and a field isn't touched. Focus that already
+          // left stays where it went.
+          (controller) =>
+            Effect.sync(() => {
+              controller.abort()
+              const document = node.ownerDocument
+              const focused = document.activeElement
+              if (focused !== null && node.contains(focused)) {
+                document.querySelector<HTMLElement>(args.trigger)?.focus({
+                  preventScroll: true
+                })
+              }
+            })
         )
       ),
       Positioning.trackPosition(
@@ -453,7 +453,10 @@ export const DatePicker = Html.component({
   init: () => ({ placement: null }),
   update: {
     CommittedDateField: ($, { date }) => pick($, date),
-    PickedCalendar: ($, { date }) => close(pick($, date), "day-press"),
+    PickedCalendar: ($, { date }) =>
+      pick($, date).emit(
+        DatePickerEvents.RequestedClose({ reason: "day-press" })
+      ),
     RequestedCalendarMonth: ($, { month }) =>
       $.emit(DatePickerEvents.RequestedMonth({ month })),
     ClickedTrigger: ($) =>
@@ -464,9 +467,8 @@ export const DatePicker = Html.component({
         : $.emit(DatePickerEvents.RequestedOpen({ reason: "trigger-press" })),
     PressedEscape: ($) =>
       $.props.open && $.props.disabled !== true
-        ? close($, "escape-key")
+        ? $.emit(DatePickerEvents.RequestedClose({ reason: "escape-key" }))
         : $.model,
-    // Focus is already where the press or Tab put it, so it stays there
     PressedOutside: ($) => leave($, "outside-press"),
     FocusedOutside: ($) => leave($, "focus-out"),
     ChangedPlacement: ($, { placement }) => $.evolve({ placement })
@@ -508,7 +510,6 @@ export const DatePicker = Html.component({
           "data-date-picker-trigger": pickerId
         })
         .disabled(disabled)
-        .ref(Trigger)
         .on("click", DatePickerMessage.ClickedTrigger())
         .forward(fallbackLabel("Choose date")))
 

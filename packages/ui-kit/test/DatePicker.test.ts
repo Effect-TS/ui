@@ -6,7 +6,7 @@ import {
   type DatePickerEvents,
   type DatePickerProps
 } from "@effect/ui-kit"
-import { Html, HtmlCommand } from "@effect/ui/html"
+import { Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -93,11 +93,6 @@ const month = (iso: string): DatePickerEvents => ({
   _tag: "RequestedMonth",
   month: utc(iso)
 })
-const focusedTrigger = <
-  S extends { readonly resolve: (...args: ReadonlyArray<any>) => S }
->(
-  scene: S
-): S => scene.resolve(HtmlCommand.Focus, { found: true })
 const quiet = (
   scene: { readonly current: { readonly emitted: ReadonlyArray<unknown> } }
 ) => assert.deepStrictEqual(scene.current.emitted, [])
@@ -134,18 +129,14 @@ describe("DatePicker", () => {
       scene.mounted(tracked(scene), sent("PressedEscape")).emitted(
         closed("escape-key")
       )
-      focusedTrigger(scene)
-      // A press outside leaves focus where the press put it
       scene.mounted(tracked(scene), sent("PressedOutside")).emitted(
         closed("outside-press")
       )
       scene.mounted(tracked(scene), sent("FocusedOutside")).emitted(
         closed("focus-out")
       )
-      assert.deepStrictEqual(scene.current.pending, [])
       scene.childEmit(Calendar, { _tag: "Picked", date: utc("2026-11-20") })
         .emitted(picked(utc("2026-11-20")), closed("day-press"))
-      focusedTrigger(scene)
       // A day of the next month asks for that month too
       scene.childEmit(Calendar, { _tag: "Picked", date: utc("2026-12-01") })
         .emitted(
@@ -153,7 +144,6 @@ describe("DatePicker", () => {
           month("2026-12-01"),
           closed("day-press")
         )
-      focusedTrigger(scene)
       scene.childEmit(Calendar, {
         _tag: "RequestedMonth",
         month: utc("2026-10-01")
@@ -195,7 +185,6 @@ describe("DatePicker", () => {
       // Nov 30 is in the shown month, so no other month is asked for
       scene.childEmit(Calendar, { _tag: "Picked", date: utc("2026-11-30") })
         .emitted(picked(utc("2026-11-30")), closed("day-press"))
-      focusedTrigger(scene)
     }))
 
   it.effect("disabled, it disables every control and asks for nothing", () =>
@@ -235,6 +224,5 @@ describe("DatePicker", () => {
       scene.mounted(tracked(scene), sent("PressedEscape")).emitted(
         closed("escape-key")
       )
-      focusedTrigger(scene)
     }))
 })
