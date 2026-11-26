@@ -194,7 +194,13 @@ import * as Stream from "effect/Stream"
 import * as Struct from "effect/Struct"
 import { Dialog, DialogDismissReason, DialogProps } from "./Dialog.ts"
 import { flag, idOf, withStyle } from "./internal/attributes.ts"
-import { byAttribute, onRange, saved } from "./internal/dom.ts"
+import {
+  byAttribute,
+  elementOf,
+  isHTMLElement,
+  onRange,
+  saved
+} from "./internal/dom.ts"
 import {
   popupAttribute,
   trackKeyboard,
@@ -834,20 +840,20 @@ const scrollable = (element: HTMLElement, horizontal: boolean): boolean => {
 }
 
 const scrollableAncestor = (
-  target: EventTarget | null,
+  target: Element,
   root: HTMLElement,
   horizontal: boolean
 ): HTMLElement | null => {
-  let node = target instanceof Element ? target : null
+  let node: Element | null = target
   while (node !== null && node !== root) {
-    if (node instanceof HTMLElement && scrollable(node, horizontal)) return node
+    if (isHTMLElement(node) && scrollable(node, horizontal)) return node
     node = node.parentElement
   }
   return null
 }
 
 const scrollTargetOf = (
-  target: EventTarget | null,
+  target: Element,
   root: HTMLElement,
   horizontal: boolean
 ): HTMLElement | null =>
@@ -873,18 +879,11 @@ const canSwipeFromEdge = (
   (fromStartEdge(direction) ? delta > 0 : delta < 0) &&
   atSwipeEdge(element, direction)
 
-const elementOf = (node: Node | null | undefined): Element | null =>
-  node === null || node === undefined
-    ? null
-    : node instanceof Element
-    ? node
-    : node.parentElement
-
 const selectedIn = (document: Document, root: HTMLElement): boolean => {
-  const active = document.activeElement
+  const active = document.activeElement as HTMLInputElement | null
   if (
-    (active instanceof HTMLInputElement ||
-      active instanceof HTMLTextAreaElement) && root.contains(active)
+    (active?.localName === "input" || active?.localName === "textarea") &&
+    root.contains(active)
   ) {
     try {
       const { selectionEnd, selectionStart } = active
@@ -1076,7 +1075,7 @@ const TrackSwipe = Mount.makeStream(
             : [args.direction]
         const snapDown = () => args.snapping && args.direction === "down"
         const inOwn = (target: EventTarget | null): Element | null => {
-          const element = elementOf(target as Node | null)
+          const element = elementOf(target)
           return element !== null && node.contains(element) &&
               element.closest("dialog") === portal()
             ? element

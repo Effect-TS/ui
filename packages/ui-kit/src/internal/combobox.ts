@@ -38,7 +38,13 @@ import {
   rightToLeft,
   watchDirectionWhile
 } from "./direction.ts"
-import { byAttribute, focusFinal, trapTab } from "./dom.ts"
+import {
+  byAttribute,
+  focusFinal,
+  isElement,
+  isHTMLElement,
+  trapTab
+} from "./dom.ts"
 import { textFilter } from "./filter.ts"
 import {
   autofillMatch,
@@ -868,10 +874,12 @@ const selectSuffix = (
   completed: NonNullable<ListArgs["completed"]>,
   frame: (f: () => void) => void
 ) => {
-  const input = byAttribute(document, "data-combobox-input", owner)
-  if (
-    !(input instanceof HTMLInputElement) || !selectingTypes.has(input.type)
-  ) return
+  const input = byAttribute(
+    document,
+    "data-combobox-input",
+    owner
+  ) as HTMLInputElement | null
+  if (input === null || !selectingTypes.has(input.type)) return
   const select = () => {
     if (input.value === completed.text && document.activeElement === input) {
       input.setSelectionRange(completed.from, completed.text.length)
@@ -1031,7 +1039,7 @@ const watch = (
           lost,
           current.closeMethod === "keyboard"
         )
-      } else if (focused instanceof HTMLElement && node.contains(focused)) {
+      } else if (isHTMLElement(focused) && node.contains(focused)) {
         if (current.inputInPopup) focused.blur()
         else find("data-combobox-input")?.focus({ preventScroll: true })
       }
@@ -1049,7 +1057,7 @@ const watch = (
     const onFocusIn = (event: FocusEvent) => {
       if (current.inputInPopup || current.touch || !current.open) return
       const target = event.target
-      if (!(target instanceof Element)) return
+      if (!isElement(target)) return
       if (target !== popup()) {
         const owner = list()
         if (
@@ -1067,9 +1075,7 @@ const watch = (
       find("data-combobox-input")?.focus({ preventScroll: true })
     }
     const onMouseDown = (event: MouseEvent) => {
-      if (
-        event.target instanceof Node && blocking.owns(node, event.target)
-      ) event.preventDefault()
+      if (blocking.owns(node, event.target)) event.preventDefault()
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (
@@ -1216,7 +1222,7 @@ const TrackComboboxChips = Mount.makeStream(
         const chip = event.target
         if (
           event.defaultPrevented || current.locked || event.isComposing ||
-          !(chip instanceof HTMLElement) ||
+          !isHTMLElement(chip) ||
           !chip.hasAttribute("data-combobox-chip")
         ) return
         const all = chips()

@@ -46,5 +46,28 @@
     "rules": {
       "eslint/no-restricted-imports": "off"
     }
+  }, {
+    // DOM instanceof checks fail across windows; use internal/dom.ts guards for nodes.
+    "files": ["packages/ui-kit/src/**"],
+    "rules": {
+      "unicorn/no-instanceof-builtins": ["error", {
+        "include": [
+          "Node",
+          "Element",
+          "HTMLElement",
+          "HTMLInputElement",
+          "HTMLTextAreaElement",
+          "SVGElement",
+          "Document",
+          "ShadowRoot",
+          "Text",
+          "Event",
+          "MouseEvent",
+          "PointerEvent",
+          "KeyboardEvent",
+          "FocusEvent"
+        ]
+      }]
+    }
   }]
 }

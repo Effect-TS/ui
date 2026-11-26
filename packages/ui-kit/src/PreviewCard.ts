@@ -224,7 +224,7 @@ import {
   withStyle
 } from "./internal/attributes.ts"
 import { detachedChannel } from "./internal/detached.ts"
-import { elementOf, focusVisible } from "./internal/dom.ts"
+import { elementOf, focusVisible, isHTMLElement } from "./internal/dom.ts"
 import { watchHoverArea } from "./internal/hoverArea.ts"
 import { lineUnder } from "./internal/inlineRect.ts"
 import { onEscape, Point, pointOf } from "./internal/interaction.ts"
@@ -894,7 +894,7 @@ const TrackPreviewCardPresence = Mount.makeStream(
       )
       const closing = () => {
         const focused = document.activeElement
-        if (focused instanceof HTMLElement && node.contains(focused)) {
+        if (isHTMLElement(focused) && node.contains(focused)) {
           const trigger = document.querySelector<HTMLElement>(current.trigger)
           if (trigger === null) focused.blur()
           else returnFocus(trigger)

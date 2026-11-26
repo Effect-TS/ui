@@ -9,6 +9,7 @@ import {
   click,
   container,
   holdExits,
+  inIframe,
   popovers,
   press,
   tick
@@ -273,10 +274,13 @@ const Page = Html.component({
   }
 })
 
-const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
+const mountPage = Effect.fnUntraced(function*(
+  config: Partial<Config> = {},
+  into: typeof container = container
+) {
   yield* popovers
   yield* geometry
-  const app = yield* container
+  const app = yield* into
   const root = yield* BrowserHost.mountEffect(
     Page,
     {
@@ -292,7 +296,7 @@ const mountPage = Effect.fnUntraced(function*(config: Partial<Config> = {}) {
     app
   )
   yield* tick
-  return { root, log: () => root.model()?.log ?? [] }
+  return { app, root, log: () => root.model()?.log ?? [] }
 })
 
 const input = () => document.querySelector<HTMLInputElement>(".input")!
@@ -607,6 +611,16 @@ describe("Combobox in a document", { concurrent: false }, () => {
         "RequestedOpen trigger-press",
         "RequestedClose escape-key"
       ])
+    }).pipe(Effect.scoped))
+
+  it.effect("driven from the parent window in an iframe, a mousedown on the modal backdrop is prevented, so the input keeps focus", () =>
+    Effect.gen(function*() {
+      const { app } = yield* mountPage({ modal: true }, inIframe)
+      const doc = app.ownerDocument
+      mousedown(doc.querySelector(".input")!)
+      yield* tick
+      const blocker = doc.querySelector("[data-combobox-blocker]")!
+      assert.isTrue(mousedown(blocker).defaultPrevented)
     }).pipe(Effect.scoped))
 
   it.effect("in a modal dialog, Escape closes only the combobox", () =>
