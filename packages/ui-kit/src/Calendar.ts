@@ -68,8 +68,8 @@
  * and `max` are natively `disabled`, and keyboard navigation clamps to the
  * range. Moves that leave the shown month emit `RequestedMonth`; if the
  * consumer leaves `month` unchanged, focus stays in the shown month. When
- * `month` changes while a day has focus, focus follows the new tab stop,
- * passing through `root` so it never leaves the calendar. Keep `root`
+ * `month` changes while a day has focus, focus moves through `root` to the
+ * new tab stop without leaving the calendar. Keep the same `root` element
  * mounted across month changes; the grid and days can be replaced.
  * If no day in the new month is in range, a visible day from an adjacent
  * month can receive focus.
@@ -308,7 +308,6 @@ const disabledWhileFocused = Subscription.make(
   Stream.make(CalendarMessage.BlurredDay())
 )
 
-// `root` takes any element.
 const CalendarRootRef = Renderer.ref("CalendarRoot")
 
 const monthOf = (props: CalendarProps) =>
@@ -459,8 +458,8 @@ export const Calendar = Html.component({
       if (!shouldFocus || date === null) {
         return $.evolve({ ...phase, shownMonth: context.monthStart })
       }
-      // Removing the focused day would blur it to `<body>`, so focus moves
-      // to the root, which outlives the month, while the old month is shown.
+      // Focus the stable root before replacing the day to avoid focus
+      // falling to `<body>` and marking an enclosing Field touched.
       return $.run(
         HtmlCommand.Focus.make({
           ref: CalendarRootRef,
@@ -493,8 +492,7 @@ export const Calendar = Html.component({
     const disabled = props.disabled === true
     const readOnly = props.readOnly === true
     const rtl = rightToLeft(p.reads.provider, model.rtl)
-    // A focused day keeps its month on screen. Parking focus on the root
-    // blurs the day, which lets the new month render.
+    // Keep the focused day mounted until focus moves to the root.
     const context = contextOf(
       props,
       model.focused ? model.shownMonth : monthOf(props)
