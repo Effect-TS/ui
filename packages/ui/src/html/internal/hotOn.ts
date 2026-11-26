@@ -117,24 +117,33 @@ const saveWindow = (view: Window, state: WindowState): void => {
   })
 }
 
+type SaveHook = (() => void) & { readonly live?: () => boolean }
+
+// Another copy of this module may own the hooks. Take them over only once its
+// roots have all unmounted, so a mounted app keeps saving.
+const claimHooks = (view: Window, state: WindowState): void => {
+  const hooks = view as unknown as Record<symbol, unknown>
+  if ((hooks[hotKey] as SaveHook | undefined)?.live?.() === true) return
+  const save: SaveHook = Object.assign(() => saveWindow(view, state), {
+    live: () => state.roots.size > 0
+  })
+  hooks[hotKey] = save
+  hooks[swapKey] = (
+    first: Exports,
+    next: Exports,
+    names: ReadonlyArray<string>
+  ) => swap(state, first, next, names)
+}
+
 const stateOf = (view: Window): WindowState => {
   let state = states.get(view)
   if (state === undefined) {
-    const made: WindowState = {
+    state = {
       roots: new Map(),
       pending: undefined,
       scroll: undefined
     }
-    states.set(view, state = made)
-    const hooks = view as unknown as Record<symbol, unknown>
-    // Overwrite: if another copy of this module ran in the window, its hooks
-    // point at roots that no longer render.
-    hooks[hotKey] = () => saveWindow(view, made)
-    hooks[swapKey] = (
-      first: Exports,
-      next: Exports,
-      names: ReadonlyArray<string>
-    ) => swap(made, first, next, names)
+    states.set(view, state)
   }
   return state
 }
@@ -423,6 +432,7 @@ export const open = (
       instance = inst
       restore.watch(inst.tree)
       windowState.roots.set(inst, capture)
+      claimHooks(view, windowState)
     },
     flushed: (buildsPendingSince) => {
       if (

@@ -7,7 +7,7 @@ import {
   HtmlHydrate,
   HtmlServer
 } from "@effect/ui/html"
-import { assert, describe, it } from "@effect/vitest"
+import { assert, describe, it, vi } from "@effect/vitest"
 import { Deferred, Effect, Layer, Redacted, Schema, SchemaGetter } from "effect"
 
 const hotKey = Symbol.for("@effect/ui/hot")
@@ -676,6 +676,36 @@ describe("hot reload", { concurrent: false }, () => {
           yield* tick
           assert.strictEqual(el.textContent, "arow")
           assert.isFalse(hotSwap({ Shell }, { Shell: shell("b") }))
+        }))
+    }))
+
+  it.live("saves a live root after a second copy's root unmounts", () =>
+    Effect.gen(function*() {
+      sessionStorage.clear()
+      const app = (html: typeof Html, name: string) =>
+        html.component({ name, model: Schema.Number, message: Schema.Never })
+          .make({
+            init: () => 1,
+            update: ($) => $.model,
+            view: (h) => h.p("x")
+          })
+      yield* inContainer("copy-a", (a) =>
+        Effect.gen(function*() {
+          yield* BrowserHost.mountEffect(app(Html, "CopyA"), {}, a)
+          vi.resetModules()
+          const [Host, Html2] = yield* Effect.promise(() =>
+            Promise.all([
+              import("@effect/ui/html/BrowserHost"),
+              import("@effect/ui/html/Html")
+            ])
+          )
+          yield* inContainer("copy-b", (b) =>
+            Effect.scoped(Host.mountEffect(app(Html2, "CopyB"), {}, b)))
+          triggerHotSave()
+          assert.include(
+            sessionStorage.getItem("@effect/ui/hot") ?? "",
+            "/CopyA"
+          )
         }))
     }))
 })
