@@ -3,7 +3,8 @@ import {
   Calendar,
   DateField,
   DatePicker,
-  type DatePickerEvents,
+  type DatePickerChangeReason,
+  DatePickerEvents,
   type DatePickerProps
 } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
@@ -70,7 +71,8 @@ const tracked = (scene: Rendered): Track =>
   (scene.get(positioner) as unknown as View.Element<unknown>).owned?.find((
     layer
   ) => layer.mount !== undefined)?.mount as unknown as Track
-const sent = (tag: string) => ({ _tag: tag }) as never
+const dismissed = (reason: "escape-key" | "outside-press" | "focus-out") =>
+  ({ _tag: "Dismissed", reason }) as never
 const props = (more: Partial<DatePickerProps> = {}): DatePickerProps => ({
   value: utc("2026-11-15"),
   open: false,
@@ -79,20 +81,12 @@ const props = (more: Partial<DatePickerProps> = {}): DatePickerProps => ({
   locale: "en-GB",
   ...more
 })
-const opened: DatePickerEvents = {
-  _tag: "RequestedOpen",
-  reason: "trigger-press"
-}
-const closed = (reason: string) =>
-  ({ _tag: "RequestedClose", reason }) as DatePickerEvents
-const picked = (date: DateTime.Utc | null): DatePickerEvents => ({
-  _tag: "Picked",
-  date
-})
-const month = (iso: string): DatePickerEvents => ({
-  _tag: "RequestedMonth",
-  month: utc(iso)
-})
+const opened = DatePickerEvents.RequestedOpen({ reason: "trigger-press" })
+const closed = (reason: DatePickerChangeReason) =>
+  DatePickerEvents.RequestedClose({ reason })
+const picked = (date: DateTime.Utc | null) => DatePickerEvents.Picked({ date })
+const month = (iso: string) =>
+  DatePickerEvents.RequestedMonth({ month: utc(iso) })
 const quiet = (
   scene: { readonly current: { readonly emitted: ReadonlyArray<unknown> } }
 ) => assert.deepStrictEqual(scene.current.emitted, [])
@@ -126,13 +120,13 @@ describe("DatePicker", () => {
       })
       assert.deepInclude(scene.get(positioner).attrs, { "data-open": "" })
       scene.click(trigger).emitted(closed("trigger-press"))
-      scene.mounted(tracked(scene), sent("PressedEscape")).emitted(
+      scene.mounted(tracked(scene), dismissed("escape-key")).emitted(
         closed("escape-key")
       )
-      scene.mounted(tracked(scene), sent("PressedOutside")).emitted(
+      scene.mounted(tracked(scene), dismissed("outside-press")).emitted(
         closed("outside-press")
       )
-      scene.mounted(tracked(scene), sent("FocusedOutside")).emitted(
+      scene.mounted(tracked(scene), dismissed("focus-out")).emitted(
         closed("focus-out")
       )
       scene.childEmit(Calendar, { _tag: "Picked", date: utc("2026-11-20") })
@@ -200,9 +194,9 @@ describe("DatePicker", () => {
       })
       assert.strictEqual(scene.get(input).attrs?.disabled, "")
       assert.strictEqual(scene.get(day("2026-11-20")).attrs?.disabled, "")
-      scene.mounted(tracked(scene), sent("PressedEscape"))
-      scene.mounted(tracked(scene), sent("PressedOutside"))
-      scene.mounted(tracked(scene), sent("FocusedOutside"))
+      scene.mounted(tracked(scene), dismissed("escape-key"))
+      scene.mounted(tracked(scene), dismissed("outside-press"))
+      scene.mounted(tracked(scene), dismissed("focus-out"))
       quiet(scene)
     }))
 
@@ -221,7 +215,7 @@ describe("DatePicker", () => {
       scene.props(props({ readOnly: true, open: true })).expectMount(
         tracked(scene)
       )
-      scene.mounted(tracked(scene), sent("PressedEscape")).emitted(
+      scene.mounted(tracked(scene), dismissed("escape-key")).emitted(
         closed("escape-key")
       )
     }))

@@ -167,14 +167,15 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
+import * as Struct from "effect/Struct"
 import { Calendar } from "./Calendar.ts"
-import { DateField } from "./DateField.ts"
+import { DateField, DateFieldProps } from "./DateField.ts"
 import {
   type Attributed,
   attrSelector,
   fallbackLabel,
   flag,
-  withStyle
+  ownStyle
 } from "./internal/attributes.ts"
 import {
   CalendarDate,
@@ -213,9 +214,7 @@ export const DatePickerProps = Schema.Struct({
   value: Schema.NullOr(CalendarDate),
   open: Schema.Boolean,
   ...CalendarGridPropsFields,
-  name: Schema.optional(Schema.String),
-  form: Schema.optional(Schema.String),
-  required: Schema.optional(Schema.Boolean),
+  ...Struct.pick(DateFieldProps.fields, ["name", "form", "required"]),
   ...Positioning.PositionerFields
 })
 
@@ -304,9 +303,9 @@ const DatePickerMessage = UiSchema.TaggedEnum({
   PickedCalendar: { date: Schema.DateTimeUtc },
   RequestedCalendarMonth: { month: Schema.DateTimeUtc },
   ClickedTrigger: {},
-  PressedEscape: {},
-  PressedOutside: {},
-  FocusedOutside: {},
+  Dismissed: {
+    reason: Schema.Literals(["escape-key", "outside-press", "focus-out"])
+  },
   ChangedPlacement: { placement: Positioning.Placement }
 })
 
@@ -322,20 +321,12 @@ type DatePickerUpdate = Component.Update<
 const pick = ($: DatePickerUpdate, date: DateTime.Utc | null) => {
   const picked = $.emit(DatePickerEvents.Picked({ date }))
   return date === null ||
-      sameMonth(date, startOfMonth(DateTime.removeTime($.props.month)))
+      sameMonth(date, DateTime.removeTime($.props.month))
     ? picked
     : picked.emit(
       DatePickerEvents.RequestedMonth({ month: startOfMonth(date) })
     )
 }
-
-const leave = (
-  $: DatePickerUpdate,
-  reason: "outside-press" | "focus-out"
-) =>
-  $.props.open && $.props.disabled !== true
-    ? $.emit(DatePickerEvents.RequestedClose({ reason }))
-    : $.model
 
 const TrackDatePicker = Mount.makeStream(
   "TrackDatePicker",
@@ -353,18 +344,20 @@ const TrackDatePicker = Mount.makeStream(
           Effect.sync(() => {
             const document = node.ownerDocument
             const controller = new AbortController()
+            const anchors = args.input + "," + args.trigger
+            const dismiss = (
+              reason: "escape-key" | "outside-press" | "focus-out"
+            ) =>
+              Queue.offerUnsafe(queue, DatePickerMessage.Dismissed({ reason }))
             const inside = (target: Node) =>
               node.contains(target) ||
-              document.querySelector(args.input)?.contains(target) === true ||
-              document.querySelector(args.trigger)?.contains(target) === true
+              (target instanceof Element && target.closest(anchors) !== null)
             raiseAbove(node)
             listenOutside(document, controller.signal, {
               open: () => true,
               inside,
-              pressed: () =>
-                Queue.offerUnsafe(queue, DatePickerMessage.PressedOutside()),
-              focused: () =>
-                Queue.offerUnsafe(queue, DatePickerMessage.FocusedOutside())
+              pressed: () => dismiss("outside-press"),
+              focused: () => dismiss("focus-out")
             })
             // The days handle `keydown` themselves, and only the innermost
             // handler hears an event, so Escape is heard natively. Capturing
@@ -376,7 +369,7 @@ const TrackDatePicker = Mount.makeStream(
                 event.isComposing || target === null || !inside(target)
               ) return
               event.preventDefault()
-              Queue.offerUnsafe(queue, DatePickerMessage.PressedEscape())
+              dismiss("escape-key")
             }, { capture: true, signal: controller.signal })
             frameOf(document.defaultView)(() => {
               if (controller.signal.aborted) return
@@ -465,12 +458,10 @@ export const DatePicker = Html.component({
         : $.props.open
         ? $.emit(DatePickerEvents.RequestedClose({ reason: "trigger-press" }))
         : $.emit(DatePickerEvents.RequestedOpen({ reason: "trigger-press" })),
-    PressedEscape: ($) =>
+    Dismissed: ($, { reason }) =>
       $.props.open && $.props.disabled !== true
-        ? $.emit(DatePickerEvents.RequestedClose({ reason: "escape-key" }))
+        ? $.emit(DatePickerEvents.RequestedClose({ reason }))
         : $.model,
-    PressedOutside: ($) => leave($, "outside-press"),
-    FocusedOutside: ($) => leave($, "focus-out"),
     ChangedPlacement: ($, { placement }) => $.evolve({ placement })
   },
   parts: (p, model) => {
@@ -518,12 +509,7 @@ export const DatePicker = Html.component({
       const layer = layered(
         placed(b)
           .attr("role", "presentation")
-          .forward((node) =>
-            node.attr(
-              "style",
-              withStyle(node.elementAttrs.style, positionerStyle)
-            )
-          ),
+          .forward(ownStyle(positionerStyle)),
         tracked.topLayer !== false,
         open
       )
