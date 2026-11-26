@@ -2,10 +2,9 @@
  * A controlled text input for a calendar date. Pass the current date as
  * `value`, a `DateTime` or `null` for an empty field, and store the
  * `DateTime.Utc | null` that `Committed` carries. Your view supplies the
- * `<input>` builder; the component formats and parses the text for a locale,
- * adds a hidden form input carrying the ISO date, and sets the state and data
- * attributes. It is a headless component, because it keeps the draft text
- * while the user types.
+ * `<input>` builder; the component formats and parses its text for a locale.
+ * It is a headless component because it keeps the draft text while the user
+ * types.
  *
  * **Anatomy**
  *
@@ -14,26 +13,31 @@
  * | `input` | `<input>`, the editable date field     |
  *
  * `input` takes the consumer's `<input>` builder and returns it, so you can
- * chain classes, attributes and handlers. When built, `input` wraps the
- * element in a `<span style="display:contents">`, which also holds a hidden
- * `<input type="hidden">` when `name` is set, so the form submits the ISO date
- * (`YYYY-MM-DD`) without affecting layout, and setting `name` mid-edit keeps
- * focus.
+ * chain classes, attributes and handlers. It wraps the element in a
+ * `<span style="display:contents">`, which also holds the hidden form input
+ * when `name` is set.
  *
  * The parts also return `value` (normalized `DateTime.Utc | null`),
- * `inputValue` (the text the input currently shows), `pattern` (the locale's
- * date pattern, such as `"dd/mm/yyyy"`, for a placeholder or hint),
- * `disabled`, `readOnly` and `required`.
+ * `inputValue` (the text the input shows), `pattern` (the locale's pattern,
+ * such as `"dd/mm/yyyy"`, for a placeholder or hint), `disabled`, `readOnly`
+ * and `required`.
  *
  * **Date values**
  *
- * Every date prop accepts any `DateTime` (`DateTime.Utc` or `DateTime.Zoned`)
- * and is normalized with `DateTime.removeTime` to midnight UTC. A `Zoned`
- * value gives its day in its own time zone, and a `Utc` value gives its UTC
- * day. Because a `Utc` "now" gives the UTC day, derive "today" from
- * `DateTime.nowInCurrentZone` or another zoned value. Every date emitted by
- * `Committed` or exposed on `dateField.value` is a normalized `DateTime.Utc`.
- * Formatting always uses `timeZone: "UTC"` so the printed day cannot shift.
+ * `value` accepts any `DateTime` and is normalized to midnight UTC with
+ * `DateTime.removeTime`: a `Zoned` value gives its day in its own time zone,
+ * and a `Utc` value its UTC day. A `Utc` "now" therefore gives the UTC day,
+ * so derive "today" from `DateTime.nowInCurrentZone` or another zoned value.
+ * Dates are formatted in UTC, so the printed day cannot shift.
+ *
+ * **Parsing**
+ *
+ * The field reads the locale's numeric order, taken from
+ * `Intl.DateTimeFormat#formatToParts` with a 4-digit year and any suffix such
+ * as Bulgarian `г.`, and ISO `YYYY-MM-DD`, which wins when both match. Dates
+ * that do not exist, such as `31/02/2026`, are rejected. The displayed text
+ * always parses back: years have 4 digits, and a locale whose dates look like
+ * ISO in another order (Kyrgyz `yyyy-dd-mm`) shows `/` in place of `-`.
  *
  * **Naming and validation**
  *
@@ -55,33 +59,25 @@
  *
  * **Keyboard**
  *
- * On `input`, pressing Enter parses and commits the typed text. Text that does
- * not parse commits nothing and stays in the input until edited or blurred.
- * Keys pressed while an input method is composing or with modifier keys are
- * ignored.
+ * On `input`, Enter commits the typed text; text that does not parse stays in
+ * the input. Enter is ignored while an input method is composing or with a
+ * modifier key held.
  *
  * **Events**
  *
  * `Committed` carries `{ date: DateTime.Utc | null }` when the user finishes
- * editing on blur or Enter and the parsed date differs from the current
- * normalized `value`. Parsing accepts the locale's numeric order (derived from
- * `Intl.DateTimeFormat#formatToParts`, with 4-digit years and the locale's
- * optional suffix, such as Bulgarian `г.`) and ISO `YYYY-MM-DD`, which wins
- * when both read the text, rejecting calendar dates that do not exist (such as
- * `31/02/2026`). Years display with 4 digits, and a locale whose dates look
- * like ISO in another order (Kyrgyz `yyyy-dd-mm`) displays `/` in place of
- * `-`, so the shown text always parses back. Empty or whitespace-only text
- * commits `null`. Text that does not parse commits nothing and reverts to the
- * current value's formatted text on blur.
+ * editing with blur or Enter and the parsed date differs from `value`. Empty
+ * text commits `null`. On blur, text that does not parse commits nothing and
+ * reverts to the formatted `value`.
  *
  * **Forms**
  *
- * When `name` is set, the hidden input submits the normalized date as
- * `YYYY-MM-DD` (or `""` when empty) under `name`, and the visible input has no
- * `name`. A disabled field disables both inputs and submits nothing.
+ * When `name` is set, a hidden input submits the date as `YYYY-MM-DD` (`""`
+ * when empty) and the visible input has no `name`. A disabled field submits
+ * nothing.
  *
  * The server formats with its own default locale, which may differ from the
- * browser's. Pass `locale` when rendering on a server.
+ * browser's, so pass `locale` when rendering on a server.
  *
  * **Example** (A labelled date field whose value lives in the consumer's Model)
  *
@@ -129,7 +125,7 @@
  *     })
  * })
  *
- * // The visible input shows the locale-formatted date and pattern, while the hidden input carries ISO.
+ * // The input shows the formatted date and pattern; the hidden input carries ISO.
  * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(EventForm, {}))
  * const input = /<input class="date" id="([^"]+)"[^>]*>/.exec(html)
  * if (input === null || !html.includes('<label for="' + input[1] + '"')) throw new Error("the input isn't labelled")
@@ -168,18 +164,15 @@ const Locale = Schema.Union([Schema.String, Schema.Array(Schema.String)])
  *
  * **Details**
  *
- * - `value`: the date, any `DateTime` (normalized to midnight UTC in its own
- *   time zone with `DateTime.removeTime`), or `null` for an empty field.
+ * - `value`: the date, any `DateTime`, or `null` for an empty field.
  * - `locale`: the locale used to format, parse and derive `pattern`; the
  *   runtime's default when left out.
  * - `name`: the form field name for the hidden input carrying the ISO date.
  * - `form`: the id of the form that submits it, when the field is not inside
  *   one.
- * - `disabled`: disables the input and hidden input; suppresses all
- *   interaction and commits nothing.
- * - `readOnly`: keeps the input focusable and selectable, sets `readonly`, and
- *   commits nothing.
- * - `required`: sets the native `required` attribute and `data-required`.
+ * - `disabled`: disables both inputs and commits nothing.
+ * - `readOnly`: keeps the input focusable and selectable but commits nothing.
+ * - `required`: sets the native `required` attribute.
  *
  * @stability experimental
  * @category schemas
@@ -209,8 +202,8 @@ export type DateFieldProps = typeof DateFieldProps.Type
  *
  * **Details**
  *
- * - `Committed`: asks for `value` to be `date`, a normalized `DateTime.Utc` at
- *   midnight UTC, or `null` when the field was cleared.
+ * - `Committed`: asks for `value` to be `date`, a `DateTime.Utc` at midnight
+ *   UTC, or `null` when the field was cleared.
  *
  * @stability experimental
  * @category schemas
@@ -297,7 +290,7 @@ const localeOf = (locale: LocaleOption): LocaleInfo =>
         suffix += literal
       }
     }
-    // `year: "numeric"` prints year 7 as "7" and year 0 as "1", so pad it.
+    // `year: "numeric"` prints year 7 as "7" and year 0 as "1".
     const year = new Intl.NumberFormat(locale as string | Array<string>, {
       numberingSystem: formatter.resolvedOptions().numberingSystem,
       minimumIntegerDigits: 4,
@@ -336,8 +329,8 @@ const formatDate = (
   ).join("")
 }
 
-// `DateTime.make` rolls an out-of-range month or day over, so a date that
-// doesn't read back as the same parts doesn't exist.
+// `DateTime.make` rolls an out-of-range day or month over, so a date whose
+// parts change doesn't exist.
 const makeDate = (
   year: number,
   month: number,
@@ -402,8 +395,8 @@ const commit = ($: DateFieldUpdate, keepOnInvalid: boolean) => {
     : $.set(idle).emit(DateFieldEvents.Committed({ date }))
 }
 
-// A browser may send no blur event when disabling a focused input, so clear
-// any in-progress draft when disabled becomes true.
+// A browser may not fire blur when a focused input is disabled, so drop the
+// draft here.
 const lostFocus = Subscription.make(
   "lostFocus",
   Stream.make(DateFieldMessage.BlurredInput({ disabled: true }))
@@ -414,9 +407,6 @@ const lostFocus = Subscription.make(
  * `view` closure that draws the input with `dateField.input(h.input)`.
  *
  * **Details**
- *
- * The parts also return `value`, `inputValue`, `pattern`, `disabled`,
- * `readOnly` and `required`.
  *
  * The field's own attributes win over the ones the consumer set on the builder
  * before the part, including the ones a state leaves absent:
