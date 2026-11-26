@@ -4,8 +4,8 @@
  * `DateTime.Utc | null` that `Committed` carries. Your view supplies the
  * `<input>` builder; the component formats and parses the text for a locale,
  * adds a hidden form input carrying the ISO date, and sets the state and data
- * attributes. It is a headless component, because it keeps the draft text and
- * focus while the user types.
+ * attributes. It is a headless component, because it keeps the draft text
+ * while the user types.
  *
  * **Anatomy**
  *
@@ -143,17 +143,21 @@ import * as Subscription from "@effect/ui/Subscription"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
 import * as DateTime from "effect/DateTime"
+import * as Equal from "effect/Equal"
 import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { defaults, flag } from "./internal/attributes.ts"
+import { defaults, flag, textInputDefaults } from "./internal/attributes.ts"
 import { input as hiddenInput } from "./internal/formInputs.ts"
+import {
+  cached,
+  type Locale as LocaleOption,
+  toAsciiDigits
+} from "./internal/number.ts"
 
 const DateValue = Schema.Union([Schema.DateTimeUtc, Schema.DateTimeZoned])
 
 const Locale = Schema.Union([Schema.String, Schema.Array(Schema.String)])
-
-type LocaleOption = string | ReadonlyArray<string> | undefined
 
 /**
  * Props for a `DateField`.
@@ -224,14 +228,12 @@ export const DateFieldEvents = UiSchema.TaggedEnum({
 export type DateFieldEvents = typeof DateFieldEvents.Type
 
 const DateFieldModel = Schema.Struct({
-  draft: Schema.NullOr(Schema.String),
-  focused: Schema.Boolean
+  draft: Schema.NullOr(Schema.String)
 })
 
 type DateFieldModel = typeof DateFieldModel.Type
 
 const DateFieldMessage = UiSchema.TaggedEnum({
-  FocusedInput: {},
   UpdatedInput: { value: Schema.String },
   BlurredInput: { disabled: Schema.Boolean },
   PressedEnter: {}
@@ -250,77 +252,45 @@ type DatePart = "year" | "month" | "day"
 
 interface LocaleInfo {
   readonly formatter: Intl.DateTimeFormat
-  readonly order: readonly [DatePart, DatePart, DatePart]
+  readonly order: ReadonlyArray<DatePart>
   readonly pattern: string
 }
 
 const formatControls = /\p{Cf}/gu
-const nonAsciiDigit = /[٠-٩۰-۹０-９]/g
 const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/
 const numericDate = /^(\d{1,4})\s*([/.-])\s*(\d{1,4})\s*\2\s*(\d{1,4})(\.)?$/
 const sampleDate = new Date(Date.UTC(2026, 10, 26))
+const patternOf = { year: "yyyy", month: "mm", day: "dd" }
 
-const localeCache = new Map<string, LocaleInfo>()
+const locales = new Map<string, LocaleInfo>()
 
-const localeKey = (locale: LocaleOption): string =>
-  locale === undefined
-    ? ""
-    : typeof locale === "string"
-    ? locale
-    : JSON.stringify(locale)
-
-const localeOf = (locale: LocaleOption): LocaleInfo => {
-  const key = localeKey(locale)
-  let info = localeCache.get(key)
-  if (info !== undefined) return info
-  const formatter = new Intl.DateTimeFormat(
-    locale as string | Array<string> | undefined,
-    {
-      calendar: "gregory",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      timeZone: "UTC"
+const localeOf = (locale: LocaleOption): LocaleInfo =>
+  cached(locales, locale, () => {
+    const formatter = new Intl.DateTimeFormat(
+      locale as string | Array<string> | undefined,
+      {
+        calendar: "gregory",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        timeZone: "UTC"
+      }
+    )
+    const order: Array<DatePart> = []
+    let pattern = ""
+    for (const { type, value } of formatter.formatToParts(sampleDate)) {
+      if (type === "year" || type === "month" || type === "day") {
+        order.push(type)
+        pattern += patternOf[type]
+      } else if (type === "literal") {
+        pattern += value.replace(formatControls, "")
+      }
     }
-  )
-  const parts = formatter.formatToParts(sampleDate)
-  const order: Array<DatePart> = []
-  let pattern = ""
-  for (const part of parts) {
-    switch (part.type) {
-      case "year":
-        order.push("year")
-        pattern += "yyyy"
-        break
-      case "month":
-        order.push("month")
-        pattern += "mm"
-        break
-      case "day":
-        order.push("day")
-        pattern += "dd"
-        break
-      case "literal":
-        pattern += part.value.replace(formatControls, "")
-        break
-    }
-  }
-  info = {
-    formatter,
-    order: order.length === 3
-      ? [order[0]!, order[1]!, order[2]!]
-      : ["year", "month", "day"],
-    pattern
-  }
-  localeCache.set(key, info)
-  return info
-}
+    return { formatter, order, pattern }
+  })
 
 const normalize = (value: DateTime.DateTime | null): DateTime.Utc | null =>
   value === null ? null : DateTime.removeTime(value)
-
-const sameDate = (a: DateTime.Utc | null, b: DateTime.Utc | null): boolean =>
-  a === null || b === null ? a === b : DateTime.Equivalence(a, b)
 
 const formatDate = (
   value: DateTime.Utc | null,
@@ -328,12 +298,13 @@ const formatDate = (
 ): string =>
   value === null ? "" : DateTime.formatIntl(value, localeOf(locale).formatter)
 
+// `DateTime.make` rolls an out-of-range month or day over, so a date that
+// doesn't read back as the same parts doesn't exist.
 const makeDate = (
   year: number,
   month: number,
   day: number
 ): DateTime.Utc | null => {
-  if (month < 1 || month > 12 || day < 1 || day > 31) return null
   const date = DateTime.make({ year, month, day })
   if (Option.isNone(date)) return null
   const parts = DateTime.toPartsUtc(date.value)
@@ -346,84 +317,47 @@ const parseDate = (
   text: string,
   locale: LocaleOption
 ): DateTime.Utc | null => {
-  const cleaned = text
-    .replace(formatControls, "")
-    .replace(nonAsciiDigit, (digit) => String(digit.charCodeAt(0) % 16))
-    .trim()
-  if (cleaned === "") return null
-  const iso = isoDate.exec(cleaned)
+  const iso = isoDate.exec(text)
   if (iso !== null) {
     return makeDate(Number(iso[1]), Number(iso[2]), Number(iso[3]))
   }
-  const match = numericDate.exec(cleaned)
-  if (match === null) return null
-  const [, first, sep, second, third, trailingDot] = match
-  if (trailingDot !== undefined && sep !== ".") return null
-  const { order } = localeOf(locale)
-  const tokens = [first!, second!, third!]
-  let year: number | undefined
-  let month: number | undefined
-  let day: number | undefined
-  for (let i = 0; i < 3; i++) {
-    const token = tokens[i]!
-    switch (order[i]) {
-      case "year":
-        if (token.length !== 4) return null
-        year = Number(token)
-        break
-      case "month":
-        if (token.length > 2) return null
-        month = Number(token)
-        break
-      case "day":
-        if (token.length > 2) return null
-        day = Number(token)
-        break
-    }
+  const match = numericDate.exec(text)
+  if (match === null || (match[5] !== undefined && match[2] !== ".")) {
+    return null
   }
-  return year === undefined || month === undefined || day === undefined
+  const tokens = [match[1]!, match[3]!, match[4]!]
+  const by = {} as Record<DatePart, string>
+  localeOf(locale).order.forEach((part, i) => {
+    by[part] = tokens[i]!
+  })
+  return by.year.length !== 4 || by.month.length > 2 || by.day.length > 2
     ? null
-    : makeDate(year, month, day)
+    : makeDate(Number(by.year), Number(by.month), Number(by.day))
 }
 
 const isLocked = (props: DateFieldProps): boolean =>
   props.disabled === true || props.readOnly === true
 
-const commit = (
-  $: DateFieldUpdate,
-  next: DateFieldModel,
-  keepOnInvalid: boolean
-) => {
-  const draft = $.model.draft
-  if (draft === null) return next
-  const current = normalize($.props.value)
-  const trimmed = draft.replace(formatControls, "").trim()
-  if (trimmed === "") {
-    return sameDate(null, current)
-      ? next
-      : $.set(next).emit(DateFieldEvents.Committed({ date: null }))
-  }
-  const parsed = parseDate(draft, $.props.locale)
-  if (parsed === null) {
-    return keepOnInvalid ? $.model : next
-  }
-  return sameDate(parsed, current)
-    ? next
-    : $.set(next).emit(DateFieldEvents.Committed({ date: parsed }))
+const idle: DateFieldModel = { draft: null }
+
+const commit = ($: DateFieldUpdate, keepOnInvalid: boolean) => {
+  if ($.model.draft === null) return $.model
+  const locale = $.props.locale
+  const text = toAsciiDigits($.model.draft.replace(formatControls, ""), locale)
+    .trim()
+  const date = text === "" ? null : parseDate(text, locale)
+  if (date === null && text !== "") return keepOnInvalid ? $.model : idle
+  return Equal.equals(date, normalize($.props.value))
+    ? idle
+    : $.set(idle).emit(DateFieldEvents.Committed({ date }))
 }
 
 // A browser may send no blur event when disabling a focused input, so clear
-// focus and any in-progress draft when disabled becomes true.
+// any in-progress draft when disabled becomes true.
 const lostFocus = Subscription.make(
   "lostFocus",
   Stream.make(DateFieldMessage.BlurredInput({ disabled: true }))
 )
-
-const inputDefaults = {
-  autocomplete: "off",
-  autocorrect: "off",
-  spellcheck: "false"
-}
 
 /**
  * A headless date field. Call it with the consumer's `h`, the `props`, and a
@@ -446,7 +380,7 @@ const inputDefaults = {
  * builder has none. `aria-invalid` and `id` are never written, so `Field`
  * keeps full ownership of them.
  *
- * The input handles `focus`, `input`, `blur` and `keydown` on a layer of its
+ * The input handles `input`, `blur` and `keydown` on a layer of its
  * own, so the consumer's handlers for them, and a `Field`'s, still run.
  *
  * History restore saves nothing of it: after Back, forward or a reload it
@@ -464,24 +398,16 @@ export const DateField = Html.component({
   events: DateFieldEvents,
   restore: false
 }).make({
-  init: () => ({ draft: null, focused: false }),
+  init: () => idle,
   update: {
-    FocusedInput: ($) =>
-      $.props.disabled === true ? $.model : $.evolve({ focused: true }),
     UpdatedInput: ($, { value }) =>
-      isLocked($.props) ? $.model : { draft: value, focused: true },
-    BlurredInput: ($, { disabled }) => {
-      const idle: DateFieldModel = { draft: null, focused: false }
-      return disabled || isLocked($.props) ? idle : commit($, idle, false)
-    },
-    PressedEnter: ($) =>
-      isLocked($.props)
-        ? $.model
-        : commit($, { draft: null, focused: $.model.focused }, true)
+      isLocked($.props) ? $.model : { draft: value },
+    BlurredInput: ($, { disabled }) =>
+      disabled || isLocked($.props) ? idle : commit($, false),
+    PressedEnter: ($) => isLocked($.props) ? $.model : commit($, true)
   },
   subscriptions: ({ model, props }) => [
-    (model.focused || model.draft !== null) && props.disabled === true &&
-    lostFocus
+    model.draft !== null && props.disabled === true && lostFocus
   ],
   parts: (p, model) => {
     const props = p.props
@@ -491,24 +417,21 @@ export const DateField = Html.component({
     const locked = disabled || readOnly
     const value = normalize(props.value)
     const { pattern } = localeOf(props.locale)
-    const focused = model.focused && !disabled
-    const inputValue = focused && model.draft !== null
+    const inputValue = model.draft !== null && !disabled
       ? model.draft
       : formatDate(value, props.locale)
     const isoValue = value === null ? "" : DateTime.formatIsoDateUtc(value)
-    const hidden = props.name === undefined
-      ? undefined
-      : View.toNode(
-        hiddenInput()
-          .attrs({
-            type: "hidden",
-            name: props.name,
-            form: props.form,
-            value: isoValue
-          })
-          .value(isoValue)
-          .disabled(disabled)
-      )
+    const hidden = props.name === undefined ? undefined : View.toNode(
+      hiddenInput()
+        .attrs({
+          type: "hidden",
+          name: props.name,
+          form: props.form,
+          value: isoValue
+        })
+        .value(isoValue)
+        .disabled(disabled)
+    )
     return {
       value,
       inputValue,
@@ -531,7 +454,6 @@ export const DateField = Html.component({
           })
           .disabled(disabled)
           .value(inputValue)
-          .on("focus", DateFieldMessage.FocusedInput())
           .on("input", ({ value }) => DateFieldMessage.UpdatedInput({ value }))
           .on("blur", (payload) =>
             DateFieldMessage.BlurredInput({
@@ -543,7 +465,7 @@ export const DateField = Html.component({
               ? DateFieldMessage.PressedEnter()
               : undefined)
           .forward((node) => {
-            const decorated = defaults(node, inputDefaults)
+            const decorated = defaults(node, textInputDefaults)
             return hidden === undefined
               ? decorated
               : new Html.Element<DateFieldMessage>("span")
