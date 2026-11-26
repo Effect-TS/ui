@@ -1055,14 +1055,16 @@ describe("history restore of a page whose hydration hasn't settled", {
     )
   })
 
-  it.effect.each([
-    ["without custom restore", undefined, "server:billing"],
+  it.effect.each(
     [
-      "with custom restore",
-      (model: string) => `filtered:${model}`,
-      "filtered:server:billing"
-    ]
-  ] as const)(
+      ["without custom restore", undefined, "server:billing"],
+      [
+        "with custom restore",
+        (model: string) => `filtered:${model}`,
+        "filtered:server:billing"
+      ]
+    ] as const
+  )(
     "Back restores a held child's model and settled query when a push interrupts decode (%s)",
     ([, restore, expected]) => {
       const history = Router.memoryHistory("/")
@@ -1106,8 +1108,11 @@ describe("history restore of a page whose hydration hasn't settled", {
         subscriptions: (
           { model: route }
         ) => [
-          Router.subscription(Routes, route, (changed) =>
-            Msg.Changed({ route: changed }))
+          Router.subscription(
+            Routes,
+            route,
+            (changed) => Msg.Changed({ route: changed })
+          )
         ],
         view: (h, route) =>
           h.main(route._tag === "Away" ? h.p("away") : Child(h, { key: "f" }))
