@@ -3294,15 +3294,16 @@ export interface Define<V extends View.Elements> {
  *
  * When a `query` entry's args change, its result keeps the last Success it
  * took for other args, with `waiting` set, until a result for the new args
- * is stored, through a `debounce` wait and the fetch. `$.queries`, `head`,
- * `subscriptions` and `onChange` see the same result. A kept list's `more`
- * is `Loading`. Only a Success is kept: after a Failure, or with none
+ * is stored, through a `debounce` wait and the fetch. `$.queries`, `head`
+ * and `subscriptions` see the same result. A kept list's `more` is
+ * `Loading`. Only a Success is kept: after a Failure, or with none
  * stored, the result is `Initial`, waiting. `dropPrevious: true` opens
  * changed args as `Initial` instead, for a component that must not show one
  * item's value under another's args.
  *
  * An entry's `onChange` returns a message to send when its result changes, for
- * a component that has to react in `update`. A `query` entry's gets its
+ * a component that has to react in `update`. It runs when a result is
+ * written, not when the args alone change. A `query` entry's gets its
  * result as `h.queries` opens it, and a `queryMany` query's gets its entries
  * and the keys whose result changed. The result is written first, and the
  * message's `update` sees it in `$.queries`.

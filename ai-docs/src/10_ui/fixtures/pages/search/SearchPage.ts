@@ -80,9 +80,11 @@ export const SearchPageNoDeps = Html.component({
   view: (h) => {
     const { page, q, sort } = h.props.route.search
 
-    const resultsView = (results: NoteResults) =>
+    // `waiting`: newer results are loading, such as the requested page while
+    // the last one stays on screen.
+    const resultsView = (results: NoteResults, waiting: boolean) =>
       h.div(
-        h.ul(
+        h.ul.attr("aria-busy", String(waiting)).children(
           results.notes.map((note) =>
             h.li.key(note.id).children(
               h.a.attr("href", noteUrl(note.id)).children(note.title)
@@ -93,7 +95,11 @@ export const SearchPageNoDeps = Html.component({
           h.button.attr("type", "button").disabled(page <= 1)
             .on("click", SearchPageMessage.ClickedPage({ page: page - 1 }))
             .children("Previous"),
-          h.span(`Page ${page} of ${results.pages}`),
+          h.span(
+            waiting
+              ? `Loading page ${page}…`
+              : `Page ${page} of ${results.pages}`
+          ),
           h.button.attr("type", "button").disabled(page >= results.pages)
             .on("click", SearchPageMessage.ClickedPage({ page: page + 1 }))
             .children("Next")
@@ -123,11 +129,11 @@ export const SearchPageNoDeps = Html.component({
         ),
       // While new args wait or load, the result keeps the last results,
       // waiting, so the list stays on screen instead of flashing
-      // "Searching…", which shows only on the first search.
+      // "Searching…", which shows only when there are no results to keep.
       AsyncResult.match(h.queries.results, {
         onInitial: () => h.p("Searching…"),
         onFailure: () => h.p("The search failed."),
-        onSuccess: ({ value }) => resultsView(value)
+        onSuccess: ({ value, waiting }) => resultsView(value, waiting)
       })
     )
   }

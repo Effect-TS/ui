@@ -527,8 +527,9 @@ after the result is written.
 When a `query` entry's args change, its result keeps the last Success,
 with `waiting` set, until the new args have a result: through the
 `debounce` wait and the fetch. So `onSuccess` keeps the old results on
-screen, marked busy, and `onInitial` shows only before the first result.
-Only a Success is kept, and a kept list's `more` is `Loading`. Give the
+screen, and the view can mark them busy from `waiting`. `onInitial` shows
+only when there's no Success to keep: before the first result, or after a
+Failure. A kept list's `more` is `Loading`. Give the
 entry `dropPrevious: true` to open new args as `Initial` instead, where a
 value shown under other args would mislead.
 

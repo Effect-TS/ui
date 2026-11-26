@@ -51,7 +51,7 @@ export const Posts = Html.component({
           PostsMessage.UpdatedSearch({ search: value })),
       // The result for the current args, as an AsyncResult.
       AsyncResult.match(h.queries.posts, {
-        // No result yet: the first fetch is running.
+        // No posts to keep: the first fetch, or a fetch after a failure.
         onInitial: () =>
           h.p.children("Loading posts"),
         onFailure: () => h.p.children("Could not load posts"),
