@@ -8,32 +8,28 @@ import type * as Kernel from "./kernel.ts"
 /** @internal */
 export const now = <A>(f: () => A): A => f()
 
-let inline = false
+/**
+ * Above 0 while `inlined` runs: fibers then yield only after
+ * `maxOpsBeforeYield` steps.
+ *
+ * @internal
+ */
+export let inline = 0
 
 /**
- * Runs `f` with fibers yielding only after `maxOpsBeforeYield` steps, so the
- * work it starts runs in this task up to its first async step.
+ * Runs `f` so that the fiber work it starts runs in this task, up to its
+ * first async step.
  *
  * @internal
  */
 export const inlined = <A>(f: () => A): A => {
-  if (inline) return f()
-  inline = true
+  inline++
   try {
     return f()
   } finally {
-    inline = false
+    inline--
   }
 }
-
-/** @internal */
-export const yields = (
-  scheduler: Scheduler.Scheduler,
-  fiber: Fiber.Fiber<unknown, unknown>
-): boolean =>
-  inline
-    ? fiber.currentOpCount >= fiber.cache.maxOpsBeforeYield
-    : scheduler.shouldYield(fiber)
 
 /** @internal */
 export const follow = (
@@ -47,13 +43,15 @@ export const fork = <A, E>(
   context: Context.Context<any>,
   effect: Effect.Effect<A, E, any>,
   now?: boolean
-): Fiber.Fiber<A, E> =>
-  owned(
+): Fiber.Fiber<A, E> => {
+  const run = Effect.runForkWith(withScheduler(context))
+  return owned(
     tree,
-    Effect.runForkWith(withScheduler(context))(
-      now ? effect : Effect.andThen(Effect.yieldNow, effect)
-    )
+    now
+      ? inlined(() => run(effect))
+      : run(Effect.andThen(Effect.yieldNow, effect))
   )
+}
 
 /** @internal */
 export const withScheduler = (

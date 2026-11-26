@@ -18,7 +18,7 @@ import type * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
 import * as domHost from "./domHost.ts"
 import * as Executor from "./executor.ts"
-import { yields } from "./fork.ts"
+import { inline } from "./fork.ts"
 import * as heads from "./heads.ts"
 import type * as hydrateRun from "./hydrateRun.ts"
 import * as Kernel from "./kernel.ts"
@@ -920,7 +920,10 @@ const onScheduler = (
     Scheduler.Scheduler,
     Context.get(ctx, Executor.CurrentExecutor).scheduler ?? {
       executionMode: callers.executionMode,
-      shouldYield: (fiber) => yields(callers, fiber),
+      shouldYield: (fiber) =>
+        inline > 0
+          ? fiber.currentOpCount >= fiber.cache.maxOpsBeforeYield
+          : callers.shouldYield(fiber),
       makeDispatcher: () => dispatcher ??= callers.makeDispatcher()
     }
   )

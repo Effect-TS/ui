@@ -4157,7 +4157,7 @@ describe("BrowserHost", { concurrent: false }, () => {
       yield* Effect.promise(async () => {
         for (const message of [1, 2, null]) {
           root.send(message)
-          for (let i = 0; i < 5; i++) await Promise.resolve()
+          await Promise.resolve()
         }
       })
       expect(log).toEqual(["args 1", "args 2", "release"])

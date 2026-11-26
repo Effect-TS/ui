@@ -266,7 +266,7 @@ describe("DatePicker in a document", { concurrent: false }, () => {
         // back before a browser task could render and blur the hidden day.
         yield* Effect.promise(async () => {
           send("close")
-          for (let i = 0; i < 5; i++) await Promise.resolve()
+          await Promise.resolve()
         })
         assert.isFalse(shown())
         assert.strictEqual(document.activeElement?.id, "trigger")

@@ -404,10 +404,9 @@ export const isDefinition = (u: unknown): u is Definition.Any =>
  *   one, when a render's args differ by the Schema's equivalence. A reader
  *   that falls behind gets only the latest.
  *
- * The commit that renders the element starts the body, a commit that
- * changes the args publishes them to `changes`, and the commit that removes
- * the element closes the Scope. Each runs in that commit's task until it first
- * waits, even when the Scheduler has no budget left.
+ * Starting the body, publishing new args to `changes` and closing the Scope
+ * each run synchronously with the commit that causes them, up to the first
+ * point where they wait.
  *
  * The body ends with its own result, which a view maps to a message with
  * `map`. When there is nothing to report, return `Component.noop`: the log

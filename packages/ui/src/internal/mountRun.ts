@@ -73,15 +73,13 @@ class Running {
     })
     const scope = this.scope
     this.ctx = ctx
-    const fiber = this.fiber = inlined(() =>
-      fork(
-        tree,
-        Context.add(Context.add(ctx, Scope.Scope, scope), Refs, refsOf(inst)),
-        Effect.suspend(() =>
-          this.mount.run(this.rec.node as never, args, changes, send)
-        ),
-        true
-      )
+    const fiber = this.fiber = fork(
+      tree,
+      Context.add(Context.add(ctx, Scope.Scope, scope), Refs, refsOf(inst)),
+      Effect.suspend(() =>
+        this.mount.run(this.rec.node as never, args, changes, send)
+      ),
+      true
     )
     Effect.runSync(Scope.addFinalizer(scope, Fiber.interrupt(fiber)))
     fiber.addObserver((exit) => {
@@ -115,8 +113,8 @@ class Running {
     const previous = this.mount
     if (previous === mount) return
     this.mount = mount
-    if (this.args !== undefined && !previous["~sameArgs"](mount)) {
-      const args = this.args
+    const args = this.args
+    if (args !== undefined && !previous["~sameArgs"](mount)) {
       inlined(() => mount["~args"].publish(args, mount.args))
     }
   }
@@ -127,9 +125,8 @@ class Running {
     const closer = tree.closed ? Fiber.getCurrent() : undefined
     if (closer !== undefined) this.fiber?.interruptUnsafe(closer.id)
     const close = Scope.close(this.scope, Exit.void)
-    const ctx = this.ctx
-    if (ctx === undefined) Effect.runSync(close)
-    else inlined(() => fork(tree, ctx, close, true))
+    if (this.ctx === undefined) Effect.runSync(close)
+    else fork(tree, this.ctx, close, true)
   }
 }
 
