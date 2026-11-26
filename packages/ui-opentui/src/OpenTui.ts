@@ -11,7 +11,6 @@
  * @since 0.1.0
  */
 import * as Component from "@effect/ui/Component"
-import type * as Mount from "@effect/ui/Mount"
 import * as Renderer from "@effect/ui/Renderer"
 import * as View from "@effect/ui/View"
 import type * as OT from "@opentui/core"
@@ -427,37 +426,18 @@ export class VoidElement<
   in Options extends object = Record<string, unknown>
 > extends View.ElementBuilder<Msg, R, E, Node, Tag> {
   /**
-   * Like `View.ElementBuilder.onMount`, preserving the OpenTUI builder type.
+   * Phantom: keeps the OpenTUI builder type through `View.WithRequirements`.
    *
    * @since 0.1.0
    */
-  override onMount<R2>(
-    mount: Mount.Issued<Msg | Component.Noop, R2, Node, never>
-  ): VoidElement<Msg, R | R2, E, Node, Tag, Options>
-  /**
-   * Rejects mounts that do not end with a message or `Component.noop`.
-   *
-   * @since 0.1.0
-   */
-  override onMount(
-    mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>
-  ): never
-  override onMount(mount: View.Mount<Msg>): any {
-    return (super.onMount as any)(mount)
-  }
-
-  /**
-   * Like `View.ElementBuilder.forward`, preserving the OpenTUI builder type.
-   *
-   * @since 0.1.0
-   */
-  override forward<R2 = never>(
-    place: (
-      node: VoidElement<Msg, R, E, Node, Tag, Options>
-    ) => View.Element<Msg, R2> | View.ElementBuilder<Msg, R2, any, any>
-  ): VoidElement<Msg, R | R2, E, Node, Tag, Options> {
-    return super.forward(place as any) as any
-  }
+  declare readonly "~With"?: VoidElement<
+    Msg,
+    R | this["~Add"],
+    E,
+    Node,
+    Tag,
+    Options
+  >
 
   /**
    * Merges typed renderable options into the element's host properties.
@@ -585,24 +565,18 @@ export class LayoutElement<
   in Options extends object = Record<string, unknown>
 > extends VoidElement<Msg, R, E, Node, Tag, Options> {
   /**
-   * Like `View.ElementBuilder.onMount`, preserving `children`.
+   * Phantom: keeps `children` through `View.WithRequirements`.
    *
    * @since 0.1.0
    */
-  override onMount<R2>(
-    mount: Mount.Issued<Msg | Component.Noop, R2, Node, never>
-  ): LayoutElement<Msg, R | R2, E, Node, Tag, Options>
-  /**
-   * Rejects mounts that do not end with a message or `Component.noop`.
-   *
-   * @since 0.1.0
-   */
-  override onMount(
-    mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>
-  ): never
-  override onMount(mount: View.Mount<Msg>): any {
-    return (super.onMount as any)(mount)
-  }
+  declare readonly "~With"?: LayoutElement<
+    Msg,
+    R | this["~Add"],
+    E,
+    Node,
+    Tag,
+    Options
+  >
 
   /**
    * Adds element and child component children. Plain strings and `View.Text`
@@ -610,34 +584,12 @@ export class LayoutElement<
    *
    * @since 0.1.0
    */
-  children<const C extends ReadonlyArray<NoTextInput<Msg, unknown>>>(
+  children<This, const C extends ReadonlyArray<NoTextInput<Msg, unknown>>>(
+    this: This,
     ...inputs: C
-  ): LayoutElement<
-    Msg,
-    R | View.Requirements<C[number]>,
-    E,
-    Node,
-    Tag,
-    Options
-  > {
-    return View.withNoTextContent(
-      this,
-      inputs as ReadonlyArray<View.Input<Msg, any>>,
-      vocabulary
-    ) as any
-  }
-
-  /**
-   * Like `View.ElementBuilder.forward`, preserving `children`.
-   *
-   * @since 0.1.0
-   */
-  override forward<R2 = never>(
-    place: (
-      node: LayoutElement<Msg, R, E, Node, Tag, Options>
-    ) => View.Element<Msg, R2> | View.ElementBuilder<Msg, R2, any, any>
-  ): LayoutElement<Msg, R | R2, E, Node, Tag, Options> {
-    return super.forward(place as any) as any
+  ): View.WithRequirements<This, View.Requirements<C[number]>>
+  children(...inputs: ReadonlyArray<View.Input<Msg, unknown>>): unknown {
+    return View.withNoTextContent(this, inputs, vocabulary)
   }
 }
 
@@ -658,47 +610,30 @@ export class TextElement<
   in Options extends object = Record<string, unknown>
 > extends VoidElement<Msg, R, E, Node, Tag, Options> {
   /**
-   * Like `View.ElementBuilder.onMount`, preserving `children`.
+   * Phantom: keeps `children` through `View.WithRequirements`.
    *
    * @since 0.1.0
    */
-  override onMount<R2>(
-    mount: Mount.Issued<Msg | Component.Noop, R2, Node, never>
-  ): TextElement<Msg, R | R2, E, Node, Tag, Options>
-  /**
-   * Rejects mounts that do not end with a message or `Component.noop`.
-   *
-   * @since 0.1.0
-   */
-  override onMount(
-    mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>
-  ): never
-  override onMount(mount: View.Mount<Msg>): any {
-    return (super.onMount as any)(mount)
-  }
+  declare readonly "~With"?: TextElement<
+    Msg,
+    R | this["~Add"],
+    E,
+    Node,
+    Tag,
+    Options
+  >
 
   /**
    * Adds text and inline text children.
    *
    * @since 0.1.0
    */
-  children<const C extends ReadonlyArray<View.Input<Msg, unknown>>>(
+  children<This, const C extends ReadonlyArray<View.Input<Msg, unknown>>>(
+    this: This,
     ...inputs: C
-  ): TextElement<Msg, R | View.Requirements<C[number]>, E, Node, Tag, Options> {
-    return View.withContent(this, inputs) as any
-  }
-
-  /**
-   * Like `View.ElementBuilder.forward`, preserving `children`.
-   *
-   * @since 0.1.0
-   */
-  override forward<R2 = never>(
-    place: (
-      node: TextElement<Msg, R, E, Node, Tag, Options>
-    ) => View.Element<Msg, R2> | View.ElementBuilder<Msg, R2, any, any>
-  ): TextElement<Msg, R | R2, E, Node, Tag, Options> {
-    return super.forward(place as any) as any
+  ): View.WithRequirements<This, View.Requirements<C[number]>>
+  children(...inputs: ReadonlyArray<View.Input<Msg, unknown>>): unknown {
+    return View.withContent(this, inputs)
   }
 }
 

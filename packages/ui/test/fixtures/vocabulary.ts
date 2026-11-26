@@ -3,7 +3,6 @@
  * `label` that can, and a void `field` with a value, an input event and its
  * own node type for refs and mounts.
  */
-import type { Component, Mount } from "@effect/ui"
 import { View } from "@effect/ui"
 
 export interface TinyField {
@@ -20,17 +19,9 @@ export class TinyVoid<
   in out Handlers = Record<string, unknown>,
   in out Node = unknown
 > extends View.ElementBuilder<Msg, R, Handlers, Node> {
+  declare readonly "~With"?: TinyVoid<Msg, R | this["~Add"], Handlers, Node>
   value(value: string): this {
     return this.prop("value", value)
-  }
-  override onMount<R2>(
-    mount: Mount.Issued<Msg | Component.Noop, R2, Node, never>
-  ): TinyVoid<Msg, R | R2, Handlers, Node>
-  override onMount(
-    mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>
-  ): never
-  override onMount(mount: View.Mount<Msg>): any {
-    return (super.onMount as any)(mount)
   }
 }
 
@@ -40,19 +31,18 @@ export class TinyElement<
   in out Handlers = Record<string, unknown>,
   in out Node = unknown
 > extends TinyVoid<Msg, R, Handlers, Node> {
-  override onMount<R2>(
-    mount: Mount.Issued<Msg | Component.Noop, R2, Node, never>
-  ): TinyElement<Msg, R | R2, Handlers, Node>
-  override onMount(
-    mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>
-  ): never
-  override onMount(mount: View.Mount<Msg>): any {
-    return (super.onMount as any)(mount)
-  }
-  children<const C extends ReadonlyArray<View.Input<Msg, any>>>(
+  declare readonly "~With"?: TinyElement<
+    Msg,
+    R | this["~Add"],
+    Handlers,
+    Node
+  >
+  children<This, const C extends ReadonlyArray<View.Input<Msg, any>>>(
+    this: This,
     ...inputs: C
-  ): View.Element<Msg, R | View.Requirements<C[number]>> {
-    return View.build(this, inputs)
+  ): View.WithRequirements<This, View.Requirements<C[number]>>
+  children(...inputs: ReadonlyArray<View.Input<Msg, unknown>>): unknown {
+    return View.withContent(this, inputs)
   }
 }
 

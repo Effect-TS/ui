@@ -1551,6 +1551,26 @@ export class ElementBuilder<
    */
   declare readonly "~Tag"?: Tag
   /**
+   * Phantom: the requirements `WithRequirements` adds.
+   *
+   * @since 0.1.0
+   */
+  declare readonly "~Add"?: unknown
+  /**
+   * Phantom: this builder's class with `~Add` in its requirements. A
+   * subclass redeclares it with its own class, so `children`, `onMount` and
+   * `forward` return that class.
+   *
+   * @since 0.1.0
+   */
+  declare readonly "~With"?: ElementBuilder<
+    Msg,
+    R | this["~Add"],
+    Handlers,
+    HostNode,
+    Tag
+  >
+  /**
    * The element's tag.
    *
    * @since 0.1.0
@@ -1707,8 +1727,7 @@ export class ElementBuilder<
    *
    * A defect fails the instance. It never runs on the server or on a host that
    * doesn't run mounts, such as `TestHost`, where a test sends the message
-   * itself. A vocabulary's element class overrides it to return its own
-   * class, so the chain goes on after it.
+   * itself. It returns the builder's own class.
    *
    * **Gotchas**
    *
@@ -1723,20 +1742,27 @@ export class ElementBuilder<
    *
    * @since 0.1.0
    */
-  onMount<R2>(
-    mount: MountModule.Issued<Msg | Component.Noop, R2, HostNode, never>
-  ): ElementBuilder<Msg, R | R2, Handlers, HostNode, Tag>
+  onMount<This, R2>(
+    this: This,
+    mount: MountModule.Issued<
+      Msg | Component.Noop,
+      R2,
+      HostNodeOf<This>,
+      never
+    >
+  ): WithRequirements<This, R2>
   /**
    * Rejects any other mount result, with a type error that says what to end
    * it with.
    *
    * @since 0.1.0
    */
-  onMount(
+  onMount<This>(
+    this: This,
     mount: MountModule.Issued<
       Msg | Component.Noop | MountHint,
       any,
-      HostNode,
+      HostNodeOf<This>,
       never
     >
   ): never
@@ -1797,14 +1823,35 @@ export class ElementBuilder<
    *
    * @since 0.1.0
    */
-  forward<R2 = never>(
+  forward<This, R2 = never>(
+    this: This,
     place: (
-      node: ElementBuilder<Msg, R, Handlers, HostNode, Tag>
+      node: WithRequirements<This, never>
     ) => Element<Msg, R2> | ElementBuilder<Msg, R2, any, any>
-  ): ElementBuilder<Msg, R | R2, Handlers, HostNode, Tag> {
-    return withForward(this, place) as any
+  ): WithRequirements<This, R2>
+  forward(place: Forward): unknown {
+    return withForward(this, place)
   }
 }
+
+type HostNodeOf<B> = B extends
+  { readonly "~HostNode"?: (_: infer HostNode) => unknown } ? HostNode
+  : never
+
+/**
+ * The builder `B`, of its own class, with `R2` added to its requirements:
+ * what `children`, `onMount` and `forward` return. A union gives a union,
+ * and a `Shorthand` root gives its builder.
+ *
+ * @stability experimental
+ * @category utility types
+ * @since 0.1.0
+ */
+export type WithRequirements<B, R2> = B extends unknown ?
+    & (B extends { readonly attr: (...args: any) => infer Chain } ? Chain : B)
+    & { readonly "~Add": R2 } extends { readonly "~With"?: infer With } ? With
+  : never
+  : never
 
 /**
  * The builder of an element that takes children: what `h.el` returns.
@@ -1827,30 +1874,17 @@ export class ContainerBuilder<
   out Tag extends string = string
 > extends ElementBuilder<Msg, R, Handlers, HostNode, Tag> {
   /**
-   * Like `ElementBuilder.onMount`, keeping `children`.
+   * Phantom: keeps `ContainerBuilder` through `WithRequirements`.
    *
    * @since 0.1.0
    */
-  override onMount<R2>(
-    mount: MountModule.Issued<Msg | Component.Noop, R2, HostNode, never>
-  ): ContainerBuilder<Msg, R | R2, Handlers, HostNode, Tag>
-  /**
-   * Rejects any other mount result, with a type error that says what to end
-   * it with.
-   *
-   * @since 0.1.0
-   */
-  override onMount(
-    mount: MountModule.Issued<
-      Msg | Component.Noop | MountHint,
-      any,
-      HostNode,
-      never
-    >
-  ): never
-  override onMount(mount: Mount<Msg>): any {
-    return (super.onMount as any)(mount)
-  }
+  declare readonly "~With"?: ContainerBuilder<
+    Msg,
+    R | this["~Add"],
+    Handlers,
+    HostNode,
+    Tag
+  >
   /**
    * Adds children after the ones the builder holds, and returns the
    * builder: nodes, builders, text, arrays to flatten, and holes (`false`,
@@ -1858,28 +1892,12 @@ export class ContainerBuilder<
    *
    * @since 0.1.0
    */
-  children<const C extends ReadonlyArray<Input<Msg, unknown>>>(
+  children<This, const C extends ReadonlyArray<Input<Msg, unknown>>>(
+    this: This,
     ...inputs: C
-  ): ContainerBuilder<
-    Msg,
-    R | Requirements<C[number]>,
-    Handlers,
-    HostNode,
-    Tag
-  > {
-    return withContent(this, inputs) as any
-  }
-  /**
-   * Like `ElementBuilder.forward`, keeping `children`.
-   *
-   * @since 0.1.0
-   */
-  override forward<R2 = never>(
-    place: (
-      node: ContainerBuilder<Msg, R, Handlers, HostNode, Tag>
-    ) => Element<Msg, R2> | ElementBuilder<Msg, R2, any, any>
-  ): ContainerBuilder<Msg, R | R2, Handlers, HostNode, Tag> {
-    return withForward(this, place) as any
+  ): WithRequirements<This, Requirements<C[number]>>
+  children(...inputs: ReadonlyArray<Input<Msg, unknown>>): unknown {
+    return withContent(this, inputs)
   }
 }
 
@@ -1892,15 +1910,32 @@ export class ContainerBuilder<
  *
  * The chain methods and the call return the builder `B`, which isn't
  * callable: `h.div(a).children(b)` adds `b`, and `h.div(a)(b)` doesn't
- * compile.
+ * compile. `B`'s `children` must return `WithRequirements` of `B` too.
+ *
+ * Calling a choice of roots, `(cond ? h.h2 : h.h1)(title)`, doesn't compile,
+ * as it would lose the children's requirements. Write
+ * `(cond ? h.h2 : h.h1).children(title)`.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
 export type Shorthand<
-  B extends { readonly children: (...inputs: any) => any }
-> = Omit<B, never> & B["children"]
+  B extends { readonly children: (...inputs: any) => WithRequirements<B, any> }
+> =
+  & Omit<B, never>
+  // `_Root` is never inferred. It makes two roots' calls differ, so a union
+  // of roots isn't callable instead of inferring `any` requirements.
+  & (<const C extends InputsOf<B>, _Root extends B = B>(
+    ...inputs: C
+  ) => WithRequirements<B, Requirements<C[number]>>)
+
+type InputsOf<B> = B extends {
+  readonly children: (
+    ...inputs: infer Inputs extends ReadonlyArray<unknown>
+  ) => unknown
+} ? Inputs
+  : never
 
 /**
  * Makes a builder callable as `Shorthand` describes, for a vocabulary's
@@ -1918,7 +1953,7 @@ export type Shorthand<
  */
 export const shorthand = <
   B extends ElementBuilder<any, any, any, any> & {
-    readonly children: (...inputs: any) => any
+    readonly children: (...inputs: any) => WithRequirements<B, any>
   }
 >(
   builder: B
@@ -2316,10 +2351,8 @@ class NoTextBuilder<Msg> extends ContainerBuilder<Msg> {
     super(tag)
     this.vocabulary = vocabulary
   }
-  override children<const C extends ReadonlyArray<Input<Msg, unknown>>>(
-    ...inputs: C
-  ): ContainerBuilder<Msg, Requirements<C[number]>> {
-    return withNoTextContent(this, inputs, this.vocabulary) as any
+  override children(...inputs: ReadonlyArray<Input<Msg, unknown>>): any {
+    return withNoTextContent(this, inputs, this.vocabulary)
   }
 }
 
