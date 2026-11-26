@@ -147,10 +147,10 @@ ${markRules}
 .find::placeholder { color: var(--faint); }
 .find:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; }
 .ilist { --cap: calc(var(--vh, 100vh) * .25); max-height: var(--cap); min-height: min(var(--slots, 0) * 26px, var(--cap)); overflow: auto; overscroll-behavior: contain; }
-.iitem { display: flex; align-items: center; height: 26px; }
+.iitem { position: relative; display: flex; align-items: center; height: 26px; }
 .iitem.split { border-top: 1px solid var(--line); }
 .iitem:hover, .iitem.on { background: var(--sel); }
-.iitem.on { box-shadow: inset 2px 0 0 var(--ink); }
+.iitem.on::before { content: ""; position: absolute; inset: 0 auto 0 0; border-left: 2px solid var(--ink); }
 .irow { display: flex; align-items: center; flex: 1; min-width: 0; height: 26px; padding: 0 20px 0 14px; white-space: nowrap; }
 .irow .imark { margin-right: 6px; }
 .tree-list .irow { padding-left: 2px; }
