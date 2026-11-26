@@ -14,6 +14,7 @@ import { McpClient, McpProtocol } from "effect/ai"
 import { HttpRouter } from "effect/http"
 import * as Socket from "effect/socket/Socket"
 import { createServer, request } from "node:http"
+import type { AddressInfo } from "node:net"
 import { type Capture, play } from "./fixtures/TwoEditors.ts"
 
 const wait = (ms: number) =>
@@ -127,6 +128,18 @@ const until = (check: () => boolean) =>
       ? Effect.void
       : Effect.andThen(wait(10), Effect.suspend(loop))
   }).pipe(Effect.timeout("2 seconds"))
+
+// A port the OS just handed out, so a repeat doesn't wait on the last one's close.
+const freePort = Effect.promise(() =>
+  new Promise<number>((resolve, reject) => {
+    const server = createServer()
+    server.on("error", reject)
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address() as AddressInfo
+      server.close(() => resolve(port))
+    })
+  })
+)
 
 // Retries until the call succeeds with a result that passes the check.
 const poll = <A>(effect: Effect.Effect<A>, check: (a: A) => boolean) =>
@@ -307,8 +320,9 @@ describe("DevToolsServer", { concurrent: false }, () => {
     () =>
       Effect.gen(function*() {
         // The page logs more than its ring holds before the server is up.
-        yield* open(DevToolsServer.url({ port: 47742 }), "open", 12)
-        const { agent } = yield* serve({ port: 47742, size: 12 })
+        const port = yield* freePort
+        yield* open(DevToolsServer.url({ port }), "open", 12)
+        const { agent } = yield* serve({ port, size: 12 })
         const instances: ReadonlyArray<any> = yield* poll(
           agent.call("list_instances"),
           (instances: ReadonlyArray<any>) =>
