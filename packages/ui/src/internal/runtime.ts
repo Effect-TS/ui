@@ -894,11 +894,15 @@ const loadsIn = (
     return
   }
   if (
-    view._tag === "Child" && rec.inst === inst && lazy.isLazy(view.component) &&
-    lazy.stateOf(view.component)._tag === "Loading"
+    view._tag === "Child" && lazy.isLazy(view.component) &&
+    lazy.stateOf(view.component)._tag === "Loading" &&
+    // A headless child's view closure is authored by its parent, which holds the rec.
+    rec.inst === Kernel.authorOf(inst)
   ) {
     out.push({
-      path: inst.path + "/" + segment(view),
+      // A kept child mounts under its author, any other under the instance drawing it.
+      path: (view.alive === undefined ? inst : rec.inst).path + "/" +
+        segment(view),
       name: childName(view.component)
     })
   }

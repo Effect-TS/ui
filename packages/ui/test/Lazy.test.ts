@@ -4,6 +4,7 @@ import { Locator, Scene, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Layer, Schema } from "effect"
 import { AsyncResult } from "effect/reactivity"
+import { Dialog } from "./html/fixtures/headless.ts"
 
 const PageEvents = UiSchema.TaggedEnum({ Saved: { title: Schema.String } })
 
@@ -53,6 +54,37 @@ const makeApp = (
       )
   })
 
+const makeDialogApp = () => {
+  const LazyPage = Component.lazy("LazyPage", () => later(Page))
+  return Component.define({
+    name: "App",
+    model: Schema.Null,
+    message: Schema.Never
+  }).make({
+    init: () => null,
+    update: ($) => $.model,
+    view: (h) =>
+      Dialog(h, {
+        props: { label: "page" },
+        view: () =>
+          h.el(
+            "div",
+            LazyPage(h, {
+              props: { title: "a" },
+              fallback: () => h.text("loading")
+            }),
+            h.keepAlive((s) =>
+              LazyPage(s, {
+                key: "b",
+                props: { title: "b" },
+                fallback: () => h.text("loading")
+              })
+            )
+          )
+      })
+  })
+}
+
 const lifecycle = (
   root: { readonly log: () => ReadonlyArray<MessageLog.Entry> },
   path: string
@@ -99,6 +131,23 @@ describe("Component.lazy", () => {
       assert.strictEqual(again.text(), "app:page:a")
       assert.strictEqual(loads, 1)
     })))
+
+  it.effect("waits for lazy children drawn in a headless child's view closure, kept or not, in settle and on the server", () =>
+    Effect.gen(function*() {
+      const rendered = yield* HtmlServer.renderToHtml(makeDialogApp(), {})
+      assert.include(rendered.html, "page:a")
+      assert.include(rendered.html, "page:b")
+      yield* provideHost(Effect.gen(function*() {
+        const root = yield* TestHost.mount(makeDialogApp(), {})
+        assert.deepStrictEqual(root.pending(), [
+          { _tag: "Load", path: "/App/Dialog[]/LazyPage[]", name: "LazyPage" },
+          { _tag: "Load", path: "/App/LazyPage[b]", name: "LazyPage" }
+        ])
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "page:apage:b")
+        assert.deepStrictEqual(root.pending(), [])
+      }))
+    }))
 
   it.effect("shows the fallback's Failure branch when the load fails, and a retry shows the component in every slot", () =>
     provideHost(Effect.gen(function*() {
