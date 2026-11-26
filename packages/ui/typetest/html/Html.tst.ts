@@ -461,6 +461,9 @@ describe("Html", () => {
         // `h.text` stays the text-node helper; the element is `h.svgText`.
         expect(h.text("label")).type.toBe<View.Text>()
         expect(h.path.attr).type.not.toBeCallableWith("strok-width", "2")
+        // A client `setAttribute` can't put `xlink:href` in its namespace.
+        expect(h.use.attr).type.not.toBeCallableWith("xlink:href", "#shape")
+        expect(h.use.attr).type.toBeCallableWith("href", "#shape")
         expect(h.svg.attr).type.not.toBeCallableWith("viewbox", "0 0 24 24")
         expect(h.circle.attrs).type.not.toBeCallableWith({ d: "M0 0" })
         expect(h.svg).type.not.toHaveProperty("disabled")

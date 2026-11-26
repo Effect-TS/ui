@@ -1567,7 +1567,7 @@ type SvgPresentationAttribute =
 
 type SvgBox = "x" | "y" | "width" | "height"
 type SvgViewport = "viewBox" | "preserveAspectRatio"
-type SvgLink = "href" | "xlink:href"
+type SvgLink = "href"
 type SvgTextPosition =
   | "x"
   | "y"
@@ -1583,7 +1583,7 @@ type SvgGradient =
   | "spreadMethod"
 
 interface SvgOwnAttributes {
-  readonly svg: SvgBox | SvgViewport | "xmlns" | "xmlns:xlink" | "version"
+  readonly svg: SvgBox | SvgViewport | "xmlns" | "version"
   readonly g: never
   readonly path: "d" | "pathLength"
   readonly circle: "cx" | "cy" | "r" | "pathLength"
