@@ -1865,22 +1865,16 @@ describe("BrowserHost", { concurrent: false }, () => {
         chromium = false
         yield* next()
         expect(root.model()).toEqual({ step: 4, left: 4 })
-        // Focus a removed element's blur sends through the list and out has a destination, so it counts.
-        const out = yield* Effect.acquireRelease(
-          Effect.sync(() =>
-            document.body.appendChild(document.createElement("button"))
-          ),
-          (button) => Effect.sync(() => button.remove())
-        )
+        // A removed element's blur sends focus to a sibling that stays, then out of the document, which counts.
         const removed = document.getElementById("a")!
         removed.focus()
         chromium = true
         removed.addEventListener("blur", () => {
-          document.getElementById("b")!.focus()
-          out.focus()
+          const sibling = document.getElementById("b")!
+          sibling.focus()
+          sibling.blur()
         }, { once: true })
         yield* next()
-        expect(document.activeElement).toBe(out)
         expect(root.model()).toEqual({ step: 5, left: 5 })
       }).pipe(Effect.scoped))
 

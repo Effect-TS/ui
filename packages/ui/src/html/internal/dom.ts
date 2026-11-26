@@ -121,21 +121,23 @@ const ignore = () => {}
 
 // Chromium blurs a focused element that a render detaches, to remove or to
 // move it, while the node is still in place and with no `relatedTarget`.
-// The HTML standard and other browsers don't. So only such an event is
-// dropped. One with a destination, or after the node has gone, such as a
-// reconnected element sending focus into an iframe, is a real exit.
+// The HTML standard and other browsers don't. So only such an event from
+// inside the outgoing node is dropped. One with a destination, from outside
+// it, or after it has gone, such as a reconnected element sending focus into
+// an iframe, is a real exit. `from` is 1 when only the children go.
 // Module-level, because `BrowserHost` detaches through one host while
 // another one listens.
-let inPlace: (() => boolean) | undefined
-const detach = (node: globalThis.Node, f: () => void): void => {
-  const outer = inPlace
-  const { nextSibling, parentNode } = node
-  inPlace = () =>
-    node.parentNode === parentNode && node.nextSibling === nextSibling
+let leaving: ((path: Array<globalThis.Node>) => boolean) | undefined
+const detach = (node: globalThis.Node, f: () => void, from = 0): void => {
+  const outer = leaving
+  const { firstChild, nextSibling, parentNode } = node
+  leaving = (path) =>
+    node.parentNode === parentNode && node.nextSibling === nextSibling &&
+    node.firstChild === firstChild && path.indexOf(node) >= from
   try {
     f()
   } finally {
-    inPlace = outer
+    leaving = outer
   }
 }
 
@@ -548,11 +550,11 @@ export const makeHost = (
 
   const listener = (event: Event): void => {
     const name = event.type
+    const path = event.composedPath() as Array<Node>
     if (
       (name === "blur" || name === "focusout") &&
-      (event as FocusEvent).relatedTarget === null && inPlace?.()
+      (event as FocusEvent).relatedTarget === null && leaving?.(path)
     ) return
-    const path = event.composedPath() as Array<Node>
     const custom = view !== null && event instanceof view.CustomEvent
     const detailFor = (node: Node) =>
       custom && isCustomTag((node as globalThis.Element).localName ?? "")
@@ -847,7 +849,7 @@ export const makeHost = (
     },
     clear(parent) {
       if (shown.size > 0) closeShownIn(parent, false)
-      detach(parent.firstChild ?? parent, () => parent.textContent = "")
+      detach(parent, () => parent.textContent = "", 1)
     },
     parentOf: (node) => node.parentNode!,
     nextOf: (node) => node.nextSibling,
