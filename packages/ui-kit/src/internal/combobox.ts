@@ -1008,7 +1008,7 @@ const watch = (
     }
 
     const closing = () => {
-      const focused = document.activeElement as HTMLElement | null
+      const focused = document.activeElement
       const lost = focused === null || focused === document.body ||
         node.contains(focused)
       if (
@@ -1022,8 +1022,8 @@ const watch = (
           lost,
           current.closeMethod === "keyboard"
         )
-      } else if (node.contains(focused)) {
-        if (current.inputInPopup) focused!.blur()
+      } else if (isHTMLElement(focused) && node.contains(focused)) {
+        if (current.inputInPopup) focused.blur()
         else find("data-combobox-input")?.focus({ preventScroll: true })
       }
       node.inert = true

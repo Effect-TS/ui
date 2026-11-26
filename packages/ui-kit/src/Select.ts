@@ -232,7 +232,12 @@ import {
   dismissAttrs,
   dismissSpan
 } from "./internal/blocker.ts"
-import { focusFinal, isElement, override } from "./internal/dom.ts"
+import {
+  focusFinal,
+  isElement,
+  isHTMLElement,
+  override
+} from "./internal/dom.ts"
 import {
   autofillMatch,
   filledOf,
@@ -1091,7 +1096,7 @@ const watch = (
     const closing = () => {
       clearTimeout(timer)
       stopArrow()
-      const focused = document.activeElement as HTMLElement | null
+      const focused = document.activeElement
       const lost = focused === null || focused === document.body ||
         node.contains(focused)
       if (current.finalFocus && (lost || !current.focusLeft)) {
@@ -1102,7 +1107,9 @@ const watch = (
           lost,
           current.closeMethod === "keyboard"
         )
-      } else if (node.contains(focused)) focused!.blur()
+      } else if (isHTMLElement(focused) && node.contains(focused)) {
+        focused.blur()
+      }
       node.inert = true
     }
 
