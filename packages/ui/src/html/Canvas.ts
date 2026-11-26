@@ -602,8 +602,6 @@ export const PixelRatio = Schema.Union([Schema.Number, Schema.Literal("auto")])
  */
 export type PixelRatio = typeof PixelRatio.Type
 
-// Sizes the backing store to the pixel ratio, scales the context to match and paints the scene. False when
-// the canvas has no 2D context.
 const draw = (
   canvas: HTMLCanvasElement,
   args: {

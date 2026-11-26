@@ -96,11 +96,12 @@ export type DefinitionTypeId = typeof DefinitionTypeId
  * redacting `Schema.Redacted` fields, and the runtime uses its equivalence
  * to tell whether a render changed them.
  *
- * `paint` is optional. It draws the node from the args once, on a copy of
- * the page that runs no mounts, such as the one DevTools shows when it
- * pauses at an earlier entry. It gets no `send` and no Scope, so it should
- * only draw. A mount without one leaves its node as the view rendered it
- * there, and the copy lists it as skipped.
+ * The optional `paint` callback draws the node synchronously from its args
+ * on a copy of the page that runs no mounts, such as DevTools time travel.
+ * The runtime calls it once after the node is attached, without `send` or
+ * a Scope. Only draw: do not attach listeners or acquire resources.
+ * If `paint` is absent or throws, the copy reports the instance as skipped;
+ * without `paint`, the node stays as the view rendered it.
  *
  * @stability experimental
  * @category models

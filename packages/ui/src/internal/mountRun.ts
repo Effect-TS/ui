@@ -148,7 +148,6 @@ export const attach = (mount: Mount.Any, rec: Kernel.Rec): void => {
   afterCommit(tree, () => next.start(from))
 }
 
-// A painted copy runs no mount: one with `paint` draws its node once, and the rest are reported as skipped.
 const still = (mount: Mount.Any, rec: Kernel.Rec): void => {
   const inst = rec.inst
   if (inst.closed) return

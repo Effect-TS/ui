@@ -2,4 +2,4 @@
 "@effect/ui-devtools": patch
 ---
 
-The time travel bar now lists the instances whose element mount didn't run on the painted page, and `show_entry` returns them as `skipped`.
+The time travel bar now lists instances whose element mounts could not paint the paused copy, and `show_entry` returns their paths as `skipped`.
