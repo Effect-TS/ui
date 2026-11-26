@@ -6,8 +6,8 @@
  * A Command runs once the render the issuing `update` caused is committed.
  * Element operations reach the element through `Html.Host`, which a test on
  * `TestHost` fakes with `Layer.succeed(Html.Host, ...)`. `waitForAnimations`
- * reads `getAnimations` on the element directly, and `waitForPaint` waits on
- * `HtmlSubscription.AnimationFrames`.
+ * reads `getAnimations` on the element directly. It and `waitForPaint` wait
+ * for frames on `HtmlSubscription.AnimationFrames`.
  *
  * @stability experimental
  * @since 0.1.0
@@ -33,6 +33,13 @@ export interface Found {
   readonly found: boolean
 }
 
+const lookup = (
+  ref: Renderer.Ref<any>
+): Effect.Effect<Option.Option<globalThis.Element>, never, Renderer.Refs> =>
+  Renderer.Refs.use((refs) =>
+    refs.lookup(ref) as Effect.Effect<Option.Option<globalThis.Element>>
+  )
+
 const withElement = <A>(
   ref: Renderer.Ref<any>,
   f: (
@@ -40,14 +47,10 @@ const withElement = <A>(
     element: globalThis.Element
   ) => A
 ): Effect.Effect<Option.Option<A>, never, Renderer.Refs | Html.Host> =>
-  Renderer.Refs.use((refs) =>
-    Effect.flatMap(refs.lookup(ref), (node) =>
-      Option.isNone(node)
-        ? Effect.succeed(Option.none())
-        : Html.Host.useSync((host) =>
-          Option.some(f(host, node.value as globalThis.Element))
-        ))
-  )
+  Effect.flatMap(lookup(ref), (element) =>
+    Option.isNone(element)
+      ? Effect.succeed(Option.none())
+      : Html.Host.useSync((host) => Option.some(f(host, element.value))))
 
 const found = (
   ref: Renderer.Ref<any>,
@@ -422,27 +425,7 @@ export const showPicker = <N extends HTMLInputElement | HTMLSelectElement, Msg>(
 export const WaitForPaint: Command.Factory<{}, void> = Command.make(
   "HtmlCommand.waitForPaint",
   { args: {} },
-  () =>
-    frames.AnimationFrames.use((source) =>
-      Effect.callback<void>((resume) => {
-        let remaining = 2
-        let off: (() => void) | undefined
-        off = source.listen(() => {
-          remaining -= 1
-          if (remaining <= 0) {
-            off?.()
-            resume(Effect.void)
-          }
-        })
-        if (remaining <= 0) off()
-        return Effect.sync(() => {
-          if (remaining > 0) {
-            remaining = 0
-            off?.()
-          }
-        })
-      })
-    )
+  () => Effect.andThen(frames.nextFrame, frames.nextFrame)
 )
 
 /**
@@ -494,60 +477,29 @@ const finite = (animation: Animation): boolean => {
   return typeof end === "number" && Number.isFinite(end)
 }
 
-const waitForElementAnimations = (
-  element: globalThis.Element
-): Effect.Effect<Found> =>
-  Effect.callback((resume) => {
-    if (typeof element.getAnimations !== "function") {
-      resume(Effect.succeed({ found: true }))
-      return
-    }
-    let stopped = false
-    let cancelNext: (() => void) | undefined
-    const schedule = (f: () => void) => {
-      const view = element.ownerDocument?.defaultView ?? null
-      if (view !== null && typeof view.requestAnimationFrame === "function") {
-        const id = view.requestAnimationFrame(f)
-        cancelNext = () => view.cancelAnimationFrame(id)
-      } else {
-        const id = setTimeout(f, 0)
-        cancelNext = () => clearTimeout(id)
-      }
-    }
-    const check = () => {
-      if (stopped) return
-      if (element.isConnected === false) {
-        resume(Effect.succeed({ found: true }))
-        return
-      }
-      const running = element.getAnimations({ subtree: true }).filter(finite)
-      if (running.length === 0) {
-        resume(Effect.succeed({ found: true }))
-        return
-      }
-      Promise.all(running.map((animation) => animation.finished)).then(
-        () => {
-          if (!stopped) resume(Effect.succeed({ found: true }))
-        },
-        () => {
-          if (stopped) return
-          if (element.isConnected === false) {
-            resume(Effect.succeed({ found: true }))
-            return
-          }
-          schedule(() => {
-            cancelNext = undefined
-            check()
-          })
-        }
-      )
-    }
-    check()
-    return Effect.sync(() => {
-      stopped = true
-      cancelNext?.()
-      cancelNext = undefined
-    })
+const settled: Found = { found: true }
+
+// A cancelled or replaced animation rejects `finished`: look again on the
+// next frame, once its replacement has started.
+const animationsSettled = (element: globalThis.Element): Effect.Effect<Found> =>
+  Effect.suspend(() => {
+    const running =
+      element.isConnected && typeof element.getAnimations === "function"
+        ? element.getAnimations({ subtree: true }).filter(finite)
+        : []
+    if (running.length === 0) return Effect.succeed(settled)
+    return Effect.flatMap(
+      Effect.promise(() =>
+        Promise.all(running.map((animation) => animation.finished)).then(
+          () => true,
+          () => false
+        )
+      ),
+      (finished) =>
+        finished
+          ? Effect.succeed(settled)
+          : Effect.andThen(frames.nextFrame, animationsSettled(element))
+    )
   })
 
 /**
@@ -565,12 +517,10 @@ export const WaitForAnimations: Command.Factory<
   "HtmlCommand.waitForAnimations",
   { args: { ref: Renderer.Ref } },
   ({ ref }) =>
-    Renderer.Refs.use((refs) =>
-      Effect.flatMap(refs.lookup(ref), (node) =>
-        Option.isNone(node)
-          ? Effect.succeed<Found>({ found: false })
-          : waitForElementAnimations(node.value as globalThis.Element))
-    )
+    Effect.flatMap(lookup(ref), (element) =>
+      Option.isNone(element)
+        ? Effect.succeed<Found>({ found: false })
+        : animationsSettled(element.value))
 )
 
 /**
@@ -587,8 +537,9 @@ export const WaitForAnimations: Command.Factory<
  * After commit, it looks up `ref` and awaits `.finished` on every finite
  * animation returned by `element.getAnimations({ subtree: true })`. Infinite
  * animations (such as spinners) are skipped. If an animation is cancelled or
- * replaced, it collects the animations again and keeps waiting while the
- * element remains connected. A ref that isn't rendered gives `{ found: false }`,
+ * replaced, it collects the animations again on the next frame of
+ * `HtmlSubscription.AnimationFrames` and keeps waiting while the element
+ * remains connected. A ref that isn't rendered gives `{ found: false }`,
  * and an element without `getAnimations` counts as settled.
  *
  * **Example** (Keeping a panel mounted during its exit animation)

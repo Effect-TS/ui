@@ -88,15 +88,12 @@ const mediaQueriesOf = (
   document: Document
 ): HtmlSubscription.MediaQueries => {
   const view = document.defaultView
+  if (view === null || typeof view.matchMedia !== "function") {
+    return mediaQueries.silent
+  }
   return {
-    matches: (query) =>
-      view === null || typeof view.matchMedia !== "function"
-        ? undefined
-        : view.matchMedia(query).matches,
+    matches: (query) => view.matchMedia(query).matches,
     listen: (query, listener) => {
-      if (view === null || typeof view.matchMedia !== "function") {
-        return () => {}
-      }
       const list = view.matchMedia(query)
       const onChange = (event: MediaQueryListEvent) => listener(event.matches)
       list.addEventListener("change", onChange)

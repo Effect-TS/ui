@@ -601,40 +601,44 @@ class StepsImpl extends internal.SceneCursor {
     )
   }
   frame(delta = 16): this {
+    return this.fireDeclared(
+      "frame",
+      "animation frames",
+      delta,
+      frames.handlerOf
+    )
+  }
+  mediaQuery(query: string, matches: boolean): this {
+    return this.fireDeclared(
+      "mediaQuery",
+      `media query ${JSON.stringify(query)}`,
+      matches,
+      (subscription) => {
+        const declared = mediaQueries.listenerOf(subscription)
+        return declared?.query === query ? declared.handler : undefined
+      }
+    )
+  }
+  // Dispatches what the first declared handler `handlerOf` finds returns.
+  private fireDeclared<A>(
+    step: string,
+    what: string,
+    payload: A,
+    handlerOf: (subscription: object) => View.Handler<unknown, A> | undefined
+  ): this {
     let handled = false
-    return this.act("frame", "message", (state) => {
-      const handler = state.declared().map(frames.handlerOf).find((handler) =>
+    return this.act(step, "message", (state) => {
+      const handler = state.declared().map(handlerOf).find((handler) =>
         handler !== undefined
       )
       if (handler === undefined) {
         throw new Error(
-          `${
-            this.name("frame")
-          }: nothing listens for animation frames; active keys: ${
+          `${this.name(step)}: nothing listens for ${what}; active keys: ${
             JSON.stringify(state.subscriptions())
           }`
         )
       }
-      const message = handle(handler, delta)
-      if (message === undefined) return state
-      handled = true
-      return engine.dispatch(state, message)
-    }, () => ({ interaction: handled ? "handled" : "ignored" }))
-  }
-  mediaQuery(query: string, matches: boolean): this {
-    let handled = false
-    return this.act("mediaQuery", "message", (state) => {
-      const declared = state.declared().map(mediaQueries.listenerOf).find((
-        declared
-      ) => declared !== undefined && declared.query === query)
-      if (declared === undefined) {
-        throw new Error(
-          `${this.name("mediaQuery")}: nothing listens for media query ${
-            JSON.stringify(query)
-          }; active keys: ${JSON.stringify(state.subscriptions())}`
-        )
-      }
-      const message = handle(declared.handler, matches)
+      const message = handle(handler, payload)
       if (message === undefined) return state
       handled = true
       return engine.dispatch(state, message)

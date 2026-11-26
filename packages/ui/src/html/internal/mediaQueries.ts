@@ -8,7 +8,8 @@ export const MediaQueries = Context.Reference<HtmlSubscription.MediaQueries>(
   { defaultValue: () => silent }
 )
 
-const silent: HtmlSubscription.MediaQueries = {
+/** @internal */
+export const silent: HtmlSubscription.MediaQueries = {
   matches: () => undefined,
   listen: () => () => {}
 }

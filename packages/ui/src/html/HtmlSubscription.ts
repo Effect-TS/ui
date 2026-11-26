@@ -557,27 +557,35 @@ export const onAnimationFrame = <Msg>(
     { [frames.frame]: handler, [services.direct]: attachFrames }
   )
 
-const attachFrames: NonNullable<services.Direct[typeof services.direct]> = (
-  context,
-  emit,
-  fail,
-  enter
-) => {
+type Direct = NonNullable<services.Direct[typeof services.direct]>
+
+// Sends what the latest declaration's handler returns for `value`.
+const sendLatest = <A>(
+  emit: Parameters<Direct>[1],
+  fail: Parameters<Direct>[2],
+  enter: Parameters<Direct>[3],
+  handlerOf: (latest: object) => View.Handler<unknown, A>
+) =>
+(value: A): void =>
+  enter((latest) => {
+    try {
+      const message = handle(handlerOf(latest), value)
+      if (message !== undefined) emit(message, noop)
+    } catch (error) {
+      fail(Cause.die(error))
+    }
+  })
+
+const attachFrames: Direct = (context, emit, fail, enter) => {
   const source = Context.get(context, AnimationFrames)
+  const send = sendLatest(emit, fail, enter, frames.handlerOf)
   let last = source.now()
   return {
     initial: Effect.void,
     close: source.listen((time) => {
       const delta = Math.max(0, time - last)
       last = time
-      enter((latest) => {
-        try {
-          const message = handle(frames.handlerOf(latest), delta)
-          if (message !== undefined) emit(message, noop)
-        } catch (error) {
-          fail(Cause.die(error))
-        }
-      })
+      send(delta)
     })
   }
 }
@@ -687,36 +695,25 @@ export const onMediaQuery = <Msg>(
   handler: View.Handler<Msg, boolean>
 ): Subscription.Subscription<Msg> => {
   const declared: mediaQueries.Listener = { query, handler }
-  const direct: NonNullable<services.Direct[typeof services.direct]> = (
-    context,
-    emit,
-    fail,
-    enter
-  ) => {
+  const direct: Direct = (context, emit, fail, enter) => {
     const source = Context.get(context, MediaQueries)
-    const first = source.matches(query)
-    let started = false
-    const deliver = (matches: boolean) => {
-      enter((latest) => {
-        try {
-          const entry = mediaQueries.listenerOf(latest) ?? declared
-          const message = handle(entry.handler, matches)
-          if (message !== undefined) emit(message, noop)
-        } catch (error) {
-          fail(Cause.die(error))
-        }
-      })
-    }
+    const send = sendLatest(
+      emit,
+      fail,
+      enter,
+      (latest) => (mediaQueries.listenerOf(latest) ?? declared).handler
+    )
+    // Read now and sent first, before any change that fires before `initial`.
+    let first = source.matches(query)
     const start = () => {
-      if (started) return
-      started = true
-      if (first !== undefined) deliver(first)
+      if (first !== undefined) send(first)
+      first = undefined
     }
     return {
       initial: Effect.sync(start),
       close: source.listen(query, (matches) => {
         start()
-        deliver(matches)
+        send(matches)
       })
     }
   }
