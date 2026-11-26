@@ -429,7 +429,7 @@ export const keeper: Kernel.Keeper = {
           alive,
           round
         })
-      } else if (lazy.isLazy(view.component)) {
+      } else if (lazy.componentOf(view.component) === undefined) {
         table.kids.set(named, {
           inst: author,
           rec,

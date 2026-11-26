@@ -6,6 +6,7 @@ import type * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
 import { runCodec } from "./codecRun.ts"
 import * as Kernel from "./kernel.ts"
+import * as lazy from "./lazy.ts"
 import { segmentOf } from "./paths.ts"
 import { boundOf, type Cache } from "./queryCore.ts"
 import { restored } from "./sharedRun.ts"
@@ -63,10 +64,10 @@ const use = (target: Kernel.Host, from: Kernel.Host): void => {
 }
 
 const decode = (
-  component: Kernel.Runnable,
+  component: Component.Any | Kernel.Runnable,
   encoded: unknown
 ): Exit.Exit<Decoded, unknown> | Fiber.Fiber<Decoded, unknown> =>
-  runCodec(stateCodecOf(component as unknown as Component.Any).decode(encoded))
+  runCodec(stateCodecOf(component as Component.Any).decode(encoded))
 
 const decodeRoot = (
   component: Kernel.Runnable,
@@ -184,7 +185,10 @@ export const make = (
     const from = served
       ? state as Saved
       : supplyOf(owner, path, view.alive !== undefined)
-    if (from?.[path] === undefined) return fallback?.(owner, rec, at) === true
+    const component = lazy.componentOf(view.component)
+    if (from?.[path] === undefined || component === undefined) {
+      return fallback?.(owner, rec, at) === true
+    }
     let receiver: Kernel.Instance | undefined
     for (
       let above = view.alive === undefined ? undefined : at;
@@ -203,9 +207,7 @@ export const make = (
     const behind = receiver !== undefined
     const away = served && view.alive !== undefined &&
       active?.has(path) === false
-    const exit = behind
-      ? undefined
-      : decode(view.component as never, from[path])
+    const exit = behind ? undefined : decode(component, from[path])
     if (exit !== undefined && Exit.isExit(exit) && !away) {
       if (!served && Exit.isFailure(exit)) {
         return fallback?.(owner, rec, at) === true
@@ -261,7 +263,7 @@ export const make = (
         if (!waiting) return
         waiting = false
         if (rec.inst !== owner || receiver!.closed) return go(Exit.interrupt())
-        const exit = decode(view.component as never, from[path])
+        const exit = decode(component, from[path])
         if (Exit.isExit(exit)) go(exit)
         else exit.addObserver(go)
       }
