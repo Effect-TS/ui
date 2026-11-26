@@ -42,7 +42,7 @@ const hydrates = (App: typeof Popover, selector: string) =>
     )
   ).catch(String)
 
-// Separate pages catch either missing iframe condition.
+// One page per case, so each is checked against the iframe gate on its own.
 Promise.all([
   hydrates(Popover, ":popover-open"),
   hydrates(Modal, ":modal"),
