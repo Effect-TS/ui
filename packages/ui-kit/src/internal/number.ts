@@ -65,6 +65,7 @@ const strayDot = new RegExp(
 const strayMark = charClass(strayMarks, "g")
 const baseSymbols = [".", ",", "．", "，", "٫", "٬"]
 const spaceSeparator = /\p{Zs}/u
+const apostrophe = /['’]/
 const formatControl = /\p{Cf}/u
 const formatControls = /\p{Cf}/gu
 const anyMinus = charClass(minusSigns)
@@ -228,7 +229,7 @@ export const parseNumber = (
     input = input.replaceAll(
       spaceSeparator.test(group)
         ? /\p{Zs}/gu
-        : /['’]/.test(group)
+        : apostrophe.test(group)
         ? /['’]/g
         : group,
       ""
@@ -284,6 +285,10 @@ export const typingOf = (
       ) continue
       add(Array.from(part.value))
       if (spaceSeparator.test(part.value)) allowed.add(" ")
+    }
+    // Either apostrophe is read as the group, so either can be typed.
+    if (details.group !== undefined && apostrophe.test(details.group)) {
+      add("'’")
     }
     add(digitsOf(locale, format))
     const style = format?.style
