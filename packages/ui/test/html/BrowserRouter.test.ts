@@ -191,10 +191,11 @@ const manualFrames = () => {
 
 const link = (app: Element, name: string) =>
   HtmlLocator.getByRole(app, "link", { name })
-const submitForm = (app: Element, name: string) =>
-  HtmlLocator.getByRole(app, "form", { name }).dispatchEvent(
-    new Event("submit", { bubbles: true, cancelable: true })
-  )
+const submitForm = (app: Element, name: string) => {
+  const event = new Event("submit", { bubbles: true, cancelable: true })
+  HtmlLocator.getByRole(app, "form", { name }).dispatchEvent(event)
+  return event.defaultPrevented
+}
 const intentsOf = (router: Router.Router) => {
   const intents: Array<string> = []
   const intent = router.intent
@@ -645,13 +646,27 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(intents).toEqual(["/people/1", "/slow", "/"])
     }).pipe(Effect.scoped))
 
-  it.effect("follows a GET form the app has no submit handler for, and leaves a handled one alone", () =>
+  it.effect("follows a GET form the app has no submit handler for, and leaves handled and POST forms alone", () =>
     Effect.gen(function*() {
       const { app, root } = yield* start("/")
-      submitForm(app, "Filter")
+      expect(submitForm(app, "Filter")).toBe(true)
+      expect(submitForm(app, "Sign out")).toBe(false)
       yield* tick
       expect(window.location.pathname).toBe("/")
-      submitForm(app, "Search")
+      // A control named `getAttribute` shadows the form's method in a browser.
+      // happy-dom reads `id` through it for its own form lookups.
+      const search = HtmlLocator.getByRole(app, "form", { name: "Search" })
+      Object.defineProperty(search, "getAttribute", {
+        value(this: Element, name: string) {
+          if (name !== "id") throw new TypeError("getAttribute is shadowed")
+          return Element.prototype.getAttribute.call(this, name)
+        },
+        configurable: true
+      })
+      const event = new Event("submit", { bubbles: true, cancelable: true })
+      search.dispatchEvent(event)
+      delete (search as { getAttribute?: unknown }).getAttribute
+      expect(event.defaultPrevented).toBe(true)
       yield* tick
       expect(window.location.pathname + window.location.search).toBe(
         "/search?q=ada"
@@ -660,6 +675,12 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(HtmlLocator.getByRole(app, "heading").textContent).toBe(
         "Search ada"
       )
+      // The same event dispatched again on a handled form isn't the Router's.
+      HtmlLocator.getByRole(app, "form", { name: "Filter" }).dispatchEvent(
+        event
+      )
+      yield* tick
+      expect(window.location.search).toBe("?q=ada")
     }).pipe(Effect.scoped))
 
   it.effect("follows GET forms and reports each composed touch intent once in a closed shadow root", () =>

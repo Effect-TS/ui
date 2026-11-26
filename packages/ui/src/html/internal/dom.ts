@@ -590,12 +590,6 @@ export const makeHost = (
       if (name === "compositionstart" || composed) composing.add(target)
       else composing.delete(target)
     }
-    const owned = name === "submit" && event.target !== null &&
-      forms.has(event.target)
-    if (owned) {
-      event.preventDefault()
-      submit.ownedUnhandled.add(event)
-    }
     if (name === "dragstart") startDrag(event as DragEvent, path)
     const handled = deliver(
       event,
@@ -619,7 +613,20 @@ export const makeHost = (
             lastPointer
           )
     )
-    if (owned && handled) submit.ownedUnhandled.delete(event)
+    if (
+      name === "submit" && event.target !== null && forms.has(event.target)
+    ) {
+      submit.ownedUnhandled.delete(event)
+      if (handled) event.preventDefault()
+      else {
+        const kind = submit.kindOf(
+          event.target as globalThis.Element,
+          (event as SubmitEvent).submitter ?? null
+        )
+        if (kind !== "native") event.preventDefault()
+        if (kind === "get") submit.ownedUnhandled.add(event)
+      }
+    }
     if (name === "dragend") endTargets()
     if (restoring.has(name) && target !== undefined && target !== null) {
       restoreSoon(target)
