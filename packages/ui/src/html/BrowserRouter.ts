@@ -22,8 +22,8 @@
  * which no Layer build begun since is still pending), the router scrolls,
  * announces the page in a live region and moves focus. A push goes to the top
  * or to its `#hash` element, and back and forward restore the saved position.
- * An initial `#hash` whose element renders after load is scrolled to and
- * focused when it appears, unless the reader interacts or navigates first.
+ * An initial `#hash` element that renders after load is scrolled to and
+ * focused once it appears, unless the reader interacts or navigates first.
  * A quiet navigation (see `Router.Settled`), such as `Router.patchSearch`,
  * stays on the page: nothing is announced and focus stays. Back and forward
  * still restore the saved position, and a `patchSearch` given
@@ -122,14 +122,11 @@ export interface Options {
    * says whether it's the base, as with an i18n prefix like `/en`.
    */
   readonly base?: string | ((segment: string) => boolean) | undefined
-  /**
-   * Scroll to the top, a `#hash` or the saved position after a navigation,
-   * and to an initial `#hash` element rendered after load. Defaults to `true`.
-   */
+  /** Scroll to the top, a `#hash` or the saved position after a navigation. Defaults to `true`. */
   readonly scroll?: boolean | undefined
   /** Announce each navigation in a live region. Defaults to `true`. */
   readonly announce?: boolean | undefined
-  /** Move focus after each navigation, and to an initial `#hash` element rendered after load. Defaults to `true`. */
+  /** Move focus after each navigation. Defaults to `true`. */
   readonly focus?: boolean | undefined
   /** The window to run in. Defaults to the global `window`. */
   readonly window?: Window | undefined
@@ -235,7 +232,7 @@ const make = (
     }
     const target = (hash: string): HTMLElement | null => {
       if (hash.length <= 1) return null
-      // A malformed escape, as in `#%`, names the element as written.
+      // A malformed escape, as in `#%`, is matched as written.
       const id = decodeComponent(hash.slice(1)) ?? hash.slice(1)
       return document.getElementById(id) ??
         document.getElementsByName(id)[0] as HTMLElement | undefined ?? null
@@ -293,7 +290,7 @@ const make = (
       else body.setAttribute("tabindex", tabindex)
     }
 
-    /** Stops waiting for a late-rendered initial `#hash` target. */
+    /** Stops watching for a late initial `#hash` target. */
     let stopWaiting = () => {}
 
     const onSettled = (settled: Router.Settled) => {
@@ -387,9 +384,8 @@ const make = (
     const router = Context.get(context, Router.Router)
 
     // --- late initial #hash ------------------------------------------------
-    // Browsers only go to the fragment while the page loads. A client-rendered target appears later,
-    // so watch for it until it does, the location changes or the reader takes over. A navigation can
-    // render before it settles, so the observer also checks that the location is still the initial one.
+    // Browsers only go to the fragment during load, so watch for a target rendered later. The
+    // location check covers a navigation that renders before it settles.
     const initial = router.location()
     if (
       !inFragment && (scroll || focus) && initial.hash.length > 1 &&
