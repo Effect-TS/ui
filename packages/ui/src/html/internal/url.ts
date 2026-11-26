@@ -48,6 +48,48 @@ const properties: ReadonlySet<string> = new Set([
 export const blockedAttribute = (name: string, value: string): boolean =>
   attributes.has(name) && isScript(value)
 
+const animationTags: ReadonlySet<string> = new Set(["set", "animate"])
+
+/**
+ * Whether `tag` is an SVG animation that sets an attribute, as the HTML parser
+ * folds its case.
+ *
+ * @internal
+ */
+export const isAnimation = (tag: string): boolean =>
+  animationTags.has(tag.toLowerCase())
+
+/**
+ * The attributes of an animation that give the values it sets.
+ *
+ * @internal
+ */
+export const animationValues: ReadonlyArray<string> = [
+  "to",
+  "from",
+  "by",
+  "values"
+]
+
+/**
+ * Whether an animation's value `name` would set a blocked URL on the
+ * attribute `target` names. `values` is a `;`-separated list, blocked when
+ * any item is; the others are one URL each.
+ *
+ * @internal
+ */
+export const blockedAnimation = (
+  target: string | null | undefined,
+  name: string,
+  value: string
+): boolean => {
+  if (target == null || !animationValues.includes(name)) return false
+  const attribute = target.trim()
+  return name === "values"
+    ? value.split(";").some((item) => blockedAttribute(attribute, item))
+    : blockedAttribute(attribute, value)
+}
+
 /**
  * Whether a URL is blocked for property `name` of a built-in `tag`.
  *

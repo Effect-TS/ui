@@ -30,6 +30,34 @@ export const attributeOf = (
     : attributeName(name, true)
 }
 
+/**
+ * Whether `value` for the normalized attribute `name` of `element` would set
+ * a blocked URL, directly or through an animation.
+ *
+ * @internal
+ */
+export const blockedValue = (
+  element: globalThis.Element,
+  name: string,
+  value: string
+): boolean =>
+  url.blockedAttribute(name, value) ||
+  (url.isAnimation(element.localName) &&
+    url.blockedAnimation(element.getAttribute("attributeName"), name, value))
+
+/**
+ * Removes an animation's values that would set a blocked URL on its new
+ * `target`, as they were checked against the old one.
+ */
+const retarget = (element: globalThis.Element, target: string): void => {
+  for (const name of url.animationValues) {
+    const value = element.getAttribute(name)
+    if (value !== null && url.blockedAnimation(target, name, value)) {
+      element.removeAttribute(name)
+    }
+  }
+}
+
 /** @internal */
 export const controlled: ReadonlySet<string> = new Set([
   "value",
@@ -705,9 +733,13 @@ export const makeHost = (
       const element = node as HTMLElement
       const normalized = attributeOf(element, name)
       if (normalized === undefined) return
-      if (value !== undefined && url.blockedAttribute(normalized, value)) {
+      if (value !== undefined && blockedValue(element, normalized, value)) {
         value = undefined
       }
+      if (
+        value !== undefined && normalized.toLowerCase() === "attributename" &&
+        url.isAnimation(element.localName)
+      ) retarget(element, value)
       if (
         normalized !== "style" || element.style === undefined ||
         element.getAttribute("style") === (previous ?? null)

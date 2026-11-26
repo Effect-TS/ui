@@ -315,23 +315,21 @@ describe("HtmlServer", { concurrent: false }, () => {
       }
     }).pipe(Effect.scoped))
 
-  it.effect("drops animation values that would set a blocked URL", () =>
+  it.effect("drops animation values that would set a blocked URL on the server and hydrated client", () =>
     Effect.gen(function*() {
+      const Target = Schema.Struct({ name: Schema.String, to: Schema.String })
       const Page = Html.component({
         name: "Animated",
-        model: Schema.Null,
-        message: Schema.Never
+        model: Target,
+        message: Target
       }).make({
-        init: () => null,
-        update: ($) => $.model,
-        view: (h) =>
+        init: () => ({ name: "href", to: "javascript:" }),
+        update: (_, message) => message,
+        view: (h, { name, to }) =>
           h.div.children(
             h.el("svg").children(
               h.el("a").children(
-                h.el("set").attr("attributeName", "href").attr(
-                  "to",
-                  "javascript:"
-                ),
+                h.el("set").attr("attributeName", name).attr("to", to),
                 h.el("animate").attr("attributeName", "xlink:href")
                   .attr("from", "/a").attr("by", " VBScript:"),
                 h.el("Animate").attr("attributename", "href")
@@ -356,7 +354,29 @@ describe("HtmlServer", { concurrent: false }, () => {
           "<set attributename=\"href\" to=\"/docs;note=1;javascript:\"></set></a></svg>" +
           "<x-data attributename=\"href\" values=\"javascript:\"></x-data></div><!--]/Animated-->"
       )
-    }))
+      const app = yield* container(rendered.html)
+      const root = yield* HtmlHydrate.hydrateEffect(
+        Page,
+        {},
+        app,
+        rendered.state
+      )
+      const set = app.querySelector("set")!
+      expect(set.hasAttribute("to")).toBe(false)
+      for (
+        const [name, to, expected] of [
+          ["fill", "vbscript:", "vbscript:"],
+          // Retargeting removes a value that is now a blocked URL.
+          ["href", "vbscript:", null],
+          ["href", "/a", "/a"],
+          ["href", "JAVASCRIPT:", null]
+        ] as const
+      ) {
+        root.send({ name, to })
+        yield* tick
+        expect(set.getAttribute("to")).toBe(expected)
+      }
+    }).pipe(Effect.scoped))
 
   it.effect("a blocked URL property removes only the attribute it reflects, and adoption drops a stale blocked URL", () =>
     Effect.gen(function*() {

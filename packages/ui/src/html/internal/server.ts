@@ -97,7 +97,12 @@ const elementAttributes = (
     if (url.blockedAttribute(normalized, value)) out.delete(normalized)
     else out.set(normalized, value)
   }
-  if (isAnimation(tag)) dropBlockedAnimation(out)
+  if (url.isAnimation(tag)) {
+    const target = out.get("attributename")
+    for (const [name, value] of out) {
+      if (url.blockedAnimation(target, name, value)) out.delete(name)
+    }
+  }
   if (elements.isCustomTag(tag)) return out
   for (const [name, value] of Object.entries(props)) {
     switch (name) {
@@ -120,31 +125,6 @@ const elementAttributes = (
     }
   }
   return out
-}
-
-const animationTags: ReadonlySet<string> = new Set(["set", "animate"])
-
-/** Whether `tag` is an SVG animation, as the HTML parser folds its case. */
-const isAnimation = (tag: string): boolean =>
-  animationTags.has(tag.toLowerCase())
-
-const animationValues = ["to", "from", "by", "values"] as const
-
-/**
- * Drops the animation values that would set a blocked URL on the attribute
- * named by `attributename`. A `values` list is dropped whole.
- */
-const dropBlockedAnimation = (attributes: Map<string, string>): void => {
-  const target = attributes.get("attributename")?.trim()
-  if (target === undefined) return
-  for (const name of animationValues) {
-    const value = attributes.get(name)
-    if (value === undefined) continue
-    const urls = name === "values" ? value.split(";") : [value]
-    if (urls.some((item) => url.blockedAttribute(target, item))) {
-      attributes.delete(name)
-    }
-  }
 }
 
 const written = (attributes: Map<string, string>): string => {
@@ -177,7 +157,7 @@ const plainAttributes = (
   if (props !== View.noFields) {
     for (const _ in props) return undefined
   }
-  if (tag === "option" || isAnimation(tag)) return undefined
+  if (tag === "option" || url.isAnimation(tag)) return undefined
   if (attrs === View.noFields) return ""
   let out = ""
   for (const name in attrs) {
