@@ -2,4 +2,4 @@
 "@effect/ui-kit": patch
 ---
 
-Select, Menu and DatePicker mounted into a same-origin iframe from the parent window now handle presses as they do in the page. They had treated the iframe's nodes as outside, because they checked them against the parent's DOM constructors.
+Fix Select drag selection and outside-press dismissal, Menu backdrop blocking and trigger focus, and DatePicker input presses when mounted into a same-origin iframe from the parent window. Pressing the DatePicker input no longer dismisses the popup.

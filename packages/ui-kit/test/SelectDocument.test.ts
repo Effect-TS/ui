@@ -713,7 +713,6 @@ describe("Select in a document", { concurrent: false }, () => {
         "[data-select-blocker]"
       )!
       press(blocker)
-      // Prevented, so the press doesn't move focus out of the popup.
       assert.isFalse(mousedown(blocker))
       yield* tick
       assert.deepStrictEqual(log(), [

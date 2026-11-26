@@ -735,7 +735,6 @@ describe("Menu in a document", { concurrent: false }, () => {
         "[data-menu-blocker]"
       )!
       assert.isFalse(blocker.inert)
-      // Prevented, so the press doesn't move focus out of the menu.
       assert.isFalse(mousedown(blocker))
       yield* tick
       assert.deepStrictEqual(log(), [

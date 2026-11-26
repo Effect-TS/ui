@@ -14,9 +14,8 @@ export const container = Effect.acquireRelease(
 export const byId = (id: string, doc = document) => doc.getElementById(id)!
 
 /**
- * An element to mount in inside a same-origin iframe, removed as the scope
- * closes. happy-dom shares DOM constructors across frames, so this window
- * gets stand-ins the iframe's nodes aren't instances of, as in a browser.
+ * happy-dom shares DOM constructors across frames. Replace the parent
+ * constructors so iframe nodes fail parent-realm instanceof checks, as in a browser.
  */
 export const inIframe = Effect.gen(function*() {
   const iframe = document.createElement("iframe")
