@@ -23,11 +23,21 @@ const Modal = app.make({
   view: (h) => h.dialog.modal(true).children("Terms")
 })
 
-/** Whether `App` hydrates with an element matching `selector`, or how `ssr` failed. */
+// An open dialog that isn't modal needs no window, so it hydrates without the iframe.
+const Dialog = app.make({
+  init: () => ({}),
+  update: ($) => $.model,
+  view: (h) => h.dialog.open(true).children("Notes")
+})
+
+/** Whether `App` hydrates with an element matching `selector` and in a document with a window, or how `ssr` failed. */
 const hydrates = (App: typeof Popover, selector: string) =>
   Effect.runPromise(
     ssr(App, {}).pipe(
-      Effect.map(({ container }) => container.querySelector(selector) !== null),
+      Effect.map(({ container, document }) => ({
+        open: container.querySelector(selector) !== null,
+        window: document.defaultView !== null
+      })),
       Effect.scoped,
       Effect.provide(Layer.mergeAll(TestHost.layer(), TestClock.layer()))
     )
@@ -36,8 +46,9 @@ const hydrates = (App: typeof Popover, selector: string) =>
 // One page each, so each has to get the window it needs on its own.
 Promise.all([
   hydrates(Popover, ":popover-open"),
-  hydrates(Modal, ":modal")
-]).then(([popover, modal]) => {
-  Object.assign(globalThis, { results: { popover, modal } })
+  hydrates(Modal, ":modal"),
+  hydrates(Dialog, "dialog[open]")
+]).then(([popover, modal, dialog]) => {
+  Object.assign(globalThis, { results: { popover, modal, dialog } })
   document.body.setAttribute("data-ready", "")
 })
