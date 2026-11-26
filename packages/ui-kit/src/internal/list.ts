@@ -4,9 +4,10 @@ import type { Keyed } from "./attributes.ts"
 export const keyed = <
   Tag extends string,
   Rest extends ReadonlyArray<unknown>,
-  R
+  R,
+  V extends string = string
 >(
-  part: View.Part<Tag, [value: string, ...Rest], R>
+  part: View.Part<Tag, [value: V, ...Rest], R>
 ) =>
   View.wrapPart(
     part,
@@ -16,18 +17,18 @@ export const keyed = <
       }
     >(
       element: B,
-      value: string,
+      value: V,
       ...rest: Rest
     ): ReturnType<B["attr"]> => part(element.key(value), value, ...rest)
   )
 
-export const valued = <Tag extends string, R>(
-  part: View.Part<Tag, [value: string], R>
+export const valued = <Tag extends string, R, V extends string = string>(
+  part: View.Part<Tag, [value: V], R>
 ) =>
   View.wrapPart(
     part,
     <B extends Keyed<Tag>>(
-      { element, value }: { readonly element: B; readonly value: string }
+      { element, value }: { readonly element: B; readonly value: V }
     ): ReturnType<B["attr"]> => part(element.key(value), value)
   )
 

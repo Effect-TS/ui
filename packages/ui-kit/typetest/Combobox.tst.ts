@@ -201,7 +201,10 @@ describe("Combobox", () => {
         RequestedInputValue: ({ inputValue }) => {
           expect(inputValue).type.toBe<string>()
           return FruitMsg.Typed({ text: inputValue })
-        }
+        },
+        RequestedOpen: () => undefined,
+        RequestedClose: () => undefined,
+        Settled: () => undefined
       },
       view: (combobox) => {
         expect(combobox.item).type.not.toBeCallableWith({

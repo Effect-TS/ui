@@ -285,7 +285,10 @@ export const ComboboxItem = Engine.Item
  * @category models
  * @since 0.1.0
  */
-export type ComboboxItem = typeof ComboboxItem.Type
+export type ComboboxItem<V extends string = string> = Engine.Item<V>
+
+const valueSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+  Schema.NullOr(Schema.Union([value, Schema.Array(value)]))
 
 /**
  * What a `Combobox` holds: the selected value, the values with
@@ -295,9 +298,7 @@ export type ComboboxItem = typeof ComboboxItem.Type
  * @category schemas
  * @since 0.1.0
  */
-export const ComboboxValue = Schema.NullOr(
-  Schema.Union([Schema.String, Schema.Array(Schema.String)])
-)
+export const ComboboxValue = valueSchema(Schema.String)
 
 /**
  * What a `Combobox` holds.
@@ -306,7 +307,9 @@ export const ComboboxValue = Schema.NullOr(
  * @category models
  * @since 0.1.0
  */
-export type ComboboxValue = typeof ComboboxValue.Type
+export type ComboboxValue<V extends string = string> = ReturnType<
+  typeof valueSchema<V>
+>["Type"]
 
 /**
  * How the combobox was opened or closed: `"keyboard"` for a key or a
@@ -415,6 +418,44 @@ export const ComboboxFilterMode = Engine.FilterMode
  */
 export type ComboboxFilterMode = typeof ComboboxFilterMode.Type
 
+const propsSchema = <V extends string>(value: Schema.Codec<V, string>) => {
+  const item = Engine.itemSchema(value)
+  return Schema.Struct({
+    open: Schema.Boolean,
+    inputValue: Schema.String,
+    items: Schema.Array(item),
+    value: Schema.optional(valueSchema(value)),
+    multiple: Schema.optional(Schema.Boolean),
+    filter: Schema.optional(ComboboxFilterMode),
+    filteredItems: Schema.optional(Schema.Array(item)),
+    locale: Schema.optional(Schema.String),
+    limit: Schema.optional(Schema.Number),
+    autoHighlight: Schema.optional(Schema.Boolean),
+    highlightItemOnHover: Schema.optional(Schema.Boolean),
+    loopFocus: Schema.optional(Schema.Boolean),
+    openOnInputClick: Schema.optional(Schema.Boolean),
+    inputInPopup: Schema.optional(Schema.Boolean),
+    inline: Schema.optional(Schema.Boolean),
+    grid: Schema.optional(Schema.Boolean),
+    virtualized: Schema.optional(Schema.Boolean),
+    placeholder: Schema.optional(Schema.String),
+    disabled: Schema.optional(Schema.Boolean),
+    readOnly: Schema.optional(Schema.Boolean),
+    required: Schema.optional(Schema.Boolean),
+    name: Schema.optional(Schema.String),
+    form: Schema.optional(Schema.String),
+    autoComplete: Schema.optional(Schema.String),
+    id: Schema.optional(Schema.String),
+    dir: Schema.optional(Schema.Literals(["ltr", "rtl"])),
+    modal: Schema.optional(Schema.Boolean),
+    dismissLabel: Schema.optional(Schema.String),
+    removedLabel: Schema.optional(Schema.String),
+    finalFocus: Schema.optional(Schema.Boolean),
+    holdExit: Schema.optional(Schema.Boolean),
+    ...Positioning.PositionerFields
+  })
+}
+
 /**
  * The props of a `Combobox`.
  *
@@ -484,40 +525,7 @@ export type ComboboxFilterMode = typeof ComboboxFilterMode.Type
  * @category schemas
  * @since 0.1.0
  */
-export const ComboboxProps = Schema.Struct({
-  open: Schema.Boolean,
-  inputValue: Schema.String,
-  items: Schema.Array(ComboboxItem),
-  value: Schema.optional(ComboboxValue),
-  multiple: Schema.optional(Schema.Boolean),
-  filter: Schema.optional(ComboboxFilterMode),
-  filteredItems: Schema.optional(Schema.Array(ComboboxItem)),
-  locale: Schema.optional(Schema.String),
-  limit: Schema.optional(Schema.Number),
-  autoHighlight: Schema.optional(Schema.Boolean),
-  highlightItemOnHover: Schema.optional(Schema.Boolean),
-  loopFocus: Schema.optional(Schema.Boolean),
-  openOnInputClick: Schema.optional(Schema.Boolean),
-  inputInPopup: Schema.optional(Schema.Boolean),
-  inline: Schema.optional(Schema.Boolean),
-  grid: Schema.optional(Schema.Boolean),
-  virtualized: Schema.optional(Schema.Boolean),
-  placeholder: Schema.optional(Schema.String),
-  disabled: Schema.optional(Schema.Boolean),
-  readOnly: Schema.optional(Schema.Boolean),
-  required: Schema.optional(Schema.Boolean),
-  name: Schema.optional(Schema.String),
-  form: Schema.optional(Schema.String),
-  autoComplete: Schema.optional(Schema.String),
-  id: Schema.optional(Schema.String),
-  dir: Schema.optional(Schema.Literals(["ltr", "rtl"])),
-  modal: Schema.optional(Schema.Boolean),
-  dismissLabel: Schema.optional(Schema.String),
-  removedLabel: Schema.optional(Schema.String),
-  finalFocus: Schema.optional(Schema.Boolean),
-  holdExit: Schema.optional(Schema.Boolean),
-  ...Positioning.PositionerFields
-})
+export const ComboboxProps = propsSchema(Schema.String)
 
 /**
  * The props of a `Combobox`.
@@ -526,7 +534,26 @@ export const ComboboxProps = Schema.Struct({
  * @category models
  * @since 0.1.0
  */
-export type ComboboxProps = typeof ComboboxProps.Type
+export type ComboboxProps<V extends string = string> = ReturnType<
+  typeof propsSchema<V>
+>["Type"]
+
+const eventsSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+  UiSchema.TaggedEnum({
+    RequestedOpen: { reason: ComboboxChangeReason },
+    RequestedClose: { reason: ComboboxChangeReason },
+    Picked: { value: valueSchema(value), reason: ComboboxChangeReason },
+    RequestedInputValue: {
+      inputValue: Schema.String,
+      reason: ComboboxChangeReason
+    },
+    Highlighted: {
+      value: Schema.NullOr(value),
+      index: Schema.Number,
+      reason: ComboboxHighlightReason
+    },
+    Settled: { open: Schema.Boolean }
+  })
 
 /**
  * What a `Combobox` emits.
@@ -550,21 +577,7 @@ export type ComboboxProps = typeof ComboboxProps.Type
  * @category schemas
  * @since 0.1.0
  */
-export const ComboboxEvents = UiSchema.TaggedEnum({
-  RequestedOpen: { reason: ComboboxChangeReason },
-  RequestedClose: { reason: ComboboxChangeReason },
-  Picked: { value: ComboboxValue, reason: ComboboxChangeReason },
-  RequestedInputValue: {
-    inputValue: Schema.String,
-    reason: ComboboxChangeReason
-  },
-  Highlighted: {
-    value: Schema.NullOr(Schema.String),
-    index: Schema.Number,
-    reason: ComboboxHighlightReason
-  },
-  Settled: { open: Schema.Boolean }
-})
+export const ComboboxEvents = eventsSchema(Schema.String)
 
 /**
  * What a `Combobox` emits.
@@ -573,7 +586,9 @@ export const ComboboxEvents = UiSchema.TaggedEnum({
  * @category models
  * @since 0.1.0
  */
-export type ComboboxEvents = typeof ComboboxEvents.Type
+export type ComboboxEvents<V extends string = string> = ReturnType<
+  typeof eventsSchema<V>
+>["Type"]
 
 /**
  * Where a combobox's popup is in its transitions: `"starting"` for the
@@ -595,7 +610,9 @@ export type ComboboxTransitionStatus = Engine.TransitionStatus
  * @category models
  * @since 0.1.0
  */
-export interface ComboboxGroup extends Engine.Group {}
+export interface ComboboxGroup<V extends string = string>
+  extends Engine.Group<V>
+{}
 
 /**
  * The matchers a `Combobox` filters with, for a consumer's own filter.
@@ -632,24 +649,108 @@ export const makeComboboxFilter = (
   locale?: string | undefined
 ): ComboboxFilter => textFilter(locale)
 
-const emits: Engine.Emits<ComboboxEvents> = {
-  requestedOpen: (reason) => ComboboxEvents.RequestedOpen({ reason }),
-  requestedClose: (reason) => ComboboxEvents.RequestedClose({ reason }),
-  picked: (value, reason) => ComboboxEvents.Picked({ value, reason }),
-  edited: (inputValue, reason) =>
-    ComboboxEvents.RequestedInputValue({ inputValue, reason }),
-  highlighted: (value, index, reason) =>
-    ComboboxEvents.Highlighted({ value, index, reason }),
-  settled: (open) => ComboboxEvents.Settled({ open })
-}
-
-const engine = Engine.make(
-  "Combobox",
-  (props: ComboboxProps): Engine.Settings<ComboboxEvents> => ({
-    ...props,
-    emits
+/**
+ * Makes a `Combobox` whose values have the type of a schema, such as a
+ * `Schema.Literals` union. The `value` prop, the items, the parts that take
+ * a `value`, `Picked` and `Highlighted` all use that type. The input text
+ * stays a `string`. `Combobox` is `makeCombobox({ value: Schema.String })`.
+ *
+ * **Details**
+ *
+ * The schema must encode to a string, since values become DOM ids and form
+ * values. `Picked` and `Highlighted` carry values of entries in `items`
+ * or `value`, and autofill picks only a value that matches one. Call
+ * `makeCombobox` once at module level, because each call makes a new
+ * component.
+ *
+ * **Example** (A combobox typed by a literal union)
+ *
+ * ```ts import.meta.vitest
+ * import { UiSchema } from "@effect/ui"
+ * import { Html, HtmlServer } from "@effect/ui/html"
+ * import { makeCombobox } from "@effect/ui-kit"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Fruit = Schema.Literals(["apple", "pear"])
+ * const FruitCombobox = makeCombobox({ value: Fruit })
+ * const items = [{ value: "apple", label: "Apple" }, { value: "pear", label: "Pear" }] as const
+ *
+ * const Message = UiSchema.TaggedEnum({
+ *   PickedFruit: { fruit: Schema.NullOr(Fruit) },
+ *   Typed: { text: Schema.String }
+ * })
+ *
+ * const Picker = Html.component({
+ *   name: "Picker",
+ *   model: Schema.Struct({ fruit: Schema.NullOr(Fruit), text: Schema.String }),
+ *   message: Message
+ * }).make({
+ *   init: () => ({ fruit: "pear" as const, text: "Pear" }),
+ *   update: {
+ *     PickedFruit: ($, { fruit }) => $.evolve({ fruit }),
+ *     Typed: ($, { text }) => $.evolve({ text })
+ *   },
+ *   view: (h, model) =>
+ *     FruitCombobox(h, {
+ *       props: { open: false, value: model.fruit, inputValue: model.text, items },
+ *       onEmit: {
+ *         // `value` is "apple" | "pear" | ReadonlyArray<"apple" | "pear"> | null
+ *         Picked: ({ value }) => Message.PickedFruit({ fruit: typeof value === "string" ? value : null }),
+ *         RequestedInputValue: ({ inputValue }) => Message.Typed({ text: inputValue }),
+ *         RequestedOpen: () => undefined,
+ *         RequestedClose: () => undefined,
+ *         Highlighted: () => undefined,
+ *         Settled: () => undefined
+ *       },
+ *       view: (combobox) => combobox.input(h.input.attr("aria-label", "Fruit"))
+ *     })
+ * })
+ *
+ * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(Picker, {}))
+ * if (!html.includes('value="Pear"')) throw new Error("the input doesn't show the label")
+ * ```
+ *
+ * @stability experimental
+ * @category components
+ * @since 0.1.0
+ */
+export const makeCombobox = <V extends string>(
+  options: { readonly value: Schema.Codec<V, string> }
+) => {
+  const events = eventsSchema(options.value)
+  const emits: Engine.Emits<ComboboxEvents<V>, V> = {
+    requestedOpen: (reason) => events.RequestedOpen({ reason }),
+    requestedClose: (reason) => events.RequestedClose({ reason }),
+    picked: (value, reason) => events.Picked({ value, reason }),
+    edited: (inputValue, reason) =>
+      events.RequestedInputValue({ inputValue, reason }),
+    highlighted: (value, index, reason) =>
+      events.Highlighted({ value, index, reason }),
+    settled: (open) => events.Settled({ open })
+  }
+  const engine = Engine.make(
+    "Combobox",
+    (props: ComboboxProps<V>): Engine.Settings<ComboboxEvents<V>, V> => ({
+      ...props,
+      emits
+    })
+  )
+  return Html.component({
+    name: "Combobox",
+    props: propsSchema(options.value),
+    model: Engine.Model,
+    message: Engine.Message,
+    events,
+    reads: {
+      provider: { owner: DirectionProvider, optional: true }
+    },
+    restore: false
+  }).make({
+    init: Engine.init,
+    update: engine.update,
+    parts: engine.parts
   })
-)
+}
 
 /**
  * A combobox: an input that filters a list of options as the user types.
@@ -753,18 +854,4 @@ const engine = Engine.make(
  * @category components
  * @since 0.1.0
  */
-export const Combobox = Html.component({
-  name: "Combobox",
-  props: ComboboxProps,
-  model: Engine.Model,
-  message: Engine.Message,
-  events: ComboboxEvents,
-  reads: {
-    provider: { owner: DirectionProvider, optional: true }
-  },
-  restore: false
-}).make({
-  init: Engine.init,
-  update: engine.update,
-  parts: engine.parts
-})
+export const Combobox = makeCombobox({ value: Schema.String })

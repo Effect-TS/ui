@@ -174,7 +174,12 @@ describe("Select", () => {
     const items = Theme.literals.map((value) => ({ value, label: value }))
     ThemeSelect(h, {
       props: { open: false, value: "light", items },
-      onEmit: { Picked: ({ value }) => ThemeMsg.PickedTheme({ theme: value }) },
+      onEmit: {
+        Picked: ({ value }) => ThemeMsg.PickedTheme({ theme: value }),
+        RequestedOpen: () => undefined,
+        RequestedClose: () => undefined,
+        Settled: () => undefined
+      },
       view: (select) => {
         expect(select.item).type.not.toBeCallableWith({
           element: h.div,

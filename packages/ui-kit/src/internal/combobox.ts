@@ -63,20 +63,27 @@ import {
   type TransitionStatus
 } from "./transition.ts"
 
-export const Item = Schema.Struct({
-  value: Schema.String,
-  label: Schema.String,
-  disabled: Schema.optional(Schema.Boolean),
-  group: Schema.optional(Schema.String),
-  row: Schema.optional(Schema.Number)
-})
+export const itemSchema = <V extends string>(
+  value: Schema.Codec<V, string>
+) =>
+  Schema.Struct({
+    value,
+    label: Schema.String,
+    disabled: Schema.optional(Schema.Boolean),
+    group: Schema.optional(Schema.String),
+    row: Schema.optional(Schema.Number)
+  })
 
-export type Item = typeof Item.Type
+export const Item = itemSchema(Schema.String)
 
-export interface Group {
+export type Item<V extends string = string> = ReturnType<
+  typeof itemSchema<V>
+>["Type"]
+
+export interface Group<V extends string = string> {
   readonly key: string | undefined
-  readonly items: ReadonlyArray<Item>
-  readonly rows: ReadonlyArray<ReadonlyArray<Item>>
+  readonly items: ReadonlyArray<Item<V>>
+  readonly rows: ReadonlyArray<ReadonlyArray<Item<V>>>
 }
 
 export type { TransitionStatus }
@@ -128,33 +135,35 @@ export const FilterMode = Schema.Literals([
 
 export type FilterMode = typeof FilterMode.Type
 
-export interface Emits<E> {
+export interface Emits<E, V extends string = string> {
   readonly requestedOpen: (reason: TextReason) => E
   readonly requestedClose: (reason: TextReason) => E
   readonly picked?:
     | ((
-      value: string | ReadonlyArray<string> | null,
+      value: V | ReadonlyArray<V> | null,
       reason: ChangeReason
     ) => E)
     | undefined
   readonly edited: (inputValue: string, reason: TextReason) => E
   readonly highlighted: (
-    value: string | null,
+    value: V | null,
     index: number,
     reason: HighlightReason
   ) => E
   readonly settled: (open: boolean) => E
 }
 
-export interface Settings<E> extends Positioning.PositionerOptions {
-  readonly emits: Emits<E>
+export interface Settings<E, V extends string = string>
+  extends Positioning.PositionerOptions
+{
+  readonly emits: Emits<E, V>
   readonly open: boolean
   readonly inputValue: string
-  readonly items: ReadonlyArray<Item>
-  readonly value?: string | ReadonlyArray<string> | null | undefined
+  readonly items: ReadonlyArray<Item<V>>
+  readonly value?: V | ReadonlyArray<V> | null | undefined
   readonly multiple?: boolean | undefined
   readonly filter?: FilterMode | undefined
-  readonly filteredItems?: ReadonlyArray<Item> | undefined
+  readonly filteredItems?: ReadonlyArray<Item<V>> | undefined
   readonly locale?: string | undefined
   readonly limit?: number | undefined
   readonly autoHighlight?: boolean | "always" | undefined
@@ -184,7 +193,7 @@ export interface Settings<E> extends Positioning.PositionerOptions {
   readonly holdExit?: boolean | undefined
 }
 
-type AnySettings = Settings<unknown>
+type AnySettings = Settings<unknown, any>
 
 export const Message = UiSchema.TaggedEnum({
   PressedInput: { pointerType: Schema.String },
@@ -310,7 +319,10 @@ const displayedOf = (model: Model, props: AnySettings): string =>
     ? model.completion.label
     : props.inputValue
 
-const itemOf = (props: AnySettings, value: string): Item | undefined =>
+const itemOf = <V extends string>(
+  props: Settings<unknown, V>,
+  value: string
+): Item<V> | undefined =>
   props.items.find((item) => item.value === value) ??
     props.filteredItems?.find((item) => item.value === value)
 
@@ -336,11 +348,11 @@ const bypassed = (model: Model, props: AnySettings, query: string): boolean => {
     textFilter(props.locale).contains(label, query)
 }
 
-const shownOf = (
+const shownOf = <V extends string>(
   model: Model,
-  props: AnySettings,
+  props: Settings<unknown, V>,
   open = props.open
-): ReadonlyArray<Item> => {
+): ReadonlyArray<Item<V>> => {
   const query = queryOf(model, props, open)
   const bypass = bypassed(model, props, query)
   if (props.filteredItems !== undefined && !bypass) return props.filteredItems
@@ -350,7 +362,7 @@ const shownOf = (
   const match = textFilter(props.locale)
   const text = bypass ? "" : query
   const limit = props.limit ?? -1
-  const shown: Array<Item> = []
+  const shown: Array<Item<V>> = []
   for (const item of props.items) {
     if (limit > -1 && shown.length >= limit) break
     if (filter === "none" || match[filter](item.label, text)) shown.push(item)
@@ -358,17 +370,21 @@ const shownOf = (
   return shown
 }
 
-const highlightedOf = (
+const highlightedOf = <V extends string>(
   model: Model,
   props: AnySettings,
-  shown: ReadonlyArray<Item>
-): string | null =>
-  model.active !== null && shown.some((item) => item.value === model.active)
-    ? model.active
+  shown: ReadonlyArray<Item<V>>
+): V | null => {
+  const active = model.active === null
+    ? undefined
+    : shown.find((item) => item.value === model.active)
+  return active !== undefined
+    ? active.value
     : model.autoFirst ||
         (props.autoHighlight === "always" && navigableOf(props))
     ? shown[0]?.value ?? null
     : null
+}
 
 const rowsOf = (
   items: ReadonlyArray<Item>
@@ -406,19 +422,19 @@ const focus = <E>(
   ref: typeof Input | typeof Trigger | typeof Chip
 ): Step<E> => step.run(HtmlCommand.Focus.make({ ref }).pipe(Command.asNoop))
 
-const picked = <E>(
+const picked = <E, V extends string>(
   step: Step<E>,
-  props: Settings<E>,
-  value: string | ReadonlyArray<string> | null,
+  props: Settings<E, V>,
+  value: V | ReadonlyArray<V> | null,
   reason: ChangeReason
 ): Step<E> =>
   props.emits.picked === undefined
     ? step
     : step.evolve({ removing: null }).emit(props.emits.picked(value, reason))
 
-const rewrite = <E>(
+const rewrite = <E, V extends string>(
   step: Step<E>,
-  props: Settings<E>,
+  props: Settings<E, V>,
   inputValue: string,
   reason: TextReason
 ): Step<E> =>
@@ -426,10 +442,10 @@ const rewrite = <E>(
     ? step
     : step.emit(props.emits.edited(inputValue, reason))
 
-const highlight = <E>(
+const highlight = <E, V extends string>(
   step: Step<E>,
-  props: Settings<E>,
-  shown: ReadonlyArray<Item>,
+  props: Settings<E, V>,
+  shown: ReadonlyArray<Item<V>>,
   value: string | null,
   reason: HighlightReason,
   byKey = false,
@@ -459,9 +475,9 @@ const highlight = <E>(
   )
 }
 
-const unhighlight = <E>(
+const unhighlight = <E, V extends string>(
   step: Step<E>,
-  props: Settings<E>,
+  props: Settings<E, V>,
   reason: HighlightReason,
   listed = step.model
 ): Step<E> =>
@@ -469,9 +485,9 @@ const unhighlight = <E>(
     ? step.evolve({ activeByKey: false })
     : highlight(step, props, shownOf(listed, props), null, reason)
 
-const open = <E>(
+const open = <E, V extends string>(
   step: Step<E>,
-  props: Settings<E>,
+  props: Settings<E, V>,
   reason: TextReason,
   method: Interaction,
   key?: string
@@ -535,9 +551,9 @@ const open = <E>(
     : next
 }
 
-const dismiss = <E>(
+const dismiss = <E, V extends string>(
   step: Step<E>,
-  props: Settings<E>,
+  props: Settings<E, V>,
   reason: TextReason,
   method: Interaction | null,
   focusLeft = false
@@ -566,9 +582,9 @@ const dismiss = <E>(
     .emit(props.emits.requestedClose(reason))
 }
 
-const toggle = <E>(
+const toggle = <E, V extends string>(
   step: Step<E>,
-  props: Settings<E>,
+  props: Settings<E, V>,
   method: Interaction
 ): Step<E> =>
   props.disabled === true
@@ -577,9 +593,9 @@ const toggle = <E>(
     ? dismiss(step, props, "trigger-press", method)
     : open(step, props, "trigger-press", method)
 
-const pick = <E>(
+const pick = <E, V extends string>(
   step: Step<E>,
-  props: Settings<E>,
+  props: Settings<E, V>,
   value: string,
   method: Interaction
 ): Step<E> => {
@@ -593,7 +609,7 @@ const pick = <E>(
     const added = picked(
       step,
       props,
-      toggled(valuesOf(props), value),
+      toggled(valuesOf(props), item.value),
       "item-press"
     )
     if (props.inputValue.trim() === "") return added
@@ -601,7 +617,7 @@ const pick = <E>(
       ? rewrite(added, props, "", "input-clear")
       : dismiss(added, props, "item-press", method)
   }
-  const chosen = picked(step, props, value, "item-press")
+  const chosen = picked(step, props, item.value, "item-press")
   const closed = dismiss(
     props.inputInPopup === true && selectableOf(props)
       ? chosen
@@ -619,9 +635,9 @@ const pick = <E>(
     : closed
 }
 
-const clear = <E>(
+const clear = <E, V extends string>(
   step: Step<E>,
-  props: Settings<E>,
+  props: Settings<E, V>,
   reason: TextReason
 ): Step<E> => {
   if (lockedOf(props)) return step
@@ -631,10 +647,10 @@ const clear = <E>(
     : cleared
 }
 
-const navigate = <E>(
+const navigate = <E, V extends string>(
   step: Step<E>,
-  props: Settings<E>,
-  shown: ReadonlyArray<Item>,
+  props: Settings<E, V>,
+  shown: ReadonlyArray<Item<V>>,
   key: string
 ): Step<E> => {
   const highlighted = highlightedOf(step.model, props, shown)
@@ -680,9 +696,9 @@ const navigate = <E>(
   )
 }
 
-const edit = <E>(
+const edit = <E, V extends string>(
   step: Step<E>,
-  props: Settings<E>,
+  props: Settings<E, V>,
   value: string,
   inputType: string,
   composing: boolean
@@ -732,27 +748,28 @@ const edit = <E>(
   return navigable ? unhighlight(next, props, "none", step.model) : next
 }
 
-const removeChip = <E>(
+const removeChip = <E, V extends string>(
   step: Step<E>,
-  props: Settings<E>,
+  props: Settings<E, V>,
   value: string,
   reason: ChangeReason
 ): Step<E> => {
   if (lockedOf(props)) return step
   const values = valuesOf(props)
-  if (!values.includes(value)) return step
+  const kept = values.filter((other) => other !== value)
+  if (kept.length === values.length) return step
   const removed = picked(
     unhighlight(step, props, "keyboard"),
     props,
-    values.filter((other) => other !== value),
+    kept,
     reason
   ).evolve({ removing: { value, label: itemOf(props, value)?.label ?? value } })
   return reason === "chip-remove-press" ? focus(removed, Input) : removed
 }
 
-const hover = <E>(
+const hover = <E, V extends string>(
   step: Step<E>,
-  props: Settings<E>,
+  props: Settings<E, V>,
   value: string | null
 ): Step<E> =>
   props.highlightItemOnHover === false || !navigableOf(props) ||
@@ -762,9 +779,9 @@ const hover = <E>(
     ? unhighlight(step, props, "pointer")
     : highlight(step, props, shownOf(step.model, props), value, "pointer")
 
-const pressInputKey = <E>(
+const pressInputKey = <E, V extends string>(
   step: Step<E>,
-  props: Settings<E>,
+  props: Settings<E, V>,
   key: string,
   chips: boolean
 ): Step<E> => {
@@ -1279,12 +1296,12 @@ type Handlers<P, E> = {
   ) => Model | Step<E>
 }
 
-export const make = <P, E>(
+export const make = <P, E, V extends string = string>(
   name: string,
-  settingsOf: (props: P) => Settings<E>
+  settingsOf: (props: P) => Settings<E, V>
 ) => {
   // With `dir` resolved for the list's keys.
-  const s = ($: Update<P, E>): Settings<E> => {
+  const s = ($: Update<P, E>): Settings<E, V> => {
     const settings = settingsOf($.props)
     return {
       ...settings,
@@ -1476,7 +1493,7 @@ export const make = <P, E>(
     const topLayer = props.topLayer !== false
     const modal = topLayer && props.modal === true
     const values = valuesOf(props)
-    const chosen = new Set(values)
+    const chosen = new Set<string>(values)
     const selectable = selectableOf(props)
     const filled = nonEmptyOf(props)
     const placeholding = selectable && !filled
@@ -1487,10 +1504,10 @@ export const make = <P, E>(
     const highlighted = navigable || model.mounted
       ? highlightedOf(model, props, items)
       : null
-    const known = new Map(
-      [...(props.filteredItems ?? []), ...props.items].map((item) =>
-        [item.value, item] as const
-      )
+    const known = new Map<string, Item<V>>(
+      [...(props.filteredItems ?? []), ...props.items].map((
+        item
+      ) => [item.value, item])
     )
     const owner = p.id("combobox")
     const inputId = inPopup ? p.id("input") : props.id ?? p.id("input")
@@ -1857,7 +1874,7 @@ export const make = <P, E>(
         )
     })
 
-    const chipPart = p.part("div", (b, value: string) =>
+    const chipPart = p.part("div", (b, value: V) =>
       b.ref(Chip.at(value))
         .attrs({
           tabindex: "-1",
@@ -1869,7 +1886,7 @@ export const make = <P, E>(
         }))
     const chip = valued(chipPart)
 
-    const chipRemovePart = p.part("button", (b, value: string) =>
+    const chipRemovePart = p.part("button", (b, value: V) =>
       inside(b)
         .attrs({
           type: "button",
@@ -1887,7 +1904,7 @@ export const make = <P, E>(
     const chipRemove = View.wrapPart(
       chipRemovePart,
       <B extends View.PartTarget<"button">>(
-        { element, value }: { readonly element: B; readonly value: string }
+        { element, value }: { readonly element: B; readonly value: V }
       ) => chipRemovePart(element, value)
     )
 
@@ -1994,7 +2011,7 @@ export const make = <P, E>(
 
     const row = p.part("div", (b) => b.attr("role", "row"))
 
-    const itemPart = p.part("div", (b, value: string) => {
+    const itemPart = p.part("div", (b, value: V) => {
       const option = known.get(value)
       if (option === undefined) {
         throw new Error(
@@ -2043,7 +2060,7 @@ export const make = <P, E>(
       <B extends View.PartTarget<"span">>(
         { element, keepMounted, value }: {
           readonly element: B
-          readonly value: string
+          readonly value: V
           readonly keepMounted?: boolean | undefined
         }
       ): ReturnType<B["attr"]> | undefined => {

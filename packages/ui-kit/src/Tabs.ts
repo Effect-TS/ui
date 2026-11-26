@@ -201,6 +201,13 @@ export const TabsActivationDirection = Schema.Literals([
  */
 export type TabsActivationDirection = typeof TabsActivationDirection.Type
 
+const tabSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+  Schema.Struct({
+    value,
+    disabled: Schema.optional(Schema.Boolean),
+    keepMounted: Schema.optional(Schema.Boolean)
+  })
+
 /**
  * One tab, in the order the list shows it.
  *
@@ -216,11 +223,7 @@ export type TabsActivationDirection = typeof TabsActivationDirection.Type
  * @category schemas
  * @since 0.1.0
  */
-export const TabsTab = Schema.Struct({
-  value: Schema.String,
-  disabled: Schema.optional(Schema.Boolean),
-  keepMounted: Schema.optional(Schema.Boolean)
-})
+export const TabsTab = tabSchema(Schema.String)
 
 /**
  * One tab, in the order the list shows it.
@@ -229,7 +232,19 @@ export const TabsTab = Schema.Struct({
  * @category models
  * @since 0.1.0
  */
-export type TabsTab = typeof TabsTab.Type
+export type TabsTab<V extends string = string> = ReturnType<
+  typeof tabSchema<V>
+>["Type"]
+
+const propsSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+  Schema.Struct({
+    value: Schema.NullOr(value),
+    tabs: Schema.Array(tabSchema(value)),
+    orientation: Schema.optional(TabsOrientation),
+    activateOnFocus: Schema.optional(Schema.Boolean),
+    loopFocus: Schema.optional(Schema.Boolean),
+    keepMounted: Schema.optional(Schema.Boolean)
+  })
 
 /**
  * Props for the tabs and the active one.
@@ -254,14 +269,7 @@ export type TabsTab = typeof TabsTab.Type
  * @category schemas
  * @since 0.1.0
  */
-export const TabsProps = Schema.Struct({
-  value: Schema.NullOr(Schema.String),
-  tabs: Schema.Array(TabsTab),
-  orientation: Schema.optional(TabsOrientation),
-  activateOnFocus: Schema.optional(Schema.Boolean),
-  loopFocus: Schema.optional(Schema.Boolean),
-  keepMounted: Schema.optional(Schema.Boolean)
-})
+export const TabsProps = propsSchema(Schema.String)
 
 /**
  * The props of `Tabs`.
@@ -270,7 +278,14 @@ export const TabsProps = Schema.Struct({
  * @category models
  * @since 0.1.0
  */
-export type TabsProps = typeof TabsProps.Type
+export type TabsProps<V extends string = string> = ReturnType<
+  typeof propsSchema<V>
+>["Type"]
+
+const eventsSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+  UiSchema.TaggedEnum({
+    Selected: { value, activationDirection: TabsActivationDirection }
+  })
 
 /**
  * `Selected` asks for the tab the user activated, by a click, Enter or Space,
@@ -282,12 +297,7 @@ export type TabsProps = typeof TabsProps.Type
  * @category schemas
  * @since 0.1.0
  */
-export const TabsEvents = UiSchema.TaggedEnum({
-  Selected: {
-    value: Schema.String,
-    activationDirection: TabsActivationDirection
-  }
-})
+export const TabsEvents = eventsSchema(Schema.String)
 
 /**
  * What `Tabs` emits.
@@ -296,7 +306,9 @@ export const TabsEvents = UiSchema.TaggedEnum({
  * @category models
  * @since 0.1.0
  */
-export type TabsEvents = typeof TabsEvents.Type
+export type TabsEvents<V extends string = string> = ReturnType<
+  typeof eventsSchema<V>
+>["Type"]
 
 const TabsMessage = UiSchema.TaggedEnum({
   ClickedTab: { value: Schema.String },
@@ -329,11 +341,11 @@ const TabsModel = Schema.Struct({
 
 type TabsModel = typeof TabsModel.Type
 
-type TabsUpdate = Component.Update<
+type TabsUpdate<V extends string> = Component.Update<
   TabsModel,
   TabsMessage,
-  TabsEvents,
-  TabsProps
+  TabsEvents<V>,
+  TabsProps<V>
 >
 
 const Tab = Html.ref("TabsTab", "button")
@@ -383,17 +395,29 @@ const enabledIn = (
 const rtlOf = ($: Directed & { readonly model: TabsModel }) =>
   rightToLeft($.reads.provider, $.model.rtl)
 
-const activate = (model: TabsModel, $: TabsUpdate, value: string) => {
-  if (!enabledIn($.props.tabs, value) || value === $.props.value) return model
+const activate = <V extends string>(
+  model: TabsModel,
+  $: TabsUpdate<V>,
+  events: ReturnType<typeof eventsSchema<V>>,
+  value: string
+) => {
+  const tab = $.props.tabs[indexOf($.props.tabs, value)]
+  if (tab === undefined || tab.disabled === true || value === $.props.value) {
+    return model
+  }
   return $.set(model).emit(
-    TabsEvents.Selected({
-      value,
+    events.Selected({
+      value: tab.value,
       activationDirection: directionOf($.props, rtlOf($), $.props.value, value)
     })
   )
 }
 
-const navigate = ($: TabsUpdate, value: string, key: string) => {
+const navigate = <V extends string>(
+  $: TabsUpdate<V>,
+  value: string,
+  key: string
+) => {
   const tabs = $.props.tabs
   const from = indexOf(tabs, value)
   if (from < 0) return $.model
@@ -778,6 +802,314 @@ type Keyed<Tag extends string> = View.PartTarget<Tag> & {
 type TabOf<B extends View.PartTarget<"button" | "a">> = ReturnType<B["attr"]>
 
 /**
+ * Makes `Tabs` whose values have the type of a schema, such as a
+ * `Schema.Literals` union. The `value` prop, the tabs, the `tab` and
+ * `panel` parts and `Selected` all use that type. `Tabs` is
+ * `makeTabs({ value: Schema.String })`.
+ *
+ * **Details**
+ *
+ * The schema must encode to a string, since values become DOM keys and ids.
+ * `Selected` carries the value of an entry in `tabs`. Call `makeTabs`
+ * once at module level, because each call makes a new component.
+ *
+ * **Example** (Tabs typed by a literal union)
+ *
+ * ```ts import.meta.vitest
+ * import { UiSchema } from "@effect/ui"
+ * import { Html, HtmlServer } from "@effect/ui/html"
+ * import { makeTabs } from "@effect/ui-kit"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Section = Schema.Literals(["general", "billing"])
+ * const SectionTabs = makeTabs({ value: Section })
+ * const tabs = Section.literals.map((value) => ({ value }))
+ *
+ * const Message = UiSchema.TaggedEnum({ Opened: { section: Section } })
+ *
+ * const Settings = Html.component({
+ *   name: "Settings",
+ *   model: Schema.Struct({ section: Section }),
+ *   message: Message
+ * }).make({
+ *   init: () => ({ section: "general" as const }),
+ *   update: {
+ *     Opened: ($, { section }) => $.evolve({ section })
+ *   },
+ *   view: (h, model) =>
+ *     SectionTabs(h, {
+ *       props: { value: model.section, tabs },
+ *       // `value` is "general" | "billing"
+ *       onEmit: { Selected: ({ value }) => Message.Opened({ section: value }) },
+ *       view: (parts) =>
+ *         parts.root(h.div).children(
+ *           parts.list(h.div).children(
+ *             tabs.map(({ value }) => parts.tab({ element: h.button, value }).children(value))
+ *           ),
+ *           tabs.map(({ value }) => parts.panel({ element: h.div, value })?.children(value))
+ *         )
+ *     })
+ * })
+ *
+ * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(Settings, {}))
+ * if (!html.includes('aria-selected="true"')) throw new Error("no tab is selected")
+ * ```
+ *
+ * @stability experimental
+ * @category components
+ * @since 0.1.0
+ */
+export const makeTabs = <V extends string>(
+  options: { readonly value: Schema.Codec<V, string> }
+) => {
+  const events = eventsSchema(options.value)
+  return Html.component({
+    name: "Tabs",
+    props: propsSchema(options.value),
+    model: TabsModel,
+    message: TabsMessage,
+    events,
+    reads: {
+      provider: { owner: DirectionProvider, optional: true }
+    },
+    restore: false
+  }).make({
+    init: ({ props }) => ({
+      highlighted: enabledIn(props.tabs, props.value) ? props.value : null,
+      focused: false,
+      secondary: null,
+      shown: props.value,
+      leaving: [],
+      started: true,
+      direction: "none",
+      indicator: false,
+      rtl: false
+    }),
+    update: {
+      ClickedTab: ($, { value }) => activate($.model, $, events, value),
+      FocusedTab: ($, { value }) => {
+        const next = UiStruct.evolve($.model, {
+          focused: true,
+          highlighted: value
+        })
+        return $.props.activateOnFocus === true && $.model.secondary !== value
+          ? activate(next, $, events, value)
+          : next
+      },
+      BlurredTab: ($) => $.evolve({ focused: false }),
+      PressedTab: ($, { button, value }) =>
+        $.evolve({ secondary: button === 0 ? null : value }),
+      ReleasedPointer: ($) => $.evolve({ secondary: null }),
+      PressedKey: ($, { key, value }) => navigate($, value, key),
+      ChangedValue: ($) => phaseOf($.model, $.props, rtlOf($)),
+      RenderedFirstFrame: ($, { value }) => {
+        const next = phaseOf($.model, $.props, rtlOf($))
+        return value === next.shown
+          ? UiStruct.evolve(next, { started: true })
+          : next
+      },
+      FinishedTransition: ($, { value }) => {
+        const next = phaseOf($.model, $.props, rtlOf($))
+        return next.leaving.includes(value)
+          ? UiStruct.evolve(next, {
+            leaving: (leaving) => leaving.filter((v) => v !== value)
+          })
+          : next
+      },
+      MeasuredActiveTab: ($, { sized }) => $.evolve({ indicator: sized }),
+      FoundDirection: ($, { rtl }) => $.evolve({ rtl })
+    },
+    subscriptions: ({ model, props }) => [
+      props.value !== model.shown &&
+      Subscription.make(
+        "changedValue",
+        [props.value],
+        () => Stream.make(TabsMessage.ChangedValue())
+      ),
+      ...(model.secondary === null ? [] : releasedPointer)
+    ],
+    parts: (p, model) => {
+      const props = p.props
+      const tabs = props.tabs
+      const orientation = props.orientation ?? "horizontal"
+      const rtl = rightToLeft(p.reads.provider, model.rtl)
+      const phase = phaseOf(model, props, rtl)
+      const entries = new Map<
+        string,
+        { readonly tab: TabsTab<V>; readonly index: number }
+      >()
+      tabs.forEach((tab, index) => {
+        if (entries.has(tab.value)) {
+          throw new Error(
+            "Tabs: two tabs have the value " + JSON.stringify(tab.value)
+          )
+        }
+        entries.set(tab.value, { tab, index })
+      })
+      const entryOf = (value: string, part: string) => {
+        const entry = entries.get(value)
+        if (entry === undefined) {
+          throw new Error(
+            "Tabs: a " + part + " was drawn for " + JSON.stringify(value) +
+              ", which isn't in tabs"
+          )
+        }
+        return entry
+      }
+      const tabId = (value: string) => p.id("tab", value)
+      const panelId = (value: string) => p.id("panel", value)
+      const mounted = (value: string) =>
+        value === props.value || phase.leaving.includes(value)
+      const drawn = new Set<string>()
+      const stop = phase.highlighted !== null && entries.has(phase.highlighted)
+        ? phase.highlighted
+        : (tabs.find((tab) => tab.disabled !== true) ?? tabs[0])?.value ?? null
+      const common = <B extends Attributed<B>>(builder: B): B =>
+        builder.attrs({
+          "data-orientation": orientation,
+          "data-activation-direction": phase.direction
+        })
+
+      const tabPart = keyed(p.part(["button", "a"], (b, value: V) => {
+        const { tab } = entryOf(value, "tab")
+        const active = value === props.value
+        const disabled = tab.disabled === true
+        const decorated = common(b)
+          .ref(Tab.at(value) as never)
+          .attrs({
+            role: "tab",
+            id: tabId(value),
+            "aria-selected": String(active),
+            "aria-disabled": disabled ? "true" : undefined,
+            tabindex: value === stop ? "0" : "-1",
+            disabled: undefined,
+            "data-active": flag(active),
+            "data-disabled": flag(disabled)
+          })
+          .on(
+            "click",
+            TabsMessage.ClickedTab({ value }),
+            disabled ? { preventDefault: "always" } : undefined
+          )
+          .on(
+            "keydown",
+            (event) =>
+              ListNavigation.isKey(event, orientation)
+                ? TabsMessage.PressedKey({ value, key: event.key })
+                : undefined,
+            { preventDefault: true }
+          )
+          .on("focus", TabsMessage.FocusedTab({ value }))
+          .on("blur", TabsMessage.BlurredTab())
+        const typed = b.tag === "button"
+          ? decorated.attr("type", "button")
+          : decorated
+        return props.activateOnFocus === true
+          ? typed.on(
+            "pointerdown",
+            ({ button }: Html.PointerPayload) =>
+              TabsMessage.PressedTab({ value, button })
+          )
+          : typed
+      }))
+
+      const panelPart = keyed(p.part((b, value: V) => {
+        const { index } = entryOf(value, "panel")
+        const open = value === props.value
+        const shown = mounted(value)
+        const status = statusOf({
+          mounted: phase.leaving.includes(value),
+          started: phase.started
+        }, { open })
+        const decorated = common(b).attrs({
+          role: "tabpanel",
+          id: panelId(value),
+          "aria-labelledby": tabId(value),
+          hidden: flag(!shown),
+          inert: flag(!open),
+          tabindex: open ? "0" : "-1",
+          "data-index": String(index),
+          "data-hidden": flag(!shown),
+          "data-starting-style": flag(status === "starting"),
+          "data-ending-style": flag(status === "ending")
+        })
+        return status === null
+          ? decorated
+          : decorated.onMount(TrackPanel({ value, status }))
+      }))
+
+      const indicatorPart = p.part((b) =>
+        common(b)
+          .attrs({ role: "presentation", hidden: flag(!phase.indicator) })
+          .onMount(TrackIndicator({
+            tab: props.value !== null && entries.has(props.value)
+              ? tabId(props.value)
+              : null,
+            tabs: tabs.map((tab) => tabId(tab.value))
+          }))
+      )
+
+      return {
+        value: props.value,
+        orientation,
+        activationDirection: phase.direction,
+        root: p.part((b) =>
+          common(b).forward((node) =>
+            drawn.size === 0
+              ? node
+              : linkPanels(
+                View.build(node, []),
+                new Map(
+                  [...drawn].map((value) => [tabId(value), panelId(value)])
+                )
+              )
+          )
+        ),
+        list: p.part((b) =>
+          common(b)
+            .attrs({
+              role: "tablist",
+              "aria-orientation": orientation === "vertical"
+                ? "vertical"
+                : undefined
+            })
+            .onMount(ActivateFromKeys({}))
+        ),
+        tab: View.wrapPart(
+          tabPart,
+          <B extends Keyed<"button" | "a">>(
+            { element, value }: { readonly element: B; readonly value: V }
+          ): TabOf<B> => tabPart(element, value) as TabOf<B>
+        ),
+        panel: View.wrapPart(
+          panelPart,
+          <B extends Keyed<string>>(
+            { element, value }: { readonly element: B; readonly value: V }
+          ): ReturnType<B["attr"]> | undefined => {
+            const panel = panelPart(element, value)
+            if (
+              !mounted(value) &&
+              !(entryOf(value, "panel").tab.keepMounted ??
+                props.keepMounted === true)
+            ) {
+              return undefined
+            }
+            drawn.add(value)
+            return panel
+          }
+        ),
+        indicator: <B extends View.PartTarget<string>>(
+          element: B
+        ): ReturnType<B["attr"]> | undefined => {
+          const indicator = indicatorPart(element)
+          return props.value === null ? undefined : indicator
+        }
+      }
+    }
+  })
+}
+
+/**
  * A headless tabs component. Call it with the consumer's `h`, the `props`, an
  * `onEmit` for `Selected`, and a `view` closure that draws `tabs.root(h.div)`
  * around `tabs.list(h.div)`, with `tabs.tab({ element: h.button, value })` for
@@ -827,245 +1159,4 @@ type TabOf<B extends View.PartTarget<"button" | "a">> = ReturnType<B["attr"]>
  * @category components
  * @since 0.1.0
  */
-export const Tabs = Html.component({
-  name: "Tabs",
-  props: TabsProps,
-  model: TabsModel,
-  message: TabsMessage,
-  events: TabsEvents,
-  reads: {
-    provider: { owner: DirectionProvider, optional: true }
-  },
-  restore: false
-}).make({
-  init: ({ props }) => ({
-    highlighted: enabledIn(props.tabs, props.value) ? props.value : null,
-    focused: false,
-    secondary: null,
-    shown: props.value,
-    leaving: [],
-    started: true,
-    direction: "none",
-    indicator: false,
-    rtl: false
-  }),
-  update: {
-    ClickedTab: ($, { value }) => activate($.model, $, value),
-    FocusedTab: ($, { value }) => {
-      const next = UiStruct.evolve($.model, {
-        focused: true,
-        highlighted: value
-      })
-      return $.props.activateOnFocus === true && $.model.secondary !== value
-        ? activate(next, $, value)
-        : next
-    },
-    BlurredTab: ($) => $.evolve({ focused: false }),
-    PressedTab: ($, { button, value }) =>
-      $.evolve({ secondary: button === 0 ? null : value }),
-    ReleasedPointer: ($) => $.evolve({ secondary: null }),
-    PressedKey: ($, { key, value }) => navigate($, value, key),
-    ChangedValue: ($) => phaseOf($.model, $.props, rtlOf($)),
-    RenderedFirstFrame: ($, { value }) => {
-      const next = phaseOf($.model, $.props, rtlOf($))
-      return value === next.shown
-        ? UiStruct.evolve(next, { started: true })
-        : next
-    },
-    FinishedTransition: ($, { value }) => {
-      const next = phaseOf($.model, $.props, rtlOf($))
-      return next.leaving.includes(value)
-        ? UiStruct.evolve(next, {
-          leaving: (leaving) => leaving.filter((v) => v !== value)
-        })
-        : next
-    },
-    MeasuredActiveTab: ($, { sized }) => $.evolve({ indicator: sized }),
-    FoundDirection: ($, { rtl }) => $.evolve({ rtl })
-  },
-  subscriptions: ({ model, props }) => [
-    props.value !== model.shown &&
-    Subscription.make(
-      "changedValue",
-      [props.value],
-      () => Stream.make(TabsMessage.ChangedValue())
-    ),
-    ...(model.secondary === null ? [] : releasedPointer)
-  ],
-  parts: (p, model) => {
-    const props = p.props
-    const tabs = props.tabs
-    const orientation = props.orientation ?? "horizontal"
-    const rtl = rightToLeft(p.reads.provider, model.rtl)
-    const phase = phaseOf(model, props, rtl)
-    const entries = new Map<
-      string,
-      { readonly tab: TabsTab; readonly index: number }
-    >()
-    tabs.forEach((tab, index) => {
-      if (entries.has(tab.value)) {
-        throw new Error(
-          "Tabs: two tabs have the value " + JSON.stringify(tab.value)
-        )
-      }
-      entries.set(tab.value, { tab, index })
-    })
-    const entryOf = (value: string, part: string) => {
-      const entry = entries.get(value)
-      if (entry === undefined) {
-        throw new Error(
-          "Tabs: a " + part + " was drawn for " + JSON.stringify(value) +
-            ", which isn't in tabs"
-        )
-      }
-      return entry
-    }
-    const tabId = (value: string) => p.id("tab", value)
-    const panelId = (value: string) => p.id("panel", value)
-    const mounted = (value: string) =>
-      value === props.value || phase.leaving.includes(value)
-    const drawn = new Set<string>()
-    const stop = phase.highlighted !== null && entries.has(phase.highlighted)
-      ? phase.highlighted
-      : (tabs.find((tab) => tab.disabled !== true) ?? tabs[0])?.value ?? null
-    const common = <B extends Attributed<B>>(builder: B): B =>
-      builder.attrs({
-        "data-orientation": orientation,
-        "data-activation-direction": phase.direction
-      })
-
-    const tabPart = keyed(p.part(["button", "a"], (b, value: string) => {
-      const { tab } = entryOf(value, "tab")
-      const active = value === props.value
-      const disabled = tab.disabled === true
-      const decorated = common(b)
-        .ref(Tab.at(value) as never)
-        .attrs({
-          role: "tab",
-          id: tabId(value),
-          "aria-selected": String(active),
-          "aria-disabled": disabled ? "true" : undefined,
-          tabindex: value === stop ? "0" : "-1",
-          disabled: undefined,
-          "data-active": flag(active),
-          "data-disabled": flag(disabled)
-        })
-        .on(
-          "click",
-          TabsMessage.ClickedTab({ value }),
-          disabled ? { preventDefault: "always" } : undefined
-        )
-        .on(
-          "keydown",
-          (event) =>
-            ListNavigation.isKey(event, orientation)
-              ? TabsMessage.PressedKey({ value, key: event.key })
-              : undefined,
-          { preventDefault: true }
-        )
-        .on("focus", TabsMessage.FocusedTab({ value }))
-        .on("blur", TabsMessage.BlurredTab())
-      const typed = b.tag === "button"
-        ? decorated.attr("type", "button")
-        : decorated
-      return props.activateOnFocus === true
-        ? typed.on(
-          "pointerdown",
-          ({ button }: Html.PointerPayload) =>
-            TabsMessage.PressedTab({ value, button })
-        )
-        : typed
-    }))
-
-    const panelPart = keyed(p.part((b, value: string) => {
-      const { index } = entryOf(value, "panel")
-      const open = value === props.value
-      const shown = mounted(value)
-      const status = statusOf({
-        mounted: phase.leaving.includes(value),
-        started: phase.started
-      }, { open })
-      const decorated = common(b).attrs({
-        role: "tabpanel",
-        id: panelId(value),
-        "aria-labelledby": tabId(value),
-        hidden: flag(!shown),
-        inert: flag(!open),
-        tabindex: open ? "0" : "-1",
-        "data-index": String(index),
-        "data-hidden": flag(!shown),
-        "data-starting-style": flag(status === "starting"),
-        "data-ending-style": flag(status === "ending")
-      })
-      return status === null
-        ? decorated
-        : decorated.onMount(TrackPanel({ value, status }))
-    }))
-
-    const indicatorPart = p.part((b) =>
-      common(b)
-        .attrs({ role: "presentation", hidden: flag(!phase.indicator) })
-        .onMount(TrackIndicator({
-          tab: props.value !== null && entries.has(props.value)
-            ? tabId(props.value)
-            : null,
-          tabs: tabs.map((tab) => tabId(tab.value))
-        }))
-    )
-
-    return {
-      value: props.value,
-      orientation,
-      activationDirection: phase.direction,
-      root: p.part((b) =>
-        common(b).forward((node) =>
-          drawn.size === 0
-            ? node
-            : linkPanels(
-              View.build(node, []),
-              new Map([...drawn].map((value) => [tabId(value), panelId(value)]))
-            )
-        )
-      ),
-      list: p.part((b) =>
-        common(b)
-          .attrs({
-            role: "tablist",
-            "aria-orientation": orientation === "vertical"
-              ? "vertical"
-              : undefined
-          })
-          .onMount(ActivateFromKeys({}))
-      ),
-      tab: View.wrapPart(
-        tabPart,
-        <B extends Keyed<"button" | "a">>(
-          { element, value }: { readonly element: B; readonly value: string }
-        ): TabOf<B> => tabPart(element, value) as TabOf<B>
-      ),
-      panel: View.wrapPart(
-        panelPart,
-        <B extends Keyed<string>>(
-          { element, value }: { readonly element: B; readonly value: string }
-        ): ReturnType<B["attr"]> | undefined => {
-          const panel = panelPart(element, value)
-          if (
-            !mounted(value) &&
-            !(entryOf(value, "panel").tab.keepMounted ??
-              props.keepMounted === true)
-          ) {
-            return undefined
-          }
-          drawn.add(value)
-          return panel
-        }
-      ),
-      indicator: <B extends View.PartTarget<string>>(
-        element: B
-      ): ReturnType<B["attr"]> | undefined => {
-        const indicator = indicatorPart(element)
-        return props.value === null ? undefined : indicator
-      }
-    }
-  }
-})
+export const Tabs = makeTabs({ value: Schema.String })

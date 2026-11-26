@@ -14,12 +14,14 @@ export interface FormField {
   readonly filled: boolean
 }
 
-export interface Valued {
-  readonly value?: string | ReadonlyArray<string> | null | undefined
+export interface Valued<V extends string = string> {
+  readonly value?: V | ReadonlyArray<V> | null | undefined
   readonly multiple?: boolean | undefined
 }
 
-export const valuesOf = (props: Valued): ReadonlyArray<string> =>
+export const valuesOf = <V extends string>(
+  props: Valued<V>
+): ReadonlyArray<V> =>
   props.value == null
     ? []
     : typeof props.value === "string"
@@ -31,10 +33,10 @@ export const filledOf = (props: Valued): boolean =>
     ? valuesOf(props).length > 0
     : valuesOf(props).some((value) => value !== "")
 
-export const toggled = (
-  values: ReadonlyArray<string>,
-  value: string
-): ReadonlyArray<string> =>
+export const toggled = <V extends string>(
+  values: ReadonlyArray<V>,
+  value: V
+): ReadonlyArray<V> =>
   values.includes(value)
     ? values.filter((other) => other !== value)
     : [...values, value]

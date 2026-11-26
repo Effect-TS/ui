@@ -257,6 +257,13 @@ import * as Positioning from "./Positioning.ts"
 import { Toolbar } from "./Toolbar.ts"
 import * as Typeahead from "./Typeahead.ts"
 
+const itemSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+  Schema.Struct({
+    value,
+    label: Schema.String,
+    disabled: Schema.optional(Schema.Boolean)
+  })
+
 /**
  * One option of a `Select`: the value it submits, the text the trigger shows
  * and typeahead matches, and whether it can be picked.
@@ -265,11 +272,7 @@ import * as Typeahead from "./Typeahead.ts"
  * @category schemas
  * @since 0.1.0
  */
-export const SelectItem = Schema.Struct({
-  value: Schema.String,
-  label: Schema.String,
-  disabled: Schema.optional(Schema.Boolean)
-})
+export const SelectItem = itemSchema(Schema.String)
 
 /**
  * One option of a `Select`.
@@ -278,7 +281,12 @@ export const SelectItem = Schema.Struct({
  * @category models
  * @since 0.1.0
  */
-export type SelectItem = typeof SelectItem.Type
+export type SelectItem<V extends string = string> = ReturnType<
+  typeof itemSchema<V>
+>["Type"]
+
+const valueSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+  Schema.NullOr(Schema.Union([value, Schema.Array(value)]))
 
 /**
  * What a `Select` holds: one value, the values of a `multiple` select, or
@@ -288,9 +296,7 @@ export type SelectItem = typeof SelectItem.Type
  * @category schemas
  * @since 0.1.0
  */
-export const SelectValue = Schema.NullOr(
-  Schema.Union([Schema.String, Schema.Array(Schema.String)])
-)
+export const SelectValue = valueSchema(Schema.String)
 
 /**
  * What a `Select` holds.
@@ -299,7 +305,9 @@ export const SelectValue = Schema.NullOr(
  * @category models
  * @since 0.1.0
  */
-export type SelectValue = typeof SelectValue.Type
+export type SelectValue<V extends string = string> = ReturnType<
+  typeof valueSchema<V>
+>["Type"]
 
 /**
  * How the select was opened or closed: `"keyboard"` for a key or a click
@@ -373,6 +381,29 @@ export const SelectChangeReason = Schema.Literals([
  */
 export type SelectChangeReason = typeof SelectChangeReason.Type
 
+const propsSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+  Schema.Struct({
+    open: Schema.Boolean,
+    items: Schema.Array(itemSchema(value)),
+    value: Schema.optional(valueSchema(value)),
+    multiple: Schema.optional(Schema.Boolean),
+    placeholder: Schema.optional(Schema.String),
+    disabled: Schema.optional(Schema.Boolean),
+    readOnly: Schema.optional(Schema.Boolean),
+    required: Schema.optional(Schema.Boolean),
+    name: Schema.optional(Schema.String),
+    form: Schema.optional(Schema.String),
+    autoComplete: Schema.optional(Schema.String),
+    id: Schema.optional(Schema.String),
+    modal: Schema.optional(Schema.Boolean),
+    dismissLabel: Schema.optional(Schema.String),
+    highlightItemOnHover: Schema.optional(Schema.Boolean),
+    alignItemWithTrigger: Schema.optional(Schema.Boolean),
+    finalFocus: Schema.optional(Schema.Boolean),
+    holdExit: Schema.optional(Schema.Boolean),
+    ...Positioning.PositionerFields
+  })
+
 /**
  * The props of a `Select`.
  *
@@ -415,27 +446,7 @@ export type SelectChangeReason = typeof SelectChangeReason.Type
  * @category schemas
  * @since 0.1.0
  */
-export const SelectProps = Schema.Struct({
-  open: Schema.Boolean,
-  items: Schema.Array(SelectItem),
-  value: Schema.optional(SelectValue),
-  multiple: Schema.optional(Schema.Boolean),
-  placeholder: Schema.optional(Schema.String),
-  disabled: Schema.optional(Schema.Boolean),
-  readOnly: Schema.optional(Schema.Boolean),
-  required: Schema.optional(Schema.Boolean),
-  name: Schema.optional(Schema.String),
-  form: Schema.optional(Schema.String),
-  autoComplete: Schema.optional(Schema.String),
-  id: Schema.optional(Schema.String),
-  modal: Schema.optional(Schema.Boolean),
-  dismissLabel: Schema.optional(Schema.String),
-  highlightItemOnHover: Schema.optional(Schema.Boolean),
-  alignItemWithTrigger: Schema.optional(Schema.Boolean),
-  finalFocus: Schema.optional(Schema.Boolean),
-  holdExit: Schema.optional(Schema.Boolean),
-  ...Positioning.PositionerFields
-})
+export const SelectProps = propsSchema(Schema.String)
 
 /**
  * The props of a `Select`.
@@ -444,7 +455,19 @@ export const SelectProps = Schema.Struct({
  * @category models
  * @since 0.1.0
  */
-export type SelectProps = typeof SelectProps.Type
+export type SelectProps<V extends string = string> = ReturnType<
+  typeof propsSchema<V>
+>["Type"]
+
+const eventsSchema = <V extends string>(value: Schema.Codec<V, string>) =>
+  UiSchema.TaggedEnum({
+    RequestedOpen: { reason: SelectChangeReason },
+    RequestedClose: { reason: SelectChangeReason },
+    Picked: { value: valueSchema(value), reason: SelectChangeReason },
+    Settled: { open: Schema.Boolean }
+  })
+
+type SelectEventsSchema<V extends string> = ReturnType<typeof eventsSchema<V>>
 
 /**
  * What a `Select` emits.
@@ -461,12 +484,7 @@ export type SelectProps = typeof SelectProps.Type
  * @category schemas
  * @since 0.1.0
  */
-export const SelectEvents = UiSchema.TaggedEnum({
-  RequestedOpen: { reason: SelectChangeReason },
-  RequestedClose: { reason: SelectChangeReason },
-  Picked: { value: SelectValue, reason: SelectChangeReason },
-  Settled: { open: Schema.Boolean }
-})
+export const SelectEvents = eventsSchema(Schema.String)
 
 /**
  * What a `Select` emits.
@@ -475,7 +493,9 @@ export const SelectEvents = UiSchema.TaggedEnum({
  * @category models
  * @since 0.1.0
  */
-export type SelectEvents = typeof SelectEvents.Type
+export type SelectEvents<V extends string = string> = SelectEventsSchema<
+  V
+>["Type"]
 
 /**
  * Where a select's popup is in its transitions: `"starting"` for the
@@ -544,11 +564,11 @@ const SelectModel = Schema.Struct({
 
 type SelectModel = typeof SelectModel.Type
 
-type SelectUpdate = Component.Update<
+type SelectUpdate<V extends string> = Component.Update<
   SelectModel,
   SelectMessage,
-  SelectEvents,
-  SelectProps
+  SelectEvents<V>,
+  SelectProps<V>
 >
 
 const Trigger = Html.ref("SelectTrigger", "button")
@@ -570,8 +590,8 @@ const startOf = (model: SelectModel, props: SelectProps): number => {
   return selected !== -1 ? selected : indexOf(props, model.active)
 }
 
-const open = (
-  $: SelectUpdate,
+const open = <V extends string>(
+  $: SelectUpdate<V>,
   reason: SelectChangeReason,
   method: SelectInteraction,
   key?: string
@@ -605,9 +625,9 @@ const open = (
   }).emit(SelectEvents.RequestedOpen({ reason }))
 }
 
-const dismiss = (
+const dismiss = <V extends string>(
   model: SelectModel,
-  $: SelectUpdate,
+  $: SelectUpdate<V>,
   reason: SelectChangeReason,
   method: SelectInteraction | null,
   focusLeft = false
@@ -623,16 +643,20 @@ const dismiss = (
     )
     : model
 
-const toggle = ($: SelectUpdate, method: SelectInteraction) =>
+const toggle = <V extends string>(
+  $: SelectUpdate<V>,
+  method: SelectInteraction
+) =>
   $.props.disabled === true
     ? $.model
     : $.props.open
     ? dismiss($.model, $, "trigger-press", method)
     : open($, "trigger-press", method)
 
-const pick = (
+const pick = <V extends string>(
   model: SelectModel,
-  $: SelectUpdate,
+  $: SelectUpdate<V>,
+  events: SelectEventsSchema<V>,
   value: string,
   method: SelectInteraction
 ) => {
@@ -647,8 +671,8 @@ const pick = (
   const next = UiStruct.evolve(model, { active: value, pressedItem: false })
   if (props.multiple === true) {
     return $.set(next).emit(
-      SelectEvents.Picked({
-        value: toggled(valuesOf(props), value),
+      events.Picked({
+        value: toggled(valuesOf(props), item.value),
         reason: "item-press"
       })
     )
@@ -658,7 +682,7 @@ const pick = (
     focusLeft: false,
     pressing: false
   })
-    .emit(SelectEvents.Picked({ value, reason: "item-press" }))
+    .emit(events.Picked({ value: item.value, reason: "item-press" }))
     .emit(SelectEvents.RequestedClose({ reason: "item-press" }))
 }
 
@@ -678,7 +702,11 @@ const hover = (model: SelectModel, active: string | null): SelectModel =>
     ? model
     : UiStruct.evolve(model, { active, activeByKey: false })
 
-const typeKey = ($: SelectUpdate, key: string) => {
+const typeKey = <V extends string>(
+  $: SelectUpdate<V>,
+  events: SelectEventsSchema<V>,
+  key: string
+) => {
   const props = $.props
   const { index, state } = Typeahead.step(
     $.model.typeahead,
@@ -696,10 +724,10 @@ const typeKey = ($: SelectUpdate, key: string) => {
   return item === undefined || props.open ||
       valuesOf(props).includes(item.value)
     ? typed
-    : typed.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))
+    : typed.emit(events.Picked({ value: item.value, reason: "none" }))
 }
 
-const focusTrigger = ($: SelectUpdate) =>
+const focusTrigger = <V extends string>($: SelectUpdate<V>) =>
   $.run(HtmlCommand.Focus.make({ ref: Trigger }).pipe(Command.asNoop))
 
 const tolerance = 1
@@ -1319,6 +1347,681 @@ const scrolling =
   "position:relative;max-height:100%;overflow-x:hidden;overflow-y:auto;scrollbar-width:none"
 
 /**
+ * Makes a `Select` whose values have the type of a schema, such as a
+ * `Schema.Literals` union. The `value` prop, the items, the `item` and
+ * `itemIndicator` parts and `Picked` all use that type. `Select` is
+ * `makeSelect({ value: Schema.String })`.
+ *
+ * **Details**
+ *
+ * The schema must encode to a string, since values become DOM ids and form
+ * values. `Picked` carries values of entries in `items`, and autofill picks
+ * only a value that matches one. Call `makeSelect` once at module level,
+ * because each call makes a new component.
+ *
+ * **Example** (A select typed by a literal union)
+ *
+ * ```ts import.meta.vitest
+ * import { UiSchema } from "@effect/ui"
+ * import { Html, HtmlServer } from "@effect/ui/html"
+ * import { makeSelect } from "@effect/ui-kit"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Theme = Schema.Literals(["light", "dark"])
+ * const ThemeSelect = makeSelect({ value: Theme })
+ * const items = [{ value: "light", label: "Light" }, { value: "dark", label: "Dark" }] as const
+ *
+ * const Message = UiSchema.TaggedEnum({
+ *   PickedTheme: { theme: Theme },
+ *   Toggled: { open: Schema.Boolean }
+ * })
+ *
+ * const Settings = Html.component({
+ *   name: "Settings",
+ *   model: Schema.Struct({ theme: Theme, open: Schema.Boolean }),
+ *   message: Message
+ * }).make({
+ *   init: () => ({ theme: "light" as const, open: false }),
+ *   update: {
+ *     PickedTheme: ($, { theme }) => $.evolve({ theme }),
+ *     Toggled: ($, { open }) => $.evolve({ open })
+ *   },
+ *   view: (h, model) =>
+ *     ThemeSelect(h, {
+ *       props: { open: model.open, value: model.theme, items },
+ *       onEmit: {
+ *         // `value` is "light" | "dark" | ReadonlyArray<"light" | "dark"> | null
+ *         Picked: ({ value }) => typeof value === "string" ? Message.PickedTheme({ theme: value }) : undefined,
+ *         RequestedOpen: () => Message.Toggled({ open: true }),
+ *         RequestedClose: () => Message.Toggled({ open: false }),
+ *         Settled: () => undefined
+ *       },
+ *       view: (select) => select.trigger(h.button).children(select.value(h.span))
+ *     })
+ * })
+ *
+ * const { html } = await Effect.runPromise(HtmlServer.renderToHtml(Settings, {}))
+ * if (!html.includes("Light")) throw new Error("the trigger doesn't show the value")
+ * ```
+ *
+ * @stability experimental
+ * @category components
+ * @since 0.1.0
+ */
+export const makeSelect = <V extends string>(
+  options: { readonly value: Schema.Codec<V, string> }
+) => {
+  const events = eventsSchema(options.value)
+  return Html.component({
+    name: "Select",
+    props: propsSchema(options.value),
+    model: SelectModel,
+    message: SelectMessage,
+    events,
+    restore: false,
+    reads: {
+      toolbar: { owner: Toolbar, optional: true }
+    }
+  }).make({
+    init: () => ({
+      mounted: false,
+      started: false,
+      openMethod: null,
+      closeMethod: null,
+      focusLeft: false,
+      active: null,
+      activeByKey: false,
+      typeahead: Typeahead.initial,
+      spaceDown: false,
+      placement: null,
+      fellBack: false,
+      scrollUp: false,
+      scrollDown: false,
+      pressing: false,
+      pressedItem: false,
+      releaseSelected: false,
+      releaseUnselected: false
+    }),
+    update: {
+      PressedTrigger: ($, { pointerType }) => toggle($, methodOf(pointerType)),
+      ReleasedTrigger: ($) => $.evolve({ pressing: false }),
+      ClickedTrigger: ($, { pointerType }) => toggle($, methodOf(pointerType)),
+      PressedTriggerKey: ($, { key }) => {
+        const props = $.props
+        if (props.disabled === true) return $.model
+        if (key === "ArrowDown" || key === "ArrowUp") {
+          return props.open
+            ? $.model
+            : open($, "list-navigation", "keyboard", key)
+        }
+        if (
+          !props.open && (props.readOnly === true || props.multiple === true)
+        ) {
+          return $.model
+        }
+        return typeKey($, events, key)
+      },
+      ClickedLabel: focusTrigger,
+      FocusedInput: focusTrigger,
+      Autofilled: ($, { value }) => {
+        const props = $.props
+        if (
+          props.disabled === true || props.readOnly === true ||
+          props.multiple === true
+        ) return $.model
+        const item = autofillMatch(props.items, value)
+        return !ListNavigation.available(item) ||
+            valuesOf(props).includes(item.value)
+          ? $.model
+          : $.emit(events.Picked({ value: item.value, reason: "none" }))
+      },
+      PressedPopupKey: ($, { key }) => {
+        const props = $.props
+        if (!props.open) return $.model
+        const to = ListNavigation.target(key, {
+          at: indexOf(props, $.model.active),
+          last: props.items.length - 1,
+          orientation: "vertical",
+          loop: "none"
+        })
+        if (to !== undefined) return highlight($.model, props, to)
+        switch (key) {
+          case "Enter":
+            return $.model.active === null
+              ? $.model
+              : pick($.model, $, events, $.model.active, "keyboard")
+          case "Escape":
+            return dismiss($.model, $, "escape-key", "keyboard")
+          case "Tab":
+            return dismiss($.model, $, "focus-out", "keyboard")
+          case " ":
+            return Typeahead.isTyping($.model.typeahead)
+              ? typeKey($, events, key)
+              : $.evolve({ spaceDown: true })
+          default:
+            return typeKey($, events, key)
+        }
+      },
+      ReleasedSpace: ($) => {
+        if (!$.model.spaceDown) return $.model
+        const next = UiStruct.evolve($.model, { spaceDown: false })
+        return $.props.open && $.model.active !== null
+          ? pick(next, $, events, $.model.active, "keyboard")
+          : next
+      },
+      EnteredItem: ($, { value }) => hover($.model, value),
+      LeftItem: ($) => hover($.model, null),
+      PressedItem: ($) => $.evolve({ pressedItem: true }),
+      ReleasedItem: ($, { pointerType, value }) => {
+        if ($.model.pressedItem || !$.props.open) return $.model
+        const selected = valuesOf<string>($.props).includes(value)
+        if (selected ? !$.model.releaseSelected : !$.model.releaseUnselected) {
+          return $.model
+        }
+        return pick($.model, $, events, value, methodOf(pointerType))
+      },
+      ClickedItem: ($, { pointerType, value }) => {
+        const next = UiStruct.evolve($.model, { pressedItem: false })
+        if (!$.props.open) return next
+        return pointerType === "touch" || pointerType === "" ||
+            $.model.pressedItem
+          ? pick(next, $, events, value, methodOf(pointerType))
+          : next
+      },
+      CompletedWaitBeforeResetTyping: ($) =>
+        $.evolve({ typeahead: Typeahead.reset }),
+      ShowedPopup: ($) =>
+        $.evolve(
+          $.props.open
+            ? { mounted: true, closeMethod: null, focusLeft: false }
+            : { mounted: true }
+        ),
+      RenderedFirstFrame: ($) =>
+        $.props.open ? $.evolve({ started: true }) : $.model,
+      FinishedTransition: ($, { open }) => {
+        if (open !== $.props.open) return $.model
+        if (open) return $.emit(events.Settled({ open }))
+        return $.model.mounted && $.props.holdExit !== true
+          ? $.evolve({
+            mounted: false,
+            started: false,
+            fellBack: false,
+            scrollUp: false,
+            scrollDown: false,
+            pressedItem: false
+          }).emit(events.Settled({ open }))
+          : $.model
+      },
+      ChangedPlacement: ($, { placement }) => $.evolve({ placement }),
+      PressedOutside: ($, { pointerType }) =>
+        dismiss($.model, $, "outside-press", methodOf(pointerType)),
+      PressedDismiss: ($) => dismiss($.model, $, "close-press", null),
+      FocusedOutside: ($) => dismiss($.model, $, "focus-out", null, true),
+      FocusedTrigger: ($) =>
+        alignedOf($.model, $.props)
+          ? dismiss($.model, $, "none", null)
+          : $.model,
+      ReleasedPointer: ($, { outside }) => {
+        if (!$.model.pressing) return $.model
+        const next = UiStruct.evolve($.model, { pressing: false })
+        return outside ? dismiss(next, $, "cancel-open", "mouse") : next
+      },
+      ResizedWindow: ($) =>
+        alignedOf($.model, $.props)
+          ? dismiss($.model, $, "window-resize", null)
+          : $.model,
+      FellBack: ($) => $.evolve({ fellBack: true }),
+      ChangedScrollArrows: ($, { down, up }) =>
+        $.evolve({ scrollUp: up, scrollDown: down }),
+      ScrolledByArrow: ($) => hover($.model, null),
+      AllowedRelease: ($) =>
+        $.evolve({ releaseSelected: true, releaseUnselected: true }),
+      DraggedPointer: ($) => $.evolve({ releaseUnselected: true })
+    },
+    parts: (p, model) => {
+      const props = p.props
+      const open = props.open
+      const shown = open || model.mounted
+      const transitionStatus: SelectTransitionStatus = statusOf(model, props)
+      const disabled = props.disabled === true
+      const readOnly = props.readOnly === true
+      const required = props.required === true
+      const multiple = props.multiple === true
+      const arrowsOpen = p.reads.toolbar?.orientation !== "vertical"
+      const values = valuesOf(props)
+      const chosen = new Set(values)
+      const filled = filledOf(props)
+      const aligned = alignedOf(model, props)
+      const topLayer = props.topLayer !== false
+      const modal = topLayer && props.modal !== false
+      const touch = model.openMethod === "touch"
+      const triggerId = props.id ?? p.id("trigger")
+      const labelId = p.id("label")
+      const popupId = p.id("popup")
+      const listId = p.id("list")
+      const arrowId = p.id("arrow")
+      const itemId = (value: string) => p.id("item", value)
+      const groupLabelId = (group: string) => p.id("group-label", group)
+      const tracked = Positioning.trackArgs(props, {
+        side: "bottom",
+        collisionAvoidance: Positioning.dropdownCollisionAvoidance,
+        anchorSelector: idSelector(triggerId),
+        arrowId,
+        leaveCoordinates: aligned
+      })
+      const position = aligned
+        ? {
+          ...tracked,
+          disableAnchorTracking: props.disableAnchorTracking ?? true
+        }
+        : tracked
+      const side = model.placement?.side ?? tracked.options.side
+      const align = model.placement?.align ?? tracked.options.align
+      const shownSide = aligned ? "none" : side
+      const items = new Map<string, SelectItem<V>>(
+        props.items.map((item) => [item.value, item])
+      )
+      const itemOf = (value: string): SelectItem<V> => {
+        const item = items.get(value)
+        if (item === undefined) {
+          throw new Error(
+            "Select: no item in the items prop has the value \"" + value + "\""
+          )
+        }
+        return item
+      }
+      const text = !filled && props.placeholder !== undefined
+        ? props.placeholder
+        : values.map((value) => items.get(value)?.label ?? value).join(", ")
+      const hovers = open && props.highlightItemOnHover !== false
+      const highlighted = model.active
+      let labelled = false
+      let listed = false
+
+      const states = <B extends Attributed<B>>(builder: B): B =>
+        transitionAttrs(builder, open, transitionStatus)
+      const placed = <B extends Attributed<B>>(builder: B): B =>
+        states(builder).attrs({ "data-side": shownSide, "data-align": align })
+
+      const inputs = formInputs(p, {
+        name: props.name,
+        form: props.form,
+        autoComplete: props.autoComplete,
+        required,
+        readOnly,
+        disabled,
+        multiple,
+        values,
+        filled
+      }, {
+        focused: SelectMessage.FocusedInput(),
+        autofilled: (value) => SelectMessage.Autofilled({ value })
+      })
+      const inputsBox = new Html.Element<SelectMessage>("span").attr(
+        "style",
+        "display:contents"
+      )
+
+      const label = p.part("div", (b) => {
+        labelled = true
+        return b.attr("id", labelId).on("click", SelectMessage.ClickedLabel())
+      })
+
+      const trigger = p.part("button", (b) =>
+        b.ref(Trigger)
+          .attrs({
+            id: triggerId,
+            type: "button",
+            role: "combobox",
+            "aria-haspopup": "listbox",
+            "aria-expanded": String(open),
+            "aria-readonly": readOnly ? "true" : undefined,
+            "aria-required": required ? "true" : undefined,
+            "aria-disabled": undefined,
+            "data-popup-open": flag(open),
+            "data-pressed": flag(open),
+            "data-popup-side": shown ? side : undefined,
+            "data-disabled": flag(disabled),
+            "data-readonly": flag(readOnly),
+            "data-required": flag(required),
+            "data-placeholder": flag(!filled)
+          })
+          .disabled(disabled)
+          .on("mousedown", ({ button, pointerType }) =>
+            button === 0 && pointerType !== "touch"
+              ? SelectMessage.PressedTrigger({ pointerType })
+              : undefined)
+          .on("mouseup", SelectMessage.ReleasedTrigger())
+          .on("click", ({ pointerType }) =>
+            pointerType === "" || pointerType === "touch"
+              ? SelectMessage.ClickedTrigger({ pointerType })
+              : undefined)
+          .on(
+            "keydown",
+            (event) =>
+              event.composing
+                ? undefined
+                : (arrowsOpen &&
+                    (event.key === "ArrowDown" || event.key === "ArrowUp")) ||
+                    (Typeahead.isPrintable(event) &&
+                      (event.key !== " " ||
+                        Typeahead.isTyping(model.typeahead)))
+                ? SelectMessage.PressedTriggerKey({ key: event.key })
+                : undefined,
+            { preventDefault: true }
+          )
+          .forward((node) => {
+            const named = node
+              .attrs({
+                "aria-controls": open ? (listed ? listId : popupId) : undefined,
+                "aria-labelledby": node.elementAttrs["aria-labelledby"] ??
+                  (labelled ? labelId : undefined)
+              })
+            return inputs.length === 0
+              ? named
+              : inputsBox.children(named, ...inputs)
+          }))
+
+      const value = p.part(
+        "span",
+        (b) =>
+          b.attrs({
+            "data-select-value": "",
+            "data-placeholder": flag(!filled)
+          })
+            .forward((node) => fillValue(node, text))
+      )
+
+      const icon = p.part(
+        "span",
+        (b) => b.attrs({ "aria-hidden": "true", "data-popup-open": flag(open) })
+      )
+
+      const backdrop = p.part(
+        "div",
+        (b) =>
+          layered(states(b).attr("role", "presentation"), topLayer, shown)
+            .forward(ownStyle(backdropStyle(topLayer, open)))
+      )
+
+      const dismissPart = p.part(
+        "span",
+        (b) =>
+          b.attrs(dismissAttrs(props.dismissLabel, open))
+            .on("click", SelectMessage.PressedDismiss())
+      )
+
+      const positionerStyle = aligned
+        ? alignedBox
+        : Positioning.positionerStyle(tracked.positionMethod)
+      const positioner = p.part("div", (b) => {
+        const decorated = layered(
+          placed(b).attrs({
+            role: "presentation",
+            "data-anchor-hidden": flag(
+              shown && !aligned && model.placement?.anchorHidden
+            )
+          }),
+          topLayer,
+          shown
+        )
+          .forward((node) => {
+            const styled = node.attr(
+              "style",
+              withStyle(node.elementAttrs.style, positionerStyle)
+            )
+            return modal ? styled.children(dismissPart(dismissSpan())) : styled
+          })
+        const blocked = modal
+          ? decorated.children(open ? blocking.open : blocking.closed)
+          : decorated
+        if (!shown) return blocked
+        const alignItem = props.items.find((item) => chosen.has(item.value)) ??
+          props.items[0]
+        return blocked.onMount(
+          TrackSelect({
+            position,
+            open,
+            mounted: model.mounted,
+            started: model.started,
+            holdExit: props.holdExit === true,
+            aligned,
+            lock: open && (modal || aligned),
+            modal,
+            touch,
+            active: open && highlighted !== null && items.has(highlighted)
+              ? itemId(highlighted)
+              : null,
+            scroll: model.activeByKey,
+            pressing: model.pressing,
+            finalFocus: props.finalFocus !== false,
+            focusLeft: model.focusLeft,
+            closeMethod: model.closeMethod,
+            triggerId,
+            popupId,
+            listId,
+            alignId: alignItem === undefined ? null : itemId(alignItem.value)
+          })
+        )
+      })
+
+      const listbox = <B extends Attributed<B>>(builder: B): B =>
+        builder
+          .attrs({
+            role: "listbox",
+            "aria-multiselectable": multiple ? "true" : undefined,
+            "aria-readonly": readOnly ? "true" : undefined
+          })
+      const named = <B extends Attributed<B> & Named>(node: B): B =>
+        fallbackLabelledBy(node, labelled ? labelId : undefined)
+
+      const popup = p.part("div", (b) =>
+        placed(b)
+          .attrs({ id: popupId, tabindex: "-1" })
+          .on(
+            "keydown",
+            (event) =>
+              event.composing
+                ? undefined
+                : event.key === "ArrowDown" || event.key === "ArrowUp" ||
+                    event.key === "Home" || event.key === "End" ||
+                    event.key === "Enter" || event.key === "Escape" ||
+                    (event.key === "Tab" && event.shift) ||
+                    Typeahead.isPrintable(event)
+                ? SelectMessage.PressedPopupKey({ key: event.key })
+                : undefined,
+            { preventDefault: true }
+          )
+          .on("keyup", ({ key }) =>
+            key === " " ? SelectMessage.ReleasedSpace() : undefined)
+          .forward((node) => {
+            const own = listed
+              ? node.attr("role", "presentation")
+              : named(listbox(node))
+            return aligned && !listed
+              ? own.attr("style", withStyle(node.elementAttrs.style, scrolling))
+              : own
+          }))
+
+      const list = p.part("div", (b) => {
+        listed = true
+        const own = listbox(b).attr("id", listId)
+        return aligned
+          ? own.forward((node) =>
+            named(node).attr(
+              "style",
+              withStyle(node.elementAttrs.style, scrolling)
+            )
+          )
+          : own.forward(named)
+      })
+
+      const arrowStyle = Positioning.arrowStyle(side)
+      const arrowPart = p.part("div", (b) =>
+        placed(b)
+          .attrs({
+            id: arrowId,
+            "aria-hidden": "true",
+            "data-uncentered": flag(model.placement?.arrowUncentered)
+          })
+          .forward((node) =>
+            node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))
+          ))
+      const arrow = View.wrapPart(
+        arrowPart,
+        <B extends View.PartTarget<"div">>(
+          element: B
+        ): ReturnType<B["attr"]> | undefined => {
+          const applied = arrowPart(element)
+          return aligned ? undefined : applied
+        }
+      )
+
+      const itemPart = p.part("div", (b, value: V) => {
+        const option = itemOf(value)
+        const selected = chosen.has(value)
+        const active = highlighted === value
+        const off = option.disabled === true
+        return b
+          .attrs({
+            id: itemId(value),
+            role: "option",
+            "aria-selected": String(selected),
+            "aria-disabled": off ? "true" : undefined,
+            tabindex: open && active ? "0" : "-1",
+            "data-selected": flag(selected),
+            "data-highlighted": flag(active),
+            "data-disabled": flag(off)
+          })
+          .on(
+            "mouseenter",
+            () => hovers ? SelectMessage.EnteredItem({ value }) : undefined
+          )
+          .on("mouseleave", () => hovers ? SelectMessage.LeftItem() : undefined)
+          .on("mousedown", SelectMessage.PressedItem())
+          .on(
+            "mouseup",
+            ({ pointerType }) =>
+              pointerType === "touch"
+                ? undefined
+                : SelectMessage.ReleasedItem({ value, pointerType })
+          )
+          .on(
+            "click",
+            ({ pointerType }) =>
+              SelectMessage.ClickedItem({ value, pointerType })
+          )
+      })
+      const item = valued(itemPart)
+
+      const itemText = p.part("div", (b) => b.attr("data-select-item-text", ""))
+
+      const indicatorPart = p.part("span", (b) => b.attr("aria-hidden", "true"))
+      const itemIndicator = View.wrapPart(
+        indicatorPart,
+        <B extends View.PartTarget<"span">>(
+          { element, keepMounted, value }: {
+            readonly element: B
+            readonly value: V
+            readonly keepMounted?: boolean | undefined
+          }
+        ): ReturnType<B["attr"]> | undefined => {
+          const applied = indicatorPart(element)
+          return chosen.has(itemOf(value).value) || keepMounted === true
+            ? applied
+            : undefined
+        }
+      )
+
+      const group = grouped(
+        p.part(
+          "div",
+          (b, key: string) =>
+            b.attrs({ role: "group", "aria-labelledby": groupLabelId(key) })
+        )
+      )
+      const groupLabel = grouped(
+        p.part(
+          "div",
+          (b, key: string) =>
+            b.attrs({ id: groupLabelId(key), "aria-hidden": "true" })
+        )
+      )
+      const separator = p.part("div", (b) => separatorAttrs(b, "horizontal"))
+
+      const scrollArrow = (direction: "up" | "down") => {
+        const visible =
+          (direction === "up" ? model.scrollUp : model.scrollDown) && !touch &&
+          shown
+        const part = p.part("div", (b) =>
+          b.attrs({
+            "aria-hidden": "true",
+            "data-select-scroll-arrow": direction,
+            "data-direction": direction,
+            "data-side": shownSide,
+            "data-visible": flag(visible)
+          })
+            .forward((node) =>
+              node.attr(
+                "style",
+                withStyle(node.elementAttrs.style, "position:absolute")
+              )
+            ))
+        return View.wrapPart(
+          part,
+          <B extends View.PartTarget<"div">>(
+            { element, keepMounted }: {
+              readonly element: B
+              readonly keepMounted?: boolean | undefined
+            }
+          ): ReturnType<B["attr"]> | undefined => {
+            const applied = part(element)
+            return visible || keepMounted === true ? applied : undefined
+          }
+        )
+      }
+
+      const finalFocus = p.part((b) => b.attr("data-final-focus", popupId))
+
+      return {
+        open,
+        mounted: shown,
+        transitionStatus,
+        selected: props.value ?? null,
+        placeholder: !filled,
+        disabled,
+        readOnly,
+        required,
+        multiple,
+        side: shownSide,
+        align,
+        alignedWithTrigger: shown && aligned,
+        highlighted,
+        openMethod: open ? model.openMethod : null,
+        label,
+        trigger,
+        value,
+        icon,
+        backdrop,
+        positioner,
+        popup,
+        list,
+        arrow,
+        item,
+        itemText,
+        itemIndicator,
+        group,
+        groupLabel,
+        separator,
+        scrollUpArrow: scrollArrow("up"),
+        scrollDownArrow: scrollArrow("down"),
+        finalFocus
+      }
+    }
+  })
+}
+
+/**
  * A select: a button that opens a list of options, the selected one shown on
  * the button.
  *
@@ -1386,601 +2089,4 @@ const scrolling =
  * @category components
  * @since 0.1.0
  */
-export const Select = Html.component({
-  name: "Select",
-  props: SelectProps,
-  model: SelectModel,
-  message: SelectMessage,
-  events: SelectEvents,
-  restore: false,
-  reads: {
-    toolbar: { owner: Toolbar, optional: true }
-  }
-}).make({
-  init: () => ({
-    mounted: false,
-    started: false,
-    openMethod: null,
-    closeMethod: null,
-    focusLeft: false,
-    active: null,
-    activeByKey: false,
-    typeahead: Typeahead.initial,
-    spaceDown: false,
-    placement: null,
-    fellBack: false,
-    scrollUp: false,
-    scrollDown: false,
-    pressing: false,
-    pressedItem: false,
-    releaseSelected: false,
-    releaseUnselected: false
-  }),
-  update: {
-    PressedTrigger: ($, { pointerType }) => toggle($, methodOf(pointerType)),
-    ReleasedTrigger: ($) => $.evolve({ pressing: false }),
-    ClickedTrigger: ($, { pointerType }) => toggle($, methodOf(pointerType)),
-    PressedTriggerKey: ($, { key }) => {
-      const props = $.props
-      if (props.disabled === true) return $.model
-      if (key === "ArrowDown" || key === "ArrowUp") {
-        return props.open
-          ? $.model
-          : open($, "list-navigation", "keyboard", key)
-      }
-      if (!props.open && (props.readOnly === true || props.multiple === true)) {
-        return $.model
-      }
-      return typeKey($, key)
-    },
-    ClickedLabel: focusTrigger,
-    FocusedInput: focusTrigger,
-    Autofilled: ($, { value }) => {
-      const props = $.props
-      if (
-        props.disabled === true || props.readOnly === true ||
-        props.multiple === true
-      ) return $.model
-      const item = autofillMatch(props.items, value)
-      return !ListNavigation.available(item) ||
-          valuesOf(props).includes(item.value)
-        ? $.model
-        : $.emit(SelectEvents.Picked({ value: item.value, reason: "none" }))
-    },
-    PressedPopupKey: ($, { key }) => {
-      const props = $.props
-      if (!props.open) return $.model
-      const to = ListNavigation.target(key, {
-        at: indexOf(props, $.model.active),
-        last: props.items.length - 1,
-        orientation: "vertical",
-        loop: "none"
-      })
-      if (to !== undefined) return highlight($.model, props, to)
-      switch (key) {
-        case "Enter":
-          return $.model.active === null
-            ? $.model
-            : pick($.model, $, $.model.active, "keyboard")
-        case "Escape":
-          return dismiss($.model, $, "escape-key", "keyboard")
-        case "Tab":
-          return dismiss($.model, $, "focus-out", "keyboard")
-        case " ":
-          return Typeahead.isTyping($.model.typeahead)
-            ? typeKey($, key)
-            : $.evolve({ spaceDown: true })
-        default:
-          return typeKey($, key)
-      }
-    },
-    ReleasedSpace: ($) => {
-      if (!$.model.spaceDown) return $.model
-      const next = UiStruct.evolve($.model, { spaceDown: false })
-      return $.props.open && $.model.active !== null
-        ? pick(next, $, $.model.active, "keyboard")
-        : next
-    },
-    EnteredItem: ($, { value }) => hover($.model, value),
-    LeftItem: ($) => hover($.model, null),
-    PressedItem: ($) => $.evolve({ pressedItem: true }),
-    ReleasedItem: ($, { pointerType, value }) => {
-      if ($.model.pressedItem || !$.props.open) return $.model
-      const selected = valuesOf($.props).includes(value)
-      if (selected ? !$.model.releaseSelected : !$.model.releaseUnselected) {
-        return $.model
-      }
-      return pick($.model, $, value, methodOf(pointerType))
-    },
-    ClickedItem: ($, { pointerType, value }) => {
-      const next = UiStruct.evolve($.model, { pressedItem: false })
-      if (!$.props.open) return next
-      return pointerType === "touch" || pointerType === "" ||
-          $.model.pressedItem
-        ? pick(next, $, value, methodOf(pointerType))
-        : next
-    },
-    CompletedWaitBeforeResetTyping: ($) =>
-      $.evolve({ typeahead: Typeahead.reset }),
-    ShowedPopup: ($) =>
-      $.evolve(
-        $.props.open
-          ? { mounted: true, closeMethod: null, focusLeft: false }
-          : { mounted: true }
-      ),
-    RenderedFirstFrame: ($) =>
-      $.props.open ? $.evolve({ started: true }) : $.model,
-    FinishedTransition: ($, { open }) => {
-      if (open !== $.props.open) return $.model
-      if (open) return $.emit(SelectEvents.Settled({ open }))
-      return $.model.mounted && $.props.holdExit !== true
-        ? $.evolve({
-          mounted: false,
-          started: false,
-          fellBack: false,
-          scrollUp: false,
-          scrollDown: false,
-          pressedItem: false
-        }).emit(SelectEvents.Settled({ open }))
-        : $.model
-    },
-    ChangedPlacement: ($, { placement }) => $.evolve({ placement }),
-    PressedOutside: ($, { pointerType }) =>
-      dismiss($.model, $, "outside-press", methodOf(pointerType)),
-    PressedDismiss: ($) => dismiss($.model, $, "close-press", null),
-    FocusedOutside: ($) => dismiss($.model, $, "focus-out", null, true),
-    FocusedTrigger: ($) =>
-      alignedOf($.model, $.props) ? dismiss($.model, $, "none", null) : $.model,
-    ReleasedPointer: ($, { outside }) => {
-      if (!$.model.pressing) return $.model
-      const next = UiStruct.evolve($.model, { pressing: false })
-      return outside ? dismiss(next, $, "cancel-open", "mouse") : next
-    },
-    ResizedWindow: ($) =>
-      alignedOf($.model, $.props)
-        ? dismiss($.model, $, "window-resize", null)
-        : $.model,
-    FellBack: ($) => $.evolve({ fellBack: true }),
-    ChangedScrollArrows: ($, { down, up }) =>
-      $.evolve({ scrollUp: up, scrollDown: down }),
-    ScrolledByArrow: ($) => hover($.model, null),
-    AllowedRelease: ($) =>
-      $.evolve({ releaseSelected: true, releaseUnselected: true }),
-    DraggedPointer: ($) => $.evolve({ releaseUnselected: true })
-  },
-  parts: (p, model) => {
-    const props = p.props
-    const open = props.open
-    const shown = open || model.mounted
-    const transitionStatus: SelectTransitionStatus = statusOf(model, props)
-    const disabled = props.disabled === true
-    const readOnly = props.readOnly === true
-    const required = props.required === true
-    const multiple = props.multiple === true
-    const arrowsOpen = p.reads.toolbar?.orientation !== "vertical"
-    const values = valuesOf(props)
-    const chosen = new Set(values)
-    const filled = filledOf(props)
-    const aligned = alignedOf(model, props)
-    const topLayer = props.topLayer !== false
-    const modal = topLayer && props.modal !== false
-    const touch = model.openMethod === "touch"
-    const triggerId = props.id ?? p.id("trigger")
-    const labelId = p.id("label")
-    const popupId = p.id("popup")
-    const listId = p.id("list")
-    const arrowId = p.id("arrow")
-    const itemId = (value: string) => p.id("item", value)
-    const groupLabelId = (group: string) => p.id("group-label", group)
-    const tracked = Positioning.trackArgs(props, {
-      side: "bottom",
-      collisionAvoidance: Positioning.dropdownCollisionAvoidance,
-      anchorSelector: idSelector(triggerId),
-      arrowId,
-      leaveCoordinates: aligned
-    })
-    const position = aligned
-      ? {
-        ...tracked,
-        disableAnchorTracking: props.disableAnchorTracking ?? true
-      }
-      : tracked
-    const side = model.placement?.side ?? tracked.options.side
-    const align = model.placement?.align ?? tracked.options.align
-    const shownSide = aligned ? "none" : side
-    const items = new Map(
-      props.items.map((item) => [item.value, item] as const)
-    )
-    const itemOf = (value: string): SelectItem => {
-      const item = items.get(value)
-      if (item === undefined) {
-        throw new Error(
-          "Select: no item in the items prop has the value \"" + value + "\""
-        )
-      }
-      return item
-    }
-    const text = !filled && props.placeholder !== undefined
-      ? props.placeholder
-      : values.map((value) => items.get(value)?.label ?? value).join(", ")
-    const hovers = open && props.highlightItemOnHover !== false
-    const highlighted = model.active
-    let labelled = false
-    let listed = false
-
-    const states = <B extends Attributed<B>>(builder: B): B =>
-      transitionAttrs(builder, open, transitionStatus)
-    const placed = <B extends Attributed<B>>(builder: B): B =>
-      states(builder).attrs({ "data-side": shownSide, "data-align": align })
-
-    const inputs = formInputs(p, {
-      name: props.name,
-      form: props.form,
-      autoComplete: props.autoComplete,
-      required,
-      readOnly,
-      disabled,
-      multiple,
-      values,
-      filled
-    }, {
-      focused: SelectMessage.FocusedInput(),
-      autofilled: (value) => SelectMessage.Autofilled({ value })
-    })
-    const inputsBox = new Html.Element<SelectMessage>("span").attr(
-      "style",
-      "display:contents"
-    )
-
-    const label = p.part("div", (b) => {
-      labelled = true
-      return b.attr("id", labelId).on("click", SelectMessage.ClickedLabel())
-    })
-
-    const trigger = p.part("button", (b) =>
-      b.ref(Trigger)
-        .attrs({
-          id: triggerId,
-          type: "button",
-          role: "combobox",
-          "aria-haspopup": "listbox",
-          "aria-expanded": String(open),
-          "aria-readonly": readOnly ? "true" : undefined,
-          "aria-required": required ? "true" : undefined,
-          "aria-disabled": undefined,
-          "data-popup-open": flag(open),
-          "data-pressed": flag(open),
-          "data-popup-side": shown ? side : undefined,
-          "data-disabled": flag(disabled),
-          "data-readonly": flag(readOnly),
-          "data-required": flag(required),
-          "data-placeholder": flag(!filled)
-        })
-        .disabled(disabled)
-        .on("mousedown", ({ button, pointerType }) =>
-          button === 0 && pointerType !== "touch"
-            ? SelectMessage.PressedTrigger({ pointerType })
-            : undefined)
-        .on("mouseup", SelectMessage.ReleasedTrigger())
-        .on("click", ({ pointerType }) =>
-          pointerType === "" || pointerType === "touch"
-            ? SelectMessage.ClickedTrigger({ pointerType })
-            : undefined)
-        .on(
-          "keydown",
-          (event) =>
-            event.composing
-              ? undefined
-              : (arrowsOpen &&
-                  (event.key === "ArrowDown" || event.key === "ArrowUp")) ||
-                  (Typeahead.isPrintable(event) &&
-                    (event.key !== " " || Typeahead.isTyping(model.typeahead)))
-              ? SelectMessage.PressedTriggerKey({ key: event.key })
-              : undefined,
-          { preventDefault: true }
-        )
-        .forward((node) => {
-          const named = node
-            .attrs({
-              "aria-controls": open ? (listed ? listId : popupId) : undefined,
-              "aria-labelledby": node.elementAttrs["aria-labelledby"] ??
-                (labelled ? labelId : undefined)
-            })
-          return inputs.length === 0
-            ? named
-            : inputsBox.children(named, ...inputs)
-        }))
-
-    const value = p.part(
-      "span",
-      (b) =>
-        b.attrs({ "data-select-value": "", "data-placeholder": flag(!filled) })
-          .forward((node) => fillValue(node, text))
-    )
-
-    const icon = p.part(
-      "span",
-      (b) => b.attrs({ "aria-hidden": "true", "data-popup-open": flag(open) })
-    )
-
-    const backdrop = p.part(
-      "div",
-      (b) =>
-        layered(states(b).attr("role", "presentation"), topLayer, shown)
-          .forward(ownStyle(backdropStyle(topLayer, open)))
-    )
-
-    const dismissPart = p.part(
-      "span",
-      (b) =>
-        b.attrs(dismissAttrs(props.dismissLabel, open))
-          .on("click", SelectMessage.PressedDismiss())
-    )
-
-    const positionerStyle = aligned
-      ? alignedBox
-      : Positioning.positionerStyle(tracked.positionMethod)
-    const positioner = p.part("div", (b) => {
-      const decorated = layered(
-        placed(b).attrs({
-          role: "presentation",
-          "data-anchor-hidden": flag(
-            shown && !aligned && model.placement?.anchorHidden
-          )
-        }),
-        topLayer,
-        shown
-      )
-        .forward((node) => {
-          const styled = node.attr(
-            "style",
-            withStyle(node.elementAttrs.style, positionerStyle)
-          )
-          return modal ? styled.children(dismissPart(dismissSpan())) : styled
-        })
-      const blocked = modal
-        ? decorated.children(open ? blocking.open : blocking.closed)
-        : decorated
-      if (!shown) return blocked
-      const alignItem = props.items.find((item) => chosen.has(item.value)) ??
-        props.items[0]
-      return blocked.onMount(
-        TrackSelect({
-          position,
-          open,
-          mounted: model.mounted,
-          started: model.started,
-          holdExit: props.holdExit === true,
-          aligned,
-          lock: open && (modal || aligned),
-          modal,
-          touch,
-          active: open && highlighted !== null && items.has(highlighted)
-            ? itemId(highlighted)
-            : null,
-          scroll: model.activeByKey,
-          pressing: model.pressing,
-          finalFocus: props.finalFocus !== false,
-          focusLeft: model.focusLeft,
-          closeMethod: model.closeMethod,
-          triggerId,
-          popupId,
-          listId,
-          alignId: alignItem === undefined ? null : itemId(alignItem.value)
-        })
-      )
-    })
-
-    const listbox = <B extends Attributed<B>>(builder: B): B =>
-      builder
-        .attrs({
-          role: "listbox",
-          "aria-multiselectable": multiple ? "true" : undefined,
-          "aria-readonly": readOnly ? "true" : undefined
-        })
-    const named = <B extends Attributed<B> & Named>(node: B): B =>
-      fallbackLabelledBy(node, labelled ? labelId : undefined)
-
-    const popup = p.part("div", (b) =>
-      placed(b)
-        .attrs({ id: popupId, tabindex: "-1" })
-        .on(
-          "keydown",
-          (event) =>
-            event.composing
-              ? undefined
-              : event.key === "ArrowDown" || event.key === "ArrowUp" ||
-                  event.key === "Home" || event.key === "End" ||
-                  event.key === "Enter" || event.key === "Escape" ||
-                  (event.key === "Tab" && event.shift) ||
-                  Typeahead.isPrintable(event)
-              ? SelectMessage.PressedPopupKey({ key: event.key })
-              : undefined,
-          { preventDefault: true }
-        )
-        .on("keyup", ({ key }) =>
-          key === " " ? SelectMessage.ReleasedSpace() : undefined)
-        .forward((node) => {
-          const own = listed
-            ? node.attr("role", "presentation")
-            : named(listbox(node))
-          return aligned && !listed
-            ? own.attr("style", withStyle(node.elementAttrs.style, scrolling))
-            : own
-        }))
-
-    const list = p.part("div", (b) => {
-      listed = true
-      const own = listbox(b).attr("id", listId)
-      return aligned
-        ? own.forward((node) =>
-          named(node).attr(
-            "style",
-            withStyle(node.elementAttrs.style, scrolling)
-          )
-        )
-        : own.forward(named)
-    })
-
-    const arrowStyle = Positioning.arrowStyle(side)
-    const arrowPart = p.part("div", (b) =>
-      placed(b)
-        .attrs({
-          id: arrowId,
-          "aria-hidden": "true",
-          "data-uncentered": flag(model.placement?.arrowUncentered)
-        })
-        .forward((node) =>
-          node.attr("style", withStyle(node.elementAttrs.style, arrowStyle))
-        ))
-    const arrow = View.wrapPart(
-      arrowPart,
-      <B extends View.PartTarget<"div">>(
-        element: B
-      ): ReturnType<B["attr"]> | undefined => {
-        const applied = arrowPart(element)
-        return aligned ? undefined : applied
-      }
-    )
-
-    const itemPart = p.part("div", (b, value: string) => {
-      const option = itemOf(value)
-      const selected = chosen.has(value)
-      const active = highlighted === value
-      const off = option.disabled === true
-      return b
-        .attrs({
-          id: itemId(value),
-          role: "option",
-          "aria-selected": String(selected),
-          "aria-disabled": off ? "true" : undefined,
-          tabindex: open && active ? "0" : "-1",
-          "data-selected": flag(selected),
-          "data-highlighted": flag(active),
-          "data-disabled": flag(off)
-        })
-        .on(
-          "mouseenter",
-          () => hovers ? SelectMessage.EnteredItem({ value }) : undefined
-        )
-        .on("mouseleave", () => hovers ? SelectMessage.LeftItem() : undefined)
-        .on("mousedown", SelectMessage.PressedItem())
-        .on(
-          "mouseup",
-          ({ pointerType }) =>
-            pointerType === "touch"
-              ? undefined
-              : SelectMessage.ReleasedItem({ value, pointerType })
-        )
-        .on(
-          "click",
-          ({ pointerType }) => SelectMessage.ClickedItem({ value, pointerType })
-        )
-    })
-    const item = valued(itemPart)
-
-    const itemText = p.part("div", (b) => b.attr("data-select-item-text", ""))
-
-    const indicatorPart = p.part("span", (b) => b.attr("aria-hidden", "true"))
-    const itemIndicator = View.wrapPart(
-      indicatorPart,
-      <B extends View.PartTarget<"span">>(
-        { element, keepMounted, value }: {
-          readonly element: B
-          readonly value: string
-          readonly keepMounted?: boolean | undefined
-        }
-      ): ReturnType<B["attr"]> | undefined => {
-        const applied = indicatorPart(element)
-        return chosen.has(itemOf(value).value) || keepMounted === true
-          ? applied
-          : undefined
-      }
-    )
-
-    const group = grouped(
-      p.part(
-        "div",
-        (b, key: string) =>
-          b.attrs({ role: "group", "aria-labelledby": groupLabelId(key) })
-      )
-    )
-    const groupLabel = grouped(
-      p.part(
-        "div",
-        (b, key: string) =>
-          b.attrs({ id: groupLabelId(key), "aria-hidden": "true" })
-      )
-    )
-    const separator = p.part("div", (b) => separatorAttrs(b, "horizontal"))
-
-    const scrollArrow = (direction: "up" | "down") => {
-      const visible =
-        (direction === "up" ? model.scrollUp : model.scrollDown) && !touch &&
-        shown
-      const part = p.part("div", (b) =>
-        b.attrs({
-          "aria-hidden": "true",
-          "data-select-scroll-arrow": direction,
-          "data-direction": direction,
-          "data-side": shownSide,
-          "data-visible": flag(visible)
-        })
-          .forward((node) =>
-            node.attr(
-              "style",
-              withStyle(node.elementAttrs.style, "position:absolute")
-            )
-          ))
-      return View.wrapPart(
-        part,
-        <B extends View.PartTarget<"div">>(
-          { element, keepMounted }: {
-            readonly element: B
-            readonly keepMounted?: boolean | undefined
-          }
-        ): ReturnType<B["attr"]> | undefined => {
-          const applied = part(element)
-          return visible || keepMounted === true ? applied : undefined
-        }
-      )
-    }
-
-    const finalFocus = p.part((b) => b.attr("data-final-focus", popupId))
-
-    return {
-      open,
-      mounted: shown,
-      transitionStatus,
-      selected: props.value ?? null,
-      placeholder: !filled,
-      disabled,
-      readOnly,
-      required,
-      multiple,
-      side: shownSide,
-      align,
-      alignedWithTrigger: shown && aligned,
-      highlighted,
-      openMethod: open ? model.openMethod : null,
-      label,
-      trigger,
-      value,
-      icon,
-      backdrop,
-      positioner,
-      popup,
-      list,
-      arrow,
-      item,
-      itemText,
-      itemIndicator,
-      group,
-      groupLabel,
-      separator,
-      scrollUpArrow: scrollArrow("up"),
-      scrollDownArrow: scrollArrow("down"),
-      finalFocus
-    }
-  }
-})
+export const Select = makeSelect({ value: Schema.String })
