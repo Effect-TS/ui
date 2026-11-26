@@ -187,7 +187,7 @@ const Provider = Html.component({
   }),
   message: ProviderMessage,
   shares: {
-    value: (model) => ({ open: model.open }),
+    value: ({ model }) => ({ open: model.open }),
     receives: ["Touch", "Open"]
   }
 }).make({

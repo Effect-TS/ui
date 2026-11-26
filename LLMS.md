@@ -606,7 +606,7 @@ consumer refuses to, because it doesn't run the component's `update`.
 
 ### Shared state
 
-A headless component with `shares: (model, props, reads) => value` owns shared
+A headless component with `shares: ({ model, props, reads }) => value` owns shared
 state: every component in its `view` closure, at any depth, can read the
 value. An owner with no parts of its own can omit `parts` in `make`; its
 `view` closure receives `{}`. A reader lists the owners it reads in
@@ -655,10 +655,10 @@ entry is `optional: true`, and the component must have `shares` itself. Write
 `shares` before `reads`, so `report` and `onChange` are typed by it. In a
 `Scene`, the component itself is the owner: `s.shared(Menu, value)`.
 
-`shares` gets the component's `reads` as a third argument, so an owner can
-share what it derives from the owners above it. A nested fieldset is disabled
-while the one around it is, and its fields read only the nearest fieldset:
-`value: (_, props, reads) => ({ disabled: props.disabled || reads.parent?.disabled === true })`.
+`shares` takes `{ model, props, reads }`, so an owner can share what it derives
+from the owners above it. A nested fieldset is disabled while the one around it
+is, and its fields read only the nearest fieldset:
+`value: ({ props, reads }) => ({ disabled: props.disabled || reads.parent?.disabled === true })`.
 A value that reads its own kind would refer to its own type, so give `shares`
 a `schema` or annotate what it returns.
 

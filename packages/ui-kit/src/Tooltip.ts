@@ -623,7 +623,7 @@ export const TooltipProvider = Html.component({
   model: TooltipProviderModel,
   message: TooltipProviderMessage,
   shares: {
-    value: (model) => ({
+    value: ({ model }) => ({
       open: model.open,
       instant: model.instant,
       turns: model.turns,

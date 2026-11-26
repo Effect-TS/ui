@@ -196,7 +196,7 @@ export const ModalProvider = Html.component({
   message: ModalProviderMessage,
 
   shares: {
-    value: (model) => ({ open: model.open }),
+    value: ({ model }) => ({ open: model.open }),
     receives: ["RequestedOpen", "RequestedClose"]
   },
 

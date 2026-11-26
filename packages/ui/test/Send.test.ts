@@ -12,7 +12,7 @@ const Log = Component.define({
   name: "Log",
   model: Schema.Array(Schema.String),
   message: LogMessage,
-  shares: { value: (ids) => ids, receives: ["Add"] }
+  shares: { value: ({ model: ids }) => ids, receives: ["Add"] }
 }).make({
   init: () => [],
   update: ($, { id }) => [...$.model, id],

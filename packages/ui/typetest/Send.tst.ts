@@ -16,7 +16,10 @@ const Editor = Component.define({
   name: "Editor",
   model: Schema.String,
   message: EditorMessage,
-  shares: { value: (text) => ({ text }), receives: ["Clear", "Focus"] }
+  shares: {
+    value: ({ model: text }) => ({ text }),
+    receives: ["Clear", "Focus"]
+  }
 }).make({
   init: () => "",
   update: ($, message) =>
@@ -149,7 +152,7 @@ const NestDef = Component.define({
   name: "Nest",
   model: Schema.Number,
   message: NestMessage,
-  shares: { value: (picked) => picked, receives: ["Picked"] },
+  shares: { value: ({ model: picked }) => picked, receives: ["Picked"] },
   reads: { parent: { owner: "self", optional: true } }
 })
 
@@ -157,7 +160,7 @@ const FlatDef = Component.define({
   name: "Flat",
   model: Schema.Number,
   message: NestMessage,
-  shares: { value: (picked) => picked, receives: ["Picked"] }
+  shares: { value: ({ model: picked }) => picked, receives: ["Picked"] }
 })
 
 describe("$.send to self", () => {

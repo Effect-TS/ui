@@ -58,7 +58,7 @@ const Group = Component.define({
   model: Schema.Struct({ on: Schema.Boolean, picks: Schema.Number }),
   message: GroupMessage,
   shares: {
-    value: (model) => model,
+    value: ({ model }) => model,
     receives: ["Picked"],
     collects: {
       schema: Schema.Boolean,

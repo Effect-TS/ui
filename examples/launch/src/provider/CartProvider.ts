@@ -13,7 +13,7 @@ export const CartProvider = Html.component({
   // value is what the Components inside the Provider read. receives
   // lists the Messages they may send it with $.send.
   shares: {
-    value: (model) => ({ count: model.count }),
+    value: ({ model }) => ({ count: model.count }),
     receives: ["RequestedAddItem"]
   }
 }).make({

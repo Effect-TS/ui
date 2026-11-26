@@ -308,7 +308,7 @@ export const Accordion = Html.component({
   message: AccordionMessage,
   events: AccordionEvents,
   shares: {
-    value: (_model, props) => resolved(props),
+    value: ({ props }) => resolved(props),
     schema: AccordionShared,
     receives: ["ToggledItem"]
   }

@@ -15,7 +15,7 @@ const Provider = Component.define({
   model: Schema.Struct({ open: Schema.Boolean, instant: Schema.Boolean }),
   message: ProviderMessage,
   shares: {
-    value: (model) => ({ open: model.open, instant: model.instant }),
+    value: ({ model }) => ({ open: model.open, instant: model.instant }),
     receives: ["Completed"],
     collects: {
       schema: Schema.Boolean,
@@ -33,7 +33,7 @@ const Plain = Component.define({
   name: "Plain",
   model: Schema.Null,
   message: Schema.Never,
-  shares: (model) => ({ model })
+  shares: ({ model }) => ({ model })
 }).make({
   init: () => null,
   update: ($) => $.model,

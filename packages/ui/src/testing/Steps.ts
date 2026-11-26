@@ -364,7 +364,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    *
    * Without it, a reader sees the value of the nearest `owner` in the
    * scene's own view, or else, for an `optional` read, `undefined`, and
-   * for a required one `shares(init(props).model, props)` with no props
+   * for a required one `shares({ model: init(props).model, props, reads })` with no props
    * when every prop of `owner` is optional. Otherwise rendering a scene
    * throws, naming this step, but not in a `shared` step: `shared` steps
    * in a row can give several owners' values.

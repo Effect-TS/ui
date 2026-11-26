@@ -265,7 +265,7 @@ export const CheckboxGroup = Html.component({
   message: CheckboxGroupMessage,
   events: CheckboxGroupEvents,
   shares: {
-    value: (model, props) => ({
+    value: ({ model, props }) => ({
       value: props.value,
       disabled: props.disabled === true,
       name: props.name ?? null,

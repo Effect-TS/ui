@@ -1369,7 +1369,9 @@ const contextPlacement = (
   }
 }
 
-const shares = (model: MenuModel, props: MenuProps): ParentState => ({
+const shares = (
+  { model, props }: { readonly model: MenuModel; readonly props: MenuProps }
+): ParentState => ({
   open: props.open,
   active: model.active,
   reason: model.closeReason,

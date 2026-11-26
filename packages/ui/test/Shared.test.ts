@@ -25,7 +25,7 @@ const TipsProvider = Component.define({
   model: Schema.NullOr(Schema.String),
   message: TipMessage,
   shares: {
-    value: (open, props) => ({ open, label: props.label ?? "" }),
+    value: ({ model: open, props }) => ({ open, label: props.label ?? "" }),
     receives: ["Enter"]
   }
 }).make({
@@ -129,7 +129,7 @@ describe("shared state", () => {
         model: Schema.Number,
         message: Tick,
         shares: {
-          value: (ticks) => new Date(Math.floor(ticks / 2)),
+          value: ({ model: ticks }) => new Date(Math.floor(ticks / 2)),
           receives: ["Tick"]
         }
       }).make({ init: () => 0, update: ($) => $.model + 1, parts: () => ({}) })
@@ -362,7 +362,7 @@ describe("shared state in a Scene", () => {
             props: Schema.Struct({ value: Schema.Number }),
             model: Schema.Number,
             message: TipMessage,
-            shares: (model) => model
+            shares: ({ model }) => model
           }).make({
             init: ($) => $.props.value,
             update: ($) => $.model,
@@ -415,7 +415,7 @@ const Group = Component.define({
   model: Schema.Struct({ on: Schema.Boolean, bumps: Schema.Number }),
   message: GroupMessage,
   shares: {
-    value: (model) => ({ on: model.on, bumps: model.bumps }),
+    value: ({ model }) => ({ on: model.on, bumps: model.bumps }),
     receives: ["Bumped"],
     collects: {
       schema: Schema.Boolean,
@@ -737,7 +737,10 @@ describe("shared state in update", () => {
     model: Schema.Number,
     message: ClockMessage,
     shares: {
-      value: (ticks) => ({ at: new Date(ticks), "~redacted": false }),
+      value: ({ model: ticks }) => ({
+        at: new Date(ticks),
+        "~redacted": false
+      }),
       receives: ["Ticked"],
       schema: Schema.Struct({ at: Schema.Date, "~redacted": Schema.Boolean })
     }
@@ -1011,7 +1014,7 @@ describe("a component that reads its own kind", () => {
     model: Schema.Number,
     message: NestMessage,
     shares: {
-      value: (_, props) => ({ open: props.open }),
+      value: ({ props }) => ({ open: props.open }),
       collects: {
         schema: Schema.Number,
         onChange: (counts) =>
@@ -1109,7 +1112,7 @@ describe("a component that reads its own kind", () => {
     name: "Menu",
     model: Schema.Number,
     message: MenuMessage,
-    shares: { value: (picked) => picked, receives: ["Picked"] },
+    shares: { value: ({ model: picked }) => picked, receives: ["Picked"] },
     reads: { parent: { owner: "self", optional: true } }
   }).make({
     init: () => 0,
@@ -1188,7 +1191,7 @@ describe("a component that reads its own kind", () => {
     model: Schema.String,
     message: Renamed,
     shares: {
-      value: (suffix, props, reads) =>
+      value: ({ model: suffix, props, reads }) =>
         `${reads.parent ?? ""}/${props.name}${suffix}`,
       schema: Schema.String,
       receives: ["Renamed"]
@@ -1284,7 +1287,7 @@ describe("a component that reads its own kind", () => {
         name: "Label",
         model: Schema.Null,
         message: Schema.Never,
-        shares: (_, __, reads) => reads.tips.label,
+        shares: ({ reads }) => reads.tips.label,
         reads: { tips: TipsProvider }
       }).make({ init: () => null, update: ($) => $.model })
       const Show = Component.define({
