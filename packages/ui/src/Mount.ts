@@ -104,11 +104,9 @@ export type DefinitionTypeId = typeof DefinitionTypeId
  * without `paint`, the node stays as the view rendered it.
  *
  * With `beforeCommit: true`, the body starts once its node is in the
- * document but before the host's commit, which shows the popovers and modal
- * dialogs the flush opened. Use it for work that must see the page as it was
- * before, such as recording which element had focus before a modal dialog
- * moves it in. Its body can't require services, so it starts on time even
- * while a Layer above it is still building.
+ * document but before the host commit shows popovers and modal dialogs.
+ * Use it to capture focus before a dialog moves focus inside. The body must
+ * require no services, so it can start without waiting for an ancestor Layer.
  *
  * @stability experimental
  * @category models
@@ -256,11 +254,7 @@ export interface Issued<
    * @internal
    */
   readonly paint: ((node: Node, args: any) => void) | undefined
-  /**
-   * The definition's `beforeCommit`.
-   *
-   * @internal
-   */
+  /** @internal */
   readonly beforeCommit: boolean | undefined
   /**
    * What keeps a running mount's args and gives their changes. A runtime

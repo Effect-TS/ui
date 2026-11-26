@@ -621,7 +621,7 @@ const closeWatcherOf = (
       .CloseWatcher
     : undefined
 
-// Starts before the commit shows the portal, so it sees what had focus before the browser moves it in.
+// Capture focus before the host commit shows the portal and moves focus inside.
 const TrackDialog = Mount.makeStream(
   "TrackDialog",
   { args: TrackDialogArgs, beforeCommit: true },

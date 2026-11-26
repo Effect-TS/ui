@@ -36,8 +36,8 @@ export const raiseAbove = (shown: Element): void => {
   }
 }
 
-// Raises the kept elements above `shown` once it shows: now, or right after
-// the commit that shows it, which a view transition can hold.
+// A view transition can delay showing the portal until after its mount starts.
+// Raise kept elements only after the portal enters the top layer.
 export const raiseAboveShown = (shown: Element, signal: AbortSignal): void => {
   if (!shown.hasAttribute("popover")) return
   if (showing(shown as HTMLElement)) return raiseAbove(shown)

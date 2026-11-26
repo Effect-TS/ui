@@ -721,7 +721,7 @@ export const flush = (tree: Tree): void => {
     const batch = tree.dirty
     if (tree.work?.(batch.length === 0)) continue
     if (batch.length === 0) {
-      // `beforeCommit` mounts start here; a render they cause joins this flush.
+      // Include renders triggered by `beforeCommit` mounts in this flush.
       const committing = tree.committing
       if (committing === undefined) break
       tree.committing = undefined

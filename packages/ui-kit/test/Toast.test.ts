@@ -385,7 +385,6 @@ const Above = Html.component({
               const portal = dialog.portal(h.dialog)?.children(
                 dialog.popup(h.div)
               )
-              // A new parent gives the open dialog a new portal node.
               return state === "replaced" ? h.section(portal) : h.div(portal)
             }
           })
