@@ -270,7 +270,7 @@ const compareHeads = (
 }
 
 /**
- * Keep the iframe off-screen rather than hidden to preserve layout and animation frames.
+ * Keep the iframe off-screen rather than hidden so focus, layout and animation frames work.
  * `write` establishes standards mode; moving the parsed nodes keeps their scripts inert.
  */
 const liveDocument = Effect.fnUntraced(function*(parsed: Document) {
