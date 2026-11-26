@@ -41,13 +41,18 @@ export const run = async (
     if (!ok) failures.push(what + " " + JSON.stringify(detail))
   }
 
-  const page = await browser.newPage({ viewport: { width: 800, height: 600 } })
-  page.on("pageerror", (error) => failures.push("page error " + String(error)))
-  await page.route(
-    "http://check.test/",
-    (route) => route.fulfill({ contentType: "text/html", body: html })
-  )
   try {
+    const page = await browser.newPage({
+      viewport: { width: 800, height: 600 }
+    })
+    page.on(
+      "pageerror",
+      (error) => failures.push("page error " + String(error))
+    )
+    await page.route(
+      "http://check.test/",
+      (route) => route.fulfill({ contentType: "text/html", body: html })
+    )
     await page.goto("http://check.test/")
     await page.waitForSelector("body[data-ready]", { state: "attached" })
     await check(page, expect)
