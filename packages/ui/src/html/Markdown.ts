@@ -730,8 +730,6 @@ export interface ViewConfig<Msg, R = never> {
   readonly islands?: Islands<Msg, R> | undefined
 }
 
-const headingTags = ["h1", "h2", "h3", "h4", "h5", "h6"] as const
-
 const textAlign = {
   None: undefined,
   Left: "left",
@@ -763,7 +761,9 @@ export const defaultViews: DefaultViews = {
       "title",
       Option.getOrUndefined(title)
     ),
-  Heading: (h, { level }, content) => h.el(headingTags[level - 1], content),
+  // Cast to one builder type: `children` on a union of builders requires `unknown`.
+  Heading: (h, { level }, content) =>
+    (h[`h${level}`] as typeof h.h1).children(content),
   Paragraph: (h, _paragraph, content) => h.p.children(content),
   CodeBlock: (h, { value }) => h.pre.children(h.code.children(value)),
   List: (h, { isOrdered, startNumber }, items) =>
@@ -779,12 +779,11 @@ export const defaultViews: DefaultViews = {
   Table: (h, _table, headerRow, bodyRows) =>
     h.table.children(h.thead.children(headerRow), h.tbody.children(bodyRows)),
   TableRow: (h, _tableRow, cells) => h.tr.children(cells),
-  TableCell: (h, _tableCell, content, alignment, isHeader) => {
-    const style = { textAlign: textAlign[alignment] }
-    return isHeader
-      ? h.th.style(style).children(content)
-      : h.td.style(style).children(content)
-  }
+  // Cast for the same reason as `Heading`.
+  TableCell: (h, _tableCell, content, alignment, isHeader) =>
+    ((isHeader ? h.th : h.td) as typeof h.th)
+      .style({ textAlign: textAlign[alignment] })
+      .children(content)
 }
 
 const warned = new Set<string>()

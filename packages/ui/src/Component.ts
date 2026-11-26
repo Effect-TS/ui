@@ -562,16 +562,16 @@ export interface InitStep<
   evolve(fields: UiStruct.EvolveFields<Model>): InitStep<Model, Msg, Events, R>
   /** Runs Commands owned by this instance, as `Step.run` does. */
   run<
-    This extends InitStep<Model, Msg, Events, unknown>,
+    Self extends InitStep<Model, Msg, Events, unknown>,
     const C extends ReadonlyArray<Command.Command<Msg | Noop, unknown>>
   >(
-    this: This,
+    this: Self,
     ...commands: C
   ): InitStep<
     Model,
     Msg,
     Events,
-    RawStepRequirements<This> | Command.Requirements<C[number]>
+    RawStepRequirements<Self> | Command.Requirements<C[number]>
   >
   /** Reports to the parent. */
   emit(...emitted: ReadonlyArray<Events>): InitStep<Model, Msg, Events, R>
@@ -624,16 +624,16 @@ export interface Step<
    * `Component.noop` is rejected. A result of `Component.noop` sends nothing.
    */
   run<
-    This extends InitStep<Model, Msg, Events, unknown>,
+    Self extends InitStep<Model, Msg, Events, unknown>,
     const C extends ReadonlyArray<Command.Command<Msg | Noop, unknown>>
   >(
-    this: This,
+    this: Self,
     ...commands: C
   ): Step<
     Model,
     Msg,
     Events,
-    RawStepRequirements<This> | Command.Requirements<C[number]>,
+    RawStepRequirements<Self> | Command.Requirements<C[number]>,
     L
   >
   /** Reports to the parent. */
