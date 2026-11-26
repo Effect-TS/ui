@@ -1,10 +1,8 @@
 /**
- * A controlled single-month calendar grid for picking a range of dates. Pass
- * the selected range as `value`, the visible month as `month` and the
- * current day as `today`. Handle `Picked` to update `value` and
- * `RequestedMonth` to update `month`. A headless component built on
- * `Calendar`: it has the same parts, keyboard and focus handling, and adds
- * range selection.
+ * A controlled single-month calendar grid for picking a range of dates, built
+ * on `Calendar`. Pass the committed range as `value`, the visible month as
+ * `month` and the current day as `today`. Handle `Picked` to update `value`
+ * and `RequestedMonth` to update `month`.
  *
  * **Anatomy**
  *
@@ -19,41 +17,36 @@
  * | `cell`     | `<td>` inside the grid body |
  * | `day`      | `<button>` inside each `cell` |
  *
- * The parts take the same arguments as `Calendar`'s, and no part adds
- * markup. The parts object also carries `weeks`, `weekdays`, `month` and
- * `title`, as `Calendar`'s does, and `anchor`: the first day of a range in
- * progress, or `null`.
+ * The parts take `Calendar`'s arguments and add no markup. The parts object
+ * also carries `Calendar`'s `weeks`, `weekdays`, `month` and `title`, and
+ * `anchor`: the first day of a range in progress, or `null`.
  *
  * Inside a `Field`, apply `field.group` to `root`, `field.member` to each
  * `day`, and pass `disabled: field.disabled`.
  *
  * **Selection**
  *
- * The first press on a day sets the anchor and emits nothing. Until the
- * second press, the days between the anchor and the day last hovered or
- * focused show as a preview. The second press emits `Picked` with the two
- * days in order and clears the anchor. Pressing the anchor again picks that
- * one day. An unavailable day can't be an anchor or an end, but a range may
- * span unavailable days: validate that in the consumer. Dates follow
- * `Calendar`'s rules: every date is normalized with `DateTime.removeTime`.
+ * The first press sets the anchor. Until the second press, the range from
+ * the anchor to the day last hovered or focused is the preview; `value`
+ * stays committed. The second press emits `Picked` with the two days in
+ * order. Pressing the anchor again picks that one day. An unavailable day
+ * can't be an anchor or an end, but a range may span unavailable days:
+ * validate that in the consumer.
  *
  * **Data attributes**
  *
- * Those of `Calendar`, each present with an empty value or absent, with
- * these on `day`:
+ * Those of `Calendar`, plus these on `day`, each present with an empty value
+ * or absent:
  *
- * - `data-selected`: the day is in the selected range
- * - `data-range-start`, `data-range-end`: the day is the first or last day
- *   of the range shown
- * - `data-in-range`: the day is in the range shown, its ends included
- *
- * The range shown is the preview while an anchor is set, and the selected
- * range otherwise.
+ * - `data-selected`: the day is in `value`, the committed range
+ * - `data-range-start`, `data-range-end`, `data-in-range`: the day is the
+ *   first day, the last day, or any day of the range shown: the preview while
+ *   an anchor is set, and `value` otherwise
  *
  * **Keyboard**
  *
- * As `Calendar`, plus Escape on a day, which clears the anchor. Escape
- * keeps its default when no anchor is set.
+ * As `Calendar`, plus Escape on a day, which clears the anchor when one is
+ * set.
  *
  * **Usage**
  *
@@ -156,9 +149,8 @@ import {
  *
  * **Details**
  *
- * - `value`: the selected range, or `null` for none. Both ends are
- *   normalized with `DateTime.removeTime`, and a `start` after `end` is
- *   read in order.
+ * - `value`: the committed range, or `null`. Both ends are normalized with
+ *   `DateTime.removeTime`, and a `start` after `end` is read in order.
  * - The rest are `Calendar`'s: `month`, `today`, `min`, `max`,
  *   `firstDayOfWeek`, `locale`, `disabled` and `readOnly`. A disabled or
  *   read-only range calendar sets no anchor and shows no preview.
@@ -188,9 +180,8 @@ export type RangeCalendarProps = typeof RangeCalendarProps.Type
  *
  * **Details**
  *
- * - `Picked`: emitted on the second press of a range, on an enabled,
- *   available day while not `readOnly`. Carries the normalized
- *   midnight-UTC `start` and `end`, in order.
+ * - `Picked`: the second press of a range, with its midnight-UTC `start` and
+ *   `end` in order.
  * - `RequestedMonth`: as `Calendar`'s.
  *
  * @stability experimental
@@ -241,21 +232,19 @@ const inRange = (date: DateTime.Utc, range: Range | null): boolean =>
 
 /**
  * A headless range calendar grid. Call it with the consumer's `h`, the
- * `props`, `onEmit`, and a `view` closure that draws the same parts as
- * `Calendar`.
+ * `props`, `onEmit`, and a `view` closure that draws `Calendar`'s parts.
  *
  * **Details**
  *
- * The parts write what `Calendar`'s do, and these over the values the
- * consumer set on the builder before applying the part:
+ * The parts write what `Calendar`'s do, and these over any values the
+ * consumer set:
  *
  * - `grid`: `aria-multiselectable="true"`
- * - `cell`: `aria-selected`, `"true"` for every day in the selected range
- * - `day`: `data-selected`, `data-range-start`, `data-range-end` and
- *   `data-in-range`
+ * - `cell`: `aria-selected="true"` on every day of `value`, even during a
+ *   preview
+ * - `day`: the data attributes above
  *
- * History restore saves nothing of the range in progress: after Back,
- * forward or a reload it starts from `init`.
+ * History restore drops the range in progress.
  *
  * @stability experimental
  * @category components
@@ -331,8 +320,7 @@ export const RangeCalendar = Html.component({
         ))
 
     return p.child(Calendar, {
-      // Calendar's value only places the tab stop: the parts below override its
-      // selection attributes.
+      // Only places the tab stop; the parts below override the selection.
       props: { ...props, value: anchor ?? selected?.start ?? null },
       onEmit: {
         Picked: ({ date }) => RangeCalendarMessage.PickedDay({ date }),
