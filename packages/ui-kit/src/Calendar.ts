@@ -307,10 +307,10 @@ const disabledWhileFocused = Subscription.make(
 
 const CalendarGridRef = Html.ref("CalendarGrid", "table")
 
-const contextOf = (
-  props: CalendarProps,
-  monthStart = startOfMonth(DateTime.removeTime(props.month))
-) => ({
+const monthOf = (props: CalendarProps) =>
+  startOfMonth(DateTime.removeTime(props.month))
+
+const contextOf = (props: CalendarProps, monthStart = monthOf(props)) => ({
   monthStart,
   preferred: normalizeOptional(props.value),
   today: DateTime.removeTime(props.today),
@@ -367,8 +367,9 @@ const navigate = (
  * - `previous`, `next`: `type="button"`, `disabled`, `aria-disabled` and
  *   `data-disabled` (plus a fallback `aria-label` when the button has no
  *   accessible name)
- * - `grid`: `role="grid"`, `tabindex="-1"`, `aria-labelledby` (appending the heading's id),
- *   `aria-disabled`, `aria-readonly`, `data-disabled` and `data-readonly`
+ * - `grid`: `role="grid"`, `tabindex="-1"`, `aria-labelledby` (appending the
+ *   heading's id), `aria-disabled`, `aria-readonly`, `data-disabled` and
+ *   `data-readonly`
  * - `weekday`: `scope="col"` and `abbr`
  * - `cell`: `role="gridcell"` and `aria-selected`
  * - `day`: `type="button"`, `tabindex`, `disabled`, `aria-label`,
@@ -399,7 +400,7 @@ export const Calendar = Html.component({
   init: ({ props }) => ({
     focusedDay: null,
     focused: false,
-    shownMonth: startOfMonth(DateTime.removeTime(props.month)),
+    shownMonth: monthOf(props),
     pendingFocus: null,
     rtl: false
   }),
@@ -457,28 +458,24 @@ export const Calendar = Html.component({
       }
       // Removing the focused day would blur it to `<body>`, so focus moves
       // to the grid while the old month is still shown.
-      return $.model.focused
-        ? $.run(
-          HtmlCommand.focus(
-            CalendarGridRef,
-            () => CalendarMessage.ParkedFocus({ date }),
-            { preventScroll: true }
-          )
+      return $.run(
+        HtmlCommand.focus(
+          CalendarGridRef,
+          () => CalendarMessage.ParkedFocus({ date }),
+          { preventScroll: true }
         )
-        : $.evolve({ ...phase, shownMonth: context.monthStart }).run(
-          focusDay(date)
-        )
+      )
     },
     ParkedFocus: ($, { date }) =>
       $.evolve({
         focusedDay: date,
         pendingFocus: null,
-        shownMonth: contextOf($.props).monthStart
+        shownMonth: monthOf($.props)
       }).run(focusDay(date)),
     FoundDirection: ($, { rtl }) => $.evolve({ rtl })
   },
   subscriptions: ({ model, props }) => {
-    const monthStart = startOfMonth(DateTime.removeTime(props.month))
+    const monthStart = monthOf(props)
     return [
       !sameMonth(monthStart, model.shownMonth) &&
       Subscription.make(
@@ -494,10 +491,12 @@ export const Calendar = Html.component({
     const disabled = props.disabled === true
     const readOnly = props.readOnly === true
     const rtl = rightToLeft(p.reads.provider, model.rtl)
-    // A focused day keeps its month on screen until focus is parked.
-    const context = model.focused
-      ? contextOf(props, model.shownMonth)
-      : contextOf(props)
+    // A focused day keeps its month on screen. Parking focus on the grid
+    // blurs the day, which lets the new month render.
+    const context = contextOf(
+      props,
+      model.focused ? model.shownMonth : monthOf(props)
+    )
     const { max, min, monthStart, preferred: value, today } = context
     const weekStartsOn = props.firstDayOfWeek ?? firstDayOfWeek(props.locale)
     const weeks = weeksOfMonth(monthStart, weekStartsOn)

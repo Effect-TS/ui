@@ -164,13 +164,9 @@ const blurOnRemoval = Effect.acquireRelease(
     Effect.sync(() => (window.Node.prototype.removeChild = removeChild))
 )
 
-const pageDown = (id: string) =>
+const keydown = (id: string, key: string) =>
   byId(id).dispatchEvent(
-    new KeyboardEvent("keydown", {
-      key: "PageDown",
-      bubbles: true,
-      cancelable: true
-    })
+    new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })
   )
 
 describe("Calendar in a document", { concurrent: false }, () => {
@@ -191,15 +187,7 @@ describe("Calendar in a document", { concurrent: false }, () => {
       // The parent changes `month` on its own
       yield* landsOnFirst(() => click(byId("jump")))
       // The parent accepts a keyboard month request
-      yield* landsOnFirst(() =>
-        byId("2026-12-15").dispatchEvent(
-          new KeyboardEvent("keydown", {
-            key: "PageUp",
-            bubbles: true,
-            cancelable: true
-          })
-        )
-      )
+      yield* landsOnFirst(() => keydown("2026-12-15", "PageUp"))
     }).pipe(Effect.scoped))
 
   it.effect("a month change keeps focus inside the calendar, unless the user left", () =>
@@ -209,7 +197,7 @@ describe("Calendar in a document", { concurrent: false }, () => {
       yield* tick
       byId("2026-12-15").focus()
       yield* tick
-      pageDown("2026-12-15")
+      keydown("2026-12-15", "PageDown")
       yield* tick
       // `click` sends the event without moving focus.
       click(byId("apply"))
@@ -217,7 +205,7 @@ describe("Calendar in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement?.id, "2027-01-15")
       assert.isFalse(byId("group").hasAttribute("data-touched"))
 
-      pageDown("2027-01-15")
+      keydown("2027-01-15", "PageDown")
       yield* tick
       byId("apply").focus()
       yield* tick
