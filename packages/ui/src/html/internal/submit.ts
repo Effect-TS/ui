@@ -18,26 +18,24 @@ export const attribute = (form: Element, name: string): string | null =>
   (Object.getPrototypeOf(form) as Element).getAttribute.call(form, name)
 
 /**
- * The submission's method as the browser reads it: an invalid value counts as
- * `get`.
+ * Where an unhandled submission goes: `"dialog"` for the `dialog` method, `"get"`
+ * for a same-window GET the Router can follow, and `"native"` for a POST or a
+ * submission to another window. An invalid method counts as `get`, as in the
+ * browser.
  *
  * @internal
  */
-export const methodOf = (
+export const kindOf = (
   form: Element,
   submitter: Element | null
-): "get" | "post" | "dialog" => {
+): "dialog" | "get" | "native" => {
   const method = (submitter?.getAttribute("formmethod") ??
     attribute(form, "method") ?? "").toLowerCase()
-  return method === "post" || method === "dialog" ? method : "get"
-}
-
-/** @internal */
-export const isSameWindow = (
-  form: Element,
-  submitter: Element | null
-): boolean => {
+  if (method === "dialog") return method
+  if (method === "post") return "native"
   const target = submitter?.getAttribute("formtarget") ??
     attribute(form, "target")
   return target === null || target === "" || target.toLowerCase() === "_self"
+    ? "get"
+    : "native"
 }

@@ -471,10 +471,7 @@ const make = (
       if (form === null || form.localName !== "form") return
       flushHistory()
       const submitter = event.submitter as HTMLButtonElement | null
-      if (
-        submit.methodOf(form, submitter) !== "get" ||
-        !submit.isSameWindow(form, submitter)
-      ) return
+      if (submit.kindOf(form, submitter) !== "get") return
       const action = submitter?.getAttribute("formaction") ??
         submit.attribute(form, "action") ?? ""
       const url = new URL(action, document.baseURI)

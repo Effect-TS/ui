@@ -590,8 +590,6 @@ export const makeHost = (
       if (name === "compositionstart" || composed) composing.add(target)
       else composing.delete(target)
     }
-    const owned = name === "submit" && event.target !== null &&
-      forms.has(event.target)
     if (name === "dragstart") startDrag(event as DragEvent, path)
     const handled = deliver(
       event,
@@ -615,20 +613,18 @@ export const makeHost = (
             lastPointer
           )
     )
-    if (owned) {
+    if (
+      name === "submit" && event.target !== null && forms.has(event.target)
+    ) {
       submit.ownedUnhandled.delete(event)
       if (handled) event.preventDefault()
       else {
-        const form = event.target as globalThis.Element
-        const submitter = (event as SubmitEvent).submitter ?? null
-        const method = submit.methodOf(form, submitter)
-        // A `dialog` form never submits natively. A same-window GET is the
-        // Router's to follow; anything else is the browser's.
-        if (method === "dialog") event.preventDefault()
-        else if (method === "get" && submit.isSameWindow(form, submitter)) {
-          event.preventDefault()
-          submit.ownedUnhandled.add(event)
-        }
+        const kind = submit.kindOf(
+          event.target as globalThis.Element,
+          (event as SubmitEvent).submitter ?? null
+        )
+        if (kind !== "native") event.preventDefault()
+        if (kind === "get") submit.ownedUnhandled.add(event)
       }
     }
     if (name === "dragend") endTargets()
