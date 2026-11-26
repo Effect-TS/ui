@@ -163,10 +163,11 @@ export interface HostEvents<Node> {
  *
  * `unmounting`, if given, is called once when a mount's Scope closes, before
  * any of its instances closes and before any of its nodes is removed. It gets
- * the container and the nodes the mount placed in it, in order and still
- * attached, so a host can keep the last frame, such as a terminal leaving
- * the final output on screen. A mount sharing the container passes only its
- * own nodes, and one that rendered nothing passes none. Releases may still be
+ * the container and the top-level nodes the mount is about to remove from it,
+ * in order and still attached, so a host can keep the last frame, such as a
+ * terminal leaving the final output on screen. These include placeholders:
+ * a view that renders nothing still leaves an empty text node. A mount
+ * sharing the container passes only its own nodes. Releases may still be
  * pending when it returns. If it throws, the nodes are still removed and
  * committed and the mount cleaned up, and closing the Scope dies with the
  * error. Mounts whose Scope closed before they placed anything, and the
