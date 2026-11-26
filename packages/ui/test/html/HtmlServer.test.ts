@@ -27,6 +27,7 @@ import {
   Layer,
   Option,
   Schema,
+  SchemaGetter,
   type Scope,
   Stream
 } from "effect"
@@ -3677,5 +3678,97 @@ describe("HtmlServer queries", { concurrent: false }, () => {
         expect(rendered.html).toContain("<p>text 1, text 2, text 3</p>")
         expect(renders).toBe(2)
       })
+  )
+
+  it.effect(
+    "ships, encodes and decodes a settled query result once across multiple readers",
+    () =>
+      Effect.gen(function*() {
+        const payload = "unique-shared-note-payload"
+        let fetches = 0
+        let encodes = 0
+        let decodes = 0
+        const NoteBody = Schema.String.pipe(Schema.decode({
+          decode: SchemaGetter.transform((body: string) => {
+            decodes++
+            return body
+          }),
+          encode: SchemaGetter.transform((body: string) => {
+            encodes++
+            return body
+          })
+        }))
+        class GetNote extends Query.Service<GetNote>()("GetNote", {
+          args: { id: Schema.String },
+          success: NoteBody,
+          error: Schema.Never,
+          staleTime: "1 minute"
+        }) {
+          static readonly layer = this.toLayer(() =>
+            Effect.sync(() => {
+              fetches++
+              return payload
+            })
+          )
+        }
+        const Reader = Html.component({
+          name: "Reader",
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          queries: {
+            note: { query: GetNote, args: () => ({ id: "1" }) }
+          }
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) =>
+            h.p(
+              AsyncResult.isSuccess(h.queries.note)
+                ? h.queries.note.value
+                : "loading"
+            )
+        })
+        const Page = Html.component({
+          name: "Page",
+          model: Schema.Struct({}),
+          message: Schema.Never
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) =>
+            h.div(
+              Reader(h, { key: "a", props: {} }),
+              Reader(h, { key: "b", props: {} })
+            )
+        }).pipe(Component.provide(GetNote.layer))
+
+        const rendered = yield* HtmlServer.renderToHtml(Page, {})
+        const serialized = HtmlServer.serializeState(rendered.state)
+        const copies = serialized.split(payload).length - 1
+        const app = yield* container(rendered.html)
+        const served = [...app.querySelectorAll("p")]
+        const root = yield* HtmlHydrate.hydrateEffect(
+          Page,
+          {},
+          app,
+          JSON.parse(serialized)
+        )
+        yield* root.adopted
+
+        const adopted = [...app.querySelectorAll("p")]
+        expect(adopted).toHaveLength(2)
+        expect(adopted[0]).toBe(served[0])
+        expect(adopted[1]).toBe(served[1])
+        expect(adopted.map((node) => node.textContent)).toEqual([
+          payload,
+          payload
+        ])
+        expect(fetches).toBe(1)
+        expect({ copies, encodes, decodes }).toEqual({
+          copies: 1,
+          encodes: 1,
+          decodes: 1
+        })
+      }).pipe(Effect.scoped)
   )
 })
