@@ -2,7 +2,7 @@
 
 // oxlint-disable-next-line no-control-regex
 const ignored = /[\u0000-\u0020]/g
-const schemePattern = /^([a-zA-Z][a-zA-Z0-9+.-]*):/
+const schemePattern = /^[a-zA-Z][a-zA-Z0-9+.-]*$/
 
 /**
  * The lowercase scheme of `url`, or `undefined` for a relative URL. ASCII
@@ -11,9 +11,10 @@ const schemePattern = /^([a-zA-Z][a-zA-Z0-9+.-]*):/
  * @internal
  */
 export const scheme = (url: string): string | undefined => {
-  if (!url.includes(":")) return undefined
-  const match = schemePattern.exec(url.replace(ignored, ""))
-  return match === null ? undefined : match[1]!.toLowerCase()
+  const colon = url.indexOf(":")
+  if (colon === -1) return undefined
+  const found = url.slice(0, colon).replace(ignored, "")
+  return schemePattern.test(found) ? found.toLowerCase() : undefined
 }
 
 const isScript = (url: string): boolean => {
@@ -30,14 +31,6 @@ const attributes: ReadonlySet<string> = new Set([
   "data"
 ])
 
-const properties: ReadonlySet<string> = new Set([
-  "href",
-  "src",
-  "action",
-  "formAction",
-  "data"
-])
-
 /**
  * Whether the normalized attribute `name` holds a `javascript:` or
  * `vbscript:` URL, which the renderers omit.
@@ -49,9 +42,10 @@ export const blockedAttribute = (name: string, value: string): boolean =>
 
 /**
  * Whether a built-in element's property `name` would be set to a
- * `javascript:` or `vbscript:` URL.
+ * `javascript:` or `vbscript:` URL. A property is checked as the attribute
+ * it reflects.
  *
  * @internal
  */
 export const blockedProperty = (name: string, value: unknown): boolean =>
-  typeof value === "string" && properties.has(name) && isScript(value)
+  typeof value === "string" && blockedAttribute(name.toLowerCase(), value)
