@@ -1776,7 +1776,8 @@ describe("BrowserHost", { concurrent: false }, () => {
           ["a", "b", "f"],
           ["a", "b", "g", "s"],
           ["s", "a", "b", "g"],
-          ["a", "b", "g", "s"]
+          ["a", "b", "g", "s"],
+          ["b", "g", "s"]
         ]
         const Items = Html.component({
           name: "Items",
@@ -1864,6 +1865,23 @@ describe("BrowserHost", { concurrent: false }, () => {
         chromium = false
         yield* next()
         expect(root.model()).toEqual({ step: 4, left: 4 })
+        // Focus a removed element's blur sends through the list and out has a destination, so it counts.
+        const out = yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            document.body.appendChild(document.createElement("button"))
+          ),
+          (button) => Effect.sync(() => button.remove())
+        )
+        const removed = document.getElementById("a")!
+        removed.focus()
+        chromium = true
+        removed.addEventListener("blur", () => {
+          document.getElementById("b")!.focus()
+          out.focus()
+        }, { once: true })
+        yield* next()
+        expect(document.activeElement).toBe(out)
+        expect(root.model()).toEqual({ step: 5, left: 5 })
       }).pipe(Effect.scoped))
 
     it.effect("focus says whether the element shows a focus ring", () =>

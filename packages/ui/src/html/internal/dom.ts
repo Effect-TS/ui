@@ -120,11 +120,12 @@ const canonicalAttrs = (
 const ignore = () => {}
 
 // Chromium blurs a focused element that a render detaches, to remove or to
-// move it, while the node is still in place. The HTML standard and other
-// browsers don't. So a `blur` or `focusout` is dropped only while the node
-// is where it was. One after it has gone, such as a reconnected element
-// sending focus into an iframe, is a real exit. Module-level, because
-// `BrowserHost` detaches through one host while another one listens.
+// move it, while the node is still in place and with no `relatedTarget`.
+// The HTML standard and other browsers don't. So only such an event is
+// dropped. One with a destination, or after the node has gone, such as a
+// reconnected element sending focus into an iframe, is a real exit.
+// Module-level, because `BrowserHost` detaches through one host while
+// another one listens.
 let inPlace: (() => boolean) | undefined
 const detach = (node: globalThis.Node, f: () => void): void => {
   const outer = inPlace
@@ -548,7 +549,8 @@ export const makeHost = (
   const listener = (event: Event): void => {
     const name = event.type
     if (
-      (name === "blur" || name === "focusout") && inPlace?.()
+      (name === "blur" || name === "focusout") &&
+      (event as FocusEvent).relatedTarget === null && inPlace?.()
     ) return
     const path = event.composedPath() as Array<Node>
     const custom = view !== null && event instanceof view.CustomEvent
