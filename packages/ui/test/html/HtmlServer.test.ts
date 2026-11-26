@@ -3911,7 +3911,10 @@ describe("HtmlServer queries", { concurrent: false }, () => {
           model: Schema.Struct({}),
           message: Schema.Never,
           queries: {
-            note: { query: GetAsyncNote, args: ({ props }) => ({ id: props.id }) }
+            note: {
+              query: GetAsyncNote,
+              args: ({ props }) => ({ id: props.id })
+            }
           }
         }).make({
           init: () => ({}),
@@ -3969,6 +3972,82 @@ describe("HtmlServer queries", { concurrent: false }, () => {
           "note-2"
         ])
         expect(decodes).toEqual({ "note-1": 1, "note-2": 1, orphan: 1 })
+        expect(orphanCancelled).toBe(true)
+      }).pipe(Effect.scoped)
+  )
+
+  it.effect(
+    "cancels an unjoined async ~query decode started after adoption",
+    () =>
+      Effect.gen(function*() {
+        let orphanCancelled = false
+        const AsyncBody = Schema.String.pipe(Schema.decode({
+          decode: SchemaGetter.transformEffect((body: string) =>
+            body === "orphan"
+              ? Effect.onInterrupt(
+                Effect.never,
+                () =>
+                  Effect.sync(() => {
+                    orphanCancelled = true
+                  })
+              )
+              : Effect.succeed(body)
+          ),
+          encode: SchemaGetter.transform((body: string) => body)
+        }))
+        class GetLateNote extends Query.Service<GetLateNote>()("GetLateNote", {
+          args: { id: Schema.String },
+          success: AsyncBody,
+          error: Schema.Never,
+          staleTime: "1 minute"
+        }) {
+          static readonly layer = this.toLayer(({ id }) =>
+            Effect.succeed(`note-${id}`)
+          )
+        }
+        const Reader = Html.component({
+          name: "Reader",
+          model: Schema.Struct({}),
+          message: Schema.Never,
+          queries: { note: { query: GetLateNote, args: () => ({ id: "1" }) } }
+        }).make({
+          init: () => ({}),
+          update: ($) => $.model,
+          view: (h) =>
+            h.p(
+              AsyncResult.isSuccess(h.queries.note)
+                ? h.queries.note.value
+                : "loading"
+            )
+        })
+        const Page = Html.component({
+          name: "Page",
+          model: Schema.Boolean,
+          message: Schema.Boolean
+        }).make({
+          init: () => false,
+          update: (_, message) => message,
+          view: (h, show) => h.div(show ? Reader(h, {}) : null)
+        }).pipe(Component.provide(GetLateNote.layer))
+
+        const rendered = yield* HtmlServer.renderToHtml(Page, {})
+        const state = {
+          ...rendered.state,
+          "~query": {
+            GetLateNote: [
+              ["{\"id\":\"1\"}", 0, "note-1", 0],
+              ["{\"id\":\"3\"}", 0, "orphan", 0]
+            ]
+          }
+        }
+        const app = yield* container(rendered.html)
+        const root = yield* HtmlHydrate.hydrateEffect(Page, {}, app, state)
+          .pipe(Effect.provideService(Query.Problems, () => {}))
+        yield* root.adopted
+        root.send(true)
+        yield* tick
+
+        expect(app.textContent).toBe("note-1")
         expect(orphanCancelled).toBe(true)
       }).pipe(Effect.scoped)
   )

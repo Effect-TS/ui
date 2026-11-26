@@ -248,8 +248,8 @@ export interface ShippedHydration {
 }
 
 /** @internal */
-export const Shipped: Context.Reference<ShippedContext | undefined> =
-  Context.Reference<ShippedContext | undefined>("@effect/ui/Query/Shipped", {
+export const Shipped: Context.Reference<ShippedContext | undefined> = Context
+  .Reference<ShippedContext | undefined>("@effect/ui/Query/Shipped", {
     defaultValue: () => undefined
   })
 

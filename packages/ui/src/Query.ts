@@ -2731,7 +2731,9 @@ interface CacheInternals {
       /** When the entries arrived, if before this call: they age from then. */
       readonly at?: number | undefined
       /** Hydration-scoped Success decoder shared with instance snapshot decoding. */
-      readonly decodeSuccess?: ((def: QueryDef, tuple: RawTuple) => unknown) | undefined
+      readonly decodeSuccess?:
+        | ((def: QueryDef, tuple: RawTuple) => unknown)
+        | undefined
     } | undefined
   ) => void
   /** Closes the fetch-free window: unwatched hydrated Failures go, raw ones included. */
@@ -3797,6 +3799,8 @@ export const makeShipped = (
   const parsed = parseRaw(input)
   if (parsed === undefined) return undefined
   const memo = new Map<RawTuple, ShippedMemoEntry>()
+  // Set once adoption ends: no reader can join a cache-only decode after that.
+  let swept = false
 
   const awaitPending = (
     tuple: RawTuple,
@@ -3904,11 +3908,13 @@ export const makeShipped = (
       memo.set(tuple, { _tag: "Done", def, value: ran.value })
       return ran.value
     }
-    trackPending(tuple, def, ran)
+    if (swept) ran.interruptUnsafe()
+    else trackPending(tuple, def, ran)
     throw new Error("async success decoder")
   }
 
   const cancelPending = (all: boolean): void => {
+    swept = true
     for (const [tuple, entry] of memo) {
       if (entry._tag === "Pending" && (all || entry.waiters === 0)) {
         memo.delete(tuple)
@@ -3931,7 +3937,9 @@ export const makeShipped = (
   }
 
   const inline = (component: unknown, encoded: unknown): unknown => {
-    const bound = queryCore.boundOf(component as { readonly "~queries": unknown })
+    const bound = queryCore.boundOf(
+      component as { readonly "~queries": unknown }
+    )
     if (
       bound === undefined || typeof encoded !== "object" || encoded === null
     ) {
@@ -6168,7 +6176,9 @@ const buildCache = (
       }
     }
   }
-  let emitted: Map<string, Map<string, AsyncResult.Success<any, any>>> | undefined
+  let emitted:
+    | Map<string, Map<string, AsyncResult.Success<any, any>>>
+    | undefined
   const dehydrate: CacheInternals["dehydrate"] = () => {
     const out: Dehydrated = {}
     emitted = new Map()
@@ -6208,7 +6218,9 @@ const buildCache = (
         ;(out[entry.def.name] ??= []).push(tuple)
         if (result._tag === "Success") {
           let byKey = emitted.get(entry.def.name)
-          if (byKey === undefined) emitted.set(entry.def.name, byKey = new Map())
+          if (byKey === undefined) {
+            emitted.set(entry.def.name, byKey = new Map())
+          }
           byKey.set(entry.argsKey, result)
         }
       } catch {

@@ -631,7 +631,9 @@ export const hydrating = (
         if (adoptedDone || !started || !hydration.settled()) return
         if (!waits.parked(hydration)) return
         adoptedDone = true
-        if (firstHeld > 0 || adoptionHead === undefined) adoptionHead = headOf!()
+        if (firstHeld > 0 || adoptionHead === undefined) {
+          adoptionHead = headOf!()
+        }
         closeWindow()
         for (const f of adoptedWaiters.splice(0)) f()
       }
