@@ -7,8 +7,9 @@
 #   packages/ui/benchmark/js-framework-benchmark/run.sh <dir> [--count <n>] [--benchmark <prefix>...]
 #
 # <dir> is where the harness is cloned, outside the repository. The browser is $CHROMIUM, else
-# `chromium` on PATH. Extra arguments go to each of the harness's `npm run bench`. Results are written to
-# <dir>/webdriver-ts/results and summarized by summarize.mjs.
+# `chromium` on PATH. REVERSE=1 runs the frameworks in reverse order, for a second pass. Extra
+# arguments go to each of the harness's `npm run bench`. Results, with the load average when each
+# framework started, are written to <dir>/webdriver-ts/results and summarized by summarize.mjs.
 set -euo pipefail
 
 HARNESS_REV=0f4e78932bf85ed60b163b801bbdbd720fdda54f
@@ -51,7 +52,7 @@ version="0.0.0-$(git -C "$repo" rev-parse --short=7 HEAD)"
 ' "$version")
 
 # Foldkit: the harness entry, moved to the latest Foldkit and the Effect that Effect UI uses.
-(cd frameworks/keyed/foldkit && npm install --save-exact foldkit@0.171.0 effect@4.1.5 @effect/platform-browser@4.1.5)
+(cd frameworks/keyed/foldkit && npm install --save-exact foldkit@0.171.0 effect@4.1.6 @effect/platform-browser@4.1.6)
 
 for f in "${FRAMEWORKS[@]}"; do
   (cd "frameworks/keyed/$f" && if [ "$f" = effect-ui ]; then npm install; else npm ci; fi && npm run build-prod)
@@ -67,9 +68,17 @@ keyed=()
 for f in "${FRAMEWORKS[@]}"; do keyed+=("keyed/$f"); done
 cd webdriver-ts
 npm run isKeyed -- --headless --chromeBinary "$chromium" "${keyed[@]}"
-rm -rf results
-# One framework at a time, in FRAMEWORKS order: given several, the harness sorts them by name.
-for f in "${keyed[@]}"; do
+rm -rf results && mkdir results
+order=("${keyed[@]}")
+if [ "${REVERSE:-}" = 1 ]; then
+  order=()
+  for ((i = ${#keyed[@]} - 1; i >= 0; i--)); do order+=("${keyed[i]}"); done
+fi
+load() { echo "$1 $(date -u +%FT%TZ) $(cut -d' ' -f1-3 /proc/loadavg)" >> results/load.txt; }
+# One framework at a time, in order: given several, the harness sorts them by name.
+for f in "${order[@]}"; do
+  load "${f#keyed/} start"
   npm run bench -- --headless --chromeBinary "$chromium" "$@" --framework "$f"
 done
+load end
 node "$here/summarize.mjs" results

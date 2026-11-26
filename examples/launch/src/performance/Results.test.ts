@@ -9,12 +9,12 @@ describe("benchmark results", () => {
       ) => [names[entry.framework], entry.multiple.toFixed(2)]),
       [
         ["Vanilla JS", "1.00"],
-        ["Solid", "1.77"],
-        ["Svelte", "2.19"],
-        ["Vue", "3.72"],
-        ["Effect UI", "4.06"],
-        ["React", "5.97"],
-        ["Foldkit 0.x", "6.27"]
+        ["Solid", "1.87"],
+        ["Svelte", "2.41"],
+        ["Vue", "3.75"],
+        ["Effect UI", "4.12"],
+        ["React", "6.44"],
+        ["Foldkit 0.x", "6.55"]
       ]
     )
   })
