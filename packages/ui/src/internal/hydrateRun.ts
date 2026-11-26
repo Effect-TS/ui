@@ -174,7 +174,12 @@ export const make = (
     settled()
   }
   const fallback = host.hold
-  ;(host as { hold: Kernel.Host["hold"] }).hold = (owner, rec, at) => {
+  ;(host as { hold: Kernel.Host["hold"] }).hold = (
+    owner,
+    rec,
+    at,
+    component
+  ) => {
     const view = rec.v as View.Child<any, any>
     const path = (view.alive === undefined && at || owner.path) + "/" +
       segmentOf(view.component, view.key)
@@ -184,7 +189,9 @@ export const make = (
     const from = served
       ? state as Saved
       : supplyOf(owner, path, view.alive !== undefined)
-    if (from?.[path] === undefined) return fallback?.(owner, rec, at) === true
+    if (from?.[path] === undefined) {
+      return fallback?.(owner, rec, at, component) === true
+    }
     let receiver: Kernel.Instance | undefined
     for (
       let above = view.alive === undefined ? undefined : at;
@@ -203,12 +210,10 @@ export const make = (
     const behind = receiver !== undefined
     const away = served && view.alive !== undefined &&
       active?.has(path) === false
-    const exit = behind
-      ? undefined
-      : decode(view.component as never, from[path])
+    const exit = behind ? undefined : decode(component, from[path])
     if (exit !== undefined && Exit.isExit(exit) && !away) {
       if (!served && Exit.isFailure(exit)) {
-        return fallback?.(owner, rec, at) === true
+        return fallback?.(owner, rec, at, component) === true
       }
       if (!served) given.set(path, from)
       decoded.set(path, Exit.isSuccess(exit) ? exit.value : undefined)
@@ -261,7 +266,7 @@ export const make = (
         if (!waiting) return
         waiting = false
         if (rec.inst !== owner || receiver!.closed) return go(Exit.interrupt())
-        const exit = decode(view.component as never, from[path])
+        const exit = decode(component, from[path])
         if (Exit.isExit(exit)) go(exit)
         else exit.addObserver(go)
       }

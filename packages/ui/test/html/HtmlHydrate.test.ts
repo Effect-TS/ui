@@ -333,6 +333,39 @@ describe("HtmlHydrate", () => {
       assert.strictEqual(app.textContent, "server 0")
     }).pipe(Effect.scoped))
 
+  it.effect("adopts a preloaded lazy child and restores its saved model", () =>
+    Effect.gen(function*() {
+      const Page = Html.component({
+        name: "Page",
+        model: Schema.Date,
+        message: Schema.Never
+      }).make({
+        init: () => new Date(0),
+        update: ($) => $.model,
+        view: (h, at) => h.p(String(at.getTime()))
+      })
+      const LazyPage = Component.lazy("LazyPage", () => Promise.resolve(Page))
+      const App = Html.component({
+        name: "App",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.div(LazyPage(h, { key: "p" }))
+      })
+      const rendered = yield* HtmlServer.renderToHtml(App, {})
+      yield* Effect.promise(() => LazyPage.preload())
+      const app = yield* container(rendered.html)
+      const server = [...app.querySelectorAll("*")]
+      yield* HtmlHydrate.hydrateEffect(App, {}, app, {
+        ...rendered.state,
+        "/App/LazyPage[p]": "1970-01-01T00:00:01.000Z"
+      })
+      sameElements(app, server)
+      assert.strictEqual(app.textContent, "1000")
+    }).pipe(Effect.scoped))
+
   it.effect("keeps nodes before a mismatch inside a row, rebuilds the rest of that row, and keeps sibling rows", () =>
     Effect.gen(function*() {
       const rendered = yield* HtmlServer.renderToHtml(List, {})

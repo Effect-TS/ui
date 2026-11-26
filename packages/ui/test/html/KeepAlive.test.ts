@@ -1579,6 +1579,51 @@ describe("keep-alive children in a receiver that waits for its Layer", {
         assert.strictEqual(app.querySelector("p")?.textContent, draft)
       }).pipe(Effect.scoped)
   )
+
+  it.effect(
+    "adopt a preloaded lazy child and restore its saved Model once the receiver resumes",
+    () =>
+      Effect.gen(function*() {
+        const Card = Html.component({
+          name: "Card",
+          model: Schema.Date,
+          message: Schema.Never
+        }).make({
+          init: () => new Date(0),
+          update: ($) => $.model,
+          view: (h, at) => h.b(String(at.getTime()))
+        })
+        const LazyCard = Component.lazy("LazyCard", () => Promise.resolve(Card))
+        const Page = Html.component({
+          name: "Page",
+          model: Schema.Null,
+          message: Schema.Never
+        }).make({
+          init: () => null,
+          update: ($) => $.model,
+          view: (h) =>
+            h.main(
+              Gated(h, {
+                key: "f",
+                slots: { body: h.keepAlive((s) => LazyCard(s, { key: "c" })) }
+              })
+            )
+        })
+        yield* Effect.promise(() => LazyCard.preload())
+        const { app, open, state } = yield* serve(
+          HtmlServer.renderToHtml(Page, {})
+        )
+        const served = app.querySelector("b")!
+        const root = yield* HtmlHydrate.hydrateEffect(Page, {}, app, {
+          ...state,
+          "/Page/LazyCard[c]": "1970-01-01T00:00:01.000Z"
+        })
+        yield* open
+        yield* root.adopted
+        assert.strictEqual(app.querySelector("b"), served)
+        assert.strictEqual(served.textContent, "1000")
+      }).pipe(Effect.scoped)
+  )
 })
 
 describe("keep-alive children of a headless child", () => {

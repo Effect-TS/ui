@@ -412,7 +412,7 @@ export const keeper: Kernel.Keeper = {
     }
     if (
       entry?.loading !== undefined &&
-      lazy.stateOf(view.component as any)._tag === "Loaded"
+      lazy.componentOf(view.component) !== undefined
     ) {
       end(table, named, entry)
       entry = undefined
@@ -429,7 +429,7 @@ export const keeper: Kernel.Keeper = {
           alive,
           round
         })
-      } else if (lazy.isLazy(view.component)) {
+      } else if (lazy.componentOf(view.component) === undefined) {
         table.kids.set(named, {
           inst: author,
           rec,
