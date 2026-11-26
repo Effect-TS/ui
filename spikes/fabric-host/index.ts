@@ -10,4 +10,6 @@ if (process.env.EXPO_PUBLIC_SPIKE === "react-bench") {
 } else if (process.env.EXPO_PUBLIC_SPIKE_PREBUILT === "1") {
   if (process.env.EXPO_PUBLIC_SPIKE === "bench") require("./prebuilt/bench.cjs")
   else require("./prebuilt/counter.cjs")
-} else require("./src/main.ts")
+} else if (process.env.EXPO_PUBLIC_SPIKE === "bench") {
+  require("./src/main-bench.ts")
+} else require("./src/main-counter.ts")

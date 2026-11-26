@@ -4,10 +4,7 @@
  */
 import * as Component from "@effect/ui/Component"
 import * as View from "@effect/ui/View"
-import * as Context from "effect/Context"
 import type { FabricNode } from "./FabricHost.ts"
-
-export class Host extends Context.Service<Host, {}>()("fabric-spike/Host") {}
 
 export interface PressPayload {
   readonly x: number
@@ -40,7 +37,8 @@ export interface Tags<Msg> {
 
 export interface Elements extends View.Elements {
   readonly Tags: Tags<this["Msg"]>
-  readonly Host: Host
+  /** Only `FabricHost` hosts this vocabulary, so mounting needs no marker. */
+  readonly Host: never
 }
 
 export const vocabulary: View.Vocabulary<Elements> = {

@@ -29,11 +29,6 @@ export const Message = UiSchema.TaggedEnum({
 })
 type Message = typeof Message.Type
 
-const update = (
-  { model }: { readonly model: Model },
-  message: Message
-): Model => reduce(model, message)
-
 const BenchDef = Spike.component({
   name: "Bench",
   model: Model,
@@ -66,7 +61,7 @@ const row = (h: H, row: Row, selected: boolean) =>
 
 export const Bench = BenchDef.make({
   init: () => ({ rows: [], selected: 0, nextId: 1 }),
-  update,
+  update: ({ model }, message) => reduce(model, message),
   view: (h, model) =>
     h.view.prop("style", { flex: 1, backgroundColor: "white", paddingTop: 48 })
       .children(

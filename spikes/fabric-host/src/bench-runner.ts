@@ -1,15 +1,15 @@
 // The measurement scripts read these logs from logcat.
 // oxlint-disable no-console
 /**
- * Runs the js-framework-benchmark operations through `send`, which resolves
- * once the change is committed to Fabric (`completeRoot` returned, so
- * layout is done and the mount is queued for the UI thread). Logs one
- * `SPIKE_BENCH` line with the median of each operation, in ms. Shared by the
- * @effect/ui and React benchmarks, so messages are plain tagged objects.
+ * The startup log and the js-framework-benchmark run, shared by the
+ * @effect/ui and React apps, so messages are plain tagged objects.
  */
-type Send = (message: unknown) => Promise<void>
+import type { Msg } from "./rows.ts"
 
-declare const global: { nativePerformanceNow?: () => number }
+declare const global: {
+  nativePerformanceNow?: () => number
+  __BUNDLE_START_TIME__: number
+}
 /**
  * Native monotonic clock. `performance` is installed by React Native's
  * InitializeCore, which the @effect/ui entry does not run.
@@ -22,13 +22,46 @@ const median = (xs: Array<number>) => {
   return Math.round(sorted[sorted.length >> 1] * 10) / 10
 }
 
-export const runBench = async (send: Send) => {
+let firstCommit = true
+let onCommit: (() => void) | undefined
+
+/**
+ * Each app calls this after every commit to Fabric (`completeRoot` returned,
+ * so layout is done and the mount is queued for the UI thread). Logs
+ * `SPIKE_STARTUP` for the first, and ends the operation being timed.
+ */
+export const committed = (): void => {
+  if (firstCommit) {
+    firstCommit = false
+    console.log(
+      `SPIKE_STARTUP ${
+        JSON.stringify({
+          bundleStartToFirstCommitMs: now() - global.__BUNDLE_START_TIME__
+        })
+      }`
+    )
+  }
+  const resolve = onCommit
+  onCommit = undefined
+  resolve?.()
+}
+
+/**
+ * Runs the benchmark's operations through `dispatch`, timing each until its
+ * commit. Logs one `SPIKE_BENCH` line with the median of each, in ms.
+ */
+export const runBench = async (dispatch: (message: Msg) => void) => {
+  const send = (message: Msg) =>
+    new Promise<void>((resolve) => {
+      onCommit = resolve
+      dispatch(message)
+    })
   const runs = 7
   const results: Record<
     string,
     { commit: Array<number>; frame: Array<number> }
   > = {}
-  const time = async (name: string, message: unknown) => {
+  const time = async (name: string, message: Msg) => {
     const t0 = now()
     await send(message)
     const t1 = now()

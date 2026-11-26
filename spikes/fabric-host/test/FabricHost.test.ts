@@ -1,30 +1,26 @@
 import * as Renderer from "@effect/ui/Renderer"
 import * as Effect from "effect/Effect"
-import * as Layer from "effect/Layer"
 import * as Scope from "effect/Scope"
 import { assert, describe, it } from "vitest"
 import { Bench } from "../src/Bench.ts"
 import { Counter } from "../src/Counter.ts"
 import * as FabricHost from "../src/FabricHost.ts"
-import * as Spike from "../src/Spike.ts"
 import * as FakeFabric from "./FakeFabric.ts"
 
 const setup = async (component: typeof Counter | typeof Bench) => {
   const fabric = FakeFabric.make()
+  let commits = 0
   const made = FabricHost.make({
     ui: fabric.ui,
     rootTag: 1,
     platform: { OS: "android" },
-    processColor: (c) => c
+    processColor: (c) => c,
+    onCommit: () => commits++
   })
-  let commits = 0
-  const host = { ...made.host, commit: () => (made.host.commit!(), commits++) }
   const scope = Scope.makeUnsafe()
   const root = await Effect.runPromise(
     Renderer.mount(component as typeof Counter, {}, made.root).pipe(
-      Effect.provide(
-        Layer.mergeAll(Renderer.layer(host), Layer.succeed(Spike.Host, {}))
-      ),
+      Effect.provide(Renderer.layer(made.host)),
       Scope.provide(scope)
     )
   )

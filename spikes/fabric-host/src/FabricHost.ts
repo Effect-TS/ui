@@ -52,8 +52,6 @@ export class FabricNode {
   last: FabricNode | undefined = undefined
   prev: FabricNode | undefined = undefined
   next: FabricNode | undefined = undefined
-  /** Props of the shadow node, already in Fabric's flat form. */
-  props: Record<string, unknown> = {}
   /** Props changed since the last commit, `null` for a removed one. */
   pending: Record<string, unknown> | undefined = undefined
   style: Readonly<Record<string, unknown>> | undefined = undefined
@@ -61,18 +59,26 @@ export class FabricNode {
   shadow: unknown = undefined
   /** This node or a descendant changed since the last commit. */
   dirty = true
-  /** The children changed since the last commit. */
+  /** A child changed, or was inserted or removed, since the last commit. */
   kidsChanged = false
-  /** A scroll view's content container, which holds its children. */
+  /** A scroll view's content container: its only child, holding its children. */
   inner: FabricNode | undefined = undefined
   events: EventEntry | undefined = undefined
   readonly tag: string
-  viewName: string
+  readonly viewName: string
   readonly reactTag: number
-  constructor(tag: string, viewName: string, reactTag: number) {
+  /** Props of the shadow node, already in Fabric's flat form. */
+  readonly props: Record<string, unknown>
+  constructor(
+    tag: string,
+    viewName: string,
+    reactTag: number,
+    props: Record<string, unknown>
+  ) {
     this.tag = tag
     this.viewName = viewName
     this.reactTag = reactTag
+    this.props = props
   }
 }
 
@@ -87,12 +93,18 @@ export const make = (options: {
   readonly rootTag: number
   readonly platform: Platform
   readonly processColor: (color: unknown) => unknown
+  /** Called after every `commit`, whether or not anything changed. */
+  readonly onCommit?: (() => void) | undefined
 }): { readonly host: Renderer.Host<FabricNode>; readonly root: FabricNode } => {
-  const { platform, processColor, rootTag, ui } = options
+  const { onCommit, platform, processColor, rootTag, ui } = options
   // React Native allocates even tags from 2, so ours never collide with surface ids.
   let nextTag = 2
-  const node = (tag: string, viewName: string) => {
-    const n = new FabricNode(tag, viewName, nextTag)
+  const node = (
+    tag: string,
+    viewName: string,
+    props: Record<string, unknown> = {}
+  ) => {
+    const n = new FabricNode(tag, viewName, nextTag, props)
     nextTag += 2
     return n
   }
@@ -106,10 +118,12 @@ export const make = (options: {
       : "AndroidTextInput"
   }
 
+  // Marks `n` changed, so that every ancestor is cloned with its children.
   const markDirty = (n: FabricNode | undefined) => {
     while (n !== undefined && !n.dirty) {
       n.dirty = true
       n = n.parent
+      if (n !== undefined) n.kidsChanged = true
     }
   }
 
@@ -129,63 +143,41 @@ export const make = (options: {
   const build = (n: FabricNode): unknown => {
     if (!n.dirty) return n.shadow
     n.dirty = false
-    const kidsChanged = n.kidsChanged || anyDirty(n)
-    n.kidsChanged = false
-    const inner = n.inner
-    if (inner === undefined) {
-      n.shadow = rebuild(n, kidsChanged, n)
-    } else {
-      const before = inner.shadow
-      inner.shadow = rebuild(inner, kidsChanged, n)
-      n.shadow = rebuild(n, inner.shadow !== before, undefined)
-    }
-    return n.shadow
-  }
-
-  // `owner` holds the children to append: `n` itself, or the scroll view
-  // whose content container `n` is. `undefined` appends `n.inner`.
-  const rebuild = (
-    n: FabricNode,
-    kidsChanged: boolean,
-    owner: FabricNode | undefined
-  ): unknown => {
     const pending = n.pending
     n.pending = undefined
     let shadow: unknown
     if (n.shadow === undefined) {
-      shadow = ui.createNode(n.reactTag, n.viewName, rootTag, n.props, n)
-    } else if (kidsChanged) {
+      // Text inside text is a span, which Fabric calls virtual text.
+      const viewName = n.tag === "text" && n.parent!.tag === "text"
+        ? "RCTVirtualText"
+        : n.viewName
+      shadow = ui.createNode(n.reactTag, viewName, rootTag, n.props, n)
+    } else if (n.kidsChanged) {
       shadow = pending === undefined
         ? ui.cloneNodeWithNewChildren(n.shadow)
         : ui.cloneNodeWithNewChildrenAndProps(n.shadow, pending)
     } else {
-      return pending === undefined
-        ? n.shadow
-        : ui.cloneNodeWithNewProps(n.shadow, pending)
+      if (pending !== undefined) {
+        n.shadow = ui.cloneNodeWithNewProps(n.shadow, pending)
+      }
+      return n.shadow
     }
-    if (owner === undefined) ui.appendChild(shadow, n.inner!.shadow)
-    else {for (let k = owner.first; k; k = k.next) {
-        ui.appendChild(shadow, build(k))
-      }}
-    return shadow
+    n.kidsChanged = false
+    for (let k = n.first; k; k = k.next) ui.appendChild(shadow, build(k))
+    return n.shadow = shadow
   }
 
   const commit = () => {
-    if (!root.dirty) return
-    root.dirty = false
-    root.kidsChanged = false
-    const set = ui.createChildSet(rootTag)
-    for (let k = root.first; k; k = k.next) ui.appendChildToSet(set, build(k))
-    ui.completeRoot(rootTag, set)
-  }
-
-  const detach = (n: FabricNode) => {
-    const parent = n.parent!
-    if (n.prev === undefined) parent.first = n.next
-    else n.prev.next = n.next
-    if (n.next === undefined) parent.last = n.prev
-    else n.next.prev = n.prev
-    n.parent = n.prev = n.next = undefined
+    if (root.dirty) {
+      root.dirty = false
+      root.kidsChanged = false
+      const set = ui.createChildSet(rootTag)
+      for (let k = root.first; k; k = k.next) {
+        ui.appendChildToSet(set, build(k))
+      }
+      ui.completeRoot(rootTag, set)
+    }
+    onCommit?.()
   }
 
   // Events: Fabric hands back the instance handle we gave createNode.
@@ -254,15 +246,16 @@ export const make = (options: {
       if (viewName === undefined) throw new Error(`Unknown element <${tag}>`)
       const n = node(tag, viewName)
       if (tag === "scroll") {
-        n.inner = node("#content", "RCTScrollContentView")
-        n.inner.props = { collapsable: false }
+        const inner = node("#content", "RCTScrollContentView", {
+          collapsable: false
+        })
+        inner.parent = n
+        n.first = n.last = n.inner = inner
       }
       return n
     },
     createText(text) {
-      const n = node("#text", "RCTRawText")
-      n.props = { text }
-      return n
+      return node("#text", "RCTRawText", { text })
     },
     setText(n, text) {
       setNative(n, "text", text)
@@ -282,10 +275,7 @@ export const make = (options: {
     },
     insertBefore(parent, n, ref) {
       if (n.parent !== undefined) host.remove(n)
-      // Text inside text is a span, which Fabric calls virtual text.
-      if (n.tag === "text" && parent.tag === "text" && n.shadow === undefined) {
-        n.viewName = "RCTVirtualText"
-      }
+      parent = parent.inner ?? parent
       const prev = ref === undefined ? parent.last : ref.prev
       n.parent = parent
       n.prev = prev
@@ -300,18 +290,23 @@ export const make = (options: {
     remove(n) {
       const parent = n.parent
       if (parent === undefined) return
-      detach(n)
+      if (n.prev === undefined) parent.first = n.next
+      else n.prev.next = n.next
+      if (n.next === undefined) parent.last = n.prev
+      else n.next.prev = n.prev
+      n.parent = n.prev = n.next = undefined
       parent.kidsChanged = true
       markDirty(parent)
     },
     // `nodes` are all of `parent`'s children, as the Host contract says.
     removeChildren(parent, nodes) {
+      parent = parent.inner ?? parent
       for (const n of nodes) n.parent = n.prev = n.next = undefined
       parent.first = parent.last = undefined
       parent.kidsChanged = true
       markDirty(parent)
     },
-    parentOf: (n) => n.parent,
+    parentOf: (n) => n.parent?.tag === "#content" ? n.parent.parent : n.parent,
     nextOf: (n) => n.next,
     setEvents(n, handlers, dispatch) {
       n.events = { handlers, dispatch }
@@ -320,13 +315,7 @@ export const make = (options: {
         setNative(n, "collapsable", false)
       }
     },
-    createContainer: () => node("#container", ""),
     commit
   }
   return { host, root }
-}
-
-const anyDirty = (n: FabricNode) => {
-  for (let k = n.first; k; k = k.next) if (k.dirty) return true
-  return false
 }

@@ -5,21 +5,15 @@ import path from "node:path"
 import { defineConfig } from "vite"
 
 const root = path.resolve(import.meta.dirname, "..")
+const spike = process.env.EXPO_PUBLIC_SPIKE ?? "counter"
 
 export default defineConfig({
   root,
   logLevel: "warn",
+  // @effect/ui resolves through the `paths` in tsconfig.json.
   resolve: {
     conditions: ["production", "import", "default"],
-    alias: [{
-      find: /^@effect\/ui\/(.*)$/,
-      replacement: path.resolve(root, "../../packages/ui/src/$1.ts")
-    }]
-  },
-  define: {
-    "process.env.EXPO_PUBLIC_SPIKE": JSON.stringify(
-      process.env.EXPO_PUBLIC_SPIKE ?? "counter"
-    )
+    tsconfigPaths: true
   },
   build: {
     outDir: path.join(root, "prebuilt"),
@@ -27,9 +21,9 @@ export default defineConfig({
     minify: false,
     target: "es2020",
     lib: {
-      entry: path.join(root, "src/main.ts"),
+      entry: path.join(root, `src/main-${spike}.ts`),
       formats: ["cjs"],
-      fileName: () => `${process.env.EXPO_PUBLIC_SPIKE ?? "counter"}.cjs`
+      fileName: () => `${spike}.cjs`
     },
     rollupOptions: { external: (id) => id.startsWith("react-native") }
   }

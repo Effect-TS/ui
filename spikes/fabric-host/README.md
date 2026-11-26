@@ -11,7 +11,8 @@ Native's Fabric renderer, with no React, from a stock Expo project
 - `src/main.ts` installs `RN$AppRegistry` so native can start a surface
   without React's `AppRegistry`. It also installs the globals native expects
   that React Native's `InitializeCore` would otherwise set up.
-- `src/Counter.ts` and `src/Bench.ts` are the two apps.
+- `src/Counter.ts` and `src/Bench.ts` are the two apps, booted by
+  `src/main-counter.ts` and `src/main-bench.ts`.
   `src/react/main.tsx` is the same benchmark in stock React Native.
 - `index.ts` picks a variant from `EXPO_PUBLIC_*` variables, which are
   inlined at build time:
@@ -42,9 +43,9 @@ first, or Gradle reuses the previous bundle.
 The release apps log `SPIKE_STARTUP` and `SPIKE_BENCH` to logcat under
 `ReactNativeJS`.
 
-To measure bundle size, run `scripts/measure.sh <name> ENV=value...`. To
-see where the bytes in a bundle go, run
-`scripts/breakdown.cjs <bundle.js> <bundle.map>`.
+To measure bundle size, run `scripts/measure.sh <name> ENV=value...`, which
+exports into `dist/<name>` and `dist/<name>-js`. To see where the bytes in a
+bundle go, run `scripts/breakdown.cjs <bundle.js> <bundle.map>`.
 
 To run the unit tests against a fake Fabric:
 

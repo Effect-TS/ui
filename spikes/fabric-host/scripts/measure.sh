@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Exports one variant as Hermes bytecode and as minified JS, and prints sizes.
-# Usage: scripts/measure.sh <name> [ENV=value ...]
+# Exports one variant as Hermes bytecode and as minified JS into dist/, and
+# prints sizes. Usage: scripts/measure.sh <name> [ENV=value ...]
 set -euo pipefail
+cd "$(dirname "$0")/.."
 name=$1; shift
-out=../../../out/$name
+out=dist/$name
 env "$@" npx expo export --platform android --output-dir "$out" >/dev/null 2>&1
 env "$@" npx expo export --no-bytecode --platform android --output-dir "$out-js" --source-maps >/dev/null 2>&1
 hbc=$(ls "$out"/_expo/static/js/android/*.hbc)

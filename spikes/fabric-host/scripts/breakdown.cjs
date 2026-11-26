@@ -38,16 +38,14 @@ const group = (source) => {
   all.sort((a, b) =>
     a.generatedLine - b.generatedLine || a.generatedColumn - b.generatedColumn
   )
+  // A mapping covers the code up to the next one, or to the end of its line.
   all.forEach((m) => {
-    if (previous && previous.generatedLine === m.generatedLine) {
-      const n = m.generatedColumn - previous.generatedColumn
+    if (previous) {
+      const end = previous.generatedLine === m.generatedLine
+        ? m.generatedColumn
+        : lines[previous.generatedLine - 1].length
       const g = group(previous.source)
-      bytes.set(g, (bytes.get(g) ?? 0) + n)
-    } else if (previous) {
-      const n = lines[previous.generatedLine - 1].length -
-        previous.generatedColumn
-      const g = group(previous.source)
-      bytes.set(g, (bytes.get(g) ?? 0) + n)
+      bytes.set(g, (bytes.get(g) ?? 0) + end - previous.generatedColumn)
     }
     previous = m
   })

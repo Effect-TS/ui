@@ -1,18 +1,13 @@
-// The measurement scripts read these logs from logcat.
-// oxlint-disable no-console
 /**
  * The same benchmark on stock React Native, for comparison on the same
  * device and build.
  */
 import { memo, useLayoutEffect, useReducer } from "react"
 import { AppRegistry, Pressable, ScrollView, Text, View } from "react-native"
-import { now, runBench } from "../bench-runner.ts"
+import { committed, runBench } from "../bench-runner.ts"
 import { type Msg, reduce, type Row as RowData } from "../rows.ts"
 
 let dispatchRef: ((message: Msg) => void) | undefined
-let onCommit: (() => void) | undefined
-let firstCommit = true
-declare const global: any
 
 const Row = memo((
   { row, selected, dispatch }: {
@@ -55,19 +50,7 @@ const App = () => {
     nextId: 1
   })
   dispatchRef = dispatch
-  useLayoutEffect(() => {
-    if (firstCommit) {
-      firstCommit = false
-      console.log(
-        `SPIKE_STARTUP ${
-          JSON.stringify({
-            bundleStartToFirstCommitMs: now() - global.__BUNDLE_START_TIME__
-          })
-        }`
-      )
-    }
-    onCommit?.()
-  })
+  useLayoutEffect(committed)
   return (
     <View style={{ flex: 1, backgroundColor: "white", paddingTop: 48 }}>
       <View
@@ -108,14 +91,4 @@ const App = () => {
 
 AppRegistry.registerComponent("main", () => App)
 
-setTimeout(() => {
-  runBench((message) =>
-    new Promise<void>((resolve) => {
-      onCommit = () => {
-        onCommit = undefined
-        resolve()
-      }
-      dispatchRef!(message as Msg)
-    })
-  )
-}, 0)
+setTimeout(() => runBench((message) => dispatchRef!(message)), 0)
