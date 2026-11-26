@@ -10,9 +10,9 @@ import * as Preview from "#domain/Preview"
 import * as Prompt from "#domain/Prompt"
 import { fromDocument, fromHeading } from "#domain/Section"
 import { type Snippet, Snippets, textOf } from "#domain/Snippet"
-import { Head, type View } from "@effect/ui"
+import { Head, Subscription, type View } from "@effect/ui"
 import { Html, Markdown } from "@effect/ui/html"
-import { Option, Schema } from "effect"
+import { Effect, Option, Schema, Stream } from "effect"
 import source, { frontmatter } from "./article.md"
 import { Counter } from "./autocounter/Counter.ts"
 import { Page } from "./counter/effect/Page.ts"
@@ -180,6 +180,45 @@ const Kept = (h: Html.H<never>, feature: Feature) =>
     h.p.class("font-medium text-pretty").children(feature.title)
   )
 
+const hashTarget = () => {
+  const { hash } = window.location
+  if (hash.length <= 1) return null
+  try {
+    return document.getElementById(decodeURIComponent(hash.slice(1)))
+  } catch {
+    return null
+  }
+}
+
+// The page is rendered on the client after initial HTML load, so the
+// browser's own fragment scroll runs before the headings exist. Jump
+// straight to the target once mounted, and re-align after webfonts
+// settle if the user hasn't scrolled away.
+const ScrollToInitialHash = Subscription.make(
+  "initial-hash",
+  Stream.fromEffect(
+    Effect.gen(function*() {
+      if (
+        typeof window === "undefined" ||
+        typeof document === "undefined"
+      ) return
+      const target = hashTarget()
+      if (target === null) return
+      const align = () => {
+        target.scrollIntoView({ behavior: "instant" })
+        return window.scrollY
+      }
+      const landed = align()
+      if ("fonts" in document) {
+        yield* Effect.promise(() => document.fonts.ready)
+        if (Math.abs(window.scrollY - landed) < 2) {
+          align()
+        }
+      }
+    })
+  ).pipe(Stream.drain)
+)
+
 export const LaunchPage = Html.component({
   name: "LaunchPage",
   props: Schema.Struct({
@@ -191,6 +230,7 @@ export const LaunchPage = Html.component({
 }).make({
   init: () => null,
   update: ($) => $.model,
+  subscriptions: () => [ScrollToInitialHash],
   head: () => [Head.title(title)],
   view: (h) => {
     const { articleUrl, snippets } = h.props
