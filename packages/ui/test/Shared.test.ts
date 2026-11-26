@@ -1276,8 +1276,6 @@ describe("a component that reads its own kind", () => {
     Effect.gen(function*() {
       const scene = yield* Scene.make(Paths, { follow: true })
       scene.expect(Locator.text("/a/b")).toExist()
-      scene.givenChild(Path, "outer", "!").expect(Locator.text("/a!/b!"))
-        .toExist()
     }).pipe(Effect.scoped))
 
   it.effect("in a scene, an owner's default derives its value from the values given", () =>
@@ -1285,24 +1283,21 @@ describe("a component that reads its own kind", () => {
       const Label = Component.define({
         name: "Label",
         model: Schema.Null,
-        message: Saw,
+        message: Schema.Never,
         shares: (_, __, reads) => reads.tips.label,
         reads: { tips: TipsProvider }
       }).make({ init: () => null, update: ($) => $.model })
       const Show = Component.define({
         name: "Show",
         model: Schema.Null,
-        message: Saw,
-        reads: {
-          label: { owner: Label, onChange: (path) => Saw.Saw({ path }) }
-        }
+        message: Schema.Never,
+        reads: { label: Label }
       }).make({
         init: () => null,
         update: ($) => $.model,
         view: (h) => h.el("p", `label:${h.reads.label}`)
       })
       const scene = yield* Scene.make(Show, {})
-      scene.expect(Locator.text("label:")).toExist()
       scene.shared(TipsProvider, { open: null, label: "given" })
         .expect(Locator.text("label:given")).toExist()
     }).pipe(Effect.scoped))

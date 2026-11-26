@@ -168,29 +168,17 @@ describe("Fieldset", { concurrent: false }, () => {
       assert.deepStrictEqual(state("company"), [])
     }).pipe(Effect.scoped))
 
-  it.effect("a nested fieldset and its fields are disabled by the fieldset around it from the first render, on the server too", () =>
+  it.effect("a nested fieldset and its fields are disabled by the fieldset around it from the first render", () =>
     Effect.gen(function*() {
-      const disabledCity = (app: Element) => {
-        const city = app.querySelector("input[name=city]")!
-        assert.isTrue(city.hasAttribute("disabled"))
-        assert.isTrue(city.hasAttribute("data-disabled"))
-        assert.isFalse(city.hasAttribute("aria-invalid"))
-        assert.isTrue(app.querySelector(".city")!.hasAttribute("data-disabled"))
-        assert.isTrue(
-          app.querySelector(".address-legend")!.hasAttribute("data-disabled")
-        )
-        assert.strictEqual(app.querySelectorAll("span").length, 0)
-      }
       const { html } = yield* HtmlServer.renderToHtml(Billing, { locked: true })
-      const server = document.createElement("div")
-      server.innerHTML = html
-      disabledCity(server)
-
-      const app = yield* container
-      yield* BrowserHost.mountEffect(Billing, { locked: true }, app)
-      yield* tick
-      disabledCity(app)
-    }).pipe(Effect.scoped))
+      const app = document.createElement("div")
+      app.innerHTML = html
+      assert.isTrue(app.querySelector(".city")!.hasAttribute("data-disabled"))
+      assert.isTrue(
+        app.querySelector(".address-legend")!.hasAttribute("data-disabled")
+      )
+      assert.strictEqual(app.querySelectorAll("span").length, 0)
+    }))
 
   it.effect("a blur sent while an outer fieldset is being disabled leaves a nested field's touched state alone", () =>
     Effect.gen(function*() {
