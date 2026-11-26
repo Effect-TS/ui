@@ -22,10 +22,6 @@
  * - an instance was still waiting for its Layer when the budget was spent;
  * - a problem was reported, on either side.
  *
- * In browser tests, a page the server rendered with an open popover or a
- * modal dialog hydrates in an off-screen iframe, where they can open. The
- * iframe is removed when the Scope closes.
- *
  * **Example** (Checking a page hydrates)
  *
  * ```ts
@@ -275,7 +271,6 @@ const compareHeads = (
  * `write` establishes standards mode; moving the parsed nodes keeps their scripts inert.
  */
 const liveDocument = Effect.fnUntraced(function*(parsed: Document) {
-  if (parsed.defaultView !== null) return parsed
   const frame = globalThis.document.createElement("iframe")
   frame.style.cssText =
     "position:fixed;left:-10000px;top:0;width:100vw;height:100vh;border:0"
@@ -344,10 +339,11 @@ const stepLimit = 10_000
  * Any problem fails `ssr`, including `Command.ServerCommandIssued` on the
  * server. To test one, render with `Renderer.prerender` instead.
  *
- * In a browser, the page only has a window when the server rendered a
- * popover or a modal dialog open. One that first opens on the client, after
- * hydration or in an instance that waited for its Layer, throws
- * `InvalidStateError`.
+ * In a browser, a page the server rendered with a popover or a modal dialog
+ * open hydrates in an off-screen iframe, removed when the Scope closes. Any
+ * other page has no window, so a popover or a modal dialog that first opens
+ * on the client, after hydration or in an instance that waited for its Layer,
+ * throws `InvalidStateError`.
  *
  * @stability experimental
  * @category constructors
@@ -512,7 +508,10 @@ export const ssr = <
       server.attributes(server.bodyOwned(serverHead))
     }><div id="app">${html}</div></body></html>`
     const parsed = new DOMParser().parseFromString(page, "text/html")
-    const document = topLayer ? yield* liveDocument(parsed) : parsed
+    // happy-dom gives a parsed document a window.
+    const document = topLayer && parsed.defaultView === null
+      ? yield* liveDocument(parsed)
+      : parsed
     const container = document.getElementById("app")!
     const before = serverNodes(container)
     const project = options?.frames ??
