@@ -723,11 +723,13 @@ describe("Menu in a document", { concurrent: false }, () => {
       assert.isNull(byId("before").getAttribute("aria-hidden"))
     }))
 
-  it.effect("driven from the parent window in an iframe, a modal menu's backdrop takes a press outside and closes it", () =>
+  it.effect("driven from the parent window in an iframe, a modal menu stays open as its trigger takes focus, and a backdrop press closes it", () =>
     Effect.gen(function*() {
       const { app, log } = yield* mountPage({}, inIframe)
       const doc = app.ownerDocument
       mousedown(byId("trigger", doc))
+      yield* tick
+      byId("trigger", doc).focus()
       yield* tick
       const blocker = byId("positioner", doc).querySelector<HTMLElement>(
         "[data-menu-blocker]"
