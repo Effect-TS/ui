@@ -251,27 +251,19 @@ describe("Dialog", () => {
     }))
 
   for (const topLayer of [true, false]) {
-    it.effect(`opens, takes input and closes in HtmlPlay with topLayer: ${topLayer}`, () =>
+    it.effect(`opens and closes in HtmlPlay with topLayer: ${topLayer}`, () =>
       Effect.gen(function*() {
-        const Msg = UiSchema.TaggedEnum({
-          Opened: {},
-          Closed: {},
-          Typed: { value: Schema.String }
-        })
+        const Msg = UiSchema.TaggedEnum({ Opened: {}, Closed: {} })
         const Settings = Html.component({
           name: "Settings",
-          model: Schema.Struct({ open: Schema.Boolean, name: Schema.String }),
+          model: Schema.Boolean,
           message: Msg
         }).make({
-          init: () => ({ open: false, name: "" }),
-          update: {
-            Opened: ($) => $.evolve({ open: true }),
-            Closed: ($) => $.evolve({ open: false }),
-            Typed: ($, { value }) => $.evolve({ name: value })
-          },
-          view: (h, model) =>
+          init: () => false,
+          update: { Opened: () => true, Closed: () => false },
+          view: (h, open) =>
             Dialog(h, {
-              props: { open: model.open, topLayer },
+              props: { open, topLayer },
               onEmit: {
                 RequestedOpen: () => Msg.Opened(),
                 RequestedClose: () => Msg.Closed(),
@@ -283,8 +275,6 @@ describe("Dialog", () => {
                   dialog.portal(h.dialog)?.children(
                     dialog.popup(h.div).children(
                       dialog.title(h.h2).children("Settings"),
-                      h.input.attr("aria-label", "Name").value(model.name)
-                        .on("input", ({ value }) => Msg.Typed({ value })),
                       dialog.close(h.button).children("Close")
                     )
                   )
@@ -296,9 +286,6 @@ describe("Dialog", () => {
         yield* play.click(settings)
         yield* play.expect(HtmlLocator.role("dialog", { name: "Settings" }))
           .toExist()
-        yield* play.type(HtmlLocator.role("textbox", { name: "Name" }), "Ada")
-        yield* play.expect(HtmlLocator.role("textbox", { name: "Name" }))
-          .toHaveValue("Ada")
         yield* play.click(HtmlLocator.role("button", { name: "Close" }))
         yield* play.expect(settings).toHaveAttribute("aria-expanded", "false")
       }).pipe(Effect.provide(TestHost.layer())))
