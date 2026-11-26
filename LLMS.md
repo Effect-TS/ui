@@ -1104,6 +1104,10 @@ Known limits:
   makes one child swappable with `Feature.Service`, and passes its editor
   into another component's slot. This entry module
   mounts the page, which is in `fixtures/pages/notes/NotePage.ts`.
+- **[Drawing icons and charts with SVG](./ai-docs/src/10_ui/21_svg-icons.ts)**:
+  SVG tags have builders on `h` like HTML tags: `h.svg`, `h.path`,
+  `h.circle`, `h.g` and the rest. Attribute names are checked per tag,
+  and SVG's `<text>` is `h.svgText` because `h.text` makes a text node.
 - **[Reusing view functions with children](./ai-docs/src/10_ui/21_view-functions.ts)**:
   Name view functions in CapitalCase, like components.
   Use a plain function for a stateless wrapper. Return the builder when

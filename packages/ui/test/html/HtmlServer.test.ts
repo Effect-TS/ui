@@ -603,6 +603,54 @@ describe("HtmlServer", { concurrent: false }, () => {
       }
     }).pipe(Effect.scoped))
 
+  it.effect("renders SVG builders in the SVG namespace on the server, fresh client and hydrated client", () =>
+    Effect.gen(function*() {
+      const Icon = Html.component({
+        name: "Icon",
+        model: Schema.Number,
+        message: Schema.Literal("Clicked")
+      }).make({
+        init: () => 0,
+        update: ($) => $.model + 1,
+        view: (h, count) =>
+          h.svg
+            .class("icon", count > 0 && "on")
+            .style({ width: "1em" })
+            .id("arrow")
+            .attrs({ viewBox: "0 0 24 24", "stroke-width": "2" })
+            .on("click", "Clicked")
+            .children(
+              h.path.attr("d", "M5 12h14"),
+              h.svgText.attr("x", "1").children(String(count))
+            )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Icon, {})
+      expect(rendered.html).toBe(
+        "<!--[/Icon--><svg class=\"icon\" style=\"width:1em\" id=\"arrow\" viewBox=\"0 0 24 24\" stroke-width=\"2\">" +
+          "<path d=\"M5 12h14\"></path><text x=\"1\">0</text></svg><!--]/Icon-->"
+      )
+      for (const hydrate of [false, true]) {
+        const app = yield* container(hydrate ? rendered.html : "")
+        const before = app.firstElementChild
+        yield* (hydrate
+          ? HtmlHydrate.hydrateEffect(Icon, {}, app, rendered.state)
+          : BrowserHost.mountEffect(Icon, {}, app))
+        const svg = app.querySelector("svg")!
+        if (hydrate) expect(svg).toBe(before)
+        expect(
+          [svg, svg.firstElementChild!, svg.lastElementChild!].map((node) =>
+            node.namespaceURI
+          )
+        )
+          .toEqual(Array(3).fill("http://www.w3.org/2000/svg"))
+        expect(svg.getAttribute("viewBox")).toBe("0 0 24 24")
+        svg.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+        yield* tick
+        expect(svg.getAttribute("class")).toBe("icon on")
+        expect(svg.lastElementChild!.textContent).toBe("1")
+      }
+    }).pipe(Effect.scoped))
+
   it.effect("escapes text, keeps a leading newline, and selects the option whose text is the select's value", () =>
     Effect.gen(function*() {
       const Page = Html.component({

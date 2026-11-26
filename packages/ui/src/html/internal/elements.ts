@@ -1,7 +1,7 @@
 /** Shared HTML element rules for the browser host and server serializer. */
 
 /** @internal */
-export const svgTags: ReadonlySet<string> = new Set([
+export const svgTagNames = [
   "svg",
   "g",
   "path",
@@ -27,7 +27,10 @@ export const svgTags: ReadonlySet<string> = new Set([
   "filter",
   "image",
   "foreignObject"
-])
+] as const
+
+/** @internal */
+export const svgTags: ReadonlySet<string> = new Set(svgTagNames)
 
 /** @internal */
 export const isCustomTag = (tag: string): boolean => tag.includes("-")
