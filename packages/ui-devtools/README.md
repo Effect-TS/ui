@@ -149,10 +149,4 @@ for (const session of inspector.sessions()) {
 
 The inspector reads Wire frames only, and the overlay shows only what it reads, so a `Schema.Redacted` value reaches them, and a copied frame, as the encoder's placeholder. The raw entries the overlay keeps to paint the page stay in memory and are only handed to the app's own views. A Subscription's key and deps and the message text of an error have no Schema to mark them, and are sent in clear: see `MessageLog.Wire`.
 
-```sh
-pnpm add @effect/ui-devtools @effect/ui @effect/ui-kit effect
-```
-
-`@effect/ui-devtools/node` also requires `@effect/platform-node`.
-
-The package is experimental: its API may change in any release.
+The package is experimental and not yet on npm: install it alongside `@effect/ui` and `@effect/ui-kit` from [snapshots](../../README.md#snapshots) (`@effect/ui-devtools/node` also requires `@effect/platform-node`).

@@ -1,6 +1,6 @@
 # @effect/ui
 
-A frontend framework for Effect whose apps are composed with Layers. A component is Schemas for its props, Model, messages and events, and pure `init`, `update` and `view` functions. Side effects are Commands and Subscriptions that the runtime runs, and data comes from queries (`Query`).
+A frontend library for Effect built around the Elm Architecture. Each component is a self-contained program with Schemas for its props, Model, messages, and events, plus pure `init`, `update`, and `view` functions. Side effects are Commands and Subscriptions that the runtime runs, data comes from queries (`Query`), and services are provided with `Layer`s.
 
 | Import                            | Holds                                                                                                                                                                                                                                               |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -12,10 +12,6 @@ A frontend framework for Effect whose apps are composed with Layers. A component
 | `@effect/ui/html/MarkdownContent` | TypeScript module types for `*.md` imports compiled by `MarkdownVite`                                                                                                                                                                               |
 | `@effect/ui/html/testing`         | `HtmlLocator`, `HtmlPlay`, `HtmlScene`, `Ssr` (`ssr`), `TestAnimationFrames`, `TestFiles`, `TestGlobalEvents`, `TestImages`                                                                                                                         |
 
-Only the `@effect/ui/html*` entry points need the DOM lib types. The rest type checks without it.
+The HTML entries listed above need DOM lib types; `@effect/ui` and `@effect/ui/testing` do not.
 
-```sh
-pnpm add @effect/ui effect
-```
-
-The package is experimental: its API may change in any release. `LLMS.md` at the repository root has the guide and worked examples.
+The package is experimental and not yet on npm: see the [snapshot install instructions](../../README.md#snapshots) at the repository root. `LLMS.md` at the repository root has the guide and worked examples.

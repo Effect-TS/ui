@@ -2,7 +2,7 @@
 
 # Effect UI
 
-A frontend framework for [Effect](https://github.com/Effect-TS/effect) whose apps are composed with Layers. A component is Schemas for its props, Model, messages and events, and pure `init`, `update` and `view` functions. Side effects are Commands and Subscriptions that the runtime runs, and data comes from queries (`Query`). The core is host-agnostic: `@effect/ui/html` renders to the DOM, and `@effect/ui-opentui` to terminals with OpenTUI.
+A frontend library for [Effect](https://github.com/Effect-TS/effect) built around the Elm Architecture. Each component is a self-contained program with Schemas for its props, Model, messages, and events, plus pure `init`, `update`, and `view` functions. Side effects run as Commands and Subscriptions managed by the runtime, data fetching and caching come from `Query`, and services are provided with `Layer`s. The core is host-agnostic: `@effect/ui/html` renders to the DOM, and `@effect/ui-opentui` to terminals with OpenTUI.
 
 The packages are experimental and not yet on npm: install them from [snapshots](#snapshots).
 
@@ -62,17 +62,32 @@ Layer.launch(Main).pipe(Effect.runFork)
 
 ## Snapshots
 
-Every pull request and every push to `main` publishes snapshot builds of all four packages to [pkg.pr.new](https://pkg.pr.new/~/Effect-TS/ui). Install one with the commit's short SHA, swapping in the package name:
+Every pull request and every push to `main` publishes snapshot builds of all four packages to [pkg.pr.new](https://pkg.pr.new/~/Effect-TS/ui). Install `@effect/ui` with a commit's short SHA alongside `effect` v4:
 
 ```sh
 pnpm add effect https://pkg.pr.new/Effect-TS/ui/@effect/ui@<sha>
 ```
 
-Every package has `effect` v4 as a peer dependency, and the other three also need `@effect/ui`. `@effect/ui-devtools` needs `@effect/ui-kit` too, and `@effect/ui-opentui` has its own [requirements](packages/ui-opentui/README.md#requirements).
+Because the packages are not on npm yet, add any extra package URLs alongside `@effect/ui` using the same `<sha>` (installing one alone fails to resolve its `@effect/ui` peer from npm):
+
+```sh
+# With ui-kit and devtools
+pnpm add effect \
+  https://pkg.pr.new/Effect-TS/ui/@effect/ui@<sha> \
+  https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@<sha> \
+  https://pkg.pr.new/Effect-TS/ui/@effect/ui-devtools@<sha>
+
+# With OpenTUI
+pnpm add effect @opentui/core@^0.9.9 \
+  https://pkg.pr.new/Effect-TS/ui/@effect/ui@<sha> \
+  https://pkg.pr.new/Effect-TS/ui/@effect/ui-opentui@<sha>
+```
+
+`@effect/ui-devtools/node` also requires `@effect/platform-node`, and `@effect/ui-opentui` has its own [runtime requirements](packages/ui-opentui/README.md#requirements).
 
 ## Examples
 
-`examples/` holds runnable apps, several of them ports of [Foldkit's examples](https://github.com/devinjameson/foldkit/tree/main/examples). Each one is a private workspace package that `pnpm check`, `pnpm lint` and `pnpm test` cover. Run one with `pnpm --filter <name> dev`. `snake-tui` is a terminal app: use `pnpm --filter snake-tui start` (Node) or `start:bun`.
+`examples/` holds runnable apps, several of them ports of [Foldkit's examples](https://github.com/devinjameson/foldkit/tree/main/examples). Each one is a private workspace package covered by `pnpm check` and `pnpm lint`, and by `pnpm test` for the examples with Vitest suites (`virtual-list` uses its own `check-history` script instead). Run a web example with `pnpm --filter <name> dev`. `snake-tui` is a terminal app: use `pnpm --filter snake-tui start` (Node) or `start:bun`.
 
 | Example                                                   | Description                                                                                  |
 | --------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
