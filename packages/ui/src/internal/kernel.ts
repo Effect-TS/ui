@@ -510,6 +510,7 @@ export const fail = (
     if (parentNode != null) {
       place(host, parentNode, fallback, first)
       unplace(host, parentNode, old)
+      wake(tree)
     }
     if (at === undefined) inst.rendered = fallback
     else {
