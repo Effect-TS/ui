@@ -49,6 +49,29 @@ afterEach(() => {
 
 // Every test syncs the one global document, and hosts on a document share its sync until each is disposed.
 describe("BrowserHost head", { concurrent: false }, () => {
+  it("drops a javascript: link href in serialization and adoption", async () => {
+    const entries = [
+      HtmlHead.link({ rel: "alternate", href: " Java\tScript:" })
+    ]
+    const rendered = await render(entries)
+    expect(rendered.head).toBe("<link rel=\"alternate\" data-eui>")
+    for (const hydrate of [false, true]) {
+      const target = new DOMParser().parseFromString(
+        `<html><head>${
+          hydrate ? rendered.head : ""
+        }</head><body></body></html>`,
+        "text/html"
+      )
+      const before = target.head.firstElementChild
+      const host = BrowserHost.makeHost(target, { warn: () => {} })
+      hosts.push(host)
+      host.head!(head(...entries))
+      const link = target.head.querySelector("link")!
+      if (hydrate) expect(link).toBe(before)
+      expect(link.getAttributeNames()).toEqual(["rel", "data-eui"])
+    }
+  })
+
   it("validates head tag and document data names before serialization, adoption and updates", async () => {
     const unsafe = [
       "x onclick",

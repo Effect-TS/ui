@@ -238,6 +238,92 @@ describe("HtmlServer", { concurrent: false }, () => {
       }
     }).pipe(Effect.scoped))
 
+  it.effect("drops javascript: and vbscript: URLs on the server, fresh client and hydrated client", () =>
+    Effect.gen(function*() {
+      const blocked = ["javascript:", " Java\tScript:", "VBSCRIPT:"]
+      const kept = ["/relative", "mailto:a@b.c"]
+      const Page = Html.component({
+        name: "Urls",
+        props: Schema.Struct({ url: Schema.String }),
+        model: Schema.String,
+        message: Schema.String
+      }).make({
+        init: ($) => $.props.url,
+        update: (_, message) => message,
+        view: (h, url) =>
+          h.div.children(
+            h.a.attr("href", url),
+            h.form.attr("action", url).children(
+              h.button.attr("formaction", url)
+            ),
+            h.img.attr("src", url),
+            h.el("object").attr("data", url),
+            h.el("svg").children(
+              h.el("a").attr("href", url).attr("xlink:href", url)
+            ),
+            h.a.prop("href", url)
+          )
+      })
+      for (const url of blocked) {
+        const rendered = yield* HtmlServer.renderToHtml(Page, { url })
+        expect(rendered.html).toBe(
+          "<!--[/Urls--><div><a></a><form><button></button></form><img><object></object>" +
+            "<svg><a></a></svg><a></a></div><!--]/Urls-->"
+        )
+      }
+      const relative = yield* HtmlServer.renderToHtml(Page, {
+        url: "/relative"
+      })
+      expect(relative.html).toBe(
+        "<!--[/Urls--><div><a href=\"/relative\"></a><form action=\"/relative\"><button formaction=\"/relative\"></button></form>" +
+          "<img src=\"/relative\"><object data=\"/relative\"></object>" +
+          "<svg><a href=\"/relative\" xlink:href=\"/relative\"></a></svg><a></a></div><!--]/Urls-->"
+      )
+      const rendered = yield* HtmlServer.renderToHtml(Page, {
+        url: blocked[0]!
+      })
+      for (const hydrate of [false, true]) {
+        const app = yield* container(hydrate ? rendered.html : "")
+        const before = app.firstElementChild
+        const root = yield* (hydrate
+          ? HtmlHydrate.hydrateEffect(
+            Page,
+            { url: blocked[0]! },
+            app,
+            rendered.state
+          )
+          : BrowserHost.mountEffect(Page, { url: blocked[0]! }, app))
+        if (hydrate) expect(app.firstElementChild).toBe(before)
+        const urls = () =>
+          Array.from(
+            app.querySelectorAll("*"),
+            (element) =>
+              Array.from(element.attributes, (attribute) =>
+                `${attribute.name}=${attribute.value}`)
+          ).flat()
+        expect(urls()).toEqual([])
+        for (const url of blocked) {
+          for (const safe of kept) {
+            root.send(safe)
+            yield* tick
+            expect(urls()).toEqual([
+              `href=${safe}`,
+              `action=${safe}`,
+              `formaction=${safe}`,
+              `src=${safe}`,
+              `data=${safe}`,
+              `href=${safe}`,
+              `xlink:href=${safe}`,
+              `href=${safe}`
+            ])
+          }
+          root.send(url)
+          yield* tick
+          expect(urls()).toEqual([])
+        }
+      }
+    }).pipe(Effect.scoped))
+
   describe("reports across hydration", () => {
     const Plain = UiSchema.TaggedEnum({ ChangedOn: { on: Schema.Boolean } })
     // An unrelated variant holds a secret, so the last message can't be shipped.
