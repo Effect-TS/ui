@@ -90,7 +90,7 @@ const elementAttributes = (
   props: Readonly<Record<string, unknown>>
 ): Map<string, string> => {
   const out = new Map<string, string>()
-  const svg = elements.svgTags.has(tag)
+  const svg = elements.svgTagSet.has(tag)
   for (const [name, value] of Object.entries(attrs)) {
     const normalized = elements.attributeName(name, svg)
     if (normalized === undefined) continue
@@ -157,7 +157,7 @@ const plainAttributes = (
   for (const name in attrs) {
     if (elements.attributeName(name, false) !== name) {
       if (
-        !elements.svgTags.has(tag) ||
+        !elements.svgTagSet.has(tag) ||
         elements.attributeName(name, true) !== name
       ) return undefined
     }

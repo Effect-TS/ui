@@ -29,20 +29,20 @@ export const LauncherPointer = <M>(
             // Fills the box from the tail to the tip, whatever its
             // shape. It ends going straight down, so the head, which
             // keeps its shape, always fits the end of the line.
-            h.el("svg").attrs({
+            h.svg.attrs({
               ...drawing,
               class: "launcher-pointer-line",
               viewBox: "0 0 100 100",
               preserveAspectRatio: "none"
             }).children(
-              h.el("path").attr("d", "M 0 0 C 58 0, 100 38, 100 100")
+              h.path.attr("d", "M 0 0 C 58 0, 100 38, 100 100")
             ),
-            h.el("svg").attrs({
+            h.svg.attrs({
               ...drawing,
               class: "launcher-pointer-head",
               viewBox: "0 0 26 15"
             }).children(
-              h.el("path").attr("d", "M 1 1 L 13 15 L 25 1")
+              h.path.attr("d", "M 1 1 L 13 15 L 25 1")
             )
           )
         )

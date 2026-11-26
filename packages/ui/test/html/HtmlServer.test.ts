@@ -664,6 +664,27 @@ describe("HtmlServer", { concurrent: false }, () => {
       }
     }).pipe(Effect.scoped))
 
+  it.effect("renders the SVG builders, with h.svgText as <text>", () =>
+    Effect.gen(function*() {
+      const Icon = Html.component({
+        name: "Icon",
+        model: Schema.Number,
+        message: Schema.Never
+      }).make({
+        init: () => 0,
+        update: ($) => $.model,
+        view: (h) =>
+          h.svg.attr("viewBox", "0 0 24 24").children(
+            h.path.attr("d", "M5 12h14"),
+            h.svgText("label")
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Icon, {})
+      expect(rendered.html).toBe(
+        "<!--[/Icon--><svg viewBox=\"0 0 24 24\"><path d=\"M5 12h14\"></path><text>label</text></svg><!--]/Icon-->"
+      )
+    }))
+
   it.effect("escapes text, keeps a leading newline, and selects the option whose text is the select's value", () =>
     Effect.gen(function*() {
       const Page = Html.component({

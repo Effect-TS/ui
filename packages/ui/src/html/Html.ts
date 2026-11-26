@@ -46,6 +46,12 @@
  * reports it, and the Model must follow. Position a popover next to its
  * trigger with CSS anchor positioning.
  *
+ * SVG tags have builders of their own, such as `h.svg`, `h.path` and
+ * `h.circle`, with `id`, `class`, `style`, events and children as on HTML
+ * elements. `attr` and `attrs` check SVG's case-sensitive attribute names
+ * by tag, so `viewbox` or `strok-width` doesn't compile. SVG's `text` is
+ * `h.svgText`, since `h.text` makes a text node.
+ *
  * The HTML renderers omit `href`, `src`, `action`, `formaction`, `xlink:href`
  * and `data` attributes containing `javascript:` or `vbscript:` URLs. Setting
  * a built-in element's `href`, `src`, `action`, `formAction` or `data` property
@@ -113,6 +119,27 @@
  * })
  * ```
  *
+ * **Example** (An icon)
+ *
+ * ```ts import.meta.vitest
+ * import { Html } from "@effect/ui/html"
+ *
+ * const ArrowIcon = <M>(h: Html.H<M>) =>
+ *   h.svg
+ *     .class("icon")
+ *     .attrs({
+ *       viewBox: "0 0 24 24",
+ *       fill: "none",
+ *       stroke: "currentColor",
+ *       "stroke-width": "2",
+ *       "aria-hidden": "true"
+ *     })
+ *     .children(
+ *       h.circle.attrs({ cx: "12", cy: "12", r: "10" }),
+ *       h.path.attr("d", "M8 12h8m-3-3 3 3-3 3")
+ *     )
+ * ```
+ *
  * @stability experimental
  * @since 0.1.0
  */
@@ -124,6 +151,7 @@ import type * as Mount from "../Mount.ts"
 import * as Renderer from "../Renderer.ts"
 import * as View from "../View.ts"
 import type * as HtmlHead from "./HtmlHead.ts"
+import * as elements from "./internal/elements.ts"
 
 // ---------------------------------------------------------------------------
 // host
@@ -1420,11 +1448,306 @@ export type ContainerTag = typeof containerTags[number]
  */
 export type VoidTag = typeof voidTags[number]
 
+// ---------------------------------------------------------------------------
+// svg
+// ---------------------------------------------------------------------------
+
+/**
+ * Tags with named builders on `h` that render in the SVG namespace.
+ *
+ * @stability experimental
+ * @category svg
+ * @since 0.1.0
+ */
+export const svgTags = elements.svgTags
+
+/**
+ * An SVG tag.
+ *
+ * @stability experimental
+ * @category svg
+ * @since 0.1.0
+ */
+export type SvgTag = typeof svgTags[number]
+
+/**
+ * Pointer, mouse, keyboard and focus events supported by SVG builders.
+ *
+ * @stability experimental
+ * @category svg
+ * @since 0.1.0
+ */
+export type SvgEvents = Pick<
+  Events,
+  | "click"
+  | "dblclick"
+  | "contextmenu"
+  | "mousedown"
+  | "mouseup"
+  | "pointerdown"
+  | "mouseenter"
+  | "mouseleave"
+  | "keydown"
+  | "keyup"
+  | "focus"
+  | "blur"
+  | "focusin"
+  | "focusout"
+>
+
+type SvgGlobalAttribute =
+  | "id"
+  | "class"
+  | "style"
+  | "lang"
+  | "tabindex"
+  | "role"
+  | `aria-${string}`
+  | `data-${string}`
+
+type SvgPresentationAttribute =
+  | "alignment-baseline"
+  | "baseline-shift"
+  | "clip"
+  | "clip-path"
+  | "clip-rule"
+  | "color"
+  | "color-interpolation"
+  | "color-interpolation-filters"
+  | "color-rendering"
+  | "cursor"
+  | "direction"
+  | "display"
+  | "dominant-baseline"
+  | "fill"
+  | "fill-opacity"
+  | "fill-rule"
+  | "filter"
+  | "flood-color"
+  | "flood-opacity"
+  | "font-family"
+  | "font-size"
+  | "font-size-adjust"
+  | "font-stretch"
+  | "font-style"
+  | "font-variant"
+  | "font-weight"
+  | "image-rendering"
+  | "letter-spacing"
+  | "lighting-color"
+  | "marker-end"
+  | "marker-mid"
+  | "marker-start"
+  | "mask"
+  | "mask-type"
+  | "opacity"
+  | "overflow"
+  | "paint-order"
+  | "pointer-events"
+  | "shape-rendering"
+  | "stop-color"
+  | "stop-opacity"
+  | "stroke"
+  | "stroke-dasharray"
+  | "stroke-dashoffset"
+  | "stroke-linecap"
+  | "stroke-linejoin"
+  | "stroke-miterlimit"
+  | "stroke-opacity"
+  | "stroke-width"
+  | "text-anchor"
+  | "text-decoration"
+  | "text-rendering"
+  | "transform"
+  | "transform-origin"
+  | "unicode-bidi"
+  | "vector-effect"
+  | "visibility"
+  | "white-space"
+  | "word-spacing"
+  | "writing-mode"
+
+type SvgBox = "x" | "y" | "width" | "height"
+type SvgViewport = "viewBox" | "preserveAspectRatio"
+type SvgLink = "href"
+type SvgTextPosition =
+  | "x"
+  | "y"
+  | "dx"
+  | "dy"
+  | "rotate"
+  | "textLength"
+  | "lengthAdjust"
+type SvgGradient =
+  | SvgLink
+  | "gradientUnits"
+  | "gradientTransform"
+  | "spreadMethod"
+
+interface SvgOwnAttributes {
+  readonly svg: SvgBox | SvgViewport | "xmlns" | "version"
+  readonly g: never
+  readonly path: "d" | "pathLength"
+  readonly circle: "cx" | "cy" | "r" | "pathLength"
+  readonly ellipse: "cx" | "cy" | "rx" | "ry" | "pathLength"
+  readonly line: "x1" | "y1" | "x2" | "y2" | "pathLength"
+  readonly polyline: "points" | "pathLength"
+  readonly polygon: "points" | "pathLength"
+  readonly rect: SvgBox | "rx" | "ry" | "pathLength"
+  readonly text: SvgTextPosition
+  readonly tspan: SvgTextPosition
+  readonly textPath:
+    | SvgLink
+    | "path"
+    | "startOffset"
+    | "method"
+    | "spacing"
+    | "side"
+    | "textLength"
+    | "lengthAdjust"
+  readonly defs: never
+  readonly use: SvgBox | SvgLink
+  readonly symbol: SvgBox | SvgViewport | "refX" | "refY"
+  readonly clipPath: "clipPathUnits"
+  readonly mask: SvgBox | "maskUnits" | "maskContentUnits"
+  readonly pattern:
+    | SvgBox
+    | SvgViewport
+    | SvgLink
+    | "patternUnits"
+    | "patternContentUnits"
+    | "patternTransform"
+  readonly marker:
+    | SvgViewport
+    | "refX"
+    | "refY"
+    | "markerUnits"
+    | "markerWidth"
+    | "markerHeight"
+    | "orient"
+  readonly linearGradient: SvgGradient | "x1" | "y1" | "x2" | "y2"
+  readonly radialGradient: SvgGradient | "cx" | "cy" | "r" | "fx" | "fy" | "fr"
+  readonly stop: "offset"
+  readonly filter: SvgBox | "filterUnits" | "primitiveUnits"
+  readonly image:
+    | SvgBox
+    | SvgLink
+    | "preserveAspectRatio"
+    | "crossorigin"
+    | "decoding"
+  readonly foreignObject: SvgBox
+}
+
+/**
+ * Attribute names accepted by an SVG tag's `attr` and `attrs`: global and
+ * presentation attributes, plus tag-specific names such as `d` on `path`.
+ * Names are case-sensitive: use `viewBox`, not `viewbox`. For an unlisted
+ * name, pass a `Record<string, string>` to `attrs`, or use `h.el(tag)`.
+ *
+ * @stability experimental
+ * @category svg
+ * @since 0.1.0
+ */
+export type SvgAttribute<Tag extends SvgTag> =
+  | SvgGlobalAttribute
+  | SvgPresentationAttribute
+  | SvgOwnAttributes[Tag]
+
+/**
+ * An SVG builder with `id`, `class`, `style` and attribute names checked
+ * by tag. HTML-only helpers such as `value` and `disabled` are excluded.
+ * Root builders on `h` are callable as shorthand for `children`.
+ *
+ * `Node` types the DOM element for `ref` and `onMount`; `Tag` selects the
+ * attribute names. See the module example for an icon.
+ *
+ * @stability experimental
+ * @category svg
+ * @since 0.1.0
+ */
+export interface SvgElement<
+  Msg,
+  R = never,
+  Node = unknown,
+  Tag extends SvgTag = SvgTag
+> extends View.ContainerBuilder<Msg, R, SvgEvents, Node, Tag> {
+  /**
+   * Sets one attribute; `undefined` removes it.
+   *
+   * @since 0.1.0
+   */
+  attr(name: SvgAttribute<Tag>, value: string | undefined): this
+  /**
+   * Sets several attributes; `undefined` removes one.
+   *
+   * @since 0.1.0
+   */
+  attrs(
+    attributes: { readonly [K in SvgAttribute<Tag>]?: string | undefined }
+  ): this
+  /**
+   * Sets the `id` attribute.
+   *
+   * @since 0.1.0
+   */
+  id(id: string): this
+  /**
+   * Sets the `class` attribute from class tokens.
+   *
+   * @since 0.1.0
+   */
+  class(...tokens: ReadonlyArray<ClassToken>): this
+  /**
+   * Sets inline CSS.
+   *
+   * @since 0.1.0
+   */
+  style(style: Style): this
+  /**
+   * Appends children.
+   *
+   * @since 0.1.0
+   */
+  children<const C extends ReadonlyArray<View.Input<Msg, any>>>(
+    ...inputs: C
+  ): SvgElement<Msg, R | View.Requirements<C[number]>, Node, Tag>
+  /**
+   * Like `View.ElementBuilder.onMount`, keeping the SVG methods.
+   *
+   * @since 0.1.0
+   */
+  onMount<R2>(
+    mount: Mount.Issued<Msg | Component.Noop, R2, Node, never>
+  ): SvgElement<Msg, R | R2, Node, Tag>
+  /**
+   * Rejects any other mount result, with a type error that says what to end
+   * it with.
+   *
+   * @since 0.1.0
+   */
+  onMount(
+    mount: Mount.Issued<Msg | Component.Noop | View.MountHint, any, Node, never>
+  ): never
+  /**
+   * Like `View.ElementBuilder.forward`, keeping the SVG methods.
+   *
+   * @since 0.1.0
+   */
+  forward<R2 = never>(
+    place: (
+      node: SvgElement<Msg, R, Node, Tag>
+    ) => View.Element<Msg, R2> | View.ElementBuilder<Msg, R2, any, any>
+  ): SvgElement<Msg, R | R2, Node, Tag>
+}
+
 /**
  * The element names the vocabulary adds to `h`, bound to a component's
  * message type. Document-level tags (`html`, `head`, `body`, `title`, `meta`,
  * `link`, `base`, `script`, `style`) aren't here: the document head is managed
  * through a component's `head`, with `HtmlHead` for its HTML entries.
+ *
+ * The SVG tags are here too, as `SvgElement` builders, with SVG's `text` as
+ * `svgText`.
  *
  * @stability experimental
  * @category vocabulary
@@ -1443,6 +1766,11 @@ export type Tags<Msg> =
       EventsOf<K>,
       HTMLElementTagNameMap[K],
       K
+    >
+  }
+  & {
+    readonly [K in SvgTag as K extends "text" ? "svgText" : K]: View.Shorthand<
+      SvgElement<Msg, never, SVGElementTagNameMap[K], K>
     >
   }
 
@@ -1525,13 +1853,17 @@ const makeTags = (): Readonly<
   const out: Record<string, VoidElement<any, any, any, any>> = {}
   for (const tag of containerTags) out[tag] = View.shorthand(new Element(tag))
   for (const tag of voidTags) out[tag] = new VoidElement(tag)
+  // An SVG element is an `Element` at runtime; `SvgElement` narrows its type.
+  for (const tag of svgTags) {
+    out[tag === "text" ? "svgText" : tag] = View.shorthand(new Element(tag))
+  }
   return out
 }
 
 /**
  * The root element builders installed on `h`, one per tag, shared by every
  * render: a callable `View.shorthand` builder for a tag that takes
- * children, and a `VoidElement` for a void tag.
+ * children, SVG tags included, and a `VoidElement` for a void tag.
  *
  * @stability experimental
  * @category vocabulary
@@ -1590,18 +1922,19 @@ export const component: Component.Define<Elements> = Component
 // ---------------------------------------------------------------------------
 
 /**
- * Declares a ref to an element of tag `tag`. Attaching it to another tag
- * doesn't compile. List rows use `Row.at(id)`.
+ * Declares a ref to an element of tag `tag`, HTML or SVG. Attaching it to
+ * another tag doesn't compile. List rows use `Row.at(id)`.
  *
  * @stability experimental
  * @category refs
  * @since 0.1.0
  */
-export const ref = <K extends keyof HTMLElementTagNameMap>(
+export const ref = <K extends keyof HTMLElementTagNameMap | SvgTag>(
   name: string,
   _tag: K
-): Renderer.Ref<HTMLElementTagNameMap[K]> =>
-  Renderer.ref<HTMLElementTagNameMap[K]>(name)
+): Renderer.Ref<
+  (HTMLElementTagNameMap & Pick<SVGElementTagNameMap, SvgTag>)[K]
+> => Renderer.ref(name)
 
 /**
  * The names that get no generated method on a custom element, because the

@@ -69,9 +69,8 @@ export const Icon = <M>(
     readonly filled?: boolean | undefined
   } = {}
 ) =>
-  h.el("svg").attrs({
+  h.svg.class("flex-none", options.class ?? "size-4").attrs({
     viewBox: "0 0 24 24",
-    class: `flex-none ${options.class ?? "size-4"}`,
     fill: options.filled === true ? "currentColor" : "none",
     stroke: "currentColor",
     "stroke-width": "2",

@@ -123,15 +123,13 @@ const strokeOf: Readonly<Record<Carries, string>> = {
   render: "stroke-accent/55"
 }
 
-export const svg = <M>(h: Html.H<M>, tag: string) => h.el(tag)
-
 const Link = <M>(
   h: Html.H<M>,
   d: string,
   className: string,
   key: string
 ) =>
-  svg(h, "path").key(key).attrs({
+  h.path.key(key).attrs({
     d,
     class: className,
     fill: "none",
@@ -160,7 +158,7 @@ const Packet = <M>(
   key: string
 ) => {
   const carries = track[0]?.carries ?? "message"
-  return svg(h, "circle").key(key).attrs({
+  return h.circle.key(key).attrs({
     ...dotAttrs(carries),
     class: Html.classNames("diagram-packet", dotClass(carries)),
     style: `offset-path: path("${trackPath(track)}")`
@@ -243,7 +241,7 @@ const restsOf = (
 
 // A dot at rest, where the packet that brought it stopped.
 const Resting = <M>(h: Html.H<M>, rest: Rest, index: number) =>
-  svg(h, "circle").key(`rest-${index}`).attrs({
+  h.circle.key(`rest-${index}`).attrs({
     ...dotAttrs(rest.carries),
     cx: String(at[rest.name].x),
     cy: String(at[rest.name].y),
@@ -268,7 +266,7 @@ export const Tree = <M>(h: Html.H<M>, options: TreeOptions<M>) => {
     "@container/tree relative mx-auto aspect-[320/246] w-full",
     "max-w-[400px]"
   ).children(
-    svg(h, "svg").attrs({
+    h.svg.attrs({
       viewBox: `0 0 ${width} ${height}`,
       // Nothing is drawn above Root's top edge, where a link that
       // starts there would otherwise show as a sliver.
@@ -363,7 +361,7 @@ export const Tree = <M>(h: Html.H<M>, options: TreeOptions<M>) => {
             displayName(side, name)
         }).style(place).children(content)
     }),
-    svg(h, "svg").attrs({
+    h.svg.attrs({
       viewBox: `0 0 ${width} ${height}`,
       class:
         "pointer-events-none absolute inset-0 z-1 size-full overflow-visible",

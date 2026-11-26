@@ -4,7 +4,7 @@ import * as transitionRun from "../../internal/transitionRun.ts"
 import type * as View from "../../View.ts"
 import type * as Html from "../Html.ts"
 import * as documentHead from "./documentHead.ts"
-import { attributeName, isCustomTag, svgTags } from "./elements.ts"
+import { attributeName, isCustomTag, svgTagSet } from "./elements.ts"
 import { bubblingEvents, ownEvents } from "./ownEvents.ts"
 import {
   type FieldState,
@@ -681,7 +681,7 @@ export const makeHost = (
 
   return {
     createElement(tag) {
-      if (svgTags.has(tag)) return document.createElementNS(SVG, tag)
+      if (svgTagSet.has(tag)) return document.createElementNS(SVG, tag)
       const element = document.createElement(tag)
       if (tag.length === 4 && tag.toLowerCase() === "form") form(element)
       return element

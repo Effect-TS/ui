@@ -1142,6 +1142,10 @@ Known limits:
 - **[Drawing on a canvas](./ai-docs/src/10_ui/25_drawing-on-canvas.ts)**:
   Draw a scene from the Model, move it every animation frame, turn presses
   into scene points, and test it in a scene and a whole-app test.
+- **[Drawing icons and charts with SVG](./ai-docs/src/10_ui/25_drawing-with-svg.ts)**:
+  SVG tags have builders on `h` like HTML tags: `h.svg`, `h.path`,
+  `h.circle`, `h.g` and the rest. Attribute names are checked per tag,
+  and SVG's `<text>` is `h.svgText` because `h.text` makes a text node.
 - **[Validating forms](./ai-docs/src/10_ui/26_forms.ts)**:
   Validate a sign-up form with `Validation`: rules on each field, a rule
   that reads another field, a username check run by a debounced query, and
