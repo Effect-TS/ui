@@ -410,20 +410,16 @@
    its content. Its tail is at a place on the page, beside the first
    lines of its part of the article. Its tip is 10px above the button,
    which is fixed to the corner of the window, so the arrow stretches
-   as the page scrolls. Once the end of its part reaches the tip, the
-   tip stays there, and the arrow scrolls away with the page. It needs
-   the margin beside the text, and a browser that can tie an animation
-   to the scroll position. */
+   as the page scrolls. Once the DevTools heading nears the top of the
+   window, the tip releases and the arrow scrolls away with the page.
+   It needs the margin beside the text, and a browser that can tie an
+   animation to the scroll position. */
 .launcher-pointer {
   display: none;
 }
 
 @supports (animation-timeline: view()) {
   @media (width >= 960px) {
-    .launcher-section {
-      view-timeline: --launcher-section block;
-    }
-
     /* From where the tail is on the page to a window's height below
        it, which is long enough to follow the tail until its part of
        the article has left the window. */
@@ -447,11 +443,12 @@
       right: 55.5px;
       bottom: 56px;
       animation: launcher-pointer-tip linear both;
-      animation-timeline: --launcher-section;
+      animation-timeline: --launcher-tail;
 
-      /* Until its part has left the window. Not written as 100%,
-         because the build turns an end of 100% into 0%. */
-      animation-range: entry calc(100% + 56px) exit 99.999%;
+      /* Stays anchored at 56px until the tail reaches 72px from the top
+         (the DevTools heading at ~20px), then rises 1:1 with the scroll
+         across the remaining 100vh - 44px until the tip clears the top. */
+      animation-range: entry calc(100% - 72px) exit calc(100% - 116px);
     }
 
     /* It shows once the tail is well above the tip. */
@@ -508,15 +505,15 @@
   }
 }
 
-/* From when the end of the arrow's part of the article is level with
-   the tip until it leaves the top of the window, the tip follows it. */
+/* Once the DevTools heading nears the top of the window, the tip
+   releases and moves upward 1:1 with the scroll until past the top. */
 @keyframes launcher-pointer-tip {
   from {
     bottom: 56px;
   }
 
   to {
-    bottom: 100%;
+    bottom: calc(100% + 12px);
   }
 }
 
