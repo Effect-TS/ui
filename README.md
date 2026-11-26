@@ -119,7 +119,7 @@ Then:
 2. Delete `src/counter.ts` and replace `src/main.ts` with the quick start, which mounts into the template's `#app`.
 3. Run `pnpm dev` to open the app, and `pnpm build` to type check and build it.
 
-To test the component, move `Counter` and `CounterMessage` into `src/Counter.ts`, export them, and import them from both `src/main.ts` and your tests. `main.ts` mounts into `document` when it's imported, so a test can't import from it. Tests need no Vitest config: `pnpm vitest` runs Stories, Scenes and Plays in Node. Both Play and `ssr` tests need `TestHost.layer()`, and a file that calls `ssr` also needs `// @vitest-environment happy-dom` on its first line. [`ai-docs/src/10_ui/50_testing.ts`](ai-docs/src/10_ui/50_testing.ts) shows each kind of test.
+To test the component, move the counter model, message and component into `src/Counter.ts`. Export `Counter` and `CounterMessage`. Import only `Counter` in `src/main.ts`; tests can import whichever exports they use. `main.ts` mounts into `document` when it's imported, so a test can't import from it. Tests need no Vitest config: `pnpm vitest` runs Stories, Scenes and Plays in Node. Both Play and `ssr` tests need `TestHost.layer()`, and a file that calls `ssr` also needs `// @vitest-environment happy-dom` on its first line. [`ai-docs/src/10_ui/50_testing.ts`](ai-docs/src/10_ui/50_testing.ts) shows each kind of test.
 
 `@effect/ui` ships `LLMS.md` as `node_modules/@effect/ui/AGENTS.md`, matching the version you installed. Point your own `AGENTS.md` or `CLAUDE.md` at it so a coding agent reads it.
 
