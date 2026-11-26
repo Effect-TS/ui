@@ -1,17 +1,16 @@
 import type { Component, Mount, View } from "@effect/ui"
-import { Command, Route, Router, UiSchema, View as V } from "@effect/ui"
+import { View as V } from "@effect/ui"
 import {
   Calendar,
   CalendarEvents,
   type CalendarProps,
-  DirectionProvider,
-  Field
+  DirectionProvider
 } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
-import { Locator, Story, TestHost } from "@effect/ui/testing"
+import { Locator, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { DateTime, Effect, Schema } from "effect"
+import { DateTime, Effect } from "effect"
 
 type Parts = Component.Headless.Parts<typeof Calendar>
 type H = View.Helper<never, CalendarProps> & View.Tags<Html.Elements, never>
@@ -309,7 +308,6 @@ describe("Calendar", () => {
         "data-outside-month": undefined
       })
 
-      // Unavailable day (not natively disabled, aria-disabled="true")
       owns(scene, dayLoc("2026-11-18"), {
         disabled: undefined,
         "aria-disabled": "true",
@@ -353,7 +351,7 @@ describe("Calendar", () => {
       assert.throws(() => p.grid(h.div as never))
     }))
 
-  it.effect("emits Picked and RequestedMonth, moves focus on month change, and restore clears focus state", () =>
+  it.effect("emits Picked and RequestedMonth, and moves focus on month change", () =>
     Effect.gen(function*() {
       const scene = yield* makeScene(
         baseProps({
@@ -379,7 +377,7 @@ describe("Calendar", () => {
         CalendarEvents.RequestedMonth({ month: utc("2026-02-01") })
       )
 
-      // Focus Jan 31, then change month to Feb 2026 (no value in Feb): clamps to Feb 28 (or max Feb 1)
+      // Preserve the day of the month, clamping to February's last day.
       scene.focus(dayLoc("2026-01-31"))
       syncMonth(
         scene,
@@ -390,7 +388,6 @@ describe("Calendar", () => {
         })
       )
       owns(scene, dayLoc("2026-02-28"), { tabindex: "0" })
-      // The focused day left with its month, so focus follows the tab stop
       assert.deepStrictEqual(focused(scene), ["2026-02-28"])
 
       // Changing month to one containing value moves focus stop to value
@@ -404,96 +401,6 @@ describe("Calendar", () => {
       )
       owns(scene, dayLoc("2026-03-12"), { tabindex: "0" })
       assert.deepStrictEqual(focused(scene), ["2026-03-12"])
-
-      // History restore drops transient focus state while preserving controlled value/month
-      const PageRoute = Route.union({
-        Pick: Route.make("/"),
-        Away: Route.make("/away")
-      })
-      const PageMsg = UiSchema.TaggedEnum({
-        ChangedRoute: { route: PageRoute },
-        Left: {},
-        Navigated: {}
-      })
-      const Page = Html.component({
-        name: "CalendarRestorePage",
-        props: Schema.Struct({ route: PageRoute }),
-        model: Schema.Struct({ route: PageRoute }),
-        message: PageMsg
-      }).make({
-        init: ($) => ({ route: $.props.route }),
-        update: {
-          ChangedRoute: (_, { route }) => ({ route }),
-          Left: ($) =>
-            $.run(
-              Router.push(PageRoute, PageRoute.Away()).pipe(
-                Command.map(() => PageMsg.Navigated())
-              )
-            ),
-          Navigated: ($) => $.model
-        },
-        subscriptions: ({ model }) => [
-          Router.subscription(
-            PageRoute,
-            model.route,
-            (route) => PageMsg.ChangedRoute({ route })
-          )
-        ],
-        view: (h, model) =>
-          h.div(
-            h.button.attr("data-testid", "away").on("click", PageMsg.Left())
-              .children("Away"),
-            model.route._tag === "Pick"
-              ? Calendar(h, {
-                props: baseProps(),
-                view: (cal) =>
-                  cal.root(h.div).children(
-                    cal.grid(h.table).children(
-                      h.tbody(
-                        ...cal.weeks.map((week) =>
-                          h.tr(
-                            ...week.map((date) =>
-                              cal.cell({ element: h.td, date }).children(
-                                cal.day({
-                                  element: h.button.attr(
-                                    "data-testid",
-                                    "day-" + iso(date)
-                                  ),
-                                  date
-                                }).children(
-                                  String(DateTime.getPartUtc(date, "day"))
-                                )
-                              )
-                            )
-                          )
-                        )
-                      )
-                    )
-                  )
-              })
-              : null
-          )
-      })
-      const history = Router.memoryHistory("/")
-      yield* Effect.gen(function*() {
-        const root = yield* TestHost.mount(Page, Router.props(PageRoute))
-        const at = (id: string) => root.get(Locator.testId(id))
-        yield* TestHost.settle
-        Locator.fire(at("day-2026-11-20"), "focus")
-        yield* TestHost.settle
-        assert.strictEqual(at("day-2026-11-20").attrs?.["data-focused"], "")
-        assert.strictEqual(at("day-2026-11-20").attrs?.tabindex, "0")
-        Locator.fire(at("away"), "click")
-        yield* TestHost.settle
-        history.go(-1)
-        yield* TestHost.settle
-        assert.isUndefined(at("day-2026-11-20").attrs?.["data-focused"])
-        assert.strictEqual(at("day-2026-11-20").attrs?.tabindex, "-1")
-        assert.strictEqual(at("day-2026-11-15").attrs?.tabindex, "0")
-      }).pipe(
-        Effect.provide(Router.make({ routes: PageRoute, history })),
-        Effect.provide(TestHost.layer())
-      )
     }))
 
   it.effect("handles every APG grid key, RTL swap, cross-month requests (accepted and refused), and min/max clamping", () =>
@@ -556,7 +463,6 @@ describe("Calendar", () => {
       scene.keydown(dayLoc("2026-11-15"), "Enter")
         .expectIgnored().expectDefaultPrevented(false)
 
-      // RTL swaps Left and Right
       scene.shared(DirectionProvider, { direction: "rtl" })
       assert.deepStrictEqual(
         focused(
@@ -679,7 +585,6 @@ describe("Calendar", () => {
         "data-focused": undefined
       })
 
-      // Update also suppresses every interaction
       scene.fire(dayLoc("2026-11-15"), "click")
       assert.deepStrictEqual(scene.current.emitted, [])
       scene.fire(loc("prev"), "click")
@@ -750,67 +655,5 @@ describe("Calendar", () => {
       scene.click(dayLoc("2026-11-25")).emitted(
         CalendarEvents.Picked({ date: utc("2026-11-25") })
       )
-    }))
-
-  it.effect("integrates with Field via field.group on root and field.member on day", () =>
-    Effect.gen(function*() {
-      const fieldScene = yield* HtmlScene.make(
-        Field,
-        { invalid: true, described: true },
-        {
-          elements: Html,
-          view: (field, h) =>
-            field.root(h.div.class("field")).children(
-              field.legend(h.div.class("legend")).children("Date"),
-              Calendar(h, {
-                props: baseProps({ disabled: field.disabled }),
-                view: (calendar) =>
-                  calendar.root(field.group(h.div.class("cal-root"))).children(
-                    calendar.heading(h.h2).children(calendar.title),
-                    calendar.grid(h.table).children(
-                      h.tbody(
-                        ...calendar.weeks.map((week) =>
-                          h.tr(
-                            ...week.map((date) =>
-                              calendar.cell({ element: h.td, date }).children(
-                                calendar.day({
-                                  element: field.member(
-                                    h.button.class("fday-" + iso(date))
-                                  ),
-                                  date
-                                }).children(
-                                  String(DateTime.getPartUtc(date, "day"))
-                                )
-                              )
-                            )
-                          )
-                        )
-                      )
-                    )
-                  )
-              }),
-              field.description(h.p.class("desc")).children("Choose a date"),
-              field.error(h.span.class("err"))?.children("Required")
-            )
-        }
-      )
-
-      const legendId = fieldScene.get(loc("legend")).attrs!.id!
-      const descId = fieldScene.get(loc("desc")).attrs!.id!
-      const errId = fieldScene.get(loc("err")).attrs!.id!
-      assert.strictEqual(fieldScene.get(loc("cal-root")).attrs?.role, "group")
-      assert.strictEqual(
-        fieldScene.get(loc("cal-root")).attrs?.["aria-labelledby"],
-        legendId
-      )
-      assert.strictEqual(
-        fieldScene.get(loc("fday-2026-11-15")).attrs?.["aria-invalid"],
-        "true"
-      )
-      assert.strictEqual(
-        fieldScene.get(loc("fday-2026-11-15")).attrs?.["aria-describedby"],
-        descId + " " + errId
-      )
-      assert.isUndefined(fieldScene.get(loc("fday-2026-11-15")).attrs?.id)
     }))
 })

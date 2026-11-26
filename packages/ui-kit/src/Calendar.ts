@@ -184,7 +184,6 @@ import {
   type CalendarWeekdayName,
   canStepMonth,
   dateKey,
-  dayAttrs,
   firstDayOfWeek,
   focusDay,
   formatMonthTitle,
@@ -198,6 +197,7 @@ import {
   startOfMonth,
   syncMonthPhase,
   tabStopOf,
+  toDay,
   weekdayNames,
   weeksOfMonth
 } from "./internal/calendar.ts"
@@ -310,22 +310,19 @@ const disabledWhileFocused = Subscription.make(
 
 const CalendarRootRef = Renderer.ref("CalendarRoot")
 
-const monthOf = (props: CalendarProps) =>
-  startOfMonth(DateTime.removeTime(props.month))
+const monthOf = (props: CalendarProps) => startOfMonth(props.month)
 
 const contextOf = (props: CalendarProps, monthStart = monthOf(props)) => ({
   monthStart,
+  weekStartsOn: props.firstDayOfWeek ?? firstDayOfWeek(props.locale),
   preferred: normalizeOptional(props.value),
-  today: DateTime.removeTime(props.today),
+  today: toDay(props.today),
   min: normalizeOptional(props.min),
   max: normalizeOptional(props.max)
 })
 
-const weeksOf = (props: CalendarProps, monthStart: DateTime.Utc) =>
-  weeksOfMonth(
-    monthStart,
-    props.firstDayOfWeek ?? firstDayOfWeek(props.locale)
-  )
+const settled = ($: CalendarUpdate) =>
+  $.model.pendingFocus === null ? $.model : $.evolve({ pendingFocus: null })
 
 const navigate = (
   $: CalendarUpdate,
@@ -334,13 +331,14 @@ const navigate = (
 ) => {
   if ($.props.disabled === true) return $.model
   const context = contextOf($.props)
-  const weekStartsOn = $.props.firstDayOfWeek ?? firstDayOfWeek($.props.locale)
-  const target = moveDate(date, move, weekStartsOn, context.min, context.max)
-  if (sameDay(target, date)) {
-    return $.model.pendingFocus === null
-      ? $.model
-      : $.evolve({ pendingFocus: null })
-  }
+  const target = moveDate(
+    date,
+    move,
+    context.weekStartsOn,
+    context.min,
+    context.max
+  )
+  if (sameDay(target, date)) return settled($)
   if (sameMonth(target, context.monthStart)) {
     return $.evolve({
       focusedDay: target,
@@ -412,11 +410,7 @@ export const Calendar = Html.component({
       if ($.props.disabled === true || isOutOfRange(date, min, max)) {
         return $.model
       }
-      if (unavailable || $.props.readOnly === true) {
-        return $.model.pendingFocus === null
-          ? $.model
-          : $.evolve({ pendingFocus: null })
-      }
+      if (unavailable || $.props.readOnly === true) return settled($)
       return $.evolve({ focusedDay: date, pendingFocus: null }).emit(
         CalendarEvents.Picked({ date })
       )
@@ -452,7 +446,7 @@ export const Calendar = Html.component({
       const { shouldFocus, ...phase } = syncMonthPhase(
         $.model,
         context,
-        weeksOf($.props, context.monthStart)
+        weeksOfMonth(context.monthStart, context.weekStartsOn)
       )
       const date = phase.focusedDay
       if (!shouldFocus || date === null) {
@@ -497,8 +491,8 @@ export const Calendar = Html.component({
       props,
       model.focused ? model.shownMonth : monthOf(props)
     )
-    const { max, min, monthStart, preferred: value, today } = context
-    const weekStartsOn = props.firstDayOfWeek ?? firstDayOfWeek(props.locale)
+    const { max, min, monthStart, preferred: value, today, weekStartsOn } =
+      context
     const weeks = weeksOfMonth(monthStart, weekStartsOn)
     const weekdays = weekdayNames(props.locale, weekStartsOn)
     const title = formatMonthTitle(monthStart, props.locale)
@@ -508,6 +502,10 @@ export const Calendar = Html.component({
     const headingId = p.id("heading")
     const isSelected = (date: DateTime.Utc) =>
       value !== null && sameDay(date, value)
+    const state = {
+      "data-disabled": flag(disabled),
+      "data-readonly": flag(readOnly)
+    }
 
     const step = (months: -1 | 1, label: string) => {
       const stepDisabled = disabled ||
@@ -549,7 +547,6 @@ export const Calendar = Html.component({
       (b, date: DateTime.Utc, key: string, unavailable: boolean) => {
         const dayDisabled = disabled || isOutOfRange(date, min, max)
         const isToday = sameDay(date, today)
-        const outsideMonth = !sameMonth(date, monthStart)
         const isFocused = !dayDisabled &&
           phase.focused &&
           phase.focusedDay !== null &&
@@ -557,19 +554,21 @@ export const Calendar = Html.component({
         const isTabStop = !dayDisabled &&
           tabStop !== null &&
           sameDay(date, tabStop)
-        return dayAttrs(
-          b,
-          {
-            selected: isSelected(date),
-            today: isToday,
-            outsideMonth,
-            unavailable,
-            disabled: dayDisabled,
-            focused: isFocused,
-            tabStop: isTabStop
-          },
-          DateTime.formatIntl(date, fullDate)
-        )
+        return b
+          .attrs({
+            type: "button",
+            tabindex: isTabStop ? "0" : "-1",
+            "aria-label": DateTime.formatIntl(date, fullDate),
+            "aria-disabled": !dayDisabled && unavailable ? "true" : undefined,
+            "aria-current": isToday ? "date" : undefined,
+            "data-selected": flag(isSelected(date)),
+            "data-today": flag(isToday),
+            "data-outside-month": flag(!sameMonth(date, monthStart)),
+            "data-unavailable": flag(unavailable),
+            "data-disabled": flag(dayDisabled),
+            "data-focused": flag(isFocused)
+          })
+          .disabled(dayDisabled)
           .ref(CalendarDayRef.at(key))
           .on(
             "click",
@@ -599,11 +598,7 @@ export const Calendar = Html.component({
       title,
       root: p.part((b) =>
         b
-          .attrs({
-            tabindex: "-1",
-            "data-disabled": flag(disabled),
-            "data-readonly": flag(readOnly)
-          })
+          .attrs({ tabindex: "-1", ...state })
           .ref(CalendarRootRef)
           .onMount(
             TrackDirection().pipe(
@@ -615,8 +610,7 @@ export const Calendar = Html.component({
         b.attrs({
           id: headingId,
           "aria-live": "polite",
-          "data-disabled": flag(disabled),
-          "data-readonly": flag(readOnly)
+          ...state
         })
       ),
       previous: step(-1, "Previous month"),
@@ -627,8 +621,7 @@ export const Calendar = Html.component({
           "aria-labelledby": headingId,
           "aria-disabled": disabled ? "true" : undefined,
           "aria-readonly": readOnly ? "true" : undefined,
-          "data-disabled": flag(disabled),
-          "data-readonly": flag(readOnly)
+          ...state
         })),
       weekday: View.wrapPart(
         weekdayPart,
@@ -645,8 +638,8 @@ export const Calendar = Html.component({
             readonly date: DateTime.DateTime
           }
         ): ReturnType<B["attr"]> => {
-          const normalized = DateTime.removeTime(date)
-          return cellPart(element.key(dateKey(normalized)), normalized)
+          const day = toDay(date)
+          return cellPart(element.key(dateKey(day)), day)
         }
       ),
       day: View.wrapPart(
@@ -658,14 +651,9 @@ export const Calendar = Html.component({
             readonly unavailable?: boolean | undefined
           }
         ): ReturnType<B["attr"]> => {
-          const normalized = DateTime.removeTime(date)
-          const key = dateKey(normalized)
-          return dayPart(
-            element.key(key),
-            normalized,
-            key,
-            unavailable === true
-          )
+          const day = toDay(date)
+          const key = dateKey(day)
+          return dayPart(element.key(key), day, key, unavailable === true)
         }
       )
     }

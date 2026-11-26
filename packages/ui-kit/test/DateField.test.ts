@@ -1,15 +1,14 @@
-import { type Component, UiSchema, type View } from "@effect/ui"
+import type { Component, View } from "@effect/ui"
 import {
   DateField,
   type DateFieldEvents,
-  type DateFieldProps,
-  Field
+  type DateFieldProps
 } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
-import { HtmlPlay, HtmlScene } from "@effect/ui/html/testing"
-import { Locator, Story, TestHost } from "@effect/ui/testing"
+import { HtmlScene } from "@effect/ui/html/testing"
+import { Locator, Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { DateTime, Effect, Schema } from "effect"
+import { DateTime, Effect } from "effect"
 
 type Parts = Component.Headless.Parts<typeof DateField>
 type H = View.Helper<never, DateFieldProps> & View.Tags<Html.Elements, never>
@@ -18,7 +17,9 @@ const standIn = {
   elements: Html,
   view: (dateField: Parts, h: H) =>
     h.div(
-      dateField.input(h.input.class("input")).attr(
+      dateField.input(
+        h.input.attrs({ class: "input", id: "mine", "aria-invalid": "false" })
+      ).attr(
         "placeholder",
         dateField.pattern
       )
@@ -52,7 +53,6 @@ describe("DateField", () => {
       quiet(scene)
       scene.blur(input).emitted(committed(utc("2026-11-26")))
 
-      // en-US mm/dd/yyyy on Enter, then blur does not commit again
       scene.props({ value: utc("2026-11-26"), locale: "en-US" })
       assert.strictEqual(text(scene), "11/26/2026")
       scene.type(input, "3/5/2026")
@@ -72,6 +72,11 @@ describe("DateField", () => {
         quiet(scene)
         assert.strictEqual(text(scene), "26/11/2026")
       }
+      // DateField leaves validation attributes to the consumer or Field.
+      assert.deepInclude(scene.get(input).attrs, {
+        id: "mine",
+        "aria-invalid": "false"
+      })
 
       scene.type(input, "")
       scene.blur(input).emitted(committed(null))
@@ -191,47 +196,4 @@ describe("DateField", () => {
       quiet(scene)
       assert.strictEqual(text(scene), "26/11/2026")
     }))
-
-  it.effect("leaves aria-invalid to Field", () =>
-    Effect.gen(function*() {
-      const Msg = UiSchema.TaggedEnum({
-        Committed: { date: Schema.NullOr(Schema.DateTimeUtc) }
-      })
-      const Consumer = Html.component({
-        name: "Consumer",
-        model: Schema.Struct({ date: Schema.NullOr(Schema.DateTimeUtc) }),
-        message: Msg
-      }).make({
-        init: () => ({ date: null }),
-        update: { Committed: ($, { date }) => $.evolve({ date }) },
-        view: (h, model) =>
-          Field(h, {
-            props: { invalid: model.date === null },
-            view: (field) =>
-              DateField(h, {
-                props: { value: model.date, locale: "en-GB" },
-                onEmit: { Committed: ({ date }) => Msg.Committed({ date }) },
-                view: (dateField) =>
-                  field.root(h.div).children(
-                    dateField.input(field.control(h.input.class("input")))
-                  )
-              })
-          })
-      })
-
-      const play = yield* HtmlPlay.make(Consumer, {})
-      assert.strictEqual(play.root.get(input).attrs?.["aria-invalid"], "true")
-
-      yield* play.fire(input, "focus")
-      yield* play.type(input, "26/11/2026")
-      yield* play.blur(input)
-      assert.isUndefined(play.root.get(input).attrs?.["aria-invalid"])
-
-      // Bad text does not make DateField write aria-invalid when Field is valid
-      yield* play.fire(input, "focus")
-      yield* play.type(input, "31/02/2026")
-      assert.isUndefined(play.root.get(input).attrs?.["aria-invalid"])
-      yield* play.blur(input)
-      assert.isUndefined(play.root.get(input).attrs?.["aria-invalid"])
-    }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 })

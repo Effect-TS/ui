@@ -140,8 +140,8 @@ import { flag, type Keyed } from "./internal/attributes.ts"
 import {
   CalendarDate,
   CalendarGridPropsFields,
-  isOutOfRange,
-  sameDay
+  sameDay,
+  toDay
 } from "./internal/calendar.ts"
 
 /**
@@ -222,13 +222,14 @@ interface Range {
 }
 
 const rangeOf = (a: DateTime.DateTime, b: DateTime.DateTime): Range => {
-  const x = DateTime.removeTime(a)
-  const y = DateTime.removeTime(b)
+  const x = toDay(a)
+  const y = toDay(b)
   return { start: DateTime.min(x, y), end: DateTime.max(x, y) }
 }
 
 const inRange = (date: DateTime.Utc, range: Range | null): boolean =>
-  range !== null && !isOutOfRange(date, range.start, range.end)
+  range !== null &&
+  DateTime.between(date, { minimum: range.start, maximum: range.end })
 
 /**
  * A headless range calendar grid. Call it with the consumer's `h`, the
@@ -269,7 +270,7 @@ export const RangeCalendar = Html.component({
     RequestedMonth: ($, { month }) =>
       $.emit(RangeCalendarEvents.RequestedMonth({ month })),
     PreviewedDay: ($, { date }) =>
-      $.model.draft === null
+      $.model.draft === null || sameDay($.model.draft.target, date)
         ? $.model
         : $.evolve({ draft: { anchor: $.model.draft.anchor, target: date } }),
     PressedEscape: ($) => $.evolve({ draft: null })
@@ -344,7 +345,7 @@ export const RangeCalendar = Html.component({
               readonly date: DateTime.DateTime
             }
           ): ReturnType<B["attr"]> => {
-            const day = DateTime.removeTime(date)
+            const day = toDay(date)
             return cellPart(calendar.cell({ element, date: day }), day)
           }
         ),
@@ -357,7 +358,7 @@ export const RangeCalendar = Html.component({
               readonly unavailable?: boolean | undefined
             }
           ): ReturnType<B["attr"]> => {
-            const day = DateTime.removeTime(date)
+            const day = toDay(date)
             return dayPart(
               calendar.day({ element, date: day, unavailable }),
               day

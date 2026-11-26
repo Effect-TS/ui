@@ -137,7 +137,7 @@ describe("DatePicker", () => {
       )
     }))
 
-  it.effect("a typed date outside the shown month also asks for that month, counting a Zoned month by its local day", () =>
+  it.effect("a typed date outside the shown month also asks for that month, counting a Zoned month by its local day, and one before min asks for nothing", () =>
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(DatePicker, props(), standIn)
       const committed = (date: DateTime.Utc | null) =>
@@ -147,6 +147,9 @@ describe("DatePicker", () => {
         month("2027-01-01")
       )
       committed(null).emitted(picked(null))
+      scene.props(props({ min: utc("2026-11-01") }))
+      committed(utc("2026-10-31"))
+      quiet(scene)
       // 02:00Z on Dec 1 is still Nov 30 in Los Angeles, so Nov 30 is in the shown month
       scene.props(props({
         month: DateTime.makeZonedUnsafe("2026-12-01T02:00:00Z", {

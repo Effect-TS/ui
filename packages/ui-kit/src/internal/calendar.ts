@@ -3,7 +3,6 @@ import * as Html from "@effect/ui/html/Html"
 import * as HtmlCommand from "@effect/ui/html/HtmlCommand"
 import * as DateTime from "effect/DateTime"
 import * as Schema from "effect/Schema"
-import { type Attributed, flag } from "./attributes.ts"
 import { cached, type Locale } from "./number.ts"
 
 export const CalendarDate = Schema.Union([
@@ -16,7 +15,7 @@ export const CalendarLocale = Schema.Union([
   Schema.Array(Schema.String)
 ])
 
-export const CalendarWeekdayNumber = Schema.Literals([0, 1, 2, 3, 4, 5, 6])
+const CalendarWeekdayNumber = Schema.Literals([0, 1, 2, 3, 4, 5, 6])
 
 export type CalendarWeekdayNumber = typeof CalendarWeekdayNumber.Type
 
@@ -51,43 +50,38 @@ export const CalendarGridPropsFields = {
   readOnly: Schema.optional(Schema.Boolean)
 } as const
 
-export const CalendarGridModelFields = {
+export const CalendarGridModel = Schema.Struct({
   focusedDay: Schema.NullOr(Schema.DateTimeUtc),
   focused: Schema.Boolean,
   shownMonth: Schema.DateTimeUtc,
   pendingFocus: Schema.NullOr(Schema.DateTimeUtc),
   // The root's CSS `direction` is right-to-left.
   rtl: Schema.Boolean
-} as const
-
-export const CalendarGridModel = Schema.Struct(CalendarGridModelFields)
+})
 
 export type CalendarGridModel = typeof CalendarGridModel.Type
 
-export type CalendarGridPhase =
+type CalendarGridPhase =
   & Pick<CalendarGridModel, "focusedDay" | "focused" | "pendingFocus">
   & { readonly shouldFocus: boolean }
 
-export interface CalendarDayState {
-  readonly selected: boolean
-  readonly today: boolean
-  readonly outsideMonth: boolean
-  readonly unavailable: boolean
-  readonly disabled: boolean
-  readonly focused: boolean
-  readonly tabStop: boolean
-}
-
 export const CalendarDayRef = Html.ref("CalendarDay", "button")
+
+const dayMillis = 86_400_000
+
+export const toDay = (date: DateTime.DateTime): DateTime.Utc =>
+  DateTime.isUtc(date) && date.epochMilliseconds % dayMillis === 0
+    ? date
+    : DateTime.removeTime(date)
 
 export const normalizeOptional = (
   date: DateTime.DateTime | null | undefined
-): DateTime.Utc | null => date == null ? null : DateTime.removeTime(date)
+): DateTime.Utc | null => date == null ? null : toDay(date)
 
-export const startOfMonth = (date: DateTime.Utc): DateTime.Utc =>
-  DateTime.startOf(date, "month")
+export const startOfMonth = (date: DateTime.DateTime): DateTime.Utc =>
+  DateTime.startOf(toDay(date), "month")
 
-export const endOfMonth = (date: DateTime.Utc): DateTime.Utc =>
+const endOfMonth = (date: DateTime.Utc): DateTime.Utc =>
   DateTime.removeTime(DateTime.endOf(date, "month"))
 
 export const dateKey = (date: DateTime.Utc): string =>
@@ -108,7 +102,7 @@ export const isOutOfRange = (
   (min !== null && DateTime.isLessThan(date, min)) ||
   (max !== null && DateTime.isGreaterThan(date, max))
 
-export const clampDate = (
+const clampDate = (
   date: DateTime.Utc,
   min: DateTime.Utc | null,
   max: DateTime.Utc | null
@@ -139,7 +133,7 @@ interface LocaleWithWeekInfo extends Intl.Locale {
 
 const formatters = new Map<string, Intl.DateTimeFormat>()
 
-const formatterOf = (
+export const formatterOf = (
   locale: Locale,
   options: Intl.DateTimeFormatOptions
 ): Intl.DateTimeFormat =>
@@ -204,22 +198,25 @@ export const weeksOfMonth = (
 // 2023-01-01 is a Sunday in UTC (weekDay === 0).
 const referenceSunday = DateTime.makeUnsafe("2023-01-01T00:00:00Z")
 
+const weekdays = new Map<string, ReadonlyArray<CalendarWeekdayName>>()
+
 export const weekdayNames = (
   locale: Locale,
   weekStartsOn: CalendarWeekdayNumber
-): ReadonlyArray<CalendarWeekdayName> => {
-  const shortFmt = formatterOf(locale, { weekday: "short" })
-  const longFmt = formatterOf(locale, { weekday: "long" })
-  const names: Array<CalendarWeekdayName> = []
-  for (let i = 0; i < 7; i++) {
-    const day = DateTime.add(referenceSunday, { days: (weekStartsOn + i) % 7 })
-    names.push({
-      short: DateTime.formatIntl(day, shortFmt),
-      long: DateTime.formatIntl(day, longFmt)
+): ReadonlyArray<CalendarWeekdayName> =>
+  cached(weekdays, { locale, weekStartsOn }, () => {
+    const shortFmt = formatterOf(locale, { weekday: "short" })
+    const longFmt = formatterOf(locale, { weekday: "long" })
+    return Array.from({ length: 7 }, (_, i) => {
+      const day = DateTime.add(referenceSunday, {
+        days: (weekStartsOn + i) % 7
+      })
+      return {
+        short: DateTime.formatIntl(day, shortFmt),
+        long: DateTime.formatIntl(day, longFmt)
+      }
     })
-  }
-  return names
-}
+  })
 
 export const formatMonthTitle = (
   monthStart: DateTime.Utc,
@@ -255,6 +252,20 @@ export const gridKeyOf = (
   return undefined
 }
 
+const steps: Record<
+  Exclude<CalendarGridKey, "startOfWeek" | "endOfWeek">,
+  Partial<DateTime.DateTime.PartsForMath>
+> = {
+  previousDay: { days: -1 },
+  nextDay: { days: 1 },
+  previousWeek: { weeks: -1 },
+  nextWeek: { weeks: 1 },
+  previousMonth: { months: -1 },
+  nextMonth: { months: 1 },
+  previousYear: { years: -1 },
+  nextYear: { years: 1 }
+}
+
 export const moveDate = (
   date: DateTime.Utc,
   move: CalendarGridKey,
@@ -262,45 +273,17 @@ export const moveDate = (
   min: DateTime.Utc | null,
   max: DateTime.Utc | null
 ): DateTime.Utc => {
-  let raw: DateTime.Utc
-  switch (move) {
-    case "previousDay":
-      raw = DateTime.subtract(date, { days: 1 })
-      break
-    case "nextDay":
-      raw = DateTime.add(date, { days: 1 })
-      break
-    case "previousWeek":
-      raw = DateTime.subtract(date, { weeks: 1 })
-      break
-    case "nextWeek":
-      raw = DateTime.add(date, { weeks: 1 })
-      break
-    case "startOfWeek":
-      raw = DateTime.startOf(date, "week", { weekStartsOn })
-      break
-    case "endOfWeek":
-      raw = DateTime.removeTime(DateTime.endOf(date, "week", { weekStartsOn }))
-      break
-    case "previousMonth":
-      raw = DateTime.subtract(date, { months: 1 })
-      break
-    case "nextMonth":
-      raw = DateTime.add(date, { months: 1 })
-      break
-    case "previousYear":
-      raw = DateTime.subtract(date, { years: 1 })
-      break
-    case "nextYear":
-      raw = DateTime.add(date, { years: 1 })
-      break
-  }
+  const raw = move === "startOfWeek"
+    ? DateTime.startOf(date, "week", { weekStartsOn })
+    : move === "endOfWeek"
+    ? DateTime.removeTime(DateTime.endOf(date, "week", { weekStartsOn }))
+    : DateTime.add(date, steps[move])
   const clamped = clampDate(raw, min, max)
   // An empty range (`min` after `max`) has no day to move to.
   return isOutOfRange(clamped, min, max) ? date : clamped
 }
 
-export interface FocusContext {
+interface FocusContext {
   readonly monthStart: DateTime.Utc
   readonly preferred: DateTime.Utc | null
   readonly today: DateTime.Utc
@@ -332,7 +315,7 @@ const clampedShown = (
 ): DateTime.Utc | null =>
   shown(context, clampDate(date, context.min, context.max))
 
-export const focusInMonth = (
+const focusInMonth = (
   context: FocusContext,
   previousFocusedDay: DateTime.Utc | null
 ): DateTime.Utc | null =>
@@ -425,28 +408,3 @@ export const tabStopOf = (
 ): DateTime.Utc | null =>
   rendered(context, weeks, focusedDay) ??
     focusInGrid(context, weeks, focusedDay)
-
-export const dayAttrs = <
-  B extends Attributed<B> & { readonly disabled: (disabled: boolean) => B }
->(
-  builder: B,
-  state: CalendarDayState,
-  label: string
-): B =>
-  builder
-    .attrs({
-      type: "button",
-      tabindex: state.tabStop ? "0" : "-1",
-      "aria-label": label,
-      "aria-disabled": !state.disabled && state.unavailable
-        ? "true"
-        : undefined,
-      "aria-current": state.today ? "date" : undefined,
-      "data-selected": flag(state.selected),
-      "data-today": flag(state.today),
-      "data-outside-month": flag(state.outsideMonth),
-      "data-unavailable": flag(state.unavailable),
-      "data-disabled": flag(state.disabled),
-      "data-focused": flag(state.focused)
-    })
-    .disabled(state.disabled)

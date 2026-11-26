@@ -157,7 +157,7 @@ import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as View from "@effect/ui/View"
-import * as DateTime from "effect/DateTime"
+import type * as DateTime from "effect/DateTime"
 import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
@@ -175,6 +175,8 @@ import {
 import {
   CalendarDate,
   CalendarGridPropsFields,
+  isOutOfRange,
+  normalizeOptional,
   sameMonth,
   startOfMonth
 } from "./internal/calendar.ts"
@@ -192,7 +194,8 @@ import * as Positioning from "./Positioning.ts"
  * - `value`: the date, any `DateTime`, or `null` for none.
  * - `open`: whether the popup shows. Required: the consumer owns it.
  * - `month`, `today`, `min`, `max`, `firstDayOfWeek`: as `Calendar` takes
- *   them.
+ *   them. A typed date outside `min` or `max` emits nothing, and the input
+ *   reverts to `value`.
  * - `locale`: the locale of both the input and the calendar.
  * - `name`, `form`, `required`: as `DateField` takes them.
  * - `disabled`: disables the input, the trigger and the calendar, and
@@ -260,8 +263,8 @@ export type DatePickerChangeReason = typeof DatePickerChangeReason.Type
  *
  * **Details**
  *
- * - `Picked`: asks for `value` to be `date`, from a typed date the user
- *   committed or a day they pressed. `null` when the input was cleared.
+ * - `Picked`: requests a new `value` after a typed commit or day press
+ *   within `min` and `max`. Carries `date: null` when the input is cleared.
  * - `RequestedOpen` and `RequestedClose`: ask for `open` to change, with
  *   the reason. A day press emits `Picked`, then `RequestedClose`.
  * - `RequestedMonth`: asks for the calendar to show `month`, the first of
@@ -294,14 +297,18 @@ const DatePickerModel = Schema.Struct({
 
 type DatePickerModel = typeof DatePickerModel.Type
 
+const DismissReason = Schema.Literals([
+  "escape-key",
+  "outside-press",
+  "focus-out"
+])
+
 const DatePickerMessage = UiSchema.TaggedEnum({
   CommittedDateField: { date: Schema.NullOr(Schema.DateTimeUtc) },
   PickedCalendar: { date: Schema.DateTimeUtc },
   RequestedCalendarMonth: { month: Schema.DateTimeUtc },
   ClickedTrigger: {},
-  Dismissed: {
-    reason: Schema.Literals(["escape-key", "outside-press", "focus-out"])
-  },
+  Dismissed: { reason: DismissReason },
   ChangedPlacement: { placement: Positioning.Placement }
 })
 
@@ -316,8 +323,7 @@ type DatePickerUpdate = Component.Update<
 
 const pick = ($: DatePickerUpdate, date: DateTime.Utc | null) => {
   const picked = $.emit(DatePickerEvents.Picked({ date }))
-  return date === null ||
-      sameMonth(date, DateTime.removeTime($.props.month))
+  return date === null || sameMonth(date, startOfMonth($.props.month))
     ? picked
     : picked.emit(
       DatePickerEvents.RequestedMonth({ month: startOfMonth(date) })
@@ -341,9 +347,7 @@ const TrackDatePicker = Mount.makeStream(
             const document = node.ownerDocument
             const controller = new AbortController()
             const anchors = args.input + "," + args.trigger
-            const dismiss = (
-              reason: "escape-key" | "outside-press" | "focus-out"
-            ) =>
+            const dismiss = (reason: typeof DismissReason.Type) =>
               Queue.offerUnsafe(queue, DatePickerMessage.Dismissed({ reason }))
             const inside = (target: Node) =>
               node.contains(target) ||
@@ -437,7 +441,15 @@ export const DatePicker = Html.component({
 }).make({
   init: () => ({ placement: null }),
   update: {
-    CommittedDateField: ($, { date }) => pick($, date),
+    CommittedDateField: ($, { date }) =>
+      date !== null &&
+        isOutOfRange(
+          date,
+          normalizeOptional($.props.min),
+          normalizeOptional($.props.max)
+        )
+        ? $.model
+        : pick($, date),
     PickedCalendar: ($, { date }) =>
       pick($, date).emit(
         DatePickerEvents.RequestedClose({ reason: "day-press" })

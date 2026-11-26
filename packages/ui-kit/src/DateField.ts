@@ -3,8 +3,7 @@
  * `value`, a `DateTime` or `null` for an empty field, and store the
  * `DateTime.Utc | null` that `Committed` carries. Your view supplies the
  * `<input>` builder; the component formats and parses its text for a locale.
- * It is a headless component because it keeps the draft text while the user
- * types.
+ * The component keeps draft text while the user types.
  *
  * **Anatomy**
  *
@@ -148,16 +147,20 @@ import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
 import { defaults, flag, textInputDefaults } from "./internal/attributes.ts"
+import {
+  CalendarDate,
+  CalendarLocale,
+  dateKey,
+  formatterOf,
+  normalizeOptional
+} from "./internal/calendar.ts"
 import { input as hiddenInput } from "./internal/formInputs.ts"
 import {
   cached,
+  formatControls,
   type Locale as LocaleOption,
   toAsciiDigits
 } from "./internal/number.ts"
-
-const DateValue = Schema.Union([Schema.DateTimeUtc, Schema.DateTimeZoned])
-
-const Locale = Schema.Union([Schema.String, Schema.Array(Schema.String)])
 
 /**
  * Props for a `DateField`.
@@ -179,8 +182,8 @@ const Locale = Schema.Union([Schema.String, Schema.Array(Schema.String)])
  * @since 0.1.0
  */
 export const DateFieldProps = Schema.Struct({
-  value: Schema.NullOr(DateValue),
-  locale: Schema.optional(Locale),
+  value: Schema.NullOr(CalendarDate),
+  locale: Schema.optional(CalendarLocale),
   name: Schema.optional(Schema.String),
   form: Schema.optional(Schema.String),
   disabled: Schema.optional(Schema.Boolean),
@@ -256,7 +259,6 @@ interface LocaleInfo {
   readonly slashes: boolean
 }
 
-const formatControls = /\p{Cf}/gu
 const isoDate = /^(\d{4})-(\d{2})-(\d{2})$/
 const numericDate = /^(\d{1,4})\s*([/.-])\s*(\d{1,4})\s*\2\s*(\d{1,4})(\.)?$/
 const sampleDate = new Date(Date.UTC(2026, 10, 26))
@@ -266,16 +268,11 @@ const locales = new Map<string, LocaleInfo>()
 
 const localeOf = (locale: LocaleOption): LocaleInfo =>
   cached(locales, locale, () => {
-    const formatter = new Intl.DateTimeFormat(
-      locale as string | Array<string> | undefined,
-      {
-        calendar: "gregory",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        timeZone: "UTC"
-      }
-    )
+    const formatter = formatterOf(locale, {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    })
     const order: Array<DatePart> = []
     let pattern = ""
     let suffix = ""
@@ -310,9 +307,6 @@ const localeOf = (locale: LocaleOption): LocaleInfo =>
       slashes
     }
   })
-
-const normalize = (value: DateTime.DateTime | null): DateTime.Utc | null =>
-  value === null ? null : DateTime.removeTime(value)
 
 const formatDate = (
   value: DateTime.Utc | null,
@@ -390,7 +384,7 @@ const commit = ($: DateFieldUpdate, keepOnInvalid: boolean) => {
     .trim()
   const date = text === "" ? null : parseDate(text, locale)
   if (date === null && text !== "") return keepOnInvalid ? $.model : idle
-  return Equal.equals(date, normalize($.props.value))
+  return Equal.equals(date, normalizeOptional($.props.value))
     ? idle
     : $.set(idle).emit(DateFieldEvents.Committed({ date }))
 }
@@ -455,12 +449,12 @@ export const DateField = Html.component({
     const readOnly = props.readOnly === true
     const required = props.required === true
     const locked = disabled || readOnly
-    const value = normalize(props.value)
+    const value = normalizeOptional(props.value)
     const { pattern } = localeOf(props.locale)
     const inputValue = model.draft !== null && !disabled
       ? model.draft
       : formatDate(value, props.locale)
-    const isoValue = value === null ? "" : DateTime.formatIsoDateUtc(value)
+    const isoValue = value === null ? "" : dateKey(value)
     const hidden = props.name === undefined ? undefined : View.toNode(
       hiddenInput()
         .attrs({
