@@ -1,10 +1,7 @@
 /**
- * A date input with a button that opens a calendar in a popup. The user types
- * a date or picks one from the calendar. Pass the date as `value`, whether
- * the popup shows as `open`, the calendar's month as `month` and the current
- * day as `today`, and store what the events ask for. It is a headless
- * component built on `DateField` and `Calendar`, and it keeps the popup's
- * placement.
+ * A headless date input with a popup calendar, built on `DateField` and
+ * `Calendar`. Supply `value`, `open`, `month` and `today`; handle the events
+ * to update the controlled value, open state and displayed month.
  *
  * **Anatomy**
  *
@@ -25,10 +22,10 @@
  * `DateField` (`value`, `inputValue`, `pattern`, `disabled`, `readOnly`,
  * `required`) and `Calendar` (`weeks`, `weekdays`, `month`, `title`).
  *
- * The positioner is a manual popover, so it renders in the top layer. It is
- * placed against the input, below it and aligned to its start unless `side`
- * and `align` say otherwise. Its inline style carries `left`, `top` and the
- * variables `Positioning` describes.
+ * The positioner uses a manual popover in the top layer unless
+ * `topLayer: false`. It anchors to the input with `side: "bottom"` and
+ * `align: "start"` by default. Its inline style carries `left`, `top` and
+ * the CSS variables described in `Positioning`.
  *
  * **Date values**
  *
@@ -48,24 +45,22 @@
  *
  * **Keyboard**
  *
- * The trigger is a native button, so Enter and Space press it. Opening moves
- * focus to the calendar's focused day, and the calendar's keys work as
- * `Calendar` describes. Escape in the popup, the input or the trigger, a
- * picked day, a press outside them and Tab out of them each ask to close it.
+ * Enter and Space press the trigger. Opening focuses the calendar's focused
+ * day; see `Calendar` for its navigation keys. Picking a day, pressing
+ * Escape or pressing or moving focus outside the picker requests a close.
+ * Escape during input-method composition does not close the popup.
  * When `open` turns false with focus still in the popup, focus goes back to
  * the trigger. Focus that already left stays where it went.
  *
  * **Field**
  *
- * Focus moves from the input and the trigger into the popup, so wrap all
- * three in `field.focusWithin` and draw the input with `field.member`:
- * `field.focusWithin(h.div).children(datePicker.input(field.member(h.input)), datePicker.trigger(h.button), datePicker.positioner(h.div))`.
- * Focus moving between them then neither touches the field nor drops its
- * focus. Pass `disabled: field.disabled`. `focusWithin` and `member` write
- * no `id` and no label, so name the input with an `aria-label`, or give it
- * an `id` and a `<label for>`. Name the popup with an `aria-label`.
+ * Wrap the input, trigger and positioner in `field.focusWithin` and apply
+ * `field.member` to the input, as below. Moving focus between them then
+ * keeps the field focused without marking it touched. Pass
+ * `disabled: field.disabled`. Label the input explicitly with `aria-label`
+ * or an `id` and `<label for>`, and give the popup an `aria-label`.
  *
- * **Example** (A date picker whose date, month and open state live in the consumer's Model)
+ * **Example** (A controlled departure date picker inside a Field)
  *
  * ```ts import.meta.vitest
  * import { UiSchema } from "@effect/ui"
@@ -361,9 +356,7 @@ const TrackDatePicker = Mount.makeStream(
               pressed: () => dismiss("outside-press"),
               focused: () => dismiss("focus-out")
             })
-            // The days handle `keydown` themselves, and only the innermost
-            // handler hears an event, so Escape is heard natively. Capturing
-            // it closes the picker before a dialog it sits in hears it.
+            // Capture Escape before day handlers or an enclosing Dialog.
             document.addEventListener("keydown", (event) => {
               const target = event.target as Node | null
               if (
@@ -381,10 +374,8 @@ const TrackDatePicker = Mount.makeStream(
             })
             return controller
           }),
-          // The mount ends as `open` turns false. Focus still in the popup
-          // goes back to the trigger before the popup hides, so it never
-          // drops to the page and a field isn't touched. Focus that already
-          // left stays where it went.
+          // When `open` turns false, restore focus before hiding the popup
+          // to avoid touching the Field. Leave outside focus unchanged.
           (controller) =>
             Effect.sync(() => {
               controller.abort()
@@ -411,9 +402,9 @@ const TrackDatePicker = Mount.makeStream(
 )
 
 /**
- * A headless date picker. Call it with the consumer's `h`, the `props`,
- * `onEmit`, and a `view` closure that draws the input, the trigger and the
- * positioner, with the popup and the calendar's parts inside it.
+ * A headless date picker. Supply `h`, `props`, `onEmit` and a `view` that
+ * renders the input, trigger and positioner, with the popup and calendar
+ * inside the positioner.
  *
  * **Details**
  *
@@ -430,8 +421,7 @@ const TrackDatePicker = Mount.makeStream(
  * - `popup`: `id`, `role="dialog"` and its data attributes
  * - the calendar's parts: what `Calendar` writes
  *
- * History restore saves nothing of it: after Back, forward or a reload it
- * starts from `init`.
+ * Internal placement state is not restored from history.
  *
  * @stability experimental
  * @category components

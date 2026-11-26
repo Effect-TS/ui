@@ -28,10 +28,9 @@ export const onEscape = <M>(message: M): Subscription.Subscription<M> =>
   }])
 
 /**
- * Listens for `compositionend` until `signal` aborts, and returns whether a
- * `keydown` belongs to an input method's composition. Safari sends
- * `compositionend` before the `keydown` that ends a composition, and marks
- * that key only with `keyCode` 229.
+ * Tracks input-method composition until `signal` aborts. Treats keyCode 229
+ * and keydowns within 20 ms of compositionend as composing too, covering
+ * browsers that clear isComposing before the final keydown.
  */
 export const trackComposing = (
   document: Document,
