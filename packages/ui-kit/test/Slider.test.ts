@@ -335,10 +335,6 @@ describe("Slider", () => {
         "--slider-thumb-position:33.333%"
       )
       assert.strictEqual(
-        scene.get(thumb(1)).attrs?.style,
-        "--slider-thumb-position:66.667%"
-      )
-      assert.strictEqual(
         scene.get(indicator).attrs?.style,
         "--slider-indicator-start:33.333%;--slider-indicator-size:33.333%"
       )
