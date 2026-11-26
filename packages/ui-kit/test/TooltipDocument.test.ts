@@ -195,6 +195,10 @@ const Page = Html.component({
         disableAnchorTracking: h.props.disableAnchorTracking,
         anchor: h.props.anchor
       },
+      onEmit: (event) =>
+        event._tag === "RequestedOpen"
+          ? Message.RequestedOpen()
+          : Message.Closed(),
       view: (tooltip) =>
         h.div.attr("id", "clip").children(
           h.div.attr("id", "layer").children(
@@ -235,7 +239,101 @@ const mountPage = Effect.fnUntraced(
 
 const style = (name: string) => byId("positioner").style.getPropertyValue(name)
 
+const mouse = (
+  target: Element,
+  type: "mouseenter" | "mouseleave" | "mousemove",
+  clientX: number,
+  clientY: number
+) =>
+  target.dispatchEvent(
+    new MouseEvent(type, { clientX, clientY, bubbles: type === "mousemove" })
+  )
+
 describe("Tooltip in a document", { concurrent: false }, () => {
+  it.effect("a diagonal move from a narrow trigger to a wider popup keeps it open, while leaving away closes it", () =>
+    Effect.gen(function*() {
+      rects.set("trigger", { x: 400, y: 300, width: 40, height: 20 })
+      const root = yield* mountPage()
+      const open = () => root.model()!.open
+      rects.set("positioner", { x: 320, y: 320, width: 200, height: 108 })
+      const trigger = byId("trigger")
+      mouse(trigger, "mouseenter", 430, 310)
+      // Out of the trigger's side, above the positioner, toward the popup.
+      mouse(trigger, "mouseleave", 440.5, 315)
+      mouse(document.body, "mousemove", 450, 318)
+      yield* tick
+      assert.isTrue(open())
+      mouse(byId("popup"), "mousemove", 480, 360)
+      yield* tick
+      assert.isTrue(open())
+      mouse(document.body, "mousemove", 800, 100)
+      yield* tick
+      assert.isFalse(open())
+
+      // A fast move reports the leave where the pointer already is: the
+      // triangle still starts on the trigger.
+      root.send(Message.RequestedOpen())
+      yield* tick
+      mouse(trigger, "mouseenter", 430, 310)
+      mouse(trigger, "mouseleave", 430, 100)
+      mouse(document.body, "mousemove", 430, 100)
+      yield* tick
+      assert.isFalse(open())
+    }).pipe(Effect.scoped))
+
+  it.effect("a tooltip the consumer opened stays open as the pointer moves elsewhere, until a press, whatever an earlier visit's pointer did", () =>
+    Effect.gen(function*() {
+      rects.set("trigger", { x: 400, y: 300, width: 40, height: 20 })
+      const root = yield* mountPage()
+      const open = () => root.model()!.open
+      rects.set("positioner", { x: 320, y: 320, width: 200, height: 108 })
+      mouse(document.body, "mousemove", 10, 10)
+      yield* tick
+      assert.isTrue(open())
+
+      // Escape with the pointer in the triangle, which no leave follows.
+      const trigger = byId("trigger")
+      mouse(trigger, "mouseenter", 430, 310)
+      mouse(trigger, "mouseleave", 440.5, 315)
+      mouse(document.body, "mousemove", 450, 318)
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+      )
+      yield* tick
+      assert.isFalse(open())
+      mouse(document.body, "mousemove", 10, 10)
+      root.send(Message.RequestedOpen())
+      yield* tick
+      mouse(document.body, "mousemove", 11, 10)
+      yield* tick
+      assert.isTrue(open())
+      document.body.dispatchEvent(
+        new MouseEvent("mousedown", { clientX: 10, clientY: 10, bubbles: true })
+      )
+      yield* tick
+      assert.isFalse(open())
+    }).pipe(Effect.scoped))
+
+  it.effect("a press in the triangle closes it", () =>
+    Effect.gen(function*() {
+      rects.set("trigger", { x: 400, y: 300, width: 40, height: 20 })
+      const root = yield* mountPage()
+      rects.set("positioner", { x: 320, y: 320, width: 200, height: 108 })
+      const trigger = byId("trigger")
+      mouse(trigger, "mouseenter", 430, 310)
+      mouse(trigger, "mouseleave", 440.5, 315)
+      mouse(document.body, "mousemove", 450, 318)
+      document.body.dispatchEvent(
+        new MouseEvent("mousedown", {
+          clientX: 450,
+          clientY: 318,
+          bubbles: true
+        })
+      )
+      yield* tick
+      assert.isFalse(root.model()!.open)
+    }).pipe(Effect.scoped))
+
   it.effect("places the positioner itself, flipped above a trigger near the bottom, and reports the side", () =>
     Effect.gen(function*() {
       yield* mountPage()

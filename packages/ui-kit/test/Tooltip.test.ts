@@ -1,13 +1,14 @@
 import {
   Command,
   type Component,
+  type Mount,
   Route,
   Router,
   UiSchema,
   View
 } from "@effect/ui"
 import {
-  Positioning,
+  type Positioning,
   Tooltip,
   type TooltipProps,
   TooltipProvider
@@ -108,6 +109,8 @@ const Toolbar = Html.component({
 })
 
 // Two tooltips under a provider, and one Model field for which one shows.
+// TestHost runs no mounts, so these tooltips' popups aren't hoverable and
+// the trigger's `mouseleave` closes them.
 const Tip = Schema.Literals(["bold", "italic"])
 const GroupedMessage = UiSchema.TaggedEnum({
   RequestedOpenTip: { tip: Tip },
@@ -135,7 +138,7 @@ const Grouped = Html.component({
           ...Tip.literals.map((tip) =>
             Tooltip(h, {
               key: tip,
-              props: { open: model.tip === tip },
+              props: { open: model.tip === tip, disableHoverablePopup: true },
               onEmit: (event) =>
                 event._tag === "RequestedOpen"
                   ? GroupedMessage.RequestedOpenTip({ tip })
@@ -199,7 +202,8 @@ const Pages = Html.component({
 })
 
 // Two tooltips under a provider, each with its own field. `keep` refuses
-// bold's `RequestedClose`, and `bold` counts bold's requests to close.
+// bold's `RequestedClose`, and `bold` counts bold's requests to close. As
+// in `Grouped`, the popups aren't hoverable.
 const IndependentMessage = UiSchema.TaggedEnum({
   RequestedOpenTip: { tip: Tip },
   RequestedCloseTip: { tip: Tip }
@@ -234,7 +238,8 @@ const Independent = Html.component({
                 key: tip,
                 props: {
                   open: model[tip],
-                  closeDelay: tip === "bold" ? h.props.closeDelay : 0
+                  closeDelay: tip === "bold" ? h.props.closeDelay : 0,
+                  disableHoverablePopup: true
                 },
                 onEmit: (event) =>
                   event._tag === "RequestedOpen"
@@ -331,9 +336,22 @@ const top = {
   arrowUncentered: false
 } as const
 
+type Track = Mount.Issued<unknown, never, never, unknown>
+type Rendered = { readonly get: (locator: Locator.Locator) => Locator.Node }
+// The positioner's mount, which places it and watches the hover area.
+const tracking = (scene: Rendered): Track =>
+  (scene.get(positioner) as unknown as View.Element<unknown>).owned?.find((
+    layer
+  ) => layer.mount !== undefined)
+    ?.mount as unknown as Track
+const sent = (tag: string, fields: object = {}) =>
+  ({ _tag: tag, ...fields }) as never
+const placed = (placement: Positioning.Placement = top) =>
+  sent("ChangedPlacement", { placement })
+
 const opened = (props: TooltipProps) =>
   HtmlScene.make(Tooltip, props, standIn).pipe(
-    Effect.map((scene) => scene.mounted(Positioning.TrackPosition, top))
+    Effect.map((scene) => scene.mounted(tracking(scene), placed()))
   )
 
 // The message a wait would have produced: the Command's own result.
@@ -342,7 +360,7 @@ const completed = (
 ) => ({ _tag: tag }) as never
 
 describe("Tooltip", () => {
-  it.effect("hover opens after the delay and stays open across the offset until the pointer leaves", () =>
+  it.effect("hover opens after the delay and stays open until the pointer leaves the hover area", () =>
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(Tooltip, { open: false }, standIn)
       scene.fire(trigger, "mouseenter")
@@ -351,23 +369,40 @@ describe("Tooltip", () => {
       scene.resolve(opening!.command, completed("CompletedWaitBeforeOpening"))
         .emitted({ _tag: "RequestedOpen" })
       assert.isFalse(scene.get(positioner).props?.popoverOpen)
-      scene.props({ open: true, side: "bottom", sideOffset: 8 }).mounted(
-        Positioning.TrackPosition,
-        top
-      )
+      scene.props({ open: true, side: "bottom", sideOffset: 8 })
+      scene.mounted(tracking(scene), placed())
 
       assert.isTrue(scene.get(positioner).props?.popoverOpen)
       // Each part draws the children it was given.
       assert.strictEqual(Locator.textOf(scene.get(positioner)), "Bold")
 
+      // Leaving the trigger toward the popup doesn't close it: the
+      // positioner's mount says when the pointer has left the hover area.
       scene.fire(trigger, "mouseleave")
-      // The gap is the positioner's padding, so the pointer reaches it as it
-      // leaves the trigger, before the wait ends, and the tooltip stays open.
-      scene.fire(positioner, "mouseenter")
+      assert.deepStrictEqual(scene.current.pending, [])
+      scene.mounted(tracking(scene), sent("LeftHoverArea"))
+      scene.mounted(tracking(scene), sent("ReturnedToHoverArea"))
       assert.deepStrictEqual(scene.current.interrupted.map((c) => c.name), [
         "WaitBeforeClosing"
       ])
-      scene.fire(positioner, "mouseleave")
+      // A close the consumer declines keeps the pointer in the hover area.
+      scene.fireDocument("keydown", { key: "Escape" })
+        .emitted({ _tag: "RequestedClose" })
+      scene.mounted(tracking(scene), sent("LeftHoverArea"))
+      scene.resolve(
+        scene.current.pending[0]!.command,
+        completed("CompletedWaitBeforeClosing")
+      )
+        .emitted({ _tag: "RequestedClose" })
+    }))
+
+  it.effect("the pointer the hover area last saw doesn't hold it open once disableHoverablePopup is set", () =>
+    Effect.gen(function*() {
+      const scene = yield* opened({ open: true })
+      scene.fire(trigger, "mouseenter")
+        .mounted(tracking(scene), sent("ReturnedToHoverArea"))
+        .props({ open: true, disableHoverablePopup: true })
+        .fire(trigger, "mouseleave")
       scene.resolve(
         scene.current.pending[0]!.command,
         completed("CompletedWaitBeforeClosing")
@@ -379,7 +414,8 @@ describe("Tooltip", () => {
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(Tooltip, { open: false }, standIn)
       assert.deepStrictEqual(scene.subscriptions, [])
-      scene.props({ open: true }).mounted(Positioning.TrackPosition, top)
+      scene.props({ open: true })
+      scene.mounted(tracking(scene), placed())
       assert.deepStrictEqual(scene.subscriptions, [
         `@effect/ui/html/document:"keydown"`,
         `@effect/ui/html/document:"mousedown","capture"`
@@ -404,14 +440,16 @@ describe("Tooltip", () => {
       assert.deepStrictEqual(scene.current.emitted, [])
     }))
 
-  it.effect("focus from a press neither opens the tooltip nor holds it open", () =>
+  it.effect("focus without a focus ring neither opens the tooltip nor holds it open", () =>
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(Tooltip, { open: false }, standIn)
-      scene.fire(trigger, "mousedown")
-        .fire(trigger, "focus")
+      scene.fire(trigger, "focus", { focusVisible: false })
       assert.deepStrictEqual(scene.current.emitted, [])
-      scene.props({ open: true }).mounted(Positioning.TrackPosition, top)
+      scene.props({ open: true })
+      scene.mounted(tracking(scene), placed())
+        .fire(trigger, "mouseenter")
         .fire(trigger, "mouseleave")
+        .mounted(tracking(scene), sent("LeftHoverArea"))
       scene.resolve(
         scene.current.pending[0]!.command,
         completed("CompletedWaitBeforeClosing")
@@ -438,11 +476,11 @@ describe("Tooltip", () => {
         { open: false, closeDelay: 300 },
         standIn
       )
-      scene.fire(trigger, "focus")
+      scene.focus(trigger)
         .emitted({ _tag: "RequestedOpen" })
         .props({ open: true, closeDelay: 300 })
-        .mounted(Positioning.TrackPosition, top)
-      // A press with the pointer on the trigger or the positioner is inside.
+      scene.mounted(tracking(scene), placed())
+      // A press on the positioner is inside.
       scene.fire(positioner, "mouseenter")
         .fireDocument("mousedown")
         .expectDefaultPrevented(false)
@@ -450,14 +488,16 @@ describe("Tooltip", () => {
       // Keyboard focus holds the tooltip open after the pointer leaves, and
       // a press elsewhere that leaves focus on the trigger still closes it.
       scene.fire(positioner, "mouseleave")
+        .mounted(tracking(scene), sent("LeftHoverArea"))
       assert.deepStrictEqual(scene.current.pending, [])
       scene.fireDocument("mousedown")
         .emitted({ _tag: "RequestedClose" })
 
       // Without focus, the close delay holds it open, and a press ends the wait.
       scene.fire(trigger, "mouseenter")
-        .fire(trigger, "blur")
+        .blur(trigger)
         .fire(trigger, "mouseleave")
+        .mounted(tracking(scene), sent("LeftHoverArea"))
       assert.deepStrictEqual(
         scene.current.pending.map((run) => run.command.args),
         [
@@ -491,9 +531,10 @@ describe("Tooltip", () => {
   it("parts clear stale state and add their styles after the consumer's", () => {
     const tooltip = Story.parts(Tooltip, {
       model: {
-        hovered: false,
+        onTrigger: false,
+        onPositioner: false,
+        inArea: false,
         focused: false,
-        pressed: false,
         instant: null,
         turn: 0,
         yieldedTo: null,
@@ -516,6 +557,33 @@ describe("Tooltip", () => {
     )
   })
 
+  it.effect("describesTrigger makes the popup the trigger's description, next to the consumer's own", () =>
+    Effect.gen(function*() {
+      const scene = yield* HtmlScene.make(Tooltip, { open: false }, {
+        elements: Html,
+        view: (tooltip, h) =>
+          h.span(
+            tooltip.trigger(h.button.attr("aria-describedby", "hint")),
+            tooltip.positioner(h.div).children(
+              tooltip.popup(h.div.class("popup")).children("Bold")
+            )
+          )
+      })
+      const popup = Locator.attr("class", "popup")
+      assert.strictEqual(scene.get(trigger).attrs?.["aria-describedby"], "hint")
+      assert.isUndefined(scene.get(popup).attrs?.id)
+      assert.isUndefined(scene.get(popup).attrs?.role)
+      // Closed too: a hidden popover still describes the trigger.
+      scene.props({ open: false, describesTrigger: true })
+      const id = scene.get(popup).attrs?.id
+      assert.isString(id)
+      assert.strictEqual(scene.get(popup).attrs?.role, "tooltip")
+      assert.strictEqual(
+        scene.get(trigger).attrs?.["aria-describedby"],
+        `hint ${id}`
+      )
+    }))
+
   it.effect("the placement the positioner reports reaches every part", () =>
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(
@@ -527,12 +595,15 @@ describe("Tooltip", () => {
       const arrow = Locator.attr("aria-hidden", "true")
       scene.props({ open: true, side: "bottom" })
       assert.strictEqual(scene.get(popup).attrs?.["data-side"], "bottom")
-      scene.mounted(Positioning.TrackPosition, {
-        side: "left",
-        align: "end",
-        anchorHidden: true,
-        arrowUncentered: true
-      })
+      scene.mounted(
+        tracking(scene),
+        placed({
+          side: "left",
+          align: "end",
+          anchorHidden: true,
+          arrowUncentered: true
+        })
+      )
       for (const part of [positioner, popup, arrow]) {
         assert.strictEqual(scene.get(part).attrs?.["data-side"], "left")
         assert.strictEqual(scene.get(part).attrs?.["data-align"], "end")
@@ -665,8 +736,12 @@ describe("Tooltip", () => {
       const scene = (
         root: { readonly get: (locator: Locator.Locator) => TestHost.TestNode }
       ) => ({
-        fire: (tip: string, event: string) =>
-          Locator.fire(root.get(Locator.attr("aria-label", tip)), event),
+        fire: (tip: string, event: string, payload?: object) =>
+          Locator.fire(
+            root.get(Locator.attr("aria-label", tip)),
+            event,
+            payload
+          ),
         shows: (tip: string) =>
           root.get(Locator.attr("aria-label", tip)).attrs
             ?.["data-popup-open"] === "",
@@ -677,7 +752,7 @@ describe("Tooltip", () => {
       const held = scene(
         yield* TestHost.mount(Independent, { keep: true, closeDelay: 0 })
       )
-      held.fire("bold", "focus")
+      held.fire("bold", "focus", { focusVisible: true })
       yield* wait(0)
       held.fire("italic", "mouseenter")
       yield* wait(0)
@@ -711,14 +786,14 @@ describe("Tooltip", () => {
           Effect.andThen(TestClock.adjust(`${millis} millis`)),
           Effect.andThen(TestHost.settle)
         )
-      const fire = (tip: string, event: string) =>
-        Locator.fire(root.get(Locator.attr("aria-label", tip)), event)
+      const fire = (tip: string, event: string, payload?: object) =>
+        Locator.fire(root.get(Locator.attr("aria-label", tip)), event, payload)
       const requests = () => Locator.textOf(root.get(Locator.tag("output")))
       const shows = (tip: string) =>
         root.get(Locator.attr("aria-label", tip)).attrs?.["data-popup-open"] ===
           ""
 
-      fire("bold", "focus")
+      fire("bold", "focus", { focusVisible: true })
       fire("italic", "mouseenter")
       yield* wait(600)
       root.send(DeferredMessage.AcceptedOpen({ tip: "bold" }))

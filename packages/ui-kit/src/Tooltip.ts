@@ -14,8 +14,12 @@
  * open: keyboard focus, `closeDelay`, or a consumer that opened it itself.
  *
  * A tooltip is a visual label for sighted mouse and keyboard users. Screen
- * readers and touch users don't get it, so the trigger still needs its own
+ * readers don't get it by default, so the trigger still needs its own
  * accessible name, such as an `aria-label` that matches the tooltip's text.
+ * A tooltip that adds to the label, such as a shortcut or why the trigger is
+ * disabled, can be the trigger's accessible description with
+ * `describesTrigger`. Touch users without a screen reader still never see
+ * it, so keep essential information out of tooltips.
  *
  * **Anatomy**
  *
@@ -80,11 +84,12 @@
  * **Keyboard**
  *
  * Focusing the trigger with the keyboard opens the tooltip without a delay,
- * and moving focus away closes it. Escape closes an open tooltip wherever
- * focus is, so a tooltip opened by hovering can be dismissed without moving
- * the pointer. Activating the trigger with Enter or Space closes it, as a
- * click does. Focus that follows a mouse press on the trigger doesn't open
- * it, and doesn't keep it open after the pointer leaves.
+ * and moving focus away closes it. The trigger must match `:focus-visible`
+ * when it receives focus to open the tooltip or keep it open after the
+ * pointer leaves. Other focus events are ignored. Escape closes an open
+ * tooltip wherever focus is, so a tooltip opened by hovering can be
+ * dismissed without moving the pointer. Activating the trigger with Enter
+ * or Space closes it, as a click does.
  *
  * **Placement and timing**
  *
@@ -103,8 +108,12 @@
  * shown, the previous one asks to close. Wrap the group, with nothing to add to each
  * tooltip: `TooltipProvider(h, { props: {}, view: () => h.div(Tooltip(h, ...), Tooltip(h, ...)) })`.
  *
- * Set `closeDelay` to give the pointer time to reach the popup when its
- * path takes it outside both the trigger and the positioner.
+ * On its way from the trigger to the popup, the pointer can cross the
+ * triangle between where it left the trigger and the positioner's near edge
+ * without starting the close, so a narrow trigger and a wide popup can be
+ * crossed diagonally. A pointer that stops in that triangle keeps the
+ * tooltip open until it moves out. With `disableHoverablePopup`, the
+ * tooltip closes `closeDelay` after the pointer leaves the trigger.
  *
  * **Example** (A toolbar button with a tooltip whose open state lives in the consumer's Model)
  *
@@ -159,8 +168,16 @@ import * as Mount from "@effect/ui/Mount"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
+import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
-import { type Attributed, flag, withStyle } from "./internal/attributes.ts"
+import * as Stream from "effect/Stream"
+import {
+  type Attributed,
+  attrSelector,
+  flag,
+  withStyle
+} from "./internal/attributes.ts"
+import { watchHoverArea } from "./internal/hoverArea.ts"
 import { onEscape } from "./internal/interaction.ts"
 import * as Positioning from "./Positioning.ts"
 
@@ -211,12 +228,16 @@ export type TooltipAlign = typeof TooltipAlign.Type
  *   stays enabled: disable the button itself if it should be.
  * - `delay`: milliseconds the pointer rests on the trigger before the
  *   tooltip opens, 600 by default.
- * - `closeDelay`: milliseconds after the pointer leaves the trigger or the
- *   positioner before the tooltip closes, 0 by default.
+ * - `closeDelay`: milliseconds after the pointer leaves the trigger, the
+ *   positioner and the triangle between them before the tooltip closes, 0
+ *   by default.
  * - `closeOnClick`: whether activating the trigger, by a click, Enter or
  *   Space, closes the tooltip, true by default.
  * - `disableHoverablePopup`: the pointer on the popup doesn't keep the
  *   tooltip open, and the positioner takes no pointer events.
+ * - `describesTrigger`: makes the popup the trigger's accessible description
+ *   unless `disabled`. Use it for text that adds to the trigger's label
+ *   rather than repeating it. False by default.
  * - `side`: the side of the trigger the popup shows on, `"top"` by default.
  *   `"inline-start"` and `"inline-end"` follow the writing direction.
  * - `align`: how the popup lines up with the trigger along that side,
@@ -255,6 +276,7 @@ export const TooltipProps = Schema.Struct({
   closeDelay: Schema.optional(Schema.Number),
   closeOnClick: Schema.optional(Schema.Boolean),
   disableHoverablePopup: Schema.optional(Schema.Boolean),
+  describesTrigger: Schema.optional(Schema.Boolean),
   ...Positioning.PositionerFields
 })
 
@@ -297,12 +319,15 @@ export type TooltipEvents = typeof TooltipEvents.Type
 const TooltipMessage = UiSchema.TaggedEnum({
   EnteredTrigger: {},
   LeftTrigger: {},
-  FocusedTrigger: {},
+  FocusedTrigger: { visible: Schema.Boolean },
   BlurredTrigger: {},
   PressedTrigger: {},
   ClickedTrigger: {},
   EnteredPositioner: {},
   LeftPositioner: {},
+  LeftHoverArea: {},
+  ReturnedToHoverArea: {},
+  ShowedPositioner: {},
   PressedEscape: {},
   PressedDocument: {},
   CompletedWaitBeforeOpening: {},
@@ -314,19 +339,19 @@ const TooltipMessage = UiSchema.TaggedEnum({
 })
 
 // Only the pointer and focus, which the consumer would never store.
-// `hovered`: the pointer is on the trigger or the positioner. `focused`: the
-// keyboard focused the trigger. `pressed` marks a mouse press on the
-// trigger, so the focus that follows it neither opens the tooltip nor holds
-// it open. `instant` is why the last change skips its transition, as
+// A hidden positioner hears no leave, so `onPositioner` and `inArea` reset
+// when it shows again. Both flags are kept when the consumer declines a close.
+// `instant` is why the last change skips its transition, as
 // `data-instant` reports it: `delay` when a TooltipProvider let it skip the
 // hover delay. `turn` orders the shown tooltips of a provider's group: the
 // one it took when it was last shown, 0 while it hasn't taken one or isn't
 // shown. `yieldedTo` is the turn it last asked to close for, so a refused
 // request isn't repeated.
 const TooltipModel = Schema.Struct({
-  hovered: Schema.Boolean,
+  onTrigger: Schema.Boolean,
+  onPositioner: Schema.Boolean,
+  inArea: Schema.Boolean,
   focused: Schema.Boolean,
-  pressed: Schema.Boolean,
   instant: Schema.NullOr(Schema.Literals(["focus", "dismiss", "delay"])),
   turn: Schema.Number,
   yieldedTo: Schema.NullOr(Schema.Number),
@@ -355,13 +380,60 @@ const WaitBeforeClosing = Command.make(
     )
 )
 
+const TrackTooltip = Mount.makeStream(
+  "TrackTooltip",
+  {
+    args: Schema.Struct({
+      position: Positioning.TrackPositionArgs,
+      trigger: Schema.String
+    })
+  },
+  (node: HTMLElement, args, changes) =>
+    Stream.merge(
+      Stream.callback<typeof TooltipMessage.Type>((queue) =>
+        Effect.acquireRelease(
+          Effect.sync(() => {
+            const controller = new AbortController()
+            Queue.offerUnsafe(queue, TooltipMessage.ShowedPositioner())
+            watchHoverArea(
+              node,
+              controller.signal,
+              () => args.trigger,
+              (away) => {
+                Queue.offerUnsafe(
+                  queue,
+                  away
+                    ? TooltipMessage.LeftHoverArea()
+                    : TooltipMessage.ReturnedToHoverArea()
+                )
+              }
+            )
+            return controller
+          }),
+          (controller) => Effect.sync(() => controller.abort())
+        )
+      ),
+      Positioning.trackPosition(
+        node,
+        args.position,
+        Stream.map(changes, (next) => next.position)
+      ).pipe(
+        Stream.map((placement) =>
+          TooltipMessage.ChangedPlacement({ placement })
+        )
+      )
+    )
+)
+
 // The two dismissals no part hears, listened for on the document while the
 // tooltip shows. Escape anywhere, so a tooltip opened by hovering can be
 // dismissed without moving focus or the pointer: its default is cancelled,
 // so an enclosing dialog stays open, and an Escape something else already
 // handled is skipped. And a mouse press anywhere, in the capture phase so a
-// handler that stops the event can't hide it: `update` knows from `hovered`
-// whether the press was outside the tooltip.
+// handler that stops the event can't hide it: `update` knows from
+// `onTrigger` and `onPositioner` whether the press was outside the tooltip.
+// The triangle only gives the pointer time to reach the popup, so a press
+// there is outside.
 const dismissals = [
   onEscape(TooltipMessage.PressedEscape()),
   HtmlSubscription.onDocument("mousedown", TooltipMessage.PressedDocument(), {
@@ -383,6 +455,24 @@ const newestOf = (turns: ReadonlyArray<number>): number | null => {
 const shownBy = (props: TooltipProps): boolean =>
   props.open && props.disabled !== true
 
+const hoverableBy = (props: TooltipProps): boolean =>
+  shownBy(props) && props.disableHoverablePopup !== true
+
+// Only the trigger counts while popup hover is disabled, even if the prop
+// changed while the pointer was on the popup.
+const hoveredBy = (
+  model: typeof TooltipModel.Type,
+  props: TooltipProps
+): boolean =>
+  model.onTrigger || (props.disableHoverablePopup !== true && model.inArea)
+
+const onPartsBy = (
+  model: typeof TooltipModel.Type,
+  props: TooltipProps
+): boolean =>
+  model.onTrigger ||
+  (props.disableHoverablePopup !== true && model.onPositioner)
+
 // `$` in any handler of the Tooltip's `update`: a tag's `$` fits the one
 // over the whole message type.
 type TooltipUpdate = Component.Update<
@@ -400,15 +490,18 @@ const dismiss = ($: TooltipUpdate, instant = $.model.instant) =>
     )
     : $.model
 
-// The pointer left the trigger or the positioner: a pending open stops, and
+// The pointer left the trigger or the hover area: a pending open stops, and
 // an open tooltip closes after `closeDelay` unless keyboard focus holds it.
-const left = ($: TooltipUpdate) => {
-  const released = $.evolve({ hovered: false, pressed: false })
+const left = (
+  $: TooltipUpdate,
+  released: Partial<typeof TooltipModel.Type>
+) => {
+  const next = $.evolve(released)
   if (!shownBy($.props)) {
-    return released.run(Command.interrupt(WaitBeforeOpening))
+    return next.run(Command.interrupt(WaitBeforeOpening))
   }
-  if ($.model.focused) return released
-  return released.run(
+  if ($.model.focused) return next
+  return next.run(
     WaitBeforeClosing.make({ delay: $.props.closeDelay ?? 0 })
   )
 }
@@ -586,9 +679,16 @@ export const TooltipProvider = Html.component({
  * such as a ui-kit Button's. The positioner and the popup can stay in the
  * view while the tooltip is closed: the popover hides them.
  *
+ * With `describesTrigger`, unless `disabled`, the popup gets a generated
+ * `id` and `role="tooltip"`. The trigger's `aria-describedby` includes that
+ * ID alongside the consumer's own IDs. Keep the positioner and the popup
+ * in the view while the tooltip is closed so the description remains
+ * available to screen readers before the tooltip opens.
+ *
  * The tooltip's own attributes win over the ones the consumer set on the
  * builder it passes in: the data attributes on every part, `popover` and
- * `role="presentation"` on the positioner, and `aria-hidden` on the arrow.
+ * `role="presentation"` on the positioner, `aria-hidden` on the arrow, and
+ * the popup's `id` and `role` with `describesTrigger` unless `disabled`.
  * That includes the ones a state leaves absent, so a `data-open` on the
  * consumer's popup is removed while the tooltip is closed. The
  * positioner's placement and the arrow's offset are added after the
@@ -626,9 +726,10 @@ export const Tooltip = Html.component({
   restore: false
 }).make({
   init: () => ({
-    hovered: false,
+    onTrigger: false,
+    onPositioner: false,
+    inArea: false,
     focused: false,
-    pressed: false,
     instant: null,
     turn: 0,
     yieldedTo: null,
@@ -636,7 +737,7 @@ export const Tooltip = Html.component({
   }),
   update: {
     EnteredTrigger: ($) => {
-      const entered = $.evolve({ hovered: true })
+      const entered = $.evolve({ onTrigger: true })
       if ($.props.disabled === true) return entered
       if (shownBy($.props)) {
         return entered.run(Command.interrupt(WaitBeforeClosing))
@@ -651,46 +752,57 @@ export const Tooltip = Html.component({
         WaitBeforeOpening.make({ delay: $.props.delay ?? 600 })
       )
     },
-    LeftTrigger: left,
-    EnteredPositioner: ($) =>
-      $.evolve({ hovered: true }).run(Command.interrupt(WaitBeforeClosing)),
-    LeftPositioner: left,
-    FocusedTrigger: ($) => {
-      const focused = $.evolve({ focused: !$.model.pressed, pressed: false })
-      if ($.model.pressed || $.props.disabled === true || shownBy($.props)) {
-        return focused
-      }
+    // While a hoverable tooltip shows, the pointer that leaves the trigger
+    // is in the hover area, on its way to the popup, until the positioner's
+    // mount says it has left.
+    LeftTrigger: ($) =>
+      hoverableBy($.props)
+        ? $.evolve({ onTrigger: false, inArea: true })
+        : left($, { onTrigger: false }),
+    EnteredPositioner: ($) => $.evolve({ onPositioner: true }),
+    LeftPositioner: ($) => $.evolve({ onPositioner: false }),
+    // Only a pointer that was in the area leaves it: the mount's first
+    // report that the pointer is elsewhere doesn't close a tooltip the
+    // consumer opened.
+    LeftHoverArea: ($) =>
+      hoverableBy($.props) && $.model.inArea
+        ? left($, { inArea: false })
+        : $.model,
+    ShowedPositioner: ($) => $.evolve({ onPositioner: false, inArea: false }),
+    ReturnedToHoverArea: ($) =>
+      hoverableBy($.props)
+        ? $.evolve({ inArea: true }).run(Command.interrupt(WaitBeforeClosing))
+        : $.model,
+    FocusedTrigger: ($, { visible }) => {
+      if (!visible) return $.model
+      const focused = $.evolve({ focused: true })
+      if ($.props.disabled === true || shownBy($.props)) return focused
       return focused.evolve({ instant: "focus" }).run(
         Command.interrupt(WaitBeforeOpening)
       ).emit(requestedOpen)
     },
     BlurredTrigger: ($) => {
-      const blurred = $.evolve({ focused: false, pressed: false })
-      return shownBy($.props) && !$.model.hovered
+      const blurred = $.evolve({ focused: false })
+      return shownBy($.props) && !hoveredBy($.model, $.props)
         ? blurred.emit(requestedClose)
         : blurred
     },
-    // A mouse press only marks the focus that follows it, and stops a
-    // pending open. The click that follows, or Enter or Space on the
-    // native button, closes an open tooltip.
-    PressedTrigger: ($) => {
-      const pressed = $.evolve({ pressed: true })
-      return $.props.closeOnClick !== false
-        ? pressed.run(Command.interrupt(WaitBeforeOpening))
-        : pressed
-    },
+    // A mouse press stops a pending open. The click that follows, or Enter
+    // or Space on the native button, closes an open tooltip.
+    PressedTrigger: ($) =>
+      $.props.closeOnClick !== false
+        ? $.run(Command.interrupt(WaitBeforeOpening))
+        : $.model,
     ClickedTrigger: ($) =>
       $.props.closeOnClick !== false ? dismiss($, "dismiss") : $.model,
     PressedEscape: ($) => dismiss($, "dismiss"),
-    // A press is outside the tooltip when the pointer is on neither the
-    // trigger nor the positioner.
-    PressedDocument: ($) => $.model.hovered ? $.model : dismiss($),
+    PressedDocument: ($) => onPartsBy($.model, $.props) ? $.model : dismiss($),
     CompletedWaitBeforeOpening: ($) =>
-      $.props.disabled !== true && !$.props.open && $.model.hovered
+      $.props.disabled !== true && !$.props.open && $.model.onTrigger
         ? $.evolve({ instant: null }).emit(requestedOpen)
         : $.model,
     CompletedWaitBeforeClosing: ($) =>
-      shownBy($.props) && !$.model.hovered && !$.model.focused
+      shownBy($.props) && !hoveredBy($.model, $.props) && !$.model.focused
         ? $.evolve({ instant: null }).emit(requestedClose)
         : $.model,
     // The shown tooltips of the group changed. Its turn follows whether it
@@ -716,10 +828,15 @@ export const Tooltip = Html.component({
     const shown = shownBy(p.props)
     const placement = model.placement
     const triggerId = p.id("trigger")
+    const triggerSelector = attrSelector("data-tooltip-trigger", triggerId)
     const arrowId = p.id("arrow")
+    const popupId =
+      p.props.describesTrigger === true && p.props.disabled !== true
+        ? p.id("popup")
+        : null
     const tracked = Positioning.trackArgs(p.props, {
       side: "top",
-      anchorSelector: `[data-tooltip-trigger="${triggerId}"]`,
+      anchorSelector: triggerSelector,
       arrowId,
       offsetAsPadding: true
     })
@@ -746,13 +863,15 @@ export const Tooltip = Html.component({
       (b) =>
         b.attrs({
           "data-popup-open": flag(shown),
-          "data-trigger-disabled": flag(p.props.disabled)
+          "data-trigger-disabled": flag(p.props.disabled),
+          "aria-describedby": popupId ?? undefined
         })
           .on("mouseenter", TooltipMessage.EnteredTrigger())
           .on("mouseleave", TooltipMessage.LeftTrigger())
           .on("mousedown", TooltipMessage.PressedTrigger())
           .on("click", TooltipMessage.ClickedTrigger())
-          .on("focus", TooltipMessage.FocusedTrigger())
+          .on("focus", ({ focusVisible }: Html.FocusPayload) =>
+            TooltipMessage.FocusedTrigger({ visible: focusVisible }))
           .on("blur", TooltipMessage.BlurredTrigger())
           .attr("data-tooltip-trigger", triggerId)
     )
@@ -768,23 +887,19 @@ export const Tooltip = Html.component({
         .forward((node) =>
           node.attr("style", withStyle(node.elementAttrs.style, style))
         )
-      const hoverable = p.props.disableHoverablePopup === true
-        ? decorated
-        : decorated.on("mouseenter", TooltipMessage.EnteredPositioner()).on(
-          "mouseleave",
-          TooltipMessage.LeftPositioner()
-        )
       return shown
-        ? hoverable.onMount(
-          Positioning.TrackPosition(tracked).pipe(
-            Mount.map((placement) =>
-              TooltipMessage.ChangedPlacement({ placement })
-            )
+        ? decorated
+          .on("mouseenter", TooltipMessage.EnteredPositioner())
+          .on("mouseleave", TooltipMessage.LeftPositioner())
+          .onMount(
+            TrackTooltip({ position: tracked, trigger: triggerSelector })
           )
-        )
-        : hoverable
+        : decorated
     })
-    const popup = p.part("div", instant)
+    const popup = p.part("div", (b) =>
+      popupId === null
+        ? instant(b)
+        : instant(b).attrs({ id: popupId, role: "tooltip" }))
     const arrowStyle = Positioning.arrowStyle(side)
     const arrow = p.part("div", (b) =>
       instant(b)
