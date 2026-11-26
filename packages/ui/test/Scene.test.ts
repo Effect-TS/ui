@@ -141,10 +141,12 @@ describe("Scene", () => {
     const off = Locator.text("Off")
     const on = Locator.text("On")
 
+    const docsPattern = /^\/docs/g
     scene
       .expect(link).toHaveAttribute("href")
       .expect(link).toHaveAttribute("href", "/docs")
-      .expect(link).toHaveAttribute("href", /^\/docs/)
+      .expect(link).toHaveAttribute("href", docsPattern)
+      .expect(link).toHaveAttribute("href", docsPattern)
       .expect(link).toHaveAttribute("hidden")
       .expect(link).toHaveAttribute("hidden", "")
       .expect(off).toHaveAttribute("disabled")
