@@ -2338,13 +2338,10 @@ type OnlyOwnersOmitParts<Sl, SV> = [Sl] extends [never]
 type ReportId = PartsHelper<never, unknown, any>["id"]
 
 // One entry of `reads`, for the owner inferred for it: `report` and `onChange` take their parameter types from
-// here. An entry for `"self"` reads the component's own `shares`, `SV` and `Rp`, and is optional.
-type IsShorthand<E> = [E] extends [never] ? false
-  : [E] extends [Headless.Any] ? true
-  : false
-
-type SharedEntry<E, O, Model, Props, Msg, SV, Rp> = IsShorthand<E> extends true
-  ? O
+// here. `E` is the owner when the entry is written as one, and this checks it against the owner. An entry for
+// `"self"` reads the component's own `shares`, `SV` and `Rp`, and is optional.
+type SharedEntry<E, O, Model, Props, Msg, SV, Rp> = [E] extends [Headless.Any] ?
+  O
   : [O] extends ["self"] ? {
       readonly owner: O
       readonly optional: true
@@ -2388,7 +2385,7 @@ type SharesValue<Model, Props, SO, SOpt, SA, SV> = (
   $: {
     readonly model: Model
     readonly props: Props
-    readonly reads: SharesReads<NoInfer<SO>, NoInfer<SOpt>, SA>
+    readonly reads: SharesReads<SO, SOpt, SA>
   }
 ) => SV
 
@@ -3073,23 +3070,11 @@ export interface DefineOptions<
   readonly reads?:
     | (
       & {
-        readonly [K in keyof SO]:
-          | SO[K]
-          | {
-            readonly owner: SO[K]
-            readonly optional?: boolean | undefined
-            readonly report?: unknown
-            readonly onChange?: unknown
-          }
-      }
-      & {
         readonly [K in keyof SOpt]:
           | (SOpt[K] & Headless.Any)
           | {
             readonly owner: unknown
             readonly optional?: SOpt[K] | undefined
-            readonly report?: unknown
-            readonly onChange?: unknown
           }
       }
       & {
@@ -3229,7 +3214,7 @@ export interface Define<V extends View.Elements> {
     const Tags extends TagOf<Msg> = never,
     const Sl extends string = never,
     SO extends { readonly [name: string]: Headless.Any | Any | "self" } = {},
-    const SOpt = {},
+    SOpt = {},
     SV = never,
     Rp = never,
     SA = SelfAbove<SV>
@@ -3524,10 +3509,11 @@ export const define = <
   V extends View.Elements = never,
   const Tags extends TagOf<Msg> = never,
   const Sl extends string = never,
-  // The owner of each entry of `reads`, inferred before `shares`, `report` and `onChange` are typed.
+  // `reads` is inferred by entry, never as a whole, so `shares` can be typed by it when it comes first.
+  // The owner of each entry.
   SO extends { readonly [name: string]: Headless.Any | Any | "self" } = {},
-  // Whether each entry of `reads` is `optional: true`, inferred alongside `SO`.
-  const SOpt = {},
+  // Each entry's `optional`, or its owner when the entry is written as one.
+  SOpt = {},
   SV = never,
   Rp = never,
   // Only inferred: typing `shares`'s self read by `SV` directly would fix `SV` to `never`.
