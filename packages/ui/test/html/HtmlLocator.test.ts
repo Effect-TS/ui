@@ -119,6 +119,49 @@ describe("HtmlLocator", () => {
       expect(clicks).toBe(0)
     })
 
+    it("DOM actions follow the flat tree through shadow hosts and slots, and a modal in a shadow root blocks the rest", () => {
+      const app = document.body.appendChild(document.createElement("div"))
+      const clicked: Array<string> = []
+      const button = (parent: ParentNode, name: string) => {
+        const button = parent.appendChild(document.createElement("button"))
+        button.addEventListener("click", () => clicked.push(name))
+        return button
+      }
+      const host = (parent: ParentNode, html = "") => {
+        const host = parent.appendChild(document.createElement("div"))
+        host.attachShadow({ mode: "open" }).innerHTML = html
+        return host
+      }
+      const inertHost = host(app)
+      inertHost.inert = true
+      const slotted = host(app, "<section inert><slot></slot></section>")
+      for (
+        const target of [
+          button(inertHost.shadowRoot!, "A"),
+          button(slotted, "B")
+        ]
+      ) {
+        expect(() => HtmlLocator.click(target)).toThrow("is inert")
+      }
+      const dialog = host(app, "<dialog></dialog>").shadowRoot!.querySelector(
+        "dialog"
+      )!
+      dialog.showModal()
+      // happy-dom never matches `:modal`; a browser does here.
+      const matches = dialog.matches.bind(dialog)
+      dialog.matches =
+        ((selector: string) =>
+          selector === ":modal" || matches(selector)) as typeof dialog.matches
+      const behind = button(app, "Behind")
+      expect(HtmlLocator.queryAllByRole(document, "button")).not.toContain(
+        behind
+      )
+      expect(() => HtmlLocator.click(behind)).toThrow("is inert")
+      HtmlLocator.click(button(host(dialog).shadowRoot!, "Inside"))
+      expect(clicked).toEqual(["Inside"])
+      app.remove()
+    })
+
     it.effect("a closed dialog and what's in it are hidden, and dialogState tells closed, open and modal apart", () =>
       Effect.gen(function*() {
         const dialog = HtmlLocator.role("dialog", { name: "Delete note?" })

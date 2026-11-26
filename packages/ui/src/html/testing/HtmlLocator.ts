@@ -6,14 +6,16 @@
  * real DOM tree. `role`, `label` and `placeholder` return a `Locator`, so
  * they combine with `Locator.inside` on the first two. On the DOM, `click`,
  * `type`, `keydown` and `submit` act as the user would, through real DOM
- * events, and refuse an inert element.
+ * events, and refuse an inert element, judged along the flat tree through
+ * shadow hosts and slots.
  *
  * Hidden elements (`hidden`, `aria-hidden="true"`, `<input type="hidden">`)
  * and everything inside them are left out of role queries unless
  * `hidden: true` is passed. So are inert elements: those inside `inert`,
  * and, while a modal dialog is open, those outside the topmost one, taken to
  * be the last open modal in document order. On the DOM a modal is a dialog
- * matching `:modal`, which some test environments never match.
+ * matching `:modal`, open shadow roots included, which some test
+ * environments never match.
  *
  * On a structural tree a match is typed `Locator.Node`, since it can be any
  * node of the tree. On `TestHost`, `root.all(HtmlLocator.role(...))` keeps the
@@ -260,7 +262,7 @@ const flag = <N>(reader: Reader<N>, node: N, name: string): boolean => {
     (prop === undefined && reader.attr(node, name) !== undefined)
 }
 
-/** The last open modal dialog in document order under `root`, which a tree can't tell from the topmost. */
+/** The last open modal dialog in document order under `root`, open shadow roots included, which a tree can't tell from the topmost. */
 const topModal = <N>(reader: Reader<N>, root: N): N | undefined => {
   let modal: N | undefined
   const walk = (node: N) => {
@@ -268,6 +270,10 @@ const topModal = <N>(reader: Reader<N>, root: N): N | undefined => {
       reader.isElement(node) && reader.tag(node) === "dialog" &&
       dialogState(node) === "modal"
     ) modal = node
+    const shadow = isDom(node)
+      ? (node as unknown as globalThis.Element).shadowRoot
+      : null
+    if (shadow != null) walk(shadow as N)
     for (const child of reader.children(node)) walk(child)
   }
   walk(root)
@@ -974,12 +980,24 @@ export const isInert = <N>(
   return modal !== undefined
 }
 
+/** A node's parent in the flat tree: the slot it is assigned to, a shadow root's host, or its parent. */
+const flatParent = (node: globalThis.Node): globalThis.Node | null => {
+  const parent = node.parentNode
+  const shadow = (parent as globalThis.Element | null)?.shadowRoot
+  if (shadow != null) {
+    for (const slot of shadow.querySelectorAll("slot")) {
+      if (slot.assignedNodes().includes(node as ChildNode)) return slot
+    }
+  }
+  return (parent as ShadowRoot | null)?.host ?? parent
+}
+
 const refuseInert = (step: string, element: globalThis.Element): void => {
   const path: Array<globalThis.Node> = []
   for (
     let at: globalThis.Node | null = element;
     at !== null;
-    at = at.parentNode
+    at = flatParent(at)
   ) path.push(at)
   if (isInert(path, element.ownerDocument)) {
     throw new Error(`HtmlLocator.${step}: the element is inert`)
