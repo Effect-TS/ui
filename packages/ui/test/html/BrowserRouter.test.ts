@@ -19,7 +19,7 @@ import { HtmlLocator } from "@effect/ui/html/testing"
 import { assert, expect, it } from "@effect/vitest"
 import { Context, Effect, Exit, Layer, Option, Schema, Scope } from "effect"
 import { TestClock } from "effect/testing"
-import { describe } from "vitest"
+import { describe, vi } from "vitest"
 import { App, AppRoute, Message, People } from "./fixtures/routed.ts"
 
 const SearchRoute = Route.union({
@@ -769,6 +769,22 @@ describe("BrowserRouter", { concurrent: false }, () => {
       yield* tick
       expect(window.scrollY).toBe(0)
       expect(document.activeElement).not.toBe(late)
+    }).pipe(Effect.scoped))
+
+  it.effect("stops waiting for a late initial #hash when the hash changes", () =>
+    Effect.gen(function*() {
+      const disconnect = vi.spyOn(MutationObserver.prototype, "disconnect")
+      const abort = vi.spyOn(AbortController.prototype, "abort")
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          disconnect.mockRestore()
+          abort.mockRestore()
+        })
+      )
+      const { router } = yield* start("/people/1#late")
+      yield* router.navigate("/people/1#other")
+      expect(disconnect).toHaveBeenCalled()
+      expect(abort).toHaveBeenCalled()
     }).pipe(Effect.scoped))
 
   it.effect("ignores links and reverts back and forward while blocked", () =>

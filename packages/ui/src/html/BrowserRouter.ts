@@ -293,7 +293,11 @@ const make = (
       else body.setAttribute("tabindex", tabindex)
     }
 
+    /** Stops waiting for a late-rendered initial `#hash` target. */
+    let stopWaiting = () => {}
+
     const onSettled = (settled: Router.Settled) => {
+      stopWaiting()
       const { action, hash } = settled.location
       if (settled.quiet) {
         // Within the page: no announcement and no focus move, and scroll only for a pop or when asked.
@@ -369,6 +373,7 @@ const make = (
       },
       onSettled,
       onHash: (hash, action, index) => {
+        stopWaiting()
         if (!scroll) return
         const saved = action === "pop" ? positions.get(index) : undefined
         if (saved !== undefined) window.scrollTo(saved.x, saved.y)
@@ -383,8 +388,8 @@ const make = (
 
     // --- late initial #hash ------------------------------------------------
     // Browsers only go to the fragment while the page loads. A client-rendered target appears later,
-    // so watch for it until it does, the location changes or the reader takes over. Every navigation
-    // and hash change replaces the location object.
+    // so watch for it until it does, the location changes or the reader takes over. A navigation can
+    // render before it settles, so the observer also checks that the location is still the initial one.
     const initial = router.location()
     if (
       !inFragment && (scroll || focus) && initial.hash.length > 1 &&
@@ -393,6 +398,7 @@ const make = (
       const view = window as Window & typeof globalThis
       const listening = new view.AbortController()
       const stop = () => {
+        stopWaiting = () => {}
         observer.disconnect()
         listening.abort()
       }
@@ -410,6 +416,7 @@ const make = (
         attributes: true,
         attributeFilter: ["id", "name"]
       })
+      stopWaiting = stop
       for (const type of ["pointerdown", "keydown", "wheel", "touchstart"]) {
         window.addEventListener(type, stop, {
           capture: true,
