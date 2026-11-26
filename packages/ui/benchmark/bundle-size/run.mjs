@@ -8,13 +8,12 @@ import { parseArgs } from "node:util"
 import { gzipSync } from "node:zlib"
 import { build, version as vite } from "vite"
 
-const { values: { app: only, base, development, json, markdown } } = parseArgs({
+const { values: { app: only, base, development, json } } = parseArgs({
   options: {
     app: { type: "string", multiple: true },
     development: { type: "boolean", default: false },
     base: { type: "string" },
-    json: { type: "string" },
-    markdown: { type: "string" }
+    json: { type: "string" }
   }
 })
 process.env.NODE_ENV = development ? "development" : "production"
@@ -338,7 +337,6 @@ const report = [
 ].join("\n")
 console.log(report)
 if (json) fs.writeFileSync(json, JSON.stringify(result) + "\n")
-if (markdown) fs.writeFileSync(markdown, report)
 if (process.env.GITHUB_STEP_SUMMARY) {
   fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, report)
 }
