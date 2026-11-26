@@ -139,7 +139,12 @@ import * as Effect from "effect/Effect"
 import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
 import { DirectionProvider } from "./DirectionProvider.ts"
-import { type Attributed, flag, separatorAttrs } from "./internal/attributes.ts"
+import {
+  type Attributed,
+  flag,
+  type Keyed,
+  separatorAttrs
+} from "./internal/attributes.ts"
 import {
   type Directed,
   rightToLeft,
@@ -568,19 +573,30 @@ export const Toolbar = Html.component({
       const entry = entryOf(value)
       const off = disabledOf(props, entry)
       const focusable = entry.focusableWhenDisabled !== false
-      const silent = off && focusable
       const own = disabledAttrs(movesFocus(b, value), off, focusable)
         .attrs({ type: "button", "data-focusable": flag(focusable) })
-      return (silent ? cancelClick(own) : own).forward((node) =>
-        disabledAttrs(
-          silent && node.handlers.click !== undefined
-            ? cancelClick(node)
-            : node,
-          off,
-          focusable
-        )
+      return (off && focusable ? cancelClick(own) : own).forward((node) =>
+        disabledAttrs(node, off, focusable)
       )
     })
+
+    // A disabled focusable button also cancels the consumer's click. The
+    // part's own forward would add the cancel beside it, so this one goes
+    // on the consumer's side.
+    const button = View.wrapPart(
+      buttonPart,
+      <B extends Keyed<"button">>(
+        { element, value }: { readonly element: B; readonly value: string }
+      ): ReturnType<B["attr"]> => {
+        const entry = entryOf(value)
+        const decorated = buttonPart(element.key(value), value)
+        return disabledOf(props, entry) && entry.focusableWhenDisabled !== false
+          ? decorated.forward((node: typeof decorated) =>
+            node.handlers.click === undefined ? node : cancelClick(node)
+          )
+          : decorated
+      }
+    )
 
     const linkPart = p.part("a", (b, value: string) => {
       entryOf(value)
@@ -656,7 +672,7 @@ export const Toolbar = Html.component({
           { element, value }: { readonly element: B; readonly value: string }
         ): ReturnType<B["attr"]> => groupPart(element, value)
       ),
-      button: valued(buttonPart),
+      button,
       link: valued(linkPart),
       input: valued(inputPart),
       separator: p.part(
