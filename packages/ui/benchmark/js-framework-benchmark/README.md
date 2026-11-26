@@ -6,64 +6,64 @@ The harness already has entries for Foldkit and the other frameworks. `effect-ui
 
 ## Results
 
-Measured on 2026-11-23 with harness revision [`0f4e789`](https://github.com/krausest/js-framework-benchmark/tree/0f4e78932bf85ed60b163b801bbdbd720fdda54f), headless Chromium 153.0.8010.52, Node 26.13 and Linux 6.18, on a shared Azure VM with an AMD EPYC 7763 (16 vCPUs) and 62 GB of RAM. Effect UI is commit `f4a8d05`.
+Measured on 2026-11-26 with harness revision [`0f4e789`](https://github.com/krausest/js-framework-benchmark/tree/0f4e78932bf85ed60b163b801bbdbd720fdda54f), headless Chromium 153.0.8010.52, Node 26.13 and Linux 6.18, on a shared Azure VM with an AMD EPYC 7763 (16 vCPUs) and 62 GB of RAM. Effect UI is commit `6f86af8`.
 
-There were two full runs of the harness's defaults: 15 iterations of each CPU benchmark and one of each memory and size benchmark. The first run went through the frameworks in the order of the tables and the second in reverse, because other jobs share the VM. The load average when each framework started is in `results/*/load.txt`. It was 37 at the start of the first run and below 1 near the end of the second.
+There were two full runs of the harness's defaults: 15 iterations of each CPU benchmark and one of each memory and size benchmark. The first run went through the frameworks in the order of the tables and the second in reverse, because other jobs share the VM. The load average when each framework started is in `results/*/load.txt`: below 9 through the first run, and in the second 27 when Solid started and below 2 from React on. An earlier first run started at a load average of 36, which about doubled vanilla JS's and Effect UI's script times, so it was discarded and repeated.
 
 Each cell is the median of both runs' values pooled. Lower is better everywhere.
 
 | CPU, total (ms)       | vanillajs | effect-ui |  foldkit | react-hooks |      vue |   svelte |    solid |
 | --------------------- | --------: | --------: | -------: | ----------: | -------: | -------: | -------: |
-| create 1,000 rows     |       107 |       126 |      145 |         127 |      130 |      111 |      110 |
-| replace 1,000 rows    |       113 |       136 |      164 |         143 |      141 |      128 |      125 |
-| update every 10th row |      45.5 |      68.3 |     73.3 |        63.6 |     55.7 |     52.1 |     57.5 |
-| select row            |       9.9 |      17.8 |     20.1 |        18.8 |     12.6 |     16.9 |     12.1 |
-| swap rows             |      52.5 |      72.8 |     63.3 |         524 |     58.5 |     65.4 |     64.1 |
-| remove row            |      51.5 |      54.3 |     48.6 |        53.2 |     58.2 |     55.4 |     55.3 |
-| create 10,000 rows    |      1231 |      1319 |     1471 |        1599 |     1328 |     1268 |     1202 |
-| append 1,000 rows     |       120 |       140 |      158 |         138 |      143 |      133 |      129 |
-| clear 1,000 rows      |      40.9 |      48.0 |     70.0 |        80.3 |     53.7 |     45.0 |     54.9 |
-| **vs vanilla**        |  **1.00** |  **1.26** | **1.39** |    **1.70** | **1.20** | **1.16** | **1.14** |
+| create 1,000 rows     |       101 |       120 |      140 |         121 |      120 |      108 |      106 |
+| replace 1,000 rows    |       110 |       129 |      162 |         140 |      132 |      120 |      122 |
+| update every 10th row |      41.9 |      63.6 |     68.6 |        61.0 |     55.2 |     48.4 |     47.2 |
+| select row            |       8.9 |      15.6 |     19.3 |        17.6 |     12.3 |     17.0 |     11.4 |
+| swap rows             |      50.5 |      61.7 |     60.0 |         487 |     59.9 |     63.0 |     64.2 |
+| remove row            |      46.2 |      51.3 |     47.7 |        51.8 |     55.9 |     48.5 |     48.6 |
+| create 10,000 rows    |      1130 |      1280 |     1486 |        1538 |     1320 |     1201 |     1198 |
+| append 1,000 rows     |       113 |       132 |      156 |         134 |      131 |      129 |      121 |
+| clear 1,000 rows      |      35.4 |      44.9 |     62.8 |        69.5 |     51.3 |     41.1 |     45.1 |
+| **vs vanilla**        |  **1.00** |  **1.27** | **1.45** |    **1.75** | **1.25** | **1.19** | **1.14** |
 
 | CPU, script (ms)      | vanillajs | effect-ui | foldkit | react-hooks |  vue | svelte | solid |
 | --------------------- | --------: | --------: | ------: | ----------: | ---: | -----: | ----: |
-| create 1,000 rows     |       7.1 |      24.2 |    41.7 |        24.7 | 24.6 |   11.6 |  10.7 |
-| replace 1,000 rows    |      14.6 |      35.8 |    56.3 |        42.3 | 35.1 |   24.4 |  21.3 |
-| update every 10th row |       1.1 |      18.6 |    25.3 |        13.6 |  7.1 |    3.7 |   3.7 |
-| select row            |       0.8 |       8.3 |    10.8 |         8.9 |  3.7 |    7.4 |   2.8 |
-| swap rows             |       0.7 |      12.5 |     8.6 |        69.1 |  3.6 |    4.6 |   3.2 |
-| remove row            |       1.0 |       4.3 |     4.2 |         3.7 |  8.8 |    2.0 |   1.1 |
-| create 10,000 rows    |      71.8 |       188 |     398 |         441 |  209 |    110 |  94.4 |
-| append 1,000 rows     |       7.5 |      27.7 |    44.7 |        26.1 | 23.4 |   12.8 |  11.1 |
-| clear 1,000 rows      |      35.0 |      42.8 |    64.5 |        74.0 | 49.0 |   39.2 |  48.3 |
+| create 1,000 rows     |       6.9 |      23.3 |    41.6 |        23.6 | 22.9 |   11.5 |  10.1 |
+| replace 1,000 rows    |      15.4 |      32.0 |    55.5 |        41.3 | 33.3 |   22.6 |  21.3 |
+| update every 10th row |       1.1 |      16.1 |    24.0 |        12.9 |  7.3 |    3.4 |   2.8 |
+| select row            |       0.8 |       6.9 |    10.3 |         8.4 |  3.4 |    7.3 |   2.7 |
+| swap rows             |       0.6 |       6.3 |     8.3 |        62.3 |  3.8 |    4.7 |   3.3 |
+| remove row            |       1.0 |       3.1 |     4.1 |         3.6 |  8.5 |    1.7 |   1.1 |
+| create 10,000 rows    |      68.8 |       181 |     399 |         422 |  203 |    101 |  93.7 |
+| append 1,000 rows     |       7.3 |      25.2 |    43.4 |        25.7 | 22.3 |   12.7 |  10.6 |
+| clear 1,000 rows      |      30.9 |      40.0 |    57.5 |        64.3 | 46.5 |   36.1 |  40.6 |
 
 | Memory and size           | vanillajs | effect-ui | foldkit | react-hooks |  vue | svelte | solid |
 | ------------------------- | --------: | --------: | ------: | ----------: | ---: | -----: | ----: |
-| ready memory (MB)         |       0.6 |       1.5 |     2.3 |         1.2 |  0.9 |    0.7 |   0.6 |
-| run memory (MB)           |       1.9 |       4.2 |     6.1 |         4.4 |  3.9 |    2.9 |   2.7 |
-| create/clear 5 times (MB) |       0.7 |       2.0 |     2.8 |         2.0 |  1.2 |    1.0 |   0.8 |
-| uncompressed size (kB)    |      11.3 |       235 |     302 |         190 | 64.3 |   26.6 |  11.5 |
-| compressed size (kB)      |       2.5 |      70.3 |    86.8 |        51.4 | 23.3 |    9.7 |   4.5 |
-| first paint (ms)          |      83.5 |       516 |     688 |         405 |  162 |    150 |   193 |
+| ready memory (MB)         |       0.6 |       1.2 |     2.3 |         1.2 |  0.9 |    0.7 |   0.6 |
+| run memory (MB)           |       1.9 |       4.1 |     6.1 |         4.4 |  3.9 |    2.9 |   2.7 |
+| create/clear 5 times (MB) |       0.7 |       1.6 |     2.8 |         2.0 |  1.2 |    1.0 |   0.8 |
+| uncompressed size (kB)    |      11.3 |       172 |     303 |         190 | 64.3 |   26.6 |  11.5 |
+| compressed size (kB)      |       2.5 |      52.8 |    87.0 |        51.4 | 23.3 |    9.7 |   4.5 |
+| first paint (ms)          |      64.8 |       381 |     691 |         419 |  154 |    106 |  68.2 |
 
 | vs vanilla (total), per run | vanillajs | effect-ui | foldkit | react-hooks |  vue | svelte | solid |
 | --------------------------- | --------: | --------: | ------: | ----------: | ---: | -----: | ----: |
-| results/pass1               |      1.00 |      1.16 |    1.32 |        1.54 | 1.11 |   1.08 |  1.01 |
-| results/pass2               |      1.00 |      1.29 |    1.42 |        1.81 | 1.24 |   1.21 |  1.22 |
+| results/pass1               |      1.00 |      1.26 |    1.45 |        1.74 | 1.23 |   1.14 |  1.09 |
+| results/pass2               |      1.00 |      1.27 |    1.45 |        1.76 | 1.30 |   1.33 |  1.26 |
 
-`vs vanilla` is the geometric mean, over the nine CPU benchmarks, of each framework's median total over vanilla JS's. It's unweighted, unlike the harness's own result page. Vanilla JS ran in the quietest part of the second run, which is why every framework's ratio is higher there. Compare frameworks within a run, not the two runs with each other. The order of the frameworks is the same in both.
+`vs vanilla` is the geometric mean, over the nine CPU benchmarks, of each framework's median total over vanilla JS's. It's unweighted, unlike the harness's own result page. Compare frameworks within a run, not the two runs with each other. Effect UI, Foldkit and React score about the same in both. Vue, Svelte and Solid score higher in the second, Solid and Svelte because they started it, when the load was highest.
 
 `total` is the harness's duration from the click to the end of the next paint, read from the Chrome trace. On this VM, painting 1,000 rows takes about 100 ms whatever the framework, so the `script` table (the JavaScript that ran in that window) separates the frameworks better. Sizes and first paint are one sample per run, so treat them as rough. The harness slows the CPU down 4 times for update every 10th row, select row, swap rows and clear 1,000 rows, and 2 times for remove row, so those rows of the tables are 4 (or 2) times what the same work takes at full speed.
 
 ## What the results say
 
-In script time, Effect UI is ahead of Foldkit 0.x on every operation except swap rows (12.5 ms against 8.6 ms) and remove row (about 4 ms for both). It runs less than half the JavaScript to create 10,000 rows (188 ms against 398 ms), uses about 30% less memory, and its bundle is 70 kB compressed against Foldkit's 87 kB.
+In script time, Effect UI is ahead of Foldkit 0.x on every operation. It runs less than half the JavaScript to create 10,000 rows (181 ms against 399 ms), uses a third less memory with 1,000 rows (4.1 MB against 6.1 MB), and its bundle is 53 kB compressed against Foldkit's 87 kB.
 
-Effect UI is also ahead of React overall. React's 524 ms swap rows makes the gap look larger than it is. That's a known cost of how React moves keyed rows when two distant ones trade places. Without swap rows, `vs vanilla` is 1.25 for Effect UI and 1.37 for React. Effect UI is clearly ahead on creating 10,000 rows (188 ms of script against 441 ms) and on clearing, about level on creating 1,000 rows and on select row, and behind on update every 10th row (18.6 ms against 13.6 ms). Vue, Svelte and Solid are ahead of both.
+Effect UI is also ahead of React overall. React's 487 ms swap rows makes the gap look larger than it is. That's a known cost of how React moves keyed rows when two distant ones trade places. Without swap rows, `vs vanilla` is 1.27 for Effect UI and 1.41 for React. In script time, Effect UI is ahead on creating 10,000 rows (181 ms against 422 ms), replacing rows and clearing, level on creating and appending 1,000 rows, and behind on update every 10th row (16.1 ms against 12.9 ms). Svelte and Solid are ahead of both. Vue is level with Effect UI in total time (1.25 against 1.27) and ahead in script time.
 
-The gap is widest on small updates. Updating every 10th row, selecting a row and swapping two rows cost Effect UI 8 to 19 ms of script with the CPU slowed down 4 times, about 2 to 5 ms at full speed. Vue, Svelte and Solid need about 3 to 7 ms slowed down. In Effect UI each message runs `update`, then the whole `view`, and `h.lazy` compares the arguments of all 1,000 rows to find the few that changed. Svelte and Solid track which DOM nodes depend on which state and write only those, so their cost follows the size of the change, not the size of the table. Creating rows is closer, since every framework has to build every row.
+The gap is widest on small updates. Updating every 10th row, selecting a row and swapping two rows cost Effect UI 6 to 16 ms of script with the CPU slowed down 4 times, about 1.5 to 4 ms at full speed. Vue, Svelte and Solid need about 3 to 7 ms slowed down. In Effect UI each message runs `update`, then the whole `view`, and `h.lazy` compares the arguments of all 1,000 rows to find the few that changed. Svelte and Solid track which DOM nodes depend on which state and write only those, so their cost follows the size of the change, not the size of the table. Creating rows is closer, since every framework has to build every row.
 
-The two Effect frameworks ship the largest bundles, 70 kB and 87 kB compressed, and have the slowest first paint: 516 ms for Effect UI and 688 ms for Foldkit, against 150 to 405 ms for the others.
+Effect UI's bundle, 53 kB compressed, is about the size of React's (51 kB). Foldkit's is the largest at 87 kB. These three bundles also have the slowest first paint: 381 ms for Effect UI, 419 ms for React and 691 ms for Foldkit, against 65 to 154 ms for vanilla JS, Vue, Svelte and Solid.
 
 ## What the workloads measure
 
@@ -90,15 +90,15 @@ Every entry renders the same DOM, and the harness checks that each one is keyed:
 
 | Entry         | Package                | Version          |
 | ------------- | ---------------------- | ---------------- |
-| `effect-ui`   | `@effect/ui`, `effect` | `f4a8d05`, 4.1.5 |
-| `foldkit`     | `foldkit`, `effect`    | 0.171.0, 4.1.5   |
+| `effect-ui`   | `@effect/ui`, `effect` | `6f86af8`, 4.1.6 |
+| `foldkit`     | `foldkit`, `effect`    | 0.171.0, 4.1.6   |
 | `react-hooks` | `react`                | 19.2.0           |
 | `vue`         | `vue`                  | 3.5.39           |
 | `svelte`      | `svelte`               | 5.42.1           |
 | `solid`       | `solid-js`             | 1.9.3            |
 | `vanillajs`   |                        |                  |
 
-The React, Vue, Svelte, Solid and vanilla JS entries are the harness's own, installed from its lockfiles. The Foldkit entry is the harness's too, moved from 0.170.0 to 0.171.0 and from Effect 4.1.0 to 4.1.5 so that both Effect frameworks use the same Effect.
+The React, Vue, Svelte, Solid and vanilla JS entries are the harness's own, installed from its lockfiles. The Foldkit entry is the harness's too, moved from 0.170.0 to 0.171.0 and from Effect 4.1.0 to 4.1.6 so that both Effect frameworks use the same Effect.
 
 ## Reproducing
 
@@ -109,7 +109,7 @@ pnpm install
 packages/ui/benchmark/js-framework-benchmark/run.sh ../js-framework-benchmark
 ```
 
-The argument is where the harness is cloned, outside this repository. `run.sh` clones the harness at the pinned revision with only the seven entries, installs it, builds and packs `@effect/ui`, builds every entry, starts the harness's server on port 8080, checks that every entry is keyed and runs the benchmarks one framework at a time. A run takes about an hour. Arguments after the directory go to the harness, for example `--count 3 --benchmark 01_ 07_` for a quick check.
+The argument is where the harness is cloned, outside this repository. `run.sh` clones the harness at the pinned revision with only the seven entries, installs it, builds and packs `@effect/ui`, builds every entry, starts the harness's server on port 8080, checks that every entry is keyed and runs the benchmarks one framework at a time. A run takes about an hour. `REVERSE=1` runs the frameworks in reverse order, as the second run did. Arguments after the directory go to the harness, for example `--count 3 --benchmark 01_ 07_` for a quick check.
 
 To summarize one or more runs:
 

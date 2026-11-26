@@ -5,7 +5,7 @@
   "private": true,
   "type": "module",
   "js-framework-benchmark": {
-    "frameworkVersion": "0.0.0-f4a8d05",
+    "frameworkVersion": "0.0.0",
     "frameworkHomeURL": "https://github.com/Effect-TS/ui",
     "language": "TypeScript",
     "repoURL": "https://github.com/Effect-TS/ui"
@@ -17,7 +17,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@effect/ui": "file:effect-ui-0.0.0.tgz",
-    "effect": "4.1.5"
+    "effect": "4.1.6"
   },
   "devDependencies": {
     "vite": "8.3.5"
