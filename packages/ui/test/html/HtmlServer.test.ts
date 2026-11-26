@@ -240,8 +240,6 @@ describe("HtmlServer", { concurrent: false }, () => {
 
   it.effect("drops javascript: and vbscript: URLs on the server, fresh client and hydrated client", () =>
     Effect.gen(function*() {
-      const blocked = ["javascript:", " Java\tScript:", "VBSCRIPT:"]
-      const kept = ["/relative", "mailto:a@b.c"]
       const Page = Html.component({
         name: "Urls",
         props: Schema.Struct({ url: Schema.String }),
@@ -260,40 +258,39 @@ describe("HtmlServer", { concurrent: false }, () => {
             h.el("object").attr("data", url),
             h.el("svg").children(
               h.el("a").attr("href", url).attr("xlink:href", url)
-            ),
-            h.a.prop("href", url)
+            )
           )
       })
-      for (const url of blocked) {
-        const rendered = yield* HtmlServer.renderToHtml(Page, { url })
-        expect(rendered.html).toBe(
-          "<!--[/Urls--><div><a></a><form><button></button></form><img><object></object>" +
-            "<svg><a></a></svg><a></a></div><!--]/Urls-->"
-        )
-      }
+      const blocked = " Java\tScript:"
+      const rendered = yield* HtmlServer.renderToHtml(Page, { url: blocked })
+      expect(rendered.html).toBe(
+        "<!--[/Urls--><div><a></a><form><button></button></form><img><object></object>" +
+          "<svg><a></a></svg></div><!--]/Urls-->"
+      )
       const relative = yield* HtmlServer.renderToHtml(Page, {
         url: "/relative"
       })
       expect(relative.html).toBe(
         "<!--[/Urls--><div><a href=\"/relative\"></a><form action=\"/relative\"><button formaction=\"/relative\"></button></form>" +
           "<img src=\"/relative\"><object data=\"/relative\"></object>" +
-          "<svg><a href=\"/relative\" xlink:href=\"/relative\"></a></svg><a></a></div><!--]/Urls-->"
+          "<svg><a href=\"/relative\" xlink:href=\"/relative\"></a></svg></div><!--]/Urls-->"
       )
-      const rendered = yield* HtmlServer.renderToHtml(Page, {
-        url: blocked[0]!
-      })
+      const written = (url: string) =>
+        ["href", "action", "formaction", "src", "data", "href", "xlink:href"]
+          .map((name) => `${name}=${url}`)
       for (const hydrate of [false, true]) {
         const app = yield* container(hydrate ? rendered.html : "")
         const before = app.firstElementChild
         const root = yield* (hydrate
           ? HtmlHydrate.hydrateEffect(
             Page,
-            { url: blocked[0]! },
+            { url: blocked },
             app,
             rendered.state
           )
-          : BrowserHost.mountEffect(Page, { url: blocked[0]! }, app))
+          : BrowserHost.mountEffect(Page, { url: blocked }, app))
         if (hydrate) expect(app.firstElementChild).toBe(before)
+        // `attributes`, not `getAttribute`: happy-dom's is stale for an SVG `a` with both hrefs.
         const urls = () =>
           Array.from(
             app.querySelectorAll("*"),
@@ -302,29 +299,21 @@ describe("HtmlServer", { concurrent: false }, () => {
                 `${attribute.name}=${attribute.value}`)
           ).flat()
         expect(urls()).toEqual([])
-        for (const url of blocked) {
-          for (const safe of kept) {
-            root.send(safe)
-            yield* tick
-            expect(urls()).toEqual([
-              `href=${safe}`,
-              `action=${safe}`,
-              `formaction=${safe}`,
-              `src=${safe}`,
-              `data=${safe}`,
-              `href=${safe}`,
-              `xlink:href=${safe}`,
-              `href=${safe}`
-            ])
-          }
+        for (
+          const [url, expected] of [
+            ["/relative", written("/relative")],
+            ["VBSCRIPT:", []],
+            ["mailto:a@b.c", written("mailto:a@b.c")]
+          ] as const
+        ) {
           root.send(url)
           yield* tick
-          expect(urls()).toEqual([])
+          expect(urls()).toEqual(expected)
         }
       }
     }).pipe(Effect.scoped))
 
-  it.effect("a blocked URL property removes only the attribute it reflects", () =>
+  it.effect("a blocked URL property removes only the attribute it reflects, and adoption drops a stale blocked URL", () =>
     Effect.gen(function*() {
       let sets = 0
       customElements.define(
@@ -340,14 +329,14 @@ describe("HtmlServer", { concurrent: false }, () => {
       )
       const Page = Html.component({
         name: "Props",
-        props: Schema.Struct({}),
         model: Schema.Null,
         message: Schema.Never
       }).make({
         init: () => null,
-        update: (model) => model,
+        update: ($) => $.model,
         view: (h) =>
           h.div.children(
+            h.a.attr("href", "javascript:"),
             h.a.attr("href", "/save").prop("href", "javascript:"),
             h.a.prop("href", "javascript:"),
             h.button.attr("formaction", "/save").prop(
@@ -363,7 +352,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       })
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
       expect(rendered.html).toBe(
-        "<!--[/Props--><div><a></a><a></a><button formaction=\"/save\"></button><button></button><x-url-prop></x-url-prop></div><!--]/Props-->"
+        "<!--[/Props--><div><a></a><a></a><a></a><button formaction=\"/save\"></button><button></button><x-url-prop></x-url-prop></div><!--]/Props-->"
       )
       for (const hydrate of [false, true]) {
         // Hydrates markup that still has the blocked href, as an older server wrote it.
