@@ -1,4 +1,4 @@
-import { all, declaration, test } from "#domain/Excerpt"
+import { all, declaration, test, withImports } from "#domain/Excerpt"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { readFileSync } from "node:fs"
@@ -11,18 +11,29 @@ const read = (path: string) =>
 // What the page shows of each test, cut from the file the way
 // vite.config.ts cuts it.
 const listings = {
-  counter: test("resets one second after the click")(
-    read("../autocounter/Counter.play.test.ts")
-  ),
-  signIn: all(
-    declaration("AppTest"),
-    test(
-      "a successful login saves the session and lands on the dashboard"
+  counter: withImports(
+    all(
+      declaration("count"),
+      test("resets one second after the click")
+    )
+  )(read("../autocounter/Counter.play.test.ts")),
+  signIn: withImports(
+    all(
+      declaration("alice"),
+      declaration("AppTest"),
+      declaration("storedSession"),
+      declaration("currentUrl"),
+      test(
+        "a successful login saves the session and lands on the dashboard"
+      )
     )
   )(read("../../../auth/src/App.play.test.ts")),
-  snake: test("steers to the apple, eats it and pauses")(
-    read("../../../snake/src/SnakeGame.play.test.ts")
-  )
+  snake: withImports(
+    all(
+      declaration("scored"),
+      test("steers to the apple, eats it and pauses")
+    )
+  )(read("../../../snake/src/SnakeGame.play.test.ts"))
 }
 
 const textOf = (frame: Frame, tag: string) =>

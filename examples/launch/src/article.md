@@ -34,7 +34,7 @@ This article covers the main changes from Foldkit 0.x to Effect UI, not every AP
 ## Terms
 
 - **Foldkit 0.x** is the existing frontend framework at [foldkit.dev](https://foldkit.dev).
-- **Effect UI** is the new frontend library that continues the work of Foldkit 0.x. You import it from `effect/ui`.
+- **Effect UI** is the new frontend library that continues the work of Foldkit 0.x. You import it from `@effect/ui`.
 - **Foldkit** is the future full-stack framework. Effect UI will be its frontend.
 
 ## Components

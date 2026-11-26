@@ -193,7 +193,10 @@ export const AgentPrompts = Html.component({
             ),
             prompts.map((prompt) =>
               tabs.panel({
-                element: h.div.key(prompt.label).class(cell),
+                element: h.div.key(prompt.label).class(
+                  cell,
+                  "data-[ending-style]:hidden"
+                ),
                 value: prompt.label
               })?.children(Text(h, prompt))
             )

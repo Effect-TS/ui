@@ -1,4 +1,5 @@
-import { test } from "#domain/Excerpt"
+import { all, declaration, test, withImports } from "#domain/Excerpt"
+import { before } from "#domain/Fold"
 import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing"
 import { Locator, TestHost } from "@effect/ui/testing"
 import { it } from "@effect/vitest"
@@ -14,7 +15,7 @@ const snippet = (id: string, name: string, code: string) => ({
   id,
   name,
   lines: code.split("\n").map((text) => [{ text, color: "" }]),
-  folds: []
+  folds: before("it.effect(", "Imports and setup")(code)
 })
 
 const tests = [
@@ -23,9 +24,12 @@ const tests = [
     snippet: snippet(
       "play",
       "Counter.play.test.ts",
-      test("resets one second after the click")(
-        read("../autocounter/Counter.play.test.ts")
-      )
+      withImports(
+        all(
+          declaration("count"),
+          test("resets one second after the click")
+        )
+      )(read("../autocounter/Counter.play.test.ts"))
     )
   },
   {
@@ -33,11 +37,17 @@ const tests = [
     snippet: snippet(
       "playSignIn",
       "App.play.test.ts",
-      test(
-        "a successful login saves the session and lands on the dashboard"
-      )(
-        read("../../../auth/src/App.play.test.ts")
-      )
+      withImports(
+        all(
+          declaration("alice"),
+          declaration("AppTest"),
+          declaration("storedSession"),
+          declaration("currentUrl"),
+          test(
+            "a successful login saves the session and lands on the dashboard"
+          )
+        )
+      )(read("../../../auth/src/App.play.test.ts"))
     )
   }
 ]
@@ -142,6 +152,21 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
         yield* view.expect(clock).toHaveText("1,000 ms")
         yield* view.click(replay)
         yield* view.expect(current).toHaveText(/HtmlPlay\.make/)
+      }))
+
+    it.effect("collapses imports and setup above it.effect until expanded", () =>
+      Effect.gen(function*() {
+        const view = yield* mount
+        const setupToggle = HtmlLocator.role("button", {
+          name: /Imports and setup/
+        })
+        const locatorDecl = Locator.text(
+          "const count = HtmlLocator.role(\"status\")"
+        )
+        yield* view.expect(setupToggle).toExist()
+        yield* view.expect(locatorDecl).toBeAbsent()
+        yield* view.click(setupToggle)
+        yield* view.expect(locatorDecl).toExist()
       }))
   }
 )

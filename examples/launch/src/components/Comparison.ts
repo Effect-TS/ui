@@ -93,7 +93,9 @@ export const Comparison = Html.component({
               ),
               sides.map((side) =>
                 tabs.panel({
-                  element: h.div.key(side.label),
+                  element: h.div.key(side.label).class(
+                    "data-[ending-style]:hidden"
+                  ),
                   value: side.label
                 })?.children(
                   h.p.class("px-4 py-3 text-sm text-muted-foreground")

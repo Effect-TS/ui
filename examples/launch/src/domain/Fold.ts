@@ -32,3 +32,14 @@ export const bodies =
       a.start - b.start
     )
   }
+
+/** Folds every line before the first line starting with `prefix`. */
+export const before =
+  (prefix: string, label: string): Folds => (code) => {
+    const lines = code.split("\n")
+    const end = lines.findIndex((line) => line.startsWith(prefix))
+    if (end < 0) {
+      throw new Error(`No line starting with "${prefix}"`)
+    }
+    return end === 0 ? [] : [{ label, start: 0, end }]
+  }

@@ -8,10 +8,11 @@ import { Counter as SplitCounter } from "./split/Counter.ts"
 
 const count = HtmlLocator.role("status")
 const addOne = HtmlLocator.role("button", { name: "+1" })
-const subtractOne = HtmlLocator.role("button", { name: "−1" })
 const reset = HtmlLocator.role("button", {
   name: "Reset in 1 second"
 })
+
+const subtractOne = HtmlLocator.role("button", { name: "−1" })
 const autoCount = HtmlLocator.role("button", { name: "Auto-count" })
 const stop = HtmlLocator.role("button", { name: "Stop" })
 

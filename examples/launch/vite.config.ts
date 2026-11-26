@@ -11,9 +11,15 @@ import {
   declaration,
   type Excerpt,
   test,
-  whole
+  whole,
+  withImports
 } from "./src/domain/Excerpt.ts"
-import { bodies, type Folds, none } from "./src/domain/Fold.ts"
+import {
+  before,
+  bodies,
+  type Folds,
+  none
+} from "./src/domain/Fold.ts"
 import { Frontmatter, Islands } from "./src/domain/Island.ts"
 import { type Snippet, Snippets } from "./src/domain/Snippet.ts"
 
@@ -44,29 +50,49 @@ const sources: {
   tests: [
     [
       "src/autocounter/Counter.story.test.ts",
-      test("resets after the delay")
+      withImports(test("resets after the delay"))
     ],
     [
       "src/autocounter/Counter.scene.test.ts",
-      test("resets after the delay")
+      withImports(
+        all(declaration("count"), test("resets after the delay"))
+      )
     ]
   ],
   play: [[
     "src/autocounter/Counter.play.test.ts",
-    test("resets one second after the click")
+    withImports(
+      all(
+        declaration("count"),
+        test("resets one second after the click")
+      )
+    ),
+    before("it.effect(", "Imports and setup")
   ]],
   playSignIn: [[
     "../auth/src/App.play.test.ts",
-    all(
-      declaration("AppTest"),
-      test(
-        "a successful login saves the session and lands on the dashboard"
+    withImports(
+      all(
+        declaration("alice"),
+        declaration("AppTest"),
+        declaration("storedSession"),
+        declaration("currentUrl"),
+        test(
+          "a successful login saves the session and lands on the dashboard"
+        )
       )
-    )
+    ),
+    before("it.effect(", "Imports and setup")
   ]],
   playSnake: [[
     "../snake/src/SnakeGame.play.test.ts",
-    test("steers to the apple, eats it and pauses")
+    withImports(
+      all(
+        declaration("scored"),
+        test("steers to the apple, eats it and pauses")
+      )
+    ),
+    before("it.effect(", "Imports and setup")
   ]],
   partsUse: [["src/parts/Details.ts", whole]],
   partsDefine: [["src/parts/Disclosure.ts", whole]],
