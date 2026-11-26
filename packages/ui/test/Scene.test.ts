@@ -536,6 +536,32 @@ describe("Scene", () => {
         scene.mounted(Hello).props({ shown: false }).props({ shown: true })
       }))
 
+    it.effect("an unkeyed element doesn't take over a keyed child's fallback of the same tag", () =>
+      Effect.gen(function*() {
+        const Page = Html.component({
+          name: "Page",
+          model: Schema.Boolean,
+          message: Schema.Boolean
+        }).make({
+          init: () => true,
+          update: (_, shown) => shown,
+          view: (h, shown) =>
+            h.section(
+              h.button.on("click", false).children("hide"),
+              shown
+                ? [
+                  h.p("notice"),
+                  Badge(h, { key: "b", fallback: () => h.ul.onMount(Hello()) })
+                ]
+                : h.ul.onMount(Hello())
+            )
+        })
+        const scene = yield* Scene.make(Page, {})
+        scene.childFailure(Badge, "b", Cause.fail("boom")).mounted(Hello).click(
+          Locator.tag("button")
+        ).mounted(Hello)
+      }))
+
     it.effect("a root headless child with a new key is a new child, so its mounts are new, its view node cached or not", () =>
       Effect.gen(function*() {
         const Wrapper = Component.define({

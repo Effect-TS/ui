@@ -238,7 +238,7 @@ const expandedChildren = new WeakMap<
 >()
 
 /**
- * The headless children an expanded closure stands for, by the closure's root, outermost first: one per
+ * The headless children an expanded closure or fallback stands for, by its root, outermost first: one per
  * child whose closure's root is the next child. The runtime matches each in turn, as it patches the child
  * and then its view's root.
  *
@@ -259,6 +259,19 @@ export const slotLengths = new WeakMap<
   object,
   ReadonlyArray<readonly [string, number]>
 >()
+
+// The root a child shows, its view's or its fallback's, as the runtime matches it: by the child first.
+// A copy per render: a closure may return a node it cached, and the identities are this render's.
+const standsFor = (
+  child: View.Child<any, any>,
+  inner: View.Node<any, any>
+): View.Node<any, any> => {
+  const out = { ...inner } as View.Node<any, any>
+  expansionOf.set(out, [child, ...(expansionOf.get(inner) ?? [])])
+  const lengths = slotLengths.get(inner)
+  if (lengths !== undefined) slotLengths.set(out, lengths)
+  return out
+}
 
 // What a story of a slotted component passed for its slots, by the component `withSlots` made.
 const storySlots = new WeakMap<
@@ -603,7 +616,10 @@ const expandRoot = <Msg>(
           const shown = node.fallback === undefined
             ? emptyText
             : View.toNode(node.fallback(result))
-          return expand(shown, path, depth, own, owners, scope, undefined)
+          return standsFor(
+            node,
+            expand(shown, path, depth, own, owners, scope, undefined)
+          )
         }
         if (node.slots !== undefined) {
           // A child's view isn't run, but what the parent passed for its slots is the parent's.
@@ -649,12 +665,7 @@ const expandRoot = <Msg>(
           (label) => checkChildPaths(label, tree),
           reads
         )
-        // A copy per render: a closure may return a node it cached, and the identities are this render's.
-        const out = { ...inner } as View.Node<any, any>
-        expansionOf.set(out, [node, ...(expansionOf.get(inner) ?? [])])
-        const lengths = slotLengths.get(inner)
-        if (lengths !== undefined) slotLengths.set(out, lengths)
-        return out
+        return standsFor(node, inner)
       }
     }
   }
