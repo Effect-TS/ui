@@ -16,12 +16,13 @@
 //   eight     + Accordion, Checkbox, Dialog, Popover, Select, Switch, Tabs, Tooltip
 //   all       + every export, through the barrel's namespace
 //
-// The timer is part of the bundle: globalThis.__t0 = performance.now() is prepended to the built
-// chunk and __t1 appended, so "eval" is the chunk's top-level execution only. Fetching and
-// scheduling the script happen before __t0 runs, so they can't reach it; the run checks that by
-// also loading the all page as a module script delayed by 250 ms. Each page inlines the chunk in a
-// classic <script> after one that records __tPre, so "script" (__t1 - __tPre) adds the parse and
-// compile of that inline chunk. The page then mounts the shell into #app, outside both figures.
+// Each page inlines its chunk in a <script type="module">, as the ES bundle is meant to run, after
+// a classic script that records __tPre. The timer is part of the bundle: globalThis.__t0 =
+// performance.now() is prepended to the built chunk and __t1 appended, so "eval" is the chunk's
+// top-level execution only. Fetching and scheduling the module happen before __t0 runs, so they
+// can't reach it; the run checks that by also loading the all page as an external module served
+// 250 ms late. "__tPre to __t1" is the wider interval: it adds parse, compile and the wait before
+// the module runs. The page then mounts the shell into #app, outside both figures.
 //
 // Each sample is a fresh browser context (no code cache, no shared heap). After the page settles,
 // the run forces a GC twice over CDP and reads Runtime.getHeapUsage: "heap" is the used JS heap.
@@ -32,7 +33,12 @@
 // at 1x and at 4x CPU throttling (Emulation.setCPUThrottlingRate).
 //
 // The run also takes one heap snapshot each of baseline and all, built without minification so
-// constructor names survive, and lists the largest differences by node type and constructor.
+// constructor names survive, and lists the largest differences in self (shallow) size by node type
+// and constructor. That says what was allocated, not what retains it.
+//
+// "Kit top-level bindings kept (unminified chunk)" splits the unminified chunk at Rolldown's "// <module path>"
+// headers and counts, per kit module, the declarations in dist that its own section still declares
+// at the top level. Even sample counts report the mean of the middle pair as the median.
 import assert from "node:assert/strict"
 import { execFileSync, execSync } from "node:child_process"
 import * as fs from "node:fs"
@@ -203,14 +209,7 @@ async function bundle(root, name, source, minify = "oxc") {
     }
   })
   assert.equal(output.length, 1, name + ": expected one chunk")
-  const [chunk] = output
-  // Inlined as a classic script, so it must not need module syntax. Unminified builds keep comments
-  // that mention it; a real use there fails as a page error.
-  if (minify) {
-    const syntax = chunk.code.match(/\bimport\.meta\b|^\s*(import|export)\b.*/m)
-    assert.ok(syntax === null, name + ": module syntax: " + syntax?.[0])
-  }
-  return chunk
+  return output[0]
 }
 
 const kitModules = (chunk) =>
@@ -219,26 +218,30 @@ const kitModules = (chunk) =>
   )
 const kitPath = (id) => id.replace(/^.*\/@effect\/ui-kit\/dist\//, "")
 
-// Statement level: each kit module's top-level bindings that an unminified chunk still declares.
-// Rolldown suffixes a name with $n when it would collide; \w stops before the suffix.
-function keptBindings(chunk) {
-  const inChunk = new Set(
-    Array.from(
-      chunk.code.matchAll(/\b(?:const|let|var|function\*?|class) (\w+)/g),
-      (match) => match[1]
-    )
+// Statement level: per kit module, the top-level bindings in dist that the final unminified chunk
+// still declares. Top-level names are unique in a chunk, as Rolldown suffixes a colliding one with
+// $n, so each module's own rendered code names its bindings there; a name counts only when the
+// chunk declares it at column 0, that is at the top level.
+const topLevel = (code) =>
+  Array.from(
+    code.matchAll(
+      /^(?:export )?(?:var|let|const|class|(?:async )?function\*?) ([\w$]+)/gm
+    ),
+    (match) => match[1]
   )
+function keptBindings(chunk) {
+  const inChunk = new Set(topLevel(chunk.code))
   return Object.fromEntries(
-    kitModules(chunk).map(([id]) => {
-      const declared = Array.from(
-        fs.readFileSync(id, "utf8").matchAll(
-          /^(?:export )?(?:const|let|function\*?|class) (\w+)/gm
-        ),
-        (match) => match[1]
+    kitModules(chunk).map(([id, info]) => {
+      const kept = new Set(
+        topLevel(info.code ?? "").filter((name) => inChunk.has(name)).map((
+          name
+        ) => name.replace(/\$\d+$/, ""))
       )
+      const declared = topLevel(fs.readFileSync(id, "utf8"))
       return [kitPath(id), {
         declared: declared.length,
-        dropped: declared.filter((name) => !inChunk.has(name))
+        dropped: declared.filter((name) => !kept.has(name))
       }]
     })
   )
@@ -253,8 +256,8 @@ const html = (code) =>
   "<script>globalThis.__tPre=performance.now()</script>" +
   (code === undefined
     ? "<script type=\"module\" src=\"/bundle.js\"></script>"
-    : "<script>" + timed(code).replaceAll("</script", "<\\/script") +
-      "</script>") +
+    : "<script type=\"module\">" +
+      timed(code).replaceAll("</script", "<\\/script") + "</script>") +
   "</body></html>"
 
 async function gc(cdp) {
@@ -301,7 +304,7 @@ async function sample(
     await settle(page)
     const result = await page.evaluate(() => ({
       eval: globalThis.__t1 - globalThis.__t0,
-      script: globalThis.__t1 - globalThis.__tPre,
+      untilEval: globalThis.__t1 - globalThis.__tPre,
       before: globalThis.__t0 - globalThis.__tPre
     }))
     result.heap = await gc(cdp)
@@ -360,7 +363,8 @@ async function heapSnapshot(cdp) {
 const stat = (values) => {
   const sorted = [...values].sort((a, b) => a - b)
   return {
-    median: sorted[Math.floor(sorted.length / 2)],
+    median: (sorted[Math.floor((sorted.length - 1) / 2)] +
+      sorted[Math.ceil((sorted.length - 1) / 2)]) / 2,
     min: sorted[0],
     max: sorted.at(-1)
   }
@@ -444,8 +448,8 @@ try {
   // The timer check: serving the chunk as a module script 250 ms late moves __t0, not eval.
   result.timerCheck = {}
   for (
-    const [mode, delay] of [["inline classic script", 0], [
-      "module script, served 250 ms late",
+    const [mode, delay] of [["inline module script", 0], [
+      "external module script, served 250 ms late",
       250
     ]]
   ) {
@@ -540,15 +544,15 @@ try {
           "Page",
           "eval ms",
           "+eval ms",
-          "script ms",
-          "+script ms",
+          "__tPre to __t1 ms",
+          "+__tPre to __t1 ms",
           "heap KiB",
           "+heap KiB"
         ],
         Object.entries(runs).map(([name, list]) => [
           name,
           ...versus(list, runs.baseline, "eval", ms, fixed),
-          ...versus(list, runs.baseline, "script", ms, fixed),
+          ...versus(list, runs.baseline, "untilEval", ms, fixed),
           ...versus(list, runs.baseline, "heap", kb, kib)
         ])
       )
@@ -582,7 +586,7 @@ try {
     }
   ).sort((a, b) => b[2] - a[2])
   section(
-    "Heap snapshot, all minus baseline (unminified builds, 1x, one sample each)",
+    "Heap snapshot, all minus baseline: self size by constructor (unminified builds, 1x, one sample each)",
     "Self size difference: " + kib(sum(diff.map(([, , size]) => size))) +
       " KiB.",
     "",
