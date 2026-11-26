@@ -13,11 +13,11 @@
  * when the routes parse its href and it has no modifier key, `target` or
  * `download`. Anything else is a full page load. `<form method="get">` is
  * intercepted by the same test. Following either to the current route sends a
- * message without scrolling to the top, announcing or moving focus. A link
- * with a `#hash` still scrolls to it, even when it's the current one, and a
- * bare `#` scrolls to the top. Both work the same in a root mounted
- * inside a shadow root, open or closed. An unhandled POST, or a GET
- * targeting another window, submits natively.
+ * message without scrolling to the top, announcing or moving focus. A `#hash`
+ * link still scrolls to its target, even when it's the current hash, and a
+ * bare `#` stays in the URL and scrolls to the top. Both work the same in a
+ * root mounted inside a shadow root, open or closed. An unhandled POST, or a
+ * GET targeting another window, submits natively.
  *
  * Once a navigation settles (the first flush after the root received it in
  * which no Layer build begun since is still pending), the router scrolls,
@@ -211,7 +211,7 @@ const make = (
       )
     } else routes.setBase("")
 
-    /** A URL's `#hash`, keeping a bare `#` that `hash` reports as empty. */
+    /** `url.hash`, but `"#"` for a bare `#`, which `hash` reports as `""`. */
     const hashOf = (url: URL | Location) =>
       url.hash || (url.href.endsWith("#") ? "#" : "")
     const currentUrl = () =>

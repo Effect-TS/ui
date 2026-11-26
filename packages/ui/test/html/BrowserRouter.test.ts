@@ -708,7 +708,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
       app.querySelector<HTMLElement>("#bio")!.scrollIntoView = () =>
         window.scrollTo(0, 300)
       window.scrollTo(0, 0)
-      // Following the current #hash again scrolls back to it.
+      // Clicking the current #hash again scrolls back to it.
       clickReporting(link(app, "Person 2 bio"))
       yield* tick
       expect(window.scrollY).toBe(300)
