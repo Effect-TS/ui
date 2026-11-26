@@ -945,7 +945,6 @@ describe("Dialog in a document", { concurrent: false }, () => {
       assert.strictEqual(window.scrollY, 240)
       assert.isNull(page.closest("[aria-hidden]"))
       assert.strictEqual(document.body.style.overflowY, "")
-      // A tap on the page closes it and reaches the page.
       let clicks = 0
       page.addEventListener("click", () => clicks++)
       click(page, "touch")
