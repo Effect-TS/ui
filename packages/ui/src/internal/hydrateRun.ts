@@ -63,18 +63,35 @@ const use = (target: Kernel.Host, from: Kernel.Host): void => {
   for (const name of methods) (target as any)[name] = from[name]
 }
 
-const shippedOf = (
-  state: Renderer.State
-): () => queryCore.ShippedHydration | undefined => {
+interface Shipped {
+  (): queryCore.ShippedHydration | undefined
+  /** Sweeps now, or when Query loads if it hasn't yet. */
+  readonly cancelPending: (all: boolean) => void
+}
+
+const shippedOf = (state: Renderer.State): Shipped => {
   const raw = state["~query"]
-  if (raw === undefined) return () => undefined
-  let resolved: queryCore.ShippedHydration | undefined | null = null
-  return () => {
+  let resolved: queryCore.ShippedHydration | undefined | null =
+    raw === undefined
+      ? undefined
+      : null
+  let swept = false
+  const get = () => {
     if (resolved !== null) return resolved
     const loaded = queryCore.loaded
     if (loaded === undefined) return undefined
-    return resolved = loaded.makeShipped(raw)
+    resolved = loaded.makeShipped(raw)
+    // A sweep that ran before Query loaded still applies to the new session.
+    if (swept) resolved?.cancelPending(false)
+    return resolved
   }
+  return Object.assign(get, {
+    cancelPending: (all: boolean) => {
+      const shipped = get()
+      if (shipped === undefined) swept = true
+      else shipped.cancelPending(all)
+    }
+  })
 }
 
 const decode = (
@@ -118,7 +135,7 @@ export const make = (
     path: string,
     found: { readonly state: unknown; readonly reported: unknown }
   ) => () => void,
-  shipped: () => queryCore.ShippedHydration | undefined = shippedOf(state)
+  shipped: Shipped = shippedOf(state)
 ): Hydration => {
   const deferred = new Set(state["~deferred"])
   const adopting = new WeakSet<Kernel.Instance>()
@@ -195,7 +212,7 @@ export const make = (
     if (pass || held.size > 0) return
     for (const owner of owners.splice(0)) restored(owner)
     started.clear()
-    shipped()?.cancelPending(false)
+    shipped.cancelPending(false)
     settled()
   }
   const fallback = host.hold
@@ -417,7 +434,7 @@ export const make = (
       root?.done()
       finish()
     },
-    close: () => shipped()?.cancelPending(true),
+    close: () => shipped.cancelPending(true),
     settled: () => !pass && held.size === 0
   }
 }
