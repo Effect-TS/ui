@@ -256,7 +256,7 @@ export class Rec {
   declare node: any
   declare kids: Array<Rec> | undefined
   declare inst: Instance
-  /** The view under which no element sets a controlled property. */
+  /** `v` when a restore last found no controlled property at or below it. */
   declare plain: unknown
   constructor(
     v: View.Node<any, any>,
@@ -1397,7 +1397,8 @@ export const replace = (
 
 const refreshed = {}
 
-// Any change below a record gives it a new view, so `plain` goes stale with it.
+// Walks elements only: a change to one gives every element above it a new
+// view, so `plain` goes stale with it.
 const restore = (host: Host, rec: Rec): boolean => {
   const view = rec.v as View.Element<any, any>
   if (rec.plain === view) return false
