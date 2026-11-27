@@ -313,6 +313,7 @@ describe("Select", () => {
         standIn
       )
       scene.fire(trigger, "keydown", key(" ")).expectIgnored()
+      scene.fire(trigger, "keydown", key("Escape")).expectIgnored()
       scene.fire(trigger, "click", pointer("mouse")).expectIgnored()
       scene.fire(trigger, "click", pointer("")).emitted(opened("trigger-press"))
       scene.fire(trigger, "keydown", key("ArrowDown")).emitted(
@@ -330,6 +331,9 @@ describe("Select", () => {
       )
       scene.props({ open: true, items }).expectMount(tracked(scene))
       assert.strictEqual(partsOf(scene).highlighted, "solar")
+      scene.fire(trigger, "keydown", key("Escape")).emitted(
+        dismissed("escape-key")
+      ).expectDefaultPrevented()
     }))
 
   it.effect("arrows, Home and End move between items without wrapping, and Shift+Tab closes", () =>
