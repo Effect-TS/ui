@@ -222,6 +222,27 @@ const manualFrames = () => {
   return { window: proxy as Window, run }
 }
 
+/** The global window, recording the listeners it holds for `type`. */
+const recordingListeners = (type: string) => {
+  const listening = new Set<unknown>()
+  const proxy = new Proxy(window, {
+    get(target, key) {
+      if (key === "addEventListener" || key === "removeEventListener") {
+        return (name: string, f: EventListener, options?: unknown) => {
+          if (name === type) {
+            if (key === "addEventListener") listening.add(f)
+            else listening.delete(f)
+          }
+          target[key](name, f, options as EventListenerOptions)
+        }
+      }
+      const value = Reflect.get(target, key)
+      return typeof value === "function" ? value.bind(target) : value
+    }
+  })
+  return { window: proxy as Window, listening }
+}
+
 const link = (app: Element, name: string) =>
   HtmlLocator.getByRole(app, "link", { name })
 const submitForm = (app: Element, name: string) => {
@@ -237,6 +258,12 @@ const intentsOf = (router: Router.Router) => {
     return intent(href)
   }
   return intents
+}
+/** Fires `beforeunload`, reporting whether something asked the browser to warn. */
+const beforeUnload = () => {
+  const event = new Event("beforeunload", { cancelable: true })
+  window.dispatchEvent(event)
+  return event.defaultPrevented
 }
 const region = () => document.querySelector("[aria-live=assertive]")
 const description = () =>
@@ -852,38 +879,9 @@ describe("BrowserRouter", { concurrent: false }, () => {
 
   it.effect("warns before unloading only while a navigation block is held", () =>
     Effect.gen(function*() {
-      const listening = new Set<unknown>()
-      const recording = new Proxy(window, {
-        get(target, key) {
-          if (key === "addEventListener") {
-            return (type: string, f: EventListener, options?: unknown) => {
-              if (type === "beforeunload") listening.add(f)
-              target.addEventListener(
-                type,
-                f,
-                options as AddEventListenerOptions
-              )
-            }
-          }
-          if (key === "removeEventListener") {
-            return (type: string, f: EventListener, options?: unknown) => {
-              if (type === "beforeunload") listening.delete(f)
-              target.removeEventListener(
-                type,
-                f,
-                options as AddEventListenerOptions
-              )
-            }
-          }
-          const value = Reflect.get(target, key)
-          return typeof value === "function" ? value.bind(target) : value
-        }
-      }) as Window
-      const beforeUnload = () => {
-        const event = new Event("beforeunload", { cancelable: true })
-        window.dispatchEvent(event)
-        return event.defaultPrevented
-      }
+      const { listening, window: recording } = recordingListeners(
+        "beforeunload"
+      )
 
       window.history.replaceState(null, "", "/")
       const outer = yield* Effect.scope
@@ -932,9 +930,7 @@ describe("BrowserRouter", { concurrent: false }, () => {
         BrowserRouter.layer({ routes: AppRoute, warnOnUnload: false })
       )
       yield* Context.get(context, Router.Router).block("form")
-      const event = new Event("beforeunload", { cancelable: true })
-      window.dispatchEvent(event)
-      expect(event.defaultPrevented).toBe(false)
+      expect(beforeUnload()).toBe(false)
     }).pipe(Effect.scoped))
 
   it.effect("puts the shell's title back and removes the region when it closes", () =>
@@ -1050,33 +1046,9 @@ describe("BrowserRouter", { concurrent: false }, () => {
 
     it.effect("writes the pending search on pagehide, and stops listening when its Scope closes", () =>
       Effect.gen(function*() {
-        const listening = new Set<unknown>()
-        const recording = new Proxy(window, {
-          get(target, key) {
-            if (key === "addEventListener") {
-              return (type: string, f: EventListener, options?: unknown) => {
-                if (type === "pagehide") listening.add(f)
-                target.addEventListener(
-                  type,
-                  f,
-                  options as AddEventListenerOptions
-                )
-              }
-            }
-            if (key === "removeEventListener") {
-              return (type: string, f: EventListener, options?: unknown) => {
-                if (type === "pagehide") listening.delete(f)
-                target.removeEventListener(
-                  type,
-                  f,
-                  options as EventListenerOptions
-                )
-              }
-            }
-            const value = Reflect.get(target, key)
-            return typeof value === "function" ? value.bind(target) : value
-          }
-        }) as Window
+        const { listening, window: recording } = recordingListeners(
+          "pagehide"
+        )
         window.history.replaceState(null, "", "/list")
         yield* Effect.gen(function*() {
           const context = yield* Layer.build(

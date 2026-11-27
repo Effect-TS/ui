@@ -369,8 +369,7 @@ const make = (
     }
 
     // --- unload warning ----------------------------------------------------
-    // `returnValue` is for Chromium before 119. It's set first, as on a plain `Event` it's the
-    // legacy inverse of `defaultPrevented`.
+    // `returnValue` is for Chromium before 119.
     const warn = (event: BeforeUnloadEvent) => {
       event.returnValue = true
       event.preventDefault()
