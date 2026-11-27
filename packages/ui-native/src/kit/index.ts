@@ -14,9 +14,11 @@
 // aren't callable. Add components with `export *` and non-component modules
 // with `export * as`, in alphabetical order.
 
+export * from "./ActivityIndicator.ts"
 export * as Css from "./Css.ts"
 export * from "./Drawer.ts"
 export * from "./InputAccessory.ts"
 export * from "./Modal.ts"
 export * from "./RefreshControl.ts"
 export * from "./SafeArea.ts"
+export * from "./Switch.ts"

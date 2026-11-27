@@ -150,6 +150,20 @@ NativeApp.register(NativeApp.mount(App, {}))
         "src/networking.ts",
         app(`import "@effect/ui-native/networking"`, "")
       )
+      write(
+        "src/onlySwitch.ts",
+        app(
+          `import { Switch } from "@effect/ui-native/kit"`,
+          "Switch(h, { props: { checked: false } })"
+        )
+      )
+      write(
+        "src/onlyIndicator.ts",
+        app(
+          `import { ActivityIndicator } from "@effect/ui-native/kit"`,
+          "ActivityIndicator(h)"
+        )
+      )
       const bundle = async (entry: string) => {
         const config = await NativeMetro.withEffectUi<NativeMetro.MetroConfig>(
           { projectRoot: root, resolver: { sourceExts: ["ts", "js"] } },
@@ -168,6 +182,14 @@ NativeApp.register(NativeApp.mount(App, {}))
       assert.notInclude(css, "processBoxShadow")
       const networking = await bundle("src/networking.ts")
       assert.include(networking, "react-native/Libraries/Core/setUpXHR")
+      const onlySwitch = await bundle("src/onlySwitch.ts")
+      assert.include(onlySwitch, "AndroidSwitch")
+      assert.notInclude(onlySwitch, "activityIndicator")
+      assert.notInclude(onlySwitch, "hidesWhenStopped")
+      const onlyIndicator = await bundle("src/onlyIndicator.ts")
+      assert.include(onlyIndicator, "activityIndicator")
+      assert.notInclude(onlyIndicator, "AndroidSwitch")
+      assert.notInclude(onlyIndicator, "setNativeValue")
     },
     30_000
   )
