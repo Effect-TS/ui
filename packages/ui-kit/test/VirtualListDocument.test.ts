@@ -24,68 +24,117 @@ const padding = (element: Element, side: "start" | "end") =>
 const rect = (top: number, height: number, width = 300) =>
   DOMRect.fromRect({ x: 0, y: top, width, height })
 
-const layout = Effect.acquireRelease(
-  Effect.sync(() => {
-    const original = Element.prototype.getBoundingClientRect
-    let stored = 0
-    const scroller = () => document.querySelector<HTMLElement>(".viewport")!
-    const list = () => document.querySelector<HTMLElement>(".list")!
-    const listHeight = () =>
-      padding(list(), "start") +
-      list().querySelectorAll(".item").length * itemSize +
-      padding(list(), "end")
-    const top =
-      () => (stored = Math.max(0, Math.min(stored, listHeight() - 100)))
-    Element.prototype.getBoundingClientRect = function(this: Element) {
-      if (this.classList.contains("viewport")) return rect(0, 100)
-      if (this.classList.contains("list")) return rect(-top(), listHeight())
-      if (this.classList.contains("item")) {
-        return rect(
-          -top() + Number(this.getAttribute("data-index")) * itemSize,
-          itemSize
-        )
+// With a `pageTop`, the page scrolls the list, which starts that far down it.
+const layout = (pageTop?: number) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const original = Element.prototype.getBoundingClientRect
+      const page = document.documentElement
+      const origin = pageTop ?? 0
+      const height = pageTop === undefined ? 100 : 800
+      let stored = 0
+      const scroller = () => document.querySelector<HTMLElement>(".viewport")!
+      const target = () => pageTop === undefined ? scroller() : window
+      const list = () => document.querySelector<HTMLElement>(".list")!
+      const listHeight = () =>
+        padding(list(), "start") +
+        list().querySelectorAll(".item").length * itemSize +
+        padding(list(), "end")
+      const top = () => (stored = Math.max(
+        0,
+        Math.min(stored, origin + listHeight() - height)
+      ))
+      const scrolled = (value: number) => {
+        stored = value
+        top()
       }
-      return original.call(this)
-    }
-    const install = () => {
-      const element = scroller()
-      Object.defineProperty(element, "clientHeight", {
-        configurable: true,
-        value: 100
-      })
-      Object.defineProperty(element, "scrollHeight", {
-        configurable: true,
-        get: listHeight
-      })
-      Object.defineProperty(element, "scrollTop", {
-        configurable: true,
-        get: top,
-        set: (value: number) => {
-          stored = value
-          top()
+      Element.prototype.getBoundingClientRect = function(this: Element) {
+        if (this.classList.contains("viewport")) return rect(0, 100)
+        if (this.classList.contains("list")) {
+          return rect(origin - top(), listHeight())
         }
+        if (this.classList.contains("item")) {
+          return rect(
+            origin - top() + Number(this.getAttribute("data-index")) * itemSize,
+            itemSize
+          )
+        }
+        return original.call(this)
+      }
+      const scrollToOf = (element: HTMLElement | Window) =>
+        ((options: ScrollToOptions) => {
+          scrolled(options.top ?? top())
+          setTimeout(() => element.dispatchEvent(new Event("scroll")), 0)
+        }) as typeof element.scrollTo
+      if (pageTop !== undefined) {
+        Object.defineProperty(window, "innerHeight", {
+          configurable: true,
+          value: height
+        })
+        Object.defineProperty(window, "scrollY", {
+          configurable: true,
+          get: top
+        })
+        Object.defineProperty(page, "clientHeight", {
+          configurable: true,
+          value: height
+        })
+        Object.defineProperty(page, "scrollHeight", {
+          configurable: true,
+          get: () => origin + listHeight()
+        })
+        window.scrollTo = scrollToOf(window)
+      }
+      const install = () => {
+        if (pageTop !== undefined) return
+        const element = scroller()
+        Object.defineProperty(element, "clientHeight", {
+          configurable: true,
+          value: height
+        })
+        Object.defineProperty(element, "scrollHeight", {
+          configurable: true,
+          get: listHeight
+        })
+        Object.defineProperty(element, "scrollTop", {
+          configurable: true,
+          get: top,
+          set: scrolled
+        })
+        element.scrollTo = scrollToOf(element)
+      }
+      const scrollTo = (top: number) => {
+        scrolled(top)
+        target().dispatchEvent(new Event("scroll"))
+      }
+      const relayout = () => target().dispatchEvent(new Event("scroll"))
+      return { install, scrollTo, relayout, scrollTop: top, original }
+    }),
+    ({ original }) =>
+      Effect.sync(() => {
+        Element.prototype.getBoundingClientRect = original
+        if (pageTop === undefined) return
+        const page = document.documentElement as unknown as Record<
+          string,
+          unknown
+        >
+        const view = window as unknown as Record<string, unknown>
+        delete view.innerHeight
+        delete view.scrollY
+        delete view.scrollTo
+        delete page.clientHeight
+        delete page.scrollHeight
       })
-      element.scrollTo = ((options: ScrollToOptions) => {
-        element.scrollTop = options.top ?? top()
-        setTimeout(() => element.dispatchEvent(new Event("scroll")), 0)
-      }) as typeof element.scrollTo
-    }
-    const scrollTo = (top: number) => {
-      scroller().scrollTop = top
-      scroller().dispatchEvent(new Event("scroll"))
-    }
-    const relayout = () => scroller().dispatchEvent(new Event("scroll"))
-    return { install, scrollTo, relayout, scrollTop: top, original }
-  }),
-  ({ original }) =>
-    Effect.sync(() => (Element.prototype.getBoundingClientRect = original))
-)
+  )
 
 const Steps = Effect.fnUntraced(function*(
   steps: ReadonlyArray<Partial<VirtualListProps>>,
-  { ownViewport = false }: { readonly ownViewport?: boolean } = {}
+  { ownViewport = false, pageTop }: {
+    readonly ownViewport?: boolean
+    readonly pageTop?: number
+  } = {}
 ) {
-  const geometry = yield* layout
+  const geometry = yield* layout(pageTop)
   const events: Array<VirtualListEvents> = []
   const Message = UiSchema.TaggedEnum({ Advanced: {} })
   const Demo = Html.component({
@@ -105,7 +154,7 @@ const Steps = Effect.fnUntraced(function*(
             return undefined
           },
           view: (virtualList) =>
-            (ownViewport
+            (ownViewport || pageTop !== undefined
               ? h.div.class("viewport").attr("style", "overflow-y:visible")
               : virtualList.viewport(h.div.class("viewport"))).children(
                 virtualList.list(h.ul.class("list")).children(
@@ -377,6 +426,30 @@ describe("VirtualList in a document", { concurrent: false }, () => {
       yield* tick
       yield* next
       assert.strictEqual(scrollTop(), 4200)
+    }))
+
+  it.effect("keeps a page above the list in place when keyed items reorder, and the item in view once in the list", () =>
+    Effect.gen(function*() {
+      const keys = Array.from({ length: 200 }, (_, i) => "k" + i)
+      const reversed = [...keys].reverse()
+      const { next, scrollTo, scrollTop } = yield* Steps([
+        { count: 200, keys },
+        { count: 200, keys: reversed },
+        {
+          count: 210,
+          keys: [
+            ...Array.from({ length: 10 }, (_, i) => "n" + i),
+            ...reversed
+          ]
+        }
+      ], { pageTop: 400 })
+      yield* next
+      assert.strictEqual(scrollTop(), 0)
+
+      scrollTo(400 + 100 * itemSize)
+      yield* tick
+      yield* next
+      assert.strictEqual(scrollTop(), 400 + 110 * itemSize)
     }))
 
   it.effect("reports a list that grows without a scroll once with trackScroll, and not without it", () =>
