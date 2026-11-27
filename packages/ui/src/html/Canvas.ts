@@ -565,28 +565,23 @@ const paintShape = (
         if (shape.smoothing !== undefined) {
           context.imageSmoothingEnabled = shape.smoothing
         }
-        if (shape.crop !== undefined) {
-          const { height, width, x, y } = shape.crop
-          context.drawImage(
-            image,
-            x,
-            y,
-            width,
-            height,
-            shape.x,
-            shape.y,
-            shape.width ?? width,
-            shape.height ?? height
-          )
-        } else if (shape.width === undefined && shape.height === undefined) {
-          context.drawImage(image, shape.x, shape.y)
-        } else {
-          const width = shape.width ??
-            ("naturalWidth" in image ? image.naturalWidth : image.width)
-          const height = shape.height ??
-            ("naturalHeight" in image ? image.naturalHeight : image.height)
-          context.drawImage(image, shape.x, shape.y, width, height)
-        }
+        // An `<img>`'s `width` is its layout size, so its source size is the natural one.
+        const crop = shape.crop
+        const width = crop?.width ??
+          ("naturalWidth" in image ? image.naturalWidth : image.width)
+        const height = crop?.height ??
+          ("naturalHeight" in image ? image.naturalHeight : image.height)
+        context.drawImage(
+          image,
+          crop?.x ?? 0,
+          crop?.y ?? 0,
+          width,
+          height,
+          shape.x,
+          shape.y,
+          shape.width ?? width,
+          shape.height ?? height
+        )
         break
       }
       case "Group": {
@@ -720,20 +715,17 @@ export type PixelRatio = typeof PixelRatio.Type
 const imageLoader = (
   canvas: HTMLCanvasElement,
   onLoad: () => void,
-  signal?: AbortSignal
+  options?: AddEventListenerOptions
 ) => {
-  const loaded = new Map<string, HTMLImageElement>()
-  const listenerOptions: AddEventListenerOptions = signal === undefined
-    ? { once: true }
-    : { once: true, signal }
+  const images = new Map<string, HTMLImageElement>()
   return (src: string): HTMLImageElement | undefined => {
-    let image = loaded.get(src)
+    let image = images.get(src)
     if (image === undefined) {
       image = canvas.ownerDocument.createElement("img")
-      loaded.set(src, image)
+      images.set(src, image)
       image.src = src
       if (!(image.complete && image.naturalWidth > 0)) {
-        image.addEventListener("load", onLoad, listenerOptions)
+        image.addEventListener("load", onLoad, options)
       }
     }
     return image.complete && image.naturalWidth > 0 ? image : undefined
@@ -748,7 +740,7 @@ const draw = (
     readonly shapes: ReadonlyArray<Shape>
     readonly pixelRatio: PixelRatio
   },
-  images?: (src: string) => ImageSource | undefined
+  images: (src: string) => ImageSource | undefined
 ): boolean => {
   const context = canvas.getContext("2d")
   if (context === null) return false
@@ -818,13 +810,9 @@ export const Paint = Mount.makeStream(
         const listening = new AbortController()
         const { signal } = listening
         yield* Effect.addFinalizer(() => Effect.sync(() => listening.abort()))
-        const images = imageLoader(
-          canvas,
-          () => {
-            draw(canvas, args, images)
-          },
+        const images = imageLoader(canvas, () => draw(canvas, args, images), {
           signal
-        )
+        })
         const report =
           (event: PointerEvent) => (from: globalThis.PointerEvent) => {
             if (!args.listen.includes(event)) return

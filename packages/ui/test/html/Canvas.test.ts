@@ -3,6 +3,7 @@ import { UiSchema } from "@effect/ui"
 import { BrowserHost, Canvas, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
+import { vi } from "vitest"
 
 const recorder = () => {
   const calls: Array<string> = []
@@ -70,23 +71,29 @@ describe("Canvas", { concurrent: false }, () => {
     new Promise<void>((resolve) => setTimeout(resolve, 30))
   )
 
+  // Every canvas gets the recorded context, and `app` is a container to mount in.
+  const page = Effect.gen(function*() {
+    const { calls, context } = recorder()
+    const getContext = HTMLCanvasElement.prototype.getContext
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        HTMLCanvasElement.prototype.getContext = (() => context) as any
+      }),
+      () =>
+        Effect.sync(() => HTMLCanvasElement.prototype.getContext = getContext)
+    )
+    const app = yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        document.body.appendChild(document.createElement("div"))
+      ),
+      (element) => Effect.sync(() => element.remove())
+    )
+    return { calls, app }
+  })
+
   it.effect("paints at the pixel ratio, repaints only a changed scene, and reports pointers in scene coordinates", () =>
     Effect.gen(function*() {
-      const { calls, context } = recorder()
-      const getContext = HTMLCanvasElement.prototype.getContext
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          HTMLCanvasElement.prototype.getContext = (() => context) as any
-        }),
-        () =>
-          Effect.sync(() => HTMLCanvasElement.prototype.getContext = getContext)
-      )
-      const app = yield* Effect.acquireRelease(
-        Effect.sync(() =>
-          document.body.appendChild(document.createElement("div"))
-        ),
-        (element) => Effect.sync(() => element.remove())
-      )
+      const { app, calls } = yield* page
       const root = yield* BrowserHost.mountEffect(Dots, {}, app)
       yield* tick
       const canvas = app.querySelector("canvas")!
@@ -206,10 +213,10 @@ describe("Canvas", { concurrent: false }, () => {
       `drawImage(${sprite},0,0,16,16,10,20,16,16)`,
       "restore()",
       "save()",
-      `drawImage(${sprite},1,2,32,32)`,
+      `drawImage(${sprite},0,0,64,32,1,2,32,32)`,
       "restore()",
       "save()",
-      `drawImage(${sprite},3,4)`,
+      `drawImage(${sprite},0,0,64,32,3,4,64,32)`,
       "restore()",
       "save()",
       "restore()"
@@ -248,40 +255,10 @@ describe("Canvas", { concurrent: false }, () => {
 
   it.effect("repaints a mounted canvas when an image finishes loading, without sending a message", () =>
     Effect.gen(function*() {
-      const { calls, context } = recorder()
-      const getContext = HTMLCanvasElement.prototype.getContext
-      const createElement = document.createElement
-      const hadOwnCreateElement = Object.hasOwn(document, "createElement")
-      const images: Array<HTMLImageElement> = []
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          HTMLCanvasElement.prototype.getContext = (() => context) as any
-          document.createElement = ((
-            tag: string,
-            options?: ElementCreationOptions
-          ) => {
-            const element = createElement.call(document, tag, options)
-            if (tag.toLowerCase() === "img") {
-              images.push(element as HTMLImageElement)
-            }
-            return element
-          }) as typeof document.createElement
-        }),
-        () =>
-          Effect.sync(() => {
-            HTMLCanvasElement.prototype.getContext = getContext
-            if (hadOwnCreateElement) {
-              document.createElement = createElement
-            } else {
-              delete (document as any).createElement
-            }
-          })
-      )
-      const app = yield* Effect.acquireRelease(
-        Effect.sync(() =>
-          document.body.appendChild(document.createElement("div"))
-        ),
-        (element) => Effect.sync(() => element.remove())
+      const { app, calls } = yield* page
+      const created = yield* Effect.acquireRelease(
+        Effect.sync(() => vi.spyOn(document, "createElement")),
+        (spy) => Effect.sync(() => spy.mockRestore())
       )
       let updates = 0
       const Sprites = Html.component({
@@ -317,6 +294,9 @@ describe("Canvas", { concurrent: false }, () => {
         "save()",
         "restore()"
       ])
+      const images = created.mock.results.map(({ value }) => value).filter((
+        element
+      ) => element.tagName === "IMG")
       assert.strictEqual(images.length, 1)
       const [image] = images
       assert.strictEqual(image.getAttribute("src"), "/sprites.png")
