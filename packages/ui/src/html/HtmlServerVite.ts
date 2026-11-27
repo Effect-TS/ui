@@ -33,6 +33,10 @@
  * first and passes remaining requests to `handler`. `serverOutDir` must
  * not overlap the client `outDir`.
  *
+ * For server rendering, the plugin adds `@effect/ui` and installed packages
+ * that depend on it to `ssr.noExternal` so component libraries share the
+ * app's copy; list a package in `ssr.external` to opt it out.
+ *
  * When another renderer builds the page shell, reduce `index.html` to its
  * asset tags and a `<!--app-html-->` marker directly in `<body>`, so the
  * shell renders the container the client hydrates. `document` inserts
@@ -142,9 +146,9 @@ export interface Plugin {
   readonly name: string
   readonly sharedDuringBuild: true
   config(
-    config: unknown,
+    config: { readonly root?: string | undefined },
     env: { readonly isPreview?: boolean | undefined }
-  ): object
+  ): Promise<object>
   resolveId(source: string): string | undefined
   load(this: LoadContext, id: string): Promise<string | undefined>
   configureServer(server: DevServer): () => void
@@ -232,6 +236,7 @@ const originalUrl = (request: IncomingMessage): string =>
 
 const documentId = "virtual:@effect/ui/document"
 const serverId = "virtual:@effect/ui/server"
+const effectUiPattern = /^@effect\/ui/
 
 const declaration = [
   "import type { Context } from \"effect/Context\"",
@@ -271,24 +276,32 @@ export const plugin = (options: Options): Plugin => {
     name: "effect-ui-html-server",
     // Shared, so the server build sees the `templateFile` that `buildApp` sets.
     sharedDuringBuild: true,
-    config: (_, { isPreview }) => ({
-      // In dev, page requests that Vite doesn't answer reach the server
-      // entry. A preview serves `/about` from `about.html`.
-      appType: isPreview ? "mpa" : "custom",
-      builder: {},
-      ssr: { noExternal: [/^@effect\/ui/] },
-      environments: {
-        ssr: {
-          build: {
-            copyPublicDir: false,
-            rolldownOptions: { input: { index: serverId } },
-            ...(options.serverOutDir === undefined
-              ? { write: false }
-              : { outDir: options.serverOutDir })
+    async config(userConfig, { isPreview }) {
+      const root = path.resolve(
+        typeof userConfig?.root === "string" && userConfig.root.length > 0
+          ? userConfig.root
+          : process.cwd()
+      )
+      const uiPackages = await discoverUiPackages(root)
+      return {
+        // In dev, page requests that Vite doesn't answer reach the server
+        // entry. A preview serves `/about` from `about.html`.
+        appType: isPreview ? "mpa" : "custom",
+        builder: {},
+        ssr: { noExternal: [effectUiPattern, ...uiPackages] },
+        environments: {
+          ssr: {
+            build: {
+              copyPublicDir: false,
+              rolldownOptions: { input: { index: serverId } },
+              ...(options.serverOutDir === undefined
+                ? { write: false }
+                : { outDir: options.serverOutDir })
+            }
           }
         }
       }
-    }),
+    },
     resolveId: (source) =>
       source === documentId || source === serverId ? `\0${source}` : undefined,
     async load(id) {
@@ -649,4 +662,105 @@ const send = async (response: Http.ServerResponse, answer: Response) => {
   } else {
     await pipeline(Readable.fromWeb(answer.body as WebStream), response)
   }
+}
+
+interface PackageJson {
+  readonly dependencies?: Record<string, unknown> | undefined
+  readonly devDependencies?: Record<string, unknown> | undefined
+  readonly peerDependencies?: Record<string, unknown> | undefined
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+const readPackageJson = async (
+  dir: string
+): Promise<PackageJson | undefined> => {
+  try {
+    const parsed: unknown = JSON.parse(
+      await fs.readFile(path.join(dir, "package.json"), "utf8")
+    )
+    return isRecord(parsed) ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const closestPackageJson = async (
+  startDir: string
+): Promise<{ readonly dir: string; readonly pkg: PackageJson } | undefined> => {
+  let current = path.resolve(startDir)
+  while (true) {
+    const pkg = await readPackageJson(current)
+    if (pkg !== undefined) return { dir: current, pkg }
+    const parent = path.dirname(current)
+    if (parent === current) return undefined
+    current = parent
+  }
+}
+
+const resolvePackage = async (
+  fromDir: string,
+  name: string
+): Promise<{ readonly dir: string; readonly pkg: PackageJson } | undefined> => {
+  let current = fromDir
+  while (true) {
+    if (path.basename(current) !== "node_modules") {
+      const dir = path.join(current, "node_modules", name)
+      const pkg = await readPackageJson(dir)
+      if (pkg !== undefined) return { dir, pkg }
+    }
+    const parent = path.dirname(current)
+    if (parent === current) return undefined
+    current = parent
+  }
+}
+
+const dependencyNames = (
+  ...fields: ReadonlyArray<unknown>
+): ReadonlyArray<string> => {
+  const names = new Set<string>()
+  for (const field of fields) {
+    if (!isRecord(field)) continue
+    for (const name of Object.keys(field)) {
+      names.add(name)
+    }
+  }
+  return [...names]
+}
+
+const discoverUiPackages = async (
+  root: string
+): Promise<ReadonlyArray<string>> => {
+  const app = await closestPackageJson(root)
+  if (app === undefined) return []
+  const visited = new Map<string, boolean>()
+  const included = new Set<string>()
+
+  const visit = async (fromDir: string, name: string): Promise<void> => {
+    const found = await resolvePackage(fromDir, name)
+    if (found === undefined) return
+    const realDir = await fs.realpath(found.dir).catch(() => found.dir)
+    const seen = visited.get(realDir)
+    if (seen !== undefined) {
+      if (seen && !effectUiPattern.test(name)) included.add(name)
+      return
+    }
+    const deps = dependencyNames(
+      found.pkg.dependencies,
+      found.pkg.peerDependencies
+    )
+    const isUi = deps.some((dep) => effectUiPattern.test(dep))
+    visited.set(realDir, isUi)
+    if (!isUi) return
+    if (!effectUiPattern.test(name)) included.add(name)
+    await Promise.all(deps.map((dep) => visit(realDir, dep)))
+  }
+
+  const rootDeps = dependencyNames(
+    app.pkg.dependencies,
+    app.pkg.devDependencies
+  )
+  await Promise.all(rootDeps.map((name) => visit(app.dir, name)))
+  return [...included].sort()
 }
