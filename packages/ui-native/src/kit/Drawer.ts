@@ -120,8 +120,8 @@ export interface DrawerEvents {
 export interface DrawerOptions<Msg, RD = never> {
   /** Content rendered inside the sliding drawer panel. */
   readonly drawer: Native.NoTextInput<Msg, RD>
-  /** Width of the drawer panel, in points. */
-  readonly drawerWidth?: number | undefined
+  /** Width of the drawer panel, in points. Required so Android and Fabric layout agree on panel bounds. */
+  readonly drawerWidth: number
   /** Edge the drawer slides from. Defaults to `"left"`. */
   readonly drawerPosition?: DrawerPosition | undefined
   /** Gesture lock mode. Defaults to `"unlocked"`. */
@@ -219,26 +219,16 @@ export const Drawer = <Msg, RD = never>(
   h: Native.H<Msg>,
   options: DrawerOptions<Msg, RD>
 ): DrawerElement<Msg, RD, DrawerEvents, "drawer"> => {
-  const drawerBackgroundColor = options.drawerBackgroundColor ?? "white"
-  const props: Record<string, unknown> = { drawerBackgroundColor }
-  if (options.drawerWidth !== undefined) props.drawerWidth = options.drawerWidth
+  const props: Record<string, unknown> = {
+    drawerWidth: options.drawerWidth,
+    drawerBackgroundColor: options.drawerBackgroundColor ?? "white"
+  }
   if (options.drawerPosition !== undefined) {
     props.drawerPosition = options.drawerPosition
   }
   if (options.drawerLockMode !== undefined) {
     props.drawerLockMode = options.drawerLockMode
   }
-  const panelStyle: Native.ViewStyle = options.drawerPosition === "right"
-    ? {
-      right: 0,
-      width: options.drawerWidth,
-      backgroundColor: drawerBackgroundColor
-    }
-    : {
-      left: 0,
-      width: options.drawerWidth,
-      backgroundColor: drawerBackgroundColor
-    }
   const base = View.withFields(
     element as DrawerElement<Msg, never, DrawerEvents, "drawer">,
     { props }
@@ -247,6 +237,13 @@ export const Drawer = <Msg, RD = never>(
     const main = h.view.prop("collapsable", false).style(fill).children(
       built.content as any
     )
+    const width = built.props.drawerWidth as number | undefined
+    const backgroundColor = built.props.drawerBackgroundColor as
+      | Native.Color
+      | undefined
+    const panelStyle: Native.ViewStyle = built.props.drawerPosition === "right"
+      ? { end: 0, width, backgroundColor }
+      : { start: 0, width, backgroundColor }
     const panel = (drawerPanel as Native.ViewElement<
       Msg,
       never,

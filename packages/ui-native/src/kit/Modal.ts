@@ -11,9 +11,12 @@
  * animation finishes).
  *
  * `onRequestClose` is required so Android's Back button cannot silently trap
- * the user in the modal; return `undefined` to intentionally keep it open. On
- * Android the modal runs in a separate `Dialog` window, so Back fires
- * `requestClose` and never reaches `NativeApp`'s `hardwareBackPress` fallback.
+ * the user in the modal. Returning `undefined` keeps the modal open for
+ * Android Back, but with `allowSwipeDismissal: true` on iOS the sheet has
+ * already been dismissed when `onRequestClose` fires, so unmount the modal
+ * there to keep the Model in sync with the screen. On Android the modal runs
+ * in a separate `Dialog` window, so Back fires `requestClose` and never
+ * reaches `NativeApp`'s `hardwareBackPress` fallback.
  *
  * `RCTModalHostView` paints nothing itself: put content inside a child
  * `h.view.style({ flex: 1, backgroundColor: ... })`, and wrap with `SafeArea`
@@ -119,8 +122,10 @@ export interface ModalEvents {
 export interface ModalOptions<Msg> {
   /**
    * Called on Android Back, Apple TV Menu, or iOS swipe dismissal (with
-   * `allowSwipeDismissal`). Required so Back cannot silently trap the user;
-   * return `undefined` to keep the modal open.
+   * `allowSwipeDismissal`). Required so Back cannot silently trap the user.
+   * Returning `undefined` keeps the modal open on Android Back; with
+   * `allowSwipeDismissal: true` on iOS, UIKit has already dismissed the sheet
+   * before this fires, so unmount the modal to keep the Model in sync.
    */
   readonly onRequestClose: View.Handler<Msg, {}>
   /** Defaults to `"none"`. */

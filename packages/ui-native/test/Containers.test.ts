@@ -144,11 +144,11 @@ describe("Drawer", () => {
     view: (h, model) =>
       Drawer(h, {
         drawerWidth: 240,
-        drawerPosition: model.side,
         drawerLockMode: "unlocked",
         drawerBackgroundColor: "#eee",
         drawer: h.text.children("Menu")
       })
+        .prop("drawerPosition", model.side)
         .ref(DrawerRef)
         .on("drawerOpen", Message.Opened())
         .on("drawerClose", Message.Closed())
@@ -197,7 +197,7 @@ describe("Drawer", () => {
       position: "absolute",
       top: 0,
       bottom: 0,
-      left: 0,
+      start: 0,
       width: 240,
       backgroundColor: "processed #eee"
     })
@@ -225,8 +225,8 @@ describe("Drawer", () => {
     await settle()
     const flipped = find(FakeFabric.byName("AndroidDrawerLayout"))
     assert.strictEqual(flipped.props.drawerPosition, "right")
-    assert.isUndefined(flipped.children[1]!.props.left)
-    assert.strictEqual(flipped.children[1]!.props.right, 0)
+    assert.isUndefined(flipped.children[1]!.props.start)
+    assert.strictEqual(flipped.children[1]!.props.end, 0)
     await close()
   })
 
