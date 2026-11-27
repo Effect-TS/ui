@@ -2030,7 +2030,7 @@ const watch = (
 
     return Effect.acquireRelease(
       Effect.sync(() => {
-        listenOutside(document, signal, {
+        listenOutside(node, signal, {
           open: () =>
             current.open,
           anyButton: () =>

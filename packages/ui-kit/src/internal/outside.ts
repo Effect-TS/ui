@@ -1,3 +1,4 @@
+import { focusedOf, listenTrees } from "./dom.ts"
 import { onScrollbar } from "./interaction.ts"
 import { inKept } from "./topLayer.ts"
 
@@ -13,7 +14,7 @@ export interface Outside {
 }
 
 export const listenOutside = (
-  document: Document,
+  node: Element,
   signal: AbortSignal,
   outside: Outside
 ): void => {
@@ -45,14 +46,10 @@ export const listenOutside = (
       focused?.()
     }
   }
-  document.addEventListener("pointerdown", onPointerDown, {
-    capture: true,
-    signal
-  })
-  document.addEventListener("click", onClick, { capture: true, signal })
-  if (focused !== undefined) {
-    document.addEventListener("focusin", onFocusIn, { capture: true, signal })
-  }
+  const captured = { capture: true, signal }
+  listenTrees(node, "pointerdown", onPointerDown, captured)
+  listenTrees(node, "click", onClick, captured)
+  if (focused !== undefined) listenTrees(node, "focusin", onFocusIn, captured)
   const left = outside.left
   if (left === undefined) return
   let settle: ReturnType<typeof setTimeout> | undefined
@@ -62,10 +59,10 @@ export const listenOutside = (
     if (!isInside(event.target as Node | null)) return
     clearTimeout(settle)
     settle = setTimeout(() => {
-      if (outside.open() && !isInside(document.activeElement)) left()
+      if (outside.open() && !isInside(focusedOf(node))) left()
     }, 0)
   }
-  document.addEventListener("focusout", onFocusOut, { capture: true, signal })
+  listenTrees(node, "focusout", onFocusOut, captured)
   signal.addEventListener("abort", () => clearTimeout(settle))
 }
 

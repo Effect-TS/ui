@@ -4,22 +4,29 @@ await run("select", async ({ browser, expect, failures, url }) => {
   const page = await browser.newPage({ viewport: { width: 800, height: 600 } })
   page.on("pageerror", (error) => failures.push("page error " + String(error)))
 
-  await page.goto(url + "select.html")
-  // A real mouse click runs the browser's default mousedown focus, which a
-  // dispatched event skips.
-  await page.locator("#trigger").click()
-  await page.waitForTimeout(100)
-  await page.keyboard.press("ArrowDown")
-  await page.waitForTimeout(100)
-  const highlighted = await page.evaluate(() =>
-    document.activeElement.closest(".popup [data-highlighted]")?.textContent ??
-      null
-  )
-  expect(
-    highlighted === "Banana",
-    "ArrowDown in a mouse-opened popup focuses Banana",
-    highlighted
-  )
+  for (const mode of ["", "?shadow"]) {
+    await page.goto(url + "select.html" + mode)
+    // A real mouse click runs the browser's default mousedown focus, which a
+    // dispatched event skips.
+    await page.locator("#trigger").click()
+    await page.waitForTimeout(100)
+    const expanded = await page.locator("#trigger").getAttribute(
+      "aria-expanded"
+    )
+    expect(expanded === "true", "A click opens the popup" + mode, expanded)
+    await page.keyboard.press("ArrowDown")
+    await page.waitForTimeout(100)
+    // Locators see into an open shadow root, which `document.activeElement`
+    // doesn't.
+    const [highlighted = null] = await page.locator(
+      ".popup [data-highlighted]:focus-within"
+    ).allTextContents()
+    expect(
+      highlighted === "Banana",
+      "ArrowDown in a mouse-opened popup focuses Banana" + mode,
+      highlighted
+    )
+  }
 
   // A parent that keeps the popup closed gets the trigger focused by the click.
   await page.goto(url + "select.html?decline")
