@@ -4756,6 +4756,31 @@ describe("Runtime", () => {
         assert.strictEqual(field.props.value, "B")
       })))
 
+    it.effect("controlled properties are restored after a refused edit", () =>
+      provideHost(Effect.gen(function*() {
+        const Msg = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
+        const Form = Component.define({
+          name: "Form",
+          model: Schema.String,
+          message: Msg,
+          elements: Tiny
+        }).make({
+          init: () => "ab",
+          update: ($, message) =>
+            message.value.length <= 2 ? message.value : $.model,
+          view: (h, value) =>
+            h.field.value(value).on("input", ({ value }) =>
+              Msg.Typed({ value }))
+        })
+        const root = yield* TestHost.mount(Form, {})
+        const field = root.get(Locator.tag("field")) as TestHost.TestElement
+        field.props.value = "abc"
+        Locator.fire(field, "input", { value: "abc" })
+        yield* TestHost.settle
+        assert.strictEqual(root.model(), "ab")
+        assert.strictEqual(field.props.value, "ab")
+      })))
+
     it.effect("onMount runs with the element's node on hosts that run mounts", () =>
       Effect.gen(function*() {
         const Msg = UiSchema.TaggedEnum({ Mounted: { tag: Schema.String } })
