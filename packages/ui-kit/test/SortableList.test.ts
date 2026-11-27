@@ -112,7 +112,6 @@ describe("SortableList", () => {
       })
       scene.expect(status).toHaveText("")
 
-      // Activate handle to pick up item "a".
       scene.click(handle("a"))
       drain(scene)
       assert.strictEqual(scene.get(list).attrs?.["data-moving"], "")
@@ -122,7 +121,6 @@ describe("SortableList", () => {
       assert.isUndefined(scene.get(item("b")).attrs?.["data-drop-position"])
       scene.expect(status).toHaveText("PickedUp:a:1/3")
 
-      // Arrows, End, clamping (no wrap), and Home.
       scene.keydown(handle("a"), "ArrowDown").expectDefaultPrevented()
       drain(scene)
       assert.strictEqual(
@@ -152,7 +150,6 @@ describe("SortableList", () => {
       scene.keydown(handle("a"), "ArrowDown").expectDefaultPrevented()
       drain(scene)
 
-      // Activate the moved handle again to commit at index 1.
       scene.click(handle("a")).emitted({ _tag: "Reordered", from: 0, to: 1 })
       drain(scene)
       assert.isUndefined(scene.get(list).attrs?.["data-moving"])
@@ -163,8 +160,7 @@ describe("SortableList", () => {
         "true"
       )
 
-      // Consumer applies the new order; Dropped reflects the live position
-      // and clears once unrelated edits diverge.
+      // Dropped follows the consumer’s order until the outcome becomes stale.
       scene.props({ items: ["b", "a", "c"] })
       scene.expect(status).toHaveText("Dropped:a:2/3")
       scene.props({ items: ["b", "a", "c", "d"] })
@@ -173,7 +169,6 @@ describe("SortableList", () => {
       scene.props({ items: ["b", "a", "c"] })
       scene.expect(status).toHaveText("")
 
-      // Moving backward places the indicator "before" the target item.
       scene.click(handle("c"))
       drain(scene)
       scene.keydown(handle("c"), "ArrowUp").expectDefaultPrevented()
@@ -182,13 +177,11 @@ describe("SortableList", () => {
         scene.get(item("a")).attrs?.["data-drop-position"],
         "before"
       )
-      // Escape cancels without emitting.
       scene.keydown(handle("c"), "Escape").expectDefaultPrevented()
       drain(scene)
       assert.isUndefined(scene.get(list).attrs?.["data-moving"])
       scene.expect(status).toHaveText("Cancelled:c:3/3")
 
-      // Dropping back at the original index emits nothing.
       scene.click(handle("b"))
       drain(scene)
       scene.click(handle("b"))
@@ -327,7 +320,6 @@ describe("SortableList", () => {
       scene.drop(item("b"), { data: dataA, ...topHalf })
       assert.deepStrictEqual(scene.current.emitted, [])
 
-      // Lower half of "b" drops "a" after "b" (index 1).
       scene.fire(item("a"), "dragstart")
       scene.fire(item("b"), "dragover", bottomHalf)
       assert.strictEqual(

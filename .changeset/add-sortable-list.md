@@ -2,4 +2,4 @@
 "@effect/ui-kit": minor
 ---
 
-Add the headless `SortableList` component, a list reordered by dragging a row or, without a pointer, by activating a row's handle, choosing a place with the arrow keys or another handle, and activating again, with focus returned to the moved row's handle after a drop by handle, and announcements for a polite live region.
+Add headless `SortableList` with pointer dragging, handle-based reordering and localizable live-region announcements. Handle drops focus the moved row’s handle; pointer drops leave focus unchanged.

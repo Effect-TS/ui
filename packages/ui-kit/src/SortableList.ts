@@ -1,13 +1,10 @@
 /**
- * A list the user reorders by dragging a row, or without a pointer by
- * activating a row's handle, choosing where it goes, and activating a handle
- * again. The order stays the consumer's: `SortableList` emits
- * `Reordered { from, to }` and draws whatever `items` says.
+ * A headless list reordered by dragging rows or activating handles.
+ * The consumer owns the order: `SortableList` emits `Reordered { from, to }`
+ * and renders the order supplied in `items`.
  *
- * `SortableList` is a headless component. It keeps the row being moved and
- * where it would land, moves focus to the moved row's handle after a drop
- * by handle, and gives the consumer what to announce. A drop by pointer
- * leaves focus where it is.
+ * The component tracks the move and provides announcement data. A drop by
+ * handle focuses the moved row's handle. A pointer drop leaves focus unchanged.
  *
  * **Anatomy**
  *
@@ -57,9 +54,10 @@
  * The parts carry `announcement`: what happened last, the row's `id`, its
  * 1-based `position` and the `count` of rows. Write the sentence in the
  * `status` part, in the user's language, and include how to move the row in
- * the `PickedUp` one. `Dropped` reads the row's position from the current
- * `items`, so it stays true when the consumer refuses a `Reordered`, and
- * clears once `items` changes otherwise.
+ * the `PickedUp` one. `Dropped` reports the row's current position in `items`,
+ * even if the consumer declines the reorder. The announcement clears when
+ * the row leaves `items`, the row count changes, or its position matches
+ * neither the source nor the destination.
  *
  * **Example** (A reorderable todo list)
  *
@@ -146,11 +144,9 @@ import {
 import * as ListNavigation from "./ListNavigation.ts"
 
 /**
- * Props for a `SortableList`.
+ * Configure row order, disabled state and orientation.
  *
- * **Details**
- *
- * - `items`: the id of every row, in the order they are drawn. Required.
+ * - `items`: unique row IDs in render order. Required.
  * - `disabled`: disables every handle and stops drags and drops.
  * - `orientation`: `"vertical"` by default, which moves with Down and Up and
  *   splits rows into top and bottom halves for a drag, or `"horizontal"`.
@@ -246,12 +242,8 @@ const SortableListMessage = UiSchema.TaggedEnum({
 
 type SortableListMessage = typeof SortableListMessage.Type
 
-// `moving.over`: the landing place shows. A drag's shows only while it is
-// over one of the list's drop targets.
-// `ended`: the last move's outcome, with the `count` of rows at that time.
-// `pressed`: a handle's `mousedown` during a move, until its `mouseup`.
-// Safari and iOS blur on that `mousedown` without focusing the button, so
-// the `focusout` it causes before the click doesn't cancel.
+// `pressed` prevents Safari/iOS blur on mousedown from cancelling a move
+// before the tapped handle receives its click.
 const SortableListModel = Schema.Struct({
   moving: Schema.NullOr(Schema.Struct({
     id: Schema.String,
@@ -288,7 +280,6 @@ const Item = Renderer.ref<globalThis.Element>("SortableListItem")
 const fromOf = ($: SortableListUpdate) =>
   $.model.moving === null ? -1 : $.props.items.indexOf($.model.moving.id)
 
-// The index of the row being dragged, or -1.
 const dragFrom = ($: SortableListUpdate): number =>
   $.props.disabled !== true && $.model.moving?.dragging === true
     ? fromOf($)
@@ -344,8 +335,6 @@ const cancel = ($: SortableListUpdate) => {
   })
 }
 
-// The index a drag ends at when dropped before or after the row `id`, or
-// `undefined` without a drag or when that row is gone from `items`.
 const dragTo = (
   $: SortableListUpdate,
   id: string,
@@ -354,12 +343,11 @@ const dragTo = (
   const from = dragFrom($)
   const over = $.props.items.indexOf(id)
   if (from < 0 || over < 0) return undefined
+  // Removing the source shifts every later insertion slot back by one.
   const slot = after ? over + 1 : over
   return slot > from ? slot - 1 : slot
 }
 
-// Records whether a drag is over a drop target, and where it would land.
-// A pointer moving within one half of a row changes nothing.
 const hover = ($: SortableListUpdate, over: boolean, to?: number) => {
   if (dragFrom($) < 0) return $.model
   const moving = $.model.moving!
@@ -389,9 +377,7 @@ const step = ($: SortableListUpdate, key: string) => {
   )
 }
 
-// Where the last outcome's row is, or -1 once `items` no longer matches the
-// outcome: the row is where it landed, or where it started when the consumer
-// refused the move.
+// Accept either position: the consumer may decline the reorder.
 const endedAt = (
   ended: NonNullable<SortableListModel["ended"]>,
   items: ReadonlyArray<string>
@@ -408,8 +394,6 @@ const releasedPointer = HtmlSubscription.onDocument(
   SortableListMessage.ReleasedPointer()
 )
 
-// The props no longer fit the Model: the moving row is gone or the list is
-// disabled, or `items` no longer matches the last outcome.
 const outdated = (
   { ended, moving }: SortableListModel,
   { disabled, items }: SortableListProps
@@ -460,13 +444,13 @@ const announcementOf = (
  * `undefined`, `announcement`, a `SortableListAnnouncement` or `undefined`,
  * `disabled` and `orientation`.
  *
- * Its own attributes win over the ones the consumer set on the builder
- * before the part, including the ones a state leaves absent:
+ * Part attributes override those already set on the builder, including
+ * attributes the part removes:
  *
  * - `list`: `data-orientation`, `data-moving` and `data-disabled`
  * - `item`: `draggable`, `data-moving` and `data-drop-position`
  * - `handle`: `type="button"`, `disabled`, `aria-disabled` (removed),
- *   `aria-pressed` (only for a move by handle, not a drag), `data-moving`
+ *   `aria-pressed` (`"true"` only on the row being moved by handle), `data-moving`
  *   and `data-disabled`
  * - `status`: `role="status"`, `aria-live="polite"` and `aria-atomic="true"`
  *
@@ -475,9 +459,9 @@ const announcementOf = (
  * `handle` handles `click`, `mousedown` and `keydown`. Each is on a layer of
  * its own, so the consumer's handlers still run. `focusout`, `mousedown`
  * and `keydown` are handled only during a move by handle, so otherwise
- * they reach the consumer's handlers on enclosing elements. A row drags only
- * rows of the same list, and a drop in a gap between rows lands where the
- * last row hovered said. The list follows the nearest `DirectionProvider` above it
+ * they reach the consumer's handlers on enclosing elements. Drops accept only
+ * rows from the same list. A drop between rows uses the last hovered position.
+ * The list follows the nearest `DirectionProvider`
  * or, without one, the list's CSS `direction`.
  *
  * @stability experimental
@@ -531,9 +515,7 @@ export const SortableList = Html.component({
     DroppedOnList: ($) =>
       dragFrom($) < 0 ? $.model : commit($, $.model.moving!.to, false),
     EndedDrag: ($) => $.model.moving?.dragging === true ? cancel($) : $.model,
-    // Ends the move for good, so restoring the row or enabling the list
-    // can't bring it back, and forgets an outcome a later edit could
-    // otherwise match again.
+    // Clear stale state so later props cannot revive a move or announcement.
     ChangedProps: ($) =>
       !outdated($.model, $.props)
         ? $.model
@@ -589,7 +571,6 @@ export const SortableList = Html.component({
       dropEffect: "move",
       preventDefault: "always"
     }
-    // `dragover` and `drop` both say where in the row the pointer is.
     const after = (payload: unknown): boolean => {
       const { height, width, x, y } = payload as Html.DragOverPayload
       return horizontal ? x >= width / 2 !== rtl : y >= height / 2
