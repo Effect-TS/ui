@@ -307,8 +307,10 @@ export const pick = <Msg>(
  * **When to use**
  *
  * Use at the end of a Command that makes the file, such as one that encodes
- * the Model as a JSON backup. Build the file in the Command, not in `update`,
- * so its content stays out of the message log.
+ * the Model as a JSON backup. Build the file in the Command from plain args,
+ * not in `update`, so a story matches the args by value. The message log
+ * still encodes those args, so declare a field that mustn't be logged with
+ * `Schema.Redacted`.
  *
  * **Details**
  *

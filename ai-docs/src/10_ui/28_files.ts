@@ -69,10 +69,11 @@ export const ReadCsv = Command.make(
 // ---------------------------------------------------------------------------
 
 // `HtmlFiles.download` asks the browser to save a `File` under its name.
-// The Command builds the file, so its content stays out of the message log,
-// which records only the args. It succeeds once the browser is asked: the
-// browser never reports whether the user saved the file, so the Command
-// ends with `Component.noop` and sends nothing.
+// The Command builds the file from plain args, so a story matches them by
+// value. The message log encodes those args, which here are the summary
+// itself. It succeeds once the browser is asked: the browser never reports
+// whether the user saved the file, so the Command ends with
+// `Component.noop` and sends nothing.
 export const DownloadSummary = Command.make(
   "import/DownloadSummary",
   { args: { name: Schema.String, rows: Schema.Number } },
