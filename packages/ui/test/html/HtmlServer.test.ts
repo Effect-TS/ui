@@ -742,6 +742,10 @@ describe("HtmlServer", { concurrent: false }, () => {
             h.select.value("a b").children(
               h.option.children(" \ta\n  b\r "),
               h.option.children("a b")
+            ),
+            h.select.value("b0").children(
+              h.option.children("b", new Html.Element<never>("script").children("0")),
+              h.option.attr("value", "b0").children("Label")
             )
           )
       })
@@ -752,6 +756,7 @@ describe("HtmlServer", { concurrent: false }, () => {
           "<select><option>a</option><option selected>b</option><option>b</option><option value=\"b\">B explicit</option></select>" +
           "<select><option> b </option><option value=\" b \" selected>Explicit</option></select>" +
           "<select><option selected> \ta\n  b\r </option><option>a b</option></select>" +
+          "<select><option>b<script>0</script></option><option value=\"b0\" selected>Label</option></select>" +
           "</div><!--]/DuplicateOptions-->"
       )
     }))

@@ -377,9 +377,10 @@ const write = (tape: ReadonlyArray<any>): string => {
           out = `${before}${inner}</${tag}>`
         }
         frame = open.parent
+        // A script's text is no part of an enclosing option's value.
         if (open.gathers) {
-          text = open.text === undefined
-            ? undefined
+          text = open.text === undefined || tag === "script"
+            ? open.text
             : open.text + text
         }
         if (open.option === undefined) selectValue = open.selectValue
