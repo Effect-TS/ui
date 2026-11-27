@@ -24,6 +24,16 @@
  * for a path ending in `/`, and a 404 to `404.html`. Any other status
  * fails the build. The server build isn't kept.
  *
+ * When another renderer builds the page shell, keep `index.html` as a
+ * skeleton with Vite's asset tags and a bare `<!--app-html-->` in `<body>`,
+ * without a `<div id="app">` wrapper, so the shell owns the container the
+ * client hydrates. Vite still transforms `index.html` in dev and hashes its
+ * assets in a build, so the page keeps every tag Vite and other plugins
+ * emit. Wrap `rendered` when calling `document` to pass the shell's body and
+ * head through while preserving `state`, `htmlAttributes` and
+ * `bodyAttributes`; a shell that sets its own `<html>` or `<body>`
+ * attributes appends them (space-separated) to those two fields.
+ *
  * **Gotchas**
  *
  * Only a root `base` is supported. Vite prefixes the asset URLs with
@@ -45,6 +55,23 @@
  * // import { document } from "virtual:@effect/ui/document"
  * // export default layerHttp(App, { routes: AppRoute, document, static: import.meta.env.PROD })
  * // export const prerender = [AppRoute.print(AppRoute.Home())]
+ * ```
+ *
+ * **Example** (Shell from another renderer)
+ *
+ * ```ts
+ * import type { HtmlServer } from "@effect/ui/html"
+ * import { document } from "virtual:@effect/ui/document"
+ *
+ * // index.html keeps only the asset tags and a bare <!--app-html--> in <body>.
+ * const page = (rendered: HtmlServer.Rendered<unknown>): string => {
+ *   const shell = renderShell(rendered.html) // the other renderer
+ *   return document({
+ *     ...rendered,
+ *     html: shell.body,
+ *     head: shell.head + rendered.head
+ *   })
+ * }
  * ```
  *
  * @stability experimental
