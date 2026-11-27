@@ -304,10 +304,6 @@ describe("Canvas", { concurrent: false }, () => {
         value: 32,
         configurable: true
       })
-      Object.defineProperty(image, "naturalHeight", {
-        value: 32,
-        configurable: true
-      })
       image.dispatchEvent(new Event("load"))
       yield* tick
       assert.deepStrictEqual(calls.splice(0), [
