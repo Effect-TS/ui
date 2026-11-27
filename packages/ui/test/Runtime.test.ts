@@ -5373,6 +5373,87 @@ describe("Runtime", () => {
         provideHost
       ))
 
+    it.effect("a reader of a mount's args sees an update or close that arrives at any yield point", () =>
+      Effect.gen(function*() {
+        for (const mode of ["update", "close"] as const) {
+          for (let at = 1;; at++) {
+            const seen: Array<number> = []
+            let reader: Fiber.Fiber<void> | undefined
+            let armed = false
+            let checks = 0
+            const tasks: Array<() => void> = []
+            const dispatcher: Scheduler.SchedulerDispatcher = {
+              scheduleTask: (task) => {
+                tasks.push(task)
+              },
+              flush: () => {
+                while (tasks.length > 0) tasks.shift()!()
+              }
+            }
+            const scheduler: Scheduler.Scheduler = {
+              executionMode: "sync",
+              shouldYield: () => armed && ++checks === at,
+              makeDispatcher: () => dispatcher
+            }
+            const Draw = Mount.make(
+              "Draw",
+              { args: { n: Schema.Number } },
+              (_node, _args, changes) =>
+                Effect.gen(function*() {
+                  reader = yield* Effect.forkDetach(
+                    Effect.suspend(() => {
+                      armed = true
+                      return Stream.runForEach(changes, ({ n }) =>
+                        Effect.sync(() => seen.push(n)))
+                    }).pipe(
+                      Effect.provideService(Scheduler.Scheduler, scheduler)
+                    ),
+                    { startImmediately: true }
+                  )
+                  armed = false
+                  return Component.noop
+                })
+            )
+            const Chart = Component.define({
+              name: "YieldingReader",
+              model: Schema.Number,
+              message: Schema.Number
+            }).make({
+              init: () => 0,
+              update: (_, n) => n,
+              view: (h, n) =>
+                n < 0
+                  ? h.el("div")
+                  : h.el("div").on("click", () => mode === "update" ? 1 : -1)
+                    .onMount(Draw({ n }))
+            })
+            const host = { ...TestHost.makeHost(), runsMounts: true }
+            const container = host.createElement("#app") as TestHost.TestElement
+            const scope = yield* Scope.make()
+            yield* Renderer.mount(Chart, {}, container).pipe(
+              Scope.provide(scope),
+              Effect.provide(Renderer.layer(host))
+            )
+            Locator.fire(container.children[0]!, "click")
+            yield* Effect.promise(() => Promise.resolve())
+            dispatcher.flush()
+            if (mode === "update") {
+              assert.strictEqual(seen.at(-1), 1, `update at yield ${at}`)
+            } else {
+              assert.strictEqual(
+                reader?.pollUnsafe()?._tag,
+                "Success",
+                `close at yield ${at}`
+              )
+            }
+            yield* Scope.close(scope, Exit.void)
+            reader?.interruptUnsafe()
+            dispatcher.flush()
+            if (checks < at) break
+          }
+        }
+      }))
+
     it.effect("a render that adds, swaps or drops an element's mount starts and stops it", () =>
       Effect.gen(function*() {
         const events: Array<string> = []

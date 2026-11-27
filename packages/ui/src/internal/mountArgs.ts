@@ -18,7 +18,11 @@ interface Reader {
   /** Whether `unread` ends with args published since the reader started or last read. */
   behind: boolean
   /** While the reader waits with nothing unread: takes the next args, or `done` at the close. */
-  resume: ((next: Effect.Effect<unknown, Cause.Done>) => void) | undefined
+  resume:
+    | ((
+      next: Effect.Effect<Arr.NonEmptyReadonlyArray<unknown>, Cause.Done>
+    ) => void)
+    | undefined
   /** How many args had been published when the reader began to wait. */
   since: number
 }
@@ -65,7 +69,12 @@ export const publish = (self: MountArgs, args: unknown): void => {
     const resume = reader.resume
     if (resume === undefined || reader.since >= published) continue
     reader.resume = undefined
-    resume(Effect.succeed(args))
+    // The close can come between the publish and this reader's turn.
+    resume(
+      Effect.suspend(() =>
+        self.closed ? done : Effect.succeed(read(reader, [args]))
+      )
+    )
   }
 }
 
@@ -78,7 +87,12 @@ const done = Cause.done()
  */
 export const close = (self: MountArgs): void => {
   self.closed = true
-  for (const reader of Array.from(self.readers).reverse()) reader.resume?.(done)
+  for (const reader of Array.from(self.readers).reverse()) {
+    const resume = reader.resume
+    if (resume === undefined) continue
+    reader.resume = undefined
+    resume(done)
+  }
   self.readers.clear()
   self.order.clear()
 }
@@ -104,21 +118,24 @@ export const changes = (self: MountArgs): Stream.Stream<any> =>
       since: 0
     }
     if (!self.closed) self.readers.add(reader)
-    const pull = Effect.suspend(() => {
-      if (self.closed) return done
-      if (reader.unread.length > 0) return Effect.succeed(read(reader, []))
-      return Effect.flatMap(
-        Effect.callback<unknown, Cause.Done>((resume) => {
-          reader.resume = resume
-          reader.since = self.published
-          self.order.add(reader)
-          return Effect.sync(() => {
-            reader.resume = undefined
-          })
-        }),
-        // The close can come between the publish and this reader's turn.
-        (args) => self.closed ? done : Effect.succeed(read(reader, [args]))
-      )
+    const pull = Effect.callback<
+      Arr.NonEmptyReadonlyArray<unknown>,
+      Cause.Done
+    >((resume) => {
+      if (self.closed) {
+        resume(done)
+        return
+      }
+      if (reader.unread.length > 0) {
+        resume(Effect.succeed(read(reader, [])))
+        return
+      }
+      reader.resume = resume
+      reader.since = self.published
+      self.order.add(reader)
+      return Effect.sync(() => {
+        if (reader.resume === resume) reader.resume = undefined
+      })
     })
     return Effect.as(
       Scope.addFinalizer(
