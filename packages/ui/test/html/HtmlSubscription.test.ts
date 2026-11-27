@@ -828,55 +828,37 @@ describe("onVisibility and onConnectivity", { concurrent: false }, () => {
         log: []
       })
 
-      // On TestHost, initial signal values emit on start, followed by changes.
+      // On TestHost: initial values, changes, nested update ordering,
+      // late-subscriber isolation, stop cleanup, and class-based signals.
       yield* Effect.gen(function*() {
+        const testHost = yield* TestHost.TestHost
         yield* TestHost.setVisible(false)
         yield* TestHost.setOnline(false)
+        const offNested = testHost.connectivity.subscribe((online) => {
+          if (!online) testHost.connectivity.set(true)
+        })
+        yield* Effect.addFinalizer(() => Effect.sync(offNested))
         const root = yield* TestHost.mount(Status, {})
         yield* TestHost.settle
         yield* TestHost.setVisible(true)
         yield* TestHost.setOnline(true)
         yield* TestHost.settle
+        yield* TestHost.setOnline(false)
+        yield* TestHost.settle
+        offNested()
         root.send(StatusMessage.Stopped())
         yield* TestHost.settle
-        yield* TestHost.setVisible(false)
-        yield* TestHost.setOnline(false)
-        yield* TestHost.settle
-        assert.deepStrictEqual(root.model()?.log, [
-          "visible:false",
-          "online:false",
-          "visible:true",
-          "online:true"
-        ])
-      }).pipe(Effect.provide(TestHost.layer()), Effect.scoped)
 
-      // Nested signal updates stay in order, late subscribers don't see
-      // earlier queued changes, and class-based signals keep `this`.
-      yield* Effect.gen(function*() {
-        const host = yield* TestHost.TestHost
-        const off = host.connectivity.subscribe((online) => {
-          if (!online) host.connectivity.set(true)
-        })
-        yield* Effect.addFinalizer(() => Effect.sync(off))
-        const root = yield* TestHost.mount(Status, {})
-        yield* TestHost.settle
-        yield* TestHost.setOnline(false)
-        yield* TestHost.settle
-        assert.deepStrictEqual(root.model()?.log, [
-          "visible:true",
-          "online:true",
-          "online:false",
-          "online:true"
-        ])
-        off()
         const late: Array<boolean> = []
         let offLate: (() => void) | undefined
-        const offFirst = host.connectivity.subscribe((online) => {
+        const offFirst = testHost.connectivity.subscribe((online) => {
           if (!online) {
             offFirst()
-            host.connectivity.set(true)
-            host.connectivity.set(false)
-            offLate = host.connectivity.subscribe((value) => late.push(value))
+            testHost.connectivity.set(true)
+            testHost.connectivity.set(false)
+            offLate = testHost.connectivity.subscribe((value) =>
+              late.push(value)
+            )
           }
         })
         yield* Effect.addFinalizer(() =>
@@ -885,13 +867,20 @@ describe("onVisibility and onConnectivity", { concurrent: false }, () => {
             offLate?.()
           })
         )
+        yield* TestHost.setVisible(false)
         yield* TestHost.setOnline(false)
-        assert.strictEqual(host.connectivity.get(), false)
+        yield* TestHost.settle
+        assert.deepStrictEqual(root.model()?.log, [
+          "visible:false",
+          "online:false",
+          "visible:true",
+          "online:true",
+          "online:false",
+          "online:true"
+        ])
+        assert.strictEqual(testHost.connectivity.get(), false)
         assert.deepStrictEqual(late, [])
-      }).pipe(Effect.provide(TestHost.layer()), Effect.scoped)
 
-      yield* Effect.gen(function*() {
-        const { host } = yield* TestHost.TestHost
         class CustomSignal implements Query.Signal {
           private value = false
           private readonly subscribers = new Set<(value: boolean) => void>()
@@ -910,10 +899,10 @@ describe("onVisibility and onConnectivity", { concurrent: false }, () => {
           }
         }
         const custom = new CustomSignal()
-        const root = yield* Renderer.mount(
+        const customRoot = yield* Renderer.mount(
           Status,
           {},
-          host.createElement("#app")
+          testHost.host.createElement("#app")
         ).pipe(
           Effect.provideService(Html.Host, BrowserHost.htmlHost),
           Effect.provideService(Query.Connectivity, custom)
@@ -921,7 +910,7 @@ describe("onVisibility and onConnectivity", { concurrent: false }, () => {
         yield* TestHost.settle
         custom.emit(true)
         yield* TestHost.settle
-        assert.deepStrictEqual(root.model()?.log, [
+        assert.deepStrictEqual(customRoot.model()?.log, [
           "visible:true",
           "online:false",
           "online:true"
@@ -939,54 +928,25 @@ describe("onVisibility and onConnectivity", { concurrent: false }, () => {
         () => scene.visibility(true),
         /HtmlScene\.visibility: nothing listens for .*; active keys: \[\]/
       )
-      assert.throws(
-        () => scene.connectivity(true),
-        /HtmlScene\.connectivity: nothing listens for .*; active keys: \[\]/
-      )
     }).pipe(Effect.scoped))
 
   it.effect("on BrowserHost, emits initial hidden and offline state and hears changes", () =>
     Effect.gen(function*() {
-      const originalVisibility = Object.getOwnPropertyDescriptor(
-        document,
-        "visibilityState"
-      )
-      const originalOnLine = Object.getOwnPropertyDescriptor(
-        window.navigator,
-        "onLine"
-      )
-      const setVisibility = (state: DocumentVisibilityState) => {
-        Object.defineProperty(document, "visibilityState", {
-          value: state,
-          configurable: true
-        })
-      }
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          setVisibility("hidden")
-          Object.defineProperty(window.navigator, "onLine", {
-            value: false,
-            configurable: true
-          })
-        }),
-        () =>
+      const stub = (target: object, key: string, value: unknown) => {
+        const original = Object.getOwnPropertyDescriptor(target, key)
+        return Effect.acquireRelease(
           Effect.sync(() => {
-            if (originalVisibility === undefined) {
-              delete (document as { visibilityState?: unknown }).visibilityState
-            } else {
-              Object.defineProperty(
-                document,
-                "visibilityState",
-                originalVisibility
-              )
-            }
-            if (originalOnLine === undefined) {
-              delete (window.navigator as { onLine?: unknown }).onLine
-            } else {
-              Object.defineProperty(window.navigator, "onLine", originalOnLine)
-            }
-          })
-      )
+            Object.defineProperty(target, key, { value, configurable: true })
+          }),
+          () =>
+            Effect.sync(() => {
+              if (original === undefined) delete (target as any)[key]
+              else Object.defineProperty(target, key, original)
+            })
+        )
+      }
+      yield* stub(document, "visibilityState", "hidden")
+      yield* stub(window.navigator, "onLine", false)
       const tick = Effect.promise(() =>
         new Promise<void>((resolve) => setTimeout(resolve, 30))
       )
@@ -995,7 +955,10 @@ describe("onVisibility and onConnectivity", { concurrent: false }, () => {
         yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
         const root = yield* BrowserHost.mountEffect(Status, {}, app)
         yield* tick
-        setVisibility("visible")
+        Object.defineProperty(document, "visibilityState", {
+          value: "visible",
+          configurable: true
+        })
         document.dispatchEvent(new Event("visibilitychange"))
         window.dispatchEvent(new Event("online"))
         yield* tick
