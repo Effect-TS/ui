@@ -847,8 +847,7 @@ export const expandedView = (
   )
 
 /**
- * The story's component's own view, before its headless children are expanded. `lazy` is where `h.lazy`
- * keeps its nodes.
+ * The story's component's own view, before its headless children are expanded.
  *
  * @internal
  */
@@ -871,8 +870,7 @@ export const viewOfFields = (
   )
 
 /**
- * `rootShared` for `story`, memoized per owner so defaulted shared values keep
- * the same reference across back-to-back renders.
+ * Memoizes required shared defaults per owner across back-to-back renders.
  *
  * @internal
  */
@@ -2459,7 +2457,7 @@ export const withView = (
         owner.path,
         lazy
       )
-      // Only `expectLazyReused` passes a store, and drops it after two renders: nothing to end or reset.
+      // Only `expectLazyReused` passes a store and discards it after two renders.
       const lazies = lazy?.lazy as View.Lazies | undefined
       lazies?.begin()
       return View.toNode(

@@ -2,4 +2,4 @@
 "@effect/ui": minor
 ---
 
-Add `expectLazyReused()` to `Scene.Steps` (and `HtmlScene.Steps`) to detect `h.lazy` cache misses on a repeat render and report the function and cause.
+Add `expectLazyReused()` to `Scene` and `HtmlScene` to assert that every `h.lazy` call reuses its cached node on a repeat render of the current state, reporting each missed function and why it rebuilt.

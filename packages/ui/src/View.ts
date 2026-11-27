@@ -2203,12 +2203,7 @@ export class Lazies {
   /** The render the entries were last used in, and how many were. */
   round = 1
   used = 0
-  /**
-   * Optional dev-only hook called on a miss before `fn` runs, while `entry`
-   * still holds the previous call.
-   *
-   * @internal
-   */
+  /** Dev-only hook called on a miss before `fn` runs and `entry` is updated. */
   declare missed?: (
     entry: LazyEntry | undefined,
     fn: Function,
