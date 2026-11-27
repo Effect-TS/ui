@@ -768,6 +768,11 @@ describe("DevToolsServer", { concurrent: false }, () => {
           },
           Impossible: { never: Schema.Never },
           Unset: { secret: Schema.Option(Schema.Redacted(Schema.Never)) },
+          NegativeZero: {
+            x: Schema.Finite.check(Schema.makeFilter((n) => Object.is(n, -0)))
+              .annotate({ examples: [-0] })
+          },
+          Truncated: { data: Schema.Struct({ "~truncated": Schema.Int }) },
           Listed: {
             items: Schema.Array(Schema.String).check(Schema.isMinLength(65))
           },
@@ -790,7 +795,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
               Schema.Literal("off")
             ])
           }
-        }).annotate({ identifier: "SampleMessage" })
+        }).annotate({ identifier: "app/SampleMessage" })
         const Sample = Html.component({
           name: "Sample",
           model: Schema.Struct({ count: Schema.Number }),
@@ -816,7 +821,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
         )
         const all = yield* agent.call("get_message_schema", { instance })
         assert.isArray(all.examples)
-        assert.strictEqual(all.examples.length, 11)
+        assert.strictEqual(all.examples.length, 13)
 
         const [
           selected,
@@ -825,6 +830,8 @@ describe("DevToolsServer", { concurrent: false }, () => {
           savedCredential,
           impossible,
           unset,
+          negativeZero,
+          truncated,
           listed,
           sampledEntry,
           unencodable,
@@ -908,6 +915,16 @@ describe("DevToolsServer", { concurrent: false }, () => {
           assert.isString(entry.invalid)
           assert.notInclude(entry.invalid, "sample")
         }
+        assert.deepStrictEqual(negativeZero.message, {
+          _tag: "NegativeZero",
+          x: 0
+        })
+        assert.include(negativeZero.invalid, "x")
+
+        assert.deepStrictEqual(truncated, {
+          message: { _tag: "Truncated", data: { "~truncated": 0 } }
+        })
+
         assert.deepStrictEqual(chosen, {
           message: { _tag: "Chosen", mode: { "~redacted": true } },
           redacted: true

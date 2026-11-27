@@ -32,7 +32,11 @@ const resolve = (
   definitions: Record<string, Json>
 ): Json | undefined =>
   isObject(schema) && typeof schema.$ref === "string"
-    ? definitions[schema.$ref.slice(schema.$ref.lastIndexOf("/") + 1)]
+    ? definitions[
+      // A JSON Pointer token: `~1` is `/` and `~0` is `~`.
+      schema.$ref.slice(schema.$ref.lastIndexOf("/") + 1)
+        .replaceAll("~1", "/").replaceAll("~0", "~")
+    ]
     : schema
 
 const literalOf = (schema: Json | undefined): unknown =>
@@ -53,9 +57,11 @@ const tagOf = (schema: Json, definitions: Record<string, Json>): unknown => {
 // Bounds the padding for minLength and the items for minItems.
 const most = 64
 
+// Only the redaction marker: the log's other placeholders need no secret.
 const holdsPlaceholder = (value: unknown): boolean =>
   typeof value === "object" && value !== null &&
-  (MessageLog.isPlaceholder(value) ||
+  ((isObject(value) && Object.keys(value).length === 1 &&
+    value["~redacted"] === true) ||
     Object.values(value).some(holdsPlaceholder))
 
 // The redacting codec's encoding of a `Schema.Redacted`.
@@ -239,10 +245,13 @@ const messageSchema = (
         ...(typeof name === "string" ? { tag: name } : {}),
         invalid
       })
-      const message = exampleOf(members[i], document.definitions)
-      if (message === undefined) {
+      const candidate = exampleOf(members[i], document.definitions)
+      if (candidate === undefined) {
         return Effect.succeed(none("No value fits this schema."))
       }
+      // Checked as the client receives it: the reply is sent as JSON text,
+      // which turns -0 into 0.
+      const message: Json = JSON.parse(JSON.stringify(candidate))
       // `shown` is the example with each Schema.Redacted as its placeholder.
       const entry = (shown: unknown, status?: { invalid: string }): Json =>
         shown === undefined
