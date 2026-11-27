@@ -1,7 +1,12 @@
 // @vitest-environment happy-dom
 import { Component, UiSchema } from "@effect/ui"
 import { Dialog, DialogTrigger, ToastProvider } from "@effect/ui-kit"
-import { BrowserHost, Html } from "@effect/ui/html"
+import {
+  BrowserHost,
+  Html,
+  HtmlKeyboard,
+  HtmlSubscription
+} from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Deferred, Effect, Layer, Schema } from "effect"
 import {
@@ -314,6 +319,59 @@ const Page = Html.component({
   }
 })
 
+// A shell with document shortcuts, and a modal it opens over itself.
+const ShellMessage = UiSchema.TaggedEnum({
+  Shortcut: { name: Schema.String },
+  RequestedClose: { reason: Schema.String }
+})
+const Shell = Html.component({
+  name: "Shell",
+  model: Schema.Struct({
+    open: Schema.Boolean,
+    log: Schema.Array(Schema.String)
+  }),
+  message: ShellMessage
+}).make({
+  init: () => ({ open: true, log: [] }),
+  update: {
+    Shortcut: ($, { name }) => ({ ...$.model, log: [...$.model.log, name] }),
+    RequestedClose: ($, { reason }) => ({
+      open: false,
+      log: [...$.model.log, `RequestedClose ${reason}`]
+    })
+  },
+  view: (h, model) =>
+    Dialog(h, {
+      props: { open: model.open, modal: true },
+      onEmit: {
+        RequestedOpen: () => undefined,
+        RequestedClose: ({ reason }) => ShellMessage.RequestedClose({ reason }),
+        Settled: () => undefined
+      },
+      view: (dialog) =>
+        h.div(
+          dialog.trigger(h.button.attr("id", "trigger")).children("Open"),
+          dialog.portal(h.dialog)?.children(
+            dialog.popup(h.div).children(
+              h.button.attr("id", "inside").children("Inside")
+            )
+          )
+        )
+    }),
+  subscriptions: () => [
+    HtmlSubscription.onDocument(
+      "keydown",
+      HtmlKeyboard.shortcuts(
+        ["?", "t", "Escape"].map((key) => ({
+          key,
+          message: ShellMessage.Shortcut({ name: key })
+        }))
+      ),
+      { preventDefault: true }
+    )
+  ]
+})
+
 const mountPage = Effect.fnUntraced(
   function*(overrides: Partial<Config>, into?: Element) {
     if (into === undefined) yield* popovers
@@ -593,6 +651,31 @@ describe("Dialog in a document", { concurrent: false }, () => {
       yield* tick
       assert.deepStrictEqual(dismissals(log()), ["RequestedClose a escape-key"])
       assert.strictEqual(document.activeElement?.id, "detached")
+    }))
+
+  it.effect("a modal keeps the page's document shortcuts from firing, Escape included, until it closes", () =>
+    Effect.gen(function*() {
+      yield* popovers
+      const app = yield* container
+      const root = yield* BrowserHost.mountEffect(Shell, {}, app)
+      yield* tick
+      const key = (key: string, target: EventTarget) =>
+        target.dispatchEvent(
+          new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })
+        )
+      byId("inside").focus()
+      key("?", byId("inside"))
+      key("t", byId("inside"))
+      key("Escape", byId("inside"))
+      yield* tick
+      yield* tick
+      assert.deepStrictEqual(root.model()!.log, ["RequestedClose escape-key"])
+      key("t", document.body)
+      yield* tick
+      assert.deepStrictEqual(root.model()!.log, [
+        "RequestedClose escape-key",
+        "t"
+      ])
     }))
 
   it.effect("a modal hides the page from screen readers and locks its scroll, until its close starts", () =>

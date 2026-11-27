@@ -18,6 +18,7 @@ import {
   Html,
   HtmlCommand,
   HtmlHydrate,
+  HtmlKeyboard,
   HtmlScheduler,
   HtmlServer,
   HtmlSubscription
@@ -3080,6 +3081,55 @@ describe("BrowserHost", { concurrent: false }, () => {
           input.value
         ])
           .toEqual([false, 0, true, ""])
+      }).pipe(Effect.scoped))
+
+    it.effect("document shortcuts don't fire while a modal dialog is open", () =>
+      Effect.gen(function*() {
+        const Message = UiSchema.TaggedEnum({ Help: {}, Closed: {} })
+        const Shell = Html.component({
+          name: "Shell",
+          model: Schema.Struct({
+            open: Schema.Boolean,
+            log: Schema.Array(Schema.String)
+          }),
+          message: Message
+        }).make({
+          init: () => ({ open: true, log: [] }),
+          update: {
+            Help: ($) => ({ ...$.model, log: [...$.model.log, "help"] }),
+            Closed: ($) => ({ ...$.model, open: false })
+          },
+          view: (h, model) =>
+            h.dialog.attr("aria-label", "Confirm").modal(model.open).children(
+              h.button.children("Inside")
+            ),
+          subscriptions: () => [
+            HtmlSubscription.onDocument(
+              "keydown",
+              HtmlKeyboard.shortcuts([{ key: "?", message: Message.Help() }])
+            )
+          ]
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Shell, {}, app)
+        yield* tick
+        const help = (target: EventTarget) =>
+          target.dispatchEvent(
+            new KeyboardEvent("keydown", {
+              key: "?",
+              bubbles: true,
+              cancelable: true
+            })
+          )
+        help(app.querySelector("button")!)
+        help(document.body)
+        yield* tick
+        expect(root.model()!.log).toEqual([])
+        root.send(Message.Closed())
+        yield* tick
+        help(document.body)
+        yield* tick
+        expect(root.model()!.log).toEqual(["help"])
       }).pipe(Effect.scoped))
 
     it.effect("a modal removed while open is forgotten, and switching mode closes without telling the app", () =>
