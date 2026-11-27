@@ -562,6 +562,8 @@ export const sharedKey: {
   <const Name extends string, V, Rp = never>(options: {
     readonly name: Name
     readonly schema: Schema.Codec<V, any>
+    readonly message?: never
+    readonly receives?: never
     readonly reports?: Schema.Codec<Rp, any> | undefined
   }): SharedKey<Name, V, never, Rp>
   <

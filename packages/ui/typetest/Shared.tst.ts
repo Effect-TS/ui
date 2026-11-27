@@ -334,6 +334,23 @@ describe("shared state", () => {
       message: maybeMessage,
       receives: ["Enter"]
     })
+    // Options passed through a variable take no overload that drops what they hold.
+    const options = {
+      name: "Bar",
+      schema: Schema.Boolean,
+      message: TipsMessage,
+      receives: ["Enter"]
+    } as const
+    const key = Component.sharedKey(options)
+    expect<Component.Shared.Receives<typeof key>>().type.toBe<
+      Extract<typeof TipsMessage.Type, { readonly _tag: "Enter" }>
+    >()
+    const missingTags = {
+      name: "Bar",
+      schema: Schema.Boolean,
+      message: TipsMessage
+    }
+    expect(Component.sharedKey).type.not.toBeCallableWith(missingTags)
   })
 
   it("drops a send to an optional owner whether it names the owner or its key", () => {
