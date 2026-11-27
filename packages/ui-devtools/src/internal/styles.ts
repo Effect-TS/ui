@@ -177,6 +177,7 @@ ${markRules}
 .stopped, .only { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 6px 20px; border-bottom: 1px solid var(--line); color: var(--faint); font-size: 12px; }
 .stopped button, .only button { padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); }
 .stopped button:hover, .only button { color: var(--ink); border-color: currentColor; }
+.only button { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .timeline-box { --chain: var(--ink); display: grid; grid-template-columns: minmax(0, 1fr) auto; min-height: 0; }
 .timeline-box.cmd { --chain: var(--cmd); }
 .gutter { position: relative; width: 8px; border-left: 1px solid var(--line); pointer-events: none; }
@@ -184,9 +185,9 @@ ${markRules}
 .gutter .g-bad { background: var(--bad); }
 .gutter .g-link { left: 2px; right: 2px; background: var(--chain); }
 .timeline { overflow: auto; min-height: 0; }
-.row { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; height: 28px; white-space: nowrap; }
-.fields { display: flex; align-items: center; gap: 4px; padding-right: 8px; }
-.field { max-width: 120px; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 12px; line-height: 18px; }
+.row { display: grid; grid-template-columns: 14px minmax(140px, 1fr) minmax(0, auto); height: 28px; white-space: nowrap; }
+.fields { display: flex; align-items: center; gap: 4px; min-width: 0; padding-right: 8px; }
+.field { flex: 0 1 auto; min-width: 4ch; max-width: 120px; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 12px; line-height: 18px; }
 .field:hover, .field.on { color: var(--ink); border-color: currentColor; }
 .row-button { display: grid; grid-template-columns: calc(var(--seq-digits, 3) * 1ch + 10px) 22px minmax(0, 1fr); align-items: center; padding: 0 12px 0 0; height: 28px; }
 .lw { display: flex; min-width: 0; }

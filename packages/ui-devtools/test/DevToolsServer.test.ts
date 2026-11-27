@@ -3,6 +3,7 @@ import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer"
 import { Command, MessageLog, Query, UiSchema } from "@effect/ui"
 import { DevTools, Inspector } from "@effect/ui-devtools"
+import * as Control from "@effect/ui-devtools/internal/control"
 import * as Mcp from "@effect/ui-devtools/internal/mcp"
 import * as Remote from "@effect/ui-devtools/internal/remote"
 import * as Server from "@effect/ui-devtools/internal/server"
@@ -1200,6 +1201,18 @@ describe("DevToolsServer", { concurrent: false }, () => {
         })
         assert.strictEqual(redacted.total, 0)
         assert.notInclude(agent.results.join("\n"), secret)
+
+        yield* agent.fails("list_entries", { field: { name: "", value: 1 } })
+
+        const fields = ["owner's id", "a&b", "$&"]
+        const page = new DOMParser().parseFromString(
+          Control.metaTag({ fields }),
+          "text/html"
+        )
+        assert.deepStrictEqual(
+          JSON.parse(page.querySelector("meta")!.content).fields,
+          fields
+        )
       }).pipe(Effect.scoped),
     30_000
   )

@@ -876,7 +876,7 @@ const FieldFilter = (h: H, field: Read.Field | null) =>
     h.span.children("Only"),
     h.button.class("code").attr("aria-pressed", "true").attr(
       "title",
-      "Show every entry"
+      "Show every entry, not only " + fieldText(field)
     ).on("click", OverlayMessage.ClickedField({ field })).children(
       fieldText(field)
     )

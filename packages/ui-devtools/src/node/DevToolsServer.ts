@@ -78,8 +78,7 @@ const viewer = (size: number, fields: ReadonlyArray<string>) =>
           : HttpServerResponse.html(
             html.replace(
               "<head>",
-              "<head><meta name=\"" + Control.metaName + "\" content='" +
-                JSON.stringify({ size, fields }) + "'>"
+              () => "<head>" + Control.metaTag({ size, fields })
             )
           )
     )

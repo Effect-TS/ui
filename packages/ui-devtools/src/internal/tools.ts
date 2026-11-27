@@ -136,7 +136,7 @@ const ListEntries = read(Tool.make("list_entries", {
       description: "Only entries with a seq above this."
     }),
     field: Schema.optionalKey(Schema.Struct({
-      name: Schema.String,
+      name: Schema.NonEmptyString,
       value: Schema.Union([Schema.String, Schema.Number, Schema.Boolean])
     })).annotate({
       description:
