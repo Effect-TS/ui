@@ -26,7 +26,7 @@ export interface Backend {
   readonly options: {
     readonly size: number
     readonly dispatch: boolean
-    readonly fields: ReadonlyArray<string>
+    readonly fields?: ReadonlyArray<string> | undefined
   }
   readonly inspector: Inspector.Inspector
   readonly history: History.History
@@ -135,10 +135,7 @@ const ListEntries = read(Tool.make("list_entries", {
     after: Schema.optionalKey(Schema.Number).annotate({
       description: "Only entries with a seq above this."
     }),
-    field: Schema.optionalKey(Schema.Struct({
-      name: Schema.NonEmptyString,
-      value: Schema.Union([Schema.String, Schema.Number, Schema.Boolean])
-    })).annotate({
+    field: Schema.optionalKey(Read.Field).annotate({
       description:
         "Only entries whose message or Command args has this top-level field with this value. " +
         "The type counts: 42 and \"42\" differ."
@@ -402,6 +399,7 @@ const isState = (entry: MessageLog.WireEntry | Inspector.Outside) =>
 
 export const handlers = (server: Backend) => {
   const { history, inspector, options } = server
+  const declared = Read.fieldNames(options.fields)
 
   const sessionOf = (id: string | undefined) =>
     Effect.suspend(() => {
@@ -595,8 +593,8 @@ export const handlers = (server: Backend) => {
           (field === undefined || Read.hasField(s, entry, field))
         )
         const names = field === undefined
-          ? options.fields
-          : Read.fieldNames([...options.fields, field.name])
+          ? declared
+          : [...declared, field.name]
         const max = limit ?? 50
         const shown = after === undefined
           ? rows.slice(-max)

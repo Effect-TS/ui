@@ -57,13 +57,12 @@ import { readFile } from "node:fs/promises"
 import { createServer } from "node:http"
 import * as Control from "../internal/control.ts"
 import * as Mcp from "../internal/mcp.ts"
-import { fieldNames } from "../internal/read.ts"
 import * as Server from "../internal/server.ts"
 
 // This path resolves from both src/node and dist/node.
 const viewerFile = new URL("../../dist/viewer.html", import.meta.url)
 
-const viewer = (size: number, fields: ReadonlyArray<string>) =>
+const viewer = (size: number, fields: ReadonlyArray<string> | undefined) =>
   HttpRouter.add(
     "GET",
     "/",
@@ -150,15 +149,14 @@ export const layer = (
 ): Layer.Layer<never, HttpServerError.ServeError> =>
   Layer.unwrap(Effect.sync(() => {
     const size = Math.max(1, options?.size ?? 1_000)
-    const fields = fieldNames(options?.fields)
     const { routes, server } = Server.make({
       size,
       dispatch: options?.dispatch ?? false,
       keep: Math.max(0, options?.keep ?? 5),
-      fields
+      fields: options?.fields
     })
     return HttpRouter.serve(
-      Layer.mergeAll(routes, viewer(size, fields), Mcp.layer(server)),
+      Layer.mergeAll(routes, viewer(size, options?.fields), Mcp.layer(server)),
       {
         disableLogger: true,
         disableListenLog: true

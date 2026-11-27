@@ -74,11 +74,6 @@ const FeedSchema = Schema.declare(
 
 const Filter = Schema.Literals(["messages", "commands", "all"])
 
-const Field = Schema.Struct({
-  name: Schema.String,
-  value: Schema.Union([Schema.String, Schema.Number, Schema.Boolean])
-})
-
 const Pane = Schema.Literals(["timeline", "entry"])
 
 const Page = Schema.Struct({ session: Schema.String, seq: Schema.Number })
@@ -92,7 +87,7 @@ const OverlayModel = Schema.Struct({
   revision: Schema.Number,
   selected: Schema.NullOr(Schema.Number),
   filter: Filter,
-  field: Schema.NullOr(Field),
+  field: Schema.NullOr(Read.Field),
   scope: Schema.NullOr(Schema.Number),
   browse: Schema.Boolean,
   find: Schema.String,
@@ -129,7 +124,7 @@ const OverlayMessage = UiSchema.TaggedEnum({
   },
   ToggledBranch: { instance: Schema.Number },
   ClickedFilter: { filter: Filter },
-  ClickedField: { field: Field },
+  ClickedField: { field: Read.Field },
   ClickedFollowLatest: {},
   ClickedBack: {},
   ScrolledTimeline: { atStart: Schema.Boolean },
@@ -892,12 +887,13 @@ const FieldButtons = (
   fields.length === 0 ? null : h.span.class("fields").children(
     fields.map((field) => {
       const on = sameField(active, field)
+      const text = fieldText(field)
       return h.button.key(field.name).class("field", "code", on && "on")
-        .attr("aria-label", fieldText(field))
-        .attr("title", fieldText(field))
+        .attr("aria-label", text)
+        .attr("title", text)
         .attr("aria-pressed", String(on))
         .on("click", OverlayMessage.ClickedField({ field }))
-        .children(named ? fieldText(field) : String(field.value))
+        .children(named ? text : String(field.value))
     })
   )
 
@@ -2058,15 +2054,6 @@ const repaint = (model: OverlayModel, feed: Feed, seq: number) => {
   return { model: { painting: page }, commands: [Paint.make(page)] }
 }
 
-// Whether a link's target stays in the timeline under the field filter.
-const holdsField = (feed: Feed, model: OverlayModel, seq: number) => {
-  const session = sessionOf(feed, model)
-  const target = session?.resolve(seq)
-  return model.field !== null && session !== undefined &&
-    target !== undefined && target._tag !== "Outside" &&
-    Read.hasField(session, target, model.field)
-}
-
 export const Overlay = Html.component({
   name: "DevToolsOverlay",
   props: OverlayProps,
@@ -2140,7 +2127,7 @@ export const Overlay = Html.component({
       return $.evolve({
         selected: seq,
         filter: "all",
-        field: holdsField($.props.feed, $.model, seq) ? $.model.field : null,
+        field: null,
         scope: null,
         pinned: false,
         reveal: seq,

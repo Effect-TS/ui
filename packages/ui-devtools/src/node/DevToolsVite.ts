@@ -29,7 +29,6 @@ import * as Layer from "effect/Layer"
 import * as Predicate from "effect/Predicate"
 import type * as DevTools from "../DevTools.ts"
 import { metaName } from "../internal/control.ts"
-import { fieldNames } from "../internal/read.ts"
 import * as DevToolsServer from "./DevToolsServer.ts"
 import * as hotExports from "./internal/hotExports.ts"
 
@@ -168,7 +167,9 @@ const hotClient = [
 ].join("\n")
 
 const devToolsClient = (
-  options: OverlayOptions & { readonly fields?: ReadonlyArray<string> }
+  options: OverlayOptions & {
+    readonly fields: ReadonlyArray<string> | undefined
+  }
 ): string =>
   [
     "import { DevTools } from \"@effect/ui-devtools\";",
@@ -242,15 +243,14 @@ const reasonOf = (error: unknown): string =>
 export const plugin = (options?: Options): Plugin => {
   const url = DevToolsServer.url(options)
   const size = Math.max(1, options?.size ?? 1_000)
-  const fields = fieldNames(options?.fields)
-  const shared = fields.length === 0 ? {} : { fields }
+  const fields = options?.fields
   const hot = options?.hot !== false
   const overlay = options?.overlay !== false
   const overlayOptions: OverlayOptions = typeof options?.overlay === "object"
     ? options.overlay
     : {}
   const devToolsSource = overlay
-    ? devToolsClient({ ...overlayOptions, ...shared })
+    ? devToolsClient({ ...overlayOptions, fields })
     : undefined
   let bound = Promise.resolve(false)
   let partial = false
@@ -322,7 +322,7 @@ export const plugin = (options?: Options): Plugin => {
           tag: "meta",
           attrs: {
             name: metaName,
-            content: JSON.stringify({ url, size, ...shared })
+            content: JSON.stringify({ url, size, fields })
           },
           injectTo: "head"
         })

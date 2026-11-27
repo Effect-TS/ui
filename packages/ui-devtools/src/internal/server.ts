@@ -262,7 +262,7 @@ export const make = (options: Options) => {
   )
 
   const server: Tools.Backend = {
-    options: { ...options, fields: options.fields ?? [] },
+    options,
     inspector,
     history,
     meta: (session) => meta.get(session),
