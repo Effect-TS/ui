@@ -177,14 +177,28 @@ export const withEffectUi = async <Config extends MetroConfig>(
       ...resolved,
       resolver: {
         ...resolver,
-        // Match the resolved entry, including extensionless and platform entries.
+        // Match the resolved entry, including extensionless and platform entries,
+        // and restore original importers for deferred package asset imports.
         resolveRequest: (context, moduleName, platform) => {
+          const bundle = platform === null ? undefined : bundles[platform]
+          if (!context.dev && bundle !== undefined) {
+            const asset = bundle.assets.get(moduleName)
+            if (asset !== undefined) {
+              const resolve = asset.runUpstream && upstream != null
+                ? upstream
+                : context.resolveRequest
+              return resolve(
+                { ...context, originModulePath: asset.origin },
+                asset.moduleName,
+                platform
+              )
+            }
+          }
           const found = (upstream ?? context.resolveRequest)(
             context,
             moduleName,
             platform
           )
-          const bundle = platform === null ? undefined : bundles[platform]
           return !context.dev && bundle !== undefined &&
               found.filePath === bundle.entry
             ? { type: "sourceFile", filePath: bundle.file }
