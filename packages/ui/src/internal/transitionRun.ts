@@ -7,6 +7,7 @@ class Running implements Kernel.Transitions {
   types: Set<string> | undefined = undefined
   holding = false
   starting = false
+  stilled = 0
   waiting: Array<() => void> = []
   constructor(
     tree: Kernel.Tree,
@@ -16,9 +17,17 @@ class Running implements Kernel.Transitions {
     this.start = start
   }
   request(types: ReadonlyArray<string>): void {
-    if (this.holding) return
+    if (this.holding || this.stilled > 0) return
     const set = this.types ??= new Set()
     for (const type of types) set.add(type)
+  }
+  still(on: boolean): void {
+    if (on) {
+      this.stilled++
+      this.types = undefined
+    } else if (this.stilled > 0) {
+      this.stilled--
+    }
   }
   waits(inst: Kernel.Instance): boolean {
     if (!this.holding && this.types === undefined) return false

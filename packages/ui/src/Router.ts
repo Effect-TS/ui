@@ -1145,7 +1145,9 @@ export class PrefetchEntryNotWatched
  *
  * `go` moves through the entries and, synchronously or later, reports the
  * entry it landed on to the listener given to `listen`, as the browser's
- * `popstate` does. `state` is opaque to the history; the Router stores the
+ * `popstate` does. Pass `animated: true` when the host already animated the
+ * traversal, as with a swipe-back gesture, so the route update skips its
+ * view transition. `state` is opaque to the history; the Router stores the
  * entry's index and its history-restore snapshot in it.
  *
  * @stability experimental
@@ -1158,7 +1160,9 @@ export interface History {
   readonly replace: (url: string, state: unknown) => void
   readonly go: (delta: number) => void
   readonly load: (href: string) => void
-  readonly listen: (popped: (url: string, state: unknown) => void) => () => void
+  readonly listen: (
+    popped: (url: string, state: unknown, animated?: boolean) => void
+  ) => () => void
 }
 
 /**
@@ -1749,6 +1753,7 @@ const build = (
       mode: {
         readonly quiet: boolean
         readonly scroll: boolean
+        readonly animated?: boolean | undefined
         readonly blocks?: ReadonlyArray<string> | undefined
       },
       saved?: Record<string, unknown> | undefined
@@ -1786,7 +1791,17 @@ const build = (
           blocks: blocked
         }
       }
-      publish(next)
+      if (mode.animated === true) {
+        const marked = Array.from(roots)
+        for (const root of marked) root.still(true)
+        try {
+          publish(next)
+        } finally {
+          for (const root of marked) root.still(false)
+        }
+      } else {
+        publish(next)
+      }
     }
 
     /** Writes `url` as a new or the current entry, and moves to it. */
@@ -1912,7 +1927,7 @@ const build = (
       return "navigated"
     }
 
-    const popped = (href: string, state: unknown) => {
+    const popped = (href: string, state: unknown, animated?: boolean) => {
       // The host has already moved to another entry, which a queued replace would overwrite.
       const left = queued
       queued = undefined
@@ -1968,7 +1983,8 @@ const build = (
         seq: current.seq + 1
       }, {
         quiet,
-        scroll: true
+        scroll: true,
+        animated: animated === true
       }, saved)
     }
     const unlisten = history.listen(popped)

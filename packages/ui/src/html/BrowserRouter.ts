@@ -32,6 +32,10 @@
  * still restore the saved position, and a `patchSearch` given
  * `{ scroll: true }` scrolls to the top.
  *
+ * When a `popstate` event reports `hasUAVisualTransition` (as after a
+ * swipe-back gesture), the route update skips its view transition so the
+ * navigation is not animated twice.
+ *
  * While a `Router.blocked` block is held, `BrowserRouter` requests a browser
  * warning before the page unloads unless `warnOnUnload` is `false`. See
  * `Router.blocked` for the warning's limits.
@@ -368,7 +372,8 @@ const make = (
       go: (delta) => history.go(delta),
       load: (href) => location.assign(href),
       listen: (popped) => {
-        const f = () => popped(currentUrl(), history.state)
+        const f = (event: PopStateEvent) =>
+          popped(currentUrl(), history.state, event.hasUAVisualTransition)
         window.addEventListener("popstate", f)
         return () => window.removeEventListener("popstate", f)
       }

@@ -79,6 +79,7 @@ export interface Server {
 /** @internal */
 export interface Transitions {
   readonly request: (types: ReadonlyArray<string>) => void
+  readonly still: (on: boolean) => void
   readonly waits: (inst: Instance) => boolean
   readonly wait: (f: () => void) => void
   readonly hold: () => boolean

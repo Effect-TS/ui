@@ -58,6 +58,8 @@ export interface RootHandle {
    */
   readonly navigated: () => void
   readonly restored: () => void
+  /** Suppresses view transitions for updates delivered while on. */
+  readonly still: (on: boolean) => void
   /** The runtime's problems sink. */
   readonly report: (
     problem: { readonly _tag: string; readonly message: string }

@@ -148,8 +148,9 @@ export const TransitionApp = Html.component({
 //     animation-duration: 250ms;
 //   }
 //
-// Where the browser lacks the API, or the user prefers reduced motion, the
-// same updates commit at once without animation. The first render never
+// Where the browser lacks the API, the user prefers reduced motion, or the
+// browser already animated a back/forward gesture, the same updates commit at
+// once without animation. The first render never
 // animates, and nor does a host without a document, such as `TestHost`, so
 // tests and server renders are unaffected. While the browser prepares the
 // transition, about a frame, the update waits: its DOM patch, the head, the

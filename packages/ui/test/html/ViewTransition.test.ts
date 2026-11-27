@@ -329,23 +329,20 @@ describe("view transitions", { concurrent: false }, () => {
       transitions.started[0]!.update()
       expect(shown()).toBe("Detail grid ")
       yield* Effect.acquireUseRelease(
-        Effect.sync(() =>
-          Object.defineProperty(
-            PopStateEvent.prototype,
-            "hasUAVisualTransition",
-            {
-              configurable: true,
-              get: () => true
+        Effect.sync(() => {
+          const Original = window.PopStateEvent
+          win.PopStateEvent = class extends Original {
+            constructor(type: string, init?: PopStateEventInit) {
+              super(type, { ...init, hasUAVisualTransition: true })
             }
-          )
-        ),
+          }
+          return Original
+        }),
         () =>
           Effect.sync(() => window.history.back()).pipe(Effect.andThen(tick)),
-        () =>
+        (Original) =>
           Effect.sync(() => {
-            delete (PopStateEvent.prototype as {
-              hasUAVisualTransition?: boolean
-            }).hasUAVisualTransition
+            win.PopStateEvent = Original
           })
       )
       expect({ shown: shown(), started: transitions.started.length }).toEqual({
