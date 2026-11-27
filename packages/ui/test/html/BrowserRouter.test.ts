@@ -850,6 +850,81 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(region()?.textContent).toBe("")
     }).pipe(Effect.scoped))
 
+  it.effect("warns before unloading only while a navigation block is held", () =>
+    Effect.gen(function*() {
+      const listening = new Set<unknown>()
+      const recording = new Proxy(window, {
+        get(target, key) {
+          if (key === "addEventListener") {
+            return (type: string, f: EventListener, options?: unknown) => {
+              if (type === "beforeunload") listening.add(f)
+              target.addEventListener(
+                type,
+                f,
+                options as AddEventListenerOptions
+              )
+            }
+          }
+          if (key === "removeEventListener") {
+            return (type: string, f: EventListener, options?: unknown) => {
+              if (type === "beforeunload") listening.delete(f)
+              target.removeEventListener(
+                type,
+                f,
+                options as AddEventListenerOptions
+              )
+            }
+          }
+          const value = Reflect.get(target, key)
+          return typeof value === "function" ? value.bind(target) : value
+        }
+      }) as Window
+      const beforeUnload = () => {
+        const event = new Event("beforeunload", { cancelable: true })
+        window.dispatchEvent(event)
+        return event.defaultPrevented
+      }
+
+      window.history.replaceState(null, "", "/")
+      const outer = yield* Effect.scope
+      const routerScope = yield* Scope.fork(outer)
+      const context = yield* Layer.build(
+        BrowserRouter.layer({ routes: AppRoute, window: recording })
+      ).pipe(Scope.provide(routerScope))
+      const router = Context.get(context, Router.Router)
+
+      // No block: no listener and unload is not prevented.
+      expect(beforeUnload()).toBe(false)
+      expect(listening.size).toBe(0)
+
+      // First block: registers one listener and prevents unload synchronously.
+      const scopeA = yield* Scope.fork(outer)
+      yield* router.block("a").pipe(Scope.provide(scopeA))
+      expect(beforeUnload()).toBe(true)
+      expect(listening.size).toBe(1)
+
+      // Overlapping block: still one listener, and releasing one keeps it active.
+      const scopeB = yield* Scope.fork(outer)
+      yield* router.block("b").pipe(Scope.provide(scopeB))
+      expect(listening.size).toBe(1)
+      yield* Scope.close(scopeA, Exit.void)
+      expect(beforeUnload()).toBe(true)
+      expect(listening.size).toBe(1)
+
+      // Releasing the last block removes the listener and stops preventing unload.
+      yield* Scope.close(scopeB, Exit.void)
+      expect(beforeUnload()).toBe(false)
+      expect(listening.size).toBe(0)
+
+      // Closing the Router's Scope removes the listener even if a block is still held.
+      const scopeC = yield* Scope.fork(outer)
+      yield* router.block("c").pipe(Scope.provide(scopeC))
+      expect(listening.size).toBe(1)
+      yield* Scope.close(routerScope, Exit.void)
+      expect(beforeUnload()).toBe(false)
+      expect(listening.size).toBe(0)
+    }).pipe(Effect.scoped))
+
   it.effect("puts the shell's title back and removes the region when it closes", () =>
     Effect.gen(function*() {
       document.title = "Shell"
