@@ -498,10 +498,8 @@ describe("transition", () => {
     Story.explore(SearchBox, {}, {
       messages: [SearchMessage.Start()],
       depth: 1,
-      transition: ({ after, before, message }) => {
-        expect(before).type.toBe<Model>()
-        expect(message).type.toBe<Message>()
-        expect(after).type.toBe<Model>()
+      transition: (transition) => {
+        expect(transition).type.toBe<Story.Transition<Model, Message>>()
       }
     })
   })

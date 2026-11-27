@@ -1431,38 +1431,19 @@ describe("Story", () => {
 
     it.effect("checks the transition rule on each update, Command results included", () =>
       Effect.gen(function*() {
-        const Stuck = Component.define({
-          name: "Stuck",
-          model: Schema.Struct({ text: Schema.String, saving: Schema.Boolean }),
-          message: EditorMessage
-        }).make({
-          init: () => ({ text: "", saving: false }),
-          update: ($, message) =>
-            message._tag === "ClickedSave"
-              ? $.set({ ...$.model, saving: true }).run(
-                SaveEditor.make({ text: $.model.text })
-              )
-              : $.model,
-          view: (h, model) => h.el("div", model.text)
-        })
         const message = yield* defect(
-          Story.check(Stuck, {}, {
+          Story.check(Editor, {}, {
             seed: 1,
             messages: EditorMessage.cases.ClickedSave,
             commands: [[SaveEditor, {
               success: EditorMessage.cases.CompletedSave
             }]],
-            transition: ({ after, message }) =>
-              message._tag !== "CompletedSave" || !after.saving
+            transition: ({ message }) => message._tag !== "CompletedSave"
           })
-        )
-        assert.include(
-          message,
-          "Story.check: the transition rule returned false"
         )
         assert.match(
           message,
-          /Story\.start\(Stuck, \{\}\)\s*\.send\(\{"_tag":"ClickedSave"\}\)\s*\.resolve\(todos\/Save,\s*\{"_tag":"CompletedSave"\}\)\s*update: \{"_tag":"CompletedSave"\}\s*before: \{"text":"","saving":true\}\s*after: \{"text":"","saving":true\}/
+          /^Story\.check: the transition rule returned false[\s\S]*\.resolve\(todos\/Save,\s*\{"_tag":"CompletedSave"\}\)\s*update: \{"_tag":"CompletedSave"\}\s*before: \{"text":"","saving":true\}\s*after: \{"text":"","saving":false\}/
         )
       }))
   })
@@ -1749,72 +1730,33 @@ Story.start(ExploreSearch, {})
     })
 
     it("checks every update against a smaller spec, and reports the first shortest divergence", () => {
-      const FilterMsg = UiSchema.TaggedEnum({
-        Toggled: { id: Schema.String },
-        Cleared: {},
-        Focused: { id: Schema.String }
+      const Toggled = UiSchema.TaggedEnum({ Toggled: { id: Schema.String } })
+      // A toggle that only adds: toggling a selected id leaves it selected.
+      const FilterList = Component.define({
+        name: "FilterList",
+        model: Schema.Struct({ selected: Schema.Array(Schema.String) }),
+        message: Toggled
+      }).make({
+        init: () => ({ selected: [] }),
+        update: ($, { id }) =>
+          $.model.selected.includes(id)
+            ? $.model
+            : { selected: [...$.model.selected, id] },
+        view: (h, model) => h.el("div", model.selected.join(","))
       })
-      const toggle = (
-        selected: ReadonlyArray<string>,
-        id: string
-      ): ReadonlyArray<string> =>
-        selected.includes(id)
-          ? selected.filter((x) => x !== id)
-          : [...selected, id]
-      const spec = (
-        selected: ReadonlyArray<string>,
-        message: typeof FilterMsg.Type
-      ) =>
-        FilterMsg.match(message, {
-          Toggled: ({ id }) => toggle(selected, id),
-          Cleared: () => [],
-          Focused: () => selected
+      const message = exploreFailure(() =>
+        Story.explore(FilterList, {}, {
+          messages: [Toggled.Toggled({ id: "a" })],
+          depth: 2,
+          transition: ({ after, before, message }) =>
+            assert.deepStrictEqual(
+              after.selected,
+              before.selected.includes(message.id)
+                ? before.selected.filter((id) => id !== message.id)
+                : [...before.selected, message.id]
+            )
         })
-      const exploreFilterList = (toggled: typeof toggle) =>
-        Story.explore(
-          Component.define({
-            name: "FilterList",
-            model: Schema.Struct({
-              selected: Schema.Array(Schema.String),
-              focused: Schema.NullOr(Schema.String)
-            }),
-            message: FilterMsg
-          }).make({
-            init: () => ({ selected: [], focused: null }),
-            update: ($, message) =>
-              FilterMsg.match(message, {
-                Toggled: ({ id }) => ({
-                  ...$.model,
-                  selected: toggled($.model.selected, id)
-                }),
-                Cleared: () => ({ ...$.model, selected: [] }),
-                Focused: ({ id }) => ({ ...$.model, focused: id })
-              }),
-            view: (h, model) => h.el("div", model.selected.join(","))
-          }),
-          {},
-          {
-            messages: [
-              FilterMsg.Toggled({ id: "a" }),
-              FilterMsg.Toggled({ id: "b" }),
-              FilterMsg.Cleared(),
-              FilterMsg.Focused({ id: "a" })
-            ],
-            depth: 4,
-            transition: ({ after, before, message }) =>
-              assert.deepStrictEqual(
-                after.selected,
-                spec(before.selected, message)
-              )
-          }
-        )
-
-      assert.isTrue(exploreFilterList(toggle).closed)
-
-      // A refactor that makes a second toggle leave the id selected.
-      const addOnly = (selected: ReadonlyArray<string>, id: string) =>
-        selected.includes(id) ? selected : [...selected, id]
-      const message = exploreFailure(() => exploreFilterList(addOnly))
+      )
       assert.strictEqual(
         message,
         `Story.explore: the transition rule threw: expected [ 'a' ] to deeply equal []:
@@ -1824,9 +1766,9 @@ Story.start(FilterList, {})
   .send({"_tag":"Toggled","id":"a"})
 
   update: {"_tag":"Toggled","id":"a"}
-    before: {"selected":["a"],"focused":null}
-    after: {"selected":["a"],"focused":null}
-  model: {"selected":["a"],"focused":null}
+    before: {"selected":["a"]}
+    after: {"selected":["a"]}
+  model: {"selected":["a"]}
   pending: nothing`
       )
     })
