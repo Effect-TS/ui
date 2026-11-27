@@ -798,16 +798,24 @@ describe("Router", { concurrent: false }, () => {
         yield* Scope.close(b, Exit.void)
         assert.deepStrictEqual(calls, [[true, true], [false, false]])
 
-        // A callback that throws fails the block, and closing its Scope still releases it.
+        // A callback that throws rolls the block back immediately without firing onBlocked(false).
+        calls.length = 0
         throws = true
         const c = yield* Scope.fork(outer)
         const exit = yield* Effect.exit(
           router.block("c").pipe(Scope.provide(c))
         )
         assert.isTrue(Exit.hasDies(exit))
+        assert.isFalse(router.blocked())
         throws = false
         yield* Scope.close(c, Exit.void)
+        assert.deepStrictEqual(calls, [[true, true]])
+
+        // Acquiring in an already-closed Scope balances true then false.
+        calls.length = 0
+        yield* router.block("d").pipe(Scope.provide(c))
         assert.isFalse(router.blocked())
+        assert.deepStrictEqual(calls, [[true, true], [false, false]])
       })
     )
   })

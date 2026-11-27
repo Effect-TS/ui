@@ -2100,29 +2100,31 @@ const build = (
           history.load(href)
           return "navigated"
         }),
-      block: (key) =>
-        Effect.flatMap(Effect.scope, (scope) => {
-          const first = blocks.size === 0
-          blocks.set(key, (blocks.get(key) ?? 0) + 1)
-          // The release is registered first, so a throwing `onBlocked` can't leave the block held.
-          const added = Scope.addFinalizer(
-            scope,
+      block: (key) => {
+        const release = () => {
+          const held = blocks.get(key)! - 1
+          if (held > 0) blocks.set(key, held)
+          else blocks.delete(key)
+        }
+        return Effect.acquireRelease(
+          Effect.sync(() => {
+            const first = blocks.size === 0
+            blocks.set(key, (blocks.get(key) ?? 0) + 1)
+            if (!first) return
+            try {
+              options.onBlocked?.(true)
+            } catch (error) {
+              release()
+              throw error
+            }
+          }),
+          () =>
             Effect.sync(() => {
-              const held = blocks.get(key)! - 1
-              if (held > 0) blocks.set(key, held)
-              else {
-                blocks.delete(key)
-                if (blocks.size === 0) options.onBlocked?.(false)
-              }
+              release()
+              if (blocks.size === 0) options.onBlocked?.(false)
             })
-          )
-          return first
-            ? Effect.andThen(
-              added,
-              Effect.sync(() => options.onBlocked?.(true))
-            )
-            : added
-        }),
+        )
+      },
       blocked: () => blocks.size > 0,
       intent: (href) =>
         Effect.sync(() => {
