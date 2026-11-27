@@ -92,7 +92,7 @@ describe("NativeHost", () => {
   })
 
   it("sends an input's value back when it differs from the edit or the edit is rejected", async () => {
-    const { fabric, find, printed, settle } = await setup()
+    const { close, fabric, find, printed, settle } = await setup()
     const input = () => find(FakeFabric.byName("AndroidTextInput"))
     fabric.emit(input(), "topChange", { text: "tim", eventCount: 1 })
     await settle()
@@ -112,10 +112,15 @@ describe("NativeHost", () => {
     await settle()
     touch(fabric, find(FakeFabric.byText("Count 0")))
     await settle()
+    const tag = input().tag
+    // A rejected edit whose field's parent is removed before restore sends no command.
+    fabric.emit(input(), "topChange", { text: "TIMOS", eventCount: 4 })
+    await close()
+    await new Promise((resolve) => setTimeout(resolve, 0))
     assert.deepStrictEqual(fabric.commands, [
-      [input().tag, "setTextAndSelection", [1, "TIM", -1, -1]],
-      [input().tag, "setTextAndSelection", [3, "TIMO", -1, -1]],
-      [input().tag, "setTextAndSelection", [3, "", -1, -1]]
+      [tag, "setTextAndSelection", [1, "TIM", -1, -1]],
+      [tag, "setTextAndSelection", [3, "TIMO", -1, -1]],
+      [tag, "setTextAndSelection", [3, "", -1, -1]]
     ])
   })
 
@@ -242,6 +247,7 @@ describe("NativeHost", () => {
     const node = input.handle as NativeHost.NativeNode
     made.operations.focus(node)
     made.operations.scrollTo(node, 0, 40)
+    made.operations.command(node, "clear")
     fabric.place(input, [1, 2, 3, 4])
     assert.deepStrictEqual(made.operations.measure(node), {
       x: 1,
@@ -251,7 +257,8 @@ describe("NativeHost", () => {
     })
     assert.deepStrictEqual(fabric.commands, [
       [input.tag, "focus", []],
-      [input.tag, "scrollTo", [0, 40, true]]
+      [input.tag, "scrollTo", [0, 40, true]],
+      [input.tag, "clear", []]
     ])
   })
 
@@ -293,6 +300,8 @@ describe("NativeHost", () => {
     host.setEvents(toggle, {}, dispatch, {})
     host.commit!()
     assert.deepStrictEqual(shadow().props, { enabled: true, value: true })
+    fabric.emit(shadow(), "topValueChange", { value: true })
+    assert.strictEqual(fired.length, 1)
   })
 
   it("renders each surface of a UIManager with its own options", () => {
@@ -323,31 +332,5 @@ describe("NativeHost", () => {
       "<RCTScrollView><RCTScrollContentView></></><RCTSinglelineTextInputView></>",
       222
     ])
-  })
-
-  it("doesn't put a rejected edit back into a field that is no longer shown", async () => {
-    const fabric = FakeFabric.make()
-    const { host, root } = NativeHost.make({
-      ui: fabric.ui,
-      rootTag: 1,
-      os: "ios",
-      processColor: (c) => c
-    })
-    const box = host.createElement("view")
-    const input = host.createElement("input")
-    host.setProp(input, "value", "old")
-    host.insertBefore(root, box, undefined)
-    host.insertBefore(box, input, undefined)
-    host.commit!()
-    const field = FakeFabric.find(
-      fabric.committed(),
-      FakeFabric.byName("RCTSinglelineTextInputView")
-    )!
-    fabric.emit(field, "topChange", { text: "new", eventCount: 1 })
-    // The edit's update removes the field's parent.
-    host.remove(box)
-    host.commit!()
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    assert.deepStrictEqual(fabric.commands, [])
   })
 })

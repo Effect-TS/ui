@@ -39,6 +39,25 @@ export default [Platform, title, flavor, topping]
   write("src/topping.ts", `export const topping = "plain topping"\n`)
   write("src/sauce.ts", `export const topping = "sauce topping"\n`)
 
+  const readBundle = (
+    config: NativeMetro.MetroConfig,
+    entry: string,
+    platform: string
+  ) => {
+    const found = config.resolver!.resolveRequest!(
+      {
+        dev: false,
+        resolveRequest: () => ({
+          type: "sourceFile",
+          filePath: Path.join(root, entry)
+        })
+      },
+      "./" + entry,
+      platform
+    )
+    return Fs.readFileSync(found.filePath!, "utf8")
+  }
+
   it(
     "swaps the resolved entry for a pre-bundle that resolves as Metro does",
     async () => {
@@ -60,23 +79,8 @@ export default [Platform, title, flavor, topping]
               )
         }
       })
-      // Metro resolves the entry to a file, as it does an import.
-      const bundle = (platform: string) => {
-        const found = config.resolver!.resolveRequest!(
-          {
-            dev: false,
-            resolveRequest: () => ({
-              type: "sourceFile",
-              filePath: Path.join(root, "src/main.ts")
-            })
-          },
-          "./src/main",
-          platform
-        )
-        return Fs.readFileSync(found.filePath!, "utf8")
-      }
-      const android = bundle("android")
-      const ios = bundle("ios")
+      const android = readBundle(config, "src/main.ts", "android")
+      const ios = readBundle(config, "src/main.ts", "ios")
       assert.include(android, "android title")
       assert.include(ios, "native title")
       assert.notInclude(ios, "plain title")
@@ -85,6 +89,60 @@ export default [Platform, title, flavor, topping]
       assert.include(android, "sauce topping")
       assert.notInclude(android, "plain topping")
       assert.match(android, /from "react-native"/)
+    },
+    30_000
+  )
+
+  it(
+    "drops an unused Native.defineView definition from the pre-bundle",
+    async () => {
+      const link = (name: string, target: string) => {
+        Fs.mkdirSync(Path.join(root, "node_modules", Path.dirname(name)), {
+          recursive: true
+        })
+        Fs.symlinkSync(target, Path.join(root, "node_modules", name))
+      }
+      const pkg = Path.resolve(import.meta.dirname, "..")
+      link("@effect/ui-native", pkg)
+      link("effect", Path.join(pkg, "node_modules/effect"))
+      // Outside the package, whose `sideEffects` would drop the whole module.
+      write(
+        "src/toggle.ts",
+        `import * as Native from "@effect/ui-native/Native"
+export const toggle = Native.defineView(() => new Native.Element("toggle"), {
+  viewName: "FixtureToggleView"
+})
+`
+      )
+      const app = (imports: string, child: string) =>
+        `import * as Native from "@effect/ui-native/Native"
+import * as NativeApp from "@effect/ui-native/NativeApp"
+import * as Schema from "effect/Schema"
+${imports}
+const App = Native.component({ name: "App", model: Schema.Number }).make({
+  init: () => 0,
+  view: (h) => h.view.style({ flex: 1 }).children(${child})
+})
+NativeApp.register(NativeApp.mount(App, {}))
+`
+      write("src/plain.ts", app("", ""))
+      write(
+        "src/unused.ts",
+        app(`import "@effect/ui-native/kit"\nimport "./toggle"`, "")
+      )
+      write("src/used.ts", app(`import { toggle } from "./toggle"`, "toggle"))
+      const bundle = async (entry: string) => {
+        const config = await NativeMetro.withEffectUi<NativeMetro.MetroConfig>(
+          { projectRoot: root, resolver: { sourceExts: ["ts", "js"] } },
+          { entry, platforms: ["android"] }
+        )
+        return readBundle(config, entry, "android")
+      }
+      assert.strictEqual(
+        await bundle("src/unused.ts"),
+        await bundle("src/plain.ts")
+      )
+      assert.include(await bundle("src/used.ts"), "FixtureToggleView")
     },
     30_000
   )
