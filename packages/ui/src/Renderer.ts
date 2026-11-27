@@ -523,17 +523,15 @@ export const Refs: Context.Service<Refs, Refs> = services.Refs
  *
  * **Details**
  *
- * - `update`: one `update` call, with the message it handled.
- * - `view`: one view call. Children's views aren't included, as they run
- *   later in the render.
+ * - `update`: one `update` call, with its message.
+ * - `view`: one view call, without its children's views, which run later.
  * - `flush`: one render pass, including every view, the host writes and the
- *   `committed` callbacks. The first mount counts as one flush, from its first
- *   `init`. A flush held for a view transition is reported once, after it
- *   commits, without the time spent waiting for the browser.
+ *   `committed` callbacks. The first mount is one flush, from its first
+ *   `init`. A flush held for a view transition is reported once it commits,
+ *   without the time spent waiting for the browser.
  *
- * A view's time also counts toward the flush it runs in, so a slow view can
- * make its flush slow too. A view rendered before a message's `update` runs
- * outside any flush.
+ * A view's time also counts toward its flush. A view rendered before a
+ * message's `update` runs outside any flush.
  *
  * `duration` and `budget` are in milliseconds.
  *
@@ -569,15 +567,15 @@ export type SlowPhase =
  *
  * **Details**
  *
- * A phase without a budget isn't timed. A phase within its budget allocates
- * nothing, and one that throws isn't reported. Time comes from the
- * `Clock`'s monotonic reading, so tests can script it. `onSlow` runs
- * synchronously, and an error it throws is logged with `Effect.logError`.
+ * A phase without a budget isn't timed, one within its budget allocates
+ * nothing, and one that throws isn't reported. Time comes from the `Clock`'s
+ * monotonic reading, so tests can script it. `onSlow` runs synchronously, and
+ * an error it throws is logged with `Effect.logError`.
  *
  * **Gotchas**
  *
- * `message` is the message itself, not redacted. Send only what you need,
- * such as its `_tag`, to a remote service.
+ * `message` is the raw message, not redacted. Send only what you need, such
+ * as its `_tag`, to a remote service.
  *
  * **Example** (Reporting slow phases)
  *

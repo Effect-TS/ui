@@ -207,9 +207,9 @@ export interface Runs {
 }
 
 /**
- * Opt-in phase timing. `now` is read only for a phase that has a hook, and
- * the hook is handed the reading from before the phase. `flush` gets
- * `held` when a transition holds the flush, which resumes later.
+ * Opt-in phase timing. Each hook gets the `now` reading from before its
+ * phase, and `now` is read only for phases with a hook. `flush` gets `held`
+ * when a transition holds the flush, which resumes later.
  *
  * @internal
  */
