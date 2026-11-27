@@ -57,14 +57,10 @@ export const run = async (
   if (found !== undefined) {
     Effect.runFork(
       Effect.scoped(Effect.andThen(
+        // `mount` completes once the DOM shows the case's messages.
         BrowserCase.mount(found, container),
         Effect.andThen(
-          // After the commit that follows the last message.
-          Effect.sync(() =>
-            requestAnimationFrame(() =>
-              container.setAttribute("data-workbench-ready", "")
-            )
-          ),
+          Effect.sync(() => container.setAttribute("data-workbench-ready", "")),
           Effect.never
         )
       )).pipe(
@@ -80,7 +76,9 @@ export const run = async (
   const list = element("ul")
   for (const each of [...cases.keys()].sort()) {
     const link = element("a", each)
-    link.href = base + encodeURI(each) + location.search
+    // Per segment, so a key's `#` or `?` stays in the path.
+    link.href = base + each.split("/").map(encodeURIComponent).join("/") +
+      location.search
     const item = element("li")
     item.append(link)
     list.append(item)

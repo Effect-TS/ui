@@ -120,7 +120,8 @@ export interface Case<C extends AnyComponent, R = never> {
  * when every prop is optional.
  *
  * `model` starts the root from that Model: what `init` returned is dropped,
- * its Commands, events and sends included.
+ * its Commands, events and sends included. A field set to `undefined`
+ * counts as left out.
  *
  * `messages` are sent to the root in order right after it mounts, in one
  * synchronous pass, as `root.send` does. They go through the real `update`,
@@ -168,12 +169,17 @@ type PropsOf<C extends AnyComponent> =
 export type Requirements<C extends AnyComponent, I> =
   | Exclude<
     | Component.Requirements<C>
-    | (I extends { readonly props: Effect.Effect<any, any, infer RP> } ? RP
-      : never),
+    | (I extends { readonly props?: infer P } ? EffectRequirements<P> : never),
     I extends { readonly layer: Layer.Layer<infer A, any, any> } ? A : never
   >
-  | (I extends { readonly layer: Layer.Layer<any, any, infer RL> } ? RL
-    : never)
+  | (I extends { readonly layer?: infer L } ? LayerRequirements<L> : never)
+
+// Both distribute, so `Props | Effect<Props, never, Config>` keeps `Config`.
+type EffectRequirements<P> = P extends Effect.Effect<any, any, infer R> ? R
+  : never
+
+type LayerRequirements<L> = L extends Layer.Layer<any, any, infer R> ? R
+  : never
 
 /**
  * Whether `u` is a `Case`.
@@ -210,8 +216,8 @@ export const make = <
   const out: Record<string, Case<C, unknown>> = {}
   for (const [key, input] of Object.entries(cases)) {
     out[key] = {
-      props: {},
       ...input,
+      props: input.props ?? {},
       [TypeId]: variance,
       name: component.definition.name + "/" + key,
       component

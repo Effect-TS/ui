@@ -3,6 +3,7 @@ import { Case, Locator, Play, TestHost } from "@effect/ui/testing"
 import { assert, it } from "@effect/vitest"
 import { Cause, Context, Effect, Exit, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
+import { SearchBox } from "./fixtures/components.ts"
 
 const SaverMessage = UiSchema.TaggedEnum({ ClickedSave: {}, SucceededSave: {} })
 const SaverEvents = UiSchema.TaggedEnum({ Saved: {} })
@@ -178,6 +179,11 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Play", (it) => {
           props: { id: "t3" },
           messages: [ItemMessage.ClickedSave()],
           layer: Layer.mergeAll(LoadLayer, SaveImmediate)
+        },
+        unset: {
+          props: { id: "t4" },
+          model: undefined,
+          layer: Layer.mergeAll(LoadLayer, SavePending)
         }
       })
 
@@ -194,5 +200,13 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Play", (it) => {
 
       const replayed = yield* Play.fromCase(cases.replayed)
       yield* replayed.expect(Locator.tag("p")).toHaveText("t3:saved")
+
+      // `model: undefined` counts as left out: `init` runs.
+      const unset = yield* Play.fromCase(cases.unset)
+      assert.deepStrictEqual(unset.root.model(), { saved: false, loaded: true })
+      assert.deepStrictEqual(
+        Case.make(SearchBox, { idle: { props: undefined } }).idle.props,
+        {}
+      )
     }))
 })

@@ -22,7 +22,8 @@ import { Schema } from "effect"
 
 export const TodoMessage = UiSchema.TaggedEnum({
   ClickedSave: {},
-  CompletedSaveTodo: {}
+  CompletedSaveTodo: {},
+  ClickedFinish: {}
 })
 
 export class SaveTodo extends Command.Service<SaveTodo>()(
@@ -40,7 +41,8 @@ export const TodoItem = Html.component({
   update: ($, message) =>
     TodoMessage.match(message, {
       ClickedSave: () => $.run(SaveTodo.make({ id: $.props.id })),
-      CompletedSaveTodo: () => ({ saved: true })
+      CompletedSaveTodo: () => ({ saved: true }),
+      ClickedFinish: () => $.evolve({ saved: true }).viewTransition()
     }),
   view: (h, model) =>
     h.button.attr("data-todo", h.props.id).on("click", TodoMessage.ClickedSave())
@@ -69,6 +71,16 @@ export const TodoItemCases = Case.make(TodoItem, {
   saved: {
     props: { id: "t1" },
     model: { saved: true },
+    layer: SavePending
+  },
+  "a?b#1": {
+    props: { id: "t1" },
+    model: { saved: true },
+    layer: SavePending
+  },
+  finished: {
+    props: { id: "t1" },
+    messages: [TodoMessage.ClickedFinish()],
     layer: SavePending
   }
 })
@@ -142,6 +154,15 @@ try {
       links
     )
 
+    await page.locator("a", { hasText: "TodoItem/a?b#1" }).click()
+    await waitReady()
+    const hashPath = await page.evaluate(() => location.pathname)
+    expect(
+      hashPath.endsWith("/TodoItem/a%3Fb%231"),
+      "a key with ? and # links to its own case",
+      hashPath
+    )
+
     await page.goto(url + "__workbench/TodoItem/missing")
     await page.locator("a", { hasText: "TodoItem/saved" }).waitFor()
     const missingBody = await page.locator("body").textContent()
@@ -152,6 +173,49 @@ try {
     )
 
     await page.close()
+
+    // The marker waits for the commit a held view transition defers.
+    const held = await browser.newPage()
+    held.on("pageerror", (error) => {
+      failures.push("pageerror: " + String(error))
+    })
+    await held.addInitScript(() => {
+      document.startViewTransition = (update) => {
+        window.__release = typeof update === "function" ? update : update.update
+        const done = Promise.resolve()
+        return {
+          ready: done,
+          finished: done,
+          updateCallbackDone: done,
+          skipTransition: () => {}
+        }
+      }
+    })
+    await held.goto(url + "__workbench/TodoItem/finished?bare")
+    await held.waitForFunction(() => window.__release !== undefined)
+    await held.waitForTimeout(150)
+    const early = await held.evaluate(() => ({
+      ready: document.getElementById("root").hasAttribute(
+        "data-workbench-ready"
+      ),
+      text: document.querySelector("[data-todo]")?.textContent
+    }))
+    expect(
+      !early.ready && early.text === "save",
+      "no ready marker while a view transition holds the commit",
+      early
+    )
+    await held.evaluate(() => window.__release())
+    await held.waitForFunction(() =>
+      document.getElementById("root").hasAttribute("data-workbench-ready")
+    )
+    const finishedText = await held.locator("[data-todo=\"t1\"]").textContent()
+    expect(
+      finishedText === "saved",
+      "ready marker follows the transition's commit",
+      finishedText
+    )
+    await held.close()
   }, {
     root,
     plugins: [

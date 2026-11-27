@@ -399,4 +399,28 @@ describe("Case", () => {
       >
     >()
   })
+
+  it("keeps the requirements of an Effect branch in a props union", () => {
+    const props = {} as
+      | Component.Props<typeof TodoItem>
+      | Effect.Effect<Component.Props<typeof TodoItem>, never, Config>
+    const cases = Case.make(TodoItem, {
+      either: { props, layer: SaveTodo.toLayer(() => Effect.never) }
+    })
+    expect(Play.fromCase(cases.either)).type.toBe<
+      Effect.Effect<
+        Play.Play<
+          Component.Model<typeof TodoItem>,
+          Component.Message<typeof TodoItem>,
+          Component.Events<typeof TodoItem>
+        >,
+        Play.StepError,
+        Config | TestHost.TestHost | Scope.Scope
+      >
+    >()
+  })
 })
+
+interface Config {
+  readonly _tag: "Config"
+}

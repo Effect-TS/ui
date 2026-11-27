@@ -28,7 +28,7 @@ const none: runtime.HotSession = {
 
 /**
  * The hot session a case root mounts with: `hot`, minus any saved snapshot,
- * with the root starting from the case's Model. What `init` returned is
+ * with the root starting from the case's Model, unless it is `undefined`. What `init` returned is
  * dropped, Commands, events and sends included.
  *
  * @internal
@@ -37,7 +37,7 @@ export const session = (
   c: Start,
   hot?: runtime.HotSession
 ): runtime.HotSession | undefined =>
-  "model" in c
+  c.model !== undefined
     ? {
       ...(hot ?? none),
       init: (inst, first) =>
