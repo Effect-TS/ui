@@ -867,14 +867,14 @@ export class VoidElement<
     )
   }
   /**
-   * Sets the `class` attribute from class tokens, skipping `false`, `null`,
+   * Appends class tokens to the `class` attribute, skipping `false`, `null`,
    * `undefined` and `""`.
    *
    * **Details**
    *
-   * The remaining tokens are joined with one space, as `classNames` does.
-   * When none remain, the attribute is removed instead of rendering
-   * `class=""`. Calling `class` again replaces the earlier value.
+   * Tokens are joined with one space after any existing classes. The attribute
+   * is omitted when no classes remain. Use
+   * `attr("class", value)` to replace or `attr("class", undefined)` to clear.
    *
    * **Example** (Adding classes conditionally)
    *
@@ -894,11 +894,14 @@ export class VoidElement<
    * @since 0.1.0
    */
   class(...tokens: ReadonlyArray<ClassToken>): this {
-    // One token, the common call, is the value as it is.
-    const value = tokens.length === 1
+    const added = tokens.length === 1
       ? tokens[0] || ""
       : joinClassTokens(tokens)
-    return this.attr("class", value === "" ? undefined : value)
+    const current = this.elementAttrs.class
+    return this.attr(
+      "class",
+      current && added ? current + " " + added : current || added || undefined
+    )
   }
   /**
    * Sets or removes the `disabled` boolean attribute.
@@ -1641,7 +1644,7 @@ export interface SvgElement<
    */
   id(id: string): this
   /**
-   * Sets the `class` attribute from class tokens.
+   * Appends class tokens to the `class` attribute.
    *
    * @since 0.1.0
    */
