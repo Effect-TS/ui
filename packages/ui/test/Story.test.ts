@@ -1245,4 +1245,80 @@ describe("Story", () => {
         waiting.send(author).given((model) => model).keepPending("author")
       }))
   })
+
+  describe("check", () => {
+    const EditorMessage = UiSchema.TaggedEnum({
+      Typed: { text: Schema.String },
+      ClickedSave: {},
+      CompletedSave: {}
+    })
+
+    class SaveEditor extends Command.Service<SaveEditor>()("todos/Save", {
+      args: { text: Schema.String },
+      success: EditorMessage
+    }) {}
+
+    const Editor = Component.define({
+      name: "Editor",
+      model: Schema.Struct({ text: Schema.String, saving: Schema.Boolean }),
+      message: EditorMessage
+    }).make({
+      init: () => ({ text: "", saving: false }),
+      update: ($, message) =>
+        EditorMessage.match(message, {
+          Typed: ({ text }) => ({ ...$.model, text }),
+          ClickedSave: () =>
+            $.set({ ...$.model, saving: true }).run(
+              SaveEditor.make({ text: $.model.text })
+            ),
+          CompletedSave: () => ({ ...$.model, saving: false })
+        }),
+      view: (h, model) => h.el("div", model.text)
+    })
+
+    it.effect("runs generated messages across pending Commands and settles them from their Service schema", () =>
+      Story.check(Editor, {}, { seed: 1 }))
+
+    it.effect("finds an interleaved invariant failure and reports shrunk replayable Story steps", () =>
+      Effect.gen(function*() {
+        const message = yield* defect(
+          Story.check(Editor, {}, {
+            seed: 1,
+            messages: Schema.Union([
+              EditorMessage.cases.ClickedSave,
+              EditorMessage.cases.Typed
+            ]),
+            commands: [[SaveEditor, {
+              success: EditorMessage.cases.CompletedSave
+            }]],
+            invariant: (story) =>
+              story.model.saving === (story.pending.length > 0)
+          })
+        )
+        assert.include(message, "Story.start(Editor, {})")
+        assert.match(
+          message,
+          /\.send\(\{"_tag":"ClickedSave"\}\)[\s\S]*\.keepPending\(todos\/Save\)[\s\S]*\.send\(\{"_tag":"ClickedSave"\}\)[\s\S]*\.resolve\(todos\/Save,\s*\{"_tag":"CompletedSave"\}\)/
+        )
+        assert.notInclude(message, `"_tag":"Typed"`)
+        assert.include(message, `"saving":false`)
+        assert.include(message, "todos/Save")
+      }))
+
+    it.effect("fails naming a Command.make Command without a commands override, and passes with one", () =>
+      Effect.gen(function*() {
+        const message = yield* defect(
+          Story.check(Note, {}, {
+            seed: 1,
+            messages: NoteMessage.cases.Save
+          })
+        )
+        assert.include(message, "notes/SaveNote")
+        yield* Story.check(Note, {}, {
+          seed: 1,
+          messages: NoteMessage.cases.Save,
+          commands: [[SaveNoteCommand, { success: NoteMessage.cases.Saved }]]
+        })
+      }))
+  })
 })
