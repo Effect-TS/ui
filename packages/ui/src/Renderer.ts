@@ -20,9 +20,11 @@
  * @stability experimental
  * @since 0.1.0
  */
-import type * as Context from "effect/Context"
+import * as Cause from "effect/Cause"
+import * as Clock from "effect/Clock"
+import * as Context from "effect/Context"
 import * as Duration from "effect/Duration"
-import type * as Effect from "effect/Effect"
+import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import type * as Option from "effect/Option"
 import * as Predicate from "effect/Predicate"
@@ -570,7 +572,7 @@ export type SlowPhase =
  * A phase without a budget isn't timed. A phase within its budget allocates
  * nothing, and one that throws isn't reported. Time comes from the
  * `Clock`'s monotonic reading, so tests can script it. `onSlow` runs
- * synchronously, and an error it throws is logged with `console.error`.
+ * synchronously, and an error it throws is logged with `Effect.logError`.
  *
  * **Gotchas**
  *
@@ -603,17 +605,24 @@ export const slowPhases = (options: {
   const update = budgetOf(options.update)
   const view = budgetOf(options.view)
   const flush = budgetOf(options.flush)
-  const report = (slow: SlowPhase) => {
-    try {
-      options.onSlow(slow)
-    } catch (error) {
-      // oxlint-disable-next-line no-console
-      console.error("[@effect/ui/Renderer] slowPhases: onSlow failed", error)
-    }
-  }
-  return Layer.succeed(services.SlowPhases, (clock): Kernel.Slow => {
+  return Layer.succeed(services.SlowPhases, (ctx): Kernel.Slow => {
+    const clock = Context.get(ctx, Clock.Clock)
     const now = () => clock.monotonicTimeNanosUnsafe()
     const since = (from: bigint) => Number(now() - from) / 1_000_000
+    const report = (slow: SlowPhase) => {
+      try {
+        options.onSlow(slow)
+      } catch (error) {
+        Effect.runForkWith(ctx)(
+          Effect.logError(
+            "Renderer.slowPhases: onSlow failed",
+            Cause.die(error)
+          )
+        )
+      }
+    }
+    // The time a flush ran before a transition held it.
+    let carried = 0
     return {
       now,
       update: update === undefined ? undefined : (from, inst, message) => {
@@ -641,9 +650,10 @@ export const slowPhases = (options: {
           })
         }
       },
-      flush: flush === undefined ? undefined : (from) => {
-        const duration = since(from)
-        if (duration > flush) {
+      flush: flush === undefined ? undefined : (from, held) => {
+        const duration = carried + since(from)
+        carried = held ? duration : 0
+        if (!held && duration > flush) {
           report({ phase: "flush", duration, budget: flush })
         }
       }

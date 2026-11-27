@@ -208,7 +208,8 @@ export interface Runs {
 
 /**
  * Opt-in phase timing. `now` is read only for a phase that has a hook, and
- * the hook is handed the reading from before the phase.
+ * the hook is handed the reading from before the phase. `flush` gets
+ * `held` when a transition holds the flush, which resumes later.
  *
  * @internal
  */
@@ -218,13 +219,8 @@ export interface Slow {
     | ((from: bigint, inst: Instance, message: unknown) => void)
     | undefined
   readonly view?: ((from: bigint, inst: Instance) => void) | undefined
-  readonly flush?: ((from: bigint) => void) | undefined
+  readonly flush?: ((from: bigint, held?: boolean) => void) | undefined
 }
-
-const startOf = (
-  slow: Slow | undefined,
-  hook: unknown
-): bigint | undefined => hook === undefined ? undefined : slow!.now()
 
 /** @internal */
 export interface Tree {
@@ -263,8 +259,6 @@ export interface Tree {
     | { readonly value: unknown; readonly title: string | undefined }
     | undefined
   transitions?: Transitions | undefined
-  /** The flush time spent before a transition held it, carried to the resumed flush. */
-  slowHeld?: bigint | undefined
   shared?: unknown
   drew?: boolean | undefined
   holds?:
@@ -602,7 +596,7 @@ export const send = (
   renderAbove(inst)
   if (inst.closed) return
   const slow = inst.tree.slow
-  const from = startOf(slow, slow?.update)
+  const from = slow?.update && slow.now()
   let next: Next | undefined
   try {
     next = inst.component.update(
@@ -747,19 +741,15 @@ const renderDirty = (inst: Instance): void => {
 /** @internal */
 export const flush = (
   tree: Tree,
-  from = startOf(tree.slow, tree.slow?.flush)
+  from = tree.slow?.flush && tree.slow.now()
 ): void => {
-  if (tree.slowHeld !== undefined) {
-    from! -= tree.slowHeld
-    tree.slowHeld = undefined
-  }
   tree.scheduled = true
   tree.flushing = true
   for (;;) {
     if (tree.closed) return
     if (tree.transitions?.hold()) {
       tree.flushing = false
-      if (from !== undefined) tree.slowHeld = tree.slow!.now() - from
+      if (from !== undefined) tree.slow!.flush!(from, true)
       return
     }
     const batch = tree.dirty
@@ -821,7 +811,7 @@ export const draw = (
 
 const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
   const slow = inst.tree.slow
-  const from = startOf(slow, slow?.view)
+  const from = slow?.view && slow.now()
   try {
     const tree = draw(inst, inst.component, inst)
     if (from !== undefined) slow!.view!(from, inst)
@@ -1785,7 +1775,7 @@ export const mount = (
   options: Options
 ): Root => {
   // The first mount is timed as one flush, from its first `init`.
-  const from = startOf(options.slow, options.slow?.flush)
+  const from = options.slow?.flush && options.slow.now()
   const tree: Tree = {
     ...options,
     host,

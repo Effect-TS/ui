@@ -4,7 +4,6 @@
  * @internal
  */
 import type * as Cause from "effect/Cause"
-import type * as Clock from "effect/Clock"
 import * as Context from "effect/Context"
 import type * as Effect from "effect/Effect"
 import type {
@@ -28,13 +27,13 @@ export const Refs = Context.Service<RefsShape, RefsShape>(
 )
 
 /**
- * Builds a root's phase timing from its `Clock`. `Renderer.slowPhases` sets
+ * Builds a root's phase timing from its context. `Renderer.slowPhases` sets
  * it, and without it the kernel times nothing.
  *
  * @internal
  */
 export const SlowPhases = Context.Reference<
-  ((clock: Clock.Clock) => Kernel.Slow) | undefined
+  ((ctx: Context.Context<never>) => Kernel.Slow) | undefined
 >("@effect/ui/Renderer/SlowPhases", { defaultValue: () => undefined })
 
 /**

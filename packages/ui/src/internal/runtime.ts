@@ -696,7 +696,7 @@ const start = (
           return routing === undefined ? first : routing.init(inst, first)
         },
         log: record,
-        slow: Context.get(ctx, services.SlowPhases)?.(clock),
+        slow: Context.get(ctx, services.SlowPhases)?.(ctx),
         onEmit: options?.onEmit,
         schedule: (task) => {
           const run = recording.follow()

@@ -6800,10 +6800,6 @@ describe("Runtime", () => {
         let spent = 0
         const outer = yield* Clock.Clock
         const clock: Clock.Clock = Object.assign(Object.create(outer), {
-          currentTimeMillisUnsafe: () =>
-            outer.currentTimeMillisUnsafe() + spent,
-          currentTimeNanosUnsafe: () =>
-            outer.currentTimeNanosUnsafe() + BigInt(spent * 1_000_000),
           monotonicTimeNanosUnsafe: () =>
             outer.monotonicTimeNanosUnsafe() + BigInt(spent * 1_000_000)
         })
