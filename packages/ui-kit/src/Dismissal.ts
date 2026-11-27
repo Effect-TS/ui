@@ -242,9 +242,12 @@ export const trackDismissal = (
     const onClick = (event: MouseEvent) => {
       const press = stack.pressed
       if (
-        press?.layer === layer && press.pointerType === "touch" &&
-        away(event.target) && top("outside-press", event)
-      ) send("outside-press", "touch")
+        press?.layer !== layer || press.pointerType !== "touch" || press.clicked
+      ) return
+      press.clicked = true
+      if (away(event.target) && top("outside-press", event)) {
+        send("outside-press", "touch")
+      }
     }
     const onFocusIn = (event: FocusEvent) => {
       if (

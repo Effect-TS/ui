@@ -23,6 +23,8 @@ export interface Layer {
 export interface Press {
   readonly layer: Layer
   readonly pointerType: string
+  // A label forwards its click to its field, so a tap can click twice.
+  clicked: boolean
 }
 
 export interface Stack {
@@ -45,7 +47,7 @@ export const claimPress = (
   event: PointerEvent,
   layer: Layer
 ): void => {
-  const press: Press = { layer, pointerType: event.pointerType }
+  const press: Press = { layer, pointerType: event.pointerType, clicked: false }
   stack.pressed = press
   const done = new AbortController()
   const options = { capture: true, signal: done.signal }

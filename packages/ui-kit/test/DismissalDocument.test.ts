@@ -70,6 +70,10 @@ const Page = Html.component({
             dialog.backdrop(h.div.attr("id", "backdrop")),
             dialog.popup(h.div.attr("id", "popup")).children(
               h.button.attr("id", "anchor").children("Edit"),
+              h.label.attr("for", "name").attr("id", "name-label").children(
+                "Name"
+              ),
+              h.input.attr("id", "name"),
               model.editor
                 ? h.div.attr("id", "editor").onMount(
                   Dismissal.TrackDismissal({
@@ -205,13 +209,23 @@ describe("Dismissal in a document", { concurrent: false }, () => {
 
   it.effect("outside press on the backdrop reaches only the dismissal layer with pointerType, while insideSelector counts as inside", () =>
     Effect.gen(function*() {
-      const { log } = yield* mountPage({ insideSelector: "#anchor" })
+      const { log } = yield* mountPage({
+        refuse: true,
+        insideSelector: "#anchor"
+      })
       click(byId("anchor"), "mouse")
       yield* tick
       assert.deepStrictEqual(log(), [])
       click(byId("backdrop"), "mouse")
       yield* tick
       assert.deepStrictEqual(log(), ["editor:outside-press:mouse"])
+      // A label forwards the tap's click to its field: still one press.
+      click(byId("name-label"), "touch")
+      yield* tick
+      assert.deepStrictEqual(log(), [
+        "editor:outside-press:mouse",
+        "editor:outside-press:touch"
+      ])
     }))
 
   it.effect("Tab still wraps inside a modal dialog while a dismissal layer is open", () =>
