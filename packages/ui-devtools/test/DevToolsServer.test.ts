@@ -19,6 +19,7 @@ import * as Socket from "effect/socket/Socket"
 import { createServer, request } from "node:http"
 import type { AddressInfo } from "node:net"
 import { type Capture, play } from "./fixtures/TwoEditors.ts"
+import { playTwoWrites, secret } from "./fixtures/TwoWrites.ts"
 
 const wait = (ms: number) =>
   Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, ms)))
@@ -1139,6 +1140,66 @@ describe("DevToolsServer", { concurrent: false }, () => {
           seq: 5,
           reason: "evicted"
         }])
+      }).pipe(Effect.scoped),
+    30_000
+  )
+
+  it.live(
+    "filters list_entries by declared and ad-hoc payload fields across instances",
+    () =>
+      Effect.gen(function*() {
+        localStorage.clear()
+        const { agent, url } = yield* serve({
+          fields: ["commandId", "secret"]
+        })
+        const services = yield* Layer.build(DevTools.layer({ server: url }))
+        yield* playTwoWrites().pipe(Effect.provide(services))
+        yield* wait(150)
+
+        const all = yield* agent.call("list_entries", { filter: "all" })
+        const clicks = all.rows.filter((row: any) =>
+          row.label === "ClickedWrite"
+        )
+        assert.strictEqual(clicks.length, 2)
+        for (const click of clicks) assert.isUndefined(click.fields)
+
+        const cmd1 = yield* agent.call("list_entries", {
+          field: { name: "commandId", value: "cmd-1" }
+        })
+        assert.strictEqual(cmd1.total, 4)
+        assert.strictEqual(cmd1.rows.length, 4)
+        assert.deepStrictEqual(
+          cmd1.rows.map((row: any) => row.tag).sort(),
+          ["CommandEnded", "CommandStarted", "Update", "Update"]
+        )
+        assert.deepStrictEqual(
+          new Set(cmd1.rows.map((row: any) => row.path)),
+          new Set(["/Board", "/Board/Feed[a]", "/Board/Feed[b]"])
+        )
+        for (const row of cmd1.rows) {
+          assert.deepStrictEqual(row.fields, { commandId: "cmd-1" })
+        }
+
+        const byAttempt = yield* agent.call("list_entries", {
+          field: { name: "attempt", value: 1 }
+        })
+        assert.strictEqual(byAttempt.total, 4)
+        for (const row of byAttempt.rows) {
+          assert.strictEqual(row.label, "Confirmed")
+          assert.strictEqual(row.fields.attempt, 1)
+          assert.isString(row.fields.commandId)
+        }
+
+        const wrongType = yield* agent.call("list_entries", {
+          field: { name: "attempt", value: "1" }
+        })
+        assert.strictEqual(wrongType.total, 0)
+
+        const redacted = yield* agent.call("list_entries", {
+          field: { name: "secret", value: secret }
+        })
+        assert.strictEqual(redacted.total, 0)
+        assert.notInclude(agent.results.join("\n"), secret)
       }).pipe(Effect.scoped),
     30_000
   )

@@ -6,6 +6,7 @@ import { HtmlLocator } from "@effect/ui/html/testing"
 import { afterEach, assert, describe, it } from "@effect/vitest"
 import { Effect, Exit, Layer, Schema, Scope } from "effect"
 import { type Capture, play } from "./fixtures/TwoEditors.ts"
+import { playTwoWrites, secret } from "./fixtures/TwoWrites.ts"
 
 const wait = (ms: number) =>
   Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, ms)))
@@ -1470,5 +1471,68 @@ describe("DevTools overlay", { concurrent: false }, () => {
         assert.deepStrictEqual(within.models, without.models)
         assert.isNull(document.querySelector("[data-effect-ui-devtools]"))
       }
+    }))
+
+  it.live("shows declared payload fields on rows and filters across instances when clicked", () =>
+    Effect.gen(function*() {
+      yield* Layer.build(
+        DevTools.layer({ fields: ["commandId", "secret"] })
+      ).pipe(
+        Effect.flatMap((services) =>
+          playTwoWrites().pipe(Effect.provide(services))
+        )
+      )
+      yield* settle
+      const root = overlay()
+      yield* open(root)
+
+      assert.notInclude(root.textContent, secret)
+
+      const cmd1Buttons = HtmlLocator.queryAllByRole(root, "button", {
+        name: /cmd-1/
+      })
+      const cmd2Buttons = HtmlLocator.queryAllByRole(root, "button", {
+        name: /cmd-2/
+      })
+      assert.strictEqual(cmd1Buttons.length, 4)
+      assert.strictEqual(cmd2Buttons.length, 4)
+
+      yield* click(instance(root, "Feed[a]"))
+      yield* click(
+        HtmlLocator.queryAllByRole(root, "button", { name: /cmd-1/ })[0]!
+      )
+
+      const filtered = Array.from(root.querySelectorAll(".row"))
+      assert.strictEqual(filtered.length, 4)
+      const labels = filtered.map((row) =>
+        row.querySelector(".row-button")!.getAttribute("aria-label")!
+      )
+      assert.isTrue(
+        labels.some((label) => label.endsWith("writes/Write started"))
+      )
+      assert.isTrue(
+        labels.some((label) => label.endsWith("writes/Write ended"))
+      )
+      assert.strictEqual(
+        labels.filter((label) => label.endsWith("Update Confirmed")).length,
+        2
+      )
+      const owners = new Set(
+        filtered.map((row) => text(row.querySelector(".who")))
+      )
+      assert.deepStrictEqual(owners, new Set(["Board", "Feed[a]", "Feed[b]"]))
+      assert.isFalse(filtered.some((row) => text(row).includes("cmd-2")))
+
+      const activeChip = HtmlLocator.queryAllByRole(root, "button", {
+        name: /commandId.*cmd-1/
+      }).find((node) =>
+        node.getAttribute("aria-pressed") === "true" && !node.closest(".row")
+      )
+      assert.isDefined(activeChip)
+      yield* click(activeChip!)
+      assert.isAbove(
+        HtmlLocator.queryAllByRole(root, "button", { name: /cmd-2/ }).length,
+        0
+      )
     }))
 })
