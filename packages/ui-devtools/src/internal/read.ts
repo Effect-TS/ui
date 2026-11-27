@@ -1,6 +1,6 @@
 import * as MessageLog from "@effect/ui/MessageLog"
 import * as Predicate from "effect/Predicate"
-import type * as Schema from "effect/Schema"
+import * as Schema from "effect/Schema"
 import type * as Inspector from "../Inspector.ts"
 
 export type Entry = MessageLog.WireEntry
@@ -74,6 +74,72 @@ export const issuedOf = (
     : entry._tag === "Failed"
     ? entry.issued
     : undefined
+
+export const Field = Schema.Struct({
+  name: Schema.NonEmptyString,
+  value: Schema.Union([Schema.String, Schema.Number, Schema.Boolean])
+})
+
+export type Field = typeof Field.Type
+
+export const fieldNames = (value: unknown): ReadonlyArray<string> =>
+  Array.isArray(value)
+    ? Array.from(
+      new Set(
+        value.filter((name): name is string =>
+          typeof name === "string" && name !== ""
+        )
+      )
+    )
+    : []
+
+const commandOf = (session: Inspector.Session, issued: MessageLog.Issued) => {
+  const issuing = session.resolve(issued.seq)
+  return isIssuing(issuing) ? issuing.commands[issued.index] : undefined
+}
+
+const payloadOf = (session: Inspector.Session, entry: Entry): unknown => {
+  if (entry._tag === "Update") return entry.message
+  if (entry._tag === "Failed" && entry.update !== undefined) {
+    return entry.update.message
+  }
+  const issued = issuedOf(entry)
+  return issued && commandOf(session, issued)?.args
+}
+
+const valueOf = (
+  payload: unknown,
+  name: string
+): Field["value"] | undefined => {
+  if (
+    !Predicate.isObject(payload) || !Object.hasOwn(payload, name) ||
+    MessageLog.isPlaceholder(payload)
+  ) return undefined
+  const value = payload[name]
+  return typeof value === "string" || typeof value === "number" ||
+      typeof value === "boolean"
+    ? value
+    : undefined
+}
+
+export const fieldsOf = (
+  session: Inspector.Session,
+  entry: Entry,
+  names: ReadonlyArray<string>
+): ReadonlyArray<Field> => {
+  if (names.length === 0) return []
+  const payload = payloadOf(session, entry)
+  return names.flatMap((name) => {
+    const value = valueOf(payload, name)
+    return value === undefined ? [] : [{ name, value }]
+  })
+}
+
+export const hasField = (
+  session: Inspector.Session,
+  entry: Entry,
+  field: Field
+): boolean => valueOf(payloadOf(session, entry), field.name) === field.value
 
 export const tagOf = (value: unknown): string | undefined =>
   Predicate.hasProperty(value, "_tag") && typeof value._tag === "string"
@@ -359,14 +425,6 @@ const runSteps = (
   return steps
 }
 
-const groupOf = (
-  session: Inspector.Session,
-  issued: MessageLog.Issued
-): string | null | undefined => {
-  const issuing = session.resolve(issued.seq)
-  return isIssuing(issuing) ? issuing.commands[issued.index]?.group : undefined
-}
-
 const stoppedBy = (session: Inspector.Session, issuing: IssuingEntry) => {
   const byCommand = new Map<number, Array<Ref>>()
   const unattributed: Array<Ref> = []
@@ -375,7 +433,7 @@ const stoppedBy = (session: Inspector.Session, issuing: IssuingEntry) => {
     const ref = refOf(session, link.seq)
     const end = ref.entry
     if (end._tag !== "CommandInterrupted") continue
-    const group = groupOf(session, end.issued)
+    const group = commandOf(session, end.issued)?.group
     const candidates = end.reason !== "interrupt" ?
       [] :
       issuing.commands.flatMap((command, index) =>

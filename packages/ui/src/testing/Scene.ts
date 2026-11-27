@@ -162,6 +162,14 @@ export interface Expect<S> {
    * presence, pass a string or `RegExp` to check its value, or `false` for absence.
    */
   toHaveAttribute(name: string, value?: string | RegExp | false): S
+  /**
+   * Asserts that exactly one element matches and checks each attribute as
+   * `toHaveAttribute` does: a string or `RegExp` checks its value, `false`
+   * its absence. A failure lists every attribute that doesn't match.
+   */
+  toHaveAttributes(
+    attributes: { readonly [name: string]: string | RegExp | false }
+  ): S
   /** Asserts that exactly `count` elements match. */
   toHaveCount(count: number): S
 }
@@ -388,6 +396,19 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never>
   expectIgnored(): this
   /** Asserts that the last interaction cancelled its event's default, or didn't with `false`. */
   expectDefaultPrevented(expected?: boolean): this
+  /**
+   * Renders the component's own view twice at the current state and throws if
+   * any `h.lazy` call rebuilds on the second render or if `h.lazy` was never
+   * called, leaving the scene's state unchanged.
+   *
+   * **Details**
+   *
+   * Reports each missed function and why it rebuilt (changed argument, shared
+   * first argument, changed function, or missing entry). Covers only this
+   * component's own view at one state, not child views or changes across steps.
+   * Requires a non-production build.
+   */
+  expectLazyReused(): this
   /**
    * Checks a headless component's parts, the plain values a consumer's
    * closure reads, for the current Model and props. `f` throws to fail the

@@ -3,6 +3,7 @@ import * as scene from "../../internal/scene.ts"
 import * as Locator from "../../testing/Locator.ts"
 import type * as Html from "../Html.ts"
 import * as HtmlLocator from "../testing/HtmlLocator.ts"
+import { cssProperty } from "./cssProperty.ts"
 import { nonTextInputTypes } from "./editable.ts"
 
 const lower = (value: string | undefined) => value?.toLowerCase()
@@ -453,6 +454,84 @@ export const drop = (given: Partial<Html.DropPayload> | undefined) => {
   }
 }
 
+const written = (name: string): string =>
+  name.startsWith("--") ? name : name.toLowerCase()
+
+const unquotedUrl = /(?<![\w-])url$/i
+
+/**
+ * Only unescaped, top-level semicolons separate declarations. Strip comments
+ * except in strings and unquoted `url(...)` values. For repeated properties,
+ * the last `!important` value wins, or the last value if none is important.
+ */
+const declarations = (style = ""): Record<string, string> => {
+  const out: Record<string, string> = Object.create(null)
+  const important = new Set<string>()
+  // The current declaration without comments, and where its first top-level
+  // `:` and last top-level `!` are in it.
+  let text = ""
+  let colon = -1
+  let bang = -1
+  let depth = 0
+  let quote = ""
+  const add = () => {
+    if (colon !== -1) {
+      const property = written(text.slice(0, colon).trim())
+      const priority = bang > colon &&
+        text.slice(bang + 1).trim().toLowerCase() === "important"
+      if (!important.has(property) || priority) {
+        out[property] = text.slice(colon + 1).trim()
+        if (priority) important.add(property)
+      }
+    }
+    text = ""
+    colon = bang = -1
+  }
+  for (let i = 0; i < style.length; i++) {
+    const char = style[i]!
+    if (char === "\\") {
+      text += style.slice(i, i + 2)
+      i++
+      continue
+    }
+    if (quote !== "") {
+      if (char === quote) quote = ""
+    } else if (char === "/" && style[i + 1] === "*") {
+      const close = style.indexOf("*/", i + 2)
+      i = close === -1 ? style.length : close + 1
+      continue
+    } else if (char === "\"" || char === "'") quote = char
+    else if (
+      char === "(" && unquotedUrl.test(text) &&
+      !/^\s*["']/.test(style.slice(i + 1))
+    ) {
+      let end = i + 1
+      while (end < style.length && style[end] !== ")") {
+        end += style[end] === "\\" ? 2 : 1
+      }
+      text += style.slice(i, end + 1)
+      i = end
+      continue
+    } else if ("([{".includes(char)) depth++
+    else if (")]}".includes(char)) depth--
+    else if (depth <= 0) {
+      if (char === ";") {
+        add()
+        continue
+      }
+      if (char === ":" && colon === -1) colon = text.length
+      else if (char === "!") bang = text.length
+    }
+    text += char
+  }
+  add()
+  return out
+}
+
+/** Custom properties keep their case; other dashed names ignore case. */
+const styleProperty = (name: string): string =>
+  name.includes("-") ? written(name) : cssProperty(name)
+
 /** @internal */
 export const matchers = {
   ...scene.matchers,
@@ -493,5 +572,12 @@ export const matchers = {
         ? name === expected
         : expected.test(name)
       return pass ? undefined : `its accessible name is ${JSON.stringify(name)}`
-    })
+    }),
+  toHaveStyle: (expected: scene.Expected) =>
+    scene.record(
+      expected,
+      "declaration",
+      ({ attrs }) => declarations(attrs?.style),
+      styleProperty
+    )
 }

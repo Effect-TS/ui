@@ -31,21 +31,20 @@ const standIn = {
       ),
       datePicker.positioner(h.div.class("positioner")).children(
         datePicker.popup(h.div.attrs({ class: "popup", role: "x" })).children(
-          datePicker.grid(h.table.class("grid")).children(
+          datePicker.months[0].grid(h.table.class("grid")).children(
             h.tbody(
-              ...datePicker.weeks.map((week) =>
+              ...datePicker.months[0].weeks.map((week) =>
                 h.tr(
                   ...week.map((date) =>
-                    datePicker.cell({
+                    datePicker.months[0].cell({
                       element: h.td.attr(
                         "data-cell",
                         DateTime.formatIsoDateUtc(date)
                       ),
                       date
                     }).children(
-                      datePicker.day({ element: h.button, date }).children(
-                        DateTime.formatIsoDateUtc(date)
-                      )
+                      datePicker.months[0].day({ element: h.button, date })
+                        .children(DateTime.formatIsoDateUtc(date))
                     )
                   )
                 )
@@ -188,5 +187,22 @@ describe("DatePicker", () => {
       assert.strictEqual(scene.get(input).attrs?.readonly, "")
       assert.strictEqual(scene.get(grid).attrs?.["aria-readonly"], "true")
       scene.click(trigger).emitted(opened)
+    }))
+
+  it.effect("multi-month picker does not request a new month for a date in another visible month", () =>
+    Effect.gen(function*() {
+      const scene = yield* HtmlScene.make(
+        DatePicker,
+        props({ months: 2 }),
+        standIn
+      )
+
+      scene.parts((datePicker) => {
+        assert.strictEqual(datePicker.months.length, 2)
+      })
+
+      // December is already visible alongside November
+      scene.childEmit(DateField, { _tag: "Committed", date: utc("2026-12-20") })
+        .emitted(picked(utc("2026-12-20")))
     }))
 })

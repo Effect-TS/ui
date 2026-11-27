@@ -18,6 +18,7 @@ describe("HtmlKeyboard.shortcuts", () => {
     editable: false,
     selectionStart: null,
     selectionEnd: null,
+    timeStamp: 0,
     defaultPrevented: false,
     ...overrides
   })

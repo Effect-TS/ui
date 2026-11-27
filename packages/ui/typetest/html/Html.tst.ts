@@ -146,6 +146,15 @@ describe("Html", () => {
             "input"
           >
         >()
+        expect(h.slot("Untitled")).type.toBe<
+          Html.Element<
+            Msg,
+            never,
+            Html.EventsOf<"slot">,
+            HTMLSlotElement,
+            "slot"
+          >
+        >()
         expect(h).type.not.toHaveProperty("script")
         return h.div()
       }
@@ -205,9 +214,10 @@ describe("Html", () => {
           null,
           undefined
         )
-        // Void tags take no children and aren't callable.
+        // Void tags, `textarea` among them, take no children and aren't callable.
         expect(h.input).type.not.toHaveProperty("children")
         expect(h.input.value(draft)).type.not.toHaveProperty("children")
+        expect(h.textarea).type.not.toHaveProperty("children")
         expect(h.br).type.not.toBeAssignableTo<(...args: never) => unknown>()
         expect(h.input).type.not.toBeAssignableTo<(...args: never) => unknown>()
         // A builder is a valid child and a valid view without a terminal call.
@@ -413,6 +423,11 @@ describe("Html", () => {
           "paste",
           ({ text }: Html.PastePayload) => Msg.Typed({ value: text })
         )
+        h.slot.on("slotchange", (payload) => {
+          expect(payload).type.toBe<{}>()
+          return Msg.Mounted()
+        })
+        expect(h.div.on).type.not.toBeCallableWith("slotchange", Msg.Mounted())
         expect(h.div.on).type.not.toBeCallableWith("input", Msg.Mounted())
         expect(h.div.on).type.not.toBeCallableWith("submit", Msg.Mounted())
         expect(h.select.on).type.not.toBeCallableWith(

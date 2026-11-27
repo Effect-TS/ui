@@ -2,12 +2,13 @@
  * @title Testing @effect/ui components
  *
  * Test a component's logic as a `Story`, its view as a `Scene`, a Command
- * against a fake Layer, and components working together as a `Play`. A
+ * against a fake Layer, and a wrapper with its headless part as a `Play`. A
  * `Case` names one state for a Play and for the browser's workbench. The
  * last test renders on the server and hydrates with `ssr`.
  */
 // @vitest-environment happy-dom
 import { Component, Router } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 import { HtmlLocator, HtmlPlay, HtmlScene, ssr } from "@effect/ui/html/testing"
 import { Case, Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -18,6 +19,7 @@ import { TestClock } from "effect/testing"
 // to what it tests: `notes/components/NoteEditor.story.test.ts` and
 // `App.play.test.ts`.
 import type { Note } from "#domain/Note"
+import { ListNotes } from "#queries/ListNotes"
 import { App } from "./fixtures/App.ts"
 import { Collapsible } from "./fixtures/kit/Collapsible.ts"
 import {
@@ -27,6 +29,10 @@ import {
   NoteEditorNoDeps,
   SaveNote
 } from "./fixtures/notes/components/NoteEditor.ts"
+import {
+  NoteLinkPickerEvents,
+  NoteLinkPickerNoDeps
+} from "./fixtures/notes/components/NoteLinkPicker.ts"
 import { Notes } from "./fixtures/notes/services/Notes.ts"
 import { NotePageNoDeps } from "./fixtures/pages/notes/NotePage.ts"
 import { NotesIndexNoDeps } from "./fixtures/pages/NotesIndex.ts"
@@ -140,6 +146,14 @@ describe("NoteEditor", () => {
         // menu the `toggle` the browser would.
         .click("More actions")
         .expect(actions).toExist()
+        // `toHaveStyle` checks inline declarations by name, whatever the
+        // spacing, so `margin` doesn't match `margin-top`. It takes the
+        // camelCase names `.style` does, or dashed CSS names.
+        .expect(actions).toHaveStyle({
+          "position-anchor": "--actions-n1",
+          margin: "0",
+          marginTop: false
+        })
         .click("Discard changes")
         // Choosing an item closes the menu. A closed popover or dialog is
         // hidden from role queries, as it is from the accessibility tree.
@@ -179,6 +193,13 @@ describe("Collapsible", () => {
         slots: (h) => ({ summary: h.h2("Groceries"), body: h.p("Milk") })
       })
       s.click("Hide")
+        // `toHaveAttributes` checks several attributes at once and reports
+        // every one that differs. `false` means absent.
+        .expect(Locator.text("Show")).toHaveAttributes({
+          type: "button",
+          "aria-expanded": "false",
+          disabled: false
+        })
         .expect(Locator.tag("h2")).toHaveText("Groceries")
         .expect(Locator.text("Milk")).toBeAbsent()
     }))
@@ -269,6 +290,13 @@ it.layer(SaveNote.layer.pipe(Layer.provideMerge(Notes.layerMemory([note]))), {
 // closes the Play settles once more, so a crash after the last step fails the
 // test. `TestHost.layer()` provides the host. `TestHost.settle`, `setOnline`
 // and `expectProblem` work beside the Play.
+//
+// Provide the host beneath the test's Layers with `Layer.provideMerge`. The
+// host's scheduler then runs their fibers too, such as a backend's worker
+// that every root shares, and each step settles them with the tree. A Layer
+// merged beside the host with `Layer.mergeAll` runs on the default scheduler,
+// so a step can read the tree before that worker has published. Waiting
+// outside Effect, on a Promise or a timer, isn't settled either way.
 
 // `NoteEditor` already provides the app's Layers, and an inner provide wins
 // over an outer one. So a test starts from `NoteEditorNoDeps` and provides
@@ -276,7 +304,7 @@ it.layer(SaveNote.layer.pipe(Layer.provideMerge(Notes.layerMemory([note]))), {
 // Build fresh services for each test so edits cannot leak.
 const NoteEditorTest = NoteEditorNoDeps.pipe(Component.provide(SaveNote.layer))
 
-it.layer(Layer.mergeAll(Notes.layerMemory([note]), TestHost.layer()), {
+it.layer(Notes.layerMemory([note]).pipe(Layer.provideMerge(TestHost.layer())), {
   buildPerTest: true
 })(
   "NoteEditor as a Play",
@@ -294,6 +322,74 @@ it.layer(Layer.mergeAll(Notes.layerMemory([note]), TestHost.layer()), {
         assert.deepStrictEqual(play.root.emitted, [
           NoteEditorEvents.Saved({ note: edited })
         ])
+      }))
+  }
+)
+
+// For a wrapper around a headless or `@effect/ui-kit` part, test each event
+// it maps in `onEmit` and the props it feeds back. Locate controls by ARIA
+// role and name. Test the part's keyboard navigation, highlight and typeahead
+// in the part itself. Omitting an `onEmit` handler is already a compile error.
+//
+// This test provides a no-op `Html.Host` for `Listbox`'s focus and scroll
+// commands. It checks wrapper state and events, not browser focus.
+const otherNote: Note = { id: "n2", title: "Recipes", body: "Soup" }
+
+const NoopHtmlHost = Layer.succeed(Html.Host, {
+  focus: () => {},
+  blur: () => {},
+  scrollIntoView: () => {},
+  measure: () => ({
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: 0,
+    height: 0
+  }),
+  select: () => {},
+  requestSubmit: () => false,
+  showPicker: () => false
+})
+
+it.layer(
+  Layer.mergeAll(
+    ListNotes.toLayer(() => Effect.succeed([note, otherNote])),
+    TestHost.layer(),
+    NoopHtmlHost
+  ),
+  { buildPerTest: true }
+)(
+  "NoteLinkPicker",
+  (it) => {
+    it.effect("links the picked note", () =>
+      Effect.gen(function*() {
+        const play = yield* HtmlPlay.make(NoteLinkPickerNoDeps, {
+          noteId: note.id
+        })
+        // Pick a note to exercise the wrapper's `Picked` handler.
+        yield* play.keydown(
+          HtmlLocator.role("button", { name: "Link to a note…" }),
+          "ArrowDown"
+        )
+        yield* play.keydown(
+          HtmlLocator.role("combobox", { name: "Filter notes" }),
+          "Enter"
+        )
+        const trigger = HtmlLocator.role("button", {
+          name: `Linked: ${otherNote.title}`
+        })
+        assert.deepStrictEqual(play.root.emitted, [
+          NoteLinkPickerEvents.Linked({ id: otherNote.id })
+        ])
+        // Reopen by click to check the `selected` prop fed back by the wrapper.
+        // `ArrowDown` would move past that option.
+        yield* play.click(trigger)
+        yield* play.expect(
+          HtmlLocator.role("option", { name: /^Recipes/ })
+        ).toHaveAttribute("aria-selected", "true")
       }))
   }
 )
@@ -364,9 +460,8 @@ const ApiFake = Layer.sync(HttpClient.HttpClient, () => {
 
 const AppTest = Layer.mergeAll(
   Router.memory({ routes: AppRoute, url: "/notes/n1" }),
-  ApiFake,
-  TestHost.layer()
-)
+  ApiFake
+).pipe(Layer.provideMerge(TestHost.layer()))
 
 it.layer(AppTest, { buildPerTest: true })("App as a Play", (it) => {
   it.effect("loads a note, saves an edit and shows the notice", () =>
@@ -447,9 +542,8 @@ const timelineOf = (flush: TestHost.Flush) =>
     Effect.provide(
       Layer.mergeAll(
         Router.memory({ routes: AppRoute, url: "/notes/n1" }),
-        ApiFake,
-        TestHost.layer({ flush })
-      )
+        ApiFake
+      ).pipe(Layer.provideMerge(TestHost.layer({ flush })))
     )
   )
 

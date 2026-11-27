@@ -18,13 +18,13 @@ interface Running {
   readonly deps: ReadonlyArray<Subscription.Dep> | undefined
   latest: Subscription.Subscription<any, any>
   fiber: Fiber.Fiber<unknown, unknown> | undefined
-  detach: (() => void) | undefined
+  attached: ReturnType<NonNullable<services.Direct[typeof services.direct]>>
 }
 
 const runningOf = new WeakMap<Kernel.Instance, Map<string, Running>>()
 
 const stop = (running: Running): void => {
-  running.detach?.()
+  running.attached?.close()
   running.fiber?.interruptUnsafe(Fiber.getCurrent()?.id)
 }
 
@@ -132,6 +132,7 @@ export const sync = (inst: Kernel.Instance): void => {
     const existing = subscriptions.get(key)
     if (existing !== undefined) {
       existing.latest = subscription
+      existing.attached?.update?.(subscription)
       continue
     }
     const { deps, name } = subscription
@@ -140,7 +141,7 @@ export const sync = (inst: Kernel.Instance): void => {
       deps,
       latest: subscription,
       fiber: undefined,
-      detach: undefined
+      attached: undefined
     }
     subscriptions.set(key, running)
     log?.(inst, { _tag: "SubscriptionStarted", key, name, deps })
@@ -232,7 +233,7 @@ const start = (
     },
     enter
   )
-  running.detach = attached?.close
+  running.attached = attached
   const fiber = fork(
     tree,
     context,

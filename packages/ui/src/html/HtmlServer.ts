@@ -60,7 +60,7 @@
  * @stability experimental
  * @since 0.1.0
  */
-import type * as Context from "effect/Context"
+import * as Context from "effect/Context"
 import type * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import type * as Component from "../Component.ts"
@@ -79,9 +79,9 @@ import * as server from "./internal/server.ts"
  * `html` is the body markup for the app's container. `state` maps each
  * instance's path to its Schema-encoded Model, plus `~deferred`, the
  * settled query entries under `~query`, the last message each owner of
- * shared state got from its reports under `~reported`, and `~static` for a
- * static render;
- * pass it to `BrowserHost.mount`. `model` is the root's Model
+ * shared state got from its reports under `~reported`, `~static` for a
+ * static render, and `~key` when rendered with `key`;
+ * pass it to `HtmlHydrate.hydrate`. `model` is the root's Model
  * after the server run, for app code that sets the status (a 404 for a
  * missing record), or `undefined` if the root failed. `head` holds the
  * `<title>`, meta, link and JSON-LD tags, and `htmlAttributes` and
@@ -100,6 +100,20 @@ export interface Rendered<out Model> {
   readonly htmlAttributes: string
   readonly bodyAttributes: string
 }
+
+/**
+ * Whether `renderToHtml` marks the rendered state as static (`~static`) when
+ * `options.static` is omitted. Defaults to `false`. `HtmlServerVite` sets it
+ * to `true` for prerenders, whose query entries hydrate stale.
+ *
+ * @stability experimental
+ * @category references
+ * @since 0.1.0
+ */
+export const Static: Context.Reference<boolean> = Context.Reference<boolean>(
+  "@effect/ui/html/HtmlServer/Static",
+  { defaultValue: () => false }
+)
 
 /** Element operations on the server, where there are no elements to reach. */
 const serverHtmlHost: Context.Service.Shape<typeof Html.Host> = {
@@ -155,8 +169,12 @@ const serverHtmlHost: Context.Service.Shape<typeof Html.Host> = {
  * prerendered without search params, such as `/search`, may be served for
  * `/search?q=x`, and a 404 prerendered at `/404` for any unknown path:
  * `Router.subscription` then delivers the Router's route without reporting
- * `RouteMismatch`. The default is HTML rendered per request, whose entries
- * hydrate fresh.
+ * `RouteMismatch`. When `options.static` is omitted, it reads `Static`.
+ * The default is `false`, for per-request HTML whose entries hydrate fresh.
+ *
+ * Use distinct `key` options when rendering the same root component more than
+ * once in one document. Each key sets the root's path to `/<name>[<key>]`
+ * and is saved in `state` for `HtmlHydrate.hydrate` to reuse automatically.
  *
  * **Gotchas**
  *
@@ -189,16 +207,18 @@ export const renderToHtml = <
   props: Props | Effect.Effect<Props, never, RP>,
   options?: {
     readonly budget?: Duration.Input | undefined
+    readonly key?: string | undefined
     readonly static?: boolean | undefined
   }
 ): Effect.Effect<Rendered<Model>, never, Exclude<R | RP, Html.Host>> =>
-  Effect.suspend(() => {
+  Effect.contextWith((context: Context.Context<never>) => {
     const writer = server.makeWriter()
     // `Renderer.prerender`, with the writer as the tree's sink.
     return runtime.prerender(component as any, props, {
       budget: options?.budget ?? "500 millis",
       elements: [Html.name],
-      static: options?.static,
+      key: options?.key,
+      static: options?.static ?? Context.get(context, Static),
       sink: writer
     }).pipe(
       Effect.provideService(Html.Host, serverHtmlHost),

@@ -247,7 +247,14 @@ export interface Direct {
       f: (latest: Subscription.Subscription<unknown, unknown>) => void
     ) => void
   ) =>
-    | { readonly initial: Effect.Effect<void>; readonly close: () => void }
+    | {
+      readonly initial: Effect.Effect<void>
+      readonly close: () => void
+      /** Called with each later declaration for the key, as `subscriptions` re-runs. */
+      readonly update?: (
+        latest: Subscription.Subscription<unknown, unknown>
+      ) => void
+    }
     | undefined
 }
 
@@ -263,3 +270,17 @@ export const isNavigation = (
   command: { readonly name: string; readonly service?: unknown }
 ): boolean =>
   command.service !== undefined && command.name.startsWith("@effect/ui/Router/")
+
+/**
+ * Runs marked Commands after render commit, without yielding to the scheduler.
+ *
+ * @internal
+ */
+export const onCommit: unique symbol = Symbol.for(
+  "@effect/ui/Command/onCommit"
+) as any
+
+/** @internal */
+export const isOnCommit = (
+  command: { readonly name: string; readonly [onCommit]?: boolean | undefined }
+): boolean => command[onCommit] === true

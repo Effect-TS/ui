@@ -790,7 +790,9 @@ and the end of the test.
 Keys and presses that no element hears, such as a game's arrow keys or an
 Escape that closes a popup opened by hovering, are entries in
 `subscriptions`: `HtmlSubscription.onDocument("keydown", handler, options)`,
-`HtmlSubscription.shortcuts(table)` for a table of single-key shortcuts, and
+`HtmlSubscription.shortcuts(table)` for a table of single-key shortcuts,
+`HtmlSubscription.keySequences(table)` for one with rows such as
+`{ keys: ["g", "l"], message }`, and
 `HtmlSubscription.onWindow("focus" | "blur", handler)` for the window's
 focus. The handler and `preventDefault` mean what they mean on an element,
 and the payload adds `defaultPrevented`, so a listener can skip a key an
@@ -809,8 +811,9 @@ its next step settles.
 
 `Canvas.view(h, { width, height, shapes, pixelRatio, onPointerDown, onPointerMove, onPointerUp })`,
 from `@effect/ui/html`, draws a scene of plain shapes: `Canvas.Rect`,
-`Circle`, `Path`, `Text` and a nestable `Group`. Build the scene from the
-Model in `view`. The canvas repaints only when the scene differs. It
+`Circle`, `Path`, `Text`, `Image` and a nestable `Group`. Build the scene from
+the Model in `view`. The canvas repaints only when the scene differs, or when
+an `Image` finishes loading. It
 returns the `h.canvas` builder, so classes, attributes and fallback
 children chain on it, and it takes the element's mount. Pointer handlers
 get `x` and `y` in scene units. `pixelRatio: "auto"` draws sharply on a
@@ -1202,8 +1205,8 @@ Known limits:
   with components in the prose as islands.
 - **[Testing @effect/ui components](./ai-docs/src/10_ui/50_testing.ts)**:
   Test a component's logic as a `Story`, its view as a `Scene`, a Command
-  against a fake Layer, and components working together as a `Play`. The
-  last test renders on the server and hydrates with `ssr`.
+  against a fake Layer, and a wrapper with its headless part as a `Play`.
+  The last test renders on the server and hydrates with `ssr`.
 - **[Terminal apps with OpenTUI](./ai-docs/src/10_ui/60_opentui.ts)**:
   Build Effect UI terminal applications with `@effect/ui-opentui`, using the
   OpenTUI vocabulary, global key shortcuts, controlled inputs, imperative

@@ -1434,6 +1434,32 @@ describe("BrowserHost", { concurrent: false }, () => {
         ]])
       }).pipe(Effect.scoped))
 
+    it.effect("two mounts of the same component with different keys produce distinct element ids", () =>
+      Effect.gen(function*() {
+        const Slot = Html.component({
+          name: "Slot",
+          model: Schema.Null,
+          message: Schema.Never
+        }).make({
+          init: () => null,
+          update: ($) => $.model,
+          view: (h) => h.button.id(h.id("trigger")).children("Open")
+        })
+        const [first, second] = [yield* container, yield* container]
+        yield* BrowserHost.mountEffect(Slot, {}, first, {
+          head: false,
+          key: "a"
+        })
+        yield* BrowserHost.mountEffect(Slot, {}, second, {
+          head: false,
+          key: "b"
+        })
+        const firstButton = first.querySelector("button")!
+        const secondButton = second.querySelector("button")!
+        expect(document.getElementById(firstButton.id)).toBe(firstButton)
+        expect(document.getElementById(secondButton.id)).toBe(secondButton)
+      }).pipe(Effect.scoped))
+
     clicksWhenConnected("x-clicks-on-connect")
     const LogPage = Component.define({
       name: "Page",
@@ -2178,6 +2204,35 @@ describe("BrowserHost", { concurrent: false }, () => {
             "doc:down:s:true:false",
             "doc:down:svg:false:false"
           ])
+        }).pipe(Effect.scoped))
+
+      it.effect("document listeners receive the DOM event timeStamp", () =>
+        Effect.gen(function*() {
+          const app = yield* container
+          const Stamps = Html.component({
+            name: "Stamps",
+            model: Schema.Array(Schema.Number),
+            message: Schema.Number
+          }).make({
+            init: (): ReadonlyArray<number> => [],
+            update: ($, stamp) => [...$.model, stamp],
+            view: (h) => h.div(),
+            subscriptions: () => [
+              HtmlSubscription.onDocument(
+                "keydown",
+                ({ timeStamp }) => timeStamp
+              )
+            ]
+          })
+          const root = yield* BrowserHost.mountEffect(Stamps, {}, app)
+          yield* tick
+          const event = new KeyboardEvent("keydown", {
+            key: "g",
+            bubbles: true
+          })
+          document.body.dispatchEvent(event)
+          yield* tick
+          expect(root.model()).toEqual([event.timeStamp])
         }).pipe(Effect.scoped))
 
       it.effect("a composing field's value isn't written until compositionend, including inside shadow DOM", () =>
@@ -3627,6 +3682,24 @@ describe("BrowserHost", { concurrent: false }, () => {
         }).pipe(Effect.scoped)
     )
 
+    it.effect("ref Commands run in the committing task under HtmlScheduler", () =>
+      Effect.gen(function*() {
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(refs(Html), {}, app)
+        yield* tick
+        yield* Effect.promise(async () => {
+          root.send(Message.Focus())
+          await Promise.resolve()
+        })
+        expect(document.activeElement).toBe(
+          HtmlLocator.getByRole(app, "textbox", { name: "Field" })
+        )
+        expect(root.model()).toEqual(["mounted input", "found true"])
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(HtmlScheduler.layer({ budget: 0 }))
+      ))
+
     const Code = Html.ref("Code", "input")
     const Loose = Html.ref("Loose", "input")
     const EntryMessage = UiSchema.TaggedEnum({
@@ -4469,6 +4542,33 @@ describe("BrowserHost", { concurrent: false }, () => {
         app
       ).pipe(Effect.provideService(Renderer.Renderer, { host: outer }))
       expect(root.model()).toEqual({ hasBrowserRenderer: true, heard: true })
+    }).pipe(Effect.scoped))
+
+  it.effect("renders a native slot in a shadow root and delivers slotchange", () =>
+    Effect.gen(function*() {
+      const Card = Html.component({
+        name: "Card",
+        model: Schema.Number,
+        message: Schema.Literal("SlotChanged")
+      }).make({
+        init: () => 0,
+        update: ($) => $.model + 1,
+        view: (h) =>
+          h.slot.attr("name", "title").on("slotchange", "SlotChanged")
+      })
+      const host = yield* container
+      host.innerHTML = "<span slot=\"title\">Plan</span>"
+      const shadow = host.attachShadow({ mode: "open" })
+      const root = yield* BrowserHost.mountEffect(
+        Card,
+        {},
+        shadow as unknown as Element
+      )
+      const slot = shadow.querySelector<HTMLSlotElement>("slot")!
+      expect(slot.assignedElements()).toEqual([host.querySelector("span")])
+      slot.dispatchEvent(new Event("slotchange", { bubbles: true }))
+      yield* tick
+      expect(root.model()).toBe(1)
     }).pipe(Effect.scoped))
 })
 

@@ -1,6 +1,7 @@
 import {
   Command,
   Component,
+  Query,
   Route,
   Router,
   Subscription,
@@ -1244,5 +1245,187 @@ describe("Story", () => {
         const waiting = yield* Story.make(Note, {})
         waiting.send(author).given((model) => model).keepPending("author")
       }))
+  })
+
+  describe("check", () => {
+    const EditorMessage = UiSchema.TaggedEnum({
+      Typed: { text: Schema.String },
+      ClickedSave: {},
+      CompletedSave: {}
+    })
+
+    class SaveEditor extends Command.Service<SaveEditor>()("todos/Save", {
+      args: { text: Schema.String },
+      success: EditorMessage
+    }) {}
+
+    const Editor = Component.define({
+      name: "Editor",
+      model: Schema.Struct({ text: Schema.String, saving: Schema.Boolean }),
+      message: EditorMessage
+    }).make({
+      init: () => ({ text: "", saving: false }),
+      update: ($, message) =>
+        EditorMessage.match(message, {
+          Typed: ({ text }) => ({ ...$.model, text }),
+          ClickedSave: () =>
+            $.set({ ...$.model, saving: true }).run(
+              SaveEditor.make({ text: $.model.text })
+            ),
+          CompletedSave: () => ({ ...$.model, saving: false })
+        }),
+      view: (h, model) => h.el("div", model.text)
+    })
+
+    it.effect("runs generated messages across pending Commands and settles them from their Service schema", () =>
+      Story.check(Editor, {}, { seed: 1 }))
+
+    it.effect("finds an interleaved invariant failure and reports shrunk replayable Story steps", () =>
+      Effect.gen(function*() {
+        const message = yield* defect(
+          Story.check(Editor, {}, {
+            seed: 1,
+            messages: Schema.Union([
+              EditorMessage.cases.ClickedSave,
+              EditorMessage.cases.Typed
+            ]),
+            commands: [[SaveEditor, {
+              success: EditorMessage.cases.CompletedSave
+            }]],
+            invariant: (story) =>
+              story.model.saving === (story.pending.length > 0)
+          })
+        )
+        assert.include(message, "Story.start(Editor, {})")
+        assert.match(
+          message,
+          /\.send\(\{"_tag":"ClickedSave"\}\)[\s\S]*\.keepPending\(todos\/Save\)[\s\S]*\.send\(\{"_tag":"ClickedSave"\}\)[\s\S]*\.resolve\(todos\/Save,\s*\{"_tag":"CompletedSave"\}\)/
+        )
+        assert.notInclude(message, `"_tag":"Typed"`)
+        assert.include(message, `"saving":false`)
+      }))
+
+    it.effect("fails naming a Command.make Command without a commands override, and passes with one", () =>
+      Effect.gen(function*() {
+        const message = yield* defect(
+          Story.check(Note, {}, {
+            seed: 1,
+            messages: NoteMessage.cases.Save
+          })
+        )
+        assert.include(message, "notes/SaveNote")
+        yield* Story.check(Note, {}, {
+          seed: 1,
+          messages: NoteMessage.cases.Save,
+          commands: [[SaveNoteCommand, { success: NoteMessage.cases.Saved }]]
+        })
+      }))
+
+    it.effect("only settles with outcomes the result Schemas have, and leaves work with none pending", () => {
+      const Message = UiSchema.TaggedEnum({ Go: {}, Failed: {} })
+      class Lookup extends Query.Service<Lookup>()("check/Lookup", {
+        args: {},
+        success: Schema.Never,
+        error: Schema.String,
+        staleTime: "1 minute"
+      }) {}
+      class Reject extends Command.Service<Reject>()("check/Reject", {
+        success: Schema.Never,
+        error: Schema.String
+      }) {}
+      class Hang extends Command.Service<Hang>()("check/Hang", {
+        success: Schema.Never
+      }) {}
+      const Failing = Component.define({
+        name: "Failing",
+        model: Schema.Struct({}),
+        message: Message,
+        queries: { q: { query: Lookup, args: () => ({}) } }
+      }).make({
+        init: () => ({}),
+        update: ($, message) =>
+          Message.match(message, {
+            Go: () =>
+              $.run(
+                Reject.make().pipe(Command.match({
+                  onSuccess: () => Message.Failed(),
+                  onFailure: () => Message.Failed()
+                }))
+              ).run(Hang.make()),
+            Failed: () => $.model
+          }),
+        view: (h) => h.el("div", "")
+      })
+      return Story.check(Failing, {}, {
+        seed: 1,
+        messages: Message.cases.Go,
+        invariant: (story) => !AsyncResult.isSuccess(story.queries().q)
+      })
+    })
+
+    it.effect("loads an infinite query as the runtime walks it", () => {
+      class List extends Query.InfiniteService<List>()("check/List", {
+        page: Schema.Literal(1),
+        items: (page) => [page],
+        key: String,
+        cursor: Schema.Number,
+        next: (_, pages) => Option.some(pages.length),
+        staleTime: "1 minute"
+      }) {}
+      class Touch extends Command.Service<Touch>()("check/Touch", {
+        invalidates: () => [List]
+      }) {}
+      const Message = UiSchema.TaggedEnum({ More: {}, Touch: {} })
+      const Feed = Component.define({
+        name: "Feed",
+        model: Schema.Struct({}),
+        message: Message,
+        queries: { list: { query: List, args: () => ({}) } }
+      }).make({
+        init: () => ({}),
+        update: ($, message) =>
+          Message.match(message, {
+            More: () => $.loadMore("list"),
+            Touch: () => $.run(Command.afterRefetch(Touch.make(), "Infinity"))
+          }),
+        view: (h) => h.el("div", "")
+      })
+      // A cold load fetches one page, More adds one, and a refetch keeps every held page.
+      let held = 0
+      return Story.check(Feed, {}, {
+        seed: 1,
+        runs: 1000,
+        invariant: (story) => {
+          const list = story.queries().list
+          if (!AsyncResult.isSuccess(list)) {
+            held = 0
+            return
+          }
+          const pages = list.value.pages.length
+          const walked = pages >= held && pages <= held + 1
+          held = pages
+          return walked
+        }
+      })
+    })
+
+    it.effect("fails on an event outside the events Schema", () =>
+      Effect.gen(function*() {
+        const Emitter = Component.define({
+          name: "Emitter",
+          model: Schema.Struct({}),
+          message: UiSchema.TaggedEnum({ Go: {} }),
+          events: Schema.String
+        }).make({
+          init: () => ({}),
+          update: ($) => $.emit(undefined as any),
+          view: (h) => h.el("div", "")
+        })
+        const message = yield* defect(Story.check(Emitter, {}, { seed: 1 }))
+        assert.include(message, "the events Schema")
+      }))
+
+    it.effect("runs settle-only stories when messages is Schema.Never", () =>
+      Story.check(Editor, {}, { seed: 1, messages: Schema.Never }))
   })
 })

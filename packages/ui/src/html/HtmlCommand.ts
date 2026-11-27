@@ -3,11 +3,15 @@
  * `scrollIntoView`, `measure`, `select`, `requestSubmit`, `showPicker`,
  * `waitForAnimations`) and `waitForPaint`.
  *
- * A Command runs once the render the issuing `update` caused is committed.
- * Element operations reach the element through `Html.Host`, which a test on
- * `TestHost` fakes with `Layer.succeed(Html.Host, ...)`. `waitForAnimations`
- * reads `getAnimations` on the element directly. It and `waitForPaint` wait
- * for frames on `HtmlSubscription.AnimationFrames`.
+ * Commands run after the render caused by the issuing `update` commits.
+ * Synchronous ref operations (`focus`, `blur`, `scrollIntoView`, `measure`,
+ * `select`, `requestSubmit` and `showPicker`) run in that same task, so the
+ * next browser event sees their DOM updates.
+ *
+ * Element operations use `Html.Host`, which tests can replace with
+ * `Layer.succeed(Html.Host, ...)`. `waitForAnimations` reads `getAnimations`
+ * directly from the element. It and `waitForPaint` wait for frames on
+ * `HtmlSubscription.AnimationFrames`.
  *
  * @stability experimental
  * @since 0.1.0
@@ -17,6 +21,7 @@ import * as Effect from "effect/Effect"
 import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
 import * as Command from "../Command.ts"
+import { onCommit } from "../internal/services.ts"
 import * as Renderer from "../Renderer.ts"
 import * as Html from "./Html.ts"
 import * as frames from "./internal/frames.ts"
@@ -77,6 +82,11 @@ const ScrollOptionsSchema = Schema.Struct({
   )
 })
 
+const onCommitOptions = <const In extends Command.ArgsInput>(
+  args: In
+): { readonly args: In } =>
+  ({ args, [onCommit]: true }) as { readonly args: In }
+
 /**
  * The Command behind `focus`, for a story's `.resolve(HtmlCommand.Focus, { found })`.
  *
@@ -92,7 +102,10 @@ export const Focus: Command.Factory<
   Found
 > = Command.make(
   "HtmlCommand.focus",
-  { args: { ref: Renderer.Ref, options: Schema.optional(FocusOptionsSchema) } },
+  onCommitOptions({
+    ref: Renderer.Ref,
+    options: Schema.optional(FocusOptionsSchema)
+  }),
   ({ options, ref }) =>
     found(ref, (host, element) => host.focus(element, options ?? {}))
 )
@@ -107,7 +120,7 @@ export const Focus: Command.Factory<
 export const Blur: Command.Factory<{ readonly ref: Renderer.Ref<any> }, Found> =
   Command.make(
     "HtmlCommand.blur",
-    { args: { ref: Renderer.Ref } },
+    onCommitOptions({ ref: Renderer.Ref }),
     ({ ref }) => found(ref, (host, element) => host.blur(element))
   )
 
@@ -126,9 +139,10 @@ export const ScrollIntoView: Command.Factory<
   Found
 > = Command.make(
   "HtmlCommand.scrollIntoView",
-  {
-    args: { ref: Renderer.Ref, options: Schema.optional(ScrollOptionsSchema) }
-  },
+  onCommitOptions({
+    ref: Renderer.Ref,
+    options: Schema.optional(ScrollOptionsSchema)
+  }),
   ({ options, ref }) =>
     found(ref, (host, element) => host.scrollIntoView(element, options ?? {}))
 )
@@ -145,7 +159,7 @@ export const Measure: Command.Factory<
   Option.Option<Html.Rect>
 > = Command.make(
   "HtmlCommand.measure",
-  { args: { ref: Renderer.Ref } },
+  onCommitOptions({ ref: Renderer.Ref }),
   ({ ref }) => withElement(ref, (host, element) => host.measure(element))
 )
 
@@ -161,7 +175,7 @@ export const Select: Command.Factory<
   Found
 > = Command.make(
   "HtmlCommand.select",
-  { args: { ref: Renderer.Ref } },
+  onCommitOptions({ ref: Renderer.Ref }),
   ({ ref }) => found(ref, (host, element) => host.select(element))
 )
 
@@ -189,7 +203,7 @@ export const RequestSubmit: Command.Factory<
   Submitted
 > = Command.make(
   "HtmlCommand.requestSubmit",
-  { args: { ref: Renderer.Ref } },
+  onCommitOptions({ ref: Renderer.Ref }),
   ({ ref }) =>
     Effect.map(
       withElement(ref, (host, element) => host.requestSubmit(element)),
@@ -363,7 +377,7 @@ export const ShowPicker: Command.Factory<
   Opened
 > = Command.make(
   "HtmlCommand.showPicker",
-  { args: { ref: Renderer.Ref } },
+  onCommitOptions({ ref: Renderer.Ref }),
   ({ ref }) =>
     Effect.map(
       withElement(ref, (host, element) => host.showPicker(element)),

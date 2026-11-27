@@ -6,6 +6,7 @@ import { HtmlLocator } from "@effect/ui/html/testing"
 import { afterEach, assert, describe, it } from "@effect/vitest"
 import { Effect, Exit, Layer, Schema, Scope } from "effect"
 import { type Capture, play } from "./fixtures/TwoEditors.ts"
+import { playTwoWrites, secret } from "./fixtures/TwoWrites.ts"
 
 const wait = (ms: number) =>
   Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, ms)))
@@ -1470,5 +1471,45 @@ describe("DevTools overlay", { concurrent: false }, () => {
         assert.deepStrictEqual(within.models, without.models)
         assert.isNull(document.querySelector("[data-effect-ui-devtools]"))
       }
+    }))
+
+  it.live("shows declared payload fields on rows and filters across instances when clicked", () =>
+    Effect.gen(function*() {
+      yield* Layer.build(
+        DevTools.layer({ fields: ["commandId", "secret"] })
+      ).pipe(
+        Effect.flatMap((services) =>
+          playTwoWrites().pipe(Effect.provide(services))
+        )
+      )
+      yield* settle
+      const root = overlay()
+      yield* open(root)
+      const cmd = (id: string) =>
+        HtmlLocator.queryAllByRole(root, "button", { name: new RegExp(id) })
+
+      assert.notInclude(root.textContent, secret)
+      assert.strictEqual(cmd("cmd-1").length, 4)
+
+      yield* showActive(root)
+      yield* click(instance(root, "Feed[a]"))
+      assert.deepStrictEqual(
+        new Set(Array.from(root.querySelectorAll(".row .who"), text)),
+        new Set(["Feed[a]"])
+      )
+      yield* click(cmd("cmd-1")[0]!)
+
+      const rows = Array.from(root.querySelectorAll(".row"))
+      assert.strictEqual(rows.length, 4)
+      assert.deepStrictEqual(
+        new Set(rows.map((row) => text(row.querySelector(".who")))),
+        new Set(["Board", "Feed[a]", "Feed[b]"])
+      )
+      assert.strictEqual(cmd("cmd-2").length, 0)
+
+      yield* click(
+        cmd("commandId.*cmd-1").find((node) => !node.closest(".row"))!
+      )
+      assert.strictEqual(cmd("cmd-2").length, 4)
     }))
 })

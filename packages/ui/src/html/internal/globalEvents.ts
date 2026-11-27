@@ -34,7 +34,29 @@ export interface Listener {
   readonly capture: boolean
   readonly handler: View.Handler<unknown, any>
   readonly preventDefault: boolean | "always" | undefined
+  /** Calls `handler` as a {@link Step} with state owned by the running listener. */
+  readonly held?: true | undefined
 }
+
+/**
+ * What a listener holds between events, such as a sequence's presses so far.
+ *
+ * @internal
+ */
+export interface Held {
+  value?: unknown
+}
+
+/**
+ * The handler of a listener with `held`: a message, `undefined`, or
+ * {@link consumed} for a press that was taken without a message.
+ *
+ * @internal
+ */
+export type Step = (payload: any, held: Held) => unknown
+
+/** @internal */
+export const consumed: unique symbol = Symbol() as any
 
 /**
  * The listener a Subscription declares, or `undefined` for any other.
@@ -103,7 +125,8 @@ export const observe = (fire: () => void): Dispatch => {
  * Runs `declared`'s handler with `payload`, as the browser host runs an
  * element's: `preventDefault: "always"` cancels first, and `true` makes
  * `cancel` the second argument of `onMessage`, called only for a message.
- * A throw from the handler propagates.
+ * A press a `held` listener consumed counts as handled and cancels under
+ * `true`, with no message. A throw from the handler propagates.
  *
  * @internal
  */
@@ -111,14 +134,19 @@ export const run = (
   declared: Listener,
   payload: unknown,
   preventDefault: () => void,
-  onMessage: (message: unknown, cancel: () => void) => void
+  onMessage: (message: unknown, cancel: () => void) => void,
+  held: Held
 ): void => {
   if (current !== undefined) current.heard ??= true
+  const cancel = declared.preventDefault === true ? preventDefault : noop
   if (declared.preventDefault === "always") preventDefault()
-  const message = handle(declared.handler, payload)
+  const message = declared.held
+    ? (declared.handler as Step)(payload, held)
+    : handle(declared.handler, payload)
   if (message !== undefined) {
     if (current !== undefined) current.handled = true
-    onMessage(message, declared.preventDefault === true ? preventDefault : noop)
+    if (message === consumed) cancel()
+    else onMessage(message, cancel)
   }
 }
 

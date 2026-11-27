@@ -3,6 +3,7 @@ import { UiSchema } from "@effect/ui"
 import { BrowserHost, Canvas, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
+import { vi } from "vitest"
 
 const recorder = () => {
   const calls: Array<string> = []
@@ -70,23 +71,28 @@ describe("Canvas", { concurrent: false }, () => {
     new Promise<void>((resolve) => setTimeout(resolve, 30))
   )
 
+  const page = Effect.gen(function*() {
+    const { calls, context } = recorder()
+    const getContext = HTMLCanvasElement.prototype.getContext
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        HTMLCanvasElement.prototype.getContext = (() => context) as any
+      }),
+      () =>
+        Effect.sync(() => HTMLCanvasElement.prototype.getContext = getContext)
+    )
+    const app = yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        document.body.appendChild(document.createElement("div"))
+      ),
+      (element) => Effect.sync(() => element.remove())
+    )
+    return { calls, app }
+  })
+
   it.effect("paints at the pixel ratio, repaints only a changed scene, and reports pointers in scene coordinates", () =>
     Effect.gen(function*() {
-      const { calls, context } = recorder()
-      const getContext = HTMLCanvasElement.prototype.getContext
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          HTMLCanvasElement.prototype.getContext = (() => context) as any
-        }),
-        () =>
-          Effect.sync(() => HTMLCanvasElement.prototype.getContext = getContext)
-      )
-      const app = yield* Effect.acquireRelease(
-        Effect.sync(() =>
-          document.body.appendChild(document.createElement("div"))
-        ),
-        (element) => Effect.sync(() => element.remove())
-      )
+      const { app, calls } = yield* page
       const root = yield* BrowserHost.mountEffect(Dots, {}, app)
       yield* tick
       const canvas = app.querySelector("canvas")!
@@ -159,7 +165,156 @@ describe("Canvas", { concurrent: false }, () => {
         Canvas.Rect({ x: 0, y: 0, width: 1, height: 1 })
       ])
     )
+    const sprite = (x: number) =>
+      Canvas.Image({
+        src: "/sprites.png",
+        x: 10,
+        y: 20,
+        crop: { x, y: 0, width: 16, height: 16 },
+        smoothing: false
+      })
+    assert.isTrue(same([sprite(0)], [sprite(0)]))
+    assert.isFalse(same([sprite(0)], [sprite(16)]))
   })
+
+  it("paint draws resolved images with optional crop and smoothing, and skips unresolved ones", () => {
+    const { calls, context } = recorder()
+    const sprite = {
+      naturalWidth: 64,
+      naturalHeight: 32,
+      width: 0,
+      height: 0
+    } as HTMLImageElement
+    Canvas.paint(
+      context,
+      {
+        width: 100,
+        height: 100,
+        shapes: [
+          Canvas.Image({
+            src: "/sprites.png",
+            x: 10,
+            y: 20,
+            crop: { x: 0, y: 0, width: 16, height: 16 },
+            smoothing: false
+          }),
+          Canvas.Image({ src: "/sprites.png", x: 1, y: 2, width: 32 }),
+          Canvas.Image({ src: "/sprites.png", x: 3, y: 4 }),
+          Canvas.Image({ src: "/missing.png", x: 0, y: 0 })
+        ]
+      },
+      (src) => src === "/sprites.png" ? sprite : undefined
+    )
+    assert.deepStrictEqual(calls, [
+      "clearRect(0,0,100,100)",
+      "save()",
+      "imageSmoothingEnabled=false",
+      `drawImage(${sprite},0,0,16,16,10,20,16,16)`,
+      "restore()",
+      "save()",
+      `drawImage(${sprite},1,2,32,32)`,
+      "restore()",
+      "save()",
+      `drawImage(${sprite},3,4)`,
+      "restore()",
+      "save()",
+      "restore()"
+    ])
+
+    const failing = recorder()
+    assert.throws(
+      () =>
+        Canvas.paint(
+          failing.context,
+          {
+            width: 10,
+            height: 10,
+            shapes: [
+              Canvas.Group({
+                translate: { x: 1, y: 2 },
+                shapes: [Canvas.Image({ src: "/boom.png", x: 0, y: 0 })]
+              })
+            ]
+          },
+          () => {
+            throw new Error("boom")
+          }
+        ),
+      "boom"
+    )
+    assert.deepStrictEqual(failing.calls, [
+      "clearRect(0,0,10,10)",
+      "save()",
+      "translate(1,2)",
+      "save()",
+      "restore()",
+      "restore()"
+    ])
+  })
+
+  it.effect("repaints a mounted canvas when an image finishes loading, without sending a message", () =>
+    Effect.gen(function*() {
+      const { app, calls } = yield* page
+      const created = yield* Effect.acquireRelease(
+        Effect.sync(() => vi.spyOn(document, "createElement")),
+        (spy) => Effect.sync(() => spy.mockRestore())
+      )
+      let updates = 0
+      const Sprites = Html.component({
+        name: "Sprites",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => {
+          updates++
+          return $.model
+        },
+        view: (h) =>
+          Canvas.view(h, {
+            width: 100,
+            height: 100,
+            shapes: [
+              Canvas.Image({
+                src: "/sprites.png",
+                x: 10,
+                y: 20,
+                crop: { x: 0, y: 0, width: 16, height: 16 },
+                smoothing: false
+              })
+            ]
+          })
+      })
+      yield* BrowserHost.mountEffect(Sprites, {}, app)
+      yield* tick
+      assert.deepStrictEqual(calls.splice(0), [
+        "setTransform(1,0,0,1,0,0)",
+        "clearRect(0,0,100,100)",
+        "save()",
+        "restore()"
+      ])
+      const images = created.mock.results.map(({ value }) => value).filter((
+        element
+      ) => element.tagName === "IMG")
+      assert.strictEqual(images.length, 1)
+      const [image] = images
+      assert.strictEqual(image.getAttribute("src"), "/sprites.png")
+      Object.defineProperty(image, "naturalWidth", {
+        value: 32,
+        configurable: true
+      })
+      image.dispatchEvent(new Event("load"))
+      yield* tick
+      assert.deepStrictEqual(calls.splice(0), [
+        "setTransform(1,0,0,1,0,0)",
+        "clearRect(0,0,100,100)",
+        "save()",
+        "imageSmoothingEnabled=false",
+        `drawImage(${image},0,0,16,16,10,20,16,16)`,
+        "restore()"
+      ])
+      assert.strictEqual(updates, 0)
+    }).pipe(Effect.scoped))
 
   it("paint draws paths, text and nested groups in order, each between save and restore", () => {
     const { calls, context } = recorder()

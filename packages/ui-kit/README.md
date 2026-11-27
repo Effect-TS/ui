@@ -23,6 +23,8 @@ Every popup renders in the browser's top layer by default. `Dialog`, `Drawer`, `
 
 A component that doesn't need an instance, such as `Switch`, is a plain view function instead: it takes no `key`, and an `on<Event>` option in place of `onEmit`. Keeping no state isn't enough on its own: `Progress` needs an instance for the id its bar points at, and `DirectionProvider` for sharing the direction with the components inside it.
 
+Test wrapper event mappings and the props they feed back with `HtmlPlay` on `TestHost`; leave the part's keyboard navigation to its own tests. For example, a `Select` wrapper handles `RequestedClose`: send `ArrowDown` to the combobox and `Escape` to the listbox, then expect `aria-expanded="false"` on the combobox. See [Testing `@effect/ui` components](../../ai-docs/src/10_ui/50_testing.ts) for an executable wrapper test.
+
 ## Components
 
 - [Accordion](src/Accordion.ts): a set of panels under headings, each opened and closed by its own button, whose open items live in your Model. One item opens at a time, or several with `multiple`. Each item is a `Collapsible`, with its size transitions and find-in-page.
@@ -30,7 +32,7 @@ A component that doesn't need an instance, such as `Switch`, is a plain view fun
 - [Autocomplete](src/Autocomplete.ts): an input that suggests completions from a list as the user types, whose open state and text live in your Model, with inline completion, grids, inline lists, and an input that submits with its form.
 - [Avatar](src/Avatar.ts): an image with a fallback.
 - [Button](src/Button.ts): a native button that can stay focusable while disabled.
-- [Calendar](src/Calendar.ts): a controlled single-month calendar grid using `DateTime`, with keyboard navigation, roving focus, min/max bounds, unavailable days and right-to-left support.
+- [Calendar](src/Calendar.ts): a controlled calendar of one or more consecutive months using `DateTime`, with keyboard navigation, roving focus, min/max bounds, unavailable days and right-to-left support.
 - [Checkbox](src/Checkbox.ts): a controlled checkbox with an indicator.
 - [CheckboxGroup](src/CheckboxGroup.ts): one list of ticked values shared by the checkboxes inside it, with a parent checkbox that ticks or unticks them all.
 - [Collapsible](src/Collapsible.ts): a panel (any element) that a button shows and hides, whose open state lives in your Model. It publishes the panel's size as CSS variables for height and width transitions, supports `keepMounted: "css"` for CSS-controlled visibility below a breakpoint, and with `hiddenUntilFound` the browser's find-in-page can open it.
@@ -62,6 +64,7 @@ A component that doesn't need an instance, such as `Switch`, is a plain view fun
 - [Select](src/Select.ts): a button that opens a list of options, whose open state and value live in your Model, with typeahead, the popup laid over the trigger with the selected option on its text, and inputs for a form.
 - [Separator](src/Separator.ts): a horizontal or vertical divider between sections of content.
 - [Slider](src/Slider.ts): a controlled slider with one thumb or a range, each thumb a native range input you supply.
+- [SortableList](src/SortableList.ts): a headless list with pointer dragging, handle-based reordering and live-region announcements. Handle drops focus the moved row’s handle; pointer drops leave focus unchanged.
 - [Switch](src/Switch.ts): a controlled on/off setting.
 - [Tabs](src/Tabs.ts): a list of tabs that each show a panel, whose active tab lives in your Model, with roving focus, link tabs, panel enter and exit transitions, and an indicator placed under the active tab with CSS variables.
 - [Toast](src/Toast.ts): `ToastProvider`, a stack of notifications that components inside it post to, which close after a timeout.

@@ -366,6 +366,38 @@ describe("HtmlHydrate", () => {
       assert.strictEqual(app.textContent, "1000")
     }).pipe(Effect.scoped))
 
+  it.effect("hydrates two keyed roots in reverse order and preserves their server ids", () =>
+    Effect.gen(function*() {
+      const Slot = Html.component({
+        name: "Slot",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.button.id(h.id("trigger")).children("Open")
+      })
+      const renderedA = yield* HtmlServer.renderToHtml(Slot, {}, { key: "a" })
+      const renderedB = yield* HtmlServer.renderToHtml(Slot, {}, { key: "b" })
+      const appA = yield* container(renderedA.html)
+      const appB = yield* container(renderedB.html)
+      const buttonA = appA.querySelector("button")!
+      const buttonB = appB.querySelector("button")!
+      const [idA, idB] = [buttonA.id, buttonB.id]
+      yield* HtmlHydrate.hydrateEffect(Slot, {}, appB, renderedB.state, {
+        head: false
+      })
+      yield* HtmlHydrate.hydrateEffect(Slot, {}, appA, renderedA.state, {
+        head: false
+      })
+      sameElements(appA, [buttonA])
+      sameElements(appB, [buttonB])
+      assert.strictEqual(buttonA.id, idA)
+      assert.strictEqual(buttonB.id, idB)
+      assert.strictEqual(document.getElementById(idA), buttonA)
+      assert.strictEqual(document.getElementById(idB), buttonB)
+    }).pipe(Effect.scoped))
+
   it.effect("keeps nodes before a mismatch inside a row, rebuilds the rest of that row, and keeps sibling rows", () =>
     Effect.gen(function*() {
       const rendered = yield* HtmlServer.renderToHtml(List, {})

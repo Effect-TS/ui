@@ -19,7 +19,7 @@
  * | --- | --- |
  * | `list_sessions` | the sessions held, whether each is connected, controllable and paused |
  * | `list_instances` | the instances of a session, with the state of their Command runs |
- * | `list_entries` | entries as rows without payloads |
+ * | `list_entries` | entry summaries with declared payload fields and optional field filtering |
  * | `count_entries` | entries by entry and message `_tag` |
  * | `get_entry` | one entry's Wire frame |
  * | `get_chain` | the causal chain of an entry |
@@ -62,7 +62,7 @@ import * as Server from "../internal/server.ts"
 // This path resolves from both src/node and dist/node.
 const viewerFile = new URL("../../dist/viewer.html", import.meta.url)
 
-const viewer = (size: number) =>
+const viewer = (size: number, fields: ReadonlyArray<string> | undefined) =>
   HttpRouter.add(
     "GET",
     "/",
@@ -77,8 +77,7 @@ const viewer = (size: number) =>
           : HttpServerResponse.html(
             html.replace(
               "<head>",
-              "<head><meta name=\"" + Control.metaName + "\" content='" +
-                JSON.stringify({ size }) + "'>"
+              () => "<head>" + Control.metaTag({ size, fields })
             )
           )
     )
@@ -117,6 +116,12 @@ export interface Options {
   readonly dispatch?: boolean | undefined
   /** How many closed sessions are kept, 5 by default. */
   readonly keep?: number | undefined
+  /**
+   * Top-level message and Command argument fields to show in `list_entries`
+   * and the server's viewer, for example `["commandId"]`. Configure app
+   * overlays with the same `fields` in `DevTools.layer`, or use `DevToolsVite.plugin`.
+   */
+  readonly fields?: ReadonlyArray<string> | undefined
 }
 
 /**
@@ -147,10 +152,11 @@ export const layer = (
     const { routes, server } = Server.make({
       size,
       dispatch: options?.dispatch ?? false,
-      keep: Math.max(0, options?.keep ?? 5)
+      keep: Math.max(0, options?.keep ?? 5),
+      fields: options?.fields
     })
     return HttpRouter.serve(
-      Layer.mergeAll(routes, viewer(size), Mcp.layer(server)),
+      Layer.mergeAll(routes, viewer(size, options?.fields), Mcp.layer(server)),
       {
         disableLogger: true,
         disableListenLog: true

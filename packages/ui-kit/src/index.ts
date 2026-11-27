@@ -240,6 +240,7 @@ export * from "./Separator.ts"
  * @since 0.1.0
  */
 export * from "./Slider.ts"
+export * from "./SortableList.ts"
 
 /**
  * @stability experimental

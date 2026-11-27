@@ -5,6 +5,7 @@ import { replace } from "../../internal/child.ts"
 import { formatCause, isRedacted } from "../../internal/codecRun.ts"
 import type * as keptRun from "../../internal/keptRun.ts"
 import * as Kernel from "../../internal/kernel.ts"
+import { rootPath } from "../../internal/paths.ts"
 import type * as runtime from "../../internal/runtime.ts"
 import { forgetStateCodec } from "../../internal/stateCodec.ts"
 import * as stateRestore from "../../internal/stateRestore.ts"
@@ -48,8 +49,13 @@ interface HotPayload {
   readonly error?: string | undefined
 }
 
+interface LiveRoot {
+  readonly capture: () => SavedRoot | undefined
+  readonly container: globalThis.Element
+}
+
 interface WindowState {
-  readonly roots: Map<Kernel.Instance, () => SavedRoot | undefined>
+  readonly roots: Map<Kernel.Instance, LiveRoot>
   pending: HotPayload | undefined
   scroll: HotPayload["scroll"]
   readonly saveHook: () => void
@@ -108,7 +114,7 @@ const saveWindow = (view: Window, state: WindowState): void => {
   state.pending = undefined
   state.scroll = undefined
   const roots: Array<SavedRoot> = []
-  for (const capture of state.roots.values()) {
+  for (const { capture } of state.roots.values()) {
     const captured = capture()
     if (captured !== undefined) roots.push(captured)
   }
@@ -363,11 +369,12 @@ const restarted = (inst: Kernel.Instance, why: string): string =>
 
 export const open = (
   component: Component.Any,
-  container: globalThis.Element
+  container: globalThis.Element,
+  key?: string | undefined
 ): runtime.HotSession | undefined => {
   const view = container.ownerDocument.defaultView
   if (view === null || view !== globalThis.window) return undefined
-  const path = "/" + component.definition.name
+  const path = rootPath(component, key)
   const containerId = container.id === "" ? undefined : container.id
   const windowState = stateOf(view)
   const claimed = takeRoot(loadPending(view, windowState), path, containerId)
@@ -443,7 +450,19 @@ export const open = (
     attach: (inst) => {
       instance = inst
       restore.watch(inst.tree)
-      windowState.roots.set(inst, capture)
+      const rootNode = container.getRootNode()
+      for (const [other, entry] of windowState.roots) {
+        if (
+          !other.closed && other.path === inst.path &&
+          entry.container.getRootNode() === rootNode
+        ) {
+          warn(
+            `[@effect/ui] Another root is already mounted at ${inst.path} in this document, so their generated element ids can collide. Pass a distinct \`key\` option to each mount.`
+          )
+          break
+        }
+      }
+      windowState.roots.set(inst, { capture, container })
       view.addEventListener(releasedEvent, windowState.claim)
       windowState.claim()
     },

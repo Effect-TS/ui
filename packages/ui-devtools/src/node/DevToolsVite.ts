@@ -240,7 +240,9 @@ const bare = (base: string): string =>
   })) && new URLSearchParams(location.search).has("bare"))`
 
 const devToolsClient = (
-  options: OverlayOptions,
+  options: OverlayOptions & {
+    readonly fields: ReadonlyArray<string> | undefined
+  },
   workbench: string | undefined
 ): string =>
   [
@@ -285,11 +287,11 @@ const reasonOf = (error: unknown): string =>
  * **Details**
  *
  * The plugin applies to `vite dev` only, not to builds, previews or Vitest.
- * It adds a `<meta>` tag with the server's URL and `size` to each HTML page
- * Vite serves, and `DevTools` reads it so the page sends its frames there and
- * takes the server's requests. When the port is taken the plugin warns, adds
- * no `<meta>` tag, and `vite dev` runs on without the server, so a page never
- * connects to a server another project started.
+ * It adds a `<meta>` tag with the server's URL, `size` and `fields` to each
+ * HTML page Vite serves, and `DevTools` reads it so the page sends its frames
+ * there, takes the server's requests and shows the same fields. If the port
+ * is taken, the plugin warns and omits the tag. Vite continues without the
+ * DevTools server, avoiding an automatic connection to another project's server.
  *
  * Unless `overlay: false` is passed, the plugin injects a small client module
  * that attaches the DevTools inspector overlay automatically for roots mounted
@@ -319,6 +321,7 @@ const reasonOf = (error: unknown): string =>
 export const plugin = (options?: Options): Plugin => {
   const url = DevToolsServer.url(options)
   const size = Math.max(1, options?.size ?? 1_000)
+  const fields = options?.fields
   const hot = options?.hot !== false
   const overlay = options?.overlay !== false
   const overlayOptions: OverlayOptions = typeof options?.overlay === "object"
@@ -354,7 +357,7 @@ export const plugin = (options?: Options): Plugin => {
         ? hotClient
         : id === resolvedDevToolsId && overlay
         ? devToolsClient(
-          overlayOptions,
+          { ...overlayOptions, fields },
           workbench === undefined ? undefined : base
         )
         : id === resolvedWorkbenchId && workbench !== undefined
@@ -419,7 +422,10 @@ export const plugin = (options?: Options): Plugin => {
       if (await bound) {
         tags.push({
           tag: "meta",
-          attrs: { name: metaName, content: JSON.stringify({ url, size }) },
+          attrs: {
+            name: metaName,
+            content: JSON.stringify({ url, size, fields })
+          },
           injectTo: "head"
         })
       }

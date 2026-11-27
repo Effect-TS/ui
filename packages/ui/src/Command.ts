@@ -88,6 +88,7 @@ import type { Given } from "./internal/given.ts"
 import type * as Kernel from "./internal/kernel.ts"
 import * as internalNoop from "./internal/noop.ts"
 import { canonical } from "./internal/queryCore.ts"
+import { onCommit } from "./internal/services.ts"
 import type * as Query from "./Query.ts"
 import type * as Renderer from "./Renderer.ts"
 
@@ -370,12 +371,14 @@ export interface Data extends Declared {
    */
   readonly argsSchema: Schema.Top
   /**
-   * The `Service` class the Command was issued by, `undefined` for a `make`
-   * Command.
+   * The `Service` class the Command was issued by, with its result Schemas,
+   * `undefined` for a `make` Command.
    *
    * @internal
    */
-  readonly service: Context.Key<any, any> | undefined
+  readonly service:
+    | { readonly success: Schema.Top; readonly error: Schema.Top }
+    | undefined
 }
 
 /**
@@ -1017,6 +1020,9 @@ const define = (
   const stream = options.stream === true
   const mode = options.mode ?? "concurrent"
   const group = options.group ?? []
+  const commit = (options as { readonly [onCommit]?: true })[onCommit]
+    ? { [onCommit]: true }
+    : undefined
   const argsSchema = argsSchemaOf(options.args)
   const groupOf = makeGroup(name, argsSchema, group)
   return {
@@ -1039,6 +1045,7 @@ const define = (
         afterRefetch: undefined,
         resolve: identity,
         reject: undefined,
+        ...commit,
         ...issue(args)
       }, unmatched)
     }
@@ -1357,7 +1364,7 @@ export const Service: <Self>() => {
   return Object.assign(
     CommandService,
     define(key, options, true, (args) => ({
-      service: Base,
+      service: CommandService,
       invalidates: invalidates?.(args) ?? noTargets,
       optimistic: optimistic?.(args) ?? noTargets,
       writes: writes === undefined

@@ -16,6 +16,9 @@
  * of what the component did. A defect in `init` or `update` makes the step
  * throw, on the line that called it.
  *
+ * `check` generates messages and settlements, checks Schemas and an optional
+ * invariant, and shrinks a failing story for replay.
+ *
  * **Example** (A todo row: send, resolve its Command, check the Model)
  *
  * ```ts import.meta.vitest
@@ -57,12 +60,16 @@
  * @stability experimental
  * @since 0.1.0
  */
+import type * as Arbitrary from "effect/Arbitrary"
 import type * as Effect from "effect/Effect"
+import type * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
+import type * as Command from "../Command.ts"
 import type * as Component from "../Component.ts"
 import * as replay from "../internal/replay.ts"
 import * as cursor from "../internal/steps.ts"
 import * as engine from "../internal/story.ts"
+import * as runner from "../internal/storyCheck.ts"
 import type * as MessageLog from "../MessageLog.ts"
 import type * as View from "../View.ts"
 import type * as Shared from "./Steps.ts"
@@ -324,6 +331,174 @@ export const start = <C extends AnyComponent>(
     "Story",
     cursor.initial(component as unknown as Component.Any, props)
   ) as unknown as Steps<C>
+
+// ---------------------------------------------------------------------------
+// Checking
+// ---------------------------------------------------------------------------
+
+/**
+ * A source of generated values for `check`. Use a function when values depend
+ * on the current Model or Command args.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type Generated<Input, A> =
+  | Schema.Schema<A>
+  | Arbitrary.Arbitrary<A>
+  | ((input: Input) => Arbitrary.Arbitrary<A>)
+
+/**
+ * Overrides for a Command's result generators. Omitted outcomes use the
+ * `Service`'s Schemas; generator functions receive the Command's args.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface CheckResults<D> {
+  readonly success?:
+    | Generated<Command.Definition.Args<D>, Command.Result<D>>
+    | undefined
+  readonly error?:
+    | Generated<Command.Definition.Args<D>, Command.Failure<D>>
+    | undefined
+}
+
+/**
+ * Generators and an invariant for `check`, plus the run, shrink and replay
+ * options accepted by `Arbitrary.checkEffect`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface CheckOptions<
+  C extends AnyComponent,
+  O extends ReadonlyArray<Command.Definition.Any> = []
+> extends Arbitrary.CheckOptions {
+  /**
+   * The messages to send. A function takes the Model. Defaults to the
+   * component's `message` Schema.
+   */
+  readonly messages?:
+    | Generated<Component.Model<C>, Component.Message<C>>
+    | undefined
+  /** Results by Command: `[[SaveTodo, { success: Message.cases.SavedTodo }]]`. */
+  readonly commands?:
+    | {
+      readonly [K in keyof O]: readonly [
+        command: O[K],
+        results: CheckResults<O[K]>
+      ]
+    }
+    | undefined
+  /**
+   * Runs after `init` and each applied step, with the same record as
+   * `Steps.check`. Return `false` or throw to fail the run.
+   */
+  readonly invariant?:
+    | ((current: Steps<C>["current"]) => boolean | void)
+    | undefined
+}
+
+/**
+ * Returns an Effect that runs generated stories for a component and props.
+ * A failing story is shrunk and reported as a defect with a replay token.
+ *
+ * **Generated steps**
+ *
+ * Each story starts with `start`. Steps either send a message or settle one
+ * piece of pending work: a Command, an `afterRefetch` wait, a query load or a
+ * load more. Settlements with no eligible work are skipped. Before sending,
+ * the runner uses `keepPending` so messages can arrive while work is pending.
+ * Query entries under a live optimistic patch cannot settle.
+ *
+ * Command results default to the `Service`'s `success` and `error` Schemas;
+ * query results use the query's Schemas. A `Command.make` Command needs a
+ * `commands` entry with a success generator or the run fails when selecting
+ * its outcomes. `Schema.Never` outcomes are not generated. Work with no
+ * available outcome stays pending. Use `messages: Schema.Never` to generate
+ * only settlements.
+ *
+ * An infinite query loads one page on a cold load. A refetch loads as many
+ * pages as it holds, unless `next` ends the list first.
+ *
+ * **Checks and failures**
+ *
+ * After `init` and each applied step, the runner checks the Model's Schema,
+ * runs `invariant`, then validates and acknowledges events and sends using
+ * the `events` and `receives` Schemas. A step that throws also fails the run.
+ *
+ * The failure report includes Story steps, the Model, pending Commands and a
+ * `replay` token. Shrinking removes steps and shrinks messages generated from
+ * a Schema or Arbitrary. Command and query results, and messages generated
+ * by a function, are sampled by seed; their values do not shrink.
+ *
+ * **Choosing generators**
+ *
+ * Defaults allow any value in the Schemas. If a Command's `success` is the
+ * whole message Schema, it can resolve with any message. The default message
+ * generator can also send a completion message without a pending Command.
+ * Narrow `messages` and `commands` to the interactions you want to test.
+ *
+ * Reports identify Commands by name, not by their variable names.
+ * `effect/Arbitrary` is unstable; replay tokens may not survive a release.
+ *
+ * **Example** (Check that the saving flag matches pending saves)
+ *
+ * ```ts import.meta.vitest
+ * import { Command, Component, UiSchema } from "@effect/ui"
+ * import { Story } from "@effect/ui/testing"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Message = UiSchema.TaggedEnum({ ClickedSave: {}, CompletedSave: {} })
+ *
+ * class Save extends Command.Service<Save>()("todos/Save", {
+ *   success: Message
+ * }) {}
+ *
+ * const Editor = Component.define({
+ *   name: "Editor",
+ *   model: Schema.Struct({ saving: Schema.Boolean }),
+ *   message: Message
+ * }).make({
+ *   init: () => ({ saving: false }),
+ *   update: ($, message) =>
+ *     Message.match(message, {
+ *       ClickedSave: () =>
+ *         $.model.saving ? $.model : $.set({ saving: true }).run(Save.make()),
+ *       CompletedSave: () => ({ saving: false })
+ *     }),
+ *   view: (h) => h.el("button").on("click", Message.ClickedSave()).children("save")
+ * })
+ *
+ * Story.check(Editor, {}, {
+ *   messages: Message.cases.ClickedSave,
+ *   commands: [[Save, { success: Message.cases.CompletedSave }]],
+ *   invariant: (story) => story.model.saving === (story.pending.length > 0)
+ * }).pipe(Effect.runPromise)
+ * ```
+ *
+ * @stability experimental
+ * @category checking
+ * @since 0.1.0
+ */
+export const check = <
+  C extends AnyComponent,
+  const O extends ReadonlyArray<Command.Definition.Any> = []
+>(
+  component: C,
+  props: Component.Props<C>,
+  options?: CheckOptions<C, O>
+): Effect.Effect<void> =>
+  runner.check(
+    check,
+    component as unknown as Component.Any,
+    () => start(component, props) as any,
+    options as runner.Options | undefined
+  )
 
 /**
  * The parts of a headless component for a Model and props: the plain values

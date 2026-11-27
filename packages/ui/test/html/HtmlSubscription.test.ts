@@ -1,6 +1,11 @@
 // @vitest-environment happy-dom
-import { UiSchema } from "@effect/ui"
-import { BrowserHost, Html, HtmlSubscription } from "@effect/ui/html"
+import { Query, Renderer, UiSchema } from "@effect/ui"
+import {
+  BrowserHost,
+  Html,
+  HtmlServer,
+  HtmlSubscription
+} from "@effect/ui/html"
 import {
   HtmlScene,
   TestAnimationFrames,
@@ -495,6 +500,124 @@ describe("HtmlSubscription.shortcuts", () => {
     }))
 })
 
+describe("HtmlSubscription.keySequences", () => {
+  it.effect("matches timed sequences, falls through on expiry or mismatch, and keeps prefixes across modifiers and repeats", () =>
+    Effect.gen(function*() {
+      const SequenceApp = Html.component({
+        name: "SequenceApp",
+        model: Schema.Struct({
+          enabled: Schema.Boolean,
+          log: Schema.Array(Schema.String)
+        }),
+        message: Schema.String
+      }).make({
+        init: () => ({ enabled: true, log: [] }),
+        update: ($, entry) =>
+          entry === "toggle"
+            ? { ...$.model, enabled: !$.model.enabled }
+            : { ...$.model, log: [...$.model.log, entry] },
+        view: (h, model) =>
+          h.div(
+            h.button.on("click", "toggle").children("Toggle"),
+            h.output(model.log.join(","))
+          ),
+        subscriptions: ({ model }) => [
+          model.enabled && HtmlSubscription.keySequences([
+            { key: "/", message: "search" },
+            { key: "l", message: "single-l" },
+            { keys: ["g", "l"], message: "list" },
+            { keys: ["g", "b"], message: "board" }
+          ])
+        ]
+      })
+
+      const scene = yield* HtmlScene.make(SequenceApp, {})
+      scene
+        .fireDocument("keydown", { key: "g", timeStamp: 0 })
+        .expectDefaultPrevented()
+        .expect(Locator.tag("output")).toHaveText("")
+        .fireDocument("keydown", { key: "l", timeStamp: 500 })
+        .expectDefaultPrevented()
+        .expect(Locator.tag("output")).toHaveText("list")
+        // Past the 1s window, the prefix expires and `l` falls through to the single-key row.
+        .fireDocument("keydown", { key: "g", timeStamp: 1000 })
+        .fireDocument("keydown", { key: "l", timeStamp: 2001 })
+        .expect(Locator.tag("output")).toHaveText("list,single-l")
+        .fireDocument("keydown", { key: "g", timeStamp: 3000 })
+        .fireDocument("keydown", { key: "/", timeStamp: 3100 })
+        .expect(Locator.tag("output")).toHaveText("list,single-l,search")
+        .fireDocument("keydown", { key: "b", timeStamp: 3200 })
+        .expectIgnored()
+        .fireDocument("keydown", { key: "g", timeStamp: 4000 })
+        .fireDocument("keydown", { key: "l", timeStamp: 4100, editable: true })
+        .expectIgnored()
+        // Modifier-only keydowns and auto-repeats keep the prefix.
+        .fireDocument("keydown", { key: "g", timeStamp: 5000 })
+        .fireDocument("keydown", { key: "Shift", timeStamp: 5200, shift: true })
+        .expectIgnored()
+        .fireDocument("keydown", { key: "g", timeStamp: 5400, repeat: true })
+        .expectIgnored()
+        .fireDocument("keydown", { key: "b", timeStamp: 5900 })
+        .expect(Locator.tag("output")).toHaveText(
+          "list,single-l,search,board"
+        )
+        .fireDocument("keydown", { key: "g", timeStamp: 6000 })
+        .click("Toggle")
+        .click("Toggle")
+        .fireDocument("keydown", { key: "b", timeStamp: 6100 })
+        .expectIgnored()
+        // A press without a `timeStamp`, as a custom source may send, counts as time 0.
+        .fireDocument("keydown", {
+          key: "g",
+          timeStamp: undefined as unknown as number
+        })
+        .fireDocument("keydown", { key: "l", timeStamp: 1001 })
+        .expect(Locator.tag("output")).toHaveText(
+          "list,single-l,search,board,single-l"
+        )
+    }))
+
+  it("rejects unreachable shadowed rows in development while allowing disjoint modifiers and guards", () => {
+    // `g b` takes a plain `g` first, so the typing row doesn't block `g l`.
+    assert.doesNotThrow(() =>
+      HtmlSubscription.keySequences([
+        { key: "g", mod: true, message: "find" },
+        { keys: ["g", "b"], message: "board" },
+        { key: "g", whileTyping: true, message: "typing-g" },
+        { keys: ["g", "l"], message: "list" }
+      ])
+    )
+    assert.throws(
+      () =>
+        HtmlSubscription.keySequences([
+          { key: "g", message: "g" },
+          { keys: ["g", "l"], message: "list" }
+        ]),
+      /"g".*"g l"/
+    )
+    assert.throws(
+      () =>
+        HtmlSubscription.keySequences([
+          { keys: ["g", "l"], message: "list" },
+          { key: "g", message: "g" }
+        ]),
+      /"g l".*"g"/
+    )
+    // The same row object twice, loose enough that a naive check would take seconds.
+    const row = {
+      keys: ["a", "b", "c", "d", "e"],
+      mod: true,
+      whileTyping: true,
+      repeat: true,
+      message: "first"
+    } as const
+    assert.throws(
+      () => HtmlSubscription.keySequences([row, row]),
+      /unreachable/
+    )
+  })
+})
+
 const FrameMessage = UiSchema.TaggedEnum({
   TickedFrame: { delta: Schema.Number },
   Toggled: {}
@@ -767,5 +890,199 @@ describe("onMediaQuery", { concurrent: false }, () => {
         getList("(prefers-color-scheme: dark)").listeners.size,
         0
       )
+    }).pipe(Effect.scoped))
+})
+
+const StatusMessage = UiSchema.TaggedEnum({
+  VisibilityChanged: { visible: Schema.Boolean },
+  ConnectivityChanged: { online: Schema.Boolean },
+  Stopped: {}
+})
+
+const Status = Html.component({
+  name: "Status",
+  model: Schema.Struct({
+    listening: Schema.Boolean,
+    log: Schema.Array(Schema.String)
+  }),
+  message: StatusMessage
+}).make({
+  init: () => ({ listening: true, log: [] }),
+  update: {
+    VisibilityChanged: ($, { visible }) => ({
+      ...$.model,
+      log: [...$.model.log, `visible:${visible}`]
+    }),
+    ConnectivityChanged: ($, { online }) => ({
+      ...$.model,
+      log: [...$.model.log, `online:${online}`]
+    }),
+    Stopped: ($) => ({ ...$.model, listening: false })
+  },
+  view: (h, model) =>
+    h.div(
+      h.button.on("click", StatusMessage.Stopped()).children("stop"),
+      h.output(model.log.join(","))
+    ),
+  subscriptions: ({ model }) => [
+    model.listening &&
+    HtmlSubscription.onVisibility((visible) =>
+      StatusMessage.VisibilityChanged({ visible })
+    ),
+    model.listening &&
+    HtmlSubscription.onConnectivity((online) =>
+      StatusMessage.ConnectivityChanged({ online })
+    )
+  ]
+})
+
+describe("onVisibility and onConnectivity", { concurrent: false }, () => {
+  it.effect("emits initial state and changes on TestHost, keeps init on SSR, and drives HtmlScene", () =>
+    Effect.gen(function*() {
+      const rendered = yield* HtmlServer.renderToHtml(Status, {})
+      assert.deepStrictEqual(rendered.state["/Status"], {
+        listening: true,
+        log: []
+      })
+
+      yield* Effect.gen(function*() {
+        const testHost = yield* TestHost.TestHost
+        yield* TestHost.setVisible(false)
+        yield* TestHost.setOnline(false)
+        const offNested = testHost.connectivity.subscribe((online) => {
+          if (!online) testHost.connectivity.set(true)
+        })
+        yield* Effect.addFinalizer(() => Effect.sync(offNested))
+        const root = yield* TestHost.mount(Status, {})
+        yield* TestHost.settle
+        yield* TestHost.setVisible(true)
+        yield* TestHost.setOnline(true)
+        yield* TestHost.settle
+        yield* TestHost.setOnline(false)
+        yield* TestHost.settle
+        offNested()
+        root.send(StatusMessage.Stopped())
+        yield* TestHost.settle
+
+        const late: Array<boolean> = []
+        let offLate: (() => void) | undefined
+        const offFirst = testHost.connectivity.subscribe((online) => {
+          if (!online) {
+            offFirst()
+            testHost.connectivity.set(true)
+            testHost.connectivity.set(false)
+            offLate = testHost.connectivity.subscribe((value) =>
+              late.push(value)
+            )
+          }
+        })
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            offFirst()
+            offLate?.()
+          })
+        )
+        yield* TestHost.setVisible(false)
+        yield* TestHost.setOnline(false)
+        yield* TestHost.settle
+        assert.deepStrictEqual(root.model()?.log, [
+          "visible:false",
+          "online:false",
+          "visible:true",
+          "online:true",
+          "online:false",
+          "online:true"
+        ])
+        assert.strictEqual(testHost.connectivity.get(), false)
+        assert.deepStrictEqual(late, [])
+
+        class CustomSignal implements Query.Signal {
+          private value = false
+          private readonly subscribers = new Set<(value: boolean) => void>()
+          get() {
+            return this.value
+          }
+          subscribe(listener: (value: boolean) => void) {
+            this.subscribers.add(listener)
+            return () => {
+              this.subscribers.delete(listener)
+            }
+          }
+          emit(next: boolean) {
+            this.value = next
+            for (const listener of this.subscribers) listener(next)
+          }
+        }
+        const custom = new CustomSignal()
+        const customRoot = yield* Renderer.mount(
+          Status,
+          {},
+          testHost.host.createElement("#app")
+        ).pipe(
+          Effect.provideService(Html.Host, BrowserHost.htmlHost),
+          Effect.provideService(Query.Connectivity, custom)
+        )
+        yield* TestHost.settle
+        custom.emit(true)
+        yield* TestHost.settle
+        assert.deepStrictEqual(customRoot.model()?.log, [
+          "visible:true",
+          "online:false",
+          "online:true"
+        ])
+      }).pipe(Effect.provide(TestHost.layer()), Effect.scoped)
+
+      const scene = yield* HtmlScene.make(Status, {})
+      scene
+        .visibility(false)
+        .connectivity(false)
+        .expect(Locator.tag("output")).toHaveText("visible:false,online:false")
+        .click("stop")
+      assert.throws(
+        () => scene.visibility(true),
+        /HtmlScene\.visibility: nothing listens for .*; active keys: \[\]/
+      )
+    }).pipe(Effect.scoped))
+
+  it.effect("on BrowserHost, emits initial hidden and offline state and hears changes", () =>
+    Effect.gen(function*() {
+      const stub = (target: object, key: string, value: unknown) => {
+        const original = Object.getOwnPropertyDescriptor(target, key)
+        return Effect.acquireRelease(
+          Effect.sync(() => {
+            Object.defineProperty(target, key, { value, configurable: true })
+          }),
+          () =>
+            Effect.sync(() => {
+              if (original === undefined) delete (target as any)[key]
+              else Object.defineProperty(target, key, original)
+            })
+        )
+      }
+      yield* stub(document, "visibilityState", "hidden")
+      yield* stub(window.navigator, "onLine", false)
+      const tick = Effect.promise(() =>
+        new Promise<void>((resolve) => setTimeout(resolve, 30))
+      )
+      const log = yield* Effect.gen(function*() {
+        const app = document.body.appendChild(document.createElement("div"))
+        yield* Effect.addFinalizer(() => Effect.sync(() => app.remove()))
+        const root = yield* BrowserHost.mountEffect(Status, {}, app)
+        yield* tick
+        Object.defineProperty(document, "visibilityState", {
+          value: "visible",
+          configurable: true
+        })
+        document.dispatchEvent(new Event("visibilitychange"))
+        window.dispatchEvent(new Event("online"))
+        yield* tick
+        return root.model()?.log
+      }).pipe(Effect.scoped)
+      assert.deepStrictEqual(log, [
+        "visible:false",
+        "online:false",
+        "visible:true",
+        "online:true"
+      ])
     }).pipe(Effect.scoped))
 })

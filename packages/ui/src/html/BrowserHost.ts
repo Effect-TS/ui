@@ -347,8 +347,9 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
 
 /**
  * Provides the browser host as the `Renderer`, `Html.Host`, the document's
- * `Query.Visibility` and `Query.Connectivity`, its events as
- * `HtmlSubscription.GlobalEvents`, its window's frames as
+ * `Query.Visibility` and `Query.Connectivity` (which also back
+ * `HtmlSubscription.onVisibility` and `HtmlSubscription.onConnectivity`), its
+ * events as `HtmlSubscription.GlobalEvents`, its window's frames as
  * `HtmlSubscription.AnimationFrames`, its window's media queries as
  * `HtmlSubscription.MediaQueries`, and an `HtmlImages.Images` and
  * `HtmlFiles.Files` over it, for the life of the Layer.
@@ -356,10 +357,11 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
  * **Details**
  *
  * `document` defaults to the global `document`. Closing the Layer removes the
- * host's listeners. The signals, `HtmlSubscription.GlobalEvents`,
- * `HtmlSubscription.AnimationFrames`, `HtmlSubscription.MediaQueries`,
- * `HtmlImages.Images` and `HtmlFiles.Files` use the document and its
- * `defaultView`, never globals.
+ * host's listeners. `Query.Visibility` reads `document.visibilityState` and
+ * `Query.Connectivity` reads `defaultView.navigator.onLine`. The signals,
+ * `HtmlSubscription.GlobalEvents`, `HtmlSubscription.AnimationFrames`,
+ * `HtmlSubscription.MediaQueries`, `HtmlImages.Images` and `HtmlFiles.Files`
+ * use the document and its `defaultView`, never globals.
  *
  * @stability experimental
  * @category layers
@@ -422,6 +424,11 @@ export interface MountOptions<
    * head tag.
    */
   readonly head?: boolean | undefined
+  /**
+   * Sets the root's path to `/<name>[<key>]`. Use distinct keys for repeated
+   * mounts of the same component in one document to avoid element id collisions.
+   */
+  readonly key?: string | undefined
 }
 
 /**
@@ -460,6 +467,8 @@ export interface MountOptions<
  * server, owns passes `head: false`: it still computes its head, and its
  * Router announces the title, but it leaves the document alone. With two
  * mounts on one document, only the one that owns the head writes it.
+ * For repeated mounts of the same component, also pass distinct `key` options
+ * to avoid generated element id collisions.
  *
  * **Example** (Launching an app)
  *
@@ -572,7 +581,7 @@ export const mountRoot = (
     )
     const outer = yield* Effect.context<Scope.Scope>()
     const attached = hot.devTools(container)
-    const hotSession = hot.open(component, container)
+    const hotSession = hot.open(component, container, options?.key)
     const hydrating = hotSession?.hasSnapshot === true ? undefined : hydrate
     if (hydrating !== hydrate) container.textContent = ""
     const scheduler =
@@ -700,7 +709,7 @@ export interface Recorded {
 export interface Controllable {
   /** The session the root's `MessageLog` entries carry. */
   readonly session: string
-  /** The root instance's path, `/<name>`. */
+  /** The root instance's path, `/<name>` or `/<name>[<key>]` when keyed. */
   readonly path: string
   readonly pause: (
     state: (path: string) => Recorded | undefined
@@ -912,7 +921,8 @@ const controllable = (
           copy,
           state,
           makePaintDom,
-          [Html.name]
+          [Html.name],
+          root.path
         ).pipe(
           Effect.provideContext(Context.add(context, Scope.Scope, scope)),
           Effect.onError(() =>

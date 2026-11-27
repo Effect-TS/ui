@@ -30,9 +30,9 @@ const items = [
   { value: "copy", label: "Copy" },
   { value: "cut", label: "Cut" },
   { value: "paste", label: "Paste" },
-  { value: "wrap", label: "Wrap lines" },
+  { value: "wrap", label: "Wrap lines", checked: true },
   { value: "minimap", label: "Minimap" },
-  { value: "small", label: "Small" },
+  { value: "small", label: "Small", checked: true },
   { value: "large", label: "Large" },
   { value: "docs", label: "Docs" },
   { value: "delete", label: "Delete", disabled: true }
@@ -50,6 +50,23 @@ const standIn = {
   elements: Html,
   view: (menu: Parts, h: H) => {
     const filtering = h.props.query !== undefined
+    // Check selection independently of construction order.
+    const tick = menu.checkboxItemIndicator({
+      element: h.span.class("tick"),
+      value: "wrap"
+    })?.children("✓")
+    const dot = menu.radioItemIndicator({
+      element: h.span.class("dot"),
+      value: "small"
+    })?.children("•")
+    const radios = [
+      menu.radioItem({
+        element: entry(h, "small").attr("data-checked", "x"),
+        value: "small"
+      }).children(dot, "Small"),
+      menu.radioItem({ element: entry(h, "large"), value: "large" })
+        .children("Large")
+    ]
     const entries = [
       menu.group({ element: h.div.class("group"), group: "edit" }).children(
         menu.groupLabel({ element: h.div.class("group-label"), group: "edit" })
@@ -73,29 +90,11 @@ const standIn = {
       menu.checkboxItem({
         element: entry(h, "wrap").attr("aria-checked", "false"),
         value: "wrap",
-        checked: true,
         closeOnClick: true
-      }).children(
-        menu.checkboxItemIndicator({
-          element: h.span.class("tick"),
-          value: "wrap"
-        })?.children("✓"),
-        "Wrap lines"
-      ),
-      menu.checkboxItem({
-        element: entry(h, "minimap"),
-        value: "minimap",
-        checked: false
-      }).children("Minimap"),
-      menu.radioGroup({ element: h.div.class("sizes"), value: "small" })
-        .children(
-          menu.radioItem({
-            element: entry(h, "small").attr("data-checked", "x"),
-            value: "small"
-          }).children("Small"),
-          menu.radioItem({ element: entry(h, "large"), value: "large" })
-            .children("Large")
-        ),
+      }).children(tick, "Wrap lines"),
+      menu.checkboxItem({ element: entry(h, "minimap"), value: "minimap" })
+        .children("Minimap"),
+      menu.radioGroup(h.div.class("sizes")).children(radios),
       menu.linkItem({
         element: h.a.attrs({ "data-testid": "docs", href: "/docs" }),
         value: "docs"
@@ -393,6 +392,10 @@ describe("Menu", () => {
         "data-unchecked": ""
       })
       assert.isUndefined(scene.get(item("large")).attrs?.["data-checked"])
+      assert.deepInclude(scene.get(Locator.attr("class", "dot")).attrs, {
+        "aria-hidden": "true",
+        "data-checked": ""
+      })
       assert.deepInclude(scene.get(Locator.attr("class", "sizes")).attrs, {
         role: "group"
       })

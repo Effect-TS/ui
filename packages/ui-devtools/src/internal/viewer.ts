@@ -7,6 +7,7 @@ import * as Stream from "effect/Stream"
 import * as Control from "./control.ts"
 import * as InspectorInternal from "./inspector.ts"
 import { type Feed, mountOverlay, Pages } from "./overlay.ts"
+import { fieldNames } from "./read.ts"
 import { styles } from "./styles.ts"
 
 const pageStyles = `
@@ -19,7 +20,11 @@ body { background: var(--bg); }
 
 export const mount = (
   container: HTMLElement,
-  options: { readonly server: string; readonly size: number }
+  options: {
+    readonly server: string
+    readonly size: number
+    readonly fields?: ReadonlyArray<string> | undefined
+  }
 ): Effect.Effect<void, never, Scope.Scope> =>
   Effect.gen(function*() {
     const inspector = InspectorInternal.make({ size: options.size })
@@ -33,7 +38,8 @@ export const mount = (
       paused: () => undefined,
       failures: () => 0,
       open: true,
-      position: () => "BottomRight"
+      position: () => "BottomRight",
+      fields: options.fields ?? []
     }
     const pages = Pages.of({
       paint: () => Effect.undefined,
@@ -87,10 +93,11 @@ export const main = (): void => {
   style.textContent = styles + pageStyles
   document.head.appendChild(style)
   const root = document.getElementById("root")!
-  const { size } = Control.fromPage()
+  const { fields, size } = Control.fromPage()
   mount(root, {
     server: location.origin,
-    size: typeof size === "number" ? size : 1_000
+    size: typeof size === "number" ? size : 1_000,
+    fields: fieldNames(fields)
   }).pipe(
     Effect.andThen(Effect.never),
     Effect.scoped,

@@ -34,6 +34,7 @@
  * @stability experimental
  * @since 0.1.0
  */
+import { dev } from "#dev"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Command from "./Command.ts"
 import type * as Component from "./Component.ts"
@@ -2147,8 +2148,9 @@ export interface HelperBase<Msg, Props> {
     ...group: Command.GroupArg<Args, G>
   ): boolean
   /**
-   * An id for an element of this instance, derived from the instance's path:
-   * the same on the server and the client, and different for every instance.
+   * An element id derived from the instance's path, matching server and client.
+   * Use distinct mount `key` options for repeated roots in one document to
+   * avoid collisions.
    */
   id(name: string, key?: string | number | undefined): string
   /**
@@ -2202,6 +2204,12 @@ export class Lazies {
   /** The render the entries were last used in, and how many were. */
   round = 1
   used = 0
+  /** Dev-only hook called on a miss before `fn` runs and `entry` is updated. */
+  declare missed?: (
+    entry: LazyEntry | undefined,
+    fn: Function,
+    args: ReadonlyArray<unknown>
+  ) => void
   begin(): void {
     this.round++
     this.used = 0
@@ -2226,7 +2234,8 @@ export class Lazies {
   }
 }
 
-interface LazyEntry {
+/** @internal */
+export interface LazyEntry {
   fn: Function
   args: ReadonlyArray<unknown>
   node: Node<any, any>
@@ -2304,6 +2313,7 @@ class HelperImpl<Msg, Props> implements Helper<Msg, Props> {
       }
       return entry.node
     }
+    if (dev) lazies.missed?.(entry, fn, args)
     const node = toNode(fn(this, ...args))
     // A key an earlier call of this render took stays theirs.
     if (entry !== undefined && entry.round === round) return node

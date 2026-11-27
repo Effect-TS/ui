@@ -169,7 +169,8 @@ export interface HtmlPlay<Model, Msg, Events>
    * Dispatches `keydown` on the document and settles the resulting UI work
    * without advancing `TestClock`. With `TestGlobalEvents` provided, the key
    * reaches every root sharing that source. Missing payload fields default
-   * as for an element keydown, with `editable` and `defaultPrevented` false.
+   * as for an element keydown, with `editable` and `defaultPrevented` false
+   * and `timeStamp` `0`.
    * Fails if no document keydown listener is registered, but only the fake
    * created by `TestGlobalEvents.make` can report missing listeners.
    */

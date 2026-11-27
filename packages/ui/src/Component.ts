@@ -1449,9 +1449,10 @@ export type HeadlessTypeId = typeof HeadlessTypeId
  * `Consumer/Drawer[]/Dialog[]`.
  *
  * Parts need no runtime: `Story.parts` builds them from a Model and props
- * alone. `p.id` is derived from the instance's path, so ids match on the
- * server and the client and differ between instances, and outside a mount
- * they're under the component's own name.
+ * alone. `p.id` derives element ids from the instance's path, matching server
+ * and client. When mounting the same root component twice in one document,
+ * pass distinct `key` options to avoid collisions. Outside a mount, ids use
+ * the component's own name.
  *
  * Lists are data: a part reads its items from props, and takes an item as an
  * argument where the consumer applies it. Richer row content stays in the

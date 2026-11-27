@@ -161,6 +161,11 @@ export interface Play<Model, Msg, Events> {
  * `play.root.pending()` to assert on that. When the scope closes with a
  * failure the end check doesn't run.
  *
+ * **Gotchas**
+ *
+ * Provide `TestHost.layer()` beneath the app's Layers, or a step can settle
+ * before their fibers have run: see `TestHost.layer`.
+ *
  * @stability experimental
  * @category constructors
  * @since 0.1.0

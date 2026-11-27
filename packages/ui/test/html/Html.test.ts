@@ -534,10 +534,19 @@ describe("Html", () => {
         button().class(false, null, undefined, "").elementAttrs,
         {}
       )
+    })
+
+    it("appends to the classes already on the builder", () => {
       assert.deepStrictEqual(
-        button().class("primary").class(false).elementAttrs,
-        {}
+        button().class("btn btn-primary").class("w-full").elementAttrs,
+        { class: "btn btn-primary w-full" }
       )
+    })
+
+    it("keeps classes on falsy tokens and returns a plain builder from a shorthand root", () => {
+      const out = View.shorthand(button().class("btn")).class(false)
+      assert.strictEqual(typeof out, "object")
+      assert.deepStrictEqual(out.elementAttrs, { class: "btn" })
     })
 
     it.effect("renders the same classes on the server", () =>

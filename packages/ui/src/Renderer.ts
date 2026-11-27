@@ -300,7 +300,8 @@ export interface Hydration<Node> {
  * included, by query name and args key. The client's cache hydrates from it,
  * so a watch over a shipped entry doesn't fetch while the hydration window is
  * open. An entry still in flight at the budget isn't shipped, and the client
- * fetches it. `~static` is set by a render with `static: true`.
+ * fetches it. `~static` is set by a render with `static: true`, and `~key` by
+ * a render with `key` so hydration mounts at the same root path.
  *
  * `~reported` holds, by path, the message an owner of shared state last got
  * from its readers' reports. An owner that adopts its Model starts from it,
@@ -334,6 +335,7 @@ export interface State {
   readonly "~query"?: unknown
   readonly "~reported"?: { readonly [path: string]: unknown } | undefined
   readonly "~static"?: boolean | undefined
+  readonly "~key"?: string | undefined
 }
 
 /**
@@ -521,7 +523,7 @@ export const Refs: Context.Service<Refs, Refs> = services.Refs
  * @since 0.1.0
  */
 export interface Root<out Model, in Msg> {
-  /** The root instance's path, `/<name>`. */
+  /** The root instance's path, `/<name>` or `/<name>[<key>]` when keyed. */
   readonly path: string
   /** The session the message log groups this mount's entries under. */
   readonly session: string
@@ -590,6 +592,10 @@ export type HostOf<V> = [V] extends [never] ? never
  * something else owns, the head is computed and the Router still reads its
  * title, but the host is never given it.
  *
+ * `key` changes the root's path from `/<name>` to `/<name>[<key>]`.
+ * Use distinct keys when mounting the same root component more than once
+ * in one document to avoid generated element id collisions.
+ *
  * **Gotchas**
  *
  * Any Effect passed as `props` is run, so a root's props can't themselves be
@@ -614,6 +620,7 @@ export const mount: <
   props: Props | Effect.Effect<Props, never, RP>,
   container: unknown,
   options?: {
+    readonly key?: string | undefined
     readonly fallback?:
       | ((
         failure: AsyncResult.Failure<never, unknown>,
@@ -676,6 +683,9 @@ export interface QueryOptions {
  * `elements` lists the vocabularies the server renders, by name, as a host's
  * `elements` does.
  *
+ * Use distinct `key` options for repeated roots in one document. The key
+ * sets the root's path to `/<name>[<key>]` and is saved in state for hydration.
+ *
  * `props` may be an Effect, as with `mount`: it is run once, before `init`,
  * and its requirements are added to the render's. The client resolves its
  * own, so with `Router.props` both sides read the route from their Router.
@@ -699,6 +709,7 @@ export const prerender: <
   options?: {
     readonly budget?: Duration.Input | undefined
     readonly elements?: ReadonlyArray<string> | "any" | undefined
+    readonly key?: string | undefined
     readonly static?: boolean | undefined
   }
 ) => Effect.Effect<Prerendered<Model, View.HeadValue<V>>, never, R | RP> = (
@@ -709,5 +720,6 @@ export const prerender: <
   runtime.prerender(component as any, props, {
     budget: options?.budget ?? "500 millis",
     elements: options?.elements ?? "any",
+    key: options?.key,
     static: options?.static
   }) as Effect.Effect<Prerendered<any, any>>

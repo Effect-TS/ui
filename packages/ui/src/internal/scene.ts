@@ -4,6 +4,7 @@
  *
  * @internal
  */
+import { dev } from "#dev"
 import type * as Cause from "effect/Cause"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import type * as Component from "../Component.ts"
@@ -69,6 +70,53 @@ const matches = (value: string, expected: string | RegExp): boolean =>
     ? value === expected
     : new RegExp(expected).test(value)
 
+const compare = (
+  value: string | undefined,
+  expected: string | RegExp | false | undefined,
+  name: string,
+  kind: string
+): string | undefined => {
+  const pass = expected === false
+    ? value === undefined
+    : value !== undefined &&
+      (expected === undefined || matches(value, expected))
+  if (pass) return undefined
+  const what = JSON.stringify(name) + " " + kind
+  return value === undefined
+    ? `it has no ${what}`
+    : `its ${what} is ${JSON.stringify(value)}`
+}
+
+/** @internal */
+export type Expected = { readonly [name: string]: string | RegExp | false }
+
+const own = (values: Locator.Node["attrs"], name: string) =>
+  values !== undefined && Object.hasOwn(values, name) ? values[name] : undefined
+
+/**
+ * `key` normalizes expected names for both lookup and failure messages.
+ *
+ * @internal
+ */
+export const record = (
+  expected: Expected,
+  kind: string,
+  read: (node: Locator.Node) => Locator.Node["attrs"],
+  key: (name: string) => string = (name) => name
+): Matcher =>
+  single((node) => {
+    const values = read(node)
+    const failures: Array<string> = []
+    for (const [name, value] of Object.entries(expected)) {
+      const at = key(name)
+      const failure = value === undefined
+        ? `${JSON.stringify(at)} is undefined, use false for an absent ${kind}`
+        : compare(own(values, at), value, at, kind)
+      if (failure !== undefined) failures.push(failure)
+    }
+    return failures.length === 0 ? undefined : failures.join(", ")
+  })
+
 /**
  * The matchers every scene's `expect` has, each made from the arguments the test gave it.
  *
@@ -92,23 +140,23 @@ export const matchers = {
     name: string,
     expected?: string | RegExp | false
   ): Matcher =>
-    single(({ attrs }) => {
-      const value = attrs !== undefined && Object.hasOwn(attrs, name)
-        ? attrs[name]
-        : undefined
-      const pass = expected === false
-        ? value === undefined
-        : value !== undefined &&
-          (expected === undefined || matches(value, expected))
-      if (pass) return undefined
-      return value === undefined
-        ? `it has no ${JSON.stringify(name)} attribute`
-        : `its ${JSON.stringify(name)} attribute is ${JSON.stringify(value)}`
-    })
+    single(({ attrs }) =>
+      compare(own(attrs, name), expected, name, "attribute")
+    ),
+  toHaveAttributes: (expected: Expected): Matcher =>
+    record(expected, "attribute", ({ attrs }) => attrs)
 }
 
 const describeExpected = (expected: unknown): string =>
-  expected instanceof RegExp ? String(expected) : JSON.stringify(expected)
+  expected instanceof RegExp
+    ? String(expected)
+    : typeof expected === "object" && expected !== null
+    ? `{${
+      Object.entries(expected).map(([name, value]) =>
+        JSON.stringify(name) + ": " + describeExpected(value)
+      ).join(", ")
+    }}`
+    : JSON.stringify(expected)
 
 /** @internal */
 export const makeExpectation = <A>(
@@ -719,6 +767,68 @@ export class SceneCursor extends Cursor {
     }
     return this
   }
+  expectLazyReused(): this {
+    const step = this.name("expectLazyReused")
+    if (!dev) {
+      throw new Error(`${step}: requires a non-production build of @effect/ui`)
+    }
+    const store: View.LazyStore = { lazy: undefined }
+    const shared = engine.stableRootShared(this.state)
+    engine.viewOfFields(this.state, shared, store)
+    const lazies = store.lazy as View.Lazies | undefined
+    if (lazies === undefined) {
+      throw new Error(`${step}: the view didn't call h.lazy`)
+    }
+    const counts = new Map<string, number>()
+    lazies.missed = (entry, fn, args) => {
+      const reason = classifyLazyMiss(entry, lazies.round, fn, args)
+      counts.set(reason, (counts.get(reason) ?? 0) + 1)
+    }
+    engine.viewOfFields(this.state, shared, store)
+    engine.report(
+      step,
+      "h.lazy calls missed on a repeat render",
+      Array.from(
+        counts,
+        ([reason, count]) => count === 1 ? reason : `${reason} (${count} calls)`
+      )
+    )
+    return this
+  }
+}
+
+const fnName = (fn: Function): string => fn.name || "<anonymous>"
+
+const classifyLazyMiss = (
+  entry: View.LazyEntry | undefined,
+  round: number,
+  fn: Function,
+  args: ReadonlyArray<unknown>
+): string => {
+  const name = fnName(fn)
+  if (entry === undefined) {
+    return args.length === 0
+      ? `${name}: no entry (function identity changed or not called on first render)`
+      : `${name}: no entry for first argument`
+  }
+  if (entry.round === round) {
+    return `${name}: first argument shared with an earlier call (${
+      fnName(entry.fn)
+    })`
+  }
+  if (entry.fn !== fn) return `${name}: function changed`
+  const changed: Array<number> = []
+  const length = Math.max(entry.args.length, args.length)
+  for (let i = 0; i < length; i++) {
+    if (
+      i >= entry.args.length || i >= args.length || args[i] !== entry.args[i]
+    ) {
+      changed.push(i)
+    }
+  }
+  return changed.length === 1
+    ? `${name}: argument ${changed[0]} changed`
+    : `${name}: arguments ${changed.join(", ")} changed`
 }
 
 const describeInteraction = (state: engine.State<any, any, any, any>): string =>

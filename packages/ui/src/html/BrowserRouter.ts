@@ -30,6 +30,10 @@
  * still restore the saved position, and a `patchSearch` given
  * `{ scroll: true }` scrolls to the top.
  *
+ * While a `Router.blocked` block is held, `BrowserRouter` requests a browser
+ * warning before the page unloads unless `warnOnUnload` is `false`. See
+ * `Router.blocked` for the warning's limits.
+ *
  * **Example** (A two-page app)
  *
  * ```ts import.meta.vitest
@@ -129,6 +133,12 @@ export interface Options {
   readonly announce?: boolean | undefined
   /** Move focus after each navigation. Defaults to `true`. */
   readonly focus?: boolean | undefined
+  /**
+   * Request a browser warning before the page unloads while a `Router.blocked` block is held.
+   * Defaults to `true`. Turn it off in shells such as Electron, where a
+   * cancelled `beforeunload` refuses to close the window without asking.
+   */
+  readonly warnOnUnload?: boolean | undefined
   /** The window to run in. Defaults to the global `window`. */
   readonly window?: Window | undefined
 }
@@ -359,6 +369,24 @@ const make = (
       }
     }
 
+    // --- unload warning ----------------------------------------------------
+    // `returnValue` is for Chromium before 119.
+    const warn = (event: BeforeUnloadEvent) => {
+      event.returnValue = true
+      event.preventDefault()
+    }
+    let warning = options.warnOnUnload !== false
+    const onBlocked = (blocked: boolean) => {
+      if (blocked && warning) window.addEventListener("beforeunload", warn)
+      else window.removeEventListener("beforeunload", warn)
+    }
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        warning = false
+        window.removeEventListener("beforeunload", warn)
+      })
+    )
+
     /** Writes a pending same-page replace now. Links and forms resolve against the document's URL. */
     let flushHistory = () => {}
     const routerLayer = Router.make({
@@ -382,7 +410,8 @@ const make = (
       },
       onLeave: (index) => {
         positions.set(index, { x: window.scrollX, y: window.scrollY })
-      }
+      },
+      onBlocked
     })
     const context = yield* Layer.build(routerLayer)
     const router = Context.get(context, Router.Router)

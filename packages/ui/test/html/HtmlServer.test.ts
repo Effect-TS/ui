@@ -441,6 +441,23 @@ describe("HtmlServer", { concurrent: false }, () => {
       }
     }).pipe(Effect.scoped))
 
+  it.effect("renders native slot markup as written", () =>
+    Effect.gen(function*() {
+      const Card = Html.component({
+        name: "Card",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.slot.attr("name", "title").children("Untitled")
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Card, {})
+      expect(rendered.html).toBe(
+        "<!--[/Card--><slot name=\"title\">Untitled</slot><!--]/Card-->"
+      )
+    }))
+
   describe("reports across hydration", () => {
     const Plain = UiSchema.TaggedEnum({ ChangedOn: { on: Schema.Boolean } })
     // An unrelated variant holds a secret, so the last message can't be shipped.
@@ -685,7 +702,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       )
     }))
 
-  it.effect("escapes text, keeps a leading newline, and selects the option whose text is the select's value", () =>
+  it.effect("escapes text and a textarea's value, keeps a leading newline, and selects the option whose text is the select's value", () =>
     Effect.gen(function*() {
       const Page = Html.component({
         name: "Text",
@@ -698,6 +715,7 @@ describe("HtmlServer", { concurrent: false }, () => {
           h.div.children(
             h.p.children("a<b>&c"),
             h.pre.children("\nx"),
+            h.textarea.value("a<b"),
             h.select.value("b").children(
               h.option.children("a"),
               h.option.children("b")
@@ -706,7 +724,42 @@ describe("HtmlServer", { concurrent: false }, () => {
       })
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
       expect(rendered.html).toBe(
-        "<!--[/Text--><div><p>a&lt;b&gt;&amp;c</p><pre>\n\nx</pre><select><option>a</option><option selected>b</option></select></div><!--]/Text-->"
+        "<!--[/Text--><div><p>a&lt;b&gt;&amp;c</p><pre>\n\nx</pre><textarea>a&lt;b</textarea><select><option>a</option><option selected>b</option></select></div><!--]/Text-->"
+      )
+    }))
+
+  it.effect("selects only the first matching option in a controlled select", () =>
+    Effect.gen(function*() {
+      const Page = Html.component({
+        name: "DuplicateOptions",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          h.div.children(
+            h.select.value("b").children(
+              h.option.attr("value", "a").children("A"),
+              h.option.attr("value", "b").children("B one"),
+              h.option.attr("value", "b").children("B two")
+            ),
+            h.select.value("a b").children(
+              h.option.children(
+                " \ta\n",
+                new Html.Element<never>("script").children("0"),
+                "  b\r "
+              ),
+              h.option.children("a b")
+            )
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toBe(
+        "<!--[/DuplicateOptions--><div>" +
+          "<select><option value=\"a\">A</option><option value=\"b\" selected>B one</option><option value=\"b\">B two</option></select>" +
+          "<select><option selected> \ta\n<script>0</script>  b\r </option><option>a b</option></select>" +
+          "</div><!--]/DuplicateOptions-->"
       )
     }))
 
@@ -723,7 +776,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         update: ($) => $.model,
         view: (h) =>
           h.div.children(
-            h.textarea.children(
+            h.el("textarea").children(
               h.el("span").prop("value", unreadable).children("only text")
             ),
             h.el("br").children(
@@ -2343,7 +2396,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => ({}),
         update: ($) => $.model,
         view: (h) =>
-          h.div(h.textarea(Word(h, { key: "a", props: {} })), h.p("after"))
+          h.div(
+            h.el("textarea", Word(h, { key: "a", props: {} })),
+            h.p("after")
+          )
       })
       const result = yield* ssr(Form, {})
       expect(result.html).toBe(

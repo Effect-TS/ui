@@ -7,7 +7,9 @@
 import type * as Component from "../Component.ts"
 import * as Feature from "../Feature.ts"
 import type * as View from "../View.ts"
-import * as lazy from "./lazy.ts"
+
+/** @internal */
+export const LazyTypeId: Component.LazyTypeId = "~@effect/ui/Component/Lazy"
 
 /** @internal */
 export const childName = (
@@ -17,7 +19,7 @@ export const childName = (
   if (definition !== undefined) return definition.name
   return (Feature.TypeId in component
     ? component[Feature.TypeId]
-    : (component as Component.Lazy.Any)[lazy.TypeId]).name
+    : (component as Component.Lazy.Any)[LazyTypeId]).name
 }
 
 /**
@@ -44,6 +46,17 @@ export const segmentOf = (
   component: Component.Any | Component.Lazy.Any | Feature.Any,
   key: string
 ): string => escapeName(childName(component)) + "[" + escapeKey(key) + "]"
+
+/**
+ * The path of a mounted root: `/Name`, or `/Name[key]` when keyed.
+ *
+ * @internal
+ */
+export const rootPath = (
+  component: Component.Any,
+  key?: string | undefined
+): string =>
+  "/" + (key === undefined ? childName(component) : segmentOf(component, key))
 
 /**
  * Where paths are checked: a path, or an instance, whose path is read only for an error.

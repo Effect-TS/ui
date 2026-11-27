@@ -12,7 +12,7 @@ import * as Control from "./control.ts"
 import * as History from "./history.ts"
 import * as InspectorInternal from "./inspector.ts"
 import { type Feed, mountOverlay, Pages, type Position } from "./overlay.ts"
-import { isFailure, tagOf } from "./read.ts"
+import { fieldNames, isFailure, tagOf } from "./read.ts"
 import * as Remote from "./remote.ts"
 import { styles } from "./styles.ts"
 import * as Tools from "./tools.ts"
@@ -51,6 +51,7 @@ export interface Options {
   readonly exclude?: ReadonlyArray<string> | undefined
   readonly server?: string | undefined
   readonly webMcp?: boolean | WebMcpOptions | undefined
+  readonly fields?: ReadonlyArray<string> | undefined
   /** `false` mounts no overlay iframe. The log, roots, WebMCP and server stay. */
   readonly panel?: boolean | undefined
 }
@@ -107,6 +108,7 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         1,
         options.size ?? (typeof page.size === "number" ? page.size : 1_000)
       )
+      const fields = fieldNames(options.fields ?? page.fields)
       const modelContext = options.webMcp === false
         ? undefined
         : WebMcp.modelContext()
@@ -245,6 +247,7 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
           failures: () => failures,
           open: load(openKey) === true,
           position: () => position,
+          fields,
           notRecording,
           // The raw message's tag: an encoded one may be under another key.
           stoppable: (session, seq) => {
@@ -528,6 +531,7 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         yield* WebMcp.register(modelContext, {
           options: {
             size,
+            fields,
             dispatch: typeof options.webMcp === "object" &&
               options.webMcp.dispatch === true
           },

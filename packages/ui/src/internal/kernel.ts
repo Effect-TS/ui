@@ -1725,6 +1725,7 @@ export interface Root {
 /** @internal */
 export interface Options {
   readonly report: Tree["report"]
+  readonly path?: string | undefined
   readonly context?: Context.Context<any> | undefined
   readonly log?: Recorder | undefined
   readonly fallback?: Tree["fallback"]
@@ -1767,6 +1768,7 @@ export const mount = (
     props,
     env
   )
+  instance.named = options.path
   if (start(instance) === undefined) {
     instance.rendered = stand(instance, instance.failure!)
   }

@@ -86,11 +86,12 @@ import * as fireGlobal from "../internal/fireGlobal.ts"
 import * as frames from "../internal/frames.ts"
 import * as globalEvents from "../internal/globalEvents.ts"
 import * as mediaQueries from "../internal/mediaQueries.ts"
+import * as signals from "../internal/signals.ts"
 import * as HtmlLocator from "./HtmlLocator.ts"
 
 /**
  * The assertions `expect(locator)` offers in an `HtmlScene`: the scene's,
- * plus checks on fields. The checks on fields want exactly one match.
+ * plus checks on fields and inline styles. These want exactly one match.
  *
  * @stability experimental
  * @category models
@@ -105,6 +106,30 @@ export interface Expect<S> extends Scene.Expect<S> {
   toBeDisabled(disabled?: boolean): S
   /** Asserts the element's accessible name, as `HtmlLocator.nameOf` computes it. */
   toHaveAccessibleName(name: string | RegExp): S
+  /**
+   * Asserts the element's inline `style` declarations, read from its
+   * `style` attribute rather than computed. A string or `RegExp` checks a
+   * declaration's value as written, `false` its absence. A failure lists
+   * every declaration that doesn't match.
+   *
+   * - Names are the camelCase and `--custom` names `.style` takes, or any
+   *   dashed CSS name, and match a declaration's name exactly: `left` doesn't
+   *   match `margin-left`.
+   * - Spacing around `:` and `;` is ignored. Values are compared trimmed,
+   *   `!important` included, with no shorthand expansion.
+   * - For repeated properties, the last `!important` value wins, or the last
+   *   value if none is important.
+   */
+  toHaveStyle(
+    style:
+      & {
+        readonly [K in Exclude<keyof Html.Style, `--${string}`>]?:
+          | string
+          | RegExp
+          | false
+      }
+      & { readonly [name: `${string}-${string}`]: string | RegExp | false }
+  ): S
 }
 
 // The same union as `Scene.ts`'s.
@@ -242,8 +267,8 @@ export interface Steps<C extends AnyComponent, Parts = never>
   /**
    * Fires `event` on the document, as the browser host delivers it to the
    * component's `HtmlSubscription.onDocument` listeners. Missing payload
-   * fields default as `keydown` and `click` default them, and
-   * `defaultPrevented` to `false`.
+   * fields default as `keydown` and `click` default them,
+   * `defaultPrevented` to `false` and `timeStamp` to `0`.
    *
    * **Details**
    *
@@ -302,6 +327,22 @@ export interface Steps<C extends AnyComponent, Parts = never>
    * is ignored when the handler returns `undefined`.
    */
   mediaQuery(query: string, matches: boolean): this
+  /**
+   * Sends `visible` to the component's `HtmlSubscription.onVisibility` handler,
+   * simulating an initial state or a change.
+   *
+   * It throws when nothing listens for visibility, listing the active keys, and
+   * is ignored when the handler returns `undefined`.
+   */
+  visibility(visible: boolean): this
+  /**
+   * Sends `online` to the component's `HtmlSubscription.onConnectivity`
+   * handler, simulating an initial state or a change.
+   *
+   * It throws when nothing listens for connectivity, listing the active keys,
+   * and is ignored when the handler returns `undefined`.
+   */
+  connectivity(online: boolean): this
 
   /** Asserts on the elements `locator` matches in the current view. */
   expect(locator: Locator.Locator): Expect<this>
@@ -579,26 +620,37 @@ class StepsImpl extends internal.SceneCursor {
         let out = state
         let heard = false
         cancelled = fireGlobal.fire(event, given, (capture) => {
-          const declared = out.declared().map(globalEvents.listenerOf).find((
-            declared
-          ) =>
-            declared !== undefined && declared.target === target &&
-            declared.event === event &&
-            declared.capture === capture
-          )
-          if (declared === undefined) return []
+          const sub = out.declared().find((sub) => {
+            const declared = globalEvents.listenerOf(sub)
+            return declared !== undefined && declared.target === target &&
+              declared.event === event &&
+              declared.capture === capture
+          })
+          if (sub === undefined) return []
           heard = true
-          return [(payload, preventDefault) =>
-            globalEvents.run(
-              declared,
-              payload,
-              preventDefault,
-              (message, cancel) => {
-                cancel()
-                handled = true
-                out = engine.dispatch(out, message)
-              }
-            )]
+          return [(payload, preventDefault) => {
+            const before = engine.heldBy.get(out)?.get(sub.key)
+            const held: globalEvents.Held = { value: before }
+            // A press a held listener consumed is handled too, with no message.
+            handled = globalEvents.observe(() =>
+              globalEvents.run(
+                globalEvents.listenerOf(sub)!,
+                payload,
+                preventDefault,
+                (message, cancel) => {
+                  cancel()
+                  out = engine.dispatch(out, message)
+                },
+                held
+              )
+            ).handled || handled
+            if (held.value !== before) {
+              const next = new Map(engine.heldBy.get(out))
+              if (held.value === undefined) next.delete(sub.key)
+              else next.set(sub.key, held.value)
+              out = engine.update(out, { held: next })
+            }
+          }]
         })
         if (!heard) {
           throw new Error(
@@ -617,6 +669,23 @@ class StepsImpl extends internal.SceneCursor {
       })
     )
   }
+  // A held listener's state ends with its entry, or once the key's declaration isn't held, as in the runtime.
+  protected override settled(
+    state: engine.State<any, any, any, any>,
+    step: string
+  ): engine.State<any, any, any, any> {
+    const held = engine.heldBy.get(state)
+    if (held !== undefined && held.size > 0) {
+      const kept = new Map<string, unknown>()
+      for (const sub of state.declared()) {
+        if (held.has(sub.key) && globalEvents.listenerOf(sub)?.held) {
+          kept.set(sub.key, held.get(sub.key))
+        }
+      }
+      if (kept.size < held.size) state = engine.update(state, { held: kept })
+    }
+    return super.settled(state, step)
+  }
   frame(delta = 16): this {
     return this.fireDeclared(
       "frame",
@@ -634,6 +703,22 @@ class StepsImpl extends internal.SceneCursor {
         const declared = mediaQueries.listenerOf(subscription)
         return declared?.query === query ? declared.handler : undefined
       }
+    )
+  }
+  visibility(visible: boolean): this {
+    return this.fireDeclared(
+      "visibility",
+      "visibility",
+      visible,
+      signals.visibilityHandlerOf
+    )
+  }
+  connectivity(online: boolean): this {
+    return this.fireDeclared(
+      "connectivity",
+      "connectivity",
+      online,
+      signals.connectivityHandlerOf
     )
   }
   private fireDeclared<A>(
