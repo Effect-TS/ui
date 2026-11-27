@@ -104,8 +104,7 @@ export interface Rendered<out Model> {
 /**
  * Whether `renderToHtml` marks the rendered state as static (`~static`) when
  * `options.static` is omitted. Defaults to `false`. `HtmlServerVite` sets it
- * to `true` while prerendering so prerendered pages hydrate stale while live
- * request renders from the same bundle hydrate fresh.
+ * to `true` for prerenders, whose query entries hydrate stale.
  *
  * @stability experimental
  * @category references
@@ -170,8 +169,8 @@ const serverHtmlHost: Context.Service.Shape<typeof Html.Host> = {
  * prerendered without search params, such as `/search`, may be served for
  * `/search?q=x`, and a 404 prerendered at `/404` for any unknown path:
  * `Router.subscription` then delivers the Router's route without reporting
- * `RouteMismatch`. When omitted it reads `Static`, which defaults to `false`
- * (HTML rendered per request, whose entries hydrate fresh).
+ * `RouteMismatch`. When `options.static` is omitted, it reads `Static`.
+ * The default is `false`, for per-request HTML whose entries hydrate fresh.
  *
  * Use distinct `key` options when rendering the same root component more than
  * once in one document. Each key sets the root's path to `/<name>[<key>]`

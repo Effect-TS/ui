@@ -25,10 +25,10 @@
  * 404 to `404.html`. Any other status fails the build. When
  * `serverOutDir` is omitted, the server build isn't kept.
  *
- * When `serverOutDir` is set, the build emits the server entry to
+ * With `serverOutDir`, the build emits a server entry and declaration file.
+ * By default, the entry is
  * `<serverOutDir>/index.js` (or `index.mjs` when the app's package isn't
- * `"type": "module"`) alongside its declaration file (`index.d.ts` /
- * `index.d.mts`), exporting `handler` and `dispose` from
+ * `"type": "module"`). It exports `handler` and `dispose` from
  * `HttpRouter.toWebHandler`. A host serves files from the client `outDir`
  * first and passes remaining requests to `handler`. `serverOutDir` must
  * not overlap the client `outDir`.
@@ -50,10 +50,9 @@
  * `vite build --watch` isn't supported and fails before building. Use
  * `vite dev` to rebuild on changes.
  *
- * Even with `serverOutDir` and no paths to prerender, `vite build` imports
- * the built server entry in Node to read `prerender`, so entries targeting
- * other runtimes (such as Cloudflare Workers) must be importable in Node at
- * build time.
+ * `vite build` imports the server entry in Node to read `prerender`, even
+ * when no paths are listed. Entries targeting other runtimes, such as
+ * Cloudflare Workers, must also be importable in Node at build time.
  *
  * **Example** (Configuring the plugin)
  *
@@ -205,14 +204,13 @@ interface ServerModule {
   readonly handler: (request: Request, context?: unknown) => Promise<Response>
   readonly dispose: () => Promise<void>
   readonly prerender: () => Promise<ReadonlyArray<string>>
-  /** The request context of a prerender: `HtmlServer.Static` set. */
+  /** Marks hydration state as static and disables prerender request logs. */
   readonly prerenderContext: unknown
 }
 
 const documentId = "virtual:@effect/ui/document"
 const serverId = "virtual:@effect/ui/server"
 
-/** The types of a kept server build's entry. */
 const declaration = [
   "import type { Context } from \"effect/Context\"",
   "",
@@ -280,7 +278,6 @@ export const plugin = (options: Options): Plugin => {
         ].join("\n")
       }
       if (id === `\0${serverId}`) {
-        // Requests are logged by a build's handler only, and not while it prerenders.
         return [
           `import * as entry from ${JSON.stringify(options.entry)}`,
           `import { Static } from "@effect/ui/html/HtmlServer"`,
@@ -465,8 +462,7 @@ export const plugin = (options: Options): Plugin => {
       const output = bundles[0]!
       const entry = output.output.find((file) => file.isEntry)!
       await fs.mkdir(cacheDir, { recursive: true })
-      // Prerenders from a copy inside the project, so the bundle's external
-      // imports resolve.
+      // Keep the prerender copy inside the project so external imports resolve.
       const dir = await fs.mkdtemp(path.join(cacheDir, "effect-ui-server-"))
       try {
         await Promise.all(

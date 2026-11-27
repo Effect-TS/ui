@@ -83,10 +83,7 @@ const Pages = layerHttp(App, {
 
 // `NotesApi` is the JSON API the app calls, from the server render and from
 // the browser. A real server also serves `/client.js`, the bundle of the
-// next example. For a Vite app, `HtmlServerVite.plugin` renders the server
-// entry in `vite dev`, prerenders listed paths in `vite build`, and with
-// `serverOutDir` emits an importable `{ handler, dispose }` web handler
-// alongside the client assets.
+// next example.
 const Main = HttpRouter.serve(Layer.mergeAll(NotesApi, Pages)).pipe(
   Layer.provide(NodeHttpServer.layer(createServer, { port }))
 )
