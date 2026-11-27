@@ -195,7 +195,7 @@ interface Issuable {
     inst: Instance,
     seq: number | undefined | void,
     index: number,
-    message: unknown
+    message: string | undefined
   ) => void
 }
 
@@ -640,20 +640,21 @@ export const send = (
   if (next.viewTransition !== undefined) {
     transitions?.request(next.viewTransition)
   }
-  issueAll(
-    inst,
-    next,
-    seq,
-    (message as { readonly _tag?: unknown } | null | undefined)?._tag
-  )
+  if (next.commands.length > 0) issueAll(inst, next, seq, messageTag(message))
   applied(inst, next, seq)
+}
+
+const messageTag = (message: unknown): string | undefined => {
+  if (typeof message !== "object" || message === null) return undefined
+  const tag = (message as { readonly _tag?: unknown })._tag
+  return typeof tag === "string" ? tag : undefined
 }
 
 const issueAll = (
   inst: Instance,
   next: Next,
   seq: number | undefined | void,
-  message: unknown
+  message: string | undefined
 ): void => {
   const commands = next.commands
   for (let index = 0; index < commands.length; index++) {

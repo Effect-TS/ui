@@ -890,7 +890,7 @@ function run(
   inst: Kernel.Instance,
   seq: number | undefined | void,
   index: number,
-  message: unknown
+  message: string | undefined
 ) {
   commandRun.issue(
     inst,
