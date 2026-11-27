@@ -284,7 +284,7 @@ describe("HtmlFiles", { concurrent: false }, () => {
       expect(revoke).toHaveBeenCalledWith(anchor.href)
     }).pipe(Effect.scoped))
 
-  it.effect("TestFiles records downloaded files", () =>
+  it.effect("TestFiles records download requests", () =>
     Effect.gen(function*() {
       const file = new File(["{\"ok\":true}"], "backup.json", {
         type: "application/json"

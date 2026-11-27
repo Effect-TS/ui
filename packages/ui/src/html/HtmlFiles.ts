@@ -1,7 +1,6 @@
 /**
- * Files the user chooses: a Command that opens the browser's file picker,
- * and reads of a `File` or `Blob` that stop when they're interrupted. And
- * files the app hands back, with `download`.
+ * Pick files, read a `File` or `Blob` with interruption support, and request
+ * downloads of files the app creates.
  *
  * **Details**
  *
@@ -229,8 +228,8 @@ files.load({
         return
       }
       const url = view.URL.createObjectURL(file)
-      // Nothing reports when the browser has read the URL, and an early revoke
-      // fails some downloads in WebKit, so it outlives the Effect.
+      // Delay revocation beyond the Effect: the browser does not report when
+      // it has finished reading the URL.
       view.setTimeout(() => view.URL.revokeObjectURL(url), 40_000)
       const anchor = document.createElement("a")
       anchor.href = url
@@ -302,7 +301,7 @@ export const pick = <Msg>(
   Command.map(Pick.make(options), f)
 
 /**
- * Asks the browser to download `file`, saved under `file.name`.
+ * Requests a download of `file` under `file.name`, without confirming a save.
  *
  * **When to use**
  *
@@ -314,10 +313,10 @@ export const pick = <Msg>(
  *
  * **Details**
  *
- * It succeeds once the browser is asked. The browser reports nothing more, so
- * the app can't tell whether the user saved the file, cancelled, or the
- * browser blocked it, as a sandboxed iframe without `allow-downloads` does.
- * `BrowserHost.layer` clicks a detached link to an object URL of the file,
+ * Completion does not tell the app whether the user saved the file, cancelled,
+ * or the browser blocked the download. The default service does nothing;
+ * `BrowserHost.layer` also skips the request if object URLs are unavailable.
+ * Otherwise, `BrowserHost.layer` clicks a detached link to an object URL of the file,
  * and revokes the URL 40 seconds later, so interrupting the Command never
  * cancels a download that started.
  *

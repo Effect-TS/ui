@@ -68,12 +68,9 @@ export const ReadCsv = Command.make(
 // Downloading a file
 // ---------------------------------------------------------------------------
 
-// `HtmlFiles.download` asks the browser to save a `File` under its name.
-// The Command builds the file from plain args, so a story matches them by
-// value. The message log encodes those args, which here are the summary
-// itself. It succeeds once the browser is asked: the browser never reports
-// whether the user saved the file, so the Command ends with
-// `Component.noop` and sends nothing.
+// Build the file from plain args so a story can match them by value.
+// Those args also appear in the message log. Completion does not confirm
+// a save, so this Command sends no success message.
 export const DownloadSummary = Command.make(
   "import/DownloadSummary",
   { args: { name: Schema.String, rows: Schema.Number } },
@@ -221,7 +218,7 @@ export const choseInInput = Effect.gen(function*() {
 
 // A story checks that `update` issues `DownloadSummary`. To check the file
 // itself, run the app with `TestFiles.layer`: `TestFiles.downloads` returns
-// every file downloaded. Without it, `TestHost` has no document and a
+// files requested for download. Without it, `TestHost` has no document and a
 // download does nothing.
 export const downloaded = Effect.gen(function*() {
   const file = new File(["id,name\n1,Ada\n"], "people.csv")

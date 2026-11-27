@@ -1,11 +1,11 @@
 /**
  * A fake `HtmlFiles.Files` for whole-app tests, so a test decides what the
- * user chooses in each file picker, and sees the files the app downloads,
+ * user chooses in each file picker, and inspects download requests,
  * without a document, in Node too.
  *
  * Provide `layer` next to `TestHost.layer()`. Every pick stays pending
  * until `choose` or `dismiss` settles it. Run `TestHost.settle` after it
- * to see the update. `downloads` returns the downloaded files.
+ * to see the update. `downloads` returns the files requested for download.
  *
  * **Example** (Choosing a file in a whole-app test)
  *
@@ -65,7 +65,7 @@ export interface TestFiles {
   readonly pending: () => ReadonlyArray<HtmlFiles.PickOptions>
   /** Settles every pending pick with `picked`. Throws when none is pending. */
   readonly settle: (picked: HtmlFiles.Picked) => void
-  /** The files downloaded, oldest first. */
+  /** Files requested for download, oldest first. */
   readonly downloads: () => ReadonlyArray<File>
 }
 
@@ -164,7 +164,7 @@ export const dismiss: Effect.Effect<void, never, TestFiles> = TestFiles.useSync(
 )
 
 /**
- * The files the app downloaded, oldest first.
+ * Files requested for download, oldest first. No browser download occurs.
  *
  * @stability experimental
  * @category testing
