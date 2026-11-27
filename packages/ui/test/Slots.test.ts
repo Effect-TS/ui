@@ -156,15 +156,19 @@ describe("slots", () => {
       assert.deepStrictEqual(failures(root), [editorPath + " update"])
     })))
 
-  it.effect("a parent render patches the outlet without running the receiver's view", () =>
-    provideHost(Effect.gen(function*() {
-      const root = yield* TestHost.mount(Page, {})
-      frameViews = 0
-      click(root, "type 0")
-      yield* TestHost.settle
-      assert.include(root.text(), "changed 1")
-      assert.strictEqual(frameViews, 0)
-    })))
+  it.effect(
+    "a parent render patches the outlet without running the receiver's view",
+    () =>
+      provideHost(Effect.gen(function*() {
+        const root = yield* TestHost.mount(Page, {})
+        frameViews = 0
+        click(root, "type 0")
+        yield* TestHost.settle
+        assert.include(root.text(), "changed 1")
+        assert.strictEqual(frameViews, 0)
+      })),
+    { concurrent: false }
+  )
 
   it.effect("unplacing a slot unmounts its content, which starts over when placed again", () =>
     provideHost(Effect.gen(function*() {

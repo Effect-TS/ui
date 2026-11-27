@@ -54,6 +54,7 @@ interface Task {
  */
 export class TestExecutor implements Executor, Scheduler.SchedulerDispatcher {
   private tasks: Array<Task> = []
+  private _ran = 0
   private random: number
   readonly flushes: Flush
   readonly scheduler: Scheduler.Scheduler
@@ -112,6 +113,7 @@ export class TestExecutor implements Executor, Scheduler.SchedulerDispatcher {
           const index = this.tasks.indexOf(entry)
           if (index < 0) return
           this.tasks.splice(index, 1)
+          this._ran++
           task()
         }, priority)
       },
@@ -131,11 +133,15 @@ export class TestExecutor implements Executor, Scheduler.SchedulerDispatcher {
     let steps = 0
     while (this.tasks.length > 0) {
       if (steps++ >= budget) return false
+      this._ran++
       this.tasks.shift()!.task()
     }
     return true
   }
   get size(): number {
     return this.tasks.length
+  }
+  get ran(): number {
+    return this._ran
   }
 }

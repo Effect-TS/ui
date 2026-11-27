@@ -41,7 +41,7 @@
  *   return root.text()
  * }).pipe(Effect.scoped, Effect.provide(TestHost.layer()))
  *
- * console.log(Effect.runSync(program)) // "1"
+ * console.log(await Effect.runPromise(program)) // "1"
  * ```
  *
  * @stability experimental
@@ -647,6 +647,7 @@ export const layer = (options?: {
       drainingClock,
       trees: () => trees
     }
+    activity.set(service, { executor, settledAt: 0 })
     yield* Effect.addFinalizer(() =>
       Effect.suspend(() =>
         problems.length === 0
@@ -925,9 +926,17 @@ export class SettleError extends Data.TaggedError("SettleError")<{
   readonly log: ReadonlyArray<MessageLog.Entry>
 }> {}
 
+const activity = new WeakMap<
+  TestHost,
+  { readonly executor: Executor.TestExecutor; settledAt: number }
+>()
+
+const realSetTimeout = globalThis.setTimeout.bind(globalThis)
+const realClearTimeout = globalThis.clearTimeout.bind(globalThis)
+
 const nextMacrotask = Effect.callback<void>((resume) => {
-  const handle = setTimeout(() => resume(Effect.void), 0)
-  return Effect.sync(() => clearTimeout(handle))
+  const handle = realSetTimeout(() => resume(Effect.void), 0)
+  return Effect.sync(() => realClearTimeout(handle))
 })
 
 /**
@@ -939,16 +948,21 @@ const nextMacrotask = Effect.callback<void>((resume) => {
  * A fiber blocked on a Queue or on `TestClock` counts as idle, so a
  * Subscription waiting for its next value, or a Command or fetch sleeping on
  * the clock, doesn't keep `settle` from returning; adjust `TestClock`, which
- * runs what it wakes. Work that resolves a Promise gets a few macrotasks to
- * come back. A run or fetch that never returns is left in `pending()`. A
- * `Component.lazy` load is waited for until it settles. Fibers on the host's
- * `Scheduler` run with the tree's tasks, under the same budget: see `layer`.
- * Then it undoes edits the Model refused on each tree `mount` made.
+ * runs what it wakes. Whenever tasks ran on the test scheduler since the last
+ * `settle`, `settle` waits one quiet macrotask so resolved Promises (from a
+ * Subscription or a Layer fiber on the host's `Scheduler`) and zero-delay
+ * timers can come back; pending Commands and fetches get up to three quiet
+ * macrotasks. An idle `settle` returns without waiting. A run or fetch that
+ * never returns is left in `pending()`. A `Component.lazy` load is waited for
+ * until it settles. Fibers on the host's `Scheduler` run with the tree's
+ * tasks, under the same budget: see `layer`. Then it undoes edits the Model
+ * refused on each tree `mount` made.
  *
  * **Gotchas**
  *
- * A fiber outside the tree that waits on a Promise or a timer outside Effect
- * isn't waited for once no Command, fetch or load is pending.
+ * Work that takes real time outside Effect (a real timer or a Promise that
+ * doesn't resolve within a macrotask) isn't waited for; drive it from the test
+ * instead.
  *
  * A tree mounted with `Renderer.mount` directly isn't registered: `settle`
  * runs its work, but doesn't wait for its runs and fetches, report its crash
@@ -985,6 +999,7 @@ export const settle: Effect.Effect<
   })
 
 const drainAll = Effect.fnUntraced(function*(testHost: TestHost) {
+  const track = activity.get(testHost)
   let budget = testHost.budget
   let quiet = 0
   while (quiet < 3) {
@@ -1014,11 +1029,19 @@ const drainAll = Effect.fnUntraced(function*(testHost: TestHost) {
     // A run or fetch sleeping on the clock looks the same as one waiting on a Promise, so anything
     // in flight gets the grace.
     const pending = testHost.pending()
-    if (pending.length === 0) return
+    if (pending.length === 0) {
+      if (
+        quiet > 0 || track === undefined ||
+        track.executor.ran === track.settledAt
+      ) {
+        break
+      }
+    }
     // Something may come back from outside the scheduler, such as a resolved Promise.
     if (!pending.some((pending) => pending._tag === "Load")) quiet++
     yield* nextMacrotask
   }
+  if (track !== undefined) track.settledAt = track.executor.ran
 })
 
 const describePending = (pending: Pending): string =>
