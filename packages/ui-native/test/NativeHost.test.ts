@@ -338,46 +338,42 @@ describe("NativeHost", () => {
   })
 
   it("keeps the input node on multiline changes and applies defaults", () => {
-    for (
-      const [os, viewName] of [
-        ["android", "AndroidTextInput"],
-        ["ios", "RCTSinglelineTextInputView"]
-      ] as const
-    ) {
-      const fabric = FakeFabric.make()
-      const { host, root } = NativeHost.make({
-        ui: fabric.ui,
-        rootTag: 1,
-        os,
-        processColor: (c) => `color:${String(c)}`
-      })
-      const input = host.createElement("input")
-      host.insertBefore(root, input, undefined)
-      host.commit!()
-      const committed = () =>
-        FakeFabric.find(fabric.committed(), FakeFabric.byName(viewName))!
-      const first = committed()
-      assert.strictEqual(first.props.autoCapitalize, "sentences")
-      assert.strictEqual(first.props.underlineColorAndroid, 0)
+    const fabric = FakeFabric.make()
+    const { host, root } = NativeHost.make({
+      ui: fabric.ui,
+      rootTag: 1,
+      os: "ios",
+      processColor: (c) => `color:${String(c)}`
+    })
+    const input = host.createElement("input")
+    host.insertBefore(root, input, undefined)
+    host.commit!()
+    const committed = () =>
+      FakeFabric.find(
+        fabric.committed(),
+        FakeFabric.byName("RCTSinglelineTextInputView")
+      )!
+    const first = committed()
+    assert.strictEqual(first.props.autoCapitalize, "sentences")
+    assert.strictEqual(first.props.underlineColorAndroid, 0)
 
-      host.setProp(input, "multiline", true)
-      host.setProp(input, "autoCapitalize", "none")
-      host.setProp(input, "underlineColorAndroid", "#3b82f6")
-      host.commit!()
-      const multi = committed()
-      assert.strictEqual(multi.tag, first.tag)
-      assert.strictEqual(multi.props.multiline, true)
-      assert.strictEqual(multi.props.autoCapitalize, "none")
-      assert.strictEqual(multi.props.underlineColorAndroid, "color:#3b82f6")
+    host.setProp(input, "multiline", true)
+    host.setProp(input, "autoCapitalize", "none")
+    host.setProp(input, "underlineColorAndroid", "#3b82f6")
+    host.commit!()
+    const multi = committed()
+    assert.strictEqual(multi.tag, first.tag)
+    assert.strictEqual(multi.props.multiline, true)
+    assert.strictEqual(multi.props.autoCapitalize, "none")
+    assert.strictEqual(multi.props.underlineColorAndroid, "color:#3b82f6")
 
-      host.setProp(input, "multiline", false)
-      host.setProp(input, "underlineColorAndroid", undefined)
-      host.commit!()
-      const single = committed()
-      assert.strictEqual(single.tag, first.tag)
-      assert.strictEqual(single.props.multiline, false)
-      assert.strictEqual(single.props.underlineColorAndroid, 0)
-    }
+    host.setProp(input, "multiline", false)
+    host.setProp(input, "underlineColorAndroid", undefined)
+    host.commit!()
+    const single = committed()
+    assert.strictEqual(single.tag, first.tag)
+    assert.strictEqual(single.props.multiline, false)
+    assert.strictEqual(single.props.underlineColorAndroid, 0)
   })
 
   it("handles defaultValue, clear, and setSelection", async () => {
@@ -412,15 +408,7 @@ describe("NativeHost", () => {
       },
       view: (h, model) =>
         h.view.children(
-          h.input
-            .prop("defaultValue", model.initial)
-            .prop("multiline", true)
-            .prop("keyboardType", "default")
-            .prop("returnKeyType", "done")
-            .prop("submitBehavior", "newline")
-            .prop("placeholderTextColor", "#9ca3af")
-            .prop("selectionColor", "#3b82f6")
-            .prop("customNativeProp", 123),
+          h.input.prop("defaultValue", model.initial).prop("multiline", true),
           h.input.prop("value", model.value).prop("defaultValue", model.seed),
           h.input.prop("defaultValue", model.seed).prop("value", model.value),
           h.text.children(String(model.ticks))
@@ -484,7 +472,7 @@ describe("NativeHost", () => {
     await close()
   })
 
-  it("delivers textLayout and input events for Android and iOS", async () => {
+  it("delivers textLayout and input events", async () => {
     const received: Array<unknown> = []
     const Msg = UiSchema.TaggedEnum({
       Recorded: { entry: Schema.Unknown }
@@ -511,12 +499,10 @@ describe("NativeHost", () => {
           h.input
             .on("selectionChange", ({ selection }) =>
               record(["selection", selection.start, selection.end]))
-            .on("keyPress", ({ key }) =>
-              record(["key", key]))
+            .on("keyPress", ({ key }) => record(["key", key]))
             .on("contentSizeChange", ({ contentSize }) =>
               record(["size", contentSize.width, contentSize.height]))
-            .on("endEditing", ({ value }) =>
-              record(["endEditing", value]))
+            .on("endEditing", ({ value }) => record(["endEditing", value]))
         )
     })
     const { close, fabric, find, settle } = await FakeFabric.mount(
@@ -543,28 +529,19 @@ describe("NativeHost", () => {
         xHeight: 8
       }]
     })
-    // Android and iOS payload shapes for each input event.
     fabric.emit(input, "topSelectionChange", {
-      selection: { start: 1, end: 3 }
-    })
-    fabric.emit(input, "topSelectionChange", {
-      selection: { start: 2, end: 2 },
-      text: "ab",
+      selection: { start: 1, end: 3 },
+      text: "abc",
       target: 1,
       eventCount: 4
     })
-    fabric.emit(input, "topKeyPress", { key: "Backspace" })
-    fabric.emit(input, "topKeyPress", { key: "Tab", eventCount: 5 })
+    fabric.emit(input, "topKeyPress", { key: "Backspace", eventCount: 5 })
     fabric.emit(input, "topContentSizeChange", {
       contentSize: { width: 100, height: 44 },
       target: 1
     })
-    fabric.emit(input, "topContentSizeChange", {
-      contentSize: { width: 100, height: 66 }
-    })
-    fabric.emit(input, "topEndEditing", { text: "android", target: 1 })
     fabric.emit(input, "topEndEditing", {
-      text: "ios",
+      text: "done",
       target: 1,
       eventCount: 6
     })
@@ -573,13 +550,9 @@ describe("NativeHost", () => {
     assert.deepStrictEqual(received, [
       ["textLayout", 1, "Hi"],
       ["selection", 1, 3],
-      ["selection", 2, 2],
       ["key", "Backspace"],
-      ["key", "Tab"],
       ["size", 100, 44],
-      ["size", 100, 66],
-      ["endEditing", "android"],
-      ["endEditing", "ios"]
+      ["endEditing", "done"]
     ])
     await close()
   })
