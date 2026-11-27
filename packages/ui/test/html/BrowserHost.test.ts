@@ -22,8 +22,12 @@ import {
   HtmlServer,
   HtmlSubscription
 } from "@effect/ui/html"
-import { HtmlLocator, TestAnimationFrames } from "@effect/ui/html/testing"
-import { TestHost } from "@effect/ui/testing"
+import {
+  BrowserCase,
+  HtmlLocator,
+  TestAnimationFrames
+} from "@effect/ui/html/testing"
+import { Case, TestHost } from "@effect/ui/testing"
 import { assert, expect, it } from "@effect/vitest"
 import {
   Cause,
@@ -4465,5 +4469,78 @@ describe("BrowserHost", { concurrent: false }, () => {
         app
       ).pipe(Effect.provideService(Renderer.Renderer, { host: outer }))
       expect(root.model()).toEqual({ hasBrowserRenderer: true, heard: true })
+    }).pipe(Effect.scoped))
+})
+
+describe("BrowserCase", { concurrent: false }, () => {
+  it.effect("mounts from model without running init's Commands, and replays messages with the case's layer", () =>
+    Effect.gen(function*() {
+      const Msg = UiSchema.TaggedEnum({
+        Loaded: {},
+        ClickedSave: {},
+        CompletedSave: {}
+      })
+      class LoadTodo extends Command.Service<LoadTodo>()(
+        "BrowserCase/LoadTodo",
+        { args: {}, success: Msg }
+      ) {}
+      class SaveTodo extends Command.Service<SaveTodo>()(
+        "BrowserCase/SaveTodo",
+        { args: { id: Schema.String }, success: Msg }
+      ) {}
+      const TodoItem = Html.component({
+        name: "TodoItem",
+        props: Schema.Struct({ id: Schema.String }),
+        model: Schema.Struct({ saved: Schema.Boolean }),
+        message: Msg
+      }).make({
+        init: ($) => $.set({ saved: false }).run(LoadTodo.make({})),
+        update: ($, message) =>
+          Msg.match(message, {
+            Loaded: () => $.model,
+            ClickedSave: () => $.run(SaveTodo.make({ id: $.props.id })),
+            CompletedSave: () => ({ saved: true })
+          }),
+        view: (h, model) =>
+          h.button.on("click", Msg.ClickedSave()).children(
+            model.saved ? "saved" : "save"
+          )
+      })
+
+      let initLoads = 0
+      const LoadLayer = LoadTodo.toLayer(() =>
+        Effect.sync(() => {
+          initLoads++
+          return Msg.Loaded()
+        })
+      )
+      const SaveImmediate = SaveTodo.toLayer(() =>
+        Effect.succeed(Msg.CompletedSave())
+      )
+      const cases = Case.make(TodoItem, {
+        saved: {
+          props: { id: "t1" },
+          model: { saved: true },
+          layer: Layer.mergeAll(LoadLayer, SaveImmediate)
+        },
+        replayed: {
+          props: { id: "t1" },
+          messages: [Msg.ClickedSave()],
+          layer: Layer.mergeAll(LoadLayer, SaveImmediate)
+        }
+      })
+
+      const app = yield* container
+      const root = yield* BrowserCase.mount(cases.saved, app)
+      yield* tick
+      expect(root.model()).toEqual({ saved: true })
+      expect(app.textContent).toBe("saved")
+      expect(initLoads).toBe(0)
+
+      const app2 = yield* container
+      const root2 = yield* BrowserCase.mount(cases.replayed, app2)
+      yield* tick
+      expect(root2.model()).toEqual({ saved: true })
+      expect(app2.textContent).toBe("saved")
     }).pipe(Effect.scoped))
 })

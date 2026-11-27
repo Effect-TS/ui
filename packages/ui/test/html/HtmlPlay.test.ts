@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-import type { Component } from "@effect/ui"
+import { Command, type Component, UiSchema } from "@effect/ui"
 import { BrowserHost, Html, HtmlSubscription } from "@effect/ui/html"
 import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing"
-import { Locator, TestHost } from "@effect/ui/testing"
+import { Case, Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Clock, Effect, Exit, Schema, type Scope } from "effect"
 import { Menu } from "./fixtures/headless.ts"
@@ -374,5 +374,56 @@ describe("HtmlPlay", () => {
         Exit.isFailure(missing) ? Cause.pretty(missing.cause) : "",
         /nothing listens for "keydown" on the document/
       )
+    }).pipe(play))
+
+  it.effect("fromCase mounts a Case on TestHost and returns an HtmlPlay cursor", () =>
+    Effect.gen(function*() {
+      const TodoMessage = UiSchema.TaggedEnum({
+        ClickedSave: {},
+        CompletedSaveTodo: {}
+      })
+      class SaveTodo extends Command.Service<SaveTodo>()(
+        "todos/SaveTodo",
+        { args: { id: Schema.String }, success: TodoMessage }
+      ) {}
+      const TodoItem = Html.component({
+        name: "TodoItem",
+        props: Schema.Struct({ id: Schema.String }),
+        model: Schema.Struct({ saved: Schema.Boolean }),
+        message: TodoMessage
+      }).make({
+        init: () => ({ saved: false }),
+        update: ($, message) =>
+          TodoMessage.match(message, {
+            ClickedSave: () => $.run(SaveTodo.make({ id: $.props.id })),
+            CompletedSaveTodo: () => ({ saved: true })
+          }),
+        view: (h, model) =>
+          h.button.on("click", TodoMessage.ClickedSave()).children(
+            model.saved ? "saved" : h.isRunning(SaveTodo) ? "saving" : "save"
+          )
+      })
+      const SavePending = SaveTodo.toLayer(() => Effect.never)
+      const cases = Case.make(TodoItem, {
+        saving: {
+          props: { id: "t1" },
+          messages: [TodoMessage.ClickedSave()],
+          layer: SavePending
+        },
+        saved: {
+          props: { id: "t1" },
+          model: { saved: true }
+        }
+      })
+
+      const saved = yield* HtmlPlay.fromCase(cases.saved).pipe(
+        Effect.provide(SavePending)
+      )
+      yield* saved.expect(HtmlLocator.role("button", { name: "saved" }))
+        .toExist()
+
+      const saving = yield* HtmlPlay.fromCase(cases.saving)
+      yield* saving.expect(HtmlLocator.role("button", { name: "saving" }))
+        .toExist()
     }).pipe(play))
 })

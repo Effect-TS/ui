@@ -1,6 +1,6 @@
 import { Command, Component, type Query, UiSchema, type View } from "@effect/ui"
-import type { Steps } from "@effect/ui/testing"
-import { Scene, Story } from "@effect/ui/testing"
+import type { Steps, TestHost } from "@effect/ui/testing"
+import { Case, Play, Scene, Story } from "@effect/ui/testing"
 import { Effect, Schema, type Scope, Stream } from "effect"
 import { describe, expect, it } from "tstyche"
 import type { SearchBox } from "../test/fixtures/components.ts"
@@ -339,5 +339,64 @@ describe("Story's re-exports of the Steps types", () => {
     expect<Story.KeyedLoad<Read>>().type.toBe<Steps.KeyedLoad<Read>>()
     expect<Story.Target>().type.toBe<Steps.Target>()
     expect<Story.StreamTarget>().type.toBe<Steps.StreamTarget>()
+  })
+})
+
+describe("Case", () => {
+  it("checks props, model and messages against the component and allows omitting empty props", () => {
+    const counterCases = Case.make(Counter, {
+      start: {
+        props: { initial: 1 },
+        model: { count: 2 },
+        messages: [CounterMessage.Increment()]
+      }
+    })
+    expect(counterCases.start.name).type.toBe<string>()
+    expect(Case.make(SearchBox, { idle: {} }).idle.name).type.toBe<string>()
+    expect(Case.make).type.not.toBeCallableWith(Counter, {
+      badProps: { props: { initial: "0" } }
+    })
+    expect(Case.make).type.not.toBeCallableWith(Counter, {
+      badModel: { props: { initial: 0 }, model: { count: "0" } }
+    })
+    expect(Case.make).type.not.toBeCallableWith(Counter, {
+      badMessage: {
+        props: { initial: 0 },
+        messages: [TodoItemMessage.Save()]
+      }
+    })
+  })
+
+  it("keeps unmet requirements in the case's type and removes ones the layer satisfies", () => {
+    const todo = { id: "t1", title: "Buy milk", done: false }
+    const todoCases = Case.make(TodoItem, {
+      unprovided: { props: { todo } },
+      provided: {
+        props: { todo },
+        layer: SaveTodo.toLayer(() => Effect.never)
+      }
+    })
+    expect(Play.fromCase(todoCases.unprovided)).type.toBe<
+      Effect.Effect<
+        Play.Play<
+          Component.Model<typeof TodoItem>,
+          Component.Message<typeof TodoItem>,
+          Component.Events<typeof TodoItem>
+        >,
+        Play.StepError,
+        SaveTodo | TestHost.TestHost | Scope.Scope
+      >
+    >()
+    expect(Play.fromCase(todoCases.provided)).type.toBe<
+      Effect.Effect<
+        Play.Play<
+          Component.Model<typeof TodoItem>,
+          Component.Message<typeof TodoItem>,
+          Component.Events<typeof TodoItem>
+        >,
+        Play.StepError,
+        TestHost.TestHost | Scope.Scope
+      >
+    >()
   })
 })

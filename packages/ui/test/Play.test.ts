@@ -1,7 +1,7 @@
 import { Command, Component, UiSchema } from "@effect/ui"
-import { Locator, Play, TestHost } from "@effect/ui/testing"
+import { Case, Locator, Play, TestHost } from "@effect/ui/testing"
 import { assert, it } from "@effect/vitest"
-import { Cause, Effect, Exit, Schema } from "effect"
+import { Cause, Context, Effect, Exit, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
 
 const SaverMessage = UiSchema.TaggedEnum({ ClickedSave: {}, SucceededSave: {} })
@@ -98,5 +98,101 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Play", (it) => {
         ),
         /Play\.expect\(<p>\)\.toHaveText\("saves: 9"\): its text is "saves: 0"; elements:\n  <div>/
       )
+    }))
+
+  it.effect("fromCase replays messages with the case's layer and starts from model without running init's Commands", () =>
+    Effect.gen(function*() {
+      class InitialId extends Context.Service<InitialId, string>()(
+        "InitialId"
+      ) {}
+
+      const ItemMessage = UiSchema.TaggedEnum({
+        Loaded: {},
+        ClickedSave: {},
+        CompletedSave: {}
+      })
+
+      class LoadItem extends Command.Service<LoadItem>()(
+        "Item/Load",
+        { args: {}, success: ItemMessage }
+      ) {}
+
+      class SaveItem extends Command.Service<SaveItem>()(
+        "Item/Save",
+        { args: { id: Schema.String }, success: ItemMessage }
+      ) {}
+
+      const Item = Component.define({
+        name: "Item",
+        props: Schema.Struct({ id: Schema.String }),
+        model: Schema.Struct({ saved: Schema.Boolean, loaded: Schema.Boolean }),
+        message: ItemMessage
+      }).make({
+        init: ($) =>
+          $.set({ saved: false, loaded: false }).run(LoadItem.make({})),
+        update: ($, message) =>
+          ItemMessage.match(message, {
+            Loaded: () => ({ ...$.model, loaded: true }),
+            ClickedSave: () => $.run(SaveItem.make({ id: $.props.id })),
+            CompletedSave: () => ({ ...$.model, saved: true })
+          }),
+        view: (h, model) =>
+          h.el(
+            "p",
+            `${h.props.id}:${
+              model.saved ? "saved" : h.isRunning(SaveItem) ? "saving" : "empty"
+            }`
+          )
+      })
+
+      let initLoads = 0
+      const LoadLayer = LoadItem.toLayer(() =>
+        Effect.sync(() => {
+          initLoads++
+          return ItemMessage.Loaded()
+        })
+      )
+      const SavePending = SaveItem.toLayer(() => Effect.never)
+      const SaveImmediate = SaveItem.toLayer(() =>
+        Effect.succeed(ItemMessage.CompletedSave())
+      )
+
+      const cases = Case.make(Item, {
+        saved: {
+          props: { id: "t1" },
+          model: { saved: true, loaded: false },
+          layer: Layer.mergeAll(LoadLayer, SavePending)
+        },
+        saving: {
+          props: Effect.gen(function*() {
+            return { id: yield* InitialId }
+          }),
+          messages: [ItemMessage.ClickedSave()],
+          layer: Layer.mergeAll(
+            LoadLayer,
+            SavePending,
+            Layer.succeed(InitialId, "t2")
+          )
+        },
+        replayed: {
+          props: { id: "t3" },
+          messages: [ItemMessage.ClickedSave()],
+          layer: Layer.mergeAll(LoadLayer, SaveImmediate)
+        }
+      })
+
+      assert.strictEqual(cases.saved.name, "Item/saved")
+      assert.strictEqual(cases.saved.component, Item)
+
+      const saved = yield* Play.fromCase(cases.saved)
+      yield* saved.expect(Locator.tag("p")).toHaveText("t1:saved")
+      assert.deepStrictEqual(saved.root.model(), { saved: true, loaded: false })
+      assert.strictEqual(initLoads, 0)
+
+      const saving = yield* Play.fromCase(cases.saving)
+      yield* saving.expect(Locator.tag("p")).toHaveText("t2:saving")
+
+      const replayed = yield* Play.fromCase(cases.replayed)
+      yield* replayed.expect(Locator.tag("p")).toHaveText("t3:saved")
     }))
 })
