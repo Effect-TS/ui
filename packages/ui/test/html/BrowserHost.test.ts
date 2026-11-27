@@ -1616,6 +1616,21 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(root.model()).toEqual(["hit"])
       }).pipe(Effect.scoped))
 
+    it.effect("a constant message is sent without reading the event", () =>
+      Effect.gen(function*() {
+        const read = vi.spyOn(globalThis, "FormData")
+        yield* Effect.addFinalizer(() => Effect.sync(() => read.mockRestore()))
+        const Page = logPage((h) => h.el("form").on("submit", "sent"))
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Page, {}, app)
+        app.querySelector("form")!.dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true })
+        )
+        yield* tick
+        expect(root.model()).toEqual(["sent"])
+        expect(read).not.toHaveBeenCalled()
+      }).pipe(Effect.scoped))
+
     // A custom element that submits its form once it is in the document, and keeps whether the app took it.
     const prevented: Array<boolean> = []
     customElements.define(

@@ -73,7 +73,7 @@
  * A move still queued when its pointer is pressed or released inside the app
  * is sent before that element event, and one queued at `pointercancel` is
  * dropped, so the Model can revert at once. The order only holds between
- * element events: a document subscriber hears the press or release first.
+ * element events: a capture-phase document subscriber hears the press or release first.
  *
  * `value`, `checked`, `selected` and `open` are controlled. The host sets them
  * after the element's children exist, skips a no-op so the caret doesn't jump,
