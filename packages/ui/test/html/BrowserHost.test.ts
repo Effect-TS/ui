@@ -5104,6 +5104,67 @@ describe("BrowserHost", { concurrent: false }, () => {
         yield* Scope.close(layerScope, Exit.void)
         expect(closed).toBe(2)
       }).pipe(Effect.scoped))
+
+    it.effect.skipIf(
+      process.versions.bun !== undefined || process.versions.deno !== undefined
+    )(
+      "a released element keeps neither its Model nor the Layer's services, and decodes nothing",
+      () =>
+        Effect.gen(function*() {
+          class Api extends Context.Service<Api, object>()("CeApi") {}
+          let model: WeakRef<object> | undefined
+          let decoded = 0
+          const Label = Html.component({
+            name: "CeLabel",
+            props: Schema.Struct({ text: Schema.String }),
+            model: Schema.Struct({}),
+            message: Schema.Never
+          }).make({
+            init: () => {
+              const value = {}
+              model = new WeakRef(value)
+              return value
+            },
+            update: ($) => $.model,
+            view: (h) => h.label.id(h.id("label")).children(h.props.text)
+          })
+          const text = Schema.String.check(
+            Schema.makeFilter(() => (decoded++, true))
+          )
+          const define = (tag: string) =>
+            BrowserHost.defineElement(tag, Label, {
+              props: { text: "" },
+              attributes: { text }
+            })
+          const layerScope = yield* Scope.make()
+          const api = yield* Effect.sync(() => {
+            const api = {}
+            return [new WeakRef(api), Layer.succeed(Api, api)] as const
+          }).pipe(
+            Effect.tap(([, provided]) =>
+              Layer.buildWithScope(
+                Layer.mergeAll(define("ce-label-a"), define("ce-label-b")).pipe(
+                  Layer.provide(provided)
+                ),
+                layerScope
+              )
+            ),
+            Effect.map(([ref]) => ref)
+          )
+          const app = yield* container
+          app.innerHTML = "<ce-label-a></ce-label-a><ce-label-b></ce-label-b>"
+          const [a, b] = app.querySelectorAll("label")
+          expect(a!.id).not.toBe(b!.id)
+
+          yield* Scope.close(layerScope, Exit.void)
+          const before = decoded
+          app.firstElementChild!.setAttribute("text", "x")
+          expect(decoded).toBe(before)
+          yield* collectGarbage
+          expect(model!.deref()).toBeUndefined()
+          expect(api.deref()).toBeUndefined()
+        }).pipe(Effect.scoped)
+    )
   })
 })
 

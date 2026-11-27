@@ -704,9 +704,9 @@ export interface DefineElementOptions<
  *
  * Each instance mounts its own root as it connects, replacing the element's
  * children, and never writes the document head. Roots are keyed by the
- * order they mounted in, so instances' element ids don't collide. All of them share the
- * Layer's services and the document's, and each has its own Scope and query
- * cache. An attribute or property change gives the root new props in place,
+ * tag and the order they mounted in, so instances' element ids don't
+ * collide. All of them share the Layer's services and the document's, and
+ * each has its own Scope and query cache. An attribute or property change gives the root new props in place,
  * keeping its Model: an attribute is decoded by its Schema in
  * `attributes`, and a removed one gives the prop back its value in
  * `props`. Attribute and property write the same prop, so the last write
@@ -796,18 +796,24 @@ export const defineElement = <
     const observed = [...decoders.keys()]
     const props = options.props as Record<string, unknown>
     const keys = new Set([...Object.keys(props), ...Object.keys(attributes)])
-    const shared = yield* documentOf(document)
-    const context = yield* Effect.context<Scope.Scope>()
-    const scope = Context.get(context, Scope.Scope)
-    let live = true
-    yield* Effect.addFinalizer(() => Effect.sync(() => live = false))
+    // Released with the Layer, so an element the page keeps doesn't keep its services.
+    let live:
+      | {
+        readonly shared: Effect.Success<ReturnType<typeof documentOf>>
+        readonly context: Context.Context<Scope.Scope>
+      }
+      | undefined = {
+        shared: yield* documentOf(document),
+        context: yield* Effect.context<Scope.Scope>()
+      }
+    yield* Effect.addFinalizer(() => Effect.sync(() => live = undefined))
     const shadow = options.shadow === true ? {} : options.shadow || undefined
     const sheets = (shadow?.styles ?? []).map((css) => {
       const sheet = new view.CSSStyleSheet()
       sheet.replaceSync(css)
       return sheet
     })
-    // Each instance's root is keyed, so instances' element ids don't collide.
+    // Roots are keyed by tag and mount order, so no two instances' element ids collide.
     let mounts = 0
     class Defined extends (view.HTMLElement as typeof HTMLElement) {
       static observedAttributes = observed
@@ -823,10 +829,11 @@ export const defineElement = <
         return { ...props, ...this["~set"] }
       }
       "~update"() {
-        if (live) this["~root"]?.setProps(this["~props"]())
+        this["~root"]?.setProps(this["~props"]())
       }
       connectedCallback() {
-        if (this["~root"] !== undefined || !live) return
+        if (this["~root"] !== undefined || live === undefined) return
+        const { context, shared } = live
         // happy-dom's upgrade doesn't report the attributes an element already has, which browsers do.
         for (const name of observed) {
           const value = this.getAttribute(name)
@@ -843,30 +850,43 @@ export const defineElement = <
         }
         const container = this["~shadow"] || this
         container.textContent = ""
-        const instance = this["~scope"] = Scope.forkUnsafe(scope, "sequential")
+        const instance = this["~scope"] = Scope.forkUnsafe(
+          Context.get(context, Scope.Scope),
+          "sequential"
+        )
         this["~root"] = Effect.runSyncWith(
           Context.add(context, Scope.Scope, instance)
         )(
-          mountRoot(
-            component as unknown as Component.Any,
-            this["~props"](),
-            container as globalThis.Element,
-            {
-              head: false,
-              key: String(mounts++),
-              fallback: options.fallback,
-              query: options.query,
-              onEmit: (event: Events) =>
-                this.dispatchEvent(
-                  new view.CustomEvent(event._tag.toLowerCase(), {
-                    detail: event,
-                    bubbles: true,
-                    composed: true
-                  })
-                )
-            },
-            undefined,
-            shared
+          Effect.andThen(
+            Scope.addFinalizer(
+              instance,
+              Effect.sync(() => {
+                if (this["~scope"] === instance) {
+                  this["~root"] = this["~scope"] = undefined
+                }
+              })
+            ),
+            mountRoot(
+              component as unknown as Component.Any,
+              this["~props"](),
+              container as globalThis.Element,
+              {
+                head: false,
+                key: `${tag}:${mounts++}`,
+                fallback: options.fallback,
+                query: options.query,
+                onEmit: (event: Events) =>
+                  this.dispatchEvent(
+                    new view.CustomEvent(event._tag.toLowerCase(), {
+                      detail: event,
+                      bubbles: true,
+                      composed: true
+                    })
+                  )
+              },
+              undefined,
+              shared
+            )
           )
         )
       }
@@ -885,6 +905,7 @@ export const defineElement = <
         _: unknown,
         value: string | null
       ) {
+        if (live === undefined) return
         const [key, decode] = decoders.get(name)!
         this["~seen"][name] = value
         if (value === null) delete this["~set"][key]
