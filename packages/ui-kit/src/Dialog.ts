@@ -866,9 +866,11 @@ const TrackDialog = Mount.makeStream(
           focusInside || target === null || current.modal !== false ||
           !current.open || !showed
         ) return
+        // A press a `Dismissal` layer took moved focus, not the user.
         if (
           !topmost("focus-out", event) || inDialogAbove(stack, node, target) ||
-          (ignored !== null && target.contains(ignored))
+          (ignored !== null && target.contains(ignored)) ||
+          stack.pressed !== undefined
         ) return
         if (current.dismissible && !handingOff() && !onTrigger(target)) {
           send(DialogMessage.FocusedOutside())

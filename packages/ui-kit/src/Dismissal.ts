@@ -31,8 +31,10 @@
  * - `outside-press`: a press with the main button outside the element. A
  *   mouse or a pen counts as it presses, a finger on the tap's click, so a
  *   scroll doesn't count. Neither does a press on a scrollbar or a toast.
- * - `focus-out`: focus moving to an element outside, unless a press outside
- *   that the layer takes moved it, or the kit did, such as a dialog opening.
+ * - `focus-out`: focus moving to an element outside, unless the kit moved
+ *   it, such as a dialog opening, or a press outside that a layer took did,
+ *   until the press's click. Neither a `Dialog` nor a layer below hears that
+ *   focus move either.
  * - `close-watcher`: Android's back gesture, in a browser with
  *   `CloseWatcher` such as Chrome.
  *
@@ -86,6 +88,7 @@ import * as Stream from "effect/Stream"
 import { elementOf } from "./internal/dom.ts"
 import { onScrollbar, trackComposing } from "./internal/interaction.ts"
 import {
+  claimPress,
   handingOff,
   join,
   type Layer,
@@ -215,11 +218,7 @@ export const trackDismissal = (
       const selector = current.insideSelector
       return !selector || elementOf(target)?.closest(selector) == null
     }
-    // The pointer type of a press outside the layer took, until its click.
-    let pressed: string | undefined
-
     const onKeyDown = (event: KeyboardEvent) => {
-      pressed = undefined
       if (
         event.key !== "Escape" || event.defaultPrevented ||
         composing(event) || !top("escape-key", event)
@@ -228,28 +227,28 @@ export const trackDismissal = (
       send("escape-key")
     }
     const onPointerDown = (event: PointerEvent) => {
-      pressed = undefined
-      const { target } = event
+      const { pointerType, target } = event
       if (
         event.button !== 0 || !event.isPrimary || !away(target) ||
         !top("outside-press", event)
       ) return
-      if (event.pointerType === "touch") pressed = "touch"
+      // A finger asks on the tap's click, so a scroll doesn't.
+      if (pointerType === "touch") claimPress(stack, event, layer)
       else if (!onScrollbar(target, event)) {
-        pressed = event.pointerType
-        send("outside-press", pressed)
+        claimPress(stack, event, layer)
+        send("outside-press", pointerType)
       }
     }
     const onClick = (event: MouseEvent) => {
-      const touch = pressed === "touch"
-      pressed = undefined
-      if (touch && away(event.target) && top("outside-press", event)) {
-        send("outside-press", "touch")
-      }
+      const press = stack.pressed
+      if (
+        press?.layer === layer && press.pointerType === "touch" &&
+        away(event.target) && top("outside-press", event)
+      ) send("outside-press", "touch")
     }
     const onFocusIn = (event: FocusEvent) => {
       if (
-        pressed === undefined && !handingOff() && away(event.target) &&
+        stack.pressed === undefined && !handingOff() && away(event.target) &&
         top("focus-out", event)
       ) send("focus-out")
     }

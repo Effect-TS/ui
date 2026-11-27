@@ -21,6 +21,7 @@ const Message = UiSchema.TaggedEnum({
 
 const Config = Schema.Struct({
   refuse: Schema.Boolean,
+  modal: Schema.optional(Schema.Boolean),
   insideSelector: Schema.optional(Schema.String),
   reasons: Schema.optional(Schema.Array(Dismissal.Reason))
 })
@@ -55,7 +56,7 @@ const Page = Html.component({
   },
   view: (h, model) =>
     Dialog(h, {
-      props: { open: model.dialog, modal: true },
+      props: { open: model.dialog, modal: h.props.modal ?? true },
       onEmit: {
         RequestedOpen: () => undefined,
         RequestedClose: ({ reason }) =>
@@ -64,6 +65,7 @@ const Page = Html.component({
       },
       view: (dialog) =>
         h.div(
+          h.button.attr("id", "outside").children("Outside"),
           dialog.portal(h.dialog)?.children(
             dialog.backdrop(h.div.attr("id", "backdrop")),
             dialog.popup(h.div.attr("id", "popup")).children(
@@ -251,6 +253,30 @@ describe("Dismissal in a document", { concurrent: false }, () => {
         "editor:outside-press:mouse",
         "editor:focus-out:"
       ])
+      // A cancelled tap, as for a scroll, doesn't pair with a later focus change.
+      press(save, "touch")
+      save.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true }))
+      save.focus()
+      yield* tick
+      assert.deepStrictEqual(log(), [
+        "editor:outside-press:mouse",
+        "editor:focus-out:",
+        "editor:focus-out:"
+      ])
+    }))
+
+  it.effect("a press the layer takes doesn't also close a non-modal dialog when it moves focus, after the layer closes", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage({ modal: false })
+      const outside = byId("outside")
+      press(outside)
+      yield* tick
+      outside.focus()
+      outside.dispatchEvent(
+        new PointerEvent("click", { bubbles: true, detail: 1 })
+      )
+      yield* tick
+      assert.deepStrictEqual(log(), ["editor:outside-press:mouse"])
     }))
 
   it.effect("a dialog above a layer takes the reasons it ignores, so the layer doesn't hear them", () =>

@@ -20,15 +20,56 @@ export interface Layer {
   readonly watch: () => CloseWatcher | undefined
 }
 
+export interface Press {
+  readonly layer: Layer
+  readonly pointerType: string
+}
+
 export interface Stack {
   readonly layers: Array<Layer>
   watched: { readonly layer: Layer; readonly watcher: CloseWatcher } | undefined
+  pressed: Press | undefined
 }
 
 export const stackOf = perDocument((): Stack => ({
   layers: [],
-  watched: undefined
+  watched: undefined,
+  pressed: undefined
 }))
+
+// A press outside that a layer took, kept until its gesture ends, also when
+// the layer closes on it, so the focus it moves, from a click handler too,
+// doesn't count as focus leaving any layer. A cancelled press ends it.
+export const claimPress = (
+  stack: Stack,
+  event: PointerEvent,
+  layer: Layer
+): void => {
+  const press: Press = { layer, pointerType: event.pointerType }
+  stack.pressed = press
+  const done = new AbortController()
+  const options = { capture: true, signal: done.signal }
+  const end = () => {
+    done.abort()
+    if (stack.pressed === press) stack.pressed = undefined
+  }
+  const own = (next: PointerEvent) => next.pointerId === event.pointerId
+  const document = (event.target as Node).ownerDocument!
+  document.addEventListener(
+    "pointerdown",
+    (next) => next !== event && end(),
+    options
+  )
+  document.addEventListener(
+    "pointercancel",
+    (next) => own(next) && end(),
+    options
+  )
+  document.addEventListener("pointerup", (next) => {
+    if (own(next)) setTimeout(end, 400)
+  }, options)
+  document.addEventListener("click", () => setTimeout(end, 0), options)
+}
 
 // A layer inside another one's node is above it, otherwise the later one is.
 const topOf = (stack: Stack, claim: Claim): Layer | undefined =>
