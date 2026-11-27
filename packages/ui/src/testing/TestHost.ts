@@ -1103,10 +1103,10 @@ export const formatLog = (entries: ReadonlyArray<MessageLog.Entry>): string =>
  *
  * A fact is an entry without `causedBy`: a message from a DOM event, a
  * Command's result, a Subscription, `root.send` or `root.setProps`, a query
- * result, a Layer build or a run ending. The entries under it are what the tree did about
- * it, in the order they were logged: the messages its `update` sent on, the
- * props, mounts and unmounts of its render, the runs it stopped and the
- * fetches its render started. See `MessageLog.Base`.
+ * result, a Layer build or a run ending. The entries under it are what the
+ * tree did about it, in the order they were logged: the messages its `update`
+ * sent on, the props, mounts and unmounts of its render, the runs it stopped
+ * and the fetches its render started. See `MessageLog.Base`.
  *
  * An entry is listed under its fact even when the flush that logged it ran
  * after later facts, so its number can be higher than the next fact's. An

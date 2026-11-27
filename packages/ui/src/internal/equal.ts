@@ -7,8 +7,8 @@
 import * as Equal from "effect/Equal"
 
 /**
- * Shallow per key for plain records, `Equal.equals` otherwise (and for fields
- * that differ by reference).
+ * Shallow per key for plain records, `Equal.equals` for anything else and for
+ * fields that differ by reference.
  *
  * @internal
  */

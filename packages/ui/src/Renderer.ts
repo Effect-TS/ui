@@ -531,7 +531,7 @@ export interface Root<out Model, in Msg, in Props = never> {
   readonly model: () => Model | undefined
   /** Sends a message to the root, as if from outside the tree. */
   readonly send: (message: Msg) => void
-  /** Gives the root new props without remounting, as a parent's render does for a child. */
+  /** Gives the root new props without remounting, as a parent does a child. */
   readonly setProps: (props: Props) => void
   /**
    * Completes once every instance has adopted the server's nodes, at once
@@ -574,8 +574,7 @@ export type HostOf<V> = [V] extends [never] ? never
  * `props` is the root's props or an Effect of them, such as
  * `Router.props(AppRoute)`. An Effect is run once, before `init`, and its
  * requirements are added to the mount's. `init` still only sees plain props,
- * so a Story or a test can pass them directly. Later changes can be pushed
- * to the mounted root with `root.setProps`.
+ * so a Story or a test can pass them directly.
  *
  * It builds every node fresh. A server render is hydrated with
  * `HtmlHydrate.hydrate`.
