@@ -4782,7 +4782,7 @@ describe("Runtime", () => {
         assert.strictEqual(root.model(), "ab")
         assert.strictEqual(field.props.value, "ab")
       }).pipe(
-        // A renderer on a host of its own, as `settle` drains every mounted tree.
+        // A renderer on a host of its own, which `settle` still restores.
         Effect.provide(Renderer.layer(TestHost.makeHost())),
         provideHost
       ))

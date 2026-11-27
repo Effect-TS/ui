@@ -82,10 +82,9 @@ import * as TestQuery from "./TestQuery.ts"
  * **Details**
  *
  * `attrs` and `props` hold what the renderer set. To act as the user editing
- * a controlled property, set `props` directly, then fire the event. The next
- * `settle` puts every controlled property of a tree `mount` made back to
- * what the renderer last set, so an edit the Model refused is undone, as on a
- * real host.
+ * a controlled property, set `props` directly, then fire the event. On a
+ * tree `mount` made, the next `settle` undoes an edit the Model refused, as
+ * a real host does.
  * `handlers`, `eventOptions`, `owners` and `dispatch` are read from the
  * tree the renderer rendered last, so an element that left it has none.
  * `eventOptions` holds the options set with the handlers. The test host has
@@ -221,7 +220,6 @@ const makeText = (text: string, along: EventsAlong): TestText => {
 const describe = (node: TestNode): string =>
   node._tag === "Text" ? JSON.stringify(node.text) : `<${node.tag}>`
 
-/** Puts back the controlled properties under `node` that an edit changed. */
 const restoreControlled = (node: TestNode): void => {
   if (node._tag === "Text") return
   controlled.restore(node)
@@ -395,7 +393,7 @@ export interface Tree {
   /** The root's failure, once it crashed. */
   readonly crashed: () => Cause.Cause<unknown> | undefined
   readonly path: string
-  /** The test host element it's mounted in, whose controlled properties `settle` puts back. */
+  /** The element it's mounted in. */
   readonly container?: TestElement | undefined
 }
 
@@ -945,8 +943,7 @@ const nextMacrotask = Effect.callback<void>((resume) => {
  * come back. A run or fetch that never returns is left in `pending()`. A
  * `Component.lazy` load is waited for until it settles. Fibers on the host's
  * `Scheduler` run with the tree's tasks, under the same budget: see `layer`.
- * Then it puts back the controlled properties of each tree `mount` made that
- * an edit changed and the Model didn't take.
+ * Then it undoes edits the Model refused on each tree `mount` made.
  *
  * **Gotchas**
  *
@@ -974,7 +971,7 @@ export const settle: Effect.Effect<
     const testHost = yield* TestHost
     yield* drainAll(testHost)
     for (const tree of testHost.trees()) {
-      // After the flush, so an accepted edit is never written back.
+      // After the flush, so an accepted edit isn't undone.
       if (tree.container !== undefined) restoreControlled(tree.container)
       const cause = tree.crashed()
       if (cause !== undefined) {

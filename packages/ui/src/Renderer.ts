@@ -138,9 +138,9 @@ export interface HostEvents<Node> {
  *
  * `elements` lists the vocabularies the host shows, by name, or is `"any"`.
  * `controlled` lists the properties re-applied after every patch, since the
- * user may have changed them; the host skips a no-op. After a user edit the
- * Model didn't follow, handled or not, nothing is patched, so the host puts
- * the property back itself once its event has run. Its members must not
+ * user may have changed them; the host skips a no-op. A user edit the Model
+ * didn't follow isn't patched, so the host puts it back once the event has
+ * run. Its members must not
  * change once the host renders. `runsMounts` is `false` on hosts that never
  * run `onMount` work. `commit` is called once at the end of each flush and
  * after mounting, for hosts that apply changes in a batch.

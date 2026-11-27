@@ -13,7 +13,7 @@ export const want = (node: object, name: string, value: unknown): void => {
   values.set(name, value)
 }
 
-/** Puts back each controlled value the renderer last set on `node` that an edit changed. @internal */
+/** Puts back the controlled values the renderer last set on `node`. @internal */
 export const restore = (
   node: { readonly props: Record<string, unknown> }
 ): void => {
