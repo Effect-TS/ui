@@ -457,7 +457,7 @@ export const open = (
           entry.container.getRootNode() === rootNode
         ) {
           warn(
-            `[@effect/ui] Another root is already mounted at ${inst.path} in this document, so their generated element ids will collide. Pass a distinct \`key\` option to each mount.`
+            `[@effect/ui] Another root is already mounted at ${inst.path} in this document, so their generated element ids can collide. Pass a distinct \`key\` option to each mount.`
           )
           break
         }

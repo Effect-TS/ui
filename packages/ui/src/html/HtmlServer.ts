@@ -81,7 +81,7 @@ import * as server from "./internal/server.ts"
  * settled query entries under `~query`, the last message each owner of
  * shared state got from its reports under `~reported`, `~static` for a
  * static render, and `~key` when rendered with `key`;
- * pass it to `BrowserHost.mount`. `model` is the root's Model
+ * pass it to `HtmlHydrate.hydrate`. `model` is the root's Model
  * after the server run, for app code that sets the status (a 404 for a
  * missing record), or `undefined` if the root failed. `head` holds the
  * `<title>`, meta, link and JSON-LD tags, and `htmlAttributes` and
