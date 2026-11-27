@@ -214,6 +214,36 @@ describe("Canvas", { concurrent: false }, () => {
       "save()",
       "restore()"
     ])
+
+    const failing = recorder()
+    assert.throws(
+      () =>
+        Canvas.paint(
+          failing.context,
+          {
+            width: 10,
+            height: 10,
+            shapes: [
+              Canvas.Group({
+                translate: { x: 1, y: 2 },
+                shapes: [Canvas.Image({ src: "/boom.png", x: 0, y: 0 })]
+              })
+            ]
+          },
+          () => {
+            throw new Error("boom")
+          }
+        ),
+      "boom"
+    )
+    assert.deepStrictEqual(failing.calls, [
+      "clearRect(0,0,10,10)",
+      "save()",
+      "translate(1,2)",
+      "save()",
+      "restore()",
+      "restore()"
+    ])
   })
 
   it.effect("repaints a mounted canvas when an image finishes loading, without sending a message", () =>

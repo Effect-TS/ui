@@ -69,9 +69,10 @@ export const sceneOf = (
 
 // `Canvas.view` returns the `h.canvas` builder with the `Canvas.Paint`
 // mount, which takes the element's one mount slot. It paints on mount and
-// again only when the scene differs, so a render that leaves it equal
-// doesn't repaint. The server writes `<canvas width height>` and the
-// fallback children; nothing paints until the client mounts.
+// again only when the scene differs, or when an `Image` finishes loading, so a
+// render that leaves the scene equal doesn't repaint. The server writes
+// `<canvas width height>` and the fallback children; nothing paints until the
+// client mounts.
 //
 // `pixelRatio: "auto"` sizes the backing store by `devicePixelRatio`, read
 // in the mount, so the view stays pure. With a ratio other than `1` the view

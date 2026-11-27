@@ -489,116 +489,121 @@ const paintShape = (
   images: ((src: string) => ImageSource | undefined) | undefined
 ): void => {
   context.save()
-  switch (shape._tag) {
-    case "Rect": {
-      if (shape.fill !== undefined) {
-        context.fillStyle = shape.fill
-        context.fillRect(shape.x, shape.y, shape.width, shape.height)
-      }
-      if (shape.stroke !== undefined) {
-        strokeWith(context, shape.stroke, shape.lineWidth)
-        context.strokeRect(shape.x, shape.y, shape.width, shape.height)
-      }
-      break
-    }
-    case "Circle": {
-      context.beginPath()
-      context.arc(shape.x, shape.y, shape.radius, 0, Math.PI * 2)
-      fillAndStroke(context, shape)
-      break
-    }
-    case "Path": {
-      context.beginPath()
-      for (const command of shape.commands) {
-        switch (command._tag) {
-          case "MoveTo":
-            context.moveTo(command.x, command.y)
-            break
-          case "LineTo":
-            context.lineTo(command.x, command.y)
-            break
-          case "QuadTo":
-            context.quadraticCurveTo(
-              command.cpx,
-              command.cpy,
-              command.x,
-              command.y
-            )
-            break
-          case "BezierTo":
-            context.bezierCurveTo(
-              command.cp1x,
-              command.cp1y,
-              command.cp2x,
-              command.cp2y,
-              command.x,
-              command.y
-            )
-            break
-          case "Close":
-            context.closePath()
+  try {
+    switch (shape._tag) {
+      case "Rect": {
+        if (shape.fill !== undefined) {
+          context.fillStyle = shape.fill
+          context.fillRect(shape.x, shape.y, shape.width, shape.height)
         }
+        if (shape.stroke !== undefined) {
+          strokeWith(context, shape.stroke, shape.lineWidth)
+          context.strokeRect(shape.x, shape.y, shape.width, shape.height)
+        }
+        break
       }
-      if (shape.lineCap !== undefined) context.lineCap = shape.lineCap
-      if (shape.lineJoin !== undefined) context.lineJoin = shape.lineJoin
-      fillAndStroke(context, shape)
-      break
+      case "Circle": {
+        context.beginPath()
+        context.arc(shape.x, shape.y, shape.radius, 0, Math.PI * 2)
+        fillAndStroke(context, shape)
+        break
+      }
+      case "Path": {
+        context.beginPath()
+        for (const command of shape.commands) {
+          switch (command._tag) {
+            case "MoveTo":
+              context.moveTo(command.x, command.y)
+              break
+            case "LineTo":
+              context.lineTo(command.x, command.y)
+              break
+            case "QuadTo":
+              context.quadraticCurveTo(
+                command.cpx,
+                command.cpy,
+                command.x,
+                command.y
+              )
+              break
+            case "BezierTo":
+              context.bezierCurveTo(
+                command.cp1x,
+                command.cp1y,
+                command.cp2x,
+                command.cp2y,
+                command.x,
+                command.y
+              )
+              break
+            case "Close":
+              context.closePath()
+          }
+        }
+        if (shape.lineCap !== undefined) context.lineCap = shape.lineCap
+        if (shape.lineJoin !== undefined) context.lineJoin = shape.lineJoin
+        fillAndStroke(context, shape)
+        break
+      }
+      case "Text": {
+        if (shape.font !== undefined) context.font = shape.font
+        if (shape.align !== undefined) context.textAlign = shape.align
+        if (shape.baseline !== undefined) context.textBaseline = shape.baseline
+        if (shape.fill !== undefined) {
+          context.fillStyle = shape.fill
+          context.fillText(shape.content, shape.x, shape.y)
+        }
+        if (shape.stroke !== undefined) {
+          strokeWith(context, shape.stroke, shape.lineWidth)
+          context.strokeText(shape.content, shape.x, shape.y)
+        }
+        break
+      }
+      case "Image": {
+        const image = images?.(shape.src)
+        if (image === undefined) break
+        if (shape.smoothing !== undefined) {
+          context.imageSmoothingEnabled = shape.smoothing
+        }
+        if (shape.crop !== undefined) {
+          const { height, width, x, y } = shape.crop
+          context.drawImage(
+            image,
+            x,
+            y,
+            width,
+            height,
+            shape.x,
+            shape.y,
+            shape.width ?? width,
+            shape.height ?? height
+          )
+        } else if (shape.width === undefined && shape.height === undefined) {
+          context.drawImage(image, shape.x, shape.y)
+        } else {
+          const width = shape.width ??
+            ("naturalWidth" in image ? image.naturalWidth : image.width)
+          const height = shape.height ??
+            ("naturalHeight" in image ? image.naturalHeight : image.height)
+          context.drawImage(image, shape.x, shape.y, width, height)
+        }
+        break
+      }
+      case "Group": {
+        if (shape.opacity !== undefined) context.globalAlpha *= shape.opacity
+        if (shape.translate !== undefined) {
+          context.translate(shape.translate.x, shape.translate.y)
+        }
+        if (shape.rotate !== undefined) context.rotate(shape.rotate)
+        if (shape.scale !== undefined) {
+          context.scale(shape.scale.x, shape.scale.y)
+        }
+        for (const child of shape.shapes) paintShape(context, child, images)
+      }
     }
-    case "Text": {
-      if (shape.font !== undefined) context.font = shape.font
-      if (shape.align !== undefined) context.textAlign = shape.align
-      if (shape.baseline !== undefined) context.textBaseline = shape.baseline
-      if (shape.fill !== undefined) {
-        context.fillStyle = shape.fill
-        context.fillText(shape.content, shape.x, shape.y)
-      }
-      if (shape.stroke !== undefined) {
-        strokeWith(context, shape.stroke, shape.lineWidth)
-        context.strokeText(shape.content, shape.x, shape.y)
-      }
-      break
-    }
-    case "Image": {
-      const image = images?.(shape.src)
-      if (image === undefined) break
-      if (shape.smoothing !== undefined) {
-        context.imageSmoothingEnabled = shape.smoothing
-      }
-      if (shape.crop !== undefined) {
-        const { height, width, x, y } = shape.crop
-        context.drawImage(
-          image,
-          x,
-          y,
-          width,
-          height,
-          shape.x,
-          shape.y,
-          shape.width ?? width,
-          shape.height ?? height
-        )
-      } else if (shape.width === undefined && shape.height === undefined) {
-        context.drawImage(image, shape.x, shape.y)
-      } else {
-        const width = shape.width ??
-          ("naturalWidth" in image ? image.naturalWidth : image.width)
-        const height = shape.height ??
-          ("naturalHeight" in image ? image.naturalHeight : image.height)
-        context.drawImage(image, shape.x, shape.y, width, height)
-      }
-      break
-    }
-    case "Group": {
-      if (shape.opacity !== undefined) context.globalAlpha *= shape.opacity
-      if (shape.translate !== undefined) {
-        context.translate(shape.translate.x, shape.translate.y)
-      }
-      if (shape.rotate !== undefined) context.rotate(shape.rotate)
-      if (shape.scale !== undefined) context.scale(shape.scale.x, shape.scale.y)
-      for (const child of shape.shapes) paintShape(context, child, images)
-    }
+  } finally {
+    context.restore()
   }
-  context.restore()
 }
 
 const fillAndStroke = (context: Context2D, shape: Circle | Path) => {
