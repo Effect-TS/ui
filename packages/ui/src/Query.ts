@@ -1290,13 +1290,13 @@ export interface StreamService<
  * - Under the default `idleTimeToLive` of 5 minutes, a subscription stays
  *   open 5 minutes after its last watcher leaves.
  * - When a run with an optimistic patch succeeds, the stream reopens and its
- *   first element drops the held patch, without checking that it includes
- *   the write. If it can predate the write, have the command record the
- *   version it wrote for each key, and filter out older elements in the
- *   stream function. The entry then stays `waiting` with the patch until an
- *   element passes. If the source resets its versions, clear the key's
- *   version before the new sequence's first element, or clear it and
- *   `invalidate` the entry, as a filtered element isn't replayed.
+ *   first element drops the held patch, even if it predates the write. To
+ *   avoid that, have the command record the version it wrote for each key,
+ *   and filter out older elements in the stream function: the entry stays
+ *   `waiting` with the patch until an element passes. If the source resets
+ *   its versions, clear the key's version before the new sequence's first
+ *   element, or clear it and `invalidate` the entry, as a filtered element
+ *   isn't replayed.
  * - An element that already holds the change can arrive while the patch is
  *   live, so write idempotent patches, such as setting a title rather than
  *   adding to a count.
