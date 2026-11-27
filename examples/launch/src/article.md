@@ -58,7 +58,7 @@ Effect UI has an inspector you can add with one Layer, `DevTools.layer`, or auto
 - **Element picker:** Click **Pick** to select any element on the page and jump to the Component instance that rendered it. Try it on this page.
 - **Noise control:** Stop or resume recording noisy Message tags at runtime without editing code, and surface or filter declared payload fields in the timeline.
 - **Time travel:** Pick an earlier entry to see the page at that point. The live app keeps running, and Resume returns to it.
-- **For agents:** An MCP server, or the experimental WebMCP in the browser, gives an agent the same view. It can read the log, find Component instances, inspect their state and pause on any entry. If you allow it, the agent can also send Messages.
+- **For agents:** An MCP server (or WebMCP in the browser) lets agents read the log, inspect Component state and, if allowed, send Messages.
 
 Terminal apps built with `@effect/ui-opentui` can stream their logs into the same browser inspector with `DevToolsHeadless.layer`.
 :::
