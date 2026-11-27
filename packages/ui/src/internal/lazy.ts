@@ -4,10 +4,10 @@ import * as Predicate from "effect/Predicate"
 import type * as Component from "../Component.ts"
 import * as child from "./child.ts"
 import * as Kernel from "./kernel.ts"
-import { LazyTypeId } from "./paths.ts"
+import { LazyTypeId as TypeId } from "./paths.ts"
 
 /** @internal */
-export const TypeId: Component.LazyTypeId = LazyTypeId
+export { TypeId }
 
 /** @internal */
 export type State =

@@ -727,33 +727,25 @@ export class SceneCursor extends Cursor {
     }
     const store: View.LazyStore = { lazy: undefined }
     const shared = engine.stableRootShared(this.state)
-    engine.renderOwnView(this.state, store, shared)
+    engine.viewOfFields(this.state, shared, store)
     const lazies = store.lazy as View.Lazies | undefined
     if (lazies === undefined) {
       throw new Error(`${step}: the view didn't call h.lazy`)
     }
     const counts = new Map<string, number>()
-    let total = 0
     lazies.missed = (entry, fn, args) => {
       const reason = classifyLazyMiss(entry, lazies.round, fn, args)
       counts.set(reason, (counts.get(reason) ?? 0) + 1)
-      total++
     }
-    try {
-      engine.renderOwnView(this.state, store, shared)
-    } finally {
-      lazies.missed = undefined
-    }
-    if (total > 0) {
-      const lines = [...counts].map(([reason, count]) =>
-        count === 1 ? `  - ${reason}` : `  - ${reason} (${count} calls)`
+    engine.viewOfFields(this.state, shared, store)
+    engine.report(
+      step,
+      "h.lazy calls missed on a repeat render",
+      Array.from(
+        counts,
+        ([reason, count]) => count === 1 ? reason : `${reason} (${count} calls)`
       )
-      throw new Error(
-        `${step}: ${total} h.lazy ${
-          total === 1 ? "call" : "calls"
-        } missed on a repeat render:\n${lines.join("\n")}`
-      )
-    }
+    )
     return this
   }
 }

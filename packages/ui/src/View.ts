@@ -2209,13 +2209,11 @@ export class Lazies {
    *
    * @internal
    */
-  declare missed?:
-    | ((
-      entry: LazyEntry | undefined,
-      fn: Function,
-      args: ReadonlyArray<unknown>
-    ) => void)
-    | undefined
+  declare missed?: (
+    entry: LazyEntry | undefined,
+    fn: Function,
+    args: ReadonlyArray<unknown>
+  ) => void
   begin(): void {
     this.round++
     this.used = 0

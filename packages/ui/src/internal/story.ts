@@ -829,7 +829,7 @@ export const expandedView = (
   fields: Fields<any, any, any, any>
 ): View.Node<any, any> =>
   expandRoot(
-    viewOfFields(fields),
+    viewOfFields(fields, rootShared(fields.shared)),
     fields.component.definition.name,
     fields.childModels,
     storySlots.get(fields.component),
@@ -846,9 +846,19 @@ export const expandedView = (
     fields
   )
 
-/** The story's component's own view, before its headless children are expanded. */
-const viewOfFields = (
-  fields: Fields<any, any, any, any>
+/**
+ * The story's component's own view, before its headless children are expanded. `lazy` is where `h.lazy`
+ * keeps its nodes.
+ *
+ * @internal
+ */
+export const viewOfFields = (
+  fields: Pick<
+    Fields<any, any, any, any>,
+    "component" | "model" | "props" | "results" | "pending" | "running"
+  >,
+  shared: Component.SharedLookup,
+  lazy?: View.LazyStore
 ): View.Node<any, any> =>
   fields.component.view(
     fields.model,
@@ -856,28 +866,8 @@ const viewOfFields = (
     fields.running ?? runningOf(fields.pending),
     fields.results,
     undefined,
-    rootShared(fields.shared)
-  )
-
-/**
- * Renders `story`'s own view against `store`, using `shared` so defaulted
- * shared owners keep one identity across repeated renders.
- *
- * @internal
- */
-export const renderOwnView = (
-  story: State<any, any, any, any>,
-  store: View.LazyStore,
-  shared: Component.SharedLookup
-): View.Node<any, any> =>
-  story.component.view(
-    story.model,
-    story.props,
-    runningOf(story.pending),
-    story.results,
-    undefined,
     shared,
-    store
+    lazy
   )
 
 /**
@@ -2159,7 +2149,8 @@ const outputs = (story: State<any, any, any, any>): Array<string> => [
     : [])
 ]
 
-const report = (
+/** @internal */
+export const report = (
   step: string,
   what: string,
   problems: ReadonlyArray<string>
@@ -2469,21 +2460,15 @@ export const withView = (
         owner.path,
         lazy
       )
+      // Only `expectLazyReused` passes a store, and drops it after two renders: nothing to end or reset.
       const lazies = lazy?.lazy as View.Lazies | undefined
       lazies?.begin()
-      try {
-        const node = View.toNode(
-          childOf.expand(
-            component.parts(model, props, { owner, running, queries, shared }),
-            (parts) => view(parts, h)
-          )
+      return View.toNode(
+        childOf.expand(
+          component.parts(model, props, { owner, running, queries, shared }),
+          (parts) => view(parts, h)
         )
-        lazies?.end()
-        return node
-      } catch (error) {
-        if (lazy !== undefined) lazy.lazy = undefined
-        throw error
-      }
+      )
     }
   })
 }
