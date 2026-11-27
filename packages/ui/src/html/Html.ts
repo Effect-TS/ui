@@ -732,8 +732,8 @@ export interface Events {
  * dialog between modal and non-modal, and a close the browser reports after
  * the dialog was shown again.
  *
- * A `slot`'s `slotchange` carries no data and doesn't fire for assignments made
- * before hydration; a view that needs the assigned nodes reads them in a mount.
+ * A `slot`'s `slotchange` carries no data, and hydration doesn't replay earlier
+ * `slotchange` events. Read the initial assigned nodes in a mount.
  *
  * @stability experimental
  * @category events
