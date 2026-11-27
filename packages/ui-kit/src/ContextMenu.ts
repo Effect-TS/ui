@@ -22,7 +22,7 @@
  * | `linkItem`              | `<a>`, one per value                                   |
  * | `checkboxItem`          | `<div>`, one per value                                 |
  * | `checkboxItemIndicator` | `<span>` inside a checkbox item, shown while checked   |
- * | `radioGroup`            | `<div>` around radio items, with the checked value     |
+ * | `radioGroup`            | `<div>` around radio items                             |
  * | `radioItem`             | `<div>` inside a radio group, one per value            |
  * | `radioItemIndicator`    | `<span>` inside a radio item, shown while checked      |
  * | `group`                 | `<div>` around items                                   |
