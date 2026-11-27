@@ -144,6 +144,12 @@ export * as PermissionsAndroid from "./PermissionsAndroid.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as PlatformColor from "./PlatformColor.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Pressable.ts"
 
 /**
