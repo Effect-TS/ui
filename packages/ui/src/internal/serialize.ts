@@ -66,12 +66,7 @@ interface Snapshot {
   readonly late: ReadonlyArray<Fiber.Fiber<Page, SchemaIssue.Issue>>
 }
 
-/**
- * Records the tree as a tape. Neither this nor `write` recurses, so a tree the kernel could draw is
- * written however deep it nests.
- *
- * @internal
- */
+/** @internal */
 export const snapshot = (
   root: Kernel.Instance,
   deferred: ReadonlySet<Kernel.Instance>,
@@ -80,8 +75,8 @@ export const snapshot = (
   const tape: Array<unknown> = []
   const late: Array<Fiber.Fiber<Page, SchemaIssue.Issue>> = []
   /**
-   * What is left to record, last first: a Rec after its owner and base, an instance, or an opcode after
-   * its value, to add to the tape as it is.
+   * Stack entries are (owner, base, Rec), an instance, or (value, opcode).
+   * Push children in reverse order to preserve their order in the tape.
    */
   const todo: Array<any> = [root]
   const kidsOf = (
@@ -239,7 +234,7 @@ export const write = (
     let under = false
     /** The kept children of the innermost instance that has some, by path. */
     let byChild: Record<string, unknown> | undefined
-    /** What each open `Fallback` and `Instance` restores at its end. */
+    /** Saved state for nested ranges, fallbacks, and instances. */
     const outer: Array<any> = []
     const deferredPaths: Array<string> = []
     const statuses: Record<string, string> = {}

@@ -2137,7 +2137,7 @@ describe("HtmlServer", { concurrent: false }, () => {
             )
         })
 
-        // Deepen until the view no longer renders, so no stack depth is assumed; 20,000 bounds the work.
+        // Probe the runtime’s stack limit rather than assuming a fixed failure depth.
         let rendered = yield* HtmlServer.renderToHtml(Page, {})
         while (rendered.html.includes("leaf") && depth < 20_000) {
           depth = Math.ceil(depth * 1.1)

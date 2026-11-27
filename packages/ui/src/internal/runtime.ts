@@ -871,10 +871,9 @@ const pendingIn = (rec: Kernel.Rec, out: Array<Pending>): void => {
   else if (rec.v._tag === "Child" && !rec.inst.closed) pendingOf(rec.inst, out)
 }
 
-// Not recursive: the server asks this of trees that may nest deeper than its stack.
 const loadsOf = (root: Kernel.Instance): Array<Load> => {
   const out: Array<Load> = []
-  /** What is left to visit, last first: each Rec after the path a child drawn at it mounts under. */
+  // Stack entries are (mount path, Rec) pairs.
   const todo: Array<any> = []
   const enter = (inst: Kernel.Instance) => {
     if (inst.kept !== undefined) {
