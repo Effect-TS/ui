@@ -450,15 +450,11 @@ describe("HtmlServer", { concurrent: false }, () => {
       }).make({
         init: () => null,
         update: ($) => $.model,
-        view: (h) =>
-          h.article(
-            h.slot.attr("name", "title").children("Untitled"),
-            h.slot
-          )
+        view: (h) => h.slot.attr("name", "title").children("Untitled")
       })
       const rendered = yield* HtmlServer.renderToHtml(Card, {})
       expect(rendered.html).toBe(
-        "<!--[/Card--><article><slot name=\"title\">Untitled</slot><slot></slot></article><!--]/Card-->"
+        "<!--[/Card--><slot name=\"title\">Untitled</slot><!--]/Card-->"
       )
     }))
 

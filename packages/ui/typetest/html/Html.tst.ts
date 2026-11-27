@@ -146,6 +146,15 @@ describe("Html", () => {
             "input"
           >
         >()
+        expect(h.slot("Untitled")).type.toBe<
+          Html.Element<
+            Msg,
+            never,
+            Html.EventsOf<"slot">,
+            HTMLSlotElement,
+            "slot"
+          >
+        >()
         expect(h).type.not.toHaveProperty("script")
         return h.div()
       }
@@ -413,6 +422,11 @@ describe("Html", () => {
           "paste",
           ({ text }: Html.PastePayload) => Msg.Typed({ value: text })
         )
+        h.slot.on("slotchange", (payload) => {
+          expect(payload).type.toBe<{}>()
+          return Msg.Mounted()
+        })
+        expect(h.div.on).type.not.toBeCallableWith("slotchange", Msg.Mounted())
         expect(h.div.on).type.not.toBeCallableWith("input", Msg.Mounted())
         expect(h.div.on).type.not.toBeCallableWith("submit", Msg.Mounted())
         expect(h.select.on).type.not.toBeCallableWith(
@@ -532,36 +546,6 @@ describe("Html", () => {
           Measure().pipe(Mount.map(() => Msg.Mounted()))
         )
         return h.input.onMount(Focus())
-      }
-    })
-  })
-
-  it("slot is an HTMLSlotElement container with a payload-free slotchange event", () => {
-    Html.component({
-      name: "Slot",
-      model: Schema.String,
-      message: Msg
-    }).make({
-      init: () => "",
-      update: ($) => $.model,
-      view: (h) => {
-        expect(h.slot("Untitled")).type.toBe<
-          Html.Element<
-            Msg,
-            never,
-            Html.EventsOf<"slot">,
-            HTMLSlotElement,
-            "slot"
-          >
-        >()
-        expect(h.div.on).type.not.toBeCallableWith("slotchange", Msg.Mounted())
-        return h.slot
-          .attr("name", "title")
-          .on("slotchange", (payload) => {
-            expect(payload).type.toBe<{}>()
-            return Msg.Mounted()
-          })
-          .children("Untitled")
       }
     })
   })
