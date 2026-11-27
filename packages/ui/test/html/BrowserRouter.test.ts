@@ -925,6 +925,18 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(listening.size).toBe(0)
     }).pipe(Effect.scoped))
 
+  it.effect("doesn't warn before unloading with warnOnUnload: false", () =>
+    Effect.gen(function*() {
+      window.history.replaceState(null, "", "/")
+      const context = yield* Layer.build(
+        BrowserRouter.layer({ routes: AppRoute, warnOnUnload: false })
+      )
+      yield* Context.get(context, Router.Router).block("form")
+      const event = new Event("beforeunload", { cancelable: true })
+      window.dispatchEvent(event)
+      expect(event.defaultPrevented).toBe(false)
+    }).pipe(Effect.scoped))
+
   it.effect("puts the shell's title back and removes the region when it closes", () =>
     Effect.gen(function*() {
       document.title = "Shell"
