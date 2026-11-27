@@ -22,6 +22,7 @@ const Message = UiSchema.TaggedEnum({
 
 const Page = Html.component({
   name: "Page",
+  props: Schema.Struct({ switches: Schema.Boolean }),
   model: Schema.Struct({
     value: Schema.NullOr(Schema.String),
     log: Schema.Array(Schema.String)
@@ -31,7 +32,7 @@ const Page = Html.component({
   init: () => ({ value: null, log: [] }),
   update: {
     RequestedOpen: ($, { reason, value }) => ({
-      value,
+      value: $.props.switches || $.model.value === null ? value : $.model.value,
       log: [...$.model.log, `RequestedOpen ${value} ${reason}`]
     }),
     RequestedClose: ($, { reason }) => ({
@@ -101,10 +102,10 @@ const Page = Html.component({
     )
 })
 
-const mountPage = Effect.fnUntraced(function*() {
+const mountPage = Effect.fnUntraced(function*(props = { switches: true }) {
   yield* popovers
   const app = yield* container
-  const root = yield* BrowserHost.mountEffect(Page, {}, app)
+  const root = yield* BrowserHost.mountEffect(Page, props, app)
   yield* tick
   return { log: () => root.model()!.log }
 })
@@ -194,6 +195,24 @@ describe("NavigationMenu panels in a document", { concurrent: false }, () => {
       byId("products-last").focus()
       assert.isTrue(key("Tab"))
       assert.strictEqual(focused(), "solutions")
+      yield* tick
+      yield* tick
+      assert.deepStrictEqual(log().slice(1), ["RequestedClose focus-out"])
+      assert.deepStrictEqual(expanded(), ["false", "false"])
+      assert.isFalse(key("Tab"))
+
+      assert.isTrue(key("ArrowDown"))
+      yield* tick
+      yield* tick
+      key("ArrowRight")
+      assert.strictEqual(focused(), "docs")
+      assert.isTrue(key("Tab"))
+      assert.strictEqual(focused(), "outside")
+      yield* tick
+      assert.deepStrictEqual(log().slice(2), [
+        "RequestedOpen solutions list-navigation",
+        "RequestedClose focus-out"
+      ])
     }))
 
   it.effect("Escape in the panel returns focus to its trigger, and an outside press closes it without moving focus there", () =>
@@ -260,6 +279,26 @@ describe("NavigationMenu panels in a document", { concurrent: false }, () => {
       assert.strictEqual(byId("products").getAttribute("aria-expanded"), "true")
     }))
 
+  it.effect("a hover switch the consumer turns down leaves the pressed panel as it was", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage({ switches: false })
+      click(byId("products"))
+      yield* tick
+      mouse(byId("solutions"), "mouseenter")
+      yield* tick
+      assert.deepStrictEqual(log(), [
+        "RequestedOpen products trigger-press",
+        "RequestedOpen solutions trigger-hover"
+      ])
+      assert.deepStrictEqual(expanded(), ["true", "false"])
+      mouse(byId("solutions"), "mouseleave")
+      mouse(byId("outside"), "mousemove")
+      yield* TestClock.adjust("50 millis")
+      yield* tick
+      assert.strictEqual(log().length, 2)
+      assert.deepStrictEqual(expanded(), ["true", "false"])
+    }))
+
   it.effect("a touch never opens a panel by hover, and a disabled trigger ignores presses", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage()
@@ -279,7 +318,7 @@ describe("NavigationMenu panels in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(log(), [])
     }))
 
-  it.effect("a link with closeOnClick closes the panel and keeps focus, and focus leaving the menu closes it", () =>
+  it.effect("a link with closeOnClick closes the panel without returning focus to the trigger, and focus leaving the menu closes it", () =>
     Effect.gen(function*() {
       const { log } = yield* mountPage()
       click(byId("products"))
@@ -291,6 +330,7 @@ describe("NavigationMenu panels in a document", { concurrent: false }, () => {
       yield* tick
       yield* tick
       assert.deepStrictEqual(log().slice(1), ["RequestedClose link-press"])
+      assert.notStrictEqual(focused(), "products")
 
       click(byId("products"))
       yield* tick

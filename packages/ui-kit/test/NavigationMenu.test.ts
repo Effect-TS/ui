@@ -10,7 +10,7 @@ const model = {
   hover: null,
   touched: false,
   away: true,
-  asked: false,
+  request: null,
   reason: null,
   patient: false,
   closeReason: null,

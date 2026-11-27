@@ -76,11 +76,12 @@
  * the focused trigger's panel in a horizontal menu, and Right in a vertical
  * one, or Left when it is right-to-left. Focus stays on the trigger.
  *
- * The popup is drawn after the list, so the menu bridges Tab: Tab from the
- * open trigger goes to the panel's first stop, Shift+Tab from there back to
- * the trigger, Tab from the panel's last stop to what follows the trigger,
- * and Shift+Tab from there into the panel. A panel with no stop leaves Tab to
- * the browser.
+ * The popup is drawn after the list, so Tab takes the panel's stops as if
+ * they followed the open trigger: Tab from the trigger goes to the panel's
+ * first stop, Shift+Tab from there back to the trigger, Tab from the panel's
+ * last stop to what follows the trigger and asks to close, with
+ * `focus-out`, and Shift+Tab from there into the panel. Tab from anywhere
+ * else skips the panel. A panel with no stop leaves Tab to the browser.
  *
  * Escape asks to close, wherever focus is, and with focus in the panel focus
  * goes back to the trigger as the close starts. A press outside the root and
@@ -188,7 +189,12 @@ import {
   withStyle
 } from "./internal/attributes.ts"
 import { provided } from "./internal/direction.ts"
-import { activeOf, elementOf, tabbablesIn } from "./internal/dom.ts"
+import {
+  activeOf,
+  elementOf,
+  isHTMLElement,
+  tabStopsIn
+} from "./internal/dom.ts"
 import { watchHoverArea } from "./internal/hoverArea.ts"
 import { onEscape } from "./internal/interaction.ts"
 import {
@@ -378,7 +384,10 @@ const NavigationMenuModel = Schema.Struct({
   hover: Schema.NullOr(Schema.String),
   touched: Schema.Boolean,
   away: Schema.Boolean,
-  asked: Schema.Boolean,
+  request: Schema.NullOr(Schema.Struct({
+    value: Schema.String,
+    reason: NavigationMenuOpenReason
+  })),
   reason: Schema.NullOr(NavigationMenuOpenReason),
   patient: Schema.Boolean,
   closeReason: Schema.NullOr(NavigationMenuDismissReason),
@@ -432,25 +441,41 @@ const TrackNavigationMenuPresence = makeTrackPresence<NavigationMenuMessage>(
   }
 )
 
+// The open panel's reason, and the press guard after a hover opened it.
+const opened = (
+  model: NavigationMenuModel,
+  $: NavigationMenuUpdate,
+  reason: NavigationMenuOpenReason | null
+) =>
+  $.set(model).evolve({
+    request: null,
+    reason,
+    patient: reason === "trigger-hover"
+  }).run(
+    reason === "trigger-hover"
+      ? WaitPatience.make({ delay: 500 })
+      : Command.interrupt(WaitPatience)
+  )
+
+// A request for another panel is held until `value` shows the consumer took
+// it, so a turned-down switch leaves the open panel as it was.
 const openFor = (
   model: NavigationMenuModel,
   $: NavigationMenuUpdate,
   value: string,
   reason: NavigationMenuOpenReason
-) =>
-  $.set(model).evolve({
-    asked: $.props.value === null,
-    reason,
-    patient: reason === "trigger-hover",
+) => {
+  const next = UiStruct.evolve(model, {
     closeReason: null,
     transition: $.props.value === null ? null : model.transition
-  }).run(
-    Command.interrupt(WaitBeforeOpening),
-    Command.interrupt(WaitBeforeClosing),
-    reason === "trigger-hover"
-      ? WaitPatience.make({ delay: 500 })
-      : Command.interrupt(WaitPatience)
-  ).emit(NavigationMenuEvents.RequestedOpen({ value, reason }))
+  })
+  return ($.props.value === value
+    ? opened(next, $, reason)
+    : $.set(next).evolve({ request: { value, reason } })).run(
+      Command.interrupt(WaitBeforeOpening),
+      Command.interrupt(WaitBeforeClosing)
+    ).emit(NavigationMenuEvents.RequestedOpen({ value, reason }))
+}
 
 const dismiss = (
   $: NavigationMenuUpdate,
@@ -458,7 +483,7 @@ const dismiss = (
 ) =>
   $.props.value === null
     ? $.model
-    : $.evolve({ closeReason: reason }).run(
+    : $.evolve({ closeReason: reason, request: null }).run(
       Command.interrupt(WaitBeforeClosing)
     ).emit(NavigationMenuEvents.RequestedClose({ reason }))
 
@@ -509,40 +534,32 @@ const TrackPanelArgs = Schema.Struct({
 
 type TrackPanelArgs = typeof TrackPanelArgs.Type
 
-// The Tab stops of the page around the popup, in order.
-const outsideStops = (popup: HTMLElement): Array<HTMLElement> =>
-  tabbablesIn(popup.ownerDocument.body).filter((stop) => !popup.contains(stop))
-
-// Moves Tab between the open trigger and its panel, which is drawn after
-// the list.
+// Tab goes through the page with the panel just after its trigger, though
+// the popup is drawn after the list. Returns whether Tab left the panel
+// past its end, which closes it.
 const bridgeTab = (
   node: HTMLElement,
   trigger: HTMLElement,
   event: KeyboardEvent
-): void => {
-  const stops = tabbablesIn(node)
-  if (stops.length === 0) return
+): boolean => {
+  const page = tabStopsIn(node.ownerDocument.body)
+  const panel = page.filter((stop) => node.contains(stop))
+  const outside = page.filter((stop) => !node.contains(stop))
+  const after = outside.indexOf(trigger) + 1
   const focused = activeOf(node.ownerDocument)
-  const go = (stop: HTMLElement | undefined) => {
-    if (stop === undefined) return
+  if (panel.length === 0 || after === 0 || !isHTMLElement(focused)) {
+    return false
+  }
+  const order = [...outside.slice(0, after), ...panel, ...outside.slice(after)]
+  const step = event.shiftKey ? -1 : 1
+  const at = order.indexOf(focused)
+  const next = at === -1 ? undefined : order[at + step]
+  if (next === undefined) return false
+  if (next !== page[page.indexOf(focused) + step]) {
     event.preventDefault()
-    stop.focus()
+    next.focus()
   }
-  if (focused === trigger) {
-    if (!event.shiftKey) go(stops[0])
-  } else if (focused !== null && node.contains(focused)) {
-    const at = stops.indexOf(focused as HTMLElement)
-    if (event.shiftKey) {
-      if (at <= 0) go(trigger)
-    } else if (at === stops.length - 1) {
-      const outside = outsideStops(node)
-      go(outside[outside.indexOf(trigger) + 1])
-    }
-  } else if (event.shiftKey && focused !== null) {
-    const outside = outsideStops(node)
-    const at = outside.indexOf(focused as HTMLElement)
-    if (at > 0 && outside[at - 1] === trigger) go(stops.at(-1))
-  }
+  return !event.shiftKey && node.contains(focused) && !node.contains(next)
 }
 
 const watchPanel = (
@@ -578,7 +595,11 @@ const watchPanel = (
         event.altKey || event.metaKey
       ) return
       const trigger = document.querySelector<HTMLElement>(current.trigger)
-      if (trigger !== null) bridgeTab(node, trigger, event)
+      // Focus leaving the root closes the panel already.
+      if (
+        trigger !== null && bridgeTab(node, trigger, event) &&
+        inside(document.activeElement)
+      ) send(NavigationMenuMessage.FocusedOutside())
     }
     const controller = new AbortController()
     const { signal } = controller
@@ -650,7 +671,7 @@ const TrackNavigationPanel = Mount.makeStream(
  * `link({ element, active, closeOnClick })` returns `element`: `active`
  * marks the link to the page being shown, as in `NavigationLinks`, and
  * `closeOnClick` asks to close the open panel, with `link-press`, when the
- * link is pressed. Focus then stays on the link. Both are `false` when left
+ * link is pressed, without returning focus to the trigger. Both are `false` when left
  * out.
  *
  * The parts also return plain values for markup that depends on them:
@@ -701,7 +722,7 @@ export const NavigationMenu = Html.component({
     hover: null,
     touched: false,
     away: true,
-    asked: false,
+    request: null,
     reason: null,
     patient: false,
     closeReason: null,
@@ -749,7 +770,14 @@ export const NavigationMenu = Html.component({
     PressedOutside: ($) => dismiss($, "outside-press"),
     PressedEscape: ($) => dismiss($, "escape-key"),
     FocusedOutside: ($) => dismiss($, "focus-out"),
-    ShowedValue: ($, { value }) => $.evolve({ value }),
+    ShowedValue: ($, { value }) => {
+      const request = $.model.request
+      return opened(
+        UiStruct.evolve($.model, { value }),
+        $,
+        request?.value === value ? request.reason : null
+      )
+    },
     CompletedWaitBeforeOpening: ($) =>
       $.props.value === null && $.model.hover !== null && !$.model.touched
         ? openFor($.model, $, $.model.hover, "trigger-hover")
@@ -760,12 +788,9 @@ export const NavigationMenu = Html.component({
         : $.model,
     CompletedPatience: ($) => $.evolve({ patient: false }),
     ShowedPortal: ($) =>
-      $.props.value === null ? $.evolve({ mounted: true }) : $.evolve({
-        mounted: true,
-        asked: false,
-        reason: $.model.asked ? $.model.reason : null,
-        closeReason: null
-      }),
+      $.props.value === null
+        ? $.evolve({ mounted: true })
+        : $.evolve({ mounted: true, closeReason: null }),
     RenderedFirstFrame: ($) =>
       $.props.value === null ? $.model : $.evolve({ started: true }),
     FinishedTransition: ($, { open }) => {
