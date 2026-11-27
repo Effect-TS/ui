@@ -72,5 +72,7 @@ export const mount = <C extends Case.AnyComponent, R>(
       })
   ) as any
 
+// `Msg` is inferred: `any` would miss a component whose messages are `never`.
 type ElementsOf<C> = C extends
-  Component.Members<any, any, any, any, any, any, infer V, any> ? V : never
+  Component.Members<any, any, any, infer _Msg, any, any, infer V, any> ? V
+  : never
