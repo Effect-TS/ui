@@ -213,6 +213,19 @@ describe("NavigationMenu panels in a document", { concurrent: false }, () => {
         "RequestedOpen solutions list-navigation",
         "RequestedClose focus-out"
       ])
+
+      // With nothing after Docs, Tab leaves the page, skipping the panel the
+      // browser would step into next.
+      byId("outside").tabIndex = -1
+      byId("solutions").focus()
+      assert.isTrue(key("ArrowDown"))
+      yield* tick
+      yield* tick
+      key("ArrowRight")
+      assert.isFalse(key("Tab"))
+      assert.isNotNull(byId("solutions-first").closest("[inert]"))
+      yield* tick
+      assert.isNull(byId("solutions-first").closest("[inert]"))
     }))
 
   it.effect("Escape in the panel returns focus to its trigger, and an outside press closes it without moving focus there", () =>

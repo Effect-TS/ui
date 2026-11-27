@@ -554,8 +554,19 @@ const bridgeTab = (
   const step = event.shiftKey ? -1 : 1
   const at = order.indexOf(focused)
   const next = at === -1 ? undefined : order[at + step]
-  if (next === undefined) return false
-  if (next !== page[page.indexOf(focused) + step]) {
+  const native = page[page.indexOf(focused) + step]
+  if (next === undefined) {
+    // Tab leaves the page, but the browser would step into the panel first,
+    // so the panel is inert until the key's default action has run.
+    if (native !== undefined && node.contains(native) && !node.inert) {
+      node.inert = true
+      setTimeout(() => {
+        node.inert = false
+      }, 0)
+    }
+    return false
+  }
+  if (next !== native) {
     event.preventDefault()
     next.focus()
   }
