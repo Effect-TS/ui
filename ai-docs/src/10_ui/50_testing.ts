@@ -139,6 +139,14 @@ describe("NoteEditor", () => {
         // menu the `toggle` the browser would.
         .click("More actions")
         .expect(actions).toExist()
+        // `toHaveStyle` checks inline declarations by name, whatever the
+        // spacing, so `margin` doesn't match `margin-top`. It takes the
+        // camelCase names `.style` does, or dashed CSS names.
+        .expect(actions).toHaveStyle({
+          "position-anchor": "--actions-n1",
+          margin: "0",
+          marginTop: false
+        })
         .click("Discard changes")
         // Choosing an item closes the menu. A closed popover or dialog is
         // hidden from role queries, as it is from the accessibility tree.
@@ -178,6 +186,13 @@ describe("Collapsible", () => {
         slots: (h) => ({ summary: h.h2("Groceries"), body: h.p("Milk") })
       })
       s.click("Hide")
+        // `toHaveAttributes` checks several attributes at once and reports
+        // every one that differs. `false` means absent.
+        .expect(Locator.text("Show")).toHaveAttributes({
+          type: "button",
+          "aria-expanded": "false",
+          disabled: false
+        })
         .expect(Locator.tag("h2")).toHaveText("Groceries")
         .expect(Locator.text("Milk")).toBeAbsent()
     }))

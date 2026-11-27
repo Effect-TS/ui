@@ -3,6 +3,7 @@ import * as scene from "../../internal/scene.ts"
 import * as Locator from "../../testing/Locator.ts"
 import type * as Html from "../Html.ts"
 import * as HtmlLocator from "../testing/HtmlLocator.ts"
+import { cssProperty } from "./cssProperty.ts"
 import { nonTextInputTypes } from "./editable.ts"
 
 const lower = (value: string | undefined) => value?.toLowerCase()
@@ -453,6 +454,54 @@ export const drop = (given: Partial<Html.DropPayload> | undefined) => {
   }
 }
 
+const important = /!\s*important$/i
+
+/**
+ * The declarations of an inline `style` attribute, by property name. A
+ * repeated property keeps its last value unless an earlier one is
+ * `!important` and the later one isn't, as in a browser.
+ */
+const declarations = (style: string | undefined): Map<string, string> => {
+  const out = new Map<string, string>()
+  const add = (declaration: string) => {
+    const colon = declaration.indexOf(":")
+    if (colon === -1) return
+    const name = declaration.slice(0, colon).trim()
+    const property = name.startsWith("--") ? name : name.toLowerCase()
+    const value = declaration.slice(colon + 1).trim()
+    const previous = out.get(property)
+    if (
+      previous === undefined || !important.test(previous) ||
+      important.test(value)
+    ) out.set(property, value)
+  }
+  if (style === undefined) return out
+  let start = 0
+  let depth = 0
+  let quote = ""
+  for (let i = 0; i < style.length; i++) {
+    const char = style[i]
+    if (quote !== "") {
+      if (char === "\\") i++
+      else if (char === quote) quote = ""
+    } else if (char === "\"" || char === "'") quote = char
+    else if (char === "(") depth++
+    else if (char === ")") depth--
+    else if (char === ";" && depth <= 0) {
+      add(style.slice(start, i))
+      start = i + 1
+    }
+  }
+  add(style.slice(start))
+  return out
+}
+
+/** The property an expected style name means: `.style`'s camelCase, or a dashed CSS name. */
+const styleProperty = (name: string): string =>
+  name.includes("-") && !name.startsWith("--")
+    ? name.toLowerCase()
+    : cssProperty(name)
+
 /** @internal */
 export const matchers = {
   ...scene.matchers,
@@ -493,5 +542,12 @@ export const matchers = {
         ? name === expected
         : expected.test(name)
       return pass ? undefined : `its accessible name is ${JSON.stringify(name)}`
-    })
+    }),
+  toHaveStyle: (
+    expected: { readonly [name: string]: string | RegExp | false }
+  ) =>
+    scene.record(expected, "declaration", ({ attrs }) => {
+      const parsed = declarations(attrs?.style)
+      return (property) => parsed.get(property)
+    }, styleProperty)
 }

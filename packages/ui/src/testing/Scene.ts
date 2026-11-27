@@ -162,6 +162,14 @@ export interface Expect<S> {
    * presence, pass a string or `RegExp` to check its value, or `false` for absence.
    */
   toHaveAttribute(name: string, value?: string | RegExp | false): S
+  /**
+   * Asserts that exactly one element matches and checks each attribute as
+   * `toHaveAttribute` does: a string or `RegExp` checks its value, `false`
+   * its absence. A failure lists every attribute that doesn't match.
+   */
+  toHaveAttributes(
+    attributes: { readonly [name: string]: string | RegExp | false }
+  ): S
   /** Asserts that exactly `count` elements match. */
   toHaveCount(count: number): S
 }

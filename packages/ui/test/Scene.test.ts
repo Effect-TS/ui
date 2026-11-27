@@ -213,7 +213,8 @@ describe("Scene", () => {
         "aria-valuemax": "100",
         "data-active": "",
         "aria-busy": false,
-        constructor: false
+        // TypeScript widens `false` to `boolean` under a key `Object.prototype` has.
+        constructor: false as const
       })
       .expect(meter).toHaveAttributes({ "aria-valuenow": valuePattern })
 
