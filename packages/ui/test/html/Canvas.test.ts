@@ -159,7 +159,157 @@ describe("Canvas", { concurrent: false }, () => {
         Canvas.Rect({ x: 0, y: 0, width: 1, height: 1 })
       ])
     )
+    const sprite = (x: number) =>
+      Canvas.Image({
+        src: "/sprites.png",
+        x: 10,
+        y: 20,
+        crop: { x, y: 0, width: 16, height: 16 },
+        smoothing: false
+      })
+    assert.isTrue(same([sprite(0)], [sprite(0)]))
+    assert.isFalse(same([sprite(0)], [sprite(16)]))
   })
+
+  it("paint draws resolved images with optional crop and smoothing, and skips unresolved ones", () => {
+    const { calls, context } = recorder()
+    const sprite = {
+      naturalWidth: 64,
+      naturalHeight: 32,
+      width: 0,
+      height: 0
+    } as HTMLImageElement
+    Canvas.paint(
+      context,
+      {
+        width: 100,
+        height: 100,
+        shapes: [
+          Canvas.Image({
+            src: "/sprites.png",
+            x: 10,
+            y: 20,
+            crop: { x: 0, y: 0, width: 16, height: 16 },
+            smoothing: false
+          }),
+          Canvas.Image({ src: "/sprites.png", x: 1, y: 2, width: 32 }),
+          Canvas.Image({ src: "/sprites.png", x: 3, y: 4 }),
+          Canvas.Image({ src: "/missing.png", x: 0, y: 0 })
+        ]
+      },
+      (src) => src === "/sprites.png" ? sprite : undefined
+    )
+    assert.deepStrictEqual(calls, [
+      "clearRect(0,0,100,100)",
+      "save()",
+      "imageSmoothingEnabled=false",
+      `drawImage(${sprite},0,0,16,16,10,20,16,16)`,
+      "restore()",
+      "save()",
+      `drawImage(${sprite},1,2,32,32)`,
+      "restore()",
+      "save()",
+      `drawImage(${sprite},3,4)`,
+      "restore()",
+      "save()",
+      "restore()"
+    ])
+  })
+
+  it.effect("repaints a mounted canvas when an image finishes loading, without sending a message", () =>
+    Effect.gen(function*() {
+      const { calls, context } = recorder()
+      const getContext = HTMLCanvasElement.prototype.getContext
+      const createElement = document.createElement
+      const hadOwnCreateElement = Object.hasOwn(document, "createElement")
+      const images: Array<HTMLImageElement> = []
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          HTMLCanvasElement.prototype.getContext = (() => context) as any
+          document.createElement = ((
+            tag: string,
+            options?: ElementCreationOptions
+          ) => {
+            const element = createElement.call(document, tag, options)
+            if (tag.toLowerCase() === "img") {
+              images.push(element as HTMLImageElement)
+            }
+            return element
+          }) as typeof document.createElement
+        }),
+        () =>
+          Effect.sync(() => {
+            HTMLCanvasElement.prototype.getContext = getContext
+            if (hadOwnCreateElement) {
+              document.createElement = createElement
+            } else {
+              delete (document as any).createElement
+            }
+          })
+      )
+      const app = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          document.body.appendChild(document.createElement("div"))
+        ),
+        (element) => Effect.sync(() => element.remove())
+      )
+      let updates = 0
+      const Sprites = Html.component({
+        name: "Sprites",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => {
+          updates++
+          return $.model
+        },
+        view: (h) =>
+          Canvas.view(h, {
+            width: 100,
+            height: 100,
+            shapes: [
+              Canvas.Image({
+                src: "/sprites.png",
+                x: 10,
+                y: 20,
+                crop: { x: 0, y: 0, width: 16, height: 16 },
+                smoothing: false
+              })
+            ]
+          })
+      })
+      yield* BrowserHost.mountEffect(Sprites, {}, app)
+      yield* tick
+      assert.deepStrictEqual(calls.splice(0), [
+        "setTransform(1,0,0,1,0,0)",
+        "clearRect(0,0,100,100)",
+        "save()",
+        "restore()"
+      ])
+      assert.strictEqual(images.length, 1)
+      const [image] = images
+      assert.strictEqual(image.getAttribute("src"), "/sprites.png")
+      Object.defineProperty(image, "naturalWidth", {
+        value: 32,
+        configurable: true
+      })
+      Object.defineProperty(image, "naturalHeight", {
+        value: 32,
+        configurable: true
+      })
+      image.dispatchEvent(new Event("load"))
+      yield* tick
+      assert.deepStrictEqual(calls.splice(0), [
+        "setTransform(1,0,0,1,0,0)",
+        "clearRect(0,0,100,100)",
+        "save()",
+        "imageSmoothingEnabled=false",
+        `drawImage(${image},0,0,16,16,10,20,16,16)`,
+        "restore()"
+      ])
+      assert.strictEqual(updates, 0)
+    }).pipe(Effect.scoped))
 
   it("paint draws paths, text and nested groups in order, each between save and restore", () => {
     const { calls, context } = recorder()
