@@ -413,8 +413,8 @@ describe("VirtualList in a document", { concurrent: false }, () => {
       )
 
       const withHeader = yield* Steps([
-        { count: 1000, keys },
-        { count: 1010, keys: added(10) }
+        { keys },
+        { keys: added(10) }
       ], { listTop: 40 })
       yield* withHeader.next
       assert.strictEqual(withHeader.scrollTop(), 10 * itemSize)
@@ -429,10 +429,10 @@ describe("VirtualList in a document", { concurrent: false }, () => {
         ...reversed
       ]
       const { indices, next, scrollTo, scrollTop } = yield* Steps([
-        { count: 200, keys },
-        { count: 200, keys: reversed },
-        { count: 250, keys: prepended },
-        { count: 250, keys: [...prepended].reverse() }
+        { keys },
+        { keys: reversed },
+        { keys: prepended },
+        { keys: [...prepended].reverse() }
       ], { page: true, listTop: 2 })
       yield* next
       assert.strictEqual(scrollTop(), 0)
