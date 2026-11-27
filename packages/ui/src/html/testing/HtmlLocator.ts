@@ -213,8 +213,6 @@ interface Entry<N> {
   readonly node: N
   readonly role: string | undefined
   readonly hidden: boolean
-  /** The `label` elements this element sits inside, innermost first. */
-  readonly labels: ReadonlyArray<N>
   readonly inSection: boolean
 }
 
@@ -223,7 +221,8 @@ interface Index<N> {
   readonly entries: ReadonlyArray<Entry<N>>
   readonly byNode: Map<N, Entry<N>>
   readonly byId: Map<string, N>
-  readonly labelsFor: Map<string, Array<N>>
+  /** The `label` elements of each labeled control, in document order. */
+  readonly labels: Map<N, Array<N>>
 }
 
 /** Whether a `dialog` is open: its `open` property, or its `open` attribute when no property was set. */
@@ -339,22 +338,25 @@ const buildIndex = <N>(root: N): Index<N> => {
     entries: [],
     byNode: new Map(),
     byId: new Map(),
-    labelsFor: new Map()
+    labels: new Map()
   }
+  const labels: Array<N> = []
+  // A label without `for` labels its first labelable descendant.
+  const wrapped = new Map<N, N>()
   const entries = index.entries as Array<Entry<N>>
   const modal = topModal(reader, root)
   const walk = (
     node: N,
     hidden: boolean,
     inert: boolean,
-    labels: ReadonlyArray<N>,
+    open: ReadonlyArray<N>,
     inSection: boolean
   ) => {
     if (!reader.isElement(node)) {
       // A document, a fragment or a structural wrapper isn't indexed, but what it holds is.
       if (reader.text(node) === undefined) {
         for (const child of reader.children(node)) {
-          walk(child, hidden, inert, labels, inSection)
+          walk(child, hidden, inert, open, inSection)
         }
       }
       return
@@ -371,22 +373,19 @@ const buildIndex = <N>(root: N): Index<N> => {
         ? explicit
         : implicitRole(reader, node, inSection),
       hidden: isHiddenHere || inertHere,
-      labels,
       inSection
     }
     entries.push(entry)
     index.byNode.set(node, entry)
     const id = reader.attr(node, "id")
     if (id !== undefined && !index.byId.has(id)) index.byId.set(id, node)
-    if (tag === "label") {
-      const target = reader.attr(node, "for")
-      if (target !== undefined) {
-        const list = index.labelsFor.get(target) ?? []
-        list.push(node)
-        index.labelsFor.set(target, list)
+    if (isLabelable(reader, node)) {
+      for (const label of open) {
+        if (!wrapped.has(label)) wrapped.set(label, node)
       }
     }
-    const childLabels = tag === "label" ? [node, ...labels] : labels
+    const wraps = tag === "label" && reader.attr(node, "for") === undefined
+    if (tag === "label") labels.push(node)
     const childSection = inSection || sectioning.has(tag)
     const host = isDom(node) &&
       (node as unknown as globalThis.Element).shadowRoot != null
@@ -402,12 +401,25 @@ const buildIndex = <N>(root: N): Index<N> => {
             modal as globalThis.Node | undefined
           )
           : inertHere,
-        childLabels,
+        wraps ? [...open, node] : open,
         childSection
       )
     }
   }
   walk(root, false, modal !== undefined, [], false)
+  for (const label of labels) {
+    const target = reader.attr(label, "for")
+    const byFor = target === undefined ? undefined : index.byId.get(target)
+    const control = target === undefined
+      ? wrapped.get(label)
+      : byFor !== undefined && isLabelable(reader, byFor)
+      ? byFor
+      : undefined
+    if (control === undefined) continue
+    const list = index.labels.get(control)
+    if (list === undefined) index.labels.set(control, [label])
+    else list.push(label)
+  }
   return index
 }
 
@@ -517,15 +529,8 @@ const computeName = <N>(index: Index<N>, entry: Entry<N>): string => {
   if (tag === "input" && type === "image") {
     return normalize(reader.attr(node, "alt") ?? "")
   }
-  if (labelable.has(tag)) {
-    const id = reader.attr(node, "id")
-    // A label can both name the control by `for` and wrap it: it counts once.
-    const labels = [
-      ...new Set([
-        ...(id === undefined ? [] : index.labelsFor.get(id) ?? []),
-        ...entry.labels
-      ])
-    ]
+  const labels = index.labels.get(node)
+  if (labels !== undefined) {
     const fromLabels = normalize(
       labels.map((l) => contentText(index, l, node, false)).join(" ")
     )
@@ -843,6 +848,11 @@ const labelable: ReadonlySet<string> = new Set([
   "output",
   "progress"
 ])
+
+const isLabelable = <N>(reader: Reader<N>, node: N): boolean =>
+  reader.isElement(node) && labelable.has(reader.tag(node)) &&
+  !(reader.tag(node) === "input" &&
+    (reader.attr(node, "type") ?? "").toLowerCase() === "hidden")
 
 /**
  * The elements whose `placeholder` is `text`.

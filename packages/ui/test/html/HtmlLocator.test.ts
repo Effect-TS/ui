@@ -325,7 +325,9 @@ describe("HtmlLocator", () => {
         <label>Notifications <button role="switch" aria-checked="false"></button></label>
         <label for="theme">Theme</label><button id="theme">Dark</button>
         <label for="mute">Sound</label><button id="mute" aria-label="Mute">Off</button>
-        <span id="help-name">Help</span><label for="help">Ignored</label><button id="help" aria-labelledby="help-name">?</button>`
+        <span id="help-name">Help</span><label for="help">Ignored</label><button id="help" aria-labelledby="help-name">?</button>
+        <label for="volume">Sound <button>Reset</button></label><input id="volume">
+        <label>Start <button id="go">Go</button></label><label for="go">later</label>`
       expect(
         HtmlLocator.getByRole(container, "switch", { name: "Notifications" })
       ).toBeDefined()
@@ -337,6 +339,11 @@ describe("HtmlLocator", () => {
         .toBeDefined()
       expect(HtmlLocator.getByRole(container, "button", { name: "Help" }))
         .toBeDefined()
+      expect(HtmlLocator.getByRole(container, "button", { name: "Reset" }))
+        .toBeDefined()
+      expect(
+        HtmlLocator.getByRole(container, "button", { name: "Start later" })
+      ).toBeDefined()
     })
 
     it("getByRole lists what's there when nothing matches", () => {
