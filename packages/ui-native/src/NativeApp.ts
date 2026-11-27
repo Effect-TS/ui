@@ -175,10 +175,9 @@ const install = () => {
   register("RCTNativeAppEventEmitter", RCTDeviceEventEmitter)
   register("RCTLog", {
     logIfNoNativeHook(level: string, ...args: ReadonlyArray<unknown>) {
-      if (global.nativeLoggingHook !== undefined) return // oxlint-disable-next-line no-console
-      ;(level === "error" || level === "fatal" ? console.error : console.log)(
-        ...args
-      )
+      if (global.nativeLoggingHook !== undefined) return
+      // oxlint-disable-next-line no-console
+      console[level === "error" || level === "fatal" ? "error" : "log"](...args)
     }
   })
   // Android sends Back to JS first, and runs the activity's default action,

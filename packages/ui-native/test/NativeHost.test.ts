@@ -2,10 +2,7 @@ import * as Native from "@effect/ui-native/Native"
 import * as NativeHost from "@effect/ui-native/NativeHost"
 import * as Renderer from "@effect/ui/Renderer"
 import * as UiSchema from "@effect/ui/UiSchema"
-import * as Context from "effect/Context"
-import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
-import * as Scope from "effect/Scope"
 import { assert, describe, it } from "vitest"
 import * as FakeFabric from "./utils/FakeFabric.ts"
 
@@ -56,43 +53,15 @@ const Counter = Native.component({
 })
 
 const setup = async () => {
-  const fabric = FakeFabric.make()
-  let commits = 0
   const colors: Array<unknown> = []
-  const made = NativeHost.make({
-    ui: fabric.ui,
-    rootTag: 1,
-    os: "android",
-    processColor: (color) => {
+  const mounted = await FakeFabric.mount(
+    (root) => Renderer.mount(Counter, {}, root),
+    (color) => {
       colors.push(color)
       return `processed ${String(color)}`
-    },
-    onCommit: () => commits++
-  })
-  const scope = Scope.makeUnsafe()
-  const root = await Effect.runPromise(
-    Renderer.mount(Counter, {}, made.root).pipe(
-      Effect.provideContext(
-        Context.make(Renderer.Renderer, { host: made.host }).pipe(
-          Context.add(Native.Host, made.operations)
-        )
-      ),
-      Scope.provide(scope)
-    )
-  )
-  const settle = async () => {
-    const before = commits
-    // `commits` changes while the loop awaits.
-    // oxlint-disable-next-line no-unmodified-loop-condition
-    for (let i = 0; i < 50 && commits === before; i++) {
-      await new Promise((r) => setTimeout(r, 0))
     }
-  }
-  await settle()
-  const find = (test: (n: FakeFabric.ShadowNode) => boolean) =>
-    FakeFabric.find(fabric.committed(), test)!
-  const printed = () => FakeFabric.print(fabric.committed())
-  return { fabric, made, root, settle, colors, find, printed, scope }
+  )
+  return { ...mounted, colors }
 }
 
 const touch = (

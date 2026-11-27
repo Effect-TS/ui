@@ -36,16 +36,21 @@ const inject = ({ module: [, code], sourceURL }: Update["added"][number]) => {
 }
 
 const makeClient = (url: string, entry: string) => {
-  let enabled = false
-  let socket: WebSocket | undefined
+  const socket = new WebSocket(url)
   const queue: Array<string> = []
-  const send = (message: string) => {
-    if (socket?.readyState === 1) socket.send(message)
-    else queue.push(message)
+  const client = {
+    enabled: false,
+    register(entryPoint: string) {
+      const message = JSON.stringify({
+        type: "register-entrypoints",
+        entryPoints: [entryPoint]
+      })
+      if (socket.readyState === 1) socket.send(message)
+      else queue.push(message)
+    }
   }
-  socket = new WebSocket(url)
   socket.onopen = () => {
-    for (const message of queue.splice(0)) socket!.send(message)
+    for (const message of queue.splice(0)) socket.send(message)
   }
   socket.onerror = (error: any) => {
     // oxlint-disable-next-line no-console
@@ -60,9 +65,8 @@ const makeClient = (url: string, entry: string) => {
     switch (data.type) {
       case "update": {
         const update = data.body as Update
-        if (!enabled) return
-        for (const item of update.added) inject(item)
-        for (const item of update.modified) inject(item)
+        if (!client.enabled) return
+        for (const item of [...update.added, ...update.modified]) inject(item)
         return
       }
       case "error": {
@@ -71,7 +75,7 @@ const makeClient = (url: string, entry: string) => {
           body.type === "GraphNotFoundError" ||
           body.type === "RevisionNotFoundError"
         ) {
-          socket?.close()
+          socket.close()
           // oxlint-disable-next-line no-console
           console.warn(
             "[@effect/ui-native] Metro restarted since the app loaded. Reload to reconnect."
@@ -83,16 +87,8 @@ const makeClient = (url: string, entry: string) => {
       }
     }
   }
-  send(JSON.stringify({ type: "register-entrypoints", entryPoints: [entry] }))
-  return {
-    send,
-    enable: () => {
-      enabled = true
-    },
-    disable: () => {
-      enabled = false
-    }
-  }
+  client.register(entry)
+  return client
 }
 
 export const install = (
@@ -117,15 +113,15 @@ export const install = (
         getDevServer().fullBundleUrl ??
           `${origin}/hot?bundleEntry=${bundleEntry}&platform=${platform}`
       )
-      if (isEnabled) client.enable()
+      client.enabled = isEnabled
     },
-    enable: () => client?.enable(),
-    disable: () => client?.disable(),
-    registerBundle(url: string) {
-      client?.send(
-        JSON.stringify({ type: "register-entrypoints", entryPoints: [url] })
-      )
+    enable() {
+      if (client !== undefined) client.enabled = true
     },
+    disable() {
+      if (client !== undefined) client.enabled = false
+    },
+    registerBundle: (url: string) => client?.register(url),
     log() {}
   })
 }

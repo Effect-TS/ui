@@ -589,15 +589,6 @@ export const tags: Readonly<Record<TagName, Element<any, any, any, any, any>>> =
   }
 
 /**
- * Whether `tag` is a native tag.
- *
- * @stability experimental
- * @category vocabulary
- * @since 0.1.0
- */
-export const isTag = (tag: string): tag is TagName => Object.hasOwn(tags, tag)
-
-/**
  * The native vocabulary, for `Component.define({ elements })`.
  *
  * @stability experimental

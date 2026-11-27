@@ -1,12 +1,8 @@
 import * as Refresh from "@effect/ui-native/internal/refresh"
 import * as Native from "@effect/ui-native/Native"
-import * as NativeHost from "@effect/ui-native/NativeHost"
 import * as Renderer from "@effect/ui/Renderer"
 import * as UiSchema from "@effect/ui/UiSchema"
-import * as Context from "effect/Context"
-import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
-import * as Scope from "effect/Scope"
 import { assert, describe, it } from "vitest"
 import * as FakeFabric from "./utils/FakeFabric.ts"
 
@@ -27,15 +23,6 @@ const counter = (
   })
 
 const setup = async () => {
-  const fabric = FakeFabric.make()
-  let commits = 0
-  const made = NativeHost.make({
-    ui: fabric.ui,
-    rootTag: 1,
-    os: "android",
-    processColor: (c) => c,
-    onCommit: () => commits++
-  })
   const reloads: Array<string> = []
   let refreshed = 0
   const runtime = Refresh.make({
@@ -45,36 +32,17 @@ const setup = async () => {
   const first = counter("v1")
   // Metro registers a module's exports after it runs.
   runtime.register(first, "7 %exports% Counter")
-  const scope = Scope.makeUnsafe()
-  const root = await Effect.runPromise(
-    Renderer.mount(first, {}, made.root).pipe(
-      Effect.provideContext(
-        Context.make(Renderer.Renderer, { host: made.host }).pipe(
-          Context.add(Native.Host, made.operations)
-        )
-      ),
-      Scope.provide(scope)
-    )
+  const mounted = await FakeFabric.mount((root) =>
+    Renderer.mount(first, {}, root)
   )
-  const settle = async () => {
-    const before = commits
-    // oxlint-disable-next-line no-unmodified-loop-condition
-    for (let i = 0; i < 50 && commits === before; i++) {
-      await new Promise((r) => setTimeout(r, 0))
-    }
-  }
-  await settle()
-  root.send(Message.Pressed())
-  await settle()
+  mounted.root.send(Message.Pressed())
+  await mounted.settle()
   return {
-    fabric,
+    ...mounted,
     first,
     runtime,
     reloads,
-    refreshed: () => refreshed,
-    settle,
-    printed: () => FakeFabric.print(fabric.committed()),
-    close: () => Effect.runPromise(Scope.close(scope, Effect.void as any))
+    refreshed: () => refreshed
   }
 }
 

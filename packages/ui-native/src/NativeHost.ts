@@ -111,27 +111,19 @@ export class NativeNode {
   events: EventEntry | undefined = undefined
   /** A text input's count of edits, which native needs back with its text. */
   eventCount = 0
-  tag: number
+  // React Native allocates even tags from 2, which never collide with the
+  // surfaces' own tags.
+  tag = lastTag += 2
   readonly type: string
   /** Props of the shadow node, in Fabric's flat form. */
   readonly props: Record<string, unknown>
   constructor(type: string, props: Record<string, unknown>) {
     this.type = type
-    this.tag = nextTag
-    // React Native allocates even tags from 2, which never collide with
-    // the surfaces' own tags.
-    nextTag += 2
     this.props = props
   }
 }
 
-let nextTag = 2
-
-// Native looks a view up by tag, so a recreated node takes a fresh one.
-const retag = (n: NativeNode) => {
-  n.tag = nextTag
-  nextTag += 2
-}
+let lastTag = 0
 
 const isColor = /(^c|C)olor$/
 const colors = new Map<string, unknown>()
@@ -228,8 +220,9 @@ export const make = (options: Options): {
       // was created under, so a view that moved into or out of text, a
       // scroll view that changed direction, and a view that moved to another
       // parent are new views, and so are their descendants.
+      // Native looks a view up by tag, so a recreated one takes a fresh tag.
       n.shadow = undefined
-      retag(n)
+      n.tag = lastTag += 2
     }
     let shadow: unknown
     if (n.shadow === undefined) {
@@ -264,7 +257,7 @@ export const make = (options: Options): {
     runsMounts: true,
     hot: true,
     createElement(type) {
-      if (!Native.isTag(type)) {
+      if (!Object.hasOwn(Native.tags, type)) {
         throw new Error(`<${type}> isn't in the ${Native.name} vocabulary`)
       }
       // React Native's ScrollView styles its view as scrolling.
@@ -338,8 +331,6 @@ export const make = (options: Options): {
       else prev.next = n
       if (ref === undefined) parent.last = n
       else ref.prev = n
-      // A text node's view name depends on its parent, so check it again.
-      if (n.type === "text") n.dirty = true
       parent.kidsChanged = true
       markDirty(parent)
     },
@@ -351,14 +342,6 @@ export const make = (options: Options): {
       if (n.next === undefined) parent.last = n.prev
       else n.next.prev = n.prev
       n.parent = n.prev = n.next = undefined
-      parent.kidsChanged = true
-      markDirty(parent)
-    },
-    // `nodes` are all of `parent`'s children, as the Host contract says.
-    removeChildren(parent, nodes) {
-      parent = unwrap(parent)
-      for (const n of nodes) n.parent = n.prev = n.next = undefined
-      parent.first = parent.last = undefined
       parent.kidsChanged = true
       markDirty(parent)
     },

@@ -3,7 +3,14 @@
  * committed (sealed) node never changes and that a tag keeps the parent it
  * was first appended to, and counts calls by method.
  */
+import * as Native from "@effect/ui-native/Native"
+import * as NativeHost from "@effect/ui-native/NativeHost"
 import type { UIManager } from "@effect/ui-native/NativeHost"
+import * as Renderer from "@effect/ui/Renderer"
+import * as Context from "effect/Context"
+import * as Effect from "effect/Effect"
+import * as Exit from "effect/Exit"
+import * as Scope from "effect/Scope"
 
 export interface ShadowNode {
   readonly tag: number
@@ -152,3 +159,54 @@ export const byText = (s: string) => (n: ShadowNode) =>
   n.viewName === "RCTRawText" && n.props.text === s
 
 export const byName = (name: string) => (n: ShadowNode) => n.viewName === name
+
+/**
+ * Runs `mount` with a NativeHost on Android over a new fake Fabric, as
+ * `NativeApp` does, and waits for the first commit. `settle` waits for the
+ * next one.
+ */
+export const mount = async <A>(
+  mount: (
+    container: NativeHost.NativeNode
+  ) => Effect.Effect<A, never, Renderer.Renderer | Native.Host | Scope.Scope>,
+  processColor: (color: unknown) => unknown = (color) => color
+) => {
+  const fabric = make()
+  let commits = 0
+  const made = NativeHost.make({
+    ui: fabric.ui,
+    rootTag: 1,
+    os: "android",
+    processColor,
+    onCommit: () => commits++
+  })
+  const scope = Scope.makeUnsafe()
+  const root = await Effect.runPromise(
+    mount(made.root).pipe(
+      Effect.provideContext(
+        Context.make(Renderer.Renderer, { host: made.host }).pipe(
+          Context.add(Native.Host, made.operations)
+        )
+      ),
+      Scope.provide(scope)
+    )
+  )
+  const settle = async () => {
+    const before = commits
+    // `commits` changes while the loop awaits.
+    // oxlint-disable-next-line no-unmodified-loop-condition
+    for (let i = 0; i < 50 && commits === before; i++) {
+      await new Promise((r) => setTimeout(r, 0))
+    }
+  }
+  await settle()
+  return {
+    fabric,
+    made,
+    root,
+    settle,
+    find: (test: (n: ShadowNode) => boolean) => find(fabric.committed(), test)!,
+    printed: () => print(fabric.committed()),
+    close: () => Effect.runPromise(Scope.close(scope, Exit.void))
+  }
+}

@@ -19,7 +19,16 @@ const button = {
   borderRadius: 8
 } as const
 
-const label = { color: "white", fontSize: 18 } as const
+const label = { color: "white", fontSize: 18, textAlign: "center" } as const
+
+const pressable = (
+  h: Native.H<typeof Message.Type>,
+  message: typeof Message.Type,
+  text: string
+) =>
+  h.view.style(button).on("press", message).children(
+    h.text.style(label).children(text)
+  )
 
 export const App = Native.component({
   name: "App",
@@ -64,15 +73,9 @@ export const App = Native.component({
       ),
       h.view.style({ flexDirection: "row", justifyContent: "center", gap: 16 })
         .children(
-          h.view.style(button).on("press", Message.ClickedDecrement()).children(
-            h.text.style(label).children("-")
-          ),
-          h.view.style(button).on("press", Message.ClickedReset()).children(
-            h.text.style(label).children("Reset")
-          ),
-          h.view.style(button).on("press", Message.ClickedIncrement()).children(
-            h.text.style(label).children("+")
-          )
+          pressable(h, Message.ClickedDecrement(), "-"),
+          pressable(h, Message.ClickedReset(), "Reset"),
+          pressable(h, Message.ClickedIncrement(), "+")
         ),
       h.input.value(model.name).placeholder("Your name").style({
         borderWidth: 1,
@@ -85,9 +88,7 @@ export const App = Native.component({
         "Hello, ",
         h.text.style({ fontWeight: "bold" }).children(model.name || "stranger")
       ),
-      h.view.style(button).on("press", Message.ClickedAdd()).children(
-        h.text.style({ ...label, textAlign: "center" }).children("Add to list")
-      ),
+      pressable(h, Message.ClickedAdd(), "Add to list"),
       h.scroll.style({ flex: 1 }).children(
         ...model.items.map((item) =>
           h.text.key(item).style({

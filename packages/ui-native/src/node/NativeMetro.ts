@@ -22,6 +22,7 @@
 import * as Fs from "node:fs"
 import * as Path from "node:path"
 import { fileURLToPath } from "node:url"
+import { prebundle } from "./internal/prebundle.ts"
 
 /**
  * The parts of a Metro config {@link withEffectUi} reads and changes.
@@ -76,31 +77,12 @@ export interface Options {
   readonly external?: ReadonlyArray<string | RegExp> | undefined
 }
 
-/**
- * Where a release build's pre-bundle is written, under the project root.
- *
- * @stability experimental
- * @category constants
- * @since 0.1.0
- */
-export const prebundleDirectory = "node_modules/.cache/@effect/ui-native"
-
 const own = (file: string) => {
   const self = fileURLToPath(import.meta.url)
   return Fs.realpathSync(
     Path.join(Path.dirname(self), file + Path.extname(self))
   )
 }
-
-const native = /^(?:@?react-native|@?expo)(?:[-/]|$)/
-
-const isExternal = (external: ReadonlyArray<string | RegExp>) => (id: string) =>
-  native.test(id) ||
-  external.some((entry) =>
-    typeof entry === "string"
-      ? id === entry || id.startsWith(entry + "/")
-      : entry.test(id)
-  )
 
 const mainOf = (root: string): string => {
   const pkg = JSON.parse(
@@ -112,66 +94,6 @@ const mainOf = (root: string): string => {
     )
   }
   return pkg.main
-}
-
-/**
- * Pre-bundles `entry` with Vite for `platform` into
- * {@link prebundleDirectory}, as a release build does, and returns the file
- * written. Modules resolve as Metro resolves them for the platform: an
- * import of `./title` picks `title.android.ts` over `title.native.ts` over
- * `title.ts` on Android, trying the config's `sourceExts` in order.
- *
- * @stability experimental
- * @category constructors
- * @since 0.1.0
- */
-export const prebundle = async (
-  config: MetroConfig,
-  platform: string,
-  options?: Pick<Options, "entry" | "external"> | undefined
-): Promise<string> => {
-  const { build } = await import("vite")
-  const root = config.projectRoot
-  const outDir = Path.join(root, prebundleDirectory)
-  const file = `main.${platform}.js`
-  const sourceExts = config.resolver?.sourceExts ??
-    ["js", "jsx", "json", "ts", "tsx"]
-  await build({
-    configFile: false,
-    root,
-    mode: "production",
-    logLevel: "warn",
-    resolve: {
-      // `production` drops the development checks of `@effect/ui`.
-      conditions: ["react-native", "production", "import", "module", "default"],
-      mainFields: [
-        ...(config.resolver?.resolverMainFields ??
-          ["react-native", "browser", "main"])
-      ],
-      extensions: sourceExts.flatMap((
-        ext
-      ) => [`.${platform}.${ext}`, `.native.${ext}`, `.${ext}`]),
-      tsconfigPaths: true
-    },
-    define: { "process.env.NODE_ENV": "\"production\"" },
-    build: {
-      outDir,
-      emptyOutDir: false,
-      // Metro minifies, and transforms the syntax for Hermes.
-      minify: false,
-      target: "es2020",
-      sourcemap: true,
-      lib: {
-        entry: Path.resolve(root, options?.entry ?? mainOf(root)),
-        // Metro's Babel turns the imports of React Native into requires, with
-        // its interop, as it does for the rest of the app.
-        formats: ["es"],
-        fileName: () => file
-      },
-      rollupOptions: { external: isExternal(options?.external ?? []) }
-    }
-  })
-  return Path.join(outDir, file)
 }
 
 /**
@@ -213,23 +135,22 @@ export const withEffectUi = async <Config extends MetroConfig>(
       }
     }
     if (options?.prebundle === false) return out
-    const entry = Path.resolve(root, options?.entry ?? mainOf(root))
-    // Metro reads its files when it starts, so every platform is built now.
-    const platforms = options?.platforms ?? ["android", "ios"]
-    const files = await Promise.all(
-      platforms.map((platform) =>
-        prebundle(resolved, platform, { entry, external: options?.external })
-      )
-    )
-    const bundles = Object.fromEntries(
-      platforms.map((platform, i) => [platform, files[i]])
-    )
     const upstream = resolved.transformer?.babelTransformerPath
     if (upstream === undefined) {
       throw new Error(
         "[@effect/ui-native] the Metro config has no transformer.babelTransformerPath to wrap"
       )
     }
+    const entry = Path.resolve(root, options?.entry ?? mainOf(root))
+    // Metro reads its files when it starts, so every platform is built now.
+    const bundles = Object.fromEntries(
+      await Promise.all(
+        (options?.platforms ?? ["android", "ios"]).map(async (platform) => [
+          platform,
+          await prebundle(resolved, platform, entry, options?.external ?? [])
+        ])
+      )
+    )
     // Metro's workers start after the config loads, and inherit these.
     process.env.EFFECT_UI_NATIVE_PREBUNDLE = JSON.stringify({
       entry,

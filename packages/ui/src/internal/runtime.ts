@@ -485,8 +485,7 @@ export const mount = (
         container,
         fromRenderer,
         // A host such as a native one opts in to its own hot-reload runtime.
-        options?.hot === undefined &&
-          Context.get(ctx, services.Renderer).host.hot === true
+        Context.get(ctx, services.Renderer).host.hot === true
           ? { ...options, hot: hotSessions.openHost() }
           : options
       ))
