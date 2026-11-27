@@ -2090,9 +2090,9 @@ const encodeCause = (cause: Cause.Cause<unknown>): typeof CauseWire.Type => ({
 })
 
 /**
- * The Schema the log encodes with: every `Schema.Redacted` in `schema`
- * encodes as `{ "~redacted": true }`, which never decodes. A Schema without
- * one is returned as is.
+ * Returns a schema that encodes `Schema.Redacted` values as
+ * `{ "~redacted": true }` and rejects those placeholders on decode.
+ * Returns `schema` unchanged if it contains no `Schema.Redacted`.
  *
  * @stability experimental
  * @category Wire

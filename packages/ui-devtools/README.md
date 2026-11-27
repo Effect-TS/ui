@@ -92,7 +92,7 @@ The plugin starts the server with `vite dev` only and adds a `<meta>` tag with i
 | `show_entry`         | paints the page at an entry, as Time travel does                                        |
 | `resume`             | shows the live page again                                                               |
 | `set_recording`      | stops or starts recording a message `_tag`, as the panel's Stop recording does          |
-| `get_message_schema` | the JSON Schema of an instance's messages, or of one `_tag`, with an example of each    |
+| `get_message_schema` | dispatch JSON Schema and per-tag examples, templates, or reasons no safe example is available    |
 | `dispatch`           | sends 1 to 100 messages to an instance, all decoded first; off by default               |
 | `wait`               | waits for the Command runs started since an entry to end                                |
 

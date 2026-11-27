@@ -3,4 +3,4 @@
 "@effect/ui": patch
 ---
 
-`get_message_schema` returns an example of each message, checked with the dispatch codec and marked `redacted` or `invalid` when it can't be sent as is. Add `MessageLog.redactSchema`, the Schema the log encodes with.
+Add per-tag examples to `get_message_schema`: ready payloads pass the dispatch decoder, templates carry `redacted` or `invalid`, and entries without a safe example omit `message`. Expose `MessageLog.redactSchema` to encode `Schema.Redacted` values as placeholders.

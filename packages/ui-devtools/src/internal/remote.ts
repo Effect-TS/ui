@@ -33,7 +33,6 @@ const resolve = (
 ): Json | undefined =>
   isObject(schema) && typeof schema.$ref === "string"
     ? definitions[
-      // A JSON Pointer token: `~1` is `/` and `~0` is `~`.
       schema.$ref.slice(schema.$ref.lastIndexOf("/") + 1)
         .replaceAll("~1", "/").replaceAll("~0", "~")
     ]
@@ -54,17 +53,16 @@ const tagOf = (schema: Json, definitions: Record<string, Json>): unknown => {
     : undefined
 }
 
-// Bounds the padding for minLength and the items for minItems.
+// Cap generated string padding and array items.
 const most = 64
 
-// Only the redaction marker: the log's other placeholders need no secret.
+// Other log placeholders do not require secrets.
 const holdsPlaceholder = (value: unknown): boolean =>
   typeof value === "object" && value !== null &&
   ((isObject(value) && Object.keys(value).length === 1 &&
     value["~redacted"] === true) ||
     Object.values(value).some(holdsPlaceholder))
 
-// The redacting codec's encoding of a `Schema.Redacted`.
 const isPlaceholderSchema = (schema: Json): boolean =>
   isObject(schema) && isObject(schema.properties) &&
   Object.keys(schema.properties).length === 1 &&
@@ -76,15 +74,9 @@ interface Document {
 }
 
 /**
- * A value for a JSON Schema, or `undefined` when none is found: a constant,
- * an example, or the smallest value of its type, preferring the first union
- * member that has one and one item in an array. A `$ref` already being
- * walked has none, so a recursive type stops at an empty array or a `None`.
- *
- * With `redacting`, the schema is from the redacting codec's document, where
- * each `Schema.Redacted` is its placeholder. There is no value when one would
- * come from an `examples` or `default` annotation above a placeholder, which
- * would show a sample in its place.
+ * Builds a candidate, not a validated payload. Prefers the first usable union
+ * member and nonempty arrays; recursive references may fall back to [] or None.
+ * In redacting mode, rejects annotations that could expose redacted values.
  */
 const exampleOf = (
   root: Json,
@@ -162,7 +154,7 @@ const exampleOf = (
           out.push(value)
         }
         const minItems = number("minItems") ?? 0
-        // Past the cap the decoder reports the length, not this walk.
+        // Let the decoder report lengths beyond the cap.
         const length = Math.min(
           Math.max(out.length + 1, minItems),
           number("maxItems") ?? Infinity,
@@ -237,7 +229,7 @@ const messageSchema = (
     const encodeRedacted = redactedSchema === schema
       ? undefined
       : Schema.encodeUnknownEffect(codecOf(redactedSchema))
-    // Read only by an example that can't be encoded, so it's built then.
+    // Build lazily when decoding or redacted encoding fails.
     let redacted: Document | undefined
     const example = (i: number): Effect.Effect<Json> => {
       const name = tags[i]
@@ -249,10 +241,8 @@ const messageSchema = (
       if (candidate === undefined) {
         return Effect.succeed(none("No value fits this schema."))
       }
-      // Checked as the client receives it: the reply is sent as JSON text,
-      // which turns -0 into 0.
+      // Validate the JSON round-trip too: serialization turns -0 into 0.
       const message: Json = JSON.parse(JSON.stringify(candidate))
-      // `shown` is the example with each Schema.Redacted as its placeholder.
       const entry = (shown: unknown, status?: { invalid: string }): Json =>
         shown === undefined
           ? none(
@@ -262,7 +252,7 @@ const messageSchema = (
           : holdsPlaceholder(shown)
           ? { message: shown as Json, redacted: true, ...status }
           : { message, ...status }
-      // Without a decoded value to encode, the redacting document is walked.
+      // Fall back to the redacting schema if decoding or encoding fails.
       const walked = (status?: { invalid: string }): Json => {
         if (encodeRedacted === undefined) return { message, ...status }
         redacted ??= documentOf(redactedSchema)
