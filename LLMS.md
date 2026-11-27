@@ -534,12 +534,10 @@ Without a stored Success, the result is `Initial`; a disabled query is
 Set `dropPrevious: true` on the entry to show `Initial` instead when old
 results would mislead.
 
-By default, the old args' fetch runs on and fills the cache, so switching
-back shows it at once. `interruptPrevious: true` interrupts it instead, and
-the new args fetch at once. `debounce` interrupts it too, but new args that
-need a fetch wait for the timer. A fetch that another instance, a `get` or a
-prefetch still needs runs on. With either option, args that change faster
-than a fetch completes show nothing new until they hold still.
+The old args' fetch is interrupted, unless another instance, a `get` or a
+prefetch still needs it, so it doesn't delay the new args. Args that change
+faster than a fetch completes show nothing new until they hold still. A fetch
+in flight when the instance unmounts runs on and fills the cache.
 
 The cache never retries a failed fetch: a fetcher that should retry does so
 itself.

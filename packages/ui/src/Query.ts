@@ -2578,7 +2578,8 @@ interface WatchHandle {
   /**
    * Drops the watcher count synchronously. Idempotent. With `abandon`, the
    * last watcher leaving interrupts a fetch a watcher started that nothing
-   * else waits for, and the entry reverts.
+   * else waits for, and the entry reverts. Under a hold, that waits for the
+   * release, and a watcher registered by then keeps the fetch.
    */
   readonly unregister: (abandon?: boolean) => void
 }
@@ -5489,19 +5490,26 @@ const buildCache = (
         if (isBareFailure(entry.result) && !settleOnce && !inWindow(entry)) {
           entry.result = undefined
         }
-        const fetch = entry.fetch
-        if (
-          abandon === true && fetch !== undefined &&
-          fetch.trigger === "watch" && !entry.kept &&
-          entry.waiters.size === 0 && entry.moreWaiters.size === 0
-        ) {
-          // Nothing else asked for it: a `get` waits, and a prefetch is kept.
-          dropFetch(entry, fetch)
-          return revert(entry)
+        if (abandon === true) {
+          // Under a hold, a watcher that registers before release takes the fetch over.
+          if (holds > 0) abandoned.add(entry)
+          else if (abandonFetch(entry)) return
         }
         afterQuiet(entry)
       }
     }
+  }
+  /** Interrupts an unwatched entry's fetch unless a `get` waits on it or a prefetch keeps it. */
+  const abandonFetch = (entry: Entry): boolean => {
+    const fetch = entry.fetch
+    if (
+      entry.watchers.size > 0 || fetch === undefined ||
+      fetch.trigger !== "watch" || entry.kept ||
+      entry.waiters.size > 0 || entry.moreWaiters.size > 0
+    ) return false
+    dropFetch(entry, fetch)
+    revert(entry)
+    return true
   }
 
   // -- hold -------------------------------------------------------------------
@@ -5510,6 +5518,8 @@ const buildCache = (
   let generation = 0
   // Each entry a watcher registered on during the hold.
   const held = new Set<Entry>()
+  // Each entry whose last watcher left with `abandon` during the hold.
+  const abandoned = new Set<Entry>()
   const hold: CacheInternals["hold"] = () => {
     if (holds++ === 0) generation++
     const since = generation
@@ -5523,7 +5533,11 @@ const buildCache = (
       }
       // Still held while deciding: a fetch started here can reach a watcher whose handler registers another,
       // which is decided in the next round, as part of this hold.
-      while (held.size > 0) {
+      while (held.size > 0 || abandoned.size > 0) {
+        for (const entry of Array.from(abandoned)) {
+          abandoned.delete(entry)
+          if (!entry.removed) abandonFetch(entry)
+        }
         const entries = Array.from(held)
         held.clear()
         for (const entry of entries) {

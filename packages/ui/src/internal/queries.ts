@@ -40,8 +40,6 @@ export interface Entry {
   readonly args: QueryFn
   /** From `debounce`: how many milliseconds a fetch for changed args waits. */
   readonly debounce: number | undefined
-  /** From `interruptPrevious` or `debounce`: interrupt the fetch of args the entry leaves. */
-  readonly interrupt: boolean
   readonly dropPrevious: boolean
   readonly onChange: ((...args: Array<any>) => unknown) | undefined
   readonly restore: false | undefined
@@ -253,7 +251,6 @@ const parse = (component: string, queries: unknown): ReadonlyArray<Entry> => {
       args,
       debounce,
       dropPrevious,
-      interruptPrevious,
       query,
       queryMany,
       onChange,
@@ -292,7 +289,6 @@ const parse = (component: string, queries: unknown): ReadonlyArray<Entry> => {
       debounce: debounce === undefined
         ? undefined
         : Duration.toMillis(debounce as Duration.Input),
-      interrupt: interruptPrevious === true || debounce !== undefined,
       dropPrevious: dropPrevious === true,
       onChange: onChange as Entry["onChange"],
       restore
