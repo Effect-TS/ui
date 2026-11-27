@@ -424,8 +424,9 @@ export interface CheckOptions<
  * Results come from the definitions' Schemas: a `Service`'s `success`
  * and `error`, a query's `success` and `error`. A `Command.make`
  * Command has none, so it needs a `commands` entry, and a story that
- * settles one without it fails naming it. A failure isn't generated when
- * the error Schema is `Schema.Never`.
+ * settles one without it fails naming it. An outcome whose Schema is
+ * `Schema.Never` isn't generated, and work with no outcome stays pending.
+ * `messages: Schema.Never` runs only settlements.
  *
  * After `init` and every step, the Model is checked against its Schema,
  * then `invariant` runs, then events and sends are checked against the

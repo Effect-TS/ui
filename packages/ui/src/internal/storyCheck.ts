@@ -86,9 +86,13 @@ interface Context {
   readonly component: Component.Any
   readonly start: () => Story
   readonly messages: Gen | undefined
+  /** `commands` by name. A result is `{ gen: undefined }` when its source is `Schema.Never`. */
   readonly commands: ReadonlyMap<
     string,
-    { readonly success?: Gen | undefined; readonly error?: Gen | undefined }
+    {
+      readonly success?: { readonly gen: Gen | undefined } | undefined
+      readonly error?: { readonly gen: Gen | undefined } | undefined
+    }
   >
   readonly invariant: ((story: any) => boolean | void) | undefined
   readonly isModel: (u: unknown) => boolean
@@ -148,27 +152,34 @@ const genOf = (
   }
 }
 
-/** A Schema's `Gen`, or none for `Schema.Never`, which has no values. */
-const schemaGen = (
-  schema: Schema.Top | undefined,
-  what: string
+/** A source's `Gen`, or none for `Schema.Never`, which has no values. */
+const sourceGen = (
+  source: Source | undefined,
+  what: string,
+  schema?: Schema.Top | undefined
 ): Gen | undefined =>
-  schema === undefined || isNever(schema) ? undefined : genOf(schema, what)
+  source === undefined || (Schema.isSchema(source) && isNever(source))
+    ? undefined
+    : genOf(source, what, schema)
 
 const show = (schema: Schema.Top | undefined, value: unknown): string =>
   isNoop(value) ? "Component.noop" : engine.show(schema, value)
 
-/** A Command's result Schemas: its `commands` entry, else its `Service`'s. */
+/**
+ * A Command's results: its `commands` entry, else its `Service`'s Schemas. None when they're
+ * `Schema.Never`. A `Command.make` Command with no entry has a success that dies naming it.
+ */
 const resultsOf = (
   ctx: Context,
   command: Pending<any>["command"]
-): { readonly success: Gen; readonly error: Gen | undefined } => {
+): { readonly success: Gen | undefined; readonly error: Gen | undefined } => {
   const given = ctx.commands.get(command.name)
   const service = command.service
-  const success = given?.success ??
-    schemaGen(service?.success, `result of ${command.name}`)
-  return {
-    success: success ?? {
+  const success = given?.success !== undefined
+    ? given.success.gen
+    : service !== undefined
+    ? sourceGen(service.success, `result of ${command.name}`)
+    : {
       schema: undefined,
       sample: () =>
         Effect.die(
@@ -176,9 +187,12 @@ const resultsOf = (
             `Story.check: ${command.name} has no success Schema to settle it from, as a Command.make Command: give it one in \`commands\``
           )
         )
-    },
-    error: given?.error ??
-      schemaGen(service?.error, `failure of ${command.name}`)
+    }
+  return {
+    success,
+    error: given?.error !== undefined
+      ? given.error.gen
+      : sourceGen(service?.error, `failure of ${command.name}`)
   }
 }
 
@@ -224,22 +238,26 @@ const commandActions = (
   ) return undefined
   const target = targetOf(state, entry, running)
   const { error, success } = resultsOf(ctx, command)
-  const actions: Array<Action> = command._tag === "Stream"
-    ? [
-      {
-        gen: success,
-        input: command.args,
-        line: (value) => `.next(${target}, ${show(success.schema, value)})`,
-        run: (story, value) => story.next(command, value)
-      },
-      { line: () => `.end(${target})`, run: (story) => story.end(command) }
-    ]
-    : [{
+  const stream = command._tag === "Stream"
+  const actions: Array<Action> = []
+  if (success !== undefined) {
+    const step = stream ? "next" : "resolve"
+    actions.push({
       gen: success,
       input: command.args,
-      line: (value) => `.resolve(${target}, ${show(success.schema, value)})`,
-      run: (story, value) => story.resolve(command, value)
-    }]
+      line: (value) => `.${step}(${target}, ${show(success.schema, value)})`,
+      run: (story, value) =>
+        command._tag === "Stream"
+          ? story.next(command, value)
+          : story.resolve(command, value)
+    })
+  }
+  if (stream) {
+    actions.push({
+      line: () => `.end(${target})`,
+      run: (story) => story.end(command)
+    })
+  }
   if (command.reject !== undefined && error !== undefined) {
     actions.push({
       gen: error,
@@ -248,7 +266,7 @@ const commandActions = (
       run: (story, value) => story.fail(command, value)
     })
   }
-  return actions
+  return actions.length === 0 ? undefined : actions
 }
 
 /** The query entries that wait for a result, unloaded or awaited, less those under a live patch. */
@@ -261,8 +279,9 @@ const queryActions = (
   for (const { entries, query } of engine.currentEntries(state)) {
     const def = Query.defOf(query.query)
     const name = query.name
-    const success = schemaGen(def.success, `result of "${name}"`)!
-    const error = schemaGen(def.error, `failure of "${name}"`)
+    const success = sourceGen(def.success, `result of "${name}"`)
+    const error = sourceGen(def.error, `failure of "${name}"`)
+    if (success === undefined && error === undefined) continue
     for (const { args, argsKey } of entries) {
       const waits = unloaded.some((entry) =>
         entry.name === name && entry.argsKey === argsKey
@@ -275,13 +294,18 @@ const queryActions = (
       }
       const at = query.keyed ? `, ${show(def.args, args)}` : ""
       const before = query.keyed ? [args] : []
-      const actions: Array<Action> = [{
-        gen: success,
-        line: (value) =>
-          `.loaded(${JSON.stringify(name)}${at}, ${show(def.success, value)})`,
-        run: (story, value) =>
-          story.loaded(name, ...before, value)
-      }]
+      const actions: Array<Action> = []
+      if (success !== undefined) {
+        actions.push({
+          gen: success,
+          line: (value) =>
+            `.loaded(${JSON.stringify(name)}${at}, ${
+              show(def.success, value)
+            })`,
+          run: (story, value) =>
+            story.loaded(name, ...before, value)
+        })
+      }
       if (error !== undefined) {
         actions.push({
           gen: error,
@@ -314,14 +338,17 @@ const moreActions = (
     ) return []
     // An infinite query's `success` is `Schema.Array(page)`.
     const page = (def.success as Schema.$Array<Schema.Top>).value
-    const pages = schemaGen(page, `page of "${name}"`)!
-    const error = schemaGen(def.error, `failure of "${name}"`)
-    const actions: Array<Action> = [{
-      gen: pages,
-      line: (value) =>
-        `.loadedMore(${JSON.stringify(name)}, ${show(page, value)})`,
-      run: (story, value) => story.loadedMore(name, value)
-    }]
+    const pages = sourceGen(page, `page of "${name}"`)
+    const error = sourceGen(def.error, `failure of "${name}"`)
+    const actions: Array<Action> = []
+    if (pages !== undefined) {
+      actions.push({
+        gen: pages,
+        line: (value) =>
+          `.loadedMore(${JSON.stringify(name)}, ${show(page, value)})`,
+        run: (story, value) => story.loadedMore(name, value)
+      })
+    }
     if (error !== undefined) {
       actions.push({
         gen: error,
@@ -330,7 +357,7 @@ const moreActions = (
         run: (story, value) => story.loadMoreFailed(name, value)
       })
     }
-    return [actions]
+    return actions.length === 0 ? [] : [actions]
   })
 
 /** Everything in flight a settlement can pick, oldest Command first. */
@@ -370,9 +397,13 @@ const checkStep = (
   }
   const state = story.state
   const events = state.component.events as Schema.Codec<unknown, unknown>
-  const event = state.emitted.find((event) => !Schema.is(events)(event))
-  if (event !== undefined) {
-    return `the event ${show(events, event)} doesn't satisfy the events Schema`
+  const isEvent = Schema.is(events)
+  for (const event of state.emitted) {
+    if (!isEvent(event)) {
+      return `the event ${
+        show(events, event)
+      } doesn't satisfy the events Schema`
+    }
   }
   if (state.emitted.length > 0) {
     lines.push(
@@ -525,24 +556,21 @@ export const check = (
 ): Effect.Effect<void> => {
   const where = callSite(site)
   const messageSchema = component.message as Schema.Top
-  const source: Source | undefined = options.messages ??
-    (isNever(messageSchema) ? undefined : messageSchema)
+  const given = options.messages ?? messageSchema
+  // `Schema.Never` messages make settle-only scripts.
+  const source = Schema.isSchema(given) && isNever(given) ? undefined : given
+  const result = (source: Source | undefined, what: string) =>
+    source === undefined ? undefined : { gen: sourceGen(source, what) }
   const ctx: Context = {
     component,
     start,
-    messages: source === undefined
-      ? undefined
-      : genOf(source, "message", messageSchema),
+    messages: sourceGen(source, "message", messageSchema),
     commands: new Map(
       (options.commands ?? []).map(([definition, results]) => {
         const name = Command.nameOf(definition)
         return [name, {
-          success: results.success === undefined
-            ? undefined
-            : genOf(results.success, `result of ${name}`),
-          error: results.error === undefined
-            ? undefined
-            : genOf(results.error, `failure of ${name}`)
+          success: result(results.success, `result of ${name}`),
+          error: result(results.error, `failure of ${name}`)
         }]
       })
     ),

@@ -1,6 +1,7 @@
 import {
   Command,
   Component,
+  Query,
   Route,
   Router,
   Subscription,
@@ -1320,5 +1321,66 @@ describe("Story", () => {
           commands: [[SaveNoteCommand, { success: NoteMessage.cases.Saved }]]
         })
       }))
+
+    it.effect("only settles with outcomes the result Schemas have, and leaves work with none pending", () => {
+      const Message = UiSchema.TaggedEnum({ Go: {}, Failed: {} })
+      class Lookup extends Query.Service<Lookup>()("check/Lookup", {
+        args: {},
+        success: Schema.Never,
+        error: Schema.String,
+        staleTime: "1 minute"
+      }) {}
+      class Reject extends Command.Service<Reject>()("check/Reject", {
+        success: Schema.Never,
+        error: Schema.String
+      }) {}
+      class Hang extends Command.Service<Hang>()("check/Hang", {
+        success: Schema.Never
+      }) {}
+      const Failing = Component.define({
+        name: "Failing",
+        model: Schema.Struct({}),
+        message: Message,
+        queries: { q: { query: Lookup, args: () => ({}) } }
+      }).make({
+        init: () => ({}),
+        update: ($, message) =>
+          Message.match(message, {
+            Go: () =>
+              $.run(
+                Reject.make().pipe(Command.match({
+                  onSuccess: () => Message.Failed(),
+                  onFailure: () => Message.Failed()
+                }))
+              ).run(Hang.make()),
+            Failed: () => $.model
+          }),
+        view: (h) => h.el("div", "")
+      })
+      return Story.check(Failing, {}, {
+        seed: 1,
+        messages: Message.cases.Go,
+        invariant: (story) => !AsyncResult.isSuccess(story.queries().q)
+      })
+    })
+
+    it.effect("fails on an event outside the events Schema", () =>
+      Effect.gen(function*() {
+        const Emitter = Component.define({
+          name: "Emitter",
+          model: Schema.Struct({}),
+          message: UiSchema.TaggedEnum({ Go: {} }),
+          events: Schema.String
+        }).make({
+          init: () => ({}),
+          update: ($) => $.emit(undefined as any),
+          view: (h) => h.el("div", "")
+        })
+        const message = yield* defect(Story.check(Emitter, {}, { seed: 1 }))
+        assert.include(message, "the events Schema")
+      }))
+
+    it.effect("runs settle-only stories when messages is Schema.Never", () =>
+      Story.check(Editor, {}, { seed: 1, messages: Schema.Never }))
   })
 })
