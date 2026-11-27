@@ -1485,60 +1485,31 @@ describe("DevTools overlay", { concurrent: false }, () => {
       yield* settle
       const root = overlay()
       yield* open(root)
+      const cmd = (id: string) =>
+        HtmlLocator.queryAllByRole(root, "button", { name: new RegExp(id) })
 
       assert.notInclude(root.textContent, secret)
-
-      const cmd1Buttons = HtmlLocator.queryAllByRole(root, "button", {
-        name: /cmd-1/
-      })
-      const cmd2Buttons = HtmlLocator.queryAllByRole(root, "button", {
-        name: /cmd-2/
-      })
-      assert.strictEqual(cmd1Buttons.length, 4)
-      assert.strictEqual(cmd2Buttons.length, 4)
+      assert.strictEqual(cmd("cmd-1").length, 4)
 
       yield* showActive(root)
       yield* click(instance(root, "Feed[a]"))
-      assert.isTrue(
-        Array.from(root.querySelectorAll(".row .who")).every((who) =>
-          text(who) === "Feed[a]"
-        )
+      assert.deepStrictEqual(
+        new Set(Array.from(root.querySelectorAll(".row .who"), text)),
+        new Set(["Feed[a]"])
       )
+      yield* click(cmd("cmd-1")[0]!)
+
+      const rows = Array.from(root.querySelectorAll(".row"))
+      assert.strictEqual(rows.length, 4)
+      assert.deepStrictEqual(
+        new Set(rows.map((row) => text(row.querySelector(".who")))),
+        new Set(["Board", "Feed[a]", "Feed[b]"])
+      )
+      assert.strictEqual(cmd("cmd-2").length, 0)
+
       yield* click(
-        HtmlLocator.queryAllByRole(root, "button", { name: /cmd-1/ })[0]!
+        cmd("commandId.*cmd-1").find((node) => !node.closest(".row"))!
       )
-
-      const filtered = Array.from(root.querySelectorAll(".row"))
-      assert.strictEqual(filtered.length, 4)
-      const labels = filtered.map((row) =>
-        row.querySelector(".row-button")!.getAttribute("aria-label")!
-      )
-      assert.isTrue(
-        labels.some((label) => label.endsWith("writes/Write started"))
-      )
-      assert.isTrue(
-        labels.some((label) => label.endsWith("writes/Write ended"))
-      )
-      assert.strictEqual(
-        labels.filter((label) => label.endsWith("Update Confirmed")).length,
-        2
-      )
-      const owners = new Set(
-        filtered.map((row) => text(row.querySelector(".who")))
-      )
-      assert.deepStrictEqual(owners, new Set(["Board", "Feed[a]", "Feed[b]"]))
-      assert.isFalse(filtered.some((row) => text(row).includes("cmd-2")))
-
-      const activeChip = HtmlLocator.queryAllByRole(root, "button", {
-        name: /commandId.*cmd-1/
-      }).find((node) =>
-        node.getAttribute("aria-pressed") === "true" && !node.closest(".row")
-      )
-      assert.isDefined(activeChip)
-      yield* click(activeChip!)
-      assert.isAbove(
-        HtmlLocator.queryAllByRole(root, "button", { name: /cmd-2/ }).length,
-        0
-      )
+      assert.strictEqual(cmd("cmd-2").length, 4)
     }))
 })

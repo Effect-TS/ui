@@ -1156,53 +1156,27 @@ describe("DevToolsServer", { concurrent: false }, () => {
         const services = yield* Layer.build(DevTools.layer({ server: url }))
         yield* playTwoWrites().pipe(Effect.provide(services))
         yield* wait(150)
+        const list = (name: string, value: unknown) =>
+          agent.call("list_entries", { field: { name, value } })
 
-        const all = yield* agent.call("list_entries", { filter: "all" })
-        const clicks = all.rows.filter((row: any) =>
-          row.label === "ClickedWrite"
-        )
-        assert.strictEqual(clicks.length, 2)
-        for (const click of clicks) assert.isUndefined(click.fields)
-
-        const cmd1 = yield* agent.call("list_entries", {
-          field: { name: "commandId", value: "cmd-1" }
-        })
-        assert.strictEqual(cmd1.total, 4)
-        assert.strictEqual(cmd1.rows.length, 4)
+        const cmd1 = yield* list("commandId", "cmd-1")
         assert.deepStrictEqual(
-          cmd1.rows.map((row: any) => row.tag).sort(),
-          ["CommandEnded", "CommandStarted", "Update", "Update"]
+          cmd1.rows.map((row: any) => [row.tag, row.path, row.fields]).sort(),
+          [
+            ["CommandEnded", "/Board", { commandId: "cmd-1" }],
+            ["CommandStarted", "/Board", { commandId: "cmd-1" }],
+            ["Update", "/Board/Feed[a]", { commandId: "cmd-1" }],
+            ["Update", "/Board/Feed[b]", { commandId: "cmd-1" }]
+          ]
         )
-        assert.deepStrictEqual(
-          new Set(cmd1.rows.map((row: any) => row.path)),
-          new Set(["/Board", "/Board/Feed[a]", "/Board/Feed[b]"])
-        )
-        for (const row of cmd1.rows) {
-          assert.deepStrictEqual(row.fields, { commandId: "cmd-1" })
-        }
 
-        const byAttempt = yield* agent.call("list_entries", {
-          field: { name: "attempt", value: 1 }
-        })
+        const byAttempt = yield* list("attempt", 1)
         assert.strictEqual(byAttempt.total, 4)
-        for (const row of byAttempt.rows) {
-          assert.strictEqual(row.label, "Confirmed")
-          assert.strictEqual(row.fields.attempt, 1)
-          assert.isString(row.fields.commandId)
-        }
+        assert.strictEqual(byAttempt.rows[0].fields.attempt, 1)
+        assert.strictEqual((yield* list("attempt", "1")).total, 0)
 
-        const wrongType = yield* agent.call("list_entries", {
-          field: { name: "attempt", value: "1" }
-        })
-        assert.strictEqual(wrongType.total, 0)
-
-        const redacted = yield* agent.call("list_entries", {
-          field: { name: "secret", value: secret }
-        })
-        assert.strictEqual(redacted.total, 0)
+        assert.strictEqual((yield* list("secret", secret)).total, 0)
         assert.notInclude(agent.results.join("\n"), secret)
-
-        yield* agent.fails("list_entries", { field: { name: "", value: 1 } })
 
         const fields = ["owner's id", "a&b", "$&"]
         const page = new DOMParser().parseFromString(

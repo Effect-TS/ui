@@ -106,5 +106,4 @@ export const playTwoWrites = Effect.fnUntraced(function*() {
   HtmlLocator.click(write)
   yield* until(() => confirmed("cmd-2"))
   yield* wait(20)
-  return app
 })
