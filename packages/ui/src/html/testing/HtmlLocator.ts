@@ -621,11 +621,9 @@ const describeOptions = (
       }`
     )
   }
-  if (options?.checked !== undefined) parts.push(`checked ${options.checked}`)
-  if (options?.expanded !== undefined) {
-    parts.push(`expanded ${options.expanded}`)
+  for (const key of ["checked", "expanded", "level"] as const) {
+    if (options?.[key] !== undefined) parts.push(`${key} ${options[key]}`)
   }
-  if (options?.level !== undefined) parts.push(`level ${options.level}`)
   return parts.join(", ")
 }
 
@@ -635,9 +633,6 @@ const select = <N>(
   options: RoleOptions | undefined
 ): Array<N> => {
   const out: Array<N> = []
-  const expanded = options?.expanded === undefined
-    ? undefined
-    : String(options.expanded)
   for (const entry of index.entries) {
     if (entry.role !== role) continue
     if (entry.hidden && options?.hidden !== true) continue
@@ -646,8 +641,8 @@ const select = <N>(
       isChecked(index.reader, entry.node) !== options.checked
     ) continue
     if (
-      expanded !== undefined &&
-      index.reader.attr(entry.node, "aria-expanded") !== expanded
+      options?.expanded !== undefined &&
+      index.reader.attr(entry.node, "aria-expanded") !== `${options.expanded}`
     ) continue
     if (
       options?.level !== undefined &&
