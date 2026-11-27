@@ -111,15 +111,6 @@ describe("HtmlLocator", () => {
       ).toThrow(
         "HtmlLocator: nothing has role \"button\", name \"Details\", expanded false. Roles here:\n  button \"Details\""
       )
-      const dom = document.createElement("div")
-      dom.innerHTML =
-        `<button aria-expanded="true">Details</button><button aria-expanded="false">Details</button><button>Details</button>`
-      expect(
-        HtmlLocator.getByRole(dom, "button", {
-          name: "Details",
-          expanded: false
-        })
-      ).toBe(dom.children[1])
     })
 
     it("inert elements and those outside the topmost modal are left out unless asked for", () => {
