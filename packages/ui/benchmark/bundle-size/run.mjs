@@ -235,42 +235,30 @@ function install(root, packed, name) {
 }
 
 const benchmark = (file) => path.join(import.meta.dirname, file)
+// An app that is one file of this directory.
+const single = (file) => (root) => {
+  const input = path.join(root, file)
+  fs.copyFileSync(benchmark(file), input)
+  return { root, input }
+}
 const apps = [
   {
     name: "counter",
     variant: "",
     check: checkCounter,
-    prepare: (root) => {
-      const input = path.join(root, "counter.ts")
-      fs.copyFileSync(
-        benchmark("counter.ts"),
-        input
-      )
-      return { root, input }
-    }
+    prepare: single("counter.ts")
   },
   {
     name: "features",
     variant: "",
     check: checkFeatures,
-    prepare: (root) => {
-      const input = path.join(root, "features.ts")
-      fs.copyFileSync(
-        benchmark("features.ts"),
-        input
-      )
-      return { root, input }
-    }
+    prepare: single("features.ts")
   },
   {
     name: "menu",
     variant: "",
     check: checkMenu,
-    prepare: (root) => {
-      const input = path.join(root, "menu.ts")
-      fs.copyFileSync(benchmark("menu.ts"), input)
-      return { root, input }
-    }
+    prepare: single("menu.ts")
   },
   {
     name: "routing",

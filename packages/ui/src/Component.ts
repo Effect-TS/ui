@@ -295,7 +295,7 @@ export interface Next<out Model, out Msg, out Events, out R = never> {
  * @since 0.1.0
  */
 export interface Send {
-  readonly owner: Headless.Any | SharedKey.Any
+  readonly owner: Shared.Owner
   readonly message: unknown
 }
 
@@ -438,6 +438,16 @@ export declare namespace Shared {
   > ? Rp
     : C extends SharedKey<infer _Name, infer _V, infer _Rcv, infer Rp> ? Rp
     : never
+
+  /**
+   * What names an owner in `reads`, `$.send` and the testing steps: the
+   * owner component, or the `SharedKey` it adopts.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export type Owner = Headless.Any | SharedKey.Any
 }
 
 /**
@@ -588,9 +598,7 @@ export const sharedKey: {
   ({
     name: options.name,
     sharesSchema: options.schema,
-    receives: options.message === undefined
-      ? Schema.Never
-      : receivesOf(options.message, options.receives!)
+    receives: receivesOf(options.message!, options.receives ?? [])
   }) satisfies SharedKey.Any
 
 /**
@@ -625,10 +633,9 @@ export const sharedKey: {
  * @since 0.1.0
  */
 export type SharedRead =
-  | Headless.Any
-  | SharedKey.Any
+  | Shared.Owner
   | {
-    readonly owner: Headless.Any | SharedKey.Any
+    readonly owner: Shared.Owner
     readonly optional?: boolean | undefined
     readonly report?: unknown
     readonly onChange?: unknown
@@ -875,7 +882,7 @@ export interface Step<
    * fails: an owner and a reader whose updates answer each other would
    * loop.
    */
-  send<O extends Headless.Any | SharedKey.Any>(
+  send<O extends Shared.Owner>(
     owner: O,
     message: NoInfer<SendMessage<Shared.Receives<O>>>
   ): Step<Model, Msg, Events, R | (Shared.Of<O> & SendTarget<KeyOf<O>>), L>
@@ -990,7 +997,7 @@ export interface Update<
   /** Each owner's current value, by the name `reads` lists it under, as `h.reads` reads it. */
   readonly reads: SharedValues<SR>
   /** Sends `message` to the nearest instance of `owner` above this one, as `Step`'s `send` does. */
-  send<O extends Headless.Any | SharedKey.Any>(
+  send<O extends Shared.Owner>(
     owner: O,
     message: NoInfer<SendMessage<Shared.Receives<O>>>
   ): Step<Model, Msg, Events, Shared.Of<O> & SendTarget<KeyOf<O>>, L>
@@ -1099,11 +1106,7 @@ const StepProto = {
   reset(this: Step<any, any, any, any>, name: string) {
     return stepWith(this, { lists: [...this.lists, { name, op: "reset" }] })
   },
-  send(
-    this: Step<any, any, any, any>,
-    owner: Headless.Any | SharedKey.Any,
-    message: unknown
-  ) {
+  send(this: Step<any, any, any, any>, owner: Shared.Owner, message: unknown) {
     return stepWith(this, { sends: [...this.sends, { owner, message }] })
   },
   viewTransition(
@@ -1164,11 +1167,7 @@ type AnyUpdate$ = Update<any, any, any, any> & {
 
 const UpdateProto = {
   ...StepProto,
-  send(
-    this: AnyUpdate$,
-    target: Headless.Any | SharedKey.Any | "self",
-    message: unknown
-  ) {
+  send(this: AnyUpdate$, target: Shared.Owner | "self", message: unknown) {
     return StepProto.send.call(
       this,
       target === "self" ? this["~self"] as unknown as Headless.Any : target,
@@ -1777,10 +1776,7 @@ export interface PartsContext {
  * @category models
  * @since 0.1.0
  */
-export type SharedLookup = (
-  owner: Headless.Any | SharedKey.Any,
-  optional?: boolean
-) => unknown
+export type SharedLookup = (owner: Shared.Owner, optional?: boolean) => unknown
 
 /**
  * What a reader's `$.reads` holds: each owner's value by the local name its
@@ -2576,8 +2572,8 @@ type ReportId = PartsHelper<never, unknown, any>["id"]
 // One entry of `reads`, for the owner inferred for it: `report` and `onChange` take their parameter types from
 // here. `E` is the owner when the entry is written as one, and this checks it against the owner. An entry for
 // `"self"` reads the component's own `shares`, `SV` and `Rp`, and is optional.
-type SharedEntry<E, O, Model, Props, Msg, SV, Rp> = [E] extends
-  [Headless.Any | SharedKey.Any] ? O
+type SharedEntry<E, O, Model, Props, Msg, SV, Rp> = [E] extends [Shared.Owner] ?
+  O
   : [O] extends ["self"] ? {
       readonly owner: O
       readonly optional: true
@@ -3252,9 +3248,7 @@ export interface DefineOptions<
   Tags extends TagOf<Msg>,
   Sl extends string,
   SR extends SharedReads,
-  SO extends {
-    readonly [name: string]: Headless.Any | Any | SharedKey.Any | "self"
-  },
+  SO extends { readonly [name: string]: Shared.Owner | Any | "self" },
   SOpt,
   SV,
   Rp,
@@ -3317,7 +3311,7 @@ export interface DefineOptions<
       & SR
       & {
         readonly [K in keyof SOpt]:
-          | (SOpt[K] & (Headless.Any | SharedKey.Any))
+          | (SOpt[K] & Shared.Owner)
           | {
             readonly owner: unknown
             readonly optional?: SOpt[K] | undefined
@@ -3472,9 +3466,7 @@ export interface Define<V extends View.Elements> {
     const Tags extends TagOf<Msg> = never,
     const Sl extends string = never,
     SR extends SharedReads = SharedReads,
-    SO extends {
-      readonly [name: string]: Headless.Any | Any | SharedKey.Any | "self"
-    } = {},
+    SO extends { readonly [name: string]: Shared.Owner | Any | "self" } = {},
     SOpt = {},
     SV = never,
     Rp = never,
@@ -3793,9 +3785,7 @@ export const define = <
   // What `reads` lists, as written; defaults to its constraint so `Listed<SR>` detects omission.
   SR extends SharedReads = SharedReads,
   // Each `reads` entry's owner, inferred before `shares`, `report` and `onChange`.
-  SO extends {
-    readonly [name: string]: Headless.Any | Any | SharedKey.Any | "self"
-  } = {},
+  SO extends { readonly [name: string]: Shared.Owner | Any | "self" } = {},
   // Each entry's `optional`, or its owner when written as shorthand.
   SOpt = {},
   SV = never,

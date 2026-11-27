@@ -11,7 +11,7 @@ export interface Read {
   /** The local name `h.reads`, `p.reads` and `$.reads` read the owner under. */
   readonly name: string
   /** The owner component or key, as `reads` names it. */
-  readonly owner: Component.Headless.Any | Component.SharedKey.Any
+  readonly owner: Component.Shared.Owner
   /** What the runtime matches the owner by. */
   readonly key: Component.SharedKey.Any
   readonly optional: boolean
@@ -31,10 +31,7 @@ export interface Read {
  * @internal
  */
 export const keyOf = (
-  owner:
-    | Component.Headless.Any
-    | Component.SharedKey.Any
-    | Component.Definition.Any
+  owner: Component.Shared.Owner | Component.Definition.Any
 ): Component.SharedKey.Any => {
   const at = typeof owner === "function" ? owner.definition : owner
   return (at as Partial<Component.Definition.Any>).sharedKey ?? at
@@ -59,26 +56,18 @@ export const readsOf = (
   if (reads === undefined) {
     reads = Object.entries(declared).map(([name, entry]): Read => {
       // A component or a key alone is short for `{ owner }`.
-      if (!("owner" in entry)) {
-        return {
-          name,
-          owner: entry,
-          key: keyOf(entry),
-          optional: false,
-          report: undefined,
-          onChange: undefined
-        }
-      }
-      const owner = entry.owner === "self"
+      const long: Exclude<Component.SharedRead, Component.Shared.Owner> =
+        "owner" in entry ? entry : { owner: entry }
+      const owner = long.owner === "self"
         ? self as unknown as Component.Headless.Any
-        : entry.owner
+        : long.owner
       return {
         name,
         owner,
-        key: entry.owner === "self" ? keyOf(definition) : keyOf(owner),
-        optional: entry.optional === true,
-        report: entry.report as Read["report"],
-        onChange: entry.onChange as Read["onChange"]
+        key: keyOf(owner),
+        optional: long.optional === true,
+        report: long.report as Read["report"],
+        onChange: long.onChange as Read["onChange"]
       }
     })
     cache.set(declared, reads)

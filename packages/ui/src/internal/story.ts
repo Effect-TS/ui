@@ -354,9 +354,7 @@ export const renderSharing = (story: State<any, any, any, any>): boolean => {
  */
 export const withShared = (
   story: State<any, any, any, any>,
-  entries: ReadonlyArray<
-    readonly [Component.Headless.Any | Component.SharedKey.Any, unknown]
-  >,
+  entries: ReadonlyArray<readonly [Component.Shared.Owner, unknown]>,
   step: string
 ): Owners | undefined => {
   const before = sharedGiven.get(story)
@@ -378,7 +376,7 @@ export const withShared = (
  * It stands above the story, so it reads only the given values.
  */
 const sharedDefault = (
-  owner: Component.Headless.Any | Component.SharedKey.Any,
+  owner: Component.Shared.Owner,
   given: Owners | undefined
 ): unknown => {
   const name = sharedReads.keyOf(owner).name
@@ -441,7 +439,7 @@ const sharedBefore = (
  */
 export const sharedMessages = (
   story: State<any, any, any, any>,
-  owner: Component.Headless.Any | Component.SharedKey.Any,
+  owner: Component.Shared.Owner,
   value: unknown
 ): ReadonlyArray<unknown> => {
   const messages: Array<unknown> = []
@@ -890,10 +888,7 @@ export const stableRootShared = (
   story: State<any, any, any, any>
 ): Component.SharedLookup => {
   const lookup = rootShared(sharedGiven.get(story))
-  const cached = new Map<
-    Component.Headless.Any | Component.SharedKey.Any,
-    unknown
-  >()
+  const cached = new Map<Component.Shared.Owner, unknown>()
   return (owner, optional) => {
     if (optional === true) return lookup(owner, true)
     if (cached.has(owner)) return cached.get(owner)
@@ -2429,7 +2424,7 @@ export const acknowledgeEmitted = <Props, Model, Msg, Events>(
  */
 export const acknowledgeSent = <Props, Model, Msg, Events>(
   story: State<Props, Model, Msg, Events>,
-  owner: Component.Headless.Any | Component.SharedKey.Any,
+  owner: Component.Shared.Owner,
   message: unknown,
   step: string
 ): State<Props, Model, Msg, Events> => {

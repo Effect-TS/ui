@@ -136,9 +136,7 @@ export abstract class Cursor {
   given(
     model: unknown,
     queries?: { readonly [name: string]: unknown },
-    shared: ReadonlyArray<
-      readonly [Component.Headless.Any | Component.SharedKey.Any, unknown]
-    > = []
+    shared: ReadonlyArray<readonly [Component.Shared.Owner, unknown]> = []
   ): this {
     const step = this.name("given")
     if (this.state.ack.acted) engine.checkGiven(this.state, step)
@@ -163,10 +161,7 @@ export abstract class Cursor {
     if (this.state.ack.acted) engine.checkGivenQueries(this.state, state, step)
     return this.replace(this.settled(state, step))
   }
-  shared(
-    owner: Component.Headless.Any | Component.SharedKey.Any,
-    value: unknown
-  ): this {
+  shared(owner: Component.Shared.Owner, value: unknown): this {
     const step = this.name("shared")
     const given = (state: engine.State<any, any, any, any>) =>
       engine.update(state, {
@@ -404,10 +399,7 @@ export abstract class Cursor {
       engine.acknowledgeEmitted(this.state, events, this.name("emitted"))
     )
   }
-  sent(
-    owner: Component.Headless.Any | Component.SharedKey.Any,
-    message: unknown
-  ): this {
+  sent(owner: Component.Shared.Owner, message: unknown): this {
     return this.replace(
       engine.acknowledgeSent(this.state, owner, message, this.name("sent"))
     )

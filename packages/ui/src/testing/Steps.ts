@@ -338,11 +338,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * sends no `onChange` message: `[[TooltipProvider, value], [ThemeProvider,
    * value]]`. Values given before and not listed are kept.
    */
-  given<
-    const O extends ReadonlyArray<
-      Component.Headless.Any | Component.SharedKey.Any
-    > = []
-  >(
+  given<const O extends ReadonlyArray<Component.Shared.Owner> = []>(
     model:
       | Component.Model<C>
       | ((model: Component.Model<C>) => Component.Model<C>),
@@ -383,7 +379,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * acknowledged with `sent`, and a send to an optional owner with no value
    * given is dropped.
    */
-  shared<O extends Component.Headless.Any | Component.SharedKey.Any>(
+  shared<O extends Component.Shared.Owner>(
     owner: O,
     value: Component.Shared.Value<O>
   ): this
@@ -529,7 +525,7 @@ export interface Steps<C extends AnyComponent> extends Pipeable {
    * asserting it went to the nearest `owner` above with `message`,
    * compared with the owner's `receives` Schema.
    */
-  sent<O extends Component.Headless.Any | Component.SharedKey.Any>(
+  sent<O extends Component.Shared.Owner>(
     owner: O,
     message: NoInfer<SendMessage<Component.Shared.Receives<O>>>
   ): this
