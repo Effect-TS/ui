@@ -871,9 +871,8 @@ export class VoidElement<
    *
    * **Details**
    *
-   * The remaining tokens are joined with one space, as `classNames` does, and
-   * added after the classes the builder already has. When no classes remain,
-   * the attribute is omitted instead of rendering `class=""`. Use
+   * Tokens are joined with one space after any existing classes. The attribute
+   * is omitted when no classes remain. Use
    * `attr("class", value)` to replace or `attr("class", undefined)` to clear.
    *
    * **Example** (Adding classes conditionally)
@@ -894,7 +893,6 @@ export class VoidElement<
    * @since 0.1.0
    */
   class(...tokens: ReadonlyArray<ClassToken>): this {
-    // One token, the common call, is the value as it is.
     const added = tokens.length === 1
       ? tokens[0] || ""
       : joinClassTokens(tokens)
