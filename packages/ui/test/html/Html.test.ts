@@ -529,15 +529,35 @@ describe("Html", () => {
       })
     })
 
-    it("removes the attribute when every token is falsy", () => {
+    it("omits the attribute when no classes remain and keeps existing classes on falsy tokens", () => {
       assert.deepStrictEqual(
         button().class(false, null, undefined, "").elementAttrs,
         {}
       )
       assert.deepStrictEqual(
         button().class("primary").class(false).elementAttrs,
-        {}
+        { class: "primary" }
       )
+      assert.deepStrictEqual(
+        button().class("primary").class(false, null, undefined, "")
+          .elementAttrs,
+        { class: "primary" }
+      )
+    })
+
+    it("appends classes across calls while attr replaces or clears", () => {
+      const base = button().class("btn btn-primary")
+      assert.deepStrictEqual(base.class("w-full").elementAttrs, {
+        class: "btn btn-primary w-full"
+      })
+      assert.deepStrictEqual(
+        base.class(false, "w-full", undefined, "mt-2").elementAttrs,
+        { class: "btn btn-primary w-full mt-2" }
+      )
+      assert.deepStrictEqual(base.attr("class", "link").elementAttrs, {
+        class: "link"
+      })
+      assert.deepStrictEqual(base.attr("class", undefined).elementAttrs, {})
     })
 
     it.effect("renders the same classes on the server", () =>
