@@ -17,6 +17,7 @@ import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import {
   Cause,
+  Clock,
   Console,
   Context,
   Deferred,
@@ -6789,6 +6790,73 @@ describe("Runtime", () => {
           entry._tag === "Failed"
         ) as MessageLog.Failed
         assert.strictEqual(failed.in, "onEmit")
+      })))
+  })
+
+  describe("slow phases", () => {
+    it.effect("Renderer.slowPhases reports an update, view or flush over its budget, with its time, and nothing within it", () =>
+      provideHost(Effect.gen(function*() {
+        // Each update and view moves the clock by the millis it is given.
+        let spent = 0
+        const outer = yield* Clock.Clock
+        const clock: Clock.Clock = Object.assign(Object.create(outer), {
+          monotonicTimeNanosUnsafe: () =>
+            outer.monotonicTimeNanosUnsafe() + BigInt(spent * 1_000_000)
+        })
+        const Message = Schema.TaggedUnion({
+          Work: { update: Schema.Number, view: Schema.Number }
+        })
+        const work = Message.make({ _tag: "Work", update: 5, view: 10 })
+        const Page = Component.define({
+          name: "Page",
+          model: Schema.Number,
+          message: Message
+        }).make({
+          init: () => 20,
+          update: (_, message) => {
+            spent += message.update
+            return message.view
+          },
+          view: (h, millis) => {
+            spent += millis
+            return h.el("button").on("click", work).children("work")
+          }
+        })
+        const reports: Array<Renderer.SlowPhase> = []
+        const root = yield* TestHost.mount(Page, {}).pipe(
+          Effect.provide(Renderer.slowPhases({
+            update: "4 millis",
+            view: "16 millis",
+            flush: "16 millis",
+            onSlow: (slow) => {
+              reports.push(slow)
+            }
+          })),
+          Effect.provideService(Clock.Clock, clock)
+        )
+        // The first mount counts as a flush.
+        assert.deepStrictEqual(reports.splice(0), [
+          {
+            phase: "view",
+            path: "/Page",
+            component: "Page",
+            duration: 20,
+            budget: 16
+          },
+          { phase: "flush", duration: 20, budget: 16 }
+        ])
+        click(root, "work")
+        yield* TestHost.settle
+        assert.deepStrictEqual(reports, [
+          {
+            phase: "update",
+            path: "/Page",
+            component: "Page",
+            message: work,
+            duration: 5,
+            budget: 4
+          }
+        ])
       })))
   })
 })

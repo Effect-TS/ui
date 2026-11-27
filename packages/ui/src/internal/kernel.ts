@@ -206,9 +206,26 @@ export interface Runs {
   >
 }
 
+/**
+ * Opt-in phase timing. Each hook gets the `now` reading from before its
+ * phase, and `now` is read only for phases with a hook. `flush` gets `held`
+ * when a transition holds the flush, which resumes later.
+ *
+ * @internal
+ */
+export interface Slow {
+  readonly now: () => bigint
+  readonly update?:
+    | ((from: bigint, inst: Instance, message: unknown) => void)
+    | undefined
+  readonly view?: ((from: bigint, inst: Instance) => void) | undefined
+  readonly flush?: ((from: bigint, held?: boolean) => void) | undefined
+}
+
 /** @internal */
 export interface Tree {
   readonly host: Host
+  readonly slow?: Slow | undefined
   readonly report: (
     path: string,
     where: FailedIn,
@@ -587,6 +604,8 @@ export const send = (
   }
   renderAbove(inst)
   if (inst.closed) return
+  const slow = inst.tree.slow
+  const from = slow?.update && slow.now()
   let next: Next | undefined
   try {
     next = inst.component.update(
@@ -599,6 +618,7 @@ export const send = (
   } catch (error) {
     return fail(inst, "update", Cause.die(error), { message, source })
   }
+  if (from !== undefined) slow!.update!(from, inst, message)
   if (next === undefined) return
   const seq = inst.tree.log?.(inst, {
     _tag: "Update",
@@ -728,13 +748,17 @@ const renderDirty = (inst: Instance): void => {
 }
 
 /** @internal */
-export const flush = (tree: Tree): void => {
+export const flush = (
+  tree: Tree,
+  from = tree.slow?.flush && tree.slow.now()
+): void => {
   tree.scheduled = true
   tree.flushing = true
   for (;;) {
     if (tree.closed) return
     if (tree.transitions?.hold()) {
       tree.flushing = false
+      if (from !== undefined) tree.slow!.flush!(from, true)
       return
     }
     const batch = tree.dirty
@@ -763,6 +787,7 @@ export const flush = (tree: Tree): void => {
     tree.committed = undefined
     for (let index = 0; index < committed.length; index++) committed[index]!()
   }
+  if (from !== undefined) tree.slow!.flush!(from)
 }
 
 // A view is called through this, as it may have a `call` of its own.
@@ -794,8 +819,11 @@ export const draw = (
 }
 
 const viewOf = (inst: Instance): View.Node<any, any> | undefined => {
+  const slow = inst.tree.slow
+  const from = slow?.view && slow.now()
   try {
     const tree = draw(inst, inst.component, inst)
+    if (from !== undefined) slow!.view!(from, inst)
     if (dev && tree !== undefined) {
       const author = checkPaths(inst, tree)
       if (author !== undefined) inst.tree.schedule(() => recheckPlaced(author))
@@ -1734,6 +1762,7 @@ export interface Root {
 /** @internal */
 export interface Options {
   readonly report: Tree["report"]
+  readonly slow?: Slow | undefined
   readonly path?: string | undefined
   readonly context?: Context.Context<any> | undefined
   readonly log?: Recorder | undefined
@@ -1754,6 +1783,8 @@ export const mount = (
   host: Host,
   options: Options
 ): Root => {
+  // The first mount is timed as one flush, from its first `init`.
+  const from = options.slow?.flush && options.slow.now()
   const tree: Tree = {
     ...options,
     host,
@@ -1782,7 +1813,7 @@ export const mount = (
     instance.rendered = stand(instance, instance.failure!)
   }
   place(host, container, instance.rendered!, null)
-  flush(tree)
+  flush(tree, from)
   return {
     instance,
     send: (message, source) => send(instance, message, source),
