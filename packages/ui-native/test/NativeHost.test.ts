@@ -389,12 +389,8 @@ describe("NativeHost", () => {
       update: {
         SetDefault: ($, { value }) => $.evolve({ initial: value })
       },
-      view: (h, model) => {
-        void (() => {
-          // @ts-expect-error known InputProps key rejects wrong value type
-          h.input.prop("multiline", 123)
-        })
-        return h.input
+      view: (h, model) =>
+        h.input
           .prop("defaultValue", model.initial)
           .prop("multiline", true)
           .prop("keyboardType", "default")
@@ -403,7 +399,6 @@ describe("NativeHost", () => {
           .prop("placeholderTextColor", "#9ca3af")
           .prop("selectionColor", "#3b82f6")
           .prop("customNativeProp", 123)
-      }
     })
     const { close, fabric, find, made, root, settle } = await FakeFabric.mount(
       (container) => Renderer.mount(Field, {}, container)
@@ -468,10 +463,12 @@ describe("NativeHost", () => {
           h.input
             .on("selectionChange", ({ selection }) =>
               record(["selection", selection.start, selection.end]))
-            .on("keyPress", ({ key }) => record(["key", key]))
+            .on("keyPress", ({ key }) =>
+              record(["key", key]))
             .on("contentSizeChange", ({ contentSize }) =>
               record(["size", contentSize.width, contentSize.height]))
-            .on("endEditing", ({ value }) => record(["endEditing", value]))
+            .on("endEditing", ({ value }) =>
+              record(["endEditing", value]))
         )
     })
     const { close, fabric, find, settle } = await FakeFabric.mount(

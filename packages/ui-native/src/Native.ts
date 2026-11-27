@@ -216,8 +216,8 @@ export interface InputProps {
   readonly placeholderTextColor?: Color | undefined
   readonly selectionColor?: Color | undefined
   /**
-   * Allows multiple lines of text. On iOS, React Native adds `paddingTop: 5`
-   * when no padding is set; set padding explicitly in `.style()` if needed.
+   * Allows multiple lines of text. Unlike React Native's `TextInput`, no
+   * `paddingTop: 5` is added on iOS.
    */
   readonly multiline?: boolean | undefined
   readonly secureTextEntry?: boolean | undefined
@@ -588,7 +588,7 @@ export interface ViewHost {
 export interface ViewKind {
   /** Fabric component name, or a function of the node and host. */
   readonly viewName: string | ((node: NativeNode, host: ViewHost) => string)
-  /** Initial Fabric props for every created node. */
+  /** Fabric props of every created node, restored when a prop is removed. */
   readonly defaults?: Readonly<Record<string, unknown>> | undefined
   /** Whether raw text may sit directly inside this view (nesting uses virtual text). */
   readonly text?: boolean | undefined

@@ -22,6 +22,13 @@ const button = {
 
 const label = { color: "white", fontSize: 18, textAlign: "center" } as const
 
+const field = {
+  borderWidth: 1,
+  borderColor: "#9ca3af",
+  borderRadius: 8,
+  padding: 8
+} as const
+
 const pressable = (
   h: Native.H<typeof Message.Type>,
   message: typeof Message.Type,
@@ -80,22 +87,12 @@ export const App = Native.component({
           pressable(h, Message.ClickedReset(), "Reset"),
           pressable(h, Message.ClickedIncrement(), "+")
         ),
-      h.input.value(model.name).placeholder("Your name").style({
-        borderWidth: 1,
-        borderColor: "#9ca3af",
-        borderRadius: 8,
-        padding: 8,
-        fontSize: 18
-      }).on("input", ({ value }) => Message.ChangedName({ value })),
+      h.input.value(model.name).placeholder("Your name")
+        .style({ ...field, fontSize: 18 })
+        .on("input", ({ value }) => Message.ChangedName({ value })),
       h.input.value(model.notes).placeholder("Notes").prop("multiline", true)
-        .style({
-          borderWidth: 1,
-          borderColor: "#9ca3af",
-          borderRadius: 8,
-          padding: 8,
-          minHeight: 72,
-          fontSize: 16
-        }).on("input", ({ value }) => Message.ChangedNotes({ value })),
+        .style({ ...field, minHeight: 72, fontSize: 16 })
+        .on("input", ({ value }) => Message.ChangedNotes({ value })),
       h.text.style({ fontSize: 18, color: "#374151" }).children(
         "Hello, ",
         h.text.style({ fontWeight: "bold" }).children(model.name || "stranger")

@@ -139,7 +139,7 @@ const container: Native.ViewKind = { viewName: "" }
 
 let lastTag = 0
 
-const isColor = /(^c|C)olor$/
+const isColor = /(^c|C)olor(Android)?$/
 const none = {}
 
 /**
@@ -173,7 +173,9 @@ export const make = (options: Options): {
     return out
   }
   const setNative = (n: NativeNode, name: string, value: unknown) => {
-    if (value !== undefined && isColor.test(name)) value = color(value)
+    // A removed prop returns to its kind's default, already in native form.
+    if (value === undefined) value = n.kind.defaults?.[name]
+    else if (isColor.test(name)) value = color(value)
     if (n.props[name] === value) return
     if (value === undefined) delete n.props[name]
     else n.props[name] = value
