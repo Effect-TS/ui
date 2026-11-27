@@ -331,19 +331,11 @@ describe("HtmlLocator", () => {
       expect(
         HtmlLocator.getByRole(container, "switch", { name: "Notifications" })
       ).toBeDefined()
-      expect(HtmlLocator.getByRole(container, "button", { name: "Theme" }))
-        .toBeDefined()
-      expect(HtmlLocator.queryAllByRole(container, "button", { name: "Dark" }))
-        .toEqual([])
-      expect(HtmlLocator.getByRole(container, "button", { name: "Mute" }))
-        .toBeDefined()
-      expect(HtmlLocator.getByRole(container, "button", { name: "Help" }))
-        .toBeDefined()
-      expect(HtmlLocator.getByRole(container, "button", { name: "Reset" }))
-        .toBeDefined()
       expect(
-        HtmlLocator.getByRole(container, "button", { name: "Start later" })
-      ).toBeDefined()
+        HtmlLocator.queryAllByRole(container, "button").map((node) =>
+          HtmlLocator.nameOf(container, node)
+        )
+      ).toEqual(["Theme", "Mute", "Help", "Reset", "Start later"])
     })
 
     it("getByRole lists what's there when nothing matches", () => {
