@@ -810,13 +810,19 @@ describe("Scene", () => {
 
     it.effect("passes when every h.lazy call reuses its node on a repeat render", () =>
       Effect.gen(function*() {
-        const Theme = Component.define({
+        const ThemeDef = Component.define({
           name: "Theme",
           model: Schema.Struct({ tone: Schema.String }),
           message: Schema.Never,
           shares: ({ model }) => ({ tone: model.tone })
-        }).make({
+        })
+        const Theme = ThemeDef.make({
           init: () => ({ tone: "light" }),
+          update: ($) => $.model,
+          parts: () => ({})
+        })
+        const DarkTheme = ThemeDef.make({
+          init: () => ({ tone: "dark" }),
           update: ($) => $.model,
           parts: () => ({})
         })
@@ -834,7 +840,11 @@ describe("Scene", () => {
           name: "StableGrid",
           model: GridModel,
           message: Schema.Literal("load"),
-          reads: { maybe: { owner: Theme, optional: true }, theme: Theme }
+          reads: {
+            maybe: { owner: Theme, optional: true },
+            theme: Theme,
+            dark: DarkTheme
+          }
         }).make({
           init: () => ({ rows: [], shifts: [], weekStart: "" }),
           update: () => initialGrid,
@@ -847,7 +857,9 @@ describe("Scene", () => {
                   h.lazy(
                     themedCell,
                     row,
-                    model.shifts,
+                    h.reads.dark.tone === "dark"
+                      ? model.shifts
+                      : [...model.shifts],
                     model.weekStart,
                     h.reads.theme
                   )
