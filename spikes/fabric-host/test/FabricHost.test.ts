@@ -5,9 +5,12 @@ import { assert, describe, it } from "vitest"
 import { Bench } from "../src/Bench.ts"
 import { Counter } from "../src/Counter.ts"
 import * as FabricHost from "../src/FabricHost.ts"
+import { Moves } from "../src/Moves.ts"
 import * as FakeFabric from "./FakeFabric.ts"
 
-const setup = async (component: typeof Counter | typeof Bench) => {
+const setup = async (
+  component: typeof Counter | typeof Bench | typeof Moves
+) => {
   const fabric = FakeFabric.make()
   let commits = 0
   const made = FabricHost.make({
@@ -99,5 +102,30 @@ describe("FabricHost", () => {
       "JSI calls per operation",
       JSON.stringify({ create, swap, remove, update, select, clear }, null, 1)
     )
+  })
+
+  it("reparents a kept text across text, scroll and view", async () => {
+    const { fabric, root, settle } = await setup(Moves)
+    const badge = () => FakeFabric.print(fabric.committed())
+    assert.include(badge(), "Inline: <RCTVirtualText>badge pressed 0</>")
+    const span = FakeFabric.find(fabric.committed(), text("badge pressed 0"))!
+    fabric.emit(span, "topTouchStart", {})
+    fabric.emit(span, "topTouchEnd", {})
+    await settle()
+    root.send({ _tag: "Moved", to: "scroll" })
+    await settle()
+    assert.include(
+      badge(),
+      "<RCTScrollView><RCTScrollContentView><RCTText>badge pressed 1</>"
+    )
+    root.send({ _tag: "Moved", to: "view" })
+    await settle()
+    assert.include(badge(), "<RCTView><RCTText>badge pressed 1</></>")
+    root.send({ _tag: "Moved", to: "hidden" })
+    await settle()
+    assert.notInclude(FakeFabric.print(fabric.committed()), "badge")
+    root.send({ _tag: "Moved", to: "text" })
+    await settle()
+    assert.include(badge(), "Inline: <RCTVirtualText>badge pressed 1</>")
   })
 })

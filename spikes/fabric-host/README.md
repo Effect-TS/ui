@@ -14,9 +14,11 @@ Native's Fabric renderer, with no React, from a stock Expo project
 - `src/Counter.ts` and `src/Bench.ts` are the two apps, booted by
   `src/main-counter.ts` and `src/main-bench.ts`.
   `src/react/main.tsx` is the same benchmark in stock React Native.
+  `src/Moves.ts` is a device check, not a measured app: it moves a kept
+  text between a text, a scroll view and a view, and hides it.
 - `index.ts` picks a variant from `EXPO_PUBLIC_*` variables, which are
   inlined at build time:
-  - `EXPO_PUBLIC_SPIKE=counter|bench|react-bench|react-template` selects
+  - `EXPO_PUBLIC_SPIKE=counter|bench|moves|react-bench|react-template` selects
     the app.
   - `EXPO_PUBLIC_SPIKE_PREBUILT=1` loads `prebuilt/<app>.cjs`, a
     tree-shaken Vite pre-bundle, instead of letting Metro bundle the sources.

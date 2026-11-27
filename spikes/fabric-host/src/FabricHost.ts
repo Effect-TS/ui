@@ -65,8 +65,8 @@ export class FabricNode {
   inner: FabricNode | undefined = undefined
   events: EventEntry | undefined = undefined
   readonly tag: string
-  readonly viewName: string
-  readonly reactTag: number
+  viewName: string
+  reactTag: number
   /** Props of the shadow node, already in Fabric's flat form. */
   readonly props: Record<string, unknown>
   constructor(
@@ -127,6 +127,19 @@ export const make = (options: {
     }
   }
 
+  // Fabric can't move a mounted view to another parent under the same tag:
+  // the old parent's diff deletes the tag the new one creates, and the view
+  // gets no more events. So a node that changes parent is made again, with
+  // its subtree, under new tags, as React remounts it.
+  const remount = (n: FabricNode) => {
+    n.shadow = n.pending = undefined
+    n.reactTag = nextTag
+    nextTag += 2
+    n.dirty = true
+    n.kidsChanged = false
+    for (let k = n.first; k; k = k.next) remount(k)
+  }
+
   const setNative = (n: FabricNode, name: string, value: unknown) => {
     if (value !== undefined && colorProp.test(name)) value = processColor(value)
     if (n.props[name] === value) return
@@ -147,11 +160,7 @@ export const make = (options: {
     n.pending = undefined
     let shadow: unknown
     if (n.shadow === undefined) {
-      // Text inside text is a span, which Fabric calls virtual text.
-      const viewName = n.tag === "text" && n.parent!.tag === "text"
-        ? "RCTVirtualText"
-        : n.viewName
-      shadow = ui.createNode(n.reactTag, viewName, rootTag, n.props, n)
+      shadow = ui.createNode(n.reactTag, n.viewName, rootTag, n.props, n)
     } else if (n.kidsChanged) {
       shadow = pending === undefined
         ? ui.cloneNodeWithNewChildren(n.shadow)
@@ -274,8 +283,15 @@ export const make = (options: {
       for (const key in next) setNative(n, key, next[key])
     },
     insertBefore(parent, n, ref) {
-      if (n.parent !== undefined) host.remove(n)
       parent = parent.inner ?? parent
+      if (n.parent !== parent) {
+        if (n.shadow !== undefined) remount(n)
+        // Text inside text is a span, which Fabric calls virtual text.
+        if (n.tag === "text") {
+          n.viewName = parent.tag === "text" ? "RCTVirtualText" : "RCTText"
+        }
+      }
+      if (n.parent !== undefined) host.remove(n)
       const prev = ref === undefined ? parent.last : ref.prev
       n.parent = parent
       n.prev = prev
@@ -315,6 +331,7 @@ export const make = (options: {
         setNative(n, "collapsable", false)
       }
     },
+    createContainer: () => node("#container", ""),
     commit
   }
   return { host, root }

@@ -13,10 +13,23 @@ export interface ShadowNode {
   sealed: boolean
 }
 
+const parents = (
+  nodes: ReadonlyArray<ShadowNode>,
+  parent = 0,
+  out = new Map<number, number>()
+) => {
+  for (const n of nodes) {
+    out.set(n.tag, parent)
+    parents(n.children, n.tag, out)
+  }
+  return out
+}
+
 export const make = () => {
   const calls: Record<string, number> = {}
   const count = (name: string) => (calls[name] = (calls[name] ?? 0) + 1)
   let committed: ReadonlyArray<ShadowNode> = []
+  let mounted = new Map<number, number>()
   let handler:
     | ((handle: unknown, type: string, payload: unknown) => void)
     | undefined
@@ -28,6 +41,7 @@ export const make = () => {
     }
     return out
   }
+  const tags = new Set<number>()
   const seal = (n: ShadowNode) => {
     if (n.sealed) return
     n.sealed = true
@@ -36,6 +50,8 @@ export const make = () => {
   const ui: UIManager = {
     createNode(tag, viewName, _rootTag, props, handle) {
       count("createNode")
+      if (tags.has(tag)) throw new Error(`createNode reuses tag ${tag}`)
+      tags.add(tag)
       return {
         tag,
         viewName,
@@ -84,6 +100,15 @@ export const make = () => {
     completeRoot(_rootTag, set: any) {
       count("completeRoot")
       set.forEach(seal)
+      // Fabric deletes a tag that moves to another parent in one commit.
+      const next = parents(set)
+      for (const [tag, parent] of next) {
+        const before = mounted.get(tag)
+        if (before !== undefined && before !== parent) {
+          throw new Error(`tag ${tag} moved from parent ${before} to ${parent}`)
+        }
+      }
+      mounted = next
       committed = set
     },
     registerEventHandler(h) {
