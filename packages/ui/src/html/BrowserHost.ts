@@ -72,11 +72,13 @@
  * didn't follow, whether `update` rejected the change or nothing handled it.
  * A focused `input` or `textarea` keeps its selection when the host writes
  * its `value`. A rejected edit, typed or composed, puts back the selection
- * from before it. A value `update` changed, such as uppercased text or
- * grouped digits, or one the Model set, keeps each end of the selection with
- * the unchanged text before it, else after it, and a caret at the end stays at
- * the end. When the text changed on both sides of the caret, as when a
- * character typed next to a separator moves it, the caret keeps its offset.
+ * from before it, and if the Model takes the edit later, as when its update
+ * runs late, the selection the user left comes back with it. A value
+ * `update` changed, such as uppercased text or grouped digits, or one the
+ * Model set, keeps each end of the selection with the unchanged text before
+ * it, else after it, and a caret at the end stays at the end. When the text
+ * changed on both sides of the caret, as when a character typed next to a
+ * separator moves it, the caret keeps its offset.
  * A field's `value` isn't written while an input method composes text in it,
  * from `compositionstart`, or an `input` that says it's composing, to
  * `compositionend`, so a patch or a rejected `input` can't replace the text

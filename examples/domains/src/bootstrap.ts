@@ -12,6 +12,9 @@ export const bootstrapSearch = (
   const input = document.getElementById(inputId)
   const app = document.getElementById(appId)
   if (!(input instanceof HTMLInputElement) || app === null) return
+  // A prerendered page is the same for every `?q=`, so fill in its query.
+  const query = new URLSearchParams(location.search).get("q")
+  if (query !== null && input.defaultValue === "") input.defaultValue = query
   const controller = new AbortController()
   const options = { signal: controller.signal }
   const update = () => {
@@ -21,11 +24,19 @@ export const bootstrapSearch = (
       element.textContent = normalizeLabel(input.value)
     })
   }
+  // The client takes its route from the URL, so an edit goes there too.
+  const edit = () => {
+    update()
+    const url = new URL(location.href)
+    if (input.value === "") url.searchParams.delete("q")
+    else url.searchParams.set("q", input.value)
+    history.replaceState(history.state, "", url)
+  }
   const clear = () => {
     input.value = ""
-    update()
+    edit()
   }
-  input.addEventListener("input", update, options)
+  input.addEventListener("input", edit, options)
   input.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !event.isComposing) {
       event.preventDefault()
@@ -39,7 +50,7 @@ export const bootstrapSearch = (
   document.addEventListener(readyEvent, () => controller.abort(), {
     once: true
   })
-  if (input.value !== input.defaultValue) update()
+  if (query !== null || input.value !== input.defaultValue) update()
   if (
     window.matchMedia(desktopMediaQuery).matches &&
     document.activeElement === document.body
