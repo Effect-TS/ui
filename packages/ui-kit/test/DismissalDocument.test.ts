@@ -3,7 +3,7 @@ import { Mount, UiSchema } from "@effect/ui"
 import { Dialog, Dismissal } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import {
   byId,
   click,
@@ -305,5 +305,46 @@ describe("Dismissal in a document", { concurrent: false }, () => {
       escape()
       yield* tick
       assert.deepStrictEqual(root.model()!.log, ["dialog:escape-key"])
+    }))
+
+  it.effect("inside an open shadow root, the layer and its insideSelector stay inside, and another element there is outside", () =>
+    Effect.gen(function*() {
+      const app = yield* container
+      const host = app.appendChild(document.createElement("div"))
+      const root = host.attachShadow({ mode: "open" })
+      root.innerHTML =
+        "<div id=\"editor\"><input id=\"field\"></div><button id=\"anchor\"></button><button id=\"other\"></button>"
+      // happy-dom doesn't retarget, so the document sees the host as a browser does.
+      const send = (id: string, event: Event) => {
+        Object.defineProperty(event, "target", { get: () => host })
+        root.getElementById(id)!.dispatchEvent(event)
+      }
+      const tap = (id: string, pointerType: string) => {
+        const init = { bubbles: true, composed: true, pointerType }
+        send(id, new PointerEvent("pointerdown", { ...init, isPrimary: true }))
+        send(id, new PointerEvent("click", { ...init, detail: 1 }))
+      }
+      const log: Array<string> = []
+      yield* Effect.forkScoped(
+        Stream.runForEach(
+          Dismissal.trackDismissal(root.getElementById("editor")!, {
+            insideSelector: "#anchor"
+          }),
+          ({ pointerType, reason }) =>
+            Effect.sync(() => log.push(`${reason}:${pointerType}`))
+        )
+      )
+      yield* tick
+      send(
+        "field",
+        new FocusEvent("focusin", { bubbles: true, composed: true })
+      )
+      tap("field", "mouse")
+      tap("anchor", "touch")
+      yield* tick
+      assert.deepStrictEqual(log, [])
+      tap("other", "touch")
+      yield* tick
+      assert.deepStrictEqual(log, ["outside-press:touch"])
     }))
 })

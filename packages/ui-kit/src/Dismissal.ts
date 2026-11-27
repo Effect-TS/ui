@@ -85,7 +85,7 @@ import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
-import { elementOf } from "./internal/dom.ts"
+import { isElement } from "./internal/dom.ts"
 import { onScrollbar, trackComposing } from "./internal/interaction.ts"
 import {
   claimPress,
@@ -208,13 +208,14 @@ export const trackDismissal = (
     }
     const top = (reason: Reason, event: Event) =>
       topFor(stack, reason, event) === layer
-    const away = (target: EventTarget | null): boolean => {
-      if (
-        target === null || node.contains(target as Node) ||
-        inKept(target as Node)
-      ) return false
+    // The composed path, as a document listener sees a shadow root's host.
+    const away = (event: Event): boolean => {
+      const path = event.composedPath()
+      if (event.target === null || path.includes(node)) return false
+      if (inKept(event.target as Node)) return false
       const selector = current.insideSelector
-      return !selector || elementOf(target)?.closest(selector) == null
+      return !selector ||
+        !path.some((target) => isElement(target) && target.matches(selector))
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (
@@ -228,12 +229,12 @@ export const trackDismissal = (
       const { pointerType, target } = event
       if (
         event.button !== 0 || !event.isPrimary ||
-        !top("outside-press", event) || !away(target)
+        !top("outside-press", event) || !away(event)
       ) return
       // A finger asks on the tap's click, so a scroll doesn't.
       if (pointerType === "touch") {
         claimPress(stack, event, (click) => {
-          if (top("outside-press", click) && away(click.target)) {
+          if (top("outside-press", click) && away(click)) {
             send("outside-press", pointerType)
           }
         })
@@ -243,7 +244,7 @@ export const trackDismissal = (
       }
     }
     const onFocusIn = (event: FocusEvent) => {
-      if (top("focus-out", event) && away(event.target)) send("focus-out")
+      if (top("focus-out", event) && away(event)) send("focus-out")
     }
 
     const controller = new AbortController()
