@@ -615,7 +615,7 @@ const watchPanel = (
     const { signal } = controller
     return Effect.acquireRelease(
       Effect.sync(() => {
-        listenOutside(document, signal, {
+        listenOutside(node, signal, {
           open: () => true,
           inside,
           pressed: () => send(NavigationMenuMessage.PressedOutside()),
