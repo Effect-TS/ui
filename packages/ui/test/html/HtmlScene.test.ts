@@ -6,6 +6,7 @@ import { Locator } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Schema } from "effect"
 import { Confirm } from "./fixtures/confirm.ts"
+import { Panes } from "./fixtures/panes.ts"
 import { Settings } from "./fixtures/settings.ts"
 
 const Board = Html.component({
@@ -613,42 +614,6 @@ describe("HtmlScene", () => {
 
     it.effect("a press the parent captures sends the release, the click and the defaults to the parent, even when the press removes the child", () =>
       Effect.gen(function*() {
-        const Panes = Html.component({
-          name: "Panes",
-          model: Schema.Array(Schema.String),
-          message: Schema.String
-        }).make({
-          init: (): ReadonlyArray<string> => [],
-          update: ($, message) => [...$.model, message],
-          view: (h, model) =>
-            h.div(
-              h.form.on("submit", "submit").children(
-                h.div.on("pointerdown", "grab", { capturePointer: true })
-                  .on("pointerup", "up")
-                  .on("click", "ck")
-                  .children(
-                    h.button.on("pointerup", "button up").on(
-                      "click",
-                      "button ck"
-                    )
-                      .children("Grab")
-                  ),
-                h.div.on("pointerdown", () => undefined, {
-                  capturePointer: true
-                })
-                  .children(h.button.on("click", "pass").children("Pass")),
-                // The press takes away the button it started on, but not the capturing element.
-                h.div.on("pointerdown", "drop", { capturePointer: true })
-                  .on("pointerup", "drop up")
-                  .children(
-                    model.includes("drop")
-                      ? undefined
-                      : h.button.children("Drop")
-                  )
-              ),
-              h.output(model.join("|"))
-            )
-        })
         const scene = yield* HtmlScene.make(Panes, {})
         scene.click("Grab")
           .expect(log).toHaveText("grab|up|ck")

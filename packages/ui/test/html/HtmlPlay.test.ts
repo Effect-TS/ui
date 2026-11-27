@@ -6,6 +6,7 @@ import { Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Clock, Effect, Exit, Schema, type Scope } from "effect"
 import { Menu } from "./fixtures/headless.ts"
+import { Panes } from "./fixtures/panes.ts"
 import { Settings } from "./fixtures/settings.ts"
 
 const Checkout = Html.component({
@@ -361,36 +362,15 @@ describe("HtmlPlay", () => {
       )
     }).pipe(play))
 
-  it.effect("a press the parent captures sends the release, the click and the defaults to the parent", () =>
+  it.effect("a press the parent captures sends the release, the click and the defaults to the parent, even when the press removes the child", () =>
     Effect.gen(function*() {
-      const Panes = Html.component({
-        name: "Panes",
-        model: Schema.Array(Schema.String),
-        message: Schema.String
-      }).make({
-        init: (): ReadonlyArray<string> => [],
-        update: ($, message) => [...$.model, message],
-        view: (h, model) =>
-          h.div(
-            h.form.on("submit", "submit").children(
-              h.div.on("pointerdown", "grab", { capturePointer: true })
-                .on("pointerup", "up")
-                .on("click", "ck")
-                .children(
-                  h.button.on("pointerup", "button up").on("click", "button ck")
-                    .children("Grab")
-                ),
-              h.div.on("pointerdown", () => undefined, { capturePointer: true })
-                .children(h.button.on("click", "pass").children("Pass"))
-            ),
-            h.output(model.join("|"))
-          )
-      })
       const p = yield* HtmlPlay.make(Panes, {})
       yield* p.click("Grab")
       yield* p.expect(log).toHaveText("grab|up|ck")
       yield* p.click("Pass")
       yield* p.expect(log).toHaveText("grab|up|ck|pass|submit")
+      yield* p.click("Drop")
+      yield* p.expect(log).toHaveText(/\|submit\|drop\|drop up$/)
     }).pipe(play))
 
   it.effect("a part's preventDefault: true cancels only when the part's own handler sends", () =>

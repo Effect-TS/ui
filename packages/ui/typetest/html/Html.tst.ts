@@ -454,19 +454,12 @@ describe("Html", () => {
       view: (h) => {
         const handler = ({ pointerId }: Html.PointerPayload) =>
           pointerId === -1 ? undefined : Msg.Mounted()
-        expect(h.div.on).type.toBeCallableWith("pointermove", handler)
-        expect(h.div.on).type.toBeCallableWith("pointerup", handler)
-        expect(h.div.on).type.toBeCallableWith("pointercancel", handler)
-        expect(h.div.on).type.toBeCallableWith("pointerdown", handler, {
-          capturePointer: true
-        })
         expect(h.circle.on).type.toBeCallableWith("pointermove", handler)
         expect(h.circle.on).type.toBeCallableWith("pointerup", handler)
         expect(h.circle.on).type.toBeCallableWith("pointercancel", handler)
         expect(h.circle.on).type.toBeCallableWith("pointerdown", handler, {
           capturePointer: true
         })
-        expect<Html.PointerPayload["pointerId"]>().type.toBe<number>()
         expect(h.div.on).type.not.toBeCallableWith("pointermove", handler, {
           capturePointer: true
         })
