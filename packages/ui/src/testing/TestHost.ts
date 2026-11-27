@@ -931,8 +931,20 @@ export class SettleError extends Data.TaggedError("SettleError")<{
 /** What each host's `ran` was when `settle` last returned. */
 const settledAt = new WeakMap<TestHost, number>()
 
-// Taken at load, so a test's fake timers don't hold `settle`.
-const { clearTimeout, setTimeout } = globalThis
+const realTimer = <K extends "setTimeout" | "clearTimeout">(
+  name: K
+): (typeof globalThis)[K] => {
+  let fn: any = globalThis[name]
+  while (true) {
+    const next = fn?.clock?.[`_${name}`]
+    if (typeof next !== "function" || next === fn) return fn.bind(globalThis)
+    fn = next
+  }
+}
+
+// Taken at load, unwrapping any fake clock so fake timers never hold `settle`.
+const setTimeout = realTimer("setTimeout")
+const clearTimeout = realTimer("clearTimeout")
 
 /** @internal */
 export const nextMacrotask = Effect.callback<void>((resume) => {
