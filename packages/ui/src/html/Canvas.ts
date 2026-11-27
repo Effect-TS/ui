@@ -359,9 +359,10 @@ const ImageSchema = Schema.TaggedStruct("Image", {
 })
 
 /**
- * An image at `x` and `y`, optionally sized to `width` and `height`, cropped
- * from `crop` in image pixels, and drawn with `smoothing` (`false` for crisp
- * pixel art). Draws nothing until the image has loaded.
+ * An image at `x` and `y`, optionally cropped from `crop` in image pixels,
+ * sized to `width` and `height` (defaulting to the crop or image size), and
+ * drawn with `smoothing` (`false` for crisp pixel art). Draws nothing until
+ * loaded.
  *
  * @stability experimental
  * @category shapes
@@ -771,8 +772,8 @@ const draw = (
  *
  * - Args compare by the Schemas' equivalence, so a render that leaves the
  *   scene equal doesn't repaint.
- * - `Image` shapes load per canvas in `canvas.ownerDocument`, draw nothing
- *   until loaded, and trigger a repaint when ready without sending a message.
+ * - `Image` shapes load per canvas, draw nothing until loaded, and repaint
+ *   when ready without sending a message.
  * - The backing store is `width` by `height` times the pixel ratio, and the
  *   context is scaled to match, so shapes stay in scene coordinates.
  *   `"auto"` reads `devicePixelRatio` as the mount paints.

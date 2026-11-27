@@ -2,4 +2,4 @@
 "@effect/ui": minor
 ---
 
-Add `Canvas.Image` and `Canvas.Crop` for drawing images and sprite-sheet frames in `Canvas` scenes, with optional destination sizing and `smoothing` control. `Canvas.Paint` loads images per canvas and repaints automatically when they finish loading, while `Canvas.paint` accepts an optional `images` resolver.
+Add `Canvas.Image` and `Canvas.Crop` to draw images and sprite-sheet frames in `Canvas` scenes with optional sizing and `smoothing`. Mounted canvases load each `src` on demand and repaint when it finishes loading; `Canvas.paint` takes an optional `images` resolver.

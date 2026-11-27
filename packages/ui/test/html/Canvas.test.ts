@@ -71,7 +71,6 @@ describe("Canvas", { concurrent: false }, () => {
     new Promise<void>((resolve) => setTimeout(resolve, 30))
   )
 
-  // Every canvas gets the recorded context, and `app` is a container to mount in.
   const page = Effect.gen(function*() {
     const { calls, context } = recorder()
     const getContext = HTMLCanvasElement.prototype.getContext
