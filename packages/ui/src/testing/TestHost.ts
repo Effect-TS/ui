@@ -1002,27 +1002,28 @@ const drainAll = Effect.fnUntraced(function*(testHost: TestHost) {
   const track = activity.get(testHost)
   let budget = testHost.budget
   let quiet = 0
+  const exhaust = () => {
+    const log = testHost.log.entries().slice(-20)
+    const pending = testHost.pending()
+    return new SettleError({
+      message: [
+        `TestHost.settle ran ${testHost.budget} tasks and work is still being scheduled.`,
+        "Last log entries:",
+        formatLog(log),
+        "Pending:",
+        pending.length === 0
+          ? "  (none)"
+          : pending.map(describePending).join("\n")
+      ].join("\n"),
+      pending,
+      log
+    })
+  }
   while (quiet < 3) {
     if (testHost.busy()) {
       quiet = 0
       const before = budget
-      if (!testHost.drain(budget)) {
-        const log = testHost.log.entries().slice(-20)
-        const pending = testHost.pending()
-        return yield* new SettleError({
-          message: [
-            `TestHost.settle ran ${testHost.budget} tasks and work is still being scheduled.`,
-            "Last log entries:",
-            formatLog(log),
-            "Pending:",
-            pending.length === 0
-              ? "  (none)"
-              : pending.map(describePending).join("\n")
-          ].join("\n"),
-          pending,
-          log
-        })
-      }
+      if (!testHost.drain(budget)) return yield* exhaust()
       budget = Math.max(0, before - 1)
       continue
     }
@@ -1038,8 +1039,20 @@ const drainAll = Effect.fnUntraced(function*(testHost: TestHost) {
       }
     }
     // Something may come back from outside the scheduler, such as a resolved Promise.
-    if (!pending.some((pending) => pending._tag === "Load")) quiet++
+    const ranBefore = track?.executor.ran
     yield* nextMacrotask
+    if (track !== undefined && track.executor.ran !== ranBefore) {
+      quiet = 0
+      const ran = track.executor.ran - ranBefore!
+      if (ran > budget) return yield* exhaust()
+      budget -= ran
+      continue
+    }
+    if (
+      !testHost.busy() && !pending.some((pending) => pending._tag === "Load")
+    ) {
+      quiet++
+    }
   }
   if (track !== undefined) track.settledAt = track.executor.ran
 })

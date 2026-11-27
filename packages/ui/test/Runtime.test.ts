@@ -6669,6 +6669,33 @@ describe("Runtime", () => {
       assert.strictEqual(error._tag, "SettleError")
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer({ budget: 200 }))))
 
+  it.effect("settle keeps waiting when an outside fiber runs during the grace turn, within budget", () => {
+    const tick = Effect.callback<void>((resume) => {
+      const handle = setTimeout(() => resume(Effect.void), 0)
+      return Effect.sync(() => clearTimeout(handle))
+    })
+    return Effect.gen(function*() {
+      const seen: Array<string> = []
+      yield* Effect.forkScoped(Effect.gen(function*() {
+        yield* Effect.promise(() => Promise.resolve())
+        yield* Effect.yieldNow
+        seen.push("worker")
+        yield* tick
+        seen.push("published")
+      }))
+      yield* TestHost.settle
+      assert.deepStrictEqual(seen, ["worker", "published"])
+
+      const error = yield* Effect.gen(function*() {
+        yield* Effect.forkScoped(
+          Effect.forever(Effect.andThen(tick, Effect.yieldNow))
+        )
+        return yield* Effect.flip(TestHost.settle)
+      }).pipe(Effect.scoped, Effect.provide(TestHost.layer({ budget: 3 })))
+      assert.strictEqual(error._tag, "SettleError")
+    }).pipe(Effect.scoped, Effect.provide(TestHost.layer()))
+  })
+
   it.effect("runs a fiber outside the tree without a settle", () =>
     Effect.gen(function*() {
       const requests = yield* Queue.unbounded<number>()
