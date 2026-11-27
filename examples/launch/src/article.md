@@ -159,7 +159,7 @@ A test can also supply test values for everything around the Component: a query'
 
 You can also replay a recorded session with `Story.fromLog`. When logging is enabled, the runtime records every Message a Component receives, along with the props, query results and Provider values its update read. `Story.fromLog` re-runs those Messages against update without running Commands, and reports the first step where the Component produces a different Model, Command or event.
 
-Because Messages have Schemas and `update` is pure, `Story.check` runs property tests over generated Message and Command sequences and shrinks failures to minimal Story steps. For concurrency bugs, `Story.explore` exhaustively searches overlapping Message and Command settlement orders and reports the shortest failing path.
+`Story.check` runs property tests over Message and Command sequences generated from a Component's Schemas, shrinking any failure to minimal Story steps. For concurrency bugs, `Story.explore` exhaustively searches overlapping Message and Command settlement orders and reports the shortest failing path.
 
 ### Play tests
 
