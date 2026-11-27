@@ -226,11 +226,6 @@ const arrowUp = () => keydown(document.activeElement!.id, "ArrowUp")
 // Enter on a focused button activates it with a click.
 const enter = () => (document.activeElement as HTMLElement).click()
 
-const pointerClick = (id: string) => () =>
-  byId(id).dispatchEvent(
-    new MouseEvent("click", { detail: 1, bubbles: true, cancelable: true })
-  )
-
 // A browser runs microtasks between two trusted events, but no other task.
 const rapidly = (...events: Array<() => void>) =>
   Effect.promise(async () => {
@@ -287,7 +282,7 @@ describe("Calendar in a document", { concurrent: false }, () => {
       assert.strictEqual(document.activeElement?.id, "apply")
     }).pipe(Effect.scoped))
 
-  it.effect("rapid keys move from the day just reached, and Enter picks it", () =>
+  it.effect("rapid keys move from the day just reached, Enter picks it, and a non-focusing click keeps keyboard focus", () =>
     Effect.gen(function*() {
       yield* BrowserHost.mountEffect(PickPage, {}, yield* container)
       yield* tick
@@ -297,21 +292,17 @@ describe("Calendar in a document", { concurrent: false }, () => {
       yield* tick
       assert.strictEqual(document.activeElement?.id, "2026-11-17")
       assert.strictEqual(byId("picked").textContent, "2026-11-17")
+
+      byId("2026-11-21").click()
+      yield* tick
+      assert.strictEqual(document.activeElement?.id, "2026-11-17")
+      assert.strictEqual(byId("picked").textContent, "2026-11-17 2026-11-21")
+      arrowRight()
+      yield* tick
+      assert.strictEqual(document.activeElement?.id, "2026-11-18")
     }).pipe(Effect.scoped))
 
-  it.effect("rapid keys across a month change, and Enter does not pick the day left", () =>
-    Effect.gen(function*() {
-      yield* BrowserHost.mountEffect(PickPage, {}, yield* container)
-      yield* tick
-      byId("2026-11-30").focus()
-      yield* tick
-      yield* rapidly(arrowRight, arrowRight, enter)
-      yield* tick
-      assert.strictEqual(document.activeElement?.id, "2026-12-02")
-      assert.strictEqual(byId("picked").textContent, "")
-    }).pipe(Effect.scoped))
-
-  it.effect("reversing back to the shown month focuses and picks it, and a pointer click during a sync still picks", () =>
+  it.effect("rapid keys across a month change handle reversals, pointer clicks, and Enter", () =>
     Effect.gen(function*() {
       yield* BrowserHost.mountEffect(PickPage, {}, yield* container)
       yield* tick
@@ -324,23 +315,15 @@ describe("Calendar in a document", { concurrent: false }, () => {
 
       byId("2026-11-30").focus()
       yield* tick
-      yield* rapidly(arrowRight, pointerClick("2026-11-30"))
+      yield* rapidly(arrowRight, () => click(byId("2026-11-30")))
       yield* tick
       assert.strictEqual(byId("picked").textContent, "2026-11-24 2026-11-30")
-    }).pipe(Effect.scoped))
 
-  it.effect("picking a day without moving focus keeps keyboard navigation on the focused day", () =>
-    Effect.gen(function*() {
-      yield* BrowserHost.mountEffect(PickPage, {}, yield* container)
+      byId("2026-12-31").focus()
       yield* tick
-      byId("2026-11-15").focus()
+      yield* rapidly(arrowRight, arrowRight, enter)
       yield* tick
-      byId("2026-11-21").click()
-      yield* tick
-      assert.strictEqual(byId("picked").textContent, "2026-11-21")
-      assert.strictEqual(document.activeElement?.id, "2026-11-15")
-      arrowRight()
-      yield* tick
-      assert.strictEqual(document.activeElement?.id, "2026-11-16")
+      assert.strictEqual(document.activeElement?.id, "2027-01-02")
+      assert.strictEqual(byId("picked").textContent, "2026-11-24 2026-11-30")
     }).pipe(Effect.scoped))
 })
