@@ -1,9 +1,21 @@
 // Every export of this module is a component, so an edit to it swaps in
 // place in the dev client and keeps the count, the name and the list.
-import { Pan, Pressable } from "@effect/ui-native/kit"
+import { Pan, Pressable, VirtualView } from "@effect/ui-native/kit"
 import * as Native from "@effect/ui-native/Native"
+import * as Command from "@effect/ui/Command"
+import * as Component from "@effect/ui/Component"
+import * as Renderer from "@effect/ui/Renderer"
 import * as UiSchema from "@effect/ui/UiSchema"
+import * as Effect from "effect/Effect"
+import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
+
+const Rect = Schema.Struct({
+  x: Schema.Number,
+  y: Schema.Number,
+  width: Schema.Number,
+  height: Schema.Number
+})
 
 const Message = UiSchema.TaggedEnum({
   ClickedDecrement: {},
@@ -15,8 +27,37 @@ const Message = UiSchema.TaggedEnum({
   SelectedItem: { item: Schema.String },
   Dragged: { dx: Schema.Number },
   Dropped: {},
-  CancelledDrag: {}
+  CancelledDrag: {},
+  ToggledVirtual: {},
+  JumpedFar: {},
+  ModeChanged: {
+    id: Schema.String,
+    mode: Schema.Literals(["visible", "prerender", "hidden"]),
+    rect: Rect
+  }
 })
+
+const virtualScroll = Native.ref("virtualScroll")
+
+const ScrollFar = Command.make(
+  "ScrollFar",
+  {},
+  () =>
+    Renderer.Refs.use((refs) =>
+      Effect.flatMap(refs.lookup(virtualScroll), (node) =>
+        Option.isNone(node)
+          ? Effect.succeed(Component.noop)
+          : Native.Host.useSync((host) => {
+            host.scrollTo(node.value, 0, 20_000, false)
+            return Component.noop
+          }))
+    )
+)
+
+const virtualRows = Array.from({ length: 300 }, (_, i) => ({
+  id: `row-${i}`,
+  index: i + 1
+}))
 
 const button = {
   backgroundColor: "#111827",
@@ -57,7 +98,12 @@ export const App = Native.component({
     selected: Schema.String,
     // The handle's offset while dragged, and where it was last dropped.
     dragged: Schema.Number,
-    dropped: Schema.Number
+    dropped: Schema.Number,
+    showVirtual: Schema.Boolean,
+    hidden: Schema.Record(Schema.String, Rect),
+    visibleEvents: Schema.Number,
+    prerenderEvents: Schema.Number,
+    hiddenEvents: Schema.Number
   }),
   message: Message
 }).make({
@@ -68,7 +114,12 @@ export const App = Native.component({
     items: [],
     selected: "",
     dragged: 0,
-    dropped: 0
+    dropped: 0,
+    showVirtual: false,
+    hidden: {},
+    visibleEvents: 0,
+    prerenderEvents: 0,
+    hiddenEvents: 0
   }),
   update: {
     ClickedDecrement: ($) => $.evolve({ count: (count) => count - 1 }),
@@ -78,9 +129,7 @@ export const App = Native.component({
     ChangedNotes: ($, { value }) => $.evolve({ notes: value }),
     ClickedAdd: ($) =>
       $.evolve({
-        items: (
-          items
-        ) => [
+        items: (items) => [
           ...items,
           `Item ${items.length + 1}: ${$.model.name || "stranger"}`
         ]
@@ -88,10 +137,83 @@ export const App = Native.component({
     SelectedItem: ($, { item }) => $.evolve({ selected: item }),
     Dragged: ($, { dx }) => $.evolve({ dragged: $.model.dropped + dx }),
     Dropped: ($) => $.evolve({ dropped: $.model.dragged }),
-    CancelledDrag: ($) => $.evolve({ dragged: $.model.dropped })
+    CancelledDrag: ($) => $.evolve({ dragged: $.model.dropped }),
+    ToggledVirtual: ($) =>
+      $.evolve({
+        showVirtual: (show) => !show,
+        hidden: () => ({}),
+        visibleEvents: () => 0,
+        prerenderEvents: () => 0,
+        hiddenEvents: () => 0
+      }),
+    JumpedFar: ($) => $.run(ScrollFar.make()),
+    ModeChanged: ($, { id, mode, rect }) =>
+      $.evolve({
+        hidden: (hidden) => {
+          if (mode === "hidden") return { ...hidden, [id]: rect }
+          if (!(id in hidden)) return hidden
+          const next = { ...hidden }
+          delete next[id]
+          return next
+        },
+        visibleEvents: (n) => (mode === "visible" ? n + 1 : n),
+        prerenderEvents: (n) => (mode === "prerender" ? n + 1 : n),
+        hiddenEvents: (n) => (mode === "hidden" ? n + 1 : n)
+      })
   },
-  view: (h, model) =>
-    h.view.style({
+  view: (h, model) => {
+    if (model.showVirtual) {
+      const rendered = virtualRows.length - Object.keys(model.hidden).length
+      return h.view.style({
+        flex: 1,
+        paddingTop: 48,
+        backgroundColor: "white"
+      }).children(
+        h.view.style({
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingHorizontal: 16,
+          paddingBottom: 12,
+          gap: 8
+        }).children(
+          pressable(h, Message.ToggledVirtual(), "Back"),
+          pressable(h, Message.JumpedFar(), "Jump"),
+          h.text.style({ fontSize: 13, color: "#374151", flex: 1 }).children(
+            `${rendered}/${virtualRows.length} V:${model.visibleEvents} P:${model.prerenderEvents} H:${model.hiddenEvents}`
+          )
+        ),
+        h.scroll.ref(virtualScroll).style({ flex: 1 }).children(
+          ...virtualRows.map((row) =>
+            VirtualView(h, {
+              hidden: model.hidden[row.id],
+              onModeChange: ({ mode, targetRect }) =>
+                Message.ModeChanged({ id: row.id, mode, rect: targetRect }),
+              children: () =>
+                h.view.style({
+                  height: 92,
+                  marginHorizontal: 16,
+                  marginVertical: 4,
+                  padding: 16,
+                  borderRadius: 10,
+                  backgroundColor: row.index % 2 === 0 ? "#eff6ff" : "#f3f4f6",
+                  justifyContent: "center"
+                }).children(
+                  h.text.style({
+                    fontSize: 18,
+                    fontWeight: "bold",
+                    color: "#111827"
+                  }).children(`Row ${row.index}`),
+                  h.text.style({ fontSize: 14, color: "#4b5563" }).children(
+                    `VirtualView item #${row.index}`
+                  )
+                )
+            }).key(row.id)
+          )
+        )
+      )
+    }
+    return h.view.style({
       flex: 1,
       paddingTop: 64,
       paddingHorizontal: 24,
@@ -103,9 +225,7 @@ export const App = Native.component({
         fontWeight: "bold",
         color: "#1f2937",
         textAlign: "center"
-      }).children(
-        String(model.count)
-      ),
+      }).children(String(model.count)),
       h.view.style({ flexDirection: "row", justifyContent: "center", gap: 16 })
         .children(
           pressable(h, Message.ClickedDecrement(), "-"),
@@ -134,7 +254,10 @@ export const App = Native.component({
         borderRadius: 8,
         backgroundColor: "#e5e7eb"
       }).children(h.text.style({ fontSize: 16 }).children("Drag me")),
-      pressable(h, Message.ClickedAdd(), "Add to list"),
+      h.view.style({ flexDirection: "row", gap: 12 }).children(
+        pressable(h, Message.ClickedAdd(), "Add to list"),
+        pressable(h, Message.ToggledVirtual(), "Virtual list")
+      ),
       h.text.style({ fontSize: 16, color: "#374151" }).children(
         model.selected === "" ? "Tap an item" : `Selected ${model.selected}`
       ),
@@ -149,4 +272,5 @@ export const App = Native.component({
         )
       )
     )
+  }
 })
