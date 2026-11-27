@@ -456,26 +456,28 @@ export const drop = (given: Partial<Html.DropPayload> | undefined) => {
 
 const important = /!\s*important$/i
 
+/** A CSS property name as written: case-insensitive, except a `--custom` one. */
+const written = (name: string): string =>
+  name.startsWith("--") ? name : name.toLowerCase()
+
 /**
  * The declarations of an inline `style` attribute, by property name. A
  * repeated property keeps its last value unless an earlier one is
  * `!important` and the later one isn't, as in a browser.
  */
-const declarations = (style: string | undefined): Map<string, string> => {
-  const out = new Map<string, string>()
+const declarations = (style = ""): Record<string, string> => {
+  const out: Record<string, string> = Object.create(null)
   const add = (declaration: string) => {
     const colon = declaration.indexOf(":")
     if (colon === -1) return
-    const name = declaration.slice(0, colon).trim()
-    const property = name.startsWith("--") ? name : name.toLowerCase()
+    const property = written(declaration.slice(0, colon).trim())
     const value = declaration.slice(colon + 1).trim()
-    const previous = out.get(property)
+    const previous = out[property]
     if (
       previous === undefined || !important.test(previous) ||
       important.test(value)
-    ) out.set(property, value)
+    ) out[property] = value
   }
-  if (style === undefined) return out
   let start = 0
   let depth = 0
   let quote = ""
@@ -498,9 +500,7 @@ const declarations = (style: string | undefined): Map<string, string> => {
 
 /** The property an expected style name means: `.style`'s camelCase, or a dashed CSS name. */
 const styleProperty = (name: string): string =>
-  name.includes("-") && !name.startsWith("--")
-    ? name.toLowerCase()
-    : cssProperty(name)
+  name.includes("-") ? written(name) : cssProperty(name)
 
 /** @internal */
 export const matchers = {
@@ -543,11 +543,11 @@ export const matchers = {
         : expected.test(name)
       return pass ? undefined : `its accessible name is ${JSON.stringify(name)}`
     }),
-  toHaveStyle: (
-    expected: { readonly [name: string]: string | RegExp | false }
-  ) =>
-    scene.record(expected, "declaration", ({ attrs }) => {
-      const parsed = declarations(attrs?.style)
-      return (property) => parsed.get(property)
-    }, styleProperty)
+  toHaveStyle: (expected: scene.Expected) =>
+    scene.record(
+      expected,
+      "declaration",
+      ({ attrs }) => declarations(attrs?.style),
+      styleProperty
+    )
 }

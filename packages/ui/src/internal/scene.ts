@@ -87,30 +87,37 @@ const compare = (
     : `its ${what} is ${JSON.stringify(value)}`
 }
 
-const attribute = (attrs: Locator.Node["attrs"]) => (name: string) =>
-  attrs !== undefined && Object.hasOwn(attrs, name) ? attrs[name] : undefined
+/**
+ * What a record matcher expects of each name.
+ *
+ * @internal
+ */
+export type Expected = { readonly [name: string]: string | RegExp | false }
+
+const own = (values: Locator.Node["attrs"], name: string) =>
+  values !== undefined && Object.hasOwn(values, name) ? values[name] : undefined
 
 /**
  * Checks every entry of `expected` on the one element and reports each that
- * fails. `read` gives the element's value for a name, after `key` turns
- * the name into the one it is read and reported under.
+ * fails. `read` gives the element's values by name, after `key` turns a
+ * name into the one it is read and reported under.
  *
  * @internal
  */
 export const record = (
-  expected: { readonly [name: string]: string | RegExp | false },
+  expected: Expected,
   kind: string,
-  read: (node: Locator.Node) => (name: string) => string | undefined,
+  read: (node: Locator.Node) => Locator.Node["attrs"],
   key: (name: string) => string = (name) => name
 ): Matcher =>
   single((node) => {
-    const get = read(node)
+    const values = read(node)
     const failures: Array<string> = []
     for (const [name, value] of Object.entries(expected)) {
       const at = key(name)
       const failure = value === undefined
         ? `${JSON.stringify(at)} is undefined, use false for an absent ${kind}`
-        : compare(get(at), value, at, kind)
+        : compare(own(values, at), value, at, kind)
       if (failure !== undefined) failures.push(failure)
     }
     return failures.length === 0 ? undefined : failures.join(", ")
@@ -140,18 +147,16 @@ export const matchers = {
     expected?: string | RegExp | false
   ): Matcher =>
     single(({ attrs }) =>
-      compare(attribute(attrs)(name), expected, name, "attribute")
+      compare(own(attrs, name), expected, name, "attribute")
     ),
-  toHaveAttributes: (
-    expected: { readonly [name: string]: string | RegExp | false }
-  ): Matcher => record(expected, "attribute", ({ attrs }) => attribute(attrs))
+  toHaveAttributes: (expected: Expected): Matcher =>
+    record(expected, "attribute", ({ attrs }) => attrs)
 }
 
 const describeExpected = (expected: unknown): string =>
   expected instanceof RegExp
     ? String(expected)
-    : typeof expected === "object" && expected !== null &&
-        !Array.isArray(expected)
+    : typeof expected === "object" && expected !== null
     ? `{${
       Object.entries(expected).map(([name, value]) =>
         JSON.stringify(name) + ": " + describeExpected(value)
