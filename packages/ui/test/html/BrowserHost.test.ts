@@ -1348,11 +1348,13 @@ describe("BrowserHost", { concurrent: false }, () => {
               h.input.attr("aria-label", "First"),
               h.input.attr("aria-label", "Second")
             ),
-          h.button.on("click", ({ pointerType }) =>
-            Message.PointerClicked({ pointerType }))
-            .on("pointerdown", ({ button, pointerType }) =>
+          h.button.on("click", ({ pointerId, pointerType }) =>
+            Message.PointerClicked({
+              pointerType: `${pointerType} ${pointerId}`
+            }))
+            .on("pointerdown", ({ button, pointerId, pointerType }) =>
               Message.PointerClicked({
-                pointerType: `down ${button} ${pointerType}`
+                pointerType: `down ${button} ${pointerType} ${pointerId}`
               }))
             .children("Pointer"),
           h.input.attr("aria-label", "Keys")
@@ -1618,6 +1620,21 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(root.model()).toEqual(["hit"])
       }).pipe(Effect.scoped))
 
+    it.effect("a constant message is sent without reading the event", () =>
+      Effect.gen(function*() {
+        const read = vi.spyOn(globalThis, "FormData")
+        yield* Effect.addFinalizer(() => Effect.sync(() => read.mockRestore()))
+        const Page = logPage((h) => h.el("form").on("submit", "sent"))
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Page, {}, app)
+        app.querySelector("form")!.dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true })
+        )
+        yield* tick
+        expect(root.model()).toEqual(["sent"])
+        expect(read).not.toHaveBeenCalled()
+      }).pipe(Effect.scoped))
+
     // A custom element that submits its form once it is in the document, and keeps whether the app took it.
     const prevented: Array<boolean> = []
     customElements.define(
@@ -1711,7 +1728,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         assert.strictEqual(app.querySelectorAll("p").length, 2)
       }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
 
-    it.effect("a pointerdown reports its button and pointer, and a click the pointer of the pointerdown before it, or none from the keyboard", () =>
+    it.effect("a pointerdown reports its button, pointer and id, and a click the pointer of the pointerdown before it, or none from the keyboard, and no id", () =>
       Effect.gen(function*() {
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Events, {}, app)
@@ -1726,6 +1743,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         button.dispatchEvent(
           new PointerEvent("pointerdown", {
             bubbles: true,
+            pointerId: 2,
             pointerType: "touch"
           })
         )
@@ -1736,18 +1754,19 @@ describe("BrowserHost", { concurrent: false }, () => {
           new PointerEvent("pointerdown", {
             bubbles: true,
             button: 2,
+            pointerId: 3,
             pointerType: "pen"
           })
         )
         click(1)
         yield* tick
         expect(root.model()).toEqual([
-          "mouse",
-          "down 0 touch",
-          "touch",
-          "",
-          "down 2 pen",
-          "pen"
+          "mouse -1",
+          "down 0 touch 2",
+          "touch -1",
+          " -1",
+          "down 2 pen 3",
+          "pen -1"
         ])
       }).pipe(Effect.scoped))
 
@@ -2809,7 +2828,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           ? (handler as (payload: unknown) => unknown)(payload)
           : handler
         if (message === undefined) return false
-        onMessage?.()
+        onMessage?.({})
         seen.push(message)
         return true
       }
@@ -2920,6 +2939,185 @@ describe("BrowserHost", { concurrent: false }, () => {
           "enter",
           "drop milk at 5,7 of 100x100",
           "leave"
+        ])
+      }).pipe(Effect.scoped))
+  })
+
+  describe("pointer gestures", () => {
+    /** Each `setPointerCapture`, with the element it was called on, and each `Handle` update, in order. */
+    const calls: Array<readonly [Element, number] | string> = []
+    const Handle = Html.component({
+      name: "Handle",
+      model: Schema.Null,
+      message: Schema.String
+    }).make({
+      init: () => null,
+      update: ($, message) => {
+        calls.push(message)
+        return $.model
+      },
+      parts: (p) => ({
+        root: p.part(
+          "div",
+          (b) => b.on("pointerdown", "grab", { capturePointer: true })
+        )
+      })
+    })
+    // Shared with an event capture doesn't apply to, which it type-checks for.
+    const grab = { preventDefault: true, capturePointer: true } as const
+    const Divider = Html.component({
+      name: "Divider",
+      model: Schema.Array(Schema.String),
+      message: Schema.String
+    }).make({
+      init: (): ReadonlyArray<string> => [],
+      update: ($, message) => [...$.model, message],
+      view: (h) =>
+        h.div(
+          Handle(h, {
+            key: "handle",
+            view: (handle) => handle.root(h.div).attr("aria-label", "Handle")
+          }),
+          h.div.attr("aria-label", "Divider")
+            .on("pointerdown", ({ button, pointerId }) =>
+              button === 0 ? `down ${pointerId}` : undefined, grab)
+            .on("contextmenu", "menu", grab)
+            .on("pointermove", ({ pointerId, x }) =>
+              `move ${pointerId} ${x}`)
+            .on("pointerup", ({ pointerId }) =>
+              `up ${pointerId}`)
+            .on("pointercancel", ({ pointerId }) =>
+              `cancel ${pointerId}`)
+            .children(h.span("Grip"))
+        )
+    })
+    const pointer = (
+      element: Element,
+      name: string,
+      init: {
+        readonly pointerId: number
+        readonly x?: number
+        readonly button?: number
+      }
+    ) =>
+      element.dispatchEvent(
+        new PointerEvent(name, {
+          bubbles: true,
+          pointerId: init.pointerId,
+          button: init.button ?? 0,
+          clientX: init.x ?? 0,
+          pointerType: "mouse"
+        })
+      )
+    const captures = Effect.acquireRelease(
+      Effect.sync(() => {
+        calls.length = 0
+        const spy = vi.spyOn(Element.prototype, "setPointerCapture")
+          .mockImplementation(function(this: Element, pointerId: number) {
+            calls.push([this, pointerId])
+          })
+        return spy
+      }),
+      (spy) => Effect.sync(() => spy.mockRestore())
+    )
+
+    // Html's own host, and `makeHost` driven through `Renderer.Host` alone, each with an author's handler and a part's.
+    it.effect.each(["mountEffect", "Renderer.Host"])(
+      "a press captures its pointer on the element with the handler before the update, unless the handler sends nothing: %s",
+      (via) =>
+        Effect.gen(function*() {
+          yield* captures
+          const app = yield* container
+          if (via === "mountEffect") {
+            yield* BrowserHost.mountEffect(Divider, {}, app)
+          } else {
+            const host = BrowserHost.makeHost(document)
+            yield* Effect.addFinalizer(() => Effect.sync(() => host.dispose()))
+            // A copy, which the renderer doesn't know for an Html host.
+            yield* Renderer.mount(Divider, {}, app).pipe(
+              Effect.provide(Renderer.layer({ ...host })),
+              Effect.provideService(Html.Host, BrowserHost.htmlHost)
+            )
+          }
+          const divider = app.querySelector("[aria-label=Divider]")!
+          const handle = app.querySelector("[aria-label=Handle]")!
+          pointer(app.querySelector("span")!, "pointerdown", { pointerId: 7 })
+          pointer(divider, "pointerdown", { pointerId: 8, button: 2 })
+          pointer(handle, "pointerdown", { pointerId: 9 })
+          pointer(divider, "contextmenu", { pointerId: 10, button: 2 })
+          assert.deepStrictEqual(calls, [[divider, 7], [handle, 9], "grab"])
+        }).pipe(Effect.scoped)
+    )
+
+    it.effect("moves are sent once per frame per pointer, with the latest position, and a queued one before its release but not after a cancel", () =>
+      Effect.gen(function*() {
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Divider, {}, app)
+        const divider = app.querySelector("[aria-label=Divider]")!
+        pointer(divider, "pointerdown", { pointerId: 1 })
+        for (const x of [1, 2, 3]) {
+          pointer(divider, "pointermove", { pointerId: 1, x })
+        }
+        pointer(divider, "pointermove", { pointerId: 2, x: 9 })
+        yield* tick
+        // Queued, then released in the same task.
+        pointer(divider, "pointermove", { pointerId: 1, x: 4 })
+        pointer(divider, "pointermove", { pointerId: 1, x: 5 })
+        pointer(divider, "pointerup", { pointerId: 1, x: 5 })
+        yield* tick
+        // Queued, then cancelled: the Model reverts without it.
+        pointer(divider, "pointerdown", { pointerId: 1 })
+        pointer(divider, "pointermove", { pointerId: 1, x: 6 })
+        pointer(divider, "pointercancel", { pointerId: 1 })
+        yield* tick
+        expect(root.model()).toEqual([
+          "down 1",
+          "move 1 3",
+          "move 2 9",
+          "move 1 5",
+          "up 1",
+          "down 1",
+          "cancel 1"
+        ])
+      }).pipe(Effect.scoped))
+
+    it.effect("a cancel or release a move's handler fires ends the other pointer's move still in the frame", () =>
+      Effect.gen(function*() {
+        const app = yield* container
+        const Pane = Html.component({
+          name: "Pane",
+          model: Schema.Array(Schema.String),
+          message: Schema.String
+        }).make({
+          init: (): ReadonlyArray<string> => [],
+          update: ($, message) => [...$.model, message],
+          view: (h) =>
+            h.div.attr("aria-label", "Pane")
+              .on("pointermove", ({ pointerId, x }) => {
+                if (pointerId === 1) {
+                  const pane = app.querySelector("[aria-label=Pane]")!
+                  pointer(pane, "pointercancel", { pointerId: 2 })
+                  // A newer move, then the release: the release sends only the newer one.
+                  pointer(pane, "pointermove", { pointerId: 3, x: 9 })
+                  pointer(pane, "pointerup", { pointerId: 3 })
+                }
+                return `move ${pointerId} ${x}`
+              })
+              .on("pointercancel", ({ pointerId }) => `cancel ${pointerId}`)
+              .on("pointerup", ({ pointerId }) => `up ${pointerId}`)
+        })
+        const root = yield* BrowserHost.mountEffect(Pane, {}, app)
+        const pane = app.querySelector("[aria-label=Pane]")!
+        pointer(pane, "pointermove", { pointerId: 1 })
+        pointer(pane, "pointermove", { pointerId: 2 })
+        pointer(pane, "pointermove", { pointerId: 3 })
+        yield* tick
+        yield* tick
+        expect(root.model()).toEqual([
+          "cancel 2",
+          "move 3 9",
+          "up 3",
+          "move 1 0"
         ])
       }).pipe(Effect.scoped))
   })

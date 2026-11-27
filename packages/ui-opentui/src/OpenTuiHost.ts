@@ -502,7 +502,7 @@ export const makeHost = (
     node: OT.BaseRenderable,
     name: string,
     payload: unknown,
-    onMessage?: (() => void) | undefined
+    onMessage?: ((options: View.EventOptions) => void) | undefined
   ): boolean => {
     const entry = events.get(node)
     if (entry === undefined) return false
@@ -559,13 +559,14 @@ export const makeHost = (
     if (handler === undefined) return
     // Renderer.Host contract: only the innermost element with a handler receives an event.
     event.stopPropagation()
-    const prevent = entry.options[name]?.preventDefault
-    if (prevent === "always") event.preventDefault()
+    if (entry.options[name]?.preventDefault === "always") {
+      event.preventDefault()
+    }
     entry.dispatch(
       name,
       handler,
       payloadOf(event, renderer),
-      prevent === true ? () => event.preventDefault() : undefined
+      (options) => options.preventDefault === true && event.preventDefault()
     )
   }
 

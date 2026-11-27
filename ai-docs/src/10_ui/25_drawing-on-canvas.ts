@@ -155,6 +155,7 @@ const press = {
   ctrl: false,
   alt: false,
   meta: false,
+  pointerId: 1,
   pointerType: "mouse" as const
 }
 

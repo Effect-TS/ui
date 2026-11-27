@@ -5,7 +5,7 @@
  * `HtmlScene.Steps` extends `Scene.Steps`, so every scene step works here.
  * Each payload is typed from the host's own payload types in `Html`, so a
  * test can't send a shape the host never would. `click` sends `pointerdown`,
- * `mousedown`, `mouseup` and `click`, then runs the browser's defaults: it
+ * `mousedown`, `pointerup`, `mouseup` and `click`, then runs the browser's defaults: it
  * throws on a disabled control, a submit button submits its form with the
  * fields read from the view, a checkbox or radio button fires `input` and
  * `change`, and a `popovertarget` button toggles its popover. The events of
@@ -161,15 +161,19 @@ export interface Steps<C extends AnyComponent, Parts = never>
 {
   /**
    * Clicks the one element `target` matches, as a browser does: `pointerdown`,
-   * `mousedown`, `mouseup` and `click` go to the innermost element that
+   * `mousedown`, `pointerup`, `mouseup` and `click` go to the innermost element that
    * handles each, then the defaults run. A string means `Locator.text(target)`.
    *
    * **Details**
    *
    * - Each pointer and mouse event carries the mouse's primary button at the
-   *   origin with no modifier keys. `fire` sends an event with another payload,
+   *   origin with no modifier keys, and the pointer events pointer id 1 where
+   *   the mouse events have none. `fire` sends an event with another payload,
    *   such as a tap's `pointerType`.
-   * - Cancelling `pointerdown` skips `mousedown` and `mouseup` but not `click`.
+   * - A `pointerdown` handler set with `capturePointer: true` that sends a
+   *   message takes the rest of the click, `mousedown` aside, and its defaults.
+   * - Cancelling `pointerdown` skips `mousedown` and `mouseup` but not
+   *   `pointerup` or `click`.
    *   Cancelling `mousedown` or `mouseup` skips nothing. Only a cancelled
    *   `click` skips the defaults, and only `click` and its defaults set
    *   `defaultPrevented`.
@@ -409,6 +413,7 @@ class StepsImpl extends internal.SceneCursor {
         let out = state
         let reached = false
         let childOnly: string | undefined
+        let captured: Locator.Node | undefined
         const send = (
           node: Locator.Node,
           event: string,
@@ -424,6 +429,7 @@ class StepsImpl extends internal.SceneCursor {
           } else {
             reached = true
             handled ||= fired.handled
+            captured ??= fired.captured
             out = fired.story
           }
           return fired.prevented
@@ -448,10 +454,9 @@ class StepsImpl extends internal.SceneCursor {
           const skipMouse = send(found, "pointerdown")
           if (!skipMouse) {
             const held = enabled(state.root, found)
-            if (held === undefined) return
-            send(held, "mousedown")
+            if (held !== undefined) send(held, "mousedown", internal.mouse)
           }
-          const pressed = enabled(state.root, found)
+          const pressed = enabled(state.root, captured ?? found)
           if (pressed === undefined) return
           const root = out.root
           const plan = defaults.planClickDefaults(
@@ -460,7 +465,12 @@ class StepsImpl extends internal.SceneCursor {
             pathOf(pressed),
             description
           )
-          if (!skipMouse) send(pressed, "mouseup")
+          send(pressed, "pointerup")
+          if (!skipMouse) {
+            const up = enabled(root, pressed)
+            if (up === undefined) return
+            send(up, "mouseup", internal.mouse)
+          }
           const released = enabled(root, pressed)
           if (released === undefined) return
           prevented = send(released, "click")

@@ -14,8 +14,6 @@ export type Listener = (payload: unknown, preventDefault: () => void) => void
 const key = defaults.keyPayload("", undefined)
 const pointerEvents: ReadonlySet<string> = new Set([
   "click",
-  "mousedown",
-  "mouseup",
   "pointerup",
   "pointercancel"
 ])
@@ -39,6 +37,8 @@ export const fire = (
 ): boolean => {
   const defaults = event === "keydown" || event === "keyup"
     ? key
+    : event === "mousedown" || event === "mouseup"
+    ? scene.mouse
     : pointerEvents.has(event)
     ? scene.pointer
     : undefined

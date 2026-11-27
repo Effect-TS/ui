@@ -342,22 +342,31 @@ export class Instance {
       (view.alive === undefined && this.under || this.parent!.path) + "/" +
       segmentOf(view.component, view.key)
   }
+  /**
+   * The message `handler` produces, unsent: `undefined` when it produces none, fails or the instance is closed.
+   * `read` is called only for a function handler, and a failed read is the handler's failure.
+   */
+  message(
+    handler: unknown,
+    read: () => unknown,
+    where: FailedIn = "event"
+  ): unknown {
+    if (this.closed) return undefined
+    if (typeof handler !== "function") return handler
+    try {
+      return handler(read())
+    } catch (error) {
+      fail(this, where, Cause.die(error))
+      return undefined
+    }
+  }
   fire(
     handler: unknown,
     payload: unknown,
     source: unknown,
     where: FailedIn = "event"
   ): boolean {
-    if (this.closed) return false
-    let message = handler
-    if (typeof handler === "function") {
-      try {
-        message = handler(payload)
-      } catch (error) {
-        fail(this, where, Cause.die(error))
-        return false
-      }
-    }
+    const message = this.message(handler, () => payload, where)
     if (message === undefined) return false
     send(this, message, source)
     return true

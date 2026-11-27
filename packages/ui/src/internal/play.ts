@@ -116,24 +116,36 @@ export class PlayCursor {
     event: string,
     payload: () => unknown
   ):
-    | { readonly handled: boolean; readonly prevented: boolean }
+    | {
+      readonly handled: boolean
+      readonly prevented: boolean
+      /** The element a `pointerdown` captured on. */
+      readonly captured: TestHost.TestElement | undefined
+    }
     | undefined
   {
     const target = this.handlerOn(node, event)
     if (target === undefined) return undefined
-    const preventDefault = target.eventOptions[event]?.preventDefault
-    let prevented = event === "submit" || preventDefault === "always"
+    let prevented = event === "submit" ||
+      target.eventOptions[event]?.preventDefault === "always"
+    let captured: TestHost.TestElement | undefined
     const handled = target.dispatch!(
       event,
       target.handlers[event]!,
       payload(),
-      preventDefault === true
-        ? () => {
-          prevented = true
+      (
+        options: {
+          readonly preventDefault?: unknown
+          readonly capturePointer?: unknown
         }
-        : undefined
+      ) => {
+        if (options.preventDefault === true) prevented = true
+        if (options.capturePointer === true && event === "pointerdown") {
+          captured = target
+        }
+      }
     )
-    return { handled, prevented }
+    return { handled, prevented, captured }
   }
 
   protected recordInteraction(step: string, handled: boolean): void {

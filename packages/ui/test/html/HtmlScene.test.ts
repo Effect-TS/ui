@@ -6,6 +6,7 @@ import { Locator } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Effect, Schema } from "effect"
 import { Confirm } from "./fixtures/confirm.ts"
+import { Panes } from "./fixtures/panes.ts"
 import { Settings } from "./fixtures/settings.ts"
 
 const Board = Html.component({
@@ -533,7 +534,7 @@ describe("HtmlScene", () => {
       )
     })
 
-    it.effect("sends pointerdown, mousedown, mouseup, click in order, follows cancel rules, and stops when press removes or disables the element", () =>
+    it.effect("sends pointerdown, mousedown, pointerup, mouseup, click in order, follows cancel rules, and stops when press removes or disables the element", () =>
       Effect.gen(function*() {
         const Sequence = Html.component({
           name: "Sequence",
@@ -553,15 +554,17 @@ describe("HtmlScene", () => {
           view: (h, model) =>
             h.div(
               h.form.on("submit", "submit").children(
-                h.button.on("pointerdown", "pd")
-                  .on("mousedown", "md")
-                  .on("mouseup", "mu")
+                h.button.on("pointerdown", ({ pointerId }) => `pd${pointerId}`)
+                  .on("mousedown", ({ pointerId }) => `md${pointerId}`)
+                  .on("pointerup", ({ pointerId }) => `pu${pointerId}`)
+                  .on("mouseup", ({ pointerId }) => `mu${pointerId}`)
                   .on("click", "ck")
                   .children("All")
               ),
               h.input.attrs({ type: "checkbox", "aria-label": "CancelPD" })
                 .on("pointerdown", "pd-cancel", { preventDefault: true })
                 .on("mousedown", "md")
+                .on("pointerup", "pu")
                 .on("mouseup", "mu")
                 .on("click", "ck")
                 .on("change", "ch"),
@@ -592,15 +595,13 @@ describe("HtmlScene", () => {
         const scene = yield* HtmlScene.make(Sequence, {})
         scene.click("All")
           .expectDefaultPrevented()
-          .expect(log).toHaveText("pd|md|mu|ck|submit")
+          .expect(log).toHaveText("pd1|md-1|pu1|mu-1|ck|submit")
           .click(HtmlLocator.label("CancelPD"))
           .expectDefaultPrevented(false)
-          .expect(log).toHaveText("pd|md|mu|ck|submit|pd-cancel|ck|ch")
+          .expect(log).toHaveText(/\|pd-cancel\|pu\|ck\|ch$/)
           .click(HtmlLocator.label("CancelMouse"))
           .expectDefaultPrevented(false)
-          .expect(log).toHaveText(
-            "pd|md|mu|ck|submit|pd-cancel|ck|ch|pd|md-cancel|mu-cancel|ck|ch"
-          )
+          .expect(log).toHaveText(/\|pd\|md-cancel\|mu-cancel\|ck\|ch$/)
           .click("Remove")
           .expect(log).toHaveText(/\|remove-down$/)
           .click("Disable")
@@ -609,6 +610,17 @@ describe("HtmlScene", () => {
           () => scene.click("Unhandled"),
           /^HtmlScene\.click: nothing handles "click" at text "Unhandled"/
         )
+      }))
+
+    it.effect("a press the parent captures sends the release, the click and the defaults to the parent, even when the press removes the child", () =>
+      Effect.gen(function*() {
+        const scene = yield* HtmlScene.make(Panes, {})
+        scene.click("Grab")
+          .expect(log).toHaveText("grab|up|ck")
+          .click("Pass")
+          .expect(log).toHaveText("grab|up|ck|pass|submit")
+          .click("Drop")
+          .expect(log).toHaveText(/\|submit\|drop\|drop up$/)
       }))
 
     it.effect("skips child-only press handlers when the parent handles click, and honors unconditional child cancellation", () =>

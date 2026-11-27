@@ -1922,6 +1922,8 @@ export interface Fired<Props, Model, Msg, Events> {
   readonly story: State<Props, Model, Msg, Events>
   readonly prevented: boolean
   readonly handled: boolean
+  /** The element a `pointerdown` captured on. */
+  readonly captured: Locator.Node | undefined
 }
 
 /** @internal */
@@ -1967,16 +1969,23 @@ export const tryFireNode = <Props, Model, Msg, Events>(
   // `preventDefault: true` cancels, then it's sent.
   let prevented = event === "submit" || always
   let handled = false
+  let captured: Locator.Node | undefined
   let out = story
   for (const layer of layers) {
     const message = handle(layer.handlers[event]!, payload)
     if (message === undefined) continue
     handled = true
-    if (layer.eventOptions[event]?.preventDefault === true) prevented = true
+    const options = layer.eventOptions[event] as
+      | { readonly preventDefault?: unknown; readonly capturePointer?: unknown }
+      | undefined
+    if (options?.preventDefault === true) prevented = true
+    if (options?.capturePointer === true && event === "pointerdown") {
+      captured = handler as Locator.Node
+    }
     // Every layer here is the scene's own component's, so each message is the scene's.
     out = dispatch(out, message as Msg)
   }
-  return { story: out, prevented, handled }
+  return { story: out, prevented, handled, captured }
 }
 
 /**

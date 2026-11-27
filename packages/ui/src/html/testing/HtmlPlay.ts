@@ -4,7 +4,7 @@
  *
  * `HtmlPlay.HtmlPlay` extends `Play.Play`, so every Play step works here.
  * Each step is the `HtmlScene` step of the same name, sent to the tree on
- * `TestHost`. `click` sends `pointerdown`, `mousedown`, `mouseup` and `click`,
+ * `TestHost`. `click` sends `pointerdown`, `mousedown`, `pointerup`, `mouseup` and `click`,
  * then runs the browser's defaults as `HtmlScene.click` does: it throws on a
  * disabled control, a submit button submits its form with the fields read from
  * the tree, a checkbox or radio button fires `input` and `change`, and a
@@ -17,7 +17,7 @@
  * field goes back to what the view set once the step settles, unless the
  * Model took the edit. A `popovertarget` click opens or closes the popover,
  * so the next click sees it. `click` settles between the press (`pointerdown`,
- * `mousedown`) and the release (`mouseup`, `click`, defaults), while the
+ * `mousedown`) and the release (`pointerup`, `mouseup`, `click`, defaults), while the
  * release events run with no render between them, so a submit reads the fields
  * as they were before the click's own message. And `focus`, `blur` and the
  * browser's other events that don't bubble go to the matched element only.
@@ -127,10 +127,12 @@ export interface HtmlPlay<Model, Msg, Events>
 {
   /**
    * Clicks the one element `target` matches, as a browser does: `pointerdown`
-   * and `mousedown` run, the tree settles, then `mouseup`, `click` and the
-   * defaults run unless the press removed the element, disabled it or made
-   * it inert. Cancelling
-   * `pointerdown` skips `mousedown` and `mouseup` (not `click`); cancelling
+   * and `mousedown` run, the tree settles, then `pointerup`, `mouseup`,
+   * `click` and the defaults run unless the press removed the element,
+   * disabled it or made it inert. A `pointerdown` handler set with
+   * `capturePointer: true` that sends a message takes the release, the click
+   * and the defaults. Cancelling
+   * `pointerdown` skips `mousedown` and `mouseup` (not `pointerup` or `click`); cancelling
    * `mousedown` or `mouseup` skips nothing; only a cancelled `click` skips the
    * defaults. A string means `Locator.text(target)`. Throws on a disabled
    * control or an inert element, and when nothing handles any event of the
@@ -245,6 +247,7 @@ class HtmlPlayCursor extends internal.PlayCursor {
     return Effect.gen({ self: this }, function*() {
       let reached = false
       let handled = false
+      let captured: TestHost.TestElement | undefined
       const send = (
         node: TestHost.TestElement,
         event: string,
@@ -254,19 +257,20 @@ class HtmlPlayCursor extends internal.PlayCursor {
         if (fired === undefined) return false
         reached = true
         handled ||= fired.handled
+        captured ??= fired.captured
         return fired.prevented
       }
       yield* this.settle
       const [node, skipMouse] = yield* Effect.sync(() =>
         atSite(site, () => {
           this.checkReady(name)
-          const node = this.findOne(locator, "click")
-          if (defaults.isClickDisabled(internal.ancestors(node))) {
+          const found = this.findOne(locator, "click")
+          if (defaults.isClickDisabled(internal.ancestors(found))) {
             throw new Error(`${name}: ${locator.description} is disabled`)
           }
-          const skipMouse = send(node, "pointerdown")
-          if (!skipMouse) send(node, "mousedown")
-          return [node, skipMouse] as const
+          const skipMouse = send(found, "pointerdown")
+          if (!skipMouse) send(found, "mousedown", () => scene.mouse)
+          return [captured ?? found, skipMouse] as const
         })
       )
       if (handled) yield* this.settle
@@ -285,7 +289,8 @@ class HtmlPlayCursor extends internal.PlayCursor {
               path,
               locator.description
             )
-            if (!skipMouse) send(node, "mouseup")
+            send(node, "pointerup")
+            if (!skipMouse) send(node, "mouseup", () => scene.mouse)
             if (!send(node, "click")) {
               for (const { checks, event, node, payload } of plan) {
                 const element = node as TestHost.TestElement

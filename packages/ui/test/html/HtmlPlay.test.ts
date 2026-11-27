@@ -6,6 +6,7 @@ import { Case, Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Clock, Effect, Exit, Schema, type Scope } from "effect"
 import { Menu } from "./fixtures/headless.ts"
+import { Panes } from "./fixtures/panes.ts"
 import { Settings } from "./fixtures/settings.ts"
 import { TodoItem } from "./fixtures/todos.ts"
 
@@ -283,7 +284,7 @@ describe("HtmlPlay", () => {
       yield* p.expect(log).toHaveText("g:true:false,g:false:true")
     }).pipe(play))
 
-  it.effect("click sends pointerdown, mousedown, mouseup, click in order, settles between press and release, and follows browser cancel rules", () =>
+  it.effect("click sends pointerdown, mousedown, pointerup, mouseup, click in order, settles between press and release, and follows browser cancel rules", () =>
     Effect.gen(function*() {
       const Sequence = Html.component({
         name: "Sequence",
@@ -307,11 +308,13 @@ describe("HtmlPlay", () => {
             h.form.on("submit", "submit").children(
               h.button.on("pointerdown", "pd")
                 .on("mousedown", "md")
-                .on("mouseup", "mu")
+                .on("pointerup", ({ pointerId }) => `pu${pointerId}`)
+                .on("mouseup", ({ pointerId }) => `mu${pointerId}`)
                 .on("click", model.pressed ? "ck-down" : "ck-up")
                 .children(model.pressed ? "AllDown" : "All"),
               h.button.on("pointerdown", "pd-cancel", { preventDefault: true })
                 .on("mousedown", "md")
+                .on("pointerup", "pu")
                 .on("mouseup", "mu")
                 .on("click", "ck")
                 .children("CancelPD"),
@@ -342,14 +345,12 @@ describe("HtmlPlay", () => {
       })
       const p = yield* HtmlPlay.make(Sequence, {})
       yield* p.click("All")
-      yield* p.expect(log).toHaveText("pd|md|mu|ck-down|submit")
+      yield* p.expect(log).toHaveText("pd|md|pu1|mu-1|ck-down|submit")
       yield* p.click("CancelPD")
-      yield* p.expect(log).toHaveText(
-        "pd|md|mu|ck-down|submit|pd-cancel|ck|submit"
-      )
+      yield* p.expect(log).toHaveText(/\|pd-cancel\|pu\|ck\|submit$/)
       yield* p.click("CancelMouse")
       yield* p.expect(log).toHaveText(
-        "pd|md|mu|ck-down|submit|pd-cancel|ck|submit|pd|md-cancel|mu-cancel|ck|submit"
+        /\|pd\|md-cancel\|mu-cancel\|ck\|submit$/
       )
       yield* p.click("Remove")
       yield* p.expect(log).toHaveText(/\|remove-down$/)
@@ -360,6 +361,57 @@ describe("HtmlPlay", () => {
         Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "",
         /nothing handles "click"/
       )
+    }).pipe(play))
+
+  it.effect("a press the parent captures sends the release, the click and the defaults to the parent, even when the press removes the child", () =>
+    Effect.gen(function*() {
+      const p = yield* HtmlPlay.make(Panes, {})
+      yield* p.click("Grab")
+      yield* p.expect(log).toHaveText("grab|up|ck")
+      yield* p.click("Pass")
+      yield* p.expect(log).toHaveText("grab|up|ck|pass|submit")
+      yield* p.click("Drop")
+      yield* p.expect(log).toHaveText(/\|submit\|drop\|drop up$/)
+    }).pipe(play))
+
+  it.effect("a part's preventDefault: true cancels only when the part's own handler sends", () =>
+    Effect.gen(function*() {
+      const Guard = Html.component({
+        name: "Guard",
+        model: Schema.Null,
+        message: Schema.String
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        parts: (p) => ({
+          root: p.part(
+            "button",
+            (b) => b.on("click", () => undefined, { preventDefault: true })
+          )
+        })
+      })
+      const Form = Html.component({
+        name: "Form",
+        model: Schema.Array(Schema.String),
+        message: Schema.String
+      }).make({
+        init: (): ReadonlyArray<string> => [],
+        update: ($, message) => [...$.model, message],
+        view: (h, model) =>
+          h.div(
+            h.form.on("submit", "submit").children(
+              Guard(h, {
+                key: "guard",
+                view: (guard) =>
+                  guard.root(h.button).on("click", "ck").children("Go")
+              })
+            ),
+            h.output(model.join("|"))
+          )
+      })
+      const p = yield* HtmlPlay.make(Form, {})
+      yield* p.click("Go")
+      yield* p.expect(log).toHaveText("ck|submit")
     }).pipe(play))
 
   it.effect("keydown on the document settles without advancing TestClock, and fails when nothing listens", () =>
