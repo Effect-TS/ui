@@ -182,14 +182,12 @@ describe("@effect/ui-native/kit", () => {
           }
       )
 
-      // Accepted toggle commits the new value and sends no restore command.
       toggle(true)
       await settle()
       await tick()
       assert.strictEqual(node().props[valueProp], true)
       assert.deepStrictEqual(fabric.commands, [])
 
-      // Silent rejection (no re-render) and re-render rejection each restore once.
       const tag = node().tag
       root.send(SwitchMessage.Configured({ mode: "silent" }))
       await settle()
@@ -204,7 +202,6 @@ describe("@effect/ui-native/kit", () => {
       await tick()
       assert.include(printed(), "true:1")
 
-      // Explicit borderRadius and alignSelf survive iosBackgroundColor updates.
       if (os === "ios") {
         root.send(
           SwitchMessage.Configured({ borderRadius: 8, alignSelf: "center" })
@@ -229,7 +226,6 @@ describe("@effect/ui-native/kit", () => {
         assert.strictEqual(node().props.alignSelf, "flex-start")
       }
 
-      // Disabling removes onChange, clears optional colours, and restores stray toggles.
       root.send(
         SwitchMessage.Configured({
           mode: "accept",

@@ -1,10 +1,6 @@
 /**
- * A circular native loading spinner (`ActivityIndicatorView` on iOS,
+ * A native loading spinner (`ActivityIndicatorView` on iOS,
  * `AndroidProgressBar` on Android).
- *
- * `ActivityIndicator` is a view function. It keeps no state, so it takes no
- * `key`, and returns a {@link ActivityIndicatorElement} builder that chains
- * `.style(...)`, `.on("layout", ...)`, `.prop(...)`, `.key(...)` and `.ref(...)`.
  *
  * **Example** (A large blue spinner shown while loading)
  *
@@ -48,15 +44,13 @@ export type ActivityIndicatorSize = "small" | "large" | number
  *
  * **Details**
  *
- * - `animating`: whether the spinner is running (`true` by default). On
- *   Android, `false` hides the view.
- * - `color`: foreground colour of the spinner. Omitted, each platform uses
- *   its system default.
+ * - `animating`: whether the spinner runs (`true` by default; `false` hides
+ *   the view on Android).
+ * - `color`: spinner colour; omitted, uses the platform default.
  * - `size`: `"small"` (20pt, default), `"large"` (36pt), or a number in
- *   points. A numeric size sets width and height on both platforms; only
- *   `"small"` and `"large"` are passed as the iOS `size` prop.
- * - `hidesWhenStopped`: on iOS, whether to hide the spinner when `animating`
- *   is `false` (`true` by default). Ignored on Android.
+ *   points. Numeric sizes set width and height on both platforms.
+ * - `hidesWhenStopped`: hides the iOS spinner when `animating` is `false`
+ *   (`true` by default); ignored on Android.
  *
  * @stability experimental
  * @category models
@@ -126,8 +120,7 @@ const indicatorBase = Native.defineView(
 )
 
 /**
- * A native activity indicator. Call it with the component's `h` and optional
- * `props`, then chain `.style(...)` or other builder methods on the result.
+ * A native activity indicator. Chain `.style(...)` to override size or layout.
  *
  * @stability experimental
  * @category components

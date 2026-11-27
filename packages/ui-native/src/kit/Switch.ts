@@ -1,12 +1,9 @@
 /**
- * A native toggle switch (`RCTSwitch` on iOS, `AndroidSwitch` on Android).
+ * A controlled native switch (`RCTSwitch` on iOS, `AndroidSwitch` on Android).
  *
- * `Switch` is a controlled view function, like `@effect/ui-kit`'s `Switch`:
- * it keeps no state and takes no `key`. The consumer owns `checked` and
- * stores what `onToggle` reports. Because native flips the switch before JS
- * answers, rejecting a toggle (leaving `checked` unchanged) sends the
- * controlled value back through `setValue` on iOS or `setNativeValue` on
- * Android.
+ * The consumer owns `checked` and stores what `onToggle` reports. Native flips
+ * before JS answers, so leaving `checked` unchanged sends it back through
+ * `setValue` on iOS or `setNativeValue` on Android.
  *
  * **Example** (A controlled switch whose value lives in the consumer's Model)
  *
@@ -48,18 +45,17 @@ import * as Native from "../Native.ts"
 import type { NativeNode } from "../NativeHost.ts"
 
 /**
- * The controlled value, interaction state and colours for `Switch`.
+ * Controlled state and colours for `Switch`.
  *
  * **Details**
  *
- * - `checked`: whether the switch is on. Required: the consumer owns it.
- * - `disabled`: when `true`, disables native interaction and omits the
- *   toggle handler.
+ * - `checked`: whether the switch is on.
+ * - `disabled`: disables native interaction and omits the toggle handler.
  * - `thumbColor`: colour of the switch grip.
  * - `trackColor`: colours of the track when off (`false`) and on (`true`).
- * - `iosBackgroundColor`: background colour shown on iOS when the switch is
- *   off or disabled. Sets a pill `borderRadius` of `16` on iOS and is
- *   ignored on Android.
+ * - `iosBackgroundColor`: iOS background colour when off or disabled; sets a
+ *   `borderRadius` of `16` unless overridden by `.style(...)`, and is ignored
+ *   on Android.
  *
  * @stability experimental
  * @category models
@@ -107,12 +103,9 @@ const defaults = { accessibilityRole: "switch" }
 // As React Native: an iOS switch keeps its own size in a stretching parent.
 const iosDefaults = { accessibilityRole: "switch", alignSelf: "flex-start" }
 
-// What native shows after a toggle, until the `value` setter answers it.
 const toggled = /* @__PURE__ */ new WeakMap<NativeNode, boolean>()
 
-// The `iosBackgroundColor`, `backgroundColor` and `borderRadius` an iOS
-// switch was given. A setter sees only its own value, and the style has to win
-// over the fallback whichever of them changes.
+// Keeps explicit iOS styles winning over `iosBackgroundColor` across updates.
 const iosStyles = /* @__PURE__ */ new WeakMap<
   NativeNode,
   Record<string, unknown>
@@ -195,9 +188,8 @@ const switchBase = Native.defineView(
 )
 
 /**
- * A controlled native switch. Call it with the component's `h`, `props`
- * carrying `checked`, and an `onToggle` handler that returns the message to
- * dispatch (or `undefined` to reject the toggle).
+ * A controlled native switch. Pass `checked` in `props` and handle changes
+ * with `onToggle` (return `undefined` to reject).
  *
  * @stability experimental
  * @category components
