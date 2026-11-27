@@ -44,7 +44,13 @@ const text: ViewKind = {
 }
 
 const defaultText = new WeakMap<NativeNode, unknown>()
-const pendingText = new Set<NativeNode>()
+const pendingText = new WeakMap<ViewHost, Set<NativeNode>>()
+
+const queueText = (n: NativeNode) => {
+  let set = pendingText.get(n.host)
+  if (set === undefined) pendingText.set(n.host, set = new Set())
+  set.add(n)
+}
 
 const setText = (n: NativeNode, value: unknown, host: ViewHost) => {
   // Skip if removed or native already shows `value`; include `eventCount` so native accepts it.
@@ -62,10 +68,10 @@ const setText = (n: NativeNode, value: unknown, host: ViewHost) => {
  * @internal
  */
 export const flushInputs = (host: ViewHost) => {
-  if (pendingText.size === 0) return
-  for (const n of pendingText) {
-    if (n.host !== host) continue
-    pendingText.delete(n)
+  const set = pendingText.get(host)
+  if (set === undefined) return
+  pendingText.delete(host)
+  for (const n of set) {
     if (n.value === undefined) {
       setText(n, defaultText.get(n), host)
       defaultText.delete(n)
@@ -86,17 +92,17 @@ const input: ViewKind = {
   props: {
     value: (n, value, host) => {
       if (value !== undefined) {
-        pendingText.delete(n)
+        pendingText.get(host)?.delete(n)
         setText(n, value, host)
       } else if (defaultText.has(n)) {
-        pendingText.add(n)
+        queueText(n)
       }
     },
     defaultValue: (n, value) => {
       if (value === undefined) defaultText.delete(n)
       else {
         defaultText.set(n, value)
-        pendingText.add(n)
+        queueText(n)
       }
     }
   },
