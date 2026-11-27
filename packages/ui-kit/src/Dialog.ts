@@ -71,9 +71,10 @@
  *
  * The trigger and the close button are native buttons, so Enter and Space
  * press them. Escape asks the topmost open dialog to close, wherever focus is,
- * unless an input method is composing or focus is in a popover drawn above
- * the dialog, such as a toast. A refused close keeps the dialog open as often
- * as Escape is pressed.
+ * unless an input method is composing, focus is in a popover drawn above
+ * the dialog, such as a toast, or something already cancelled it with
+ * `preventDefault`. A refused close keeps the dialog open as often as Escape
+ * is pressed.
  *
  * When the dialog opens, focus moves to the `initialFocus` element, or else
  * to the first element in the popup that Tab reaches, or else to the popup.
@@ -167,6 +168,11 @@
  * closes, doesn't close another one with `modal: false`. Focus the user
  * moves out of it still does.
  *
+ * A widget of the consumer's own joins the same stack with
+ * `Dismissal.TrackDismissal`. Drawn in the popup, such as an inline editor,
+ * it is above the dialog and hears them instead, while Tab still stays inside
+ * a modal dialog.
+ *
  * **Triggers drawn elsewhere**
  *
  * A `DialogTrigger` opens a dialog from another part of the page. Give the
@@ -252,7 +258,6 @@ import {
   focusable,
   isElement,
   isHTMLElement,
-  perDocument,
   tabbablesIn
 } from "./internal/dom.ts"
 import {
@@ -261,12 +266,23 @@ import {
   trackComposing
 } from "./internal/interaction.ts"
 import {
+  type Claim,
+  handingOff,
+  handOff,
+  join,
+  type Layer,
+  rewatch,
+  type Stack,
+  stackOf,
+  topFor,
+  watcherOf
+} from "./internal/layers.ts"
+import {
   hideOthers,
   lockScroll,
   modalOf,
   nextLayerOrder
 } from "./internal/modal.ts"
-import { isAndroid } from "./internal/platform.ts"
 import {
   inKept,
   inPlaceBox,
@@ -545,56 +561,8 @@ const TrackDialogArgs = {
 
 type TrackDialogArgs = Schema.Struct<typeof TrackDialogArgs>["Type"]
 
-type CloseWatcher = EventTarget & { readonly destroy: () => void }
-type Showing = {
-  readonly node: HTMLDialogElement
-  readonly order: number
-  readonly open: () => boolean
-  readonly top: () => boolean
-  readonly watch: () => CloseWatcher | undefined
-}
-
-interface Stack {
-  readonly showing: Array<Showing>
-  watched:
-    | { readonly entry: Showing; readonly watcher: CloseWatcher }
-    | undefined
-}
-const stackOf = perDocument((): Stack => ({ showing: [], watched: undefined }))
-const rewatch = (stack: Stack) => {
-  const top = stack.showing.find((entry) => entry.top())
-  if (stack.watched?.entry === top) return
-  stack.watched?.watcher.destroy()
-  const watcher = top?.watch()
-  stack.watched = top !== undefined && watcher !== undefined
-    ? { entry: top, watcher }
-    : undefined
-}
-const orderOf = ({ showing }: Stack, node: Element): number =>
-  showing.findIndex((entry) => entry.node === node)
-const onTop = (stack: Stack, node: HTMLDialogElement): boolean => {
-  const mine = orderOf(stack, node)
-  return stack.showing.every((other, index) =>
-    other.node === node || !other.open() ||
-    !(node.contains(other.node) || (!other.node.contains(node) && index > mine))
-  )
-}
-
-let handingOff = 0
-const handOff = (
-  element: HTMLElement | null | undefined,
-  visible = false
-): void => {
-  if (element == null) return
-  // Never `false`, which hides a focus ring the browser would draw.
-  const focusVisible = visible || undefined
-  handingOff++
-  try {
-    element.focus({ preventScroll: true, focusVisible } as FocusOptions)
-  } finally {
-    handingOff--
-  }
-}
+const orderOf = ({ layers }: Stack, node: Element): number =>
+  layers.findIndex((layer) => layer.node === node)
 
 const inDialogAbove = (
   stack: Stack,
@@ -607,19 +575,20 @@ const inDialogAbove = (
   return index === -1 || index > orderOf(stack, node)
 }
 
-const inOtherLayer = (node: HTMLDialogElement, target: Node): boolean => {
+// A popover that isn't in the stack of layers, such as a toast. One that is,
+// such as a `Dismissal` layer drawn as a popover, leaves Escape to the stack.
+const inOtherLayer = (
+  stack: Stack,
+  node: HTMLDialogElement,
+  target: Node
+): boolean => {
   const other = closestOf(target, "[popover]")
   return other != null && other !== node && !other.contains(node) &&
-    !node.contains(other)
+    !node.contains(other) &&
+    !stack.layers.some((layer) =>
+      layer.node.contains(target) && !layer.node.contains(node)
+    )
 }
-
-const closeWatcherOf = (
-  view: Window | null
-): (new() => CloseWatcher) | undefined =>
-  view !== null && isAndroid(view)
-    ? (view as Window & { readonly CloseWatcher?: new() => CloseWatcher })
-      .CloseWatcher
-    : undefined
 
 // Capture focus before the host commit shows the portal and moves focus inside.
 const TrackDialog = Mount.makeStream(
@@ -646,28 +615,21 @@ const TrackDialog = Mount.makeStream(
         handOff(element, visible)
         return focusedNow() === element
       }
-      const topmost = () => current.topmost && onTop(stack, node)
-      const Watcher = closeWatcherOf(view)
-      const entry: Showing = {
+      const order = nextLayerOrder()
+      // A dialog takes every claim, also the ones it ignores, such as a press
+      // outside with `disablePointerDismissal`, so they don't reach a layer below.
+      const entry: Layer = {
         node,
-        order: nextLayerOrder(),
         open: () => current.open,
-        top: () => current.open && topmost(),
-        watch: () => {
-          if (Watcher === undefined) return undefined
-          const watcher = new Watcher()
-          watcher.addEventListener("cancel", (event) => {
-            if (event.cancelable) event.preventDefault()
-            send(DialogMessage.CancelledCloseWatcher())
-          })
-          watcher.addEventListener("close", () => {
-            if (stack.watched?.watcher !== watcher) return
-            stack.watched = undefined
-            frame(() => rewatch(stack))
-          })
-          return watcher
-        }
+        takes: () => true,
+        watch: watcherOf(
+          stack,
+          view,
+          () => send(DialogMessage.CancelledCloseWatcher())
+        )
       }
+      const topmost = (claim: Claim, event?: Event) =>
+        current.topmost && topFor(stack, claim, event) === entry
       const controls = `[aria-controls="${CSS.escape(args.portalId)}"]`
       const anyTrigger = `${controls},[data-dialog-trigger="${
         CSS.escape(args.portalId)
@@ -741,7 +703,7 @@ const TrackDialog = Mount.makeStream(
         release?.()
         release = undefined
         if (!current.open || current.modal === false) return
-        const shown = hideOthers(node, entry.order)
+        const shown = hideOthers(node, order)
         const unlock = current.modal === true ? lockScroll(document) : undefined
         release = () => {
           shown()
@@ -750,21 +712,24 @@ const TrackDialog = Mount.makeStream(
       }
 
       const onKeyDown = (event: KeyboardEvent) => {
-        if (event.defaultPrevented || !current.open || !topmost()) return
+        if (event.defaultPrevented || !current.open) return
         const target = event.target as Node | null
         if (event.key === "Escape") {
-          if (composing(event)) return
-          if (target !== null && inOtherLayer(node, target)) return
+          if (!topmost("escape-key", event) || composing(event)) return
+          if (target !== null && inOtherLayer(stack, node, target)) return
           event.preventDefault()
           send(DialogMessage.PressedEscape())
           return
         }
-        if (event.key !== "Tab" || current.modal === false) return
+        if (
+          event.key !== "Tab" || current.modal === false ||
+          !topmost("focus", event)
+        ) return
         const focused = focusedNow()
         if (
           focused !== null && focused !== document.body &&
           !node.contains(focused) &&
-          (current.modal !== true || inOtherLayer(node, focused))
+          (current.modal !== true || inOtherLayer(stack, node, focused))
         ) return
         const root = popup()
         const items = tabbables(node, root)
@@ -813,8 +778,8 @@ const TrackDialog = Mount.makeStream(
       let pressed: string | undefined
       let dismissing: number | undefined
       let ignored: Node | null = null
-      const listens = (): boolean =>
-        current.open && current.dismissible && topmost()
+      const listens = (event: Event): boolean =>
+        current.open && current.dismissible && topmost("outside-press", event)
       // A touch dismisses on pointerdown, so the dialog's layer, backdrop or
       // viewport has left or stopped taking events before the tap's click,
       // which would land on the page behind it. When the tap landed directly
@@ -852,7 +817,7 @@ const TrackDialog = Mount.makeStream(
             : null
         if (event.pointerType === "touch") touches.add(event.pointerId)
         if (
-          !listens() || !event.isPrimary || event.button !== 0 ||
+          !listens(event) || !event.isPrimary || event.button !== 0 ||
           touches.size > 1
         ) return
         if (
@@ -883,7 +848,7 @@ const TrackDialog = Mount.makeStream(
       const onClick = (event: MouseEvent) => {
         const pointerType = pressed
         pressed = undefined
-        if (!listens()) return
+        if (!listens(event)) return
         if (pointerType === undefined && event.detail !== 0) return
         const target = event.target as Node | null
         if (target === null || !outside(target)) return
@@ -902,10 +867,10 @@ const TrackDialog = Mount.makeStream(
           !current.open || !showed
         ) return
         if (
-          !topmost() || inDialogAbove(stack, node, target) ||
+          !topmost("focus-out", event) || inDialogAbove(stack, node, target) ||
           (ignored !== null && target.contains(ignored))
         ) return
-        if (current.dismissible && handingOff === 0 && !onTrigger(target)) {
+        if (current.dismissible && !handingOff() && !onTrigger(target)) {
           send(DialogMessage.FocusedOutside())
         }
       }
@@ -927,7 +892,7 @@ const TrackDialog = Mount.makeStream(
 
       const opening = (from: Element | null) =>
         frame(() => {
-          if (current.open && topmost()) focusFirst(from)
+          if (current.open && topmost("focus")) focusFirst(from)
           const focused = focusedNow()
           focusInside = node.contains(focused)
           if (focusInside) lastFocused = focused as HTMLElement
@@ -937,7 +902,7 @@ const TrackDialog = Mount.makeStream(
         })
 
       const parentsOf = () =>
-        stack.showing.filter((other) => other.node.contains(node))
+        stack.layers.filter((other) => other.node.contains(node))
       const restoreFocus = (
         parents: ReadonlyArray<typeof entry>,
         held: boolean
@@ -952,11 +917,13 @@ const TrackDialog = Mount.makeStream(
         const focused = focusedNow() as HTMLElement | null
         const away = !held && focused !== null && focused !== document.body &&
           !node.contains(focused)
+        // Focus in another dialog stays there. A layer inside this one, such as
+        // a `Dismissal` layer still mounted in the popup, isn't another.
         if (
           focused !== null &&
-          stack.showing.some((other) =>
+          stack.layers.some((other) =>
             other.open() && other.node.contains(focused) &&
-            !parents.includes(other)
+            !node.contains(other.node) && !parents.includes(other)
           )
         ) return
         if (!finalFocus) {
@@ -1041,9 +1008,10 @@ const TrackDialog = Mount.makeStream(
         opening(active)
       }
 
+      let leave = () => {}
       return Effect.acquireRelease(
         Effect.sync(() => {
-          stack.showing.push(entry)
+          leave = join(stack, entry)
           document.addEventListener("keydown", onKeyDown, { signal })
           document.addEventListener("pointerdown", onPointerDown, {
             capture: true,
@@ -1073,7 +1041,6 @@ const TrackDialog = Mount.makeStream(
             attributeFilter: ["class", "style", "hidden"]
           })
           hold()
-          rewatch(stack)
           if (current.mounted) shows()
           else send(DialogMessage.ShowedPortal())
         }).pipe(
@@ -1086,9 +1053,8 @@ const TrackDialog = Mount.makeStream(
         ),
         () =>
           Effect.sync(() => {
-            stack.showing.splice(stack.showing.indexOf(entry), 1)
+            leave()
             controller.abort()
-            rewatch(stack)
             observer.disconnect()
             page.disconnect()
             release?.()

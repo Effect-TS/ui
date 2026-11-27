@@ -4,7 +4,14 @@ import { Dialog, Dismissal } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { byId, click, container, popovers, tick } from "./utils/document.ts"
+import {
+  byId,
+  click,
+  container,
+  popovers,
+  press,
+  tick
+} from "./utils/document.ts"
 
 const Message = UiSchema.TaggedEnum({
   ClosedEditor: {},
@@ -82,6 +89,61 @@ const Page = Html.component({
           )
         )
     })
+})
+
+const AboveMessage = UiSchema.TaggedEnum({
+  OpenedDialog: {},
+  RequestedCloseDialog: { reason: Schema.String },
+  RequestedDismissEditor: { request: Dismissal.Request }
+})
+
+// A layer with a dialog opened above it, which ignores presses outside.
+const Above = Html.component({
+  name: "Above",
+  model: Schema.Struct({
+    dialog: Schema.Boolean,
+    log: Schema.Array(Schema.String)
+  }),
+  message: AboveMessage
+}).make({
+  init: () => ({ dialog: false, log: [] }),
+  update: {
+    OpenedDialog: ($) => ({ ...$.model, dialog: true }),
+    RequestedCloseDialog: ($, { reason }) => ({
+      dialog: false,
+      log: [...$.model.log, `dialog:${reason}`]
+    }),
+    RequestedDismissEditor: ($, { request }) => ({
+      ...$.model,
+      log: [...$.model.log, `editor:${request.reason}`]
+    })
+  },
+  view: (h, model) =>
+    h.div(
+      h.div.attr("id", "editor").onMount(
+        Dismissal.TrackDismissal().pipe(
+          Mount.map((request) =>
+            AboveMessage.RequestedDismissEditor({ request })
+          )
+        )
+      ),
+      Dialog(h, {
+        props: { open: model.dialog, disablePointerDismissal: true },
+        onEmit: {
+          RequestedOpen: () => undefined,
+          RequestedClose: ({ reason }) =>
+            AboveMessage.RequestedCloseDialog({ reason }),
+          Settled: () => undefined
+        },
+        view: (dialog) =>
+          h.div(
+            dialog.portal(h.dialog)?.children(
+              dialog.backdrop(h.div.attr("id", "backdrop")),
+              dialog.popup(h.div).children(h.button.children("OK"))
+            )
+          )
+      })
+    )
 })
 
 const mountPage = Effect.fnUntraced(function*(overrides: Partial<Config> = {}) {
@@ -170,5 +232,38 @@ describe("Dismissal in a document", { concurrent: false }, () => {
       escape(byId("editor-input"))
       yield* tick
       assert.deepStrictEqual(log(), ["dialog:escape-key"])
+    }))
+
+  it.effect("focus leaving the layer asks with focus-out, unless a press outside already asked", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage({ refuse: true })
+      const save = byId("save")
+      press(save)
+      save.focus()
+      save.dispatchEvent(
+        new PointerEvent("click", { bubbles: true, detail: 1 })
+      )
+      yield* tick
+      assert.deepStrictEqual(log(), ["editor:outside-press:mouse"])
+      byId("anchor").focus()
+      yield* tick
+      assert.deepStrictEqual(log(), [
+        "editor:outside-press:mouse",
+        "editor:focus-out:"
+      ])
+    }))
+
+  it.effect("a dialog above a layer takes the reasons it ignores, so the layer doesn't hear them", () =>
+    Effect.gen(function*() {
+      yield* popovers
+      const app = yield* container
+      const root = yield* BrowserHost.mountEffect(Above, {}, app)
+      yield* tick
+      root.send(AboveMessage.OpenedDialog())
+      yield* tick
+      click(byId("backdrop"), "mouse")
+      escape()
+      yield* tick
+      assert.deepStrictEqual(root.model()!.log, ["dialog:escape-key"])
     }))
 })
