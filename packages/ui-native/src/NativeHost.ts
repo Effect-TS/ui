@@ -18,6 +18,7 @@
  */
 import type * as Renderer from "@effect/ui/Renderer"
 import type * as Context from "effect/Context"
+import { focus } from "./internal/focus.ts"
 import {
   commits,
   flushInputs,
@@ -69,6 +70,7 @@ export interface UIManager {
     node: unknown,
     includeTransform: boolean
   ): ReadonlyArray<number> | null | undefined
+  sendAccessibilityEvent(node: unknown, eventType: string): void
   /**
    * Marks the node as the JS responder, which stops native views inside it
    * from handling the touch and, with `blockNativeResponder` on Android, a
@@ -463,6 +465,9 @@ export const make = (options: Options): {
     scrollTo: (n, x, y, animated = true) =>
       command(n, "scrollTo", [x, y, animated]),
     scrollToEnd: (n, animated = true) => command(n, "scrollToEnd", [animated]),
+    accessibilityEvent(n, type) {
+      if (n.shadow !== undefined) ui.sendAccessibilityEvent(n.shadow, type)
+    },
     measure(n) {
       const rect = rectOf(n, false)
       if (rect == null) return undefined
@@ -508,6 +513,9 @@ const listen = (ui: UIManager) => {
   ui.registerEventHandler((handle, type, payload) => {
     if (!(handle instanceof NativeNode)) return
     route(handle, type, payload)
+    // Native sends these whether or not the input has a handler.
+    if (type === "topFocus") focus.node = handle
+    else if (type === "topBlur" && focus.node === handle) focus.node = undefined
     const hook = handle.kind.events?.[type]
     // Strip Fabric's "top" prefix: topLayout -> layout.
     if (hook === undefined) {

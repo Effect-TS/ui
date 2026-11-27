@@ -24,6 +24,7 @@ export interface ShadowNode {
 export const make = () => {
   const calls: Record<string, number> = {}
   const commands: Array<readonly [number, string, ReadonlyArray<unknown>]> = []
+  const accessibilityEvents: Array<readonly [number, string]> = []
   const responders: Array<readonly [number, boolean, boolean]> = []
   const rects = new Map<number, readonly [number, number, number, number]>()
   const count = (name: string) => (calls[name] = (calls[name] ?? 0) + 1)
@@ -124,6 +125,9 @@ export const make = () => {
     getBoundingClientRect(node: any) {
       return rects.get(node.tag)
     },
+    sendAccessibilityEvent(node: any, type) {
+      accessibilityEvents.push([node.tag, type])
+    },
     setIsJSResponder(node: any, isResponder, block) {
       responders.push([node.tag, isResponder, block])
     },
@@ -136,6 +140,7 @@ export const make = () => {
     ui,
     calls,
     commands,
+    accessibilityEvents,
     responders,
     /** The LayoutAnimation config of each completeRoot, `undefined` for none. */
     layouts,
