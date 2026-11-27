@@ -111,7 +111,8 @@ describe("BrowserHost document services", { concurrent: false }, () => {
             load: () => Effect.succeed("error")
           }),
           Effect.provideService(HtmlFiles.Files, {
-            pick: () => Effect.succeed({ opened: true, files: [] })
+            pick: () => Effect.succeed({ opened: true, files: [] }),
+            download: () => Effect.void
           })
         ),
         app

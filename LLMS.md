@@ -1172,7 +1172,8 @@ Known limits:
   the user chose, `HtmlFiles.pick` opens a picker from a keyboard shortcut,
   and a Command reads the file with `HtmlFiles.readAsText`. Cancelling the
   Command stops the browser reading the file. A story resolves the picker
-  and the read, and a scene chooses a file in the input.
+  and the read, and a scene chooses a file in the input. A Command hands a
+  file back with `HtmlFiles.download`, and `TestFiles` records it.
 - **[Routing and the document head](./ai-docs/src/10_ui/30_routing.ts)**:
   Define typed routes with `Route` and keep the current route in the root's
   Model. Each page's `head` option sets its title with `Head` and its meta

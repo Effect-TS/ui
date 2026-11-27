@@ -124,7 +124,8 @@ export const make = (
           load: (source) => images.loader!(document, source)
         }),
         Context.add(files.Files, {
-          pick: (options) => files.picker!(document, htmlHost, options)
+          pick: (options) => files.browser!.pick(document, htmlHost, options),
+          download: (file) => files.browser!.download(document, file)
         })
       )
     return Effect.as(

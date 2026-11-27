@@ -1,6 +1,6 @@
 /**
- * Files the user chooses: a Command that opens the browser's file picker,
- * and reads of a `File` or `Blob` that stop when they're interrupted.
+ * Pick files, read a `File` or `Blob` with interruption support, and request
+ * downloads of files the app creates.
  *
  * **Details**
  *
@@ -12,6 +12,9 @@
  * `Command.interrupt`, a `"switch"` run or the component unmounting, cancels
  * the read, so the browser stops reading the file rather than reading it all
  * and dropping the result.
+ *
+ * `download` asks the browser to save a `File` the app made, such as an
+ * export, under the file's name.
  *
  * **Example** (Previewing a text file, with a cancel button)
  *
@@ -164,7 +167,7 @@ export interface Picked {
 }
 
 /**
- * Opens the browser's file picker.
+ * Opens the browser's file picker, and downloads files.
  *
  * **Details**
  *
@@ -172,9 +175,10 @@ export interface Picked {
  * browser that doesn't report a dismissal leaves it pending, so let the user
  * move on without it. Interrupting it stops waiting, and the picker stays open
  * until the user closes it. `BrowserHost.layer` provides one that opens a
- * detached file input of its document. The default never settles, so on a
- * host without a document a pick stays pending. A test settles picks with
- * `TestFiles` from `@effect/ui/html/testing`.
+ * detached file input of its document, and downloads through a detached link.
+ * The default's picks never settle, so on a host without a document a pick
+ * stays pending, and its downloads do nothing. A test settles picks and sees
+ * downloads with `TestFiles` from `@effect/ui/html/testing`.
  *
  * @stability experimental
  * @category services
@@ -182,10 +186,12 @@ export interface Picked {
  */
 export interface Files {
   readonly pick: (options: PickOptions) => Effect.Effect<Picked>
+  readonly download: (file: File) => Effect.Effect<void>
 }
 
 /**
- * The file picker. It defaults to one whose picks never settle.
+ * The file picker and downloads. It defaults to one whose picks never settle
+ * and whose downloads do nothing.
  *
  * @stability experimental
  * @category references
@@ -193,28 +199,44 @@ export interface Files {
  */
 export const Files: Context.Reference<Files> = files.Files
 
-files.load((document, htmlHost, options) =>
-  Effect.callback((resume) => {
-    const input = document.createElement("input")
-    input.type = "file"
-    input.multiple = options.multiple === true
-    if (options.accept !== undefined) input.accept = options.accept.join(",")
-    if (options.capture !== undefined) {
-      input.setAttribute("capture", options.capture)
-    }
-    const settle = (picked: ReadonlyArray<File>) =>
-      resume(Effect.succeed({ opened: true, files: picked }))
-    input.onchange = () => settle(Array.from(input.files ?? []))
-    input.oncancel = () => settle([])
-    if (!htmlHost.showPicker(input)) {
-      return resume(Effect.succeed({ opened: false, files: [] }))
-    }
-    return Effect.sync(() => {
-      input.onchange = null
-      input.oncancel = null
+files.load({
+  pick: (document, htmlHost, options) =>
+    Effect.callback((resume) => {
+      const input = document.createElement("input")
+      input.type = "file"
+      input.multiple = options.multiple === true
+      if (options.accept !== undefined) input.accept = options.accept.join(",")
+      if (options.capture !== undefined) {
+        input.setAttribute("capture", options.capture)
+      }
+      const settle = (picked: ReadonlyArray<File>) =>
+        resume(Effect.succeed({ opened: true, files: picked }))
+      input.onchange = () => settle(Array.from(input.files ?? []))
+      input.oncancel = () => settle([])
+      if (!htmlHost.showPicker(input)) {
+        return resume(Effect.succeed({ opened: false, files: [] }))
+      }
+      return Effect.sync(() => {
+        input.onchange = null
+        input.oncancel = null
+      })
+    }),
+  download: (document, file) =>
+    Effect.sync(() => {
+      const view = document.defaultView
+      if (view === null || typeof view.URL?.createObjectURL !== "function") {
+        return
+      }
+      const url = view.URL.createObjectURL(file)
+      // Delay revocation beyond the Effect: the browser does not report when
+      // it has finished reading the URL.
+      view.setTimeout(() => view.URL.revokeObjectURL(url), 40_000)
+      const anchor = document.createElement("a")
+      anchor.href = url
+      anchor.download = file.name
+      anchor.click()
     })
-  })
-)
+})
 
 /**
  * The Command behind `pick`, for a story's `.resolve(HtmlFiles.Pick, { opened, files })`.
@@ -277,3 +299,51 @@ export const pick = <Msg>(
   options: PickOptions = {}
 ): Command.Mapped<Command.Issued<Picked, never, Picked, "Effect">, Msg> =>
   Command.map(Pick.make(options), f)
+
+/**
+ * Requests a download of `file` under `file.name`, without confirming a save.
+ *
+ * **When to use**
+ *
+ * Use at the end of a Command that makes the file, such as one that encodes
+ * the Model as a JSON backup. Build the file in the Command from plain args,
+ * not in `update`, so a story matches the args by value. The message log
+ * still encodes those args, so declare a field that mustn't be logged with
+ * `Schema.Redacted`.
+ *
+ * **Details**
+ *
+ * Completion does not tell the app whether the user saved the file, cancelled,
+ * or the browser blocked the download. The default service does nothing;
+ * `BrowserHost.layer` also skips the request if object URLs are unavailable.
+ * Otherwise, `BrowserHost.layer` clicks a detached link to an object URL of the file,
+ * and revokes the URL 40 seconds later, so interrupting the Command never
+ * cancels a download that started.
+ *
+ * **Example** (Exporting the Model as JSON)
+ *
+ * ```ts
+ * import { Command, Component } from "@effect/ui"
+ * import { HtmlFiles } from "@effect/ui/html"
+ * import { Effect, Schema } from "effect"
+ *
+ * const Settings = Schema.Struct({ theme: Schema.String })
+ *
+ * const Export = Command.make(
+ *   "Export",
+ *   { args: { settings: Settings } },
+ *   ({ settings }) =>
+ *     HtmlFiles.download(
+ *       new File([JSON.stringify(settings)], "settings.json", {
+ *         type: "application/json"
+ *       })
+ *     ).pipe(Effect.as(Component.noop))
+ * )
+ * ```
+ *
+ * @stability experimental
+ * @category downloading
+ * @since 0.1.0
+ */
+export const download = (file: File): Effect.Effect<void> =>
+  Files.use((files) => files.download(file))

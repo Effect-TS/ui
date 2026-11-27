@@ -8,21 +8,28 @@ export const Files: Context.Reference<HtmlFiles.Files> = Context.Reference<
   HtmlFiles.Files
 >(
   "@effect/ui/html/HtmlFiles/Files",
-  { defaultValue: () => pending }
+  { defaultValue: () => fallback }
 )
 
-const pending: HtmlFiles.Files = { pick: () => Effect.never }
+const fallback: HtmlFiles.Files = {
+  pick: () => Effect.never,
+  download: () => Effect.void
+}
 
 /** @internal */
-export let picker:
-  | ((
+export interface Browser {
+  readonly pick: (
     document: Document,
     htmlHost: Context.Service.Shape<typeof Html.Host>,
     options: HtmlFiles.PickOptions
-  ) => Effect.Effect<HtmlFiles.Picked>)
-  | undefined
+  ) => Effect.Effect<HtmlFiles.Picked>
+  readonly download: (document: Document, file: File) => Effect.Effect<void>
+}
 
 /** @internal */
-export const load = (pick: NonNullable<typeof picker>): void => {
-  picker = pick
+export let browser: Browser | undefined
+
+/** @internal */
+export const load = (files: Browser): void => {
+  browser = files
 }
