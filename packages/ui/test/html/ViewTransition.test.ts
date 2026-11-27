@@ -335,11 +335,11 @@ describe("view transitions", { concurrent: false }, () => {
   it.effect("Renderer.slowPhases times a flush across its hold, without the wait", () =>
     Effect.gen(function*() {
       const transitions = yield* fakeTransitions()
-      let spent = 0
+      // Nanoseconds, split across the hold so that adding milliseconds would round.
+      let spent = 0n
       const outer = yield* Clock.Clock
       const clock: Clock.Clock = Object.assign(Object.create(outer), {
-        monotonicTimeNanosUnsafe: () =>
-          outer.monotonicTimeNanosUnsafe() + BigInt(spent * 1_000_000)
+        monotonicTimeNanosUnsafe: () => outer.monotonicTimeNanosUnsafe() + spent
       })
       const Go = Mount.make(
         "Go",
@@ -353,16 +353,18 @@ describe("view transitions", { concurrent: false }, () => {
         message: Msg
       }).make({
         init: () => {
-          spent += 20
+          spent += 2_100_000n
           return { went: false }
         },
         update: {
           Went: ($) => $.evolve({ went: true }).viewTransition(["went"])
         },
-        view: (h, { went }) =>
-          h.div.onMount(Go().pipe(Mount.map(Msg.Went))).children(
+        view: (h, { went }) => {
+          if (went) spent += 2_200_000n
+          return h.div.onMount(Go().pipe(Mount.map(Msg.Went))).children(
             went ? "went" : ""
           )
+        }
       })
       const reports: Array<Renderer.SlowPhase> = []
       const app = yield* Effect.acquireRelease(
@@ -375,7 +377,7 @@ describe("view transitions", { concurrent: false }, () => {
         Effect.provide(Layer.merge(
           BrowserHost.layer(),
           Renderer.slowPhases({
-            flush: "16 millis",
+            flush: "4 millis",
             onSlow: (slow) => {
               reports.push(slow)
             }
@@ -385,9 +387,9 @@ describe("view transitions", { concurrent: false }, () => {
       )
       yield* tick
       expect(transitions.started).toHaveLength(1)
-      spent += 100
+      spent += 100_000_000n
       transitions.started[0]!.update()
       expect(app.textContent).toBe("went")
-      expect(reports).toEqual([{ phase: "flush", duration: 20, budget: 16 }])
+      expect(reports).toEqual([{ phase: "flush", duration: 4.3, budget: 4 }])
     }).pipe(Effect.scoped))
 })

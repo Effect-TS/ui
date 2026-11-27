@@ -621,8 +621,8 @@ export const slowPhases = (options: {
         )
       }
     }
-    // The time a flush ran before a transition held it.
-    let carried = 0
+    // The nanoseconds a flush ran before a transition held it.
+    let carried = BigInt("0")
     return {
       now,
       update: update === undefined ? undefined : (from, inst, message) => {
@@ -651,9 +651,11 @@ export const slowPhases = (options: {
         }
       },
       flush: flush === undefined ? undefined : (from, held) => {
-        const duration = carried + since(from)
-        carried = held ? duration : 0
-        if (!held && duration > flush) {
+        const spent = carried + now() - from
+        carried = held ? spent : BigInt("0")
+        if (held) return
+        const duration = Number(spent) / 1_000_000
+        if (duration > flush) {
           report({ phase: "flush", duration, budget: flush })
         }
       }
