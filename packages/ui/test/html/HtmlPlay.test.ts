@@ -375,4 +375,37 @@ describe("HtmlPlay", () => {
         /nothing listens for "keydown" on the document/
       )
     }).pipe(play))
+
+  it.effect("expect inherits toHaveAttributes and toHaveStyle", () =>
+    Effect.gen(function*() {
+      const Panel = Html.component({
+        name: "Panel",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          h.div.attrs({
+            role: "meter",
+            "aria-valuenow": "40",
+            "aria-valuemax": "100"
+          }).style({
+            "--uat-panel-left": "123px",
+            marginLeft: "1px"
+          })
+      })
+      const p = yield* HtmlPlay.make(Panel, {})
+      const meter = HtmlLocator.role("meter")
+      yield* p.expect(meter).toHaveAttributes({
+        "aria-valuenow": "40",
+        "aria-valuemax": "100",
+        "aria-busy": false
+      })
+      yield* p.expect(meter).toHaveStyle({
+        "--uat-panel-left": "123px",
+        marginLeft: "1px",
+        left: false
+      })
+    }).pipe(play))
 })

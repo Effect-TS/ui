@@ -1,4 +1,5 @@
 import { Command, Component, type Query, UiSchema, type View } from "@effect/ui"
+import type { HtmlPlay, HtmlScene } from "@effect/ui/html/testing"
 import type { Steps } from "@effect/ui/testing"
 import { Scene, Story } from "@effect/ui/testing"
 import { Effect, Schema, type Scope, Stream } from "effect"
@@ -19,6 +20,8 @@ declare const counter: Story.Steps<typeof Counter>
 declare const todoItem: Story.Steps<typeof TodoItem>
 declare const searchBox: Story.Steps<typeof SearchBox>
 declare const sceneExpect: Scene.Expect<Scene.Steps<typeof Counter>>
+declare const htmlSceneExpect: HtmlScene.Expect<HtmlScene.Steps<typeof Counter>>
+declare const htmlPlayExpect: HtmlPlay.Expect
 const increment = CounterMessage.Increment()
 
 describe("Story", () => {
@@ -41,6 +44,46 @@ describe("Story", () => {
     expect(sceneExpect.toHaveAttribute).type.not.toBeCallableWith(
       "disabled",
       true
+    )
+  })
+
+  it("expect.toHaveAttributes and expect.toHaveStyle typecheck expected records and reject typos", () => {
+    expect(sceneExpect.toHaveAttributes).type.toBeCallableWith({
+      href: "/docs",
+      role: /^link$/,
+      disabled: false
+    })
+    expect(sceneExpect.toHaveAttributes).type.not.toBeCallableWith({
+      disabled: true
+    })
+    expect(sceneExpect.toHaveAttributes).type.not.toBeCallableWith({
+      disabled: undefined
+    })
+    expect(sceneExpect).type.not.toHaveProperty("toHaveStyle")
+
+    expect(htmlSceneExpect.toHaveStyle).type.toBeCallableWith({
+      marginLeft: "1px",
+      "margin-left": /^1px$/,
+      "--uat-panel-left": "123px",
+      "-webkit-touch-callout": "none",
+      left: false
+    })
+    expect(htmlPlayExpect.toHaveStyle).type.toBeCallableWith({
+      color: "red",
+      "--accent": false
+    })
+    expect(htmlSceneExpect.toHaveStyle).type.not.toBeCallableWith({
+      pointerEvent: false
+    })
+    expect(htmlSceneExpect.toHaveStyle).type.not.toBeCallableWith({
+      color: true
+    })
+    expect(htmlSceneExpect.toHaveStyle).type.not.toBeCallableWith({
+      color: undefined
+    })
+    expect(htmlSceneExpect.toHaveStyle).type.not.toBeCallableWith(
+      "color",
+      "red"
     )
   })
 

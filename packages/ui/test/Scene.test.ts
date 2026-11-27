@@ -181,6 +181,69 @@ describe("Scene", () => {
     )
   })
 
+  it("expect.toHaveAttributes checks strings, RegExps, absence, reports every mismatch, and requires a single match", () => {
+    const Gauge = Html.component({
+      name: "Gauge",
+      model: Schema.Null,
+      message: Schema.Never
+    }).make({
+      init: () => null,
+      update: ($) => $.model,
+      view: (h) =>
+        h.div(
+          h.div.attrs({
+            role: "meter",
+            "aria-valuemin": "0",
+            "aria-valuenow": "40",
+            "aria-valuemax": "100",
+            "data-active": ""
+          }),
+          h.span("a"),
+          h.span("b")
+        )
+    })
+    const scene = Scene.start(Gauge, {})
+    const meter = HtmlLocator.role("meter")
+    const valuePattern = /^40$/g
+
+    scene
+      .expect(meter).toHaveAttributes({
+        "aria-valuemin": "0",
+        "aria-valuenow": valuePattern,
+        "aria-valuemax": "100",
+        "data-active": "",
+        "aria-busy": false,
+        constructor: false
+      })
+      .expect(meter).toHaveAttributes({ "aria-valuenow": valuePattern })
+
+    assert.throws(
+      () =>
+        scene.expect(meter).toHaveAttributes({
+          "aria-valuenow": "30",
+          "aria-valuemax": /^200/,
+          "aria-label": "CPU",
+          "data-active": false
+        }),
+      /Scene\.expect\(role "meter"\)\.toHaveAttributes\(.*\/\^200\/.*\): its "aria-valuenow" attribute is "40", its "aria-valuemax" attribute is "100", it has no "aria-label" attribute, its "data-active" attribute is ""; elements:/
+    )
+    assert.throws(
+      () =>
+        scene.expect(meter).toHaveAttributes({
+          "aria-valuenow": undefined as any
+        }),
+      /false/
+    )
+    assert.throws(
+      () => scene.expect(Locator.text("missing")).toHaveAttributes({ id: "x" }),
+      /toHaveAttributes\(.+\): 0 elements match/
+    )
+    assert.throws(
+      () => scene.expect(Locator.tag("span")).toHaveAttributes({ id: false }),
+      /toHaveAttributes\(.+\): 2 elements match/
+    )
+  })
+
   it("fire throws when nothing handles the event, submit included", () => {
     const scene = Scene.start(Note, {})
     assert.throws(
