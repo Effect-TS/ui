@@ -89,7 +89,7 @@ const rootOf = (inst: Kernel.Instance): Root => {
 // oxlint-disable-next-line effect/no-unused-internal
 export const cacheOf = (inst: Kernel.Instance): Cache => rootOf(inst).cache
 
-/** Opens the pass's hold: a watch released in it is interrupted only if no watcher took it over by the end. */
+/** Opens the pass's hold, which endPass releases. */
 const holdOf = (inst: Kernel.Instance): Root => {
   const root = rootOf(inst)
   root.hold ??= root.cache.hold()
@@ -141,11 +141,14 @@ const failWith = (inst: Kernel.Instance, error: unknown, key?: string): void =>
     key
   )
 
-const releaseWatch = (running: Watch, abandon = false): void => {
+/** With `inst`, the fetch is abandoned at the pass's end unless a watcher takes it over. */
+const releaseWatch = (running: Watch, inst?: Kernel.Instance): void => {
   if (running.released) return
   running.released = true
   running.debounce?.interruptUnsafe()
-  running.handle?.unregister(abandon)
+  if (running.handle === undefined) return
+  if (inst !== undefined) holdOf(inst)
+  running.handle.unregister(inst !== undefined)
 }
 
 const releaseAll = (state: State): void => {
@@ -162,10 +165,7 @@ export const closing = (inst: Kernel.Instance): void => {
 }
 
 const swap = (inst: Kernel.Instance, state: State): void => {
-  for (const running of state.watches.values()) {
-    holdOf(inst)
-    releaseWatch(running, true)
-  }
+  for (const running of state.watches.values()) releaseWatch(running, inst)
   state.watches.clear()
   state.keyed.clear()
   state.synced = false
@@ -283,8 +283,7 @@ const watch = (
   for (const [key, running] of watches) {
     if (markers.has(key)) continue
     watches.delete(key)
-    holdOf(inst)
-    releaseWatch(running, true)
+    releaseWatch(running, inst)
     if (running.marker.keyed) {
       const run = state.keyed.get(running.marker.entry.name)
       run?.values.delete(running.marker.argsKey!)

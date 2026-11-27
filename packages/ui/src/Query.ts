@@ -5534,7 +5534,7 @@ const buildCache = (
       // Still held while deciding: a fetch started here can reach a watcher whose handler registers another,
       // which is decided in the next round, as part of this hold.
       while (held.size > 0 || abandoned.size > 0) {
-        for (const entry of Array.from(abandoned)) {
+        for (const entry of abandoned) {
           abandoned.delete(entry)
           if (!entry.removed) abandonFetch(entry)
         }
