@@ -7,8 +7,8 @@
  * The consumer owns whether the popup is open, passes it as `open`, and
  * stores what `RequestedOpen` and `RequestedClose` ask for. `Picked` reports
  * the item the user chose. `items` lists every item with its label, in the
- * order they're drawn, for navigation, typeahead and filtering, and whether
- * each checkbox and radio item is `checked`.
+ * order they're drawn, for navigation, typeahead and filtering. A checkbox
+ * or radio item is checked when its entry has `checked: true`.
  *
  * **Anatomy**
  *
@@ -44,11 +44,10 @@
  * The items and the indicators take `{ element, value }`, and `group`
  * and `groupLabel` take `{ element, group }`, where `group` is the
  * `group` of the items inside. `item` closes the menu when picked and the
- * others don't; a
- * `closeOnClick` field changes that. The indicators, `clear` and `empty`
- * return `undefined` while they're hidden, and a `keepMounted` field keeps
- * an indicator drawn. Every item value has to be in `items`, and an item
- * keys its element with the value. `radioGroup` takes the builder alone.
+ * others don't; a `closeOnClick` field changes that. The indicators,
+ * `clear` and `empty` return `undefined` while they're hidden, and a
+ * `keepMounted` field keeps an indicator drawn. Every item value has to be
+ * in `items`, and an item keys its element with the value.
  *
  * A submenu is another `Menu` drawn inside the parent's popup, with the
  * parent's item value as `parentItem`. Apply both parts to the item that
@@ -3464,27 +3463,29 @@ export const Menu = Html.component({
     const itemAttrs = <H extends HTMLElement, T extends "div" | "a">(
       b: Html.Element<MenuMessage, never, Html.Events, H, T>,
       value: string,
-      role: string,
-      action: ItemAction
+      kind: ItemAction["kind"],
+      closeOnClick: boolean
     ) => {
       const item = itemOf(value)
+      const action = { value, kind, closeOnClick }
+      const checks = kind === "checkbox" || kind === "radio"
       const shownItem = matches === null || visible.has(item)
       const active = highlighted === value
       const off = item.disabled === true || disabled
       const submenuOpen = model.submenus.some((submenu) =>
         submenu.open && submenu.item === value
       )
-      const own = b
-        .attrs({
-          id: itemId(value),
-          role,
-          "aria-disabled": off ? "true" : undefined,
-          tabindex: open && !filtering && (active || submenuOpen) ? "0" : "-1",
-          "data-highlighted": flag(active),
-          "data-disabled": flag(off),
-          hidden: flag(!shownItem),
-          "data-menu-item": value
-        })
+      const attrs = b.attrs({
+        id: itemId(value),
+        role: checks ? "menuitem" + kind : "menuitem",
+        "aria-disabled": off ? "true" : undefined,
+        tabindex: open && !filtering && (active || submenuOpen) ? "0" : "-1",
+        "data-highlighted": flag(active),
+        "data-disabled": flag(off),
+        hidden: flag(!shownItem),
+        "data-menu-item": value
+      })
+      const own = (checks ? checkedAttrs(attrs, item.checked === true) : attrs)
         .on(
           "mouseenter",
           () =>
@@ -3502,7 +3503,7 @@ export const Menu = Html.component({
         .on(
           "click",
           ({ pointerType }) => MenuMessage.ClickedItem({ action, pointerType }),
-          { preventDefault: off && action.kind === "link" }
+          { preventDefault: off && kind === "link" }
         )
         .on("keydown", keyMessage(action), { preventDefault: true })
         .on(
@@ -3544,81 +3545,51 @@ export const Menu = Html.component({
       )
     }
 
-    const item = closable(
-      p.part(
-        "div",
-        (b, value: string, closeOnClick?: boolean) =>
-          itemAttrs(b, value, "menuitem", {
-            value,
-            kind: "item",
-            closeOnClick: closeOnClick ?? true
-          })
-      )
-    )
-
-    const linkItem = closable(
-      p.part(
-        "a",
-        (b, value: string, closeOnClick?: boolean) =>
-          itemAttrs(b, value, "menuitem", {
-            value,
-            kind: "link",
-            closeOnClick: closeOnClick ?? false
-          })
-      )
-    )
-
-    const checkable = (role: string, kind: "checkbox" | "radio") =>
+    const divItem = (kind: "item" | "checkbox" | "radio") =>
       closable(
         p.part(
           "div",
           (b, value: string, closeOnClick?: boolean) =>
-            checkedAttrs(
-              itemAttrs(b, value, role, {
-                value,
-                kind,
-                closeOnClick: closeOnClick ?? false
-              }),
-              itemOf(value).checked === true
-            )
+            itemAttrs(b, value, kind, closeOnClick ?? kind === "item")
         )
       )
-
-    const checkboxItem = checkable("menuitemcheckbox", "checkbox")
+    const item = divItem("item")
+    const linkItem = closable(
+      p.part(
+        "a",
+        (b, value: string, closeOnClick?: boolean) =>
+          itemAttrs(b, value, "link", closeOnClick ?? false)
+      )
+    )
+    const checkboxItem = divItem("checkbox")
+    const radioItem = divItem("radio")
     const radioGroup = p.part(
       "div",
       (b) => b.attrs({ role: "group", "data-disabled": flag(disabled) })
     )
-    const radioItem = checkable("menuitemradio", "radio")
 
-    const indicator = () => {
-      const part = p.part(
-        "span",
-        (b, value: string) => {
-          const item = itemOf(value)
-          return checkedAttrs(
-            b.attr("aria-hidden", "true"),
-            item.checked === true
-          )
-            .attr("data-disabled", flag(item.disabled === true || disabled))
+    const indicatorPart = p.part(
+      "span",
+      (b, item: MenuItem) =>
+        checkedAttrs(b.attr("aria-hidden", "true"), item.checked === true)
+          .attr("data-disabled", flag(item.disabled === true || disabled))
+    )
+    const indicator = View.wrapPart(
+      indicatorPart,
+      <B extends View.PartTarget<"span">>(
+        { element, keepMounted, value }: {
+          readonly element: B
+          readonly value: string
+          readonly keepMounted?: boolean | undefined
         }
-      )
-      return View.wrapPart(
-        part,
-        <B extends View.PartTarget<"span">>(
-          { element, keepMounted, value }: {
-            readonly element: B
-            readonly value: string
-            readonly keepMounted?: boolean | undefined
-          }
-        ): ReturnType<B["attr"]> | undefined => {
-          const applied = part(element, value)
-          return itemOf(value).checked === true || keepMounted === true
-            ? applied
-            : undefined
-        }
-      )
-    }
+      ): ReturnType<B["attr"]> | undefined => {
+        const item = itemOf(value)
+        const applied = indicatorPart(element, item)
+        return item.checked === true || keepMounted === true
+          ? applied
+          : undefined
+      }
+    )
 
     const group = grouped(
       p.part(
@@ -3752,10 +3723,10 @@ export const Menu = Html.component({
       item,
       linkItem,
       checkboxItem,
-      checkboxItemIndicator: indicator(),
+      checkboxItemIndicator: indicator,
       radioGroup,
       radioItem,
-      radioItemIndicator: indicator(),
+      radioItemIndicator: indicator,
       group,
       groupLabel,
       separator,
