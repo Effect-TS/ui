@@ -242,8 +242,11 @@ const messageSchema = (
       ? undefined
       : documentOf(redactedSchema)
     const redactedMembers = redacted === undefined ? [] : membersOf(redacted)
-    const decode = Schema.decodeUnknownEffect(
-      Schema.toCodecJson(schema as Schema.Codec<unknown>)
+    const codec = Schema.toCodecJson(schema as Schema.Codec<unknown>)
+    const decode = Schema.decodeUnknownEffect(codec)
+    const encode = Schema.encodeUnknownEffect(codec)
+    const encodeRedacted = Schema.encodeUnknownEffect(
+      Schema.toCodecJson(redactedSchema as Schema.Codec<unknown>)
     )
     const example = (i: number): Effect.Effect<Json> => {
       const message = exampleOf(members[i], document.definitions)
@@ -253,19 +256,37 @@ const messageSchema = (
           invalid: "No value fits this schema."
         })
       }
-      // The JSON Schema doesn't show a Schema.Redacted, the redacting one does.
-      const shown = redacted === undefined ? message : exampleOf(
-        members[i],
-        document.definitions,
-        { schema: redactedMembers[i], definitions: redacted.definitions }
-      )!
-      const entry = holdsPlaceholder(shown)
-        ? { message: shown, redacted: true }
-        : { message }
-      return Effect.match(decode(message, { errors: "all" }), {
-        onFailure: (error) => ({ ...entry, invalid: error.message }),
-        onSuccess: () => entry
-      })
+      // An example that doesn't decode can only be redacted by its Schema:
+      // the walk follows the redacting document beside the plain one.
+      const walked = (): { message: Json; redacted?: true } => {
+        if (redacted === undefined) return { message }
+        const shown = exampleOf(members[i], document.definitions, {
+          schema: redactedMembers[i],
+          definitions: redacted.definitions
+        })!
+        return holdsPlaceholder(shown)
+          ? { message: shown, redacted: true }
+          : { message }
+      }
+      return decode(message, { errors: "all" }).pipe(
+        Effect.matchEffect({
+          onFailure: (error) =>
+            Effect.succeed({ ...walked(), invalid: error.message }),
+          // One that does is redacted by the log's codec, which marks the
+          // Schema.Redacted it decoded to whichever branch supplied it.
+          onSuccess: (value) =>
+            redacted === undefined
+              ? Effect.succeed({ message })
+              : Effect.all([encode(value), encodeRedacted(value)]).pipe(
+                Effect.map(([plain, shown]) =>
+                  JSON.stringify(plain) === JSON.stringify(shown)
+                    ? { message }
+                    : { message: shown as Json, redacted: true }
+                ),
+                Effect.orElseSucceed(walked)
+              )
+        })
+      )
     }
     return tag === undefined
       ? Effect.map(

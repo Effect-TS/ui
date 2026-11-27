@@ -757,6 +757,21 @@ describe("DevToolsServer", { concurrent: false }, () => {
           Unset: { secret: Schema.Option(Schema.Redacted(Schema.Never)) },
           Listed: {
             items: Schema.Array(Schema.String).check(Schema.isMinLength(65))
+          },
+          Sampled: {
+            payload: Schema.Struct({ token: Schema.Redacted(Schema.String) })
+              .pipe(
+                // The JSON form: the JSON Schema drops a Redacted example.
+                Schema.annotateEncoded({
+                  examples: [{ token: "sample" }] as never
+                })
+              )
+          },
+          Chosen: {
+            mode: Schema.Union([
+              Schema.Redacted(Schema.Literals(["a", "b"])),
+              Schema.Literal("off")
+            ])
           }
         }).annotate({ identifier: "SampleMessage" })
         const Sample = Html.component({
@@ -784,7 +799,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
         )
         const all = yield* agent.call("get_message_schema", { instance })
         assert.isArray(all.examples)
-        assert.strictEqual(all.examples.length, 7)
+        assert.strictEqual(all.examples.length, 9)
 
         const [
           selected,
@@ -793,7 +808,9 @@ describe("DevToolsServer", { concurrent: false }, () => {
           savedCredential,
           impossible,
           unset,
-          listed
+          listed,
+          sampled,
+          chosen
         ] = all.examples
 
         assert.deepStrictEqual(selected, {
@@ -853,6 +870,18 @@ describe("DevToolsServer", { concurrent: false }, () => {
 
         assert.strictEqual(listed.message.items.length, 64)
         assert.include(listed.invalid, "items")
+
+        assert.deepStrictEqual(sampled, {
+          message: {
+            _tag: "Sampled",
+            payload: { token: { "~redacted": true } }
+          },
+          redacted: true
+        })
+        assert.deepStrictEqual(chosen, {
+          message: { _tag: "Chosen", mode: { "~redacted": true } },
+          redacted: true
+        })
       }).pipe(Effect.scoped),
     30_000
   )
