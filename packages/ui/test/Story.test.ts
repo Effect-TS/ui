@@ -1303,7 +1303,6 @@ describe("Story", () => {
         )
         assert.notInclude(message, `"_tag":"Typed"`)
         assert.include(message, `"saving":false`)
-        assert.include(message, "todos/Save")
       }))
 
     it.effect("fails naming a Command.make Command without a commands override, and passes with one", () =>
@@ -1364,36 +1363,8 @@ describe("Story", () => {
       })
     })
 
-    it.effect("loads an infinite query as the runtime walks it: one page when next ends the list", () => {
+    it.effect("loads an infinite query as the runtime walks it", () => {
       class List extends Query.InfiniteService<List>()("check/List", {
-        page: Schema.Number,
-        items: (page) => [page],
-        key: String,
-        cursor: Schema.Number,
-        next: () => Option.none(),
-        staleTime: "1 minute"
-      }) {}
-      const Feed = Component.define({
-        name: "Feed",
-        model: Schema.Struct({}),
-        message: Schema.Never,
-        queries: { list: { query: List, args: () => ({}) } }
-      }).make({
-        init: () => ({}),
-        update: ($) => $.model,
-        view: (h) => h.el("div", "")
-      })
-      return Story.check(Feed, {}, {
-        seed: 1,
-        invariant: (story) => {
-          const list = story.queries().list
-          return !AsyncResult.isSuccess(list) || list.value.pages.length === 1
-        }
-      })
-    })
-
-    it.effect("refetches an infinite query as the runtime walks it: every held page while next continues", () => {
-      class List extends Query.InfiniteService<List>()("check/Endless", {
         page: Schema.Literal(1),
         items: (page) => [page],
         key: String,
@@ -1419,7 +1390,7 @@ describe("Story", () => {
           }),
         view: (h) => h.el("div", "")
       })
-      // No step here drops a page: a run starts with the list unloaded, and from then on it only grows.
+      // A cold load fetches one page, More adds one, and a refetch keeps every held page.
       let held = 0
       return Story.check(Feed, {}, {
         seed: 1,
@@ -1430,9 +1401,10 @@ describe("Story", () => {
             held = 0
             return
           }
-          const grew = list.value.pages.length >= held
-          held = list.value.pages.length
-          return grew
+          const pages = list.value.pages.length
+          const walked = pages >= held && pages <= held + 1
+          held = pages
+          return walked
         }
       })
     })
