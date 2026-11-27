@@ -30,9 +30,9 @@ const items = [
   { value: "copy", label: "Copy" },
   { value: "cut", label: "Cut" },
   { value: "paste", label: "Paste" },
-  { value: "wrap", label: "Wrap lines" },
+  { value: "wrap", label: "Wrap lines", checked: true },
   { value: "minimap", label: "Minimap" },
-  { value: "small", label: "Small" },
+  { value: "small", label: "Small", checked: true },
   { value: "large", label: "Large" },
   { value: "docs", label: "Docs" },
   { value: "delete", label: "Delete", disabled: true }
@@ -73,7 +73,6 @@ const standIn = {
       menu.checkboxItem({
         element: entry(h, "wrap").attr("aria-checked", "false"),
         value: "wrap",
-        checked: true,
         closeOnClick: true
       }).children(
         menu.checkboxItemIndicator({
@@ -82,12 +81,9 @@ const standIn = {
         })?.children("✓"),
         "Wrap lines"
       ),
-      menu.checkboxItem({
-        element: entry(h, "minimap"),
-        value: "minimap",
-        checked: false
-      }).children("Minimap"),
-      menu.radioGroup({ element: h.div.class("sizes"), value: "small" })
+      menu.checkboxItem({ element: entry(h, "minimap"), value: "minimap" })
+        .children("Minimap"),
+      menu.radioGroup(h.div.class("sizes"))
         .children(
           menu.radioItem({
             element: entry(h, "small").attr("data-checked", "x"),
@@ -976,7 +972,13 @@ describe("Menu", () => {
         Menu,
         {
           open: true,
-          items: [{ value: "wrap", label: "Wrap lines" }, ...sizes]
+          items: [
+            { value: "wrap", label: "Wrap lines", checked: true },
+            ...sizes.map((size) => ({
+              ...size,
+              checked: size.value === "large"
+            }))
+          ]
         },
         {
           elements: Html,
@@ -998,18 +1000,17 @@ describe("Menu", () => {
             return h.div(
               menu.checkboxItem({
                 element: h.div.attr("data-testid", "wrap"),
-                value: "wrap",
-                checked: true
+                value: "wrap"
               }).children(tick, "Wrap lines"),
-              menu.radioGroup({ element: h.div, value: "large" }).children(
-                radios
-              )
+              menu.radioGroup(h.div).children(radios)
             )
           }
         }
       )
       assert.deepStrictEqual(
-        sizes.map(({ value }) => scene.get(item(value)).attrs?.["aria-checked"]),
+        sizes.map(({ value }) =>
+          scene.get(item(value)).attrs?.["aria-checked"]
+        ),
         ["false", "true"]
       )
       assert.deepInclude(scene.get(Locator.attr("class", "dot")).attrs, {

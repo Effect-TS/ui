@@ -130,7 +130,11 @@ describe("Menu", () => {
           menu.linkItem({ element: h.a.attr("href", "/copy"), value: "copy" })
         ).type.toBe<A>()
         expect(
-          menu.checkboxItem({ element: h.div, value: "copy", checked: true })
+          menu.checkboxItem({
+            element: h.div,
+            value: "copy",
+            closeOnClick: true
+          })
         ).type.toBe<Div>()
         expect(menu.checkboxItemIndicator({ element: h.span, value: "copy" }))
           .type.toBe<Span | undefined>()
@@ -144,12 +148,7 @@ describe("Menu", () => {
           .type.toBe<
           Span<Clock> | undefined
         >()
-        expect(menu.radioGroup({ element: h.div, value: "copy" })).type.toBe<
-          Div
-        >()
-        expect(menu.radioGroup({ element: h.div, value: null })).type.toBe<
-          Div
-        >()
+        expect(menu.radioGroup(h.div)).type.toBe<Div>()
         expect(menu.radioItem({ element: h.div, value: "copy" })).type.toBe<
           Div
         >()
@@ -202,21 +201,18 @@ describe("Menu", () => {
         })
         expect(menu.checkboxItem).type.not.toBeCallableWith({
           element: h.span,
-          value: "copy",
-          checked: true
+          value: "copy"
         })
         expect(menu.checkboxItem).type.not.toBeCallableWith({
           element: h.div,
-          value: "copy"
+          value: "copy",
+          checked: true
         })
         expect(menu.checkboxItemIndicator).type.not.toBeCallableWith({
           element: h.div,
           value: "copy"
         })
-        expect(menu.radioGroup).type.not.toBeCallableWith({
-          element: h.span,
-          value: "copy"
-        })
+        expect(menu.radioGroup).type.not.toBeCallableWith(h.span)
         expect(menu.radioItem).type.not.toBeCallableWith({
           element: h.span,
           value: "copy"
