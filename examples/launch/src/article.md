@@ -171,8 +171,6 @@ Play is a new kind of test in Effect UI. In Story and Scene tests, you resolve e
 
 ::PlayTest
 
-Define reusable states once with `Case.make` to share them between `Play.fromCase` tests and a live browser workbench in `DevToolsVite.plugin`.
-
 ## DevTools
 
 :::LauncherPointer
