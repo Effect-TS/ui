@@ -544,12 +544,12 @@ export class Load extends Command.Service<Load>()(
  * released when the instance unmounts. It sends no messages.
  *
  * In the browser, `BrowserRouter` also asks the browser to warn before the
- * page unloads, as on reload, closing the tab or following a link the
- * routes don't parse. It's only a warning and saves nothing: the browser
- * picks the text, shows it only once the user has interacted with the page,
- * and on mobile may not ask at all, as when the tab is discarded in the
- * background. Save drafts that must survive as the user types or on
- * `visibilitychange`.
+ * page unloads, unless its `warnOnUnload` option is `false`. This covers
+ * reloads, closing the tab and links the routes don't parse. The warning
+ * saves nothing. The browser chooses its text and requires prior user
+ * interaction to show it. The warning may not appear, especially on mobile
+ * when a tab is discarded in the background. Save drafts as the user types
+ * or on `visibilitychange` rather than relying on the warning.
  *
  * The Subscription is named `@effect/ui/Router/blocked` and `key` is its
  * dep, so `Router.blocked("form")` has the Subscription key

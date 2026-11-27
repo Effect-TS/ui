@@ -890,17 +890,14 @@ describe("BrowserRouter", { concurrent: false }, () => {
       ).pipe(Scope.provide(routerScope))
       const router = Context.get(context, Router.Router)
 
-      // No block: no listener and unload is not prevented.
       expect(beforeUnload()).toBe(false)
       expect(listening.size).toBe(0)
 
-      // First block: registers one listener and prevents unload synchronously.
       const scopeA = yield* Scope.fork(outer)
       yield* router.block("a").pipe(Scope.provide(scopeA))
       expect(beforeUnload()).toBe(true)
       expect(listening.size).toBe(1)
 
-      // Overlapping block: still one listener, and releasing one keeps it active.
       const scopeB = yield* Scope.fork(outer)
       yield* router.block("b").pipe(Scope.provide(scopeB))
       expect(listening.size).toBe(1)
@@ -908,7 +905,6 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(beforeUnload()).toBe(true)
       expect(listening.size).toBe(1)
 
-      // Releasing the last block removes the listener and stops preventing unload.
       yield* Scope.close(scopeB, Exit.void)
       expect(beforeUnload()).toBe(false)
       expect(listening.size).toBe(0)
@@ -921,7 +917,6 @@ describe("BrowserRouter", { concurrent: false }, () => {
       expect(beforeUnload()).toBe(false)
       expect(listening.size).toBe(0)
 
-      // warnOnUnload: false never registers a listener or prevents unload.
       const optOut = yield* Layer.build(
         BrowserRouter.layer({
           routes: AppRoute,

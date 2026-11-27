@@ -30,8 +30,9 @@
  * still restore the saved position, and a `patchSearch` given
  * `{ scroll: true }` scrolls to the top.
  *
- * While a `Router.blocked` block is held, the browser warns before the page
- * unloads (see `Router.blocked` for its limits).
+ * While a `Router.blocked` block is held, `BrowserRouter` requests a browser
+ * warning before the page unloads unless `warnOnUnload` is `false`. See
+ * `Router.blocked` for the warning's limits.
  *
  * **Example** (A two-page app)
  *
@@ -133,7 +134,7 @@ export interface Options {
   /** Move focus after each navigation. Defaults to `true`. */
   readonly focus?: boolean | undefined
   /**
-   * Warn before the page unloads while a `Router.blocked` block is held.
+   * Request a browser warning before the page unloads while a `Router.blocked` block is held.
    * Defaults to `true`. Turn it off in shells such as Electron, where a
    * cancelled `beforeunload` refuses to close the window without asking.
    */
