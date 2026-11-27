@@ -2739,6 +2739,52 @@ describe("Runtime", () => {
         yield* TestHost.settle
         assert.strictEqual(changes(), 4)
       })))
+
+    it.effect("root.setProps updates a mounted root without remounting", () =>
+      provideHost(Effect.gen(function*() {
+        let inits = 0
+        const Clock = Component.define({
+          name: "Clock",
+          props: Schema.Date,
+          model: Schema.Number,
+          message: CounterMessage
+        }).make({
+          init: () => {
+            inits++
+            return 0
+          },
+          update: ($) => $.model + 1,
+          view: (h, count) => h.el("span", `${h.props.getTime()}:${count}`),
+          subscriptions: ({ props }) => [
+            Subscription.make("sub", props.getTime(), () => Stream.never)
+          ]
+        })
+
+        const root = yield* TestHost.mount(Clock, new Date(0))
+        root.send(CounterMessage.Increment())
+        yield* TestHost.settle
+
+        const before = root.log().length
+        root.setProps(new Date(1))
+        yield* TestHost.settle
+        assert.strictEqual(inits, 1)
+        assert.strictEqual(root.text(), "1:1")
+        const added = root.log().slice(before)
+        const seq = added[0].seq
+        assert.strictEqual(
+          TestHost.formatTimeline(added),
+          [
+            `#${seq} /Clock PropsChanged`,
+            `    #${seq + 1} /Clock SubscriptionStopped sub:0`,
+            `    #${seq + 2} /Clock SubscriptionStarted sub:1`
+          ].join("\n")
+        )
+
+        // A new Date of the same time is equal and logs nothing.
+        root.setProps(new Date(1))
+        yield* TestHost.settle
+        assert.strictEqual(root.log().length, before + added.length)
+      })))
   })
 
   describe("provided Layers", () => {

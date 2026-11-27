@@ -99,14 +99,14 @@ import * as server from "../internal/server.ts"
  * @category models
  * @since 0.1.0
  */
-export interface Ssr<out Model, in Msg, out Events = never> {
+export interface Ssr<out Model, in Msg, out Events = never, in Props = never> {
   readonly html: string
   readonly state: Renderer.State
   readonly model: Model | undefined
   readonly head: HtmlHead.HtmlHead
   readonly document: Document
   readonly container: globalThis.Element
-  readonly root: TestHost.Root<Model, Msg, Events>
+  readonly root: TestHost.Root<Model, Msg, Events, Props>
   readonly adopted: ReadonlyArray<string>
   readonly log: ReadonlyArray<MessageLog.Entry>
   readonly serverLog: ReadonlyArray<MessageLog.Entry>
@@ -371,7 +371,7 @@ export const ssr = <
     readonly frames?: ((container: globalThis.Element) => string) | undefined
   }
 ): Effect.Effect<
-  Ssr<Model, Msg, Events>,
+  Ssr<Model, Msg, Events, Props>,
   SsrError,
   Exclude<R | RP, Html.Host> | TestHost.TestHost | Scope.Scope
 > =>
@@ -597,7 +597,7 @@ export const ssr = <
         )
       )
     ) as Effect.Effect<
-      runtime.Root & Renderer.Root<any, any>,
+      runtime.Root & Renderer.Root<any, any, any>,
       never,
       Exclude<R | RP, Html.Host> | Scope.Scope
     >
@@ -715,7 +715,7 @@ export const ssr = <
       head: serverHead,
       document,
       container,
-      root: root as TestHost.Root<Model, Msg, Events>,
+      root: root as TestHost.Root<Model, Msg, Events, Props>,
       adopted,
       log,
       serverLog: serverLog.entries(),

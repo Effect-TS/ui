@@ -673,7 +673,7 @@ const budgetOf = (input: Duration.Input | undefined): number | undefined =>
  * @category models
  * @since 0.1.0
  */
-export interface Root<out Model, in Msg> {
+export interface Root<out Model, in Msg, in Props = never> {
   /** The root instance's path, `/<name>` or `/<name>[<key>]` when keyed. */
   readonly path: string
   /** The session the message log groups this mount's entries under. */
@@ -682,6 +682,8 @@ export interface Root<out Model, in Msg> {
   readonly model: () => Model | undefined
   /** Sends a message to the root, as if from outside the tree. */
   readonly send: (message: Msg) => void
+  /** Gives the root new props without remounting, as a parent does a child. */
+  readonly setProps: (props: Props) => void
   /**
    * Completes once every instance has adopted the server's nodes, at once
    * without hydration. Head sync and the router's announcements start with
@@ -783,7 +785,7 @@ export const mount: <
     readonly onEmit?: ((event: Events) => void) | undefined
   }
 ) => Effect.Effect<
-  Root<Model, Msg>,
+  Root<Model, Msg, Props>,
   never,
   R | RF | RP | HostOf<V> | Renderer | Scope.Scope
 > = runtime.mount as any

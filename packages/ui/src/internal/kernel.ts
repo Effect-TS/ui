@@ -1373,6 +1373,14 @@ const patch = (inst: Instance, old: Rec, view: View.Node<any, any>): Rec => {
   }
 }
 
+const applyProps = (inst: Instance, props: unknown): boolean => {
+  if (inst.closed || propsEqual(inst.props, props)) return false
+  inst.props = props
+  inst.tree.log?.(inst, { _tag: "PropsChanged", props })
+  inst.component["~sync"]?.(inst)
+  return !inst.closed
+}
+
 /** @internal */
 export const patchChild = (
   inst: Instance,
@@ -1406,17 +1414,8 @@ export const patchChild = (
       : patch(inst, shown[0]!, fallbackOf(inst, view, child.failure))
     return old
   }
+  const changed = applyProps(child, view.props)
   if (child.closed) return old
-  const changed = !propsEqual(child.props, view.props)
-  if (changed) {
-    child.props = view.props
-    const log = inst.tree.log
-    if (log !== undefined) {
-      log(child, { _tag: "PropsChanged", props: view.props })
-    }
-    child.component["~sync"]?.(child)
-    if (child.closed) return old
-  }
   if (changed || view.view !== undefined) {
     if (child === receiving) markDirty(child)
     else render(child)
@@ -1756,6 +1755,7 @@ const increasing = (sources: Int32Array): Array<number> => {
 export interface Root {
   readonly instance: Instance
   readonly send: (message: unknown, source?: unknown) => void
+  readonly setProps: (props: unknown) => void
   readonly close: () => void
 }
 
@@ -1817,6 +1817,9 @@ export const mount = (
   return {
     instance,
     send: (message, source) => send(instance, message, source),
+    setProps: (props) => {
+      if (applyProps(instance, props)) markDirty(instance)
+    },
     close: () => {
       if (tree.closed) return
       tree.closed = true

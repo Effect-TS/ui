@@ -526,9 +526,9 @@ name and write its result. To start from fetched data without sending
 `s.given(model, { note })`. The `MessageLog` records each result write as a
 `QueryChanged` entry, and an `Update` entry only for an `onChange` message.
 Each `Mounted` and `Update` entry records the results, restored or hydrated
-ones included, so `Story.fromLog` replays `$.queries` as it was. New props from a parent are logged as a
-`PropsChanged` entry, so the result's `props` and `queries()` hold what the
-instance ended with.
+ones included, so `Story.fromLog` replays `$.queries` as it was. New props from
+a parent or `root.setProps` are logged as a `PropsChanged` entry, so the
+result's `props` and `queries()` hold what the instance ended with.
 
 ### Slots
 
@@ -738,13 +738,13 @@ Choose a popup by who decides when it closes:
   component own focus, outside-interaction blocking, close requests and exit
   presence, as `@effect/ui-kit`'s `Dialog` does.
 
-Nothing is dispatched when a prop changes: the log records `PropsChanged`,
-and the next `update` reads the new value from `$.props`. To act on the
-change itself, re-key the child if the new value should start a fresh
-instance. If work should restart without resetting the Model, key a
-Subscription on the prop with `Subscription.make(name, deps, build)`. If the
-work needs a host node, pass the prop as a mount argument and observe
-argument changes in the mount.
+Nothing is dispatched when a prop changes, from a parent or `root.setProps`:
+the log records `PropsChanged`, and the next `update` reads the new value
+from `$.props`. To act on the change itself, re-key the child if the new
+value should start a fresh instance. If work should restart without resetting
+the Model, key a Subscription on the prop with
+`Subscription.make(name, deps, build)`. If the work needs a host node, pass the
+prop as a mount argument and observe argument changes in the mount.
 
 The **Who owns the state** example has a controlled modal, a workflow started
 by a send, a provider that owns visibility, a seed, and three patterns that

@@ -7,15 +7,14 @@
 import * as Equal from "effect/Equal"
 
 /**
- * Shallow per key, with `Equal.equals` only for values that differ by reference.
+ * Shallow per key for plain records, `Equal.equals` for anything else and for
+ * fields that differ by reference.
  *
  * @internal
  */
 export const propsEqual = (a: unknown, b: unknown): boolean => {
   if (a === b) return true
-  if (
-    typeof a !== "object" || typeof b !== "object" || a === null || b === null
-  ) return Equal.equals(a, b)
+  if (!isPlainRecord(a) || !isPlainRecord(b)) return Equal.equals(a, b)
   let count = 0
   for (const key in a) {
     if (!Object.hasOwn(a, key)) continue
@@ -34,12 +33,8 @@ export const propsEqual = (a: unknown, b: unknown): boolean => {
 const isPrimitive = (u: unknown): boolean =>
   u === null || (typeof u !== "object" && typeof u !== "function")
 
-/**
- * An object literal, or one with no prototype.
- *
- * @internal
- */
-export const isPlainRecord = (value: unknown): value is object => {
+/** An object literal, or one with no prototype. */
+const isPlainRecord = (value: unknown): value is object => {
   if (typeof value !== "object" || value === null) return false
   const proto = Object.getPrototypeOf(value)
   return proto === Object.prototype || proto === null
@@ -73,11 +68,9 @@ const differsPlainly = (a: unknown, b: unknown): boolean => {
 }
 
 /**
- * A shared value, or what an owner's `collects.onChange` returns: compared as props are when both are plain
- * records, so one built anew each time is no change, and by `Equal.equals` otherwise, so a new Date of
- * the same time isn't either.
+ * A shared value, or what an owner's `collects.onChange` returns: compared by
+ * the same rules as props.
  *
  * @internal
  */
-export const sharedEqual = (a: unknown, b: unknown): boolean =>
-  isPlainRecord(a) && isPlainRecord(b) ? propsEqual(a, b) : Equal.equals(a, b)
+export const sharedEqual: (a: unknown, b: unknown) => boolean = propsEqual

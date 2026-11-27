@@ -122,8 +122,8 @@ type DocumentKeyDetails = Partial<
  * @category models
  * @since 0.1.0
  */
-export interface HtmlPlay<Model, Msg, Events>
-  extends Play.Play<Model, Msg, Events>
+export interface HtmlPlay<Model, Msg, Events, Props = never>
+  extends Play.Play<Model, Msg, Events, Props>
 {
   /**
    * Clicks the one element `target` matches, as a browser does: `pointerdown`
@@ -532,7 +532,7 @@ export const make = <
   component: Component.Members<Name, Props, Model, Msg, Events, R, V, any>,
   props: Props | Effect.Effect<Props, never, RP>
 ): Effect.Effect<
-  HtmlPlay<Model, Msg, Events>,
+  HtmlPlay<Model, Msg, Events, Props>,
   Play.StepError,
   R | RP | TestHost.TestHost | Scope.Scope
 > =>

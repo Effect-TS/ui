@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
-import { Component, Feature, UiSchema } from "@effect/ui"
+import { Component, Feature, MessageLog, UiSchema } from "@effect/ui"
 import { Html, HtmlServer } from "@effect/ui/html"
 import * as BrowserHost from "@effect/ui/html/BrowserHost"
 import * as HtmlHydrate from "@effect/ui/html/HtmlHydrate"
+import { Story } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import {
   Deferred,
@@ -622,5 +623,41 @@ describe("HtmlHydrate", () => {
         assert.strictEqual(app.querySelector("form"), served)
         assert.isFalse(submitted(served))
       }).pipe(Effect.scoped))
+  })
+
+  describe("setProps", () => {
+    it.effect("keeps props updated while a hydrated root waits for its Layer", () =>
+      Effect.gen(function*() {
+        const GatedRow = Component.provide(
+          Row,
+          Layer.effectDiscard(Effect.suspend(() => layerGate))
+        )
+        const rendered = yield* HtmlServer.renderToHtml(GatedRow, {
+          label: "one"
+        })
+        const latch = yield* Deferred.make<void>()
+        layerGate = Deferred.await(latch)
+        const app = yield* container(rendered.html)
+        const log = MessageLog.makeMemory()
+        const root = yield* HtmlHydrate.hydrateEffect(
+          GatedRow,
+          { label: "one" },
+          app,
+          rendered.state
+        ).pipe(Effect.provideService(MessageLog.MessageLog, log))
+
+        root.setProps({ label: "two" })
+        yield* tick
+        yield* Deferred.succeed(latch, undefined)
+        yield* root.adopted
+        yield* tick
+
+        assert.strictEqual(app.textContent, "two0 clickedrow two")
+        const replay = Story.fromLog(GatedRow, log.entries())
+        assert.deepStrictEqual(replay.props, { label: "two" })
+      }).pipe(
+        Effect.ensuring(Effect.sync(() => layerGate = Effect.void)),
+        Effect.scoped
+      ))
   })
 })

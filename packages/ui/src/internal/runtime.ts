@@ -63,6 +63,7 @@ export interface Root {
   readonly instance: Instance
   readonly model: () => unknown
   readonly send: (message: unknown) => void
+  readonly setProps: (props: unknown) => void
   readonly find: (born: number) => Instance | undefined
   readonly dispatch: (
     inst: Instance,
@@ -407,7 +408,7 @@ const mountCore = (
   hostOf: (ctx: Context.Context<any>) => HostInput,
   options?: Options
 ): Effect.Effect<
-  Root & Renderer.Root<any, any>,
+  Root & Renderer.Root<any, any, any>,
   never,
   Scope.Scope
 > =>
@@ -471,7 +472,7 @@ export const mount = (
   container: unknown,
   options?: Options
 ): Effect.Effect<
-  Root & Renderer.Root<any, any>,
+  Root & Renderer.Root<any, any, any>,
   never,
   Scope.Scope | Renderer.Renderer
 > => mountCore(component, rootProps, container, fromRenderer, options)
@@ -484,7 +485,7 @@ export const mountDom = (
   makeDom: MakeDom,
   elements: ReadonlyArray<string> | "any",
   options?: Options
-): Effect.Effect<Root & Renderer.Root<any, any>, never, Scope.Scope> =>
+): Effect.Effect<Root & Renderer.Root<any, any, any>, never, Scope.Scope> =>
   mountCore(
     component,
     rootProps,
@@ -743,6 +744,7 @@ const start = (
     instance: instance as unknown as Instance,
     model: () => instance.failure === undefined ? instance.model : undefined,
     send: (message: unknown) => recording.step(() => mounted.send(message)),
+    setProps: (props: unknown) => recording.step(() => mounted.setProps(props)),
     find: (born: number) =>
       findIn(instance, born, recording.numberOf) as Instance | undefined,
     dispatch: (inst: Instance, message: unknown) =>
@@ -778,7 +780,7 @@ const start = (
       }
       return queries.made()
     }
-  } satisfies Root & Renderer.Root<any, any>
+  } satisfies Root & Renderer.Root<any, any, any>
   hydrating?.finish(root.head)
   const awaitOwned: Effect.Effect<void> = Effect.suspend(() =>
     tree.owned === undefined || tree.owned.size === 0

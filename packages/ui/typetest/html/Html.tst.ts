@@ -906,7 +906,7 @@ describe("BrowserHost", () => {
 
   it("mountEffect needs only a Scope for an HTML root", () => {
     expect(BrowserHost.mountEffect(Counter, {}, document.body)).type.toBe<
-      Effect.Effect<Renderer.Root<number, Msg>, never, Scope.Scope>
+      Effect.Effect<Renderer.Root<number, Msg, {}>, never, Scope.Scope>
     >()
   })
 
@@ -947,7 +947,7 @@ describe("BrowserHost", () => {
   it("Renderer.mount of an HTML root needs Html.Host", () => {
     expect(Renderer.mount(Counter, {}, document.body)).type.toBe<
       Effect.Effect<
-        Renderer.Root<number, Msg>,
+        Renderer.Root<number, Msg, {}>,
         never,
         Html.Host | Renderer.Renderer | Scope.Scope
       >

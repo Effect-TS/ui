@@ -44,8 +44,8 @@ interface Modifiers {
  * @category models
  * @since 0.1.0
  */
-export interface MountedApp<out Model, in Msg> {
-  readonly root: Renderer.Root<Model, Msg>
+export interface MountedApp<out Model, in Msg, in Props = never> {
+  readonly root: Renderer.Root<Model, Msg, Props>
   readonly setup: TestRendererSetup
   readonly titles: ReadonlyArray<string>
   readonly settle: Effect.Effect<void>
@@ -129,7 +129,7 @@ export const mount = <
   props: Props | Effect.Effect<Props, never, RP>,
   options?: TestOptions | undefined
 ): Effect.Effect<
-  MountedApp<Model, Msg>,
+  MountedApp<Model, Msg, Props>,
   never,
   Exclude<R | RP, OpenTui.Host> | Scope.Scope
 > =>
@@ -203,5 +203,5 @@ export const mount = <
           settle
         ),
       resize: (width, height) => act(() => setup.resize(width, height))
-    } as MountedApp<Model, Msg>
+    } as MountedApp<Model, Msg, Props>
   }) as any

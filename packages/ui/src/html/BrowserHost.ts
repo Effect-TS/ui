@@ -447,7 +447,7 @@ export interface MountOptions<
  * **When to use**
  *
  * Use to run an app. Reach for `mountEffect` when the caller needs the root,
- * to send it messages.
+ * to send it messages or update its props.
  *
  * **Details**
  *
@@ -530,8 +530,8 @@ let defaultScheduler: Scheduler.Scheduler | undefined
  *
  * **When to use**
  *
- * Use when the caller needs the root: to read its Model or send it a message.
- * `mount` is the form that runs an app.
+ * Use when the caller needs the root: to read its Model, send it a message
+ * or update its props with `setProps`. `mount` is the form that runs an app.
  *
  * **Details**
  *
@@ -559,7 +559,7 @@ export const mountEffect = <
   container: globalThis.Element,
   options?: MountOptions<V, RF, Events>
 ): Effect.Effect<
-  Renderer.Root<Model, Msg>,
+  Renderer.Root<Model, Msg, Props>,
   never,
   Exclude<R | RF | RP, Html.Host> | Scope.Scope
 > =>
@@ -578,7 +578,7 @@ export const mountRoot = (
   container: globalThis.Element,
   options: MountOptions<any, any, any> | undefined,
   hydrate: hydrateRun.Hydrating | undefined
-): Effect.Effect<Renderer.Root<any, any>, never, Scope.Scope> =>
+): Effect.Effect<Renderer.Root<any, any, any>, never, Scope.Scope> =>
   Effect.gen(function*() {
     const { host, raw, make, held, hold } = build(container.ownerDocument)
     yield* Effect.addFinalizer(() => Effect.sync(host.dispose))
@@ -646,7 +646,7 @@ export const mountRoot = (
  * **Details**
  *
  * Without `props`, the instance takes the props its parent's view passes it,
- * and the root the props it was mounted with. With them, it takes those, so
+ * and the root its current props. With them, it takes those, so
  * a child shows the props it had at that entry, even when its parent's
  * Model at that entry would pass it newer ones or its parent wasn't
  * recorded.

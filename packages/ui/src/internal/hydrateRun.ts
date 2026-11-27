@@ -496,7 +496,9 @@ class Waits {
     this.waiting.delete(inst)
     const latest = this.held.get(inst)
     this.held.delete(inst)
-    if (!inst.closed) this.log(inst, { ...draft, model: inst.model })
+    if (!inst.closed) {
+      this.log(inst, { ...draft, model: inst.model, props: inst.props })
+    }
     this.checkAdopted()
     if (latest !== undefined && !inst.closed && !latest[0].closed) {
       Kernel.patchChild(latest[0], inst.at!, latest[1])

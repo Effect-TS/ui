@@ -944,7 +944,7 @@ export const mountEffect = <
   props: Props | Effect.Effect<Props, never, RP>,
   options?: MountOptions<V, RF, Events> | undefined
 ): Effect.Effect<
-  Renderer.Root<Model, Msg>,
+  Renderer.Root<Model, Msg, Props>,
   never,
   Exclude<R | RF | RP, OpenTui.Host> | Scope.Scope
 > =>
