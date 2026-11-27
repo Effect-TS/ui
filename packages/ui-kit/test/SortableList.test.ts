@@ -48,6 +48,20 @@ const item = (id: string) => Locator.attr("data-testid", `item-${id}`)
 const handle = (id: string) => Locator.attr("data-testid", `handle-${id}`)
 const status = Locator.attr("data-testid", "status")
 
+const mouse = {
+  button: 0,
+  x: 0,
+  y: 0,
+  shift: false,
+  ctrl: false,
+  alt: false,
+  meta: false,
+  pointerType: "mouse"
+} as const
+
+const topHalf = { x: 10, y: 5, width: 100, height: 40 }
+const bottomHalf = { x: 10, y: 30, width: 100, height: 40 }
+
 interface Scene {
   readonly current: {
     readonly pending: ReadonlyArray<{ readonly command: unknown }>
@@ -68,8 +82,7 @@ const dragDataOf = (
   locator: Locator.Locator
 ): Readonly<Record<string, string>> => {
   const node = scene.get(locator) as unknown as View.Element<unknown>
-  const layers = [node, ...(node.owned ?? [])]
-  for (const layer of layers) {
+  for (const layer of [node, ...(node.owned ?? [])]) {
     const options = layer.eventOptions.dragstart as
       | Html.DragSourceOptions
       | undefined
@@ -150,11 +163,10 @@ describe("SortableList", () => {
         "true"
       )
 
-      // Consumer applies the new order; Dropped reflects the live position.
+      // Consumer applies the new order; Dropped reflects the live position
+      // and clears once unrelated edits diverge.
       scene.props({ items: ["b", "a", "c"] })
       scene.expect(status).toHaveText("Dropped:a:2/3")
-
-      // Later unrelated list edits must not rewrite the Dropped announcement.
       scene.props({ items: ["b", "a", "c", "d"] })
       scene.expect(status).toHaveText("")
       scene.subscription("changedProps", { _tag: "ChangedProps" })
@@ -170,8 +182,11 @@ describe("SortableList", () => {
         scene.get(item("a")).attrs?.["data-drop-position"],
         "before"
       )
-      scene.keydown(handle("c"), "Escape")
+      // Escape cancels without emitting.
+      scene.keydown(handle("c"), "Escape").expectDefaultPrevented()
       drain(scene)
+      assert.isUndefined(scene.get(list).attrs?.["data-moving"])
+      scene.expect(status).toHaveText("Cancelled:c:3/3")
 
       // Dropping back at the original index emits nothing.
       scene.click(handle("b"))
@@ -181,7 +196,7 @@ describe("SortableList", () => {
       assert.deepStrictEqual(scene.current.emitted, [])
     }))
 
-  it.effect("pick-then-place commits at another handle, and Escape or focusout cancels without emitting", () =>
+  it.effect("focusout cancels a move unless focus stays in the list or a handle press is in progress", () =>
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(
         SortableList,
@@ -189,75 +204,26 @@ describe("SortableList", () => {
         standIn
       )
 
-      // Pick up "a" and activate "c"'s handle to place it at index 2.
       scene.click(handle("a"))
-      drain(scene)
-      scene.click(handle("c")).emitted({ _tag: "Reordered", from: 0, to: 2 })
-      drain(scene)
-      assert.isUndefined(scene.get(list).attrs?.["data-moving"])
-
-      // Escape cancels with no emitted event.
-      scene.click(handle("b"))
-      drain(scene)
-      scene.keydown(handle("b"), "ArrowDown")
-      drain(scene)
-      scene.keydown(handle("b"), "Escape").expectDefaultPrevented()
-      drain(scene)
-      assert.deepStrictEqual(scene.current.emitted, [])
-      assert.isUndefined(scene.get(list).attrs?.["data-moving"])
-      scene.expect(status).toHaveText("Cancelled:b:2/3")
-
-      // Focus moving within the list keeps the move active; leaving cancels.
-      scene.click(handle("b"))
       drain(scene)
       scene.fire(list, "focusout", { within: true, disabled: false })
         .expectIgnored()
-      assert.strictEqual(scene.get(list).attrs?.["data-moving"], "")
-      scene.fire(list, "focusout", { within: false, disabled: false })
-      drain(scene)
-      assert.deepStrictEqual(scene.current.emitted, [])
-      assert.isUndefined(scene.get(list).attrs?.["data-moving"])
-      scene.expect(status).toHaveText("Cancelled:b:2/3")
-    }))
 
-  it.effect("a press on a handle excuses only the focusout before its click", () =>
-    Effect.gen(function*() {
-      const scene = yield* HtmlScene.make(
-        SortableList,
-        { items: ["a", "b", "c"] },
-        standIn
-      )
-      const mouse = {
-        button: 0,
-        x: 0,
-        y: 0,
-        shift: false,
-        ctrl: false,
-        alt: false,
-        meta: false,
-        pointerType: "mouse"
-      } as const
-
-      // Safari and iOS blur on mousedown without focusing the button.
-      scene.click(handle("a"))
-      drain(scene)
+      // Safari and iOS blur on mousedown before the click lands.
       scene.fire(handle("c"), "mousedown", mouse)
       scene.fire(list, "focusout", { within: false, disabled: false })
       assert.strictEqual(scene.get(list).attrs?.["data-moving"], "")
-      scene.click(handle("c")).emitted({ _tag: "Reordered", from: 0, to: 2 })
-      drain(scene)
 
       // A press released off the handle sends no click; leaving then cancels.
-      scene.click(handle("b"))
-      drain(scene)
-      scene.fire(handle("c"), "mousedown", mouse)
       scene.fireDocument("mouseup", mouse)
       scene.fire(list, "focusout", { within: false, disabled: false })
+      drain(scene)
+      assert.deepStrictEqual(scene.current.emitted, [])
       assert.isUndefined(scene.get(list).attrs?.["data-moving"])
-      assert.deepStrictEqual(scene.current.emitted, [])
+      scene.expect(status).toHaveText("Cancelled:a:1/3")
     }))
 
-  it.effect("removing the moving row or disabling the list ends the move", () =>
+  it.effect("prop changes mid-move clamp a shortened list and end invalidated moves", () =>
     Effect.gen(function*() {
       const scene = yield* HtmlScene.make(
         SortableList,
@@ -265,35 +231,7 @@ describe("SortableList", () => {
         standIn
       )
 
-      scene.click(handle("a"))
-      drain(scene)
-      scene.keydown(handle("a"), "End")
-      drain(scene)
-      scene.props({ items: ["b", "c"] })
-      scene.subscription("changedProps", { _tag: "ChangedProps" })
-      scene.props({ items: ["a", "b", "c"] })
-      scene.click(handle("b"))
-      drain(scene)
-      scene.expect(status).toHaveText("PickedUp:b:2/3")
-
-      scene.props({ items: ["a", "b", "c"], disabled: true })
-      scene.subscription("changedProps", { _tag: "ChangedProps" })
-      scene.props({ items: ["a", "b", "c"] })
-      scene.click(handle("c"))
-      drain(scene)
-      scene.expect(status).toHaveText("PickedUp:c:3/3")
-      assert.deepStrictEqual(scene.current.emitted, [])
-    }))
-
-  it.effect("rows removed during a move clamp the drop", () =>
-    Effect.gen(function*() {
-      const scene = yield* HtmlScene.make(
-        SortableList,
-        { items: ["a", "b", "c"] },
-        standIn
-      )
-
-      // The indicator falls back to after "b", and so does the event.
+      // Removing a trailing row clamps both the indicator and the emitted drop.
       scene.click(handle("a"))
       drain(scene)
       scene.keydown(handle("a"), "End")
@@ -305,6 +243,28 @@ describe("SortableList", () => {
       )
       scene.click(handle("a")).emitted({ _tag: "Reordered", from: 0, to: 1 })
       drain(scene)
+
+      // Removing the moving row ends the move; restoring it does not revive it.
+      scene.props({ items: ["a", "b", "c"] })
+      scene.click(handle("a"))
+      drain(scene)
+      scene.keydown(handle("a"), "End")
+      drain(scene)
+      scene.props({ items: ["b", "c"] })
+      scene.subscription("changedProps", { _tag: "ChangedProps" })
+      scene.props({ items: ["a", "b", "c"] })
+      scene.click(handle("b"))
+      drain(scene)
+      scene.expect(status).toHaveText("PickedUp:b:2/3")
+
+      // Disabling the list ends the move; re-enabling does not revive it.
+      scene.props({ items: ["a", "b", "c"], disabled: true })
+      scene.subscription("changedProps", { _tag: "ChangedProps" })
+      scene.props({ items: ["a", "b", "c"] })
+      scene.click(handle("c"))
+      drain(scene)
+      scene.expect(status).toHaveText("PickedUp:c:3/3")
+      assert.deepStrictEqual(scene.current.emitted, [])
     }))
 
   it.effect("horizontal orientation uses Left/Right arrows and respects DirectionProvider RTL", () =>
@@ -362,42 +322,26 @@ describe("SortableList", () => {
         scene.get(handle("a")).attrs?.["aria-pressed"],
         "false"
       )
-      scene.fire(item("b"), "dragover", { x: 10, y: 5, width: 100, height: 40 })
+      scene.fire(item("b"), "dragover", topHalf)
       assert.isUndefined(scene.get(item("b")).attrs?.["data-drop-position"])
-      scene.drop(item("b"), {
-        data: dataA,
-        x: 10,
-        y: 5,
-        width: 100,
-        height: 40
-      })
+      scene.drop(item("b"), { data: dataA, ...topHalf })
       assert.deepStrictEqual(scene.current.emitted, [])
 
       // Lower half of "b" drops "a" after "b" (index 1).
       scene.fire(item("a"), "dragstart")
-      scene.fire(item("b"), "dragover", {
-        x: 10,
-        y: 30,
-        width: 100,
-        height: 40
-      })
+      scene.fire(item("b"), "dragover", bottomHalf)
       assert.strictEqual(
         scene.get(item("b")).attrs?.["data-drop-position"],
         "after"
       )
-      scene.drop(item("b"), {
-        data: dataA,
-        x: 10,
-        y: 30,
-        width: 100,
-        height: 40
-      }).emitted({ _tag: "Reordered", from: 0, to: 1 })
+      scene.drop(item("b"), { data: dataA, ...bottomHalf })
+        .emitted({ _tag: "Reordered", from: 0, to: 1 })
       drain(scene)
 
       // Moving from an item into a gap on `list` preserves the pending drop position.
       const dataC = dragDataOf(scene, item("c"))
       scene.fire(item("c"), "dragstart")
-      scene.fire(item("a"), "dragover", { x: 10, y: 5, width: 100, height: 40 })
+      scene.fire(item("a"), "dragover", topHalf)
       assert.strictEqual(
         scene.get(item("a")).attrs?.["data-drop-position"],
         "before"

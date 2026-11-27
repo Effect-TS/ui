@@ -238,54 +238,50 @@ describe("SortableList in a document", { concurrent: false }, () => {
           ReorderedSecond: ($, { from, to }) =>
             $.evolve({ second: reorder($.model.second, from, to) })
         },
-        view: (h, model) =>
-          h.div(
+        view: (h, model) => {
+          const renderList = (
+            key: string,
+            prefix: string,
+            items: ReadonlyArray<string>,
+            onReorder: (
+              event: { readonly from: number; readonly to: number }
+            ) => typeof Message.Type
+          ) =>
             SortableList(h, {
-              // Keys that differ only by case still get distinct drag types.
-              key: "list",
-              props: { items: model.first },
-              onEmit: {
-                Reordered: ({ from, to }) =>
-                  Message.ReorderedFirst({ from, to })
-              },
+              key,
+              props: { items },
+              onEmit: { Reordered: onReorder },
               view: (sortableList) =>
-                sortableList.list(h.ul.attr("id", "first")).children(
-                  model.first.map((id) =>
+                sortableList.list(h.ul.attr("id", prefix)).children(
+                  items.map((id) =>
                     sortableList.item({
-                      element: h.li.attr("id", `first-${id}`),
+                      element: h.li.attr("id", `${prefix}-${id}`),
                       id
                     }).children(
                       sortableList.handle({
-                        element: h.button.attr("id", `first-handle-${id}`),
-                        id
-                      }).children(id)
-                    )
-                  )
-                )
-            }),
-            SortableList(h, {
-              key: "List",
-              props: { items: model.second },
-              onEmit: {
-                Reordered: ({ from, to }) =>
-                  Message.ReorderedSecond({ from, to })
-              },
-              view: (sortableList) =>
-                sortableList.list(h.ul.attr("id", "second")).children(
-                  model.second.map((id) =>
-                    sortableList.item({
-                      element: h.li.attr("id", `second-${id}`),
-                      id
-                    }).children(
-                      sortableList.handle({
-                        element: h.button.attr("id", `second-handle-${id}`),
+                        element: h.button.attr("id", `${prefix}-handle-${id}`),
                         id
                       }).children(id)
                     )
                   )
                 )
             })
+          return h.div(
+            // Keys that differ only by case still get distinct drag types.
+            renderList(
+              "list",
+              "first",
+              model.first,
+              (event) => Message.ReorderedFirst(event)
+            ),
+            renderList(
+              "List",
+              "second",
+              model.second,
+              (event) => Message.ReorderedSecond(event)
+            )
           )
+        }
       })
 
       const app = yield* container
