@@ -3,6 +3,7 @@ import {
   Command,
   Component,
   Feature,
+  Head,
   MessageLog,
   Mount,
   Query,
@@ -4938,7 +4939,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         }).make({
           init: () => 0,
           update: ($) => $.model + 1,
-          head: () => ({ title: "Widget title" }),
+          head: () => [Head.title("Widget title")],
           view: (h, count) =>
             h.div(
               h.span(`${h.props.unitId}:${h.props.compact}:${count}`),

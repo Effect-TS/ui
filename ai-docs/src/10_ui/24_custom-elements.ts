@@ -3,13 +3,14 @@
  *
  * Use web components from other libraries in an HTML view: bind each tag
  * with its properties and events once, set them with typed methods, and fire
- * an element's event in a scene.
+ * an element's event in a scene. Then publish a component as a web
+ * component of its own.
  */
 import { UiSchema } from "@effect/ui"
-import { Html } from "@effect/ui/html"
+import { BrowserHost, Html } from "@effect/ui/html"
 import { HtmlScene } from "@effect/ui/html/testing"
 import { Locator } from "@effect/ui/testing"
-import { Effect, Schema } from "effect"
+import { Effect, Layer, Schema } from "effect"
 
 // ---------------------------------------------------------------------------
 // Bindings: a tag, its properties and its events
@@ -110,3 +111,48 @@ export const picked = Effect.gen(function*() {
     .expect(Locator.tag("output"))
     .toHaveText("#db2777")
 })
+
+// ---------------------------------------------------------------------------
+// Publishing a component as a custom element
+// ---------------------------------------------------------------------------
+
+// Emissions must be tagged: each one is dispatched on the element as a
+// bubbling, composed `CustomEvent` named by its `_tag` in lowercase, with the
+// emission as `detail`. This one arrives as `tourbooked`.
+const TourEvents = UiSchema.TaggedEnum({
+  TourBooked: { unitId: Schema.String }
+})
+
+export const TourForm = Html.component({
+  name: "TourForm",
+  props: Schema.Struct({ unitId: Schema.String, compact: Schema.Boolean }),
+  model: Schema.Null,
+  message: Schema.Literal("Book"),
+  events: TourEvents
+}).make({
+  init: () => null,
+  update: ($) => $.emit(TourEvents.TourBooked({ unitId: $.props.unitId })),
+  view: (h) => h.button.on("click", "Book").children("Book a tour")
+})
+
+// `defineElement` registers `<unit-tour-form>` while its Layer is built.
+// `props` is every instance's starting props, and each of its keys is also a
+// JavaScript property of the element. An attribute named for a prop in
+// kebab-case is decoded by its Schema in `attributes`, so
+// `<unit-tour-form unit-id="u1">` sets `unitId`. Changing either gives the
+// mounted component new props, and its Model stays. The instances share the
+// Layer's services, never write the document head, and each one unmounts
+// when it's removed from the page, but not when it's moved.
+export const TourFormElement = BrowserHost.defineElement(
+  "unit-tour-form",
+  TourForm,
+  {
+    props: { unitId: "", compact: false },
+    attributes: { unitId: Schema.String },
+    // Optional: mount in a shadow root, with styles no page CSS reaches.
+    shadow: { styles: ["button { font: inherit; }"] }
+  }
+)
+
+// In the entry module of the page that uses the element.
+Layer.launch(TourFormElement).pipe(Effect.runFork)
