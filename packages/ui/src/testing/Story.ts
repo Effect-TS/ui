@@ -16,9 +16,8 @@
  * of what the component did. A defect in `init` or `update` makes the step
  * throw, on the line that called it.
  *
- * `check` generates stories instead: messages and settlements of the work
- * in flight, checked against the Schemas and an invariant, and shrunk to the
- * smallest failing one.
+ * `check` generates messages and settlements, checks Schemas and an optional
+ * invariant, and shrinks a failing story for replay.
  *
  * **Example** (A todo row: send, resolve its Command, check the Model)
  *
@@ -338,9 +337,8 @@ export const start = <C extends AnyComponent>(
 // ---------------------------------------------------------------------------
 
 /**
- * Where `check` takes generated values from: a Schema, an Arbitrary, or a
- * function of `Input` that returns an Arbitrary, for values that depend on
- * it.
+ * A source of generated values for `check`. Use a function when values depend
+ * on the current Model or Command args.
  *
  * @stability experimental
  * @category models
@@ -352,8 +350,8 @@ export type Generated<Input, A> =
   | ((input: Input) => Arbitrary.Arbitrary<A>)
 
 /**
- * The results `check` settles a Command with, in place of its `Service`'s
- * Schemas. A function takes the Command's args.
+ * Overrides for a Command's result generators. Omitted outcomes use the
+ * `Service`'s Schemas; generator functions receive the Command's args.
  *
  * @stability experimental
  * @category models
@@ -369,8 +367,8 @@ export interface CheckResults<D> {
 }
 
 /**
- * The options of `check`: what it generates, what it checks, and how it
- * runs, shrinks and replays, as `Arbitrary.checkEffect` takes them.
+ * Generators and an invariant for `check`, plus the run, shrink and replay
+ * options accepted by `Arbitrary.checkEffect`.
  *
  * @stability experimental
  * @category models
@@ -397,8 +395,8 @@ export interface CheckOptions<
     }
     | undefined
   /**
-   * Checked after `init` and after every step, on the record `s.check`
-   * gets. It fails by returning `false` or by throwing.
+   * Runs after `init` and each applied step, with the same record as
+   * `Steps.check`. Return `false` or throw to fail the run.
    */
   readonly invariant?:
     | ((current: Steps<C>["current"]) => boolean | void)
@@ -406,52 +404,49 @@ export interface CheckOptions<
 }
 
 /**
- * Runs generated stories, and fails with the smallest failing one, as Story
- * steps.
+ * Returns an Effect that runs generated stories for a component and props.
+ * A failing story is shrunk and reported as a defect with a replay token.
  *
- * **Details**
+ * **Generated steps**
  *
- * Each story starts with `start` and runs a generated list of steps. A step
- * is a message, or a settlement that picks one piece of work in flight and
- * settles it with a generated result: a Command with `resolve`, `fail`,
- * `next` or `end`, an `afterRefetch` wait with `waitExpired`, a query
- * with `loaded` or `loadFailed`, and a load more with `loadedMore` or
- * `loadMoreFailed`. A settlement with nothing in flight is skipped.
- * Messages arrive while work runs, as in the runtime: what would block a
- * message is kept with `keepPending` first. Work under a live optimistic
- * patch isn't settled until the Command settles.
+ * Each story starts with `start`. Steps either send a message or settle one
+ * piece of pending work: a Command, an `afterRefetch` wait, a query load or a
+ * load more. Settlements with no eligible work are skipped. Before sending,
+ * the runner uses `keepPending` so messages can arrive while work is pending.
+ * Query entries under a live optimistic patch cannot settle.
  *
- * Results come from the definitions' Schemas: a `Service`'s `success`
- * and `error`, a query's `success` and `error`. A `Command.make`
- * Command has none, so it needs a `commands` entry, and a story that
- * settles one without it fails naming it. An outcome whose Schema is
- * `Schema.Never` isn't generated, and work with no outcome stays pending.
- * `messages: Schema.Never` runs only settlements. An infinite query loads
- * pages as the runtime walks them: one on a cold load, and on a refetch
- * as many as it holds, unless `next` ends the list first.
+ * Command results default to the `Service`'s `success` and `error` Schemas;
+ * query results use the query's Schemas. A `Command.make` Command needs a
+ * `commands` entry with a success generator or the run fails when selecting
+ * its outcomes. `Schema.Never` outcomes are not generated. Work with no
+ * available outcome stays pending. Use `messages: Schema.Never` to generate
+ * only settlements.
  *
- * After `init` and every step, the Model is checked against its Schema,
- * then `invariant` runs, then events and sends are checked against the
- * `events` and `receives` Schemas and acknowledged. A step that throws,
- * as when `update` does, fails too.
+ * An infinite query loads one page on a cold load. A refetch loads as many
+ * pages as it holds, unless `next` ends the list first.
  *
- * The failure lists the steps as a story would run them, with the Model and
- * what's pending, and a `replay` token for the same run. Steps are removed
- * while shrinking, and messages from a Schema or an Arbitrary shrink too.
- * Results and messages from a function are sampled by seed, and don't.
+ * **Checks and failures**
  *
- * **Gotchas**
+ * After `init` and each applied step, the runner checks the Model's Schema,
+ * runs `invariant`, then validates and acknowledges events and sends using
+ * the `events` and `receives` Schemas. A step that throws also fails the run.
  *
- * The defaults generate any value the Schemas allow. When a Command's
- * `success` is the component's whole `message` Schema, it may resolve
- * with any message, and the default `messages` send results with nothing
- * running. Narrow `messages` and `commands` to what can happen.
+ * The failure report includes Story steps, the Model, pending Commands and a
+ * `replay` token. Shrinking removes steps and shrinks messages generated from
+ * a Schema or Arbitrary. Command and query results, and messages generated
+ * by a function, are sampled by seed; their values do not shrink.
  *
- * The failure names Commands by name, not by the variable that holds them.
- * `effect/Arbitrary` is unstable, and its replay tokens may not survive a
- * release.
+ * **Choosing generators**
  *
- * **Example** (Saving follows the pending saves)
+ * Defaults allow any value in the Schemas. If a Command's `success` is the
+ * whole message Schema, it can resolve with any message. The default message
+ * generator can also send a completion message without a pending Command.
+ * Narrow `messages` and `commands` to the interactions you want to test.
+ *
+ * Reports identify Commands by name, not by their variable names.
+ * `effect/Arbitrary` is unstable; replay tokens may not survive a release.
+ *
+ * **Example** (Check that the saving flag matches pending saves)
  *
  * ```ts import.meta.vitest
  * import { Command, Component, UiSchema } from "@effect/ui"

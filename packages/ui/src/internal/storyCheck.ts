@@ -1,10 +1,7 @@
 /**
- * The runner behind `Story.check`: a generated script of messages and settlements, run on a
- * Story cursor with the public steps, and the checks after every step.
- *
- * A script is generated up front, so shrinking removes steps without changing the choices of the
- * others. A settlement picks one piece of in-flight work by index and samples its result with its
- * own seed, so a shrunk script and a replay make the same choices.
+ * Generates scripts up front so removing a step preserves the other steps' indices and seeds.
+ * Each settlement selects from the work pending at that step, so removing earlier steps can
+ * change which work it settles.
  *
  * @internal
  */
@@ -21,12 +18,7 @@ import { isNoop, isNoopSchema, noop } from "./noop.ts"
 import { atSite, callSite, type Cursor } from "./steps.ts"
 import * as engine from "./story.ts"
 
-/**
- * Where generated values come from: a Schema, an Arbitrary, or a function of an input, the Model
- * or a Command's args, that returns an Arbitrary.
- *
- * @internal
- */
+/** @internal */
 export type Source =
   | Schema.Top
   | Arbitrary.Arbitrary<unknown>
@@ -46,7 +38,6 @@ export interface Options extends Arbitrary.CheckOptions {
   readonly invariant?: ((story: any) => boolean | void) | undefined
 }
 
-/** The cursor the runner drives: a Story's. */
 type Story = Cursor & { readonly [step: string]: any }
 
 type Step =
@@ -91,7 +82,6 @@ interface Context {
 
 const derived = new WeakMap<Schema.Top, Arbitrary.Arbitrary<unknown>>()
 
-/** A source's Arbitrary, for `input` when it's a function. A Schema's is derived once. */
 const arbitraryOf = (
   source: Source,
   input?: unknown
@@ -125,18 +115,15 @@ const sample = (
     )
   )
 
-/** Whether a source has values: `Schema.Never` has none. */
 const inhabited = (source: Source | undefined): source is Source =>
   source !== undefined &&
   !(Schema.isSchema(source) && SchemaAST.isNever(source.ast))
 
-/** A value as a step prints it, by its source when that's a Schema. */
 const show = (source: Source | undefined, value: unknown): string =>
   isNoop(value)
     ? "Component.noop"
     : engine.show(Schema.isSchema(source) ? source : undefined, value)
 
-/** A step that takes a value of `source`, or none when it has no values. */
 const valued = (
   step: string,
   args: ReadonlyArray<unknown>,
@@ -218,7 +205,6 @@ const commandActions = (
   ]
 }
 
-/** How each query entry `engine.settleable` gives can settle, from the query's Schemas. */
 const queryActions = (
   state: engine.State<any, any, any, any>
 ): Array<ReadonlyArray<Action>> => {
@@ -270,10 +256,6 @@ const settleable = (
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
 
-/**
- * The checks after `init` and every step that applied: the Model against its Schema, then the
- * invariant, then the outputs, checked against their Schemas and acknowledged.
- */
 const checkStep = (
   ctx: Context,
   story: Story,
@@ -321,7 +303,6 @@ const checkStep = (
   return undefined
 }
 
-/** Marks what blocks a message step as kept, as a written story would. */
 const keepAll = (story: Story, lines: Array<string>): void => {
   const { commands, more, queries } = engine.blocking(story.state)
   for (const name of new Set(commands.map((entry) => entry.command.name))) {
@@ -354,7 +335,6 @@ const runScript = (
     ]
     const failed = (reason: string): Effect.Effect<never, Failure> =>
       Effect.fail({ reason, lines, state: story.state })
-    // A step that throws fails the run, as it fails a written story.
     const attempt = (f: () => void): string | undefined => {
       try {
         f()

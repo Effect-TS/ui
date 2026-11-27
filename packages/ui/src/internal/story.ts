@@ -1722,11 +1722,7 @@ export const describe = (
     JSON.stringify(MessageLog.encodeArgs(command.argsSchema, command.args))
   })`
 
-/**
- * Whether a Command waits on refetches.
- *
- * @internal
- */
+/** @internal */
 export const isWaiting = (entry: Pending<any>): boolean =>
   entry.awaiting !== undefined && entry.awaiting.length > 0
 

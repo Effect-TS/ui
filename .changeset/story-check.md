@@ -2,4 +2,4 @@
 "@effect/ui": patch
 ---
 
-Add `Story.check`, which runs generated stories against a component and fails with the smallest failing one, written as Story steps with a `replay` token. Messages and Command results come from the definitions' Schemas, or from `messages` and `commands`, and an `invariant` runs after every step.
+Add `Story.check` to test component invariants with generated messages and settlements. Failures include shrunk Story steps and a replay token.
