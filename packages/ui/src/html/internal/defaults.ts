@@ -454,47 +454,67 @@ export const drop = (given: Partial<Html.DropPayload> | undefined) => {
   }
 }
 
-const important = /!\s*important$/i
-
 /** A CSS property name as written: case-insensitive, except a `--custom` one. */
 const written = (name: string): string =>
   name.startsWith("--") ? name : name.toLowerCase()
 
 /**
- * The declarations of an inline `style` attribute, by property name. A
- * repeated property keeps its last value unless an earlier one is
- * `!important` and the later one isn't, as in a browser.
+ * The declarations of an inline `style` attribute, by property name, with
+ * comments dropped. Only a top-level `;` ends a declaration: not one that is
+ * escaped, quoted, or inside `()`, `[]` or `{}`. A repeated property keeps
+ * its last value unless an earlier one is `!important` and the later one
+ * isn't, as in a browser.
  */
 const declarations = (style = ""): Record<string, string> => {
   const out: Record<string, string> = Object.create(null)
-  const add = (declaration: string) => {
-    const colon = declaration.indexOf(":")
-    if (colon === -1) return
-    const property = written(declaration.slice(0, colon).trim())
-    const value = declaration.slice(colon + 1).trim()
-    const previous = out[property]
-    if (
-      previous === undefined || !important.test(previous) ||
-      important.test(value)
-    ) out[property] = value
-  }
-  let start = 0
+  const important = new Set<string>()
+  // The current declaration without comments, and where its first top-level
+  // `:` and last top-level `!` are in it.
+  let text = ""
+  let colon = -1
+  let bang = -1
   let depth = 0
   let quote = ""
-  for (let i = 0; i < style.length; i++) {
-    const char = style[i]
-    if (quote !== "") {
-      if (char === "\\") i++
-      else if (char === quote) quote = ""
-    } else if (char === "\"" || char === "'") quote = char
-    else if (char === "(") depth++
-    else if (char === ")") depth--
-    else if (char === ";" && depth <= 0) {
-      add(style.slice(start, i))
-      start = i + 1
+  const add = () => {
+    if (colon !== -1) {
+      const property = written(text.slice(0, colon).trim())
+      const priority = bang > colon &&
+        text.slice(bang + 1).trim().toLowerCase() === "important"
+      if (!important.has(property) || priority) {
+        out[property] = text.slice(colon + 1).trim()
+        if (priority) important.add(property)
+      }
     }
+    text = ""
+    colon = bang = -1
   }
-  add(style.slice(start))
+  for (let i = 0; i < style.length; i++) {
+    const char = style[i]!
+    if (char === "\\") {
+      text += style.slice(i, i + 2)
+      i++
+      continue
+    }
+    if (quote !== "") {
+      if (char === quote) quote = ""
+    } else if (char === "/" && style[i + 1] === "*") {
+      const close = style.indexOf("*/", i + 2)
+      i = close === -1 ? style.length : close + 1
+      continue
+    } else if (char === "\"" || char === "'") quote = char
+    else if ("([{".includes(char)) depth++
+    else if (")]}".includes(char)) depth--
+    else if (depth <= 0) {
+      if (char === ";") {
+        add()
+        continue
+      }
+      if (char === ":" && colon === -1) colon = text.length
+      else if (char === "!") bang = text.length
+    }
+    text += char
+  }
+  add()
   return out
 }
 

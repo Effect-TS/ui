@@ -81,6 +81,12 @@ describe("Story", () => {
     expect(htmlSceneExpect.toHaveStyle).type.not.toBeCallableWith({
       color: undefined
     })
+    expect(htmlSceneExpect.toHaveStyle).type.not.toBeCallableWith({
+      "margin-left": undefined
+    })
+    expect(htmlSceneExpect.toHaveStyle).type.not.toBeCallableWith({
+      "--accent": undefined
+    })
     expect(htmlSceneExpect.toHaveStyle).type.not.toBeCallableWith(
       "color",
       "red"

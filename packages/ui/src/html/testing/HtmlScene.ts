@@ -121,12 +121,14 @@ export interface Expect<S> extends Scene.Expect<S> {
    * - A repeated property has the value a browser would use.
    */
   toHaveStyle(
-    style: {
-      readonly [K in keyof Html.Style | `${string}-${string}`]?:
-        | string
-        | RegExp
-        | false
-    }
+    style:
+      & {
+        readonly [K in Exclude<keyof Html.Style, `--${string}`>]?:
+          | string
+          | RegExp
+          | false
+      }
+      & { readonly [name: `${string}-${string}`]: string | RegExp | false }
   ): S
 }
 
