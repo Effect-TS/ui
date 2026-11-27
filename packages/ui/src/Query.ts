@@ -4526,12 +4526,12 @@ const buildCache = (
   const traced = <A, E>(
     def: QueryDef,
     trigger: Trigger,
-    body: Effect.Effect<A, E>
+    body: () => Effect.Effect<A, E>
   ): Effect.Effect<A, E> =>
     Effect.useSpan(
       def.name,
       { attributes: { trigger } },
-      (span) => Effect.provideService(body, Tracer.ParentSpan, span)
+      (span) => Effect.provideService(body(), Tracer.ParentSpan, span)
     )
   /** Runs `f` one scheduler step later. */
   const defer = (f: () => void): void => {
@@ -5071,7 +5071,7 @@ const buildCache = (
       previous === undefined
         ? Effect.yieldNow
         : Effect.uninterruptible(Fiber.await(previous)),
-      traced(entry.def, trigger, Effect.suspend(body))
+      traced(entry.def, trigger, body)
     ))
     fetch.fiber = fiber
     fetchFibers.add(fiber)
@@ -5284,26 +5284,24 @@ const buildCache = (
       previous.push(replaced)
     }
     const entry = shared.entry
-    const body = entry.def.list === undefined
-      ? Effect.suspend(() => build.fetcher(entry.args))
-      : entry.def.list.ops.callerWalk(
-        listEnv(),
-        entry.def,
-        entry.args,
-        () => logKeyOf(entry),
-        build,
-        Math.max(entry.def.list.ops.heldPages(entry).length, 1),
-        (page, cursor) => {
-          if (shared.fiber === fiber) {
-            emitFetch(entry, "get", false, false, { page, cursor })
-          }
+    const walk = entry.def.list?.ops.callerWalk(
+      listEnv(),
+      entry.def,
+      entry.args,
+      () => logKeyOf(entry),
+      build,
+      Math.max(entry.def.list.ops.heldPages(entry).length, 1),
+      (page, cursor) => {
+        if (shared.fiber === fiber) {
+          emitFetch(entry, "get", false, false, { page, cursor })
         }
-      )
+      }
+    )
     const fiber = runFork(Effect.andThen(
       previous.length === 0
         ? Effect.yieldNow
         : Effect.uninterruptible(Fiber.awaitAll(previous)),
-      traced(entry.def, "get", body)
+      traced(entry.def, "get", () => walk ?? build.fetcher(entry.args))
     ))
     shared.fiber = fiber
     fetchFibers.add(fiber)
@@ -5568,31 +5566,23 @@ const buildCache = (
           })
         }
         if (existing !== undefined) resetIdle(existing)
-        if (registered.list === undefined) {
-          event(undefined)
-          return traced(
-            registered,
-            "get",
-            Effect.suspend(() => buildOf(fetcher).fetcher(args))
-          )
-        }
-        event({ page: 0, cursor: undefined })
-        const count = existing === undefined
-          ? 1
-          : Math.max(registered.list.ops.heldPages(existing).length, 1)
-        return traced(
-          registered,
-          "get",
-          registered.list.ops.callerWalk(
-            listEnv(),
-            registered,
-            args,
-            logKey,
-            buildOf(fetcher),
-            count,
-            (page, cursor) => event({ page, cursor })
-          )
-        )
+        const list = registered.list
+        const build = buildOf(fetcher)
+        event(list === undefined ? undefined : { page: 0, cursor: undefined })
+        return traced(registered, "get", () =>
+          list === undefined
+            ? build.fetcher(args)
+            : list.ops.callerWalk(
+              listEnv(),
+              registered,
+              args,
+              logKey,
+              build,
+              existing === undefined
+                ? 1
+                : Math.max(list.ops.heldPages(existing).length, 1),
+              (page, cursor) => event({ page, cursor })
+            ))
       }
       const entry = ensureEntry(registered, args, argsKey)
       const result = entry.result

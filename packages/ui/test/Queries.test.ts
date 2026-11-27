@@ -12,7 +12,7 @@ import { Html } from "@effect/ui/html"
 import { ssr } from "@effect/ui/html/testing"
 import { Locator, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Layer, Option, Schema, Tracer } from "effect"
+import { Effect, Layer, Schema, Tracer } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
 
@@ -792,23 +792,26 @@ describe("a query without onChange", { concurrent: false }, () => {
             }
           })
         ))
+        // Each span's parent, as an index into `spans`: -1 for a root.
+        const parent = (span: Tracer.Span) =>
+          span.parent._tag === "Some"
+            ? spans.indexOf(span.parent.value as Tracer.Span)
+            : -1
         assert.deepStrictEqual(
-          spans.map((span) => [span.name, span.attributes.get("trigger")]),
+          spans.map((span) => [
+            span.name,
+            span.attributes.get("trigger"),
+            parent(span)
+          ]),
           [
-            ["notes/GetNote", "watch"],
-            ["rpc GetNote", undefined],
-            ["notes/Touch", undefined],
-            ["rpc Touch", undefined],
-            ["notes/GetNote", "invalidation"],
-            ["rpc GetNote", undefined]
+            ["notes/GetNote", "watch", -1],
+            ["rpc GetNote", undefined, 0],
+            ["notes/Touch", undefined, -1],
+            ["rpc Touch", undefined, 2],
+            ["notes/GetNote", "invalidation", -1],
+            ["rpc GetNote", undefined, 4]
           ]
         )
-        const [watch, watchRpc, touch, touchRpc, refetch, refetchRpc] = spans
-        const parentOf = (span: Tracer.Span) =>
-          Option.getOrUndefined(span.parent)
-        assert.strictEqual(parentOf(watchRpc!), watch)
-        assert.strictEqual(parentOf(touchRpc!), touch)
-        assert.strictEqual(parentOf(refetchRpc!), refetch)
       })
     )
   })
