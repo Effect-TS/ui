@@ -172,11 +172,13 @@ import * as Command from "@effect/ui/Command"
 import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as Mount from "@effect/ui/Mount"
+import * as Renderer from "@effect/ui/Renderer"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as UiStruct from "@effect/ui/UiStruct"
 import * as View from "@effect/ui/View"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
+import * as Option from "effect/Option"
 import * as Queue from "effect/Queue"
 import * as Schema from "effect/Schema"
 import * as Stream from "effect/Stream"
@@ -410,14 +412,23 @@ const wait = <M>(name: string, message: M) =>
     ({ delay }) => Effect.as(sleep(delay), message)
   )
 
+const Trigger = Html.ref("NavigationMenuTrigger", "button")
+
+// A trigger disabled or removed during the wait sent no `mouseleave`, so it
+// is checked once the wait is over.
 const WaitBeforeOpening = Command.make(
   "WaitBeforeOpening",
   { args: { delay: Schema.Number, value: Schema.String }, mode: "switch" },
   ({ delay, value }) =>
-    Effect.as(
-      sleep(delay),
-      NavigationMenuMessage.CompletedWaitBeforeOpening({ value })
-    )
+    Effect.gen(function*() {
+      yield* sleep(delay)
+      const trigger = yield* Renderer.Refs.use((refs) =>
+        refs.lookup(Trigger.at(value))
+      )
+      return Option.isSome(trigger)
+        ? NavigationMenuMessage.CompletedWaitBeforeOpening({ value })
+        : NavigationMenuMessage.LeftTrigger()
+    })
 )
 
 const WaitBeforeClosing = wait(
@@ -850,6 +861,7 @@ export const NavigationMenu = Html.component({
           })
           .disabled(disabled)
         return disabled ? button : button
+          .ref(Trigger.at(item))
           .on("click", NavigationMenuMessage.PressedTrigger({ value: item }))
           .on("pointerdown", ({ pointerType }) =>
             pointerType === "mouse"

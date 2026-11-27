@@ -17,7 +17,8 @@ import {
 const Message = UiSchema.TaggedEnum({
   RequestedOpen: { value: Schema.String, reason: Schema.String },
   RequestedClose: { reason: Schema.String },
-  Settled: { open: Schema.Boolean }
+  Settled: { open: Schema.Boolean },
+  Changed: { products: Schema.Literals(["on", "off", "gone"]) }
 })
 
 const Page = Html.component({
@@ -25,21 +26,25 @@ const Page = Html.component({
   props: Schema.Struct({ switches: Schema.Boolean }),
   model: Schema.Struct({
     value: Schema.NullOr(Schema.String),
+    products: Schema.Literals(["on", "off", "gone"]),
     log: Schema.Array(Schema.String)
   }),
   message: Message
 }).make({
-  init: () => ({ value: null, log: [] }),
+  init: () => ({ value: null, products: "on" as const, log: [] }),
   update: {
     RequestedOpen: ($, { reason, value }) => ({
+      ...$.model,
       value: $.props.switches || $.model.value === null ? value : $.model.value,
       log: [...$.model.log, `RequestedOpen ${value} ${reason}`]
     }),
     RequestedClose: ($, { reason }) => ({
+      ...$.model,
       value: null,
       log: [...$.model.log, `RequestedClose ${reason}`]
     }),
-    Settled: ($) => $.model
+    Settled: ($) => $.model,
+    Changed: ($, { products }) => $.evolve({ products })
   },
   view: (h, model) =>
     h.div(
@@ -55,9 +60,10 @@ const Page = Html.component({
           navigationMenu.root(h.nav.attr("aria-label", "Main")).children(
             navigationMenu.list(h.ul).children(
               navigationMenu.item(h.li).children(
-                navigationMenu.trigger({
+                model.products === "gone" ? null : navigationMenu.trigger({
                   element: h.button.attr("id", "products"),
-                  value: "products"
+                  value: "products",
+                  disabled: model.products === "off"
                 }).children("Products")
               ),
               navigationMenu.item(h.li).children(
@@ -107,7 +113,7 @@ const mountPage = Effect.fnUntraced(function*(props = { switches: true }) {
   const app = yield* container
   const root = yield* BrowserHost.mountEffect(Page, props, app)
   yield* tick
-  return { log: () => root.model()!.log }
+  return { log: () => root.model()!.log, send: root.send }
 })
 
 const key = (key: string, init: KeyboardEventInit = {}) => {
@@ -312,9 +318,22 @@ describe("NavigationMenu panels in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(expanded(), ["true", "false"])
     }))
 
-  it.effect("a touch never opens a panel by hover, and a disabled trigger ignores presses", () =>
+  it.effect("a touch never opens a panel by hover, a disabled trigger ignores presses, and one disabled or removed while the mouse rests on it opens nothing", () =>
     Effect.gen(function*() {
-      const { log } = yield* mountPage()
+      const { log, send } = yield* mountPage()
+      for (const products of ["off", "gone"] as const) {
+        send(Message.Changed({ products: "on" }))
+        yield* tick
+        mouse(byId("products"), "mouseenter")
+        yield* tick
+        send(Message.Changed({ products }))
+        yield* tick
+        yield* TestClock.adjust("50 millis")
+        yield* tick
+        assert.deepStrictEqual(log(), [], products)
+      }
+      send(Message.Changed({ products: "on" }))
+      yield* tick
       press(byId("products"), "touch")
       mouse(byId("products"), "mouseenter")
       yield* TestClock.adjust("50 millis")
