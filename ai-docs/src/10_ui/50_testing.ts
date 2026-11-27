@@ -2,9 +2,8 @@
  * @title Testing @effect/ui components
  *
  * Test a component's logic as a `Story`, its view as a `Scene`, a Command
- * against a fake Layer, and components working together as a `Play`, such as
- * a wrapper and the headless part it places. The last test renders on the
- * server and hydrates with `ssr`.
+ * against a fake Layer, and a wrapper with its headless part as a `Play`.
+ * The last test renders on the server and hydrates with `ssr`.
  */
 // @vitest-environment happy-dom
 import { Component, Router } from "@effect/ui"
@@ -304,15 +303,13 @@ it.layer(Layer.mergeAll(Notes.layerMemory([note]), TestHost.layer()), {
   }
 )
 
-// A component that wraps a headless or `@effect/ui-kit` part only needs a Play
-// test for what the wrapper itself wires: each event it maps in `onEmit` and
-// the props it feeds back. Locate controls by ARIA role and name. The part's
-// own keys, highlight and typeahead belong in the part's tests, and leaving a
-// handler out of `onEmit` is already a compile error.
+// For a wrapper around a headless or `@effect/ui-kit` part, test each event
+// it maps in `onEmit` and the props it feeds back. Locate controls by ARIA
+// role and name. Test the part's keyboard navigation, highlight and typeahead
+// in the part itself. Omitting an `onEmit` handler is already a compile error.
 //
-// `Listbox` issues `HtmlCommand.focus` and `HtmlCommand.scrollIntoView`, which
-// call `Html.Host`. A Play resolves nothing by hand, so it provides a no-op
-// `Html.Host`.
+// This test provides a no-op `Html.Host` for `Listbox`'s focus and scroll
+// commands. It checks wrapper state and events, not browser focus.
 const otherNote: Note = { id: "n2", title: "Recipes", body: "Soup" }
 
 const NoopHtmlHost = Layer.succeed(Html.Host, {
@@ -349,7 +346,7 @@ it.layer(
         const play = yield* HtmlPlay.make(NoteLinkPickerNoDeps, {
           noteId: note.id
         })
-        // `Picked` is the one event `NoteLinkPicker` maps. Pick with the keys.
+        // Pick a note to exercise the wrapper's `Picked` handler.
         yield* play.keydown(
           HtmlLocator.role("button", { name: "Link to a note…" }),
           "ArrowDown"
@@ -364,8 +361,8 @@ it.layer(
         assert.deepStrictEqual(play.root.emitted, [
           NoteLinkPickerEvents.Linked({ id: otherNote.id })
         ])
-        // Clicking the relabelled trigger opens `Listbox` on the `selected`
-        // prop the wrapper feeds back. `ArrowDown` would move on from it.
+        // Reopen by click to check the `selected` prop fed back by the wrapper.
+        // `ArrowDown` would move past that option.
         yield* play.click(trigger)
         yield* play.expect(
           HtmlLocator.role("option", { name: /^Recipes/ })

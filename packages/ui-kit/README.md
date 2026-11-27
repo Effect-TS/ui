@@ -23,7 +23,7 @@ Every popup renders in the browser's top layer by default. `Dialog`, `Drawer`, `
 
 A component that doesn't need an instance, such as `Switch`, is a plain view function instead: it takes no `key`, and an `on<Event>` option in place of `onEmit`. Keeping no state isn't enough on its own: `Progress` needs an instance for the id its bar points at, and `DirectionProvider` for sharing the direction with the components inside it.
 
-To test a component that wraps a kit part, drive it with `HtmlPlay` on `TestHost`, one test per event it maps in `onEmit`, and leave the part's own keyboard handling to the part's tests. For a `Select`, send `ArrowDown` to the combobox and `Escape` to the listbox, then expect `aria-expanded="false"`. [Testing `@effect/ui` components](../../ai-docs/src/10_ui/50_testing.ts) has a full example.
+Test wrapper event mappings and the props they feed back with `HtmlPlay` on `TestHost`; leave the part's keyboard navigation to its own tests. For example, a `Select` wrapper handles `RequestedClose`: send `ArrowDown` to the combobox and `Escape` to the listbox, then expect `aria-expanded="false"` on the combobox. See [Testing `@effect/ui` components](../../ai-docs/src/10_ui/50_testing.ts) for an executable wrapper test.
 
 ## Components
 
