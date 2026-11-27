@@ -29,7 +29,8 @@ type Issued =
 interface Run {
   readonly command: Issued
   readonly issued: Kernel.Issued
-  readonly message: string | undefined
+  /** The issuing message's `_tag`, or `"init"` on mount. Only a string reaches the span. */
+  readonly message: unknown
   status: schedule.Status
   fiber: Fiber.Fiber<unknown, unknown> | undefined
   done: boolean
@@ -208,9 +209,9 @@ class Runs implements Kernel.Runs {
     const program = Effect.useSpan(
       command.name,
       {
-        attributes: run.message === undefined
-          ? { path: inst.path, mode: command.mode }
-          : { path: inst.path, mode: command.mode, message: run.message }
+        attributes: typeof run.message === "string"
+          ? { path: inst.path, mode: command.mode, message: run.message }
+          : { path: inst.path, mode: command.mode }
       },
       (span): Effect.Effect<unknown, unknown, any> => {
         if (run.done || inst.closed) return Effect.interrupt
@@ -536,7 +537,7 @@ export const issue = (
   inst: Kernel.Instance,
   command: Command.Command<any, any>,
   issued: Kernel.Issued,
-  message: string | undefined,
+  message: unknown,
   cleanupFailed: CleanupFailed
 ): void => {
   if (inst.closed) return

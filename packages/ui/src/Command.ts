@@ -890,12 +890,18 @@ function run(
   inst: Kernel.Instance,
   seq: number | undefined | void,
   index: number,
-  message: string | undefined
+  message: unknown
 ) {
-  commandRun.issue(inst, this, {
-    seq: typeof seq === "number" ? seq : -1,
-    index
-  }, message, cleanupFailed)
+  commandRun.issue(
+    inst,
+    this,
+    {
+      seq: typeof seq === "number" ? seq : -1,
+      index
+    },
+    message,
+    cleanupFailed
+  )
 }
 
 // Written out rather than spread from `Proto`: a bundler keeps a spread, and with it the runner.

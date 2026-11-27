@@ -195,7 +195,7 @@ interface Issuable {
     inst: Instance,
     seq: number | undefined | void,
     index: number,
-    message: string | undefined
+    message: unknown
   ) => void
 }
 
@@ -640,21 +640,20 @@ export const send = (
   if (next.viewTransition !== undefined) {
     transitions?.request(next.viewTransition)
   }
-  if (next.commands.length > 0) issueAll(inst, next, seq, messageTag(message))
+  issueAll(
+    inst,
+    next,
+    seq,
+    (message as { readonly _tag?: unknown } | null | undefined)?._tag
+  )
   applied(inst, next, seq)
-}
-
-const messageTag = (message: unknown): string | undefined => {
-  if (typeof message !== "object" || message === null) return undefined
-  const tag = (message as { readonly _tag?: unknown })._tag
-  return typeof tag === "string" ? tag : undefined
 }
 
 const issueAll = (
   inst: Instance,
   next: Next,
   seq: number | undefined | void,
-  message: string | undefined
+  message: unknown
 ): void => {
   const commands = next.commands
   for (let index = 0; index < commands.length; index++) {
@@ -877,7 +876,7 @@ const start = (inst: Instance): Rec | undefined => {
       adopted: false
     })
     component.boot?.(inst)
-    if (first.commands.length > 0) issueAll(inst, first, seq, "init")
+    issueAll(inst, first, seq, "init")
     component["~first"]?.(inst)
     if (inst.closed) return undefined
     inst.dirty = false
