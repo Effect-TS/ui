@@ -156,11 +156,7 @@ export class PlayCursor {
   protected restoreControlled(
     edited: ReadonlyArray<TestHost.TestElement>
   ): void {
-    for (const node of edited) {
-      for (const [name, value] of controlled.wantedOf(node) ?? []) {
-        node.props[name] = value
-      }
-    }
+    for (const node of edited) controlled.restore(node)
   }
 
   private run(

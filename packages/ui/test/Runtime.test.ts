@@ -4769,9 +4769,12 @@ describe("Runtime", () => {
           update: ($, message) =>
             message.value.length <= 2 ? message.value : $.model,
           view: (h, value) =>
-            h.field.value(value).on("input", ({ value }) =>
-              Msg.Typed({ value }))
+            h.field.value(value).on(
+              "input",
+              ({ value }) => Msg.Typed({ value })
+            )
         })
+        const testHost = yield* TestHost.TestHost
         const root = yield* TestHost.mount(Form, {})
         const field = root.get(Locator.tag("field")) as TestHost.TestElement
         field.props.value = "abc"
@@ -4779,6 +4782,15 @@ describe("Runtime", () => {
         yield* TestHost.settle
         assert.strictEqual(root.model(), "ab")
         assert.strictEqual(field.props.value, "ab")
+        // An accepted edit is already on the field, so nothing writes it again.
+        testHost.host.clearOperations()
+        field.props.value = "a"
+        Locator.fire(field, "input", { value: "a" })
+        yield* TestHost.settle
+        assert.strictEqual(field.props.value, "a")
+        assert.isFalse(
+          testHost.host.operations().some((op) => op.startsWith("prop"))
+        )
       })))
 
     it.effect("onMount runs with the element's node on hosts that run mounts", () =>

@@ -82,7 +82,9 @@ import * as TestQuery from "./TestQuery.ts"
  * **Details**
  *
  * `attrs` and `props` hold what the renderer set. To act as the user editing
- * a controlled property, set `props` directly, then fire the event.
+ * a controlled property, set `props` directly, then fire the event. The next
+ * `settle` puts the element's controlled properties back to what the renderer
+ * last set, so an edit the Model refused is undone, as on a real host.
  * `handlers`, `eventOptions`, `owners` and `dispatch` are read from the
  * tree the renderer rendered last, so an element that left it has none.
  * `eventOptions` holds the options set with the handlers. The test host has
@@ -175,7 +177,8 @@ const fireFrom = (
 
 const makeElement = (
   tag: string,
-  along: EventsAlong = noLookup
+  along: EventsAlong = noLookup,
+  edited?: Set<TestElement>
 ): TestElement => {
   const events = () => along(pathFrom(element))[0]
   const element: TestElement = {
@@ -200,7 +203,10 @@ const makeElement = (
     get dispatch() {
       return events()?.dispatch
     },
-    fire: (event, payload) => fireFrom(along, element, event, payload)
+    fire: (event, payload) => {
+      edited?.add(element)
+      return fireFrom(along, element, event, payload)
+    }
   }
   return element
 }
@@ -227,7 +233,9 @@ const detach = (node: TestNode) => {
 
 /**
  * Makes a test host. `operations` lists what the renderer asked of it, which
- * `clearOperations` empties.
+ * `clearOperations` empties. `restoreEdited` puts the controlled properties
+ * of each element fired on since the last call back to what the renderer last
+ * set, without logging an operation.
  *
  * @stability experimental
  * @category constructors
@@ -236,6 +244,7 @@ const detach = (node: TestNode) => {
 export const makeHost = (): Renderer.Host<TestNode> & {
   readonly operations: () => ReadonlyArray<string>
   readonly clearOperations: () => void
+  readonly restoreEdited: () => void
   readonly commits: () => number
   /** Calls `listener` after every commit. Returns the unsubscribe. */
   readonly onCommit: (listener: () => void) => () => void
@@ -243,11 +252,16 @@ export const makeHost = (): Renderer.Host<TestNode> & {
   let operations: Array<string> = []
   let commits = 0
   const listeners = new Set<() => void>()
+  const edited = new Set<TestElement>()
   const { along, connect, set } = hostEvents.make<TestNode>()
   return {
     operations: () => operations,
     clearOperations: () => {
       operations = []
+    },
+    restoreEdited: () => {
+      for (const element of edited) controlled.restore(element)
+      edited.clear()
     },
     commits: () => commits,
     onCommit: (listener) => {
@@ -258,7 +272,7 @@ export const makeHost = (): Renderer.Host<TestNode> & {
     },
     createElement(tag) {
       operations.push(`create <${tag}>`)
-      return makeElement(tag, along)
+      return makeElement(tag, along, edited)
     },
     createText(text) {
       operations.push(`create ${JSON.stringify(text)}`)
@@ -952,6 +966,8 @@ export const settle: Effect.Effect<
   .gen(function*() {
     const testHost = yield* TestHost
     yield* drainAll(testHost)
+    // After the flush, so an accepted edit is never written back.
+    testHost.host.restoreEdited()
     for (const tree of testHost.trees()) {
       const cause = tree.crashed()
       if (cause !== undefined) {

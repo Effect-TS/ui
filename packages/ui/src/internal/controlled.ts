@@ -13,7 +13,9 @@ export const want = (node: object, name: string, value: unknown): void => {
   values.set(name, value)
 }
 
-/** @internal */
-export const wantedOf = (
-  node: object
-): ReadonlyMap<string, unknown> | undefined => wanted.get(node)
+/** Writes the controlled values the renderer last set back to `node.props`. @internal */
+export const restore = (
+  node: { readonly props: Record<string, unknown> }
+): void => {
+  for (const [name, value] of wanted.get(node) ?? []) node.props[name] = value
+}
