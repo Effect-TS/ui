@@ -167,15 +167,17 @@ export const makeHost = (
       ? (f) => view.requestAnimationFrame(f)
       : (f) => setTimeout(f, 0)
 
+  const focusedState = (element: any) =>
+    element.getRootNode().activeElement === element
+      ? fieldStateOf(element)
+      : undefined
+
   const writeControlled = (element: any, name: string, value: unknown) => {
     if (
       name === "value" &&
       (composing.has(element) || (value !== "" && element.type === "file"))
     ) return
-    const state =
-      name === "value" && element.getRootNode().activeElement === element
-        ? fieldStateOf(element)
-        : undefined
+    const state = name === "value" ? focusedState(element) : undefined
     if (state === undefined) {
       element[name] = value
       return
@@ -333,8 +335,15 @@ export const makeHost = (
       later(() => {
         restore = undefined
         for (const node of nodes) {
+          const typed = composing.has(node) ? undefined : focusedState(node)
           restoreAffected(node)
-          if (!composing.has(node)) edits.delete(node)
+          if (composing.has(node)) continue
+          edits.delete(node)
+          // The Model can take the edit after this, as when its update is
+          // still waiting; writing the text back then puts the caret back.
+          if (typed !== undefined && typed.value !== (node as any).value) {
+            remember(node, typed)
+          }
         }
       })
     }

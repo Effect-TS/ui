@@ -428,6 +428,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         Upper: { value: Schema.String },
         Card: { value: Schema.String },
         Push: {},
+        Accept: {},
         ResetUpper: {}
       })
       const Fields = Html.component({
@@ -453,6 +454,7 @@ describe("BrowserHost", { concurrent: false }, () => {
                 ? "hello"
                 : "hello world"
             }),
+            Accept: () => ({ ...$.model, pushed: "hello Xworld" }),
             ResetUpper: () => ({ ...$.model, upper: "ABCDEF" })
           }),
         view: (h, model) =>
@@ -476,6 +478,7 @@ describe("BrowserHost", { concurrent: false }, () => {
               model.pushed
             ),
             h.button.on("click", Edited.Push()).children("Push"),
+            h.button.on("click", Edited.Accept()).children("Accept"),
             h.button.on("click", Edited.ResetUpper()).children("Reset")
           )
       })
@@ -583,6 +586,20 @@ describe("BrowserHost", { concurrent: false }, () => {
           press("Push")
           yield* tick
           expect(field("Email").value).toBe("hello world")
+        }).pipe(Effect.scoped))
+
+      it.effect("an edit the Model takes after it was put back gets its caret back", () =>
+        Effect.gen(function*() {
+          const { field, press } = yield* mountFields
+          const pushed = field("Pushed")
+          pushed.focus()
+          pushed.setSelectionRange(6, 6)
+          edit(pushed, "hello Xworld", 7)
+          yield* tick
+          expect(selection(pushed)).toEqual(["hello world", 6, 6])
+          press("Accept")
+          yield* tick
+          expect(selection(pushed)).toEqual(["hello Xworld", 7, 7])
         }).pipe(Effect.scoped))
 
       it.effect("a rejected composition puts back the selection it started from after compositionend", () =>
