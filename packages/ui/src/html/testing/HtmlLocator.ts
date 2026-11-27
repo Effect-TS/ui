@@ -590,9 +590,10 @@ const levelOf = <N>(reader: Reader<N>, node: N): number | undefined => {
  *
  * `name` matches the accessible name exactly (after collapsing whitespace),
  * or tests it with a RegExp. `checked` matches a checkbox or radio button's
- * live state, and `level` a heading's. `hidden: true` includes hidden and
- * inert elements for inspection; simulated user actions still refuse inert
- * targets.
+ * live state, `expanded` matches an explicit `aria-expanded` attribute
+ * (`"true"` or `"false"`), and `level` a heading's. `hidden: true` includes
+ * hidden and inert elements for inspection; simulated user actions still
+ * refuse inert targets.
  *
  * @stability experimental
  * @category models
@@ -601,6 +602,7 @@ const levelOf = <N>(reader: Reader<N>, node: N): number | undefined => {
 export interface RoleOptions {
   readonly name?: string | RegExp | undefined
   readonly checked?: boolean | undefined
+  readonly expanded?: boolean | undefined
   readonly level?: number | undefined
   readonly hidden?: boolean | undefined
 }
@@ -620,6 +622,9 @@ const describeOptions = (
     )
   }
   if (options?.checked !== undefined) parts.push(`checked ${options.checked}`)
+  if (options?.expanded !== undefined) {
+    parts.push(`expanded ${options.expanded}`)
+  }
   if (options?.level !== undefined) parts.push(`level ${options.level}`)
   return parts.join(", ")
 }
@@ -630,12 +635,19 @@ const select = <N>(
   options: RoleOptions | undefined
 ): Array<N> => {
   const out: Array<N> = []
+  const expanded = options?.expanded === undefined
+    ? undefined
+    : String(options.expanded)
   for (const entry of index.entries) {
     if (entry.role !== role) continue
     if (entry.hidden && options?.hidden !== true) continue
     if (
       options?.checked !== undefined &&
       isChecked(index.reader, entry.node) !== options.checked
+    ) continue
+    if (
+      expanded !== undefined &&
+      index.reader.attr(entry.node, "aria-expanded") !== expanded
     ) continue
     if (
       options?.level !== undefined &&
