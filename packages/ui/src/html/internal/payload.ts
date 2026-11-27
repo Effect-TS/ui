@@ -158,6 +158,9 @@ const isComposingKey = (event: KeyboardEvent): boolean =>
   event.isComposing === true ||
   (event as { readonly keyCode?: number }).keyCode === 229
 
+// Focus leaving the element that composed means its key events may go unseen.
+const forgetKeys = () => composingCodes.clear()
+
 /**
  * Tracks keydown and keyup so the keyup of a key whose keydown composed still
  * reports `composing: true` after `compositionend`. Call it for both, before
@@ -167,8 +170,14 @@ export const noteKey = (event: Event): void => {
   const e = event as KeyboardEvent
   if (!e.code) return
   if (e.type === "keydown") {
-    if (isComposingKey(e)) composingCodes.add(e.code)
-    else composingCodes.delete(e.code)
+    if (isComposingKey(e)) {
+      composingCodes.add(e.code)
+      ;(event.composedPath()[0] ?? event.target)?.addEventListener(
+        "blur",
+        forgetKeys,
+        { once: true }
+      )
+    } else if (!e.repeat) composingCodes.delete(e.code)
   } else if (composingCodes.delete(e.code)) composingKeyups.add(event)
 }
 
