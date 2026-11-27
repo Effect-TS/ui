@@ -129,6 +129,10 @@ const written = (attributes: Map<string, string>): string => {
   return out
 }
 
+/** An option's implicit value is its text with ASCII whitespace stripped and collapsed. */
+const optionValue = (text: string): string =>
+  text.replace(/[\t\n\f\r ]+/g, " ").replace(/^ | $/g, "")
+
 /**
  * The text of a text-only element. A textarea with no children shows its
  * value. Raw text that could end the element early is left out; the client
@@ -353,7 +357,9 @@ const write = (tape: ReadonlyArray<any>): string => {
         else {
           let before = open.before
           if (open.option !== undefined) {
-            if (selectValue !== undefined && text === selectValue) {
+            if (
+              selectValue !== undefined && optionValue(text!) === selectValue
+            ) {
               open.option.set("selected", "")
               selectValue = undefined
             }

@@ -734,6 +734,14 @@ describe("HtmlServer", { concurrent: false }, () => {
               h.option.children("b"),
               h.option.children("b"),
               h.option.attr("value", "b").children("B explicit")
+            ),
+            h.select.value(" b ").children(
+              h.option.children(" b "),
+              h.option.attr("value", " b ").children("Explicit")
+            ),
+            h.select.value("a b").children(
+              h.option.children(" \ta\n  b\r "),
+              h.option.children("a b")
             )
           )
       })
@@ -742,6 +750,8 @@ describe("HtmlServer", { concurrent: false }, () => {
         "<!--[/DuplicateOptions--><div>" +
           "<select><option value=\"a\">A</option><option value=\"b\" selected>B one</option><option value=\"b\">B two</option><optgroup label=\"More\"><option>b</option></optgroup></select>" +
           "<select><option>a</option><option selected>b</option><option>b</option><option value=\"b\">B explicit</option></select>" +
+          "<select><option> b </option><option value=\" b \" selected>Explicit</option></select>" +
+          "<select><option selected> \ta\n  b\r </option><option>a b</option></select>" +
           "</div><!--]/DuplicateOptions-->"
       )
     }))
