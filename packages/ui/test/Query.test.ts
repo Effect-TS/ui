@@ -1675,7 +1675,7 @@ describe("Query", () => {
       online = false
       yield* Effect.gen(function*() {
         const before = yield* GetNotes.peek({ folder: "inbox" })
-        assert.isTrue(AsyncResult.isSuccess(before))
+        assert(AsyncResult.isSuccess(before))
         assert.deepStrictEqual(before.value, ["draft", "todo"])
         assert.isFalse(before.waiting)
 
@@ -1693,19 +1693,19 @@ describe("Query", () => {
 
         assert.strictEqual(calls, 2)
         assert.strictEqual(seen.length, 2)
-        assert.isTrue(AsyncResult.isSuccess(seen[0]))
+        assert(AsyncResult.isSuccess(seen[0]))
         assert.deepStrictEqual(seen[0].value, ["draft", "todo"])
         assert.isTrue(seen[0].waiting)
 
         const after = yield* GetNotes.peek({ folder: "inbox" })
         for (const result of [seen[1], after]) {
-          assert.isTrue(AsyncResult.isFailure(result))
+          assert(AsyncResult.isFailure(result))
           assert.isFalse(result.waiting)
           assert.deepStrictEqual(
             Cause.findErrorOption(result.cause),
             Option.some("offline")
           )
-          assert.isTrue(Option.isSome(result.previousSuccess))
+          assert(Option.isSome(result.previousSuccess))
           assert.deepStrictEqual(result.previousSuccess.value.value, [
             "draft",
             "todo"
@@ -1758,13 +1758,47 @@ describe("Query", () => {
         })
 
         const peeked = yield* GetNotes.peek({ folder: "inbox" })
-        assert.isTrue(AsyncResult.isSuccess(peeked))
+        assert(AsyncResult.isSuccess(peeked))
         assert.deepStrictEqual(peeked.value, ["server"])
         assert.strictEqual(peeked.timestamp, 100)
 
         const got = yield* GetNotes.get({ folder: "inbox" })
         assert.deepStrictEqual(got, ["server"])
         assert.strictEqual(calls, 1)
+      }).pipe(Effect.provide(session()))
+    }).pipe(Effect.provide(KeyValueStore.layerMemory))
+  })
+
+  it.effect("restores nothing until a hydrated page is adopted", () => {
+    class GetNotes extends Query.Service<GetNotes>()("notes/AdoptedNotes", {
+      success: Schema.String,
+      staleTime: "30 seconds",
+      persist: true
+    }) {
+      static readonly layer = this.toLayer(() => Effect.succeed("saved"))
+    }
+    return Effect.gen(function*() {
+      const store = Layer.succeed(
+        KeyValueStore.KeyValueStore,
+        yield* KeyValueStore.KeyValueStore
+      )
+      const session = () =>
+        Layer.merge(GetNotes.layer, Query.layer()).pipe(
+          Layer.provide(
+            QueryPersistence.layerKvs({ prefix: "notes", maxAge: "7 days" })
+          ),
+          Layer.provide(store)
+        )
+      yield* GetNotes.get({}).pipe(Effect.provide(session()))
+
+      yield* Effect.gen(function*() {
+        const cache = Query.internals(yield* Query.Cache)
+        cache.hydrate({})
+        assert.strictEqual((yield* GetNotes.peek({}))._tag, "Initial")
+        cache.closeWindow()
+        const peeked = yield* GetNotes.peek({})
+        assert(AsyncResult.isSuccess(peeked))
+        assert.strictEqual(peeked.value, "saved")
       }).pipe(Effect.provide(session()))
     }).pipe(Effect.provide(KeyValueStore.layerMemory))
   })

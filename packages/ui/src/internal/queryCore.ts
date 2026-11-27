@@ -266,6 +266,34 @@ export const Shipped: Context.Reference<ShippedContext | undefined> = Context
     defaultValue: () => undefined
   })
 
+/**
+ * Where a cache restores and saves the Successes of `persist` queries.
+ * `undefined` by default: nothing is restored or saved. `QueryPersistence`
+ * provides it.
+ *
+ * @internal
+ */
+export interface Persistence {
+  /** The saved Success of an entry, decoded. */
+  readonly get: (
+    def: any,
+    argsKey: string
+  ) => AsyncResult.Success<any, any> | undefined
+  /** Called with every Success the cache stores. */
+  readonly save: (
+    def: any,
+    argsKey: string,
+    result: AsyncResult.Success<any, any>,
+    report: (problem: Query.Problem.Any) => void
+  ) => void
+}
+
+/** @internal */
+export const Persistence: Context.Reference<Persistence | undefined> = Context
+  .Reference<Persistence | undefined>("@effect/ui/Query/Persistence", {
+    defaultValue: () => undefined
+  })
+
 /** @internal */
 export const report = (
   ctx: Context.Context<never>,
