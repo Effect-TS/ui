@@ -74,16 +74,10 @@ export const TypeId = "~@effect/ui/testing/Case" as const
  * @category models
  * @since 0.1.0
  */
-export type AnyComponent = Component.Members<
-  string,
-  any,
-  any,
-  any,
-  any,
-  any,
-  any,
-  any
->
+export type AnyComponent =
+  | Component.Members<string, any, any, any, any, any, any, any>
+  // `any` messages don't fit a component whose messages are `never`.
+  | Component.Members<string, any, any, never, any, any, any, any>
 
 /**
  * One state of `component`, named `<component name>/<key>`.
@@ -217,7 +211,7 @@ export const make = <
   for (const [key, input] of Object.entries(cases)) {
     out[key] = {
       ...input,
-      props: input.props ?? {},
+      props: input.props === undefined ? {} : input.props,
       [TypeId]: variance,
       name: component.definition.name + "/" + key,
       component
