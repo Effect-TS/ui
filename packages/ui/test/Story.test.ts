@@ -15,6 +15,7 @@ import { Cause, Effect, Layer, Option, Redacted, Schema, Stream } from "effect"
 import { AsyncResult } from "effect/reactivity"
 import {
   Counter,
+  CounterMessage,
   SaveTodo,
   Search,
   SearchBox,
@@ -1828,6 +1829,27 @@ Story.start(FilterList, {})
   model: {"selected":["a"],"focused":null}
   pending: nothing`
       )
+    })
+
+    it("gives the transition rule only the explored story's updates, not a story its update runs", () => {
+      const Tick = UiSchema.TaggedEnum({ Tick: {} })
+      const Outer = Component.define({
+        name: "Outer",
+        model: Schema.Number,
+        message: Tick
+      }).make({
+        init: () => 0,
+        update: ($) =>
+          Story.start(Counter, { initial: $.model }).send(
+            CounterMessage.Increment()
+          ).model.count,
+        view: (h, model) => h.el("div", String(model))
+      })
+      Story.explore(Outer, {}, {
+        messages: [Tick.Tick()],
+        depth: 1,
+        transition: ({ after, before }) => after === before + 1
+      })
     })
   })
 })

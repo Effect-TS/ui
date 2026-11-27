@@ -824,7 +824,10 @@ export const update = <Props, Model, Msg, Events>(
       fields.shared === sharedGiven.get(story)
       ? story.view
       : () => expandedView(fields)
-  return record(fields, view)
+  const out = record(fields, view)
+  const recording = recordings.get(story)
+  if (recording !== undefined) recordings.set(out, recording)
+  return out
 }
 
 /**
@@ -1817,23 +1820,32 @@ export interface Update {
   readonly after: unknown
 }
 
-let updates: Array<Update> | undefined
+interface Recording {
+  readonly updates: Array<Update>
+  open: boolean
+}
+
+/** The recording a state and the states `update` derives from it belong to. */
+const recordings = new WeakMap<object, Recording>()
 
 /**
- * Runs `f` and returns the `update` calls it made, in the order they ran.
+ * Runs `f` and returns the `update` calls it made on `story` and the states derived from it, in
+ * the order they ran. Another story stepped inside `f` isn't recorded.
  *
  * @internal
  */
-export const recordUpdates = (f: () => void): ReadonlyArray<Update> => {
-  const previous = updates
-  const out: Array<Update> = []
-  updates = out
+export const recordUpdates = (
+  story: State<any, any, any, any>,
+  f: () => void
+): ReadonlyArray<Update> => {
+  const recording: Recording = { updates: [], open: true }
+  recordings.set(story, recording)
   try {
     f()
   } finally {
-    updates = previous
+    recording.open = false
   }
-  return out
+  return recording.updates
 }
 
 /** @internal */
@@ -1851,7 +1863,10 @@ export const dispatch = <Props, Model, Msg, Events>(
     sharedReads.record(story.component, rootShared(sharedGiven.get(story)))
   )
   // Before `apply`, which can dispatch a cut run's message: calls stay in the order they ran.
-  updates?.push({ before: story.model, message, after: next.model })
+  const recording = recordings.get(story)
+  if (recording?.open) {
+    recording.updates.push({ before: story.model, message, after: next.model })
+  }
   return apply(story, next)
 }
 

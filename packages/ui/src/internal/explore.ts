@@ -315,7 +315,9 @@ export const explore = (
       const acknowledged: Array<string> = []
       let problem: rules.Problem | undefined
       try {
-        const updates = engine.recordUpdates(() => move.run(story))
+        const updates = checks.transition === undefined
+          ? (move.run(story), [])
+          : engine.recordUpdates(story.state, () => move.run(story))
         problem = rules.check(
           checks,
           story,

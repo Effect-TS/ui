@@ -286,7 +286,9 @@ const runScript = (
       Effect.fail({ ...problem, lines, state: story.state })
     const attempt = (f: () => void): rules.Problem | undefined => {
       try {
-        const updates = engine.recordUpdates(f)
+        const updates = ctx.rules.transition === undefined
+          ? (f(), [])
+          : engine.recordUpdates(story.state, f)
         return rules.check(
           ctx.rules,
           story,
