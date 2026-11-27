@@ -2402,7 +2402,7 @@ interface QueryDef {
     | ((result: Settled, args: any) => Duration.Input | undefined)
     | undefined
   readonly tags: ReadonlyArray<string>
-  /** Restored from and saved to `QueryPersistence`, when an app provides it. */
+  /** Opts into `QueryPersistence`. */
   readonly persist: boolean | undefined
   /** Throws when the args don't encode, or encode to something JSON can't carry. */
   readonly argsKey: (args: unknown) => string
@@ -5027,7 +5027,6 @@ const buildCache = (
   }
   const lookup = (def: QueryDef, argsKey: string): Entry | undefined =>
     index.get(def.name)?.get(argsKey)
-  /** What a new entry starts from. Nothing while a hydrated page is adopted. */
   const savedOf = (
     def: QueryDef,
     argsKey: string
@@ -5563,9 +5562,9 @@ const buildCache = (
       )
     }
   }
-  /** A settle or a stored write: patches held after success are confirmed and go. */
   const save = (entry: Entry, result: Settled): void =>
     persistence?.save(entry.def, entry.argsKey, result, report)
+  /** A settle or a stored write: patches held after success are confirmed and go. */
   const store = (entry: Entry, result: Settled): void => {
     save(entry, result)
     entry.result = result

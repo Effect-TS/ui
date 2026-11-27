@@ -1,35 +1,31 @@
 /**
- * Saves the Successes of `persist` queries to a `KeyValueStore`, and
- * restores them into the next cache, so a reload shows the last data while
- * it refetches, offline included.
+ * Persists `persist: true` query Successes to a `KeyValueStore` and restores
+ * them into the next cache so reloads show the last data while refetching,
+ * including offline.
  *
- * A query opts in with `persist: true`. Provide `layerKvs` to a mount, or
- * to `Query.layer()` in plain Effect code, with the store under it. Without
- * the Layer the flag does nothing.
+ * Provide `layerKvs` to a mount or `Query.layer()` with a `KeyValueStore`
+ * beneath it. Without the Layer, `persist: true` does nothing.
  *
- * - The Layer reads every entry under its `prefix` while it builds, so a
- *   mount waits for the read and its first frame holds the saved values. It
- *   removes entries last saved more than `maxAge` ago, saved under another
- *   `version`, or that don't parse. A value that no longer decodes is
- *   removed when the cache first reads it.
- * - A saved value fills an entry when the cache creates it, as a stale
- *   Success with its saved timestamp. A watch or `get` refetches at once, and
- *   a failed refetch keeps it as the Failure's previous Success. That holds
- *   for a fetch that failed before a hydrated page was adopted, too.
- * - Every Success the cache holds is saved: fetches, a Command's `writes`,
- *   and an infinite query's `loadMore` and `reset`. Never an optimistic
- *   patch or a Failure. Writes go out at most once a second,
- *   and once more when the Layer's Scope closes.
+ * - On build, `layerKvs` loads entries under `prefix` before mount (so the
+ *   first frame has saved data) and prunes entries past `maxAge`, under
+ *   another `version`, or unparseable. Entries that fail to decode are dropped
+ *   on first read.
+ * - Restored entries start stale with their original timestamp: a watch or
+ *   `get` refetches immediately, and a failed refetch keeps the saved value as
+ *   `previousSuccess` (including fetches that fail before hydration adoption).
+ * - Fetches, Command `writes`, and infinite query `loadMore`/`reset` are saved;
+ *   optimistic patches and Failures are not. Writes flush at most once per
+ *   second and once on Scope close.
  *
  * **Gotchas**
  *
- * - Server hydration wins: an entry the server shipped in `~query` ignores
- *   its saved value. Other entries are restored once the page is adopted.
- * - A query whose args, success or error Schema holds a `Schema.Redacted`
- *   is never saved.
- * - Nothing clears a signed-out user's entries. Put the user id in `prefix`.
- * - Saved entries are held in memory for the session, encoded, next to the
- *   cache's decoded values.
+ * - Server hydration (`~query`) wins; omitted entries restore after adoption.
+ * - Queries whose args, success, or error Schema holds `Schema.Redacted` are
+ *   never saved.
+ * - Signed-out users' entries aren't cleared automatically; include the user
+ *   id in `prefix`.
+ * - Saved entries remain in memory (encoded) for the session alongside decoded
+ *   cache values.
  *
  * **Example** (A reload that is offline)
  *
@@ -120,7 +116,6 @@ const parse = (text: string | undefined): Saved | undefined => {
   }
 }
 
-/** A query whose Schemas hold a `Schema.Redacted` never leaves memory. */
 const persisted = (def: Def): boolean | undefined =>
   def.persist && !holdsRedacted(def.args.ast) &&
   !holdsRedacted(def.success.ast) && !holdsRedacted(def.error.ast)
@@ -235,7 +230,6 @@ export const layerKvs = (options: {
               timestamp: entry.timestamp
             })
           } catch {
-            // A value that no longer decodes is dropped, and the entry is cold.
             saved.delete(key)
             dirty.set(key, constVoid)
             latch.openUnsafe()

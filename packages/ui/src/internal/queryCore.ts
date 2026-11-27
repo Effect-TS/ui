@@ -268,22 +268,16 @@ export const Shipped: Context.Reference<ShippedContext | undefined> = Context
   })
 
 /**
- * Where a cache restores and saves the Successes of `persist` queries.
- * `undefined` by default: nothing is restored or saved. `QueryPersistence`
- * provides it.
+ * Persistence backend for `persist` queries, provided by `QueryPersistence`.
  *
  * @internal
  */
 export interface Persistence {
-  /** The saved Success a new entry starts from, decoded. */
   readonly get: (
     def: ReturnType<typeof Query.defOf>,
     argsKey: string
   ) => AsyncResult.Success<any, any> | undefined
-  /**
-   * Called with every result the cache stores. `report` is that cache's
-   * problems sink, which this Layer's own context may not hold.
-   */
+  /** `report` is the cache's problems sink, which the Layer's context may not hold. */
   readonly save: (
     def: ReturnType<typeof Query.defOf>,
     argsKey: string,
