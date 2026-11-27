@@ -5,13 +5,14 @@
  * the user chose, `HtmlFiles.pick` opens a picker from a keyboard shortcut,
  * and a Command reads the file with `HtmlFiles.readAsText`. Cancelling the
  * Command stops the browser reading the file. A story resolves the picker
- * and the read, and a scene chooses a file in the input.
+ * and the read, and a scene chooses a file in the input. A Command hands a
+ * file back with `HtmlFiles.download`, and `TestFiles` records it.
  */
-import { Command, UiSchema } from "@effect/ui"
+import { Command, Component, UiSchema } from "@effect/ui"
 import { Html, HtmlFiles, HtmlSubscription } from "@effect/ui/html"
-import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing"
-import { Locator, Story } from "@effect/ui/testing"
-import { Effect, Schema } from "effect"
+import { HtmlLocator, HtmlScene, TestFiles } from "@effect/ui/html/testing"
+import { Locator, Story, TestHost } from "@effect/ui/testing"
+import { Effect, Layer, Schema } from "effect"
 
 // ---------------------------------------------------------------------------
 // Reading a file in a Command
@@ -35,7 +36,8 @@ export const ImportMessage = UiSchema.TaggedEnum({
   PressedOpen: {},
   ClickedCancel: {},
   CompletedReadCsv: { name: Schema.String, rows: Schema.Number },
-  FailedReadCsv: { name: Schema.String }
+  FailedReadCsv: { name: Schema.String },
+  ClickedDownloadSummary: {}
 })
 
 // The args type the file with `Schema.instanceOf(File)`. `Schema.File`
@@ -60,6 +62,26 @@ export const ReadCsv = Command.make(
         onFailure: () => ImportMessage.FailedReadCsv({ name: file.name })
       })
     )
+)
+
+// ---------------------------------------------------------------------------
+// Downloading a file
+// ---------------------------------------------------------------------------
+
+// `HtmlFiles.download` asks the browser to save a `File` under its name.
+// The Command builds the file, so its content stays out of the message log,
+// which records only the args. It succeeds once the browser is asked: the
+// browser never reports whether the user saved the file, so the Command
+// ends with `Component.noop` and sends nothing.
+export const DownloadSummary = Command.make(
+  "import/DownloadSummary",
+  { args: { name: Schema.String, rows: Schema.Number } },
+  (summary) =>
+    HtmlFiles.download(
+      new File([JSON.stringify(summary)], "summary.json", {
+        type: "application/json"
+      })
+    ).pipe(Effect.as(Component.noop))
 )
 
 // ---------------------------------------------------------------------------
@@ -106,7 +128,13 @@ export const CsvImport = Html.component({
         : $.model,
     CompletedReadCsv: (_, { name, rows }) =>
       ImportModel.Imported({ name, rows }),
-    FailedReadCsv: (_, { name }) => ImportModel.Failed({ name })
+    FailedReadCsv: (_, { name }) => ImportModel.Failed({ name }),
+    ClickedDownloadSummary: ($) =>
+      $.model._tag === "Imported"
+        ? $.run(
+          DownloadSummary.make({ name: $.model.name, rows: $.model.rows })
+        )
+        : $.model
   },
   view: (h, model) =>
     h.section(
@@ -127,7 +155,11 @@ export const CsvImport = Html.component({
             )
           ),
         Imported: ({ name, rows }) =>
-          h.p(`Imported ${rows} rows from ${name}.`),
+          h.p(
+            `Imported ${rows} rows from ${name}.`,
+            h.button.on("click", ImportMessage.ClickedDownloadSummary())
+              .children("Download summary")
+          ),
         Cancelled: ({ name }) => h.p(`Cancelled importing ${name}.`),
         Failed: ({ name }) =>
           h.p.attr("role", "alert").children(`Couldn't read ${name}.`)
@@ -181,3 +213,22 @@ export const choseInInput = Effect.gen(function*() {
     )
     .expect(Locator.text("Imported 3 rows from people.csv.")).toExist()
 })
+
+// ---------------------------------------------------------------------------
+// A whole-app test sees the download
+// ---------------------------------------------------------------------------
+
+// A story checks that `update` issues `DownloadSummary`. To check the file
+// itself, run the app with `TestFiles.layer`: `TestFiles.downloads` returns
+// every file downloaded. Without it, `TestHost` has no document and a
+// download does nothing.
+export const downloaded = Effect.gen(function*() {
+  const file = new File(["id,name\n1,Ada\n"], "people.csv")
+  const root = yield* TestHost.mount(CsvImport, {})
+  root.send(ImportMessage.ChoseFiles({ files: [file] }))
+  yield* TestHost.settle
+  root.send(ImportMessage.ClickedDownloadSummary())
+  yield* TestHost.settle
+  const [summary] = yield* TestFiles.downloads
+  return [summary.name, yield* HtmlFiles.readAsText(summary)] // ["summary.json", '{"name":"people.csv","rows":2}']
+}).pipe(Effect.provide(Layer.merge(TestHost.layer(), TestFiles.layer)))

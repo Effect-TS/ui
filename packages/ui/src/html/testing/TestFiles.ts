@@ -1,10 +1,11 @@
 /**
  * A fake `HtmlFiles.Files` for whole-app tests, so a test decides what the
- * user chooses in each file picker, without a document, in Node too.
+ * user chooses in each file picker, and sees the files the app downloads,
+ * without a document, in Node too.
  *
  * Provide `layer` next to `TestHost.layer()`. Every pick stays pending
  * until `choose` or `dismiss` settles it. Run `TestHost.settle` after it
- * to see the update.
+ * to see the update. `downloads` returns the downloaded files.
  *
  * **Example** (Choosing a file in a whole-app test)
  *
@@ -64,6 +65,8 @@ export interface TestFiles {
   readonly pending: () => ReadonlyArray<HtmlFiles.PickOptions>
   /** Settles every pending pick with `picked`. Throws when none is pending. */
   readonly settle: (picked: HtmlFiles.Picked) => void
+  /** The files downloaded, oldest first. */
+  readonly downloads: () => ReadonlyArray<File>
 }
 
 /**
@@ -93,6 +96,7 @@ interface Pending {
  */
 export const make = (): HtmlFiles.Files & TestFiles => {
   const pending = new Set<Pending>()
+  const downloads: Array<File> = []
   return {
     pick: (options) =>
       Effect.callback((resume) => {
@@ -111,7 +115,12 @@ export const make = (): HtmlFiles.Files & TestFiles => {
       const entries = Array.from(pending)
       pending.clear()
       for (const entry of entries) entry.settle(picked)
-    }
+    },
+    download: (file) =>
+      Effect.sync(() => {
+        downloads.push(file)
+      }),
+    downloads: () => downloads.slice()
   }
 }
 
@@ -153,3 +162,13 @@ export const choose = (
 export const dismiss: Effect.Effect<void, never, TestFiles> = TestFiles.useSync(
   (control) => control.settle({ opened: true, files: [] })
 )
+
+/**
+ * The files the app downloaded, oldest first.
+ *
+ * @stability experimental
+ * @category testing
+ * @since 0.1.0
+ */
+export const downloads: Effect.Effect<ReadonlyArray<File>, never, TestFiles> =
+  TestFiles.useSync((control) => control.downloads())
