@@ -5,8 +5,27 @@ import type { MetroConfig } from "../NativeMetro.ts"
 
 const native = /^(?:@?react-native|@?expo)(?:[-/]|$)/
 
-// What an app's resolver gets back from `context.resolveRequest`.
-const toVite = { type: "vite" } as const
+// What an app's resolver gets back from `context.resolveRequest`: the
+// request, which Vite resolves once the app's resolver returns it. Vite
+// resolves asynchronously, so a resolver that reads the file it resolved to
+// fails the build rather than ship another module.
+interface Delegated {
+  readonly type: "sourceFile"
+  readonly filePath: string
+  readonly moduleName: string
+  readonly origin: string
+}
+
+const delegate = (moduleName: string, origin: string): Delegated => ({
+  type: "sourceFile",
+  get filePath(): string {
+    throw new Error(
+      `[@effect/ui-native] resolveRequest read the file context.resolveRequest resolved ${moduleName} to, which a pre-bundle can't tell it, so return the result as it is or add the module to external`
+    )
+  },
+  moduleName,
+  origin
+})
 
 const empty = "\0@effect/ui-native/empty"
 
@@ -50,12 +69,13 @@ export const prebundle = async (
     plugins: resolveRequest == null ? [] : [{
       name: "@effect/ui-native:resolve-request",
       enforce: "pre",
-      resolveId(source, importer) {
+      async resolveId(source, importer) {
         if (
           importer === undefined || source[0] === "\0" || isExternal(source)
         ) {
           return null
         }
+        const delegated = new Set<Delegated>()
         const found = resolveRequest(
           {
             ...config.resolver,
@@ -65,12 +85,32 @@ export const prebundle = async (
             preferNativePlatform: true,
             originModulePath: importer,
             customResolverOptions: {},
-            resolveRequest: () => toVite
+            resolveRequest: (
+              context: { readonly originModulePath: string },
+              moduleName: string
+            ) => {
+              const request = delegate(moduleName, context.originModulePath)
+              delegated.add(request)
+              return request
+            }
           },
           source,
           platform
         )
-        if (found === toVite) return null
+        if (delegated.has(found as Delegated)) {
+          const { moduleName, origin } = found as Delegated
+          if (moduleName === source && origin === importer) return null
+          if (isExternal(moduleName)) return { id: moduleName, external: true }
+          const resolved = await this.resolve(moduleName, origin, {
+            skipSelf: true
+          })
+          if (resolved === null) {
+            throw new Error(
+              `[@effect/ui-native] resolveRequest resolved ${source} to ${moduleName}, which wasn't found from ${origin}`
+            )
+          }
+          return resolved
+        }
         if (found.type === "sourceFile") return found.filePath
         if (found.type === "empty") return empty
         throw new Error(

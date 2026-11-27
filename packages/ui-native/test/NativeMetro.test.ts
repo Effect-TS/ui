@@ -20,7 +20,8 @@ describe("NativeMetro.withEffectUi", () => {
     `import { Platform } from "react-native"
 import { title } from "./title"
 import { flavor } from "./flavor"
-export default [Platform, title, flavor]
+import { topping } from "./topping"
+export default [Platform, title, flavor, topping]
 `
   )
   write("src/title.ts", `export const title = "plain title"\n`)
@@ -28,6 +29,8 @@ export default [Platform, title, flavor]
   write("src/title.android.ts", `export const title = "android title"\n`)
   write("src/flavor.ts", `export const flavor = "plain flavor"\n`)
   write("src/custom.ts", `export const flavor = "custom flavor"\n`)
+  write("src/topping.ts", `export const topping = "plain topping"\n`)
+  write("src/sauce.ts", `export const topping = "sauce topping"\n`)
 
   it(
     "swaps the resolved entry for a pre-bundle that resolves as Metro does",
@@ -38,13 +41,18 @@ export default [Platform, title, flavor]
         projectRoot: root,
         resolver: {
           sourceExts: ["ts", "js"],
+          // One alias returns a file, the other renames the import.
           resolveRequest: (context, moduleName, platform) =>
             moduleName === "./flavor"
               ? {
                 type: "sourceFile",
                 filePath: Path.join(root, "src/custom.ts")
               }
-              : context.resolveRequest(context, moduleName, platform)
+              : context.resolveRequest(
+                context,
+                moduleName === "./topping" ? "./sauce" : moduleName,
+                platform
+              )
         }
       }).finally(() => {
         process.env.NODE_ENV = env
@@ -71,6 +79,8 @@ export default [Platform, title, flavor]
       assert.notInclude(ios, "plain title")
       assert.include(android, "custom flavor")
       assert.notInclude(android, "plain flavor")
+      assert.include(android, "sauce topping")
+      assert.notInclude(android, "plain topping")
       assert.match(android, /from "react-native"/)
     },
     30_000

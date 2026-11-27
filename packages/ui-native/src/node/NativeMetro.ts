@@ -124,9 +124,11 @@ const mainOf = (root: string): string => {
  * The app's own `resolver.resolveRequest` also resolves the imports Vite
  * bundles, so a release gets the modules development does. It is given the
  * resolver config, `dev`, `originModulePath` and `platform`, and its
- * `context.resolveRequest` hands the import back to Vite. It may resolve to
- * a source file or to an empty module; anything else fails the build, and
- * belongs in `external`.
+ * `context.resolveRequest` hands the import, under the name and origin it is
+ * given, back to Vite. It may resolve to a source file or to an empty module;
+ * anything else fails the build, and belongs in `external`. Vite resolves
+ * a handed-back import only after the app's resolver returns, so a resolver
+ * that reads its result fails the build too.
  *
  * In development the entry's sources are served as they are, and the
  * refresh runtime is run before them, so that an edit to a module whose
