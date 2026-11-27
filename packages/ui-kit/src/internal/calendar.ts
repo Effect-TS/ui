@@ -403,8 +403,12 @@ export const syncMonthPhase = (
 
 export const tabStopOf = (
   focusedDay: DateTime.Utc | null,
+  focused: boolean,
   context: FocusContext,
   weeks: Weeks
 ): DateTime.Utc | null =>
-  rendered(context, weeks, focusedDay) ??
+  (focused
+    ? rendered(context, weeks, focusedDay)
+    : shown(context, context.preferred) ??
+      rendered(context, weeks, focusedDay)) ??
     focusInGrid(context, weeks, focusedDay)

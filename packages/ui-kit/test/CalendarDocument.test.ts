@@ -221,9 +221,15 @@ const keydown = (id: string, key: string) =>
   )
 
 const arrowRight = () => keydown(document.activeElement!.id, "ArrowRight")
+const arrowUp = () => keydown(document.activeElement!.id, "ArrowUp")
 
 // Enter on a focused button activates it with a click.
 const enter = () => (document.activeElement as HTMLElement).click()
+
+const pointerClick = (id: string) => () =>
+  byId(id).dispatchEvent(
+    new MouseEvent("click", { detail: 1, bubbles: true, cancelable: true })
+  )
 
 // A browser runs microtasks between two trusted events, but no other task.
 const rapidly = (...events: Array<() => void>) =>
@@ -303,5 +309,38 @@ describe("Calendar in a document", { concurrent: false }, () => {
       yield* tick
       assert.strictEqual(document.activeElement?.id, "2026-12-02")
       assert.strictEqual(byId("picked").textContent, "")
+    }).pipe(Effect.scoped))
+
+  it.effect("reversing back to the shown month focuses and picks it, and a pointer click during a sync still picks", () =>
+    Effect.gen(function*() {
+      yield* BrowserHost.mountEffect(PickPage, {}, yield* container)
+      yield* tick
+      byId("2026-11-30").focus()
+      yield* tick
+      yield* rapidly(arrowRight, arrowUp, enter)
+      yield* tick
+      assert.strictEqual(document.activeElement?.id, "2026-11-24")
+      assert.strictEqual(byId("picked").textContent, "2026-11-24")
+
+      byId("2026-11-30").focus()
+      yield* tick
+      yield* rapidly(arrowRight, pointerClick("2026-11-30"))
+      yield* tick
+      assert.strictEqual(byId("picked").textContent, "2026-11-24 2026-11-30")
+    }).pipe(Effect.scoped))
+
+  it.effect("picking a day without moving focus keeps keyboard navigation on the focused day", () =>
+    Effect.gen(function*() {
+      yield* BrowserHost.mountEffect(PickPage, {}, yield* container)
+      yield* tick
+      byId("2026-11-15").focus()
+      yield* tick
+      byId("2026-11-21").click()
+      yield* tick
+      assert.strictEqual(byId("picked").textContent, "2026-11-21")
+      assert.strictEqual(document.activeElement?.id, "2026-11-15")
+      arrowRight()
+      yield* tick
+      assert.strictEqual(document.activeElement?.id, "2026-11-16")
     }).pipe(Effect.scoped))
 })

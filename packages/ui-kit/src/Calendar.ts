@@ -284,7 +284,11 @@ export const CalendarEvents = UiSchema.TaggedEnum({
 export type CalendarEvents = typeof CalendarEvents.Type
 
 const CalendarMessage = UiSchema.TaggedEnum({
-  ClickedDay: { date: Schema.DateTimeUtc, unavailable: Schema.Boolean },
+  ClickedDay: {
+    date: Schema.DateTimeUtc,
+    unavailable: Schema.Boolean,
+    keyboard: Schema.Boolean
+  },
   ClickedStep: { months: Schema.Literals([-1, 1]) },
   FocusedDay: { date: Schema.DateTimeUtc },
   BlurredDay: {},
@@ -327,7 +331,10 @@ const settled = ($: CalendarUpdate) =>
 const navigate = ($: CalendarUpdate, move: CalendarGridKey) => {
   if ($.props.disabled === true) return $.model
   const context = contextOf($.props)
-  const syncing = !sameMonth($.model.shownMonth, context.monthStart)
+  const mountedMonth = $.model.focused
+    ? $.model.shownMonth
+    : context.monthStart
+  const syncing = !sameMonth(mountedMonth, context.monthStart)
   const date = syncing &&
       $.model.pendingFocus !== null &&
       sameMonth($.model.pendingFocus, context.monthStart)
@@ -342,13 +349,19 @@ const navigate = ($: CalendarUpdate, move: CalendarGridKey) => {
     context.max
   )
   if (sameDay(target, date)) return syncing ? $.model : settled($)
-  if (sameMonth(target, context.monthStart)) {
+  if (sameMonth(target, mountedMonth)) {
+    const step = $.evolve({
+      focusedDay: target,
+      pendingFocus: null
+    }).run(focusDay(target))
     return syncing
-      ? $.evolve({ pendingFocus: target })
-      : $.evolve({
-        focusedDay: target,
-        pendingFocus: null
-      }).run(focusDay(target))
+      ? step.emit(
+        CalendarEvents.RequestedMonth({ month: startOfMonth(target) })
+      )
+      : step
+  }
+  if (sameMonth(target, context.monthStart)) {
+    return $.evolve({ pendingFocus: target })
   }
   return $.evolve({ pendingFocus: target }).emit(
     CalendarEvents.RequestedMonth({ month: startOfMonth(target) })
@@ -410,12 +423,13 @@ export const Calendar = Html.component({
     rtl: false
   }),
   update: {
-    ClickedDay: ($, { date, unavailable }) => {
+    ClickedDay: ($, { date, keyboard, unavailable }) => {
       const { max, min, monthStart } = contextOf($.props)
       if ($.props.disabled === true || isOutOfRange(date, min, max)) {
         return $.model
       }
       if (
+        keyboard &&
         $.model.focused &&
         !sameMonth($.model.shownMonth, monthStart) &&
         $.model.focusedDay !== null &&
@@ -424,9 +438,10 @@ export const Calendar = Html.component({
         return $.model
       }
       if (unavailable || $.props.readOnly === true) return settled($)
-      return $.evolve({ focusedDay: date, pendingFocus: null }).emit(
-        CalendarEvents.Picked({ date })
-      )
+      return ($.model.pendingFocus === null
+        ? $
+        : $.evolve({ pendingFocus: null }))
+        .emit(CalendarEvents.Picked({ date }))
     },
     ClickedStep: ($, { months }) => {
       const { max, min, monthStart } = contextOf($.props)
@@ -510,7 +525,7 @@ export const Calendar = Html.component({
     const weekdays = weekdayNames(props.locale, weekStartsOn)
     const title = formatMonthTitle(monthStart, props.locale)
     const phase = syncMonthPhase(model, context, weeks)
-    const tabStop = tabStopOf(phase.focusedDay, context, weeks)
+    const tabStop = tabStopOf(phase.focusedDay, phase.focused, context, weeks)
     const fullDate = fullDateFormatter(props.locale)
     const headingId = p.id("heading")
     const isSelected = (date: DateTime.Utc) =>
@@ -595,7 +610,12 @@ export const Calendar = Html.component({
           .ref(CalendarDayRef.at(key))
           .on(
             "click",
-            CalendarMessage.ClickedDay({ date, unavailable }),
+            (payload) =>
+              CalendarMessage.ClickedDay({
+                date,
+                unavailable,
+                keyboard: payload?.pointerType === ""
+              }),
             unavailable ? { preventDefault: "always" } : undefined
           )
           .on("focus", CalendarMessage.FocusedDay({ date }))
