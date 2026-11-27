@@ -1,5 +1,5 @@
 import { plugin } from "@effect/ui/html/HtmlServerVite"
-import { describe, expect, it } from "@effect/vitest"
+import { describe, expect, it, vi } from "@effect/vitest"
 import { once } from "node:events"
 import * as fs from "node:fs/promises"
 import * as os from "node:os"
@@ -87,6 +87,22 @@ describe("HtmlServerVite.plugin", () => {
       )
       expect(await page("people/1.html")).toContain("Bio of person 1")
       expect(await page("404.html")).toContain("<h1>Not found</h1>")
+    } finally {
+      await fs.rm(outDir, { recursive: true, force: true })
+    }
+  }, 60_000)
+
+  it("rejects watch builds before building either environment", async () => {
+    const outDir = await fs.mkdtemp(path.join(os.tmpdir(), "html-server-vite-"))
+    try {
+      const builder = await createBuilder(
+        config({ build: { outDir, watch: {} } })
+      )
+      const build = vi.spyOn(builder, "build")
+      await expect(builder.buildApp()).rejects.toThrow(
+        /HtmlServerVite.*vite build --watch/
+      )
+      expect(build).not.toHaveBeenCalled()
     } finally {
       await fs.rm(outDir, { recursive: true, force: true })
     }
