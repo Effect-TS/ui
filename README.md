@@ -89,7 +89,7 @@ Without `exactOptionalPropertyTypes`, some types are inferred too widely. For ex
 
 ## Snapshots
 
-Every pull request and every push to `main` publishes snapshot builds of all five packages to [pkg.pr.new](https://pkg.pr.new/~/Effect-TS/ui). Install `@effect/ui` with a commit's short SHA alongside `effect` v4:
+Every pull request and every push to `main` publishes snapshot builds of every package to [pkg.pr.new](https://pkg.pr.new/~/Effect-TS/ui). Install `@effect/ui` with a commit's short SHA alongside `effect` v4:
 
 ```sh
 pnpm add effect @effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@<sha>
