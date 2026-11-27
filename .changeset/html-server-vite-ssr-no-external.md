@@ -2,4 +2,4 @@
 "@effect/ui": patch
 ---
 
-Bundle installed packages that depend on `@effect/ui` in `HtmlServerVite` via `ssr.noExternal` so third-party component libraries share the app's `@effect/ui` instance during dev SSR and prerender.
+`HtmlServerVite` now automatically bundles installed component libraries that depend on `@effect/ui` during dev SSR and prerender, so apps no longer need to list them in `ssr.noExternal`. List a package in `ssr.external` to opt it out.

@@ -662,7 +662,6 @@ type PackageJson = Partial<
   Record<"dependencies" | "devDependencies" | "peerDependencies", object>
 >
 
-/** The closest `<sub>/package.json` at or above `from`, with its directory. */
 const findPackage = async (
   from: string,
   sub = ""
@@ -683,11 +682,6 @@ const findPackage = async (
   }
 }
 
-/**
- * The installed packages that depend on `@effect/ui`, found from the
- * dependencies of the closest `package.json` at or above `root`, and from
- * the dependencies of each package found.
- */
 const uiPackages = async (root: string): Promise<Array<string>> => {
   const names = new Set<string>()
   const crawled = new Set<string>()
