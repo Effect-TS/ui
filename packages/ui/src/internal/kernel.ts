@@ -644,11 +644,11 @@ export const send = (
   applied(inst, next, seq)
 }
 
-const messageTag = (message: unknown): string | undefined =>
-  typeof message === "object" && message !== null &&
-    typeof (message as { readonly _tag?: unknown })._tag === "string"
-    ? (message as { readonly _tag: string })._tag
-    : undefined
+const messageTag = (message: unknown): string | undefined => {
+  if (typeof message !== "object" || message === null) return undefined
+  const tag = (message as { readonly _tag?: unknown })._tag
+  return typeof tag === "string" ? tag : undefined
+}
 
 const issueAll = (
   inst: Instance,
