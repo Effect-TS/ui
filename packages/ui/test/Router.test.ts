@@ -776,10 +776,14 @@ describe("Router", { concurrent: false }, () => {
   it.effect("calls onBlocked on the first block and the last release, after blocked() changes", () => {
     const calls: Array<[boolean, boolean]> = []
     let router: Router.Router | undefined
+    let throws = false
     const layer = Router.make({
       routes: AppRoute,
       history: Router.memoryHistory("/"),
-      onBlocked: (blocked) => calls.push([blocked, router!.blocked()])
+      onBlocked: (blocked) => {
+        calls.push([blocked, router!.blocked()])
+        if (throws) throw new Error("onBlocked")
+      }
     })
     return run(
       layer,
@@ -793,6 +797,17 @@ describe("Router", { concurrent: false }, () => {
         yield* Scope.close(a, Exit.void)
         yield* Scope.close(b, Exit.void)
         assert.deepStrictEqual(calls, [[true, true], [false, false]])
+
+        // A callback that throws fails the block, and closing its Scope still releases it.
+        throws = true
+        const c = yield* Scope.fork(outer)
+        const exit = yield* Effect.exit(
+          router.block("c").pipe(Scope.provide(c))
+        )
+        assert.isTrue(Exit.hasDies(exit))
+        throws = false
+        yield* Scope.close(c, Exit.void)
+        assert.isFalse(router.blocked())
       })
     )
   })

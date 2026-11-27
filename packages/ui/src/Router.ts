@@ -2104,8 +2104,8 @@ const build = (
         Effect.flatMap(Effect.scope, (scope) => {
           const first = blocks.size === 0
           blocks.set(key, (blocks.get(key) ?? 0) + 1)
-          if (first) options.onBlocked?.(true)
-          return Scope.addFinalizer(
+          // The release is registered first, so a throwing `onBlocked` can't leave the block held.
+          const added = Scope.addFinalizer(
             scope,
             Effect.sync(() => {
               const held = blocks.get(key)! - 1
@@ -2116,6 +2116,12 @@ const build = (
               }
             })
           )
+          return first
+            ? Effect.andThen(
+              added,
+              Effect.sync(() => options.onBlocked?.(true))
+            )
+            : added
         }),
       blocked: () => blocks.size > 0,
       intent: (href) =>
