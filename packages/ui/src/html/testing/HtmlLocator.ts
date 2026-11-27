@@ -340,9 +340,8 @@ const buildIndex = <N>(root: N): Index<N> => {
     byId: new Map(),
     labels: new Map()
   }
-  const labels: Array<N> = []
-  // A label without `for` labels its first labelable descendant.
-  const wrapped = new Map<N, N>()
+  // Every label in document order, with its first labelable descendant.
+  const labels = new Map<N, N | undefined>()
   const entries = index.entries as Array<Entry<N>>
   const modal = topModal(reader, root)
   const walk = (
@@ -379,13 +378,14 @@ const buildIndex = <N>(root: N): Index<N> => {
     index.byNode.set(node, entry)
     const id = reader.attr(node, "id")
     if (id !== undefined && !index.byId.has(id)) index.byId.set(id, node)
-    if (isLabelable(reader, node)) {
+    const isLabel = tag === "label"
+    if (isLabel) labels.set(node, undefined)
+    else if (open.length > 0 && isLabelable(reader, node)) {
       for (const label of open) {
-        if (!wrapped.has(label)) wrapped.set(label, node)
+        if (labels.get(label) === undefined) labels.set(label, node)
       }
     }
-    const wraps = tag === "label" && reader.attr(node, "for") === undefined
-    if (tag === "label") labels.push(node)
+    const childOpen = isLabel ? [...open, node] : open
     const childSection = inSection || sectioning.has(tag)
     const host = isDom(node) &&
       (node as unknown as globalThis.Element).shadowRoot != null
@@ -401,21 +401,17 @@ const buildIndex = <N>(root: N): Index<N> => {
             modal as globalThis.Node | undefined
           )
           : inertHere,
-        wraps ? [...open, node] : open,
+        childOpen,
         childSection
       )
     }
   }
   walk(root, false, modal !== undefined, [], false)
-  for (const label of labels) {
+  for (const [label, first] of labels) {
+    // A label without `for` labels its first labelable descendant.
     const target = reader.attr(label, "for")
-    const byFor = target === undefined ? undefined : index.byId.get(target)
-    const control = target === undefined
-      ? wrapped.get(label)
-      : byFor !== undefined && isLabelable(reader, byFor)
-      ? byFor
-      : undefined
-    if (control === undefined) continue
+    const control = target === undefined ? first : index.byId.get(target)
+    if (control === undefined || !isLabelable(reader, control)) continue
     const list = index.labels.get(control)
     if (list === undefined) index.labels.set(control, [label])
     else list.push(label)
@@ -849,10 +845,12 @@ const labelable: ReadonlySet<string> = new Set([
   "progress"
 ])
 
-const isLabelable = <N>(reader: Reader<N>, node: N): boolean =>
-  reader.isElement(node) && labelable.has(reader.tag(node)) &&
-  !(reader.tag(node) === "input" &&
-    (reader.attr(node, "type") ?? "").toLowerCase() === "hidden")
+const isLabelable = <N>(reader: Reader<N>, node: N): boolean => {
+  const tag = reader.tag(node)
+  return tag === "input"
+    ? reader.attr(node, "type")?.toLowerCase() !== "hidden"
+    : labelable.has(tag)
+}
 
 /**
  * The elements whose `placeholder` is `text`.
