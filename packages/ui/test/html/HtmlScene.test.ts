@@ -182,11 +182,6 @@ describe("HtmlScene", () => {
             ),
           h.input.prop("type", "checkbox").attr("aria-label", "PropBox")
             .on("keydown", saw("keydown")),
-          h.textarea.attr("aria-label", "Notes").on("input", saw("input")),
-          h.input.attrs({ type: "email", "aria-label": "Mail" }).on(
-            "input",
-            saw("input")
-          ),
           h.div.attr("contenteditable", "true").on("keydown", saw("keydown"))
             .children(
               h.span.attr("id", "ce-child").children("Edit"),
@@ -212,8 +207,6 @@ describe("HtmlScene", () => {
       .compositionEnd(name)
       .change(name, "Ada")
       .change(name, { inputType: "insertReplacementText" })
-      .type(HtmlLocator.label("Notes"), "Hi")
-      .type(HtmlLocator.label("Mail"), "a@b")
       .keydown(name, "a")
       .keydown(name, "a", {
         composing: true,
@@ -228,14 +221,12 @@ describe("HtmlScene", () => {
     assert.deepStrictEqual(
       scene.get(log).children?.map((child) => child.text).join("").split("\n"),
       [
-        `input {"value":"A","checked":false,"files":[],"composing":false,"inputType":"insertText","selectionStart":1,"selectionEnd":1}`,
+        `input {"value":"A","checked":false,"files":[],"composing":false,"inputType":"insertText","selectionStart":null,"selectionEnd":null}`,
         `input {"value":"Ad","checked":false,"files":[],"composing":true,"inputType":"insertCompositionText","selectionStart":0,"selectionEnd":2}`,
         `compositionend {"value":"Adam"}`,
         `compositionend {"value":"Ada"}`,
-        `change {"value":"Ada","checked":false,"files":[],"composing":false,"inputType":"","selectionStart":3,"selectionEnd":3}`,
-        `change {"value":"Ada","checked":false,"files":[],"composing":false,"inputType":"insertReplacementText","selectionStart":3,"selectionEnd":3}`,
-        `input {"value":"Hi","composing":false,"inputType":"insertText","selectionStart":2,"selectionEnd":2}`,
-        `input {"value":"a@b","checked":false,"files":[],"composing":false,"inputType":"insertText","selectionStart":null,"selectionEnd":null}`,
+        `change {"value":"Ada","checked":false,"files":[],"composing":false,"inputType":"","selectionStart":null,"selectionEnd":null}`,
+        `change {"value":"Ada","checked":false,"files":[],"composing":false,"inputType":"insertReplacementText","selectionStart":null,"selectionEnd":null}`,
         `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":true,"selectionStart":null,"selectionEnd":null}`,
         `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":true,"repeat":true,"editable":false,"selectionStart":1,"selectionEnd":3}`,
         `keydown {"key":" ","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`,

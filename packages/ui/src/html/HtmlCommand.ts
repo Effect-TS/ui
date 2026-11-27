@@ -329,28 +329,17 @@ export const measure = <N extends globalThis.Element, Msg>(
  * the element shows something else, such as a character `update`
  * rejected, since writing it afterward would drop the selection.
  *
- * **Example** (Selecting a field's text once it has focus)
+ * **Example** (Selecting a field's text, or placing the caret)
  *
  * ```ts
  * import { Html, HtmlCommand } from "@effect/ui/html"
  * import { UiSchema } from "@effect/ui"
  *
- * const Message = UiSchema.TaggedEnum({ FocusedAmount: {}, CompletedSelectAmount: {} })
+ * const Message = UiSchema.TaggedEnum({ CompletedSelectAmount: {} })
  * const Amount = Html.ref("Amount", "input")
  *
- * const command = HtmlCommand.select(Amount, () => Message.CompletedSelectAmount())
- * ```
- *
- * **Example** (Placing the caret after an inserted suggestion)
- *
- * ```ts
- * import { Html, HtmlCommand } from "@effect/ui/html"
- * import { UiSchema } from "@effect/ui"
- *
- * const Message = UiSchema.TaggedEnum({ PlacedCaret: {} })
- * const Query = Html.ref("Query", "textarea")
- *
- * const command = HtmlCommand.select(Query, () => Message.PlacedCaret(), { start: 14 })
+ * const all = HtmlCommand.select(Amount, () => Message.CompletedSelectAmount())
+ * const caret = HtmlCommand.select(Amount, () => Message.CompletedSelectAmount(), { start: 2 })
  * ```
  *
  * @stability experimental
