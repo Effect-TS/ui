@@ -21,7 +21,7 @@
  * @since 0.1.0
  */
 import type * as Context from "effect/Context"
-import type * as Duration from "effect/Duration"
+import * as Duration from "effect/Duration"
 import type * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import type * as Option from "effect/Option"
@@ -31,6 +31,7 @@ import * as Schema from "effect/Schema"
 import * as SchemaTransformation from "effect/SchemaTransformation"
 import type * as Scope from "effect/Scope"
 import type * as Component from "./Component.ts"
+import type * as Kernel from "./internal/kernel.ts"
 import * as runtime from "./internal/runtime.ts"
 import * as services from "./internal/services.ts"
 import type * as View from "./View.ts"
@@ -514,6 +515,139 @@ export interface Refs {
  * @since 0.1.0
  */
 export const Refs: Context.Service<Refs, Refs> = services.Refs
+
+/**
+ * One phase that took longer than its budget, from `slowPhases`.
+ *
+ * **Details**
+ *
+ * - `update`: one `update` call, with the message it handled.
+ * - `view`: one view call. Children's views aren't included, as they run
+ *   later in the render.
+ * - `flush`: one render pass, including every view, the host writes and the
+ *   `committed` callbacks. The first mount counts as one flush, from its first
+ *   `init`. A slow view inside a flush is reported as both.
+ *
+ * `duration` and `budget` are in milliseconds.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type SlowPhase =
+  | {
+    readonly phase: "update"
+    readonly path: string
+    readonly component: string
+    readonly message: unknown
+    readonly duration: number
+    readonly budget: number
+  }
+  | {
+    readonly phase: "view"
+    readonly path: string
+    readonly component: string
+    readonly duration: number
+    readonly budget: number
+  }
+  | {
+    readonly phase: "flush"
+    readonly duration: number
+    readonly budget: number
+  }
+
+/**
+ * Reports each `update`, view or flush that takes longer than its budget, in
+ * every tree mounted with this Layer.
+ *
+ * **Details**
+ *
+ * A phase without a budget isn't timed. A phase within its budget allocates
+ * nothing, and one that throws isn't reported. Time comes from the
+ * `Clock`'s monotonic reading, so tests can script it. `onSlow` runs
+ * synchronously, and an error it throws is logged with `console.error`.
+ *
+ * **Gotchas**
+ *
+ * `message` is the message itself, not redacted. Send only what you need,
+ * such as its `_tag`, to a remote service.
+ *
+ * **Example** (Reporting slow phases)
+ *
+ * ```ts
+ * import { Renderer } from "@effect/ui"
+ *
+ * const SlowPhases = Renderer.slowPhases({
+ *   update: "4 millis",
+ *   view: "16 millis",
+ *   flush: "16 millis",
+ *   onSlow: (slow) => console.warn(slow.phase, slow.duration)
+ * })
+ * ```
+ *
+ * @stability experimental
+ * @category layers
+ * @since 0.1.0
+ */
+export const slowPhases = (options: {
+  readonly update?: Duration.Input | undefined
+  readonly view?: Duration.Input | undefined
+  readonly flush?: Duration.Input | undefined
+  readonly onSlow: (slow: SlowPhase) => void
+}): Layer.Layer<never> => {
+  const update = budgetOf(options.update)
+  const view = budgetOf(options.view)
+  const flush = budgetOf(options.flush)
+  const report = (slow: SlowPhase) => {
+    try {
+      options.onSlow(slow)
+    } catch (error) {
+      // oxlint-disable-next-line no-console
+      console.error("[@effect/ui/Renderer] slowPhases: onSlow failed", error)
+    }
+  }
+  return Layer.succeed(services.SlowPhases, (clock): Kernel.Slow => {
+    const now = () => clock.monotonicTimeNanosUnsafe()
+    const since = (from: bigint) => Number(now() - from) / 1_000_000
+    return {
+      now,
+      update: update === undefined ? undefined : (from, inst, message) => {
+        const duration = since(from)
+        if (duration > update) {
+          report({
+            phase: "update",
+            path: inst.path,
+            component: inst.component.definition.name,
+            message,
+            duration,
+            budget: update
+          })
+        }
+      },
+      view: view === undefined ? undefined : (from, inst) => {
+        const duration = since(from)
+        if (duration > view) {
+          report({
+            phase: "view",
+            path: inst.path,
+            component: inst.component.definition.name,
+            duration,
+            budget: view
+          })
+        }
+      },
+      flush: flush === undefined ? undefined : (from) => {
+        const duration = since(from)
+        if (duration > flush) {
+          report({ phase: "flush", duration, budget: flush })
+        }
+      }
+    }
+  })
+}
+
+const budgetOf = (input: Duration.Input | undefined): number | undefined =>
+  input === undefined ? undefined : Duration.toMillis(input)
 
 /**
  * A mounted tree.

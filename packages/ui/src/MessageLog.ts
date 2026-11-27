@@ -7,7 +7,8 @@
  * an entry, so an app that doesn't provide a log pays nothing for it. Provide
  * `memory` for a ring buffer, `socket` to stream entries to a devtools
  * process, or `fanout` for several sinks. Production observability goes
- * through Effect's tracer, logger and metrics instead.
+ * through Effect's tracer, logger and metrics instead, and slow renders
+ * through `Renderer.slowPhases`.
  *
  * Entries hold decoded values and references, never copies. They're encoded
  * through the component's Schemas only when they're sent somewhere, as the

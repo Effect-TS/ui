@@ -6849,7 +6849,7 @@ describe("Runtime", () => {
           },
           { phase: "flush", duration: 20, budget: 16 }
         ])
-        yield* click(root, "work")
+        click(root, "work")
         yield* TestHost.settle
         assert.deepStrictEqual(reports, [
           {

@@ -4,6 +4,7 @@
  * @internal
  */
 import type * as Cause from "effect/Cause"
+import type * as Clock from "effect/Clock"
 import * as Context from "effect/Context"
 import type * as Effect from "effect/Effect"
 import type {
@@ -12,6 +13,7 @@ import type {
 } from "../Renderer.ts"
 import type * as Route from "../Route.ts"
 import type * as Subscription from "../Subscription.ts"
+import type * as Kernel from "./kernel.ts"
 import type * as prefetchWalk from "./prefetch.ts"
 import type * as routeRun from "./routeRun.ts"
 
@@ -24,6 +26,16 @@ export const Renderer = Context.Service<RendererShape, RendererShape>(
 export const Refs = Context.Service<RefsShape, RefsShape>(
   "@effect/ui/Renderer/Refs"
 )
+
+/**
+ * Builds a root's phase timing from its `Clock`. `Renderer.slowPhases` sets
+ * it, and without it the kernel times nothing.
+ *
+ * @internal
+ */
+export const SlowPhases = Context.Reference<
+  ((clock: Clock.Clock) => Kernel.Slow) | undefined
+>("@effect/ui/Renderer/SlowPhases", { defaultValue: () => undefined })
 
 /**
  * What a mounted root offers the router: its flush counter and its instances' state.
