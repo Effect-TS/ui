@@ -2,6 +2,9 @@
  * The React Native element vocabulary: `view`, `text`, `scroll` and
  * `input`, rendered by `NativeHost` as Fabric's native views.
  *
+ * Other modules add native views with {@link defineView}, so an app's host
+ * holds only the views it renders.
+ *
  * @stability experimental
  * @since 0.1.0
  */
@@ -9,6 +12,7 @@ import * as Component from "@effect/ui/Component"
 import * as Renderer from "@effect/ui/Renderer"
 import * as View from "@effect/ui/View"
 import * as Context from "effect/Context"
+import { kinds } from "./internal/kinds.ts"
 import type { NativeNode } from "./NativeHost.ts"
 
 /**
@@ -249,15 +253,29 @@ export interface ValuePayload {
 }
 
 /**
- * The events of a `view` and a `text`. A press ends on the element, or
- * at most 20 points outside it.
+ * An element's position in its parent and its size, in points, after
+ * layout.
  *
  * @stability experimental
  * @category events
  * @since 0.1.0
  */
-export interface PressEvents {
+export interface LayoutPayload {
+  readonly layout: Rect
+}
+
+/**
+ * The events of a `view` and a `text`. A press ends on the element, or
+ * at most 20 points outside it. `layout` fires when layout changes the
+ * element's position or size.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface ViewEvents {
   readonly press: PressPayload
+  readonly layout: LayoutPayload
 }
 
 /**
@@ -267,7 +285,7 @@ export interface PressEvents {
  * @category events
  * @since 0.1.0
  */
-export interface ScrollEvents extends PressEvents {
+export interface ScrollEvents extends ViewEvents {
   readonly scroll: ScrollPayload
 }
 
@@ -284,6 +302,7 @@ export interface InputEvents {
   readonly submit: ValuePayload
   readonly focus: {}
   readonly blur: {}
+  readonly layout: LayoutPayload
 }
 
 /**
@@ -320,12 +339,120 @@ export class Host extends Context.Service<Host, {
   ) => void
   /** `undefined` until the node has been committed. */
   readonly measure: (node: NativeNode) => Rect | undefined
+  /** Runs a native command, such as `scrollToEnd`. Does nothing before the node's first commit. */
+  readonly command: (
+    node: NativeNode,
+    name: string,
+    args?: ReadonlyArray<unknown> | undefined
+  ) => void
 }>()("@effect/ui-native/Native/Host") {}
 
 declare module "@effect/ui/Command" {
   interface FrameworkServices {
     readonly NativeHost: Host
   }
+}
+
+/**
+ * What a {@link ViewKind}'s hooks can do to a node.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface ViewHost {
+  /** `Platform.OS` of the running app. */
+  readonly os: string
+  /**
+   * Sets a Fabric prop, sent at the next commit. A prop whose name ends in
+   * `Color` is processed as a colour.
+   */
+  readonly set: (node: NativeNode, name: string, value: unknown) => void
+  /** Turns a colour into the value Fabric parses, for colours nested in a prop. */
+  readonly color: (value: unknown) => unknown
+  /** Runs a native command. Does nothing before the node's first commit. */
+  readonly command: (
+    node: NativeNode,
+    name: string,
+    args?: ReadonlyArray<unknown> | undefined
+  ) => void
+  /** Runs the node's own handler for `event`, if it has one. */
+  readonly fire: (node: NativeNode, event: string, payload: unknown) => void
+}
+
+/**
+ * How the host renders an element: the native view it creates and what the
+ * host does with its props and events.
+ *
+ * **Details**
+ *
+ * A prop without a setter in `props` is sent to Fabric as it is. A native
+ * event without a hook in `events`, such as `topLayout`, runs the
+ * element's own `layout` handler with the native payload, and doesn't reach
+ * its ancestors. Binding the handler sets `onLayout: true`, which native
+ * checks before it sends the event.
+ *
+ * A `value` prop is controlled. When native edits it, as a text field does,
+ * the kind's `events` hook records what native shows, so the `value` setter
+ * can skip a value native already shows. If the Model doesn't take the
+ * edit, the host calls the setter with the last value again once the event
+ * has run, and the setter sends it back.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface ViewKind {
+  /** Fabric's component name, or a function of the node, such as the platform's name. */
+  readonly viewName: string | ((node: NativeNode, host: ViewHost) => string)
+  /** Props every node starts with. */
+  readonly defaults?: Readonly<Record<string, unknown>> | undefined
+  /** Raw text may sit inside. Text inside it is virtual text. */
+  readonly text?: boolean | undefined
+  /** An inner view that holds the children, as a scroll view's content view. */
+  readonly content?: ViewKind | undefined
+  /** Setters by prop name, for a prop that needs more than sending it. */
+  readonly props?:
+    | Readonly<
+      Record<string, (node: NativeNode, value: unknown, host: ViewHost) => void>
+    >
+    | undefined
+  /** Hooks by native event name, such as `topChange`, for an event that needs more than its payload. */
+  readonly events?:
+    | Readonly<
+      Record<string, (node: NativeNode, payload: any, host: ViewHost) => void>
+    >
+    | undefined
+}
+
+/**
+ * Makes `builder`'s tag render as `kind`, and returns `builder`. The
+ * definition lasts as long as the module that holds it, so render the
+ * builder this returns: a bundler drops the definition of a builder nobody
+ * renders. A later definition of the same tag replaces it, as Fast Refresh
+ * needs.
+ *
+ * **Example** (An activity indicator)
+ *
+ * ```ts
+ * import { Native } from "@effect/ui-native"
+ *
+ * const spinner = Native.defineView(new Native.Element("spinner"), {
+ *   viewName: (_, host) =>
+ *     host.os === "ios" ? "ActivityIndicatorView" : "AndroidProgressBar",
+ *   defaults: { animating: true, styleAttr: "Normal", indeterminate: true }
+ * })
+ * ```
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const defineView = /* @__NO_SIDE_EFFECTS__ */ <
+  B extends View.ElementBuilder<any, any, any, any, any>
+>(builder: B, kind: ViewKind): B => {
+  kinds.set(builder.tag, kind)
+  return builder
 }
 
 /**
@@ -516,11 +643,11 @@ export class InputElement<
  * @since 0.1.0
  */
 export interface Tags<Msg> {
-  readonly view: View.Shorthand<ViewElement<Msg, never, PressEvents, "view">>
+  readonly view: View.Shorthand<ViewElement<Msg, never, ViewEvents, "view">>
   readonly scroll: View.Shorthand<
     ViewElement<Msg, never, ScrollEvents, "scroll">
   >
-  readonly text: View.Shorthand<TextElement<Msg, never, PressEvents, "text">>
+  readonly text: View.Shorthand<TextElement<Msg, never, ViewEvents, "text">>
   readonly input: InputElement<Msg, never, InputEvents, "input">
 }
 
@@ -573,6 +700,10 @@ export const Elements: Elements | undefined = undefined
  */
 export const name = "native"
 
+// Android has its own views for horizontal scrolling.
+const horizontal = (n: NativeNode, host: ViewHost): boolean =>
+  host.os === "android" && n.props.horizontal === true
+
 /**
  * The element builders installed on `h`.
  *
@@ -582,10 +713,79 @@ export const name = "native"
  */
 export const tags: Readonly<Record<TagName, Element<any, any, any, any, any>>> =
   {
-    view: View.shorthand(new ViewElement("view")),
-    scroll: View.shorthand(new ViewElement("scroll")),
-    text: View.shorthand(new TextElement("text")),
-    input: new InputElement("input")
+    view: View.shorthand(
+      defineView(new ViewElement("view"), { viewName: "RCTView" })
+    ),
+    scroll: View.shorthand(defineView(new ViewElement("scroll"), {
+      viewName: (n, host) =>
+        horizontal(n, host) ? "AndroidHorizontalScrollView" : "RCTScrollView",
+      // React Native's ScrollView styles its view as scrolling.
+      defaults: { overflow: "scroll" },
+      content: {
+        viewName: (n, host) =>
+          horizontal(n.parent!, host)
+            ? "AndroidHorizontalScrollContentView"
+            : "RCTScrollContentView",
+        defaults: { collapsable: false }
+      },
+      props: {
+        horizontal(n, value, host) {
+          host.set(n, "horizontal", value)
+          // Both views need row layout so horizontal content spans its children.
+          const row = value === true ? "row" : undefined
+          host.set(n, "flexDirection", row)
+          host.set(n.inner!, "flexDirection", row)
+        }
+      },
+      events: {
+        topScroll: (n, event, host) =>
+          host.fire(n, "scroll", {
+            x: event?.contentOffset?.x ?? 0,
+            y: event?.contentOffset?.y ?? 0,
+            contentWidth: event?.contentSize?.width ?? 0,
+            contentHeight: event?.contentSize?.height ?? 0,
+            width: event?.layoutMeasurement?.width ?? 0,
+            height: event?.layoutMeasurement?.height ?? 0
+          })
+      }
+    })),
+    text: View.shorthand(defineView(new TextElement("text"), {
+      // Fabric represents text nested inside text as virtual text.
+      viewName: (n) =>
+        n.parent?.kind.text === true ? "RCTVirtualText" : "RCTText",
+      text: true
+    })),
+    input: defineView(new InputElement("input"), {
+      viewName: (_, host) =>
+        host.os === "ios" ? "RCTSinglelineTextInputView" : "AndroidTextInput",
+      props: {
+        value(n, value, host) {
+          // `text` follows native's edits, so this only sends a value that
+          // differs from what the field shows. Native drops text sent for an
+          // older edit than its own, so it carries the latest edit's count.
+          if (n.props.text === value) return
+          host.set(n, "mostRecentEventCount", n.eventCount)
+          host.set(n, "text", value)
+          // Resetting to the tree's existing text produces no Fabric diff,
+          // even if the user edited the field. Send a command too, as
+          // TextInput does.
+          host.command(n, "setTextAndSelection", [n.eventCount, value, -1, -1])
+        }
+      },
+      events: {
+        topChange(n, event, host) {
+          const value = String(event?.text ?? "")
+          if (typeof event?.eventCount === "number") {
+            n.eventCount = event.eventCount
+          }
+          // Native shows this text already, so it isn't sent back.
+          n.props.text = value
+          host.fire(n, "input", { value })
+        },
+        topSubmitEditing: (n, event, host) =>
+          host.fire(n, "submit", { value: event?.text ?? "" })
+      }
+    })
   }
 
 /**

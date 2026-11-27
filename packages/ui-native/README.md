@@ -9,7 +9,8 @@ React Native vocabulary and Fabric host for `@effect/ui`. Apps render native vie
 
 ## Modules
 
-- `Native`: `Native.component`, `Native.H`, the element vocabulary (`view`, `text`, `scroll`, `input`), style and event types, and `Native.Host`
+- `Native`: `Native.component`, `Native.H`, the element vocabulary (`view`, `text`, `scroll`, `input`), style and event types, `Native.Host`, and `Native.defineView`, which adds a native view outside the vocabulary
+- `@effect/ui-native/kit`: native controls and APIs beyond the vocabulary, each in its own module so an app bundles only what it imports
 - `NativeHost`: `make`, the `Renderer.Host` that builds Fabric shadow trees and commits them to a surface
 - `NativeApp`: `mount`, `mountEffect`, and `register`, which runs an app on every surface native starts; the `Surface` service
 - `@effect/ui-native/node`: `NativeMetro.withEffectUi`, the Metro configuration

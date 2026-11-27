@@ -36,9 +36,10 @@ const Counter = Native.component({
       h.view.style({ padding: 8 }).on("press", Message.Pressed()).children(
         h.text.children("Count ", String(model.count))
       ),
+      // Rejects a name over four letters.
       h.input.value(model.name).placeholder("Name").on(
         "input",
-        ({ value }) => Message.Typed({ value })
+        ({ value }) => value.length > 4 ? undefined : Message.Typed({ value })
       ),
       h.text.children(
         "Hello, ",
@@ -90,7 +91,7 @@ describe("NativeHost", () => {
     assert.include(printed(), "<RCTText>Count 1</>")
   })
 
-  it("sends an input's value back only when it differs from the edit", async () => {
+  it("sends an input's value back when it differs from the edit or the edit is rejected", async () => {
     const { fabric, find, printed, settle } = await setup()
     const input = () => find(FakeFabric.byName("AndroidTextInput"))
     fabric.emit(input(), "topChange", { text: "tim", eventCount: 1 })
@@ -106,11 +107,15 @@ describe("NativeHost", () => {
     // Native shows "TIMO" already, so the field isn't cloned.
     assert.strictEqual(input(), before)
 
+    // Nothing renders for a rejected edit, so the host puts "TIMO" back.
+    fabric.emit(before, "topChange", { text: "TIMOS", eventCount: 3 })
+    await settle()
     touch(fabric, find(FakeFabric.byText("Count 0")))
     await settle()
     assert.deepStrictEqual(fabric.commands, [
       [input().tag, "setTextAndSelection", [1, "TIM", -1, -1]],
-      [input().tag, "setTextAndSelection", [2, "", -1, -1]]
+      [input().tag, "setTextAndSelection", [3, "TIMO", -1, -1]],
+      [input().tag, "setTextAndSelection", [3, "", -1, -1]]
     ])
   })
 
@@ -248,6 +253,46 @@ describe("NativeHost", () => {
       [input.tag, "focus", []],
       [input.tag, "scrollTo", [0, 40, true]]
     ])
+  })
+
+  it("renders a view another module defines, and sends its events only to it", () => {
+    Native.defineView(new Native.Element("toggle"), {
+      viewName: (_, host) => host.os === "ios" ? "RCTSwitch" : "AndroidSwitch",
+      defaults: { enabled: true },
+      props: { checked: (n, value, host) => host.set(n, "value", value) }
+    })
+    const fabric = FakeFabric.make()
+    const { host, root } = NativeHost.make({
+      ui: fabric.ui,
+      rootTag: 1,
+      os: "ios",
+      processColor: (c) => c
+    })
+    const fired: Array<unknown> = []
+    const dispatch = (name: string, handler: unknown, payload: unknown) =>
+      fired.push([name, handler, payload]) > 0
+    const box = host.createElement("view")
+    const toggle = host.createElement("toggle")
+    host.setProp(toggle, "checked", true)
+    host.setEvents(box, { valueChange: "box" }, dispatch, {})
+    host.setEvents(toggle, { valueChange: "toggle" }, dispatch, {})
+    host.insertBefore(root, box, undefined)
+    host.insertBefore(box, toggle, undefined)
+    host.commit!()
+    const shadow = () =>
+      FakeFabric.find(fabric.committed(), FakeFabric.byName("RCTSwitch"))!
+    assert.deepStrictEqual(shadow().props, {
+      enabled: true,
+      value: true,
+      onValueChange: true
+    })
+
+    fabric.emit(shadow(), "topValueChange", { value: false })
+    assert.deepStrictEqual(fired, [["valueChange", "toggle", { value: false }]])
+
+    host.setEvents(toggle, {}, dispatch, {})
+    host.commit!()
+    assert.deepStrictEqual(shadow().props, { enabled: true, value: true })
   })
 
   it("names the views for iOS", () => {
