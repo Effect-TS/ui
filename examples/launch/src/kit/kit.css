@@ -874,6 +874,200 @@
       @apply h-1.5 rounded-[1px] bg-background;
     }
   }
+
+  .kit-calendar {
+    @apply flex flex-1 flex-col gap-1;
+  }
+
+  .kit-calendar-head {
+    @apply flex items-center justify-between gap-1;
+
+    .kit-bar {
+      @apply h-1;
+    }
+  }
+
+  .kit-calendar-nav {
+    @apply flex gap-1 text-[0.5rem] leading-none text-muted-foreground;
+  }
+
+  .kit-calendar-grid {
+    @apply w-full border-separate border-spacing-[2px];
+
+    td {
+      @apply p-0 text-center;
+    }
+
+    button {
+      @apply block h-[5px] w-full rounded-[1px];
+      background: var(--kit-line);
+      transition-property: background-color, opacity;
+
+      &[data-outside-month] {
+        @apply opacity-25;
+      }
+
+      &[data-in-range] {
+        background: color-mix(in oklab, var(--color-accent) 32%, transparent);
+      }
+
+      &[data-selected],
+      &[data-range-start],
+      &[data-range-end] {
+        background: var(--color-accent);
+      }
+    }
+  }
+
+  .kit-datepicker-input {
+    @apply justify-between gap-1 pr-1;
+
+    input {
+      @apply w-0 min-w-0 flex-1 bg-transparent font-mono text-[0.5rem] text-foreground;
+    }
+
+    button {
+      @apply flex-none text-[0.5625rem] leading-none text-muted-foreground;
+    }
+  }
+
+  .kit-calendar-popup {
+    @apply w-[78px] p-1;
+  }
+
+  .kit-file-drop {
+    @apply relative flex flex-1 flex-col items-center justify-center gap-1 rounded-sm border border-dashed border-border py-1.5;
+    transition-property: border-color, background-color;
+
+    [data-playing] & {
+      @apply border-accent;
+      background: color-mix(in oklab, var(--color-accent) 8%, transparent);
+    }
+  }
+
+  .kit-file-chip {
+    @apply h-2.5 w-3.5 rounded-[2px] border border-border bg-background;
+    transform: translateY(-3px) scale(0.92);
+    transition-property: transform, border-color, background-color;
+
+    [data-playing] & {
+      @apply border-accent bg-accent;
+      transform: translateY(1px) scale(1);
+    }
+  }
+
+  .kit-file-trigger {
+    @apply flex items-center justify-center;
+
+    .kit-bar {
+      @apply h-1;
+    }
+  }
+
+  .kit-sortable-wrap {
+    @apply flex flex-1;
+  }
+
+  .kit-sortable {
+    @apply m-0 flex flex-1 list-none flex-col justify-center gap-1 p-0;
+  }
+
+  .kit-sortable-item {
+    @apply flex items-center gap-1.5 rounded-[3px] border border-border bg-background px-1 py-px;
+    transition-property: transform, box-shadow;
+
+    &:has(.kit-bar-accent) {
+      @apply z-1;
+
+      [data-playing] & {
+        box-shadow: 0 3px 8px -4px rgb(0 0 0 / 0.4);
+      }
+    }
+
+    .kit-bar {
+      @apply h-1;
+    }
+  }
+
+  .kit-grip {
+    @apply h-2 w-1.5 flex-none;
+    background-image: radial-gradient(var(--color-muted-foreground) 0.7px, transparent 0.7px);
+    background-size: 3px 3px;
+  }
+
+  .kit-keycap {
+    @apply inline-flex h-3.5 min-w-3.5 flex-none items-center justify-center rounded-[3px] border border-border-strong bg-background px-1 font-mono text-[0.5rem] leading-none text-muted-foreground;
+    font-feature-settings: normal;
+    transition-property: transform, border-color, color;
+
+    [data-playing] & {
+      @apply border-accent text-accent-text;
+      transform: translateY(1px);
+    }
+  }
+
+  .kit-dismissal {
+    @apply relative flex flex-1 items-end justify-end self-stretch;
+  }
+
+  .kit-layer {
+    @apply absolute flex flex-col gap-1 rounded-sm border border-border bg-background p-1;
+    transition-property: opacity, transform, border-color;
+
+    .kit-bar {
+      @apply h-1;
+    }
+  }
+
+  .kit-layer-back {
+    @apply top-0.5 left-0 w-12;
+  }
+
+  .kit-layer-front {
+    @apply top-3 left-3 w-12 border-accent bg-card;
+    box-shadow: 0 4px 10px -6px rgb(0 0 0 / 0.45);
+
+    [data-playing] & {
+      @apply opacity-0;
+      transform: translateY(-4px) scale(0.94);
+    }
+  }
+
+  .kit-list-nav,
+  .kit-typeahead {
+    @apply flex flex-1 items-center gap-1.5;
+  }
+
+  .kit-list-nav-rows,
+  .kit-typeahead-rows {
+    @apply flex min-w-0 flex-1 flex-col gap-0.5;
+  }
+
+  .kit-list-nav-row {
+    @apply flex items-center rounded-[2px] px-1 py-[3px];
+    transition-property: background-color, opacity;
+
+    .kit-bar {
+      @apply h-1;
+    }
+
+    &[data-disabled] {
+      @apply opacity-30;
+    }
+
+    &[data-active] {
+      @apply bg-muted;
+    }
+  }
+
+  .kit-typeahead-row {
+    @apply truncate rounded-[2px] px-1 py-px text-[0.5rem] leading-tight text-muted-foreground;
+    transition-property: background-color, color;
+
+    &[data-matched] {
+      @apply bg-accent text-accent-foreground;
+    }
+  }
 }
 
 @keyframes kit-type {

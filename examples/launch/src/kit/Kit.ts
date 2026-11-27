@@ -82,7 +82,8 @@ const Tile = (
       "inert",
       ""
     ).children(
-      h.div.class("kit-picture").children(tile(h, name, playing))
+      // Drawn again only when the tile starts or stops playing.
+      h.div.class("kit-picture").children(h.lazy(tile, name, playing))
     ),
     h.span.class("kit-name").children(name)
   )

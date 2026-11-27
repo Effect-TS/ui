@@ -1,5 +1,7 @@
 ---
 title: Introducing Effect UI
+published: 2026-11-26
+updated: 2026-11-27
 ---
 
 Effect UI is a frontend library built on Effect and the Elm Architecture: self-contained Components with explicit state transitions and side effects as values. It continues the work of Foldkit 0.x ([foldkit.dev](https://foldkit.dev)), which we announced as the "new frontend foundation" in [Foldkit Joins Effect](https://foldkit.dev/blog/foldkit-joins-effect).
@@ -55,7 +57,7 @@ This counter shows the core parts of a Component. One definition holds its Model
 
 Click "+1", then click the Effect UI button in the bottom-right corner. [DevTools](#devtools) lists the Message you sent and what it changed.
 
-**A Component works the same on every platform.** Only the platform-specific pieces change: the view elements, the host you mount onto and the effects that interact with them. For example, `Html.component` and `HtmlCommand.focus` target HTML, while `OpenTui.component` and `OpenTuiCommand.focus` in `@effect/ui-opentui` target the terminal.
+**A Component works the same on every platform.** Only the platform-specific pieces change: the view elements, the host you mount onto and the effects that interact with them. `Html.component` and `HtmlCommand.focus` target HTML, `OpenTui.component` and `OpenTuiCommand.focus` in `@effect/ui-opentui` target the terminal, and `Native.component` in `@effect/ui-native` renders React Native views through Fabric without React.
 
 ### How Foldkit 0.x and Effect UI handle Messages
 
@@ -91,10 +93,12 @@ In Effect UI, a Provider shares part of its Model with Components inside it, at 
 
 In Foldkit 0.x, the Model held fetched data, and the parent managed the `Query`. The parent stored the query state, forwarded its Messages and decided when to load or refresh. In Effect UI, **you define a query once and list it on the Components that need it.** The runtime fetches the data and keeps it in one cache for every Component.
 
-- **Fetching:** The runtime fetches when the Component renders, and again when the query's arguments change. Setting `debounce` waits until the arguments stop changing. Until the new result arrives, the last Success stays on screen with `waiting: true`.
+- **Fetching:** The runtime fetches when the Component renders, and again when the query's arguments change, interrupting an in-flight fetch for superseded arguments when nothing else needs it. Setting `debounce` waits until the arguments stop changing. Until the new result arrives, the last Success stays on screen with `waiting: true`.
 - **Caching:** The runtime keeps one result per query and arguments. Components that ask for the same data share one fetch.
 - **Freshness:** A result older than `staleTime` stays on screen while the runtime refetches it.
 - **States:** Each result is an `AsyncResult`: either no result yet, failure or success.
+
+For live data such as WebSockets or server-sent events, `Query.StreamService` backs a query entry with a shared `Stream`: each emitted value updates the cached result, and the stream closes when nothing watches it.
 
 ::Chips{label="Also built into queries" items="polling, refetch on focus and reconnect, load more, invalidation from Commands, optimistic updates, prefetch on link hover, server rendering, restore on back and forward"}
 
@@ -129,9 +133,9 @@ You can package your own reusable behavior the same way.
 
 ### The UI kit
 
-**`@effect/ui-kit` already ships 42 components**, so you don't have to build accessible UI from scratch. The kit has every component in [Base UI](https://base-ui.com/), plus NavigationLinks, VirtualList, VirtualKeyboard, DirectionProvider and Positioning. They're all headless. Each handles keyboard, focus and ARIA while you write the markup and styles.
+**`@effect/ui-kit` ships 51 modules**, so you don't have to build accessible UI from scratch. Of those, 46 are headless components and 5 are lower-level primitives: `Dismissal`, `ListNavigation`, `Positioning`, `Typeahead` and `VirtualKeyboard`. The kit covers every component in [Base UI](https://base-ui.com/), plus `Calendar`, `RangeCalendar`, `DateField`, `DatePicker`, `FileDrop`, `SortableList`, `NavigationLinks`, `VirtualList` and `DirectionProvider`. Each handles keyboard, focus and ARIA while you write the markup and styles.
 
-Here is the full set of 42 components. Hover or tap to animate.
+Here are all 51 modules. Hover or tap to animate.
 
 ::Kit
 
@@ -139,7 +143,7 @@ Here is the full set of 42 components. Hover or tap to animate.
 
 Effect UI renders through a host instead of tying Components to the browser DOM. The browser host renders DOM nodes, the server host writes HTML and the test host builds an in-memory tree, all from the same HTML Components.
 
-Other platforms bring their own elements and host, like `@effect/ui-opentui` for the terminal, sharing the Component runtime without translating views across platforms. You pick the host when mounting the app, and the host interface is public if you want to write your own.
+Other platforms bring their own elements and host, sharing the Component runtime without translating views across platforms: `@effect/ui-opentui` renders to the terminal, and `@effect/ui-native` renders React Native views directly through Fabric without React. You pick the host when mounting the app, and the host interface is public if you want to write your own.
 
 ::Listing{code="mount"}
 
@@ -155,6 +159,8 @@ A test can also supply test values for everything around the Component: a query'
 
 You can also replay a recorded session with `Story.fromLog`. When logging is enabled, the runtime records every Message a Component receives, along with the props, query results and Provider values its update read. `Story.fromLog` re-runs those Messages against update without running Commands, and reports the first step where the Component produces a different Model, Command or event.
 
+`Story.check` runs property tests over Message and Command sequences generated from a Component's Schemas, shrinking any failure to minimal Story steps. For concurrency bugs, `Story.explore` exhaustively searches overlapping Message and Command settlement orders and reports the shortest failing path.
+
 ### Play tests
 
 Play is a new kind of test in Effect UI. In Story and Scene tests, you resolve each Command by hand, so the Command itself never runs. A Play test mounts the Component and its children on the [test host](#host-agnostic-rendering). It runs their real Commands, Subscriptions and query fetches against the Layers the test provides.
@@ -168,13 +174,16 @@ Play is a new kind of test in Effect UI. In Story and Scene tests, you resolve e
 ## DevTools
 
 :::LauncherPointer
-Effect UI has an inspector that you add with one Layer, `DevTools.layer`. It's running on this page, behind the Effect UI button in the bottom-right corner.
+Effect UI has an inspector you can add with one Layer, `DevTools.layer`, or automatically in dev with `DevToolsVite.plugin`. It's running on this page, behind the Effect UI button in the bottom-right corner.
 
 - **Timeline:** One list holds every Message from every Component, the Model after it and what changed.
 - **Cause and effect:** For any entry, DevTools traces what sent the Message, the Commands it issued and how each one ended.
+- **Element picker:** Click **Pick** to select any element on the page and jump to the Component instance that rendered it. Try it on this page.
+- **Noise control:** Stop or resume recording noisy Message tags at runtime without editing code, and surface or filter declared payload fields in the timeline.
 - **Time travel:** Pick an earlier entry to see the page at that point. The live app keeps running, and Resume returns to it.
-- **For agents:** An MCP server gives an agent the same view. It can read the log, inspect a Component's state and show the page at any entry. If you allow it, the agent can also send Messages.
+- **For agents:** An MCP server, or the experimental WebMCP in the browser, gives an agent the same view. It can read the log, find Component instances, inspect their state and pause on any entry. If you allow it, the agent can also send Messages.
 
+Terminal apps built with `@effect/ui-opentui` can stream their logs into the same browser inspector with `DevToolsHeadless.layer`.
 :::
 
 ## Performance
@@ -190,6 +199,8 @@ In [js-framework-benchmark](https://github.com/krausest/js-framework-benchmark),
 - **Services per Component:** `Component.provide` gives services to a Component and everything below it. Its Commands and Subscriptions use them, and TypeScript reports a missing service at compile time.
 - **Code splitting:** Load a Component from a chunk of its own with `Component.lazy`. The browser loads the chunk the first time the Component renders, so it stays out of the initial bundle.
 - **Control overlapping Commands:** When an update issues a Command that is still running, use `concurrent` to run both, `switch` to interrupt the earlier run or `queue` to wait for it.
+- **Full-stack SSR and prerendering:** `HtmlServerVite.plugin` renders pages on the server in `vite dev`, prerenders static routes in `vite build` and can emit a production web handler. This page uses it.
+- **Web Components, both ways:** Consume third-party Web Components with `Html.customElement`, or publish any Effect UI Component as a custom element with `BrowserHost.defineElement` to embed it in an existing app.
 
 ## What stays the same
 
@@ -211,11 +222,11 @@ pnpm add effect \
   @effect/ui-kit@https://pkg.pr.new/Effect-TS/ui/@effect/ui-kit@main
 ```
 
-To stay on one build, replace `main` with a commit's short SHA. You can ignore pnpm's unmet `@effect/ui` peer warning: `@effect/ui-kit` still uses the snapshot you installed.
+To stay on one build, replace `main` with a commit's short SHA. Snapshots of `@effect/ui-devtools`, `@effect/ui-opentui` and `@effect/ui-native` are published the same way, with install commands under [Snapshots](https://github.com/Effect-TS/ui#snapshots) in the README. You can ignore pnpm's unmet `@effect/ui` peer warning: the packages still use the snapshots you installed.
 
 To start a new app from Vite's `vanilla-ts` template, follow [Start a new app](https://github.com/Effect-TS/ui#start-a-new-app). `@effect/ui` ships its guide as `node_modules/@effect/ui/AGENTS.md`, so point your coding agent's instructions at that file.
 
-The [examples](https://github.com/Effect-TS/ui/tree/main/examples) in the repository are complete apps you can read and run.
+The [examples](https://github.com/Effect-TS/ui/tree/main/examples) in the repository are complete apps you can read and run, including [`domains`](https://github.com/Effect-TS/ui/tree/main/examples/domains) (a server-rendered port of Foldkit Domains with a shared `HttpApi`) and [`native`](https://github.com/Effect-TS/ui/tree/main/examples/native) (an Expo app running on `@effect/ui-native`).
 
 ## What happens next
 

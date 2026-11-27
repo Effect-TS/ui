@@ -5,7 +5,7 @@ import { Comparison } from "#components/Comparison"
 import { Icon } from "#components/Icon"
 import { LauncherPointer } from "#components/LauncherPointer"
 import { type Feature, fromItem, type Layout } from "#domain/Feature"
-import { Islands } from "#domain/Island"
+import { byline, Frontmatter, Islands } from "#domain/Island"
 import * as Preview from "#domain/Preview"
 import * as Prompt from "#domain/Prompt"
 import { fromDocument, fromHeading } from "#domain/Section"
@@ -30,7 +30,8 @@ const sections = fromDocument(article)
 
 const prompts = Prompt.fromDocument(article)
 
-const title = frontmatter?.title ?? ""
+const meta = Schema.decodeUnknownSync(Frontmatter)(frontmatter)
+const dates = byline(meta)
 
 const block = "mx-auto max-w-(--column)"
 
@@ -230,7 +231,7 @@ export const LaunchPage = Html.component({
   init: () => null,
   update: ($) => $.model,
   subscriptions: () => [ScrollToInitialHash],
-  head: () => [Head.title(title)],
+  head: () => [Head.title(meta.title)],
   view: (h) => {
     const { articleUrl, snippets } = h.props
     return h.div.class(
@@ -291,7 +292,22 @@ export const LaunchPage = Html.component({
             h.h1.class(
               "text-[clamp(2.2rem,5.2vw,3.6rem)]/[1.08] font-bold",
               "tracking-[-0.035em] text-balance"
-            ).children(title)
+            ).children(meta.title),
+            h.p.class(
+              "mt-4 flex flex-wrap items-center gap-x-2.5 gap-y-1",
+              "font-mono text-[11px] tracking-[0.04em]",
+              "text-muted-foreground font-features-[normal]"
+            ).children(
+              dates.flatMap(({ iso, label, text }, index) => [
+                index > 0 &&
+                h.span.attr("aria-hidden", "true").children("·"),
+                h.span.children(
+                  label,
+                  " ",
+                  h.time.attr("datetime", iso).children(text)
+                )
+              ])
+            )
           )
         ),
         Markdown.viewBlocks(h, article, {

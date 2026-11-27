@@ -1,4 +1,5 @@
-import { Schema } from "effect"
+import { MarkdownParser } from "@effect/ui/html"
+import { Option, Schema } from "effect"
 import { scenarios } from "../diagram/scenarios.ts"
 import { modules } from "../kit/components.ts"
 import {
@@ -11,7 +12,7 @@ import {
   summary,
   value
 } from "../performance/Results.ts"
-import { Islands } from "./Island.ts"
+import { byline, Frontmatter, Islands } from "./Island.ts"
 import type { Snippet, Snippets } from "./Snippet.ts"
 
 const attributes = (text: string) =>
@@ -109,7 +110,7 @@ export const toMarkdown = (source: string, snippets: Snippets) => {
           "A third tab runs this test of the Snake game in `examples/snake`. A seed fixes where the apple appears. The test presses Space to start the game and the up arrow to turn, then advances the TestClock 150 ms, which is one move. It presses the right arrow and advances the clock 900 ms, which is six moves. The snake reaches the apple and the score is 10. It presses Space to pause and advances the clock ten seconds, and the snake doesn't move."
         ].join("\n\n")
       case "Kit":
-        return `Components: ${modules.join(", ")}.`
+        return `Modules: ${modules.join(", ")}.`
       case "PerformanceChart":
         return [
           "| Entry | JavaScript time, as a multiple of vanilla JavaScript |",
@@ -142,8 +143,22 @@ export const toMarkdown = (source: string, snippets: Snippets) => {
         throw new Error(`No text for the island "${name}"`)
     }
   }
+  const meta = Schema.decodeUnknownSync(Frontmatter)(
+    Option.getOrThrow(
+      MarkdownParser.parseMarkdownWithFrontmatter(source, {
+        islands: Islands,
+        frontmatter: Frontmatter
+      }).frontmatter
+    )
+  )
+  const dates = byline(meta).map(({ label, text }) =>
+    `${label} ${text}`
+  )
   return source
-    .replace(/^---\ntitle: (.*)\n---\n/, "# $1\n")
+    .replace(
+      /^---\n[^]*?\n---\n/,
+      () => `# ${meta.title}\n\n${dates.join(" · ")}\n`
+    )
     .replace(
       /^:::(\w+)(?:\{(.*)\})?\n([^]*?)\n:::$/gm,
       (_, name, text, body) => island(name, text, body)
