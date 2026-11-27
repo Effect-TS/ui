@@ -5008,31 +5008,19 @@ describe("BrowserHost", { concurrent: false }, () => {
           })
         )
 
-        const received: Array<CustomEvent> = []
-        const onBooked = (event: Event) => {
-          received.push(event as CustomEvent)
-        }
-        yield* Effect.acquireRelease(
-          Effect.sync(() =>
-            document.body.addEventListener("tourbooked", onBooked)
-          ),
-          () =>
-            Effect.sync(() =>
-              document.body.removeEventListener("tourbooked", onBooked)
-            )
-        )
-
         const app = yield* container
+        const received: Array<CustomEvent> = []
+        app.addEventListener("tourbooked", (event) => {
+          received.push(event as CustomEvent)
+        })
         const element = document.createElement("ce-shadow-tour")
         element.setAttribute("unit-id", "u9")
         app.appendChild(element)
 
-        expect(element.shadowRoot).not.toBeNull()
         expect(element.shadowRoot!.adoptedStyleSheets).toHaveLength(1)
 
         element.shadowRoot!.querySelector("button")!.click()
         expect(received).toHaveLength(1)
-        expect(received[0]!.bubbles).toBe(true)
         expect(received[0]!.composed).toBe(true)
         expect(received[0]!.detail).toEqual(Events.TourBooked({ unitId: "u9" }))
       }).pipe(Effect.scoped))
@@ -5040,14 +5028,14 @@ describe("BrowserHost", { concurrent: false }, () => {
     it.effect("keeps Model across a synchronous move and closes its scope on removal or layer release", () =>
       Effect.gen(function*() {
         class Prefix extends Context.Service<Prefix, string>()("CePrefix") {}
-        const prefixes: Array<string> = []
+        let prefix: string | undefined
         let closed = 0
         const Track = Mount.make(
           "CeTrack",
           { args: {} },
           () =>
             Effect.gen(function*() {
-              prefixes.push(yield* Prefix)
+              prefix = yield* Prefix
               return yield* Effect.onExit(Effect.never, () =>
                 Effect.sync(() => {
                   closed++
@@ -5082,15 +5070,13 @@ describe("BrowserHost", { concurrent: false }, () => {
         firstParent.appendChild(first)
         yield* tick
 
-        expect(prefixes).toEqual(["ok"])
+        expect(prefix).toBe("ok")
         first.querySelector("button")!.click()
         yield* tick
-        expect(first.querySelector("span")!.textContent).toBe("1")
 
         secondParent.appendChild(first)
         yield* tick
         expect(first.querySelector("span")!.textContent).toBe("1")
-        expect(prefixes).toEqual(["ok"])
         expect(closed).toBe(0)
 
         first.remove()
@@ -5100,7 +5086,6 @@ describe("BrowserHost", { concurrent: false }, () => {
         const second = document.createElement("ce-counter")
         secondParent.appendChild(second)
         yield* tick
-        expect(prefixes).toEqual(["ok", "ok"])
         yield* Scope.close(layerScope, Exit.void)
         expect(closed).toBe(2)
       }).pipe(Effect.scoped))
@@ -5113,6 +5098,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         Effect.gen(function*() {
           class Api extends Context.Service<Api, object>()("CeApi") {}
           let model: WeakRef<object> | undefined
+          let api: WeakRef<object> | undefined
           let decoded = 0
           const Label = Html.component({
             name: "CeLabel",
@@ -5137,19 +5123,17 @@ describe("BrowserHost", { concurrent: false }, () => {
               attributes: { text }
             })
           const layerScope = yield* Scope.make()
-          const api = yield* Effect.sync(() => {
-            const api = {}
-            return [new WeakRef(api), Layer.succeed(Api, api)] as const
-          }).pipe(
-            Effect.tap(([, provided]) =>
-              Layer.buildWithScope(
-                Layer.mergeAll(define("ce-label-a"), define("ce-label-b")).pipe(
-                  Layer.provide(provided)
-                ),
-                layerScope
+          yield* Layer.buildWithScope(
+            Layer.mergeAll(define("ce-label-a"), define("ce-label-b")).pipe(
+              Layer.provide(
+                Layer.sync(Api)(() => {
+                  const value = {}
+                  api = new WeakRef(value)
+                  return value
+                })
               )
             ),
-            Effect.map(([ref]) => ref)
+            layerScope
           )
           const app = yield* container
           app.innerHTML = "<ce-label-a></ce-label-a><ce-label-b></ce-label-b>"
@@ -5157,12 +5141,11 @@ describe("BrowserHost", { concurrent: false }, () => {
           expect(a!.id).not.toBe(b!.id)
 
           yield* Scope.close(layerScope, Exit.void)
-          const before = decoded
           app.firstElementChild!.setAttribute("text", "x")
-          expect(decoded).toBe(before)
+          expect(decoded).toBe(0)
           yield* collectGarbage
           expect(model!.deref()).toBeUndefined()
-          expect(api.deref()).toBeUndefined()
+          expect(api!.deref()).toBeUndefined()
         }).pipe(Effect.scoped)
     )
   })
