@@ -215,16 +215,17 @@ export const Switch = <Msg>(
 ): SwitchElement<Msg> => {
   const { onToggle, props } = options
   const disabled = props.disabled === true
-  return View.withFields(switchBase, {
-    props: {
-      value: props.checked,
-      disabled,
-      thumbColor: props.thumbColor,
-      trackColor: props.trackColor,
-      iosBackgroundColor: props.iosBackgroundColor
-    },
-    handlers: disabled || onToggle === undefined
-      ? View.noFields
-      : { change: onToggle }
-  })
+  const elementProps = {
+    value: props.checked,
+    disabled,
+    thumbColor: props.thumbColor,
+    trackColor: props.trackColor,
+    iosBackgroundColor: props.iosBackgroundColor
+  }
+  return View.withFields(
+    switchBase,
+    disabled || onToggle === undefined
+      ? { props: elementProps }
+      : { props: elementProps, handlers: { change: onToggle } }
+  )
 }
