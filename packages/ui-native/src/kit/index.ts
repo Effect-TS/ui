@@ -72,6 +72,12 @@ export * from "./Drawer.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as I18nManager from "./I18nManager.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Image.ts"
 
 /**
