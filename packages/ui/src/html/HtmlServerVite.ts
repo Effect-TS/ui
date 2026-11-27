@@ -24,6 +24,15 @@
  * for a path ending in `/`, and a 404 to `404.html`. Any other status
  * fails the build. The server build isn't kept.
  *
+ * When another renderer builds the page shell, reduce `index.html` to its
+ * asset tags and a `<!--app-html-->` marker directly in `<body>`, so the
+ * shell renders the container the client hydrates. `document` inserts
+ * `html` and `head` as given, so pass the shell's markup there and spread
+ * the rest of `rendered`. Append the shell's own `<html>` or `<body>`
+ * attributes to `htmlAttributes` or `bodyAttributes`, after a space. Give
+ * `<title>` and each `<html>` or `<body>` attribute a single owner, since
+ * neither is merged.
+ *
  * **Gotchas**
  *
  * Only a root `base` is supported. Vite prefixes the asset URLs with
@@ -45,6 +54,23 @@
  * // import { document } from "virtual:@effect/ui/document"
  * // export default layerHttp(App, { routes: AppRoute, document, static: import.meta.env.PROD })
  * // export const prerender = [AppRoute.print(AppRoute.Home())]
+ * ```
+ *
+ * **Example** (Shell from another renderer)
+ *
+ * ```ts
+ * import type { HtmlServer } from "@effect/ui/html"
+ * import { document } from "virtual:@effect/ui/document"
+ *
+ * // src/entry.server.ts: pass `page` to `layerHttp` as `document`.
+ * const page = (rendered: HtmlServer.Rendered<unknown>): string => {
+ *   const shell = renderShell(rendered.html) // the other renderer
+ *   return document({
+ *     ...rendered,
+ *     html: shell.body,
+ *     head: shell.head + rendered.head
+ *   })
+ * }
  * ```
  *
  * @stability experimental
