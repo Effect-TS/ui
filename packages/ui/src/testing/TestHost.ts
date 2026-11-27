@@ -83,8 +83,9 @@ import * as TestQuery from "./TestQuery.ts"
  *
  * `attrs` and `props` hold what the renderer set. To act as the user editing
  * a controlled property, set `props` directly, then fire the event. The next
- * `settle` puts every controlled property of a mounted tree back to what the
- * renderer last set, so an edit the Model refused is undone, as on a real host.
+ * `settle` puts every controlled property of a tree `mount` made back to
+ * what the renderer last set, so an edit the Model refused is undone, as on a
+ * real host.
  * `handlers`, `eventOptions`, `owners` and `dispatch` are read from the
  * tree the renderer rendered last, so an element that left it has none.
  * `eventOptions` holds the options set with the handlers. The test host has
@@ -944,11 +945,17 @@ const nextMacrotask = Effect.callback<void>((resume) => {
  * come back. A run or fetch that never returns is left in `pending()`. A
  * `Component.lazy` load is waited for until it settles. Fibers on the host's
  * `Scheduler` run with the tree's tasks, under the same budget: see `layer`.
+ * Then it puts back the controlled properties of each tree `mount` made that
+ * an edit changed and the Model didn't take.
  *
  * **Gotchas**
  *
  * A fiber outside the tree that waits on a Promise or a timer outside Effect
  * isn't waited for once no Command, fetch or load is pending.
+ *
+ * A tree mounted with `Renderer.mount` directly isn't registered: `settle`
+ * runs its work, but doesn't wait for its runs and fetches, report its crash
+ * or restore its controlled properties.
  *
  * When the budget runs out, `settle` fails with a `SettleError` holding the
  * log's tail and what is pending. A crashed root fails it with `RootCrashed`,
