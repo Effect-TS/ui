@@ -1887,17 +1887,41 @@ type TypesOf<S> = {
   readonly [K in keyof S]: S[K] extends Schema.Top ? S[K]["Type"] : never
 }
 
+type ElementOf<Tag extends string> = Tag extends keyof HTMLElementTagNameMap
+  ? HTMLElementTagNameMap[Tag]
+  : HTMLElement
+
+type IsReadonly<T, K extends keyof T> =
+  (<V>() => V extends Pick<T, K> ? 1 : 2) extends
+    (<V>() => V extends { -readonly [Q in K]: T[Q] } ? 1 : 2) ? false : true
+
+type ElementProperties<T> = {
+  readonly [
+    K in keyof T as K extends keyof HTMLElement | symbol ? never
+      : NonNullable<T[K]> extends Function ? never
+      : IsReadonly<T, K> extends true ? never
+      : K
+  ]: T[K]
+}
+
+type Properties<P, Tag extends string> =
+  & P
+  & Omit<ElementProperties<ElementOf<Tag>>, keyof P>
+
 /**
  * The builder under a custom element's property methods: an `Element` whose
- * `prop` takes only the declared properties, each typed by its Schema, and
- * whose `on` adds the declared events, each with its decoded `detail` as
- * the payload.
+ * `prop` takes the declared properties and the element's own properties,
+ * and whose `on` adds the declared events, each with its decoded `detail`
+ * as the payload.
  *
  * **Details**
  *
  * `P` maps each declared property to its value type and `E` each declared
  * event to its `detail`. A declared event replaces an HTML event of the same
- * name. `CustomElement` adds a method per declared property.
+ * name. When `Tag` is in `HTMLElementTagNameMap`, its element class types
+ * `ref` and `onMount`, and `prop` also takes its writable fields that
+ * `HTMLElement` lacks, minus methods. A declared property wins over a field
+ * of the same name. `CustomElement` adds a method per declared property.
  *
  * @stability experimental
  * @category custom elements
@@ -1909,16 +1933,19 @@ export class CustomElementBuilder<
   out R = never,
   in out P = {},
   in out E = {},
-  out Tag extends string = string
-> extends Element<Msg, R, Omit<Events, keyof E> & E, HTMLElement, Tag> {
+  in out Tag extends string = string
+> extends Element<Msg, R, Omit<Events, keyof E> & E, ElementOf<Tag>, Tag> {
   /**
-   * Writes the declared property `name` on the element as a JavaScript
-   * property, typed by its Schema. The browser host writes it when its value
-   * changes, and resets it when a render leaves it out.
+   * Writes the property `name` on the element as a JavaScript property,
+   * typed by its Schema or by the element's class. The browser host writes
+   * it when its value changes, and resets it when a render leaves it out.
    *
    * @since 0.1.0
    */
-  override prop<K extends keyof P & string>(name: K, value: P[K]): this {
+  override prop<K extends keyof Properties<P, Tag> & string>(
+    name: K,
+    value: Properties<P, Tag>[K]
+  ): this {
     return super.prop(name, value)
   }
   /**
@@ -1945,7 +1972,7 @@ export interface CustomElementBuilder<
   out R = never,
   in out P = {},
   in out E = {},
-  out Tag extends string = string
+  in out Tag extends string = string
 > {
   disabled(
     this: Undeclared<P, "disabled">,
@@ -2065,7 +2092,11 @@ export interface CustomElementBinding<Tag extends string, P, E> {
  * doesn't bubble reaches the element's own handler only.
  *
  * `prop` takes the same declarations, typed the same way, and sets a
- * property whose name has no method (see `CustomElementReserved`). The
+ * property whose name has no method (see `CustomElementReserved`). When
+ * the element's library registers its class in `HTMLElementTagNameMap`, as
+ * Lit, Stencil and Shoelace do, `prop` also takes the class's writable
+ * fields, typed by it, so `properties` is only needed for a method or for
+ * an element with no types. That class also types `ref` and `onMount`. The
  * HTML methods, such as `class`, `style` and `on("click", ...)`, work as
  * on any element. Registering the element with `customElements.define`, often by
  * importing its package, is still the app's job.

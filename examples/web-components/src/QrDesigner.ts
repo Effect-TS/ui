@@ -8,17 +8,7 @@ export const HexColorPicker = Html.customElement({
   events: { "color-changed": Schema.Struct({ value: Schema.String }) }
 })
 
-export const QrCode = Html.customElement({
-  tag: "sl-qr-code",
-  properties: {
-    value: Schema.String,
-    label: Schema.String,
-    size: Schema.Number,
-    fill: Schema.String,
-    background: Schema.String,
-    radius: Schema.Number
-  }
-})
+export const QrCode = Html.customElement({ tag: "sl-qr-code" })
 
 export const Target = Schema.Literals(["fill", "background"])
 export type Target = typeof Target.Type
@@ -111,12 +101,12 @@ export const QrDesigner = Html.component({
       ),
       h.figure.class("bg-white p-6 shadow").children(
         QrCode(h)
-          .value(model.text)
-          .label(`QR code for ${model.text}`)
-          .size(256)
-          .fill(model.fill)
-          .background(model.background)
-          .radius(model.radius)
+          .prop("value", model.text)
+          .prop("label", `QR code for ${model.text}`)
+          .prop("size", 256)
+          .prop("fill", model.fill)
+          .prop("background", model.background)
+          .prop("radius", model.radius)
       )
     )
 })
