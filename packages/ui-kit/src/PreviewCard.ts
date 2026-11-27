@@ -224,21 +224,19 @@ import {
   withStyle
 } from "./internal/attributes.ts"
 import { detachedChannel } from "./internal/detached.ts"
-import { elementOf, focusVisible, isHTMLElement } from "./internal/dom.ts"
+import { elementOf, focusVisible } from "./internal/dom.ts"
 import { watchHoverArea } from "./internal/hoverArea.ts"
 import { lineUnder } from "./internal/inlineRect.ts"
 import { onEscape, Point, pointOf } from "./internal/interaction.ts"
 import { listenOutside } from "./internal/outside.ts"
+import { makeTrackPresence, returningFocus } from "./internal/presence.ts"
 import {
   atDocumentOrigin,
   inPlaceBox,
   layered,
-  portalBox,
-  raiseAbove
+  portalBox
 } from "./internal/topLayer.ts"
 import {
-  frameOf,
-  settling,
   statusOf,
   transitionAttrs,
   type TransitionStatus
@@ -546,19 +544,18 @@ const WaitBeforeClosing = Command.make(
 
 const escape = onEscape(PreviewCardMessage.PressedEscape())
 
+const TrackPreviewCardPresence = makeTrackPresence<PreviewCardMessage>(
+  "TrackPreviewCardPresence",
+  {
+    showed: PreviewCardMessage.ShowedPortal,
+    started: PreviewCardMessage.RenderedFirstFrame,
+    finished: (open) => PreviewCardMessage.FinishedTransition({ open })
+  }
+)
+
 const detached = detachedChannel<PreviewCardMessage>(
   "detachedPreviewCardTriggers"
 )
-
-let returning = 0
-const returnFocus = (element: HTMLElement): void => {
-  returning++
-  try {
-    element.focus({ preventScroll: true, focusVisible: true } as FocusOptions)
-  } finally {
-    returning--
-  }
-}
 
 const activeOf = (
   model: PreviewCardModel,
@@ -708,7 +705,7 @@ const TrackDetachedPreviewCardTrigger = Mount.makeStream(
             }
           }, { signal })
           node.addEventListener("focus", () => {
-            if (returning > 0) return
+            if (returningFocus()) return
             send(
               PreviewCardMessage.FocusedTrigger({
                 triggerId: triggerId(),
@@ -857,83 +854,6 @@ const TrackPreviewCard = Mount.makeStream(
         )
       )
     )
-)
-
-const TrackPreviewCardPresence = Mount.makeStream(
-  "TrackPreviewCardPresence",
-  {
-    args: {
-      open: Schema.Boolean,
-      mounted: Schema.Boolean,
-      started: Schema.Boolean,
-      holdExit: Schema.Boolean,
-      popupId: Schema.String,
-      trigger: Schema.String
-    }
-  },
-  (node: HTMLElement, args, changes) =>
-    Stream.callback<PreviewCardMessage>((queue) => {
-      const document = node.ownerDocument
-      const frame = frameOf(document.defaultView)
-      const send = (message: PreviewCardMessage) => {
-        Queue.offerUnsafe(queue, message)
-      }
-      let current = args
-      const popup = () => document.getElementById(current.popupId) ?? node
-      const opening = () =>
-        frame(() => {
-          if (current.open && !current.started) {
-            frame(() => send(PreviewCardMessage.RenderedFirstFrame()))
-          }
-        })
-      const transition = settling(
-        node,
-        popup,
-        frame,
-        (open) => send(PreviewCardMessage.FinishedTransition({ open }))
-      )
-      const closing = () => {
-        const focused = document.activeElement
-        if (isHTMLElement(focused) && node.contains(focused)) {
-          const trigger = document.querySelector<HTMLElement>(current.trigger)
-          if (trigger === null) focused.blur()
-          else returnFocus(trigger)
-        }
-        node.inert = true
-      }
-      const onChange = (next: typeof args) => {
-        const previous = current
-        current = next
-        if (previous.open && !next.open) closing()
-        if (!previous.open && next.open) {
-          node.inert = false
-          raiseAbove(node)
-          send(PreviewCardMessage.ShowedPortal())
-          opening()
-        }
-        transition.follow(previous, next)
-      }
-      return Effect.acquireRelease(
-        Effect.sync(() => {
-          raiseAbove(node)
-          node.inert = !current.open
-          if (!current.mounted) send(PreviewCardMessage.ShowedPortal())
-          if (current.open) opening()
-        }).pipe(
-          Effect.tap(() =>
-            Effect.forkScoped(
-              Stream.runForEach(changes, (next) =>
-                Effect.sync(() => onChange(next)))
-            )
-          )
-        ),
-        () =>
-          Effect.sync(() => {
-            transition.cancel()
-            node.inert = false
-          })
-      )
-    })
 )
 
 /**
@@ -1314,7 +1234,7 @@ export const PreviewCard = Html.component({
                 : PreviewCardMessage.TouchedTrigger()
           )
           .on("focus", ({ focusVisible }: Html.FocusPayload) =>
-            returning > 0
+            returningFocus()
               ? undefined
               : PreviewCardMessage.FocusedTrigger({
                 triggerId: key,
@@ -1360,7 +1280,8 @@ export const PreviewCard = Html.component({
             started: model.started,
             holdExit: props.holdExit === true,
             popupId,
-            trigger: triggerSelector
+            trigger: triggerSelector,
+            restore: true
           })
         )
         : portal

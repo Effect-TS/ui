@@ -19,7 +19,7 @@ Checkbox(h, {
 })
 ```
 
-Every popup renders in the browser's top layer by default. `Dialog`, `Drawer`, `Popover`, `Tooltip`, `PreviewCard`, `Menu` (and so `Menubar` and `ContextMenu`), `Select`, `Combobox`, `Autocomplete` and `ToastProvider` take `topLayer: false` to render in place instead, like Base UI's portal given a `container`: placed and clipped inside the element the view draws it in, and never modal.
+Every popup renders in the browser's top layer by default. `Dialog`, `Drawer`, `Popover`, `Tooltip`, `PreviewCard`, `Menu` (and so `Menubar` and `ContextMenu`), `NavigationMenu`, `Select`, `Combobox`, `Autocomplete` and `ToastProvider` take `topLayer: false` to render in place instead, like Base UI's portal given a `container`: placed and clipped inside the element the view draws it in, and never modal.
 
 A component that doesn't need an instance, such as `Switch`, is a plain view function instead: it takes no `key`, and an `on<Event>` option in place of `onEmit`. Keeping no state isn't enough on its own: `Progress` needs an instance for the id its bar points at, and `DirectionProvider` for sharing the direction with the components inside it.
 
@@ -50,7 +50,8 @@ A component that doesn't need an instance, such as `Switch`, is a plain view fun
 - [Menu](src/Menu.ts): a button that opens a list of actions, checkbox and radio items and submenus, whose open state lives in your Model, with typeahead, a filter input, several triggers and a viewport that resizes the popup as it moves between them.
 - [Menubar](src/Menubar.ts): a row of menus, as in a desktop application, with one Tab stop, arrow keys that move between the triggers and switch between open menus, and hover that switches while a menu is open.
 - [Meter](src/Meter.ts): a measurement within a known range, such as disk usage, whose value lives in your Model, with a label, a value text and an indicator sized to the value.
-- [NavigationMenu](src/NavigationMenu.ts): a navigation landmark with a list of links, where you say which link is the current page and the arrow keys move focus between the links.
+- [NavigationLinks](src/NavigationLinks.ts): a navigation landmark with a list of links, where you say which link is the current page and the arrow keys move focus between the links.
+- [NavigationMenu](src/NavigationMenu.ts): a navigation landmark whose triggers open panels of links in a shared popup, with the open item in your Model.
 - [NumberField](src/NumberField.ts): a controlled input for a number, formatted and parsed for a locale, with stepper buttons that repeat while held, an area to drag across, and a hidden input for a form.
 - [OTPField](src/OTPField.ts): a one-time code field, a row of one-character inputs whose code lives in your Model as a `Redacted<string>`. It moves focus as the user types, takes a pasted or autofilled code whole, and submits it as one form value.
 - [Popover](src/Popover.ts): a `Dialog` anchored to its trigger, opened by a press or by hover. It has several triggers, with `PopoverTrigger` for one drawn elsewhere, and a `viewport` part that animates the content and the popup's size as it moves between them.

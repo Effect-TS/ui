@@ -4,6 +4,7 @@ import { NavigationMenu } from "@effect/ui-kit"
 import { BrowserHost, Html } from "@effect/ui/html"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
+import { TestClock } from "effect/testing"
 import {
   byId,
   click,
@@ -68,6 +69,13 @@ const Page = Html.component({
                 navigationMenu.link({
                   element: h.a.attr("id", "docs").attr("href", "/docs")
                 }).children("Docs")
+              ),
+              navigationMenu.item(h.li).children(
+                navigationMenu.trigger({
+                  element: h.button.attr("id", "pricing"),
+                  value: "pricing",
+                  disabled: true
+                }).children("Pricing")
               )
             ),
             navigationMenu.portal(h.div)?.children(
@@ -77,8 +85,11 @@ const Page = Html.component({
                     navigationMenu.value === null ? null : h.div(
                       h.a.attr("id", `${navigationMenu.value}-first`)
                         .attr("href", "/first").children("First"),
-                      h.a.attr("id", `${navigationMenu.value}-last`)
-                        .attr("href", "/last").children("Last")
+                      navigationMenu.link({
+                        element: h.a.attr("id", `${navigationMenu.value}-last`)
+                          .attr("href", "#last"),
+                        closeOnClick: true
+                      }).children("Last")
                     )
                   )
                 )
@@ -108,6 +119,18 @@ const key = (key: string, init: KeyboardEventInit = {}) => {
   document.activeElement!.dispatchEvent(event)
   return event.defaultPrevented
 }
+
+const mouse = (
+  target: Element,
+  type: "mouseenter" | "mouseleave" | "mousemove"
+) =>
+  target.dispatchEvent(
+    new MouseEvent(type, {
+      clientX: 500,
+      clientY: 500,
+      bubbles: type === "mousemove"
+    })
+  )
 
 const focused = () => document.activeElement?.id
 
@@ -198,5 +221,88 @@ describe("NavigationMenu panels in a document", { concurrent: false }, () => {
         "RequestedClose outside-press"
       ])
       assert.notStrictEqual(focused(), "products")
+    }))
+
+  it.effect("resting the mouse on a trigger opens its panel, another trigger switches at once, and leaving closes only a panel opened by hover", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage()
+      const wait = Effect.andThen(TestClock.adjust("50 millis"), tick)
+      mouse(byId("products"), "mouseenter")
+      yield* tick
+      assert.deepStrictEqual(log(), [])
+      yield* wait
+      assert.deepStrictEqual(log(), ["RequestedOpen products trigger-hover"])
+      mouse(byId("products"), "mouseleave")
+      mouse(byId("solutions"), "mouseenter")
+      yield* tick
+      assert.deepStrictEqual(log().slice(1), [
+        "RequestedOpen solutions trigger-hover"
+      ])
+      mouse(byId("solutions"), "mouseleave")
+      mouse(byId("outside"), "mousemove")
+      yield* tick
+      assert.strictEqual(log().length, 2)
+      yield* wait
+      assert.deepStrictEqual(log().slice(2), ["RequestedClose trigger-hover"])
+
+      mouse(byId("products"), "mouseenter")
+      yield* wait
+      click(byId("products"))
+      yield* tick
+      assert.deepStrictEqual(log().slice(3), [
+        "RequestedOpen products trigger-hover",
+        "RequestedOpen products trigger-press"
+      ])
+      mouse(byId("products"), "mouseleave")
+      mouse(byId("outside"), "mousemove")
+      yield* wait
+      assert.strictEqual(log().length, 5)
+      assert.strictEqual(byId("products").getAttribute("aria-expanded"), "true")
+    }))
+
+  it.effect("a touch never opens a panel by hover, and a disabled trigger ignores presses", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage()
+      press(byId("products"), "touch")
+      mouse(byId("products"), "mouseenter")
+      yield* TestClock.adjust("50 millis")
+      yield* tick
+      assert.deepStrictEqual(log(), [])
+      const pricing = byId("pricing")
+      assert.isTrue(pricing.hasAttribute("disabled"))
+      assert.isTrue(pricing.hasAttribute("data-disabled"))
+      assert.strictEqual(pricing.getAttribute("aria-expanded"), "false")
+      click(pricing)
+      mouse(pricing, "mouseenter")
+      yield* TestClock.adjust("50 millis")
+      yield* tick
+      assert.deepStrictEqual(log(), [])
+    }))
+
+  it.effect("a link with closeOnClick closes the panel and keeps focus, and focus leaving the menu closes it", () =>
+    Effect.gen(function*() {
+      const { log } = yield* mountPage()
+      click(byId("products"))
+      yield* tick
+      const last = byId("products-last")
+      assert.isNull(last.getAttribute("role"))
+      last.focus()
+      click(last)
+      yield* tick
+      yield* tick
+      assert.deepStrictEqual(log().slice(1), ["RequestedClose link-press"])
+
+      click(byId("products"))
+      yield* tick
+      byId("products-first").focus()
+      byId("solutions").focus()
+      yield* tick
+      assert.deepStrictEqual(log().slice(3), [])
+      byId("outside").focus()
+      yield* tick
+      assert.deepStrictEqual(log().slice(2), [
+        "RequestedOpen products trigger-press",
+        "RequestedClose focus-out"
+      ])
     }))
 })
