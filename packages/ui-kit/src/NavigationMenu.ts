@@ -385,7 +385,6 @@ const NavigationMenuModel = Schema.Struct({
   })),
   reason: Schema.NullOr(NavigationMenuOpenReason),
   patient: Schema.Boolean,
-  // Whether the close being shown returns focus to the trigger.
   restoreFocus: Schema.Boolean,
   value: Schema.NullOr(Schema.String),
   mounted: Schema.Boolean,
@@ -453,7 +452,6 @@ const TrackNavigationMenuPresence = makeTrackPresence<NavigationMenuMessage>(
   }
 )
 
-// The open panel's reason, and the press guard after a hover opened it.
 const opened = (
   model: NavigationMenuModel,
   $: NavigationMenuUpdate,
@@ -499,7 +497,6 @@ const dismiss = (
       Command.interrupt(WaitBeforeClosing)
     ).emit(NavigationMenuEvents.RequestedClose({ reason }))
 
-// The popup shows `value`, so a request the consumer took applies.
 const showed = (
   model: NavigationMenuModel,
   $: NavigationMenuUpdate,
@@ -521,7 +518,6 @@ const triggerOf = (scope: string, value: string) =>
 
 const rootAttribute = "data-navigation-menu"
 
-// The open key on a trigger whose panel is closed asks to open it.
 const TrackNavigationList = makeTrackArrowKeys(
   "TrackNavigationList",
   (list, event, keys) => {
@@ -678,8 +674,8 @@ const TrackNavigationPanel = Mount.makeStream(
  * `link({ element, active, closeOnClick })` returns `element`: `active`
  * marks the link to the page being shown, as in `NavigationLinks`, and
  * `closeOnClick` asks to close the open panel, with `link-press`, when the
- * link is pressed, without returning focus to the trigger. Both are `false` when left
- * out.
+ * link is pressed, without returning focus to the trigger. Both are `false`
+ * when left out.
  *
  * The parts also return plain values for markup that depends on them:
  * `value`, the item the popup shows, through its exit transition; `open`;
@@ -696,8 +692,9 @@ const TrackNavigationPanel = Mount.makeStream(
  * tells its triggers and links by, and `data-navigation-menu`, which the
  * root is found by. The trigger adds the popup's id to the consumer's
  * `aria-controls` while its panel is open. The viewport's children are
- * drawn inside its `data-current` container. The portal's box and the positioner's and the
- * arrow's position are added after the consumer's inline style. A handler
+ * drawn inside its `data-current` container. The portal's box and the
+ * positioner's and the arrow's position are added after the consumer's inline
+ * style. A handler
  * the consumer adds to a part runs after the menu's own.
  *
  * Two menus under one parent each need a `key`.
@@ -912,7 +909,6 @@ export const NavigationMenu = Html.component({
 
     const topLayer = tracked.topLayer !== false
     const portalBox = portalStyle(topLayer, tracked.positionMethod)
-    // Drawn only while it shows.
     const portalPart = p.part(
       "div",
       (b) =>
@@ -971,7 +967,6 @@ export const NavigationMenu = Html.component({
         })
         .forward(ownStyle(arrowStyle)))
 
-    // Drawn inside the portal, so only while it shows.
     const viewport = p.part("div", (b) =>
       b
         .attrs({
