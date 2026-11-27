@@ -2321,6 +2321,72 @@ describe("BrowserHost", { concurrent: false }, () => {
           ])
         }).pipe(Effect.scoped))
 
+      it.effect("keydown and keyup forward KeyboardEvent.code on elements and the document", () =>
+        Effect.gen(function*() {
+          const app = yield* container
+          const KeyCodes = Html.component({
+            name: "KeyCodes",
+            model: Schema.Array(Schema.String),
+            message: Schema.String
+          }).make({
+            init: (): ReadonlyArray<string> => [],
+            update: ($, entry) => [...$.model, entry],
+            view: (h) =>
+              h.div
+                .on("keydown", ({ alt, code, key }) =>
+                  `el:down:${key}:${code}:${alt}`)
+                .on("keyup", ({ alt, code, key }) =>
+                  `el:up:${key}:${code}:${alt}`)
+                .children(h.button.attr("id", "kc-btn").children("Press")),
+            subscriptions: () => [
+              HtmlSubscription.onDocument(
+                "keydown",
+                ({ alt, code, key }) => `doc:down:${key}:${code}:${alt}`
+              ),
+              HtmlSubscription.onDocument(
+                "keyup",
+                ({ alt, code, key }) => `doc:up:${key}:${code}:${alt}`
+              )
+            ]
+          })
+          const root = yield* BrowserHost.mountEffect(KeyCodes, {}, app)
+          yield* tick
+          const button = app.querySelector("#kc-btn")!
+          button.dispatchEvent(
+            new KeyboardEvent("keydown", {
+              key: "∑",
+              code: "KeyW",
+              altKey: true,
+              bubbles: true
+            })
+          )
+          button.dispatchEvent(
+            new KeyboardEvent("keyup", {
+              key: "∑",
+              code: "KeyW",
+              altKey: true,
+              bubbles: true
+            })
+          )
+          button.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "w", bubbles: true })
+          )
+          button.dispatchEvent(
+            new KeyboardEvent("keyup", { key: "w", bubbles: true })
+          )
+          yield* tick
+          expect(root.model()).toEqual([
+            "el:down:∑:KeyW:true",
+            "doc:down:∑:KeyW:true",
+            "el:up:∑:KeyW:true",
+            "doc:up:∑:KeyW:true",
+            "el:down:w::false",
+            "doc:down:w::false",
+            "el:up:w::false",
+            "doc:up:w::false"
+          ])
+        }).pipe(Effect.scoped))
+
       it.effect("document listeners receive the DOM event timeStamp", () =>
         Effect.gen(function*() {
           const app = yield* container

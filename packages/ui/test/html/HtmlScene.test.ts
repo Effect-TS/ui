@@ -209,7 +209,9 @@ describe("HtmlScene", () => {
       .change(name, "Ada")
       .change(name, { inputType: "insertReplacementText" })
       .keydown(name, "a")
-      .keydown(name, "a", {
+      .keydown(name, "∑", {
+        code: "KeyW",
+        alt: true,
         composing: true,
         repeat: true,
         editable: false,
@@ -228,11 +230,11 @@ describe("HtmlScene", () => {
         `compositionend {"value":"Ada"}`,
         `change {"value":"Ada","checked":false,"files":[],"composing":false,"inputType":"","selectionStart":null,"selectionEnd":null}`,
         `change {"value":"Ada","checked":false,"files":[],"composing":false,"inputType":"insertReplacementText","selectionStart":null,"selectionEnd":null}`,
-        `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":true,"selectionStart":null,"selectionEnd":null}`,
-        `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":true,"repeat":true,"editable":false,"selectionStart":1,"selectionEnd":3}`,
-        `keydown {"key":" ","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`,
-        `keydown {"key":"g","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":true,"selectionStart":null,"selectionEnd":null}`,
-        `keydown {"key":"g","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`
+        `keydown {"key":"a","code":"","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":true,"selectionStart":null,"selectionEnd":null}`,
+        `keydown {"key":"∑","code":"KeyW","shift":false,"ctrl":false,"alt":true,"meta":false,"composing":true,"repeat":true,"editable":false,"selectionStart":1,"selectionEnd":3}`,
+        `keydown {"key":" ","code":"","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`,
+        `keydown {"key":"g","code":"","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":true,"selectionStart":null,"selectionEnd":null}`,
+        `keydown {"key":"g","code":"","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`
       ]
     )
   })

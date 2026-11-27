@@ -419,7 +419,7 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
         .expect(Locator.tag("output")).toHaveText("ax,by!")
     }))
 
-  it.effect("default editable and repeat to false on document keys and accept overrides", () =>
+  it.effect("default code, editable and repeat on document keys and accept overrides", () =>
     Effect.gen(function*() {
       const Shortcut = Html.component({
         name: "Shortcut",
@@ -432,20 +432,43 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
         subscriptions: () => [
           HtmlSubscription.onDocument(
             "keydown",
-            ({ editable, key, repeat }) => `${key}:${editable}:${repeat}`
+            ({ code, editable, key, repeat }) =>
+              `down:${key}:${code}:${editable}:${repeat}`
+          ),
+          HtmlSubscription.onDocument(
+            "keyup",
+            ({ code, key }) => `up:${key}:${code}`
           )
         ]
       })
+      const scene = yield* HtmlScene.make(Shortcut, {})
+      scene
+        .fireDocument("keydown", { key: "g" })
+        .fireDocument("keydown", {
+          key: "∑",
+          code: "KeyW",
+          editable: true,
+          repeat: true
+        })
+        .fireDocument("keyup", { key: "∑", code: "KeyW" })
+        .fireDocument("keyup", { key: "g" })
+        .expect(Locator.tag("output")).toHaveText(
+          "down:g::false:false,down:∑:KeyW:true:true,up:∑:KeyW,up:g:"
+        )
       const root = yield* TestHost.mount(Shortcut, {})
       yield* TestHost.settle
       yield* TestGlobalEvents.fire("document", "keydown", { key: "g" })
       yield* TestGlobalEvents.fire("document", "keydown", {
-        key: "g",
+        key: "∑",
+        code: "KeyW",
         editable: true,
         repeat: true
       })
       yield* TestHost.settle
-      assert.deepStrictEqual(root.model(), ["g:false:false", "g:true:true"])
+      assert.deepStrictEqual(root.model(), [
+        "down:g::false:false",
+        "down:∑:KeyW:true:true"
+      ])
     }).pipe(Effect.provide(testLayer)))
 
   it.effect("throw when nothing listens, listing the active keys", () =>
