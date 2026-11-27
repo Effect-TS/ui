@@ -346,8 +346,9 @@ export interface KeyPayload extends SelectionPayload {
 }
 
 /**
- * The payload of `selectionchange` on an `input` or `textarea`, sent for
- * every move of the caret or change of the selection, a script's included.
+ * The payload of `selectionchange` on an `input` or `textarea`: the
+ * current caret or selection, after the user or a script changed it. The
+ * browser queues the event, so changes in one task can arrive as one.
  *
  * **Details**
  *
@@ -380,8 +381,9 @@ export interface SelectionPayload {
  * such as choosing an option.
  *
  * `selectionStart` and `selectionEnd` are the selection the edit left, as
- * `SelectionPayload` describes. `selectionchange` follows a task later, so
- * read the caret here to keep it in step with `value`.
+ * `SelectionPayload` describes. Read the caret here to keep it in step with
+ * `value`: `selectionchange` is queued, and an edit that leaves the range
+ * where it was sends none.
  *
  * @stability experimental
  * @category events

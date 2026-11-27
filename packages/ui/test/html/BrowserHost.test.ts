@@ -3773,10 +3773,11 @@ describe("BrowserHost", { concurrent: false }, () => {
         ])
       }).pipe(Effect.scoped))
 
-    it.effect("HtmlCommand.select places a range in the value the same update wrote, and finds a field without a selection", () =>
+    it.effect("HtmlCommand.select places a range in the value the same update wrote, and finds fields without a selection", () =>
       Effect.gen(function*() {
         const Area = Html.ref("Area", "textarea")
         const Mail = Html.ref("Mail", "input")
+        const Attachment = Html.ref("Attachment", "input")
         const CaretMessage = UiSchema.TaggedEnum({
           Completed: {},
           Selected: { found: Schema.Boolean }
@@ -3803,6 +3804,11 @@ describe("BrowserHost", { concurrent: false }, () => {
                     Mail,
                     ({ found }) => CaretMessage.Selected({ found }),
                     { start: 1, end: 3 }
+                  ),
+                  HtmlCommand.select(
+                    Attachment,
+                    ({ found }) => CaretMessage.Selected({ found }),
+                    { start: 0 }
                   )
                 ),
               Selected: ({ found }) =>
@@ -3812,7 +3818,10 @@ describe("BrowserHost", { concurrent: false }, () => {
             h.div(
               h.textarea.attr("aria-label", "Area").ref(Area).value(model.text),
               h.input.attrs({ type: "email", "aria-label": "Mail" }).ref(Mail)
-                .value("a@b.c")
+                .value("a@b.c"),
+              h.input.attrs({ type: "file", "aria-label": "Attachment" }).ref(
+                Attachment
+              ).value("notes.txt")
             )
         })
         const app = yield* container
@@ -3830,7 +3839,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           14,
           14
         ])
-        expect(root.model()!.found).toEqual([true, true])
+        expect(root.model()!.found).toEqual([true, true, true])
       }).pipe(Effect.scoped))
 
     it.effect("HtmlCommand.waitForPaint waits two animation frames", () =>

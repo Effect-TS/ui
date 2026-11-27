@@ -320,12 +320,14 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
     // Written first: the host would otherwise put a value `update` rejected back a frame later, which
     // drops the selection.
     const value = dom.written.get(field)?.get("value")
-    if (typeof value === "string" && field.value !== value) field.value = value
     try {
+      if (typeof value === "string" && field.value !== value) {
+        field.value = value
+      }
       if (options === undefined) field.select()
       else field.setSelectionRange(options.start, options.end ?? options.start)
     } catch {
-      // An element that isn't a text field, or an input type without a selection such as `email`.
+      // A field without a selection, such as `email`, or a file input, which refuses a non-empty value.
     }
   },
   requestSubmit: (element) => {
