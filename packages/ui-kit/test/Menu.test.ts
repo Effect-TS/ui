@@ -965,4 +965,60 @@ describe("Menu", () => {
         assert.include(String(exit.cause), "a part for")
       }
     }))
+
+  it.effect("checked state and indicators do not depend on part construction order", () =>
+    Effect.gen(function*() {
+      const sizes = [
+        { value: "small", label: "Small" },
+        { value: "large", label: "Large" }
+      ]
+      const scene = yield* HtmlScene.make(
+        Menu,
+        {
+          open: true,
+          items: [{ value: "wrap", label: "Wrap lines" }, ...sizes]
+        },
+        {
+          elements: Html,
+          view: (menu, h) => {
+            const tick = menu.checkboxItemIndicator({
+              element: h.span.class("tick"),
+              value: "wrap"
+            })?.children("✓")
+            const dot = menu.radioItemIndicator({
+              element: h.span.class("dot"),
+              value: "large"
+            })?.children("•")
+            const radios = sizes.map(({ label, value }) =>
+              menu.radioItem({
+                element: h.div.attr("data-testid", value),
+                value
+              }).children(value === "large" ? dot : null, label)
+            )
+            return h.div(
+              menu.checkboxItem({
+                element: h.div.attr("data-testid", "wrap"),
+                value: "wrap",
+                checked: true
+              }).children(tick, "Wrap lines"),
+              menu.radioGroup({ element: h.div, value: "large" }).children(
+                radios
+              )
+            )
+          }
+        }
+      )
+      assert.deepStrictEqual(
+        sizes.map(({ value }) => scene.get(item(value)).attrs?.["aria-checked"]),
+        ["false", "true"]
+      )
+      assert.deepInclude(scene.get(Locator.attr("class", "dot")).attrs, {
+        "aria-hidden": "true",
+        "data-checked": ""
+      })
+      assert.deepInclude(scene.get(Locator.attr("class", "tick")).attrs, {
+        "aria-hidden": "true",
+        "data-checked": ""
+      })
+    }))
 })
