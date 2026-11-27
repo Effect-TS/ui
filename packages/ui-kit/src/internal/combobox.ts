@@ -1742,11 +1742,10 @@ export const make = <P, E, V extends string = string>(
         .on(
           "keyup",
           ({ composing, key }) =>
-            composing
-              ? undefined
-              : (key === "Enter" && open && !inline && highlighted === null) ||
-                  (key === "Escape" && inline && !readOnly &&
-                    (props.inputValue !== "" || filled))
+            !composing &&
+              ((key === "Enter" && open && !inline && highlighted === null) ||
+                (key === "Escape" && inline && !readOnly &&
+                  (props.inputValue !== "" || filled)))
               ? Message.ReleasedInputKey({ key })
               : undefined
         )

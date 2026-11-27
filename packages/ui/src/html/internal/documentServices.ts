@@ -64,6 +64,7 @@ const globalEventsOf = (
         },
         () => event.preventDefault()
       )
+    // Not `noteKeyDown` itself, which subscriptions would share and lose when the first one stops.
     const onKeyDown = !custom && name === "keyup"
       ? (event: Event) => noteKeyDown(event)
       : undefined
