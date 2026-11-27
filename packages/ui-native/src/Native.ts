@@ -778,6 +778,18 @@ export interface ScrollPayload {
 }
 
 /**
+ * A width and a height, in points.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface SizePayload {
+  readonly width: number
+  readonly height: number
+}
+
+/**
  * The text of an `input`.
  *
  * @stability experimental
@@ -833,12 +845,25 @@ export interface ViewEvents {
 /**
  * The events of a `scroll`.
  *
+ * **Details**
+ *
+ * Native sends `scroll` once per frame on iOS and on every scroll change on
+ * Android, unless `scrollEventThrottle` is set. A drag fires
+ * `scrollBeginDrag` and `scrollEndDrag`. If the content keeps moving after
+ * the drag, `momentumScrollBegin` and `momentumScrollEnd` follow.
+ * `contentSizeChange` fires when layout changes the size of the content.
+ *
  * @stability experimental
  * @category events
  * @since 0.1.0
  */
 export interface ScrollEvents extends ViewEvents {
   readonly scroll: ScrollPayload
+  readonly scrollBeginDrag: ScrollPayload
+  readonly scrollEndDrag: ScrollPayload
+  readonly momentumScrollBegin: ScrollPayload
+  readonly momentumScrollEnd: ScrollPayload
+  readonly contentSizeChange: SizePayload
 }
 
 /**
@@ -889,9 +914,14 @@ export class Host extends Context.Service<Host, {
     y: number,
     animated?: boolean | undefined
   ) => void
+  /** Scrolls a `scroll` to the end of its content. */
+  readonly scrollToEnd: (
+    node: NativeNode,
+    animated?: boolean | undefined
+  ) => void
   /** `undefined` until the node has been committed. */
   readonly measure: (node: NativeNode) => Rect | undefined
-  /** Runs a native command, such as `scrollToEnd`. Does nothing before the node's first commit. */
+  /** Runs a native command, such as `flashScrollIndicators`. Does nothing before the node's first commit. */
   readonly command: (
     node: NativeNode,
     name: string,
@@ -937,7 +967,8 @@ export interface ViewHost {
  *
  * Props without a setter go straight to Fabric. Native events without a hook
  * (such as `topLayout`) dispatch directly to the matching handler (`layout`)
- * without bubbling, and binding that handler sets `onLayout: true` on Fabric.
+ * without bubbling. Binding that handler sets the prop `onLayout` to `true`,
+ * and unbinding it removes it, through the kind's setter if it has one.
  *
  * `value` is controlled: an `events` hook records what native currently shows
  * so the `value` setter can skip no-ops, and if the Model rejects the edit the
@@ -958,7 +989,27 @@ export interface ViewKind {
   /** Whether raw text may sit directly inside this view (nesting uses virtual text). */
   readonly text?: boolean | undefined
   /** Inner content container created automatically for children, as in `scroll`. */
-  readonly content?: Pick<ViewKind, "viewName" | "defaults"> | undefined
+  readonly content?:
+    | Pick<ViewKind, "viewName" | "defaults" | "events">
+    | undefined
+  /**
+   * Attaches the node to its parent element instead of rendering it among the
+   * parent's children, as a refresh control attaches to its scroll view. A
+   * parent holds one attached node: a new one replaces the last.
+   *
+   * Without a result, the node renders as the parent's first native child,
+   * ahead of its content view. With one, the node renders around the parent
+   * and takes the parent's props whose names match `outer`, such as its
+   * margins. `props` are the parent's defaults while wrapped.
+   */
+  readonly attach?:
+    | ((host: ViewHost) =>
+      | {
+        readonly outer: RegExp
+        readonly props: Readonly<Record<string, unknown>>
+      }
+      | undefined)
+    | undefined
   /** Custom prop setters by prop name. */
   readonly props?:
     | Readonly<
@@ -1106,7 +1157,8 @@ export interface Element<
 }
 
 /**
- * The builder of `view` and `scroll`, whose children can't be text.
+ * The builder of `view`, and the base of `scroll`. Their children can't be
+ * text.
  *
  * @stability experimental
  * @category models
@@ -1137,14 +1189,60 @@ export class ViewElement<
   children(...inputs: ReadonlyArray<View.Input<Msg, unknown>>): unknown {
     return View.withNoTextContent(this, inputs, vocabulary)
   }
+}
 
+/**
+ * The builder of `scroll`. Its children are laid out in a content view that
+ * scrolls inside it.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export class ScrollElement<
+  out Msg,
+  out R = never,
+  in out E = Record<string, unknown>,
+  out Tag extends string = string
+> extends ViewElement<Msg, R, E, Tag> {
   /**
-   * Scrolls a `scroll` sideways instead of down.
+   * Phantom: keeps `children` through `View.WithRequirements`.
    *
    * @since 0.1.0
    */
-  horizontal(this: ViewElement<Msg, R, E, "scroll">, horizontal = true): this {
-    return this.prop("horizontal", horizontal) as this
+  declare readonly "~With"?: ScrollElement<Msg, R | this["~Add"], E, Tag>
+
+  /**
+   * Scrolls sideways instead of down, laying the content out in a row.
+   *
+   * @since 0.1.0
+   */
+  horizontal(horizontal = true): this {
+    return this.prop("horizontal", horizontal)
+  }
+
+  /**
+   * Styles the content view, such as its padding or the alignment of the
+   * children. A later call merges with earlier ones, and `undefined` removes
+   * a property.
+   *
+   * @since 0.1.0
+   */
+  contentContainerStyle(style: ViewStyle): this {
+    return this.prop("contentContainerStyle", {
+      ...(this.props.contentContainerStyle as object),
+      ...style
+    })
+  }
+
+  /**
+   * Sends at most one `scroll` event per `ms` milliseconds. 0 through 16
+   * leave events unthrottled.
+   *
+   * @since 0.1.0
+   */
+  scrollEventThrottle(ms: number): this {
+    return this.prop("scrollEventThrottle", ms)
   }
 }
 
@@ -1231,7 +1329,7 @@ export class InputElement<
 export interface Tags<Msg> {
   readonly view: View.Shorthand<ViewElement<Msg, never, ViewEvents, "view">>
   readonly scroll: View.Shorthand<
-    ViewElement<Msg, never, ScrollEvents, "scroll">
+    ScrollElement<Msg, never, ScrollEvents, "scroll">
   >
   readonly text: View.Shorthand<TextElement<Msg, never, ViewEvents, "text">>
   readonly input: InputElement<Msg, never, InputEvents, "input">
@@ -1297,7 +1395,7 @@ export const tags: Readonly<
   Record<TagName, Element<any, any, any, any, any, any>>
 > = {
   view: View.shorthand(new ViewElement("view")),
-  scroll: View.shorthand(new ViewElement("scroll")),
+  scroll: View.shorthand(new ScrollElement("scroll")),
   text: View.shorthand(new TextElement("text")),
   input: new InputElement("input")
 }
