@@ -80,7 +80,8 @@ import * as server from "./internal/server.ts"
  * instance's path to its Schema-encoded Model, plus `~deferred`, the
  * settled query entries under `~query`, the last message each owner of
  * shared state got from its reports under `~reported`, `~static` for a
- * static render, and `~key` when rendered with `key`;
+ * static render, `~key` when rendered with `key`, and the root's props under
+ * `~props` with `includeProps`;
  * pass it to `HtmlHydrate.hydrate`. `model` is the root's Model
  * after the server run, for app code that sets the status (a 404 for a
  * missing record), or `undefined` if the root failed. `head` holds the
@@ -176,10 +177,17 @@ const serverHtmlHost: Context.Service.Shape<typeof Html.Host> = {
  * once in one document. Each key sets the root's path to `/<name>[<key>]`
  * and is saved in `state` for `HtmlHydrate.hydrate` to reuse automatically.
  *
+ * Props are omitted by default. Set `includeProps: true` to encode the root's
+ * props with its props Schema and read them with `HtmlHydrate.decodeProps`
+ * on the client. If the Schema contains `Schema.Redacted` or encoding fails,
+ * props are omitted with a warning once per component. Skip this option when
+ * the client can reconstruct the props, for example with `Router.props`.
+ *
  * **Gotchas**
  *
  * Read data is public: `state` includes every settled entry, including typed
- * Failures and entries no view renders.
+ * Failures and entries no view renders, and with `includeProps` the root's
+ * props.
  *
  * Route status is the app's: resolve the URL with `AppRoute.resolve` first,
  * answer a `notFound` route with a 404, a `redirected` one with a
@@ -209,6 +217,7 @@ export const renderToHtml = <
     readonly budget?: Duration.Input | undefined
     readonly key?: string | undefined
     readonly static?: boolean | undefined
+    readonly includeProps?: boolean | undefined
   }
 ): Effect.Effect<Rendered<Model>, never, Exclude<R | RP, Html.Host>> =>
   Effect.contextWith((context: Context.Context<never>) => {
@@ -219,6 +228,7 @@ export const renderToHtml = <
       elements: [Html.name],
       key: options?.key,
       static: options?.static ?? Context.get(context, Static),
+      includeProps: options?.includeProps,
       sink: writer
     }).pipe(
       Effect.provideService(Html.Host, serverHtmlHost),

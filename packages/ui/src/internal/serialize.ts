@@ -6,12 +6,12 @@ import type * as SchemaIssue from "effect/SchemaIssue"
 import type * as Component from "../Component.ts"
 import type * as Renderer from "../Renderer.ts"
 import type * as View from "../View.ts"
-import { runCodec, warnOnce, warnUnencoded } from "./codecRun.ts"
+import { formatCause, runCodec, warnOnce, warnUnencoded } from "./codecRun.ts"
 import * as Kernel from "./kernel.ts"
 import { segment, slotSegment } from "./paths.ts"
 import * as queryCore from "./queryCore.ts"
 import type * as services from "./services.ts"
-import { encodePage, stateCodecOf } from "./stateCodec.ts"
+import { encodeJson, encodePage, stateCodecOf } from "./stateCodec.ts"
 
 interface Page {
   readonly state: unknown
@@ -208,6 +208,27 @@ const warnRedacted = (inst: Kernel.Instance, ctx: Context.Context<any>) =>
       "everything under it fresh, without hydration. Keep the secret in a leaf component or in a service."
   )
 
+/** @internal */
+export const encodeProps = (
+  inst: Kernel.Instance,
+  props: unknown,
+  ctx: Context.Context<any>
+): Effect.Effect<unknown> =>
+  Effect.catchCause(
+    encodeJson((inst.component as unknown as Component.Any).props, props),
+    (cause) => {
+      warnOnce(
+        "props",
+        inst,
+        ctx,
+        () =>
+          "its props don't encode as JSON, so the server leaves them out of the state and " +
+          "HtmlHydrate.decodeProps fails on the client. " + formatCause(cause)
+      )
+      return Effect.undefined
+    }
+  )
+
 const ignore = () => {}
 const mute: services.ServerSink = {
   text: ignore,
@@ -224,7 +245,8 @@ export const write = (
   ctx: Context.Context<any>,
   isStatic: boolean,
   to: services.ServerSink,
-  rootKey?: string | undefined
+  rootKey?: string | undefined,
+  props?: unknown
 ): Effect.Effect<Renderer.State> =>
   Effect.map(awaitEncoded(late), () => {
     const state: Record<string, unknown> = {}
@@ -343,6 +365,7 @@ export const write = (
     add("~deferred", deferredPaths)
     if (Object.keys(statuses).length > 0) add("~status", statuses)
     add("~query", query)
+    if (props !== undefined) add("~props", props)
     if (Object.keys(collected).length > 0) add("~reported", collected)
     if (Object.keys(kept).length > 0) add("~kept", kept)
     if (isStatic) add("~static", true)

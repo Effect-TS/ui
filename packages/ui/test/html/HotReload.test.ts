@@ -322,6 +322,42 @@ describe("hot reload", { concurrent: false }, () => {
       })
   )
 
+  it.live("keeps the server HTML when props don't decode with a hot snapshot pending", () =>
+    Effect.gen(function*() {
+      sessionStorage.clear()
+      const Shown = Html.component({
+        name: "HotProps",
+        props: Schema.Struct({ text: Schema.String }),
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.p(h.props.text)
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Shown, { text: "server" })
+      yield* inContainer("props", (el) =>
+        Effect.andThen(
+          BrowserHost.mountEffect(Shown, { text: "client" }, el),
+          Effect.sync(triggerHotSave)
+        ))
+      yield* inContainer("props", (el) =>
+        Effect.gen(function*() {
+          el.innerHTML = rendered.html
+          // Rendered without includeProps, so decodeProps fails.
+          const error = yield* Effect.flip(
+            HtmlHydrate.hydrateEffect(
+              Shown,
+              HtmlHydrate.decodeProps(Shown, rendered.state),
+              el,
+              rendered.state
+            )
+          )
+          assert.isTrue(Schema.isSchemaError(error))
+          assert.strictEqual(el.innerHTML, rendered.html)
+        }))
+    }))
+
   it.live(
     "preserves compatible descendants under an async-decoding parent whether its decode succeeds or fails",
     () =>

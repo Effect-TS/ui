@@ -403,7 +403,7 @@ const fromDom = (
 
 const mountCore = (
   component: Component.Any,
-  rootProps: unknown,
+  props: unknown,
   container: unknown,
   hostOf: (ctx: Context.Context<any>) => HostInput,
   options?: Options
@@ -411,59 +411,58 @@ const mountCore = (
   Root & Renderer.Root<any, any, any>,
   never,
   Scope.Scope
-> =>
-  withProps(rootProps, (props) => {
-    const path = rootPath(component, options?.key)
-    const go = (decoded?: Exit.Exit<Decoded, unknown>) =>
-      Effect.uninterruptible(
-        Effect.contextWith((ctx: Context.Context<Scope.Scope>) => {
-          const owner = Context.get(ctx, Scope.Scope)
-          if (isClosed(owner)) return Effect.interrupt
-          let made: ReturnType<typeof start> | undefined
-          let ready = false
-          let waiters: Array<() => void> | undefined
-          scopeAddFinalizerUnsafe(owner, {}, () => {
-            const close = Effect.suspend(() => made?.close ?? Effect.void)
-            return Effect.suspend(() =>
-              ready
-                ? close
-                : Effect.flatMap(
-                  Effect.callback<void>((resume) => {
-                    if (ready) resume(Effect.void)
-                    else (waiters ??= []).push(() => resume(Effect.void))
-                  }),
-                  () => close
-                )
-            )
-          })
-          try {
-            made = start(
-              component,
-              path,
-              props,
-              container,
-              ctx,
-              options,
-              hostOf(ctx),
-              undefined,
-              decoded && [path, decoded]
-            )
-          } finally {
-            ready = true
-            if (waiters !== undefined) {
-              for (const wake of waiters) wake()
-            }
-          }
-          return isClosed(owner)
-            ? Effect.interrupt
-            : Effect.succeed(made.root)
+> => {
+  const path = rootPath(component, options?.key)
+  const go = (decoded?: Exit.Exit<Decoded, unknown>) =>
+    Effect.uninterruptible(
+      Effect.contextWith((ctx: Context.Context<Scope.Scope>) => {
+        const owner = Context.get(ctx, Scope.Scope)
+        if (isClosed(owner)) return Effect.interrupt
+        let made: ReturnType<typeof start> | undefined
+        let ready = false
+        let waiters: Array<() => void> | undefined
+        scopeAddFinalizerUnsafe(owner, {}, () => {
+          const close = Effect.suspend(() => made?.close ?? Effect.void)
+          return Effect.suspend(() =>
+            ready
+              ? close
+              : Effect.flatMap(
+                Effect.callback<void>((resume) => {
+                  if (ready) resume(Effect.void)
+                  else (waiters ??= []).push(() => resume(Effect.void))
+                }),
+                () => close
+              )
+          )
         })
-      )
-    const hydrate = options?.hydrate
-    return hydrate === undefined
-      ? go(undefined)
-      : hydrate.decode(component as unknown as Kernel.Runnable, path, go)
-  })
+        try {
+          made = start(
+            component,
+            path,
+            props,
+            container,
+            ctx,
+            options,
+            hostOf(ctx),
+            undefined,
+            decoded && [path, decoded]
+          )
+        } finally {
+          ready = true
+          if (waiters !== undefined) {
+            for (const wake of waiters) wake()
+          }
+        }
+        return isClosed(owner)
+          ? Effect.interrupt
+          : Effect.succeed(made.root)
+      })
+    )
+  const hydrate = options?.hydrate
+  return hydrate === undefined
+    ? go(undefined)
+    : hydrate.decode(component as unknown as Kernel.Runnable, path, go)
+}
 
 /** @internal */
 export const mount = (
@@ -475,12 +474,21 @@ export const mount = (
   Root & Renderer.Root<any, any, any>,
   never,
   Scope.Scope | Renderer.Renderer
-> => mountCore(component, rootProps, container, fromRenderer, options)
+> =>
+  withProps(
+    rootProps,
+    (props) => mountCore(component, props, container, fromRenderer, options)
+  )
 
-/** @internal */
+/**
+ * Takes resolved props: `BrowserHost.mountRoot` runs a props Effect before
+ * a hot snapshot clears the container.
+ *
+ * @internal
+ */
 export const mountDom = (
   component: Component.Any,
-  rootProps: unknown,
+  props: unknown,
   container: unknown,
   makeDom: MakeDom,
   elements: ReadonlyArray<string> | "any",
@@ -488,7 +496,7 @@ export const mountDom = (
 ): Effect.Effect<Root & Renderer.Root<any, any, any>, never, Scope.Scope> =>
   mountCore(
     component,
-    rootProps,
+    props,
     container,
     () => fromDom(makeDom, elements),
     options
@@ -950,6 +958,7 @@ export const prerender = (
     readonly elements: ReadonlyArray<string> | "any"
     readonly key?: string | undefined
     readonly static?: boolean | undefined
+    readonly includeProps?: boolean | undefined
     readonly sink?: services.ServerSink | undefined
     readonly onFinish?: ((cache: queryCore.Cache) => void) | undefined
   }
@@ -991,11 +1000,8 @@ export const prerender = (
         const cache = root.freeze()
         if (cache !== undefined) options.onFinish?.(cache)
         const query = cache === undefined ? {} : cache.dehydrate()
-        const snap = serialize.snapshot(
-          root.instance as unknown as Kernel.Instance,
-          made.deferred,
-          cache?.shipped
-        )
+        const instance = root.instance as unknown as Kernel.Instance
+        const snap = serialize.snapshot(instance, made.deferred, cache?.shipped)
         const nodes: Array<Renderer.ServerNode> = []
         const state = yield* serialize.write(
           snap,
@@ -1003,7 +1009,10 @@ export const prerender = (
           ctx,
           options.static === true,
           options.sink ?? serialize.nodeSink(nodes),
-          options.key
+          options.key,
+          options.includeProps === true
+            ? yield* serialize.encodeProps(instance, props, ctx)
+            : undefined
         )
         return { nodes, state, model: root.model(), head: headOf(root) }
       }),

@@ -308,6 +308,9 @@ export interface Hydration<Node> {
  * fetches it. `~static` is set by a render with `static: true`, and `~key` by
  * a render with `key` so hydration mounts at the same root path.
  *
+ * `~props` holds the root's props, encoded with its props Schema, from a
+ * render with `includeProps: true`. Use `HtmlHydrate.decodeProps` to read them.
+ *
  * `~reported` holds, by path, the message an owner of shared state last got
  * from its readers' reports. An owner that adopts its Model starts from it,
  * so the client sends that message again only if its reports differ, even
@@ -338,6 +341,7 @@ export interface State {
   readonly [path: string]: unknown
   readonly "~deferred"?: ReadonlyArray<string> | undefined
   readonly "~query"?: unknown
+  readonly "~props"?: unknown
   readonly "~reported"?: { readonly [path: string]: unknown } | undefined
   readonly "~static"?: boolean | undefined
   readonly "~key"?: string | undefined
@@ -839,6 +843,9 @@ export interface QueryOptions {
  * Use distinct `key` options for repeated roots in one document. The key
  * sets the root's path to `/<name>[<key>]` and is saved in state for hydration.
  *
+ * `includeProps: true` adds the root's props to the state as `~props`,
+ * as `HtmlServer.renderToHtml` describes.
+ *
  * `props` may be an Effect, as with `mount`: it is run once, before `init`,
  * and its requirements are added to the render's. The client resolves its
  * own, so with `Router.props` both sides read the route from their Router.
@@ -864,6 +871,7 @@ export const prerender: <
     readonly elements?: ReadonlyArray<string> | "any" | undefined
     readonly key?: string | undefined
     readonly static?: boolean | undefined
+    readonly includeProps?: boolean | undefined
   }
 ) => Effect.Effect<Prerendered<Model, View.HeadValue<V>>, never, R | RP> = (
   component,
@@ -874,5 +882,6 @@ export const prerender: <
     budget: options?.budget ?? "500 millis",
     elements: options?.elements ?? "any",
     key: options?.key,
-    static: options?.static
+    static: options?.static,
+    includeProps: options?.includeProps
   }) as Effect.Effect<Prerendered<any, any>>
