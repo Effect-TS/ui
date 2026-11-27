@@ -641,28 +641,27 @@ const attachValue = (
   listen: (listener: (value: boolean) => void) => () => void,
   send: (value: boolean) => void
 ) => {
-  // A change that fires while a handler runs is queued, so messages
-  // dispatch in the order the values arrived.
-  let queue: Array<boolean> | undefined
-  const deliver = (values: Array<boolean>) => {
-    if (queue !== undefined) return void queue.push(...values)
-    queue = values
+  // Starts with the captured value, so it goes out before any change, even
+  // one that precedes `initial`. A change that fires while a handler runs
+  // waits here, so messages dispatch in the order the values arrived.
+  const queue: Array<boolean> = initial === undefined ? [] : [initial]
+  let draining = false
+  const drain = () => {
+    if (draining) return
+    draining = true
     try {
-      for (let i = 0; i < queue.length; i++) send(queue[i])
+      for (const value of queue) send(value)
     } finally {
-      queue = undefined
+      queue.length = 0
+      draining = false
     }
   }
-  // Deliver the captured value before changes, even if they precede `initial`.
-  let first = initial
-  const takeFirst = (): Array<boolean> => {
-    const value = first
-    first = undefined
-    return value === undefined ? [] : [value]
-  }
   return {
-    initial: Effect.sync(() => deliver(takeFirst())),
-    close: listen((value) => deliver([...takeFirst(), value]))
+    initial: Effect.sync(drain),
+    close: listen((value) => {
+      queue.push(value)
+      drain()
+    })
   }
 }
 
