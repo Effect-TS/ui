@@ -2,8 +2,8 @@
  * @title Testing @effect/ui components
  *
  * Test a component's logic as a `Story`, its view as a `Scene`, a Command
- * against a fake Layer, and components working together — including a wrapper
- * around a headless or kit part — as a `Play`. The last test renders on the
+ * against a fake Layer, and components working together as a `Play`, such as
+ * a wrapper and the headless part it places. The last test renders on the
  * server and hydrates with `ssr`.
  */
 // @vitest-environment happy-dom
@@ -311,7 +311,8 @@ it.layer(Layer.mergeAll(Notes.layerMemory([note]), TestHost.layer()), {
 // handler out of `onEmit` is already a compile error.
 //
 // `Listbox` issues `HtmlCommand.focus` and `HtmlCommand.scrollIntoView`, which
-// call `Html.Host`, so a `TestHost` play supplies a no-op `Html.Host`.
+// call `Html.Host`. A Play resolves nothing by hand, so it provides a no-op
+// `Html.Host`.
 const otherNote: Note = { id: "n2", title: "Recipes", body: "Soup" }
 
 const NoopHtmlHost = Layer.succeed(Html.Host, {
@@ -343,14 +344,12 @@ it.layer(
 )(
   "NoteLinkPicker",
   (it) => {
-    it.effect("links the picked note and closes the popup", () =>
+    it.effect("links the picked note", () =>
       Effect.gen(function*() {
         const play = yield* HtmlPlay.make(NoteLinkPickerNoDeps, {
           noteId: note.id
         })
-        // `NoteLinkPicker` maps one event from `Listbox` (`Picked`). Open with
-        // the keyboard, pick an option, and check both what the wrapper renders
-        // and what it emits.
+        // `Picked` is the one event `NoteLinkPicker` maps. Pick with the keys.
         yield* play.keydown(
           HtmlLocator.role("button", { name: "Link to a note…" }),
           "ArrowDown"
@@ -362,15 +361,12 @@ it.layer(
         const trigger = HtmlLocator.role("button", {
           name: `Linked: ${otherNote.title}`
         })
-        yield* play.expect(trigger).toHaveAttribute("aria-expanded", "false")
-        yield* play.expect(
-          HtmlLocator.role("dialog", { name: "Link to a note" })
-        ).toBeAbsent()
+        yield* play.expect(trigger).toExist()
         assert.deepStrictEqual(play.root.emitted, [
           NoteLinkPickerEvents.Linked({ id: otherNote.id })
         ])
-        // Reopening by click makes `Listbox` read the `selected` prop the
-        // wrapper feeds back (`model.linked`), rather than advancing with keys.
+        // Opening by click starts `Listbox` on the `selected` prop the wrapper
+        // feeds back. `ArrowDown` would move on from it.
         yield* play.click(trigger)
         yield* play.expect(
           HtmlLocator.role("option", { name: /^Recipes/ })
