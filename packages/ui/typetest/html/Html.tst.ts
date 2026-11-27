@@ -214,9 +214,10 @@ describe("Html", () => {
           null,
           undefined
         )
-        // Void tags take no children and aren't callable.
+        // Void tags, `textarea` among them, take no children and aren't callable.
         expect(h.input).type.not.toHaveProperty("children")
         expect(h.input.value(draft)).type.not.toHaveProperty("children")
+        expect(h.textarea).type.not.toHaveProperty("children")
         expect(h.br).type.not.toBeAssignableTo<(...args: never) => unknown>()
         expect(h.input).type.not.toBeAssignableTo<(...args: never) => unknown>()
         // A builder is a valid child and a valid view without a terminal call.

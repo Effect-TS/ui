@@ -782,9 +782,9 @@ export type ValueNode =
   | HTMLSelectElement
 
 /**
- * The builder of a void HTML element, such as `h.input` or `h.br`: the core
- * builder plus typed events, controlled properties, drag and drop and a few
- * attribute helpers, and no children. `Element` adds `children` for the other tags.
+ * A builder without children, such as `h.input` or `h.textarea`. Extends the
+ * core builder with typed events, controlled properties, drag and drop,
+ * and attribute helpers. `Element` adds children.
  *
  * **Details**
  *
@@ -1352,7 +1352,6 @@ export const containerTags = [
   "table",
   "tbody",
   "td",
-  "textarea",
   "tfoot",
   "th",
   "thead",
@@ -1365,7 +1364,8 @@ export const containerTags = [
 ] as const
 
 /**
- * The void tags, which take no children.
+ * Tags whose builders take no children, including `textarea`.
+ * Set textarea content with `.value(...)`; it is not an HTML void element.
  *
  * @stability experimental
  * @category vocabulary
@@ -1378,6 +1378,7 @@ export const voidTags = [
   "img",
   "input",
   "source",
+  "textarea",
   "track",
   "wbr"
 ] as const
@@ -1392,7 +1393,7 @@ export const voidTags = [
 export type ContainerTag = typeof containerTags[number]
 
 /**
- * A void tag.
+ * A tag that takes no children.
  *
  * @stability experimental
  * @category vocabulary
