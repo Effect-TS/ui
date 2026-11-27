@@ -9,7 +9,9 @@ import {
   Effect,
   Fiber,
   Layer,
+  Logger,
   Option,
+  Redacted,
   Schema,
   SchemaGetter
 } from "effect"
@@ -587,5 +589,118 @@ describe("HtmlHydrate", () => {
         assert.strictEqual(app.querySelector("form"), served)
         assert.isFalse(submitted(served))
       }).pipe(Effect.scoped))
+  })
+
+  describe("root props", () => {
+    const News = Html.component({
+      name: "News",
+      props: Schema.Struct({
+        items: Schema.Array(Schema.String),
+        sort: Schema.String,
+        publishedAt: Schema.Date
+      }),
+      model: Schema.String,
+      message: Schema.Never
+    }).make({
+      init: ($) => $.props.sort,
+      update: ($) => $.model,
+      view: (h, sort) =>
+        h.ol.attr("data-sort", sort).attr(
+          "data-at",
+          String(h.props.publishedAt.getTime())
+        ).children(
+          ...h.props.items.map((title) => h.li.key(title).children(title))
+        )
+    })
+
+    it.effect("adopts server nodes using root props included in the state", () =>
+      Effect.gen(function*() {
+        const rendered = yield* HtmlServer.renderToHtml(
+          News,
+          {
+            items: ["first story", "second story"],
+            sort: "rank",
+            publishedAt: new Date(1000)
+          },
+          { includeProps: true }
+        )
+        const state = JSON.parse(HtmlServer.serializeState(rendered.state))
+        const app = yield* container(rendered.html)
+        const server = [...app.querySelectorAll("*")]
+        const root = yield* HtmlHydrate.hydrateEffect(
+          News,
+          HtmlHydrate.decodeProps(News, state),
+          app,
+          state
+        )
+        yield* root.adopted
+        sameElements(app, server)
+        assert.deepStrictEqual(texts(app, "li"), [
+          "first story",
+          "second story"
+        ])
+        assert.strictEqual(
+          app.querySelector("ol")!.getAttribute("data-at"),
+          "1000"
+        )
+      }).pipe(Effect.scoped))
+
+    it.effect("fails hydration with SchemaError and leaves server DOM untouched when props were not included", () =>
+      Effect.gen(function*() {
+        const rendered = yield* HtmlServer.renderToHtml(News, {
+          items: ["first story", "second story"],
+          sort: "rank",
+          publishedAt: new Date(1000)
+        })
+        const app = yield* container(rendered.html)
+        const server = [...app.querySelectorAll("*")]
+        const error = yield* Effect.flip(
+          Layer.build(
+            HtmlHydrate.hydrate(
+              News,
+              HtmlHydrate.decodeProps(News, rendered.state),
+              app,
+              rendered.state
+            )
+          )
+        )
+        assert.isTrue(Schema.isSchemaError(error))
+        sameElements(app, server)
+      }).pipe(Effect.scoped))
+
+    it.effect("omits Redacted root props even with includeProps and warns once", () => {
+      const messages: Array<string> = []
+      const logger = Logger.make<unknown, void>((options) => {
+        if (options.logLevel === "Warn") messages.push(String(options.message))
+      })
+      const SecretProps = Html.component({
+        name: "SecretProps",
+        props: Schema.Struct({ token: Schema.Redacted(Schema.String) }),
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.p("ok")
+      })
+      return Effect.gen(function*() {
+        const first = yield* HtmlServer.renderToHtml(
+          SecretProps,
+          { token: Redacted.make("top-secret") },
+          { includeProps: true }
+        )
+        yield* HtmlServer.renderToHtml(
+          SecretProps,
+          { token: Redacted.make("top-secret") },
+          { includeProps: true }
+        )
+        assert.notInclude(HtmlServer.serializeState(first.state), "top-secret")
+        assert.strictEqual(messages.length, 1)
+        const error = yield* Effect.flip(
+          HtmlHydrate.decodeProps(SecretProps, first.state)
+        )
+        assert.isTrue(Schema.isSchemaError(error))
+      }).pipe(Effect.provide(Logger.layer([logger])))
+    })
   })
 })
