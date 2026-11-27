@@ -2,4 +2,4 @@
 "@effect/ui-kit": patch
 ---
 
-Prevent `Drawer` mouse and pen swipes from starting on `menuitem`, `menuitemcheckbox`, `menuitemradio`, and `option` elements and their descendants.
+Prevent `Drawer` mouse and pen swipes from starting on menu items and options.
