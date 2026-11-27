@@ -162,10 +162,8 @@ export interface Play<Model, Msg, Events> {
  *
  * **Gotchas**
  *
- * Provide `TestHost.layer()` beneath the app's Layers, with
- * `Layer.provideMerge`, so their fibers run on its scheduler and every step
- * settles them. A Layer merged beside the host, as by `Layer.mergeAll`, can
- * still be working when the next `expect` reads the tree.
+ * Provide `TestHost.layer()` beneath the app's Layers, or a step can settle
+ * before their fibers have run: see `TestHost.layer`.
  *
  * @stability experimental
  * @category constructors

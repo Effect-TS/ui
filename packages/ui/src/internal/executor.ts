@@ -102,34 +102,20 @@ export class TestExecutor implements Executor, Scheduler.SchedulerDispatcher {
    * dispatcher of `wake`, which runs it if no drain has.
    */
   outside(wake: Scheduler.Scheduler): Scheduler.Scheduler {
-    const tasks = this.tasks
-    const outside = new Set<Task>()
-    // Run by a drain or by `wake`, whichever comes first.
-    const run = (entry: Task) => {
-      if (!outside.has(entry)) return
-      tasks.splice(tasks.indexOf(entry), 1)
-      entry.task()
-    }
-    let woken: Scheduler.SchedulerDispatcher | undefined
+    const woken = wake.makeDispatcher()
     const dispatcher: Scheduler.SchedulerDispatcher = {
       scheduleTask: (task, priority) => {
-        const entry: Task = {
-          task: () => {
-            outside.delete(entry)
-            task()
-          },
-          priority
-        }
-        outside.add(entry)
+        const entry: Task = { task, priority }
         this.queue(entry)
-        ;(woken ??= wake.makeDispatcher()).scheduleTask(
-          () => run(entry),
-          priority
-        )
+        woken.scheduleTask(() => {
+          // Gone when a drain ran it first.
+          const index = this.tasks.indexOf(entry)
+          if (index < 0) return
+          this.tasks.splice(index, 1)
+          task()
+        }, priority)
       },
-      flush: () => {
-        for (const entry of outside) run(entry)
-      }
+      flush: () => woken.flush()
     }
     return {
       executionMode: wake.executionMode,

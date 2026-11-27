@@ -932,8 +932,7 @@ const nextMacrotask = Effect.callback<void>((resume) => {
  * **Gotchas**
  *
  * A fiber outside the tree that waits on a Promise or a timer outside Effect
- * isn't waited for once no Command, fetch or load is pending, nor is a fiber
- * on another scheduler, such as one a Layer merged beside the host started.
+ * isn't waited for once no Command, fetch or load is pending.
  *
  * When the budget runs out, `settle` fails with a `SettleError` holding the
  * log's tail and what is pending. A crashed root fails it with `RootCrashed`,
