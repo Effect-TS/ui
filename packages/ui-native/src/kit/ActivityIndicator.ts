@@ -94,6 +94,14 @@ export type ActivityIndicatorElement<Msg, R = never> = Native.Element<
   "activityIndicator"
 >
 
+const iosDefaults = { animating: true }
+// `AndroidProgressBar` throws unless `styleAttr` is set.
+const androidDefaults = {
+  animating: true,
+  styleAttr: "Normal",
+  indeterminate: true
+}
+
 const indicatorBase = Native.defineView(
   () =>
     new Native.Element<
@@ -105,15 +113,8 @@ const indicatorBase = Native.defineView(
   {
     viewName: (_, host) =>
       host.os === "ios" ? "ActivityIndicatorView" : "AndroidProgressBar",
+    defaults: (host) => host.os === "ios" ? iosDefaults : androidDefaults,
     props: {
-      animating(n, value, host) {
-        if (host.os !== "ios") {
-          // AndroidProgressBar throws in apply() unless styleAttr is set.
-          host.set(n, "styleAttr", "Normal")
-          host.set(n, "indeterminate", true)
-        }
-        host.set(n, "animating", value)
-      },
       size(n, value, host) {
         if (host.os === "ios") host.set(n, "size", value)
       },
@@ -141,17 +142,15 @@ export const ActivityIndicator = <Msg>(
   const props = options?.props
   const size = props?.size ?? "small"
   const dim = size === "small" ? 20 : size === "large" ? 36 : size
-  const elementProps: Record<string, unknown> = {
-    animating: props?.animating ?? true,
-    width: dim,
-    height: dim
-  }
-  if (typeof size === "string") elementProps.size = size
-  if (props?.color !== undefined) elementProps.color = props.color
-  if (props?.hidesWhenStopped !== undefined) {
-    elementProps.hidesWhenStopped = props.hidesWhenStopped
-  }
   return View.withFields(indicatorBase, {
-    props: elementProps
-  }) as ActivityIndicatorElement<Msg>
+    props: {
+      animating: props?.animating,
+      color: props?.color,
+      hidesWhenStopped: props?.hidesWhenStopped,
+      // iOS takes only the named sizes.
+      size: typeof size === "string" ? size : undefined,
+      width: dim,
+      height: dim
+    }
+  })
 }

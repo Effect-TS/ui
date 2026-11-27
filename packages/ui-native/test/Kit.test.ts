@@ -145,19 +145,30 @@ const IndicatorHarness = Native.component({
     )
 })
 
+// The host restores a rejected toggle a macrotask after the event.
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+
 describe("@effect/ui-native/kit", () => {
   for (const os of ["android", "ios"] as const) {
     const viewName = os === "ios" ? "RCTSwitch" : "AndroidSwitch"
     const valueProp = os === "ios" ? "value" : "on"
     const commandName = os === "ios" ? "setValue" : "setNativeValue"
-
-    it(`Switch accepts toggles, updates platform props, and disables interaction on ${os}`, async () => {
-      const { close, fabric, find, root, settle } = await FakeFabric.mount(
-        (container) => Renderer.mount(SwitchHarness, {}, container),
+    const setup = async (
+      props: { reject?: "silent" | "rerender"; unhandled?: boolean } = {}
+    ) => {
+      const mounted = await FakeFabric.mount(
+        (container) => Renderer.mount(SwitchHarness, props, container),
         processColor,
         os
       )
-      const node = () => find(FakeFabric.byName(viewName))
+      const node = () => mounted.find(FakeFabric.byName(viewName))
+      const toggle = (value: boolean) =>
+        mounted.fabric.emit(node(), "topChange", { target: node().tag, value })
+      return { ...mounted, node, toggle }
+    }
+
+    it(`Switch accepts toggles, updates platform props, and disables interaction on ${os}`, async () => {
+      const { close, fabric, node, root, settle, toggle } = await setup()
       if (os === "ios") {
         assert.deepStrictEqual(node().props, {
           accessibilityRole: "switch",
@@ -186,9 +197,9 @@ describe("@effect/ui-native/kit", () => {
       }
 
       // Accepted toggle commits the new value and sends no restore command.
-      fabric.emit(node(), "topChange", { target: node().tag, value: true })
+      toggle(true)
       await settle()
-      await new Promise((r) => setTimeout(r, 0))
+      await tick()
       assert.strictEqual(node().props[valueProp], true)
       assert.deepStrictEqual(fabric.commands, [])
 
@@ -240,8 +251,8 @@ describe("@effect/ui-native/kit", () => {
       }
 
       // A native event while disabled does not notify onToggle and snaps back.
-      fabric.emit(node(), "topChange", { target: node().tag, value: false })
-      await new Promise((r) => setTimeout(r, 0))
+      toggle(false)
+      await tick()
       assert.strictEqual(node().props[valueProp], true)
       assert.deepStrictEqual(fabric.commands, [
         [node().tag, commandName, [true]]
@@ -251,67 +262,38 @@ describe("@effect/ui-native/kit", () => {
 
     it(`Switch sends the controlled value back when a toggle is rejected on ${os}`, async () => {
       // Silent rejection (no re-render): restored after the event tick.
-      const silent = await FakeFabric.mount(
-        (container) =>
-          Renderer.mount(SwitchHarness, { reject: "silent" }, container),
-        processColor,
-        os
-      )
-      const silentNode = silent.find(FakeFabric.byName(viewName))
-      silent.fabric.emit(silentNode, "topChange", {
-        target: silentNode.tag,
-        value: true
-      })
-      await new Promise((r) => setTimeout(r, 0))
+      const silent = await setup({ reject: "silent" })
+      const silentNode = silent.node()
+      silent.toggle(true)
+      await tick()
       assert.strictEqual(silentNode.props[valueProp], false)
       assert.deepStrictEqual(silent.fabric.commands, [
         [silentNode.tag, commandName, [false]]
       ])
 
       // Unmounting before restore sends no command.
-      silent.fabric.emit(silentNode, "topChange", {
-        target: silentNode.tag,
-        value: true
-      })
+      silent.toggle(true)
       await silent.close()
-      await new Promise((r) => setTimeout(r, 0))
+      await tick()
       assert.strictEqual(silent.fabric.commands.length, 1)
 
       // Rejection with a re-render (Model changes elsewhere, checked stays false): restored once.
-      const rerender = await FakeFabric.mount(
-        (container) =>
-          Renderer.mount(SwitchHarness, { reject: "rerender" }, container),
-        processColor,
-        os
-      )
-      const rerenderNode = () => rerender.find(FakeFabric.byName(viewName))
-      rerender.fabric.emit(rerenderNode(), "topChange", {
-        target: rerenderNode().tag,
-        value: true
-      })
+      const rerender = await setup({ reject: "rerender" })
+      rerender.toggle(true)
       await rerender.settle()
-      await new Promise((r) => setTimeout(r, 0))
+      await tick()
       assert.include(rerender.printed(), "false:1")
       assert.deepStrictEqual(rerender.fabric.commands, [
-        [rerenderNode().tag, commandName, [false]]
+        [rerender.node().tag, commandName, [false]]
       ])
       await rerender.close()
 
       // No onToggle handler at all: still snaps back to checked.
-      const unhandled = await FakeFabric.mount(
-        (container) =>
-          Renderer.mount(SwitchHarness, { unhandled: true }, container),
-        processColor,
-        os
-      )
-      const unhandledNode = unhandled.find(FakeFabric.byName(viewName))
-      unhandled.fabric.emit(unhandledNode, "topChange", {
-        target: unhandledNode.tag,
-        value: true
-      })
-      await new Promise((r) => setTimeout(r, 0))
+      const unhandled = await setup({ unhandled: true })
+      unhandled.toggle(true)
+      await tick()
       assert.deepStrictEqual(unhandled.fabric.commands, [
-        [unhandledNode.tag, commandName, [false]]
+        [unhandled.node().tag, commandName, [false]]
       ])
       await unhandled.close()
     })

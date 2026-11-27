@@ -103,67 +103,60 @@ export type SwitchElement<Msg, R = never> = Native.Element<
   "switch"
 >
 
-interface SwitchState {
-  native?: boolean | undefined
-  iosBg?: unknown
-  bg?: unknown
-  radius?: unknown
-  alignSelf?: unknown
-}
+const defaults = { accessibilityRole: "switch" }
+// As React Native: an iOS switch keeps its own size in a stretching parent.
+const iosDefaults = { accessibilityRole: "switch", alignSelf: "flex-start" }
 
-// Per-node state for controlled toggle restores (`topChange`) and iOS fallback
-// styles (`iosBackgroundColor`, default `alignSelf: "flex-start"`) so partial
-// prop updates always agree with a fresh mount.
-const states = /* @__PURE__ */ new WeakMap<NativeNode, SwitchState>()
+// What native shows after a toggle, until the `value` setter answers it.
+const toggled = /* @__PURE__ */ new WeakMap<NativeNode, boolean>()
 
-const stateOf = (n: NativeNode): SwitchState => {
-  let state = states.get(n)
-  if (state === undefined) states.set(n, state = {})
-  return state
-}
+// The `iosBackgroundColor`, `backgroundColor` and `borderRadius` an iOS
+// switch was given. A setter sees only its own value, and the style has to win
+// over the fallback whichever of them changes.
+const iosStyles = /* @__PURE__ */ new WeakMap<
+  NativeNode,
+  Record<string, unknown>
+>()
 
-const applyIosBackground = (
-  n: NativeNode,
-  state: SwitchState,
-  host: Native.ViewHost
-) => {
-  host.set(n, "backgroundColor", state.bg ?? state.iosBg)
-  host.set(
-    n,
-    "borderRadius",
-    state.radius ?? (state.iosBg === undefined ? undefined : 16)
-  )
-}
+const iosStyle =
+  (name: string) => (n: NativeNode, value: unknown, host: Native.ViewHost) => {
+    if (host.os !== "ios") {
+      if (name !== "iosBackgroundColor") host.set(n, name, value)
+      return
+    }
+    let style = iosStyles.get(n)
+    if (style === undefined) iosStyles.set(n, style = {})
+    style[name] = value
+    const fallback = style.iosBackgroundColor
+    host.set(n, "backgroundColor", style.backgroundColor ?? fallback)
+    host.set(
+      n,
+      "borderRadius",
+      style.borderRadius ?? (fallback === undefined ? undefined : 16)
+    )
+  }
 
 const switchBase = Native.defineView(
   () => new Native.Element<any, never, SwitchEvents, "switch">("switch"),
   {
     viewName: (_, host) => host.os === "ios" ? "RCTSwitch" : "AndroidSwitch",
-    defaults: { accessibilityRole: "switch" },
+    defaults: (host) => host.os === "ios" ? iosDefaults : defaults,
     props: {
       value(n, value, host) {
-        const checked = value === true
-        const state = states.get(n)
-        const observed = state?.native
-        if (state !== undefined) state.native = undefined
-        // Always commit the prop on change so iOS updates `_props.value` and
-        // Android's `ReactSwitch.setOn` unlocks `allowChange`.
-        host.set(n, host.os === "ios" ? "value" : "on", checked)
-        if (host.os === "ios" && state?.alignSelf === undefined) {
-          host.set(n, "alignSelf", "flex-start")
+        const ios = host.os === "ios"
+        // An accepted toggle has to be committed: iOS reports only a change
+        // from the committed value, and Android locks the switch until `on`
+        // is set.
+        host.set(n, ios ? "value" : "on", value)
+        // Fabric sees no change when a toggle is rejected, so send a command.
+        if (toggled.get(n) === !value) {
+          host.command(n, ios ? "setValue" : "setNativeValue", [value])
         }
-        if (observed !== undefined && observed !== checked) {
-          host.command(
-            n,
-            host.os === "ios" ? "setValue" : "setNativeValue",
-            [checked]
-          )
-        }
+        toggled.delete(n)
       },
       disabled(n, value, host) {
-        const disabled = value === true
-        if (host.os === "ios") host.set(n, "disabled", disabled)
-        else host.set(n, "enabled", !disabled)
+        if (host.os === "ios") host.set(n, "disabled", value)
+        else host.set(n, "enabled", !value)
       },
       thumbColor(n, value, host) {
         host.set(n, "thumbTintColor", value)
@@ -187,35 +180,14 @@ const switchBase = Native.defineView(
           )
         }
       },
-      iosBackgroundColor(n, value, host) {
-        if (host.os !== "ios") return
-        const state = stateOf(n)
-        state.iosBg = value
-        applyIosBackground(n, state, host)
-      },
-      backgroundColor(n, value, host) {
-        if (host.os !== "ios") return host.set(n, "backgroundColor", value)
-        const state = stateOf(n)
-        state.bg = value
-        applyIosBackground(n, state, host)
-      },
-      borderRadius(n, value, host) {
-        if (host.os !== "ios") return host.set(n, "borderRadius", value)
-        const state = stateOf(n)
-        state.radius = value
-        applyIosBackground(n, state, host)
-      },
-      alignSelf(n, value, host) {
-        if (host.os !== "ios") return host.set(n, "alignSelf", value)
-        const state = stateOf(n)
-        state.alignSelf = value
-        host.set(n, "alignSelf", value ?? "flex-start")
-      }
+      iosBackgroundColor: iosStyle("iosBackgroundColor"),
+      backgroundColor: iosStyle("backgroundColor"),
+      borderRadius: iosStyle("borderRadius")
     },
     events: {
       topChange(n, event, host) {
         const checked = Boolean(event?.value)
-        stateOf(n).native = checked
+        toggled.set(n, checked)
         host.fire(n, "change", { checked })
       }
     }
@@ -243,19 +215,16 @@ export const Switch = <Msg>(
 ): SwitchElement<Msg> => {
   const { onToggle, props } = options
   const disabled = props.disabled === true
-  const elementProps: Record<string, unknown> = {
-    value: props.checked,
-    disabled
-  }
-  if (props.thumbColor !== undefined) elementProps.thumbColor = props.thumbColor
-  if (props.trackColor !== undefined) elementProps.trackColor = props.trackColor
-  if (props.iosBackgroundColor !== undefined) {
-    elementProps.iosBackgroundColor = props.iosBackgroundColor
-  }
   return View.withFields(switchBase, {
-    props: elementProps,
-    ...(!disabled && onToggle !== undefined
-      ? { handlers: { change: onToggle } }
-      : undefined)
-  }) as SwitchElement<Msg>
+    props: {
+      value: props.checked,
+      disabled,
+      thumbColor: props.thumbColor,
+      trackColor: props.trackColor,
+      iosBackgroundColor: props.iosBackgroundColor
+    },
+    handlers: disabled || onToggle === undefined
+      ? View.noFields
+      : { change: onToggle }
+  })
 }
