@@ -3,12 +3,12 @@ import type { Steps, TestHost } from "@effect/ui/testing"
 import { Case, Play, Scene, Story } from "@effect/ui/testing"
 import { Effect, Schema, type Scope, Stream } from "effect"
 import { describe, expect, it } from "tstyche"
-import type { SearchBox } from "../test/fixtures/components.ts"
 import {
   Counter,
   CounterMessage,
   SaveTodo,
   Search,
+  SearchBox,
   SearchMessage,
   TodoItem,
   TodoItemMessage,

@@ -51,6 +51,8 @@ export interface Options {
   readonly exclude?: ReadonlyArray<string> | undefined
   readonly server?: string | undefined
   readonly webMcp?: boolean | WebMcpOptions | undefined
+  /** `false` mounts no overlay iframe. The log, roots, WebMCP and server stay. */
+  readonly panel?: boolean | undefined
 }
 
 const corners: { readonly [P in Position]: string } = {
@@ -63,8 +65,8 @@ const corners: { readonly [P in Position]: string } = {
 // A painted copy's dialogs and popovers sit in the top layer, above any z-index. While paused the frame
 // joins the top layer after them, so the copy never covers the panel. Leaving the top layer takes the frame
 // out of the page for a moment, so it only re-joins when something opened since it last joined.
-const raise = (frame: HTMLIFrameElement, covered: boolean) => {
-  if (typeof frame.showPopover !== "function") return
+const raise = (frame: HTMLIFrameElement | undefined, covered: boolean) => {
+  if (typeof frame?.showPopover !== "function") return
   if (frame.matches(":popover-open")) {
     if (!covered) return
     frame.hidePopover()
@@ -73,8 +75,8 @@ const raise = (frame: HTMLIFrameElement, covered: boolean) => {
   frame.showPopover()
 }
 
-const lower = (frame: HTMLIFrameElement) => {
-  if (!frame.hasAttribute("popover")) return
+const lower = (frame: HTMLIFrameElement | undefined) => {
+  if (frame?.hasAttribute("popover") !== true) return
   if (frame.matches(":popover-open")) frame.hidePopover()
   frame.removeAttribute("popover")
 }
@@ -199,7 +201,7 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
           Effect.sync(() => {
             if (paused !== was) return
             paused = undefined
-            lower(frame)
+            lower(shown)
             changed()
           })
         )
@@ -228,31 +230,13 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
                     skipped: painted.skipped
                   }
                 }
-                raise(frame, covered)
+                raise(shown, covered)
                 covered = false
                 changed()
                 return painted
               })
             )
         })))
-      const pages = Pages.of({
-        paint,
-        resume,
-        clear: (sessionId) =>
-          Effect.sync(() => {
-            const upTo = latest.get(sessionId)
-            if (paused !== undefined || upTo === undefined) return
-            inspector.sessions().find((session) => session.id === sessionId)
-              ?.clear()
-            history.clear(sessionId, upTo)
-            wireHistory?.clear(sessionId, upTo)
-            notify()
-          }),
-        setOpen: (open) => Effect.sync(() => save(openKey, open)),
-        setRecording: (tag, recording) =>
-          Effect.sync(() => setRecording(tag, recording)),
-        setPosition: (next) => Effect.sync(() => setPosition(next))
-      })
       const controllables: BrowserHost.Controllables = {
         register: (root) => {
           roots.set(root.session, root)
@@ -261,217 +245,240 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
             if (roots.get(root.session) === root) roots.delete(root.session)
             if (paused?.root === root) {
               paused = undefined
-              lower(frame)
+              lower(shown)
             }
             changed()
           }
         }
       }
 
-      const frame = document.createElement("iframe")
-      frame.setAttribute("data-effect-ui-devtools", "")
-      frame.title = "Effect UI inspector"
-      frame.setAttribute(
-        "style",
-        "position:fixed;inset:auto;" + corners[position] +
-          ";z-index:2147483000;border:0;margin:0;padding:0;width:0;height:0;overflow:hidden;" +
-          "background:transparent;color-scheme:light dark;max-width:none;max-height:none;" +
-          "box-shadow:0 8px 28px light-dark(rgb(0 0 0 / .14), rgb(0 0 0 / .5))"
-      )
-      frame.srcdoc =
-        "<!doctype html><html><head><meta charset=\"utf-8\"><style>" + styles +
-        "</style></head><body><div id=\"root\"></div></body></html>"
-      yield* Effect.addFinalizer(() => Effect.sync(() => frame.remove()))
-      yield* Effect.callback<void>((resume) => {
-        frame.addEventListener("load", () => resume(Effect.void), {
-          once: true
-        })
-        document.body.appendChild(frame)
-      })
+      let shown: HTMLIFrameElement | undefined
       let covered = true
-      const opened = (event: Event) => {
-        if (
-          event.target !== frame && (event as ToggleEvent).newState === "open"
-        ) {
-          covered = true
-        }
-      }
-      document.addEventListener("beforetoggle", opened, true)
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() =>
-          document.removeEventListener("beforetoggle", opened, true)
+      if (options.panel !== false) {
+        const pages = Pages.of({
+          paint,
+          resume,
+          clear: (sessionId) =>
+            Effect.sync(() => {
+              const upTo = latest.get(sessionId)
+              if (paused !== undefined || upTo === undefined) return
+              inspector.sessions().find((session) => session.id === sessionId)
+                ?.clear()
+              history.clear(sessionId, upTo)
+              wireHistory?.clear(sessionId, upTo)
+              notify()
+            }),
+          setOpen: (open) => Effect.sync(() => save(openKey, open)),
+          setRecording: (tag, recording) =>
+            Effect.sync(() => setRecording(tag, recording)),
+          setPosition: (next) => Effect.sync(() => setPosition(next))
+        })
+        const frame = document.createElement("iframe")
+        frame.setAttribute("data-effect-ui-devtools", "")
+        frame.title = "Effect UI inspector"
+        frame.setAttribute(
+          "style",
+          "position:fixed;inset:auto;" + corners[position] +
+            ";z-index:2147483000;border:0;margin:0;padding:0;width:0;height:0;overflow:hidden;" +
+            "background:transparent;color-scheme:light dark;max-width:none;max-height:none;" +
+            "box-shadow:0 8px 28px light-dark(rgb(0 0 0 / .14), rgb(0 0 0 / .5))"
         )
-      )
-      const inner = frame.contentDocument!
-      const container = inner.getElementById("root")!
-
-      const root = inner.documentElement
-      const place = (next: Position) => {
-        position = next
-        frame.style.top = next.startsWith("Top") ? "12px" : "auto"
-        frame.style.bottom = next.startsWith("Bottom") ? "12px" : "auto"
-        frame.style.left = next.endsWith("Left") ? "12px" : "auto"
-        frame.style.right = next.endsWith("Right") ? "12px" : "auto"
-        root.setAttribute("data-position", next)
-      }
-      const setPosition = (next: Position) => {
-        place(next)
-        save(positionKey, next)
-        changed()
-      }
-      place(position)
-      const resize = (width: number, height: number) => {
-        root.style.setProperty(
-          "--panel-w",
-          Math.max(480, Math.round(width)) + "px"
-        )
-        root.style.setProperty(
-          "--panel-h",
-          Math.max(300, Math.round(height)) + "px"
-        )
-      }
-      const saved = load(sizeKey)
-      if (
-        Array.isArray(saved) && typeof saved[0] === "number" &&
-        typeof saved[1] === "number"
-      ) {
-        resize(saved[0], saved[1])
-      }
-      let suppressClick = false
-      inner.addEventListener("click", (event) => {
-        if (!suppressClick) return
-        suppressClick = false
-        event.preventDefault()
-        event.stopImmediatePropagation()
-      }, true)
-      const clamp = (value: number, min: number, max: number) =>
-        Math.min(Math.max(value, min), Math.max(min, max))
-      container.addEventListener("pointerdown", (event) => {
-        const target = event.target as Element
-        const grip = target.closest<HTMLElement>(".grip")
-        if (grip != null && event.button === 0) {
-          const panel = grip.parentElement
-          if (panel == null) return
-          event.preventDefault()
-          const grow = {
-            x: position.endsWith("Right") ? -1 : 1,
-            y: position.startsWith("Bottom") ? -1 : 1
+        frame.srcdoc =
+          "<!doctype html><html><head><meta charset=\"utf-8\"><style>" +
+          styles +
+          "</style></head><body><div id=\"root\"></div></body></html>"
+        shown = frame
+        yield* Effect.addFinalizer(() => Effect.sync(() => frame.remove()))
+        yield* Effect.callback<void>((resume) => {
+          frame.addEventListener("load", () => resume(Effect.void), {
+            once: true
+          })
+          document.body.appendChild(frame)
+        })
+        const opened = (event: Event) => {
+          if (
+            event.target !== frame && (event as ToggleEvent).newState === "open"
+          ) {
+            covered = true
           }
+        }
+        document.addEventListener("beforetoggle", opened, true)
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() =>
+            document.removeEventListener("beforetoggle", opened, true)
+          )
+        )
+        const inner = frame.contentDocument!
+        const container = inner.getElementById("root")!
+
+        const root = inner.documentElement
+        const place = (next: Position) => {
+          position = next
+          frame.style.top = next.startsWith("Top") ? "12px" : "auto"
+          frame.style.bottom = next.startsWith("Bottom") ? "12px" : "auto"
+          frame.style.left = next.endsWith("Left") ? "12px" : "auto"
+          frame.style.right = next.endsWith("Right") ? "12px" : "auto"
+          root.setAttribute("data-position", next)
+        }
+        const setPosition = (next: Position) => {
+          place(next)
+          save(positionKey, next)
+          changed()
+        }
+        place(position)
+        const resize = (width: number, height: number) => {
+          root.style.setProperty(
+            "--panel-w",
+            Math.max(480, Math.round(width)) + "px"
+          )
+          root.style.setProperty(
+            "--panel-h",
+            Math.max(300, Math.round(height)) + "px"
+          )
+        }
+        const saved = load(sizeKey)
+        if (
+          Array.isArray(saved) && typeof saved[0] === "number" &&
+          typeof saved[1] === "number"
+        ) {
+          resize(saved[0], saved[1])
+        }
+        let suppressClick = false
+        inner.addEventListener("click", (event) => {
+          if (!suppressClick) return
+          suppressClick = false
+          event.preventDefault()
+          event.stopImmediatePropagation()
+        }, true)
+        const clamp = (value: number, min: number, max: number) =>
+          Math.min(Math.max(value, min), Math.max(min, max))
+        container.addEventListener("pointerdown", (event) => {
+          const target = event.target as Element
+          const grip = target.closest<HTMLElement>(".grip")
+          if (grip != null && event.button === 0) {
+            const panel = grip.parentElement
+            if (panel == null) return
+            event.preventDefault()
+            const grow = {
+              x: position.endsWith("Right") ? -1 : 1,
+              y: position.startsWith("Bottom") ? -1 : 1
+            }
+            const start = {
+              x: event.screenX,
+              y: event.screenY,
+              rect: panel.getBoundingClientRect()
+            }
+            const move = (moved: PointerEvent) =>
+              resize(
+                start.rect.width + grow.x * (moved.screenX - start.x),
+                start.rect.height + grow.y * (moved.screenY - start.y)
+              )
+            const end = () => {
+              grip.removeEventListener("pointermove", move)
+              const rect = panel.getBoundingClientRect()
+              save(sizeKey, [rect.width, rect.height])
+            }
+            grip.setPointerCapture(event.pointerId)
+            grip.addEventListener("pointermove", move)
+            grip.addEventListener("lostpointercapture", end, { once: true })
+            return
+          }
+          const launcher = target.closest<HTMLElement>(".launcher")
+          if (launcher == null || event.button !== 0) return
+          suppressClick = false
           const start = {
             x: event.screenX,
             y: event.screenY,
-            rect: panel.getBoundingClientRect()
+            rect: frame.getBoundingClientRect()
           }
-          const move = (moved: PointerEvent) =>
-            resize(
-              start.rect.width + grow.x * (moved.screenX - start.x),
-              start.rect.height + grow.y * (moved.screenY - start.y)
-            )
-          const end = () => {
-            grip.removeEventListener("pointermove", move)
-            const rect = panel.getBoundingClientRect()
-            save(sizeKey, [rect.width, rect.height])
+          let dragging = false
+          let left = start.rect.left
+          let top = start.rect.top
+          const move = (moved: PointerEvent) => {
+            const dx = moved.screenX - start.x
+            const dy = moved.screenY - start.y
+            if (!dragging) {
+              if (Math.hypot(dx, dy) < 6) return
+              dragging = true
+              root.setAttribute("data-dragging", "true")
+            }
+            const vw = view?.innerWidth ?? 0
+            const vh = view?.innerHeight ?? 0
+            left = clamp(start.rect.left + dx, 12, vw - start.rect.width - 12)
+            top = clamp(start.rect.top + dy, 12, vh - start.rect.height - 12)
+            frame.style.left = Math.round(left) + "px"
+            frame.style.top = Math.round(top) + "px"
+            frame.style.right = "auto"
+            frame.style.bottom = "auto"
           }
-          grip.setPointerCapture(event.pointerId)
-          grip.addEventListener("pointermove", move)
-          grip.addEventListener("lostpointercapture", end, { once: true })
-          return
-        }
-        const launcher = target.closest<HTMLElement>(".launcher")
-        if (launcher == null || event.button !== 0) return
-        suppressClick = false
-        const start = {
-          x: event.screenX,
-          y: event.screenY,
-          rect: frame.getBoundingClientRect()
-        }
-        let dragging = false
-        let left = start.rect.left
-        let top = start.rect.top
-        const move = (moved: PointerEvent) => {
-          const dx = moved.screenX - start.x
-          const dy = moved.screenY - start.y
-          if (!dragging) {
-            if (Math.hypot(dx, dy) < 6) return
-            dragging = true
-            root.setAttribute("data-dragging", "true")
+          let done = false
+          const finish = (cancelled: boolean) => {
+            if (done) return
+            done = true
+            launcher.removeEventListener("pointermove", move)
+            launcher.removeEventListener("pointerup", onUp)
+            launcher.removeEventListener("pointercancel", onCancel)
+            launcher.removeEventListener("lostpointercapture", onLost)
+            if (!dragging) return
+            root.removeAttribute("data-dragging")
+            suppressClick = true
+            setTimeout(() => {
+              suppressClick = false
+            }, 0)
+            if (cancelled) {
+              place(position)
+              return
+            }
+            const vw = view?.innerWidth ?? 0
+            const vh = view?.innerHeight ?? 0
+            const vertical = top + start.rect.height / 2 < vh / 2
+              ? "Top"
+              : "Bottom"
+            const horizontal = left + start.rect.width / 2 < vw / 2
+              ? "Left"
+              : "Right"
+            setPosition((vertical + horizontal) as Position)
           }
-          const vw = view?.innerWidth ?? 0
-          const vh = view?.innerHeight ?? 0
-          left = clamp(start.rect.left + dx, 12, vw - start.rect.width - 12)
-          top = clamp(start.rect.top + dy, 12, vh - start.rect.height - 12)
-          frame.style.left = Math.round(left) + "px"
-          frame.style.top = Math.round(top) + "px"
-          frame.style.right = "auto"
-          frame.style.bottom = "auto"
-        }
-        let done = false
-        const finish = (cancelled: boolean) => {
-          if (done) return
-          done = true
-          launcher.removeEventListener("pointermove", move)
-          launcher.removeEventListener("pointerup", onUp)
-          launcher.removeEventListener("pointercancel", onCancel)
-          launcher.removeEventListener("lostpointercapture", onLost)
-          if (!dragging) return
-          root.removeAttribute("data-dragging")
-          suppressClick = true
-          setTimeout(() => {
-            suppressClick = false
-          }, 0)
-          if (cancelled) {
-            place(position)
-            return
-          }
-          const vw = view?.innerWidth ?? 0
-          const vh = view?.innerHeight ?? 0
-          const vertical = top + start.rect.height / 2 < vh / 2
-            ? "Top"
-            : "Bottom"
-          const horizontal = left + start.rect.width / 2 < vw / 2
-            ? "Left"
-            : "Right"
-          setPosition((vertical + horizontal) as Position)
-        }
-        const onUp = () => finish(false)
-        const onCancel = () => finish(true)
-        const onLost = () => finish(false)
-        launcher.setPointerCapture?.(event.pointerId)
-        launcher.addEventListener("pointermove", move)
-        launcher.addEventListener("pointerup", onUp)
-        launcher.addEventListener("pointercancel", onCancel)
-        launcher.addEventListener("lostpointercapture", onLost)
-      })
-
-      const viewport = () => {
-        if (view === null) return
-        root.style.setProperty("--vw", view.innerWidth + "px")
-        root.style.setProperty("--vh", view.innerHeight + "px")
-      }
-      viewport()
-      view?.addEventListener("resize", viewport)
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => view?.removeEventListener("resize", viewport))
-      )
-      const Observer =
-        (frame.contentWindow as (Window & typeof globalThis) | null)
-          ?.ResizeObserver
-      if (Observer !== undefined) {
-        const observer = new Observer(() => {
-          const shape = container.firstElementChild?.firstElementChild
-          frame.style.width = container.offsetWidth + "px"
-          frame.style.height = container.offsetHeight + "px"
-          frame.style.borderRadius = shape == null
-            ? "0"
-            : inner.defaultView!.getComputedStyle(shape).borderRadius
+          const onUp = () => finish(false)
+          const onCancel = () => finish(true)
+          const onLost = () => finish(false)
+          launcher.setPointerCapture?.(event.pointerId)
+          launcher.addEventListener("pointermove", move)
+          launcher.addEventListener("pointerup", onUp)
+          launcher.addEventListener("pointercancel", onCancel)
+          launcher.addEventListener("lostpointercapture", onLost)
         })
-        observer.observe(container)
-        yield* Effect.addFinalizer(() =>
-          Effect.sync(() => observer.disconnect())
-        )
-      }
 
-      yield* mountOverlay(container, feed, pages)
+        const viewport = () => {
+          if (view === null) return
+          root.style.setProperty("--vw", view.innerWidth + "px")
+          root.style.setProperty("--vh", view.innerHeight + "px")
+        }
+        viewport()
+        view?.addEventListener("resize", viewport)
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => view?.removeEventListener("resize", viewport))
+        )
+        const Observer =
+          (frame.contentWindow as (Window & typeof globalThis) | null)
+            ?.ResizeObserver
+        if (Observer !== undefined) {
+          const observer = new Observer(() => {
+            const shape = container.firstElementChild?.firstElementChild
+            frame.style.width = container.offsetWidth + "px"
+            frame.style.height = container.offsetHeight + "px"
+            frame.style.borderRadius = shape == null
+              ? "0"
+              : inner.defaultView!.getComputedStyle(shape).borderRadius
+          })
+          observer.observe(container)
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => observer.disconnect())
+          )
+        }
+
+        yield* mountOverlay(container, feed, pages)
+      }
 
       const encoded = yield* MessageLog.makeEncoded((batch) =>
         Effect.suspend(() => {

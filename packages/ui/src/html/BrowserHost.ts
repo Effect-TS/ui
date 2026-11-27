@@ -593,7 +593,8 @@ export const mountRoot = (
         container,
         make,
         [Html.name],
-        { ...options, hydrate: hydrating, hot: hotSession, scheduler }
+        // A case's `hot`, from `BrowserCase`, overrides the session.
+        { hydrate: hydrating, hot: hotSession, scheduler, ...options }
       ),
       mountContext
     )

@@ -68,6 +68,7 @@ import type * as Scope from "effect/Scope"
 import type * as Component from "../Component.ts"
 import * as internal from "../internal/play.ts"
 import type * as View from "../View.ts"
+import type * as Case from "./Case.ts"
 import type * as Locator from "./Locator.ts"
 import type * as Scene from "./Scene.ts"
 import type * as TestHost from "./TestHost.ts"
@@ -180,4 +181,28 @@ export const make = <
   Play<Model, Msg, Events>,
   StepError,
   R | RP | TestHost.TestHost | Scope.Scope
-> => internal.begin(internal.PlayCursor, "Play", make, component, props) as any
+> =>
+  internal.begin(internal.PlayCursor, "Play", make, { component, props }) as any
+
+/**
+ * Mounts a `Case` on `TestHost`, sends its messages, settles, and returns
+ * a cursor over it, for the life of the current Scope.
+ *
+ * **Details**
+ *
+ * The root starts from the case's `model` when it has one, and the case's
+ * `layer` is built in the current Scope and provided around the mount.
+ * What the case still needs comes from the test's environment. Otherwise it
+ * is `make`, end check included.
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const fromCase = <C extends Case.AnyComponent, R>(
+  c: Case.Case<C, R>
+): Effect.Effect<
+  Play<Component.Model<C>, Component.Message<C>, Component.Events<C>>,
+  StepError,
+  R | TestHost.TestHost | Scope.Scope
+> => internal.begin(internal.PlayCursor, "Play", fromCase, c) as any

@@ -49,6 +49,7 @@
  */
 import type * as Layer from "effect/Layer"
 import * as internal from "./internal/layer.ts"
+import * as internalWorkbench from "./internal/workbench.ts"
 
 /**
  * The corner of the page the overlay sits in.
@@ -148,6 +149,10 @@ export const layer = (options?: {
   readonly server?: string | undefined
   readonly webMcp?: boolean | WebMcpOptions | undefined
 }): Layer.Layer<never> => internal.make(options ?? {})
+
+/** @internal */
+// oxlint-disable-next-line effect/no-unused-internal
+export const workbench: typeof internalWorkbench.run = internalWorkbench.run
 
 /** @internal */
 // oxlint-disable-next-line effect/no-unused-internal

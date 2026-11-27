@@ -78,6 +78,7 @@ import * as internal from "../../internal/play.ts"
 import * as scene from "../../internal/scene.ts"
 import { atSite, callSite } from "../../internal/steps.ts"
 import * as Renderer from "../../Renderer.ts"
+import type * as Case from "../../testing/Case.ts"
 import * as Locator from "../../testing/Locator.ts"
 import type * as Play from "../../testing/Play.ts"
 import * as TestHost from "../../testing/TestHost.ts"
@@ -528,27 +529,45 @@ export const make = <
   HtmlPlay<Model, Msg, Events>,
   Play.StepError,
   R | RP | TestHost.TestHost | Scope.Scope
-> => {
-  const started = internal.begin(
+> =>
+  start(
+    internal.begin(HtmlPlayCursor, "HtmlPlay", make, { component, props })
+  ) as any
+
+/**
+ * Mounts a `Case` on `TestHost`, sends its messages, settles, and returns
+ * an `HtmlPlay` cursor over it, as `Play.fromCase` does.
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const fromCase = <C extends Case.AnyComponent, R>(
+  c: Case.Case<C, R>
+): Effect.Effect<
+  HtmlPlay<Component.Model<C>, Component.Message<C>, Component.Events<C>>,
+  Play.StepError,
+  R | TestHost.TestHost | Scope.Scope
+> => start(internal.begin(HtmlPlayCursor, "HtmlPlay", fromCase, c)) as any
+
+const start = Effect.fnUntraced(function*(
+  started: Effect.Effect<
     HtmlPlayCursor,
-    "HtmlPlay",
-    make,
-    component,
-    props
+    Play.StepError,
+    TestHost.TestHost | Scope.Scope
+  >
+) {
+  const { host } = yield* TestHost.TestHost
+  const keys = documentKeys(
+    yield* HtmlSubscription.GlobalEvents,
+    Option.getOrUndefined(
+      yield* Effect.serviceOption(TestGlobalEvents.TestGlobalEvents)
+    )
   )
-  return Effect.gen(function*() {
-    const { host } = yield* TestHost.TestHost
-    const keys = documentKeys(
-      yield* HtmlSubscription.GlobalEvents,
-      Option.getOrUndefined(
-        yield* Effect.serviceOption(TestGlobalEvents.TestGlobalEvents)
-      )
-    )
-    const play = yield* started.pipe(
-      Effect.provideService(Renderer.Renderer, { host: htmlHost(host) }),
-      Effect.provideService(HtmlSubscription.GlobalEvents, keys.source)
-    )
-    play.documentKeys = keys
-    return play
-  }) as any
-}
+  const play = yield* started.pipe(
+    Effect.provideService(Renderer.Renderer, { host: htmlHost(host) }),
+    Effect.provideService(HtmlSubscription.GlobalEvents, keys.source)
+  )
+  play.documentKeys = keys
+  return play
+})

@@ -46,7 +46,9 @@ describe("DevToolsVite", () => {
       let close = () => {}
       const returned = plugin.configureServer({
         config: { logger: { info: () => {}, warn: () => {} } },
-        httpServer: { once: (_event, listener) => close = listener },
+        httpServer: {
+          once: (_event: string, listener: () => void) => close = listener
+        },
         middlewares: {
           use: (handler: Middleware) => {
             middlewares.push(handler)
@@ -60,7 +62,10 @@ describe("DevToolsVite", () => {
       return { middlewares, transformed, returned, close }
     }
 
-    const request = async (middlewares: ReadonlyArray<Middleware>, url: string) => {
+    const request = async (
+      middlewares: ReadonlyArray<Middleware>,
+      url: string
+    ) => {
       let status = 200
       const headers: Record<string, string> = {}
       let body = ""
