@@ -46,10 +46,12 @@ export const make = (
 
 /**
  * A native module whose methods record their calls in `calls`, and answer
- * with `answers[method]` when it's a function.
+ * with `answers[method]` when it's a function. A method in `arity` throws
+ * when called with another number of arguments, as Android's bridge does.
  */
 export const module = (
-  answers: Record<string, (...args: ReadonlyArray<any>) => unknown> = {}
+  answers: Record<string, (...args: ReadonlyArray<any>) => unknown> = {},
+  arity: Record<string, number> = {}
 ) => {
   const calls: Array<readonly [string, ...ReadonlyArray<unknown>]> = []
   const proxy = new Proxy({}, {
@@ -57,6 +59,11 @@ export const module = (
       // Not a thenable.
       method === "then" ? undefined : (...args: ReadonlyArray<unknown>) => {
         calls.push([method, ...args])
+        if (arity[method] !== undefined && args.length !== arity[method]) {
+          throw new Error(
+            `${method} takes ${arity[method]} arguments, got ${args.length}`
+          )
+        }
         return answers[method]?.(...args)
       }
   })

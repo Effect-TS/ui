@@ -18,6 +18,12 @@
  * @stability experimental
  * @since 0.1.0
  */
+export * as AccessibilityInfo from "./AccessibilityInfo.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./ActivityIndicator.ts"
 
 /**
