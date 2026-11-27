@@ -169,6 +169,8 @@ export interface Steps<C extends AnyComponent, Parts = never>
    *   origin with no modifier keys, and the pointer events pointer id 1 where
    *   the mouse events have none. `fire` sends an event with another payload,
    *   such as a tap's `pointerType`.
+   * - A `pointerdown` handler set with `capturePointer: true` that sends a
+   *   message takes the rest of the click, `mousedown` aside, and its defaults.
    * - Cancelling `pointerdown` skips `mousedown` and `mouseup` but not
    *   `pointerup` or `click`.
    *   Cancelling `mousedown` or `mouseup` skips nothing. Only a cancelled
@@ -394,6 +396,7 @@ class StepsImpl extends internal.SceneCursor {
         let out = state
         let reached = false
         let childOnly: string | undefined
+        let captured: Locator.Node | undefined
         const send = (
           node: Locator.Node,
           event: string,
@@ -409,6 +412,7 @@ class StepsImpl extends internal.SceneCursor {
           } else {
             reached = true
             handled ||= fired.handled
+            captured ??= fired.captured
             out = fired.story
           }
           return fired.prevented
@@ -436,7 +440,8 @@ class StepsImpl extends internal.SceneCursor {
             if (held === undefined) return
             send(held, "mousedown", internal.mouse)
           }
-          const pressed = enabled(state.root, found)
+          // A captured pointer's release and click go to the capturing element.
+          const pressed = enabled(state.root, captured ?? found)
           if (pressed === undefined) return
           const root = out.root
           const plan = defaults.planClickDefaults(

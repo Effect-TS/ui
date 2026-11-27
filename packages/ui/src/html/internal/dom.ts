@@ -359,7 +359,7 @@ export const makeHost = (
     options: Html.PointerDownOptions | undefined
   ) => {
     if (options?.preventDefault === true) event?.preventDefault()
-    if (options?.capturePointer === true) {
+    if (options?.capturePointer === true && event?.type === "pointerdown") {
       // A pointer the browser doesn't know as active, such as a synthetic event's, can't be captured.
       try {
         ;(node as globalThis.Element).setPointerCapture(
@@ -409,10 +409,11 @@ export const makeHost = (
     | readonly [globalThis.Element, Html.DragOverPayload, ReadonlyArray<string>]
     | undefined
   let overSent: Html.DragOverPayload | undefined
+  type Moves = Map<number, readonly [globalThis.Element, PointerEvent]>
   /** The latest move of each pointer, by id, while a frame is pending. */
-  let moves:
-    | Map<number, readonly [globalThis.Element, PointerEvent]>
-    | undefined
+  let moves: Moves | undefined
+  /** The moves the frame is sending and hasn't sent yet, so a release or cancel a handler fires still finds its own. */
+  let flushing: Moves | undefined
 
   const sendMove = (
     [element, event]: readonly [globalThis.Element, PointerEvent]
@@ -434,7 +435,12 @@ export const makeHost = (
           // Teardown took the queue.
           if (moves !== queued) return
           moves = undefined
-          for (const move of queued.values()) sendMove(move)
+          flushing = queued
+          for (const [id, move] of queued) {
+            queued.delete(id)
+            sendMove(move)
+          }
+          flushing = undefined
         })
       }
       moves.set(event.pointerId, [node as globalThis.Element, event])
@@ -444,10 +450,12 @@ export const makeHost = (
 
   /** Sends the pointer's queued move before a press or release, and drops it at a cancel. */
   const endMove = (name: string, event: PointerEvent) => {
-    const queued = moves?.get(event.pointerId)
-    if (queued === undefined) return
-    moves!.delete(event.pointerId)
-    if (name !== "pointercancel") sendMove(queued)
+    for (const queue of [flushing, moves]) {
+      const queued = queue?.get(event.pointerId)
+      if (queued === undefined) continue
+      queue!.delete(event.pointerId)
+      if (name !== "pointercancel") sendMove(queued)
+    }
   }
 
   const accepts = (node: globalThis.Node, types: ReadonlyArray<string>) => {
@@ -609,7 +617,7 @@ export const makeHost = (
       return onDropTarget(name, event as DragEvent, path)
     }
     if (
-      moves !== undefined &&
+      (moves !== undefined || flushing !== undefined) &&
       (name === "pointerdown" || name === "pointerup" ||
         name === "pointercancel")
     ) endMove(name, event as PointerEvent)
@@ -969,6 +977,8 @@ export const makeHost = (
       }
       listening.clear()
       moves = undefined
+      // Stops a frame that is sending.
+      flushing?.clear()
       endTargets()
     }
   }

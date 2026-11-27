@@ -2930,6 +2930,8 @@ describe("BrowserHost", { concurrent: false }, () => {
         )
       })
     })
+    // Shared with an event capture doesn't apply to, which it type-checks for.
+    const grab = { preventDefault: true, capturePointer: true } as const
     const Divider = Html.component({
       name: "Divider",
       model: Schema.Array(Schema.String),
@@ -2945,9 +2947,8 @@ describe("BrowserHost", { concurrent: false }, () => {
           }),
           h.div.attr("aria-label", "Divider")
             .on("pointerdown", ({ button, pointerId }) =>
-              button === 0 ? `down ${pointerId}` : undefined, {
-              capturePointer: true
-            })
+              button === 0 ? `down ${pointerId}` : undefined, grab)
+            .on("contextmenu", "menu", grab)
             .on("pointermove", ({ pointerId, x }) =>
               `move ${pointerId} ${x}`)
             .on("pointerup", ({ pointerId }) =>
@@ -3010,6 +3011,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           pointer(app.querySelector("span")!, "pointerdown", { pointerId: 7 })
           pointer(divider, "pointerdown", { pointerId: 8, button: 2 })
           pointer(handle, "pointerdown", { pointerId: 9 })
+          pointer(divider, "contextmenu", { pointerId: 10, button: 2 })
           assert.deepStrictEqual(calls, [[divider, 7], [handle, 9], "grab"])
         }).pipe(Effect.scoped)
     )
@@ -3044,6 +3046,39 @@ describe("BrowserHost", { concurrent: false }, () => {
           "down 1",
           "cancel 1"
         ])
+      }).pipe(Effect.scoped))
+
+    it.effect("a cancel a move's handler fires drops the other pointer's move still in the frame", () =>
+      Effect.gen(function*() {
+        const app = yield* container
+        const Pane = Html.component({
+          name: "Pane",
+          model: Schema.Array(Schema.String),
+          message: Schema.String
+        }).make({
+          init: (): ReadonlyArray<string> => [],
+          update: ($, message) => [...$.model, message],
+          view: (h) =>
+            h.div.attr("aria-label", "Pane")
+              .on("pointermove", ({ pointerId }) => {
+                if (pointerId === 1) {
+                  pointer(
+                    app.querySelector("[aria-label=Pane]")!,
+                    "pointercancel",
+                    { pointerId: 2 }
+                  )
+                }
+                return `move ${pointerId}`
+              })
+              .on("pointercancel", ({ pointerId }) => `cancel ${pointerId}`)
+        })
+        const root = yield* BrowserHost.mountEffect(Pane, {}, app)
+        const pane = app.querySelector("[aria-label=Pane]")!
+        pointer(pane, "pointermove", { pointerId: 1 })
+        pointer(pane, "pointermove", { pointerId: 2 })
+        yield* tick
+        yield* tick
+        expect(root.model()).toEqual(["cancel 2", "move 1"])
       }).pipe(Effect.scoped))
   })
 

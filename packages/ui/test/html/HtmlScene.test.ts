@@ -611,6 +611,43 @@ describe("HtmlScene", () => {
         )
       }))
 
+    it.effect("a press the parent captures sends the release, the click and the defaults to the parent", () =>
+      Effect.gen(function*() {
+        const Panes = Html.component({
+          name: "Panes",
+          model: Schema.Array(Schema.String),
+          message: Schema.String
+        }).make({
+          init: (): ReadonlyArray<string> => [],
+          update: ($, message) => [...$.model, message],
+          view: (h, model) =>
+            h.div(
+              h.form.on("submit", "submit").children(
+                h.div.on("pointerdown", "grab", { capturePointer: true })
+                  .on("pointerup", "up")
+                  .on("click", "ck")
+                  .children(
+                    h.button.on("pointerup", "button up").on(
+                      "click",
+                      "button ck"
+                    )
+                      .children("Grab")
+                  ),
+                h.div.on("pointerdown", () => undefined, {
+                  capturePointer: true
+                })
+                  .children(h.button.on("click", "pass").children("Pass"))
+              ),
+              h.output(model.join("|"))
+            )
+        })
+        const scene = yield* HtmlScene.make(Panes, {})
+        scene.click("Grab")
+          .expect(log).toHaveText("grab|up|ck")
+          .click("Pass")
+          .expect(log).toHaveText("grab|up|ck|pass|submit")
+      }))
+
     it.effect("skips child-only press handlers when the parent handles click, and honors unconditional child cancellation", () =>
       Effect.gen(function*() {
         const TooltipLike = Html.component({

@@ -128,7 +128,9 @@ export interface HtmlPlay<Model, Msg, Events>
    * Clicks the one element `target` matches, as a browser does: `pointerdown`
    * and `mousedown` run, the tree settles, then `pointerup`, `mouseup`,
    * `click` and the defaults run unless the press removed the element,
-   * disabled it or made it inert. Cancelling
+   * disabled it or made it inert. A `pointerdown` handler set with
+   * `capturePointer: true` that sends a message takes the release, the click
+   * and the defaults. Cancelling
    * `pointerdown` skips `mousedown` and `mouseup` (not `pointerup` or `click`); cancelling
    * `mousedown` or `mouseup` skips nothing; only a cancelled `click` skips the
    * defaults. A string means `Locator.text(target)`. Throws on a disabled
@@ -243,6 +245,7 @@ class HtmlPlayCursor extends internal.PlayCursor {
     return Effect.gen({ self: this }, function*() {
       let reached = false
       let handled = false
+      let captured: TestHost.TestElement | undefined
       const send = (
         node: TestHost.TestElement,
         event: string,
@@ -252,19 +255,21 @@ class HtmlPlayCursor extends internal.PlayCursor {
         if (fired === undefined) return false
         reached = true
         handled ||= fired.handled
+        captured ??= fired.captured
         return fired.prevented
       }
       yield* this.settle
       const [node, skipMouse] = yield* Effect.sync(() =>
         atSite(site, () => {
           this.checkReady(name)
-          const node = this.findOne(locator, "click")
-          if (defaults.isClickDisabled(internal.ancestors(node))) {
+          const found = this.findOne(locator, "click")
+          if (defaults.isClickDisabled(internal.ancestors(found))) {
             throw new Error(`${name}: ${locator.description} is disabled`)
           }
-          const skipMouse = send(node, "pointerdown")
-          if (!skipMouse) send(node, "mousedown", () => scene.mouse)
-          return [node, skipMouse] as const
+          const skipMouse = send(found, "pointerdown")
+          if (!skipMouse) send(found, "mousedown", () => scene.mouse)
+          // A captured pointer's release and click go to the capturing element.
+          return [captured ?? found, skipMouse] as const
         })
       )
       if (handled) yield* this.settle

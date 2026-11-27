@@ -361,6 +361,38 @@ describe("HtmlPlay", () => {
       )
     }).pipe(play))
 
+  it.effect("a press the parent captures sends the release, the click and the defaults to the parent", () =>
+    Effect.gen(function*() {
+      const Panes = Html.component({
+        name: "Panes",
+        model: Schema.Array(Schema.String),
+        message: Schema.String
+      }).make({
+        init: (): ReadonlyArray<string> => [],
+        update: ($, message) => [...$.model, message],
+        view: (h, model) =>
+          h.div(
+            h.form.on("submit", "submit").children(
+              h.div.on("pointerdown", "grab", { capturePointer: true })
+                .on("pointerup", "up")
+                .on("click", "ck")
+                .children(
+                  h.button.on("pointerup", "button up").on("click", "button ck")
+                    .children("Grab")
+                ),
+              h.div.on("pointerdown", () => undefined, { capturePointer: true })
+                .children(h.button.on("click", "pass").children("Pass"))
+            ),
+            h.output(model.join("|"))
+          )
+      })
+      const p = yield* HtmlPlay.make(Panes, {})
+      yield* p.click("Grab")
+      yield* p.expect(log).toHaveText("grab|up|ck")
+      yield* p.click("Pass")
+      yield* p.expect(log).toHaveText("grab|up|ck|pass|submit")
+    }).pipe(play))
+
   it.effect("a part's preventDefault: true cancels only when the part's own handler sends", () =>
     Effect.gen(function*() {
       const Guard = Html.component({
