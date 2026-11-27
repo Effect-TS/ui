@@ -138,7 +138,7 @@ ${markRules}
 .corner-option:hover, .corner-option.on { background: var(--sel); color: var(--ink); }
 .corner-option.on { font-weight: 600; }
 .body { display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); min-height: 0; }
-.left { background: var(--sunk); border-right: 1px solid var(--line); display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-height: 0; }
+.left { background: var(--sunk); border-right: 1px solid var(--line); display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); min-height: 0; }
 .instances { padding: 10px 0 6px; border-bottom: 1px solid var(--line); min-width: 0; }
 .ihead { display: flex; align-items: center; gap: 8px; padding: 0 20px 6px; }
 .heading { font-size: 12px; color: var(--muted); }
