@@ -1170,53 +1170,88 @@ export const infiniteItems = (
 export interface StreamService<
   in out Self,
   in out Name extends string,
-  in out Args,
-  in out A,
-  in out E
+  in out Args extends Schema.Top,
+  in out Success extends Schema.Top,
+  in out Error extends Schema.Top
 > extends
-  Context.ServiceClass<Self, Name, (args: Args) => Stream.Stream<A, E>>,
-  Query<Args, A, E>
+  Context.ServiceClass<
+    Self,
+    Name,
+    (args: Args["Type"]) => Stream.Stream<Success["Type"], Error["Type"]>
+  >,
+  Query<Args["Type"], Success["Type"], Error["Type"]>
 {
+  /**
+   * Preserves a supplied Schema; wraps a fields record in `Schema.Struct`.
+   * Defaults to an empty struct.
+   */
+  readonly args: Args
+  readonly success: Success
+  /** Defaults to `Schema.Never`. */
+  readonly error: Error
   /**
    * Builds a Layer providing the stream function. Streams are interrupted
    * when the Layer's Scope closes.
    */
   toLayer<LE = never, LR = never>(
     build:
-      | ((args: Args) => Stream.Stream<A, E>)
-      | Effect.Effect<(args: Args) => Stream.Stream<A, E>, LE, LR>
+      | ((args: Args["Type"]) => Stream.Stream<Success["Type"], Error["Type"]>)
+      | Effect.Effect<
+        (args: Args["Type"]) => Stream.Stream<Success["Type"], Error["Type"]>,
+        LE,
+        LR
+      >
   ): Layer.Layer<Self, LE, Exclude<LR, Scope.Scope>>
   /**
    * Returns the latest element while the stream is open. Otherwise opens it,
    * or joins the one opening, and returns its first element.
    */
-  get(args: Args): Effect.Effect<A, E, Self | Cache>
+  get(
+    args: Args["Type"]
+  ): Effect.Effect<Success["Type"], Error["Type"], Self | Cache>
   /** Opens the stream unless it's open, and returns nothing. */
-  prefetch(args: Args): Effect.Effect<void, never, Self | Cache>
+  prefetch(args: Args["Type"]): Effect.Effect<void, never, Self | Cache>
   /**
    * Closes the stream of one entry, or of every entry of the query when
    * called without arguments. A watched entry opens a new one at once.
    */
-  invalidate(args?: Args): Effect.Effect<void, never, Cache>
+  invalidate(args?: Args["Type"]): Effect.Effect<void, never, Cache>
   /**
    * Watches an entry: opens its stream unless it's open, then emits its
    * changes, as `changes` does for any query.
    */
   changes(
-    args: Args
-  ): Stream.Stream<AsyncResult.AsyncResult<A, E>, never, Self | Cache>
+    args: Args["Type"]
+  ): Stream.Stream<
+    AsyncResult.AsyncResult<Success["Type"], Error["Type"]>,
+    never,
+    Self | Cache
+  >
   /** Reads an entry's state without opening its stream. */
-  peek(args: Args): Effect.Effect<AsyncResult.AsyncResult<A, E>, never, Cache>
+  peek(
+    args: Args["Type"]
+  ): Effect.Effect<
+    AsyncResult.AsyncResult<Success["Type"], Error["Type"]>,
+    never,
+    Cache
+  >
   /** One entry, as an invalidation target. */
-  entry(args: Args): EntryTarget<Query<Args, A, E>>
+  entry(
+    args: Args["Type"]
+  ): EntryTarget<Query<Args["Type"], Success["Type"], Error["Type"]>>
   /**
    * An optimistic patch of one entry, applied over each element while the
    * run that declares it is queued or running. It implies invalidation of
    * the entry.
    */
-  patch(args: Args, f: (value: A) => A): Patch<Query<Args, A, E>>
+  patch(
+    args: Args["Type"],
+    f: (value: Success["Type"]) => Success["Type"]
+  ): Patch<Query<Args["Type"], Success["Type"], Error["Type"]>>
   /** An optimistic patch of every entry of the query that holds a Success. */
-  patchAll(f: (value: A, args: Args) => A): Patch<Query<Args, A, E>>
+  patchAll(
+    f: (value: Success["Type"], args: Args["Type"]) => Success["Type"]
+  ): Patch<Query<Args["Type"], Success["Type"], Error["Type"]>>
 }
 
 /**
@@ -1327,9 +1362,9 @@ export const StreamService: <Self>() => <
 ) => StreamService<
   Self,
   Name,
-  Service.ArgsType<Args>,
-  Success["Type"],
-  Error["Type"]
+  Service.ArgsSchema<Args>,
+  Success,
+  Error
 > = (): any =>
 (
   name: string,
@@ -5679,7 +5714,8 @@ const buildCache = (
       traced(
         entry.def,
         "get",
-        () => walk ?? fetchOnce(entry.def, build, entry.args, () => logKeyOf(entry))
+        () =>
+          walk ?? fetchOnce(entry.def, build, entry.args, () => logKeyOf(entry))
       )
     ))
     shared.fiber = fiber
