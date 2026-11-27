@@ -1,8 +1,9 @@
 // The React Native modules ui-native reaches into, which ship no types.
 
-declare module "react-native/Libraries/StyleSheet/processColor" {
-  const processColor: (color: unknown) => unknown
-  export default processColor
+// The style processors: `processColor`, `processTransform` and so on.
+declare module "react-native/Libraries/StyleSheet/process*" {
+  const process: (value: any) => any
+  export default process
 }
 
 declare module "react-native/Libraries/Utilities/Platform" {

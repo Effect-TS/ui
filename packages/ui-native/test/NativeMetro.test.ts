@@ -94,7 +94,7 @@ export default [Platform, title, flavor, topping]
   )
 
   it(
-    "drops an unused Native.defineView definition from the pre-bundle",
+    "drops unused Native.defineView definitions and Css helpers from the pre-bundle",
     async () => {
       const link = (name: string, target: string) => {
         Fs.mkdirSync(Path.join(root, "node_modules", Path.dirname(name)), {
@@ -138,6 +138,13 @@ NativeApp.register(NativeApp.mount(App, {}))
         )
       )
       write("src/used.ts", app(`import { toggle } from "./toggle"`, "toggle"))
+      write(
+        "src/css.ts",
+        app(
+          `import { Css } from "@effect/ui-native/kit"`,
+          `h.view.style({ transform: Css.transform("scale(2)") })`
+        )
+      )
       const bundle = async (entry: string) => {
         const config = await NativeMetro.withEffectUi<NativeMetro.MetroConfig>(
           { projectRoot: root, resolver: { sourceExts: ["ts", "js"] } },
@@ -149,6 +156,10 @@ NativeApp.register(NativeApp.mount(App, {}))
       assert.strictEqual(await bundle("src/unused.ts"), plain)
       assert.notInclude(plain, "setSelection")
       assert.include(await bundle("src/used.ts"), "FixtureToggleView")
+      // Each Css helper brings only its own React Native parser.
+      const css = await bundle("src/css.ts")
+      assert.include(css, "processTransform")
+      assert.notInclude(css, "processBoxShadow")
     },
     30_000
   )

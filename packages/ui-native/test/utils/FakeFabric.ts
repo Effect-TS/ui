@@ -161,22 +161,23 @@ export const byText = (s: string) => (n: ShadowNode) =>
 export const byName = (name: string) => (n: ShadowNode) => n.viewName === name
 
 /**
- * Runs `mount` with a NativeHost on Android over a new fake Fabric, as
- * `NativeApp` does, and waits for the first commit. `settle` waits for the
- * next one.
+ * Runs `mount` with a NativeHost on `os` (Android by default) over a new
+ * fake Fabric, as `NativeApp` does, and waits for the first commit.
+ * `settle` waits for the next one.
  */
 export const mount = async <A>(
   mount: (
     container: NativeHost.NativeNode
   ) => Effect.Effect<A, never, Renderer.Renderer | Native.Host | Scope.Scope>,
-  processColor: (color: unknown) => unknown = (color) => color
+  processColor: (color: unknown) => unknown = (color) => color,
+  os = "android"
 ) => {
   const fabric = make()
   let commits = 0
   const made = NativeHost.make({
     ui: fabric.ui,
     rootTag: 1,
-    os: "android",
+    os,
     processColor,
     onCommit: () => commits++
   })

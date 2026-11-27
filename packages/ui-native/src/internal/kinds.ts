@@ -1,8 +1,44 @@
-import type { ViewHost, ViewKind } from "../Native.ts"
+import type { ScrollPayload, ViewHost, ViewKind } from "../Native.ts"
 import type { NativeNode } from "../NativeHost.ts"
 
 const horizontal = (n: NativeNode, host: ViewHost): boolean =>
   host.os === "android" && n.props.horizontal === true
+
+// Retain the previous content style so updates can remove omitted properties.
+const contentStyles = new WeakMap<NativeNode, Readonly<Record<string, any>>>()
+
+const direction = (n: NativeNode, host: ViewHost) =>
+  host.set(
+    n.inner!,
+    "flexDirection",
+    contentStyles.get(n)?.flexDirection ??
+      (n.props.horizontal === true ? "row" : undefined)
+  )
+
+const relay = (name: string) => (n: NativeNode, event: any, host: ViewHost) =>
+  host.fire(
+    n,
+    name,
+    {
+      x: event?.contentOffset?.x ?? 0,
+      y: event?.contentOffset?.y ?? 0,
+      contentWidth: event?.contentSize?.width ?? 0,
+      contentHeight: event?.contentSize?.height ?? 0,
+      width: event?.layoutMeasurement?.width ?? 0,
+      height: event?.layoutMeasurement?.height ?? 0
+    } satisfies ScrollPayload
+  )
+
+// Android sends momentum events only to a scroll view that asks for them.
+const momentum =
+  (name: string) => (n: NativeNode, value: unknown, host: ViewHost) => {
+    host.set(n, name, value)
+    host.set(
+      n,
+      "sendMomentumEvents",
+      n.props.onMomentumScrollBegin ?? n.props.onMomentumScrollEnd
+    )
+  }
 
 const scroll: ViewKind = {
   viewName: (n, host) =>
@@ -13,33 +49,56 @@ const scroll: ViewKind = {
       horizontal(n.parent!, host)
         ? "AndroidHorizontalScrollContentView"
         : "RCTScrollContentView",
-    defaults: { collapsable: false }
+    defaults: { collapsable: false },
+    events: {
+      topLayout: (n, event, host) =>
+        host.fire(n.parent!, "contentSizeChange", {
+          width: event?.layout?.width ?? 0,
+          height: event?.layout?.height ?? 0
+        })
+    }
   },
   props: {
     horizontal(n, value, host) {
       host.set(n, "horizontal", value)
-      // Both views need row layout so horizontal content spans its children.
-      const row = value === true ? "row" : undefined
-      host.set(n, "flexDirection", row)
-      host.set(n.inner!, "flexDirection", row)
-    }
+      // The scroll view needs row layout so horizontal content spans its children.
+      host.set(n, "flexDirection", value === true ? "row" : undefined)
+      direction(n, host)
+    },
+    contentContainerStyle(n, value, host) {
+      const was = contentStyles.get(n)
+      const style = (value ?? {}) as Record<string, unknown>
+      contentStyles.set(n, style)
+      for (const key in was) {
+        if (!(key in style)) host.set(n.inner!, key, undefined)
+      }
+      for (const key in style) host.set(n.inner!, key, style[key])
+      direction(n, host)
+    },
+    onMomentumScrollBegin: momentum("onMomentumScrollBegin"),
+    onMomentumScrollEnd: momentum("onMomentumScrollEnd"),
+    // React Native reports the size the content view is laid out at.
+    onContentSizeChange: (n, value, host) =>
+      host.set(n.inner!, "onLayout", value)
   },
   events: {
-    topScroll: (n, event, host) =>
-      host.fire(n, "scroll", {
-        x: event?.contentOffset?.x ?? 0,
-        y: event?.contentOffset?.y ?? 0,
-        contentWidth: event?.contentSize?.width ?? 0,
-        contentHeight: event?.contentSize?.height ?? 0,
-        width: event?.layoutMeasurement?.width ?? 0,
-        height: event?.layoutMeasurement?.height ?? 0
-      })
+    topScroll: relay("scroll"),
+    topScrollBeginDrag: relay("scrollBeginDrag"),
+    topScrollEndDrag: relay("scrollEndDrag"),
+    topMomentumScrollBegin: relay("momentumScrollBegin"),
+    topMomentumScrollEnd: relay("momentumScrollEnd")
   }
 }
+
+// As React Native's `Text` sets them: native clips truncated text by
+// default, and VoiceOver skips text that isn't accessible.
+const textDefaults = { ellipsizeMode: "tail" }
+const iosTextDefaults = { ...textDefaults, accessible: true }
 
 const text: ViewKind = {
   // Fabric represents text nested inside text as virtual text.
   viewName: (n) => n.parent?.kind.text === true ? "RCTVirtualText" : "RCTText",
+  defaults: (host) => host.os === "ios" ? iosTextDefaults : textDefaults,
   text: true
 }
 
@@ -88,7 +147,11 @@ const input: ViewKind = {
   // which swaps `UITextField` for `UITextView` when `multiline` changes.
   viewName: (_, host) =>
     host.os === "ios" ? "RCTSinglelineTextInputView" : "AndroidTextInput",
-  defaults: { autoCapitalize: "sentences", underlineColorAndroid: 0 },
+  defaults: {
+    accessible: true,
+    autoCapitalize: "sentences",
+    underlineColorAndroid: 0
+  },
   props: {
     value: (n, value, host) => {
       if (value !== undefined) {

@@ -107,8 +107,12 @@ export class NativeNode {
   dirty = true
   /** A child changed, or was inserted or removed, since the last commit. */
   kidsChanged = false
-  /** A scroll view's content container: its only child, holding its children. */
+  /** A scroll view's content container, holding its scrollable children. */
   inner: NativeNode | undefined = undefined
+  /** A node rendered as this node's first native child, ahead of its children. */
+  lead: NativeNode | undefined = undefined
+  /** The node rendered around this node, which is its `lead`. */
+  outer: NativeNode | undefined = undefined
   events: EventEntry | undefined = undefined
   /** A text input's count of edits, which native needs back with its text. */
   eventCount = 0
@@ -124,13 +128,16 @@ export class NativeNode {
   constructor(
     kind: Native.ViewKind,
     host: Native.ViewHost,
-    props: Record<string, unknown> = { ...kind.defaults }
+    props?: Record<string, unknown>
   ) {
     this.kind = kind
     this.host = host
-    this.props = props
+    this.props = props ?? { ...defaultsOf(this) }
   }
 }
+
+const defaultsOf = ({ host, kind: { defaults } }: NativeNode) =>
+  typeof defaults === "function" ? defaults(host) : defaults
 
 const rawText: Native.ViewKind = { viewName: "RCTRawText" }
 // Distinct references so restore can tell mounted roots from kept containers.
@@ -172,16 +179,28 @@ export const make = (options: Options): {
     }
     return out
   }
+  const wrapOf = (outer: NativeNode) => outer.kind.attach!(view)!
+  // The props a wrapper gives the node it wraps, unless the node sets them.
+  // They go in when the node is created: gaining or losing a wrapper changes
+  // its native parent, which recreates it.
+  const wrapDefaultsOf = (n: NativeNode) =>
+    n.outer === undefined ? undefined : wrapOf(n.outer).props
   const setNative = (n: NativeNode, name: string, value: unknown) => {
-    // A removed prop returns to its kind's default, already in native form.
-    if (value === undefined) value = n.kind.defaults?.[name]
+    // A wrapper holds the outer props of the node it wraps.
+    const outer = n.outer
+    if (outer !== undefined && wrapOf(outer).outer.test(name)) n = outer
+    // Kind defaults are already processed for Fabric, including colours.
+    if (value === undefined) value = defaultsOf(n)?.[name]
     else if (isColor.test(name)) value = color(value)
-    if (n.props[name] === value) return
+    put(n, name, value)
+  }
+  const put = (n: NativeNode, name: string, value: unknown) => {
+    if (same(n.props[name], value)) return
     if (value === undefined) delete n.props[name]
     else n.props[name] = value
     // A node not created yet takes all its props at createNode.
     if (n.shadow !== undefined) {
-      ;(n.pending ??= {})[name] = value === undefined ? null : value
+      ;(n.pending ??= {})[name] = value ?? wrapDefaultsOf(n)?.[name] ?? null
     }
     markDirty(n)
   }
@@ -194,6 +213,44 @@ export const make = (options: Options): {
   }
   const view: Native.ViewHost = { os, set: setNative, color, command, fire }
   const root = new NativeNode(surface, view)
+
+  const move = (from: NativeNode, to: NativeNode, outer: RegExp) => {
+    for (const name in to.props) {
+      if (outer.test(name)) put(to, name, undefined)
+    }
+    for (const name in from.props) {
+      if (!outer.test(name)) continue
+      put(to, name, from.props[name])
+      put(from, name, undefined)
+    }
+  }
+  const attach = (to: NativeNode, n: NativeNode) => {
+    const wrap = n.kind.attach!(view)
+    if (wrap === undefined) {
+      to.lead = n
+      return
+    }
+    // A keyed replacement is inserted before the old node is removed: give
+    // back what the old wrapper took, which may differ from what `n` takes.
+    if (to.outer !== undefined) detach(to, to.outer)
+    to.outer = n
+    n.lead = to
+    move(to, n, wrap.outer)
+  }
+  const detach = (to: NativeNode, n: NativeNode) => {
+    if (to.lead === n) to.lead = undefined
+    else if (to.outer === n) {
+      to.outer = undefined
+      move(n, to, wrapOf(n).outer)
+    }
+  }
+  // A node with a wrapper renders inside it, so the wrapper changes with it.
+  const place = (n: NativeNode): NativeNode => {
+    const outer = n.outer
+    if (outer === undefined) return n
+    if (n.dirty) outer.dirty = outer.kidsChanged = true
+    return outer
+  }
 
   const viewNameOf = (n: NativeNode): string => {
     const name = n.kind.viewName
@@ -219,7 +276,14 @@ export const make = (options: Options): {
     if (n.shadow === undefined) {
       n.viewName = viewName
       n.parentTag = parentTag
-      shadow = createNode(n.tag, viewName, rootTag, n.props, n)
+      const defaults = wrapDefaultsOf(n)
+      shadow = createNode(
+        n.tag,
+        viewName,
+        rootTag,
+        defaults === undefined ? n.props : { ...defaults, ...n.props },
+        n
+      )
     } else if (n.kidsChanged) {
       shadow = pending === undefined
         ? cloneChildren(n.shadow)
@@ -231,16 +295,19 @@ export const make = (options: Options): {
     pending = undefined
     n.kidsChanged = false
     const textual = n.kind.text === true
+    if (n.lead !== undefined) appendChild(shadow, build(n.lead, n.tag))
     for (let k = n.first; k !== undefined; k = k.next) {
       // Outside text, the renderer's only text is the empty node a blank
       // view leaves, which native can't lay out.
-      if (k.kind === rawText && !textual) continue
-      appendChild(shadow, build(k, n.tag))
+      if ((k.kind === rawText && !textual) || k.kind.attach !== undefined) {
+        continue
+      }
+      appendChild(shadow, build(place(k), n.tag))
     }
     return n.shadow = shadow
   }
 
-  const unwrap = (n: NativeNode): NativeNode => n.inner ?? n
+  const contentOf = (n: NativeNode): NativeNode => n.inner ?? n
 
   const host: Renderer.Host<NativeNode> = {
     elements: [Native.name],
@@ -276,7 +343,8 @@ export const make = (options: Options): {
     },
     insertBefore(parent, n, ref) {
       if (n.parent !== undefined) host.remove(n)
-      parent = unwrap(parent)
+      if (n.kind.attach !== undefined) attach(parent, n)
+      parent = contentOf(parent)
       const prev = ref === undefined ? parent.last : ref.prev
       n.parent = parent
       n.prev = prev
@@ -291,6 +359,7 @@ export const make = (options: Options): {
     remove(n) {
       const parent = n.parent
       if (parent === undefined) return
+      if (n.kind.attach !== undefined) detach(host.parentOf(n)!, n)
       if (n.prev === undefined) parent.first = n.next
       else n.prev.next = n.next
       if (n.next === undefined) parent.last = n.prev
@@ -310,14 +379,16 @@ export const make = (options: Options): {
       const was: object = n.events?.handlers ?? none
       n.events = { handlers, dispatch }
       for (const name in was) {
-        if (!(name in handlers)) setNative(n, propOf(name), undefined)
+        if (!(name in handlers) && name !== "press") {
+          setProp(n, propOf(name), undefined)
+        }
       }
       for (const name in handlers) {
         if (name in was) continue
         // A flattened view has no native view to receive touches. Native
         // sends other events only to a view whose `onEvent` prop is true.
         if (name === "press") setNative(n, "collapsable", false)
-        else setNative(n, propOf(name), true)
+        else setProp(n, propOf(name), true)
       }
     },
     commit() {
@@ -327,7 +398,9 @@ export const make = (options: Options): {
         root.kidsChanged = false
         const set = ui.createChildSet(rootTag)
         for (let k = root.first; k !== undefined; k = k.next) {
-          if (k.kind !== rawText) ui.appendChildToSet(set, build(k, rootTag))
+          if (k.kind !== rawText && k.kind.attach === undefined) {
+            ui.appendChildToSet(set, build(place(k), rootTag))
+          }
         }
         ui.completeRoot(rootTag, set)
       }
@@ -340,6 +413,7 @@ export const make = (options: Options): {
     blur: (n) => command(n, "blur"),
     scrollTo: (n, x, y, animated = true) =>
       command(n, "scrollTo", [x, y, animated]),
+    scrollToEnd: (n, animated = true) => command(n, "scrollToEnd", [animated]),
     measure(n) {
       const rect = n.shadow === undefined
         ? undefined
@@ -350,6 +424,22 @@ export const make = (options: Options): {
     }
   }
   return { host, root, operations }
+}
+
+// Skip Fabric commits for inline objects whose contents have not changed.
+const same = (a: any, b: any): boolean => {
+  if (a === b) return true
+  if (
+    typeof a !== "object" || typeof b !== "object" ||
+    a?.constructor !== b?.constructor
+  ) return false
+  let extra = 0
+  for (const key in a) {
+    if (!(key in b) || !same(a[key], b[key])) return false
+    extra--
+  }
+  for (const _ in b) extra++
+  return !extra
 }
 
 const markDirty = (n: NativeNode | undefined) => {

@@ -10,7 +10,7 @@ React Native vocabulary and Fabric host for `@effect/ui`. Apps render native vie
 ## Modules
 
 - `Native`: `Native.component`, `Native.H`, the element vocabulary (`view`, `text`, `scroll`, `input`), style, prop and event types, `Native.Host`, `Native.clear`, `Native.setSelection`, and `Native.defineView` for custom native views
-- `@effect/ui-native/kit`: native controls and APIs beyond the vocabulary, bundled only when imported
+- `@effect/ui-native/kit`: native controls and APIs beyond the vocabulary, bundled only when imported, such as `Css`, which parses CSS strings into the style forms native reads, and `RefreshControl` for pull to refresh
 - `NativeHost`: `make`, the `Renderer.Host` that builds Fabric shadow trees and commits them to a surface
 - `NativeApp`: `mount`, `mountEffect`, and `register`, which runs an app on every surface native starts; the `Surface` service
 - `@effect/ui-native/node`: `NativeMetro.withEffectUi`, the Metro configuration
@@ -54,6 +54,16 @@ In development Metro serves the sources. Editing a module that exports only comp
 On Android, Back closes the app when nothing handles it. An app that adds handlers with React Native's `BackHandler` takes over that default, as it does in a React app.
 
 React Native doesn't load the `expo` package itself: an app that doesn't import it saves about 1 MB of Hermes bytecode.
+
+## Styles and props
+
+`.style()` takes React Native's style names and `.prop()` its other props, such as `testID`, `role`, `accessibilityLabel` or a `text`'s `numberOfLines`. Both are typed, and `.prop()` takes any value for a name without a type.
+
+Styles take structured values: `transform` is `[{ rotate: "45deg" }]` rather than `"rotate(45deg)"`. To parse CSS strings, use `Css` from `@effect/ui-native/kit`. Nested colours, such as a `boxShadow`'s `color`, must be processed with `Css.color` or another `Css` helper.
+
+These forms target React Native 0.88.1's default `enableNativeCSSParsing: false`. Enabling the flag changes how native reads `filter` drop shadows and `backgroundImage`; keep it off when using those forms or their `Css` helpers.
+
+Use native prop names and plain style objects. React Native's `aria-*` and `id` aliases and `StyleSheet` aren't provided.
 
 ## Example
 
