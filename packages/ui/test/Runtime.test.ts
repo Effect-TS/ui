@@ -2738,6 +2738,93 @@ describe("Runtime", () => {
         yield* TestHost.settle
         assert.strictEqual(changes(), 4)
       })))
+
+    it.effect("root.setProps updates a mounted root without remounting", () =>
+      provideHost(Effect.gen(function*() {
+        let inits = 0
+        const Label = Component.define({
+          name: "Label",
+          props: Schema.Struct({ text: Schema.String }),
+          model: Schema.Null,
+          message: Schema.Never
+        }).make({
+          init: () => null,
+          update: ($) => $.model,
+          view: (h) => h.el("em", h.props.text)
+        })
+        const Msg = UiSchema.TaggedEnum({ Bump: {}, Record: {} })
+        const App = Component.define({
+          name: "App",
+          props: Schema.Struct({ label: Schema.String }),
+          model: Schema.Struct({ count: Schema.Number, seen: Schema.String }),
+          message: Msg
+        }).make({
+          init: () => {
+            inits++
+            return { count: 0, seen: "" }
+          },
+          update: ($, message) =>
+            Msg.match(message, {
+              Bump: () => ({ ...$.model, count: $.model.count + 1 }),
+              Record: () => ({ ...$.model, seen: $.props.label })
+            }),
+          view: (h, model) =>
+            h.el(
+              "div",
+              h.el("span", `${h.props.label}:${model.count}:${model.seen}`),
+              Label(h, { key: "l", props: { text: h.props.label } })
+            ),
+          subscriptions: ({ props }) => [
+            Subscription.make("sub", props.label, () => Stream.never)
+          ]
+        })
+
+        const root = yield* TestHost.mount(App, { label: "one" })
+        yield* TestHost.settle
+        const span = root.get(Locator.tag("span"))
+        root.send(Msg.Bump())
+        yield* TestHost.settle
+
+        const before = root.log().length
+        root.setProps({ label: "two" })
+        yield* TestHost.settle
+
+        assert.strictEqual(inits, 1)
+        assert.deepStrictEqual(root.model(), { count: 1, seen: "" })
+        assert.strictEqual(root.text(), "two:1:two")
+        assert.strictEqual(root.get(Locator.tag("span")), span)
+
+        const added = root.log().slice(before)
+        assert.deepStrictEqual(
+          added.map((entry) =>
+            "path" in entry ? `${entry.path} ${entry._tag}` : entry._tag
+          ),
+          [
+            "/App PropsChanged",
+            "/App SubscriptionStopped",
+            "/App SubscriptionStarted",
+            "/App/Label[l] PropsChanged"
+          ]
+        )
+        const changed = added[0] as MessageLog.PropsChanged
+        assert.deepStrictEqual(changed.props, { label: "two" })
+        assert.isUndefined(changed.causedBy)
+        for (const consequence of added.slice(1)) {
+          assert.strictEqual(consequence.causedBy, changed.seq)
+        }
+
+        // Equal props log nothing.
+        const countAfter = root.log().length
+        root.setProps({ label: "two" })
+        yield* TestHost.settle
+        assert.strictEqual(root.log().length, countAfter)
+
+        // Next update sees the new props.
+        root.send(Msg.Record())
+        yield* TestHost.settle
+        assert.deepStrictEqual(root.model(), { count: 1, seen: "two" })
+        assert.strictEqual(root.text(), "two:1:twotwo")
+      })))
   })
 
   describe("provided Layers", () => {

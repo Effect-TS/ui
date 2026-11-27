@@ -8,7 +8,9 @@ import {
   UiSchema,
   type View
 } from "@effect/ui"
-import { TestHost } from "@effect/ui/testing"
+import { BrowserHost, Html, HtmlHydrate } from "@effect/ui/html"
+import { Ssr } from "@effect/ui/html/testing"
+import { Play, TestHost } from "@effect/ui/testing"
 import { Effect, Schema, type Scope } from "effect"
 import { describe, expect, it } from "tstyche"
 import { Counter } from "../test/fixtures/components.ts"
@@ -271,5 +273,56 @@ describe("View elements", () => {
   it("refs are invariant in their node", () => {
     expect(Field.at("row-1")).type.toBe<Renderer.Ref<TinyField>>()
     expect<Renderer.Ref<unknown>>().type.not.toBeAssignableFrom(Field)
+  })
+})
+
+describe("Root.setProps", () => {
+  const Label = Html.component({
+    name: "Label",
+    props: Schema.Struct({ text: Schema.String }),
+    model: Schema.Number,
+    message: Msg
+  }).make({
+    init: () => 0,
+    update: ($) => $.model,
+    view: (h) => h.span(h.props.text)
+  })
+
+  it("carries Props through mount handles and keeps Root<Model, Msg> assignable", () => {
+    void ((el: Element, state: Renderer.State) =>
+      Effect.gen(function*() {
+        const mounted = yield* Renderer.mount(Label, { text: "a" }, el)
+        expect(mounted.setProps).type.toBeCallableWith({ text: "b" })
+        expect(mounted.setProps).type.not.toBeCallableWith({ text: 1 })
+        expect<Renderer.Root<number, typeof Msg.Type>>().type
+          .toBeAssignableFrom(mounted)
+
+        const browser = yield* BrowserHost.mountEffect(Label, { text: "a" }, el)
+        expect(browser.setProps).type.toBeCallableWith({ text: "b" })
+        expect(browser.setProps).type.not.toBeCallableWith({ text: 1 })
+
+        const hydrated = yield* HtmlHydrate.hydrateEffect(
+          Label,
+          { text: "a" },
+          el,
+          state
+        )
+        expect(hydrated.setProps).type.toBeCallableWith({ text: "b" })
+        expect(hydrated.setProps).type.not.toBeCallableWith({ text: 1 })
+
+        const tested = yield* TestHost.mount(Label, { text: "a" })
+        expect(tested.setProps).type.toBeCallableWith({ text: "b" })
+        expect(tested.setProps).type.not.toBeCallableWith({ text: 1 })
+        expect<TestHost.TestRoot<number, typeof Msg.Type, never>>().type
+          .toBeAssignableFrom(tested)
+
+        const played = yield* Play.make(Label, { text: "a" })
+        expect(played.root.setProps).type.toBeCallableWith({ text: "b" })
+        expect(played.root.setProps).type.not.toBeCallableWith({ text: 1 })
+
+        const ssr = yield* Ssr.ssr(Label, { text: "a" })
+        expect(ssr.root.setProps).type.toBeCallableWith({ text: "b" })
+        expect(ssr.root.setProps).type.not.toBeCallableWith({ text: 1 })
+      }))
   })
 })
