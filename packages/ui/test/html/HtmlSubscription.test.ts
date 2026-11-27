@@ -577,6 +577,15 @@ describe("HtmlSubscription.keySequences", () => {
         .click("Toggle")
         .fireDocument("keydown", { key: "b", timeStamp: 6100 })
         .expectIgnored()
+        // A press without a `timeStamp`, as a custom source may send, counts as time 0.
+        .fireDocument("keydown", {
+          key: "g",
+          timeStamp: undefined as unknown as number
+        })
+        .fireDocument("keydown", { key: "l", timeStamp: 1001 })
+        .expect(Locator.tag("output")).toHaveText(
+          "list,single-l,search,single-l,board,single-l,single-l"
+        )
     }))
 
   it("rejects unreachable shadowed rows in development while allowing disjoint modifiers and guards", () => {
@@ -610,6 +619,22 @@ describe("HtmlSubscription.keySequences", () => {
           { key: "g", message: "g" }
         ]),
       /(?=[\s\S]*g)(?=[\s\S]*l)/
+    )
+    // The same row object twice: the second can never win.
+    const row = { keys: ["g", "l"], message: "list" } as const
+    assert.throws(
+      () => HtmlSubscription.keySequences([row, row]),
+      /unreachable/
+    )
+    // Rows that accept many flag combinations on every press still check quickly.
+    const loose = { mod: true, whileTyping: true, repeat: true } as const
+    assert.throws(
+      () =>
+        HtmlSubscription.keySequences([
+          { ...loose, keys: ["a", "b", "c", "d", "e"], message: "first" },
+          { ...loose, keys: ["a", "b", "c", "d", "e"], message: "second" }
+        ]),
+      /unreachable/
     )
   })
 })

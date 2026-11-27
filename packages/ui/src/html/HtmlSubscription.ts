@@ -485,9 +485,9 @@ export const keySequences = <
       | undefined
     held.value = undefined
     if (payload.composing || payload.defaultPrevented) return
-    // `0` without a `timeStamp`, which a custom `GlobalEvents` source may not supply.
+    // A press without a `timeStamp`, which a custom `GlobalEvents` source may not supply, is at `0`.
     const gap = pending
-      ? payload.timeStamp - pending.at(-1)!.timeStamp || 0
+      ? (payload.timeStamp ?? 0) - (pending.at(-1)!.timeStamp ?? 0)
       : -1
     // A clock that went back counts as expired too.
     const live = gap >= 0 &&

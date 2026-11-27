@@ -76,6 +76,8 @@ export const checkSequences = (table: ReadonlyArray<Row>): void =>
     }
     const upTo = table.slice(0, index + 1)
     let blocker: Row | undefined
+    // What a run leads to depends only on its length and the rows it fits.
+    const seen = new Set<string>()
     // Whether `row` fires after `run`, with every combination of the flags `matches` reads tried for each press.
     const fires = (run: ReadonlyArray<Press>): boolean => {
       for (let i = 0; i < 64; i++) {
@@ -89,12 +91,16 @@ export const checkSequences = (table: ReadonlyArray<Row>): void =>
           repeat: (i & 32) > 0
         }]
         if (first([row], presses) === undefined) continue
+        const id = presses.length +
+          upTo.map((other) => first([other], presses) ? 1 : 0).join("")
+        if (seen.has(id)) continue
+        seen.add(id)
         const winner = first(upTo, presses)!
         if (
           presses.length === keys.length ||
           presses.length === keysOf(winner).length
         ) {
-          if (winner === row) return true
+          if (upTo.indexOf(winner) === index) return true
           blocker ??= winner
         } else if (fires(presses)) return true
       }
