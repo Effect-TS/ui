@@ -5,6 +5,7 @@ import { assert, describe, it } from "@effect/vitest"
 import {
   Cause,
   type Context,
+  Deferred,
   type Duration,
   Effect,
   Equal,
@@ -509,6 +510,8 @@ describe("Query hydration", () => {
       closed: boolean
     }
     const streams: Array<StreamHandle> = []
+    // Holds the server stream's unsubscribe, as a slow network close would.
+    let unsubscribed = Effect.void
     class GetNote extends Query.StreamService<GetNote>()("notes/GetNote", {
       args: { id: Schema.String },
       success: Note,
@@ -528,8 +531,9 @@ describe("Query hydration", () => {
               return handle
             }),
             (handle) =>
-              Effect.sync(() => {
+              Effect.suspend(() => {
                 handle.closed = true
+                return unsubscribed
               })
           )
         )
@@ -538,17 +542,23 @@ describe("Query hydration", () => {
 
     return Effect.gen(function*() {
       const shipped = yield* Effect.gen(function*() {
+        const release = yield* Deferred.make<void>()
+        unsubscribed = Deferred.await(release)
         const got = yield* GetNote.get({ id: "1" }).pipe(Effect.forkScoped)
         yield* flush
         assert.strictEqual(streams.length, 1)
         streams[0].emit("Server")
         yield* flush
+        // Stored and shipped while the unsubscribe is still running.
         assert.deepStrictEqual(yield* Fiber.join(got), {
           id: "1",
           title: "Server"
         })
         assert.isTrue(streams[0].closed)
-        return (yield* cache).dehydrate()
+        const out = (yield* cache).dehydrate()
+        yield* Deferred.succeed(release, undefined)
+        unsubscribed = Effect.void
+        return out
       }).pipe(
         Effect.scoped,
         Effect.provide(Layer.merge(GetNote.layer, settleOnce([])))

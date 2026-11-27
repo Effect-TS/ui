@@ -4304,6 +4304,8 @@ interface CacheEnv {
     exit: Exit.Exit<A, any>
   ) => void
   readonly invalidateEntry: (entry: Entry, cause?: Trigger) => void
+  /** Tells the fetch-end listeners. */
+  readonly fetchEnded: () => void
 }
 
 interface ListOps {
@@ -4753,7 +4755,7 @@ const listOps: ListOps = {
 interface LiveOps {
   /**
    * A stored fetch: runs the stream and stores the last element of each chunk. The first settles the fetch, and
-   * the stream stays open as the entry's live one. A per-request cache takes the first element and closes it.
+   * the stream stays open as the entry's live one. A per-request cache stores the first element, then closes it.
    */
   readonly body: (
     env: CacheEnv,
@@ -4761,7 +4763,7 @@ interface LiveOps {
     fetch: FetchRec,
     build: Build
   ) => Effect.Effect<any, any>
-  /** The stream's first element, which is all a caller-only read and a per-request cache take. */
+  /** The stream's first element, which is all a caller-only read takes. */
   readonly once: (
     def: QueryDef,
     stream: unknown,
@@ -4778,30 +4780,32 @@ const emptyStream = (def: QueryDef, logKey: string): Error =>
 const liveOps: LiveOps = {
   body: (env, entry, fetch, build) => {
     const stream: Stream.Stream<any, any> = build.fetcher(entry.args) as any
-    const logKey = () => env.logKeyOf(entry)
-    if (env.settleOnce) return liveOps.once(entry.def, stream, logKey)
     return Effect.andThen(
       Stream.runForEachArray(stream, (chunk) =>
-        Effect.sync(() => {
-          const value = chunk[chunk.length - 1]
+        Effect.suspend(() => {
+          const value = chunk[env.settleOnce ? 0 : chunk.length - 1]
           const result = AsyncResult.success(value, { timestamp: env.now() })
           if (entry.live === fetch) {
             // Only a new stream's first element confirms held patches, and an invalidation stays owed.
             entry.result = result
-            return env.emit(entry)
+            env.emit(entry)
+            return Effect.void
           }
-          if (entry.fetch !== fetch) return
+          if (entry.fetch !== fetch) return Effect.void
           entry.kept = false
           env.store(entry, result)
           entry.fetch = undefined
-          entry.live = fetch
+          if (!env.settleOnce) entry.live = fetch
           env.resumeAll(entry.waiters, Exit.succeed(value))
           env.afterFetch(entry, true, undefined)
+          env.fetchEnded()
+          // Settled before the unsubscribe, which the fiber still runs and teardown awaits.
+          return env.settleOnce ? Effect.interrupt : Effect.void
         })),
       // Still opening: the stream ended before its first element.
       Effect.suspend(() =>
         entry.fetch === fetch
-          ? Effect.die(emptyStream(entry.def, logKey()))
+          ? Effect.die(emptyStream(entry.def, env.logKeyOf(entry)))
           : Effect.void
       )
     )
@@ -5373,7 +5377,8 @@ const buildCache = (
       afterFetch,
       afterQuiet,
       resumeAll,
-      invalidateEntry
+      invalidateEntry,
+      fetchEnded: () => notify(fetchEndListeners, undefined)
     }
 
   // -- fetching ---------------------------------------------------------------

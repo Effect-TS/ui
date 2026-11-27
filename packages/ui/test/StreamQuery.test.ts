@@ -129,6 +129,8 @@ describe("Stream queries", () => {
   it.effect("two watchers share one stream, stay Initial until the first element, get resolves on it, and edits reach both", () => {
     const { GetNote, provide, streams } = makeNotes()
     return Effect.gen(function*() {
+      let fetchEnds = 0
+      Query.internals(yield* Query.Cache).onFetchEnd(() => fetchEnds++)
       const a = yield* watch(GetNote.changes({ id: "1" }))
       const b = yield* watch(GetNote.changes({ id: "1" }))
       assert.strictEqual(streams.length, 1)
@@ -151,6 +153,7 @@ describe("Stream queries", () => {
         id: "1",
         title: "v1"
       })
+      assert.strictEqual(fetchEnds, 1)
       assert.strictEqual(
         (yield* TestQuery.entry(GetNote, { id: "1" }))?.stale,
         false
