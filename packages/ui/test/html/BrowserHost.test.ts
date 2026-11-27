@@ -1945,11 +1945,12 @@ describe("BrowserHost", { concurrent: false }, () => {
                 saw("key")
               ),
             h.textarea.attr("aria-label", "Area").on("input", saw("input"))
-              .on("compositionend", saw("compositionend")),
+              .on("compositionend", saw("compositionend"))
+              .on("selectionchange", saw("selectionchange")),
             h.input.attrs({ type: "checkbox", "aria-label": "Box" }).on(
               "keydown",
               saw("key")
-            ),
+            ).on("input", saw("input")),
             h.button.on("keydown", saw("key")).children("Button")
           )
         }
@@ -2000,7 +2001,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           ])
         }).pipe(Effect.scoped))
 
-      it.effect("a key reports the selection of a text field, and none for a button or a checkbox", () =>
+      it.effect("keys, input and selectionchange report the selection of a text field, and none for a button or a checkbox", () =>
         Effect.gen(function*() {
           const app = yield* container
           const shadowHost = yield* container
@@ -2030,6 +2031,17 @@ describe("BrowserHost", { concurrent: false }, () => {
             HtmlLocator.getByRole(app, "button", { name: "Button" }),
             "Enter"
           )
+          const area = HtmlLocator.getByRole(app, "textbox", {
+            name: "Area"
+          }) as HTMLTextAreaElement
+          area.value = "service.name = api and "
+          area.setSelectionRange(8, 8)
+          area.dispatchEvent(new InputEvent("input", { bubbles: true }))
+          area.setSelectionRange(3, 5)
+          area.dispatchEvent(new Event("selectionchange", { bubbles: true }))
+          HtmlLocator.getByRole(app, "checkbox", { name: "Box" }).dispatchEvent(
+            new Event("input", { bubbles: true })
+          )
           const keyEvent = new KeyboardEvent("keydown", {
             key: "ArrowLeft",
             bubbles: true,
@@ -2051,12 +2063,19 @@ describe("BrowserHost", { concurrent: false }, () => {
           const selectionOf = (entries: ReadonlyArray<string>) =>
             entries.map((entry) => {
               const { selectionEnd, selectionStart } = JSON.parse(
-                entry.slice(4)
+                entry.slice(entry.indexOf(" ") + 1)
               )
               return [selectionStart, selectionEnd]
             })
           const selections = selectionOf(root.model()!)
-          expect(selections).toEqual([[1, 4], [null, null], [null, null]])
+          expect(selections).toEqual([
+            [1, 4],
+            [null, null],
+            [null, null],
+            [8, 8],
+            [3, 5],
+            [null, null]
+          ])
           expect(selectionOf(shadowRoot.model()!)).toEqual([[0, 0]])
         }).pipe(Effect.scoped))
 
@@ -3752,6 +3771,66 @@ describe("BrowserHost", { concurrent: false }, () => {
           "submitted true",
           "submitted false"
         ])
+      }).pipe(Effect.scoped))
+
+    it.effect("HtmlCommand.select places a range in the value the same update wrote, and finds a field without a selection", () =>
+      Effect.gen(function*() {
+        const Area = Html.ref("Area", "textarea")
+        const Mail = Html.ref("Mail", "input")
+        const CaretMessage = UiSchema.TaggedEnum({
+          Completed: {},
+          Selected: { found: Schema.Boolean }
+        })
+        const Editor = Html.component({
+          name: "Editor",
+          model: Schema.Struct({
+            text: Schema.String,
+            found: Schema.Array(Schema.Boolean)
+          }),
+          message: CaretMessage
+        }).make({
+          init: () => ({ text: "a ser b", found: [] }),
+          update: ($, message) =>
+            CaretMessage.match(message, {
+              Completed: () =>
+                $.evolve({ text: "a service.name b" }).run(
+                  HtmlCommand.select(
+                    Area,
+                    ({ found }) => CaretMessage.Selected({ found }),
+                    { start: 14 }
+                  ),
+                  HtmlCommand.select(
+                    Mail,
+                    ({ found }) => CaretMessage.Selected({ found }),
+                    { start: 1, end: 3 }
+                  )
+                ),
+              Selected: ({ found }) =>
+                $.evolve({ found: (all) => [...all, found] })
+            }),
+          view: (h, model) =>
+            h.div(
+              h.textarea.attr("aria-label", "Area").ref(Area).value(model.text),
+              h.input.attrs({ type: "email", "aria-label": "Mail" }).ref(Mail)
+                .value("a@b.c")
+            )
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Editor, {}, app)
+        yield* tick
+        const area = HtmlLocator.getByRole(app, "textbox", {
+          name: "Area"
+        }) as HTMLTextAreaElement
+        area.focus()
+        area.setSelectionRange(5, 5)
+        root.send(CaretMessage.Completed())
+        yield* tick
+        expect([area.value, area.selectionStart, area.selectionEnd]).toEqual([
+          "a service.name b",
+          14,
+          14
+        ])
+        expect(root.model()!.found).toEqual([true, true])
       }).pipe(Effect.scoped))
 
     it.effect("HtmlCommand.waitForPaint waits two animation frames", () =>
