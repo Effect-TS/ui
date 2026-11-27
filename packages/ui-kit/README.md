@@ -23,6 +23,8 @@ Every popup renders in the browser's top layer by default. `Dialog`, `Drawer`, `
 
 A component that doesn't need an instance, such as `Switch`, is a plain view function instead: it takes no `key`, and an `on<Event>` option in place of `onEmit`. Keeping no state isn't enough on its own: `Progress` needs an instance for the id its bar points at, and `DirectionProvider` for sharing the direction with the components inside it.
 
+To test a component that wraps a kit part, drive it with `HtmlPlay` on `TestHost` — one test per event it maps in `onEmit`, such as sending `ArrowDown` to a `Select` combobox and `Escape` to its listbox and expecting `aria-expanded="false"` — rather than re-testing the part's own keyboard handling (see [testing `@effect/ui` components](../../ai-docs/src/10_ui/50_testing.ts)).
+
 ## Components
 
 - [Accordion](src/Accordion.ts): a set of panels under headings, each opened and closed by its own button, whose open items live in your Model. One item opens at a time, or several with `multiple`. Each item is a `Collapsible`, with its size transitions and find-in-page.

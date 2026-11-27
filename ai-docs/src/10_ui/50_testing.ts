@@ -2,11 +2,13 @@
  * @title Testing @effect/ui components
  *
  * Test a component's logic as a `Story`, its view as a `Scene`, a Command
- * against a fake Layer, and components working together as a `Play`. The
- * last test renders on the server and hydrates with `ssr`.
+ * against a fake Layer, and components working together — including a wrapper
+ * around a headless or kit part — as a `Play`. The last test renders on the
+ * server and hydrates with `ssr`.
  */
 // @vitest-environment happy-dom
 import { Component, Router } from "@effect/ui"
+import { Html } from "@effect/ui/html"
 import { HtmlLocator, HtmlPlay, HtmlScene, ssr } from "@effect/ui/html/testing"
 import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
@@ -17,6 +19,7 @@ import { TestClock } from "effect/testing"
 // to what it tests: `notes/components/NoteEditor.story.test.ts` and
 // `App.play.test.ts`.
 import type { Note } from "#domain/Note"
+import { ListNotes } from "#queries/ListNotes"
 import { App } from "./fixtures/App.ts"
 import { Collapsible } from "./fixtures/kit/Collapsible.ts"
 import {
@@ -26,6 +29,10 @@ import {
   NoteEditorNoDeps,
   SaveNote
 } from "./fixtures/notes/components/NoteEditor.ts"
+import {
+  NoteLinkPickerEvents,
+  NoteLinkPickerNoDeps
+} from "./fixtures/notes/components/NoteLinkPicker.ts"
 import { Notes } from "./fixtures/notes/services/Notes.ts"
 import { NotePageNoDeps } from "./fixtures/pages/notes/NotePage.ts"
 import { NotesIndexNoDeps } from "./fixtures/pages/NotesIndex.ts"
@@ -292,6 +299,74 @@ it.layer(Layer.mergeAll(Notes.layerMemory([note]), TestHost.layer()), {
         assert.deepStrictEqual(yield* notes.get(note.id), edited)
         assert.deepStrictEqual(play.root.emitted, [
           NoteEditorEvents.Saved({ note: edited })
+        ])
+      }))
+  }
+)
+
+// A component that wraps a headless or `@effect/ui-kit` part only needs a Play
+// test for what the wrapper itself wires: each event it maps in `onEmit` and
+// the props it feeds back. Locate controls by ARIA role and name. The part's
+// own keys, highlight and typeahead belong in the part's tests, and leaving a
+// handler out of `onEmit` is already a compile error.
+//
+// `Listbox` issues `HtmlCommand.focus` and `HtmlCommand.scrollIntoView`, which
+// call `Html.Host`, so a `TestHost` play supplies a no-op `Html.Host`.
+const otherNote: Note = { id: "n2", title: "Recipes", body: "Soup" }
+
+const NoopHtmlHost = Layer.succeed(Html.Host, {
+  focus: () => {},
+  blur: () => {},
+  scrollIntoView: () => {},
+  measure: () => ({
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: 0,
+    height: 0
+  }),
+  select: () => {},
+  requestSubmit: () => false,
+  showPicker: () => false
+})
+
+it.layer(
+  Layer.mergeAll(
+    ListNotes.toLayer(() => Effect.succeed([note, otherNote])),
+    TestHost.layer(),
+    NoopHtmlHost
+  ),
+  { buildPerTest: true }
+)(
+  "NoteLinkPicker",
+  (it) => {
+    it.effect("links the picked note and closes the popup", () =>
+      Effect.gen(function*() {
+        const play = yield* HtmlPlay.make(NoteLinkPickerNoDeps, {
+          noteId: note.id
+        })
+        // `NoteLinkPicker` maps one event from `Listbox` (`Picked`). Open with
+        // the keyboard, pick an option, and check both what the wrapper renders
+        // and what it emits.
+        yield* play.keydown(
+          HtmlLocator.role("button", { name: "Link to a note…" }),
+          "ArrowDown"
+        )
+        yield* play.keydown(
+          HtmlLocator.role("combobox", { name: "Filter notes" }),
+          "Enter"
+        )
+        yield* play.expect(
+          HtmlLocator.role("button", { name: `Linked: ${otherNote.title}` })
+        ).toHaveAttribute("aria-expanded", "false")
+        yield* play.expect(
+          HtmlLocator.role("dialog", { name: "Link to a note" })
+        ).toBeAbsent()
+        assert.deepStrictEqual(play.root.emitted, [
+          NoteLinkPickerEvents.Linked({ id: otherNote.id })
         ])
       }))
   }
