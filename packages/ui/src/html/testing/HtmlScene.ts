@@ -111,14 +111,13 @@ export interface Expect<S> extends Scene.Expect<S> {
    * declaration's value as written, `false` its absence. A failure lists
    * every declaration that doesn't match.
    *
-   * **Details**
-   *
    * - Names are the camelCase and `--custom` names `.style` takes, or any
    *   dashed CSS name, and match a declaration's name exactly: `left` doesn't
    *   match `margin-left`.
    * - Spacing around `:` and `;` is ignored. Values are compared trimmed,
    *   `!important` included, with no shorthand expansion.
-   * - A repeated property has the value a browser would use.
+   * - For repeated properties, the last `!important` value wins, or the last
+   *   value if none is important.
    */
   toHaveStyle(
     style:

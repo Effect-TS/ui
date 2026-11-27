@@ -454,19 +454,15 @@ export const drop = (given: Partial<Html.DropPayload> | undefined) => {
   }
 }
 
-/** A CSS property name as written: case-insensitive, except a `--custom` one. */
 const written = (name: string): string =>
   name.startsWith("--") ? name : name.toLowerCase()
 
 const unquotedUrl = /(?<![\w-])url$/i
 
 /**
- * The declarations of an inline `style` attribute, by property name, with
- * comments dropped. Only a top-level `;` ends a declaration: not one that is
- * escaped, quoted, or inside `()`, `[]` or `{}`. An unquoted `url(...)` is
- * kept as written, `/*` included. A repeated property keeps
- * its last value unless an earlier one is `!important` and the later one
- * isn't, as in a browser.
+ * Only unescaped, top-level semicolons separate declarations. Strip comments
+ * except in strings and unquoted `url(...)` values. For repeated properties,
+ * the last `!important` value wins, or the last value if none is important.
  */
 const declarations = (style = ""): Record<string, string> => {
   const out: Record<string, string> = Object.create(null)
@@ -532,7 +528,7 @@ const declarations = (style = ""): Record<string, string> => {
   return out
 }
 
-/** The property an expected style name means: `.style`'s camelCase, or a dashed CSS name. */
+/** Custom properties keep their case; other dashed names ignore case. */
 const styleProperty = (name: string): string =>
   name.includes("-") ? written(name) : cssProperty(name)
 

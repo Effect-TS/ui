@@ -69,7 +69,6 @@ const matches = (value: string, expected: string | RegExp): boolean =>
     ? value === expected
     : new RegExp(expected).test(value)
 
-/** Checks `value`: `expected` `undefined` wants it present, `false` absent. */
 const compare = (
   value: string | undefined,
   expected: string | RegExp | false | undefined,
@@ -87,20 +86,14 @@ const compare = (
     : `its ${what} is ${JSON.stringify(value)}`
 }
 
-/**
- * What a record matcher expects of each name.
- *
- * @internal
- */
+/** @internal */
 export type Expected = { readonly [name: string]: string | RegExp | false }
 
 const own = (values: Locator.Node["attrs"], name: string) =>
   values !== undefined && Object.hasOwn(values, name) ? values[name] : undefined
 
 /**
- * Checks every entry of `expected` on the one element and reports each that
- * fails. `read` gives the element's values by name, after `key` turns a
- * name into the one it is read and reported under.
+ * `key` normalizes expected names for both lookup and failure messages.
  *
  * @internal
  */

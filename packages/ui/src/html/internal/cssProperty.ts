@@ -1,7 +1,5 @@
 /**
- * The CSS property name `.style` writes for a key: camelCase becomes
- * kebab-case, vendor prefixes get their leading dash, and `--custom` names
- * are kept.
+ * Shared by `.style` and its matcher so both normalize names the same way.
  *
  * @internal
  */
