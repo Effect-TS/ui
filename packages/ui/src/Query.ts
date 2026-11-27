@@ -5434,7 +5434,7 @@ const buildCache = (
     if (holds > 0) {
       // Decided at release. The window is read now, as the decision would have been.
       held.add(entry)
-      // It takes over a fetch abandoned in this hold: only its own abandon can mark it again.
+      // It takes over any fetch abandoned in this hold.
       abandoned.delete(entry)
     } else if (first && isStale(entry) && !windowed) {
       // Only the zero-to-one transition is a fetch trigger: a joining watcher never refetches. Inside the
@@ -5493,7 +5493,7 @@ const buildCache = (
           entry.result = undefined
         }
         if (abandon === true) {
-          // Under a hold, a watcher that registers before release takes the fetch over.
+          // Deferred to release, so a watcher registering before then takes the fetch over.
           if (holds > 0) abandoned.add(entry)
           else if (abandonFetch(entry)) return
         }
@@ -5536,7 +5536,7 @@ const buildCache = (
       // Still held while deciding: a fetch started here can reach a watcher whose handler registers another,
       // which is decided in the next round, as part of this hold.
       while (held.size > 0 || abandoned.size > 0) {
-        // Abandoned fetches go only once no registration is left to decide, as one may take them over.
+        // Registrations first: deciding one can start a fetch whose handler takes an abandoned fetch over.
         if (held.size === 0) {
           for (const entry of abandoned) {
             abandoned.delete(entry)
