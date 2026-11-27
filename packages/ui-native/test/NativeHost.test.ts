@@ -75,15 +75,7 @@ const touch = (
 }
 
 describe("NativeHost", () => {
-  it("presses the nearest view with a press handler", async () => {
-    const { fabric, find, printed, settle } = await setup()
-    assert.include(printed(), "<RCTText>Count 0</>")
-    touch(fabric, find(FakeFabric.byText("Count 0")))
-    await settle()
-    assert.include(printed(), "<RCTText>Count 1</>")
-  })
-
-  it("drops a press that is cancelled or ends outside the view", async () => {
+  it("presses the nearest view with a press handler, unless cancelled or outside it", async () => {
     const { fabric, find, printed, settle } = await setup()
     const label = find(FakeFabric.byText("Count 0"))
     const button = find((n) => n.props.padding === 8)
@@ -188,7 +180,8 @@ describe("NativeHost", () => {
     )
   })
 
-  it("recreates text that moves into or out of text", () => {
+  // FakeFabric fails a commit that gives a tag a new parent, as Fabric does.
+  it("rebuilds a node that changes parent, and keeps one moved among siblings", () => {
     const fabric = FakeFabric.make()
     const { host, root } = NativeHost.make({
       ui: fabric.ui,
@@ -208,10 +201,6 @@ describe("NativeHost", () => {
       FakeFabric.print(fabric.committed()),
       "<RCTText><RCTVirtualText>moving</></><RCTView></>"
     )
-    const nested = FakeFabric.find(
-      fabric.committed(),
-      FakeFabric.byName("RCTVirtualText")
-    )!
 
     host.insertBefore(box, inner, undefined)
     host.commit!()
@@ -219,70 +208,27 @@ describe("NativeHost", () => {
       FakeFabric.print(fabric.committed()),
       "<RCTText></><RCTView><RCTText>moving</></>"
     )
+
+    const sibling = host.createElement("view")
+    host.insertBefore(box, sibling, undefined)
+    host.commit!()
     const moved = FakeFabric.find(
       fabric.committed(),
-      (n) => n.viewName === "RCTText" && n.children.length > 0
+      FakeFabric.byText("moving")
     )!
-    assert.notStrictEqual(moved.tag, nested.tag)
+    host.insertBefore(box, inner, undefined)
+    host.commit!()
+    assert.strictEqual(
+      FakeFabric.find(fabric.committed(), FakeFabric.byText("moving"))!.tag,
+      moved.tag
+    )
 
     host.insertBefore(outer, inner, undefined)
     host.commit!()
     assert.strictEqual(
       FakeFabric.print(fabric.committed()),
-      "<RCTText><RCTVirtualText>moving</></><RCTView></>"
+      "<RCTText><RCTVirtualText>moving</></><RCTView><RCTView></></>"
     )
-  })
-
-  it("recreates a view and its subtree when it moves to another parent", () => {
-    const fabric = FakeFabric.make()
-    const { host, root } = NativeHost.make({
-      ui: fabric.ui,
-      rootTag: 1,
-      os: "android",
-      processColor: (c) => c
-    })
-    const left = host.createElement("view")
-    const right = host.createElement("view")
-    const moving = host.createElement("view")
-    const label = host.createElement("text")
-    host.insertBefore(label, host.createText("moving"), undefined)
-    host.insertBefore(moving, label, undefined)
-    host.insertBefore(left, moving, undefined)
-    host.insertBefore(root, left, undefined)
-    host.insertBefore(root, right, undefined)
-    host.commit!()
-    const tags = () => {
-      const text = FakeFabric.find(
-        fabric.committed(),
-        FakeFabric.byText("moving")
-      )!
-      const box = FakeFabric.find(
-        fabric.committed(),
-        (n) => n.children.some((c) => c.viewName === "RCTText")
-      )!
-      return [box.tag, box.children[0]!.tag, text.tag]
-    }
-    const before = tags()
-
-    // Fabric keeps a tag's parent for good, so each tag here has to be new.
-    host.insertBefore(right, moving, undefined)
-    host.commit!()
-    assert.strictEqual(
-      FakeFabric.print(fabric.committed()),
-      "<RCTView></><RCTView><RCTView><RCTText>moving</></></>"
-    )
-    const after = tags()
-    for (let i = 0; i < before.length; i++) {
-      assert.notStrictEqual(after[i], before[i])
-    }
-
-    // A move among the same parent's children keeps the views.
-    const other = host.createElement("view")
-    host.insertBefore(right, other, undefined)
-    host.commit!()
-    host.insertBefore(right, other, moving)
-    host.commit!()
-    assert.deepStrictEqual(tags(), after)
   })
 
   it("runs the Host operations on committed nodes", async () => {

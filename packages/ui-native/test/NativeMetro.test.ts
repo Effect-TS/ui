@@ -2,28 +2,21 @@ import { NativeMetro } from "@effect/ui-native/node"
 import * as Fs from "node:fs"
 import * as Os from "node:os"
 import * as Path from "node:path"
-import { afterAll, assert, describe, it } from "vitest"
+import { afterAll, assert, beforeAll, describe, it, vi } from "vitest"
 
-describe("NativeMetro.withEffectUi", () => {
-  const dirs: Array<string> = []
-  afterAll(() => {
-    for (const dir of dirs) Fs.rmSync(dir, { recursive: true, force: true })
-  })
+// Both cases build into one fixture as a release, so they run in turn.
+describe("NativeMetro.withEffectUi", { concurrent: false }, () => {
   // Vite reports real paths, as Metro does.
-  const makeDir = () => {
-    const dir = Fs.realpathSync(
-      Fs.mkdtempSync(Path.join(Os.tmpdir(), "ui-native-prebundle-"))
-    )
-    dirs.push(dir)
-    return dir
-  }
-  const root = makeDir()
-  // Tests run concurrently, so each writes its pre-bundle in its own copy.
-  const copy = () => {
-    const dir = makeDir()
-    Fs.cpSync(root, dir, { recursive: true })
-    return dir
-  }
+  const root = Fs.realpathSync(
+    Fs.mkdtempSync(Path.join(Os.tmpdir(), "ui-native-prebundle-"))
+  )
+  beforeAll(() => {
+    vi.stubEnv("NODE_ENV", "production")
+  })
+  afterAll(() => {
+    vi.unstubAllEnvs()
+    Fs.rmSync(root, { recursive: true, force: true })
+  })
   const write = (file: string, content: string) => {
     Fs.mkdirSync(Path.dirname(Path.join(root, file)), { recursive: true })
     Fs.writeFileSync(Path.join(root, file), content)
@@ -49,8 +42,6 @@ export default [Platform, title, flavor, topping]
   it(
     "swaps the resolved entry for a pre-bundle that resolves as Metro does",
     async () => {
-      const env = process.env.NODE_ENV
-      process.env.NODE_ENV = "production"
       const config = await NativeMetro.withEffectUi({
         projectRoot: root,
         resolver: {
@@ -68,8 +59,6 @@ export default [Platform, title, flavor, topping]
                 platform
               )
         }
-      }).finally(() => {
-        process.env.NODE_ENV = env
       })
       // Metro resolves the entry to a file, as it does an import.
       const bundle = (platform: string) => {
@@ -101,10 +90,8 @@ export default [Platform, title, flavor, topping]
   )
 
   it("fails rather than resolve an import for another platform", async () => {
-    const env = process.env.NODE_ENV
-    process.env.NODE_ENV = "production"
     const error = await NativeMetro.withEffectUi({
-      projectRoot: copy(),
+      projectRoot: root,
       resolver: {
         sourceExts: ["ts", "js"],
         resolveRequest: (context, moduleName, platform) =>
@@ -117,9 +104,7 @@ export default [Platform, title, flavor, topping]
     }, { platforms: ["android"] }).then(
       () => undefined,
       (error: Error) => error
-    ).finally(() => {
-      process.env.NODE_ENV = env
-    })
+    )
     assert.include(error?.message, "./title on platform null")
   }, 30_000)
 })

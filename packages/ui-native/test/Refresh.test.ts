@@ -47,17 +47,13 @@ const setup = async () => {
 }
 
 describe("Fast Refresh", () => {
-  it("treats components as the components Metro asks about", () => {
-    const runtime = Refresh.make({ reload: () => {}, refreshed: () => {} })
-    assert.isTrue(runtime.isLikelyComponentType(counter("v1")))
-    assert.isFalse(runtime.isLikelyComponentType(() => null))
-    assert.isFalse(runtime.isLikelyComponentType({}))
-  })
-
   it("swaps an edited component in place and keeps its state", async () => {
     const { printed, refreshed, reloads, runtime, settle, close } =
       await setup()
     assert.strictEqual(printed(), "<RCTText>v1 1</>")
+    // Nothing changed yet.
+    runtime.performReactRefresh()
+    assert.strictEqual(refreshed(), 0)
     const next = counter("v2")
     runtime.register(next, "7 %exports% Counter")
     // An id from React's Babel plugin names the same value, and is ignored.
@@ -75,8 +71,11 @@ describe("Fast Refresh", () => {
     await close()
   })
 
-  it("keeps one family across edits, so Metro doesn't invalidate the boundary", async () => {
+  it("answers Metro's questions about components, with one family across edits", async () => {
     const { first, runtime, close } = await setup()
+    assert.isTrue(runtime.isLikelyComponentType(first))
+    assert.isFalse(runtime.isLikelyComponentType(() => null))
+    assert.isFalse(runtime.isLikelyComponentType({}))
     assert.isUndefined(runtime.getFamilyByType(counter("unregistered")))
     const next = counter("v2")
     runtime.register(next, "7 %exports% Counter")
@@ -100,14 +99,6 @@ describe("Fast Refresh", () => {
     assert.strictEqual(printed(), "<RCTText>v1 1</>")
     assert.strictEqual(refreshed(), 0)
     assert.strictEqual(reloads.length, 1)
-    await close()
-  })
-
-  it("does nothing when no module changed", async () => {
-    const { refreshed, reloads, runtime, close } = await setup()
-    runtime.performReactRefresh()
-    assert.strictEqual(refreshed(), 0)
-    assert.deepStrictEqual(reloads, [])
     await close()
   })
 })
