@@ -192,4 +192,54 @@ NativeApp.register(NativeApp.mount(App, {}))
     )
     assert.include(error?.message, "./title on platform null")
   }, 30_000)
+
+  it(
+    "leaves asset imports external by absolute path, handles assetFiles, and rejects require of assets",
+    async () => {
+      // Scale-only asset (no 1x file on disk) plus a resolveRequest assetFiles alias.
+      write("src/mark@2x.png", "png-2x")
+      write("src/badge@2x.png", "png-badge")
+      write(
+        "src/assets-entry.ts",
+        `import mark from "./mark.png"
+import badge from "./badge"
+export default [mark, badge]
+`
+      )
+      const config = await NativeMetro.withEffectUi({
+        projectRoot: root,
+        resolver: {
+          sourceExts: ["ts", "js"],
+          assetExts: ["png"],
+          resolveRequest: (context, moduleName, platform) =>
+            moduleName === "./badge"
+              ? {
+                type: "assetFiles",
+                filePaths: [Path.join(root, "src/badge@2x.png")]
+              }
+              : context.resolveRequest(context, moduleName, platform)
+        }
+      }, { entry: "src/assets-entry.ts", platforms: ["android"] })
+      const bundle = readBundle(config, "src/assets-entry.ts", "android")
+      assert.include(bundle, Path.join(root, "src/mark.png"))
+      assert.include(bundle, Path.join(root, "src/badge.png"))
+      assert.notInclude(bundle, "data:image")
+
+      write(
+        "src/require-asset.ts",
+        `declare const require: (id: string) => number
+export default require("./mark.png")
+`
+      )
+      const error = await NativeMetro.withEffectUi({
+        projectRoot: root,
+        resolver: { sourceExts: ["ts", "js"], assetExts: ["png"] }
+      }, { entry: "src/require-asset.ts", platforms: ["android"] }).then(
+        () => undefined,
+        (err: Error) => err
+      )
+      assert.include(error?.message, "static `import`")
+    },
+    30_000
+  )
 })

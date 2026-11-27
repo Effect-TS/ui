@@ -42,6 +42,9 @@
   "exports": {
     "./package.json": "./package.json",
     ".": "./src/index.ts",
+    "./assets": {
+      "types": "./src/assets.d.ts"
+    },
     "./networking": "./src/networking/index.ts",
     "./node": "./src/node/index.ts",
     "./kit": "./src/kit/index.ts",
@@ -74,6 +77,9 @@
     "exports": {
       "./package.json": "./package.json",
       ".": "./dist/index.js",
+      "./assets": {
+        "types": "./src/assets.d.ts"
+      },
       "./networking": "./dist/networking/index.js",
       "./node": "./dist/node/index.js",
       "./kit": "./dist/kit/index.js",

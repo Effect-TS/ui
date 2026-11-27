@@ -36,6 +36,7 @@ export interface MetroConfig {
   readonly resolver?: {
     readonly unstable_conditionNames?: ReadonlyArray<string> | undefined
     readonly sourceExts?: ReadonlyArray<string> | undefined
+    readonly assetExts?: ReadonlyArray<string> | undefined
     readonly resolverMainFields?: ReadonlyArray<string> | undefined
     readonly resolveRequest?: ResolveRequest | null | undefined
     readonly [key: string]: unknown
@@ -68,8 +69,9 @@ export interface Options {
   readonly platforms?: ReadonlyArray<string> | undefined
   /**
    * Modules the pre-bundle leaves to Metro, besides `react-native`, `expo`
-   * and their scoped and prefixed packages. Leave out any package with
-   * native code or assets.
+   * and their scoped and prefixed packages. Leave out any other package with
+   * native code. Static imports of assets in `resolver.assetExts` are left to
+   * Metro automatically.
    */
   readonly external?: ReadonlyArray<string | RegExp> | undefined
 }
@@ -87,7 +89,11 @@ export type ResolveRequest = (
   context: any,
   moduleName: string,
   platform: string | null
-) => { readonly type: string; readonly filePath?: string }
+) => {
+  readonly type: string
+  readonly filePath?: string
+  readonly filePaths?: ReadonlyArray<string>
+}
 
 const own = (file: string) => {
   const self = fileURLToPath(import.meta.url)
@@ -117,19 +123,21 @@ const mainOf = (root: string): string => {
  * A release build is one with `NODE_ENV=production`, as `expo export`,
  * `expo run:android --variant release`, Gradle's and Xcode's release builds
  * and EAS Build all set. For one, Vite bundles the entry with the
- * `production` condition, leaving out React Native and Expo, and Metro
- * bundles the result in place of the entry. Packages Metro has to bundle,
- * such as those with native code or assets, go in `external`.
+ * `production` condition, leaving out React Native, Expo and static asset
+ * imports (`resolver.assetExts`), and Metro bundles the result in place of
+ * the entry. Other packages with native code go in `external`. Use static
+ * `import` for assets rather than `require`: pre-bundling rejects `require`
+ * of an asset.
  *
  * The app's own `resolver.resolveRequest` also resolves the imports Vite
  * bundles, so a release gets the modules development does. It is given the
  * resolver config, `dev`, `originModulePath` and `platform`, and its
  * `context.resolveRequest` hands the import, under the name and origin it is
- * given, back to Vite. It may resolve to a source file or to an empty module;
- * anything else fails the build, and belongs in `external`. Vite resolves
- * a handed-back import only after the app's resolver returns, and only for
- * the build's platform, so a resolver that reads its result, or hands it
- * back for another platform, fails the build too.
+ * given, back to Vite. It may resolve to a source file, asset files, or an
+ * empty module; anything else fails the build, and belongs in `external`. Vite
+ * resolves a handed-back import only after the app's resolver returns, and
+ * only for the build's platform, so a resolver that reads its result, or
+ * hands it back for another platform, fails the build too.
  *
  * In development the entry's sources are served as they are, and the
  * refresh runtime is run before them, so that an edit to a module whose
