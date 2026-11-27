@@ -13,9 +13,12 @@ export const want = (node: object, name: string, value: unknown): void => {
   values.set(name, value)
 }
 
-/** Writes the controlled values the renderer last set back to `node.props`. @internal */
+/** Writes the controlled values the renderer last set back to each node's `props`, and empties `nodes`. @internal */
 export const restore = (
-  node: { readonly props: Record<string, unknown> }
+  nodes: Set<{ readonly props: Record<string, unknown> }>
 ): void => {
-  for (const [name, value] of wanted.get(node) ?? []) node.props[name] = value
+  for (const node of nodes) {
+    for (const [name, value] of wanted.get(node) ?? []) node.props[name] = value
+  }
+  nodes.clear()
 }

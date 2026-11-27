@@ -233,9 +233,10 @@ const detach = (node: TestNode) => {
 
 /**
  * Makes a test host. `operations` lists what the renderer asked of it, which
- * `clearOperations` empties. `restoreEdited` puts the controlled properties
- * of each element fired on since the last call back to what the renderer last
- * set, without logging an operation.
+ * `clearOperations` empties. `edited` holds the elements the user edited
+ * since the last `settle`, which puts their controlled properties back to
+ * what the renderer last set without logging an operation. `fire` adds its
+ * element.
  *
  * @stability experimental
  * @category constructors
@@ -244,7 +245,7 @@ const detach = (node: TestNode) => {
 export const makeHost = (): Renderer.Host<TestNode> & {
   readonly operations: () => ReadonlyArray<string>
   readonly clearOperations: () => void
-  readonly restoreEdited: () => void
+  readonly edited: Set<TestElement>
   readonly commits: () => number
   /** Calls `listener` after every commit. Returns the unsubscribe. */
   readonly onCommit: (listener: () => void) => () => void
@@ -259,10 +260,7 @@ export const makeHost = (): Renderer.Host<TestNode> & {
     clearOperations: () => {
       operations = []
     },
-    restoreEdited: () => {
-      for (const element of edited) controlled.restore(element)
-      edited.clear()
-    },
+    edited,
     commits: () => commits,
     onCommit: (listener) => {
       listeners.add(listener)
@@ -967,7 +965,7 @@ export const settle: Effect.Effect<
     const testHost = yield* TestHost
     yield* drainAll(testHost)
     // After the flush, so an accepted edit is never written back.
-    testHost.host.restoreEdited()
+    controlled.restore(testHost.host.edited)
     for (const tree of testHost.trees()) {
       const cause = tree.crashed()
       if (cause !== undefined) {

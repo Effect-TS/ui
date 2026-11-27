@@ -6,7 +6,6 @@ import * as Locator from "../testing/Locator.ts"
 import type { StepError } from "../testing/Play.ts"
 import * as TestHost from "../testing/TestHost.ts"
 import * as caseRun from "./caseRun.ts"
-import * as controlled from "./controlled.ts"
 import * as scene from "./scene.ts"
 import { atSite, callSite } from "./steps.ts"
 import * as engine from "./story.ts"
@@ -17,7 +16,7 @@ export interface PlannedEvent {
   readonly description: string
   readonly event: string
   readonly payload: () => unknown
-  readonly edit?: (() => ReadonlyArray<TestHost.TestElement>) | undefined
+  readonly edit?: (() => void) | undefined
 }
 
 /** @internal */
@@ -40,6 +39,8 @@ export class PlayCursor {
   readonly module: string
   readonly root: TestHost.TestRoot<any, any, any>
   readonly settle: Effect.Effect<void, StepError>
+  /** The host's `edited`: `settle` restores what a step adds. */
+  protected readonly edited: Set<TestHost.TestElement>
 
   constructor(
     module: string,
@@ -48,6 +49,7 @@ export class PlayCursor {
   ) {
     this.module = module
     this.root = root
+    this.edited = testHost.host.edited
     this.settle = Effect.provideService(
       TestHost.settle,
       TestHost.TestHost,
@@ -95,11 +97,8 @@ export class PlayCursor {
     const site = callSite(this[step as keyof this] as Function)
     return Effect.gen({ self: this }, function*() {
       yield* this.settle
-      const edited = yield* Effect.sync(() =>
-        atSite(site, () => this.run(step, plan))
-      )
+      yield* Effect.sync(() => atSite(site, () => this.run(step, plan)))
       yield* this.settle
-      this.restoreControlled(edited)
     })
   }
 
@@ -153,24 +152,17 @@ export class PlayCursor {
     this.ignored = handled ? undefined : step
   }
 
-  protected restoreControlled(
-    edited: ReadonlyArray<TestHost.TestElement>
-  ): void {
-    for (const node of edited) controlled.restore(node)
-  }
-
   private run(
     step: string,
     plan: () => ReadonlyArray<PlannedEvent>
-  ): ReadonlyArray<TestHost.TestElement> {
+  ): void {
     const name = this.name(step)
     this.checkReady(name)
     let reached = false
     let handled = false
-    const edited: Array<TestHost.TestElement> = []
     const events = plan()
     for (const { edit, event, node, payload } of events) {
-      if (edit !== undefined) edited.push(...edit())
+      edit?.()
       const fired = this.dispatchEvent(node, event, payload)
       if (fired === undefined) continue
       reached = true
@@ -184,7 +176,6 @@ export class PlayCursor {
       )
     }
     this.recordInteraction(step, handled)
-    return edited
   }
 
   protected one<P>(
@@ -204,7 +195,7 @@ export class PlayCursor {
         payload: () => value,
         edit: edit === undefined ? undefined : () => {
           edit(node, value)
-          return [node]
+          this.edited.add(node)
         }
       }]
     })
