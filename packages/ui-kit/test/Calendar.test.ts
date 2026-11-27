@@ -833,5 +833,38 @@ describe("Calendar", () => {
       syncMonth(scene, december())
       assert.deepStrictEqual(focused(scene), ["2027-01-01"])
       owns(scene, dayIn(1, "2027-01-01"), { tabindex: "0" })
+
+      // Keys before a window change mounts shift only if the new window lacks
+      // the target, and move focus at once only if the mounted one is kept
+      const november = (extra: Partial<CalendarProps> = {}) =>
+        december({ month: utc("2026-11-01"), ...extra })
+      scene.focus(dayIn(0, "2026-12-01"))
+      scene.keydown(dayIn(0, "2026-12-01"), "ArrowLeft")
+        .emitted(CalendarEvents.RequestedMonth({ month: utc("2026-11-01") }))
+      scene.props(november())
+      scene.keydown(dayIn(0, "2026-12-01"), "ArrowRight")
+      assert.deepStrictEqual(scene.current.emitted, [])
+      assert.deepStrictEqual(focused(syncMonth(scene, november())), [
+        "2026-12-01"
+      ])
+
+      scene.focus(dayIn(0, "2026-11-30"))
+      scene.props(november({ months: 1 }))
+      scene.keydown(dayIn(0, "2026-11-30"), "ArrowRight")
+        .emitted(CalendarEvents.RequestedMonth({ month: utc("2026-12-01") }))
+      assert.deepStrictEqual(
+        focused(syncMonth(scene, november({ months: 1 }))),
+        []
+      )
+
+      scene.props(november())
+      scene.keydown(dayIn(0, "2026-11-30"), "ArrowRight")
+      scene.keydown(dayIn(0, "2026-11-30"), "ArrowRight")
+      // Enter on the stale focused button picks nothing
+      scene.fire(dayIn(0, "2026-11-30"), "click", { pointerType: "" })
+      assert.deepStrictEqual(scene.current.emitted, [])
+      assert.deepStrictEqual(focused(syncMonth(scene, november())), [
+        "2026-12-02"
+      ])
     }))
 })

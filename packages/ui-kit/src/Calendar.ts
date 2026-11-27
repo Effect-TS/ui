@@ -360,14 +360,22 @@ const contextOf = (
 const settled = ($: CalendarUpdate) =>
   $.model.pendingFocus === null ? $.model : $.evolve({ pendingFocus: null })
 
+// Whether the DOM shows the props' month count from `monthStart`. While
+// focused, the window stays mounted until `SyncedMonth`.
+const mounts = (
+  model: CalendarUpdate["model"],
+  context: ReturnType<typeof contextOf>,
+  monthStart: DateTime.Utc
+) =>
+  model.focused
+    ? sameMonth(model.shownMonth, monthStart) &&
+      model.shownMonths === context.months
+    : sameMonth(context.monthStart, monthStart)
+
 const navigate = ($: CalendarUpdate, move: CalendarGridKey) => {
   if ($.props.disabled === true) return $.model
   const context = contextOf($.props)
-  // The window still in the DOM, until `SyncedMonth` catches up.
-  const mounted = $.model.focused
-    ? contextOf($.props, $.model.shownMonth, $.model.shownMonths)
-    : context
-  const syncing = !sameMonth(mounted.monthStart, context.monthStart)
+  const syncing = !mounts($.model, context, context.monthStart)
   const date = syncing &&
       $.model.pendingFocus !== null &&
       inWindow(context, $.model.pendingFocus)
@@ -382,28 +390,20 @@ const navigate = ($: CalendarUpdate, move: CalendarGridKey) => {
     context.max
   )
   if (sameDay(target, date)) return syncing ? $.model : settled($)
-  if (inWindow(mounted, target)) {
-    const step = $.evolve({
-      focusedDay: target,
-      pendingFocus: null,
-      pickedDay: null
-    }).run(focusDay(target))
-    return syncing
-      ? step.emit(CalendarEvents.RequestedMonth({ month: mounted.monthStart }))
-      : step
-  }
-  if (inWindow(context, target)) {
-    return $.evolve({ pendingFocus: target, pickedDay: null })
-  }
-  // Shift only far enough to include the target month.
-  const month = startOfMonth(target)
-  return $.evolve({ pendingFocus: target, pickedDay: null }).emit(
-    CalendarEvents.RequestedMonth({
-      month: DateTime.isLessThan(target, context.monthStart)
-        ? month
-        : addMonths(month, 1 - context.months)
-    })
-  )
+  // The props' window, shifted only far enough to include the target.
+  const month = inWindow(context, target)
+    ? context.monthStart
+    : DateTime.isLessThan(target, context.monthStart)
+    ? startOfMonth(target)
+    : addMonths(startOfMonth(target), 1 - context.months)
+  // Focus moves now only if that window is the one in the DOM.
+  const step = mounts($.model, context, month)
+    ? $.evolve({ focusedDay: target, pendingFocus: null, pickedDay: null })
+      .run(focusDay(target))
+    : $.evolve({ pendingFocus: target, pickedDay: null })
+  return sameMonth(month, context.monthStart)
+    ? step
+    : step.emit(CalendarEvents.RequestedMonth({ month }))
 }
 
 /**
@@ -466,14 +466,14 @@ export const Calendar = Html.component({
   }),
   update: {
     ClickedDay: ($, { date, keyboard, unavailable }) => {
-      const { max, min, monthStart } = contextOf($.props)
+      const context = contextOf($.props)
+      const { max, min } = context
       if ($.props.disabled === true || isOutOfRange(date, min, max)) {
         return $.model
       }
       if (
         keyboard &&
-        $.model.focused &&
-        !sameMonth($.model.shownMonth, monthStart) &&
+        !mounts($.model, context, context.monthStart) &&
         $.model.focusedDay !== null &&
         sameDay(date, $.model.focusedDay)
       ) {
