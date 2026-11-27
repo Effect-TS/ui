@@ -768,9 +768,11 @@ describe("DevToolsServer", { concurrent: false }, () => {
           },
           Impossible: { never: Schema.Never },
           Unset: { secret: Schema.Option(Schema.Redacted(Schema.Never)) },
+          // Decodes as -0, but the client receives 0.
           NegativeZero: {
-            x: Schema.Finite.check(Schema.makeFilter((n) => Object.is(n, -0)))
-              .annotate({ examples: [-0] })
+            point: Schema.Struct({
+              x: Schema.Finite.check(Schema.makeFilter((n) => Object.is(n, -0)))
+            }).pipe(Schema.annotateEncoded({ examples: [{ x: -0 }] as never }))
           },
           Truncated: { data: Schema.Struct({ "~truncated": Schema.Int }) },
           Listed: {
@@ -917,7 +919,7 @@ describe("DevToolsServer", { concurrent: false }, () => {
         }
         assert.deepStrictEqual(negativeZero.message, {
           _tag: "NegativeZero",
-          x: 0
+          point: { x: 0 }
         })
         assert.include(negativeZero.invalid, "x")
 
