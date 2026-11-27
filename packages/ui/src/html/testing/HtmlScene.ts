@@ -437,8 +437,7 @@ class StepsImpl extends internal.SceneCursor {
           const skipMouse = send(found, "pointerdown")
           if (!skipMouse) {
             const held = enabled(state.root, found)
-            if (held === undefined) return
-            send(held, "mousedown", internal.mouse)
+            if (held !== undefined) send(held, "mousedown", internal.mouse)
           }
           // A captured pointer's release and click go to the capturing element.
           const pressed = enabled(state.root, captured ?? found)

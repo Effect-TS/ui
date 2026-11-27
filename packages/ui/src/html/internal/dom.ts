@@ -450,12 +450,12 @@ export const makeHost = (
 
   /** Sends the pointer's queued move before a press or release, and drops it at a cancel. */
   const endMove = (name: string, event: PointerEvent) => {
-    for (const queue of [flushing, moves]) {
-      const queued = queue?.get(event.pointerId)
-      if (queued === undefined) continue
-      queue!.delete(event.pointerId)
-      if (name !== "pointercancel") sendMove(queued)
-    }
+    const id = event.pointerId
+    const queued = moves?.get(id) ?? flushing?.get(id)
+    if (queued === undefined) return
+    moves?.delete(id)
+    flushing?.delete(id)
+    if (name !== "pointercancel") sendMove(queued)
   }
 
   const accepts = (node: globalThis.Node, types: ReadonlyArray<string>) => {

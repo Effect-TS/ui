@@ -611,7 +611,7 @@ describe("HtmlScene", () => {
         )
       }))
 
-    it.effect("a press the parent captures sends the release, the click and the defaults to the parent", () =>
+    it.effect("a press the parent captures sends the release, the click and the defaults to the parent, even when the press removes the child", () =>
       Effect.gen(function*() {
         const Panes = Html.component({
           name: "Panes",
@@ -636,7 +636,15 @@ describe("HtmlScene", () => {
                 h.div.on("pointerdown", () => undefined, {
                   capturePointer: true
                 })
-                  .children(h.button.on("click", "pass").children("Pass"))
+                  .children(h.button.on("click", "pass").children("Pass")),
+                // The press takes away the button it started on, but not the capturing element.
+                h.div.on("pointerdown", "drop", { capturePointer: true })
+                  .on("pointerup", "drop up")
+                  .children(
+                    model.includes("drop")
+                      ? undefined
+                      : h.button.children("Drop")
+                  )
               ),
               h.output(model.join("|"))
             )
@@ -646,6 +654,8 @@ describe("HtmlScene", () => {
           .expect(log).toHaveText("grab|up|ck")
           .click("Pass")
           .expect(log).toHaveText("grab|up|ck|pass|submit")
+          .click("Drop")
+          .expect(log).toHaveText(/\|submit\|drop\|drop up$/)
       }))
 
     it.effect("skips child-only press handlers when the parent handles click, and honors unconditional child cancellation", () =>

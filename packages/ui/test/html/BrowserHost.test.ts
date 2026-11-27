@@ -3048,7 +3048,7 @@ describe("BrowserHost", { concurrent: false }, () => {
         ])
       }).pipe(Effect.scoped))
 
-    it.effect("a cancel a move's handler fires drops the other pointer's move still in the frame", () =>
+    it.effect("a cancel or release a move's handler fires ends the other pointer's move still in the frame", () =>
       Effect.gen(function*() {
         const app = yield* container
         const Pane = Html.component({
@@ -3060,25 +3060,32 @@ describe("BrowserHost", { concurrent: false }, () => {
           update: ($, message) => [...$.model, message],
           view: (h) =>
             h.div.attr("aria-label", "Pane")
-              .on("pointermove", ({ pointerId }) => {
+              .on("pointermove", ({ pointerId, x }) => {
                 if (pointerId === 1) {
-                  pointer(
-                    app.querySelector("[aria-label=Pane]")!,
-                    "pointercancel",
-                    { pointerId: 2 }
-                  )
+                  const pane = app.querySelector("[aria-label=Pane]")!
+                  pointer(pane, "pointercancel", { pointerId: 2 })
+                  // A newer move, then the release: the release sends only the newer one.
+                  pointer(pane, "pointermove", { pointerId: 3, x: 9 })
+                  pointer(pane, "pointerup", { pointerId: 3 })
                 }
-                return `move ${pointerId}`
+                return `move ${pointerId} ${x}`
               })
               .on("pointercancel", ({ pointerId }) => `cancel ${pointerId}`)
+              .on("pointerup", ({ pointerId }) => `up ${pointerId}`)
         })
         const root = yield* BrowserHost.mountEffect(Pane, {}, app)
         const pane = app.querySelector("[aria-label=Pane]")!
         pointer(pane, "pointermove", { pointerId: 1 })
         pointer(pane, "pointermove", { pointerId: 2 })
+        pointer(pane, "pointermove", { pointerId: 3 })
         yield* tick
         yield* tick
-        expect(root.model()).toEqual(["cancel 2", "move 1"])
+        expect(root.model()).toEqual([
+          "cancel 2",
+          "move 3 9",
+          "up 3",
+          "move 1 0"
+        ])
       }).pipe(Effect.scoped))
   })
 
