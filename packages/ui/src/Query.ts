@@ -1234,8 +1234,8 @@ export interface StreamService<
  * - The stream opens where a fetch would start: on the first watcher, `get`
  *   or `prefetch` of an entry with no open stream. The entry is `Initial`,
  *   or its last value, with `waiting` until the first element, which
- *   settles it as a fetch result does. Each later element is stored. Of a
- *   chunk, only the last element is stored.
+ *   settles it as a fetch result does. Each later element is stored, or a
+ *   chunk's last.
  * - Watchers see changes, as for any query: an element equal to the stored
  *   value is stored but not emitted.
  * - An entry is fresh while its stream is open, and stale otherwise.
@@ -1255,9 +1255,12 @@ export interface StreamService<
  * - Under the default `idleTimeToLive` of 5 minutes, a subscription stays
  *   open 5 minutes after its last watcher leaves.
  * - A run with an optimistic patch reopens the stream when it ends, as it
- *   refetches an ordinary query. An element that already holds the change
- *   can arrive while the patch is live, so write patches that are
- *   idempotent, such as setting a title rather than adding to a count.
+ *   refetches an ordinary query. The new stream's first element drops the
+ *   patch, so if that snapshot predates the write, the old value shows
+ *   until the next element.
+ * - An element that already holds the change can arrive while the patch is
+ *   live, so write idempotent patches, such as setting a title rather than
+ *   adding to a count.
  * - `Stream.fromEffect` completes after one element, so the entry goes
  *   stale at once. In a test that wants a live entry, follow it with
  *   `Stream.never`.
@@ -3022,7 +3025,10 @@ interface CacheInternals {
   readonly seed: (snapshot: unknown) => boolean
   /** Called at every fetch start. */
   readonly onFetch: (listener: (event: FetchEvent) => void) => () => void
-  /** Called once a stored fetch has ended and its entry has emitted. A stream query's ends when its stream closes. */
+  /**
+   * Called once a stored fetch has ended and its entry has emitted. For a
+   * stream query: at its first element, and again when its stream closes.
+   */
   readonly onFetchEnd: (listener: () => void) => () => void
   readonly inspect: (def: QueryDef, args: unknown) => EntryInfo | undefined
   /** The stored fetches in flight, and those held until a live patch's run exits. */
@@ -3859,7 +3865,7 @@ interface Entry {
   /** Pending `get` callers of the stored fetch. */
   readonly waiters: Set<Waiter>
   fetch: FetchRec | undefined
-  /** A stream query's stream once its first element settled the fetch. It keeps the entry fresh. */
+  /** A stream query's open stream, after its first element. It keeps the entry fresh. */
   live: FetchRec | undefined
   /** Restarts since the last settle. */
   restarts: number
@@ -4304,7 +4310,6 @@ interface CacheEnv {
     exit: Exit.Exit<A, any>
   ) => void
   readonly invalidateEntry: (entry: Entry, cause?: Trigger) => void
-  /** Tells the fetch-end listeners. */
   readonly fetchEnded: () => void
 }
 
@@ -4754,8 +4759,8 @@ const listOps: ListOps = {
  */
 interface LiveOps {
   /**
-   * A stored fetch: runs the stream and stores the last element of each chunk. The first settles the fetch, and
-   * the stream stays open as the entry's live one. A per-request cache stores the first element, then closes it.
+   * A stored fetch: stores each chunk's last element, and the first settles the fetch while the stream stays open.
+   * A per-request cache stores the first element, then closes the stream.
    */
   readonly body: (
     env: CacheEnv,
@@ -5555,8 +5560,7 @@ const buildCache = (
   ): void => {
     if (disposed) return
     if (entry.live === fetch) {
-      // A stream ended after its first element. Completion keeps the last value, and a failure settles as a
-      // fetch's does. Either way the entry is stale.
+      // Ended after its first element: completion keeps the last value, a failure settles as a fetch's does.
       entry.live = undefined
       if (exit._tag === "Success") return afterFetch(entry, false, undefined)
     } else if (entry.fetch !== fetch) return
@@ -5997,7 +6001,7 @@ const buildCache = (
       return resetIdle(entry)
     }
     if (entry.fetch !== undefined) entry.kept = true
-    // A stream query keeps its idle deadline while its stream opens: it counts from the latest request.
+    // A stream query's idle deadline runs while its stream opens, so it counts from the latest request.
     resetIdle(entry)
     ensureFetch(entry, "prefetch", buildOf(fetcher))
     afterQuiet(entry)
