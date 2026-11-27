@@ -382,6 +382,24 @@ describe("Select in a document", { concurrent: false }, () => {
       assert.strictEqual(byId("positioner").getAttribute("data-side"), "top")
     }).pipe(Effect.scoped))
 
+  it.effect("in a shadow root, ArrowDown places the popup below the trigger and focuses the highlighted item", () =>
+    Effect.gen(function*() {
+      const shadow = (yield* container).attachShadow({ mode: "open" })
+      yield* mountPage(
+        {},
+        Effect.sync(() => shadow.appendChild(document.createElement("div")))
+      )
+      keydown(shadow.getElementById("trigger")!, "ArrowDown")
+      yield* tick
+      const positioner = shadow.getElementById("positioner")!
+      assert.strictEqual(positioner.style.getPropertyValue("left"), "60px")
+      assert.strictEqual(positioner.style.getPropertyValue("top"), "330px")
+      assert.strictEqual(
+        shadow.activeElement,
+        shadow.querySelector("[data-testid=light]")
+      )
+    }).pipe(Effect.scoped))
+
   it.effect("aligned with the trigger, the selected item's text is over the value, inside the CSS margins", () =>
     Effect.gen(function*() {
       const { root } = yield* mountPage({ align: true })
