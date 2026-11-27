@@ -89,7 +89,7 @@ Without `exactOptionalPropertyTypes`, some types are inferred too widely. For ex
 
 ## Snapshots
 
-Every pull request and every push to `main` publishes snapshot builds of all four packages to [pkg.pr.new](https://pkg.pr.new/~/Effect-TS/ui). Install `@effect/ui` with a commit's short SHA alongside `effect` v4:
+Every pull request and every push to `main` publishes snapshot builds of all five packages to [pkg.pr.new](https://pkg.pr.new/~/Effect-TS/ui). Install `@effect/ui` with a commit's short SHA alongside `effect` v4:
 
 ```sh
 pnpm add effect @effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@<sha>
@@ -108,11 +108,16 @@ pnpm add effect \
 pnpm add effect @opentui/core@^0.9.9 \
   @effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@<sha> \
   @effect/ui-opentui@https://pkg.pr.new/Effect-TS/ui/@effect/ui-opentui@<sha>
+
+# With React Native, in an app on react-native >=0.88.0
+pnpm add effect \
+  @effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@<sha> \
+  @effect/ui-native@https://pkg.pr.new/Effect-TS/ui/@effect/ui-native@<sha>
 ```
 
 pnpm reports unmet `@effect/*` peers for these packages, because a URL doesn't satisfy their `^0.0.0` range. They still use the snapshots you installed, so you can ignore the warning.
 
-`@effect/ui-devtools/node` also requires `@effect/platform-node`, and `@effect/ui-opentui` has its own [runtime requirements](packages/ui-opentui/README.md#requirements).
+`@effect/ui-devtools/node` also requires `@effect/platform-node`. `@effect/ui-opentui` and `@effect/ui-native` have their own runtime requirements: see the [OpenTUI](packages/ui-opentui/README.md#requirements) and [native](packages/ui-native/README.md#requirements) READMEs.
 
 ### Start a new app
 
