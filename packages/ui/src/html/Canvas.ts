@@ -565,23 +565,29 @@ const paintShape = (
         if (shape.smoothing !== undefined) {
           context.imageSmoothingEnabled = shape.smoothing
         }
-        // An `<img>`'s `width` is its layout size, so its source size is the natural one.
-        const crop = shape.crop
-        const width = crop?.width ??
-          ("naturalWidth" in image ? image.naturalWidth : image.width)
-        const height = crop?.height ??
-          ("naturalHeight" in image ? image.naturalHeight : image.height)
-        context.drawImage(
-          image,
-          crop?.x ?? 0,
-          crop?.y ?? 0,
-          width,
-          height,
-          shape.x,
-          shape.y,
-          shape.width ?? width,
-          shape.height ?? height
-        )
+        if (shape.crop !== undefined) {
+          const { height, width, x, y } = shape.crop
+          context.drawImage(
+            image,
+            x,
+            y,
+            width,
+            height,
+            shape.x,
+            shape.y,
+            shape.width ?? width,
+            shape.height ?? height
+          )
+        } else if (shape.width === undefined && shape.height === undefined) {
+          context.drawImage(image, shape.x, shape.y)
+        } else {
+          // An `<img>`'s `width` is its layout size, so its source size is the natural one.
+          const width = shape.width ??
+            ("naturalWidth" in image ? image.naturalWidth : image.width)
+          const height = shape.height ??
+            ("naturalHeight" in image ? image.naturalHeight : image.height)
+          context.drawImage(image, shape.x, shape.y, width, height)
+        }
         break
       }
       case "Group": {

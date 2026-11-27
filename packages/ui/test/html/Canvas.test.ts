@@ -213,10 +213,10 @@ describe("Canvas", { concurrent: false }, () => {
       `drawImage(${sprite},0,0,16,16,10,20,16,16)`,
       "restore()",
       "save()",
-      `drawImage(${sprite},0,0,64,32,1,2,32,32)`,
+      `drawImage(${sprite},1,2,32,32)`,
       "restore()",
       "save()",
-      `drawImage(${sprite},0,0,64,32,3,4,64,32)`,
+      `drawImage(${sprite},3,4)`,
       "restore()",
       "save()",
       "restore()"
