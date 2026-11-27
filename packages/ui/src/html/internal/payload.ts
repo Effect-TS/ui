@@ -7,9 +7,10 @@ const HTML = "http://www.w3.org/1999/xhtml"
 /**
  * The `pointerType` of a click-like event's payload. A click with `detail`
  * 0, or a pointer event with an empty `pointerType`, came from no pointer:
- * the keyboard, or a script. Otherwise the last `pointerdown` says which
- * pointer it was, since a browser may report a tap's `click` as a mouse's,
- * as WebKit does. Without one, the event's own type, and `"mouse"` last.
+ * the keyboard, or a script. A pointer event reports its own type. Otherwise
+ * the last `pointerdown` says which pointer it was, since a browser may
+ * report a tap's `click` as a mouse's, as WebKit does. Without one, the
+ * event's own type, and `"mouse"` last.
  */
 const pressedWith = (
   name: string,
@@ -20,7 +21,7 @@ const pressedWith = (
   if (own === "" || (name === "click" && (event as MouseEvent).detail === 0)) {
     return ""
   }
-  return last ?? own ?? "mouse"
+  return (name.startsWith("pointer") ? own : last ?? own) ?? "mouse"
 }
 
 const fieldsOf = (
@@ -165,14 +166,16 @@ export const payloadOf = (
     case "mousedown":
     case "mouseup":
     case "pointerdown":
+    case "pointermove":
     case "pointerup":
     case "pointercancel": {
-      const e = event as MouseEvent
+      const e = event as PointerEvent
       return {
         button: e.button ?? 0,
         x: e.clientX ?? 0,
         y: e.clientY ?? 0,
         ...modifiers(event),
+        pointerId: typeof e.pointerId === "number" ? e.pointerId : -1,
         pointerType: pressedWith(name, event, pointer)
       }
     }

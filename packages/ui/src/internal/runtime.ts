@@ -169,7 +169,10 @@ const bridge = (
             }
           }
           if (message === undefined) return false
-          onMessage?.()
+          onMessage?.(
+            (rec.v as View.Element<any, any>).eventOptions[event] ??
+              View.noFields
+          )
           Kernel.send(inst, message, event)
           return true
         }),

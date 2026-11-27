@@ -43,10 +43,12 @@ import type * as View from "./View.ts"
  *
  * The handler runs once, synchronously. When it produces a message,
  * `onMessage` runs before the message is sent, while the host's event is
- * still being handled, so the host can cancel the event's default there. It
- * doesn't run when the handler returns `undefined` or fails, or when the
- * instance is gone or not yet started. The result is whether a handler
- * produced a message.
+ * still being handled, with the options the handler was set with, so the
+ * host can act on them there, such as cancelling the event's default. Each
+ * layer of an element that parts of headless components decorated runs it
+ * with its own options. It doesn't run when the handler returns `undefined`
+ * or fails, or when the instance is gone or not yet started. The result is
+ * whether a handler produced a message.
  *
  * @stability experimental
  * @category models
@@ -56,7 +58,7 @@ export type Dispatch = (
   event: string,
   handler: View.Handler<unknown, any>,
   payload: unknown,
-  onMessage?: (() => void) | undefined
+  onMessage?: ((options: View.EventOptions) => void) | undefined
 ) => boolean
 
 /**
@@ -122,8 +124,8 @@ export interface HostEvents<Node> {
  * its own events into plain payloads and calls `dispatch` for the innermost
  * element with a handler, so re-rendering never touches listeners. The
  * element's `EventOptions` come with its handlers: a host with cancellable
- * events honours `preventDefault: true` from `dispatch`'s `onMessage`, and
- * `preventDefault: "always"` before it calls `dispatch`.
+ * events honours `preventDefault: true` in the options `dispatch` gives
+ * `onMessage`, and `preventDefault: "always"` before it calls `dispatch`.
  *
  * A handler value is opaque to the host. It may be a message, a function or
  * a value the renderer made, such as the one standing for every layer of an

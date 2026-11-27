@@ -66,6 +66,13 @@
  * them in. `dragover` is sent at most once per animation frame. A drop on a
  * target is always cancelled, and its strings and files are read then.
  *
+ * A `pointerdown` handler set with `{ capturePointer: true }` captures the
+ * pointer on its element when it produces a message, so a drag keeps its
+ * `pointermove`, `pointerup` and `pointercancel` outside the element.
+ * `pointermove` is sent at most once per animation frame for each pointer.
+ * A move still queued when its pointer is pressed or released is sent first,
+ * and one queued at `pointercancel` is dropped, so the Model can revert at once.
+ *
  * `value`, `checked`, `selected` and `open` are controlled. The host sets them
  * after the element's children exist, skips a no-op so the caret doesn't jump,
  * and puts the Model's value back after the user changes it and the Model
@@ -147,20 +154,17 @@ const open = { closed: false }
 
 const fired = (
   handlers: Readonly<Record<string, View.Handler<unknown, any>>>,
-  dispatch: Renderer.Dispatch,
-  options: Readonly<Record<string, View.EventOptions>>
+  dispatch: Renderer.Dispatch
 ): Record<string, unknown> => {
   const out: Record<string, unknown> = {}
   for (const name in handlers) {
     const handler = handlers[name]
     out[name] = {
-      "~fire": (payload: unknown, event: string, prevent: () => void) =>
-        dispatch(
-          event,
-          handler,
-          payload,
-          options[event]?.preventDefault === true ? prevent : undefined
-        )
+      "~fire": (
+        payload: unknown,
+        event: string,
+        sent: Parameters<Renderer.Dispatch>[3]
+      ) => dispatch(event, handler, payload, sent)
     }
   }
   return out
@@ -235,7 +239,7 @@ const build = (
         node,
         {
           v: {
-            handlers: fired(handlers, dispatch, options),
+            handlers: fired(handlers, dispatch),
             eventOptions: options
           },
           inst: open

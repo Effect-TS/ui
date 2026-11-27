@@ -5,22 +5,23 @@ import * as Kernel from "./kernel.ts"
 interface Layer {
   readonly inst: Kernel.Instance
   readonly handler: unknown
-  readonly prevents: boolean
+  readonly options: View.EventOptions
 }
 
 /** @internal */
 export class Layered {
   readonly layers: Array<Layer> = []
-  "~fire"(payload: unknown, event: string, onMessage?: () => void): boolean {
+  /** Calls `onMessage` with the options of each layer that sends. */
+  "~fire"(
+    payload: unknown,
+    event: string,
+    onMessage?: (options: View.EventOptions) => void
+  ): boolean {
     let sent = false
-    let told = false
     for (const layer of this.layers) {
       if (!layer.inst.fire(layer.handler, payload, event)) continue
       sent = true
-      if (layer.prevents && !told) {
-        told = true
-        onMessage?.()
-      }
+      onMessage?.(layer.options)
     }
     return sent
   }
@@ -110,7 +111,7 @@ export const layer = (
       ;((handlers ??= {})[event] ??= new Layered()).layers.push({
         inst: target,
         handler: layer.handlers[event],
-        prevents: layer.eventOptions[event]?.preventDefault === true
+        options: layer.eventOptions[event] ?? View.noFields
       })
     }
     for (const event in layer.eventOptions) {

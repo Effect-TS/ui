@@ -2780,7 +2780,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           ? (handler as (payload: unknown) => unknown)(payload)
           : handler
         if (message === undefined) return false
-        onMessage?.()
+        onMessage?.({})
         seen.push(message)
         return true
       }
@@ -2896,6 +2896,20 @@ describe("BrowserHost", { concurrent: false }, () => {
   })
 
   describe("pointer gestures", () => {
+    const Handle = Html.component({
+      name: "Handle",
+      model: Schema.Null,
+      message: Schema.String
+    }).make({
+      init: () => null,
+      update: ($) => $.model,
+      parts: (p) => ({
+        root: p.part(
+          "div",
+          (b) => b.on("pointerdown", "grab", { capturePointer: true })
+        )
+      })
+    })
     const Divider = Html.component({
       name: "Divider",
       model: Schema.Array(Schema.String),
@@ -2904,18 +2918,24 @@ describe("BrowserHost", { concurrent: false }, () => {
       init: (): ReadonlyArray<string> => [],
       update: ($, message) => [...$.model, message],
       view: (h) =>
-        h.div.attr("aria-label", "Divider")
-          .on("pointerdown", ({ button, pointerId }) =>
-            button === 0 ? `down ${pointerId}` : undefined, {
-            capturePointer: true
-          })
-          .on("pointermove", ({ pointerId, x }) =>
-            `move ${pointerId} ${x}`)
-          .on("pointerup", ({ pointerId }) =>
-            `up ${pointerId}`)
-          .on("pointercancel", ({ pointerId }) =>
-            `cancel ${pointerId}`)
-          .children(h.span("Grip"))
+        h.div(
+          Handle(h, {
+            key: "handle",
+            view: (handle) => handle.root(h.div).attr("aria-label", "Handle")
+          }),
+          h.div.attr("aria-label", "Divider")
+            .on("pointerdown", ({ button, pointerId }) =>
+              button === 0 ? `down ${pointerId}` : undefined, {
+              capturePointer: true
+            })
+            .on("pointermove", ({ pointerId, x }) =>
+              `move ${pointerId} ${x}`)
+            .on("pointerup", ({ pointerId }) =>
+              `up ${pointerId}`)
+            .on("pointercancel", ({ pointerId }) =>
+              `cancel ${pointerId}`)
+            .children(h.span("Grip"))
+        )
     })
     const pointer = (
       element: Element,
@@ -2948,21 +2968,34 @@ describe("BrowserHost", { concurrent: false }, () => {
       ({ spy }) => Effect.sync(() => spy.mockRestore())
     ).pipe(Effect.map(({ calls }) => calls))
 
-    it.effect("a press captures its pointer on the element with the handler, unless the handler sends nothing", () =>
-      Effect.gen(function*() {
-        const calls = yield* captures
-        const app = yield* container
-        const root = yield* BrowserHost.mountEffect(Divider, {}, app)
-        const divider = app.querySelector("[aria-label=Divider]")!
-        const grip = app.querySelector("span")!
-        pointer(grip, "pointerdown", { pointerId: 7 })
-        pointer(grip, "pointerdown", { pointerId: 8, button: 2 })
-        yield* tick
-        assert.deepStrictEqual(calls, [[divider, 7]])
-        expect(root.model()).toEqual(["down 7"])
-      }).pipe(Effect.scoped))
+    // Html's own host, and `makeHost` driven through `Renderer.Host` alone, each with an author's handler and a part's.
+    it.effect.each(["mountEffect", "Renderer.Host"])(
+      "a press captures its pointer on the element with the handler, unless the handler sends nothing: %s",
+      (via) =>
+        Effect.gen(function*() {
+          const calls = yield* captures
+          const app = yield* container
+          if (via === "mountEffect") {
+            yield* BrowserHost.mountEffect(Divider, {}, app)
+          } else {
+            const host = BrowserHost.makeHost(document)
+            yield* Effect.addFinalizer(() => Effect.sync(() => host.dispose()))
+            // A copy, which the renderer doesn't know for an Html host.
+            yield* Renderer.mount(Divider, {}, app).pipe(
+              Effect.provide(Renderer.layer({ ...host })),
+              Effect.provideService(Html.Host, BrowserHost.htmlHost)
+            )
+          }
+          const divider = app.querySelector("[aria-label=Divider]")!
+          const handle = app.querySelector("[aria-label=Handle]")!
+          pointer(app.querySelector("span")!, "pointerdown", { pointerId: 7 })
+          pointer(divider, "pointerdown", { pointerId: 8, button: 2 })
+          pointer(handle, "pointerdown", { pointerId: 9 })
+          assert.deepStrictEqual(calls, [[divider, 7], [handle, 9]])
+        }).pipe(Effect.scoped)
+    )
 
-    it.effect("moves are sent once per frame per pointer, with the latest position, and a queued one before its release", () =>
+    it.effect("moves are sent once per frame per pointer, with the latest position, and a queued one before its release but not after a cancel", () =>
       Effect.gen(function*() {
         const app = yield* container
         const root = yield* BrowserHost.mountEffect(Divider, {}, app)
@@ -2978,12 +3011,19 @@ describe("BrowserHost", { concurrent: false }, () => {
         pointer(divider, "pointermove", { pointerId: 1, x: 5 })
         pointer(divider, "pointerup", { pointerId: 1, x: 5 })
         yield* tick
+        // Queued, then cancelled: the Model reverts without it.
+        pointer(divider, "pointerdown", { pointerId: 1 })
+        pointer(divider, "pointermove", { pointerId: 1, x: 6 })
+        pointer(divider, "pointercancel", { pointerId: 1 })
+        yield* tick
         expect(root.model()).toEqual([
           "down 1",
           "move 1 3",
           "move 2 9",
           "move 1 5",
-          "up 1"
+          "up 1",
+          "down 1",
+          "cancel 1"
         ])
       }).pipe(Effect.scoped))
   })

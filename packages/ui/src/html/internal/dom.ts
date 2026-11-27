@@ -363,13 +363,24 @@ export const makeHost = (
     const element = rec?.v as View.Element<any, any> | undefined
     const handler = element?.handlers[name]
     if (handler === undefined) return false
-    const prevents = element!.eventOptions[name]?.preventDefault
-    if (prevents === "always") event?.preventDefault()
+    const options = element!.eventOptions[name]
+    if (options?.preventDefault === "always") event?.preventDefault()
+    const sent = (own: Html.PointerDownOptions | undefined) => {
+      if (own?.preventDefault === true) event?.preventDefault()
+      if (own?.capturePointer === true) {
+        // A pointer the browser doesn't know as active, such as a synthetic event's, can't be captured.
+        try {
+          ;(node as globalThis.Element).setPointerCapture(
+            (event as PointerEvent).pointerId
+          )
+        } catch {}
+      }
+    }
     const inst = rec!.inst
     step(() => {
       if (inst.closed) return false
       if (handler?.["~fire"] !== undefined) {
-        return handler["~fire"](payload(), name, () => event?.preventDefault())
+        return handler["~fire"](payload(), name, sent)
       }
       let message = handler
       if (typeof handler === "function") {
@@ -381,7 +392,7 @@ export const makeHost = (
         }
       }
       if (message === undefined) return false
-      if (prevents === true) event?.preventDefault()
+      sent(options)
       Kernel.send(inst, message, name)
       return true
     })
@@ -397,6 +408,40 @@ export const makeHost = (
     | readonly [globalThis.Element, Html.DragOverPayload, ReadonlyArray<string>]
     | undefined
   let overSent: Html.DragOverPayload | undefined
+  let moveFrame = false
+  const moves = new Map<number, readonly [globalThis.Element, unknown]>()
+
+  const sendMove = (
+    [element, payload]: readonly [globalThis.Element, unknown]
+  ) => element.isConnected && dispatch(element, "pointermove", () => payload)
+
+  const queueMove = (event: PointerEvent, path: ReadonlyArray<Node>) => {
+    for (const node of path) {
+      if (node === container) return
+      if (elementOf(node)?.handlers.pointermove === undefined) continue
+      const element = node as globalThis.Element
+      moves.set(event.pointerId, [
+        element,
+        payloadOf("pointermove", event, event.target, element, undefined)
+      ])
+      if (moveFrame) return
+      moveFrame = true
+      return later(() => {
+        moveFrame = false
+        const queued = [...moves.values()]
+        moves.clear()
+        for (const move of queued) sendMove(move)
+      })
+    }
+  }
+
+  /** Sends the pointer's queued move before a press or release, and drops it at a cancel. */
+  const endMove = (name: string, event: PointerEvent) => {
+    const queued = moves.get(event.pointerId)
+    if (queued === undefined) return
+    moves.delete(event.pointerId)
+    if (name !== "pointercancel") sendMove(queued)
+  }
 
   const accepts = (node: globalThis.Node, types: ReadonlyArray<string>) => {
     const element = elementOf(node)
@@ -553,6 +598,12 @@ export const makeHost = (
     if (dropTargetEvents.has(name)) {
       return onDropTarget(name, event as DragEvent, path)
     }
+    if (name === "pointermove") return queueMove(event as PointerEvent, path)
+    if (
+      moves.size > 0 &&
+      (name === "pointerdown" || name === "pointerup" ||
+        name === "pointercancel")
+    ) endMove(name, event as PointerEvent)
     const target = path[0] ?? event.target as Node
     const entry = name === "toggle" ? reported.get(target) : undefined
     if (entry !== undefined) {
@@ -648,7 +699,12 @@ export const makeHost = (
     listening.add(name)
     container.addEventListener(name, listener, true)
     if (name === "click") listen("pointerdown")
-    else if (name === "dragend") listen("dragstart")
+    else if (name === "pointermove") {
+      // So a queued move goes out before its pointer's next press or release.
+      listen("pointerdown")
+      listen("pointerup")
+      listen("pointercancel")
+    } else if (name === "dragend") listen("dragstart")
     else if (name === "drop") {
       for (const targetEvent of dropTargetEvents) listen(targetEvent)
       listen("dragend")
@@ -903,6 +959,7 @@ export const makeHost = (
         container.removeEventListener(name, listener, true)
       }
       listening.clear()
+      moves.clear()
       endTargets()
     }
   }

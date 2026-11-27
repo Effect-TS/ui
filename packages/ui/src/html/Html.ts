@@ -250,15 +250,18 @@ export type PointerType = "mouse" | "touch" | "pen" | ""
 
 /**
  * The payload of `click`, `dblclick`, `contextmenu`, `mousedown`,
- * `mouseup` and `pointerdown`: the button, the position in the viewport,
- * the modifier keys, and the kind of pointer.
+ * `mouseup` and the pointer events: the button, the position in the
+ * viewport, the modifier keys, and the pointer.
  *
  * **Details**
  *
- * `pointerType` is `""` for a click from the keyboard or a script. Otherwise
- * the browser host reads it from the `pointerdown` before the event, since
- * some browsers report a tap's `click` as a mouse's. A browser that sends no
- * pointer events reports `"mouse"`.
+ * `pointerType` is `""` for a click from the keyboard or a script. A pointer
+ * event reports its own. Otherwise the browser host reads it from the
+ * `pointerdown` before the event, since some browsers report a tap's `click`
+ * as a mouse's. A browser that sends no pointer events reports `"mouse"`.
+ *
+ * `pointerId` tells the pointers of a multi-touch apart, and is `-1` for an
+ * event that carries none, such as a `mousedown` or a click from the keyboard.
  *
  * @stability experimental
  * @category events
@@ -272,6 +275,7 @@ export interface PointerPayload {
   readonly ctrl: boolean
   readonly alt: boolean
   readonly meta: boolean
+  readonly pointerId: number
   readonly pointerType: PointerType
 }
 
@@ -605,6 +609,30 @@ export interface DropTargetOptions extends View.EventOptions {
 }
 
 /**
+ * The options of `pointerdown`. With `capturePointer: true`, a press whose
+ * handler sends a message captures its pointer on the handler's element, so
+ * the element gets the press's `pointermove`, `pointerup` and
+ * `pointercancel` wherever the pointer goes.
+ *
+ * **Details**
+ *
+ * The browser releases the capture when the press ends. Capture sends the
+ * rest of the press to the element, so a `click` on a child goes to the
+ * element instead. A touch drag needs CSS `touch-action: none` on the
+ * element, or the browser scrolls and sends `pointercancel`.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface PointerDownOptions extends View.EventOptions {
+  readonly capturePointer?: boolean | undefined
+}
+
+type EventOptionsOf<K> = [K] extends ["pointerdown"] ? PointerDownOptions
+  : View.EventOptions
+
+/**
  * The payload of `focusin` and `focusout`: whether the other end of the
  * move is inside the handler's element. For `focusin` that is where focus
  * came from, and for `focusout` where it goes.
@@ -689,6 +717,12 @@ export interface FocusOutPayload extends FocusWithinPayload, BlurPayload {}
  * touch may send no mouse events, and a `pointerdown` whose default was
  * cancelled sends none.
  *
+ * `pointermove` is sent at most once per animation frame for each pointer,
+ * with its latest position. A move still waiting when its pointer is pressed
+ * or released is sent first, and one waiting at `pointercancel` is dropped.
+ * Its default can't be cancelled. To follow a drag outside the element, see
+ * `PointerDownOptions`.
+ *
  * @stability experimental
  * @category events
  * @since 0.1.0
@@ -700,6 +734,9 @@ export interface Events {
   readonly mousedown: PointerPayload
   readonly mouseup: PointerPayload
   readonly pointerdown: PointerPayload
+  readonly pointermove: PointerPayload
+  readonly pointerup: PointerPayload
+  readonly pointercancel: PointerPayload
   readonly mouseenter: HoverPayload
   readonly mouseleave: HoverPayload
   readonly keydown: KeyPayload
@@ -1058,7 +1095,7 @@ export class VoidElement<
   override on<K extends string>(
     event: K & keyof E,
     handler: View.Handler<Msg, E[K & keyof E]>,
-    options?: View.EventOptions | undefined
+    options?: EventOptionsOf<K> | undefined
   ): this {
     if (options === undefined && (event === "dragstart" || event === "drop")) {
       const set = View.ownFields(this).eventOptions[event]
@@ -1434,6 +1471,9 @@ export type SvgEvents = Pick<
   | "mousedown"
   | "mouseup"
   | "pointerdown"
+  | "pointermove"
+  | "pointerup"
+  | "pointercancel"
   | "mouseenter"
   | "mouseleave"
   | "keydown"
@@ -1620,6 +1660,16 @@ export interface SvgElement<
   Node = unknown,
   Tag extends SvgTag = SvgTag
 > extends View.ContainerBuilder<Msg, R, SvgEvents, Node, Tag> {
+  /**
+   * Sends a message when `event` fires, as `View.ElementBuilder.on` does.
+   *
+   * @since 0.1.0
+   */
+  on<K extends string>(
+    event: K & keyof SvgEvents,
+    handler: View.Handler<Msg, SvgEvents[K & keyof SvgEvents]>,
+    options?: EventOptionsOf<K> | undefined
+  ): this
   /**
    * Sets one attribute; `undefined` removes it.
    *

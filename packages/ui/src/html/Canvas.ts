@@ -35,7 +35,7 @@
  *     }).attr("aria-label", "Dots")
  * })
  *
- * const pressed = { button: 0, shift: false, ctrl: false, alt: false, meta: false, pointerType: "mouse" as const }
+ * const pressed = { button: 0, shift: false, ctrl: false, alt: false, meta: false, pointerId: 1, pointerType: "mouse" as const }
  *
  * Effect.gen(function*() {
  *   const s = yield* HtmlScene.make(Dots, {})
@@ -832,6 +832,7 @@ export const Paint = Mount.makeStream(
               y: (from.clientY - box.top) *
                 (box.height === 0 ? 1 : args.height / box.height),
               ...modifiers(from),
+              pointerId: from.pointerId ?? -1,
               pointerType: pointerTypeOf(from) ?? "mouse"
             })
           }
