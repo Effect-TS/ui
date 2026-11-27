@@ -1,7 +1,17 @@
-import { Command, Component, UiSchema } from "@effect/ui"
+import { Command, Component, Subscription, UiSchema } from "@effect/ui"
 import { Locator, Play, TestHost } from "@effect/ui/testing"
 import { assert, it } from "@effect/vitest"
-import { Cause, Effect, Exit, Schema } from "effect"
+import {
+  Cause,
+  Context,
+  Effect,
+  Exit,
+  Layer,
+  PubSub,
+  Queue,
+  Schema,
+  Stream
+} from "effect"
 import { TestClock } from "effect/testing"
 
 const SaverMessage = UiSchema.TaggedEnum({ ClickedSave: {}, SucceededSave: {} })
@@ -99,4 +109,95 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Play", (it) => {
         /Play\.expect\(<p>\)\.toHaveText\("saves: 9"\): its text is "saves: 0"; elements:\n  <div>/
       )
     }))
+
+  it.effect("settles a shared backend layer's worker across mounted roots", () => {
+    class Backend extends Context.Service<
+      Backend,
+      {
+        readonly save: (value: number) => Effect.Effect<void>
+        readonly values: Stream.Stream<number>
+      }
+    >()("Play/Backend") {
+      static readonly layer = Layer.effect(
+        this,
+        Effect.gen(function*() {
+          const queue = yield* Queue.unbounded<number>()
+          const pubsub = yield* PubSub.unbounded<number>({ replay: 1 })
+          yield* PubSub.publish(pubsub, 0)
+          yield* Effect.forkScoped(
+            Effect.forever(
+              Effect.flatMap(
+                Queue.take(queue),
+                (value) => PubSub.publish(pubsub, value)
+              )
+            )
+          )
+          return {
+            save: (value) => Effect.asVoid(Queue.offer(queue, value)),
+            values: Stream.fromPubSub(pubsub)
+          }
+        })
+      )
+    }
+
+    const PanelMessage = UiSchema.TaggedEnum({
+      ClickedSave: {},
+      ReceivedValue: { value: Schema.Number }
+    })
+
+    class SaveValue extends Command.Service<SaveValue>()(
+      "Panel/SaveValue",
+      { args: { value: Schema.Number } }
+    ) {
+      static readonly layer = this.toLayer(
+        Backend.useSync((backend) => ({ value }) => backend.save(value))
+      )
+    }
+
+    const Panel = Component.define({
+      name: "Panel",
+      model: Schema.Number,
+      message: PanelMessage
+    }).make({
+      init: () => -1,
+      update: ($, message) =>
+        PanelMessage.match(message, {
+          ClickedSave: () => $.run(SaveValue.make({ value: 7 })),
+          ReceivedValue: ({ value }) => value
+        }),
+      subscriptions: () => [
+        Subscription.make(
+          "values",
+          Stream.unwrap(
+            Backend.useSync((backend) =>
+              Stream.map(
+                backend.values,
+                (value) => PanelMessage.ReceivedValue({ value })
+              )
+            )
+          )
+        )
+      ],
+      view: (h, value) =>
+        h.el("div").children(
+          h.el("button").on("click", PanelMessage.ClickedSave()).children(
+            "Save"
+          ),
+          h.el("p").children(String(value))
+        )
+    })
+
+    const value = Locator.tag("p")
+    const backendLayer = SaveValue.layer.pipe(Layer.provideMerge(Backend.layer))
+
+    return Effect.gen(function*() {
+      const first = yield* Play.make(Panel, {})
+      const second = yield* Play.make(Panel, {})
+      yield* first.expect(value).toHaveText("0")
+      yield* second.expect(value).toHaveText("0")
+      yield* first.click("Save")
+      yield* first.expect(value).toHaveText("7")
+      yield* second.expect(value).toHaveText("7")
+    }).pipe(Effect.provide(backendLayer))
+  })
 })

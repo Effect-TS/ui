@@ -45,38 +45,39 @@ const Card = Html.component({
     )
 })
 
-const where = { server: true }
 const PageMsg = UiSchema.TaggedEnum({ Added: { count: Schema.Number } })
-const Page = Html.component({
-  name: "Page",
-  model: Schema.Number,
-  message: PageMsg
-}).make({
-  init: () => 0,
-  update: (_, msg) => msg.count,
-  view: (h, n) =>
-    h.main(
-      Card(h, {
-        key: "c",
-        slots: {
-          title: "note",
-          body: [
-            h.p(where.server ? "from the server" : "from the client"),
-            Counter(h, {
-              key: "n",
-              onEmit: (event) => PageMsg.Added({ count: event.count })
-            })
-          ]
-        }
-      }),
-      h.output("added " + n)
-    )
-})
+// Each test gets its own `where`: tests in a file run concurrently.
+const makePage = (where: { server: boolean }) =>
+  Html.component({
+    name: "Page",
+    model: Schema.Number,
+    message: PageMsg
+  }).make({
+    init: () => 0,
+    update: (_, msg) => msg.count,
+    view: (h, n) =>
+      h.main(
+        Card(h, {
+          key: "c",
+          slots: {
+            title: "note",
+            body: [
+              h.p(where.server ? "from the server" : "from the client"),
+              Counter(h, {
+                key: "n",
+                onEmit: (event) => PageMsg.Added({ count: event.count })
+              })
+            ]
+          }
+        }),
+        h.output("added " + n)
+      )
+  })
 
 describe("slots on the server", () => {
   it.effect("writes a marker pair per outlet, and the client adopts the content", () =>
     Effect.gen(function*() {
-      where.server = true
+      const Page = makePage({ server: true })
       // ssr() fails if the client rebuilds a node the server rendered outside a deferred instance.
       const result = yield* ssr(Page, {})
       for (const slot of ["title", "body", "aside"]) {
@@ -108,7 +109,7 @@ describe("slots on the server", () => {
 
   it.effect("adopts a slotted child's shipped state instead of re-initializing it", () =>
     Effect.gen(function*() {
-      where.server = true
+      const Page = makePage({ server: true })
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
       const app = yield* container
       app.innerHTML = rendered.html.replace("add 0", "add 4")
@@ -133,7 +134,8 @@ describe("slots on the server", () => {
 
   it.effect("builds content fresh when it doesn't match the server's, and adopts the rest", () =>
     Effect.gen(function*() {
-      where.server = true
+      const where = { server: true }
+      const Page = makePage(where)
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
       where.server = false
       const app = yield* container

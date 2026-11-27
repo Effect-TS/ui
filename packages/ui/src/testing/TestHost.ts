@@ -5,9 +5,10 @@
  * `TestHost` records what it's asked to do, implements every event behaviour
  * `h` promises (only the innermost element with a handler for an event gets
  * it), and never runs `onMount` work: the test sends the message instead. Its
- * Layer swaps in a test scheduler that Commands, Subscriptions, Layer builds
- * and the render flush all go through, so `settle` can drain everything, and
- * provides `MessageLog.memory`, so `root.log()` reads back what happened.
+ * Layer swaps in a test scheduler that Commands, Subscriptions, Layer builds,
+ * the render flush and the fibers of Layers built on top of it all go
+ * through, so `settle` can drain everything, and provides
+ * `MessageLog.memory`, so `root.log()` reads back what happened.
  *
  * Runtime tests are plain scoped Effects. An app's tests drive a tree on
  * `TestHost` through `Play` and `HtmlPlay`, which act as a user does and
@@ -56,6 +57,7 @@ import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Queue from "effect/Queue"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
+import * as Scheduler from "effect/Scheduler"
 import * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
@@ -514,10 +516,22 @@ const flushFrom = (value: string): Flush | undefined => {
  * The Layer owns settable `Query.Visibility` and `Query.Connectivity`, both
  * starting true, and collects the problems every mounted cache reports.
  *
+ * It also provides a `Scheduler` to what is built and run on top of it, such
+ * as an app's Layers and the fibers a test forks. Their tasks join the test
+ * scheduler's queue, so `settle` runs them with the tree's, and the caller's
+ * scheduler runs them when no `settle` does. A backend worker shared by every
+ * root has published what a Command handed it by the time `settle` returns,
+ * and a test can still await the backend directly.
+ *
  * **Gotchas**
  *
  * A problem fails the test: `settle` fails with a `ProblemsError`, and the
  * Layer's Scope closes with one as a defect, unless `expectProblem` took it.
+ *
+ * Provide the host beneath the app's Layers, as in
+ * `Backend.layer.pipe(Layer.provideMerge(TestHost.layer()))`. A Layer merged
+ * beside it, as by `Layer.mergeAll`, runs its fibers on the default
+ * scheduler, and `settle` can return before they do.
  *
  * @stability experimental
  * @category layers
@@ -633,7 +647,11 @@ export const layer = (options?: {
     return Context.make(TestHost, service).pipe(
       Context.add(Renderer.Renderer, { host }),
       Context.add(Executor.CurrentExecutor, executor),
-      Context.add(MessageLog.MessageLog, log)
+      Context.add(MessageLog.MessageLog, log),
+      Context.add(
+        Scheduler.Scheduler,
+        executor.outside(yield* Scheduler.Scheduler)
+      )
     ) as Context.Context<TestHost | Renderer.Renderer>
   }))
 
@@ -907,9 +925,13 @@ const nextMacrotask = Effect.callback<void>((resume) => {
  * the clock, doesn't keep `settle` from returning; adjust `TestClock`, which
  * runs what it wakes. Work that resolves a Promise gets a few macrotasks to
  * come back. A run or fetch that never returns is left in `pending()`. A
- * `Component.lazy` load is waited for until it settles.
+ * `Component.lazy` load is waited for until it settles. Fibers on the host's
+ * `Scheduler` run with the tree's tasks, under the same budget: see `layer`.
  *
  * **Gotchas**
+ *
+ * A fiber outside the tree that waits on a Promise or a timer outside Effect
+ * isn't waited for once no Command, fetch or load is pending.
  *
  * When the budget runs out, `settle` fails with a `SettleError` holding the
  * log's tail and what is pending. A crashed root fails it with `RootCrashed`,
