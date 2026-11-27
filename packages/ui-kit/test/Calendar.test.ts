@@ -858,9 +858,12 @@ describe("Calendar", () => {
       )
 
       scene.props(november())
+      // Enter before sync picks the focused day while no key moved away from it
+      scene.fire(dayIn(0, "2026-11-30"), "click", { pointerType: "" })
+        .emitted(CalendarEvents.Picked({ date: utc("2026-11-30") }))
       scene.keydown(dayIn(0, "2026-11-30"), "ArrowRight")
       scene.keydown(dayIn(0, "2026-11-30"), "ArrowRight")
-      // Enter on the stale focused button picks nothing
+      // ...and nothing once a key has
       scene.fire(dayIn(0, "2026-11-30"), "click", { pointerType: "" })
       assert.deepStrictEqual(scene.current.emitted, [])
       assert.deepStrictEqual(focused(syncMonth(scene, november())), [

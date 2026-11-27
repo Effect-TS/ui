@@ -471,8 +471,11 @@ export const Calendar = Html.component({
       if ($.props.disabled === true || isOutOfRange(date, min, max)) {
         return $.model
       }
+      // Enter on the focused button after a key moved focus to a day that
+      // isn't mounted yet.
       if (
         keyboard &&
+        $.model.pendingFocus !== null &&
         !mounts($.model, context, context.monthStart) &&
         $.model.focusedDay !== null &&
         sameDay(date, $.model.focusedDay)
