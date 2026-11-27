@@ -821,15 +821,12 @@ const Status = Html.component({
 describe("onVisibility and onConnectivity", { concurrent: false }, () => {
   it.effect("emits initial state and changes on TestHost, keeps init on SSR, and drives HtmlScene", () =>
     Effect.gen(function*() {
-      // Server rendering retains init without running subscriptions.
       const rendered = yield* HtmlServer.renderToHtml(Status, {})
       assert.deepStrictEqual(rendered.state["/Status"], {
         listening: true,
         log: []
       })
 
-      // On TestHost: initial values, changes, nested update ordering,
-      // late-subscriber isolation, stop cleanup, and class-based signals.
       yield* Effect.gen(function*() {
         const testHost = yield* TestHost.TestHost
         yield* TestHost.setVisible(false)
@@ -917,7 +914,6 @@ describe("onVisibility and onConnectivity", { concurrent: false }, () => {
         ])
       }).pipe(Effect.provide(TestHost.layer()), Effect.scoped)
 
-      // HtmlScene.visibility and connectivity dispatch, and throw when unheard.
       const scene = yield* HtmlScene.make(Status, {})
       scene
         .visibility(false)

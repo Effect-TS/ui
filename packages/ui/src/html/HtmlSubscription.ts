@@ -641,9 +641,9 @@ const attachValue = (
   listen: (listener: (value: boolean) => void) => () => void,
   send: (value: boolean) => void
 ) => {
-  // Starts with the captured value, so it goes out before any change, even
-  // one that precedes `initial`. A change that fires while a handler runs
-  // waits here, so messages dispatch in the order the values arrived.
+  // Deliver the captured value before changes, even if they arrive before
+  // the `initial` effect runs. Queue changes triggered by handlers to
+  // preserve delivery order.
   const queue: Array<boolean> = initial === undefined ? [] : [initial]
   let draining = false
   const drain = () => {
