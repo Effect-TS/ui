@@ -93,20 +93,13 @@ describe("HtmlServerVite.plugin", () => {
   }, 60_000)
 
   it("rejects watch builds before building either environment", async () => {
-    const outDir = await fs.mkdtemp(path.join(os.tmpdir(), "html-server-vite-"))
-    try {
-      const builder = await createBuilder(
-        config({ build: { outDir, watch: {} } })
-      )
-      const build = vi.spyOn(builder, "build")
-      await expect(builder.buildApp()).rejects.toThrow(
-        /HtmlServerVite.*vite build --watch/
-      )
-      expect(build).not.toHaveBeenCalled()
-    } finally {
-      await fs.rm(outDir, { recursive: true, force: true })
-    }
-  }, 60_000)
+    const builder = await createBuilder(config({ build: { watch: {} } }))
+    const build = vi.spyOn(builder, "build")
+    await expect(builder.buildApp()).rejects.toThrow(
+      /HtmlServerVite.*vite build --watch/
+    )
+    expect(build).not.toHaveBeenCalled()
+  })
 
   it(
     "disposes a server entry once its requests end, on reload and on close",
