@@ -247,7 +247,7 @@ const write = (tape: ReadonlyArray<any>): string => {
    * is kept. Nothing of an element is read there.
    */
   let skips = false
-  /** The value of the select the options being written belong to. */
+  /** The value of the select the options being written belong to, cleared once an option matches it. */
   let selectValue: string | undefined
   for (let at = 0; at < tape.length;) {
     switch (tape[at++]) {
@@ -297,7 +297,10 @@ const write = (tape: ReadonlyArray<any>): string => {
           ) {
             const value = attributes.get("value")
             if (value === undefined) option = attributes
-            else if (value === selectValue) attributes.set("selected", "")
+            else if (value === selectValue) {
+              attributes.set("selected", "")
+              selectValue = undefined
+            }
           }
           if (option === undefined) out += `${written(attributes)}>`
         }
@@ -350,7 +353,10 @@ const write = (tape: ReadonlyArray<any>): string => {
         else {
           let before = open.before
           if (open.option !== undefined) {
-            if (text === open.selectValue) open.option.set("selected", "")
+            if (selectValue !== undefined && text === selectValue) {
+              open.option.set("selected", "")
+              selectValue = undefined
+            }
             before += `${written(open.option)}>`
           }
           let inner = open.kind === "text"
@@ -372,7 +378,7 @@ const write = (tape: ReadonlyArray<any>): string => {
             ? undefined
             : open.text + text
         }
-        selectValue = open.selectValue
+        if (open.option === undefined) selectValue = open.selectValue
         bare = false
         break
       }
