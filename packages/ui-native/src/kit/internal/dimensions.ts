@@ -3,14 +3,7 @@ import { source } from "./device.ts"
 
 const empty: Dimensions.Size = { width: 0, height: 0, scale: 1, fontScale: 1 }
 
-interface Payload {
-  readonly width: number
-  readonly height: number
-  readonly scale: number
-  readonly fontScale: number
-}
-
-const points = (p: Payload): Dimensions.Size => ({
+const points = (p: Dimensions.Size): Dimensions.Size => ({
   width: p.width,
   height: p.height,
   scale: p.scale,
@@ -18,7 +11,7 @@ const points = (p: Payload): Dimensions.Size => ({
 })
 
 // Android reports pixels, which React Native turns into points.
-const pixels = (p: Payload | undefined): Dimensions.Size | undefined =>
+const pixels = (p: Dimensions.Size | undefined): Dimensions.Size | undefined =>
   p == null ? undefined : {
     width: p.width / p.scale,
     height: p.height / p.scale,

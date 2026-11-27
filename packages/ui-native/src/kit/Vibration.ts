@@ -58,7 +58,7 @@ const stopRunning = (
  * @since 0.1.0
  */
 export const vibrate = (duration = 400): Effect.Effect<void> =>
-  device.withDevice((d) => {
+  Native.Device.useSync((d) => {
     d.module("Vibration")?.vibrate(duration)
   })
 
@@ -134,7 +134,7 @@ export const pattern = (
  * @category actions
  * @since 0.1.0
  */
-export const cancel: Effect.Effect<void> = device.withDevice((d) => {
+export const cancel: Effect.Effect<void> = Native.Device.useSync((d) => {
   stopRunning(running(d))
   if (d.os === "android") d.module("Vibration")?.cancel()
 })

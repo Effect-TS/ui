@@ -45,7 +45,7 @@ import type * as Subscription from "@effect/ui/Subscription"
 import type * as View from "@effect/ui/View"
 import type * as Effect from "effect/Effect"
 import type * as Stream from "effect/Stream"
-import type * as Native from "../Native.ts"
+import * as Native from "../Native.ts"
 import * as device from "./internal/device.ts"
 import { dimensions } from "./internal/dimensions.ts"
 
@@ -97,10 +97,11 @@ const keyboard = device.source<Keyboard | undefined>(
   () => undefined,
   (d, set) => {
     for (const event of events) {
+      const hide = event.endsWith("Hide")
       device.observe(d, "KeyboardObserver", event, (e) => {
         const frame = e?.endCoordinates
         set(
-          event.endsWith("Hide") || offScreen(d, frame)
+          hide || offScreen(d, frame)
             ? undefined
             : {
               screenX: frame.screenX,
@@ -159,7 +160,9 @@ export const changes: Stream.Stream<Keyboard | undefined> = device.changes(
  * @category actions
  * @since 0.1.0
  */
-export const dismiss: Effect.Effect<void> = device.withDevice((d) => d.blur())
+export const dismiss: Effect.Effect<void> = Native.Device.useSync((d) =>
+  d.blur()
+)
 
 /**
  * The Command behind `dismiss`, for a story's

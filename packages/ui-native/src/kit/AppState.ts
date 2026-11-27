@@ -32,6 +32,7 @@ import type * as View from "@effect/ui/View"
 import type * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import type * as Stream from "effect/Stream"
+import * as Native from "../Native.ts"
 import * as device from "./internal/device.ts"
 
 /**
@@ -141,7 +142,7 @@ export const onFocusChange = <Msg>(
  */
 export const layerVisibility: Layer.Layer<never> = Layer.effect(
   Query.Visibility,
-  device.withDevice((d): Query.Signal => ({
+  Native.Device.useSync((d): Query.Signal => ({
     get: () => state(d).get() === "active",
     subscribe: (listener) =>
       state(d).subscribe((value) => listener(value === "active"))

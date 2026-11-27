@@ -133,7 +133,7 @@ const onAndroid = <A>(
 ): Effect.Effect<A, Native.DeviceError> =>
   Native.Device.use((d) =>
     d.os === "android"
-      ? device.promise(name, method, (module) => module && f(module, d))
+      ? device.promise(name, method, f)
       : Effect.succeed(otherwise)
   )
 
@@ -227,7 +227,7 @@ export const Check: Command.Factory<
 > = Command.make(
   "PermissionsAndroid.check",
   { args: { permission: PermissionSchema } },
-  ({ permission }) => device.result(check(permission))
+  ({ permission }) => Effect.result(check(permission))
 )
 
 /**
@@ -251,7 +251,7 @@ export const Request: Command.Factory<
       rationale: Schema.optional(RationaleSchema)
     }
   },
-  ({ permission, rationale }) => device.result(request(permission, rationale))
+  ({ permission, rationale }) => Effect.result(request(permission, rationale))
 )
 
 /**
@@ -267,5 +267,5 @@ export const RequestMultiple: Command.Factory<
 > = Command.make(
   "PermissionsAndroid.requestMultiple",
   { args: { permissions: Schema.Array(PermissionSchema) } },
-  ({ permissions }) => device.result(requestMultiple(permissions))
+  ({ permissions }) => Effect.result(requestMultiple(permissions))
 )

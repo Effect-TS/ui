@@ -76,7 +76,7 @@ const ios = (d: Native.Device) => d.os === "ios"
  * @category getters
  * @since 0.1.0
  */
-export const height: Effect.Effect<number> = device.withDevice((d) =>
+export const height: Effect.Effect<number> = Native.Device.useSync((d) =>
   d.module(name)?.getConstants().HEIGHT ?? 0
 )
 
@@ -171,7 +171,7 @@ export const setStyle = (
   value: Style,
   options?: { readonly animated?: boolean | undefined }
 ): Effect.Effect<void> =>
-  device.withDevice((d) => {
+  Native.Device.useSync((d) => {
     stack(d).set({ style: value, animated: options?.animated })
   })
 
@@ -187,7 +187,7 @@ export const setHidden = (
   hidden: boolean,
   options?: { readonly animation?: Animation | undefined }
 ): Effect.Effect<void> =>
-  device.withDevice((d) => {
+  Native.Device.useSync((d) => {
     stack(d).set({ hidden, animation: options?.animation })
   })
 

@@ -28,6 +28,7 @@ import * as Renderer from "@effect/ui/Renderer"
 import type * as View from "@effect/ui/View"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
+import * as Equal from "effect/Equal"
 import * as Fiber from "effect/Fiber"
 import * as Layer from "effect/Layer"
 import type * as AsyncResult from "effect/reactivity/AsyncResult"
@@ -36,6 +37,7 @@ import RCTDeviceEventEmitter from "react-native/Libraries/EventEmitter/RCTDevice
 import processColor from "react-native/Libraries/StyleSheet/processColor"
 import * as TurboModuleRegistry from "react-native/Libraries/TurboModule/TurboModuleRegistry"
 import Platform from "react-native/Libraries/Utilities/Platform"
+import { type Cell, cell } from "./internal/cell.ts"
 import { blurFocused } from "./internal/focus.ts"
 import * as Native from "./Native.ts"
 import * as NativeHost from "./NativeHost.ts"
@@ -245,19 +247,6 @@ const device: Native.Device = {
   color: processColor
 }
 
-const sameProps = (a: unknown, b: unknown): boolean => {
-  if (a === b) return true
-  if (
-    typeof a !== "object" || typeof b !== "object" || a === null || b === null
-  ) {
-    return false
-  }
-  if (Array.isArray(a) !== Array.isArray(b)) return false
-  const keys = Object.keys(a)
-  return keys.length === Object.keys(b).length &&
-    keys.every((key) => sameProps((a as any)[key], (b as any)[key]))
-}
-
 let installed = false
 
 const install = () => {
@@ -308,7 +297,7 @@ export const register = <A>(app: Layer.Layer<A, never, Surface>): void => {
   install()
   const surfaces = new Map<number, {
     readonly fiber: Fiber.Fiber<unknown>
-    readonly setProps: (props: Readonly<Record<string, unknown>>) => void
+    readonly props: Cell<Readonly<Record<string, unknown>>>
   }>()
   const stop = (rootTag: number) => {
     const running = surfaces.get(rootTag)
@@ -322,43 +311,30 @@ export const register = <A>(app: Layer.Layer<A, never, Surface>): void => {
   global.RN$AppRegistry = {
     runApplication(appKey: string, params: Params) {
       stop(params.rootTag)
-      let props = params.initialProps ?? {}
-      const listeners = new Set<
-        (props: Readonly<Record<string, unknown>>) => void
-      >()
-      const surface: Surface["Service"] = {
-        appKey,
-        rootTag: params.rootTag,
-        get props() {
-          return props
-        },
-        onProps(listener) {
-          listeners.add(listener)
-          return () => listeners.delete(listener)
-        }
-      }
+      const props = cell(params.initialProps ?? {}, Equal.equals)
       surfaces.set(params.rootTag, {
+        props,
         fiber: Effect.runFork(
           Layer.launch(Layer.provide(
             app,
             Layer.succeedContext(
-              Context.make(Surface, surface).pipe(
-                Context.add(Native.Device, device)
-              )
+              Context.make(Surface, {
+                appKey,
+                rootTag: params.rootTag,
+                get props() {
+                  return props.get()
+                },
+                onProps: props.subscribe
+              }).pipe(Context.add(Native.Device, device))
             )
           ))
-        ),
-        setProps(next) {
-          if (sameProps(props, next)) return
-          props = next
-          for (const listener of listeners) listener(next)
-        }
+        )
       })
     },
     // Native sends new props, and sends them again when the surface's
     // display mode changes.
     setSurfaceProps(_appKey: string, params: Params) {
-      surfaces.get(params.rootTag)?.setProps(params.initialProps ?? {})
+      surfaces.get(params.rootTag)?.props.set(params.initialProps ?? {})
     }
   }
   global.RN$stopSurface = stop

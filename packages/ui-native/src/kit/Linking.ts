@@ -50,23 +50,15 @@
 import * as Command from "@effect/ui/Command"
 import type * as Subscription from "@effect/ui/Subscription"
 import type * as View from "@effect/ui/View"
-import type * as Effect from "effect/Effect"
+import * as Effect from "effect/Effect"
 import type * as Result from "effect/Result"
 import * as Schema from "effect/Schema"
 import type * as Stream from "effect/Stream"
-import * as Native from "../Native.ts"
+import type * as Native from "../Native.ts"
 import * as device from "./internal/device.ts"
 
 const nameOf = (d: Native.Device) =>
   d.os === "android" ? "IntentAndroid" : "LinkingManager"
-
-const call = <A>(
-  method: string,
-  f: (module: any) => Promise<A>
-): Effect.Effect<A, Native.DeviceError> =>
-  Native.Device.use((d) =>
-    device.promise(nameOf(d), method, (module) => module && f(module))
-  )
 
 /**
  * Opens `url` in the app that handles it, such as the browser for an
@@ -77,7 +69,7 @@ const call = <A>(
  * @since 0.1.0
  */
 export const openURL = (url: string): Effect.Effect<void, Native.DeviceError> =>
-  call("openURL", (m) => m.openURL(url))
+  device.promise(nameOf, "openURL", (m) => m.openURL(url))
 
 /**
  * Whether an installed app handles `url`.
@@ -89,7 +81,7 @@ export const openURL = (url: string): Effect.Effect<void, Native.DeviceError> =>
 export const canOpenURL = (
   url: string
 ): Effect.Effect<boolean, Native.DeviceError> =>
-  call("canOpenURL", (m) => m.canOpenURL(url))
+  device.promise(nameOf, "canOpenURL", (m) => m.canOpenURL(url))
 
 /**
  * Opens this app's page in the system settings.
@@ -98,10 +90,8 @@ export const canOpenURL = (
  * @category actions
  * @since 0.1.0
  */
-export const openSettings: Effect.Effect<void, Native.DeviceError> = call(
-  "openSettings",
-  (m) => m.openSettings()
-)
+export const openSettings: Effect.Effect<void, Native.DeviceError> = device
+  .promise(nameOf, "openSettings", (m) => m.openSettings())
 
 /**
  * The URL that launched the app, or `undefined` when it launched another
@@ -112,7 +102,11 @@ export const openSettings: Effect.Effect<void, Native.DeviceError> = call(
  * @since 0.1.0
  */
 export const initialURL: Effect.Effect<string | undefined, Native.DeviceError> =
-  call("getInitialURL", async (m) => (await m.getInitialURL()) || undefined)
+  device.promise(
+    nameOf,
+    "getInitialURL",
+    async (m) => (await m.getInitialURL()) || undefined
+  )
 
 /**
  * An extra of an Android intent.
@@ -139,12 +133,10 @@ export const sendIntent = (
   action: string,
   extras?: ReadonlyArray<Extra>
 ): Effect.Effect<void, Native.DeviceError> =>
-  Native.Device.use((d) =>
-    device.promise(
-      "IntentAndroid",
-      "sendIntent",
-      (m) => d.os === "android" ? m?.sendIntent(action, extras) : undefined
-    )
+  device.promise(
+    "IntentAndroid",
+    "sendIntent",
+    (m, d) => d.os === "android" ? m.sendIntent(action, extras) : undefined
   )
 
 const listen = (d: Native.Device, listener: (url: string) => void) =>
@@ -185,7 +177,7 @@ export const Open: Command.Factory<
 > = Command.make(
   "Linking.openURL",
   { args: { url: Schema.String } },
-  ({ url }) => device.result(openURL(url))
+  ({ url }) => Effect.result(openURL(url))
 )
 
 /**
@@ -201,7 +193,7 @@ export const CanOpen: Command.Factory<
 > = Command.make(
   "Linking.canOpenURL",
   { args: { url: Schema.String } },
-  ({ url }) => device.result(canOpenURL(url))
+  ({ url }) => Effect.result(canOpenURL(url))
 )
 
 /**
@@ -217,7 +209,7 @@ export const OpenSettings: Command.Factory<
 > = Command.make(
   "Linking.openSettings",
   {},
-  () => device.result(openSettings)
+  () => Effect.result(openSettings)
 )
 
 /**
@@ -233,7 +225,7 @@ export const InitialURL: Command.Factory<
 > = Command.make(
   "Linking.initialURL",
   {},
-  () => device.result(initialURL)
+  () => Effect.result(initialURL)
 )
 
 /**
@@ -260,5 +252,5 @@ export const SendIntent: Command.Factory<
       })))
     }
   },
-  ({ action, extras }) => device.result(sendIntent(action, extras))
+  ({ action, extras }) => Effect.result(sendIntent(action, extras))
 )

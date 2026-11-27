@@ -237,7 +237,7 @@ export const announce = (
   announcement: string,
   options?: AnnounceOptions
 ): Effect.Effect<void> =>
-  device.withDevice((d) => {
+  Native.Device.useSync((d) => {
     const module = d.module(nameOf(d))
     if (options !== undefined && module?.announceForAccessibilityWithOptions) {
       module.announceForAccessibilityWithOptions(announcement, options)

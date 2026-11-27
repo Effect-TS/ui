@@ -213,7 +213,9 @@ export const KeyboardAvoidingView = Native.component({
     ChangedKeyboard: ($, { top }) =>
       $.set({ ...$.model, keyboardTop: top }).run(Measure.make()),
     LaidOut: ($, { percent }) =>
-      $.set({ ...$.model, percent }).run(Measure.make()),
+      (percent === $.model.percent ? $ : $.set({ ...$.model, percent })).run(
+        Measure.make()
+      ),
     // The frame includes the inset on screen, which the props and Model
     // give: a render commits before the next message. The adjustment moves
     // the view's bottom edge by a share of how much it changed, which the
@@ -235,18 +237,24 @@ export const KeyboardAvoidingView = Native.component({
           model.seen.inset === 0
         ? Math.min(moved, reach)
         : Math.min(Math.max(moved, Math.min(0, reach)), Math.max(0, reach))
-      const bottom = model.bottom === null || inset === 0
+      let bottom = model.bottom === null || inset === 0
         ? edge
         : model.bottom + moved - own
-      return $.set({
-        ...model,
-        // Less than a point is the layout's rounding.
-        bottom: model.bottom !== null && Math.abs(bottom - model.bottom) < 1
-          ? model.bottom
-          : bottom,
-        height: behavior === "height" ? height + inset : height,
-        seen: { bottom: edge, inset }
-      })
+      // Less than a point is the layout's rounding.
+      if (model.bottom !== null && Math.abs(bottom - model.bottom) < 1) {
+        bottom = model.bottom
+      }
+      const full = behavior === "height" ? height + inset : height
+      // A layout that moved nothing renders nothing.
+      return bottom === model.bottom && full === model.height &&
+          edge === model.seen.bottom && inset === model.seen.inset
+        ? $
+        : $.set({
+          ...model,
+          bottom,
+          height: full,
+          seen: { bottom: edge, inset }
+        })
     }
   },
   subscriptions: ({ props }) => [

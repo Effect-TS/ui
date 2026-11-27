@@ -314,7 +314,7 @@ export const Alert: Command.Factory<
 > = Command.make(
   "Alert.alert",
   { args: { ...options, cancelable: Schema.optional(Schema.Boolean) } },
-  (options) => device.result(alert(options))
+  (options) => Effect.result(alert(options))
 )
 
 /**
@@ -339,5 +339,5 @@ export const Prompt: Command.Factory<
       keyboardType: Schema.optional(Schema.String)
     }
   },
-  (options) => device.result(prompt(options))
+  (options) => Effect.result(prompt(options))
 )

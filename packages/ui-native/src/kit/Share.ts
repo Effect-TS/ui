@@ -94,7 +94,7 @@ export const share = (
           "ShareModule",
           "share",
           (module) =>
-            module?.share(
+            module.share(
               {
                 title: options.title,
                 message: [options.message, options.url].filter(Boolean).join(
@@ -161,5 +161,5 @@ export const Share: Command.Factory<
       tintColor: Schema.optional(Schema.Union([Schema.String, Schema.Number]))
     }
   },
-  (options) => device.result(share(options))
+  (options) => Effect.result(share(options))
 )

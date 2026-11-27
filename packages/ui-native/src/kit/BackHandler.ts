@@ -47,10 +47,8 @@
  * @since 0.1.0
  */
 import * as Command from "@effect/ui/Command"
-import * as Subscription from "@effect/ui/Subscription"
+import type * as Subscription from "@effect/ui/Subscription"
 import type * as View from "@effect/ui/View"
-import * as Cause from "effect/Cause"
-import * as Context from "effect/Context"
 import type * as Effect from "effect/Effect"
 import * as Native from "../Native.ts"
 import * as device from "./internal/device.ts"
@@ -97,27 +95,10 @@ const entries = device.perDevice((d) => {
 export const onPress = <Msg>(
   handler: View.Handler<Msg, void>
 ): Subscription.Subscription<Msg> =>
-  Subscription.direct<View.Handler<Msg, void>, Msg>(
+  device.subscription(
     "@effect/ui-native/kit/BackHandler",
-    undefined,
     handler,
-    (context, { emit, enter, fail }) =>
-      entries(Context.get(context, Native.Device))(() => {
-        let taken = false
-        enter((latest) => {
-          try {
-            const message = typeof latest === "function"
-              ? (latest as () => Msg | undefined)()
-              : latest
-            if (message === undefined) return
-            taken = true
-            emit(message)
-          } catch (error) {
-            fail(Cause.die(error))
-          }
-        })
-        return taken
-      })
+    (d, press) => entries(d)(() => press(undefined))
   )
 
 /**
@@ -127,7 +108,7 @@ export const onPress = <Msg>(
  * @category actions
  * @since 0.1.0
  */
-export const exit: Effect.Effect<void> = device.withDevice(exitWith)
+export const exit: Effect.Effect<void> = Native.Device.useSync(exitWith)
 
 /**
  * The Command behind `exit`, for a story's `.resolve(BackHandler.Exit, undefined)`.

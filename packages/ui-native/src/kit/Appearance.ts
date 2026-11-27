@@ -20,6 +20,7 @@ import type * as View from "@effect/ui/View"
 import type * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import type * as Stream from "effect/Stream"
+import * as Native from "../Native.ts"
 import * as device from "./internal/device.ts"
 
 /**
@@ -85,7 +86,7 @@ export const changes: Stream.Stream<ColorScheme> = device.changes(scheme)
 export const setColorScheme = (
   colorScheme: ColorScheme | "auto"
 ): Effect.Effect<void> =>
-  device.withDevice((d) => {
+  Native.Device.useSync((d) => {
     const appearance = d.module("Appearance")
     if (appearance === undefined) return
     appearance.setColorScheme(colorScheme)

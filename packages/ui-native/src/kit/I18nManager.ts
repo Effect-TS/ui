@@ -25,7 +25,7 @@
 import * as Command from "@effect/ui/Command"
 import type * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
-import type * as Native from "../Native.ts"
+import * as Native from "../Native.ts"
 import * as device from "./internal/device.ts"
 
 /**
@@ -68,10 +68,10 @@ const layout = device.perDevice((d): Layout => {
  * @category getters
  * @since 0.1.0
  */
-export const get: Effect.Effect<Layout> = device.withDevice(layout)
+export const get: Effect.Effect<Layout> = Native.Device.useSync(layout)
 
 const set = (method: string) => (value: boolean): Effect.Effect<void> =>
-  device.withDevice((d: Native.Device) => {
+  Native.Device.useSync((d) => {
     d.module(name)?.[method](value)
   })
 
