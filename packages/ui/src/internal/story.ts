@@ -1998,12 +1998,19 @@ const dispatchChild = <Props, Model, Msg, Events>(
       childModels: new Map(childModels.get(out)).set(path, next.model)
     })
   }
+  // Each message is for its target as it was when this update ran: one an earlier message replaced
+  // takes nothing.
+  const at = (target: string | undefined) =>
+    target === undefined ? undefined : children!.get(target)?.instance
   for (const send of next.sends ?? []) {
     const owner = ownerAbove(story, children!, path, send.owner.definition)
-    if (owner !== undefined) out = deliver(out, owner, send.message)
+    if (owner !== undefined) {
+      out = deliver(out, owner, send.message, at(owner))
+    }
   }
+  const owner = ran.child.owner?.path
   for (const event of next.events) {
-    out = deliver(out, ran.child.owner?.path, ran.child.onEmit(event))
+    out = deliver(out, owner, ran.child.onEmit(event), at(owner))
   }
   return out
 }

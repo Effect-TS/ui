@@ -297,6 +297,67 @@ describe("p.child in a Scene", () => {
     )
   })
 
+  it.effect("an owned child's event for an owner an earlier event replaced reaches nothing, as in the runtime", () =>
+    Effect.gen(function*() {
+      const Press = UiSchema.TaggedEnum({ Press: {} })
+      const Step = UiSchema.TaggedEnum({ Wrap: {}, Inc: {} })
+      const Inner = Html.component({
+        name: "Inner",
+        model: Schema.Null,
+        message: Press,
+        events: Step
+      }).make({
+        init: () => null,
+        update: ($) => $.set($.model).emit(Step.Wrap(), Step.Inc()),
+        parts: (p) => ({
+          button: p.part("button", (b) => b.on("click", Press.Press()))
+        })
+      })
+      const Wrapped = UiSchema.TaggedEnum({ Wrap: {} })
+      const Outer = Html.component({
+        name: "Outer",
+        model: Schema.Number,
+        message: Step,
+        events: Wrapped
+      }).make({
+        init: () => 0,
+        update: ($, message) =>
+          message._tag === "Wrap"
+            ? $.set($.model).emit(Wrapped.Wrap())
+            : $.model + 1,
+        parts: (p, count) =>
+          p.child(Inner, {
+            onEmit: (event) => event,
+            parts: (inner) => ({ count, button: inner.button })
+          })
+      })
+      const Shell = Html.component({
+        name: "Shell",
+        model: Schema.Boolean,
+        message: Wrapped
+      }).make({
+        init: () => false,
+        update: () => true,
+        view: (h, wrap) => {
+          const outer = Outer(h, {
+            key: "outer",
+            onEmit: (event) => event,
+            view: (outer) =>
+              outer.button(h.button).children(String(outer.count))
+          })
+          return wrap ? h.section(outer) : h.div(outer)
+        }
+      })
+      // Wrap remounts Outer and Inner, so the Inc Inner emitted after it was for the Outer that closed.
+      const root = yield* TestHost.mount(Shell, {})
+      yield* TestHost.settle
+      Locator.fire(element(root, "0"), "click")
+      yield* TestHost.settle
+      assert.strictEqual(root.text(), "0")
+      const scene = Scene.start(Shell, {})
+      scene.click("0").expect(Locator.tag("section")).toHaveText("0")
+    }).pipe(Effect.scoped, provideHost))
+
   it("a scene of a consumer runs an owned child's events through its owner, and gives its Model only when it can tell which", () => {
     const scene = Scene.start(App, {})
     // The row's layers run deepest owner first: the Menu's pick reaches App through Combo, the Dialog's
