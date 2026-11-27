@@ -359,15 +359,22 @@ it.layer(
           HtmlLocator.role("combobox", { name: "Filter notes" }),
           "Enter"
         )
-        yield* play.expect(
-          HtmlLocator.role("button", { name: `Linked: ${otherNote.title}` })
-        ).toHaveAttribute("aria-expanded", "false")
+        const trigger = HtmlLocator.role("button", {
+          name: `Linked: ${otherNote.title}`
+        })
+        yield* play.expect(trigger).toHaveAttribute("aria-expanded", "false")
         yield* play.expect(
           HtmlLocator.role("dialog", { name: "Link to a note" })
         ).toBeAbsent()
         assert.deepStrictEqual(play.root.emitted, [
           NoteLinkPickerEvents.Linked({ id: otherNote.id })
         ])
+        // Reopening by click makes `Listbox` read the `selected` prop the
+        // wrapper feeds back (`model.linked`), rather than advancing with keys.
+        yield* play.click(trigger)
+        yield* play.expect(
+          HtmlLocator.role("option", { name: /^Recipes/ })
+        ).toHaveAttribute("aria-selected", "true")
       }))
   }
 )
