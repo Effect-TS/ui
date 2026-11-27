@@ -13,6 +13,7 @@ React Native vocabulary and Fabric host for `@effect/ui`. Apps render native vie
 - `@effect/ui-native/kit`: native controls and APIs beyond the vocabulary, bundled only when imported, such as `Css`, which parses CSS strings into the style forms native reads, and `RefreshControl` for pull to refresh
 - `NativeHost`: `make`, the `Renderer.Host` that builds Fabric shadow trees and commits them to a surface
 - `NativeApp`: `mount`, `mountEffect`, and `register`, which runs an app on every surface native starts; the `Surface` service
+- `@effect/ui-native/networking`: opt-in side-effect entry that installs React Native's networking globals (`fetch`, `XMLHttpRequest`, `WebSocket`, `URL`, `AbortController`)
 - `@effect/ui-native/node`: `NativeMetro.withEffectUi`, the Metro configuration
 
 ## Setup
@@ -54,6 +55,8 @@ In development Metro serves the sources. Editing a module that exports only comp
 On Android, Back closes the app when nothing handles it. An app that adds handlers with React Native's `BackHandler` takes over that default, as it does in a React app.
 
 React Native doesn't load the `expo` package itself: an app that doesn't import it saves about 1 MB of Hermes bytecode.
+
+Networking globals are opt-in, so apps that don't make requests don't bundle React Native's XHR stack. If your app uses `fetch` or `FetchHttpClient`, add `import "@effect/ui-native/networking"` to the entry module.
 
 ## Styles and props
 

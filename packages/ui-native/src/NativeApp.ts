@@ -7,6 +7,10 @@
  * emitters native sends device events through, `performance`, and in
  * development the Fast Refresh client.
  *
+ * Networking globals such as `fetch` are not installed by {@link register}.
+ * Import `@effect/ui-native/networking` from the entry module if your app
+ * makes network requests.
+ *
  * @example
  * ```ts
  * import * as NativeApp from "@effect/ui-native/NativeApp"

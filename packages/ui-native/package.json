@@ -29,7 +29,10 @@
     "native",
     "effect"
   ],
-  "sideEffects": [],
+  "sideEffects": [
+    "./src/networking/index.ts",
+    "./dist/networking/index.js"
+  ],
   "imports": {
     "#dev": {
       "production": "./src/internal/devOff.ts",
@@ -39,6 +42,7 @@
   "exports": {
     "./package.json": "./package.json",
     ".": "./src/index.ts",
+    "./networking": "./src/networking/index.ts",
     "./node": "./src/node/index.ts",
     "./kit": "./src/kit/index.ts",
     "./kit/*": "./src/kit/*.ts",
@@ -70,6 +74,7 @@
     "exports": {
       "./package.json": "./package.json",
       ".": "./dist/index.js",
+      "./networking": "./dist/networking/index.js",
       "./node": "./dist/node/index.js",
       "./kit": "./dist/kit/index.js",
       "./kit/*": "./dist/kit/*.js",

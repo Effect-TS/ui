@@ -94,7 +94,7 @@ export default [Platform, title, flavor, topping]
   )
 
   it(
-    "drops unused Native.defineView definitions and Css helpers from the pre-bundle",
+    "drops unused definitions and Css helpers, and keeps opt-in networking",
     async () => {
       const link = (name: string, target: string) => {
         Fs.mkdirSync(Path.join(root, "node_modules", Path.dirname(name)), {
@@ -131,6 +131,7 @@ NativeApp.register(NativeApp.mount(App, {}))
         app(
           [
             `import { clear, setSelection } from "@effect/ui-native/Native"`,
+            `import "@effect/ui-native"`,
             `import "@effect/ui-native/kit"`,
             `import "./toggle"`
           ].join("\n"),
@@ -145,6 +146,10 @@ NativeApp.register(NativeApp.mount(App, {}))
           `h.view.style({ transform: Css.transform("scale(2)") })`
         )
       )
+      write(
+        "src/networking.ts",
+        app(`import "@effect/ui-native/networking"`, "")
+      )
       const bundle = async (entry: string) => {
         const config = await NativeMetro.withEffectUi<NativeMetro.MetroConfig>(
           { projectRoot: root, resolver: { sourceExts: ["ts", "js"] } },
@@ -155,11 +160,14 @@ NativeApp.register(NativeApp.mount(App, {}))
       const plain = await bundle("src/plain.ts")
       assert.strictEqual(await bundle("src/unused.ts"), plain)
       assert.notInclude(plain, "setSelection")
+      assert.notInclude(plain, "react-native/Libraries/Core/setUpXHR")
       assert.include(await bundle("src/used.ts"), "FixtureToggleView")
       // Each Css helper brings only its own React Native parser.
       const css = await bundle("src/css.ts")
       assert.include(css, "processTransform")
       assert.notInclude(css, "processBoxShadow")
+      const networking = await bundle("src/networking.ts")
+      assert.include(networking, "react-native/Libraries/Core/setUpXHR")
     },
     30_000
   )

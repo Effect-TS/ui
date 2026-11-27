@@ -39,6 +39,8 @@ declare module "react-native/Libraries/Core/Devtools/getDevServer" {
   export default getDevServer
 }
 
+declare module "react-native/Libraries/Core/setUpXHR" {}
+
 declare module "react-native/Libraries/Utilities/DevSettings" {
   const DevSettings: {
     readonly reload: (reason?: string) => void
