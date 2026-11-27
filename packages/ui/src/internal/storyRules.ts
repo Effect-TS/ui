@@ -6,6 +6,7 @@
 import * as Schema from "effect/Schema"
 import type * as Component from "../Component.ts"
 import type { Transition } from "../testing/Story.ts"
+import { keyOf } from "./shared.ts"
 import type { Cursor } from "./steps.ts"
 import * as engine from "./story.ts"
 
@@ -176,11 +177,12 @@ const check = (
     const shown = engine.show(receives, send.message)
     if (!Schema.is(receives)(send.message)) {
       return {
-        reason:
-          `the send ${shown} doesn't satisfy the receives Schema of ${send.owner.definition.name}`
+        reason: `the send ${shown} doesn't satisfy the receives Schema of ${
+          keyOf(send.owner).name
+        }`
       }
     }
-    lines.push(`.sent(${send.owner.definition.name}, ${shown})`)
+    lines.push(`.sent(${keyOf(send.owner).name}, ${shown})`)
     story.sent(send.owner, send.message)
   }
   return undefined

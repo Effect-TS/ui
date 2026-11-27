@@ -286,15 +286,16 @@ export interface Next<out Model, out Msg, out Events, out R = never> {
 }
 
 /**
- * A `$.send(Owner, message)` an `update` issued: the owner component, whose
- * nearest instance above the sender gets the message, and the message.
+ * A `$.send(Owner, message)` an `update` issued: the owner component or
+ * its shared key, whose nearest instance above the sender gets the message,
+ * and the message.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
 export interface Send {
-  readonly owner: Headless.Any
+  readonly owner: Headless.Any | SharedKey.Any
   readonly message: unknown
 }
 
@@ -341,7 +342,8 @@ export type SharedTypeId = typeof SharedTypeId
  * compile. `provide` never removes it.
  *
  * Names are the type-level key. At runtime a reader still needs the exact
- * owner definition, not just a component with the same name.
+ * owner, or the `SharedKey` it adopts, not just a component with the same
+ * name.
  *
  * @stability experimental
  * @category utility types
@@ -370,6 +372,8 @@ export declare namespace Shared {
   export type Of<C> = C extends
     Headless<infer _P, infer _E, infer _Parts, infer _R, infer _Rcv, infer Sh>
     ? Sh
+    : C extends SharedKey<infer Name, infer _V, infer _Rcv, infer _Rp>
+      ? Shared<Name>
     : never
 
   /**
@@ -398,6 +402,7 @@ export declare namespace Shared {
     infer V,
     infer _Rp
   > ? V
+    : C extends SharedKey<infer _Name, infer V, infer _Rcv, infer _Rp> ? V
     : never
 
   /**
@@ -409,6 +414,7 @@ export declare namespace Shared {
    */
   export type Receives<C> = C extends
     Headless<infer _P, infer _E, infer _Parts, infer _R, infer Rcv> ? Rcv
+    : C extends SharedKey<infer _Name, infer _V, infer Rcv, infer _Rp> ? Rcv
     : never
 
   /**
@@ -430,8 +436,146 @@ export declare namespace Shared {
     infer _V,
     infer Rp
   > ? Rp
+    : C extends SharedKey<infer _Name, infer _V, infer _Rcv, infer Rp> ? Rp
     : never
 }
+
+/**
+ * An owner's identity apart from its implementation: its name, the Schema
+ * of what it shares, the messages it receives and what its readers report.
+ * `Component.sharedKey` makes one.
+ *
+ * **When to use**
+ *
+ * Use when a reader works with or without an owner above it, and shouldn't
+ * import the owner to name it. A reader lists the key in `reads` and sends
+ * to it with `$.send(Key, message)`, as it would the owner component.
+ *
+ * **Details**
+ *
+ * An owner adopts a key with `key` in its `shares`, and `define` checks
+ * that the two agree. The runtime then matches readers of the key, and of
+ * the owner component, by the key. An owner that adopts none is its own key.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface SharedKey<
+  in out Name extends string,
+  in out V,
+  in out Rcv = never,
+  in out Rp = never
+> extends SharedKey.Any {
+  readonly "~@effect/ui/Component/SharedKey": {
+    readonly _Name: Types.Invariant<Name>
+    readonly _V: Types.Invariant<V>
+    readonly _Rcv: Types.Invariant<Rcv>
+    readonly _Rp: Types.Invariant<Rp>
+  }
+  readonly name: Name
+  readonly sharesSchema: Schema.Codec<V, any>
+  readonly receives: Schema.Codec<Rcv, any>
+}
+
+/**
+ * Types for shared keys.
+ *
+ * @stability experimental
+ * @since 0.1.0
+ */
+export declare namespace SharedKey {
+  /**
+   * What the runtime identifies an owner by: a shared key, or the definition
+   * of an owner that adopts none.
+   *
+   * @stability experimental
+   * @category models
+   * @since 0.1.0
+   */
+  export interface Any {
+    readonly name: string
+    readonly sharesSchema: Schema.Codec<any, any> | undefined
+    readonly receives: Schema.Codec<any, any>
+  }
+}
+
+/**
+ * Makes a shared key: an owner's name, the Schema of what it shares, the tags
+ * of `message` it receives and the Schema of what its readers report.
+ *
+ * **When to use**
+ *
+ * Use when readers look for an owner optionally, as a `Menu` looks for a
+ * `Menubar`, so a reader rendered alone doesn't bundle the owner.
+ *
+ * **Details**
+ *
+ * The owner gives the key as `key` in its `shares`, next to the same
+ * `schema`, `receives` and `collects.schema`. The key holds only its name
+ * and Schemas, so readers import it without the owner's `update` and parts.
+ * `reports` only types `report`, and isn't kept.
+ *
+ * In a story, a required read of a key has no default, since there is no
+ * owner to start: give its value with `.shared(Key, value)`.
+ *
+ * **Example** (An owner and an optional reader joined by a key)
+ *
+ * ```ts import.meta.vitest
+ * import { Component, UiSchema } from "@effect/ui"
+ * import { Schema } from "effect"
+ *
+ * const BarMessage = UiSchema.TaggedEnum({ Pinged: {} })
+ *
+ * // Readers import this, and not `Bar`.
+ * const BarKey = Component.sharedKey({
+ *   name: "Bar",
+ *   schema: Schema.Boolean,
+ *   message: BarMessage,
+ *   receives: ["Pinged"]
+ * })
+ *
+ * export const Bar = Component.define({
+ *   name: "Bar",
+ *   model: Schema.Boolean,
+ *   message: BarMessage,
+ *   shares: { key: BarKey, value: ({ model }) => model, schema: Schema.Boolean, receives: ["Pinged"] }
+ * }).make({ init: () => false, update: () => true })
+ *
+ * export const Item = Component.define({
+ *   name: "Item",
+ *   model: Schema.Null,
+ *   message: UiSchema.TaggedEnum({ Clicked: {} }),
+ *   reads: { bar: { owner: BarKey, optional: true } }
+ * }).make({
+ *   init: () => null,
+ *   update: ($) => $.send(BarKey, BarMessage.Pinged()),
+ *   view: (h) => h.el("span", h.reads.bar === true ? "pinged" : "idle")
+ * })
+ * ```
+ *
+ * @stability experimental
+ * @category constructors
+ * @since 0.1.0
+ */
+export const sharedKey = <
+  const Name extends string,
+  V,
+  Msg = never,
+  const Tags extends TagOf<Msg> = never,
+  Rp = never
+>(options: {
+  readonly name: Name
+  readonly schema: Schema.Codec<V, any>
+  readonly message?: Schema.Codec<Msg, any> | undefined
+  readonly receives?: ReadonlyArray<Tags> | undefined
+  readonly reports?: Schema.Codec<Rp, any> | undefined
+}): SharedKey<Name, V, Tagged<Msg, Tags>, Rp> =>
+  ({
+    name: options.name,
+    sharesSchema: options.schema,
+    receives: receivesOf(options.message!, options.receives ?? [])
+  }) as SharedKey.Any as SharedKey<Name, V, Tagged<Msg, Tags>, Rp>
 
 /**
  * One entry of a reader's `reads` option: the owner, or the owner with what
@@ -466,8 +610,9 @@ export declare namespace Shared {
  */
 export type SharedRead =
   | Headless.Any
+  | SharedKey.Any
   | {
-    readonly owner: Headless.Any
+    readonly owner: Headless.Any | SharedKey.Any
     readonly optional?: boolean | undefined
     readonly report?: unknown
     readonly onChange?: unknown
@@ -687,8 +832,8 @@ export interface Step<
   /**
    * Sends `message` to the nearest instance of `owner` above this one, as
    * this `update` applies, before its emits are delivered. `owner` is a
-   * headless component with `shares`, and `message` one of the messages it
-   * `receives`.
+   * headless component with `shares`, or a `SharedKey`, and `message` one of
+   * the messages it `receives`.
    *
    * **Details**
    *
@@ -699,7 +844,7 @@ export interface Step<
    * fails: an owner and a reader whose updates answer each other would
    * loop.
    */
-  send<O extends Headless.Any>(
+  send<O extends Headless.Any | SharedKey.Any>(
     owner: O,
     message: NoInfer<SendMessage<Shared.Receives<O>>>
   ): Step<Model, Msg, Events, R | (Shared.Of<O> & SendTarget<O>), L>
@@ -814,7 +959,7 @@ export interface Update<
   /** Each owner's current value, by the name `reads` lists it under, as `h.reads` reads it. */
   readonly reads: SharedValues<SR>
   /** Sends `message` to the nearest instance of `owner` above this one, as `Step`'s `send` does. */
-  send<O extends Headless.Any>(
+  send<O extends Headless.Any | SharedKey.Any>(
     owner: O,
     message: NoInfer<SendMessage<Shared.Receives<O>>>
   ): Step<Model, Msg, Events, Shared.Of<O> & SendTarget<O>, L>
@@ -923,7 +1068,11 @@ const StepProto = {
   reset(this: Step<any, any, any, any>, name: string) {
     return stepWith(this, { lists: [...this.lists, { name, op: "reset" }] })
   },
-  send(this: Step<any, any, any, any>, owner: Headless.Any, message: unknown) {
+  send(
+    this: Step<any, any, any, any>,
+    owner: Headless.Any | SharedKey.Any,
+    message: unknown
+  ) {
     return stepWith(this, { sends: [...this.sends, { owner, message }] })
   },
   viewTransition(
@@ -984,7 +1133,11 @@ type AnyUpdate$ = Update<any, any, any, any> & {
 
 const UpdateProto = {
   ...StepProto,
-  send(this: AnyUpdate$, target: Headless.Any | "self", message: unknown) {
+  send(
+    this: AnyUpdate$,
+    target: Headless.Any | SharedKey.Any | "self",
+    message: unknown
+  ) {
     return StepProto.send.call(
       this,
       target === "self" ? this["~self"] as unknown as Headless.Any : target,
@@ -1591,7 +1744,10 @@ export interface PartsContext {
  * @category models
  * @since 0.1.0
  */
-export type SharedLookup = (owner: Headless.Any, optional?: boolean) => unknown
+export type SharedLookup = (
+  owner: Headless.Any | SharedKey.Any,
+  optional?: boolean
+) => unknown
 
 /**
  * What a reader's `$.reads` holds: each owner's value by the local name its
@@ -2387,8 +2543,8 @@ type ReportId = PartsHelper<never, unknown, any>["id"]
 // One entry of `reads`, for the owner inferred for it: `report` and `onChange` take their parameter types from
 // here. `E` is the owner when the entry is written as one, and this checks it against the owner. An entry for
 // `"self"` reads the component's own `shares`, `SV` and `Rp`, and is optional.
-type SharedEntry<E, O, Model, Props, Msg, SV, Rp> = [E] extends [Headless.Any] ?
-  O
+type SharedEntry<E, O, Model, Props, Msg, SV, Rp> = [E] extends
+  [Headless.Any | SharedKey.Any] ? O
   : [O] extends ["self"] ? {
       readonly owner: O
       readonly optional: true
@@ -2582,6 +2738,8 @@ export interface Definition<
   readonly sharesSchema: Schema.Codec<SV, any> | undefined
   /** What an owner collects from the readers below it: the `collects` of `shares`. */
   readonly collects: SharesCollects<Msg, Rp> | undefined
+  /** The `SharedKey` an owner adopts: the `key` of `shares`. */
+  readonly sharedKey: SharedKey.Any | undefined
   /** What history restore saves of an instance: `false` for nothing, or the Model to save. */
   readonly restore: false | ((model: Model, props: Props) => Model) | undefined
   /** An init function, with the definition's Model, message, events and props. */
@@ -2880,6 +3038,8 @@ export declare namespace Definition {
         readonly onChange: (collected: ReadonlyArray<never>) => unknown
       }
       | undefined
+    /** The `SharedKey` the component adopts as an owner, or `undefined` when it is its own key. */
+    readonly sharedKey: SharedKey.Any | undefined
     /** What history restore saves of an instance: `false` for nothing, or the Model to save. */
     readonly restore: false | ((model: any, props: any) => unknown) | undefined
   }
@@ -3056,7 +3216,9 @@ export interface DefineOptions<
   Tags extends TagOf<Msg>,
   Sl extends string,
   SR extends SharedReads,
-  SO extends { readonly [name: string]: Headless.Any | Any | "self" },
+  SO extends {
+    readonly [name: string]: Headless.Any | Any | SharedKey.Any | "self"
+  },
   SOpt,
   SV,
   Rp,
@@ -3118,7 +3280,7 @@ export interface DefineOptions<
       & SR
       & {
         readonly [K in keyof SOpt]:
-          | (SOpt[K] & Headless.Any)
+          | (SOpt[K] & (Headless.Any | SharedKey.Any))
           | {
             readonly owner: unknown
             readonly optional?: SOpt[K] | undefined
@@ -3161,11 +3323,19 @@ export interface DefineOptions<
        * None by default.
        */
       readonly receives?: ReadonlyArray<Tags> | undefined
+      /**
+       * The `SharedKey` readers name the owner by, so they needn't import it. It must have the
+       * owner's name, `schema`, `receives` and `collects.schema`; give `schema` too.
+       */
+      readonly key?: NoInfer<SharedKey<Name, SV, Tagged<Msg, Tags>>> | undefined
     }
     | {
       readonly value: SharesValue<Model, Props, SO, SOpt, SA, SV>
       readonly schema?: Schema.Codec<SV, any> | undefined
       readonly receives?: ReadonlyArray<Tags> | undefined
+      readonly key?:
+        | NoInfer<SharedKey<Name, SV, Tagged<Msg, Tags>, Rp>>
+        | undefined
       /** What the owner collects from the readers below it. */
       readonly collects: {
         /** The Schema of what each reader below reports with `report`. */
@@ -3261,7 +3431,9 @@ export interface Define<V extends View.Elements> {
     const Tags extends TagOf<Msg> = never,
     const Sl extends string = never,
     SR extends SharedReads = SharedReads,
-    SO extends { readonly [name: string]: Headless.Any | Any | "self" } = {},
+    SO extends {
+      readonly [name: string]: Headless.Any | Any | SharedKey.Any | "self"
+    } = {},
     SOpt = {},
     SV = never,
     Rp = never,
@@ -3578,7 +3750,9 @@ export const define = <
   // What `reads` lists, as written; defaults to its constraint so `Listed<SR>` detects omission.
   SR extends SharedReads = SharedReads,
   // Each `reads` entry's owner, inferred before `shares`, `report` and `onChange`.
-  SO extends { readonly [name: string]: Headless.Any | Any | "self" } = {},
+  SO extends {
+    readonly [name: string]: Headless.Any | Any | SharedKey.Any | "self"
+  } = {},
   // Each entry's `optional`, or its owner when written as shorthand.
   SOpt = {},
   SV = never,
@@ -3643,6 +3817,7 @@ export const define = <
         "collects" in shares
       ? shares.collects
       : undefined,
+    sharedKey: (shares as { readonly key?: SharedKey.Any } | undefined)?.key,
     restore: options.restore,
     init: (init) => init,
     // A slice is the function given, with `$` bound to the message it's called with.

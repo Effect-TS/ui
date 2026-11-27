@@ -16,6 +16,7 @@ import * as lazy from "./lazy.ts"
 import type * as componentQueries from "./queries.ts"
 import * as queryCore from "./queryCore.ts"
 import type * as services from "./services.ts"
+import { keyOf } from "./shared.ts"
 
 /**
  * An instance, as a declaration, its walk and its check see it.
@@ -290,10 +291,12 @@ const walkPage = (
       at !== undefined;
       at = at.parent
     ) {
-      if (at.component.definition === owner.definition) return at.shares
+      if (keyOf(at.component.definition) === keyOf(owner)) return at.shares
     }
     throw new Error(
-      `${owner.definition.name} isn't above ${inst.path}, so its shared state can't be read`
+      `${
+        keyOf(owner).name
+      } isn't above ${inst.path}, so its shared state can't be read`
     )
   }
   try {

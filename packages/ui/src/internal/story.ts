@@ -175,7 +175,7 @@ export type Fields<Props, Model, Msg, Events> =
     readonly running?:
       | ((name: string, groupKey: string | undefined) => boolean)
       | undefined
-    readonly shared?: ReadonlyMap<Component.Definition.Any, unknown> | undefined
+    readonly shared?: ReadonlyMap<Component.SharedKey.Any, unknown> | undefined
     readonly collected?: Collected | undefined
     /** Listener state keyed by Subscription key, preserved across scene updates. */
     readonly held?: ReadonlyMap<string, unknown> | undefined
@@ -290,12 +290,12 @@ const storySlots = new WeakMap<
 /** @internal */
 export const sharedGiven = new WeakMap<
   object,
-  ReadonlyMap<Component.Definition.Any, unknown>
+  ReadonlyMap<Component.SharedKey.Any, unknown>
 >()
 
 // -- shared state -----------------------------------------------------------
 // The owners above a point in the story's view, nearest last: their values as the readers there see them.
-type Owners = ReadonlyMap<Component.Definition.Any, unknown>
+type Owners = ReadonlyMap<Component.SharedKey.Any, unknown>
 const noOwners: Owners = new Map()
 
 /** The owners the readers below `component` see: `owners`, and `component` nearest when it's an owner. */
@@ -310,7 +310,7 @@ const ownersBelow = (
   return definition.shares === undefined
     ? owners
     : new Map(owners).set(
-      definition,
+      sharedReads.keyOf(definition),
       sharedReads.ownerValue(
         definition,
         model,
@@ -354,19 +354,21 @@ export const renderSharing = (story: State<any, any, any, any>): boolean => {
  */
 export const withShared = (
   story: State<any, any, any, any>,
-  entries: ReadonlyArray<readonly [Component.Headless.Any, unknown]>,
+  entries: ReadonlyArray<
+    readonly [Component.Headless.Any | Component.SharedKey.Any, unknown]
+  >,
   step: string
 ): Owners | undefined => {
   const before = sharedGiven.get(story)
   if (entries.length === 0) return before
   const given = new Map(before)
   for (const [owner, value] of entries) {
-    if (owner.definition.shares === undefined) {
+    if (typeof owner === "function" && owner.definition.shares === undefined) {
       throw new Error(
         `${step}: ${owner.definition.name} shares nothing: it has no shares`
       )
     }
-    given.set(owner.definition, value)
+    given.set(sharedReads.keyOf(owner), value)
   }
   return given
 }
@@ -376,11 +378,16 @@ export const withShared = (
  * It stands above the story, so it reads only the given values.
  */
 const sharedDefault = (
-  owner: Component.Headless.Any,
+  owner: Component.Headless.Any | Component.SharedKey.Any,
   given: Owners | undefined
 ): unknown => {
-  const name = owner.definition.name
+  const name = sharedReads.keyOf(owner).name
   const props = {}
+  if (typeof owner !== "function") {
+    throw new MissingShared(
+      `Scene: the scene reads the shared state of ${name} by its key, so there is no owner to start and no default. Give it with .shared(key, value)`
+    )
+  }
   if (!Schema.is(owner.props)(props)) {
     throw new MissingShared(
       `Scene: the scene reads the shared state of ${name}, whose props aren't all optional, so it has no default. Give it with .shared(${name}, value)`
@@ -403,9 +410,9 @@ const sharedDefault = (
 export const sharedLookup =
   (given: Owners | undefined, owners: Owners): Component.SharedLookup =>
   (owner, optional) => {
-    const definition = owner.definition
-    if (given?.has(definition)) return given.get(definition)
-    if (owners.has(definition)) return owners.get(definition)
+    const key = sharedReads.keyOf(owner)
+    if (given?.has(key)) return given.get(key)
+    if (owners.has(key)) return owners.get(key)
     return optional === true ? undefined : sharedDefault(owner, given)
   }
 
@@ -415,9 +422,7 @@ const sharedBefore = (
   read: sharedReads.Read
 ): { readonly value: unknown } | undefined => {
   const given = sharedGiven.get(story)
-  if (given?.has(read.owner.definition)) {
-    return { value: given.get(read.owner.definition) }
-  }
+  if (given?.has(read.key)) return { value: given.get(read.key) }
   if (read.optional) return undefined
   try {
     return { value: sharedDefault(read.owner, given) }
@@ -436,14 +441,13 @@ const sharedBefore = (
  */
 export const sharedMessages = (
   story: State<any, any, any, any>,
-  owner: Component.Headless.Any,
+  owner: Component.Headless.Any | Component.SharedKey.Any,
   value: unknown
 ): ReadonlyArray<unknown> => {
   const messages: Array<unknown> = []
+  const key = sharedReads.keyOf(owner)
   for (const read of sharedReads.readsOf(story.component.definition)) {
-    if (
-      read.onChange === undefined || read.owner.definition !== owner.definition
-    ) continue
+    if (read.onChange === undefined || read.key !== key) continue
     const before = sharedBefore(story, read)
     if (before !== undefined && !sharedEqual(before.value, value)) {
       messages.push(read.onChange(value))
@@ -502,7 +506,7 @@ export const reportsOf = (
   for (const read of sharedReads.readsOf(story.component.definition)) {
     if (
       read.report === undefined ||
-      (read.optional && !given?.has(read.owner.definition))
+      (read.optional && !given?.has(read.key))
     ) continue
     out[read.name] = read.report(
       story.model,
@@ -519,10 +523,10 @@ const delivered = (
   send: Component.Send
 ): boolean => {
   if (send.owner === undefined) return true
-  const definition = send.owner.definition
-  if (sharedGiven.get(story)?.has(definition)) return true
+  const key = sharedReads.keyOf(send.owner)
+  if (sharedGiven.get(story)?.has(key)) return true
   return !sharedReads.readsOf(story.component.definition).some((read) =>
-    read.optional && read.owner.definition === definition
+    read.optional && read.key === key
   )
 }
 
@@ -886,7 +890,10 @@ export const stableRootShared = (
   story: State<any, any, any, any>
 ): Component.SharedLookup => {
   const lookup = rootShared(sharedGiven.get(story))
-  const cached = new Map<Component.Headless.Any, unknown>()
+  const cached = new Map<
+    Component.Headless.Any | Component.SharedKey.Any,
+    unknown
+  >()
   return (owner, optional) => {
     if (optional === true) return lookup(owner, true)
     if (cached.has(owner)) return cached.get(owner)
@@ -2036,9 +2043,9 @@ const describeEvent = (
 ): string => show(story.component.events, event)
 
 const describeSend = (send: Component.Send): string =>
-  `${
-    show(send.owner.receives, send.message)
-  } to the owner ${send.owner.definition.name}`
+  `${show(send.owner.receives, send.message)} to the owner ${
+    sharedReads.keyOf(send.owner).name
+  }`
 
 /** Whether a Command's mode lets a message arrive while it runs: what such a mode is for. */
 const exempt = (entry: Pending<any>): boolean =>
@@ -2422,14 +2429,14 @@ export const acknowledgeEmitted = <Props, Model, Msg, Events>(
  */
 export const acknowledgeSent = <Props, Model, Msg, Events>(
   story: State<Props, Model, Msg, Events>,
-  owner: Component.Headless.Any,
+  owner: Component.Headless.Any | Component.SharedKey.Any,
   message: unknown,
   step: string
 ): State<Props, Model, Msg, Events> => {
   const oldest = story.sent[0]
   const receives: Schema.Codec<unknown, unknown> = owner.receives
   const matched = oldest !== undefined &&
-    oldest.owner.definition === owner.definition &&
+    sharedReads.keyOf(oldest.owner) === sharedReads.keyOf(owner) &&
     Schema.toEquivalence(receives)(oldest.message, message)
   if (!matched) {
     throw new Error(

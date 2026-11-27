@@ -1157,8 +1157,9 @@ Known limits:
   a tooltip provider that knows which tooltip is open, tooltips that read it
   and tell it when they're focused, and a scene of one tooltip with no
   provider mounted. Then an optional owner, the reports readers give it, a
-  reader's `onChange`, a component that reads and sends to its own kind, and
-  an owner that shares what it derives from the one above it.
+  reader's `onChange`, a component that reads and sends to its own kind, an
+  owner that shares what it derives from the one above it, and a shared key
+  that names an owner without importing it.
 - **[Custom elements](./ai-docs/src/10_ui/24_custom-elements.ts)**:
   Use web components from other libraries in an HTML view: bind each tag
   with its properties and events once, set them with typed methods, and fire

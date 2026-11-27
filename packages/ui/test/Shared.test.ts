@@ -279,11 +279,9 @@ describe("shared state in a Scene", () => {
       const scene = yield* Scene.make(Tip, { id: "a" })
       scene.click("a:closed")
       assert.deepStrictEqual(
-        scene.current.sent.map((
-          send
-        ) => [send.owner.definition.name, send.message]),
+        scene.current.sent.map((send) => [send.owner, send.message]),
         [
-          ["TipsProvider", { _tag: "Enter", id: "a" }]
+          [TipsProvider, { _tag: "Enter", id: "a" }]
         ]
       )
       scene.sent(TipsProvider, { _tag: "Enter", id: "a" })

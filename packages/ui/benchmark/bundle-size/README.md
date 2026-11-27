@@ -6,7 +6,7 @@ Bundle sizes of small @effect/ui clients, bundled with Vite against the packed @
 pnpm bundle-size [--app <name>]... [--development] [--json <file>] [--base <file>]
 ```
 
-Apps: `counter` (`counter.ts`), `features` (`features.ts`: a Layer, a slot, a failure fallback and the message log) and `routing` (`examples/routing`). Every app is measured unless `--app` picks some. Each bundle runs in happy-dom before it counts. Added gzip bytes are an app's total minus a separately bundled effect-only client.
+Apps: `counter` (`counter.ts`), `features` (`features.ts`: a Layer, a slot, a failure fallback and the message log), `menu` (`menu.ts`: one ui-kit `Menu` with a trigger, positioner, popup and item) and `routing` (`examples/routing`). Every app is measured unless `--app` picks some. Each bundle runs in happy-dom before it counts. Added gzip bytes are an app's total minus a separately bundled effect-only client.
 
 | Option          | Effect                                                                                          |
 | --------------- | ----------------------------------------------------------------------------------------------- |

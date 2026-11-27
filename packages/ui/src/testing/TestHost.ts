@@ -68,6 +68,7 @@ import * as controlled from "../internal/controlled.ts"
 import * as Executor from "../internal/executor.ts"
 import * as hostEvents from "../internal/hostEvents.ts"
 import * as runtime from "../internal/runtime.ts"
+import { keyOf } from "../internal/shared.ts"
 import * as MessageLog from "../MessageLog.ts"
 import * as Query from "../Query.ts"
 import * as Renderer from "../Renderer.ts"
@@ -1212,7 +1213,7 @@ const formatEntry = (entry: MessageLog.Entry): string => {
         ? ""
         : ` sends ${
           entry.sends.map((send) =>
-            `${send.owner.definition.name} ${summary(send.message)}`
+            `${keyOf(send.owner).name} ${summary(send.message)}`
           ).join(", ")
         }`
       return `${head} ${

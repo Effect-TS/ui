@@ -122,9 +122,11 @@ import type * as Component from "@effect/ui/Component"
 import * as Html from "@effect/ui/html/Html"
 import * as UiSchema from "@effect/ui/UiSchema"
 import * as Schema from "effect/Schema"
-import { CheckboxGroup } from "./CheckboxGroup.ts"
 import { type Attributed, defaults, flag } from "./internal/attributes.ts"
-import { CheckboxGroupMessage } from "./internal/checkboxGroup.ts"
+import {
+  CheckboxGroupKey,
+  CheckboxGroupMessage
+} from "./internal/checkboxGroup.ts"
 import { field } from "./internal/field.ts"
 
 /**
@@ -219,7 +221,7 @@ const CheckboxMessage = UiSchema.TaggedEnum({
   PressedEnter: {}
 })
 
-type GroupShared = Component.Shared.Value<typeof CheckboxGroup>
+type GroupShared = Component.Shared.Value<typeof CheckboxGroupKey>
 
 const isMember = (
   props: CheckboxProps
@@ -346,7 +348,7 @@ export const Checkbox = Html.component({
   events: CheckboxEvents,
   reads: {
     group: {
-      owner: CheckboxGroup,
+      owner: CheckboxGroupKey,
       optional: true,
       report: (_model, props, id) =>
         isMember(props)
@@ -370,12 +372,12 @@ export const Checkbox = Html.component({
       switch (resolved.role) {
         case "member":
           return toggled.send(
-            CheckboxGroup,
+            CheckboxGroupKey,
             CheckboxGroupMessage.ToggledItem({ value: resolved.value })
           )
         case "parent":
           return toggled.send(
-            CheckboxGroup,
+            CheckboxGroupKey,
             CheckboxGroupMessage.ToggledParent()
           )
         default:

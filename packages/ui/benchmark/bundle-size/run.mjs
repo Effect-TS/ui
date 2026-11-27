@@ -99,6 +99,45 @@ async function checkFeatures(chunks) {
   })
 }
 
+async function checkMenu(chunks) {
+  await inWindow(async (window, document) => {
+    // happy-dom has no popover API, which the menu's positioner uses.
+    const open = new Set()
+    const element = window.HTMLElement.prototype
+    element.showPopover = function() {
+      open.add(this)
+      this.dispatchEvent(
+        Object.assign(new window.Event("beforetoggle"), { newState: "open" })
+      )
+    }
+    element.hidePopover = function() {
+      open.delete(this)
+    }
+    const matches = window.Element.prototype.matches
+    window.Element.prototype.matches = function(selector) {
+      return selector === ":popover-open"
+        ? open.has(this)
+        : matches.call(this, selector)
+    }
+    document.body.innerHTML = "<div id=\"app\"></div>"
+    await evaluate(window, chunks)
+    const trigger = document.querySelector("#app button")
+    assert.ok(trigger, "the menu did not mount")
+    assert.equal(trigger.getAttribute("aria-expanded"), "false")
+    trigger.click()
+    await window.happyDOM.waitUntilComplete()
+    assert.equal(
+      trigger.getAttribute("aria-expanded"),
+      "true",
+      "the menu did not open"
+    )
+    assert.ok(
+      document.querySelector("#app [role=menuitem]"),
+      "the menu did not draw its item"
+    )
+  })
+}
+
 async function checkRouting(chunks, entry) {
   const directory = fs.mkdtempSync(
     path.join(tmpdir(), "ui-bundle-size-routing-")
@@ -220,6 +259,16 @@ const apps = [
         benchmark("features.ts"),
         input
       )
+      return { root, input }
+    }
+  },
+  {
+    name: "menu",
+    variant: "",
+    check: checkMenu,
+    prepare: (root) => {
+      const input = path.join(root, "menu.ts")
+      fs.copyFileSync(benchmark("menu.ts"), input)
       return { root, input }
     }
   },

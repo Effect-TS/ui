@@ -147,7 +147,10 @@ describe("$.send to an owner", () => {
       })
       const root = yield* TestHost.mount(Host, {})
       yield* TestHost.settle
-      Locator.fire(root.get(Locator.text("out:alone", { exact: true })), "click")
+      Locator.fire(
+        root.get(Locator.text("out:alone", { exact: true })),
+        "click"
+      )
       Locator.fire(root.get(Locator.text("in:", { exact: true })), "click")
       yield* TestHost.settle
       assert.strictEqual(root.text(), "out:alonein:a")
