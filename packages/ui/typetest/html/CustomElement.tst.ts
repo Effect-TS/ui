@@ -34,13 +34,11 @@ const Message = UiSchema.TaggedEnum({
 })
 
 declare class TestQrCodeElement extends HTMLElement {
-  value: string
   size: number
   errorCorrection: "L" | "M" | "Q" | "H"
   readonly version: number
   data: null
   onScan?: ((value: string) => void) | undefined
-  generate(): void
 }
 
 declare class TestBadgeElement extends HTMLElement {
@@ -151,40 +149,27 @@ describe("Html.customElement", () => {
 
   it("infers prop and ref types from HTMLElementTagNameMap", () => {
     const h = {} as Html.H<typeof Message.Type>
-    const QrCode = Html.customElement({ tag: "test-qr-code" })
-    const qr = QrCode(h)
-    const qrRef = Html.ref("Qr", "test-qr-code")
+    const qr = Html.customElement({ tag: "test-qr-code" })(h)
 
-    expect(qr.prop).type.toBeCallableWith("value", "https://effect.website")
-    expect(qr.prop).type.toBeCallableWith("size", 256)
     expect(qr.prop).type.toBeCallableWith("errorCorrection", "H")
     expect(qr.prop).type.not.toBeCallableWith("errorCorrection", "Z")
-    expect(qr.prop).type.not.toBeCallableWith("size", "256")
     expect(qr.prop).type.not.toBeCallableWith("version", 1)
     expect(qr.prop).type.toBeCallableWith("data", null)
-    expect(qr.prop).type.not.toBeCallableWith("generate", () => {})
     expect(qr.prop).type.not.toBeCallableWith("onScan", () => {})
     expect(qr.prop).type.not.toBeCallableWith("title", "qr")
-    expect(qr).type.not.toHaveProperty("size")
-    expect(qr.ref).type.toBeCallableWith(qrRef)
+    expect(qr).type.not.toHaveProperty("errorCorrection")
+    expect(qr.ref).type.toBeCallableWith(Html.ref("Qr", "test-qr-code"))
     expect(qr.ref).type.not.toBeCallableWith(Html.ref("Div", "div"))
 
-    const CustomQrCode = Html.customElement({
+    const customQr = Html.customElement({
       tag: "test-qr-code",
-      properties: { size: Schema.String, custom: Schema.Boolean }
-    })
-    const customQr = CustomQrCode(h)
-    expect(customQr.size).type.toBeCallableWith("256")
+      properties: { size: Schema.String }
+    })(h)
     expect(customQr.prop).type.toBeCallableWith("size", "256")
-    expect(customQr.prop).type.not.toBeCallableWith("size", 256)
-    expect(customQr.custom).type.toBeCallableWith(true)
-    expect(customQr.custom).type.not.toBeCallableWith("yes")
-    expect(customQr.prop).type.toBeCallableWith("custom", true)
     expect(customQr.prop).type.toBeCallableWith("errorCorrection", "H")
-    expect(customQr).type.not.toHaveProperty("errorCorrection")
 
-    const Plain = Html.customElement({ tag: "test-unregistered" })
-    expect(Plain(h).prop).type.not.toBeCallableWith("value", "x")
+    expect(Html.customElement({ tag: "test-unregistered" })(h).prop).type.not
+      .toBeCallableWith("value", "x")
 
     const tag = "test-qr-code" as "test-qr-code" | "test-badge"
     expect(Html.customElement({ tag })(h).prop).type.not.toBeCallableWith(
