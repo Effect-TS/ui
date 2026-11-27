@@ -1,14 +1,12 @@
 import type { ViewHost, ViewKind } from "../Native.ts"
 import type { NativeNode } from "../NativeHost.ts"
 
-// Android has its own views for horizontal scrolling.
 const horizontal = (n: NativeNode, host: ViewHost): boolean =>
   host.os === "android" && n.props.horizontal === true
 
 const scroll: ViewKind = {
   viewName: (n, host) =>
     horizontal(n, host) ? "AndroidHorizontalScrollView" : "RCTScrollView",
-  // React Native's ScrollView styles its view as scrolling.
   defaults: { overflow: "scroll" },
   content: {
     viewName: (n, host) =>
@@ -50,15 +48,11 @@ const input: ViewKind = {
     host.os === "ios" ? "RCTSinglelineTextInputView" : "AndroidTextInput",
   props: {
     value(n, value, host) {
-      // `text` follows native's edits, so this only sends a value that
-      // differs from what the field shows. Native drops text sent for an
-      // older edit than its own, so it carries the latest edit's count.
+      // Skip if native already shows `value`; include `eventCount` so native accepts it.
       if (n.props.text === value) return
       host.set(n, "mostRecentEventCount", n.eventCount)
       host.set(n, "text", value)
-      // Resetting to the tree's existing text produces no Fabric diff,
-      // even if the user edited the field. Send a command too, as
-      // TextInput does.
+      // Fabric emits no diff when resetting to the last committed text, so send a command too.
       host.command(n, "setTextAndSelection", [n.eventCount, value, -1, -1])
     }
   },
@@ -78,9 +72,8 @@ const input: ViewKind = {
 }
 
 /**
- * The view kinds by tag: the vocabulary's, held here so the host has them
- * whatever the bundler keeps of `Native`, and those `Native.defineView`
- * adds.
+ * Seeded with core vocabulary kinds here so `NativeHost` keeps them even when
+ * `Native.tags` is tree-shaken.
  *
  * @internal
  */

@@ -113,7 +113,6 @@ describe("Fast Refresh", () => {
       define("Before")
       runtime.performReactRefresh()
       assert.deepStrictEqual(reloads, [])
-      // Nodes keep the definition they were made with.
       define("After")
       runtime.performReactRefresh()
       assert.strictEqual(refreshed(), 0)

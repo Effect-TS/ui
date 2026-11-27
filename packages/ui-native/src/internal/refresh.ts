@@ -25,9 +25,8 @@ export const make = (options: {
   const families = new Map<string, Family>()
   const familyOf = new WeakMap<object, Family>()
   const changed = new Map<string, Family>()
-  // A mounted node keeps the view definition it was made with, so a view
-  // defined again needs a reload. Watched here to keep production lookups out
-  // of the host.
+  // Mounted nodes keep their initial ViewKind; reload on redefinition without
+  // adding production lookups to NativeHost.
   let redefined = false
   const define = kinds.set
   kinds.set = (tag, kind) => {

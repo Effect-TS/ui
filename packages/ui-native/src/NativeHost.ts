@@ -118,7 +118,6 @@ export class NativeNode {
   // surfaces' own tags.
   tag = lastTag += 2
   readonly kind: Native.ViewKind
-  /** The surface's host, which the kind's functions get. */
   readonly host: Native.ViewHost
   /** Props of the shadow node, in Fabric's flat form. */
   readonly props: Record<string, unknown>
@@ -134,7 +133,7 @@ export class NativeNode {
 }
 
 const rawText: Native.ViewKind = { viewName: "RCTRawText" }
-// A surface's root, and a container holding nodes off screen.
+// Distinct references so restore can tell mounted roots from kept containers.
 const surface: Native.ViewKind = { viewName: "" }
 const container: Native.ViewKind = { viewName: "" }
 
@@ -369,7 +368,6 @@ const fire = (n: NativeNode, name: string, payload: unknown) => {
   if (handler !== undefined) n.events!.dispatch(name, handler, payload)
 }
 
-// The prop that asks native for an event, `layout` -> `onLayout`.
 const propOf = (name: string): string =>
   "on" + name[0]!.toUpperCase() + name.slice(1)
 
@@ -425,13 +423,12 @@ const listen = (ui: UIManager) => {
       }
     }
     const hook = handle.kind.events?.[type]
-    // Fabric names events `topLayout`, for the `layout` handler.
+    // Strip Fabric's "top" prefix: topLayout -> layout.
     if (hook === undefined) {
       return fire(handle, type[3]!.toLowerCase() + type.slice(4), payload)
     }
     hook(handle, payload, handle.host)
-    // Once the event's update has rendered, a value native edited that the
-    // Model didn't take is put back, if the field is still shown.
+    // After the microtask render, restore rejected controlled edits if still mounted.
     if (handle.value !== undefined) {
       setTimeout(() => {
         let n = handle

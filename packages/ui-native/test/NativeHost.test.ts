@@ -36,7 +36,6 @@ const Counter = Native.component({
       h.view.style({ padding: 8 }).on("press", Message.Pressed()).children(
         h.text.children("Count ", String(model.count))
       ),
-      // Rejects a name over four letters.
       h.input.value(model.name).placeholder("Name").on(
         "input",
         ({ value }) => value.length > 4 ? undefined : Message.Typed({ value })

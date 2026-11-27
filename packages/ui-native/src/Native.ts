@@ -253,8 +253,7 @@ export interface ValuePayload {
 }
 
 /**
- * An element's position in its parent and its size, in points, after
- * layout.
+ * An element's position and size in its parent, in points.
  *
  * @stability experimental
  * @category events
@@ -354,7 +353,7 @@ declare module "@effect/ui/Command" {
 }
 
 /**
- * What a {@link ViewKind}'s hooks can do to a node.
+ * Operations available to a {@link ViewKind}'s hooks.
  *
  * @stability experimental
  * @category models
@@ -363,61 +362,54 @@ declare module "@effect/ui/Command" {
 export interface ViewHost {
   /** `Platform.OS` of the running app. */
   readonly os: string
-  /**
-   * Sets a Fabric prop, sent at the next commit. A prop whose name ends in
-   * `Color` is processed as a colour.
-   */
+  /** Sets a Fabric prop for the next commit, processing `*Color` values. */
   readonly set: (node: NativeNode, name: string, value: unknown) => void
-  /** Turns a colour into the value Fabric parses, for colours nested in a prop. */
+  /** Converts a colour for Fabric, for colours nested inside a prop. */
   readonly color: (value: unknown) => unknown
-  /** Runs a native command. Does nothing before the node's first commit. */
+  /** Dispatches a native command; no-op before the node's first commit. */
   readonly command: (
     node: NativeNode,
     name: string,
     args?: ReadonlyArray<unknown> | undefined
   ) => void
-  /** Runs the node's own handler for `event`, if it has one. */
+  /** Dispatches `event` to the node's own handler, if bound. */
   readonly fire: (node: NativeNode, event: string, payload: unknown) => void
 }
 
 /**
- * How the host renders an element: the native view it creates and what the
- * host does with its props and events.
+ * How the host renders an element: its Fabric view name, defaults, prop
+ * setters, and native event hooks.
  *
  * **Details**
  *
- * A prop without a setter in `props` is sent to Fabric as it is. A native
- * event without a hook in `events`, such as `topLayout`, runs the
- * element's own `layout` handler with the native payload, and doesn't reach
- * its ancestors. Binding the handler sets `onLayout: true`, which native
- * checks before it sends the event.
+ * Props without a setter go straight to Fabric. Native events without a hook
+ * (such as `topLayout`) dispatch directly to the matching handler (`layout`)
+ * without bubbling, and binding that handler sets `onLayout: true` on Fabric.
  *
- * A `value` prop is controlled. When native edits it, as a text field does,
- * the kind's `events` hook records what native shows, so the `value` setter
- * can skip a value native already shows. If the Model doesn't take the
- * edit, the host calls the setter with the last value again once the event
- * has run, and the setter sends it back.
+ * `value` is controlled: an `events` hook records what native currently shows
+ * so the `value` setter can skip no-ops, and if the Model rejects the edit the
+ * host calls the setter again with the last value after the event finishes.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
 export interface ViewKind {
-  /** Fabric's component name, or a function of the node, such as the platform's name. */
+  /** Fabric component name, or a function of the node and host. */
   readonly viewName: string | ((node: NativeNode, host: ViewHost) => string)
-  /** Props every node starts with. */
+  /** Initial Fabric props for every created node. */
   readonly defaults?: Readonly<Record<string, unknown>> | undefined
-  /** Raw text may sit inside. Text inside it is virtual text. */
+  /** Whether raw text may sit directly inside this view (nesting uses virtual text). */
   readonly text?: boolean | undefined
-  /** An inner view that holds the children, as a scroll view's content view. */
+  /** Inner content container created automatically for children, as in `scroll`. */
   readonly content?: Pick<ViewKind, "viewName" | "defaults"> | undefined
-  /** Setters by prop name, for a prop that needs more than sending it. */
+  /** Custom prop setters by prop name. */
   readonly props?:
     | Readonly<
       Record<string, (node: NativeNode, value: unknown, host: ViewHost) => void>
     >
     | undefined
-  /** Hooks by native event name, such as `topChange`, for an event that needs more than its payload. */
+  /** Custom hooks by native event name (e.g. `topChange`). */
   readonly events?:
     | Readonly<
       Record<string, (node: NativeNode, payload: any, host: ViewHost) => void>
@@ -426,11 +418,10 @@ export interface ViewKind {
 }
 
 /**
- * Makes the tag of the builder `make` returns render as `kind`, and returns
- * that builder. A bundler drops the whole definition, builder included,
- * from an app that never renders the builder, so keep the call to the
- * builder's constructor inside `make`. A later definition of the same tag
- * replaces it, as Fast Refresh needs.
+ * Registers `kind` for the builder returned by `make` and returns that
+ * builder. Construct the builder inside `make` so bundlers tree-shake the
+ * entire definition, builder included, when unused. Re-defining a tag replaces
+ * it (reloading under Fast Refresh).
  *
  * **Example** (An activity indicator)
  *

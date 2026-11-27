@@ -2,4 +2,4 @@
 "@effect/ui-native": minor
 ---
 
-Add `Native.defineView` so modules can define their own native views, deliver any native event to the handler of the same name, and add the `@effect/ui-native/kit` entry point. An input now puts back an edit the Model rejects.
+Add `Native.defineView` for custom native views, generic native event delivery, `Native.Host.command`, and the `@effect/ui-native/kit` entry point. Controlled inputs now restore their value when the Model rejects an edit.
