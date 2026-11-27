@@ -7,10 +7,9 @@
  * emitters native sends device events through, `performance`, and in
  * development the Fast Refresh client.
  *
- * Networking globals (`fetch`, `XMLHttpRequest`, `WebSocket`, `URL`,
- * `AbortController`) are not installed by {@link register}. Import
- * `@effect/ui-native/networking` from the entry module if your app makes
- * network requests (such as `fetch` or `FetchHttpClient`).
+ * Networking globals such as `fetch` are not installed by {@link register}.
+ * Import `@effect/ui-native/networking` from the entry module if your app
+ * makes network requests.
  *
  * @example
  * ```ts

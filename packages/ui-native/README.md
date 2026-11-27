@@ -56,16 +56,7 @@ On Android, Back closes the app when nothing handles it. An app that adds handle
 
 React Native doesn't load the `expo` package itself: an app that doesn't import it saves about 1 MB of Hermes bytecode.
 
-Networking globals (`fetch`, `XMLHttpRequest`, `WebSocket`, `URL`, `AbortController`) are opt-in so apps that don't make requests don't bundle React Native's XHR stack. If your app uses `fetch` or `FetchHttpClient`, import `@effect/ui-native/networking` in the entry module:
-
-```ts
-// src/main.ts
-import "@effect/ui-native/networking"
-import * as NativeApp from "@effect/ui-native/NativeApp"
-import { App } from "./App.ts"
-
-NativeApp.register(NativeApp.mount(App, {}))
-```
+Networking globals are opt-in, so apps that don't make requests don't bundle React Native's XHR stack. If your app uses `fetch` or `FetchHttpClient`, add `import "@effect/ui-native/networking"` to the entry module.
 
 ## Styles and props
 

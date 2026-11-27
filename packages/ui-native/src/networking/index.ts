@@ -21,6 +21,8 @@
  * @stability experimental
  * @since 0.1.0
  */
+// Not a bare import: that is emitted into the declarations, where an app
+// can't resolve it.
 import * as setUpXHR from "react-native/Libraries/Core/setUpXHR"
 
 void setUpXHR
