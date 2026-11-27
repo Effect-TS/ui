@@ -14,24 +14,12 @@ export const attribute = (form: Element, name: string): string | null =>
   (Object.getPrototypeOf(form) as Element).getAttribute.call(form, name)
 
 /**
- * How a submission is made: `"dialog"` for the `dialog` method, which the
- * host cancels, `"get"` for a same-window GET the Router can follow, and
- * `"native"` for POST or GET targeting another window. An invalid method
- * counts as `get`, as in the browser.
+ * The submission's method in lowercase: the submitter's `formmethod`, else the
+ * form's `method`. Anything but `post` and `dialog` is a GET, as in the
+ * browser.
  *
  * @internal
  */
-export const kindOf = (
-  form: Element,
-  submitter: Element | null
-): "dialog" | "get" | "native" => {
-  const method = (submitter?.getAttribute("formmethod") ??
-    attribute(form, "method") ?? "").toLowerCase()
-  if (method === "dialog") return method
-  if (method === "post") return "native"
-  const target = submitter?.getAttribute("formtarget") ??
-    attribute(form, "target")
-  return target === null || target === "" || target.toLowerCase() === "_self"
-    ? "get"
-    : "native"
-}
+export const methodOf = (form: Element, submitter: Element | null): string =>
+  (submitter?.getAttribute("formmethod") ?? attribute(form, "method") ?? "")
+    .toLowerCase()

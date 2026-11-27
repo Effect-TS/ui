@@ -626,7 +626,7 @@ export const makeHost = (
     if (
       name === "submit" && event.target !== null && forms.has(event.target) &&
       (handled ||
-        submit.kindOf(
+        submit.methodOf(
             event.target as globalThis.Element,
             (event as SubmitEvent).submitter ?? null
           ) === "dialog")
