@@ -2376,6 +2376,31 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(submitted(upper.querySelector("form")!)).toBe(true)
       }).pipe(Effect.scoped))
 
+    it.effect("an unhandled GET form without a router is not prevented", () =>
+      Effect.gen(function*() {
+        const Settings = Html.component({
+          name: "Settings",
+          model: Schema.Null,
+          message: Schema.Never
+        }).make({
+          init: () => null,
+          update: ($) => $.model,
+          view: (h) =>
+            h.form.attrs({ method: "get", action: "/settings" }).children(
+              h.input.attrs({ type: "hidden", name: "tools", value: "1" }),
+              h.button.attr("type", "submit").children("Save")
+            )
+        })
+        const app = yield* container
+        yield* BrowserHost.mountEffect(Settings, {}, app)
+        const event = new SubmitEvent("submit", {
+          bubbles: true,
+          cancelable: true
+        })
+        app.querySelector("form")!.dispatchEvent(event)
+        expect(event.defaultPrevented).toBe(false)
+      }).pipe(Effect.scoped))
+
     it.effect("preventDefault cancels the default only when the handler sends, before the message is sent", () =>
       Effect.gen(function*() {
         let event: Event | undefined
