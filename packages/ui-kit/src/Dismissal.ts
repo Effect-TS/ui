@@ -1,42 +1,33 @@
 /**
- * Lets a widget of the consumer's own, such as an inline editor or a
- * floating toolbar, join the stack of layers the kit's dialogs keep, so
- * Escape, a press outside, focus leaving it and Android's back gesture reach
- * only the topmost layer.
+ * Lets custom widgets share Dialog's dismissal stack. `TrackDismissal`
+ * reports close requests; the consumer decides whether to close the widget.
+ * Ignoring a request does not pass it to the layer below. Focus trapping and
+ * focus return remain separate responsibilities.
  *
- * A layer doesn't close by itself. `TrackDismissal` reports a `Request` with
- * the reason, and the consumer decides, as with a dialog's `RequestedClose`.
- * A refused request is still taken, so the layer below doesn't hear it.
- * Focus trapping and returning focus are not part of it.
+ * **Layer ordering**
  *
- * **Layers**
+ * Mount `TrackDismissal` on the widget's element while it is visible. A
+ * nested layer takes precedence over its ancestor; otherwise, the later
+ * mount takes precedence. `Dialog`, `AlertDialog`, `Popover` and `Drawer`
+ * share this stack. They claim every reason, even when configured to ignore
+ * it, such as an outside press with `disablePointerDismissal`.
+ * A modal dialog still traps Tab while a custom layer inside it is open.
  *
- * Issue `TrackDismissal` on the widget's element while it shows: the
- * mount's lifetime is the layer's. A layer drawn inside another one's
- * element, such as an editor in a `Dialog`'s popup, is above it. Otherwise
- * the one mounted later is. `Dialog`, `AlertDialog`, `Popover` and
- * `Drawer` are layers too, and take every reason, also one they ignore,
- * such as a press outside with `disablePointerDismissal`. A modal dialog
- * keeps Tab inside it while a layer in it is open.
+ * Each event selects the topmost layer that accepts its reason. Closing
+ * that layer during the event does not pass the event to another layer.
  *
- * Each event goes to the topmost layer that takes its reason, decided as the
- * event starts, so a layer that closes on it doesn't hand it on to the layer
- * below.
+ * **Dismissal reasons**
  *
- * **Reasons**
- *
- * - `escape-key`: Escape, wherever focus is, unless something already
- *   cancelled it with `preventDefault` or an input method is composing. The
- *   layer cancels it.
- * - `outside-press`: a press with the main button outside the element. A
- *   mouse or a pen counts as it presses, a finger on the tap's click, so a
- *   scroll doesn't count. Neither does a press on a scrollbar or a toast.
- * - `focus-out`: focus moving to an element outside, unless the kit moved
- *   it, such as a dialog opening, or a press outside that a layer took did,
- *   until the press's click. Neither a `Dialog` nor a layer below hears that
- *   focus move either.
- * - `close-watcher`: Android's back gesture, in a browser with
- *   `CloseWatcher` such as Chrome.
+ * - `escape-key`: Escape, unless already prevented or an input method is
+ *   composing. The selected layer prevents the key's default behavior.
+ * - `outside-press`: a primary-button press outside the element. Mouse and
+ *   pen presses request dismissal on pointerdown; touch waits for a click
+ *   so scrolling does not dismiss. Scrollbars and toasts do not count.
+ * - `focus-out`: focus moving outside the element. Focus moved by the kit
+ *   or by a claimed outside press, through its click, does not request
+ *   dismissal from any layer.
+ * - `close-watcher`: Android's back gesture in browsers that support
+ *   `CloseWatcher`.
  *
  * **Example** (An inline editor that keeps unsaved changes)
  *
@@ -98,9 +89,7 @@ import {
 import { inKept } from "./internal/topLayer.ts"
 
 /**
- * Why a layer is asked to close: Escape, a press outside, focus leaving it,
- * or a close request from the browser, such as Android's back gesture. The
- * same names as a dialog's `DialogDismissReason`.
+ * Dismissal reasons shared with Dialog's `DialogDismissReason`.
  *
  * @stability experimental
  * @category schemas
@@ -145,15 +134,15 @@ export const Request = Schema.Struct({
 export type Request = typeof Request.Type
 
 /**
- * The args of `TrackDismissal`.
+ * Options for `TrackDismissal`.
  *
  * **Details**
  *
  * - `insideSelector`: elements outside the layer's element that count as
  *   inside it, such as its anchor, its trigger or a part drawn elsewhere:
  *   `[id="${anchorId}"]`.
- * - `reasons`: the reasons the layer takes, all four when left out. A
- *   reason left out isn't listened for, and reaches the layer below.
+ * - `reasons`: accepted reasons, defaulting to all four. Omitted reasons
+ *   remain available to lower layers.
  *
  * @stability experimental
  * @category schemas
@@ -174,15 +163,13 @@ export const TrackDismissalArgs = Schema.Struct({
 export type TrackDismissalArgs = typeof TrackDismissalArgs.Type
 
 /**
- * The body of `TrackDismissal`: the Stream of a layer's `Request`s, which
- * keeps the layer in the stack as it runs.
+ * Returns a stream of close requests for `node`. Running the stream registers
+ * the layer; stopping it removes the layer.
  *
  * **Details**
  *
- * An element takes one mount. To do more on the layer's element, such as
- * place it with `Positioning.trackPosition`, pass `Mount.makeStream` a body
- * that merges this Stream with its own. The arguments are the ones a body
- * gets: the node, the args and the Stream of later args.
+ * An element accepts one mount. To combine dismissal with positioning, use
+ * `Mount.makeStream` and merge this stream with `Positioning.trackPosition`.
  *
  * @stability experimental
  * @category mounts
@@ -208,7 +195,7 @@ export const trackDismissal = (
     }
     const top = (reason: Reason, event: Event) =>
       topFor(stack, reason, event) === layer
-    // The composed path, as a document listener sees a shadow root's host.
+    // Shadow DOM retargets event.target to the host; the path includes inner nodes.
     const away = (event: Event): boolean => {
       const path = event.composedPath()
       if (event.target === null || path.includes(node)) return false
@@ -231,7 +218,7 @@ export const trackDismissal = (
         event.button !== 0 || !event.isPrimary ||
         !top("outside-press", event) || !away(event)
       ) return
-      // A finger asks on the tap's click, so a scroll doesn't.
+      // Wait for a touch click so scrolling does not dismiss the layer.
       if (pointerType === "touch") {
         claimPress(stack, event, (click) => {
           if (top("outside-press", click) && away(click)) {
@@ -282,14 +269,14 @@ export const trackDismissal = (
   })
 
 /**
- * A stream mount that keeps its element in the stack of layers while it
- * runs, and reports each `Request` to close it. Issue it on the element
- * while the widget shows, and map each `Request` to a message.
+ * Registers its element in the dismissal stack for the mount's lifetime.
+ * Map each emitted `Request` to a message so your update handler can decide
+ * whether to close the widget.
  *
  * **Details**
  *
- * The module's JSDoc says which layer hears what. The args can change while
- * it runs, and a reason added or left out applies from the next event.
+ * Argument updates apply from the next event. See the module documentation
+ * for layer ordering and dismissal reasons.
  *
  * A `Scene` has no document, so send a `Request` there with
  * `mounted(Dismissal.TrackDismissal, request)`.

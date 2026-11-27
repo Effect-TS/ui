@@ -18,7 +18,6 @@ export interface Layer {
   readonly node: HTMLElement
   readonly open: () => boolean
   readonly takes: (claim: Claim) => boolean
-  // Android's back gesture asked to close it.
   readonly cancelled: () => void
 }
 
@@ -36,9 +35,8 @@ export const stackOf = perDocument((document): Stack => ({
   pressed: undefined
 }))
 
-// A press outside that a layer took, kept until its gesture ends, also when
-// the layer closes on it, so the focus it moves, from a click handler too,
-// doesn't count as focus leaving any layer. A cancelled press ends it.
+// Suppress focus-out requests through the outside press's click, even if
+// the dismissed layer has unmounted. Click handlers can also move focus.
 export const claimPress = (
   stack: Stack,
   press: PointerEvent,
@@ -73,8 +71,6 @@ export const handOff = (
   }
 }
 
-// A layer inside another one's node is above it, otherwise the later one is.
-// Focus that the kit or a claimed press moves leaves no layer.
 const topOf = (stack: Stack, claim: Claim): Layer | undefined =>
   claim === "focus-out" && (handing > 0 || stack.pressed !== undefined)
     ? undefined
@@ -134,7 +130,6 @@ export const rewatch = (stack: Stack): void => {
     : undefined
 }
 
-// The layer is in the stack until the signal aborts.
 export const join = (stack: Stack, layer: Layer, signal: AbortSignal): void => {
   stack.layers.push(layer)
   rewatch(stack)

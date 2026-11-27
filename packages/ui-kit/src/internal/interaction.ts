@@ -67,9 +67,8 @@ export const onScrollbar = (
   return onY || (scrollsX && event.offsetY > target.clientHeight)
 }
 
-// Hears a press's clicks until its gesture ends: at the next press, as this
-// one is cancelled, or a while after it lifts, since nothing says that no
-// click follows.
+// Wait briefly after pointerup: the browser may dispatch a click later,
+// but sends no event to confirm that no click will follow.
 export const onPressClick = (
   document: Document,
   press: PointerEvent,
