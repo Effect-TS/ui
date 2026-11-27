@@ -94,6 +94,7 @@ import * as Effect from "effect/Effect"
 import type * as Fiber from "effect/Fiber"
 import * as Layer from "effect/Layer"
 import * as Option from "effect/Option"
+import * as base from "../internal/base.ts"
 import * as services from "../internal/services.ts"
 import { decodeComponent } from "../internal/url.ts"
 import type * as Route from "../Route.ts"
@@ -122,9 +123,10 @@ const replaceInterval = "200 millis"
 export interface Options {
   readonly routes: Route.AnyUnion
   /**
-   * The base path the routes are relative to. A string is used as it is. A
-   * function is given the first segment of the URL's path at startup and
-   * says whether it's the base, as with an i18n prefix like `/en`.
+   * The routes' base path, set when the Layer is built and restored when
+   * its Scope closes. Pass a string such as Vite's `import.meta.env.BASE_URL`,
+   * or a function that selects the first URL path segment as the base,
+   * as with an i18n prefix like `/en`.
    */
   readonly base?: string | ((segment: string) => boolean) | undefined
   /** Scroll to the top, a `#hash` or the saved position after a navigation. Defaults to `true`. */
@@ -215,14 +217,15 @@ const make = (
     const location = window.location
     const history = window.history
 
-    if (inFragment) routes.setBase("#")
-    else if (typeof options.base === "string") routes.setBase(options.base)
-    else if (options.base !== undefined) {
-      const segment = location.pathname.split("/")[1] ?? ""
-      routes.setBase(
-        segment !== "" && options.base(segment) ? `/${segment}` : ""
-      )
-    } else routes.setBase("")
+    const segment = location.pathname.split("/")[1] ?? ""
+    yield* base.scoped(
+      routes,
+      inFragment
+        ? "#"
+        : typeof options.base === "function"
+        ? segment !== "" && options.base(segment) ? `/${segment}` : ""
+        : options.base ?? ""
+    )
 
     /** `url.hash`, but `"#"` for a bare `#`, which `hash` reports as `""`. */
     const hashOf = (url: URL | Location) =>

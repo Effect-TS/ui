@@ -42,10 +42,22 @@
  * `<title>` and each `<html>` or `<body>` attribute a single owner, since
  * neither is merged.
  *
+ * For a non-root Vite `base`, pass `import.meta.env.BASE_URL` as `base`
+ * to `layerHttp` and `BrowserRouter.layer`. The server receives URLs with
+ * the base prefix. Prerender paths are app-relative: with `base: "/docs/"`,
+ * `"/about"` is requested as `"/docs/about"` but written to `about.html`.
+ * Prerender paths are read before the entry's Layer sets the routes' base.
+ *
+ * Relative bases keep routes at the root. Full-URL bases do too in builds,
+ * but in dev Vite sets `BASE_URL` to the URL's path, such as `"/static/"`,
+ * and routes use that path as their base.
+ *
  * **Gotchas**
  *
- * Only a root `base` is supported. Vite prefixes the asset URLs with
- * `base`, but the app's routes and the links it renders don't carry it.
+ * Every prerendered page is filled from the root `index.html`. With a
+ * relative `base` such as `"./"`, its `./assets/…` URLs only resolve from
+ * pages at the root, so `people/1.html` loses its assets. Use an absolute
+ * `base` for nested pages.
  *
  * `vite build --watch` isn't supported and fails before building. Use
  * `vite dev` to rebuild on changes.
@@ -65,7 +77,7 @@
  * // src/entry.server.ts:
  * //
  * // import { document } from "virtual:@effect/ui/document"
- * // export default layerHttp(App, { routes: AppRoute, document })
+ * // export default layerHttp(App, { routes: AppRoute, document, base: import.meta.env.BASE_URL })
  * // export const prerender = [AppRoute.print(AppRoute.Home())]
  * ```
  *
@@ -152,13 +164,14 @@ interface OutputFile {
 
 interface DevServer {
   readonly config: {
+    readonly base: string
     readonly root: string
     readonly logger: { error(message: string): void }
   }
   readonly middlewares: {
     use(
       handler: (
-        request: Http.IncomingMessage,
+        request: IncomingMessage,
         response: Http.ServerResponse,
         next: (error?: unknown) => void
       ) => void
@@ -166,9 +179,8 @@ interface DevServer {
   }
   readonly environments: {
     readonly client: object
-    readonly ssr: {
-      readonly runner?: { import(url: string): Promise<unknown> }
-    }
+    // Vite types it without `runner`, which only a runnable environment has.
+    readonly ssr: object
   }
   transformIndexHtml(url: string, html: string): Promise<string>
 }
@@ -179,6 +191,7 @@ interface OutputOption {
 
 interface Environment {
   readonly config: {
+    readonly env: { readonly [key: string]: unknown }
     readonly root: string
     readonly cacheDir: string
     readonly build: {
@@ -207,6 +220,14 @@ interface ServerModule {
   /** Marks hydration state as static and disables prerender request logs. */
   readonly prerenderContext: unknown
 }
+
+interface IncomingMessage extends Http.IncomingMessage {
+  readonly originalUrl?: string | undefined
+}
+
+/** The URL with Vite's `base`, which Vite strips from `url`. */
+const originalUrl = (request: IncomingMessage): string =>
+  request.originalUrl ?? request.url ?? "/"
 
 const documentId = "virtual:@effect/ui/document"
 const serverId = "virtual:@effect/ui/server"
@@ -347,10 +368,13 @@ export const plugin = (options: Options): Plugin => {
       }
 
       const load = async () => {
-        if (ssr.runner === undefined) {
+        const { runner } = ssr as {
+          readonly runner?: { import(url: string): Promise<unknown> }
+        }
+        if (runner === undefined) {
           throw new Error("HtmlServerVite needs a runnable ssr environment")
         }
-        const module = (await ssr.runner.import(serverId)) as ServerModule
+        const module = (await runner.import(serverId)) as ServerModule
         // A new module means an edit re-evaluated the entry. A module that
         // was already replaced never becomes current again.
         if (!seen.has(module)) {
@@ -363,7 +387,7 @@ export const plugin = (options: Options): Plugin => {
       }
 
       const serve = (
-        request: Http.IncomingMessage,
+        request: IncomingMessage,
         response: Http.ServerResponse,
         next: (error?: unknown) => void
       ): Promise<void> =>
@@ -404,9 +428,14 @@ export const plugin = (options: Options): Plugin => {
         await Promise.all(disposing)
       })
 
+      const { base } = server.config
       // Returned, so it runs after Vite's own middlewares.
       return () => {
         server.middlewares.use((request, response, next) => {
+          // In middleware mode, Vite passes on requests outside its base.
+          if (!`${originalUrl(request).split("?")[0]}/`.startsWith(base)) {
+            return next()
+          }
           if (closing) {
             response.statusCode = 503
             response.end()
@@ -423,7 +452,7 @@ export const plugin = (options: Options): Plugin => {
           "HtmlServerVite doesn't support `vite build --watch`. Use `vite dev` to rebuild on changes."
         )
       }
-      const { cacheDir } = ssr.config
+      const { cacheDir, env } = ssr.config
       const clientDirs = resolvedOutDirs(client)
       const outDir = clientDirs[0]!
       const serverDirs = options.serverOutDir === undefined
@@ -475,18 +504,26 @@ export const plugin = (options: Options): Plugin => {
         const module = (await import(
           pathToFileURL(path.join(dir, entry.fileName)).href
         )) as ServerModule
+        // Match Route's base normalization, including Home's trailing slash.
+        const { BASE_URL } = env
+        const base = typeof BASE_URL === "string" && /^\/(?!\/)/.test(BASE_URL)
+          ? BASE_URL
+          : "/"
+        const prefix = base.replace(/\/$/, "")
         try {
           // Settled, so no render outlives the handler when one fails.
           const results = await Promise.allSettled(
             (await module.prerender()).map(async (url) => {
               const target = new URL(url, origin)
+              const { pathname } = target
+              target.pathname = pathname === "/" ? base : prefix + pathname
               const response = await module.handler(
                 new Request(target),
                 module.prerenderContext
               )
               await write(
                 outDir,
-                fileName(target.pathname, response.status),
+                fileName(pathname, response.status),
                 await response.text()
               )
             })
@@ -574,7 +611,7 @@ const write = async (
 }
 
 const toRequest = (
-  request: Http.IncomingMessage,
+  request: IncomingMessage,
   signal: AbortSignal
 ): Request => {
   const headers = new Headers()
@@ -587,7 +624,7 @@ const toRequest = (
   const method = request.method ?? "GET"
   const protocol = "encrypted" in request.socket ? "https" : "http"
   return new Request(
-    new URL(request.url ?? "/", `${protocol}://${request.headers.host}`),
+    new URL(originalUrl(request), `${protocol}://${request.headers.host}`),
     {
       method,
       headers,
