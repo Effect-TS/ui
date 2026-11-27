@@ -36,11 +36,7 @@ cd android
 
 The APK is `android/app/build/outputs/apk/release/app-release.apk`. Add `-PreactNativeArchitectures=x86_64` (or `arm64-v8a`) to build for one ABI only.
 
-Gradle decides whether to bundle again from the `.ts` and `.js` files in this directory, outside `node_modules`. After changing a workspace package, delete the previous bundle so the next build makes a new one:
-
-```sh
-rm -rf android/app/build/generated/assets/react
-```
+Gradle bundles again only when the bundle task's inputs change, and React Native's inputs stop at this directory. `plugins/withWorkspaceSources.cjs`, listed in `app.json`, adds the sources of the workspace packages the app links (`packages/ui` and `packages/ui-native`), so editing one of them is enough for the next `assembleRelease` to ship it. Run `pnpm prebuild` again after linking another workspace package.
 
 ## Measuring the bundle
 
