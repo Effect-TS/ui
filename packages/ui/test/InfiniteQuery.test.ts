@@ -655,13 +655,10 @@ describe("Query lists", () => {
   })
 
   it.effect("reactivityKeys refetches held pages of matching lists without affecting other keys", () => {
-    const { ListMessages, db } = makeList({
+    const { ListMessages, db, provide } = makeList({
       staleTime: "1 minute",
       reactivityKeys: ({ room }) => [`room:${room}`]
     })
-    const layer = Layer.merge(ListMessages.layer, TestQuery.layer()).pipe(
-      Layer.provideMerge(Reactivity.layer)
-    )
     return Effect.gen(function*() {
       const a = yield* watch(ListMessages.changes({ room: "a" }))
       const b = yield* watch(ListMessages.changes({ room: "b" }))
@@ -683,7 +680,7 @@ describe("Query lists", () => {
         "invalidation@0",
         "invalidation@1"
       ])
-    }).pipe(Effect.provide(layer))
+    }).pipe(provide, Effect.provide(Reactivity.layer))
   })
 })
 

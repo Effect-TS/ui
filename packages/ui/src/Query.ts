@@ -5048,15 +5048,14 @@ const buildCache = (
     if (existing === undefined) {
       queries.set(def.name, def)
       if (
-        !disposed && !settleOnce && def.reactivityKeys !== undefined &&
-        reactivity === undefined
+        !settleOnce && reactivity === undefined &&
+        def.reactivityKeys !== undefined
       ) {
         report(
           new ReactivityMissing({
             query: def.name,
             message: "[Query] " + quote(def.name) +
-              " declares reactivityKeys, but no Reactivity service is in the" +
-              " cache's context."
+              " declares reactivityKeys, but no Reactivity service is in the cache's context."
           })
         )
       }
@@ -5098,10 +5097,6 @@ const buildCache = (
     const found = lookup(def, argsKey)
     if (found !== undefined) return found
     saved ??= savedOf(def, argsKey)
-    const keys = !disposed && reactivity !== undefined &&
-        def.reactivityKeys !== undefined
-      ? def.reactivityKeys(args)
-      : undefined
     const entry: Entry = {
       def,
       argsKey,
@@ -5137,23 +5132,27 @@ const buildCache = (
       hasMore: undefined,
       moreWaiters: new Set()
     }
+    // Before the index insert, so keys that throw leave no entry behind.
+    if (
+      !disposed && reactivity !== undefined && def.reactivityKeys !== undefined
+    ) {
+      entry.offReactivity = reactivity.registerUnsafe(
+        def.reactivityKeys(args),
+        () => {
+          if (!disposed) invalidateEntry(entry)
+        }
+      )
+    }
     let byKey = index.get(def.name)
     if (byKey === undefined) index.set(def.name, byKey = new Map())
     byKey.set(argsKey, entry)
     if (adopting && def.persist) unrestored.add(entry)
-    if (keys !== undefined) {
-      entry.offReactivity = reactivity!.registerUnsafe(keys, () => {
-        if (!disposed && !entry.removed) invalidateEntry(entry)
-      })
-    }
     return entry
   }
   const removeEntry = (entry: Entry): void => {
     if (entry.removed) return
     entry.removed = true
-    const off = entry.offReactivity
-    entry.offReactivity = undefined
-    off?.()
+    entry.offReactivity?.()
     dropFetch(entry)
     cancelIdle(entry)
     stopInterval(entry)
@@ -7000,9 +6999,7 @@ const buildCache = (
     for (const build of attached) build.listeners.delete(buildClosed)
     attached.clear()
     for (const entry of allEntries()) {
-      const off = entry.offReactivity
-      entry.offReactivity = undefined
-      off?.()
+      entry.offReactivity?.()
       dropFetch(entry)
       resumeAll(entry.waiters, Exit.interrupt())
       resumeAll(entry.moreWaiters, Exit.interrupt())

@@ -1952,13 +1952,10 @@ describe("Query", () => {
   })
 
   it.effect("reactivityKeys invalidates matching entries before staleTime without affecting other keys", () => {
-    const { GetUser, db } = makeUsers({
+    const { GetUser, db, provide } = makeUsers({
       staleTime: "1 minute",
       reactivityKeys: ({ id }) => [`users:${id}`]
     })
-    const layer = Layer.merge(GetUser.layer, TestQuery.layer()).pipe(
-      Layer.provideMerge(Reactivity.layer)
-    )
     return Effect.gen(function*() {
       const watched = yield* watch(GetUser.changes({ id: "1" }))
       const other = yield* watch(GetUser.changes({ id: "3" }))
@@ -1992,7 +1989,7 @@ describe("Query", () => {
         "invalidation",
         "get"
       ])
-    }).pipe(Effect.provide(layer))
+    }).pipe(provide, Effect.provide(Reactivity.layer))
   })
 
   it.effect("reactivityKeys unregisters when an entry is collected or the cache is disposed", () => {
@@ -2003,11 +2000,8 @@ describe("Query", () => {
         ...base,
         registerUnsafe: (keys, handler) => {
           registrations++
-          let active = true
           const unregister = base.registerUnsafe(keys, handler)
           return () => {
-            if (!active) return
-            active = false
             registrations--
             unregister()
           }
