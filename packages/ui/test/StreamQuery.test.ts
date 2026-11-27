@@ -189,6 +189,17 @@ describe("Stream queries", () => {
       assert.isTrue(streams[0].closed)
       streams.shift()
 
+      // A repeated prefetch renews the deadline of a stream still opening.
+      yield* GetNote.prefetch({ id: "silent" })
+      yield* advance("9 seconds")
+      yield* GetNote.prefetch({ id: "silent" })
+      yield* advance("9 seconds")
+      assert.strictEqual(streams.length, 1)
+      assert.isFalse(streams[0].closed)
+      yield* advance("1 second")
+      assert.isTrue(streams[0].closed)
+      streams.shift()
+
       const a = yield* watch(GetNote.changes({ id: "1" }))
       streams[0].emit("v1")
       yield* flush

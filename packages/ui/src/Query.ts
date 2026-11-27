@@ -1199,8 +1199,8 @@ export interface StreamService<
    */
   invalidate(args?: Args): Effect.Effect<void, never, Cache>
   /**
-   * Watches an entry: opens its stream unless it's open, then emits every
-   * element, as `changes` does for any query.
+   * Watches an entry: opens its stream unless it's open, then emits its
+   * changes, as `changes` does for any query.
    */
   changes(
     args: Args
@@ -6039,7 +6039,11 @@ const buildCache = (
     ) {
       return resetIdle(entry)
     }
-    if (entry.fetch !== undefined) entry.kept = true
+    if (entry.fetch !== undefined) {
+      entry.kept = true
+      // An opening stream's idle deadline counts from the latest request.
+      resetIdle(entry)
+    }
     ensureFetch(entry, "prefetch", buildOf(fetcher))
     afterQuiet(entry)
   }
