@@ -129,9 +129,9 @@ You can package your own reusable behavior the same way.
 
 ### The UI kit
 
-**`@effect/ui-kit` already ships 41 components**, so you don't have to build accessible UI from scratch. The kit has every component in [Base UI](https://base-ui.com/), plus VirtualList, VirtualKeyboard, DirectionProvider and Positioning. They're all headless. Each handles keyboard, focus and ARIA while you write the markup and styles.
+**`@effect/ui-kit` already ships 42 components**, so you don't have to build accessible UI from scratch. The kit has every component in [Base UI](https://base-ui.com/), plus NavigationLinks, VirtualList, VirtualKeyboard, DirectionProvider and Positioning. They're all headless. Each handles keyboard, focus and ARIA while you write the markup and styles.
 
-Here is the full set of 41 components. Hover or tap to animate.
+Here is the full set of 42 components. Hover or tap to animate.
 
 ::Kit
 

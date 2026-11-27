@@ -7,6 +7,9 @@ export interface Outside {
   readonly inside: (target: Node) => boolean
   readonly pressed: (pointerType: string) => void
   readonly focused?: (() => void) | undefined
+  // Focus moved from inside to anywhere else, including <body> and out of
+  // the document, which fire no focusin.
+  readonly left?: (() => void) | undefined
 }
 
 export const listenOutside = (
@@ -50,6 +53,20 @@ export const listenOutside = (
   if (focused !== undefined) {
     document.addEventListener("focusin", onFocusIn, { capture: true, signal })
   }
+  const left = outside.left
+  if (left === undefined) return
+  let settle: ReturnType<typeof setTimeout> | undefined
+  const isInside = (target: Node | null) =>
+    target !== null && outside.inside(target)
+  const onFocusOut = (event: FocusEvent) => {
+    if (!isInside(event.target as Node | null)) return
+    clearTimeout(settle)
+    settle = setTimeout(() => {
+      if (outside.open() && !isInside(document.activeElement)) left()
+    }, 0)
+  }
+  document.addEventListener("focusout", onFocusOut, { capture: true, signal })
+  signal.addEventListener("abort", () => clearTimeout(settle))
 }
 
 export const releasedOutside = (

@@ -27,6 +27,7 @@ import {
   Menu,
   Menubar,
   Meter,
+  NavigationLinks,
   NavigationMenu,
   NumberField,
   OTPField,
@@ -57,8 +58,8 @@ import { floating, keyboardCover, stage } from "./geometry.ts"
 // passed in its props, and its data attributes drive the CSS.
 //
 // The popups (Dialog, Drawer, Popover, Tooltip, PreviewCard, Menu,
-// Menubar, ContextMenu, Select, Combobox, Autocomplete and the Toast
-// viewport) take `topLayer: false`, so they open in place inside their
+// Menubar, ContextMenu, NavigationMenu, Select, Combobox, Autocomplete
+// and the Toast viewport) take `topLayer: false`, so they open in place inside their
 // tile, which is their containing block, and never as modals: they
 // lock no scroll, hide nothing from screen readers and block no
 // presses. The dialogs also leave focus where it is as they open and
@@ -613,20 +614,56 @@ const pictures: Record<Module, Picture> = {
           )
         )
     }),
-  NavigationMenu: (h, on) =>
-    NavigationMenu(h, {
-      key: "NavigationMenu",
-      view: (navigationMenu) =>
-        navigationMenu.root(h.nav.class("kit-nav")).children(
-          navigationMenu.list(h.ul).children(
+  NavigationLinks: (h, on) =>
+    NavigationLinks(h, {
+      key: "NavigationLinks",
+      view: (navigationLinks) =>
+        navigationLinks.root(h.nav.class("kit-nav")).children(
+          navigationLinks.list(h.ul).children(
             [0, 1, 2].map((index) =>
-              navigationMenu.item(h.li.key(String(index))).children(
-                navigationMenu.link({
+              navigationLinks.item(h.li.key(String(index))).children(
+                navigationLinks.link({
                   element: h.a.attr("href", "#ui-kit"),
                   active: index === (on ? 2 : 0)
                 }).children(bar(h, 20))
               )
             )
+          )
+        )
+    }),
+  NavigationMenu: (h, on) =>
+    NavigationMenu(h, {
+      key: "NavigationMenu",
+      props: { value: on ? "0" : null, ...inTile, sideOffset: 4 },
+      onEmit: none,
+      view: (navigationMenu) =>
+        h.div.class("kit-overlay kit-top").children(
+          navigationMenu.root(h.nav.class("kit-nav")).children(
+            navigationMenu.list(h.ul).children(
+              ["0", "1"].map((value) =>
+                navigationMenu.item(h.li.key(value)).children(
+                  navigationMenu.trigger({ element: h.button, value })
+                    .children(bar(h, 20))
+                )
+              )
+            ),
+            navigationMenu.portal(h.div.class("kit-portal"))
+              ?.children(
+                navigationMenu.positioner(
+                  h.div.class("kit-positioner")
+                )
+                  .children(
+                    navigationMenu.popup(
+                      h.div.class("kit-popup kit-preview")
+                    )
+                      .children(
+                        navigationMenu.viewport(h.div).children(
+                          h.span.class("kit-thumb"),
+                          bar(h, 34)
+                        )
+                      )
+                  )
+              )
           )
         )
     }),

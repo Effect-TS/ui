@@ -117,16 +117,21 @@ export const tabbablesIn = (root: Element): Array<HTMLElement> =>
   Array.from(root.querySelectorAll<HTMLElement>(tabbableSelector))
     .filter(tabbable)
 
-// Moves focus itself, as the browser's next stop after a positive
-// `tabindex` can be outside `root`.
-export const trapTab = (event: KeyboardEvent, root: HTMLElement): void => {
-  event.preventDefault()
+// The Tab stops in `root`, in Tab order: positive `tabindex` first.
+export const tabStopsIn = (root: Element): Array<HTMLElement> => {
   const found = tabbablesIn(root)
-  const items = [
+  return [
     ...found.filter((element) => tabOrder(element) > 0)
       .sort((a, b) => tabOrder(a) - tabOrder(b)),
     ...found.filter((element) => tabOrder(element) === 0)
   ]
+}
+
+// Moves focus itself, as the browser's next stop after a positive
+// `tabindex` can be outside `root`.
+export const trapTab = (event: KeyboardEvent, root: HTMLElement): void => {
+  event.preventDefault()
+  const items = tabStopsIn(root)
   if (items.length === 0) return
   const focused = activeOf(root.ownerDocument)
   const at = items.findIndex((element) => element === focused)

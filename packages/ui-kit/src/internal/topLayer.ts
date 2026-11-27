@@ -74,3 +74,15 @@ export const layered = <
 // `display` while closed stay out of it.
 export const inPlaceBox = "position:static;inset:auto;width:auto;height:auto;" +
   boxReset
+
+// The box of a positioned popup's portal: in place, or in the top layer, at
+// the document's origin for `positionMethod: "absolute"`.
+export const portalStyle = (
+  topLayer: boolean,
+  positionMethod: string | undefined
+): string =>
+  !topLayer
+    ? inPlaceBox
+    : positionMethod === "absolute"
+    ? portalBox + ";" + atDocumentOrigin
+    : portalBox
