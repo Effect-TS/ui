@@ -1163,7 +1163,6 @@ const TrackVirtualList = Mount.makeStream(
               atEnd,
               overflowing,
               length,
-              // Above the list on the page, hold its start rather than follow a row.
               anchor: above
                 ? { index: 0, key: null, offset: start }
                 : anchorAt(start),

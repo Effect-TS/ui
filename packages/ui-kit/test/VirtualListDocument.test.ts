@@ -24,7 +24,6 @@ const padding = (element: Element, side: "start" | "end") =>
 const rect = (top: number, height: number, width = 300) =>
   DOMRect.fromRect({ x: 0, y: top, width, height })
 
-// With `page`, the page scrolls the list; `listTop` places the list that far below its scroller's top.
 const layout = (page = false, listTop = 0) =>
   Effect.acquireRelease(
     Effect.sync(() => {
@@ -420,7 +419,7 @@ describe("VirtualList in a document", { concurrent: false }, () => {
       assert.strictEqual(withHeader.scrollTop(), 10 * itemSize)
     }))
 
-  it.effect("keeps a page above the list in place when keyed items reorder, and the item in view once in the list", () =>
+  it.effect("preserves page position above the list and anchors by key within it", () =>
     Effect.gen(function*() {
       const keys = Array.from({ length: 200 }, (_, i) => "k" + i)
       const reversed = [...keys].reverse()
