@@ -362,7 +362,7 @@ const Shell = Html.component({
     HtmlSubscription.onDocument(
       "keydown",
       HtmlKeyboard.shortcuts(
-        ["?", "t", "Escape"].map((key) => ({
+        ["?", "Escape"].map((key) => ({
           key,
           message: ShellMessage.Shortcut({ name: key })
         }))
@@ -665,16 +665,15 @@ describe("Dialog in a document", { concurrent: false }, () => {
         )
       byId("inside").focus()
       key("?", byId("inside"))
-      key("t", byId("inside"))
       key("Escape", byId("inside"))
       yield* tick
       yield* tick
       assert.deepStrictEqual(root.model()!.log, ["RequestedClose escape-key"])
-      key("t", document.body)
+      key("?", document.body)
       yield* tick
       assert.deepStrictEqual(root.model()!.log, [
         "RequestedClose escape-key",
-        "t"
+        "?"
       ])
     }))
 

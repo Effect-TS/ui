@@ -3142,7 +3142,6 @@ describe("BrowserHost", { concurrent: false }, () => {
             })
           )
         help(app.querySelector("button")!)
-        help(document.body)
         yield* tick
         expect(root.model()!.log).toEqual([])
         root.send(Message.Closed())
