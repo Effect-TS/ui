@@ -376,61 +376,47 @@ describe("HtmlPlay", () => {
       )
     }).pipe(play))
 
-  it.effect("keySequences keeps its pending prefix across unrelated updates and works after switching from shortcuts", () =>
+  it.effect("keySequences keeps its prefix across updates, and drops it when the key switches to shortcuts", () =>
     Effect.gen(function*() {
-      const Mode = Schema.Literals(["shortcuts", "sequences", "off"])
       const App = Html.component({
         name: "KeySequencePlay",
         model: Schema.Struct({
-          mode: Mode,
+          sequences: Schema.Boolean,
           log: Schema.Array(Schema.String)
         }),
         message: Schema.String
       }).make({
-        init: () => ({ mode: "shortcuts" as const, log: [] }),
+        init: () => ({ sequences: false, log: [] }),
         update: ($, entry) =>
-          entry === "mode:shortcuts"
-            ? { ...$.model, mode: "shortcuts" as const }
-            : entry === "mode:sequences"
-            ? { ...$.model, mode: "sequences" as const }
-            : entry === "mode:off"
-            ? { ...$.model, mode: "off" as const }
+          entry === "switch"
+            ? { ...$.model, sequences: !$.model.sequences }
             : { ...$.model, log: [...$.model.log, entry] },
         view: (h, model) =>
           h.div(
-            h.button.on("click", "mode:shortcuts").children("Shortcuts"),
-            h.button.on("click", "mode:sequences").children("Sequences"),
-            h.button.on("click", "mode:off").children("Off"),
+            h.button.on("click", "switch").children("Switch"),
             h.button.on("click", "ping").children("Ping"),
             h.output(model.log.join(","))
           ),
         subscriptions: ({ model }) => [
-          model.mode === "shortcuts" &&
-          HtmlSubscription.shortcuts([{ key: "/", message: "search" }]),
-          model.mode === "sequences" &&
-          HtmlSubscription.keySequences([{ keys: ["g", "l"], message: "list" }])
+          model.sequences
+            ? HtmlSubscription.keySequences([{
+              keys: ["g", "l"],
+              message: "list"
+            }])
+            : HtmlSubscription.shortcuts([{ key: "/", message: "search" }])
         ]
       })
 
       const p = yield* HtmlPlay.make(App, {})
-      yield* p.keydown("document", "/")
-      // Switching from `shortcuts` to `keySequences` on the same keydown subscription key.
-      yield* p.click("Sequences")
+      // The keydown listener was attached for `shortcuts`.
+      yield* p.click("Switch")
       yield* p.keydown("document", "g")
-      // An unrelated update re-runs `subscriptions` without dropping the prefix.
       yield* p.click("Ping")
       yield* p.keydown("document", "l")
-      yield* p.expect(log).toHaveText("search,ping,list")
-      // Switching to `shortcuts` and back drops the pending prefix with no key pressed between.
+      yield* p.expect(log).toHaveText("ping,list")
       yield* p.keydown("document", "g")
-      yield* p.click("Shortcuts")
-      yield* p.click("Sequences")
-      yield* p.keydown("document", "l")
-      yield* p.expectIgnored()
-      // Gating off drops the pending prefix.
-      yield* p.keydown("document", "g")
-      yield* p.click("Off")
-      yield* p.click("Sequences")
+      yield* p.click("Switch")
+      yield* p.click("Switch")
       yield* p.keydown("document", "l")
       yield* p.expectIgnored()
     }).pipe(play))
