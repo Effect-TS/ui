@@ -7,13 +7,12 @@ import { assert, describe, it } from "@effect/vitest"
 const h = View.makeHelper<never, {}, Html.Elements>({}, Html)
 
 const model = {
-  hover: null,
   touched: false,
   away: true,
   request: null,
   reason: null,
   patient: false,
-  closeReason: null,
+  restoreFocus: false,
   value: null,
   mounted: false,
   started: false,
