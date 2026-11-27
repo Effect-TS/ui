@@ -83,8 +83,8 @@ import * as TestQuery from "./TestQuery.ts"
  *
  * `attrs` and `props` hold what the renderer set. To act as the user editing
  * a controlled property, set `props` directly, then fire the event. The next
- * `settle` puts the element's controlled properties back to what the renderer
- * last set, so an edit the Model refused is undone, as on a real host.
+ * `settle` puts every controlled property of a mounted tree back to what the
+ * renderer last set, so an edit the Model refused is undone, as on a real host.
  * `handlers`, `eventOptions`, `owners` and `dispatch` are read from the
  * tree the renderer rendered last, so an element that left it has none.
  * `eventOptions` holds the options set with the handlers. The test host has
@@ -177,8 +177,7 @@ const fireFrom = (
 
 const makeElement = (
   tag: string,
-  along: EventsAlong = noLookup,
-  edited?: Set<TestElement>
+  along: EventsAlong = noLookup
 ): TestElement => {
   const events = () => along(pathFrom(element))[0]
   const element: TestElement = {
@@ -203,10 +202,7 @@ const makeElement = (
     get dispatch() {
       return events()?.dispatch
     },
-    fire: (event, payload) => {
-      edited?.add(element)
-      return fireFrom(along, element, event, payload)
-    }
+    fire: (event, payload) => fireFrom(along, element, event, payload)
   }
   return element
 }
@@ -224,6 +220,13 @@ const makeText = (text: string, along: EventsAlong): TestText => {
 const describe = (node: TestNode): string =>
   node._tag === "Text" ? JSON.stringify(node.text) : `<${node.tag}>`
 
+/** Puts back the controlled properties under `node` that an edit changed. */
+const restoreControlled = (node: TestNode): void => {
+  if (node._tag === "Text") return
+  controlled.restore(node)
+  for (const child of node.children) restoreControlled(child)
+}
+
 const detach = (node: TestNode) => {
   const parent = node.parent
   if (parent === undefined) return
@@ -233,10 +236,7 @@ const detach = (node: TestNode) => {
 
 /**
  * Makes a test host. `operations` lists what the renderer asked of it, which
- * `clearOperations` empties. `edited` holds the elements the user edited
- * since the last `settle`, which puts their controlled properties back to
- * what the renderer last set without logging an operation. `fire` adds its
- * element.
+ * `clearOperations` empties.
  *
  * @stability experimental
  * @category constructors
@@ -245,7 +245,6 @@ const detach = (node: TestNode) => {
 export const makeHost = (): Renderer.Host<TestNode> & {
   readonly operations: () => ReadonlyArray<string>
   readonly clearOperations: () => void
-  readonly edited: Set<TestElement>
   readonly commits: () => number
   /** Calls `listener` after every commit. Returns the unsubscribe. */
   readonly onCommit: (listener: () => void) => () => void
@@ -253,14 +252,12 @@ export const makeHost = (): Renderer.Host<TestNode> & {
   let operations: Array<string> = []
   let commits = 0
   const listeners = new Set<() => void>()
-  const edited = new Set<TestElement>()
   const { along, connect, set } = hostEvents.make<TestNode>()
   return {
     operations: () => operations,
     clearOperations: () => {
       operations = []
     },
-    edited,
     commits: () => commits,
     onCommit: (listener) => {
       listeners.add(listener)
@@ -270,7 +267,7 @@ export const makeHost = (): Renderer.Host<TestNode> & {
     },
     createElement(tag) {
       operations.push(`create <${tag}>`)
-      return makeElement(tag, along, edited)
+      return makeElement(tag, along)
     },
     createText(text) {
       operations.push(`create ${JSON.stringify(text)}`)
@@ -397,6 +394,8 @@ export interface Tree {
   /** The root's failure, once it crashed. */
   readonly crashed: () => Cause.Cause<unknown> | undefined
   readonly path: string
+  /** The test host element it's mounted in, whose controlled properties `settle` puts back. */
+  readonly container?: TestElement | undefined
 }
 
 /**
@@ -827,7 +826,8 @@ export const mount = <
       root,
       testHost.log,
       () => frames.slice(),
-      emitted
+      emitted,
+      container
     )
     testRoot = {
       ...neutral,
@@ -853,7 +853,8 @@ export const register = (
   root: runtime.Root & Renderer.Root<any, any, any>,
   log: MessageLog.Memory,
   frames: () => ReadonlyArray<string>,
-  emitted: ReadonlyArray<unknown>
+  emitted: ReadonlyArray<unknown>,
+  container?: TestElement
 ): Effect.Effect<Root<any, any, any, any>, never, Scope.Scope> =>
   Effect.gen(function*() {
     const pending = (): ReadonlyArray<Pending> => [
@@ -871,7 +872,8 @@ export const register = (
     const unregister = testHost.register({
       path: root.path,
       pending,
-      crashed: root.crashed
+      crashed: root.crashed,
+      container
     })
     yield* Effect.addFinalizer(() => Effect.sync(unregister))
     const entries = () =>
@@ -964,9 +966,9 @@ export const settle: Effect.Effect<
   .gen(function*() {
     const testHost = yield* TestHost
     yield* drainAll(testHost)
-    // After the flush, so an accepted edit is never written back.
-    controlled.restore(testHost.host.edited)
     for (const tree of testHost.trees()) {
+      // After the flush, so an accepted edit is never written back.
+      if (tree.container !== undefined) restoreControlled(tree.container)
       const cause = tree.crashed()
       if (cause !== undefined) {
         return yield* new RootCrashed({ path: tree.path, cause })

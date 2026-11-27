@@ -39,8 +39,6 @@ export class PlayCursor {
   readonly module: string
   readonly root: TestHost.TestRoot<any, any, any>
   readonly settle: Effect.Effect<void, StepError>
-  /** The host's `edited`: `settle` restores what a step adds. */
-  protected readonly edited: Set<TestHost.TestElement>
 
   constructor(
     module: string,
@@ -49,7 +47,6 @@ export class PlayCursor {
   ) {
     this.module = module
     this.root = root
-    this.edited = testHost.host.edited
     this.settle = Effect.provideService(
       TestHost.settle,
       TestHost.TestHost,
@@ -193,10 +190,7 @@ export class PlayCursor {
         description: locator.description,
         event,
         payload: () => value,
-        edit: edit === undefined ? undefined : () => {
-          edit(node, value)
-          this.edited.add(node)
-        }
+        edit: edit === undefined ? undefined : () => edit(node, value)
       }]
     })
   }

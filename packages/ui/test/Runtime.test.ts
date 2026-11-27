@@ -4757,7 +4757,7 @@ describe("Runtime", () => {
       })))
 
     it.effect("controlled properties are restored after a refused edit", () =>
-      provideHost(Effect.gen(function*() {
+      Effect.gen(function*() {
         const Msg = UiSchema.TaggedEnum({ Typed: { value: Schema.String } })
         const Form = Component.define({
           name: "Form",
@@ -4774,7 +4774,6 @@ describe("Runtime", () => {
               ({ value }) => Msg.Typed({ value })
             )
         })
-        const testHost = yield* TestHost.TestHost
         const root = yield* TestHost.mount(Form, {})
         const field = root.get(Locator.tag("field")) as TestHost.TestElement
         field.props.value = "abc"
@@ -4783,15 +4782,24 @@ describe("Runtime", () => {
         assert.strictEqual(root.model(), "ab")
         assert.strictEqual(field.props.value, "ab")
         // An accepted edit is already on the field, so nothing writes it again.
-        testHost.host.clearOperations()
-        field.props.value = "a"
+        let value: unknown = "a"
+        let writes = 0
+        Object.defineProperty(field.props, "value", {
+          get: () => value,
+          set: (next) => {
+            writes++
+            value = next
+          }
+        })
         Locator.fire(field, "input", { value: "a" })
         yield* TestHost.settle
-        assert.strictEqual(field.props.value, "a")
-        assert.isFalse(
-          testHost.host.operations().some((op) => op.startsWith("prop"))
-        )
-      })))
+        assert.strictEqual(root.model(), "a")
+        assert.strictEqual(writes, 0)
+      }).pipe(
+        // A renderer on a host of its own, as `settle` drains every mounted tree.
+        Effect.provide(Renderer.layer(TestHost.makeHost())),
+        provideHost
+      ))
 
     it.effect("onMount runs with the element's node on hosts that run mounts", () =>
       Effect.gen(function*() {

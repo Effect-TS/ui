@@ -298,12 +298,10 @@ class HtmlPlayCursor extends internal.PlayCursor {
                   for (const [other, checked] of checks()) {
                     const control = other as TestHost.TestElement
                     control.props.checked = checked
-                    this.edited.add(control)
                   }
                 } else if (event === "toggle") {
                   element.props.popoverOpen =
                     (sent() as Html.PopoverTogglePayload).open
-                  this.edited.add(element)
                 }
                 send(element, event, sent)
               }
