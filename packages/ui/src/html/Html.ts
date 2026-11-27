@@ -317,9 +317,10 @@ export interface HoverPayload {
 }
 
 /**
- * The payload of `keydown` and `keyup`. `composing` is true while an input
- * method composes text, including for the key that ends the composition, so
- * a handler for Enter can leave it to the input method.
+ * The payload of `keydown` and `keyup`. `code` is the physical key's
+ * `KeyboardEvent.code`, such as `"KeyW"`, or `""` when unavailable. `composing`
+ * is true while an input method composes text, including for the key that ends
+ * the composition, so a handler for Enter can leave it to the input method.
  *
  * **Details**
  *
@@ -341,6 +342,7 @@ export interface HoverPayload {
  */
 export interface KeyPayload extends SelectionPayload {
   readonly key: string
+  readonly code: string
   readonly shift: boolean
   readonly ctrl: boolean
   readonly alt: boolean

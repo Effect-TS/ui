@@ -417,6 +417,7 @@ export const keyPayload = (
   path: ReadonlyArray<Locator.Node> = []
 ): Html.KeyPayload => ({
   key,
+  code: details?.code ?? "",
   shift: details?.shift === true,
   ctrl: details?.ctrl === true,
   alt: details?.alt === true,

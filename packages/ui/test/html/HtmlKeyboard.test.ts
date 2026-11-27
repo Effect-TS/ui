@@ -9,6 +9,7 @@ describe("HtmlKeyboard.shortcuts", () => {
     overrides: Partial<HtmlSubscription.GlobalPayload<Html.KeyPayload>>
   ): HtmlSubscription.GlobalPayload<Html.KeyPayload> => ({
     key: "",
+    code: "",
     shift: false,
     ctrl: false,
     alt: false,
