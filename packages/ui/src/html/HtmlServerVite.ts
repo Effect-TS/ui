@@ -29,6 +29,9 @@
  * Only a root `base` is supported. Vite prefixes the asset URLs with
  * `base`, but the app's routes and the links it renders don't carry it.
  *
+ * `vite build --watch` isn't supported and fails before building. Use
+ * `vite dev` to rebuild on changes.
+ *
  * **Example** (Configuring the plugin)
  *
  * ```ts
@@ -129,7 +132,7 @@ interface Environment {
   readonly config: {
     readonly root: string
     readonly cacheDir: string
-    readonly build: { readonly outDir: string }
+    readonly build: { readonly outDir: string; readonly watch?: unknown }
   }
 }
 
@@ -330,6 +333,11 @@ export const plugin = (options: Options): Plugin => {
     },
     async buildApp(builder) {
       const { client, ssr } = builder.environments
+      if (client.config.build.watch || ssr.config.build.watch) {
+        throw new Error(
+          "HtmlServerVite doesn't support `vite build --watch`. Use `vite dev` to rebuild on changes."
+        )
+      }
       const { cacheDir, root } = ssr.config
       const outDir = path.resolve(root, client.config.build.outDir)
       await builder.build(client)

@@ -1,5 +1,5 @@
 import { plugin } from "@effect/ui/html/HtmlServerVite"
-import { describe, expect, it } from "@effect/vitest"
+import { describe, expect, it, vi } from "@effect/vitest"
 import { once } from "node:events"
 import * as fs from "node:fs/promises"
 import * as os from "node:os"
@@ -91,6 +91,17 @@ describe("HtmlServerVite.plugin", () => {
       await fs.rm(outDir, { recursive: true, force: true })
     }
   }, 60_000)
+
+  it("rejects watch builds before building either environment", async () => {
+    const builder = await createBuilder(config({ build: { watch: {} } }))
+    const build = vi
+      .spyOn(builder, "build")
+      .mockRejectedValue(new Error("unexpected build"))
+    await expect(builder.buildApp()).rejects.toThrow(
+      /HtmlServerVite.*vite build --watch/
+    )
+    expect(build).not.toHaveBeenCalled()
+  })
 
   it(
     "disposes a server entry once its requests end, on reload and on close",
