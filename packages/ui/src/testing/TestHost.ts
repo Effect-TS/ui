@@ -82,7 +82,9 @@ import * as TestQuery from "./TestQuery.ts"
  * **Details**
  *
  * `attrs` and `props` hold what the renderer set. To act as the user editing
- * a controlled property, set `props` directly, then fire the event.
+ * a controlled property, set `props` directly, then fire the event. On a
+ * tree `mount` made, the next `settle` undoes an edit the Model refused, as
+ * a real host does.
  * `handlers`, `eventOptions`, `owners` and `dispatch` are read from the
  * tree the renderer rendered last, so an element that left it has none.
  * `eventOptions` holds the options set with the handlers. The test host has
@@ -217,6 +219,12 @@ const makeText = (text: string, along: EventsAlong): TestText => {
 
 const describe = (node: TestNode): string =>
   node._tag === "Text" ? JSON.stringify(node.text) : `<${node.tag}>`
+
+const restoreControlled = (node: TestNode): void => {
+  if (node._tag === "Text") return
+  controlled.restore(node)
+  for (const child of node.children) restoreControlled(child)
+}
 
 const detach = (node: TestNode) => {
   const parent = node.parent
@@ -385,6 +393,8 @@ export interface Tree {
   /** The root's failure, once it crashed. */
   readonly crashed: () => Cause.Cause<unknown> | undefined
   readonly path: string
+  /** The element it's mounted in. */
+  readonly container?: TestElement | undefined
 }
 
 /**
@@ -815,7 +825,8 @@ export const mount = <
       root,
       testHost.log,
       () => frames.slice(),
-      emitted
+      emitted,
+      container
     )
     testRoot = {
       ...neutral,
@@ -841,7 +852,8 @@ export const register = (
   root: runtime.Root & Renderer.Root<any, any, any>,
   log: MessageLog.Memory,
   frames: () => ReadonlyArray<string>,
-  emitted: ReadonlyArray<unknown>
+  emitted: ReadonlyArray<unknown>,
+  container?: TestElement
 ): Effect.Effect<Root<any, any, any, any>, never, Scope.Scope> =>
   Effect.gen(function*() {
     const pending = (): ReadonlyArray<Pending> => [
@@ -859,7 +871,8 @@ export const register = (
     const unregister = testHost.register({
       path: root.path,
       pending,
-      crashed: root.crashed
+      crashed: root.crashed,
+      container
     })
     yield* Effect.addFinalizer(() => Effect.sync(unregister))
     const entries = () =>
@@ -930,11 +943,16 @@ const nextMacrotask = Effect.callback<void>((resume) => {
  * come back. A run or fetch that never returns is left in `pending()`. A
  * `Component.lazy` load is waited for until it settles. Fibers on the host's
  * `Scheduler` run with the tree's tasks, under the same budget: see `layer`.
+ * Then it undoes edits the Model refused on each tree `mount` made.
  *
  * **Gotchas**
  *
  * A fiber outside the tree that waits on a Promise or a timer outside Effect
  * isn't waited for once no Command, fetch or load is pending.
+ *
+ * A tree mounted with `Renderer.mount` directly isn't registered: `settle`
+ * runs its work, but doesn't wait for its runs and fetches, report its crash
+ * or restore its controlled properties.
  *
  * When the budget runs out, `settle` fails with a `SettleError` holding the
  * log's tail and what is pending. A crashed root fails it with `RootCrashed`,
@@ -953,6 +971,8 @@ export const settle: Effect.Effect<
     const testHost = yield* TestHost
     yield* drainAll(testHost)
     for (const tree of testHost.trees()) {
+      // After the flush, so an accepted edit isn't undone.
+      if (tree.container !== undefined) restoreControlled(tree.container)
       const cause = tree.crashed()
       if (cause !== undefined) {
         return yield* new RootCrashed({ path: tree.path, cause })

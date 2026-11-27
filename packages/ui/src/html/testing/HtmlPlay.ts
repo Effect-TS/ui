@@ -274,9 +274,8 @@ class HtmlPlayCursor extends internal.PlayCursor {
         })
       )
       if (handled) yield* this.settle
-      const edited = yield* Effect.sync(() =>
+      yield* Effect.sync(() =>
         atSite(site, () => {
-          const edited: Array<TestHost.TestElement> = []
           const container = this.root.container
           const path = internal.ancestors(node)
           if (
@@ -299,12 +298,10 @@ class HtmlPlayCursor extends internal.PlayCursor {
                   for (const [other, checked] of checks()) {
                     const control = other as TestHost.TestElement
                     control.props.checked = checked
-                    edited.push(control)
                   }
                 } else if (event === "toggle") {
                   element.props.popoverOpen =
                     (sent() as Html.PopoverTogglePayload).open
-                  edited.push(element)
                 }
                 send(element, event, sent)
               }
@@ -316,11 +313,9 @@ class HtmlPlayCursor extends internal.PlayCursor {
             )
           }
           this.recordInteraction("click", handled)
-          return edited
         })
       )
       yield* this.settle
-      this.restoreControlled(edited)
     })
   }
   type(
