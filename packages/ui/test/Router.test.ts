@@ -22,7 +22,7 @@ import {
   Option,
   Scheduler,
   Schema,
-  type Scope,
+  Scope,
   Stream
 } from "effect"
 import { AsyncResult } from "effect/reactivity"
@@ -769,6 +769,53 @@ describe("Router", { concurrent: false }, () => {
         yield* TestHost.settle
         assert.strictEqual(root.model()?.route._tag, "Home")
         assert.strictEqual(settled.length, 2)
+      })
+    )
+  })
+
+  it.effect("calls onBlocked on the first block and the last release, after blocked() changes", () => {
+    const calls: Array<[boolean, boolean]> = []
+    let router: Router.Router | undefined
+    let throws = false
+    const layer = Router.make({
+      routes: AppRoute,
+      history: Router.memoryHistory("/"),
+      onBlocked: (blocked) => {
+        calls.push([blocked, router!.blocked()])
+        if (throws) throw new Error("onBlocked")
+      }
+    })
+    return run(
+      layer,
+      Effect.gen(function*() {
+        router = yield* Router.Router
+        const outer = yield* Effect.scope
+        const a = yield* Scope.fork(outer)
+        const b = yield* Scope.fork(outer)
+        yield* router.block("a").pipe(Scope.provide(a))
+        yield* router.block("b").pipe(Scope.provide(b))
+        yield* Scope.close(a, Exit.void)
+        yield* Scope.close(b, Exit.void)
+        assert.deepStrictEqual(calls, [[true, true], [false, false]])
+
+        // A callback that throws rolls the block back immediately without firing onBlocked(false).
+        calls.length = 0
+        throws = true
+        const c = yield* Scope.fork(outer)
+        const exit = yield* Effect.exit(
+          router.block("c").pipe(Scope.provide(c))
+        )
+        assert.isTrue(Exit.hasDies(exit))
+        assert.isFalse(router.blocked())
+        throws = false
+        yield* Scope.close(c, Exit.void)
+        assert.deepStrictEqual(calls, [[true, true]])
+
+        // Acquiring in an already-closed Scope balances true then false.
+        calls.length = 0
+        yield* router.block("d").pipe(Scope.provide(c))
+        assert.isFalse(router.blocked())
+        assert.deepStrictEqual(calls, [[true, true], [false, false]])
       })
     )
   })

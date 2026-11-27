@@ -543,6 +543,14 @@ export class Load extends Command.Service<Load>()(
  * held while `subscriptions` returns it, so the Model says when, and it's
  * released when the instance unmounts. It sends no messages.
  *
+ * In the browser, `BrowserRouter` also asks the browser to warn before the
+ * page unloads, unless its `warnOnUnload` option is `false`. This covers
+ * reloads, closing the tab and links the routes don't parse. The warning
+ * saves nothing. The browser chooses its text and requires prior user
+ * interaction to show it. The warning may not appear, especially on mobile
+ * when a tab is discarded in the background. Save drafts as the user types
+ * or on `visibilitychange` rather than relying on the warning.
+ *
  * The Subscription is named `@effect/ui/Router/blocked` and `key` is its
  * dep, so `Router.blocked("form")` has the Subscription key
  * `@effect/ui/Router/blocked:"form"`.
@@ -1219,6 +1227,8 @@ export interface Options {
     | undefined
   /** Called before the Router leaves the history entry at `index`. */
   readonly onLeave?: ((index: number) => void) | undefined
+  /** Called with `true` when the first block is held and `false` when the last is released. */
+  readonly onBlocked?: ((blocked: boolean) => void) | undefined
   /**
    * Throttles the replaces that stay on the page, such as a `patchSearch` per
    * keystroke, to stay under the browser's rate limit on history calls. The
@@ -2090,18 +2100,31 @@ const build = (
           history.load(href)
           return "navigated"
         }),
-      block: (key) =>
-        Effect.flatMap(Effect.scope, (scope) => {
-          blocks.set(key, (blocks.get(key) ?? 0) + 1)
-          return Scope.addFinalizer(
-            scope,
+      block: (key) => {
+        const release = () => {
+          const held = blocks.get(key)! - 1
+          if (held > 0) blocks.set(key, held)
+          else blocks.delete(key)
+        }
+        return Effect.acquireRelease(
+          Effect.sync(() => {
+            const first = blocks.size === 0
+            blocks.set(key, (blocks.get(key) ?? 0) + 1)
+            if (!first) return
+            try {
+              options.onBlocked?.(true)
+            } catch (error) {
+              release()
+              throw error
+            }
+          }),
+          () =>
             Effect.sync(() => {
-              const held = blocks.get(key)! - 1
-              if (held === 0) blocks.delete(key)
-              else blocks.set(key, held)
+              release()
+              if (blocks.size === 0) options.onBlocked?.(false)
             })
-          )
-        }),
+        )
+      },
       blocked: () => blocks.size > 0,
       intent: (href) =>
         Effect.sync(() => {
