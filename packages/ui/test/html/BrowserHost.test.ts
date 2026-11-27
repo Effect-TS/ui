@@ -933,6 +933,35 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(app.innerHTML).toBe("<div><span>two</span></div>")
       }).pipe(Effect.scoped))
 
+    it.effect("a focused row keeps focus when a keyed reorder moves it", () =>
+      Effect.gen(function*() {
+        const Focusable = Html.component({
+          name: "Focusable",
+          model: Schema.Array(Schema.String),
+          message: ListMessage
+        }).make({
+          init: (): ReadonlyArray<string> => ["one", "two", "three"],
+          update: (_, message) => message.rows,
+          view: (h, rows) =>
+            h.ul(
+              rows.map((row) =>
+                h.li.key(row).attr("tabindex", "0").children(row)
+              )
+            )
+        })
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Focusable, {}, app)
+        const one = app.querySelector("li")!
+        one.focus()
+        expect(document.activeElement).toBe(one)
+        root.send(ListMessage.Set({ rows: ["two", "three", "one"] }))
+        yield* tick
+        expect(Array.from(app.querySelectorAll("li"), (li) => li.textContent))
+          .toEqual(["two", "three", "one"])
+        expect(app.querySelector("ul")!.lastElementChild).toBe(one)
+        expect(document.activeElement).toBe(one)
+      }).pipe(Effect.scoped))
+
     it.effect("a custom element's class is set as an attribute, whatever its className does", () =>
       Effect.gen(function*() {
         const seen: Array<string | null> = []
