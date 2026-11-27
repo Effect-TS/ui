@@ -1,4 +1,5 @@
-import { DateTime, Schema } from "effect"
+import { MarkdownParser } from "@effect/ui/html"
+import { Option, Schema } from "effect"
 import { scenarios } from "../diagram/scenarios.ts"
 import { modules } from "../kit/components.ts"
 import {
@@ -11,7 +12,7 @@ import {
   summary,
   value
 } from "../performance/Results.ts"
-import { formatDate, Frontmatter, Islands } from "./Island.ts"
+import { byline, Frontmatter, Islands } from "./Island.ts"
 import type { Snippet, Snippets } from "./Snippet.ts"
 
 const attributes = (text: string) =>
@@ -142,27 +143,22 @@ export const toMarkdown = (source: string, snippets: Snippets) => {
         throw new Error(`No text for the island "${name}"`)
     }
   }
+  const meta = Schema.decodeUnknownSync(Frontmatter)(
+    Option.getOrThrow(
+      MarkdownParser.parseMarkdownWithFrontmatter(source, {
+        islands: Islands,
+        frontmatter: Frontmatter
+      }).frontmatter
+    )
+  )
+  const dates = byline(meta).map(({ label, text }) =>
+    `${label} ${text}`
+  )
   return source
-    .replace(/^---\n([\s\S]*?)\n---\n/, (_, block: string) => {
-      const fields = Object.fromEntries(
-        block.split("\n").flatMap((line) => {
-          const separator = line.indexOf(": ")
-          return separator === -1
-            ? []
-            : [[
-              line.slice(0, separator).trim(),
-              line.slice(separator + 2).trim()
-            ]]
-        })
-      )
-      const meta = Schema.decodeUnknownSync(Frontmatter)(fields)
-      const dates = DateTime.Equivalence(meta.published, meta.updated)
-        ? `Published ${formatDate(meta.published)}`
-        : `Published ${formatDate(meta.published)} · Updated ${
-          formatDate(meta.updated)
-        }`
-      return `# ${meta.title}\n\n${dates}\n`
-    })
+    .replace(
+      /^---\n[^]*?\n---\n/,
+      () => `# ${meta.title}\n\n${dates.join(" · ")}\n`
+    )
     .replace(
       /^:::(\w+)(?:\{(.*)\})?\n([^]*?)\n:::$/gm,
       (_, name, text, body) => island(name, text, body)

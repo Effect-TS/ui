@@ -3,7 +3,7 @@ import { assert, describe, it } from "@effect/vitest"
 import { DateTime, Option, Schema } from "effect"
 import { readFileSync } from "node:fs"
 import { toMarkdown } from "./domain/ArticleText.ts"
-import { formatDate, Frontmatter, Islands } from "./domain/Island.ts"
+import { Frontmatter, Islands } from "./domain/Island.ts"
 import { fromDocument } from "./domain/Section.ts"
 import type { Snippets } from "./domain/Snippet.ts"
 
@@ -52,45 +52,28 @@ describe("article", () => {
         DateTime.formatIsoDateUtc(meta.updated)
       }" />`
     )
-    assert.strictEqual(
-      formatDate(DateTime.makeUnsafe("2026-11-26")),
-      "Nov 26, 2026"
-    )
   })
 
   it("renders title and dates in the Markdown export", () => {
-    const emptySnippets = {} as Snippets
-    const rendered = toMarkdown(
-      [
-        "---",
-        "title: Introducing Effect UI",
-        "published: 2026-11-26",
-        "updated: 2026-11-27",
-        "---",
-        "",
-        "Hello."
-      ].join("\n"),
-      emptySnippets
-    )
+    const exported = (updated: string) =>
+      toMarkdown(
+        [
+          "---",
+          "title: Introducing Effect UI",
+          "published: 2026-11-26",
+          `updated: ${updated}`,
+          "---",
+          "",
+          "Hello."
+        ].join("\n"),
+        {} as Snippets
+      )
     assert.strictEqual(
-      rendered,
+      exported("2026-11-27"),
       "# Introducing Effect UI\n\nPublished Nov 26, 2026 · Updated Nov 27, 2026\n\nHello."
     )
-
-    const sameDay = toMarkdown(
-      [
-        "---",
-        "title: Introducing Effect UI",
-        "published: 2026-11-26",
-        "updated: 2026-11-26",
-        "---",
-        "",
-        "Hello."
-      ].join("\n"),
-      emptySnippets
-    )
     assert.strictEqual(
-      sameDay,
+      exported("2026-11-26"),
       "# Introducing Effect UI\n\nPublished Nov 26, 2026\n\nHello."
     )
   })

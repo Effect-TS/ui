@@ -44,9 +44,7 @@ describe("kit geometry", () => {
   })
 
   it("jumps to the matching row in Typeahead when playing", () => {
-    assert.strictEqual(typeaheadMatch(false).index, -1)
-    const playing = typeaheadMatch(true)
-    assert.strictEqual(playing.state.typed, "g")
-    assert.strictEqual(playing.index, 2)
+    assert.strictEqual(typeaheadMatch(false), -1)
+    assert.strictEqual(typeaheadMatch(true), 2)
   })
 })

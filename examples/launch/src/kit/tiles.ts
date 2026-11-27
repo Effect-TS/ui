@@ -64,6 +64,7 @@ import {
   listItems,
   stage,
   typeaheadItems,
+  typeaheadKey,
   typeaheadMatch
 } from "./geometry.ts"
 
@@ -135,6 +136,46 @@ const sortableRows = [
   { id: "b", width: 42, accent: false },
   { id: "c", width: 28, accent: false }
 ] as const
+
+type CalendarParts = Component.Headless.Parts<typeof Calendar>
+
+// The weeks of a month, which the Calendar, RangeCalendar and DatePicker
+// pictures share.
+const monthGrid = <M>(
+  h: Html.H<M>,
+  month: CalendarParts["months"][number],
+  weeks = month.weeks
+) =>
+  month.grid(h.table.class("kit-calendar-grid")).children(
+    h.tbody.children(
+      weeks.map((week, row) =>
+        h.tr.key(String(row)).children(
+          week.map((date) =>
+            month.cell({ element: h.td, date }).children(
+              month.day({ element: h.button, date })
+            )
+          )
+        )
+      )
+    )
+  )
+
+const calendarPicture = <M>(
+  h: Html.H<M>,
+  calendar: CalendarParts
+) => {
+  const [month] = calendar.months
+  return calendar.root(h.div.class("kit-calendar")).children(
+    h.div.class("kit-calendar-head").children(
+      month.heading(h.span).children(bar(h, 24)),
+      h.span.class("kit-calendar-nav").children(
+        calendar.previous(h.button).children("‹"),
+        calendar.next(h.button).children("›")
+      )
+    ),
+    monthGrid(h, month)
+  )
+}
 
 // A popup drawn in place, with the side and the alignment the picture
 // gives it. In place, the collision boundary is the part of the page in
@@ -332,36 +373,7 @@ const pictures: Record<Module, Picture> = {
         locale: "en-US"
       },
       onEmit: none,
-      view: (calendar) => {
-        const [month] = calendar.months
-        return calendar.root(h.div.class("kit-calendar")).children(
-          h.div.class("kit-calendar-head").children(
-            month.heading(h.span).children(bar(h, 24)),
-            h.span.class("kit-calendar-nav").children(
-              calendar.previous(h.button).children("‹"),
-              calendar.next(h.button).children("›")
-            )
-          ),
-          month.grid(h.table.class("kit-calendar-grid")).children(
-            h.tbody.children(
-              month.weeks.map((week, row) =>
-                h.tr.key(String(row)).children(
-                  week.map((date) =>
-                    month.cell({
-                      element: h.td.key(
-                        String(DateTime.toEpochMillis(date))
-                      ),
-                      date
-                    }).children(
-                      month.day({ element: h.button, date })
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-      }
+      view: (calendar) => calendarPicture(h, calendar)
     }),
   Checkbox: (h, on) =>
     Checkbox(h, {
@@ -564,25 +576,7 @@ const pictures: Record<Module, Picture> = {
               h.div.class("kit-popup kit-calendar-popup")
             ).children(
               datePicker.root(h.div.class("kit-calendar")).children(
-                month.grid(h.table.class("kit-calendar-grid"))
-                  .children(
-                    h.tbody.children(
-                      month.weeks.slice(0, 4).map((week, row) =>
-                        h.tr.key(String(row)).children(
-                          week.map((date) =>
-                            month.cell({
-                              element: h.td.key(
-                                String(DateTime.toEpochMillis(date))
-                              ),
-                              date
-                            }).children(
-                              month.day({ element: h.button, date })
-                            )
-                          )
-                        )
-                      )
-                    )
-                  )
+                monthGrid(h, month, month.weeks.slice(0, 4))
               )
             )
           )
@@ -952,37 +946,7 @@ const pictures: Record<Module, Picture> = {
         locale: "en-US"
       },
       onEmit: none,
-      view: (rangeCalendar) => {
-        const [month] = rangeCalendar.months
-        return rangeCalendar.root(h.div.class("kit-calendar"))
-          .children(
-            h.div.class("kit-calendar-head").children(
-              month.heading(h.span).children(bar(h, 24)),
-              h.span.class("kit-calendar-nav").children(
-                rangeCalendar.previous(h.button).children("‹"),
-                rangeCalendar.next(h.button).children("›")
-              )
-            ),
-            month.grid(h.table.class("kit-calendar-grid")).children(
-              h.tbody.children(
-                month.weeks.map((week, row) =>
-                  h.tr.key(String(row)).children(
-                    week.map((date) =>
-                      month.cell({
-                        element: h.td.key(
-                          String(DateTime.toEpochMillis(date))
-                        ),
-                        date
-                      }).children(
-                        month.day({ element: h.button, date })
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          )
-      }
+      view: (calendar) => calendarPicture(h, calendar)
     }),
   ScrollArea: (h, on) =>
     ScrollArea(h, {
@@ -1215,19 +1179,17 @@ const pictures: Record<Module, Picture> = {
       h.span.class("kit-keycap").children("esc")
     ),
   Typeahead: (h, on) => {
-    const match = typeaheadMatch(on)
+    const matched = typeaheadMatch(on)
     return h.div.class("kit-typeahead").children(
       h.div.class("kit-typeahead-rows").children(
         typeaheadItems.map(({ label }, index) =>
           h.div.key(label).class("kit-typeahead-row").attr(
             "data-matched",
-            index === match.index ? "" : undefined
+            index === matched ? "" : undefined
           ).children(label)
         )
       ),
-      h.span.class("kit-keycap").children(
-        match.state.typed === "" ? "g" : match.state.typed
-      )
+      h.span.class("kit-keycap").children(typeaheadKey)
     )
   },
   Positioning: (h, on) => {

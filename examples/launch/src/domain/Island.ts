@@ -54,12 +54,26 @@ export const Frontmatter = Schema.Struct({
   published: Schema.DateTimeUtcFromString,
   updated: Schema.DateTimeUtcFromString
 })
-export type Frontmatter = typeof Frontmatter.Type
 
-export const formatDate = (date: DateTime.Utc): string =>
-  DateTime.formatUtc(date, {
-    locale: "en-US",
-    month: "short",
-    day: "numeric",
-    year: "numeric"
-  })
+/**
+ * The article's dates in the order the byline shows them. "Updated" is
+ * left out while it is the day of publication.
+ */
+export const byline = (
+  { published, updated }: typeof Frontmatter.Type
+) =>
+  [
+    { label: "Published", date: published },
+    ...DateTime.Equivalence(published, updated)
+      ? []
+      : [{ label: "Updated", date: updated }]
+  ].map(({ date, label }) => ({
+    label,
+    iso: DateTime.formatIsoDateUtc(date),
+    text: DateTime.formatUtc(date, {
+      locale: "en-US",
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    })
+  }))

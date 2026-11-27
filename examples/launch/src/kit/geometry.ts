@@ -108,12 +108,16 @@ export const typeaheadItems = [
   { label: "Gamma" }
 ] as const
 
+/** The key the Typeahead tile types. */
+export const typeaheadKey = "g"
+
 /**
- * The typed prefix and matched item index in the Typeahead tile,
- * computed by `Typeahead.step`. At rest nothing is typed; playing,
- * typing "g" jumps straight to "Gamma".
+ * The matched item's index in the Typeahead tile, computed by
+ * `Typeahead.step`. At rest nothing matches. Playing, typing
+ * `typeaheadKey` jumps straight to "Gamma".
  */
-export const typeaheadMatch = (on: boolean) =>
+export const typeaheadMatch = (on: boolean): number =>
   on
-    ? Typeahead.step(Typeahead.initial, "g", typeaheadItems, -1)
-    : { state: Typeahead.initial, index: -1 }
+    ? Typeahead.step(Typeahead.initial, typeaheadKey, typeaheadItems)
+      .index
+    : -1
