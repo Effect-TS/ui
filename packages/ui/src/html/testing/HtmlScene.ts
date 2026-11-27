@@ -86,6 +86,7 @@ import * as fireGlobal from "../internal/fireGlobal.ts"
 import * as frames from "../internal/frames.ts"
 import * as globalEvents from "../internal/globalEvents.ts"
 import * as mediaQueries from "../internal/mediaQueries.ts"
+import * as signals from "../internal/signals.ts"
 import * as HtmlLocator from "./HtmlLocator.ts"
 
 /**
@@ -302,6 +303,22 @@ export interface Steps<C extends AnyComponent, Parts = never>
    * is ignored when the handler returns `undefined`.
    */
   mediaQuery(query: string, matches: boolean): this
+  /**
+   * Sends `visible` to the component's `HtmlSubscription.onVisibility` handler,
+   * simulating an initial state or a change.
+   *
+   * It throws when nothing listens for visibility, listing the active keys, and
+   * is ignored when the handler returns `undefined`.
+   */
+  visibility(visible: boolean): this
+  /**
+   * Sends `online` to the component's `HtmlSubscription.onConnectivity`
+   * handler, simulating an initial state or a change.
+   *
+   * It throws when nothing listens for connectivity, listing the active keys,
+   * and is ignored when the handler returns `undefined`.
+   */
+  connectivity(online: boolean): this
 
   /** Asserts on the elements `locator` matches in the current view. */
   expect(locator: Locator.Locator): Expect<this>
@@ -634,6 +651,22 @@ class StepsImpl extends internal.SceneCursor {
         const declared = mediaQueries.listenerOf(subscription)
         return declared?.query === query ? declared.handler : undefined
       }
+    )
+  }
+  visibility(visible: boolean): this {
+    return this.fireDeclared(
+      "visibility",
+      "visibility",
+      visible,
+      signals.visibilityHandlerOf
+    )
+  }
+  connectivity(online: boolean): this {
+    return this.fireDeclared(
+      "connectivity",
+      "connectivity",
+      online,
+      signals.connectivityHandlerOf
     )
   }
   private fireDeclared<A>(

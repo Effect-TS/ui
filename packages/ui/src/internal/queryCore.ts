@@ -179,7 +179,9 @@ export const makeSignal = (initial = true): SettableSignal => {
     set: (value) => {
       if (value === current) return
       current = value
-      for (const listener of Array.from(listeners)) listener(value)
+      for (const listener of Array.from(listeners)) {
+        if (listeners.has(listener)) listener(value)
+      }
     }
   }
 }

@@ -347,8 +347,9 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
 
 /**
  * Provides the browser host as the `Renderer`, `Html.Host`, the document's
- * `Query.Visibility` and `Query.Connectivity`, its events as
- * `HtmlSubscription.GlobalEvents`, its window's frames as
+ * `Query.Visibility` and `Query.Connectivity` (which also back
+ * `HtmlSubscription.onVisibility` and `HtmlSubscription.onConnectivity`), its
+ * events as `HtmlSubscription.GlobalEvents`, its window's frames as
  * `HtmlSubscription.AnimationFrames`, its window's media queries as
  * `HtmlSubscription.MediaQueries`, and an `HtmlImages.Images` and
  * `HtmlFiles.Files` over it, for the life of the Layer.
@@ -356,10 +357,11 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
  * **Details**
  *
  * `document` defaults to the global `document`. Closing the Layer removes the
- * host's listeners. The signals, `HtmlSubscription.GlobalEvents`,
- * `HtmlSubscription.AnimationFrames`, `HtmlSubscription.MediaQueries`,
- * `HtmlImages.Images` and `HtmlFiles.Files` use the document and its
- * `defaultView`, never globals.
+ * host's listeners. `Query.Visibility` reads `document.visibilityState` and
+ * `Query.Connectivity` reads `defaultView.navigator.onLine`. The signals,
+ * `HtmlSubscription.GlobalEvents`, `HtmlSubscription.AnimationFrames`,
+ * `HtmlSubscription.MediaQueries`, `HtmlImages.Images` and `HtmlFiles.Files`
+ * use the document and its `defaultView`, never globals.
  *
  * @stability experimental
  * @category layers

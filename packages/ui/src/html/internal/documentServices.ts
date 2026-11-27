@@ -11,9 +11,9 @@ import * as mediaQueries from "./mediaQueries.ts"
 import { payloadOf } from "./payload.ts"
 
 const signals = (document: Document) => {
-  const visibility = queryCore.makeSignal(document.visibilityState !== "hidden")
-  const connectivity = queryCore.makeSignal(true)
   const view = document.defaultView
+  const visibility = queryCore.makeSignal(document.visibilityState !== "hidden")
+  const connectivity = queryCore.makeSignal(view?.navigator?.onLine !== false)
   const onVisibility = () =>
     visibility.set(document.visibilityState !== "hidden")
   const onOnline = () => connectivity.set(true)
