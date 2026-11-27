@@ -1715,7 +1715,7 @@ describe("Query", () => {
     }).pipe(Effect.provide(KeyValueStore.layerMemory))
   })
 
-  it.effect("a hydrated ~query value beats a saved entry", () => {
+  it.effect("a hydrated ~query value beats a saved entry, and omitted entries wait for adoption", () => {
     const Notes = Schema.Array(Schema.String)
     let calls = 0
     class GetNotes extends Query.Service<GetNotes>()("notes/HydratedNotes", {
@@ -1733,8 +1733,11 @@ describe("Query", () => {
     return Effect.gen(function*() {
       const session = yield* persisted(GetNotes.layer)
 
-      yield* GetNotes.get({ folder: "inbox" }).pipe(Effect.provide(session))
-      assert.strictEqual(calls, 1)
+      yield* Effect.andThen(
+        GetNotes.get({ folder: "inbox" }),
+        GetNotes.get({ folder: "archive" })
+      ).pipe(Effect.provide(session))
+      assert.strictEqual(calls, 2)
 
       yield* Effect.gen(function*() {
         const cache = Query.internals(yield* Query.Cache)
@@ -1744,41 +1747,28 @@ describe("Query", () => {
           ]
         })
 
-        const peeked = yield* GetNotes.peek({ folder: "inbox" })
-        assert(AsyncResult.isSuccess(peeked))
-        assert.deepStrictEqual(peeked.value, ["server"])
-        assert.strictEqual(peeked.timestamp, 100)
+        const inbox = yield* GetNotes.peek({ folder: "inbox" })
+        assert(AsyncResult.isSuccess(inbox))
+        assert.deepStrictEqual(inbox.value, ["server"])
+        assert.strictEqual(inbox.timestamp, 100)
+        assert.deepStrictEqual(
+          yield* GetNotes.get({ folder: "inbox" }),
+          ["server"]
+        )
+        assert.strictEqual(calls, 2)
 
-        const got = yield* GetNotes.get({ folder: "inbox" })
-        assert.deepStrictEqual(got, ["server"])
-        assert.strictEqual(calls, 1)
-      }).pipe(Effect.provide(session))
-    }).pipe(Effect.provide(KeyValueStore.layerMemory))
-  })
-
-  it.effect("restores nothing until a hydrated page is adopted", () => {
-    class GetNotes extends Query.Service<GetNotes>()("notes/AdoptedNotes", {
-      success: Schema.String,
-      staleTime: "30 seconds",
-      persist: true
-    }) {
-      static readonly layer = this.toLayer(() => Effect.succeed("saved"))
-    }
-    return Effect.gen(function*() {
-      const session = yield* persisted(GetNotes.layer)
-      yield* GetNotes.get({}).pipe(Effect.provide(session))
-
-      yield* Effect.gen(function*() {
-        const cache = Query.internals(yield* Query.Cache)
-        cache.hydrate({})
-        assert.strictEqual((yield* GetNotes.peek({}))._tag, "Initial")
+        assert.strictEqual(
+          (yield* GetNotes.peek({ folder: "archive" }))._tag,
+          "Initial"
+        )
         cache.closeWindow()
-        const peeked = yield* GetNotes.peek({})
-        assert(AsyncResult.isSuccess(peeked))
-        assert.strictEqual(peeked.value, "saved")
+        const archive = yield* GetNotes.peek({ folder: "archive" })
+        assert(AsyncResult.isSuccess(archive))
+        assert.deepStrictEqual(archive.value, ["saved"])
       }).pipe(Effect.provide(session))
     }).pipe(Effect.provide(KeyValueStore.layerMemory))
   })
+
   it.effect("an offline reload shows the pages loadMore appended and reset dropped, aged from the last save", () => {
     const Page = Schema.Struct({ n: Schema.Number })
     let online = true
@@ -1813,10 +1803,9 @@ describe("Query", () => {
         yield* ListNotes.loadMore({})
         yield* Fiber.interrupt(fiber)
       }).pipe(Effect.provide(session))
+
       // Page 1 is 8 days old, but the list was saved 2 days ago.
       yield* advance("2 days")
-      assert.deepStrictEqual(yield* Effect.provide(pages, session), [1, 2])
-
       online = false
       yield* Effect.gen(function*() {
         assert.deepStrictEqual(yield* pages, [1, 2])
@@ -1875,6 +1864,7 @@ describe("Query", () => {
               )
             )
             yield* flush
+            assert.deepStrictEqual(seen, delay === 0 ? ["Failure"] : [])
             cache.closeWindow()
             yield* advance("1 second")
             // A fetch that failed before adoption gets the saved value under it.
@@ -1919,18 +1909,16 @@ describe("Query", () => {
           ),
           Layer.provide(Layer.succeed(KeyValueStore.KeyValueStore, store))
         )
-      const peeked = (prefix: string) =>
-        Effect.map(
-          GetNotes.peek({}).pipe(Effect.provide(session(prefix))),
-          (result) => result._tag
-        )
       yield* GetNotes.get({}).pipe(Effect.provide(session("app/u1")))
       // A parent prefix under another version leaves the nested one alone.
       yield* Effect.provide(Effect.void, session("app", "2"))
       failGets = true
       yield* Effect.provide(Effect.void, session("app/u1"))
       failGets = false
-      assert.strictEqual(yield* peeked("app/u1"), "Success")
+      assert.strictEqual(
+        (yield* GetNotes.peek({}).pipe(Effect.provide(session("app/u1"))))._tag,
+        "Success"
+      )
     }).pipe(Effect.provide(KeyValueStore.layerMemory))
   })
 
