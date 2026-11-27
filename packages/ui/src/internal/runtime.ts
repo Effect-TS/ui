@@ -1,6 +1,7 @@
 /**
  * @internal
  */
+import * as hotSessions from "#hot"
 import type * as Cause from "effect/Cause"
 import * as Clock from "effect/Clock"
 import * as Context from "effect/Context"
@@ -476,9 +477,17 @@ export const mount = (
   never,
   Scope.Scope | Renderer.Renderer
 > =>
-  withProps(
-    rootProps,
-    (props) => mountCore(component, props, container, fromRenderer, options)
+  Effect.contextWith((ctx: Context.Context<Renderer.Renderer>) =>
+    withProps(rootProps, (props) =>
+      mountCore(
+        component,
+        props,
+        container,
+        fromRenderer,
+        Context.get(ctx, services.Renderer).host.hot === true
+          ? { ...options, hot: hotSessions.openHost() }
+          : options
+      ))
   )
 
 /**
