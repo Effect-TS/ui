@@ -2,14 +2,15 @@
  * @title Testing @effect/ui components
  *
  * Test a component's logic as a `Story`, its view as a `Scene`, a Command
- * against a fake Layer, and a wrapper with its headless part as a `Play`.
- * The last test renders on the server and hydrates with `ssr`.
+ * against a fake Layer, and a wrapper with its headless part as a `Play`. A
+ * `Case` names one state for a Play and for the browser's workbench. The
+ * last test renders on the server and hydrates with `ssr`.
  */
 // @vitest-environment happy-dom
 import { Component, Router } from "@effect/ui"
 import { Html } from "@effect/ui/html"
 import { HtmlLocator, HtmlPlay, HtmlScene, ssr } from "@effect/ui/html/testing"
-import { Locator, Scene, Story, TestHost } from "@effect/ui/testing"
+import { Case, Locator, Scene, Story, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
@@ -392,6 +393,48 @@ it.layer(
       }))
   }
 )
+
+// ---------------------------------------------------------------------------
+// Case: a state written once, for a test and for the browser.
+// ---------------------------------------------------------------------------
+
+// A Case names one state of a component: its props and, optionally, a Model
+// to start from, messages sent once it mounts and a Layer to provide.
+// `HtmlPlay.fromCase` (or `Play.fromCase`) starts a Play from one. With
+// `DevToolsVite.plugin({ workbench: { cases: "/src/**/*.cases.ts" } })` the
+// dev server shows each at `/__workbench/NoteEditor/<key>`, and
+// `BrowserCase.mount` mounts one into any element. In an app the cases go
+// in `NoteEditor.cases.ts`, which the workbench finds by its exports.
+const NoteEditorCases = Case.make(NoteEditorTest, {
+  clean: { props: { note }, layer: Notes.layerMemory([note]) },
+  edited: {
+    props: { note },
+    messages: [NoteEditorMessage.UpdatedBody({ body: edited.body })],
+    layer: Notes.layerMemory([note])
+  },
+  failed: {
+    props: { note },
+    model: {
+      draft: edited.body,
+      saved: note.body,
+      edits: 1,
+      error: "Offline",
+      confirming: false,
+      actionsOpen: false
+    },
+    layer: Notes.layerMemory([note])
+  }
+})
+
+it.layer(TestHost.layer())("NoteEditor's cases", (it) => {
+  it.effect("start from their message or Model", () =>
+    Effect.gen(function*() {
+      const edits = yield* HtmlPlay.fromCase(NoteEditorCases.edited)
+      yield* edits.expect(body).toHaveValue(edited.body)
+      const failed = yield* HtmlPlay.fromCase(NoteEditorCases.failed)
+      yield* failed.expect(HtmlLocator.role("alert")).toHaveText("Offline")
+    }))
+})
 
 // The app is tested as it ships, so its components keep their own domain
 // Layers. The test provides what an entry module provides. `Router.memory`

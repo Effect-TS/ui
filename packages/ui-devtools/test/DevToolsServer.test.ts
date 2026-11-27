@@ -851,7 +851,9 @@ describe("DevToolsServer", { concurrent: false }, () => {
                   warn: (message) => warnings.push(message)
                 }
               },
-              httpServer: { once: (_, listener) => close = listener }
+              httpServer: { once: (_, listener) => close = listener },
+              middlewares: { use: () => {} },
+              transformIndexHtml: async (_, html) => html
             })
             yield* Effect.addFinalizer(() => Effect.sync(close))
             return { plugin, warnings }

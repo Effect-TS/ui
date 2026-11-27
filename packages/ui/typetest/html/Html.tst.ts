@@ -16,8 +16,8 @@ import {
   HtmlServer,
   HtmlSubscription
 } from "@effect/ui/html"
-import { HtmlLocator } from "@effect/ui/html/testing"
-import { type Locator, Scene } from "@effect/ui/testing"
+import { BrowserCase, HtmlLocator } from "@effect/ui/html/testing"
+import { Case, type Locator, Scene } from "@effect/ui/testing"
 import { Context, Effect, type Layer, Schema, type Scope, Stream } from "effect"
 import { describe, expect, it } from "tstyche"
 
@@ -958,6 +958,25 @@ describe("BrowserHost", () => {
     expect(BrowserHost.mountEffect).type.not.toBeCallableWith(
       App,
       {},
+      document.body
+    )
+  })
+
+  it("BrowserCase.mount rejects a case of another vocabulary, messages or not", () => {
+    const Native: View.Vocabulary<Native> = { name: "native", tags: {} }
+    const Silent = Component.define({
+      name: "Silent",
+      model: Schema.Number,
+      message: Schema.Never,
+      elements: Native
+    }).make({
+      init: () => 0,
+      update: ($) => $.model,
+      view: (h) => h.view
+    })
+    const cases = Case.make(Silent, { idle: {} })
+    expect(BrowserCase.mount).type.not.toBeCallableWith(
+      cases.idle,
       document.body
     )
   })

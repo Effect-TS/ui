@@ -5,6 +5,7 @@ import type * as Scope from "effect/Scope"
 import * as Locator from "../testing/Locator.ts"
 import type { StepError } from "../testing/Play.ts"
 import * as TestHost from "../testing/TestHost.ts"
+import * as caseRun from "./caseRun.ts"
 import * as controlled from "./controlled.ts"
 import * as scene from "./scene.ts"
 import { atSite, callSite } from "./steps.ts"
@@ -295,13 +296,15 @@ export const begin = <S extends PlayCursor>(
   ) => S,
   module: string,
   make: Function,
-  component: any,
-  props: unknown
+  c: caseRun.Start
 ): Effect.Effect<S, StepError, TestHost.TestHost | Scope.Scope> => {
   const site = callSite(make)
   return Effect.gen(function*() {
     const testHost = yield* TestHost.TestHost
-    const root = yield* TestHost.mount(component, props as any)
+    const root = yield* caseRun.mount(
+      c,
+      TestHost.mount(c.component, c.props, { hot: caseRun.session(c) } as {})
+    )
     const play = new Ctor(module, root, testHost)
     yield* play.settle
     yield* Effect.addFinalizer((exit) =>

@@ -1,5 +1,5 @@
 import { Command, Component, Subscription, UiSchema } from "@effect/ui"
-import { Locator, Play, TestHost } from "@effect/ui/testing"
+import { Case, Locator, Play, TestHost } from "@effect/ui/testing"
 import { assert, it } from "@effect/vitest"
 import {
   Cause,
@@ -13,6 +13,7 @@ import {
   Stream
 } from "effect"
 import { TestClock } from "effect/testing"
+import { SearchBox } from "./fixtures/components.ts"
 
 const SaverMessage = UiSchema.TaggedEnum({ ClickedSave: {}, SucceededSave: {} })
 const SaverEvents = UiSchema.TaggedEnum({ Saved: {} })
@@ -200,4 +201,112 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Play", (it) => {
       yield* second.expect(value).toHaveText("7")
     }).pipe(Effect.provide(backendLayer))
   })
+
+  it.effect("fromCase starts from the case's model or sends its messages, with its layer", () =>
+    Effect.gen(function*() {
+      class InitialId extends Context.Service<InitialId, string>()(
+        "InitialId"
+      ) {}
+
+      const ItemMessage = UiSchema.TaggedEnum({
+        Loaded: {},
+        ClickedSave: {},
+        CompletedSave: {}
+      })
+
+      class LoadItem extends Command.Service<LoadItem>()(
+        "Item/Load",
+        { args: {}, success: ItemMessage }
+      ) {}
+
+      class SaveItem extends Command.Service<SaveItem>()(
+        "Item/Save",
+        { args: { id: Schema.String }, success: ItemMessage }
+      ) {}
+
+      const Item = Component.define({
+        name: "Item",
+        props: Schema.Struct({ id: Schema.String }),
+        model: Schema.Struct({ saved: Schema.Boolean, loaded: Schema.Boolean }),
+        message: ItemMessage
+      }).make({
+        init: ($) =>
+          $.set({ saved: false, loaded: false }).run(LoadItem.make({})),
+        update: ($, message) =>
+          ItemMessage.match(message, {
+            Loaded: () => ({ ...$.model, loaded: true }),
+            ClickedSave: () => $.run(SaveItem.make({ id: $.props.id })),
+            CompletedSave: () => ({ ...$.model, saved: true })
+          }),
+        view: (h, model) =>
+          h.el(
+            "p",
+            `${h.props.id}:${
+              model.saved ? "saved" : h.isRunning(SaveItem) ? "saving" : "empty"
+            }`
+          )
+      })
+
+      let initLoads = 0
+      const LoadLayer = LoadItem.toLayer(() =>
+        Effect.sync(() => {
+          initLoads++
+          return ItemMessage.Loaded()
+        })
+      )
+      const SavePending = SaveItem.toLayer(() => Effect.never)
+
+      const cases = Case.make(Item, {
+        saved: {
+          props: { id: "t1" },
+          model: { saved: true, loaded: false },
+          layer: Layer.mergeAll(LoadLayer, SavePending)
+        },
+        saving: {
+          props: Effect.gen(function*() {
+            return { id: yield* InitialId }
+          }),
+          messages: [ItemMessage.ClickedSave()],
+          layer: Layer.mergeAll(
+            LoadLayer,
+            SavePending,
+            Layer.succeed(InitialId, "t2")
+          )
+        },
+        unset: {
+          props: { id: "t4" },
+          model: undefined,
+          layer: Layer.mergeAll(LoadLayer, SavePending)
+        }
+      })
+
+      assert.strictEqual(cases.saved.name, "Item/saved")
+      assert.strictEqual(cases.saved.component, Item)
+
+      const saved = yield* Play.fromCase(cases.saved)
+      yield* saved.expect(Locator.tag("p")).toHaveText("t1:saved")
+      assert.strictEqual(initLoads, 0)
+
+      const saving = yield* Play.fromCase(cases.saving)
+      yield* saving.expect(Locator.tag("p")).toHaveText("t2:saving")
+
+      // `model: undefined` counts as left out: `init` runs.
+      const unset = yield* Play.fromCase(cases.unset)
+      assert.deepStrictEqual(unset.root.model(), { saved: false, loaded: true })
+      assert.deepStrictEqual(
+        Case.make(SearchBox, { idle: { props: undefined } }).idle.props,
+        {}
+      )
+      const Nullable = Component.define({
+        name: "Nullable",
+        props: Schema.NullOr(Schema.String),
+        model: Schema.Struct({}),
+        message: Schema.Never
+      }).make({
+        init: () => ({}),
+        update: ($) => $.model,
+        view: (h) => h.el("p")
+      })
+      assert.isNull(Case.make(Nullable, { empty: { props: null } }).empty.props)
+    }))
 })

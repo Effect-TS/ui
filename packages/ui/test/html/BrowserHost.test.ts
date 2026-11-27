@@ -22,8 +22,12 @@ import {
   HtmlServer,
   HtmlSubscription
 } from "@effect/ui/html"
-import { HtmlLocator, TestAnimationFrames } from "@effect/ui/html/testing"
-import { TestHost } from "@effect/ui/testing"
+import {
+  BrowserCase,
+  HtmlLocator,
+  TestAnimationFrames
+} from "@effect/ui/html/testing"
+import { Case, TestHost } from "@effect/ui/testing"
 import { assert, expect, it } from "@effect/vitest"
 import {
   Cause,
@@ -4565,5 +4569,43 @@ describe("BrowserHost", { concurrent: false }, () => {
       slot.dispatchEvent(new Event("slotchange", { bubbles: true }))
       yield* tick
       expect(root.model()).toBe(1)
+    }).pipe(Effect.scoped))
+})
+
+describe("BrowserCase", { concurrent: false }, () => {
+  it.effect("mounts from the case's model, or sends its messages with its layer", () =>
+    Effect.gen(function*() {
+      const Msg = UiSchema.TaggedEnum({ ClickedSave: {}, CompletedSave: {} })
+      class SaveTodo extends Command.Service<SaveTodo>()(
+        "BrowserCase/SaveTodo",
+        { args: {}, success: Msg }
+      ) {}
+      const TodoItem = Html.component({
+        name: "TodoItem",
+        model: Schema.Struct({ saved: Schema.Boolean }),
+        message: Msg
+      }).make({
+        init: () => ({ saved: false }),
+        update: ($, message) =>
+          Msg.match(message, {
+            ClickedSave: () => $.run(SaveTodo.make({})),
+            CompletedSave: () => ({ saved: true })
+          }),
+        view: (h, model) => h.p(model.saved ? "saved" : "save")
+      })
+      const layer = SaveTodo.toLayer(() => Effect.succeed(Msg.CompletedSave()))
+      const cases = Case.make(TodoItem, {
+        saved: { model: { saved: true }, layer },
+        replayed: { messages: [Msg.ClickedSave()], layer }
+      })
+
+      const app = yield* container
+      yield* BrowserCase.mount(cases.saved, app)
+      expect(app.textContent).toBe("saved")
+
+      const app2 = yield* container
+      yield* BrowserCase.mount(cases.replayed, app2)
+      yield* tick
+      expect(app2.textContent).toBe("saved")
     }).pipe(Effect.scoped))
 })

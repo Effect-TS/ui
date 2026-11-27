@@ -12,6 +12,7 @@
     "effect": "^4.1.6"
   },
   "devDependencies": {
+    "@effect/ui-devtools": "workspace:*",
     "@effect/vitest": "^4.1.6",
     "@tailwindcss/vite": "^4.3.5",
     "tailwindcss": "^4.3.5",

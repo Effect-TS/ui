@@ -1,15 +1,15 @@
 import { Command, Component, type Query, UiSchema, type View } from "@effect/ui"
 import type { HtmlPlay, HtmlScene } from "@effect/ui/html/testing"
-import type { Steps } from "@effect/ui/testing"
-import { Scene, Story } from "@effect/ui/testing"
+import type { Steps, TestHost } from "@effect/ui/testing"
+import { Case, Play, Scene, Story } from "@effect/ui/testing"
 import { Effect, Schema, type Scope, Stream } from "effect"
 import { describe, expect, it } from "tstyche"
-import type { SearchBox } from "../test/fixtures/components.ts"
 import {
   Counter,
   CounterMessage,
   SaveTodo,
   Search,
+  SearchBox,
   SearchMessage,
   TodoItem,
   TodoItemMessage,
@@ -387,3 +387,63 @@ describe("Story's re-exports of the Steps types", () => {
     expect<Story.StreamTarget>().type.toBe<Steps.StreamTarget>()
   })
 })
+
+describe("Case", () => {
+  it("checks props, model and messages against the component and allows omitting empty props", () => {
+    expect(Case.make).type.toBeCallableWith(Counter, {
+      start: {
+        props: { initial: 1 },
+        model: { count: 2 },
+        messages: [CounterMessage.Increment()]
+      }
+    })
+    expect(Case.make).type.toBeCallableWith(SearchBox, { idle: {} })
+    expect(Case.make).type.not.toBeCallableWith(Counter, {
+      badProps: { props: { initial: "0" } }
+    })
+    expect(Case.make).type.not.toBeCallableWith(Counter, {
+      badModel: { props: { initial: 0 }, model: { count: "0" } }
+    })
+    expect(Case.make).type.not.toBeCallableWith(Counter, {
+      badMessage: {
+        props: { initial: 0 },
+        messages: [TodoItemMessage.Save()]
+      }
+    })
+  })
+
+  it("keeps the requirements its layer doesn't provide", () => {
+    const todo = { id: "t1", title: "Buy milk", done: false }
+    const SavePending = SaveTodo.toLayer(() => Effect.never)
+    const props = {} as
+      | Component.Props<typeof TodoItem>
+      | Effect.Effect<Component.Props<typeof TodoItem>, never, Config>
+    const cases = Case.make(TodoItem, {
+      unprovided: { props: { todo } },
+      provided: { props: { todo }, layer: SavePending },
+      // Only one branch provides SaveTodo.
+      either: Math.random() > 0.5
+        ? { props: { todo }, layer: SavePending }
+        : { props: { todo } },
+      effectProps: { props, layer: SavePending }
+    })
+    expect(Play.fromCase(cases.unprovided)).type.toBe<TodoPlay<SaveTodo>>()
+    expect(Play.fromCase(cases.provided)).type.toBe<TodoPlay<never>>()
+    expect(Play.fromCase(cases.either)).type.toBe<TodoPlay<SaveTodo>>()
+    expect(Play.fromCase(cases.effectProps)).type.toBe<TodoPlay<Config>>()
+  })
+})
+
+interface Config {
+  readonly _tag: "Config"
+}
+
+type TodoPlay<R> = Effect.Effect<
+  Play.Play<
+    Component.Model<typeof TodoItem>,
+    Component.Message<typeof TodoItem>,
+    Component.Events<typeof TodoItem>
+  >,
+  Play.StepError,
+  R | TestHost.TestHost | Scope.Scope
+>

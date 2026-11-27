@@ -22,6 +22,12 @@ export {
  * @stability experimental
  * @since 0.1.0
  */
+export * as BrowserCase from "./BrowserCase.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as HtmlLocator from "./HtmlLocator.ts"
 
 /**

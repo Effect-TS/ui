@@ -2,11 +2,12 @@
 import type { Component } from "@effect/ui"
 import { BrowserHost, Html, HtmlSubscription } from "@effect/ui/html"
 import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing"
-import { Locator, TestHost } from "@effect/ui/testing"
+import { Case, Locator, TestHost } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import { Cause, Clock, Effect, Exit, Schema, type Scope } from "effect"
 import { Menu } from "./fixtures/headless.ts"
 import { Settings } from "./fixtures/settings.ts"
+import { TodoItem } from "./fixtures/todos.ts"
 
 const Checkout = Html.component({
   name: "Checkout",
@@ -419,5 +420,15 @@ describe("HtmlPlay", () => {
       yield* p.click("Switch")
       yield* p.keydown("document", "l")
       yield* p.expectIgnored()
+    }).pipe(play))
+
+  it.effect("fromCase mounts a Case and returns an HtmlPlay", () =>
+    Effect.gen(function*() {
+      const cases = Case.make(TodoItem, {
+        open: { props: { todo: { id: "t1", title: "Buy milk", done: false } } }
+      })
+      const p = yield* HtmlPlay.fromCase(cases.open)
+      yield* p.expect(HtmlLocator.role("button", { name: "Delete Buy milk" }))
+        .toExist()
     }).pipe(play))
 })

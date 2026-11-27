@@ -27,6 +27,7 @@ import * as Effect from "effect/Effect"
 import * as Fiber from "effect/Fiber"
 import * as Layer from "effect/Layer"
 import * as Predicate from "effect/Predicate"
+import type * as Http from "node:http"
 import type * as DevTools from "../DevTools.ts"
 import { metaName } from "../internal/control.ts"
 import * as DevToolsServer from "./DevToolsServer.ts"
@@ -65,6 +66,33 @@ export interface Options extends DevToolsServer.Options {
    * `false` to disable, or pass `OverlayOptions`.
    */
   readonly overlay?: boolean | OverlayOptions | undefined
+  /**
+   * Serves a page under `/__workbench/` that shows one `Case` at a time.
+   * Off unless set.
+   */
+  readonly workbench?: WorkbenchOptions | undefined
+}
+
+/**
+ * Options for the workbench page served by `plugin`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface WorkbenchOptions {
+  /**
+   * Globs for the modules that export cases, from the project root, such as
+   * `"/src/**\/*.cases.ts"`. Every `Case` a module exports is found,
+   * whatever the export is called, alone or in the record `Case.make`
+   * returns.
+   */
+  readonly cases: string | ReadonlyArray<string>
+  /**
+   * Modules the page imports before the cases, from the project root, such
+   * as the app's stylesheet.
+   */
+  readonly setup?: string | ReadonlyArray<string> | undefined
 }
 
 /**
@@ -103,6 +131,7 @@ export interface Plugin {
  * @since 0.1.0
  */
 export interface ViteConfig {
+  readonly base?: string | undefined
   readonly experimental?:
     | { readonly hmrPartialAccept?: boolean | undefined }
     | undefined
@@ -136,6 +165,16 @@ export interface DevServer {
   readonly httpServer: {
     readonly once: (event: "close", listener: () => void) => unknown
   } | null
+  readonly middlewares: {
+    readonly use: (
+      handler: (
+        req: Http.IncomingMessage,
+        res: Http.ServerResponse,
+        next: (error?: unknown) => void
+      ) => void
+    ) => unknown
+  }
+  readonly transformIndexHtml: (url: string, html: string) => Promise<string>
 }
 
 /**
@@ -155,6 +194,28 @@ const hotId = "/@effect-ui/hot"
 const resolvedHotId = "\0effect-ui-hot"
 const devToolsId = "/@effect-ui/devtools"
 const resolvedDevToolsId = "\0effect-ui-devtools"
+const workbenchId = "/@effect-ui/workbench"
+const resolvedWorkbenchId = "\0effect-ui-workbench"
+const workbenchPath = /^\/__workbench(?:[/?]|$)/
+
+const workbenchPage = [
+  "<!doctype html>",
+  "<html>",
+  "<head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Workbench</title></head>",
+  `<body><div id="root"></div><script type="module" src="${workbenchId}"></script></body>`,
+  "</html>",
+  ""
+].join("\n")
+
+const workbenchClient = (options: WorkbenchOptions): string =>
+  [
+    ...[options.setup ?? []].flat().map((setup) =>
+      `import ${JSON.stringify(setup)};`
+    ),
+    "import { DevTools } from \"@effect/ui-devtools\";",
+    `DevTools.workbench(import.meta.glob(${JSON.stringify(options.cases)}));`,
+    ""
+  ].join("\n")
 
 const hotClient = [
   "if (import.meta.hot) {",
@@ -166,14 +227,31 @@ const hotClient = [
   ""
 ].join("\n")
 
+// The path under `base`, which ends in `/`, keeping that `/`.
+const underBase = (base: string, path: string): string | undefined =>
+  path.startsWith(base) ? path.slice(base.length - 1) : undefined
+
+// On a workbench page, `?bare` keeps everything but the overlay's iframe.
+const bare = (base: string): string =>
+  `!(location.pathname.startsWith(${
+    JSON.stringify(base)
+  }) && ${workbenchPath}.test(location.pathname.slice(${
+    base.length - 1
+  })) && new URLSearchParams(location.search).has("bare"))`
+
 const devToolsClient = (
   options: OverlayOptions & {
     readonly fields: ReadonlyArray<string> | undefined
-  }
+  },
+  workbench: string | undefined
 ): string =>
   [
     "import { DevTools } from \"@effect/ui-devtools\";",
-    `DevTools.attach(${JSON.stringify(options)});`,
+    workbench !== undefined
+      ? `DevTools.attach({ ...${JSON.stringify(options)}, panel: ${
+        bare(workbench)
+      } });`
+      : `DevTools.attach(${JSON.stringify(options)});`,
     ""
   ].join("\n")
 
@@ -249,9 +327,8 @@ export const plugin = (options?: Options): Plugin => {
   const overlayOptions: OverlayOptions = typeof options?.overlay === "object"
     ? options.overlay
     : {}
-  const devToolsSource = overlay
-    ? devToolsClient({ ...overlayOptions, fields })
-    : undefined
+  const workbench = options?.workbench
+  let base = "/"
   let bound = Promise.resolve(false)
   let partial = false
   return {
@@ -265,18 +342,26 @@ export const plugin = (options?: Options): Plugin => {
         : undefined,
     configResolved: (config) => {
       partial = hot && config.experimental?.hmrPartialAccept === true
+      base = config.base ?? "/"
     },
     resolveId: (id) =>
       hot && id === hotId
         ? resolvedHotId
         : overlay && id === devToolsId
         ? resolvedDevToolsId
+        : workbench !== undefined && id === workbenchId
+        ? resolvedWorkbenchId
         : undefined,
     load: (id) =>
       id === resolvedHotId
         ? hotClient
-        : id === resolvedDevToolsId
-        ? devToolsSource
+        : id === resolvedDevToolsId && overlay
+        ? devToolsClient(
+          { ...overlayOptions, fields },
+          workbench === undefined ? undefined : base
+        )
+        : id === resolvedWorkbenchId && workbench !== undefined
+        ? workbenchClient(workbench)
         : undefined,
     transform(code, id, options) {
       if (!partial || options?.ssr === true) return undefined
@@ -287,6 +372,23 @@ export const plugin = (options?: Options): Plugin => {
       return { code: code + hotExports.footer(found), map: null }
     },
     configureServer: (server) => {
+      // Registered here, not in a returned hook, so it runs before the app's
+      // catch-all, such as HtmlServerVite's.
+      if (workbench !== undefined) {
+        server.middlewares.use((req, res, next) => {
+          // This middleware runs before Vite strips the base path.
+          const url = underBase(base, req.url ?? "/")
+          if (
+            req.method !== "GET" || url === undefined ||
+            !workbenchPath.test(url)
+          ) return next()
+          server.transformIndexHtml(url, workbenchPage).then((html) => {
+            res.statusCode = 200
+            res.setHeader("Content-Type", "text/html")
+            res.end(html)
+          }, next)
+        })
+      }
       const { logger } = server.config
       let settle: (ok: boolean) => void = () => {}
       bound = new Promise((resolve) => settle = resolve)
@@ -330,14 +432,15 @@ export const plugin = (options?: Options): Plugin => {
       if (overlay) {
         tags.push({
           tag: "script",
-          attrs: { type: "module", src: devToolsId },
+          // Vite prefixes the page's own URLs with `base`, not a plugin's tags.
+          attrs: { type: "module", src: base.slice(0, -1) + devToolsId },
           injectTo: "head-prepend"
         })
       }
       if (hot) {
         tags.push({
           tag: "script",
-          attrs: { type: "module", src: hotId },
+          attrs: { type: "module", src: base.slice(0, -1) + hotId },
           injectTo: "head"
         })
       }
