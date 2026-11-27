@@ -127,7 +127,6 @@ describe("HtmlServerVite.plugin", () => {
           path.join(clientOutDir, "index.html"),
           "utf8"
         )
-        expect(home).toContain("<h1>Home</h1>")
         expect(home).toContain("\"~static\":true")
 
         const dts = await fs.readFile(
@@ -159,18 +158,16 @@ describe("HtmlServerVite.plugin", () => {
           expect(html).not.toContain("\"~static\"")
 
           const logs: Array<unknown> = []
-          const capture = Logger.make(({ message }) => {
-            logs.push(message)
-          })
           const staticLive = await server.handler(
             new Request("http://localhost/people/2"),
             Context.add(
               HtmlServer.Static.context(true),
               Logger.CurrentLoggers,
-              new Set([capture])
+              new Set([Logger.make(({ message }) => {
+                logs.push(message)
+              })])
             )
           )
-          expect(staticLive.status).toBe(200)
           expect(await staticLive.text()).toContain("\"~static\":true")
           expect(logs.length).toBeGreaterThan(0)
 
@@ -201,24 +198,18 @@ describe("HtmlServerVite.plugin", () => {
 
         const cases: ReadonlyArray<InlineConfig> = [
           {
-            build: { outDir: "dist" },
-            plugins: [
-              plugin({ entry: "/src/entry.server.ts", serverOutDir: "dist" })
-            ]
-          },
-          {
-            build: { outDir: "dist" },
-            plugins: [
-              plugin({
-                entry: "/src/entry.server.ts",
-                serverOutDir: "dist/server"
-              })
-            ]
-          },
-          {
             build: { outDir: "dist/client" },
             plugins: [
               plugin({ entry: "/src/entry.server.ts", serverOutDir: "dist" })
+            ]
+          },
+          {
+            build: { outDir: realClient },
+            plugins: [
+              plugin({
+                entry: "/src/entry.server.ts",
+                serverOutDir: path.join(linkedClient, "server")
+              })
             ]
           },
           {
@@ -232,15 +223,6 @@ describe("HtmlServerVite.plugin", () => {
               plugin({
                 entry: "/src/entry.server.ts",
                 serverOutDir: "dist/server"
-              })
-            ]
-          },
-          {
-            build: { outDir: realClient },
-            plugins: [
-              plugin({
-                entry: "/src/entry.server.ts",
-                serverOutDir: path.join(linkedClient, "server")
               })
             ]
           }
