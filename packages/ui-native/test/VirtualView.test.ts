@@ -25,6 +25,7 @@ const Message = UiSchema.TaggedEnum({
 
 const makeList = (options: {
   readonly initialHidden?: boolean
+  readonly startHidden?: boolean
   readonly removeClippedSubviews?: boolean
   readonly onRenderChild: () => void
 }) =>
@@ -43,7 +44,7 @@ const makeList = (options: {
     message: Message
   }).make({
     init: () => ({
-      hidden: options.initialHidden
+      hidden: options.initialHidden || options.startHidden
         ? { width: undefined, height: 64 }
         : undefined,
       lastMode: "none",
@@ -132,10 +133,10 @@ describe("VirtualView", () => {
     await close()
   })
 
-  it("supports initialHidden, removeClippedSubviews, and rejects raw text children", async () => {
+  it("defaults initialHidden from hidden, forwards removeClippedSubviews, and rejects raw text", async () => {
     let childRenders = 0
     const List = makeList({
-      initialHidden: true,
+      startHidden: true,
       removeClippedSubviews: true,
       onRenderChild: () => childRenders++
     })

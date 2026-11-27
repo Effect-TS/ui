@@ -16,9 +16,9 @@
  * - Native may skip emitting `"visible"` if the view was already prerendered
  *   before entering the viewport, so do not use `"visible"` as an impression
  *   event.
- * - Fabric dispatches `"visible"` synchronously on the UI thread, so a pure
- *   Model update that clears `hidden` commits in the microtask queue before
- *   the frame is drawn; an async `Command` cannot make that deadline.
+ * - Fabric dispatches `"visible"` synchronously on the UI thread. Clear
+ *   `hidden` directly in the pure `update` rather than through an async
+ *   `Command` so the update stays on that reveal path.
  * - React Native exports `VirtualView` as unstable (`unstable_VirtualView`).
  *
  * @stability experimental
@@ -94,7 +94,8 @@ export interface VirtualViewOptions<
   readonly hidden?: VirtualViewSize | undefined
   /**
    * Whether native starts this view in the hidden mode on initial creation.
-   * Defaults to `false`. Pair `true` with an initial `hidden` placeholder size.
+   * Defaults to `hidden !== undefined`, so mounting with a cached placeholder
+   * size still receives a reveal event when the view lands in the viewport.
    */
   readonly initialHidden?: boolean | undefined
   /**
@@ -171,7 +172,7 @@ export const VirtualView = <
     "virtualView"
   >).forward((node) => {
     let out = node
-      .prop("initialHidden", initialHidden ?? false)
+      .prop("initialHidden", initialHidden ?? (hidden !== undefined))
       .prop("renderState", hidden === undefined ? 1 : 2)
     if (removeClippedSubviews !== undefined) {
       out = out.prop("removeClippedSubviews", removeClippedSubviews)
