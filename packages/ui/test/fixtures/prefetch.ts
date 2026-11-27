@@ -81,12 +81,19 @@ export class Badge
   extends Feature.Service<Badge>()("test/Badge", { props: Schema.Struct({}) })
 {}
 
-/** Reads person 1, and shows a card for person 2 in a frame's slot, a feature, and a note with and without a `provide`. */
+/** An owner no page renders. */
+const BarKey = Component.sharedKey({ name: "Bar", schema: Schema.Boolean })
+
+/**
+ * Reads person 1 and an absent optional owner, and shows a card for person 2 in a frame's slot, a
+ * feature, and a note with and without a `provide`.
+ */
 export const Walked = Component.define({
   name: "Walked",
   model: Schema.Struct({}),
   message: Schema.Never,
-  queries: { person: { query: GetPerson, args: () => ({ id: 1 }) } }
+  queries: { person: { query: GetPerson, args: () => ({ id: 1 }) } },
+  reads: { bar: { owner: BarKey, optional: true } }
 }).make({
   init: () => ({}),
   update: ($) => $.model,

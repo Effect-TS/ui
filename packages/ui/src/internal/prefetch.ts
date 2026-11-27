@@ -285,7 +285,7 @@ const walkPage = (
   }
   // A page that reads shared state reads the owners above the declarer: the walk doesn't run the
   // closures of the headless components in the page, owners among them.
-  const shared: Component.SharedLookup = (owner) => {
+  const shared: Component.SharedLookup = (owner, optional) => {
     const key = keyOf(owner)
     for (
       let at: Instance | undefined = inst;
@@ -294,6 +294,7 @@ const walkPage = (
     ) {
       if (keyOf(at.component.definition) === key) return at.shares
     }
+    if (optional === true) return undefined
     throw new Error(
       `${key.name} isn't above ${inst.path}, so its shared state can't be read`
     )
