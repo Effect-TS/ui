@@ -239,10 +239,7 @@ interface Ran {
   readonly child: View.Child<any, any>
   readonly model: unknown
   readonly shared: Component.SharedLookup
-  // The path of the nearest expanded owner above it, by definition.
-  readonly owners: OwnerPaths
 }
-type OwnerPaths = ReadonlyMap<Component.Definition.Any, string>
 // The children an expansion replaced, by the expanded root: `childEmit` and `childFailure` still find them.
 const expandedChildren = new WeakMap<
   object,
@@ -533,16 +530,6 @@ const delivered = (
   )
 }
 
-/** `ownerPaths`, and `component` nearest at `path` when it's an owner. */
-const withOwner = (
-  ownerPaths: OwnerPaths,
-  component: { readonly definition: Component.Definition.Any },
-  path: string
-): OwnerPaths =>
-  component.definition.shares === undefined
-    ? ownerPaths
-    : new Map(ownerPaths).set(component.definition, path)
-
 const expandRoot = <Msg>(
   view: View.Node<Msg, any>,
   name: string,
@@ -552,10 +539,7 @@ const expandRoot = <Msg>(
   root: Owners,
   status: ReadonlyMap<string, SlotResult> | undefined,
   slotStatus: SlotResult | undefined,
-  author: Pick<
-    Fields<any, any, any, any>,
-    "component" | "model" | "props" | "results"
-  >
+  author: Pick<Fields<any, any, any, any>, "model" | "props" | "results">
 ): View.Node<Msg, any> => {
   const replaced: Array<View.Child<any, any>> = []
   const ran = new Map<string, Ran>()
@@ -573,7 +557,6 @@ const expandRoot = <Msg>(
     depth: number,
     own: boolean,
     owners: Owners,
-    ownerPaths: OwnerPaths,
     reads: SlotResult | undefined
   ) => {
     const nodes = View.children([input])
@@ -581,7 +564,7 @@ const expandRoot = <Msg>(
     if (own) written.push(paths)
     const scope = (label: string) => checkContentPaths(label, nodes)
     return nodes.map((child) =>
-      expand(child, path, depth, own, owners, ownerPaths, scope, reads)
+      expand(child, path, depth, own, owners, scope, reads)
     )
   }
   const expand = (
@@ -590,7 +573,6 @@ const expandRoot = <Msg>(
     depth: number,
     own: boolean,
     owners: Owners,
-    ownerPaths: OwnerPaths,
     scope: (label: string) => ChildPaths,
     reads: SlotResult | undefined
   ): View.Node<any, any> => {
@@ -609,7 +591,6 @@ const expandRoot = <Msg>(
             1,
             false,
             owners,
-            ownerPaths,
             undefined
           )
         } as View.Node<
@@ -620,16 +601,7 @@ const expandRoot = <Msg>(
       case "Element": {
         let changed = false
         const children = node.children.map((child) => {
-          const next = expand(
-            child,
-            path,
-            depth,
-            own,
-            owners,
-            ownerPaths,
-            scope,
-            reads
-          )
+          const next = expand(child, path, depth, own, owners, scope, reads)
           if (next !== child) changed = true
           return next
         })
@@ -662,16 +634,7 @@ const expandRoot = <Msg>(
           return standsFor(
             node,
             true,
-            expand(
-              shown,
-              path,
-              depth,
-              own,
-              owners,
-              ownerPaths,
-              scope,
-              undefined
-            )
+            expand(shown, path, depth, own, owners, scope, undefined)
           )
         }
         if (node.slots !== undefined) {
@@ -685,7 +648,6 @@ const expandRoot = <Msg>(
               depth + 1,
               own,
               owners,
-              ownerPaths,
               reads
             )
             shown.push(...placed)
@@ -703,12 +665,7 @@ const expandRoot = <Msg>(
           ? given.get(childPath)
           : component.init(node.props).model
         const lookup = sharedLookup(shared, owners)
-        ran.set(childPath, {
-          child: node,
-          model,
-          shared: lookup,
-          owners: ownerPaths
-        })
+        ran.set(childPath, { child: node, model, shared: lookup })
         const parts = component.parts(model, node.props, {
           owner: { path: childPath, depth: depth + 1 },
           shared: lookup
@@ -723,7 +680,6 @@ const expandRoot = <Msg>(
           depth + 1,
           own,
           ownersBelow(shared, owners, component, model, node.props),
-          withOwner(ownerPaths, component, childPath),
           (label) => checkChildPaths(label, tree),
           reads
         )
@@ -737,7 +693,6 @@ const expandRoot = <Msg>(
     0,
     true,
     root,
-    withOwner(new Map(), author.component, "/" + name),
     (label) => checkChildPaths(label, view),
     slotStatus
   )
@@ -767,8 +722,13 @@ export const record = <Props, Model, Msg, Events>(
     if (rendered === undefined) {
       rendered = render()
       // A render that fails places nothing, so the next one starts from the Models this one started from.
-      const placed = placedModels(rendered, fields.childModels)
-      if (placed !== undefined) childModels.set(story, placed)
+      const ran = ranChildren.get(rendered)
+      if (ran !== undefined || fields.childModels?.size) {
+        childModels.set(
+          story,
+          new Map(Array.from(ran ?? [], ([path, child]) => [path, child.model]))
+        )
+      }
     }
     return rendered
   }
@@ -846,50 +806,28 @@ export const record = <Props, Model, Msg, Events>(
   return story
 }
 
-// The Models a render placed, by path, as the runtime keeps an instance while it's placed: `init` runs
-// once, and a child no longer placed is closed, so one placed again starts from `init`.
-const placedModels = (
-  expanded: View.Node<any, any>,
-  given: ReadonlyMap<string, unknown> | undefined
-): ReadonlyMap<string, unknown> | undefined => {
-  const ran = ranChildren.get(expanded)
-  if (ran === undefined) return given?.size ? new Map() : given
-  return given?.size === ran.size &&
-      [...ran].every(([path, child]) =>
-        given.has(path) && given.get(path) === child.model
-      )
-    ? given
-    : new Map([...ran].map(([path, child]) => [path, child.model]))
-}
-
-const fieldsOf = <Props, Model, Msg, Events>(
-  story: State<Props, Model, Msg, Events>
-): Fields<Props, Model, Msg, Events> => ({
-  component: story.component,
-  props: story.props,
-  model: story.model,
-  results: story.results,
-  pending: story.pending,
-  emitted: story.emitted,
-  sent: story.sent,
-  interrupted: story.interrupted,
-  loadingMore: story.loadingMore,
-  // A step sets it last, once it has settled: an interaction to what it did, any other step to `false`.
-  defaultPrevented: story.defaultPrevented,
-  ack: story.ack,
-  childModels: childModels.get(story),
-  childStatus: childStatuses.get(story),
-  shared: sharedGiven.get(story),
-  collected: collectedLast.get(story)
-})
-
 /** @internal */
 export const update = <Props, Model, Msg, Events>(
   story: State<Props, Model, Msg, Events>,
   patch: Partial<Fields<Props, Model, Msg, Events>>
 ): State<Props, Model, Msg, Events> => {
   const fields: Fields<Props, Model, Msg, Events> = {
-    ...fieldsOf(story),
+    component: story.component,
+    props: story.props,
+    model: story.model,
+    results: story.results,
+    pending: story.pending,
+    emitted: story.emitted,
+    sent: story.sent,
+    interrupted: story.interrupted,
+    loadingMore: story.loadingMore,
+    // A step sets it last, once it has settled: an interaction to what it did, any other step to `false`.
+    defaultPrevented: story.defaultPrevented,
+    ack: story.ack,
+    childModels: childModels.get(story),
+    childStatus: childStatuses.get(story),
+    shared: sharedGiven.get(story),
+    collected: collectedLast.get(story),
     ...patch
   }
   // A defect in `view` fails the step that changed the Model, the query results, the props or what's pending.
@@ -1914,7 +1852,8 @@ const dispatchChild = <Props, Model, Msg, Events>(
   message: unknown
 ): State<Props, Model, Msg, Events> => {
   if (message === undefined || isNoop(message)) return story
-  const ran = ranChildren.get(story.view())?.get(path)
+  const children = ranChildren.get(story.view())
+  const ran = children?.get(path)
   if (ran === undefined) return story
   const component = ran.child.component as unknown as Component.Headless.Any
   const next = (component.update as (
@@ -1933,13 +1872,35 @@ const dispatchChild = <Props, Model, Msg, Events>(
     })
   }
   for (const send of next.sends ?? []) {
-    const owner = ran.owners.get(send.owner.definition)
+    const owner = ownerAbove(story, children!, path, send.owner.definition)
     if (owner !== undefined) out = deliver(out, owner, send.message)
   }
   for (const event of next.events) {
     out = deliver(out, ran.child.owner?.path, ran.child.onEmit(event))
   }
   return out
+}
+
+// The path of the nearest instance of `definition` above the child at `path`: an expanded child whose
+// path is a prefix of it, else the story's component.
+const ownerAbove = (
+  story: State<any, any, any, any>,
+  children: ReadonlyMap<string, Ran>,
+  path: string,
+  definition: Component.Definition.Any
+): string | undefined => {
+  let found: string | undefined
+  for (const [at, { child }] of children) {
+    if (
+      (child.component as Component.Any).definition === definition &&
+      path.startsWith(at + "/") &&
+      (found === undefined || at.length > found.length)
+    ) found = at
+  }
+  return found ??
+    (story.component.definition === definition
+      ? "/" + definition.name
+      : undefined)
 }
 
 /** `node` and its ancestors in `root`, innermost first, or `undefined` when `node` isn't in `root`. */
@@ -2050,14 +2011,9 @@ export const tryFireNode = <Props, Model, Msg, Events>(
 ): Fired<Props, Model, Msg, Events> | undefined => {
   const handler = handlerOn(ancestry(story, node), event)
   if (handler === undefined) return undefined
-  // In the runtime's order: the parts' layers, deepest owner first, then the element's own.
-  const owned = handler.owned ?? []
-  const layers = [
-    ...owned.slice().sort((a, b) => b.owner.path.length - a.owner.path.length),
-    handler
-  ].filter((layer) => Object.hasOwn(layer.handlers, event))
+  const layers = View.layersOf(handler)
   let prevented = event === "submit" ||
-    [...owned, handler].some((layer) =>
+    layers.some((layer) =>
       layer.eventOptions[event]?.preventDefault === "always"
     )
   let handled = false
@@ -2065,6 +2021,7 @@ export const tryFireNode = <Props, Model, Msg, Events>(
   // Each layer runs once: its message decides whether its own `preventDefault: true` cancels, then it's
   // sent to the layer's owner.
   for (const layer of layers) {
+    if (!Object.hasOwn(layer.handlers, event)) continue
     const message = handle(layer.handlers[event]!, payload)
     if (message === undefined) continue
     handled = true

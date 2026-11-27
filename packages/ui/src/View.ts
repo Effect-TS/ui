@@ -206,6 +206,25 @@ export const tokenListAttributes: ReadonlySet<string> = new Set([
 ])
 
 const noOwned: ReadonlyArray<Owned> = []
+
+/**
+ * An element's layers in the order a host runs them: its parts' layers,
+ * deepest owner first, then the element's own. Depth is read from the path,
+ * since a kept-alive instance that moves keeps its old `depth`.
+ *
+ * @internal
+ */
+export const layersOf = (
+  element: Element<any, any>
+): ReadonlyArray<Owned | Element<any, any>> => {
+  const owned = element.owned ?? noOwned
+  return [
+    ...(owned.length > 1
+      ? owned.slice().sort((a, b) => b.owner.path.length - a.owner.path.length)
+      : owned),
+    element
+  ]
+}
 // What an element built without children holds: one frozen array for all of them.
 const noChildren: ReadonlyArray<never> = Object.freeze([])
 

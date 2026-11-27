@@ -93,12 +93,7 @@ export const layer = (
   if (owned.length === 0) {
     return mount === undefined ? view : { ...view, mount }
   }
-  const layers = [
-    ...(owned.length > 1
-      ? owned.slice().sort((a, b) => b.owner.path.length - a.owner.path.length)
-      : owned),
-    view
-  ]
+  const layers = View.layersOf(view)
   if (dev) checkLayers(inst, layers)
   let handlers: Record<string, Layered> | undefined
   let options: Record<string, Record<string, unknown>> | undefined
