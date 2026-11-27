@@ -29,11 +29,14 @@ const layout = (pageTop?: number) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       const original = Element.prototype.getBoundingClientRect
-      const page = document.documentElement
+      const windowScrollTo = window.scrollTo
       const origin = pageTop ?? 0
-      const height = pageTop === undefined ? 100 : 800
+      const height = pageTop === undefined ? 100 : window.innerHeight
       let stored = 0
-      const scroller = () => document.querySelector<HTMLElement>(".viewport")!
+      const scroller = () =>
+        pageTop === undefined
+          ? document.querySelector<HTMLElement>(".viewport")!
+          : document.documentElement
       const target = () => pageTop === undefined ? scroller() : window
       const list = () => document.querySelector<HTMLElement>(".list")!
       const listHeight = () =>
@@ -44,10 +47,6 @@ const layout = (pageTop?: number) =>
         0,
         Math.min(stored, origin + listHeight() - height)
       ))
-      const scrolled = (value: number) => {
-        stored = value
-        top()
-      }
       Element.prototype.getBoundingClientRect = function(this: Element) {
         if (this.classList.contains("viewport")) return rect(0, 100)
         if (this.classList.contains("list")) {
@@ -61,32 +60,8 @@ const layout = (pageTop?: number) =>
         }
         return original.call(this)
       }
-      const scrollToOf = (element: HTMLElement | Window) =>
-        ((options: ScrollToOptions) => {
-          scrolled(options.top ?? top())
-          setTimeout(() => element.dispatchEvent(new Event("scroll")), 0)
-        }) as typeof element.scrollTo
-      if (pageTop !== undefined) {
-        Object.defineProperty(window, "innerHeight", {
-          configurable: true,
-          value: height
-        })
-        Object.defineProperty(window, "scrollY", {
-          configurable: true,
-          get: top
-        })
-        Object.defineProperty(page, "clientHeight", {
-          configurable: true,
-          value: height
-        })
-        Object.defineProperty(page, "scrollHeight", {
-          configurable: true,
-          get: () => origin + listHeight()
-        })
-        window.scrollTo = scrollToOf(window)
-      }
+      const relayout = () => target().dispatchEvent(new Event("scroll"))
       const install = () => {
-        if (pageTop !== undefined) return
         const element = scroller()
         Object.defineProperty(element, "clientHeight", {
           configurable: true,
@@ -94,36 +69,41 @@ const layout = (pageTop?: number) =>
         })
         Object.defineProperty(element, "scrollHeight", {
           configurable: true,
-          get: listHeight
+          get: () => origin + listHeight()
         })
         Object.defineProperty(element, "scrollTop", {
           configurable: true,
           get: top,
-          set: scrolled
+          set: (value: number) => {
+            stored = value
+            top()
+          }
         })
-        element.scrollTo = scrollToOf(element)
+        target().scrollTo = ((options: ScrollToOptions) => {
+          element.scrollTop = options.top ?? top()
+          setTimeout(relayout, 0)
+        }) as typeof window.scrollTo
       }
       const scrollTo = (top: number) => {
-        scrolled(top)
-        target().dispatchEvent(new Event("scroll"))
+        scroller().scrollTop = top
+        relayout()
       }
-      const relayout = () => target().dispatchEvent(new Event("scroll"))
-      return { install, scrollTo, relayout, scrollTop: top, original }
+      return {
+        install,
+        scrollTo,
+        relayout,
+        scrollTop: top,
+        original,
+        windowScrollTo
+      }
     }),
-    ({ original }) =>
+    ({ original, windowScrollTo }) =>
       Effect.sync(() => {
         Element.prototype.getBoundingClientRect = original
-        if (pageTop === undefined) return
-        const page = document.documentElement as unknown as Record<
-          string,
-          unknown
-        >
-        const view = window as unknown as Record<string, unknown>
-        delete view.innerHeight
-        delete view.scrollY
-        delete view.scrollTo
-        delete page.clientHeight
-        delete page.scrollHeight
+        window.scrollTo = windowScrollTo
+        for (const key of ["clientHeight", "scrollHeight", "scrollTop"]) {
+          Reflect.deleteProperty(document.documentElement, key)
+        }
       })
   )
 
@@ -432,7 +412,7 @@ describe("VirtualList in a document", { concurrent: false }, () => {
     Effect.gen(function*() {
       const keys = Array.from({ length: 200 }, (_, i) => "k" + i)
       const reversed = [...keys].reverse()
-      const { next, scrollTo, scrollTop } = yield* Steps([
+      const { indices, next, scrollTo, scrollTop } = yield* Steps([
         { count: 200, keys },
         { count: 200, keys: reversed },
         {
@@ -445,6 +425,7 @@ describe("VirtualList in a document", { concurrent: false }, () => {
       ], { pageTop: 400 })
       yield* next
       assert.strictEqual(scrollTop(), 0)
+      assert.strictEqual(indices()[0], 0)
 
       scrollTo(400 + 100 * itemSize)
       yield* tick

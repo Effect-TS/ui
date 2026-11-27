@@ -1101,6 +1101,10 @@ const TrackVirtualList = Mount.makeStream(
         }
 
         const anchorAt = (start: number): Position | null => {
+          // Above the list, hold its start rather than follow a row.
+          if (placement(box().top) > 0.5) {
+            return { index: 0, key: null, offset: start }
+          }
           const zero = origin()
           for (const item of itemsOf()) {
             const rect = placedAt(item)
