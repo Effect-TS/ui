@@ -1910,21 +1910,16 @@ type Properties<P, T> = Types.IsUnion<T> extends true ? P
     }
 
 /**
- * The builder under a custom element's property methods: an `Element` whose
- * `prop` takes the declared properties and the element's own properties,
- * and whose `on` adds the declared events, each with its decoded `detail`
- * as the payload.
+ * A custom element builder with typed properties and events. Declared
+ * event handlers receive the decoded `detail` as their payload.
  *
  * **Details**
  *
  * `P` maps each declared property to its value type and `E` each declared
  * event to its `detail`. A declared event replaces an HTML event of the same
  * name. `Node` defaults to `HTMLElementTagNameMap[Tag]`, or `HTMLElement`
- * for an unregistered tag, and types `ref` and `onMount`. `prop` also
- * takes its writable fields that `HTMLElement` lacks, minus methods and
- * callbacks, each typed as it reads, unless `Tag` is a union. A declared
- * property wins over a field of the same name. `CustomElement` adds a
- * method per declared property.
+ * for an unregistered tag, and types `ref` and `onMount`.
+ * `CustomElement` adds a method per declared property.
  *
  * @stability experimental
  * @category custom elements
@@ -1957,9 +1952,7 @@ export class CustomElementBuilder<
 type Undeclared<P, K extends string> = K extends keyof P ? never : unknown
 
 /**
- * The typed `prop`, and the HTML methods a declared property can share a
- * name with. Once a declaration takes the name, the HTML method can't be
- * called, so the generated method is the only signature left.
+ * A declared property method replaces any HTML method of the same name.
  *
  * @stability experimental
  * @category custom elements
@@ -2102,18 +2095,22 @@ export interface CustomElementBinding<Tag extends string, P, E> {
  * `Schema.Struct({})` declares an event without a payload. An event that
  * doesn't bubble reaches the element's own handler only.
  *
- * `prop` takes the same declarations, typed the same way, and sets a
- * property whose name has no method (see `CustomElementReserved`). When
- * the element's library registers its class in `HTMLElementTagNameMap`, as
- * Lit, Stencil and Shoelace do, `prop` also takes the class's writable
- * fields, typed as they read, and that class types `ref` and `onMount`.
- * Declare a property in `properties` for a method, for an element with no
- * types, for a union `tag`, for a callback, which isn't inferred, or for an accessor whose
- * setter takes another type than its getter returns, such as `currentTime`
- * on Shoelace's `sl-animation`. The HTML methods, such as `class`, `style`
- * and `on("click", ...)`, work as on any element. Registering the element
- * with `customElements.define`, often by importing its package, is still
- * the app's job.
+ * `prop` accepts declared properties, including names without a method
+ * (see `CustomElementReserved`). For a single tag registered in
+ * `HTMLElementTagNameMap`, it also infers writable fields beyond
+ * `HTMLElement`, excluding methods and callbacks. Inferred values use
+ * the fields' read types; explicit schemas take precedence. The registered
+ * class also types `ref` and `onMount`.
+ *
+ * Declare schemas in `properties` for fluent property methods, callback
+ * properties, or accessors whose setters accept a different type from
+ * their getters' return types. Explicit schemas are also needed when the
+ * tag is absent from `HTMLElementTagNameMap` or has a union type.
+ *
+ * HTML methods such as `class`, `style` and `on("click", ...)` remain
+ * available unless a declared property replaces them. The app must still
+ * register the element with `customElements.define`, often by importing
+ * its package.
  *
  * Throws when `tag` isn't a custom element name, lowercase with a hyphen.
  *

@@ -2,4 +2,4 @@
 "@effect/ui": patch
 ---
 
-`Html.customElement` reads a registered tag's class from `HTMLElementTagNameMap`: `prop` takes its writable fields with their types, and `ref` and `onMount` use the element class, so `Html.customElement({ tag: "sl-qr-code" })` needs no `properties`.
+Infer `Html.customElement` property types from `HTMLElementTagNameMap` for `.prop`, and use the registered element class for `ref` and `onMount`. Explicit property schemas still take precedence and provide fluent methods.
