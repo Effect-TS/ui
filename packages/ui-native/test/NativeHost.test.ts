@@ -9,7 +9,7 @@ import * as FakeFabric from "./utils/FakeFabric.ts"
 const Message = UiSchema.TaggedEnum({
   Pressed: {},
   Typed: { value: Schema.String },
-  Scrolled: { y: Schema.Number },
+  Scrolled: { event: Schema.String, y: Schema.Number },
   Toggled: {}
 })
 
@@ -19,16 +19,18 @@ const Counter = Native.component({
     count: Schema.Number,
     name: Schema.String,
     on: Schema.Boolean,
-    y: Schema.Number
+    y: Schema.Number,
+    events: Schema.Array(Schema.String)
   }),
   message: Message
 }).make({
-  init: () => ({ count: 0, name: "", on: false, y: 0 }),
+  init: () => ({ count: 0, name: "", on: false, y: 0, events: [] }),
   update: {
     Pressed: ($) => $.evolve({ count: (count) => count + 1, name: () => "" }),
     // Keeps the name upper case, so an edit in lower case is replaced.
     Typed: ($, { value }) => $.evolve({ name: value.toUpperCase() }),
-    Scrolled: ($, { y }) => $.evolve({ y }),
+    Scrolled: ($, { event, y }) =>
+      $.evolve({ y, events: (events) => [...events, event] }),
     Toggled: ($) => $.evolve({ on: (on) => !on })
   },
   view: (h, model) =>
@@ -45,10 +47,17 @@ const Counter = Native.component({
         h.text.style({ fontWeight: "bold" }).children(model.name)
       ),
       h.view.style(model.on ? { backgroundColor: "red" } : {}).children(),
-      h.scroll.horizontal(model.on).on("scroll", ({ y }) =>
-        Message.Scrolled({ y }))
+      h.scroll.horizontal(model.on)
+        .contentContainerStyle(
+          model.on ? { padding: 4 } : { padding: 8, flexDirection: "column" }
+        )
+        .on("scroll", ({ y }) => Message.Scrolled({ event: "scroll", y }))
+        .on("momentumScrollEnd", ({ y }) =>
+          Message.Scrolled({ event: "momentumScrollEnd", y }))
+        .on("contentSizeChange", ({ height }) =>
+          Message.Scrolled({ event: "contentSizeChange", y: height }))
         .children(h.text.children("Row")),
-      h.text.children(`y ${model.y}`)
+      h.text.children(`y ${model.y} ${model.events.join(",")}`)
     )
 })
 
@@ -153,20 +162,39 @@ describe("NativeHost", () => {
     assert.strictEqual(red(), undefined)
   })
 
-  it("holds a scroll view's children in its content view and maps scroll events", async () => {
+  it("holds a scroll view's children in its styled content view and maps scroll events", async () => {
     const { fabric, find, printed, root, settle } = await setup()
     assert.include(
       printed(),
       "<RCTScrollView><RCTScrollContentView><RCTText>Row</></></>"
     )
     const scroll = find(FakeFabric.byName("RCTScrollView"))
-    fabric.emit(scroll, "topScroll", {
+    // Android sends momentum events only when asked.
+    assert.strictEqual(scroll.props.sendMomentumEvents, true)
+    assert.deepStrictEqual(scroll.children[0]!.props, {
+      collapsable: false,
+      padding: 8,
+      flexDirection: "column",
+      onLayout: true
+    })
+    const metrics = {
       contentOffset: { x: 0, y: 120 },
       contentSize: { width: 100, height: 900 },
       layoutMeasurement: { width: 100, height: 300 }
+    }
+    fabric.emit(scroll, "topScroll", metrics)
+    fabric.emit(scroll, "topMomentumScrollEnd", {
+      ...metrics,
+      contentOffset: { x: 0, y: 200 }
+    })
+    fabric.emit(scroll.children[0]!, "topLayout", {
+      layout: { x: 0, y: 0, width: 100, height: 900 }
     })
     await settle()
-    assert.include(printed(), "y 120")
+    assert.include(
+      printed(),
+      "y 900 scroll,momentumScrollEnd,contentSizeChange"
+    )
 
     root.send(Message.Toggled())
     await settle()
@@ -180,12 +208,19 @@ describe("NativeHost", () => {
     assert.notStrictEqual(horizontal.children[0]!.tag, scroll.children[0]!.tag)
     assert.strictEqual(horizontal.props.flexDirection, "row")
     assert.strictEqual(horizontal.props.overflow, "scroll")
-    assert.strictEqual(horizontal.children[0]!.props.flexDirection, "row")
+    // Without a direction in the content style, horizontal content is a row.
+    assert.deepStrictEqual(horizontal.children[0]!.props, {
+      collapsable: false,
+      padding: 4,
+      flexDirection: "row",
+      onLayout: true
+    })
 
     root.send(Message.Toggled())
     await settle()
-    assert.isUndefined(
-      find(FakeFabric.byName("RCTScrollContentView")).props.flexDirection
+    assert.strictEqual(
+      find(FakeFabric.byName("RCTScrollContentView")).props.flexDirection,
+      "column"
     )
   })
 
@@ -301,6 +336,7 @@ describe("NativeHost", () => {
     const node = input.handle as NativeHost.NativeNode
     made.operations.focus(node)
     made.operations.scrollTo(node, 0, 40)
+    made.operations.scrollToEnd(node)
     made.operations.command(node, "clear")
     fabric.place(input, [1, 2, 3, 4])
     assert.deepStrictEqual(made.operations.measure(node), {
@@ -312,6 +348,7 @@ describe("NativeHost", () => {
     assert.deepStrictEqual(fabric.commands, [
       [input.tag, "focus", []],
       [input.tag, "scrollTo", [0, 40, true]],
+      [input.tag, "scrollToEnd", [true]],
       [input.tag, "clear", []]
     ])
   })
@@ -367,6 +404,38 @@ describe("NativeHost", () => {
     })
     fabric.emit(shadow(), "topValueChange", { value: true })
     assert.strictEqual(fired.length, 1)
+  })
+
+  it("hands a wrapped node's layout from one wrapper kind to another", () => {
+    const wrapper = (tag: string, outer: RegExp) =>
+      Native.defineView(() => new Native.Element(tag), {
+        viewName: tag,
+        attach: () => ({ outer, props: {} })
+      })
+    wrapper("marginWrap", /^margin$/)
+    wrapper("widthWrap", /^width$/)
+    const fabric = FakeFabric.make()
+    const { host, root } = NativeHost.make({
+      ui: fabric.ui,
+      rootTag: 1,
+      os: "android",
+      processColor: (c) => c
+    })
+    const box = host.createElement("view")
+    host.setProp(box, "margin", 4)
+    host.setProp(box, "width", 100)
+    const a = host.createElement("marginWrap")
+    host.insertBefore(root, box, undefined)
+    host.insertBefore(box, a, undefined)
+    host.commit!()
+    // The renderer inserts a replacement before it removes the old node.
+    host.insertBefore(box, host.createElement("widthWrap"), a)
+    host.remove(a)
+    host.commit!()
+    const [b] = fabric.committed()
+    assert.strictEqual(FakeFabric.print([b!]), "<widthWrap><RCTView></></>")
+    assert.deepStrictEqual(b!.props, { width: 100 })
+    assert.deepStrictEqual(b!.children[0]!.props, { margin: 4 })
   })
 
   it("renders each surface of a UIManager with its own options", () => {
