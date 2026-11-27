@@ -87,8 +87,15 @@ export const prebundle = async (
             customResolverOptions: {},
             resolveRequest: (
               context: { readonly originModulePath: string },
-              moduleName: string
+              moduleName: string,
+              requested: string | null
             ) => {
+              // Vite resolves for the build's platform only.
+              if (requested !== platform) {
+                throw new Error(
+                  `[@effect/ui-native] resolveRequest asked for ${moduleName} on platform ${requested}, but the pre-bundle for ${platform} resolves only for ${platform}`
+                )
+              }
               const request = delegate(moduleName, context.originModulePath)
               delegated.add(request)
               return request

@@ -5,11 +5,25 @@ import * as Path from "node:path"
 import { afterAll, assert, describe, it } from "vitest"
 
 describe("NativeMetro.withEffectUi", () => {
+  const dirs: Array<string> = []
+  afterAll(() => {
+    for (const dir of dirs) Fs.rmSync(dir, { recursive: true, force: true })
+  })
   // Vite reports real paths, as Metro does.
-  const root = Fs.realpathSync(
-    Fs.mkdtempSync(Path.join(Os.tmpdir(), "ui-native-prebundle-"))
-  )
-  afterAll(() => Fs.rmSync(root, { recursive: true, force: true }))
+  const makeDir = () => {
+    const dir = Fs.realpathSync(
+      Fs.mkdtempSync(Path.join(Os.tmpdir(), "ui-native-prebundle-"))
+    )
+    dirs.push(dir)
+    return dir
+  }
+  const root = makeDir()
+  // Tests run concurrently, so each writes its pre-bundle in its own copy.
+  const copy = () => {
+    const dir = makeDir()
+    Fs.cpSync(root, dir, { recursive: true })
+    return dir
+  }
   const write = (file: string, content: string) => {
     Fs.mkdirSync(Path.dirname(Path.join(root, file)), { recursive: true })
     Fs.writeFileSync(Path.join(root, file), content)
@@ -85,4 +99,27 @@ export default [Platform, title, flavor, topping]
     },
     30_000
   )
+
+  it("fails rather than resolve an import for another platform", async () => {
+    const env = process.env.NODE_ENV
+    process.env.NODE_ENV = "production"
+    const error = await NativeMetro.withEffectUi({
+      projectRoot: copy(),
+      resolver: {
+        sourceExts: ["ts", "js"],
+        resolveRequest: (context, moduleName, platform) =>
+          context.resolveRequest(
+            context,
+            moduleName,
+            moduleName === "./title" ? null : platform
+          )
+      }
+    }, { platforms: ["android"] }).then(
+      () => undefined,
+      (error: Error) => error
+    ).finally(() => {
+      process.env.NODE_ENV = env
+    })
+    assert.include(error?.message, "./title on platform null")
+  }, 30_000)
 })
