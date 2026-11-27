@@ -1289,15 +1289,12 @@ export interface StreamService<
  *
  * - Under the default `idleTimeToLive` of 5 minutes, a subscription stays
  *   open 5 minutes after its last watcher leaves.
- * - A run with an optimistic patch reopens the stream when it ends, as it
- *   refetches an ordinary query, and the new stream's first element drops
- *   the patch. If that snapshot can predate the write, have the command
- *   record its receipt's version for each key, and drop older snapshots in
- *   the stream function with
- *   `Stream.filter((s) => s.version >= (versions.get(id) ?? 0))`. The entry
- *   then stays `waiting` with the patch until a snapshot that includes the
- *   write arrives. If none ever does, the patch stays, so clear the version
- *   when the source reconnects or give the filter a deadline.
+ * - A run with an optimistic patch reopens the stream when it ends, and the
+ *   new stream's first element drops the patch. If that element can predate
+ *   the write, have the command record the version it wrote for each key,
+ *   and filter out older elements in the stream function. The entry then
+ *   stays `waiting` with the patch until an element includes the write, so
+ *   clear the recorded version if the source can reset its versions.
  * - An element that already holds the change can arrive while the patch is
  *   live, so write idempotent patches, such as setting a title rather than
  *   adding to a count.
