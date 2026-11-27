@@ -445,8 +445,10 @@ export const plugin = (options: Options): Plugin => {
       await builder.build(client)
       templateFile = path.join(outDir, "index.html")
       const rawOutput = await builder.build(ssr)
-      const bundles = (Array.isArray(rawOutput) ? rawOutput : [rawOutput]) as
-        ReadonlyArray<{ readonly output: ReadonlyArray<OutputFile> }>
+      const bundles =
+        (Array.isArray(rawOutput) ? rawOutput : [rawOutput]) as ReadonlyArray<
+          { readonly output: ReadonlyArray<OutputFile> }
+        >
       if (serverDirs !== undefined) {
         await Promise.all(
           bundles.map((bundle, index) => {

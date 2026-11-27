@@ -106,7 +106,10 @@ describe("HtmlServerVite.plugin", () => {
       const serverOutDir = path.join(dir, "server")
       try {
         await fs.mkdir(publicDir, { recursive: true })
-        await fs.writeFile(path.join(publicDir, "robots.txt"), "User-agent: *\n")
+        await fs.writeFile(
+          path.join(publicDir, "robots.txt"),
+          "User-agent: *\n"
+        )
         const builder = await createBuilder(
           config({
             publicDir,
