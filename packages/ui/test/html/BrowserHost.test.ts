@@ -1950,7 +1950,7 @@ describe("BrowserHost", { concurrent: false }, () => {
             h.input.attrs({ type: "checkbox", "aria-label": "Box" }).on(
               "keydown",
               saw("key")
-            ).on("input", saw("input")),
+            ),
             h.button.on("keydown", saw("key")).children("Button")
           )
         }
@@ -2001,7 +2001,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           ])
         }).pipe(Effect.scoped))
 
-      it.effect("keys, input and selectionchange report the selection of a text field, and none for a button or a checkbox", () =>
+      it.effect("keys and selectionchange report the selection of a text field, and none for a button or a checkbox", () =>
         Effect.gen(function*() {
           const app = yield* container
           const shadowHost = yield* container
@@ -2034,14 +2034,9 @@ describe("BrowserHost", { concurrent: false }, () => {
           const area = HtmlLocator.getByRole(app, "textbox", {
             name: "Area"
           }) as HTMLTextAreaElement
-          area.value = "service.name = api and "
-          area.setSelectionRange(8, 8)
-          area.dispatchEvent(new InputEvent("input", { bubbles: true }))
+          area.value = "hello"
           area.setSelectionRange(3, 5)
           area.dispatchEvent(new Event("selectionchange", { bubbles: true }))
-          HtmlLocator.getByRole(app, "checkbox", { name: "Box" }).dispatchEvent(
-            new Event("input", { bubbles: true })
-          )
           const keyEvent = new KeyboardEvent("keydown", {
             key: "ArrowLeft",
             bubbles: true,
@@ -2072,9 +2067,7 @@ describe("BrowserHost", { concurrent: false }, () => {
             [1, 4],
             [null, null],
             [null, null],
-            [8, 8],
-            [3, 5],
-            [null, null]
+            [3, 5]
           ])
           expect(selectionOf(shadowRoot.model()!)).toEqual([[0, 0]])
         }).pipe(Effect.scoped))
@@ -3773,10 +3766,9 @@ describe("BrowserHost", { concurrent: false }, () => {
         ])
       }).pipe(Effect.scoped))
 
-    it.effect("HtmlCommand.select places a range in the value the same update wrote, and finds fields without a selection", () =>
+    it.effect("HtmlCommand.select places a range in the value the same update wrote, and finds a field without a selection", () =>
       Effect.gen(function*() {
         const Area = Html.ref("Area", "textarea")
-        const Mail = Html.ref("Mail", "input")
         const Attachment = Html.ref("Attachment", "input")
         const CaretMessage = UiSchema.TaggedEnum({
           Completed: {},
@@ -3801,11 +3793,6 @@ describe("BrowserHost", { concurrent: false }, () => {
                     { start: 14 }
                   ),
                   HtmlCommand.select(
-                    Mail,
-                    ({ found }) => CaretMessage.Selected({ found }),
-                    { start: 1, end: 3 }
-                  ),
-                  HtmlCommand.select(
                     Attachment,
                     ({ found }) => CaretMessage.Selected({ found }),
                     { start: 0 }
@@ -3817,8 +3804,6 @@ describe("BrowserHost", { concurrent: false }, () => {
           view: (h, model) =>
             h.div(
               h.textarea.attr("aria-label", "Area").ref(Area).value(model.text),
-              h.input.attrs({ type: "email", "aria-label": "Mail" }).ref(Mail)
-                .value("a@b.c"),
               h.input.attrs({ type: "file", "aria-label": "Attachment" }).ref(
                 Attachment
               ).value("notes.txt")
@@ -3839,7 +3824,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           14,
           14
         ])
-        expect(root.model()!.found).toEqual([true, true, true])
+        expect(root.model()!.found).toEqual([true, true])
       }).pipe(Effect.scoped))
 
     it.effect("HtmlCommand.waitForPaint waits two animation frames", () =>

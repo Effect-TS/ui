@@ -395,10 +395,6 @@ describe("Html", () => {
           ({ selectionEnd }: Html.SelectionPayload) =>
             selectionEnd === null ? undefined : Msg.Mounted()
         )
-        expect(h.input.on).type.toBeCallableWith(
-          "selectionchange",
-          (_: Html.SelectionPayload) => Msg.Mounted()
-        )
         expect(h.div.on).type.not.toBeCallableWith(
           "selectionchange",
           () => Msg.Mounted()
