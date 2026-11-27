@@ -263,6 +263,8 @@ export interface Tree {
     | { readonly value: unknown; readonly title: string | undefined }
     | undefined
   transitions?: Transitions | undefined
+  /** The flush time spent before a transition held it, carried to the resumed flush. */
+  slowHeld?: bigint | undefined
   shared?: unknown
   drew?: boolean | undefined
   holds?:
@@ -747,12 +749,17 @@ export const flush = (
   tree: Tree,
   from = startOf(tree.slow, tree.slow?.flush)
 ): void => {
+  if (tree.slowHeld !== undefined) {
+    from! -= tree.slowHeld
+    tree.slowHeld = undefined
+  }
   tree.scheduled = true
   tree.flushing = true
   for (;;) {
     if (tree.closed) return
     if (tree.transitions?.hold()) {
       tree.flushing = false
+      if (from !== undefined) tree.slowHeld = tree.slow!.now() - from
       return
     }
     const batch = tree.dirty

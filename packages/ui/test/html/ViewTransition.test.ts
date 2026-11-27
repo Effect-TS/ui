@@ -2,6 +2,7 @@
 import {
   Command,
   MessageLog,
+  Mount,
   Renderer,
   Route,
   Router,
@@ -13,7 +14,7 @@ import * as domHost from "@effect/ui/internal/domHost"
 import * as Executor from "@effect/ui/internal/executor"
 import type * as runtime from "@effect/ui/internal/runtime"
 import { expect, it } from "@effect/vitest"
-import { Context, Effect, Exit, Layer, Schema, Scope } from "effect"
+import { Clock, Context, Effect, Exit, Layer, Schema, Scope } from "effect"
 import { describe } from "vitest"
 
 const GalleryRoute = Route.union({
@@ -329,5 +330,64 @@ describe("view transitions", { concurrent: false }, () => {
       expect(shown()).toBe("Grid list ")
       expect(transitions.started).toHaveLength(0)
       expect(commits()).toBe(before + 1)
+    }).pipe(Effect.scoped))
+
+  it.effect("Renderer.slowPhases times a flush across its hold, without the wait", () =>
+    Effect.gen(function*() {
+      const transitions = yield* fakeTransitions()
+      let spent = 0
+      const outer = yield* Clock.Clock
+      const clock: Clock.Clock = Object.assign(Object.create(outer), {
+        monotonicTimeNanosUnsafe: () =>
+          outer.monotonicTimeNanosUnsafe() + BigInt(spent * 1_000_000)
+      })
+      const Go = Mount.make(
+        "Go",
+        { args: {}, beforeCommit: true },
+        () => Effect.void
+      )
+      const Msg = UiSchema.TaggedEnum({ Went: {} })
+      const Slow = Html.component({
+        name: "Slow",
+        model: Schema.Struct({ went: Schema.Boolean }),
+        message: Msg
+      }).make({
+        init: () => {
+          spent += 20
+          return { went: false }
+        },
+        update: {
+          Went: ($) => $.evolve({ went: true }).viewTransition(["went"])
+        },
+        view: (h, { went }) =>
+          h.div.onMount(Go().pipe(Mount.map(Msg.Went))).children(
+            went ? "went" : ""
+          )
+      })
+      const reports: Array<Renderer.SlowPhase> = []
+      const app = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          document.body.appendChild(document.createElement("div"))
+        ),
+        (element) => Effect.sync(() => element.remove())
+      )
+      yield* Renderer.mount(Slow, {}, app).pipe(
+        Effect.provide(Layer.merge(
+          BrowserHost.layer(),
+          Renderer.slowPhases({
+            flush: "16 millis",
+            onSlow: (slow) => {
+              reports.push(slow)
+            }
+          })
+        )),
+        Effect.provideService(Clock.Clock, clock)
+      )
+      yield* tick
+      expect(transitions.started).toHaveLength(1)
+      spent += 100
+      transitions.started[0]!.update()
+      expect(app.textContent).toBe("went")
+      expect(reports).toEqual([{ phase: "flush", duration: 20, budget: 16 }])
     }).pipe(Effect.scoped))
 })

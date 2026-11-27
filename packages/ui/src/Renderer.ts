@@ -526,7 +526,12 @@ export const Refs: Context.Service<Refs, Refs> = services.Refs
  *   later in the render.
  * - `flush`: one render pass, including every view, the host writes and the
  *   `committed` callbacks. The first mount counts as one flush, from its first
- *   `init`. A slow view inside a flush is reported as both.
+ *   `init`. A flush held for a view transition is reported once, after it
+ *   commits, without the time spent waiting for the browser.
+ *
+ * A view's time also counts toward the flush it runs in, so a slow view can
+ * make its flush slow too. A view rendered before a message's `update` runs
+ * outside any flush.
  *
  * `duration` and `budget` are in milliseconds.
  *
