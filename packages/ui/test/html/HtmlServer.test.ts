@@ -728,6 +728,41 @@ describe("HtmlServer", { concurrent: false }, () => {
       )
     }))
 
+  it.effect("selects only the first matching option in a controlled select", () =>
+    Effect.gen(function*() {
+      const Page = Html.component({
+        name: "DuplicateOptions",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          h.div.children(
+            h.select.value("b").children(
+              h.option.attr("value", "a").children("A"),
+              h.option.attr("value", "b").children("B one"),
+              h.option.attr("value", "b").children("B two")
+            ),
+            h.select.value("a b").children(
+              h.option.children(
+                " \ta\n",
+                new Html.Element<never>("script").children("0"),
+                "  b\r "
+              ),
+              h.option.children("a b")
+            )
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Page, {})
+      expect(rendered.html).toBe(
+        "<!--[/DuplicateOptions--><div>" +
+          "<select><option value=\"a\">A</option><option value=\"b\" selected>B one</option><option value=\"b\">B two</option></select>" +
+          "<select><option selected> \ta\n<script>0</script>  b\r </option><option>a b</option></select>" +
+          "</div><!--]/DuplicateOptions-->"
+      )
+    }))
+
   it.effect("never reads the properties of markup it leaves out", () =>
     Effect.gen(function*() {
       // `String` of it throws.
