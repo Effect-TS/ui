@@ -117,16 +117,13 @@ export class NativeNode {
   // React Native allocates even tags from 2, which never collide with the
   // surfaces' own tags.
   tag = lastTag += 2
-  readonly type: string
   readonly kind: Native.ViewKind
   /** Props of the shadow node, in Fabric's flat form. */
   readonly props: Record<string, unknown>
   constructor(
-    type: string,
     kind: Native.ViewKind,
-    props: Record<string, unknown>
+    props: Record<string, unknown> = { ...kind.defaults }
   ) {
-    this.type = type
     this.kind = kind
     this.props = props
   }
@@ -139,6 +136,7 @@ let lastTag = 0
 
 const isColor = /(^c|C)olor$/
 const colors = new Map<string, unknown>()
+const none = {}
 
 /**
  * Makes a host for the surface `rootTag`, and the node its root mounts in.
@@ -159,48 +157,10 @@ export const make = (options: Options): {
   const cloneChildren = ui.cloneNodeWithNewChildren
   const cloneBoth = ui.cloneNodeWithNewChildrenAndProps
   const appendChild = ui.appendChild
-  const root = new NativeNode("#root", container, {})
-
-  const color = (value: unknown) => {
-    if (typeof value !== "string") return processColor(value)
-    let out = colors.get(value)
-    if (out === undefined) {
-      if (colors.size > 255) colors.clear()
-      colors.set(value, out = processColor(value))
-    }
-    return out
-  }
-
-  const markDirty = (n: NativeNode | undefined) => {
-    while (n !== undefined && !n.dirty) {
-      n.dirty = true
-      n = n.parent
-      if (n !== undefined) n.kidsChanged = true
-    }
-  }
-
-  const setNative = (n: NativeNode, name: string, value: unknown) => {
-    if (value !== undefined && isColor.test(name)) value = color(value)
-    if (n.props[name] === value) return
-    if (value === undefined) delete n.props[name]
-    else n.props[name] = value
-    // A node not created yet takes all its props at createNode.
-    if (n.shadow !== undefined) {
-      ;(n.pending ??= {})[name] = value === undefined ? null : value
-    }
-    markDirty(n)
-  }
-
-  const command = (
-    n: NativeNode,
-    name: string,
-    args: ReadonlyArray<unknown> = []
-  ) => {
-    if (n.shadow !== undefined) ui.dispatchCommand(n.shadow, name, args)
-  }
-
-  const view: Native.ViewHost = { os, set: setNative, color, command, fire }
-  listen(ui, view)
+  const root = new NativeNode(container)
+  const view = listen(ui, os, processColor)
+  const setNative = view.set
+  const command = view.command
 
   const viewNameOf = (n: NativeNode): string => {
     const name = n.kind.viewName
@@ -241,7 +201,7 @@ export const make = (options: Options): {
     for (let k = n.first; k !== undefined; k = k.next) {
       // Outside text, the renderer's only text is the empty node a blank
       // view leaves, which native can't lay out.
-      if (k.type === "#text" && !textual) continue
+      if (k.kind === rawText && !textual) continue
       appendChild(shadow, build(k, n.tag))
     }
     return n.shadow = shadow
@@ -256,27 +216,20 @@ export const make = (options: Options): {
     hot: true,
     createElement(type) {
       const kind = kinds.get(type)
-      if (kind === undefined) {
-        throw new Error(
-          `<${type}> has no native view`
-        )
-      }
-      const n = new NativeNode(type, kind, { ...kind.defaults })
-      const content = kind.content
-      if (content !== undefined) {
-        const inner = new NativeNode("#content", content, {
-          ...content.defaults
-        })
+      if (kind === undefined) throw new Error(`<${type}> has no native view`)
+      const n = new NativeNode(kind)
+      if (kind.content !== undefined) {
+        const inner = new NativeNode(kind.content)
         inner.parent = n
         n.first = n.last = n.inner = inner
       }
       return n
     },
     createText(text) {
-      return new NativeNode("#text", rawText, { text })
+      return new NativeNode(rawText, { text })
     },
     createContainer() {
-      return new NativeNode("#root", container, {})
+      return new NativeNode(container)
     },
     setText(n, text) {
       setNative(n, "text", text)
@@ -313,17 +266,21 @@ export const make = (options: Options): {
       parent.kidsChanged = true
       markDirty(parent)
     },
-    parentOf: (n) => n.parent?.type === "#content" ? n.parent.parent : n.parent,
+    parentOf(n) {
+      const parent = n.parent
+      return parent !== undefined && parent.parent?.inner === parent
+        ? parent.parent
+        : parent
+    },
     nextOf: (n) => n.next,
     setEvents(n, handlers, dispatch) {
-      const was = n.events?.handlers
+      const was: object = n.events?.handlers ?? none
       n.events = { handlers, dispatch }
-      if (was !== undefined) {
-        for (const name in was) {
-          if (!(name in handlers)) setNative(n, propOf(name), undefined)
-        }
+      for (const name in was) {
+        if (!(name in handlers)) setNative(n, propOf(name), undefined)
       }
       for (const name in handlers) {
+        if (name in was) continue
         // A flattened view has no native view to receive touches. Native
         // sends other events only to a view whose `onEvent` prop is true.
         if (name === "press") setNative(n, "collapsable", false)
@@ -336,7 +293,7 @@ export const make = (options: Options): {
         root.kidsChanged = false
         const set = ui.createChildSet(rootTag)
         for (let k = root.first; k !== undefined; k = k.next) {
-          if (k.type !== "#text") ui.appendChildToSet(set, build(k, rootTag))
+          if (k.kind !== rawText) ui.appendChildToSet(set, build(k, rootTag))
         }
         ui.completeRoot(rootTag, set)
       }
@@ -361,6 +318,14 @@ export const make = (options: Options): {
   return { host, root, operations }
 }
 
+const markDirty = (n: NativeNode | undefined) => {
+  while (n !== undefined && !n.dirty) {
+    n.dirty = true
+    n = n.parent
+    if (n !== undefined) n.kidsChanged = true
+  }
+}
+
 const setProp = (
   n: NativeNode,
   name: string,
@@ -382,16 +347,50 @@ const propOf = (name: string): string =>
   "on" + name[0]!.toUpperCase() + name.slice(1)
 
 // Native reports every surface's events through one handler, with the
-// instance handle the host gave `createNode`.
-const listening = new WeakSet<UIManager>()
+// instance handle the host gave `createNode`, so the surfaces of a
+// UIManager share it and the `ViewHost` its hooks get.
+const views = new WeakMap<UIManager, Native.ViewHost>()
 
 // How far, in points, a touch may end outside the pressed view and still
 // press it, as React Native's `Pressable` allows by default.
 const slop = 20
 
-const listen = (ui: UIManager, view: Native.ViewHost) => {
-  if (listening.has(ui)) return
-  listening.add(ui)
+const listen = (
+  ui: UIManager,
+  os: string,
+  processColor: (color: unknown) => unknown
+): Native.ViewHost => {
+  const known = views.get(ui)
+  if (known !== undefined) return known
+  const color = (value: unknown) => {
+    if (typeof value !== "string") return processColor(value)
+    let out = colors.get(value)
+    if (out === undefined) {
+      if (colors.size > 255) colors.clear()
+      colors.set(value, out = processColor(value))
+    }
+    return out
+  }
+  const view: Native.ViewHost = {
+    os,
+    color,
+    fire,
+    set(n, name, value) {
+      if (value !== undefined && isColor.test(name)) value = color(value)
+      if (n.props[name] === value) return
+      if (value === undefined) delete n.props[name]
+      else n.props[name] = value
+      // A node not created yet takes all its props at createNode.
+      if (n.shadow !== undefined) {
+        ;(n.pending ??= {})[name] = value === undefined ? null : value
+      }
+      markDirty(n)
+    },
+    command(n, name, args = []) {
+      if (n.shadow !== undefined) ui.dispatchCommand(n.shadow, name, args)
+    }
+  }
+  views.set(ui, view)
   let pressed: NativeNode | undefined
   const within = (n: NativeNode, x: number, y: number) => {
     const rect = n.shadow === undefined
@@ -444,4 +443,5 @@ const listen = (ui: UIManager, view: Native.ViewHost) => {
       setTimeout(() => setProp(handle, "value", handle.value, view), 0)
     }
   })
+  return view
 }

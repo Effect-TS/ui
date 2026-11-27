@@ -410,7 +410,7 @@ export interface ViewKind {
   /** Raw text may sit inside. Text inside it is virtual text. */
   readonly text?: boolean | undefined
   /** An inner view that holds the children, as a scroll view's content view. */
-  readonly content?: ViewKind | undefined
+  readonly content?: Pick<ViewKind, "viewName" | "defaults"> | undefined
   /** Setters by prop name, for a prop that needs more than sending it. */
   readonly props?:
     | Readonly<
