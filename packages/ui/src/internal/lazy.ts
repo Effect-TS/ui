@@ -4,9 +4,10 @@ import * as Predicate from "effect/Predicate"
 import type * as Component from "../Component.ts"
 import * as child from "./child.ts"
 import * as Kernel from "./kernel.ts"
+import { LazyTypeId } from "./paths.ts"
 
 /** @internal */
-export const TypeId: Component.LazyTypeId = "~@effect/ui/Component/Lazy"
+export const TypeId: Component.LazyTypeId = LazyTypeId
 
 /** @internal */
 export type State =

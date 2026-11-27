@@ -834,13 +834,14 @@ describe("Scene", () => {
           name: "StableGrid",
           model: GridModel,
           message: Schema.Literal("load"),
-          reads: { theme: Theme }
+          reads: { maybe: { owner: Theme, optional: true }, theme: Theme }
         }).make({
           init: () => ({ rows: [], shifts: [], weekStart: "" }),
           update: () => initialGrid,
           view: (h, model) =>
             h.div(
               h.button.on("click", "load").children("load"),
+              h.span(h.reads.maybe === undefined ? "none" : h.reads.maybe.tone),
               h.ul(
                 model.rows.map((row) =>
                   h.lazy(
@@ -857,6 +858,7 @@ describe("Scene", () => {
         const scene = yield* Scene.make(Grid, {})
         scene.click("load")
           .expectLazyReused()
+          .expect(Locator.tag("span")).toHaveText("none")
           .expect(Locator.tag("li")).toHaveCount(3)
       }))
 
@@ -902,6 +904,30 @@ describe("Scene", () => {
       assert.match(message, /argument\s+1\b/i)
       assert.match(message, /\b3\b/)
       assert.strictEqual(message.match(/hoursCell/g)?.length, 1)
+
+      let render = 0
+      const optCell = (h: Html.H<never>, row: Row, extra?: string) =>
+        h.li(extra ?? row.name)
+      const ArityChange = Html.component({
+        name: "ArityChange",
+        model: GridModel,
+        message: Schema.Never
+      }).make({
+        init: () => initialGrid,
+        update: ($) => $.model,
+        view: (h, model) =>
+          h.ul(
+            render++ % 2 === 0
+              ? h.lazy(optCell, model.rows[0]!)
+              : h.lazy(optCell, model.rows[0]!, undefined)
+          )
+      })
+      const arityError = assert.throws(
+        () => Scene.start(ArityChange, {}).expectLazyReused(),
+        /Scene\.expectLazyReused:/
+      )
+      assert.match(String(arityError), /optCell/)
+      assert.match(String(arityError), /argument\s+1\b/i)
     })
 
     it("reports shared first argument, changed function, and missing entry misses", () => {

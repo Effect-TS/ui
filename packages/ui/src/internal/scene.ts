@@ -781,7 +781,11 @@ const classifyLazyMiss = (
   const changed: Array<number> = []
   const length = Math.max(entry.args.length, args.length)
   for (let i = 0; i < length; i++) {
-    if (args[i] !== entry.args[i]) changed.push(i)
+    if (
+      i >= entry.args.length || i >= args.length || args[i] !== entry.args[i]
+    ) {
+      changed.push(i)
+    }
   }
   return changed.length === 1
     ? `${name}: argument ${changed[0]} changed`

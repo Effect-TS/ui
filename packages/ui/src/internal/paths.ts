@@ -8,7 +8,8 @@ import type * as Component from "../Component.ts"
 import * as Feature from "../Feature.ts"
 import type * as View from "../View.ts"
 
-const LazyTypeId: Component.LazyTypeId = "~@effect/ui/Component/Lazy"
+/** @internal */
+export const LazyTypeId: Component.LazyTypeId = "~@effect/ui/Component/Lazy"
 
 /** @internal */
 export const childName = (

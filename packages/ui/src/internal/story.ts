@@ -892,9 +892,10 @@ export const stableRootShared = (
   const lookup = rootShared(sharedGiven.get(story))
   const cached = new Map<Component.Definition.Any, unknown>()
   return (owner, optional) => {
+    if (optional === true) return lookup(owner, true)
     const definition = owner.definition
     if (cached.has(definition)) return cached.get(definition)
-    const value = lookup(owner, optional)
+    const value = lookup(owner, false)
     cached.set(definition, value)
     return value
   }
