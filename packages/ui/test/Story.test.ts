@@ -1392,6 +1392,51 @@ describe("Story", () => {
       })
     })
 
+    it.effect("refetches an infinite query as the runtime walks it: every held page while next continues", () => {
+      class List extends Query.InfiniteService<List>()("check/Endless", {
+        page: Schema.Literal(1),
+        items: (page) => [page],
+        key: String,
+        cursor: Schema.Number,
+        next: (_, pages) => Option.some(pages.length),
+        staleTime: "1 minute"
+      }) {}
+      class Touch extends Command.Service<Touch>()("check/Touch", {
+        invalidates: () => [List]
+      }) {}
+      const Message = UiSchema.TaggedEnum({ More: {}, Touch: {} })
+      const Feed = Component.define({
+        name: "Feed",
+        model: Schema.Struct({}),
+        message: Message,
+        queries: { list: { query: List, args: () => ({}) } }
+      }).make({
+        init: () => ({}),
+        update: ($, message) =>
+          Message.match(message, {
+            More: () => $.loadMore("list"),
+            Touch: () => $.run(Command.afterRefetch(Touch.make(), "Infinity"))
+          }),
+        view: (h) => h.el("div", "")
+      })
+      // No step here drops a page: a run starts with the list unloaded, and from then on it only grows.
+      let held = 0
+      return Story.check(Feed, {}, {
+        seed: 1,
+        runs: 1000,
+        invariant: (story) => {
+          const list = story.queries().list
+          if (!AsyncResult.isSuccess(list)) {
+            held = 0
+            return
+          }
+          const grew = list.value.pages.length >= held
+          held = list.value.pages.length
+          return grew
+        }
+      })
+    })
+
     it.effect("fails on an event outside the events Schema", () =>
       Effect.gen(function*() {
         const Emitter = Component.define({

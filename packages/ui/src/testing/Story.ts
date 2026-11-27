@@ -428,7 +428,7 @@ export interface CheckOptions<
  * `Schema.Never` isn't generated, and work with no outcome stays pending.
  * `messages: Schema.Never` runs only settlements. An infinite query loads
  * pages as the runtime walks them: one on a cold load, and on a refetch
- * up to the pages it holds, stopping where `next` ends the list.
+ * as many as it holds, unless `next` ends the list first.
  *
  * After `init` and every step, the Model is checked against its Schema,
  * then `invariant` runs, then events and sends are checked against the

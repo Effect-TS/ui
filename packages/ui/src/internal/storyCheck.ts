@@ -159,7 +159,7 @@ const walkOf = (
   inhabited(page)
     ? Arbitrary.map(
       Arbitrary.array(arbitraryOf(page), {
-        minLength: 1,
+        minLength: Math.max(1, held),
         maxLength: Math.max(1, held)
       }),
       (sampled) => {
