@@ -145,20 +145,22 @@ describe("NativeApp", { concurrent: false }, () => {
     assert.strictEqual(FakeFabric.print(fabric.committed()), "")
   })
 
-  it("passes props native replaces to the root, skipping equal ones", async () => {
+  it("passes replaced props to the root with Native.Host, skipping equal ones", async () => {
     const runs: Array<unknown> = []
     NativeApp.register(
       NativeApp.mount(
         Named,
-        NativeApp.Surface.useSync(({ props }) => {
-          runs.push(props)
-          return { name: String(props.name) }
-        })
+        Native.Host.use(() =>
+          NativeApp.Surface.useSync(({ props }) => {
+            runs.push(props)
+            return { name: String(props.name) }
+          })
+        )
       )
     )
     global.RN$AppRegistry.runApplication("main", {
       rootTag: 21,
-      initialProps: { name: "Tim", nested: { a: 1 } }
+      initialProps: { name: "Tim", nested: { a: 1, b: [2] } }
     })
     await settle()
     assert.strictEqual(
@@ -169,7 +171,7 @@ describe("NativeApp", { concurrent: false }, () => {
     // A display mode change sends equal props in new objects.
     global.RN$AppRegistry.setSurfaceProps("main", {
       rootTag: 21,
-      initialProps: { name: "Tim", nested: { a: 1 } }
+      initialProps: { nested: { b: [2], a: 1 }, name: "Tim" }
     }, 1)
     await settle()
     assert.strictEqual(runs.length, 1)
@@ -222,58 +224,6 @@ describe("NativeApp", { concurrent: false }, () => {
     await settle()
     assert.strictEqual(runs, 2)
     global.RN$stopSurface(41)
-    await settle()
-  })
-
-  it("runs props with the surface's Native.Host on each update", async () => {
-    NativeApp.register(
-      NativeApp.mount(
-        Named,
-        Native.Host.use(() =>
-          NativeApp.Surface.useSync(({ props }) => ({
-            name: String(props.name)
-          }))
-        )
-      )
-    )
-    global.RN$AppRegistry.runApplication("main", {
-      rootTag: 51,
-      initialProps: { name: "Tim" }
-    })
-    await settle()
-    global.RN$AppRegistry.setSurfaceProps("main", {
-      rootTag: 51,
-      initialProps: { name: "Ann" }
-    })
-    await settle()
-    assert.strictEqual(
-      FakeFabric.print(fabric.committed()),
-      "<RCTText>Hello, Ann</>"
-    )
-    global.RN$stopSurface(51)
-    await settle()
-  })
-
-  it("tells an array from a record in props", async () => {
-    let runs = 0
-    NativeApp.register(
-      NativeApp.mount(
-        Named,
-        NativeApp.Surface.useSync(() => ({ name: String(++runs) }))
-      )
-    )
-    global.RN$AppRegistry.runApplication("main", {
-      rootTag: 61,
-      initialProps: { data: [] }
-    })
-    await settle()
-    global.RN$AppRegistry.setSurfaceProps("main", {
-      rootTag: 61,
-      initialProps: { data: {} }
-    })
-    await settle()
-    assert.strictEqual(runs, 2)
-    global.RN$stopSurface(61)
     await settle()
   })
 

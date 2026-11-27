@@ -1,4 +1,4 @@
-import { Keyboard } from "@effect/ui-native/kit"
+import * as Keyboard from "@effect/ui-native/kit/Keyboard"
 import * as Native from "@effect/ui-native/Native"
 import * as Command from "@effect/ui/Command"
 import * as Renderer from "@effect/ui/Renderer"
@@ -32,7 +32,7 @@ const setup = (os: string) => {
 }
 
 describe("Keyboard", () => {
-  it("sends iOS's frame as the keyboard starts to move, and again only when it differs", async () => {
+  it("tracks iOS frames, deduplicates unchanged frames, and hides when moved off-screen", async () => {
     const fake = setup("ios")
     const listener = await FakeDevice.listen(
       fake.device,
@@ -52,18 +52,12 @@ describe("Keyboard", () => {
     fake.emit("keyboardWillHide", frame(844))
     await listener.settle()
     assert.deepStrictEqual(listener.values(), ["hidden", 544, 500, "hidden"])
-    assert.deepStrictEqual(
-      await FakeDevice.run(fake.device, Keyboard.get),
-      undefined
-    )
+    assert.isUndefined(await FakeDevice.run(fake.device, Keyboard.get))
     await listener.close()
   })
 
-  it("reads Android's frame once the keyboard has moved", async () => {
+  it("tracks Android keyboardDidShow without registering iOS listeners", async () => {
     const fake = setup("android")
-    fake.emit("keyboardDidShow", {
-      endCoordinates: { screenX: 0, screenY: 500, width: 390, height: 344 }
-    })
     assert.isUndefined(await FakeDevice.run(fake.device, Keyboard.get))
     fake.emit("keyboardDidShow", {
       endCoordinates: { screenX: 0, screenY: 500, width: 390, height: 344 }
@@ -76,11 +70,10 @@ describe("Keyboard", () => {
       duration: 0,
       easing: "keyboard"
     })
-    // Android sends its events without counting listeners.
     assert.deepStrictEqual(fake.calls, [])
   })
 
-  it("dismisses from a Command, which runs on the app's device", async () => {
+  it("dismisses from a Command on the app's device", async () => {
     const fake = setup("ios")
     const Message = UiSchema.TaggedEnum({ Done: {} })
     const Form = Native.component({

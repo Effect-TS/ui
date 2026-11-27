@@ -1,4 +1,4 @@
-import { PermissionsAndroid } from "@effect/ui-native/kit"
+import * as PermissionsAndroid from "@effect/ui-native/kit/PermissionsAndroid"
 import * as Effect from "effect/Effect"
 import * as Result from "effect/Result"
 import { assert, describe, it } from "vitest"
@@ -33,50 +33,21 @@ const rationale = {
 }
 
 describe("PermissionsAndroid", () => {
-  it("checks and requests on Android", async () => {
-    const fake = setup(false)
+  it("checks, requests single and multiple permissions, and shows rationale only when suggested", async () => {
+    const noRationale = setup(false)
     assert.isTrue(
-      await FakeDevice.run(fake.device, PermissionsAndroid.check(camera))
+      await FakeDevice.run(noRationale.device, PermissionsAndroid.check(camera))
     )
     assert.strictEqual(
-      await FakeDevice.run(fake.device, PermissionsAndroid.request(camera)),
+      await FakeDevice.run(
+        noRationale.device,
+        PermissionsAndroid.request(camera, rationale)
+      ),
       "granted"
     )
-    assert.deepStrictEqual(fake.permissions, [["checkPermission", camera], [
-      "requestPermission",
-      camera
-    ]])
-  })
-
-  it("explains first when Android suggests it", async () => {
-    const fake = setup(true)
-    await FakeDevice.run(
-      fake.device,
-      PermissionsAndroid.request(camera, rationale)
-    )
-    assert.deepStrictEqual(fake.permissions.map(([method]) => method), [
-      "shouldShowRequestPermissionRationale",
-      "requestPermission"
-    ])
-    assert.deepStrictEqual(fake.dialogs[0].slice(0, 2), [
-      "showAlert",
-      rationale
-    ])
-  })
-
-  it("skips the rationale when Android doesn't suggest it", async () => {
-    const fake = setup(false)
-    await FakeDevice.run(
-      fake.device,
-      PermissionsAndroid.request(camera, rationale)
-    )
-    assert.deepStrictEqual(fake.dialogs, [])
-  })
-
-  it("requests several, keeping their types", async () => {
-    const fake = setup(false)
+    assert.deepStrictEqual(noRationale.dialogs, [])
     const statuses = await FakeDevice.run(
-      fake.device,
+      noRationale.device,
       PermissionsAndroid.requestMultiple([
         camera,
         "android.permission.RECORD_AUDIO"
@@ -86,12 +57,26 @@ describe("PermissionsAndroid", () => {
       statuses["android.permission.RECORD_AUDIO"]
     assert.strictEqual(audio, "never_ask_again")
     assert.strictEqual(statuses[camera], "never_ask_again")
+
+    const withRationale = setup(true)
+    await FakeDevice.run(
+      withRationale.device,
+      PermissionsAndroid.request(camera, rationale)
+    )
+    assert.deepStrictEqual(
+      withRationale.permissions.map(([method]) => method),
+      ["shouldShowRequestPermissionRationale", "requestPermission"]
+    )
+    assert.deepStrictEqual(withRationale.dialogs[0].slice(0, 2), [
+      "showAlert",
+      rationale
+    ])
   })
 
-  it("holds no permission off Android, without calling native", async () => {
-    const fake = setup(false)
+  it("denies off Android without calling native", async () => {
+    const permissions = FakeDevice.module()
     const ios = FakeDevice.make("ios", {
-      PermissionsAndroid: FakeDevice.module().module
+      PermissionsAndroid: permissions.module
     })
     assert.isFalse(
       await FakeDevice.run(ios.device, PermissionsAndroid.check(camera))
@@ -107,24 +92,28 @@ describe("PermissionsAndroid", () => {
       ),
       { [camera]: "denied" }
     )
-    assert.deepStrictEqual(fake.permissions, [])
+    assert.deepStrictEqual(permissions.calls, [])
   })
 
-  it("fails when native rejects, and answers its Commands with a Result", async () => {
+  it("fails on native rejection and answers Commands with a Result", async () => {
     const fake = FakeDevice.make("android", {
       PermissionsAndroid: FakeDevice.module({
         checkPermission: () => Promise.reject(new Error("No"))
       }).module
     })
-    const error = await FakeDevice.run(
-      fake.device,
-      Effect.flip(PermissionsAndroid.check(camera))
+    assert.strictEqual(
+      (await FakeDevice.run(
+        fake.device,
+        Effect.flip(PermissionsAndroid.check(camera))
+      )).method,
+      "checkPermission"
     )
-    assert.strictEqual(error.method, "checkPermission")
-    const requested = await FakeDevice.run(
-      setup(false).device,
-      PermissionsAndroid.Request.make({ permission: camera }).effect
+    assert.deepStrictEqual(
+      await FakeDevice.run(
+        setup(false).device,
+        PermissionsAndroid.Request.make({ permission: camera }).effect
+      ),
+      Result.succeed("granted" as const)
     )
-    assert.deepStrictEqual(requested, Result.succeed("granted"))
   })
 })

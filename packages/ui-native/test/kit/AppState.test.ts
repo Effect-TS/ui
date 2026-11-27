@@ -1,4 +1,4 @@
-import { AppState } from "@effect/ui-native/kit"
+import * as AppState from "@effect/ui-native/kit/AppState"
 import * as Native from "@effect/ui-native/Native"
 import * as Query from "@effect/ui/Query"
 import * as Effect from "effect/Effect"
@@ -15,7 +15,7 @@ const setup = (os = "ios") => {
 }
 
 describe("AppState", () => {
-  it("reads the current state over the one at launch, and sends each change", async () => {
+  it("tracks state changes, keeps changes ahead of initial read, and defaults to active off a device", async () => {
     const fake = setup()
     const listener = await FakeDevice.listen(
       fake.device,
@@ -27,29 +27,31 @@ describe("AppState", () => {
     await listener.settle()
     assert.deepStrictEqual(listener.values(), ["active", "background"])
     await listener.close()
-  })
 
-  it("keeps a change that arrives before native answers with the current state", async () => {
     let answer: (e: unknown) => void = () => {}
-    const fake = FakeDevice.make("ios", {
+    const raced = FakeDevice.make("ios", {
       AppState: FakeDevice.module({
         getConstants: () => ({ initialAppState: "active" }),
         getCurrentAppState: (success) => (answer = success)
       }).module
     })
     assert.strictEqual(
-      await FakeDevice.run(fake.device, AppState.get),
+      await FakeDevice.run(raced.device, AppState.get),
       "active"
     )
-    fake.emit("appStateDidChange", { app_state: "background" })
+    raced.emit("appStateDidChange", { app_state: "background" })
     answer({ app_state: "active" })
     assert.strictEqual(
-      await FakeDevice.run(fake.device, AppState.get),
+      await FakeDevice.run(raced.device, AppState.get),
       "background"
+    )
+    assert.strictEqual(
+      await FakeDevice.run(FakeDevice.make("unknown").device, AppState.get),
+      "active"
     )
   })
 
-  it("sends memory warnings and Android's focus changes", async () => {
+  it("sends memory warnings and Android focus changes until closed", async () => {
     const fake = setup("android")
     const warnings = await FakeDevice.listen(
       fake.device,
@@ -70,7 +72,7 @@ describe("AppState", () => {
     assert.strictEqual(fake.listening("memoryWarning"), 0)
   })
 
-  it("makes Query.Visibility follow it", async () => {
+  it("feeds Query.Visibility from app state", async () => {
     const fake = setup()
     const signal = await Effect.runPromise(
       Query.Visibility.useSync((signal) => signal).pipe(
@@ -84,18 +86,14 @@ describe("AppState", () => {
     fake.emit("appStateDidChange", { app_state: "background" })
     assert.isFalse(signal.get())
     assert.deepStrictEqual(seen, [false])
-  })
 
-  it("is active off a device", async () => {
-    const { device } = FakeDevice.make("unknown")
-    assert.strictEqual(await FakeDevice.run(device, AppState.get), "active")
     assert.isTrue(
       await Effect.runPromise(
         Effect.provide(
           Query.Visibility.useSync((s) => s.get()),
           Layer.provide(
             AppState.layerVisibility,
-            Layer.succeed(Native.Device, device)
+            Layer.succeed(Native.Device, FakeDevice.make("unknown").device)
           )
         )
       )

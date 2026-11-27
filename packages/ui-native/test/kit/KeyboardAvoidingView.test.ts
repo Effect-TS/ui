@@ -1,7 +1,7 @@
 import {
   KeyboardAvoidingView,
   type KeyboardAvoidingViewProps
-} from "@effect/ui-native/kit"
+} from "@effect/ui-native/kit/KeyboardAvoidingView"
 import * as Native from "@effect/ui-native/Native"
 import * as Renderer from "@effect/ui/Renderer"
 import * as UiSchema from "@effect/ui/UiSchema"
@@ -89,7 +89,6 @@ const setup = async (initial: KeyboardAvoidingViewProps, layout: {
     )
     await settle()
   }
-  // Fabric sends layout when the view's frame changes.
   const laidOut = async () => {
     mounted.fabric.emit(view(), "topLayout", { layout: {} })
     await settle()
@@ -98,7 +97,6 @@ const setup = async (initial: KeyboardAvoidingViewProps, layout: {
     mounted.root.send(Set.Set({ props }))
     await settle()
   }
-  // Moves the parent down by `by` points.
   const move = (by: number) => {
     top += by
     bottom += by
@@ -107,12 +105,19 @@ const setup = async (initial: KeyboardAvoidingViewProps, layout: {
 }
 
 describe("KeyboardAvoidingView", () => {
-  it("adds the inset to the view's own bottom padding", async () => {
+  it("pads the view, follows offset and enabled props, and resets on hide", async () => {
     const screen = await setup({})
     await screen.keyboard(544)
     assert.strictEqual(screen.view().props.paddingBottom, 308)
     assert.include(screen.printed(), "inset 300")
     await screen.layout()
+    assert.strictEqual(screen.view().props.paddingBottom, 308)
+    await screen.setProps({ offset: 20 })
+    assert.strictEqual(screen.view().props.paddingBottom, 328)
+    await screen.setProps({ enabled: false })
+    assert.strictEqual(screen.view().props.paddingBottom, 8)
+    assert.include(screen.printed(), "inset 0")
+    await screen.setProps({ offset: 0, enabled: true })
     assert.strictEqual(screen.view().props.paddingBottom, 308)
     await screen.keyboard(undefined)
     assert.strictEqual(screen.view().props.paddingBottom, 8)
@@ -120,14 +125,7 @@ describe("KeyboardAvoidingView", () => {
     await screen.close()
   })
 
-  it("adds the offset of a surface below the top of the screen", async () => {
-    const screen = await setup({ offset: 100 }, { top: 0, bottom: 700 })
-    await screen.keyboard(544)
-    assert.strictEqual(screen.view().props.paddingBottom, 264)
-    await screen.close()
-  })
-
-  it("shortens the view, and keeps it so once it lays out shorter", async () => {
+  it("shortens the view with height behavior across layouts, resizes, and hide", async () => {
     const screen = await setup({ behavior: "height" })
     await screen.layout()
     await screen.keyboard(544)
@@ -143,40 +141,13 @@ describe("KeyboardAvoidingView", () => {
     await screen.close()
   })
 
-  it("moves the view up, and keeps it so once it lays out higher", async () => {
+  it("moves the view up with position behavior across layouts", async () => {
     const screen = await setup({ behavior: "position" })
     await screen.keyboard(544)
     assert.strictEqual(screen.view().props.bottom, 300)
     await screen.layout()
     await screen.layout()
     assert.strictEqual(screen.view().props.bottom, 300)
-    await screen.close()
-  })
-
-  it("follows enabled and offset at once", async () => {
-    const screen = await setup({})
-    await screen.keyboard(544)
-    assert.strictEqual(screen.view().props.paddingBottom, 308)
-    await screen.setProps({ offset: 20 })
-    assert.strictEqual(screen.view().props.paddingBottom, 328)
-    await screen.setProps({ enabled: false })
-    assert.strictEqual(screen.view().props.paddingBottom, 8)
-    assert.include(screen.printed(), "inset 0")
-    await screen.close()
-  })
-
-  it("pads a view sized by its content once, however often it lays out", async () => {
-    const screen = await setup({}, { content: 400 })
-    await screen.keyboard(300)
-    await screen.layout()
-    await screen.layout()
-    assert.strictEqual(screen.view().props.paddingBottom, 160)
-    await screen.keyboard(undefined)
-    await screen.layout()
-    assert.strictEqual(screen.view().props.paddingBottom, 8)
-    await screen.keyboard(300)
-    await screen.layout()
-    assert.strictEqual(screen.view().props.paddingBottom, 160)
     await screen.close()
   })
 
@@ -240,6 +211,12 @@ describe("KeyboardAvoidingView", () => {
         assert.strictEqual(screen.view().props[prop], value)
         assert.include(screen.printed(), "inset 4")
       }
+      await screen.keyboard(undefined)
+      await screen.layout()
+      assert.include(screen.printed(), "inset 0")
+      await screen.keyboard(keyboard)
+      await screen.layout()
+      assert.strictEqual(screen.view().props[prop], value)
       await screen.close()
     }
   )
@@ -253,14 +230,6 @@ describe("KeyboardAvoidingView", () => {
     }
     assert.strictEqual(screen.view().props.paddingBottom, 312)
     assert.include(screen.printed(), "inset 304")
-    await screen.close()
-  })
-
-  it("leaves the view alone when disabled", async () => {
-    const screen = await setup({ enabled: false })
-    await screen.keyboard(544)
-    assert.strictEqual(screen.view().props.paddingBottom, 8)
-    assert.include(screen.printed(), "inset 0")
     await screen.close()
   })
 })

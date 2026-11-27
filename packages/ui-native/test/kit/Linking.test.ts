@@ -1,4 +1,4 @@
-import { Linking } from "@effect/ui-native/kit"
+import * as Linking from "@effect/ui-native/kit/Linking"
 import * as Native from "@effect/ui-native/Native"
 import * as Effect from "effect/Effect"
 import * as Result from "effect/Result"
@@ -17,111 +17,96 @@ const answers = {
 }
 
 describe("Linking", () => {
-  it("calls LinkingManager on iOS and IntentAndroid on Android", async () => {
+  it("calls platform modules, sends Android intents, and surfaces failures as DeviceError and Result", async () => {
     const ios = FakeDevice.module(answers)
     const android = FakeDevice.module(answers)
     const iosDevice =
       FakeDevice.make("ios", { LinkingManager: ios.module }).device
     const androidDevice =
       FakeDevice.make("android", { IntentAndroid: android.module }).device
+
     await FakeDevice.run(iosDevice, Linking.openURL("https://a.test"))
     assert.isTrue(
       await FakeDevice.run(androidDevice, Linking.canOpenURL("https://b.test"))
     )
+    assert.isUndefined(await FakeDevice.run(androidDevice, Linking.initialURL))
+    const extras = [{ key: "k", value: 1 }]
+    await FakeDevice.run(
+      androidDevice,
+      Linking.sendIntent("action.VIEW", extras)
+    )
     assert.deepStrictEqual(ios.calls, [["openURL", "https://a.test"]])
-    assert.deepStrictEqual(android.calls, [["canOpenURL", "https://b.test"]])
-  })
+    assert.deepStrictEqual(android.calls, [
+      ["canOpenURL", "https://b.test"],
+      ["getInitialURL"],
+      ["sendIntent", "action.VIEW", extras]
+    ])
 
-  it("fails with a DeviceError when native rejects, or the module is missing", async () => {
-    const linking = FakeDevice.module(answers)
-    const fake = FakeDevice.make("ios", { LinkingManager: linking.module })
     const rejected = await FakeDevice.run(
-      fake.device,
+      iosDevice,
       Effect.flip(Linking.openURL("mailto:a"))
     )
     assert.instanceOf(rejected, Native.DeviceError)
     assert.strictEqual(rejected.method, "openURL")
-    const missing = await FakeDevice.run(
-      FakeDevice.make("unknown").device,
-      Effect.flip(Linking.openSettings)
+    assert.strictEqual(
+      (await FakeDevice.run(
+        iosDevice,
+        Effect.flip(Linking.sendIntent("action.VIEW"))
+      )).method,
+      "sendIntent"
     )
-    assert.strictEqual(missing.module, "LinkingManager")
+    assert.strictEqual(
+      (await FakeDevice.run(
+        FakeDevice.make("unknown").device,
+        Effect.flip(Linking.openSettings)
+      )).module,
+      "LinkingManager"
+    )
+    assert.deepStrictEqual(
+      Linking.CanOpen.make({ url: "https://a.test" }).args,
+      { url: "https://a.test" }
+    )
+    assert.isTrue(
+      Result.isFailure(
+        await FakeDevice.run(
+          iosDevice,
+          Linking.Open.make({ url: "mailto:a" }).effect
+        )
+      )
+    )
   })
 
-  it("reads no initial URL as undefined", async () => {
+  it("delivers incoming URLs via onURL and urls stream with iOS listener cleanup", async () => {
     const linking = FakeDevice.module(answers)
-    const fake = FakeDevice.make("android", { IntentAndroid: linking.module })
-    assert.isUndefined(await FakeDevice.run(fake.device, Linking.initialURL))
-  })
-
-  it("sends intents only on Android", async () => {
-    const linking = FakeDevice.module(answers)
-    const android = FakeDevice.make("android", {
-      IntentAndroid: linking.module
-    })
-    const ios = FakeDevice.make("ios", { IntentAndroid: linking.module })
-    const extras = [{ key: "k", value: 1 }]
-    await FakeDevice.run(
-      android.device,
-      Linking.sendIntent("action.VIEW", extras)
-    )
-    const failed = await FakeDevice.run(
-      ios.device,
-      Effect.flip(Linking.sendIntent("action.VIEW"))
-    )
-    assert.strictEqual(failed.method, "sendIntent")
-    assert.deepStrictEqual(linking.calls, [[
-      "sendIntent",
-      "action.VIEW",
-      extras
-    ]])
-  })
-
-  it("sends the URLs that open the app, telling iOS's module of the listener", async () => {
-    const linking = FakeDevice.module(answers)
-    const fake = FakeDevice.make("ios", { LinkingManager: linking.module })
+    const ios = FakeDevice.make("ios", { LinkingManager: linking.module })
     const listener = await FakeDevice.listen(
-      fake.device,
+      ios.device,
       (got) => Linking.onURL(got)
     )
     await listener.settle()
-    fake.emit("url", { url: "app://a" })
+    ios.emit("url", { url: "app://a" })
     await listener.settle()
     assert.deepStrictEqual(listener.values(), ["app://a"])
     assert.deepStrictEqual(linking.calls, [["addListener", "url"]])
     await listener.close()
     assert.deepStrictEqual(linking.calls.at(-1), ["removeListeners", 1])
-    assert.strictEqual(fake.listening("url"), 0)
-  })
+    assert.strictEqual(ios.listening("url"), 0)
 
-  it("streams the URLs", async () => {
-    const fake = FakeDevice.make("android", {
+    const android = FakeDevice.make("android", {
       IntentAndroid: FakeDevice.module(answers).module
     })
     const urls = Effect.runPromise(
       Linking.urls.pipe(
         Stream.take(2),
         Stream.runCollect,
-        Effect.provideService(Native.Device, fake.device)
+        Effect.provideService(Native.Device, android.device)
       )
     )
-    while (fake.listening("url") === 0) {
+    while (android.listening("url") === 0) {
       await new Promise((r) => setTimeout(r, 1))
     }
-    fake.emit("url", { url: "app://a" })
-    fake.emit("url", { url: "app://b" })
+    android.emit("url", { url: "app://a" })
+    android.emit("url", { url: "app://b" })
     assert.deepStrictEqual(await urls, ["app://a", "app://b"])
-  })
-
-  it("answers its Commands with a Result", async () => {
-    const linking = FakeDevice.module(answers)
-    const fake = FakeDevice.make("ios", { LinkingManager: linking.module })
-    const command = Linking.CanOpen.make({ url: "https://a.test" })
-    assert.deepStrictEqual(command.args, { url: "https://a.test" })
-    const open = await FakeDevice.run(
-      fake.device,
-      Linking.Open.make({ url: "mailto:a" }).effect
-    )
-    assert.isTrue(Result.isFailure(open))
   })
 })

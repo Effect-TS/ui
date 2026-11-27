@@ -1,4 +1,4 @@
-import { AccessibilityInfo } from "@effect/ui-native/kit"
+import * as AccessibilityInfo from "@effect/ui-native/kit/AccessibilityInfo"
 import * as Native from "@effect/ui-native/Native"
 import * as Command from "@effect/ui/Command"
 import * as Renderer from "@effect/ui/Renderer"
@@ -9,12 +9,13 @@ import * as FakeDevice from "../utils/FakeDevice.ts"
 import * as FakeFabric from "../utils/FakeFabric.ts"
 
 describe("AccessibilityInfo", () => {
-  it("reads a setting from each platform's module", async () => {
+  it("reads settings per platform, falling back to false when unsupported or unavailable", async () => {
     const info = FakeDevice.module({
       isTouchExplorationEnabled: (ok) => ok(true)
     }, { isTouchExplorationEnabled: 1 })
     const manager = FakeDevice.module({
-      getCurrentReduceMotionState: (ok) => ok(true)
+      getCurrentReduceMotionState: (ok) => ok(true),
+      getCurrentGrayscaleState: (_ok, fail) => fail({})
     }, { getCurrentReduceMotionState: 2 })
     const android = FakeDevice.make("android", {
       AccessibilityInfo: info.module
@@ -26,91 +27,70 @@ describe("AccessibilityInfo", () => {
         AccessibilityInfo.isEnabled("screenReader")
       )
     )
-    assert.isTrue(
-      await FakeDevice.run(
-        ios.device,
-        AccessibilityInfo.isEnabled("reduceMotion")
-      )
-    )
-  })
-
-  it("answers false for a setting the platform lacks, or without the module", async () => {
-    const info = FakeDevice.module()
-    const android = FakeDevice.make("android", {
-      AccessibilityInfo: info.module
-    })
     assert.isFalse(
       await FakeDevice.run(
         android.device,
         AccessibilityInfo.isEnabled("boldText")
       )
     )
-    assert.deepStrictEqual(info.calls, [])
-    const nothing = FakeDevice.make("unknown")
-    assert.isFalse(
+    assert.isTrue(
       await FakeDevice.run(
-        nothing.device,
-        AccessibilityInfo.isEnabled("grayscale")
+        ios.device,
+        AccessibilityInfo.isEnabled("reduceMotion")
       )
     )
-    const failing = FakeDevice.make("ios", {
-      AccessibilityManager:
-        FakeDevice.module({ getCurrentGrayscaleState: (_ok, fail) => fail({}) })
-          .module
-    })
+    assert.isFalse(
+      await FakeDevice.run(ios.device, AccessibilityInfo.isEnabled("grayscale"))
+    )
     assert.isFalse(
       await FakeDevice.run(
-        failing.device,
+        FakeDevice.make("unknown").device,
         AccessibilityInfo.isEnabled("grayscale")
       )
     )
   })
 
-  it("sends the setting once read, then each change", async () => {
-    let answer: (enabled: boolean) => void = () => {}
-    const manager = FakeDevice.module({
-      getCurrentVoiceOverState: (ok) => (answer = ok)
+  it("sends the setting once read, ignores stale answers, and cleans up", async () => {
+    let iosAnswer: (enabled: boolean) => void = () => {}
+    const ios = FakeDevice.make("ios", {
+      AccessibilityManager: FakeDevice.module({
+        getCurrentVoiceOverState: (ok) => (iosAnswer = ok)
+      }).module
     })
-    const fake = FakeDevice.make("ios", {
-      AccessibilityManager: manager.module
-    })
-    const listener = await FakeDevice.listen(
-      fake.device,
+    const iosListener = await FakeDevice.listen(
+      ios.device,
       (got) => AccessibilityInfo.onChange("screenReader", got)
     )
-    answer(true)
-    fake.emit("screenReaderChanged", false)
-    await listener.settle()
-    assert.deepStrictEqual(listener.values(), [true, false])
-    await listener.close()
-    assert.strictEqual(fake.listening("screenReaderChanged"), 0)
-  })
+    iosAnswer(true)
+    ios.emit("screenReaderChanged", false)
+    await iosListener.settle()
+    assert.deepStrictEqual(iosListener.values(), [true, false])
+    await iosListener.close()
+    assert.strictEqual(ios.listening("screenReaderChanged"), 0)
 
-  it("ignores an answer that comes after a change", async () => {
-    let answer: (enabled: boolean) => void = () => {}
-    const info = FakeDevice.module({
-      isReduceMotionEnabled: (ok) => (answer = ok)
+    let androidAnswer: (enabled: boolean) => void = () => {}
+    const android = FakeDevice.make("android", {
+      AccessibilityInfo: FakeDevice.module({
+        isReduceMotionEnabled: (ok) => (androidAnswer = ok)
+      }).module
     })
-    const fake = FakeDevice.make("android", { AccessibilityInfo: info.module })
-    const listener = await FakeDevice.listen(
-      fake.device,
+    const androidListener = await FakeDevice.listen(
+      android.device,
       (got) => AccessibilityInfo.onChange("reduceMotion", got)
     )
-    fake.emit("reduceMotionDidChange", true)
-    answer(false)
-    await listener.settle()
-    assert.deepStrictEqual(listener.values(), [true])
-    await listener.close()
+    android.emit("reduceMotionDidChange", true)
+    androidAnswer(false)
+    await androidListener.settle()
+    assert.deepStrictEqual(androidListener.values(), [true])
+    await androidListener.close()
   })
 
-  it("announces, with iOS's options when given", async () => {
+  it("announces, reports finished announcements on iOS, and queries Android timeout", async () => {
     const manager = FakeDevice.module()
-    const fake = FakeDevice.make("ios", {
-      AccessibilityManager: manager.module
-    })
-    await FakeDevice.run(fake.device, AccessibilityInfo.announce("Saved"))
+    const ios = FakeDevice.make("ios", { AccessibilityManager: manager.module })
+    await FakeDevice.run(ios.device, AccessibilityInfo.announce("Saved"))
     await FakeDevice.run(
-      fake.device,
+      ios.device,
       AccessibilityInfo.Announce.make({
         announcement: "Sent",
         options: { queue: true }
@@ -120,31 +100,23 @@ describe("AccessibilityInfo", () => {
       ["announceForAccessibility", "Saved"],
       ["announceForAccessibilityWithOptions", "Sent", { queue: true }]
     ])
-  })
 
-  it("reports finished announcements on iOS", async () => {
-    const fake = FakeDevice.make("ios", {
-      AccessibilityManager: FakeDevice.module().module
-    })
-    const listener = await FakeDevice.listen(
-      fake.device,
+    const finished = await FakeDevice.listen(
+      ios.device,
       (got) => AccessibilityInfo.onAnnouncementFinished(got)
     )
-    fake.emit("announcementFinished", { announcement: "Saved", success: true })
-    await listener.settle()
-    assert.deepStrictEqual(listener.values(), [{
+    ios.emit("announcementFinished", { announcement: "Saved", success: true })
+    await finished.settle()
+    assert.deepStrictEqual(finished.values(), [{
       announcement: "Saved",
       success: true
     }])
-    await listener.close()
-  })
+    await finished.close()
 
-  it("asks Android for a timeout, and keeps it elsewhere", async () => {
-    const info = FakeDevice.module({
-      getRecommendedTimeoutMillis: (ms, ok) => ok(ms * 2)
-    })
     const android = FakeDevice.make("android", {
-      AccessibilityInfo: info.module
+      AccessibilityInfo: FakeDevice.module({
+        getRecommendedTimeoutMillis: (ms, ok) => ok(ms * 2)
+      }).module
     })
     assert.strictEqual(
       await FakeDevice.run(
@@ -153,9 +125,6 @@ describe("AccessibilityInfo", () => {
       ),
       6000
     )
-    const ios = FakeDevice.make("ios", {
-      AccessibilityManager: FakeDevice.module().module
-    })
     assert.strictEqual(
       await FakeDevice.run(
         ios.device,

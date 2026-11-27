@@ -1,11 +1,11 @@
-import { Share } from "@effect/ui-native/kit"
+import * as Share from "@effect/ui-native/kit/Share"
 import * as Effect from "effect/Effect"
 import * as Result from "effect/Result"
 import { assert, describe, it } from "vitest"
 import * as FakeDevice from "../utils/FakeDevice.ts"
 
 describe("Share", () => {
-  it("shares text on Android, with the URL after the message", async () => {
+  it("shares on Android with the URL appended, and fails its Command without the module", async () => {
     const module = FakeDevice.module({
       share: () => Promise.resolve({ action: "sharedAction" })
     })
@@ -28,34 +28,45 @@ describe("Share", () => {
       { title: "Hi", message: "Effect https://effect.website" },
       "Share"
     ]])
+    assert.isTrue(
+      Result.isFailure(
+        await FakeDevice.run(
+          FakeDevice.make("android").device,
+          Share.Share.make({ message: "Hi" }).effect
+        )
+      )
+    )
   })
 
-  it("passes iOS the message, URL and processed tint number, and reports the activity", async () => {
+  it("passes iOS only numeric processed tints, and handles activity, dismissal and errors", async () => {
     const sheets = FakeDevice.module({
       showShareActionSheetWithOptions: (_options, _onError, onDone) =>
         onDone(true, "com.apple.UIKit.activity.Mail")
     })
     const fake = FakeDevice.make("ios", { ActionSheetManager: sheets.module })
-    const shared = await FakeDevice.run(
-      fake.device,
-      Share.share({
-        url: "https://effect.website",
-        subject: "Look",
-        tintColor: "red"
-      })
+    assert.deepStrictEqual(
+      await FakeDevice.run(
+        fake.device,
+        Share.share({
+          url: "https://effect.website",
+          subject: "Look",
+          tintColor: "red"
+        })
+      ),
+      { action: "shared", activityType: "com.apple.UIKit.activity.Mail" }
     )
-    assert.deepStrictEqual(shared, {
-      action: "shared",
-      activityType: "com.apple.UIKit.activity.Mail"
-    })
     assert.deepInclude(sheets.calls[0][1] as object, {
       url: "https://effect.website",
       subject: "Look",
       tintColor: 0xffff0000
     })
-  })
 
-  it("reports a dismissed sheet, and fails on iOS's error", async () => {
+    await FakeDevice.run(
+      fake.device,
+      Share.share({ message: "Hi", tintColor: "nope" })
+    )
+    assert.isUndefined((sheets.calls[1][1] as any).tintColor)
+
     const dismissed = FakeDevice.make("ios", {
       ActionSheetManager: FakeDevice.module({
         showShareActionSheetWithOptions: (_options, _onError, onDone) =>
@@ -72,14 +83,16 @@ describe("Share", () => {
           onError({ message: "No" })
       }).module
     })
-    const error = await FakeDevice.run(
-      failed.device,
-      Effect.flip(Share.share({ message: "Hi" }))
+    assert.strictEqual(
+      (await FakeDevice.run(
+        failed.device,
+        Effect.flip(Share.share({ message: "Hi" }))
+      )).method,
+      "showShareActionSheetWithOptions"
     )
-    assert.strictEqual(error.method, "showShareActionSheetWithOptions")
   })
 
-  it("fails without a message or URL, or with an unknown tint, before calling iOS", async () => {
+  it("fails before calling native when both message and URL are missing", async () => {
     const sheets = FakeDevice.module()
     const fake = FakeDevice.make("ios", { ActionSheetManager: sheets.module })
     // @ts-expect-error A message or a URL is required.
@@ -95,27 +108,5 @@ describe("Share", () => {
     )
     assert.isTrue(Result.isFailure(command))
     assert.deepStrictEqual(sheets.calls, [])
-  })
-
-  it("leaves out a tint React Native can't process", async () => {
-    const sheets = FakeDevice.module({
-      showShareActionSheetWithOptions: (_options, _onError, onDone) =>
-        onDone(false, null)
-    })
-    const fake = FakeDevice.make("ios", { ActionSheetManager: sheets.module })
-    await FakeDevice.run(
-      fake.device,
-      Share.share({ message: "Hi", tintColor: "nope" })
-    )
-    assert.isUndefined((sheets.calls[0][1] as any).tintColor)
-  })
-
-  it("answers its Command with a Result, failing without the module", async () => {
-    const fake = FakeDevice.make("android")
-    const shared = await FakeDevice.run(
-      fake.device,
-      Share.Share.make({ message: "Hi" }).effect
-    )
-    assert.isTrue(Result.isFailure(shared))
   })
 })

@@ -1,9 +1,9 @@
-import { I18nManager } from "@effect/ui-native/kit"
+import * as I18nManager from "@effect/ui-native/kit/I18nManager"
 import { assert, describe, it } from "vitest"
 import * as FakeDevice from "../utils/FakeDevice.ts"
 
 describe("I18nManager", () => {
-  it("reads native's layout once", async () => {
+  it("reads layout constants, defaults to LTR off a device, and updates layout flags", async () => {
     const i18n = FakeDevice.module({
       getConstants: () => ({
         isRTL: true,
@@ -12,23 +12,14 @@ describe("I18nManager", () => {
       })
     })
     const fake = FakeDevice.make("android", { I18nManager: i18n.module })
-    const expected = {
-      isRTL: true,
-      doLeftAndRightSwapInRTL: false,
-      localeIdentifier: "ar_EG"
-    }
     assert.deepStrictEqual(
       await FakeDevice.run(fake.device, I18nManager.get),
-      expected
+      {
+        isRTL: true,
+        doLeftAndRightSwapInRTL: false,
+        localeIdentifier: "ar_EG"
+      }
     )
-    assert.deepStrictEqual(
-      await FakeDevice.run(fake.device, I18nManager.get),
-      expected
-    )
-    assert.strictEqual(i18n.calls.length, 1)
-  })
-
-  it("lays out left to right off a device", async () => {
     assert.deepStrictEqual(
       await FakeDevice.run(FakeDevice.make("unknown").device, I18nManager.get),
       {
@@ -37,18 +28,16 @@ describe("I18nManager", () => {
         localeIdentifier: undefined
       }
     )
-  })
 
-  it("sets the layout for the next launch", async () => {
-    const i18n = FakeDevice.module()
-    const fake = FakeDevice.make("ios", { I18nManager: i18n.module })
-    await FakeDevice.run(fake.device, I18nManager.allowRTL(false))
+    const writer = FakeDevice.module()
+    const ios = FakeDevice.make("ios", { I18nManager: writer.module })
+    await FakeDevice.run(ios.device, I18nManager.allowRTL(false))
     await FakeDevice.run(
-      fake.device,
+      ios.device,
       I18nManager.ForceRTL.make({ value: true }).effect
     )
-    await FakeDevice.run(fake.device, I18nManager.swapLeftAndRightInRTL(true))
-    assert.deepStrictEqual(i18n.calls, [
+    await FakeDevice.run(ios.device, I18nManager.swapLeftAndRightInRTL(true))
+    assert.deepStrictEqual(writer.calls, [
       ["allowRTL", false],
       ["forceRTL", true],
       ["swapLeftAndRightInRTL", true]

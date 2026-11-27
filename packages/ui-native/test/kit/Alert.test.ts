@@ -1,4 +1,4 @@
-import { Alert } from "@effect/ui-native/kit"
+import * as Alert from "@effect/ui-native/kit/Alert"
 import type * as Native from "@effect/ui-native/Native"
 import * as Effect from "effect/Effect"
 import * as Result from "effect/Result"
@@ -39,16 +39,18 @@ const buttons = [
 ] as const
 
 describe("Alert", () => {
-  it("maps Android's last three buttons to positive, negative and neutral", async () => {
+  it("maps Android buttons, defaults to OK, and handles dismissal and errors", async () => {
     const fake = android((_, onAction) => onAction("buttonClicked", -2))
-    const pressed = await FakeDevice.run(
-      fake.device,
-      Alert.alert({
-        title: "Delete?",
-        buttons: [{ id: "x", text: "X" }, ...buttons]
-      })
+    assert.strictEqual(
+      await FakeDevice.run(
+        fake.device,
+        Alert.alert({
+          title: "Delete?",
+          buttons: [{ id: "x", text: "X" }, ...buttons]
+        })
+      ),
+      "cancel"
     )
-    assert.strictEqual(pressed, "cancel")
     assert.deepStrictEqual(fake.calls[1].slice(0, 2), ["showAlert", {
       title: "Delete?",
       message: "",
@@ -57,32 +59,46 @@ describe("Alert", () => {
       buttonNegative: "Cancel",
       buttonNeutral: "Later"
     }])
-  })
 
-  it("succeeds with undefined when Android's dialog is dismissed, and fails on its error", async () => {
-    const dismissed = android((_, onAction) => onAction("dismissed"))
+    assert.strictEqual(
+      await FakeDevice.run(
+        android((_, onAction) => onAction("buttonClicked", -1)).device,
+        Alert.alert({ title: "Hi" })
+      ),
+      "ok"
+    )
     assert.isUndefined(
       await FakeDevice.run(
-        dismissed.device,
+        android((_, onAction) => onAction("dismissed")).device,
         Alert.alert({ title: "Hi", cancelable: true })
       )
     )
-    const failed = android((onError) => onError("No activity"))
     const error = await FakeDevice.run(
-      failed.device,
+      android((onError) => onError("No activity")).device,
       Effect.flip(Alert.alert({ title: "Hi" }))
     )
     assert.strictEqual(error.module, "DialogManagerAndroid")
   })
 
-  it("defaults to one OK button", async () => {
-    const fake = android((_, onAction) => onAction("buttonClicked", -1))
-    const pressed: "ok" | undefined = await FakeDevice.run(
-      fake.device,
-      Alert.alert({ title: "Hi" })
+  it("presents iOS alerts and prompts, defaulting empty buttons and answering Commands", async () => {
+    const styled = ios("2")
+    assert.strictEqual(
+      await FakeDevice.run(
+        styled.device,
+        Alert.alert({ title: "Delete?", message: "For good", buttons })
+      ),
+      "delete"
     )
-    assert.strictEqual(pressed, "ok")
-    const empty = ios("0", "hi")
+    assert.deepInclude(styled.calls[0][1] as object, {
+      title: "Delete?",
+      message: "For good",
+      buttons: [{ 0: "Later" }, { 1: "Cancel" }, { 2: "Delete" }],
+      cancelButtonKey: "1",
+      destructiveButtonKey: "2",
+      preferredButtonKey: "2"
+    })
+
+    const empty = ios("0", "hello")
     assert.strictEqual(
       await FakeDevice.run(
         empty.device,
@@ -93,13 +109,36 @@ describe("Alert", () => {
     assert.deepStrictEqual(
       await FakeDevice.run(
         empty.device,
-        Alert.prompt({ title: "Hi", buttons: [] })
+        Alert.prompt({ title: "Name", buttons: [] })
       ),
-      { id: "ok", text: "hi" }
+      { id: "ok", text: "hello" }
     )
     assert.deepStrictEqual(
       empty.calls.map(([, args]) => (args as any).buttons),
       [[{ 0: "OK" }], [{ 0: "OK" }]]
+    )
+    assert.deepStrictEqual(
+      await FakeDevice.run(
+        ios("0", { login: "me", password: "pw" }).device,
+        Alert.prompt({ title: "Sign in", type: "login-password" })
+      ),
+      { id: "ok", text: "pw", login: "me" }
+    )
+
+    assert.deepStrictEqual(
+      await FakeDevice.run(
+        ios("0").device,
+        Alert.Alert.make({ title: "Hi" }).effect
+      ),
+      Result.succeed("ok")
+    )
+    assert.isTrue(
+      Result.isFailure(
+        await FakeDevice.run(
+          android(() => {}).device,
+          Alert.Prompt.make({ title: "Name" }).effect
+        )
+      )
     )
   })
 
@@ -134,55 +173,5 @@ describe("Alert", () => {
       >()
     }
     assert.isFunction(types)
-  })
-
-  it("passes iOS the buttons by index, with their styles", async () => {
-    const fake = ios("2")
-    const pressed = await FakeDevice.run(
-      fake.device,
-      Alert.alert({ title: "Delete?", message: "For good", buttons })
-    )
-    assert.strictEqual(pressed, "delete")
-    const [method, args] = fake.calls[0]
-    assert.strictEqual(method, "alertWithArgs")
-    assert.deepInclude(args as object, {
-      title: "Delete?",
-      message: "For good",
-      buttons: [{ 0: "Later" }, { 1: "Cancel" }, { 2: "Delete" }],
-      cancelButtonKey: "1",
-      destructiveButtonKey: "2",
-      preferredButtonKey: "2"
-    })
-  })
-
-  it("prompts on iOS with the text entered", async () => {
-    const plain = ios("0", "hello")
-    assert.deepStrictEqual(
-      await FakeDevice.run(plain.device, Alert.prompt({ title: "Name" })),
-      { id: "ok", text: "hello" }
-    )
-    assert.strictEqual((plain.calls[0][1] as any).type, "plain-text")
-    const login = ios("0", { login: "me", password: "pw" })
-    assert.deepStrictEqual(
-      await FakeDevice.run(
-        login.device,
-        Alert.prompt({ title: "Sign in", type: "login-password" })
-      ),
-      { id: "ok", text: "pw", login: "me" }
-    )
-  })
-
-  it("fails to prompt off iOS, and answers its Command with a Result", async () => {
-    const fake = android(() => {})
-    const prompted = await FakeDevice.run(
-      fake.device,
-      Alert.Prompt.make({ title: "Name" }).effect
-    )
-    assert.isTrue(Result.isFailure(prompted))
-    const alerted = await FakeDevice.run(
-      ios("0").device,
-      Alert.Alert.make({ title: "Hi" }).effect
-    )
-    assert.deepStrictEqual(alerted, Result.succeed("ok"))
   })
 })

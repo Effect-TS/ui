@@ -1,4 +1,4 @@
-import { BackHandler } from "@effect/ui-native/kit"
+import * as BackHandler from "@effect/ui-native/kit/BackHandler"
 import { assert, describe, it } from "vitest"
 import * as FakeDevice from "../utils/FakeDevice.ts"
 
@@ -15,7 +15,7 @@ const setup = () => {
 }
 
 describe("BackHandler", () => {
-  it("gives a press to the latest handler first, which passes it on with undefined", async () => {
+  it("runs the latest handler first, invokes default when unhandled, and detaches on last close", async () => {
     const fake = setup()
     let taking = false
     const first = await FakeDevice.listen(
@@ -34,23 +34,16 @@ describe("BackHandler", () => {
     assert.deepStrictEqual(first.values(), ["first"])
     assert.deepStrictEqual(second.values(), ["second"])
     assert.strictEqual(fake.exits(), 0)
-    await first.close()
-    await second.close()
-  })
 
-  it("runs the default when no handler takes the press, and stops listening with the last", async () => {
-    const fake = setup()
-    const passing = await FakeDevice.listen(
-      fake.device,
-      (got) => BackHandler.onPress<ReturnType<typeof got>>(() => undefined)
-    )
+    await first.close()
+    taking = false
     fake.emit("hardwareBackPress")
     assert.strictEqual(fake.exits(), 1)
-    await passing.close()
+    await second.close()
     assert.strictEqual(fake.listening("hardwareBackPress"), 0)
   })
 
-  it("exits on request, and does nothing without the native module", async () => {
+  it("exits on request and is a no-op without the native module", async () => {
     const fake = setup()
     await FakeDevice.run(fake.device, BackHandler.exit)
     assert.strictEqual(fake.exits(), 1)

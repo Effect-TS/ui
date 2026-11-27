@@ -1,4 +1,4 @@
-import { Dimensions } from "@effect/ui-native/kit"
+import * as Dimensions from "@effect/ui-native/kit/Dimensions"
 import * as Native from "@effect/ui-native/Native"
 import * as Effect from "effect/Effect"
 import * as Fiber from "effect/Fiber"
@@ -21,47 +21,42 @@ const device = (os: string, constants: unknown) =>
   })
 
 describe("Dimensions", () => {
-  it("reads iOS's points, and the window for a missing screen", async () => {
-    const { device: d } = device("ios", {
-      window: { ...size(390, 844), extra: 1 }
-    })
-    assert.deepStrictEqual(await FakeDevice.run(d, Dimensions.get), {
-      window: size(390, 844),
-      screen: size(390, 844)
-    })
+  it("reads iOS points, converts Android pixels, rounds to pixels, and defaults off a device", async () => {
+    assert.deepStrictEqual(
+      await FakeDevice.run(
+        device("ios", { window: { ...size(390, 844), extra: 1 } }).device,
+        Dimensions.get
+      ),
+      { window: size(390, 844), screen: size(390, 844) }
+    )
+    assert.deepStrictEqual(
+      await FakeDevice.run(
+        device("android", {
+          window: size(1, 1),
+          windowPhysicalPixels: size(780, 1600),
+          screenPhysicalPixels: size(780, 1688)
+        }).device,
+        Dimensions.get
+      ),
+      { window: size(390, 800), screen: size(390, 844) }
+    )
+    assert.deepStrictEqual(
+      await FakeDevice.run(FakeDevice.make("unknown").device, Dimensions.get),
+      {
+        window: { width: 0, height: 0, scale: 1, fontScale: 1 },
+        screen: { width: 0, height: 0, scale: 1, fontScale: 1 }
+      }
+    )
+    assert.strictEqual(Dimensions.roundToPixel(10.3, 3), 31 / 3)
+    assert.strictEqual(Dimensions.toPixels(10.3, 3), 31)
   })
 
-  it("turns Android's pixels into points", async () => {
-    const { device: d } = device("android", {
-      window: size(1, 1),
-      windowPhysicalPixels: size(780, 1600),
-      screenPhysicalPixels: size(780, 1688)
-    })
-    assert.deepStrictEqual(await FakeDevice.run(d, Dimensions.get), {
-      window: size(390, 800),
-      screen: size(390, 844)
-    })
-  })
-
-  it("sends the dimensions when it starts, then each change", async () => {
+  it("delivers initial dimensions and updates via onChange and changes stream", async () => {
     const fake = device("ios", { window: size(390, 844) })
     const listener = await FakeDevice.listen(
       fake.device,
       (got) => Dimensions.onChange((d) => got(d.window.width))
     )
-    await listener.settle()
-    fake.emit("didUpdateDimensions", { window: size(844, 390) })
-    await listener.settle()
-    assert.deepStrictEqual(listener.values(), [390, 844])
-    assert.deepStrictEqual(
-      await FakeDevice.run(fake.device, Dimensions.get),
-      { window: size(844, 390), screen: size(844, 390) }
-    )
-    await listener.close()
-  })
-
-  it("streams the changes", async () => {
-    const fake = device("ios", { window: size(390, 844) })
     const fiber = Effect.runFork(
       Effect.provideService(
         Stream.runCollect(Stream.take(Dimensions.changes, 1)),
@@ -69,22 +64,16 @@ describe("Dimensions", () => {
         fake.device
       )
     )
-    await new Promise((r) => setTimeout(r, 0))
-    fake.emit("didUpdateDimensions", { window: size(1, 2) })
+    await listener.settle()
+    fake.emit("didUpdateDimensions", { window: size(844, 390) })
+    await listener.settle()
     const [changed] = await Effect.runPromise(Fiber.join(fiber))
-    assert.strictEqual(changed.window.height, 2)
-  })
-
-  it("is 0 by 0 at scale 1 off a device", async () => {
-    const { device: d } = FakeDevice.make("unknown")
-    assert.deepStrictEqual(await FakeDevice.run(d, Dimensions.get), {
-      window: { width: 0, height: 0, scale: 1, fontScale: 1 },
-      screen: { width: 0, height: 0, scale: 1, fontScale: 1 }
-    })
-  })
-
-  it("rounds to pixels", () => {
-    assert.strictEqual(Dimensions.roundToPixel(10.3, 3), 31 / 3)
-    assert.strictEqual(Dimensions.toPixels(10.3, 3), 31)
+    assert.deepStrictEqual(listener.values(), [390, 844])
+    assert.strictEqual(changed.window.height, 390)
+    assert.deepStrictEqual(
+      await FakeDevice.run(fake.device, Dimensions.get),
+      { window: size(844, 390), screen: size(844, 390) }
+    )
+    await listener.close()
   })
 })
