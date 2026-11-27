@@ -316,13 +316,20 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
       left: box.left
     }
   },
-  select: (element) => {
+  select: (element, options) => {
     const field = element as HTMLInputElement
     // Written first: the host would otherwise put a value `update` rejected back a frame later, which
     // drops the selection.
     const value = dom.written.get(field)?.get("value")
-    if (typeof value === "string" && field.value !== value) field.value = value
-    if (typeof field.select === "function") field.select()
+    try {
+      if (typeof value === "string" && field.value !== value) {
+        field.value = value
+      }
+      if (options === undefined) field.select()
+      else field.setSelectionRange(options.start, options.end ?? options.start)
+    } catch {
+      // Thrown by a type without a selection, such as `email`, or a file input given a value.
+    }
   },
   requestSubmit: (element) => {
     const form = element.localName === "form"

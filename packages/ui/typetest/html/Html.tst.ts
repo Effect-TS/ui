@@ -390,6 +390,16 @@ describe("Html", () => {
             selectionStart === selectionEnd ? undefined : Msg.Mounted()
         )
         expect<Html.KeyPayload["selectionStart"]>().type.toBe<number | null>()
+        expect<Html.ValuePayload["selectionEnd"]>().type.toBe<number | null>()
+        expect(h.textarea.on).type.toBeCallableWith(
+          "selectionchange",
+          ({ selectionEnd }: Html.SelectionPayload) =>
+            selectionEnd === null ? undefined : Msg.Mounted()
+        )
+        expect(h.div.on).type.not.toBeCallableWith(
+          "selectionchange",
+          () => Msg.Mounted()
+        )
         expect<Html.KeyPayload["repeat"]>().type.toBe<boolean>()
         expect<Html.KeyPayload["editable"]>().type.toBe<boolean>()
         const shortcutHandler = HtmlKeyboard.shortcuts([

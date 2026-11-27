@@ -198,7 +198,12 @@ describe("HtmlScene", () => {
     const propBox = HtmlLocator.label("PropBox")
     const scene = HtmlScene.start(Field, {})
       .type(name, "A")
-      .type(name, "Ad", { composing: true, inputType: "insertCompositionText" })
+      .type(name, "Ad", {
+        composing: true,
+        inputType: "insertCompositionText",
+        selectionStart: 0,
+        selectionEnd: 2
+      })
       .compositionEnd(name, "Adam")
       .compositionEnd(name)
       .change(name, "Ada")
@@ -217,12 +222,12 @@ describe("HtmlScene", () => {
     assert.deepStrictEqual(
       scene.get(log).children?.map((child) => child.text).join("").split("\n"),
       [
-        `input {"value":"A","checked":false,"files":[],"composing":false,"inputType":"insertText"}`,
-        `input {"value":"Ad","checked":false,"files":[],"composing":true,"inputType":"insertCompositionText"}`,
+        `input {"value":"A","checked":false,"files":[],"composing":false,"inputType":"insertText","selectionStart":null,"selectionEnd":null}`,
+        `input {"value":"Ad","checked":false,"files":[],"composing":true,"inputType":"insertCompositionText","selectionStart":0,"selectionEnd":2}`,
         `compositionend {"value":"Adam"}`,
         `compositionend {"value":"Ada"}`,
-        `change {"value":"Ada","checked":false,"files":[],"composing":false,"inputType":""}`,
-        `change {"value":"Ada","checked":false,"files":[],"composing":false,"inputType":"insertReplacementText"}`,
+        `change {"value":"Ada","checked":false,"files":[],"composing":false,"inputType":"","selectionStart":null,"selectionEnd":null}`,
+        `change {"value":"Ada","checked":false,"files":[],"composing":false,"inputType":"insertReplacementText","selectionStart":null,"selectionEnd":null}`,
         `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":true,"selectionStart":null,"selectionEnd":null}`,
         `keydown {"key":"a","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":true,"repeat":true,"editable":false,"selectionStart":1,"selectionEnd":3}`,
         `keydown {"key":" ","shift":false,"ctrl":false,"alt":false,"meta":false,"composing":false,"repeat":false,"editable":false,"selectionStart":null,"selectionEnd":null}`,

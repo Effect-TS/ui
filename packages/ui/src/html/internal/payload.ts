@@ -54,15 +54,15 @@ const controlPayload = (
   const e = event as Partial<InputEvent> | undefined
   const composing = e?.isComposing === true
   const inputType = typeof e?.inputType === "string" ? e.inputType : ""
+  const edit = { composing, inputType, ...selectionOf(control) }
   return control.localName === "input"
     ? {
       value: control.value,
       checked: control.checked === true,
       files: control.files ? Array.from(control.files) : noFiles,
-      composing,
-      inputType
+      ...edit
     }
-    : { value: String(control.value ?? ""), composing, inputType }
+    : { value: String(control.value ?? ""), ...edit }
 }
 
 const noFiles: ReadonlyArray<File> = []
@@ -204,6 +204,8 @@ export const payloadOf = (
       return controlPayload(fieldOf(target, element), event)
     case "compositionend":
       return { value: String(fieldOf(target, element).value ?? "") }
+    case "selectionchange":
+      return selectionOf(element)
     case "paste":
       return { text: pastedText(event) }
     case "submit": {
