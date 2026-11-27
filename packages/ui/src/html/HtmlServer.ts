@@ -212,7 +212,7 @@ export const renderToHtml = <
     readonly static?: boolean | undefined
   }
 ): Effect.Effect<Rendered<Model>, never, Exclude<R | RP, Html.Host>> =>
-  Effect.flatMap(Effect.context<never>(), (context) => {
+  Effect.contextWith((context: Context.Context<never>) => {
     const writer = server.makeWriter()
     // `Renderer.prerender`, with the writer as the tree's sink.
     return runtime.prerender(component as any, props, {

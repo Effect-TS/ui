@@ -98,86 +98,89 @@ describe("HtmlServerVite.plugin", () => {
   it(
     "emits a web handler into serverOutDir alongside prerendered pages",
     async () => {
-    const dir = await fs.mkdtemp(path.join(fixtureRoot, ".out-"))
-    const clientOutDir = path.join(dir, "client")
-    const serverOutDir = path.join(dir, "server")
-    try {
-      const builder = await createBuilder(
-        config({
-          build: { outDir: clientOutDir, emptyOutDir: true },
-          plugins: [plugin({ entry: "/src/entry.server.ts", serverOutDir })]
-        })
-      )
-      await builder.buildApp()
-
-      const home = await fs.readFile(
-        path.join(clientOutDir, "index.html"),
-        "utf8"
-      )
-      expect(home).toContain("<h1>Home</h1>")
-      expect(home).toContain("\"~static\":true")
-
-      const dts = await fs.readFile(
-        path.join(serverOutDir, "index.d.ts"),
-        "utf8"
-      )
-      expect(dts).toContain("handler")
-      expect(dts).toContain("dispose")
-
-      const server = (await import(
-        pathToFileURL(path.join(serverOutDir, "index.js")).href
-      )) as {
-        readonly handler: (request: Request) => Promise<Response>
-        readonly dispose: () => Promise<void>
-      }
+      const dir = await fs.mkdtemp(path.join(fixtureRoot, ".out-"))
+      const clientOutDir = path.join(dir, "client")
+      const serverOutDir = path.join(dir, "server")
       try {
-        const live = await server.handler(
-          new Request("http://localhost/people/2")
+        const builder = await createBuilder(
+          config({
+            build: { outDir: clientOutDir, emptyOutDir: true },
+            plugins: [plugin({ entry: "/src/entry.server.ts", serverOutDir })]
+          })
         )
-        expect(live.status).toBe(200)
-        const html = await live.text()
-        expect(html).toContain("Bio of person 2")
-        expect(html).toMatch(
-          /<script type="module" crossorigin src="\/assets\/[^"]+\.js">/
-        )
-        expect(html).not.toContain("\"~static\"")
+        await builder.buildApp()
 
-        const missing = await server.handler(
-          new Request("http://localhost/nowhere")
+        const home = await fs.readFile(
+          path.join(clientOutDir, "index.html"),
+          "utf8"
         )
-        expect(missing.status).toBe(404)
-        expect(await missing.text()).toContain("<h1>Not found</h1>")
+        expect(home).toContain("<h1>Home</h1>")
+        expect(home).toContain("\"~static\":true")
+
+        const dts = await fs.readFile(
+          path.join(serverOutDir, "index.d.ts"),
+          "utf8"
+        )
+        expect(dts).toContain("handler")
+        expect(dts).toContain("dispose")
+
+        const server = (await import(
+          pathToFileURL(path.join(serverOutDir, "index.js")).href
+        )) as {
+          readonly handler: (request: Request) => Promise<Response>
+          readonly dispose: () => Promise<void>
+        }
+        try {
+          const live = await server.handler(
+            new Request("http://localhost/people/2")
+          )
+          expect(live.status).toBe(200)
+          const html = await live.text()
+          expect(html).toContain("Bio of person 2")
+          expect(html).toMatch(
+            /<script type="module" crossorigin src="\/assets\/[^"]+\.js">/
+          )
+          expect(html).not.toContain("\"~static\"")
+
+          const missing = await server.handler(
+            new Request("http://localhost/nowhere")
+          )
+          expect(missing.status).toBe(404)
+          expect(await missing.text()).toContain("<h1>Not found</h1>")
+        } finally {
+          await server.dispose()
+        }
       } finally {
-        await server.dispose()
+        await fs.rm(dir, { recursive: true, force: true })
       }
-    } finally {
-      await fs.rm(dir, { recursive: true, force: true })
-    }
-  }, 60_000)
+    },
+    60_000
+  )
 
   it(
     "rejects overlapping serverOutDir and client outDir before building either environment",
     async () => {
-    for (
-      const [outDir, serverOutDir] of [
-        ["dist", "dist"],
-        ["dist", "dist/server"],
-        ["dist/client", "dist"]
-      ] as const
-    ) {
-      const builder = await createBuilder(
-        config({
-          build: { outDir },
-          plugins: [plugin({ entry: "/src/entry.server.ts", serverOutDir })]
-        })
-      )
-      const build = vi
-        .spyOn(builder, "build")
-        .mockRejectedValue(new Error("unexpected build"))
-      await expect(builder.buildApp()).rejects.toThrow(/serverOutDir/i)
-      expect(build).not.toHaveBeenCalled()
+      for (
+        const [outDir, serverOutDir] of [
+          ["dist", "dist"],
+          ["dist", "dist/server"],
+          ["dist/client", "dist"]
+        ] as const
+      ) {
+        const builder = await createBuilder(
+          config({
+            build: { outDir },
+            plugins: [plugin({ entry: "/src/entry.server.ts", serverOutDir })]
+          })
+        )
+        const build = vi
+          .spyOn(builder, "build")
+          .mockRejectedValue(new Error("unexpected build"))
+        await expect(builder.buildApp()).rejects.toThrow(/serverOutDir/i)
+        expect(build).not.toHaveBeenCalled()
+      }
     }
-  })
+  )
 
   it("rejects watch builds before building either environment", async () => {
     const builder = await createBuilder(config({ build: { watch: {} } }))

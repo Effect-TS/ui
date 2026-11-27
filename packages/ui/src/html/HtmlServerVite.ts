@@ -132,22 +132,11 @@ export interface Plugin {
   load(this: LoadContext, id: string): Promise<string | undefined>
   configureServer(server: DevServer): () => void
   buildApp(builder: Builder): Promise<void>
-  buildEnd(this: BuildEndContext): Promise<void>
+  buildEnd(this: { readonly environment: object }): Promise<void>
 }
 
 interface LoadContext {
   addWatchFile(file: string): void
-  resolve?(
-    source: string,
-    importer?: string
-  ): Promise<{ readonly id: string } | null>
-}
-
-interface BuildEndContext {
-  readonly environment: object
-  getModuleInfo?(id: string): {
-    readonly exports?: ReadonlyArray<string> | null
-  } | null
 }
 
 interface OutputFile {
@@ -195,16 +184,18 @@ interface Builder {
 
 /** What the virtual server module exports. */
 interface ServerModule {
-  readonly handler: (request: Request) => Promise<Response>
+  readonly handler: (request: Request, context?: unknown) => Promise<Response>
   readonly dispose: () => Promise<void>
   readonly prerender: () => Promise<ReadonlyArray<string>>
-  readonly prerenderRequest: (request: Request) => Promise<Response>
+  /** The request context of a prerender: `HtmlServer.Static` set. */
+  readonly prerenderContext: unknown
 }
 
 const documentId = "virtual:@effect/ui/document"
 const serverId = "virtual:@effect/ui/server"
 
-const declarationSource = [
+/** The types of a kept server build's entry. */
+const declaration = [
   "import type { Context } from \"effect/Context\"",
   "",
   "export declare const handler: (",
@@ -214,8 +205,6 @@ const declarationSource = [
   "export declare const dispose: () => Promise<void>",
   ""
 ].join("\n")
-
-let importSeq = 0
 
 /**
  * Creates the Vite plugin.
@@ -229,8 +218,6 @@ export const plugin = (options: Options): Plugin => {
   let devServer: DevServer | undefined
   // The app's `index.html` in dev, and the client build's in a build.
   let templateFile = ""
-  let resolvedEntry: string | undefined
-  let hasPrerender = true
   // Closes each dev server, by its client environment. A restart
   // configures the new server before it closes the old one.
   const closers = new WeakMap<object, () => Promise<void>>()
@@ -254,12 +241,12 @@ export const plugin = (options: Options): Plugin => {
       ssr: { noExternal: [/^@effect\/ui/] },
       environments: {
         ssr: {
-          build: options.serverOutDir !== undefined
-            ? {
-              outDir: options.serverOutDir,
-              rolldownOptions: { input: { index: serverId } }
-            }
-            : { write: false, rolldownOptions: { input: serverId } }
+          build: {
+            rolldownOptions: { input: { index: serverId } },
+            ...(options.serverOutDir === undefined
+              ? { write: false }
+              : { outDir: options.serverOutDir })
+          }
         }
       }
     }),
@@ -274,22 +261,19 @@ export const plugin = (options: Options): Plugin => {
         ].join("\n")
       }
       if (id === `\0${serverId}`) {
-        resolvedEntry = (await this.resolve?.(options.entry))?.id
-        const handlerOptions =
-          devServer !== undefined || options.serverOutDir === undefined
-            ? ", { disableLogger: true }"
-            : ""
+        // Requests are logged by a build's handler only, and not while it prerenders.
         return [
           `import * as entry from ${JSON.stringify(options.entry)}`,
           `import { Static } from "@effect/ui/html/HtmlServer"`,
-          `import * as Context from "effect/Context"`,
-          `import { isEffect, runPromise } from "effect/Effect"`,
+          `import { flatMap, isEffect, runPromise } from "effect/Effect"`,
+          `import { withLoggerDisabled } from "effect/http/HttpMiddleware"`,
           `import { toWebHandler } from "effect/http/HttpRouter"`,
-          `import { CurrentLoggers } from "effect/Logger"`,
-          `export const { handler, dispose } = toWebHandler(entry.default${handlerOptions})`,
+          `export const { handler, dispose } = toWebHandler(entry.default, {`,
+          `  disableLogger: ${devServer !== undefined},`,
+          `  middleware: (app) => flatMap(Static, (isStatic) => isStatic ? withLoggerDisabled(app) : app)`,
+          `})`,
           `export const prerender = async () => isEffect(entry.prerender) ? runPromise(entry.prerender) : entry.prerender ?? []`,
-          `const prerenderContext = Context.add(Context.make(Static, true), CurrentLoggers, new Set())`,
-          `export const prerenderRequest = (request) => handler(request, prerenderContext)`
+          `export const prerenderContext = Static.context(true)`
         ].join("\n")
       }
       return undefined
@@ -423,33 +407,48 @@ export const plugin = (options: Options): Plugin => {
       }
       const { cacheDir, root } = ssr.config
       const outDir = path.resolve(root, client.config.build.outDir)
-      const serverOutDir = options.serverOutDir !== undefined
-        ? path.resolve(root, ssr.config.build.outDir)
-        : undefined
+      const serverOutDir = options.serverOutDir === undefined
+        ? undefined
+        : path.resolve(root, options.serverOutDir)
       if (serverOutDir !== undefined && overlaps(outDir, serverOutDir)) {
         throw new Error(
-          `HtmlServerVite: \`serverOutDir\` (${ssr.config.build.outDir}) must not overlap the client \`outDir\` (${client.config.build.outDir}). Set \`build.outDir\` (for example \`"dist/client"\`) to a sibling directory.`
+          `HtmlServerVite: \`serverOutDir\` (${options.serverOutDir}) must not overlap the client \`outDir\` (${client.config.build.outDir}). Set \`build.outDir\` (for example \`"dist/client"\`) to a sibling directory.`
         )
       }
       await builder.build(client)
       templateFile = path.join(outDir, "index.html")
-      resolvedEntry = undefined
-      hasPrerender = true
       const output = (await builder.build(ssr)) as {
         readonly output: ReadonlyArray<OutputFile>
       }
       const entry = output.output.find((file) => file.isEntry)!
-      const prerenderFrom = async (entryFile: string) => {
+      if (serverOutDir !== undefined) {
+        await write(
+          serverOutDir,
+          entry.fileName.replace(/\.([cm]?)js$/, ".d.$1ts"),
+          declaration
+        )
+      }
+      await fs.mkdir(cacheDir, { recursive: true })
+      // Prerenders from a copy inside the project, so the bundle's external
+      // imports resolve.
+      const dir = await fs.mkdtemp(path.join(cacheDir, "effect-ui-server-"))
+      try {
+        await Promise.all(
+          output.output.map((file) =>
+            write(dir, file.fileName, file.code ?? file.source ?? "")
+          )
+        )
         const module = (await import(
-          `${pathToFileURL(entryFile).href}?t=${++importSeq}`
+          pathToFileURL(path.join(dir, entry.fileName)).href
         )) as ServerModule
         try {
           // Settled, so no render outlives the handler when one fails.
           const results = await Promise.allSettled(
             (await module.prerender()).map(async (url) => {
               const target = new URL(url, origin)
-              const response = await module.prerenderRequest(
-                new Request(target)
+              const response = await module.handler(
+                new Request(target),
+                module.prerenderContext
               )
               await write(
                 outDir,
@@ -463,59 +462,21 @@ export const plugin = (options: Options): Plugin => {
         } finally {
           await module.dispose()
         }
-      }
-      if (serverOutDir !== undefined) {
-        await write(
-          serverOutDir,
-          declarationFileName(entry.fileName),
-          declarationSource
-        )
-        if (hasPrerender) {
-          await prerenderFrom(path.join(serverOutDir, entry.fileName))
-        }
-        return
-      }
-      if (!hasPrerender) return
-      await fs.mkdir(cacheDir, { recursive: true })
-      // Inside the project, so the bundle's external imports resolve.
-      const dir = await fs.mkdtemp(path.join(cacheDir, "effect-ui-server-"))
-      try {
-        await Promise.all(
-          output.output.map((file) =>
-            write(dir, file.fileName, file.code ?? file.source ?? "")
-          )
-        )
-        await prerenderFrom(path.join(dir, entry.fileName))
       } finally {
         await fs.rm(dir, { recursive: true, force: true })
       }
     },
     // Closes the dev server that owns this environment. Builds register none.
     async buildEnd() {
-      if (resolvedEntry !== undefined) {
-        const info = this.getModuleInfo?.(resolvedEntry)
-        if (info?.exports != null) {
-          hasPrerender = info.exports.includes("prerender")
-        }
-      }
       await closers.get(this.environment)?.()
     }
   }
 }
 
-const isInside = (parent: string, child: string): boolean => {
-  const relative = path.relative(parent, child)
-  return relative === "" ||
-    (relative !== ".." &&
-      !relative.startsWith(`..${path.sep}`) &&
-      !path.isAbsolute(relative))
-}
-
+/** Whether one resolved directory is the other, or inside it. */
 const overlaps = (a: string, b: string): boolean =>
-  isInside(a, b) || isInside(b, a)
-
-const declarationFileName = (file: string): string =>
-  file.replace(/\.([cm]?)js$/, ".d.$1ts")
+  `${a}${path.sep}`.startsWith(`${b}${path.sep}`) ||
+  `${b}${path.sep}`.startsWith(`${a}${path.sep}`)
 
 const fileName = (pathname: string, status: number): string => {
   if (status === 404) {
