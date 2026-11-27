@@ -528,8 +528,7 @@ const flushFrom = (value: string): Flush | undefined => {
  * A problem fails the test: `settle` fails with a `ProblemsError`, and the
  * Layer's Scope closes with one as a defect, unless `expectProblem` took it.
  *
- * Only a Layer built on top of the host gets its `Scheduler`, so provide the
- * host beneath the app's Layers, as in
+ * Provide the host beneath the app's Layers, as in
  * `Backend.layer.pipe(Layer.provideMerge(TestHost.layer()))`. A Layer merged
  * beside it, as by `Layer.mergeAll`, runs its fibers on the default
  * scheduler, and `settle` can return before they do.
