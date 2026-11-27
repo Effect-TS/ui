@@ -42,6 +42,8 @@ export interface Feed {
   readonly failures: () => number
   readonly open: boolean
   readonly position: () => Position
+  /** The payload fields timeline rows show. */
+  readonly fields: ReadonlyArray<string>
   /** The message tags not recorded, when the page has a recorder to change. */
   readonly notRecording?: (() => ReadonlyArray<string>) | undefined
   /** The message tag of an `Update`, while the recorder records it. */
@@ -72,6 +74,11 @@ const FeedSchema = Schema.declare(
 
 const Filter = Schema.Literals(["messages", "commands", "all"])
 
+const Field = Schema.Struct({
+  name: Schema.String,
+  value: Schema.Union([Schema.String, Schema.Number, Schema.Boolean])
+})
+
 const Pane = Schema.Literals(["timeline", "entry"])
 
 const Page = Schema.Struct({ session: Schema.String, seq: Schema.Number })
@@ -85,6 +92,7 @@ const OverlayModel = Schema.Struct({
   revision: Schema.Number,
   selected: Schema.NullOr(Schema.Number),
   filter: Filter,
+  field: Schema.NullOr(Field),
   scope: Schema.NullOr(Schema.Number),
   browse: Schema.Boolean,
   find: Schema.String,
@@ -121,6 +129,7 @@ const OverlayMessage = UiSchema.TaggedEnum({
   },
   ToggledBranch: { instance: Schema.Number },
   ClickedFilter: { filter: Filter },
+  ClickedField: { field: Field },
   ClickedFollowLatest: {},
   ClickedBack: {},
   ScrolledTimeline: { atStart: Schema.Boolean },
@@ -854,6 +863,44 @@ const Filters = (h: H, model: OverlayModel) =>
     )
   )
 
+const sameField = (a: Read.Field | null, b: Read.Field) =>
+  a !== null && a.name === b.name && a.value === b.value
+
+const fieldText = (field: Read.Field) => field.name + " " + String(field.value)
+
+const FieldFilter = (h: H, field: Read.Field | null) =>
+  field === null ? null : h.div.class("only").attr("role", "group").attr(
+    "aria-label",
+    "Field filter"
+  ).children(
+    h.span.children("Only"),
+    h.button.class("code").attr("aria-pressed", "true").attr(
+      "title",
+      "Show every entry"
+    ).on("click", OverlayMessage.ClickedField({ field })).children(
+      fieldText(field)
+    )
+  )
+
+// With one declared field the name is left to the title, to save width.
+const FieldButtons = (
+  h: H,
+  fields: ReadonlyArray<Read.Field>,
+  active: Read.Field | null,
+  named: boolean
+) =>
+  fields.length === 0 ? null : h.span.class("fields").children(
+    fields.map((field) => {
+      const on = sameField(active, field)
+      return h.button.key(field.name).class("field", "code", on && "on")
+        .attr("aria-label", fieldText(field))
+        .attr("title", fieldText(field))
+        .attr("aria-pressed", String(on))
+        .on("click", OverlayMessage.ClickedField({ field }))
+        .children(named ? fieldText(field) : String(field.value))
+    })
+  )
+
 const NotRecording = (h: H, tags: ReadonlyArray<string>) =>
   tags.length === 0 ? null : h.div.class("stopped").attr("role", "group").attr(
     "aria-label",
@@ -923,6 +970,7 @@ const Timeline = (
   h: H,
   session: Session,
   model: OverlayModel,
+  names: ReadonlyArray<string>,
   timeline: ReadonlyArray<Entry>,
   newest: number,
   hidden: number,
@@ -945,7 +993,7 @@ const Timeline = (
         itemSize: 28,
         measure: false,
         initialCount: 40,
-        dataset: model.filter + ":" + model.scope,
+        dataset: JSON.stringify([model.filter, model.scope, model.field]),
         ...scrollOf(model, keys)
       },
       onEmit: {
@@ -1004,7 +1052,13 @@ const Timeline = (
                           .children(Read.nameOf(entry.path))
                         : null
                     )
-                  )
+                  ),
+                FieldButtons(
+                  h,
+                  Read.fieldsOf(session, entry, names),
+                  model.field,
+                  names.length > 1
+                )
               )
             })
           ),
@@ -1850,10 +1904,14 @@ const Panel = (h: H, model: OverlayModel) => {
     const instance = Read.instanceOf(entry)
     return instance !== undefined && isWithin(instance)
   })
-  const timeline = scoped.filter((entry) => Read.matches(entry, model.filter))
+  const field = model.field
+  const narrowed = field === null
+    ? scoped
+    : scoped.filter((entry) => Read.hasField(session, entry, field))
+  const timeline = narrowed.filter((entry) => Read.matches(entry, model.filter))
     .reverse()
   const hidden = model.filter === "messages"
-    ? scoped.length - timeline.length
+    ? narrowed.length - timeline.length
     : 0
   const selected = model.selected === null
     ? timeline[0]
@@ -1882,12 +1940,14 @@ const Panel = (h: H, model: OverlayModel) => {
         Instances(h, session, model, owner, timeline),
         h.div.children(
           Filters(h, model),
+          FieldFilter(h, model.field),
           NotRecording(h, feed.notRecording?.() ?? [])
         ),
         Timeline(
           h,
           session,
           model,
+          feed.fields,
           timeline,
           entries.at(-1)?.seq ?? 0,
           hidden,
@@ -1998,6 +2058,15 @@ const repaint = (model: OverlayModel, feed: Feed, seq: number) => {
   return { model: { painting: page }, commands: [Paint.make(page)] }
 }
 
+// Whether a link's target stays in the timeline under the field filter.
+const holdsField = (feed: Feed, model: OverlayModel, seq: number) => {
+  const session = sessionOf(feed, model)
+  const target = session?.resolve(seq)
+  return model.field !== null && session !== undefined &&
+    target !== undefined && target._tag !== "Outside" &&
+    Read.hasField(session, target, model.field)
+}
+
 export const Overlay = Html.component({
   name: "DevToolsOverlay",
   props: OverlayProps,
@@ -2009,6 +2078,7 @@ export const Overlay = Html.component({
     revision: 0,
     selected: null,
     filter: "messages",
+    field: null,
     scope: null,
     browse: true,
     find: "",
@@ -2070,6 +2140,7 @@ export const Overlay = Html.component({
       return $.evolve({
         selected: seq,
         filter: "all",
+        field: holdsField($.props.feed, $.model, seq) ? $.model.field : null,
         scope: null,
         pinned: false,
         reveal: seq,
@@ -2091,6 +2162,10 @@ export const Overlay = Html.component({
             : [...open, instance]
       }),
     ClickedFilter: ($, { filter }) => $.evolve({ filter }),
+    ClickedField: ($, { field }) =>
+      sameField($.model.field, field)
+        ? $.evolve({ field: null })
+        : $.evolve({ field, scope: null }),
     ClickedFollowLatest: ($) => {
       const next = $.evolve({ selected: null, ...following })
       return pageAt($.model) === null
@@ -2149,6 +2224,7 @@ export const Overlay = Html.component({
       return $.evolve({
         revision: increment,
         selected: null,
+        field: null,
         scope: hasScope ? $.model.scope : null,
         atStart: true,
         ...following

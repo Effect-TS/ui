@@ -19,7 +19,7 @@
  * | --- | --- |
  * | `list_sessions` | the sessions held, whether each is connected, controllable and paused |
  * | `list_instances` | the instances of a session, with the state of their Command runs |
- * | `list_entries` | entries as rows without payloads |
+ * | `list_entries` | entries as rows without payloads, with the declared `fields` |
  * | `count_entries` | entries by entry and message `_tag` |
  * | `get_entry` | one entry's Wire frame |
  * | `get_chain` | the causal chain of an entry |
@@ -57,12 +57,13 @@ import { readFile } from "node:fs/promises"
 import { createServer } from "node:http"
 import * as Control from "../internal/control.ts"
 import * as Mcp from "../internal/mcp.ts"
+import { fieldNames } from "../internal/read.ts"
 import * as Server from "../internal/server.ts"
 
 // This path resolves from both src/node and dist/node.
 const viewerFile = new URL("../../dist/viewer.html", import.meta.url)
 
-const viewer = (size: number) =>
+const viewer = (size: number, fields: ReadonlyArray<string>) =>
   HttpRouter.add(
     "GET",
     "/",
@@ -78,7 +79,7 @@ const viewer = (size: number) =>
             html.replace(
               "<head>",
               "<head><meta name=\"" + Control.metaName + "\" content='" +
-                JSON.stringify({ size }) + "'>"
+                JSON.stringify({ size, fields }) + "'>"
             )
           )
     )
@@ -117,6 +118,12 @@ export interface Options {
   readonly dispatch?: boolean | undefined
   /** How many closed sessions are kept, 5 by default. */
   readonly keep?: number | undefined
+  /**
+   * Top-level message and Command args fields, such as `"commandId"`, that
+   * `list_entries` rows and the server's page show. Give pages the same
+   * `fields` in `DevTools.layer`, or use `DevToolsVite.plugin`.
+   */
+  readonly fields?: ReadonlyArray<string> | undefined
 }
 
 /**
@@ -144,13 +151,15 @@ export const layer = (
 ): Layer.Layer<never, HttpServerError.ServeError> =>
   Layer.unwrap(Effect.sync(() => {
     const size = Math.max(1, options?.size ?? 1_000)
+    const fields = fieldNames(options?.fields)
     const { routes, server } = Server.make({
       size,
       dispatch: options?.dispatch ?? false,
-      keep: Math.max(0, options?.keep ?? 5)
+      keep: Math.max(0, options?.keep ?? 5),
+      fields
     })
     return HttpRouter.serve(
-      Layer.mergeAll(routes, viewer(size), Mcp.layer(server)),
+      Layer.mergeAll(routes, viewer(size, fields), Mcp.layer(server)),
       {
         disableLogger: true,
         disableListenLog: true

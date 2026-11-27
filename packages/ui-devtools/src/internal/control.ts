@@ -84,6 +84,7 @@ export const metaName = "effect-ui-devtools"
 export const fromPage = (): {
   readonly url?: unknown
   readonly size?: unknown
+  readonly fields?: unknown
 } => {
   const content = document.querySelector<HTMLMetaElement>(
     "meta[name=\"" + metaName + "\"]"

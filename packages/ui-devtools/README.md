@@ -46,6 +46,8 @@ It follows the latest entry until one is selected, and remembers whether the pan
 
 `DevTools.layer` accepts `position`, `size` (1,000 shown entries by default) and `exclude` (message `_tag` values matched across every component). Excluded updates add no rows and coalesce per instance between shown entries so high-frequency bursts do not evict the buffer, while keeping the next shown entry's Model diff and Time travel state accurate. `exclude` is not a way to hide sensitive data: later entries still carry whatever an excluded message changed in the Model — use `Schema.Redacted` for sensitive values.
 
+`fields` names top-level fields, such as `DevTools.layer({ fields: ["commandId"] })`, to show on timeline rows: from an update's message, and from the Command args of a run's entries. Only string, number and boolean values are shown, so redacted values never are. Click one to show only the entries with that value across every instance; click it again, or the chip under the filters, to show everything.
+
 `exclude` sets the initial recording policy. To change it while the app runs, select an update and click **Stop recording** to exclude future updates with its message `_tag`. The **Not recording** strip under the filters lists stopped tags, including configured exclusions. Click a tag to resume recording it.
 
 These choices override `exclude` for the selected tags and persist through reloads until the tab closes. They affect future updates, not existing entries, and cannot recover evicted history. Excluded Wire frames carry the same policy to the Node server and its agent tools.
@@ -75,13 +77,13 @@ Then point the agent at `http://127.0.0.1:4774/mcp`, for example in `.mcp.json`:
 }
 ```
 
-The plugin starts the server with `vite dev` only and adds a `<meta>` tag with its URL and `size` to the page, which `DevTools.layer` reads. Without Vite, run `effect-ui-devtools [--port <n>] [--size <n>] [--dispatch]` or `DevToolsServer.layer`, and pass `DevTools.layer({ server: "http://127.0.0.1:4774" })`. A server process can add `MessageLog.socket("ws://127.0.0.1:4774/log", { host: "server" })` to show its renders as sessions.
+The plugin starts the server with `vite dev` only and adds a `<meta>` tag with its URL, `size` and `fields` to the page, which `DevTools.layer` reads. Without Vite, run `effect-ui-devtools [--port <n>] [--size <n>] [--dispatch] [--field <name>]...` or `DevToolsServer.layer`, and pass `DevTools.layer({ server: "http://127.0.0.1:4774" })`. A server process can add `MessageLog.socket("ws://127.0.0.1:4774/log", { host: "server" })` to show its renders as sessions.
 
 | Tool                 | Does                                                                                    |
 | -------------------- | --------------------------------------------------------------------------------------- |
 | `list_sessions`      | the sessions held: app, host, connected, controllable, paused at, the tags not recorded |
 | `list_instances`     | the instances of a session, with how their Command runs ended                           |
-| `list_entries`       | entries as rows without payloads, filtered by instance, kind or `_tag`                  |
+| `list_entries`       | entries as rows with their `fields`, filtered by instance, kind, `_tag` or field value  |
 | `count_entries`      | entries by entry and message `_tag`                                                     |
 | `get_entry`          | one entry's Wire frame                                                                  |
 | `get_chain`          | the causal chain the panel shows                                                        |

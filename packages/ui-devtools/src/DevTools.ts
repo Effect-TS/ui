@@ -125,7 +125,13 @@ export type WebMcpOptions = internal.WebMcpOptions
  * allows it, dispatch a message to an instance. An agent's paint is the
  * same pause as Time travel, so the overlay shows it as paused and either
  * one can resume it. With `DevToolsVite.plugin`, the page carries the URL
- * and the plugin's `size`, so neither option is needed.
+ * and the plugin's `size` and `fields`, so none of these options is needed.
+ *
+ * `fields` names top-level fields, such as `"commandId"`, to show on timeline
+ * rows: from an `Update`'s message, and from the args of a Command run's
+ * entries. Only string, number and boolean values are shown, so redacted
+ * values never are. Click one to show only the entries with that value,
+ * across every instance.
  *
  * When the browser exposes WebMCP (`document.modelContext`), the Layer also
  * registers the DevTools tools directly in the page under the `effect_ui_`
@@ -147,6 +153,7 @@ export const layer = (options?: {
   readonly exclude?: ReadonlyArray<string> | undefined
   readonly server?: string | undefined
   readonly webMcp?: boolean | WebMcpOptions | undefined
+  readonly fields?: ReadonlyArray<string> | undefined
 }): Layer.Layer<never> => internal.make(options ?? {})
 
 /** @internal */

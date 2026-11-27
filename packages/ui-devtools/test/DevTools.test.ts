@@ -1497,7 +1497,13 @@ describe("DevTools overlay", { concurrent: false }, () => {
       assert.strictEqual(cmd1Buttons.length, 4)
       assert.strictEqual(cmd2Buttons.length, 4)
 
+      yield* showActive(root)
       yield* click(instance(root, "Feed[a]"))
+      assert.isTrue(
+        Array.from(root.querySelectorAll(".row .who")).every((who) =>
+          text(who) === "Feed[a]"
+        )
+      )
       yield* click(
         HtmlLocator.queryAllByRole(root, "button", { name: /cmd-1/ })[0]!
       )

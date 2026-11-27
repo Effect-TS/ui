@@ -75,6 +75,68 @@ export const issuedOf = (
     ? entry.issued
     : undefined
 
+export type FieldValue = string | number | boolean
+
+export interface Field {
+  readonly name: string
+  readonly value: FieldValue
+}
+
+// Strings only, deduplicated, without empty names.
+export const fieldNames = (value: unknown): ReadonlyArray<string> =>
+  Array.isArray(value)
+    ? Array.from(
+      new Set(
+        value.filter((name): name is string =>
+          typeof name === "string" && name !== ""
+        )
+      )
+    )
+    : []
+
+// An entry's one payload: an Update's message, or its Command's args.
+const payloadOf = (session: Inspector.Session, entry: Entry): unknown => {
+  if (entry._tag === "Update") return entry.message
+  if (entry._tag === "Failed" && entry.update !== undefined) {
+    return entry.update.message
+  }
+  const issued = issuedOf(entry)
+  if (issued === undefined) return undefined
+  const issuing = session.resolve(issued.seq)
+  return isIssuing(issuing) ? issuing.commands[issued.index]?.args : undefined
+}
+
+const valueOf = (payload: unknown, name: string): FieldValue | undefined => {
+  if (
+    typeof payload !== "object" || payload === null || Array.isArray(payload) ||
+    MessageLog.isPlaceholder(payload) || !Object.hasOwn(payload, name)
+  ) return undefined
+  const value = (payload as Record<string, unknown>)[name]
+  return typeof value === "string" || typeof value === "number" ||
+      typeof value === "boolean"
+    ? value
+    : undefined
+}
+
+export const fieldsOf = (
+  session: Inspector.Session,
+  entry: Entry,
+  names: ReadonlyArray<string>
+): ReadonlyArray<Field> => {
+  if (names.length === 0) return []
+  const payload = payloadOf(session, entry)
+  return names.flatMap((name) => {
+    const value = valueOf(payload, name)
+    return value === undefined ? [] : [{ name, value }]
+  })
+}
+
+export const hasField = (
+  session: Inspector.Session,
+  entry: Entry,
+  field: Field
+): boolean => valueOf(payloadOf(session, entry), field.name) === field.value
+
 export const tagOf = (value: unknown): string | undefined =>
   Predicate.hasProperty(value, "_tag") && typeof value._tag === "string"
     ? value._tag
