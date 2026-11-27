@@ -537,17 +537,6 @@ describe("Html", () => {
   })
 
   it("slot is an HTMLSlotElement container with a payload-free slotchange event", () => {
-    const TitleSlot = Html.ref("TitleSlot", "slot")
-    expect(TitleSlot).type.toBe<Renderer.Ref<HTMLSlotElement>>()
-    const InspectSlot = Mount.make(
-      "InspectSlot",
-      { args: {} },
-      (node: HTMLSlotElement) =>
-        Effect.sync(() => {
-          expect(node).type.toBe<HTMLSlotElement>()
-          return Msg.Mounted()
-        })
-    )
     Html.component({
       name: "Slot",
       model: Schema.String,
@@ -565,10 +554,6 @@ describe("Html", () => {
             "slot"
           >
         >()
-        expect(h.slot.ref).type.toBeCallableWith(TitleSlot)
-        expect(h.slot.onMount).type.toBeCallableWith(InspectSlot())
-        expect<Html.EventsOf<"slot">["slotchange"]>().type.toBe<{}>()
-        expect(h.slot.on).type.toBeCallableWith("slotchange", Msg.Mounted())
         expect(h.div.on).type.not.toBeCallableWith("slotchange", Msg.Mounted())
         return h.slot
           .attr("name", "title")

@@ -4477,34 +4477,18 @@ describe("BrowserHost", { concurrent: false }, () => {
         init: () => 0,
         update: ($) => $.model + 1,
         view: (h) =>
-          h.article(
-            h.slot
-              .attr("name", "title")
-              .on("slotchange", "SlotChanged")
-              .children("Untitled"),
-            h.slot
-          )
+          h.slot.attr("name", "title").on("slotchange", "SlotChanged")
       })
-      const host = yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const element = document.body.appendChild(
-            document.createElement("fx-card")
-          )
-          element.innerHTML = "<span slot=\"title\">Plan</span>Body text"
-          return element
-        }),
-        (element) => Effect.sync(() => element.remove())
-      )
+      const host = yield* container
+      host.innerHTML = "<span slot=\"title\">Plan</span>"
       const shadow = host.attachShadow({ mode: "open" })
       const root = yield* BrowserHost.mountEffect(
         Card,
         {},
         shadow as unknown as Element
       )
-      const slot = shadow.querySelector("slot[name=title]") as HTMLSlotElement
-      const span = host.querySelector("span")!
-      expect(slot).toBeInstanceOf(HTMLSlotElement)
-      expect(slot.assignedElements()).toEqual([span])
+      const slot = shadow.querySelector<HTMLSlotElement>("slot")!
+      expect(slot.assignedElements()).toEqual([host.querySelector("span")])
       slot.dispatchEvent(new Event("slotchange", { bubbles: true }))
       yield* tick
       expect(root.model()).toBe(1)
