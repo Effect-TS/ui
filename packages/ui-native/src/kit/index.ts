@@ -42,6 +42,12 @@ export * as Appearance from "./Appearance.ts"
  * @stability experimental
  * @since 0.1.0
  */
+export * as BackHandler from "./BackHandler.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as Css from "./Css.ts"
 
 /**
