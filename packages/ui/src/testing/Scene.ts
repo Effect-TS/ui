@@ -389,6 +389,20 @@ export interface Steps<C extends AnyComponent, Parts = never, Report = never>
   /** Asserts that the last interaction cancelled its event's default, or didn't with `false`. */
   expectDefaultPrevented(expected?: boolean): this
   /**
+   * Renders the component's own view twice at the current state against one
+   * `LazyStore`, and throws if any `h.lazy` call builds again on the second
+   * render or if the view never called `h.lazy`.
+   *
+   * **Details**
+   *
+   * Catches unstable `h.lazy` calls inside `view` (changed argument identity,
+   * shared first argument, inline function, or fresh first argument) without
+   * changing the scene's state. Children are leaves in a scene, so their views
+   * aren't covered, and state changes across steps aren't compared. Requires a
+   * non-production build of `@effect/ui`.
+   */
+  expectLazyReused(): this
+  /**
    * Checks a headless component's parts, the plain values a consumer's
    * closure reads, for the current Model and props. `f` throws to fail the
    * test.

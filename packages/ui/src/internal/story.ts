@@ -859,6 +859,47 @@ const viewOfFields = (
     rootShared(fields.shared)
   )
 
+/**
+ * Renders `story`'s own view against `store`, using `shared` so defaulted
+ * shared owners keep one identity across repeated renders.
+ *
+ * @internal
+ */
+export const renderOwnView = (
+  story: State<any, any, any, any>,
+  store: View.LazyStore,
+  shared: Component.SharedLookup
+): View.Node<any, any> =>
+  story.component.view(
+    story.model,
+    story.props,
+    runningOf(story.pending),
+    story.results,
+    undefined,
+    shared,
+    store
+  )
+
+/**
+ * `rootShared` for `story`, memoized per owner so defaulted shared values keep
+ * the same reference across back-to-back renders.
+ *
+ * @internal
+ */
+export const stableRootShared = (
+  story: State<any, any, any, any>
+): Component.SharedLookup => {
+  const lookup = rootShared(sharedGiven.get(story))
+  const cached = new Map<Component.Definition.Any, unknown>()
+  return (owner, optional) => {
+    const definition = owner.definition
+    if (cached.has(definition)) return cached.get(definition)
+    const value = lookup(owner, optional)
+    cached.set(definition, value)
+    return value
+  }
+}
+
 const boundOf = componentQueries.boundOf
 
 /** @internal */
@@ -2417,20 +2458,31 @@ export const withView = (
       running?: View.Running,
       queries?: Component.Results,
       _path?: string,
-      shared?: Component.SharedLookup
+      shared?: Component.SharedLookup,
+      lazy?: View.LazyStore
     ) => {
       const h = View.makeHelper(
         props,
         elements ?? component.elements,
         running,
-        owner.path
+        owner.path,
+        lazy
       )
-      return View.toNode(
-        childOf.expand(
-          component.parts(model, props, { owner, running, queries, shared }),
-          (parts) => view(parts, h)
+      const lazies = lazy?.lazy as View.Lazies | undefined
+      lazies?.begin()
+      try {
+        const node = View.toNode(
+          childOf.expand(
+            component.parts(model, props, { owner, running, queries, shared }),
+            (parts) => view(parts, h)
+          )
         )
-      )
+        lazies?.end()
+        return node
+      } catch (error) {
+        if (lazy !== undefined) lazy.lazy = undefined
+        throw error
+      }
     }
   })
 }
