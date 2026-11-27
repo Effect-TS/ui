@@ -236,120 +236,7 @@ describe("headless components in a story", () => {
         .expect(trigger).toHaveAttribute("aria-expanded", "false")
     }))
 
-  it.effect("a layer whose owner an earlier layer removed sends nothing, and a child placed again starts from init", () =>
-    Effect.gen(function*() {
-      const Message = UiSchema.TaggedEnum({
-        Show: {},
-        Picked: { id: Schema.String },
-        Clicked: { id: Schema.String },
-        Closed: {}
-      })
-      const Picker = Html.component({
-        name: "Picker",
-        model: Schema.Struct({
-          open: Schema.Boolean,
-          log: Schema.Array(Schema.String)
-        }),
-        message: Message
-      }).make({
-        init: () => ({ open: true, log: [] }),
-        update: ($, message) => ({
-          open: message._tag === "Show" ||
-            ($.model.open && message._tag !== "Picked"),
-          log: [...$.model.log, message._tag]
-        }),
-        view: (h, model) =>
-          h.div(
-            h.button.on("click", Message.Show()).children("Show"),
-            model.open && Dialog(h, {
-              props: { label: "Pick" },
-              onEmit: () => Message.Closed(),
-              view: (dialog) =>
-                dialog.popup(h.dialog).children(
-                  Menu(h, {
-                    key: "menu",
-                    props: { items },
-                    onEmit: (event) => Message.Picked({ id: event.id }),
-                    view: (menu) =>
-                      h.div(
-                        menu.trigger(h.button).children("Actions"),
-                        h.ul.children(menu.visible.map((item) =>
-                          dialog.close(menu.item(h.li.key(item.id), item))
-                            .on("click", Message.Clicked({ id: item.id }))
-                            .children(item.label)
-                        ))
-                      )
-                  })
-                )
-            }),
-            h.output(model.log.join(", "))
-          )
-      })
-      const copy = Locator.text("Copy")
-      const scene = yield* HtmlScene.make(Picker, {})
-      scene.fire(trigger, "keydown", { key: "c" })
-        .expect(copy).toHaveAttribute("data-active", "")
-      // The Menu's pick removes the Dialog, so the Dialog's close has no instance to reach.
-      scene.click("Copy")
-        .expect(Locator.tag("output")).toHaveText("Picked, Clicked")
-        .expect(Locator.tag("dialog")).toBeAbsent()
-      scene.click("Show").expect(copy).toHaveAttribute("data-active", false)
-    }))
-
-  it.effect("a mounted child keeps its Model across new props, and one closed and placed again within a click starts from init", () =>
-    Effect.gen(function*() {
-      const CounterMessage = UiSchema.TaggedEnum({ Inc: {} })
-      const Counter = Html.component({
-        name: "Counter",
-        props: Schema.Struct({ seed: Schema.Number }),
-        model: Schema.Number,
-        message: CounterMessage
-      }).make({
-        init: ($) => $.set($.props.seed),
-        update: ($) => $.model + 1,
-        parts: (p, count) => ({
-          count,
-          button: p.part("button", (b) => b.on("click", CounterMessage.Inc()))
-        })
-      })
-      const Message = UiSchema.TaggedEnum({ Reseed: {}, Hide: {}, Show: {} })
-      const Panel = Html.component({
-        name: "Panel",
-        model: Schema.Struct({ seed: Schema.Number, shown: Schema.Boolean }),
-        message: Message
-      }).make({
-        init: () => ({ seed: 0, shown: true }),
-        update: ($, message) =>
-          Message.match(message, {
-            Reseed: () => ({ ...$.model, seed: 10 }),
-            Hide: () => ({ ...$.model, shown: false }),
-            Show: () => ({ ...$.model, shown: true })
-          }),
-        view: (h, model) =>
-          h.div(
-            h.button.on("click", Message.Reseed()).children("Reseed"),
-            h.button.on("pointerdown", Message.Hide())
-              .on("click", Message.Show()).children("Remount"),
-            model.shown && Counter(h, {
-              key: "counter",
-              props: { seed: model.seed },
-              view: (counter) =>
-                counter.button(h.button.attr("id", "count")).children(
-                  String(counter.count)
-                )
-            })
-          )
-      })
-      const count = Locator.attr("id", "count")
-      const scene = yield* HtmlScene.make(Panel, {})
-      // The runtime runs a mounted child's init once: new props don't run it again.
-      scene.click("Reseed").expect(count).toHaveText("0")
-        .click(count).expect(count).toHaveText("1")
-      // Hidden on pointerdown and shown on click, the counter is a new instance.
-      scene.click("Remount").expect(count).toHaveText("10")
-    }))
-
-  it.effect("a layer whose owner an earlier layer replaced sends nothing to the new instance", () =>
+  it.effect("a layer whose owner an earlier layer replaced or removed sends nothing", () =>
     Effect.gen(function*() {
       const CounterMessage = UiSchema.TaggedEnum({ Inc: {} })
       const Counter = Html.component({
@@ -377,74 +264,99 @@ describe("headless components in a story", () => {
           button: p.part("button", (b) => b.on("click", CounterMessage.Inc()))
         })
       })
-      const Message = UiSchema.TaggedEnum({ Wrap: {} })
+      const Message = UiSchema.TaggedEnum({ Next: {} })
       const Panel = Html.component({
         name: "Panel",
-        model: Schema.Boolean,
+        model: Schema.Number,
         message: Message
       }).make({
-        init: () => false,
-        update: () => true,
-        view: (h, wrap) => {
+        init: () => 0,
+        update: ($) => $.model + 1,
+        view: (h, step) => {
           const shown = Counter(h, {
             key: "counter",
             view: (counter) =>
               Switch(h, {
                 key: "switch",
-                onEmit: () => Message.Wrap(),
+                onEmit: () => Message.Next(),
                 view: (button) =>
                   counter.button(button.button(h.button.attr("id", "count")))
                     .children(String(counter.count))
               })
           })
-          return wrap ? h.section(shown) : h.div(shown)
+          return step === 0
+            ? h.div(shown)
+            : step === 1
+            ? h.section(shown)
+            : h.div()
         }
       })
       const count = Locator.attr("id", "count")
       const scene = yield* HtmlScene.make(Panel, {})
-      // The Switch's layer runs first and wraps both in a section: the click began before the new Counter.
-      scene.click(count).expect(Locator.tag("section")).toExist()
-        .expect(count).toHaveText("0")
+      // The Switch's layer runs first and replaces both children, then removes them: the Counter's layer
+      // is for the instance the click began with.
+      scene.click(count).expect(Locator.tag("section")).toHaveText("0")
+        .click(count).expect(count).toBeAbsent()
     }))
 
-  it.effect("a child at the same path that the runtime would create again starts from init", () =>
+  it.effect("a headless child keeps its Model for as long as the runtime keeps its instance", () =>
     Effect.gen(function*() {
       const CounterMessage = UiSchema.TaggedEnum({ Inc: {} })
-      const counter = (init: number) =>
+      const counter = () =>
         Html.component({
           name: "Counter",
+          props: Schema.Struct({ seed: Schema.Number }),
           model: Schema.Number,
           message: CounterMessage
         }).make({
-          init: () => init,
+          init: ($) => $.set($.props.seed),
           update: ($) => $.model + 1,
           parts: (p, count) => ({
             count,
             button: p.part("button", (b) => b.on("click", CounterMessage.Inc()))
           })
         })
-      const Zero = counter(0)
-      const Ten = counter(10)
-      const Message = UiSchema.TaggedEnum({ Wrap: {}, Swap: {} })
+      const Counter = counter()
+      const Twin = counter()
+      const Message = UiSchema.TaggedEnum({
+        Reseed: {},
+        Hide: {},
+        Show: {},
+        Wrap: {},
+        Swap: {}
+      })
       const Panel = Html.component({
         name: "Panel",
-        model: Schema.Struct({ wrap: Schema.Boolean, swap: Schema.Boolean }),
+        model: Schema.Struct({
+          seed: Schema.Number,
+          shown: Schema.Boolean,
+          wrap: Schema.Boolean,
+          swap: Schema.Boolean
+        }),
         message: Message
       }).make({
-        init: () => ({ wrap: false, swap: false }),
+        init: () => ({ seed: 0, shown: true, wrap: false, swap: false }),
         update: ($, message) =>
-          message._tag === "Wrap"
-            ? { ...$.model, wrap: true }
-            : { ...$.model, swap: true },
+          Message.match(message, {
+            Reseed: () => ({ ...$.model, seed: 10 }),
+            Hide: () => ({ ...$.model, shown: false }),
+            Show: () => ({ ...$.model, shown: true }),
+            Wrap: () => ({ ...$.model, wrap: true }),
+            Swap: () => ({ ...$.model, swap: true })
+          }),
         view: (h, model) => {
-          const shown = (model.swap ? Ten : Zero)(h, {
+          const shown = model.shown && (model.swap ? Twin : Counter)(h, {
             key: "counter",
+            props: { seed: model.seed },
             view: (counter) =>
               counter.button(h.button.attr("id", "count")).children(
                 String(counter.count)
               )
           })
           return h.div(
+            h.button.on("click", Message.Reseed()).children("Reseed"),
+            h.button.on("pointerdown", Message.Hide())
+              .on("click", Message.Show()).children("Remount"),
             h.button.on("click", Message.Wrap()).children("Wrap"),
             h.button.on("click", Message.Swap()).children("Swap"),
             model.wrap ? h.section(shown) : h.div(shown)
@@ -453,9 +365,13 @@ describe("headless components in a story", () => {
       })
       const count = Locator.attr("id", "count")
       const scene = yield* HtmlScene.make(Panel, {})
-      // A new element around it, then another component with its name and key: each a new instance.
-      scene.click(count).expect(count).toHaveText("1")
-        .click("Wrap").expect(count).toHaveText("0")
+      // New props don't run init again.
+      scene.click("Reseed").expect(count).toHaveText("0")
+        .click(count).expect(count).toHaveText("1")
+      // Each of these makes a new instance, which starts from init: closed on pointerdown and placed again
+      // on click, a new element around it, and another component with its name and key.
+      scene.click("Remount").expect(count).toHaveText("10")
+        .click(count).click("Wrap").expect(count).toHaveText("10")
         .click(count).click("Swap").expect(count).toHaveText("10")
     }))
 
