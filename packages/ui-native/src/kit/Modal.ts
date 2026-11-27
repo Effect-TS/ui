@@ -11,12 +11,9 @@
  * animation finishes).
  *
  * `onRequestClose` is required so Android's Back button cannot silently trap
- * the user in the modal. Returning `undefined` keeps the modal open for
- * Android Back, but with `allowSwipeDismissal: true` on iOS the sheet has
- * already been dismissed when `onRequestClose` fires, so unmount the modal
- * there to keep the Model in sync with the screen. On Android the modal runs
- * in a separate `Dialog` window, so Back fires `requestClose` and never
- * reaches `NativeApp`'s `hardwareBackPress` fallback.
+ * the user in the modal. On Android the modal runs in a separate `Dialog`
+ * window, so Back fires `requestClose` and never reaches `NativeApp`'s
+ * `hardwareBackPress` fallback.
  *
  * `RCTModalHostView` paints nothing itself: put content inside a child
  * `h.view.style({ flex: 1, backgroundColor: ... })`, and wrap with `SafeArea`
@@ -57,7 +54,7 @@ import type { NativeNode } from "../NativeHost.ts"
  * @category models
  * @since 0.1.0
  */
-export type AnimationType = "none" | "slide" | "fade"
+export type ModalAnimationType = "none" | "slide" | "fade"
 
 /**
  * How a `Modal` is presented on iOS. Ignored on Android.
@@ -66,7 +63,7 @@ export type AnimationType = "none" | "slide" | "fade"
  * @category models
  * @since 0.1.0
  */
-export type PresentationStyle =
+export type ModalPresentationStyle =
   | "fullScreen"
   | "pageSheet"
   | "formSheet"
@@ -79,7 +76,7 @@ export type PresentationStyle =
  * @category models
  * @since 0.1.0
  */
-export type SupportedOrientation =
+export type ModalSupportedOrientation =
   | "portrait"
   | "portrait-upside-down"
   | "landscape"
@@ -93,7 +90,7 @@ export type SupportedOrientation =
  * @category events
  * @since 0.1.0
  */
-export interface OrientationChangePayload {
+export interface ModalOrientationChangePayload {
   readonly orientation: "portrait" | "landscape"
 }
 
@@ -107,7 +104,7 @@ export interface OrientationChangePayload {
 export interface ModalEvents {
   readonly requestClose: {}
   readonly show: {}
-  readonly orientationChange: OrientationChangePayload
+  readonly orientationChange: ModalOrientationChangePayload
   readonly layout: Native.LayoutPayload
 }
 
@@ -129,14 +126,14 @@ export interface ModalOptions<Msg> {
    */
   readonly onRequestClose: View.Handler<Msg, {}>
   /** Defaults to `"none"`. */
-  readonly animationType?: AnimationType | undefined
+  readonly animationType?: ModalAnimationType | undefined
   /** Renders over a transparent window. Defaults to `false`. */
   readonly transparent?: boolean | undefined
   /** iOS only. Defaults to `"fullScreen"`, or `"overFullScreen"` when `transparent` is `true`. */
-  readonly presentationStyle?: PresentationStyle | undefined
+  readonly presentationStyle?: ModalPresentationStyle | undefined
   /** iOS only. */
   readonly supportedOrientations?:
-    | ReadonlyArray<SupportedOrientation>
+    | ReadonlyArray<ModalSupportedOrientation>
     | undefined
   /** iOS only. Allows dismissing a sheet modal by swiping down, firing `onRequestClose`. */
   readonly allowSwipeDismissal?: boolean | undefined
@@ -205,15 +202,9 @@ const element = Native.defineView(
  */
 export const Modal = <Msg>(
   _h: Native.H<Msg>,
-  options: ModalOptions<Msg>
-): ModalElement<Msg, never, ModalEvents, "modal"> => {
-  let props: Record<string, unknown> | undefined
-  for (const key in options) {
-    if (key === "onRequestClose") continue
-    const value = (options as unknown as Record<string, unknown>)[key]
-    if (value !== undefined) (props ??= {})[key] = value
-  }
-  const base = (element as ModalElement<Msg, never, ModalEvents, "modal">)
-    .on("requestClose", options.onRequestClose)
-  return props === undefined ? base : View.withFields(base, { props })
-}
+  { onRequestClose, ...props }: ModalOptions<Msg>
+): ModalElement<Msg, never, ModalEvents, "modal"> =>
+  View.withFields(element, {
+    handlers: { requestClose: onRequestClose },
+    props
+  })

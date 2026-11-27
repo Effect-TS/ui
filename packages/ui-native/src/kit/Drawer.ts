@@ -130,56 +130,10 @@ export interface DrawerOptions<Msg, RD = never> {
   readonly drawerBackgroundColor?: Native.Color | undefined
 }
 
-/**
- * The builder {@link Drawer} returns.
- *
- * @stability experimental
- * @category models
- * @since 0.1.0
- */
-export class DrawerElement<
-  out Msg,
-  out R = never,
-  in out E = Record<string, unknown>,
-  out Tag extends string = string
-> extends Native.Element<Msg, R, E, Tag, Native.ViewStyle> {
-  /**
-   * Phantom: keeps the builder type through `View.WithRequirements`.
-   *
-   * @since 0.1.0
-   */
-  declare readonly "~With"?: DrawerElement<Msg, R | this["~Add"], E, Tag>
-
-  /**
-   * Adds the main screen content behind the drawer. Text is rejected: wrap it
-   * in `h.text(...)`.
-   *
-   * @since 0.1.0
-   */
-  children<
-    This,
-    const C extends ReadonlyArray<Native.NoTextInput<Msg, unknown>>
-  >(
-    this: This,
-    ...inputs: C
-  ): View.WithRequirements<This, View.Requirements<C[number]>>
-  children(...inputs: ReadonlyArray<View.Input<Msg, unknown>>): unknown {
-    return View.withNoTextContent(this, inputs, Native.vocabulary)
-  }
-}
-
 const states: ReadonlyArray<DrawerState> = ["idle", "dragging", "settling"]
 
-const fill: Native.ViewStyle = {
-  position: "absolute",
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0
-}
-
 const element = Native.defineView(
-  () => new DrawerElement<any, never, DrawerEvents, "drawer">("drawer"),
+  () => new Native.ViewElement<any, never, DrawerEvents, "drawer">("drawer"),
   {
     viewName: (_, host) =>
       host.os === "android" ? "AndroidDrawerLayout" : "RCTView",
@@ -193,17 +147,41 @@ const element = Native.defineView(
   }
 )
 
-const drawerPanel = Native.defineView(
-  () =>
-    new Native.ViewElement<any, never, Native.ViewEvents, "drawerPanel">(
-      "drawerPanel"
-    ),
+const main = Native.defineView(
+  () => new Native.ViewElement<any>("drawerMain"),
   {
-    viewName: (n, host) => {
-      if (host.os !== "android") n.props.display = "none"
-      return "RCTView"
-    },
-    defaults: { collapsable: false, position: "absolute", top: 0, bottom: 0 }
+    viewName: "RCTView",
+    defaults: {
+      collapsable: false,
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0
+    }
+  }
+)
+
+const panelDefaults = {
+  collapsable: false,
+  position: "absolute",
+  top: 0,
+  bottom: 0
+}
+const hiddenPanelDefaults = {
+  collapsable: false,
+  position: "absolute",
+  top: 0,
+  bottom: 0,
+  display: "none"
+}
+
+const panel = Native.defineView(
+  () => new Native.ViewElement<any>("drawerPanel"),
+  {
+    viewName: "RCTView",
+    defaults: (host) =>
+      host.os === "android" ? panelDefaults : hiddenPanelDefaults
   }
 )
 
@@ -216,54 +194,27 @@ const drawerPanel = Native.defineView(
  * @since 0.1.0
  */
 export const Drawer = <Msg, RD = never>(
-  h: Native.H<Msg>,
-  options: DrawerOptions<Msg, RD>
-): DrawerElement<Msg, RD, DrawerEvents, "drawer"> => {
-  const props: Record<string, unknown> = {
-    drawerWidth: options.drawerWidth,
-    drawerBackgroundColor: options.drawerBackgroundColor ?? "white"
-  }
-  if (options.drawerPosition !== undefined) {
-    props.drawerPosition = options.drawerPosition
-  }
-  if (options.drawerLockMode !== undefined) {
-    props.drawerLockMode = options.drawerLockMode
-  }
-  const base = View.withFields(
-    element as DrawerElement<Msg, never, DrawerEvents, "drawer">,
-    { props }
-  )
-  return base.forward((built) => {
-    const main = h.view.prop("collapsable", false).style(fill).children(
-      built.content as any
-    )
-    const width = built.props.drawerWidth as number | undefined
-    const backgroundColor = built.props.drawerBackgroundColor as
-      | Native.Color
-      | undefined
-    const panelStyle: Native.ViewStyle = built.props.drawerPosition === "right"
-      ? { end: 0, width, backgroundColor }
-      : { start: 0, width, backgroundColor }
-    const panel = (drawerPanel as Native.ViewElement<
-      Msg,
-      never,
-      Native.ViewEvents,
-      "drawerPanel"
-    >)
-      .style(panelStyle)
-      .children(options.drawer)
-    return View.withFields(
-      element as DrawerElement<Msg, never, DrawerEvents, "drawer">,
-      {
-        elementAttrs: built.elementAttrs,
-        elementKey: built.elementKey,
-        eventOptions: built.eventOptions,
-        handlers: built.handlers,
-        mount: built.mount,
-        owned: built.owned,
-        props: built.props,
-        refKey: built.refKey
-      }
-    ).children(main, panel)
-  }) as any
-}
+  _h: Native.H<Msg>,
+  { drawer, drawerBackgroundColor = "white", ...props }: DrawerOptions<Msg, RD>
+): Native.ViewElement<Msg, RD, DrawerEvents, "drawer"> =>
+  View.withFields(
+    element as Native.ViewElement<Msg, never, DrawerEvents, "drawer">,
+    { props: { ...props, drawerBackgroundColor } }
+  ).forward((built) => {
+    // The layout takes two children: the main content, then the panel. The
+    // panel follows the props as chained, so it stays where native draws it.
+    const node = View.build(built, [])
+    return {
+      ...node,
+      children: [
+        View.toNode(View.withContent(main, node.children)),
+        View.toNode(
+          panel.style({
+            [node.props.drawerPosition === "right" ? "end" : "start"]: 0,
+            width: node.props.drawerWidth,
+            backgroundColor: node.props.drawerBackgroundColor
+          } as Native.ViewStyle).children(drawer)
+        )
+      ]
+    }
+  })

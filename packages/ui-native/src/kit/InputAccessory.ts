@@ -110,6 +110,9 @@ export class InputAccessoryElement<
   }
 }
 
+const defaults = { position: "absolute" }
+const hiddenDefaults = { position: "absolute", display: "none" }
+
 const element = Native.defineView(
   () =>
     new InputAccessoryElement<
@@ -119,12 +122,9 @@ const element = Native.defineView(
       "inputAccessory"
     >("inputAccessory"),
   {
-    viewName: (n, host) => {
-      if (host.os === "ios") return "RCTInputAccessoryView"
-      n.props.display = "none"
-      return "RCTView"
-    },
-    defaults: { position: "absolute" },
+    viewName: (_, host) =>
+      host.os === "ios" ? "RCTInputAccessoryView" : "RCTView",
+    defaults: (host) => host.os === "ios" ? defaults : hiddenDefaults,
     content: {
       viewName: (_, host) => host.os === "ios" ? "RCTSafeAreaView" : "RCTView",
       defaults: { flex: 1 }
@@ -148,18 +148,7 @@ export const InputAccessory = <Msg>(
   never,
   InputAccessoryEvents,
   "inputAccessory"
-> => {
-  const base = element as InputAccessoryElement<
-    Msg,
-    never,
-    InputAccessoryEvents,
-    "inputAccessory"
-  >
-  if (options === undefined) return base
-  let props: Record<string, unknown> | undefined
-  if (options.nativeID !== undefined) (props ??= {}).nativeID = options.nativeID
-  if (options.backgroundColor !== undefined) {
-    ;(props ??= {}).backgroundColor = options.backgroundColor
-  }
-  return props === undefined ? base : View.withFields(base, { props })
-}
+> =>
+  options === undefined
+    ? element
+    : View.withFields(element, { props: { ...options } })
