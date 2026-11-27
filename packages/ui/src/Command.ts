@@ -889,12 +889,13 @@ function run(
   this: Command<any, any>,
   inst: Kernel.Instance,
   seq: number | undefined | void,
-  index: number
+  index: number,
+  message: string | undefined
 ) {
   commandRun.issue(inst, this, {
     seq: typeof seq === "number" ? seq : -1,
     index
-  }, cleanupFailed)
+  }, message, cleanupFailed)
 }
 
 // Written out rather than spread from `Proto`: a bundler keeps a spread, and with it the runner.
