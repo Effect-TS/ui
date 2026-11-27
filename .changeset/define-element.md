@@ -2,4 +2,4 @@
 "@effect/ui": minor
 ---
 
-Add `BrowserHost.defineElement`, which publishes a component as a custom element whose attributes and properties update its props in place, and whose emissions are dispatched as DOM events.
+Add `BrowserHost.defineElement` to publish a component as a custom element. Its attributes and properties update the component's props in place, and its emissions are dispatched as DOM events.

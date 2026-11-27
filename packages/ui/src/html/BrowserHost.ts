@@ -385,7 +385,7 @@ export const layer = (options?: {
     )
   )
 
-// What every mount on one document can share: the host and the document's services.
+// The host and document services that every mount on a document can share.
 const documentOf = Effect.fnUntraced(function*(document: Document) {
   const built = build(document)
   yield* Effect.addFinalizer(() => Effect.sync(built.host.dispose))
@@ -620,8 +620,7 @@ export const mountRoot = (
       ),
       mountContext
     )
-    // A `defineElement` instance, which passes its Layer's `shared`, isn't offered to `Controllables`:
-    // a paused copy of its element would mount itself.
+    // `defineElement` instances skip `Controllables`: a paused copy of the element would mount itself.
     if (shared !== undefined) return root
     const controlled = controllable(
       component,
@@ -649,13 +648,13 @@ export const mountRoot = (
  *
  * **Details**
  *
- * `props` is what every instance starts with. Each key of `props` and of
- * `attributes` becomes a JavaScript property of the element. `attributes`
- * maps a prop to a Schema that decodes its attribute, named as the prop in
- * kebab-case, so `unitId` reads `unit-id`. `shadow` mounts each instance in
- * its own shadow root, `"open"` by default, and adopts `styles` there.
- * `fallback` and `query` are as for `mount`, and `document` picks the
- * document and its window's `customElements`, the global ones by default.
+ * `props` is every instance's starting props. Each key of `props` and
+ * `attributes` becomes a property of the element. `attributes` maps a prop
+ * to the Schema that decodes its kebab-case attribute, so `unitId` reads
+ * `unit-id`. `shadow` mounts each instance in a shadow root, `"open"` by
+ * default, that adopts `styles`. `fallback` and `query` are as for
+ * `mount`. `document` defaults to the global one and also selects its
+ * window's `customElements`.
  *
  * @stability experimental
  * @category models
@@ -691,39 +690,39 @@ export interface DefineElementOptions<
 }
 
 /**
- * A Layer that defines `tag` as a custom element showing `component`, for
- * as long as the Layer is built. It provides no service.
+ * A Layer that defines `tag` as a custom element rendering `component`
+ * while the Layer is built. It provides no service.
  *
  * **When to use**
  *
- * Use to publish a component to a page Effect UI doesn't own, or to another
- * framework, as a web component. `Html.customElement` is the other way
- * around: it uses a web component in a view.
+ * Use to publish a component as a web component, for a page Effect UI
+ * doesn't own or for another framework. `Html.customElement` does the
+ * reverse: it uses a web component in a view.
  *
  * **Details**
  *
- * Each instance mounts its own root as it connects, replacing the element's
- * children, and never writes the document head. Roots are keyed by the
- * tag and the order they mounted in, so instances' element ids don't
- * collide. All of them share the Layer's services and the document's, and
- * each has its own Scope and query cache. An attribute or property change gives the root new props in place,
- * keeping its Model: an attribute is decoded by its Schema in
- * `attributes`, and a removed one gives the prop back its value in
- * `props`. Attribute and property write the same prop, so the last write
- * wins, and nothing is reflected back to an attribute. A property set
- * before the element was defined is applied as it connects, after its
- * attributes. An attribute its Schema rejects is reported with
- * `console.error` and leaves the prop as it was.
+ * Each instance mounts its own root, with its own Scope and query cache,
+ * when it connects. The root replaces the element's children and never
+ * writes the document head. Instances share the Layer's services, and their
+ * generated element ids don't collide, even across tags.
+ *
+ * Setting an attribute or property updates the props in place and keeps the
+ * Model. The last write wins, and properties are never reflected to
+ * attributes. An attribute is decoded by its Schema in `attributes`: a
+ * rejected value is logged with `console.error` and leaves the prop as it
+ * was, and removing the attribute restores the prop's value in `props`.
+ * Properties set before the tag was defined are applied on connect, after
+ * the attributes.
  *
  * Each emission is dispatched on the element as a bubbling, composed
- * `CustomEvent` named by its `_tag` in lowercase, with the emission as
+ * `CustomEvent` named by its lowercased `_tag`, with the emission as
  * `detail`, so `TourBooked` arrives as `tourbooked`.
  *
- * Moving an element within the document keeps its root. Removing it closes
- * its Scope a microtask later, and releasing the Layer closes every
- * instance's. The tag stays defined, as `customElements` can't undefine
- * it, and its elements show nothing from then on. Building a Layer for a tag
- * that is already defined is a defect. DevTools can't pause an instance.
+ * Moving an element keeps its root, and removing it closes its Scope a
+ * microtask later. Releasing the Layer closes every instance's Scope. The
+ * tag stays defined, as `customElements` can't undefine it, but its elements
+ * render nothing from then on. Building the Layer for a tag that is already
+ * defined is a defect. DevTools can't pause an instance.
  *
  * **Example** (Publishing a form as a web component)
  *
@@ -796,7 +795,7 @@ export const defineElement = <
     const observed = [...decoders.keys()]
     const props = options.props as Record<string, unknown>
     const keys = new Set([...Object.keys(props), ...Object.keys(attributes)])
-    // Released with the Layer, so an element the page keeps doesn't keep its services.
+    // Cleared on release, so elements left on the page don't retain the Layer's services.
     let live:
       | {
         readonly shared: Effect.Success<ReturnType<typeof documentOf>>
@@ -813,7 +812,6 @@ export const defineElement = <
       sheet.replaceSync(css)
       return sheet
     })
-    // Roots are keyed by tag and mount order, so no two instances' element ids collide.
     let mounts = 0
     class Defined extends (view.HTMLElement as typeof HTMLElement) {
       static observedAttributes = observed

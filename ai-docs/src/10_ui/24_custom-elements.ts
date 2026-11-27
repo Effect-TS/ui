@@ -116,9 +116,9 @@ export const picked = Effect.gen(function*() {
 // Publishing a component as a custom element
 // ---------------------------------------------------------------------------
 
-// Emissions must be tagged: each one is dispatched on the element as a
-// bubbling, composed `CustomEvent` named by its `_tag` in lowercase, with the
-// emission as `detail`. This one arrives as `tourbooked`.
+// Emissions must be tagged. Each is dispatched on the element as a bubbling,
+// composed `CustomEvent` named by its lowercased `_tag`, with the emission as
+// `detail`, so this one arrives as `tourbooked`.
 const TourEvents = UiSchema.TaggedEnum({
   TourBooked: { unitId: Schema.String }
 })
@@ -135,21 +135,18 @@ export const TourForm = Html.component({
   view: (h) => h.button.on("click", "Book").children("Book a tour")
 })
 
-// `defineElement` registers `<unit-tour-form>` while its Layer is built.
-// `props` is every instance's starting props, and each of its keys is also a
-// JavaScript property of the element. An attribute named for a prop in
-// kebab-case is decoded by its Schema in `attributes`, so
-// `<unit-tour-form unit-id="u1">` sets `unitId`. Changing either gives the
-// mounted component new props, and its Model stays. The instances share the
-// Layer's services, never write the document head, and each one unmounts
-// when it's removed from the page, but not when it's moved.
+// Defines `<unit-tour-form>` while the Layer is built. Each key of `props` is
+// also an element property, and `attributes` decodes kebab-case attributes,
+// so `unit-id="u1"` sets `unitId`. Either write updates the props and keeps
+// the Model. An instance unmounts when it's removed from the page, not when
+// it's moved.
 export const TourFormElement = BrowserHost.defineElement(
   "unit-tour-form",
   TourForm,
   {
     props: { unitId: "", compact: false },
     attributes: { unitId: Schema.String },
-    // Optional: mount in a shadow root, with styles no page CSS reaches.
+    // Optional: a shadow root, with styles page CSS can't reach.
     shadow: { styles: ["button { font: inherit; }"] }
   }
 )
