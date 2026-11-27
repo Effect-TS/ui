@@ -14,18 +14,98 @@
 // aren't callable. Add components with `export *` and non-component modules
 // with `export * as`, in alphabetical order.
 
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./ActivityIndicator.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as Animation from "./Animation.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as Css from "./Css.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
+export * as Dimensions from "./Dimensions.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Drawer.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Image.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./ImageBackground.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./InputAccessory.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * as LayoutAnimation from "./LayoutAnimation.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Modal.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Pan.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Pressable.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./RefreshControl.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./SafeArea.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./Switch.ts"
+
+/**
+ * @stability experimental
+ * @since 0.1.0
+ */
 export * from "./VirtualView.ts"
