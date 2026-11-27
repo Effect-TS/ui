@@ -25,8 +25,8 @@ const setup = async (initial: KeyboardAvoidingViewProps, layout: {
   readonly anchor?: "top" | "bottom"
   readonly padding?: number | `${number}%`
 } = {}) => {
-  const { anchor = "top", bottom = 844, content, padding = 8, top = 44 } =
-    layout
+  const { anchor = "top", content, padding = 8 } = layout
+  let { bottom = 844, top = 44 } = layout
   const fake = FakeDevice.make("ios", {
     KeyboardObserver: FakeDevice.module().module
   })
@@ -98,7 +98,12 @@ const setup = async (initial: KeyboardAvoidingViewProps, layout: {
     mounted.root.send(Set.Set({ props }))
     await settle()
   }
-  return { ...mounted, view, keyboard, layout: laidOut, setProps }
+  // Moves the parent down by `by` points.
+  const move = (by: number) => {
+    top += by
+    bottom += by
+  }
+  return { ...mounted, view, keyboard, layout: laidOut, setProps, move }
 }
 
 describe("KeyboardAvoidingView", () => {
@@ -238,6 +243,18 @@ describe("KeyboardAvoidingView", () => {
       await screen.close()
     }
   )
+
+  it("adds up movements of less than a point", async () => {
+    const screen = await setup({})
+    await screen.keyboard(544)
+    for (let i = 0; i < 8; i++) {
+      screen.move(0.5)
+      await screen.layout()
+    }
+    assert.strictEqual(screen.view().props.paddingBottom, 312)
+    assert.include(screen.printed(), "inset 304")
+    await screen.close()
+  })
 
   it("leaves the view alone when disabled", async () => {
     const screen = await setup({ enabled: false })

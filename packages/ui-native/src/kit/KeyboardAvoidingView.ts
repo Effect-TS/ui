@@ -115,7 +115,8 @@ const Model = Schema.Struct({
   // without the inset, or null before it's measured.
   bottom: Schema.NullOr(Schema.Number),
   height: Schema.Number,
-  // The bottom edge on screen when last measured, and the inset then.
+  // The bottom edge on screen when last measured, less the movement under
+  // a point not yet taken into `bottom`, and the inset then.
   seen: Schema.Struct({ bottom: Schema.Number, inset: Schema.Number }),
   // Whether the consumer's bottom padding is a percentage, which the
   // padding replaces.
@@ -223,6 +224,8 @@ export const KeyboardAvoidingView = Native.component({
     // shrinks it, at its top, its bottom or both, and the position moves it.
     // Movement up to that much is the adjustment's, and is left out of the
     // edge the inset is computed from, so the inset doesn't move it again.
+    // The view is measured again once a changed inset is on screen, so the
+    // next layout's movement isn't taken for the adjustment's.
     Measured: ($, { height, y }) => {
       const { model, props } = $
       const inset = insetOf(props, model)
@@ -237,24 +240,30 @@ export const KeyboardAvoidingView = Native.component({
           model.seen.inset === 0
         ? Math.min(moved, reach)
         : Math.min(Math.max(moved, Math.min(0, reach)), Math.max(0, reach))
-      let bottom = model.bottom === null || inset === 0
+      const measured = model.bottom === null || inset === 0
         ? edge
         : model.bottom + moved - own
-      // Less than a point is the layout's rounding.
-      if (model.bottom !== null && Math.abs(bottom - model.bottom) < 1) {
-        bottom = model.bottom
-      }
+      // Less than a point is kept until it adds up to one, so rounding
+      // doesn't move the inset back and forth.
+      const bottom =
+        model.bottom !== null && Math.abs(measured - model.bottom) < 1
+          ? model.bottom
+          : measured
+      const seen = edge - (measured - bottom)
       const full = behavior === "height" ? height + inset : height
       // A layout that moved nothing renders nothing.
-      return bottom === model.bottom && full === model.height &&
-          edge === model.seen.bottom && inset === model.seen.inset
-        ? $
-        : $.set({
-          ...model,
-          bottom,
-          height: full,
-          seen: { bottom: edge, inset }
-        })
+      if (
+        bottom === model.bottom && full === model.height &&
+        seen === model.seen.bottom && inset === model.seen.inset
+      ) return $
+      const next = {
+        ...model,
+        bottom,
+        height: full,
+        seen: { bottom: seen, inset }
+      }
+      const step = $.set(next)
+      return insetOf(props, next) === inset ? step : step.run(Measure.make())
     }
   },
   subscriptions: ({ props }) => [
