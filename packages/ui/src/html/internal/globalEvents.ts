@@ -126,8 +126,7 @@ export const observe = (fire: () => void): Dispatch => {
  * element's: `preventDefault: "always"` cancels first, and `true` makes
  * `cancel` the second argument of `onMessage`, called only for a message.
  * A press a `held` listener consumed counts as handled and cancels under
- * `true`, with no message. Returns whether it was handled. A throw from the
- * handler propagates.
+ * `true`, with no message. A throw from the handler propagates.
  *
  * @internal
  */
@@ -137,18 +136,18 @@ export const run = (
   preventDefault: () => void,
   onMessage: (message: unknown, cancel: () => void) => void,
   held: Held
-): boolean => {
+): void => {
   if (current !== undefined) current.heard ??= true
   const cancel = declared.preventDefault === true ? preventDefault : noop
   if (declared.preventDefault === "always") preventDefault()
   const message = declared.held
     ? (declared.handler as Step)(payload, held)
     : handle(declared.handler, payload)
-  if (message === undefined) return false
-  if (current !== undefined) current.handled = true
-  if (message === consumed) cancel()
-  else onMessage(message, cancel)
-  return true
+  if (message !== undefined) {
+    if (current !== undefined) current.handled = true
+    if (message === consumed) cancel()
+    else onMessage(message, cancel)
+  }
 }
 
 const noop = () => {}

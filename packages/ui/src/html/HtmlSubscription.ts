@@ -15,7 +15,7 @@
  * @stability experimental
  * @since 0.1.0
  */
-import { checkSequences } from "#dev"
+import { dev } from "#dev"
 import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
 import * as Duration from "effect/Duration"
@@ -474,34 +474,32 @@ export const keySequences = <
   table: Rows,
   options?: KeySequenceOptions | undefined
 ): Subscription.Subscription<Rows[number]["message"]> => {
-  checkSequences(table, keys.matches)
-  const timeout = Duration.toMillis(options?.timeout ?? 1000)
+  if (dev) keys.checkSequences(table)
   const step: globalEvents.Step = (
     payload: GlobalPayload<Html.KeyPayload>,
     held
   ) => {
-    const pending = held.value as Pending | undefined
+    // The presses so far, the last of them the latest a row took.
+    const pending = held.value as
+      | ReadonlyArray<GlobalPayload<Html.KeyPayload>>
+      | undefined
     held.value = undefined
     if (payload.composing || payload.defaultPrevented) return
-    // A custom `GlobalEvents` source may not supply it.
-    const at = payload.timeStamp ?? 0
+    // `0` without a `timeStamp`, which a custom `GlobalEvents` source may not supply.
+    const gap = pending
+      ? payload.timeStamp - pending.at(-1)!.timeStamp || 0
+      : -1
     // A clock that went back counts as expired too.
-    const gap = pending === undefined ? -1 : at - pending.at
-    const live = gap >= 0 && gap <= timeout
-    const tries = live
-      ? [[...pending!.presses, payload], [payload]]
-      : [[payload]]
-    for (const presses of tries) {
-      for (const row of table) {
-        const want = "keys" in row ? row.keys : [row.key]
-        if (
-          presses.length <= want.length &&
-          presses.every((press, i) => keys.matches(row, want[i]!, press))
-        ) {
-          if (presses.length === want.length) return row.message
-          held.value = { presses, at }
-          return globalEvents.consumed
-        }
+    const live = gap >= 0 &&
+      gap <= Duration.toMillis(options?.timeout ?? 1000)
+    for (
+      const presses of live ? [[...pending!, payload], [payload]] : [[payload]]
+    ) {
+      const row = keys.first(table, presses)
+      if (row !== undefined) {
+        if (presses.length === keys.keysOf(row).length) return row.message
+        held.value = presses
+        return globalEvents.consumed
       }
     }
     if (live && (payload.repeat || modifiers.includes(payload.key))) {
@@ -516,11 +514,6 @@ export const keySequences = <
     false,
     true
   )
-}
-
-interface Pending {
-  readonly presses: ReadonlyArray<Html.KeyPayload>
-  readonly at: number
 }
 
 const modifiers = ["Shift", "Control", "Alt", "Meta", "AltGraph"]

@@ -586,26 +586,28 @@ class StepsImpl extends internal.SceneCursor {
               declared.capture === capture
           })
           if (sub === undefined) return []
-          const declared = globalEvents.listenerOf(sub)!
-          const key = sub.key
           heard = true
           return [(payload, preventDefault) => {
-            const held: globalEvents.Held = {
-              value: engine.heldBy.get(out)?.get(key)
-            }
-            handled = globalEvents.run(
-              declared,
-              payload,
-              preventDefault,
-              (message, cancel) => {
-                cancel()
-                out = engine.dispatch(out, message)
-              },
-              held
-            ) || handled
-            if (declared.held) {
+            const before = engine.heldBy.get(out)?.get(sub.key)
+            const held: globalEvents.Held = { value: before }
+            // A press a held listener consumed is handled too, with no message.
+            handled = globalEvents.observe(() =>
+              globalEvents.run(
+                globalEvents.listenerOf(sub)!,
+                payload,
+                preventDefault,
+                (message, cancel) => {
+                  cancel()
+                  out = engine.dispatch(out, message)
+                },
+                held
+              )
+            ).handled || handled
+            if (held.value !== before) {
               const next = new Map(engine.heldBy.get(out))
-              out = engine.update(out, { held: next.set(key, held.value) })
+              if (held.value === undefined) next.delete(sub.key)
+              else next.set(sub.key, held.value)
+              out = engine.update(out, { held: next })
             }
           }]
         })
