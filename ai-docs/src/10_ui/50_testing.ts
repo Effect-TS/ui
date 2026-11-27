@@ -123,8 +123,8 @@ describe("NoteEditor", () => {
   })
 
   it("story: follows a smaller spec", () => {
-    // The spec says what each message does to the part of the Model it
-    // models, as a plain function. Another component works as one too:
+    // A spec is a plain function over the part of the Model it models.
+    // Another component can be one too:
     // `Story.start(Simple, {}).given(state).send(message).model`.
     type Text = { readonly draft: string; readonly saved: string }
     const text = ({ draft, saved }: Text): Text => ({ draft, saved })
@@ -141,7 +141,7 @@ describe("NoteEditor", () => {
           return before
       }
     }
-    // A wrong `init` passes every transition, so check it once.
+    // `transition` checks `update` calls, never `init`: check `init` once.
     assert.deepStrictEqual(text(Story.start(NoteEditor, { note }).model), {
       draft: note.body,
       saved: note.body
@@ -154,8 +154,8 @@ describe("NoteEditor", () => {
       commands: [[SaveNote, {
         success: ({ note }) => [NoteEditorMessage.SucceededSaveNote({ note })]
       }]],
-      // Checked on every `update` call, Command results included. The first
-      // failure reports the call, and the shortest path to it.
+      // Runs on every `update` call, Command results included, and reports
+      // the first failing call with a shortest path to it.
       transition: ({ after, before, message }) =>
         assert.deepStrictEqual(text(after), spec(text(before), message)),
       depth: 4

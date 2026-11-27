@@ -55,7 +55,7 @@ export const make = (
 }
 
 /**
- * Why a step failed, and the lines a report prints before the Model: the failing `update` call.
+ * Why a step failed, and in `detail` the failing `update` call.
  *
  * @internal
  */
@@ -81,9 +81,9 @@ type Story = Cursor & {
 }
 
 /**
- * Runs `f`, then checks the Model's Schema, `transition` on each `update` call `f` made,
- * `invariant` on `record`, then validates and acknowledges events and sends, adding their steps to
- * `lines`, then `after`. The invariant runs before acknowledging so it can inspect events and sends.
+ * Runs `f`, then checks the Model's Schema, `transition`, `invariant`, events and sends (adding
+ * their acknowledgements to `lines`), then `after`. The invariant runs before acknowledging so it
+ * can inspect events and sends.
  *
  * @internal
  */
@@ -108,7 +108,7 @@ export const step = (
 }
 
 /**
- * The end of a report: the failing `update` call, if any, then the Model and what's pending.
+ * The end of a report: the failing `update` call, if any, the Model and what's pending.
  *
  * @internal
  */
