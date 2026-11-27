@@ -948,8 +948,12 @@ const loadStep = (
   return writeResult(story, entry, snapshot, [])
 }
 
-/** The result's last Success at `argsKey`: its value, or a Failure's previous one. */
-const storedAt = (
+/**
+ * The result's last Success at `argsKey`: its value, or a Failure's previous one.
+ *
+ * @internal
+ */
+export const storedAt = (
   story: State<any, any, any, any>,
   name: string,
   argsKey: string
@@ -1573,8 +1577,12 @@ export const settleStep = (
   )
 }
 
-/** The component's own queries, each with the entries it is at: one per args it returns now. */
-function* currentEntries(
+/**
+ * The component's own queries, each with the entries it is at: one per args it returns now.
+ *
+ * @internal
+ */
+export function* currentEntries(
   story: State<any, any, any, any>
 ): Generator<
   {
@@ -1677,6 +1685,24 @@ const registeredPatches = (
 }
 
 /**
+ * The running or queued Command whose optimistic patch is live on the entry of query `name` at
+ * `argsKey`, if any.
+ *
+ * @internal
+ */
+export const patcherOf = (
+  story: State<any, any, any, any>,
+  name: string,
+  argsKey: string
+): Pending<any> | undefined =>
+  story.pending.find((entry) =>
+    entry.status !== "awaiting" &&
+    livePatches.get(entry)?.some((patch) =>
+        patch.name === name && patch.argsKey === argsKey
+      ) === true
+  )
+
+/**
  * Throws when a running or queued Command's optimistic patch is live on the entry of query `name`
  * at `argsKey`: the runtime settles no fetch there, so only a patched value can be written.
  */
@@ -1686,12 +1712,7 @@ const checkUnpatched = (
   name: string,
   argsKey: string
 ): void => {
-  const patcher = story.pending.find((entry) =>
-    entry.status !== "awaiting" &&
-    livePatches.get(entry)?.some((patch) =>
-        patch.name === name && patch.argsKey === argsKey
-      ) === true
-  )
+  const patcher = patcherOf(story, name, argsKey)
   if (patcher !== undefined) {
     throw new Error(
       `${step}: "${name}" is under the optimistic patch of ${
@@ -1959,8 +1980,10 @@ export const fireNode = <Props, Model, Msg, Events>(
  * A value as a failure message shows it, encoded as the log encodes it: by `schema` with every
  * `Schema.Redacted` redacted, and a part that fails to encode a placeholder, so a secret never reaches
  * the message.
+ *
+ * @internal
  */
-const show = (schema: Schema.Top | undefined, value: unknown): string =>
+export const show = (schema: Schema.Top | undefined, value: unknown): string =>
   JSON.stringify(
     schema === undefined
       ? MessageLog.structural(value)
@@ -2067,6 +2090,30 @@ const missingQueries = (story: State<any, any, any, any>): Array<string> =>
         `the query "${entry.name}" has no result${entry.label}: load it with loaded or loadFailed, or keep it with keepPending("${entry.name}")`
       ]
   )
+
+/**
+ * What blocks a message step that `keepPending` can mark: the Commands, and the queries by name.
+ *
+ * @internal
+ */
+export const keepable = (
+  story: State<any, any, any, any>
+): {
+  readonly commands: ReadonlyArray<Pending<any>>
+  readonly queries: ReadonlyArray<string>
+} => ({
+  commands: story.pending.filter((entry) =>
+    !exempt(entry) && !story.ack.kept.includes(entry)
+  ),
+  queries: Array.from(
+    new Set([
+      ...story.loadingMore.filter((name) => !story.ack.keptMore.includes(name)),
+      ...unloaded(story).flatMap((entry) =>
+        isKept(story, entry) ? [] : [entry.name]
+      )
+    ])
+  )
+})
 
 /** Work in flight that blocks a message step: what nothing settled, kept or exempts. */
 const inFlight = (story: State<any, any, any, any>): Array<string> => [
