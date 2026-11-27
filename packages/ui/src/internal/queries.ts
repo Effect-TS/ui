@@ -63,15 +63,12 @@ export interface Keyed {
  * @internal
  */
 export interface Marker {
-  readonly query: Query.Query.Any
-  readonly name: string
+  readonly entry: Entry
   /** `undefined`: the query is disabled, and the marker is inert. */
   readonly args: unknown
   readonly argsKey: string | undefined
   /** Set for one key of a keyed query: its values are collected into the query's result. */
   readonly keyed: boolean
-  readonly debounce: number | undefined
-  readonly interrupt: boolean
 }
 
 /**
@@ -513,15 +510,7 @@ export const bind = (
         argsKey: string | undefined,
         keyed: boolean
       ) => {
-        const marker: Marker = {
-          query: entry.query,
-          name: entry.name,
-          args,
-          argsKey,
-          keyed,
-          debounce: entry.debounce,
-          interrupt: entry.interrupt
-        }
+        const marker: Marker = { entry, args, argsKey, keyed }
         return {
           [Subscription.TypeId]: Subscription.TypeId,
           // New args are a new key, so the old watcher goes before the new one registers.

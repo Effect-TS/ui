@@ -273,9 +273,9 @@ const watch = (
   for (const [key, running] of watches) {
     if (markers.has(key)) continue
     watches.delete(key)
-    releaseWatch(running, running.marker.interrupt)
+    releaseWatch(running, running.marker.entry.interrupt)
     if (running.marker.keyed) {
-      const run = state.keyed.get(running.marker.name)
+      const run = state.keyed.get(running.marker.entry.name)
       run?.values.delete(running.marker.argsKey!)
       run?.changes.delete(running.marker.argsKey!)
     }
@@ -287,13 +287,13 @@ const watch = (
       existing.marker = marker
       continue
     }
-    const def = loaded().defOf(marker.query)
+    const def = loaded().defOf(marker.entry.query)
     const fetchKey = marker.argsKey === undefined
       ? undefined
       : def.logKey(marker.args, marker.argsKey)
     const logKey = fetchKey === undefined
       ? key
-      : subscriptionCore.keyOf(`~query/${marker.name}`, fetchKey)
+      : subscriptionCore.keyOf(`~query/${marker.entry.name}`, fetchKey)
     const running: Watch = {
       marker,
       logKey,
@@ -323,7 +323,7 @@ const watch = (
       ) return
       last = { result, patched, more }
       if (running.marker.keyed) {
-        const run = state.keyed.get(running.marker.name)!
+        const run = state.keyed.get(running.marker.entry.name)!
         run.values.set(at.argsKey, { args: at.args, result, patched })
         run.changes.add(at.argsKey)
         return requestKeyed(inst, state)
@@ -331,7 +331,7 @@ const watch = (
       follow(inst.tree)(() => {
         Kernel.renderAbove(inst)
         if (running.released || inst.closed) return
-        const entry = bound.byName.get(running.marker.name)!
+        const entry = running.marker.entry
         writeResult(
           inst,
           state,
@@ -344,7 +344,7 @@ const watch = (
     }
     const go = (ctx: Context.Context<any>) => {
       if (inst.closed || running.released) return
-      const fetcher = Context.getOrUndefined(ctx, marker.query as never)
+      const fetcher = Context.getOrUndefined(ctx, marker.entry.query as never)
       if (fetcher === undefined) {
         return failWith(
           inst,
@@ -382,7 +382,7 @@ const watch = (
     }
     const start = () => against(inst, go)
     if (
-      marker.debounce === undefined || !state.synced ||
+      marker.entry.debounce === undefined || !state.synced ||
       inst.tree.host.server !== undefined ||
       !wouldFetch(inst, def, marker.args)
     ) {
@@ -394,7 +394,7 @@ const watch = (
       inst.tree,
       servicesOf(inst.env),
       Effect.andThen(
-        Effect.sleep(Duration.millis(marker.debounce)),
+        Effect.sleep(Duration.millis(marker.entry.debounce)),
         Effect.sync(() =>
           resume(() => {
             running.debounce = undefined
