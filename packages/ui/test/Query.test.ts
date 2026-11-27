@@ -1,4 +1,4 @@
-import { Query } from "@effect/ui"
+import { Query, QueryPersistence } from "@effect/ui"
 import { TestQuery } from "@effect/ui/testing"
 import { assert, describe, it } from "@effect/vitest"
 import {
@@ -17,6 +17,7 @@ import {
   Stream
 } from "effect"
 import type { Duration } from "effect"
+import { KeyValueStore } from "effect/persistence"
 import { AsyncResult } from "effect/reactivity"
 import { TestClock } from "effect/testing"
 
@@ -1629,5 +1630,142 @@ describe("Query", () => {
     assert.strictEqual(GetUser.args.fields.id, Schema.String)
     assert.strictEqual(Now.error, Schema.Never)
     assert.deepStrictEqual(Now.args.fields, {})
+  })
+
+  it.effect("persists a query success across cache builds and keeps it across a failed refetch", () => {
+    const Notes = Schema.Array(Schema.String)
+    let online = true
+    let calls = 0
+    class GetNotes extends Query.Service<GetNotes>()("notes/GetNotes", {
+      args: { folder: Schema.String },
+      success: Notes,
+      error: Schema.String,
+      staleTime: "30 seconds",
+      persist: true
+    }) {
+      static readonly layer = this.toLayer(() => {
+        calls++
+        return online
+          ? Effect.succeed(["draft", "todo"])
+          : Effect.fail("offline")
+      })
+    }
+    return Effect.gen(function*() {
+      const store = Layer.succeed(
+        KeyValueStore.KeyValueStore,
+        yield* KeyValueStore.KeyValueStore
+      )
+      const session = () =>
+        Layer.merge(GetNotes.layer, Query.layer()).pipe(
+          Layer.provide(
+            QueryPersistence.layerKvs({
+              prefix: "notes",
+              maxAge: "7 days"
+            })
+          ),
+          Layer.provide(store)
+        )
+
+      const saved = yield* GetNotes.get({ folder: "inbox" }).pipe(
+        Effect.provide(session())
+      )
+      assert.deepStrictEqual(saved, ["draft", "todo"])
+      assert.strictEqual(calls, 1)
+
+      online = false
+      yield* Effect.gen(function*() {
+        const before = yield* GetNotes.peek({ folder: "inbox" })
+        assert.isTrue(AsyncResult.isSuccess(before))
+        assert.deepStrictEqual(before.value, ["draft", "todo"])
+        assert.isFalse(before.waiting)
+
+        const seen: Array<
+          AsyncResult.AsyncResult<ReadonlyArray<string>, string>
+        > = []
+        const fiber = yield* Effect.forkChild(
+          Stream.runForEach(
+            GetNotes.changes({ folder: "inbox" }),
+            (result) => Effect.sync(() => seen.push(result))
+          )
+        )
+        yield* flush
+        yield* Fiber.interrupt(fiber)
+
+        assert.strictEqual(calls, 2)
+        assert.strictEqual(seen.length, 2)
+        assert.isTrue(AsyncResult.isSuccess(seen[0]))
+        assert.deepStrictEqual(seen[0].value, ["draft", "todo"])
+        assert.isTrue(seen[0].waiting)
+
+        const after = yield* GetNotes.peek({ folder: "inbox" })
+        for (const result of [seen[1], after]) {
+          assert.isTrue(AsyncResult.isFailure(result))
+          assert.isFalse(result.waiting)
+          assert.deepStrictEqual(
+            Cause.findErrorOption(result.cause),
+            Option.some("offline")
+          )
+          assert.isTrue(Option.isSome(result.previousSuccess))
+          assert.deepStrictEqual(result.previousSuccess.value.value, [
+            "draft",
+            "todo"
+          ])
+        }
+      }).pipe(Effect.provide(session()))
+    }).pipe(Effect.provide(KeyValueStore.layerMemory))
+  })
+
+  it.effect("a hydrated ~query value beats a saved entry", () => {
+    const Notes = Schema.Array(Schema.String)
+    let calls = 0
+    class GetNotes extends Query.Service<GetNotes>()("notes/HydratedNotes", {
+      args: { folder: Schema.String },
+      success: Notes,
+      error: Schema.String,
+      staleTime: "30 seconds",
+      persist: true
+    }) {
+      static readonly layer = this.toLayer(() => {
+        calls++
+        return Effect.succeed(["saved"])
+      })
+    }
+    return Effect.gen(function*() {
+      const store = Layer.succeed(
+        KeyValueStore.KeyValueStore,
+        yield* KeyValueStore.KeyValueStore
+      )
+      const session = () =>
+        Layer.merge(GetNotes.layer, Query.layer()).pipe(
+          Layer.provide(
+            QueryPersistence.layerKvs({
+              prefix: "notes-hydrate",
+              maxAge: "7 days"
+            })
+          ),
+          Layer.provide(store)
+        )
+
+      yield* GetNotes.get({ folder: "inbox" }).pipe(Effect.provide(session()))
+      assert.strictEqual(calls, 1)
+
+      yield* Effect.gen(function*() {
+        const cache = Query.internals(yield* Query.Cache)
+        cache.hydrate({
+          "notes/HydratedNotes": [
+            ["{\"folder\":\"inbox\"}", 0, ["server"], 100]
+          ]
+        })
+
+        const peeked = yield* GetNotes.peek({ folder: "inbox" })
+        assert.isTrue(AsyncResult.isSuccess(peeked))
+        assert.deepStrictEqual(peeked.value, ["server"])
+        assert.strictEqual(peeked.timestamp, 100)
+
+        const got = yield* GetNotes.get({ folder: "inbox" })
+        assert.deepStrictEqual(got, ["server"])
+        assert.strictEqual(calls, 1)
+      }).pipe(Effect.provide(session()))
+    }).pipe(Effect.provide(KeyValueStore.layerMemory))
   })
 })
