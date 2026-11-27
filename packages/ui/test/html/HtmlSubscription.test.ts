@@ -526,7 +526,8 @@ describe("HtmlSubscription.keySequences", () => {
             { key: "/", message: "search" },
             { key: "l", message: "single-l" },
             { keys: ["g", "l"], message: "list" },
-            { keys: ["g", "b"], message: "board" }
+            { keys: ["g", "b"], message: "board" },
+            { keys: ["m", "m"], message: "modal", whileModal: true }
           ])
         ]
       })
@@ -575,15 +576,25 @@ describe("HtmlSubscription.keySequences", () => {
         .expect(Locator.tag("output")).toHaveText(
           "list,single-l,search,board,single-l"
         )
+        // Behind a modal, only rows with `whileModal` match, prefixes included.
+        .fireDocument("keydown", { key: "g", timeStamp: 7000, modal: true })
+        .expectIgnored()
+        .fireDocument("keydown", { key: "m", timeStamp: 7100, modal: true })
+        .expectDefaultPrevented()
+        .fireDocument("keydown", { key: "m", timeStamp: 7200, modal: true })
+        .expect(Locator.tag("output")).toHaveText(
+          "list,single-l,search,board,single-l,modal"
+        )
     }))
 
   it("rejects unreachable shadowed rows in development while allowing disjoint modifiers and guards", () => {
-    // `g b` takes a plain `g` first, so the typing row doesn't block `g l`.
+    // `g b` takes a plain `g` first, so the typing and modal rows don't block `g l`.
     assert.doesNotThrow(() =>
       HtmlSubscription.keySequences([
         { key: "g", mod: true, message: "find" },
         { keys: ["g", "b"], message: "board" },
         { key: "g", whileTyping: true, message: "typing-g" },
+        { key: "g", whileModal: true, message: "modal-g" },
         { keys: ["g", "l"], message: "list" }
       ])
     )

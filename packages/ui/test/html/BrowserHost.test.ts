@@ -3260,11 +3260,15 @@ describe("BrowserHost", { concurrent: false }, () => {
           host.commit?.()
           dialog.dispatchEvent(new Event("close"))
           expect(seen).toEqual(["closed"])
-          // Once it's closed for good, the page's shortcuts work again.
-          host.setProp(dialog, "open", false)
-          host.commit?.()
-          document.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))
-          expect(heard).toEqual(["help"])
+          // A host disposed while it's open holds the page's shortcuts until it closes.
+          host.dispose()
+          const press = () =>
+            document.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))
+          press()
+          dialog.close()
+          yield* tick
+          press()
+          expect(heard).toEqual([undefined, "help"])
         } finally {
           host.dispose()
           dialog.remove()

@@ -913,6 +913,19 @@ export const makeHost = (
       }
       listening.clear()
       endTargets()
+      // A disposed host reopens nothing.
+      restore?.clear()
+      // Without the host's listener, a modal still open releases its own
+      // hold as it closes.
+      for (const dialog of shown) {
+        const release = modals.get(dialog)
+        modals.delete(dialog)
+        if (release === undefined) continue
+        if (dialog.open) {
+          dialog.addEventListener("close", release, { once: true })
+        } else release()
+      }
+      shown.clear()
     }
   }
 }
