@@ -37,7 +37,7 @@ export interface MetroConfig {
     readonly unstable_conditionNames?: ReadonlyArray<string> | undefined
     readonly sourceExts?: ReadonlyArray<string> | undefined
     readonly resolverMainFields?: ReadonlyArray<string> | undefined
-    readonly resolveRequest?: ResolveRequest | undefined
+    readonly resolveRequest?: ResolveRequest | null | undefined
     readonly [key: string]: unknown
   } | undefined
   readonly serializer?: {
@@ -74,17 +74,20 @@ export interface Options {
   readonly external?: ReadonlyArray<string | RegExp> | undefined
 }
 
-type Resolution = { readonly type: string; readonly filePath?: string }
-
-type ResolveRequest = (
-  context: {
-    readonly dev: boolean
-    readonly resolveRequest: ResolveRequest
-    readonly [key: string]: unknown
-  },
+/**
+ * Metro's `resolver.resolveRequest`. The context is Metro's own, which an
+ * app's resolver types with Metro's types.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type ResolveRequest = (
+  // oxlint-disable-next-line no-explicit-any
+  context: any,
   moduleName: string,
   platform: string | null
-) => Resolution
+) => { readonly type: string; readonly filePath?: string }
 
 const own = (file: string) => {
   const self = fileURLToPath(import.meta.url)
@@ -118,6 +121,13 @@ const mainOf = (root: string): string => {
  * bundles the result in place of the entry. Packages Metro has to bundle,
  * such as those with native code or assets, go in `external`.
  *
+ * The app's own `resolver.resolveRequest` also resolves the imports Vite
+ * bundles, so a release gets the modules development does. It is given the
+ * resolver config, `dev`, `originModulePath` and `platform`, and its
+ * `context.resolveRequest` hands the import back to Vite. It may resolve to
+ * a source file or to an empty module; anything else fails the build, and
+ * belongs in `external`.
+ *
  * In development the entry's sources are served as they are, and the
  * refresh runtime is run before them, so that an edit to a module whose
  * exports are all components swaps them in place without losing state.
@@ -143,6 +153,7 @@ export const withEffectUi = async <Config extends MetroConfig>(
     if (options?.prebundle === false) return { ...resolved, resolver }
     const entry = Path.resolve(root, options?.entry ?? mainOf(root))
     // Metro reads its files when it starts, so every platform is built now.
+    // Each pre-bundle records the file its entry resolved to for its platform.
     const bundles = Object.fromEntries(
       await Promise.all(
         (options?.platforms ?? ["android", "ios"]).map(async (platform) => [
@@ -166,8 +177,8 @@ export const withEffectUi = async <Config extends MetroConfig>(
           )
           const bundle = platform === null ? undefined : bundles[platform]
           return !context.dev && bundle !== undefined &&
-              found.filePath === entry
-            ? { type: "sourceFile", filePath: bundle }
+              found.filePath === bundle.entry
+            ? { type: "sourceFile", filePath: bundle.file }
             : found
         }
       } satisfies MetroConfig["resolver"]

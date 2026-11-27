@@ -28,8 +28,8 @@ NativeApp.register(NativeApp.mount(App, {}))
 
 Point `main` in `package.json` at it, and wrap the Metro configuration:
 
-```js
-// metro.config.mjs
+```ts
+// metro.config.ts
 import { NativeMetro } from "@effect/ui-native/node"
 import ExpoMetro from "expo/metro-config"
 
@@ -40,7 +40,7 @@ export default NativeMetro.withEffectUi(
 
 A release build (`NODE_ENV=production`, as `expo export` and Gradle's release tasks set it) is pre-bundled with Vite, which tree-shakes `effect` and `@effect/ui`, and Metro bundles the result with React Native. Packages with native code or assets are left to Metro: `react-native`, `expo`, and their scoped and prefixed packages by default, and any others named in the `external` option.
 
-Each platform in the `platforms` option (`["android", "ios"]` by default) gets its own pre-bundle, resolved the way Metro resolves modules: `title.android.ts` or `title.ios.ts` first, then `title.native.ts`, then `title.ts`, with Metro's `sourceExts` and `resolverMainFields`. Other platforms, such as web, get the sources.
+Each platform in the `platforms` option (`["android", "ios"]` by default) gets its own pre-bundle, resolved the way Metro resolves modules: `title.android.ts` or `title.ios.ts` first, then `title.native.ts`, then `title.ts`, with Metro's `sourceExts` and `resolverMainFields`. An app's own `resolver.resolveRequest` runs first for each import, so a module it maps elsewhere ships as it does in development. It may resolve to a source file or an empty module; a package it resolves to assets belongs in `external`. Other platforms, such as web, get the sources.
 
 In development Metro serves the sources. Editing a module that exports only components swaps them in place and keeps their state; editing any other module reloads the app.
 

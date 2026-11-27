@@ -5,10 +5,16 @@ import type { MetroConfig } from "../NativeMetro.ts"
 
 const native = /^(?:@?react-native|@?expo)(?:[-/]|$)/
 
+// What an app's resolver gets back from `context.resolveRequest`.
+const toVite = { type: "vite" } as const
+
+const empty = "\0@effect/ui-native/empty"
+
 /**
  * Pre-bundles `entry` for `platform` under the project's
- * `node_modules/.cache`, and returns the file written. Modules resolve as
- * Metro resolves them: on Android an import of `./title` picks
+ * `node_modules/.cache`. Returns the file written, and the file `entry`
+ * resolved to. Modules resolve as Metro resolves them: the app's
+ * `resolveRequest` first, then, on Android, an import of `./title` picks
  * `title.android.ts` over `title.native.ts` over `title.ts`, trying the
  * config's `sourceExts` in order.
  */
@@ -17,7 +23,7 @@ export const prebundle = async (
   platform: string,
   entry: string,
   external: ReadonlyArray<string | RegExp>
-): Promise<string> => {
+): Promise<{ readonly file: string; readonly entry: string }> => {
   const { build } = await import("vite")
   const outDir = Path.join(
     config.projectRoot,
@@ -26,18 +32,57 @@ export const prebundle = async (
   const file = `main.${platform}.js`
   const sourceExts = config.resolver?.sourceExts ??
     ["js", "jsx", "json", "ts", "tsx"]
-  await build({
+  const mainFields = config.resolver?.resolverMainFields ??
+    ["react-native", "browser", "main"]
+  const isExternal = (id: string) =>
+    native.test(id) ||
+    external.some((entry) =>
+      typeof entry === "string"
+        ? id === entry || id.startsWith(entry + "/")
+        : entry.test(id)
+    )
+  const resolveRequest = config.resolver?.resolveRequest
+  const result = await build({
     configFile: false,
     root: config.projectRoot,
     mode: "production",
     logLevel: "warn",
+    plugins: resolveRequest == null ? [] : [{
+      name: "@effect/ui-native:resolve-request",
+      enforce: "pre",
+      resolveId(source, importer) {
+        if (
+          importer === undefined || source[0] === "\0" || isExternal(source)
+        ) {
+          return null
+        }
+        const found = resolveRequest(
+          {
+            ...config.resolver,
+            mainFields,
+            dev: false,
+            platform,
+            preferNativePlatform: true,
+            originModulePath: importer,
+            customResolverOptions: {},
+            resolveRequest: () => toVite
+          },
+          source,
+          platform
+        )
+        if (found === toVite) return null
+        if (found.type === "sourceFile") return found.filePath
+        if (found.type === "empty") return empty
+        throw new Error(
+          `[@effect/ui-native] resolveRequest resolved ${source} to ${found.type}, which a pre-bundle can't hold, so add it to external`
+        )
+      },
+      load: (id) => id === empty ? "export default {}" : null
+    }],
     resolve: {
       // `production` drops the development checks of `@effect/ui`.
       conditions: ["react-native", "production", "import", "module", "default"],
-      mainFields: [
-        ...(config.resolver?.resolverMainFields ??
-          ["react-native", "browser", "main"])
-      ],
+      mainFields: [...mainFields],
       extensions: sourceExts.flatMap((
         ext
       ) => [`.${platform}.${ext}`, `.native.${ext}`, `.${ext}`]),
@@ -57,16 +102,17 @@ export const prebundle = async (
         formats: ["es"],
         fileName: () => file
       },
-      rollupOptions: {
-        external: (id) =>
-          native.test(id) ||
-          external.some((entry) =>
-            typeof entry === "string"
-              ? id === entry || id.startsWith(entry + "/")
-              : entry.test(id)
-          )
-      }
+      rollupOptions: { external: isExternal }
     }
   })
-  return Path.join(outDir, file)
+  const output = Array.isArray(result) ? result[0] : result
+  const resolved = "output" in output
+    ? output.output[0].facadeModuleId
+    : undefined
+  if (resolved == null) {
+    throw new Error(
+      `[@effect/ui-native] Vite didn't report the file ${entry} resolved to`
+    )
+  }
+  return { file: Path.join(outDir, file), entry: Path.normalize(resolved) }
 }

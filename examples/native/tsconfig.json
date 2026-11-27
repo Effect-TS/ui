@@ -3,6 +3,7 @@
   "extends": "../../tsconfig.base.json",
   "include": [
     "src/**/*.ts",
+    "metro.config.ts",
     "../../packages/ui-native/src/internal/reactNative.d.ts"
   ],
   "compilerOptions": {
