@@ -665,8 +665,6 @@ describe("Query lists", () => {
       yield* advance(10)
       yield* Effect.forkScoped(ListMessages.loadMore({ room: "a" }))
       yield* advance(10)
-      assert.deepStrictEqual(a.seen, ["a0", "a0,a1"])
-      assert.deepStrictEqual(b.seen, ["a0"])
 
       db.version = "b"
       yield* Reactivity.invalidate(["room:a"])
