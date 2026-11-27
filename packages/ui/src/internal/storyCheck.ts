@@ -72,7 +72,7 @@ interface Failure extends rules.Problem {
 }
 
 interface Context {
-  readonly start: () => Story
+  readonly start: (component: Component.Any) => Story
   /** None for `Schema.Never`, which makes settle-only scripts. */
   readonly messages: Source | undefined
   readonly commands: ReadonlyMap<string, Results>
@@ -275,7 +275,7 @@ const runScript = (
 ): Effect.Effect<boolean, Failure> =>
   Effect.gen(function*() {
     // A defect in `init` fails every run alike: there is nothing to shrink.
-    const story = ctx.start()
+    const story = ctx.start(ctx.rules.component)
     const component = story.state.component
     const lines = [
       `Story.start(${component.definition.name}, ${
@@ -284,22 +284,8 @@ const runScript = (
     ]
     const failed = (problem: rules.Problem): Effect.Effect<never, Failure> =>
       Effect.fail({ ...problem, lines, state: story.state })
-    const attempt = (f: () => void): rules.Problem | undefined => {
-      try {
-        const updates = ctx.rules.transition === undefined
-          ? (f(), [])
-          : engine.recordUpdates(story.state, f)
-        return rules.check(
-          ctx.rules,
-          story,
-          updates,
-          () => story.current,
-          lines
-        )
-      } catch (error) {
-        return { reason: `the step threw: ${rules.messageOf(error)}` }
-      }
-    }
+    const attempt = (f: () => void): rules.Problem | undefined =>
+      rules.step(ctx.rules, story, f, () => story.current, lines)
     const first = attempt(() => {})
     if (first !== undefined) return yield* failed(first)
     for (const step of script) {
@@ -380,11 +366,7 @@ const report = (
   `Story.check: ${failure.reason}, after ${result.runs} run(s) and ${result.shrinks} shrink(s):\n\n${
     failure.lines.join("\n  ")
   }\n\n  ${
-    [
-      ...(failure.detail ?? []),
-      `model: ${show(failure.state.component.model, failure.state.model)}`,
-      `pending: ${engine.describePending(failure.state.pending)}`
-    ].join("\n  ")
+    rules.describe(failure, failure.state)
   }\n\nReplay it with { replay: ${JSON.stringify(result.replay)} }`
 
 /**
@@ -395,7 +377,7 @@ const report = (
 export const check = (
   site: Function,
   component: Component.Any,
-  start: () => Story,
+  start: (component: Component.Any) => Story,
   options: Options = {}
 ): Effect.Effect<void> => {
   const where = callSite(site)

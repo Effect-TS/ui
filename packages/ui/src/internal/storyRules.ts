@@ -5,14 +5,20 @@
  */
 import * as Schema from "effect/Schema"
 import type * as Component from "../Component.ts"
+import type { Transition } from "../testing/Story.ts"
 import type { Cursor } from "./steps.ts"
 import * as engine from "./story.ts"
 
+type Update = Transition<unknown, unknown>
+
 /** @internal */
 export interface Rules {
+  /** The component to start stories from: with a `transition` rule, one that records its `update` calls. */
+  readonly component: Component.Any
+  readonly updates: Array<Update>
   readonly isModel: (u: unknown) => boolean
   readonly isEvent: (u: unknown) => boolean
-  readonly transition: ((update: engine.Update) => boolean | void) | undefined
+  readonly transition: ((update: Update) => boolean | void) | undefined
   readonly invariant: ((record: any) => boolean | void) | undefined
 }
 
@@ -23,12 +29,27 @@ export const make = (
     readonly transition?: ((update: any) => boolean | void) | undefined
     readonly invariant?: ((record: any) => boolean | void) | undefined
   }
-): Rules => ({
-  isModel: Schema.is(component.model as Schema.Codec<unknown, unknown>),
-  isEvent: Schema.is(component.events as Schema.Codec<unknown, unknown>),
-  transition: options.transition,
-  invariant: options.invariant
-})
+): Rules => {
+  const updates: Array<Update> = []
+  const { transition } = options
+  return {
+    // Another story started during a step runs its own component, so it isn't recorded.
+    component: transition === undefined
+      ? component
+      : Object.assign(Object.create(component), {
+        update: (model: unknown, message: unknown, ...rest: Array<any>) => {
+          const next = (component.update as Function)(model, message, ...rest)
+          updates.push({ before: model, message, after: next.model })
+          return next
+        }
+      }),
+    updates,
+    isModel: Schema.is(component.model as Schema.Codec<unknown, unknown>),
+    isEvent: Schema.is(component.events as Schema.Codec<unknown, unknown>),
+    transition,
+    invariant: options.invariant
+  }
+}
 
 /**
  * Why a step failed, and the lines a report prints before the Model: the failing `update` call.
@@ -40,8 +61,7 @@ export interface Problem {
   readonly detail?: ReadonlyArray<string> | undefined
 }
 
-/** @internal */
-export const messageOf = (error: unknown): string =>
+const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
 
 const run = (name: string, f: () => boolean | void): string | undefined => {
@@ -52,20 +72,56 @@ const run = (name: string, f: () => boolean | void): string | undefined => {
   }
 }
 
+type Story = Cursor & {
+  emitted(...events: Array<unknown>): unknown
+  sent(owner: Component.Send["owner"], message: unknown): unknown
+}
+
 /**
- * Checks the Model's Schema, `transition` on each of `updates`, `invariant` on `record`, then
- * validates and acknowledges events and sends, adding their steps to `lines`. The invariant runs
- * before acknowledging so it can inspect events and sends.
+ * Runs `f`, then checks the Model's Schema, `transition` on each `update` call `f` made,
+ * `invariant` on `record`, then validates and acknowledges events and sends, adding their steps to
+ * `lines`, then `after`. The invariant runs before acknowledging so it can inspect events and sends.
  *
  * @internal
  */
-export const check = (
+export const step = (
   rules: Rules,
-  story: Cursor & {
-    emitted(...events: Array<unknown>): unknown
-    sent(owner: Component.Send["owner"], message: unknown): unknown
-  },
-  updates: ReadonlyArray<engine.Update>,
+  story: Story,
+  f: () => void,
+  record: () => unknown,
+  lines: Array<string>,
+  after?: () => string | undefined
+): Problem | undefined => {
+  rules.updates.length = 0
+  try {
+    f()
+    const problem = check(rules, story, record, lines)
+    if (problem !== undefined) return problem
+    const reason = after?.()
+    return reason === undefined ? undefined : { reason }
+  } catch (error) {
+    return { reason: `the step threw: ${messageOf(error)}` }
+  }
+}
+
+/**
+ * The end of a report: the failing `update` call, if any, then the Model and what's pending.
+ *
+ * @internal
+ */
+export const describe = (
+  problem: Problem,
+  state: engine.State<any, any, any, any>
+): string =>
+  [
+    ...(problem.detail ?? []),
+    `model: ${engine.show(state.component.model, state.model)}`,
+    `pending: ${engine.describePending(state.pending)}`
+  ].join("\n  ")
+
+const check = (
+  rules: Rules,
+  story: Story,
   record: () => unknown,
   lines: Array<string>
 ): Problem | undefined => {
@@ -76,7 +132,7 @@ export const check = (
   }
   const { invariant, transition } = rules
   if (transition !== undefined) {
-    for (const update of updates) {
+    for (const update of rules.updates) {
       const reason = run("transition rule", () => transition(update))
       if (reason !== undefined) {
         return {

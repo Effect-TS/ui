@@ -522,7 +522,7 @@ export const check = <
   runner.check(
     check,
     component as unknown as Component.Any,
-    () => start(component, props) as any,
+    (component) => start(component as unknown as C, props) as any,
     options as runner.Options | undefined
   )
 

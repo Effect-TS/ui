@@ -297,13 +297,7 @@ export const explore = (
       throw new Error(
         `Story.explore: ${problem.reason}:\n\n${first}\n  ${
           steps.join("\n  ")
-        }\n\n  ${
-          [
-            ...(problem.detail ?? []),
-            `model: ${show(component.model, state.model)}`,
-            `pending: ${engine.describePending(state.pending)}`
-          ].join("\n  ")
-        }`
+        }\n\n  ${rules.describe(problem, state)}`
       )
     }
 
@@ -313,27 +307,17 @@ export const explore = (
       move: Move
     ): Node => {
       const acknowledged: Array<string> = []
-      let problem: rules.Problem | undefined
-      try {
-        const updates = checks.transition === undefined
-          ? (move.run(story), [])
-          : engine.recordUpdates(story.state, () => move.run(story))
-        problem = rules.check(
-          checks,
-          story,
-          updates,
-          () => recordOf(story),
-          acknowledged
-        )
-        if (problem === undefined) {
-          const reason = story.state.pending.map((entry) =>
-            settlesOf(entry.command)
-          ).find((settles) => typeof settles === "string")
-          if (reason !== undefined) problem = { reason }
-        }
-      } catch (error) {
-        problem = { reason: `the step threw: ${rules.messageOf(error)}` }
-      }
+      const problem = rules.step(
+        checks,
+        story,
+        () => move.run(story),
+        () => recordOf(story),
+        acknowledged,
+        () =>
+          story.state.pending.map((entry) => settlesOf(entry.command)).find((
+            settles
+          ) => typeof settles === "string") as string | undefined
+      )
       const node: Node = {
         parent,
         lines: () => [...move.lines(), ...acknowledged]
@@ -411,7 +395,7 @@ export const explore = (
       return moves
     }
 
-    const first = at(initial(component, props))
+    const first = at(initial(checks.component, props))
     const root = visit(undefined, first, {
       lines: () => [
         `Story.start(${component.definition.name}, ${

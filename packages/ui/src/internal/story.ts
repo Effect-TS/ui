@@ -824,10 +824,7 @@ export const update = <Props, Model, Msg, Events>(
       fields.shared === sharedGiven.get(story)
       ? story.view
       : () => expandedView(fields)
-  const out = record(fields, view)
-  const recording = recordings.get(story)
-  if (recording !== undefined) recordings.set(out, recording)
-  return out
+  return record(fields, view)
 }
 
 /**
@@ -1809,66 +1806,24 @@ export const findRunning = (
   return entry
 }
 
-/**
- * One `update` call: the Model it received, the message and the Model it returned.
- *
- * @internal
- */
-export interface Update {
-  readonly before: unknown
-  readonly message: unknown
-  readonly after: unknown
-}
-
-interface Recording {
-  readonly updates: Array<Update>
-  open: boolean
-}
-
-/** The recording a state and the states `update` derives from it belong to. */
-const recordings = new WeakMap<object, Recording>()
-
-/**
- * Runs `f` and returns the `update` calls it made on `story` and the states derived from it, in
- * the order they ran. Another story stepped inside `f` isn't recorded.
- *
- * @internal
- */
-export const recordUpdates = (
-  story: State<any, any, any, any>,
-  f: () => void
-): ReadonlyArray<Update> => {
-  const recording: Recording = { updates: [], open: true }
-  recordings.set(story, recording)
-  try {
-    f()
-  } finally {
-    recording.open = false
-  }
-  return recording.updates
-}
-
 /** @internal */
 export const dispatch = <Props, Model, Msg, Events>(
   story: State<Props, Model, Msg, Events>,
   message: Msg | Component.Noop | undefined
-): State<Props, Model, Msg, Events> => {
+): State<Props, Model, Msg, Events> =>
   // `undefined` is a handler's "no message", and `Component.noop` a Command's or a mount's.
-  if (message === undefined || isNoop(message)) return story
-  const next = story.component.update(
-    story.model,
-    message,
-    story.props,
-    story.results,
-    sharedReads.record(story.component, rootShared(sharedGiven.get(story)))
-  )
-  // Before `apply`, which can dispatch a cut run's message: calls stay in the order they ran.
-  const recording = recordings.get(story)
-  if (recording?.open) {
-    recording.updates.push({ before: story.model, message, after: next.model })
-  }
-  return apply(story, next)
-}
+  message === undefined || isNoop(message)
+    ? story
+    : apply(
+      story,
+      story.component.update(
+        story.model,
+        message,
+        story.props,
+        story.results,
+        sharedReads.record(story.component, rootShared(sharedGiven.get(story)))
+      )
+    )
 
 /** `node` and its ancestors in `root`, innermost first, or `undefined` when `node` isn't in `root`. */
 const pathTo = (
