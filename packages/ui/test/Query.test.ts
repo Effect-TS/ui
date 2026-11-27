@@ -1576,4 +1576,17 @@ describe("Query", () => {
       )
     }).pipe(Effect.provide(Layer.merge(Flaky.layer, Query.layer())))
   })
+
+  it("exposes its args, success and error Schemas", () => {
+    const { GetUser } = makeUsers({ staleTime: 0 })
+    class Now extends Query.Service<Now>()("schemas/Now", {
+      success: Schema.Number,
+      staleTime: 0
+    }) {}
+    assert.strictEqual(GetUser.success, User)
+    assert.strictEqual(GetUser.error, Schema.String)
+    assert.strictEqual(GetUser.args.fields.id, Schema.String)
+    assert.strictEqual(Now.error, Schema.Never)
+    assert.deepStrictEqual(Now.args.fields, {})
+  })
 })

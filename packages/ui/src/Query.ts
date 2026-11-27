@@ -204,13 +204,25 @@ export declare namespace Query {
 export interface Service<
   in out Self,
   in out Name extends string,
-  in out Args,
-  in out A,
-  in out E
+  in out Args extends Schema.Top,
+  in out Success extends Schema.Top,
+  in out Error extends Schema.Top
 > extends
-  Context.ServiceClass<Self, Name, (args: Args) => Effect.Effect<A, E>>,
-  Query<Args, A, E>
+  Context.ServiceClass<
+    Self,
+    Name,
+    (args: Args["Type"]) => Effect.Effect<Success["Type"], Error["Type"]>
+  >,
+  Query<Args["Type"], Success["Type"], Error["Type"]>
 {
+  /**
+   * Preserves a supplied Schema; wraps a fields record in `Schema.Struct`.
+   * Defaults to an empty struct.
+   */
+  readonly args: Args
+  readonly success: Success
+  /** Defaults to `Schema.Never`. */
+  readonly error: Error
   /**
    * Builds a Layer providing the fetcher from a function or an Effect. Fetches
    * are interrupted when the Layer's Scope closes, waiting for cleanup before
@@ -218,8 +230,12 @@ export interface Service<
    */
   toLayer<LE = never, LR = never>(
     build:
-      | ((args: Args) => Effect.Effect<A, E>)
-      | Effect.Effect<(args: Args) => Effect.Effect<A, E>, LE, LR>
+      | ((args: Args["Type"]) => Effect.Effect<Success["Type"], Error["Type"]>)
+      | Effect.Effect<
+        (args: Args["Type"]) => Effect.Effect<Success["Type"], Error["Type"]>,
+        LE,
+        LR
+      >
   ): Layer.Layer<Self, LE, Exclude<LR, Scope.Scope>>
   /**
    * Returns the stored value when it's fresh, and fetches otherwise, joining
@@ -239,18 +255,20 @@ export interface Service<
    * run invalidates, it always calls the fetcher in the caller's fiber, and
    * stores nothing.
    */
-  get(args: Args): Effect.Effect<A, E, Self | Cache>
+  get(
+    args: Args["Type"]
+  ): Effect.Effect<Success["Type"], Error["Type"], Self | Cache>
   /**
    * Starts a fetch that outlives the caller, unless the entry is fresh, and
    * returns nothing.
    */
-  prefetch(args: Args): Effect.Effect<void, never, Self | Cache>
+  prefetch(args: Args["Type"]): Effect.Effect<void, never, Self | Cache>
   /**
    * Marks one entry, or every entry of the query when called without
    * arguments, stale. A watched entry refetches at once, a fetch in flight is
    * restarted, and any other entry refetches the next time it's asked for.
    */
-  invalidate(args?: Args): Effect.Effect<void, never, Cache>
+  invalidate(args?: Args["Type"]): Effect.Effect<void, never, Cache>
   /**
    * Watches an entry: loads it if it's cold or stale and nothing else watches
    * it, then emits every change. The Stream starts with the current state
@@ -258,28 +276,48 @@ export interface Service<
    * with a fetcher's defect.
    */
   changes(
-    args: Args
-  ): Stream.Stream<AsyncResult.AsyncResult<A, E>, never, Self | Cache>
+    args: Args["Type"]
+  ): Stream.Stream<
+    AsyncResult.AsyncResult<Success["Type"], Error["Type"]>,
+    never,
+    Self | Cache
+  >
   /**
    * Reads an entry's state without fetching. It doesn't create the entry or
    * keep it alive.
    */
-  peek(args: Args): Effect.Effect<AsyncResult.AsyncResult<A, E>, never, Cache>
+  peek(
+    args: Args["Type"]
+  ): Effect.Effect<
+    AsyncResult.AsyncResult<Success["Type"], Error["Type"]>,
+    never,
+    Cache
+  >
   /** One entry, as an invalidation target. */
-  entry(args: Args): EntryTarget<Query<Args, A, E>>
+  entry(
+    args: Args["Type"]
+  ): EntryTarget<Query<Args["Type"], Success["Type"], Error["Type"]>>
   /**
    * An optimistic patch of one entry, applied over its server value while the
    * run that declares it is queued or running. It implies invalidation of
    * the entry.
    */
-  patch(args: Args, f: (value: A) => A): Patch<Query<Args, A, E>>
+  patch(
+    args: Args["Type"],
+    f: (value: Success["Type"]) => Success["Type"]
+  ): Patch<Query<Args["Type"], Success["Type"], Error["Type"]>>
   /**
    * An optimistic patch of every entry of the query that holds a Success when
    * the run is issued. It implies invalidation of the whole query.
    */
-  patchAll(f: (value: A, args: Args) => A): Patch<Query<Args, A, E>>
+  patchAll(
+    f: (value: Success["Type"], args: Args["Type"]) => Success["Type"]
+  ): Patch<Query<Args["Type"], Success["Type"], Error["Type"]>>
   /** A write of a run's result into one entry, for a Command's `writes`. */
-  set(args: Args, value: A): Write<Query<Args, A, E>>
+  set(
+    args: Args["Type"],
+    value: Success["Type"]
+  ): Write<Query<Args["Type"], Success["Type"], Error["Type"]>>
 }
 
 /**
@@ -290,15 +328,15 @@ export interface Service<
  */
 export declare namespace Service {
   /**
-   * The arguments type of an `args` option: the Schema's type, or the type of
-   * the struct a fields record makes.
+   * The arguments Schema of an `args` option: the Schema itself, or the
+   * struct a fields record makes.
    *
    * @category utility types
    * @since 0.1.0
    */
-  export type ArgsType<Args extends Schema.Top | Schema.Struct.Fields> =
-    Args extends Schema.Top ? Args["Type"]
-      : Args extends Schema.Struct.Fields ? Schema.Struct<Args>["Type"]
+  export type ArgsSchema<Args extends Schema.Top | Schema.Struct.Fields> =
+    Args extends Schema.Top ? Args
+      : Args extends Schema.Struct.Fields ? Schema.Struct<Args>
       : never
 
   /**
@@ -433,7 +471,7 @@ export const Service: <Self>() => <
       readonly idleTimeToLive?: Duration.Input | undefined
       readonly refetchInterval?:
         | RefetchInterval<
-          Service.ArgsType<Args>,
+          Service.ArgsSchema<Args>["Type"],
           Success["Type"],
           Error["Type"]
         >
@@ -443,9 +481,9 @@ export const Service: <Self>() => <
 ) => Service<
   Self,
   Name,
-  Service.ArgsType<Args>,
-  Success["Type"],
-  Error["Type"]
+  Service.ArgsSchema<Args>,
+  Success,
+  Error
 > = (): any =>
 (
   name: string,
@@ -476,6 +514,9 @@ const queryClass = (def: QueryDef) => {
   const Base = Context.Service<any, Fetcher>()(def.name)
   class QueryService extends Base {
     static readonly [TypeId]: any = def
+    static readonly args = def.args
+    static readonly success = def.success
+    static readonly error = def.error
     static toLayer(
       build: Fetcher | Effect.Effect<Fetcher, any, any>
     ): Layer.Layer<any, any, any> {
@@ -752,8 +793,8 @@ export interface LoadedMore<Page> {
  *
  * It's a `Context.Service` whose value is the query's fetcher, which takes
  * the arguments and the cursor of the page to load, `None` for the first.
- * Its result is the page array. It has the statics of a query, except `set`,
- * and adds `loadMore`, `reset` and `items`.
+ * The fetcher returns one page; `get` returns the page array. It has the
+ * statics of a query, except `set`, and adds `loadMore`, `reset` and `items`.
  *
  * @stability experimental
  * @category models
@@ -762,25 +803,42 @@ export interface LoadedMore<Page> {
 export interface InfiniteService<
   in out Self,
   in out Name extends string,
-  in out Args,
-  in out Page,
+  in out Args extends Schema.Top,
+  in out Page extends Schema.Top,
   in out Item,
-  in out Cursor,
-  in out E
+  in out Cursor extends Schema.Top,
+  in out Error extends Schema.Top
 > extends
   Context.ServiceClass<
     Self,
     Name,
-    (args: Args, cursor: Option.Option<Cursor>) => Effect.Effect<Page, E>
+    (
+      args: Args["Type"],
+      cursor: Option.Option<Cursor["Type"]>
+    ) => Effect.Effect<Page["Type"], Error["Type"]>
   >,
-  InfiniteQuery<Args, Page, Item, E>
+  InfiniteQuery<Args["Type"], Page["Type"], Item, Error["Type"]>
 {
+  readonly args: Args
+  /**
+   * Wraps the supplied page Schema in `Schema.Array`; access the page Schema
+   * via `success.value`.
+   */
+  readonly success: Schema.$Array<Page>
+  /** Defaults to `Schema.Never`. */
+  readonly error: Error
   /** Builds a Layer providing the fetcher. */
   toLayer<LE = never, LR = never>(
     build:
-      | ((args: Args, cursor: Option.Option<Cursor>) => Effect.Effect<Page, E>)
+      | ((
+        args: Args["Type"],
+        cursor: Option.Option<Cursor["Type"]>
+      ) => Effect.Effect<Page["Type"], Error["Type"]>)
       | Effect.Effect<
-        (args: Args, cursor: Option.Option<Cursor>) => Effect.Effect<Page, E>,
+        (
+          args: Args["Type"],
+          cursor: Option.Option<Cursor["Type"]>
+        ) => Effect.Effect<Page["Type"], Error["Type"]>,
         LE,
         LR
       >
@@ -791,27 +849,29 @@ export interface InfiniteService<
    * flight. As for any query, a call waiting on a load that reverts is
    * interrupted.
    */
-  get(args: Args): Effect.Effect<ReadonlyArray<Page>, E, Self | Cache>
+  get(
+    args: Args["Type"]
+  ): Effect.Effect<ReadonlyArray<Page["Type"]>, Error["Type"], Self | Cache>
   /**
    * Loads the first page when the list is cold. When it holds pages, stale
    * ones included, it only keeps the entry from being collected.
    */
-  prefetch(args: Args): Effect.Effect<void, never, Self | Cache>
+  prefetch(args: Args["Type"]): Effect.Effect<void, never, Self | Cache>
   /** Marks one list, or every list of the query, stale, as for any query. */
-  invalidate(args?: Args): Effect.Effect<void, never, Cache>
+  invalidate(args?: Args["Type"]): Effect.Effect<void, never, Cache>
   /** Watches a list and emits its page array, as `changes` does for any query. */
   changes(
-    args: Args
+    args: Args["Type"]
   ): Stream.Stream<
-    AsyncResult.AsyncResult<ReadonlyArray<Page>, E>,
+    AsyncResult.AsyncResult<ReadonlyArray<Page["Type"]>, Error["Type"]>,
     never,
     Self | Cache
   >
   /** Reads a list's page array without loading anything. */
   peek(
-    args: Args
+    args: Args["Type"]
   ): Effect.Effect<
-    AsyncResult.AsyncResult<ReadonlyArray<Page>, E>,
+    AsyncResult.AsyncResult<ReadonlyArray<Page["Type"]>, Error["Type"]>,
     never,
     Cache
   >
@@ -827,35 +887,39 @@ export interface InfiniteService<
    * run to exit. It fails with the error of the page it waited for, and does
    * nothing when the list has ended.
    */
-  loadMore(args: Args): Effect.Effect<LoadedMore<Page>, E, Self | Cache>
+  loadMore(
+    args: Args["Type"]
+  ): Effect.Effect<LoadedMore<Page["Type"]>, Error["Type"], Self | Cache>
   /**
    * Drops every held page after the first, then invalidates the list, so it
    * loads again from the first page with only that page held.
    */
-  reset(args: Args): Effect.Effect<void, never, Cache>
+  reset(args: Args["Type"]): Effect.Effect<void, never, Cache>
   /**
    * The items of a page array, in order, with a later item whose `key` was
    * already seen left out.
    */
-  items(pages: ReadonlyArray<Page>): ReadonlyArray<Item>
+  items(pages: ReadonlyArray<Page["Type"]>): ReadonlyArray<Item>
   /** One list, as an invalidation target. */
-  entry(args: Args): EntryTarget<InfiniteQuery<Args, Page, Item, E>>
+  entry(
+    args: Args["Type"]
+  ): EntryTarget<InfiniteQuery<Args["Type"], Page["Type"], Item, Error["Type"]>>
   /**
    * An optimistic patch of one list, applied to each held page. It can't
    * change the page count, and implies invalidation of the list.
    */
   patch(
-    args: Args,
-    f: (page: Page, index: number) => Page
-  ): Patch<InfiniteQuery<Args, Page, Item, E>>
+    args: Args["Type"],
+    f: (page: Page["Type"], index: number) => Page["Type"]
+  ): Patch<InfiniteQuery<Args["Type"], Page["Type"], Item, Error["Type"]>>
   /**
    * An optimistic patch of every list of the query that holds pages when the
    * run is issued, applied to each page. It implies invalidation of the whole
    * query.
    */
   patchAll(
-    f: (page: Page, args: Args, index: number) => Page
-  ): Patch<InfiniteQuery<Args, Page, Item, E>>
+    f: (page: Page["Type"], args: Args["Type"], index: number) => Page["Type"]
+  ): Patch<InfiniteQuery<Args["Type"], Page["Type"], Item, Error["Type"]>>
 }
 
 /**
@@ -984,7 +1048,7 @@ export const InfiniteService: <Self>() => <
       readonly idleTimeToLive?: Duration.Input | undefined
       readonly refetchInterval?:
         | RefetchInterval<
-          Service.ArgsType<Args>,
+          Service.ArgsSchema<Args>["Type"],
           ReadonlyArray<PageSchema["Type"]>,
           Error["Type"]
         >
@@ -994,11 +1058,11 @@ export const InfiniteService: <Self>() => <
 ) => InfiniteService<
   Self,
   Name,
-  Service.ArgsType<Args>,
-  PageSchema["Type"],
+  Service.ArgsSchema<Args>,
+  PageSchema,
   Item,
-  CursorSchema["Type"],
-  Error["Type"]
+  CursorSchema,
+  Error
 > = (): any =>
 (
   name: string,
