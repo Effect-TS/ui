@@ -96,12 +96,10 @@ describe("VirtualView", () => {
     })
     assert.include(printed(), "<VirtualView></>")
 
-    // Unknown mode values are ignored.
     fabric.emit(vv(), "topModeChange", { mode: 99, targetRect, thresholdRect })
     await new Promise((r) => setTimeout(r, 10))
     assert.strictEqual(vv().props.renderState, 2)
 
-    // Prerender reveals children and restores caller minWidth/minHeight.
     fabric.emit(vv(), "topModeChange", { mode: 1, targetRect, thresholdRect })
     await settle()
     assert.strictEqual(childRenders, 2)
