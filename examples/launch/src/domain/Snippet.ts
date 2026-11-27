@@ -31,18 +31,12 @@ const Files = Schema.Array(Snippet)
 
 export const Snippets = Schema.Struct({
   intro: Files,
-  split: Files,
-  counterFoldkit: Files,
-  counterEffect: Files,
-  queryFoldkit: Files,
-  queryEffect: Files,
+  counter: Files,
+  query: Files,
   tests: Files,
   play: Files,
   playSignIn: Files,
   playSnake: Files,
-  partsUse: Files,
-  partsDefine: Files,
-  mount: Files,
   provider: Files
 })
 export type Snippets = typeof Snippets.Type

@@ -4,7 +4,6 @@ import { Component, UiSchema, type View } from "@effect/ui"
 import { Collapsible } from "@effect/ui-kit"
 import { Html, HtmlCommand } from "@effect/ui/html"
 import { Schema } from "effect"
-import { CodeGroup, CodeGroupMessage } from "./CodeGroup.ts"
 
 const Line = <M>(
   h: Html.H<M>,
@@ -179,34 +178,21 @@ const pill = [
  * A long file that starts collapsed to a preview: the lines from
  * `start` to `end`. The rest stays in the page, hidden until the
  * browser's find-in-page matches it, which opens the file.
- *
- * Inside a CodeGroup the files of one `row` open and close together.
- * On its own, a file keeps whether it is open in its Model.
  */
 export const CodePreview = Html.component({
   name: "CodePreview",
   props: Schema.Struct({
     snippet: Snippet,
     start: Schema.Number,
-    end: Schema.Number,
-    row: Schema.Number
+    end: Schema.Number
   }),
   model: Schema.Struct({ isOpen: Schema.Boolean }),
-  message: CodePreviewMessage,
-  reads: { group: { owner: CodeGroup, optional: true } }
+  message: CodePreviewMessage
 }).make({
   init: () => ({ isOpen: false }),
   update: {
     Toggled: ($, { isOpen }) => {
-      const next = $.reads.group === undefined
-        ? $.evolve({ isOpen })
-        : $.send(
-          CodeGroup,
-          CodeGroupMessage.RequestedSetRow({
-            row: $.props.row,
-            isOpen
-          })
-        )
+      const next = $.evolve({ isOpen })
       // Closing a long file from its end would leave the reader far
       // below it, so bring its top back into view.
       return isOpen ? next : next.run(
@@ -217,9 +203,8 @@ export const CodePreview = Html.component({
     }
   },
   view: (h, model) => {
-    const { end, row, snippet: { lines }, start } = h.props
-    const isOpen = h.reads.group?.openRows.includes(row) ??
-      model.isOpen
+    const { end, snippet: { lines }, start } = h.props
+    const { isOpen } = model
     const onEmit = {
       Toggled: ({ open }: { readonly open: boolean }) =>
         CodePreviewMessage.Toggled({ isOpen: open }),
@@ -286,7 +271,6 @@ export const Code = <M>(
   options: {
     readonly demo?: View.Input<M>
     readonly preview?: Preview | undefined
-    readonly row?: number | undefined
   } = {}
 ) =>
   Window(
@@ -301,8 +285,7 @@ export const Code = <M>(
         key: snippet.id,
         props: {
           snippet,
-          ...options.preview,
-          row: options.row ?? 0
+          ...options.preview
         }
       })
   )

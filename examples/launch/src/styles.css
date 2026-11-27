@@ -363,49 +363,6 @@
   }
 }
 
-/* The bars of the performance chart grow from the left as the chart
-   scrolls up from the bottom of the window, each starting a little
-   after the one above it. The last is full when the chart is a little
-   below the middle of the window. The scroll position drives them, so
-   they are drawn in full wherever a browser can't do that. */
-@supports (animation-timeline: view()) {
-  @media (prefers-reduced-motion: no-preference) {
-    .chart-bars {
-      view-timeline: --chart-bars block;
-    }
-
-    .chart-bar {
-      animation: chart-bar-grow linear both;
-      animation-timeline: --chart-bars;
-      animation-range: cover calc(var(--bar, 0) * 2.5%) cover calc(27% + var(--bar, 0) * 2.5%);
-    }
-
-    .chart-bars > :nth-child(2) {
-      --bar: 1;
-    }
-
-    .chart-bars > :nth-child(3) {
-      --bar: 2;
-    }
-
-    .chart-bars > :nth-child(4) {
-      --bar: 3;
-    }
-
-    .chart-bars > :nth-child(5) {
-      --bar: 4;
-    }
-
-    .chart-bars > :nth-child(6) {
-      --bar: 5;
-    }
-
-    .chart-bars > :nth-child(n + 7) {
-      --bar: 6;
-    }
-  }
-}
-
 /* The arrow to the DevTools button, in red marker on the page, under
    its content. Its tail is at a place on the page, beside the first
    lines of its part of the article. Its tip is 10px above the button,
@@ -524,16 +481,6 @@
 
   to {
     opacity: 1;
-  }
-}
-
-@keyframes chart-bar-grow {
-  from {
-    clip-path: inset(0 100% 0 0 round 3px);
-  }
-
-  to {
-    clip-path: inset(0 0 0 0 round 3px);
   }
 }
 

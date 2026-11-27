@@ -1,4 +1,4 @@
-import { srOnly, wide } from "#components/Classes"
+import { srOnly } from "#components/Classes"
 import { Scrubber } from "#components/Scrubber"
 import { UiSchema } from "@effect/ui"
 import { Html } from "@effect/ui/html"
@@ -7,18 +7,15 @@ import { panel, SenderPicker, Transport } from "./controls.ts"
 import * as P from "./player.ts"
 import {
   Name,
-  type Scenario,
   ScenarioName,
   scenarios,
-  type Side
+  type Side,
+  type Step
 } from "./scenarios.ts"
 import { Tree } from "./tree.ts"
 
-// The two architectures handle the same Message in turn,
-// Foldkit 0.x and then Effect UI, on one timeline. Position -1 is
-// before anything is sent. Then comes a position per step of the first
-// side and a position per step of the second, and at the last position
-// both are done.
+// Position -1 is before anything is sent, 0..steps.length-1 are the
+// steps, and steps.length is done.
 
 export const DiagramMessage = UiSchema.TaggedEnum({
   PickedChoice: { choice: Name },
@@ -34,49 +31,25 @@ type Msg = typeof DiagramMessage.Type
 
 const Model = Schema.Struct({ choice: Name, player: P.Player })
 
-interface Turn {
-  readonly side: Side
-  readonly steps: ReturnType<Side["steps"]>
-  // The timeline position of the side's first step.
-  readonly start: number
-}
-
-const turnsOf = (
-  scenario: Scenario,
-  choice: Name
-): ReadonlyArray<Turn> => {
-  const [first, second] = scenario.sides
-  const steps = first.steps(choice)
-  return [
-    { side: first, steps, start: 0 },
-    { side: second, steps: second.steps(choice), start: steps.length }
-  ]
-}
+const stepsOf = (scenario: ScenarioName, choice: Name) =>
+  scenarios[scenario].side.steps(choice)
 
 const endOf = (scenario: ScenarioName, choice: Name) =>
-  turnsOf(scenarios[scenario], choice).reduce(
-    (total, turn) => total + turn.steps.length,
-    0
-  )
-
-const isPlayingAt = (turn: Turn, time: number) =>
-  time >= turn.start && time < turn.start + turn.steps.length
+  stepsOf(scenario, choice).length
 
 const Lane = (
   h: Html.H<Msg>,
-  turn: Turn,
+  side: Side,
+  steps: ReadonlyArray<Step>,
   options: {
     readonly time: number
-    readonly waiting: string
     readonly runs: number
   }
 ) => {
-  const { side, steps } = turn
   const last = steps.length - 1
-  const local = options.time - turn.start
-  const shown = Math.max(Math.min(local, last), -1)
-  const done = local > last
-  const isActive = isPlayingAt(turn, options.time)
+  const shown = Math.max(Math.min(options.time, last), -1)
+  const done = options.time > last
+  const isActive = options.time >= 0 && !done
   const step = shown >= 0 ? steps[shown] : undefined
   return h.div.class(
     panel,
@@ -87,14 +60,14 @@ const Lane = (
     "motion-safe:duration-300"
   ).attrs({
     role: "group",
-    "aria-label": side.title,
+    "aria-label": side.subtitle,
     "data-active": isActive ? "true" : undefined
   }).children(
     h.div.class("flex items-baseline justify-between gap-2").children(
       h.p.class(
-        "text-[0.9375rem]/[1.4] font-semibold whitespace-nowrap"
+        "text-[0.9375rem]/[1.4] font-semibold"
       )
-        .children(side.title),
+        .children(side.subtitle),
       h.p.class(
         "font-mono text-[0.6875rem] whitespace-nowrap tabular-nums",
         "font-features-[normal]",
@@ -109,10 +82,11 @@ const Lane = (
       side,
       step,
       past: steps.slice(0, Math.max(shown, 0)),
-      // Changes only on this side's own steps, so its packets don't
-      // play again while the other side takes its turn.
       key: `${options.runs}-${Math.min(shown, last)}-${done}`,
-      compact: true,
+      dim: (name) =>
+        step !== undefined &&
+        side.plain.includes(name) &&
+        !step.nodes.includes(name),
       still: done
     }),
     // One segment per step, across the full width.
@@ -139,69 +113,25 @@ const Lane = (
             "col-start-1 row-start-1 text-pretty",
             index - 1 !== shown && "invisible",
             s === undefined && "text-muted-foreground"
-          ).children(s === undefined ? options.waiting : s.text)
+          ).children(
+            s === undefined ? "Waiting for the Message." : s.text
+          )
         )
       )
   )
 }
 
 // What the slider and the live region say about a position.
-const describe = (
-  turns: ReadonlyArray<Turn>,
-  time: number,
-  end: number
-) => {
+const describe = (steps: ReadonlyArray<Step>, time: number) => {
   if (time < 0) return "Not sent yet"
-  if (time >= end) {
-    return turns.map(({ side, steps }) =>
-      `${side.title} took ${steps.length} steps.`
-    ).join(" ")
+  if (time >= steps.length) {
+    return `Done in ${steps.length} steps.`
   }
-  const turn = turns.find((candidate) => isPlayingAt(candidate, time))
-  if (turn === undefined) return ""
-  const index = time - turn.start
-  return `${turn.side.title}, step ${
-    index + 1
-  } of ${turn.steps.length}: ${turn.steps[index]!.text}`
+  return `Step ${time + 1} of ${steps.length}: ${steps[time]!.text}`
 }
 
-// A cell per step of each side and a last cell for the end, with
-// each side's name under its own cells.
-const Timeline = (
-  h: Html.H<Msg>,
-  turns: ReadonlyArray<Turn>,
-  time: number,
-  end: number
-) =>
-  h.div.class("flex flex-col gap-1.5").children(
-    Scrubber(h, {
-      label: "Step",
-      valueText: describe(turns, time, end),
-      value: time + 1,
-      cells: end + 1,
-      onMove: (value) => DiagramMessage.Scrubbed({ value })
-    }),
-    h.div.class(
-      "flex font-mono text-[0.6875rem] text-muted-foreground",
-      "font-features-[normal]"
-    ).attr("aria-hidden", "true").children(
-      turns.map((turn) =>
-        h.span.key(turn.side.id).style({
-          flex: String(turn.steps.length)
-        }).class(
-          "truncate text-center",
-          isPlayingAt(turn, time) && "font-semibold text-accent-text",
-          "motion-safe:transition-[color] motion-safe:duration-300"
-        ).children(turn.side.title)
-      ),
-      h.span.style({ flex: "1" })
-    )
-  )
-
 const names: Readonly<Record<ScenarioName, string>> = {
-  messages: "How Foldkit 0.x and Effect UI each handle a Message",
-  sharedState:
-    "How Foldkit 0.x and Effect UI each change a shared value"
+  sharedState: "How a Provider shares state in Effect UI"
 }
 
 export const Diagram = Html.component({
@@ -261,11 +191,11 @@ export const Diagram = Html.component({
   view: (h, model) => {
     const scenario = scenarios[h.props.scenario]
     const { step: time, isPlaying, runs } = model.player
-    const turns = turnsOf(scenario, model.choice)
-    const end = endOf(h.props.scenario, model.choice)
+    const steps = scenario.side.steps(model.choice)
+    const end = steps.length
     return h.figure.class(
-      wide,
-      "@container/diagram flex flex-col gap-4 [--wide:920px]"
+      "mx-auto my-8 flex max-w-(--column) flex-col gap-4",
+      "@container/diagram [p+&]:mt-[1.4em]"
     ).attr("aria-label", names[h.props.scenario]).children(
       h.div.class("flex flex-wrap items-end justify-between gap-3")
         .children(
@@ -286,23 +216,16 @@ export const Diagram = Html.component({
             replay: DiagramMessage.ClickedReset()
           })
         ),
-      Timeline(h, turns, time, end),
-      h.div.class("grid grid-cols-2 gap-4 diagram-narrow:gap-2")
-        .children(
-          turns.map((turn, index) =>
-            h.div.key(turn.side.id).class("contents").children(
-              Lane(h, turn, {
-                time,
-                waiting: index === 0 || time < 0
-                  ? "Waiting for the Message."
-                  : `Plays after ${turns[0]!.side.title}.`,
-                runs
-              })
-            )
-          )
-        ),
+      Scrubber(h, {
+        label: "Step",
+        valueText: describe(steps, time),
+        value: time + 1,
+        cells: end + 1,
+        onMove: (value) => DiagramMessage.Scrubbed({ value })
+      }),
+      Lane(h, scenario.side, steps, { time, runs }),
       h.p.class(srOnly).attr("aria-live", "polite").children(
-        time < 0 ? "" : describe(turns, time, end)
+        time < 0 ? "" : describe(steps, time)
       )
     )
   }

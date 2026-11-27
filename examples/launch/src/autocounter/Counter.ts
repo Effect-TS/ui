@@ -3,9 +3,8 @@ import { Button } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Effect, Schema, Stream } from "effect"
 
-// A Schema union with a constructor for each Message, like Foldkit
-// 0.x's defineMessageUnion. A Message's fields are its payload:
-// ClickedAdd carries the amount to add.
+// A Schema union with a constructor for each Message. A Message's
+// fields are its payload: ClickedAdd carries the amount to add.
 export const CounterMessage = UiSchema.TaggedEnum({
   ClickedAdd: { amount: Schema.Number },
   ClickedResetAfterDelay: {},
@@ -39,14 +38,13 @@ export const Counter = Html.component({
   init: () => ({ count: 0, isAutoCounting: false }),
   // A handler per Message. $ holds the current Model and builds
   // the result: $.evolve changes the fields it names, and $.run
-  // issues a Command. Foldkit 0.x returned { model, commands }.
+  // issues a Command.
   update: {
     // The Message's payload is the handler's second argument.
     ClickedAdd: ($, { amount }) =>
       $.evolve({ count: (count) => count + amount }),
     // Runs the Command without changing the Model. To do both,
-    // chain them: $.evolve({ ... }).run(...). In Foldkit 0.x,
-    // update returned { model, commands } instead.
+    // chain them: $.evolve({ ... }).run(...).
     ClickedResetAfterDelay: ($) => $.run(DelayReset.make()),
     CompletedDelayReset: ($) => $.evolve({ count: 0 }),
     ClickedToggleAutoCount: ($) =>

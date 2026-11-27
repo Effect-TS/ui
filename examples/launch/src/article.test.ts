@@ -77,4 +77,37 @@ describe("article", () => {
       "# Introducing Effect UI\n\nPublished Nov 26, 2026\n\nHello."
     )
   })
+
+  it("mentions Foldkit only in the What happens next section", () => {
+    const [before, after = ""] = source.split("## What happens next")
+    assert.isNotEmpty(after)
+    assert.notMatch(before, /foldkit/i)
+    assert.match(after, /foldkit/i)
+  })
+
+  it("exports Architecture and Diagram islands in Markdown", () => {
+    const exported = toMarkdown(
+      [
+        "---",
+        "title: Introducing Effect UI",
+        "published: 2026-11-26",
+        "updated: 2026-11-26",
+        "---",
+        "",
+        "::Architecture",
+        "",
+        "::Diagram{scenario=\"sharedState\"}"
+      ].join("\n"),
+      {} as Snippets
+    )
+    assert.include(
+      exported,
+      "Every Component has a Model, an update and a view of its own."
+    )
+    assert.include(
+      exported,
+      "**A Provider's Model holds the shared value.** Changed by: A1."
+    )
+    assert.notInclude(exported, "**Effect UI.**")
+  })
 })

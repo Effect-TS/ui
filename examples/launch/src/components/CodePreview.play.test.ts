@@ -5,7 +5,6 @@ import { Locator } from "@effect/ui/testing"
 import { assert, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { Code } from "./Code.ts"
-import { CodeGroup } from "./CodeGroup.ts"
 import { scrolls, TestLayer } from "./testing.ts"
 
 const file = (id: string): Snippet => ({
@@ -18,31 +17,6 @@ const file = (id: string): Snippet => ({
 })
 
 const preview = { start: 2, end: 16 }
-
-// Two sides of a comparison: a file on each side in row 0, and one
-// more in row 1.
-const Comparison = Html.component({
-  name: "Comparison",
-  model: Schema.Null,
-  message: Schema.Never
-}).make({
-  init: () => null,
-  update: ($) => $.model,
-  view: (h) =>
-    CodeGroup(h, {
-      view: () =>
-        h.main.children(
-          (["left/0", "right/0", "left/1"] as const).map((id) =>
-            h.section.key(id).attr("aria-label", id).children(
-              Code(h, file(id), {
-                preview,
-                row: id.endsWith("1") ? 1 : 0
-              })
-            )
-          )
-        )
-    })
-})
 
 const Alone = Html.component({
   name: "Alone",
@@ -81,18 +55,6 @@ it.layer(TestLayer, { buildPerTest: true })(
         yield* play.expect(show).toHaveCount(2)
         // Closing brings the top of the file back into view.
         assert.deepStrictEqual(scrolls, [{ block: "nearest" }])
-      }))
-
-    it.effect("opens and closes the files of one row together", () =>
-      Effect.gen(function*() {
-        const play = yield* HtmlPlay.make(Comparison, {})
-        yield* play.expect(show).toHaveCount(3)
-        yield* play.click(inside("left/0", show))
-        yield* play.expect(inside("left/0", hide)).toExist()
-        yield* play.expect(inside("right/0", hide)).toExist()
-        yield* play.expect(inside("left/1", show)).toExist()
-        yield* play.click(inside("right/0", hide))
-        yield* play.expect(show).toHaveCount(3)
       }))
   }
 )

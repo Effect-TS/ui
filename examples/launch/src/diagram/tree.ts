@@ -1,4 +1,3 @@
-import { Button } from "@effect/ui-kit"
 import { Html } from "@effect/ui/html"
 import { Array, Option } from "effect"
 import {
@@ -119,7 +118,6 @@ export const statusText = (
 
 const strokeOf: Readonly<Record<Carries, string>> = {
   message: "stroke-accent",
-  value: "stroke-accent",
   render: "stroke-accent/55"
 }
 
@@ -139,15 +137,10 @@ const Link = <M>(
 const dotClass = (carries: Carries) =>
   // Foreground, not accent, so the dot shows over a node that is
   // filled with the accent colour.
-  carries === "value"
-    ? "fill-background stroke-foreground"
-    : carries === "render"
-    ? "fill-foreground/70"
-    : "fill-foreground"
+  carries === "render" ? "fill-foreground/70" : "fill-foreground"
 
 const dotAttrs = (carries: Carries) => ({
-  r: carries === "render" ? "4.5" : "6",
-  "stroke-width": carries === "value" ? "2.5" : undefined
+  r: carries === "render" ? "4.5" : "6"
 })
 
 // One dot per packet, travelling the track's path once and staying
@@ -165,7 +158,7 @@ const Packet = <M>(
   })
 }
 
-export interface TreeOptions<M> {
+export interface TreeOptions {
   readonly side: Side
   // The step on screen, and the ones before it, whose moves stay
   // drawn as a trail.
@@ -173,21 +166,14 @@ export interface TreeOptions<M> {
   readonly past: ReadonlyArray<Step>
   // Changes whenever a step starts, so its packets play again.
   readonly key: string
-  // Drawn under a node's name in place of its role.
-  readonly badge?: ((name: Name) => string | undefined) | undefined
-  // Makes each node a button that sends this Message.
-  readonly press?: ((name: Name) => M | undefined) | undefined
-  readonly label?: ((name: Name) => string) | undefined
   readonly dim?: ((name: Name) => boolean) | undefined
-  // Smaller nodes, for two trees side by side on a phone.
-  readonly compact?: boolean | undefined
   // Shows the step as it ends: its moves drawn, nothing travelling.
   readonly still?: boolean | undefined
 }
 
 const nodeClass = [
-  "absolute flex -translate-x-1/2 flex-col items-center",
-  "rounded-md border border-border-strong bg-background px-1",
+  "absolute flex w-[35%] -translate-x-1/2 flex-col items-center",
+  "rounded-md border border-border-strong bg-background px-1 py-1.5",
   "text-center text-foreground",
   "data-[plain]:border-dashed",
   "data-[status=active]:border-accent",
@@ -199,14 +185,6 @@ const nodeClass = [
   "data-[dim]:opacity-45",
   "motion-safe:transition-[background-color,border-color,color,opacity,box-shadow]",
   "motion-safe:duration-300"
-].join(" ")
-
-const buttonClass = [
-  "cursor-pointer [box-shadow:0_1px_2px_var(--color-ring)]",
-  "not-disabled:border-b-2 hover:border-muted-foreground",
-  "active:translate-y-px",
-  "focus-visible:outline-accent disabled:cursor-default",
-  "disabled:opacity-45"
 ].join(" ")
 
 interface Rest {
@@ -249,17 +227,14 @@ const Resting = <M>(h: Html.H<M>, rest: Rest, index: number) =>
   })
 
 // The tree of one side: Root, A under it, A1 and A2 under A.
-export const Tree = <M>(h: Html.H<M>, options: TreeOptions<M>) => {
-  const { side, step, key, compact = false, still = false } = options
+export const Tree = <M>(h: Html.H<M>, options: TreeOptions) => {
+  const { side, step, key, still = false } = options
   const rests = restsOf(step, options.past)
   // A step that moves the dots draws them as packets, which stop
   // where the dots then rest. Any other step draws them at rest.
   const travels = !still && (step?.moves.length ?? 0) > 0
   const past = still && step ? [...options.past, step] : options.past
   const moving = still ? undefined : step
-  const size = compact
-    ? "w-[42%] py-0.5 @min-[300px]/tree:w-[35%] @min-[300px]/tree:py-1.5"
-    : "w-[35%] py-1.5"
   const showDirect = side.steps("A1").concat(side.steps("A2"))
     .some((s) => s.moves.some(isDirect))
   return h.div.class(
@@ -310,31 +285,7 @@ export const Tree = <M>(h: Html.H<M>, options: TreeOptions<M>) => {
     ),
     names.map((name) => {
       const status = statusOf(step, name)
-      const shown = options.badge?.(name) ?? statusText(step, name)
-      // Compact nodes are too narrow for a role: they show what runs.
-      const badge = compact && shown !== undefined
-        ? shown.replace(" runs", "")
-        : shown
-      const message = options.press?.(name)
-      const content = [
-        h.span.class(
-          "font-mono font-semibold font-features-[normal]",
-          compact
-            ? "text-[0.6875rem]/[1.3] @min-[300px]/tree:text-[0.8125rem]/[1.35]"
-            : "text-[0.8125rem]/[1.35]"
-        ).attr("data-part", "name").children(displayName(side, name)),
-        h.span.class(
-          "max-w-full truncate",
-          compact
-            ? "text-[0.5625rem]/[1.3] @min-[300px]/tree:text-[0.625rem]/[1.3]"
-            : "text-[0.625rem]/[1.3]",
-          status === "update"
-            ? "text-inherit"
-            : "text-muted-foreground"
-        ).attr("data-part", "role").children(
-          badge ?? (compact ? "\u00a0" : side.roles[name])
-        )
-      ]
+      const badge = statusText(step, name)
       const attrs = {
         "data-node": name,
         "data-status": status === "idle" ? undefined : status,
@@ -345,21 +296,23 @@ export const Tree = <M>(h: Html.H<M>, options: TreeOptions<M>) => {
         left: `${(at[name].x / width) * 100}%`,
         top: `${(at[name].y / height) * 100}%`
       }
-      // Only a node that can send gets a button.
-      if (message === undefined) {
-        return h.div.class(nodeClass, size).key(name).attrs(attrs)
-          .style(place).children(content)
-      }
-      return Button(h, { onPress: message }).class(
-        nodeClass,
-        size,
-        buttonClass
-      ).key(name)
-        .attrs({
-          ...attrs,
-          "aria-label": options.label?.(name) ??
+      return h.div.class(nodeClass).key(name).attrs(attrs)
+        .style(place).children(
+          h.span.class(
+            "font-mono text-[0.8125rem]/[1.35] font-semibold",
+            "font-features-[normal]"
+          ).attr("data-part", "name").children(
             displayName(side, name)
-        }).style(place).children(content)
+          ),
+          h.span.class(
+            "max-w-full truncate text-[0.625rem]/[1.3]",
+            status === "update"
+              ? "text-inherit"
+              : "text-muted-foreground"
+          ).attr("data-part", "role").children(
+            badge ?? side.roles[name]
+          )
+        )
     }),
     h.svg.attrs({
       viewBox: `0 0 ${width} ${height}`,
