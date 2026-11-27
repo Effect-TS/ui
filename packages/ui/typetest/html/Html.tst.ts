@@ -536,6 +536,51 @@ describe("Html", () => {
     })
   })
 
+  it("slot is an HTMLSlotElement container with a payload-free slotchange event", () => {
+    const TitleSlot = Html.ref("TitleSlot", "slot")
+    expect(TitleSlot).type.toBe<Renderer.Ref<HTMLSlotElement>>()
+    const InspectSlot = Mount.make(
+      "InspectSlot",
+      { args: {} },
+      (node: HTMLSlotElement) =>
+        Effect.sync(() => {
+          expect(node).type.toBe<HTMLSlotElement>()
+          return Msg.Mounted()
+        })
+    )
+    Html.component({
+      name: "Slot",
+      model: Schema.String,
+      message: Msg
+    }).make({
+      init: () => "",
+      update: ($) => $.model,
+      view: (h) => {
+        expect(h.slot("Untitled")).type.toBe<
+          Html.Element<
+            Msg,
+            never,
+            Html.EventsOf<"slot">,
+            HTMLSlotElement,
+            "slot"
+          >
+        >()
+        expect(h.slot.ref).type.toBeCallableWith(TitleSlot)
+        expect(h.slot.onMount).type.toBeCallableWith(InspectSlot())
+        expect<Html.EventsOf<"slot">["slotchange"]>().type.toBe<{}>()
+        expect(h.slot.on).type.toBeCallableWith("slotchange", Msg.Mounted())
+        expect(h.div.on).type.not.toBeCallableWith("slotchange", Msg.Mounted())
+        return h.slot
+          .attr("name", "title")
+          .on("slotchange", (payload) => {
+            expect(payload).type.toBe<{}>()
+            return Msg.Mounted()
+          })
+          .children("Untitled")
+      }
+    })
+  })
+
   it("requirements from onMount and from children reach the component", () => {
     const Mounted = Html.component({
       name: "Mounted",

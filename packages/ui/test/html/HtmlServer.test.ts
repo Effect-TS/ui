@@ -441,6 +441,27 @@ describe("HtmlServer", { concurrent: false }, () => {
       }
     }).pipe(Effect.scoped))
 
+  it.effect("renders native slot markup as written", () =>
+    Effect.gen(function*() {
+      const Card = Html.component({
+        name: "Card",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) =>
+          h.article(
+            h.slot.attr("name", "title").children("Untitled"),
+            h.slot
+          )
+      })
+      const rendered = yield* HtmlServer.renderToHtml(Card, {})
+      expect(rendered.html).toBe(
+        "<!--[/Card--><article><slot name=\"title\">Untitled</slot><slot></slot></article><!--]/Card-->"
+      )
+    }))
+
   describe("reports across hydration", () => {
     const Plain = UiSchema.TaggedEnum({ ChangedOn: { on: Schema.Boolean } })
     // An unrelated variant holds a secret, so the last message can't be shipped.
