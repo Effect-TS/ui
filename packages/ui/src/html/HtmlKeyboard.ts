@@ -25,8 +25,8 @@ import * as keys from "./internal/keys.ts"
  * defaults to `false` (ignored on a document listener while a modal is open),
  * and `repeat` defaults to `false` (ignored while the key auto-repeats).
  *
- * A component drawn inside a modal whose document rows should keep working
- * there, such as a dialog's own `mod+s`, sets `whileModal: true` on them.
+ * Set `whileModal: true` on document shortcut rows that should match inside
+ * a modal, such as a dialog's own `mod+s` shortcut.
  *
  * @stability experimental
  * @category events
@@ -73,9 +73,9 @@ export interface Sequence<Msg> extends Omit<Shortcut<Msg>, "key"> {
  *
  * Events with `composing` are always ignored, and on document listeners
  * (`HtmlSubscription.onDocument`) events with `defaultPrevented` are ignored as
- * well, as are rows without `whileModal` while `modal` is true (element
- * payloads carry neither). Each row is checked in
- * order and the first match returns its `message`. Unmatched events return
+ * well. While `modal` is true, only rows with `whileModal: true` can match.
+ * Element payloads carry neither flag. Each row is checked in order and the
+ * first match returns its `message`. Unmatched events return
  * `undefined`, so `{ preventDefault: true }` cancels the browser's default
  * only for matched shortcuts. On element handlers, returning `undefined` does
  * not fall through to an ancestor element's handler because the host stops at

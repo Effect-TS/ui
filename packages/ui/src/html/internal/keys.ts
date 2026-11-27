@@ -9,7 +9,7 @@ import type * as HtmlKeyboard from "../HtmlKeyboard.ts"
 
 type Row = HtmlKeyboard.Shortcut<unknown> | HtmlKeyboard.Sequence<unknown>
 
-// `modal` is a document listener's: element payloads carry none.
+// Only global listener payloads carry `modal`; element payloads omit it.
 type Press =
   & Pick<
     Html.KeyPayload,

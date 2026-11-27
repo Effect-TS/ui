@@ -213,7 +213,6 @@ export const makeHost = (
     }
   }
 
-  // Each modal's release of its hold on the document's shortcuts.
   const modals = new WeakMap<globalThis.Node, () => void>()
   const unmodal = (dialog: globalThis.Node) => {
     modals.get(dialog)?.()
@@ -913,11 +912,10 @@ export const makeHost = (
       }
       listening.clear()
       endTargets()
-      // A disposed host reopens nothing.
       restore?.clear()
-      // `shown` stays, so removing the nodes still closes their dialogs.
-      // Without the host's listener, a modal left open releases its hold
-      // once it really closes, past any stale `close`.
+      // Keep `shown` so node removal still closes dialogs. After disposal,
+      // release each remaining hold on close, ignoring stale close events
+      // from an earlier showing of the same dialog.
       for (const dialog of shown) {
         if (!modals.has(dialog)) continue
         if (!dialog.open) {

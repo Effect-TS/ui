@@ -41,7 +41,8 @@ const SnakeMessage = UiSchema.TaggedEnum({
 // combos, `editable` (keys typed into a field) and `modal` (keys pressed while
 // a modal dialog is open); `whileTyping: true` lets `Escape` through, and
 // `whileModal: true` does the same behind a modal. The listener runs the
-// declaration from the latest `subscriptions`, so omitting the opposite direction updates with `model.heading`.
+// declaration from the latest `subscriptions`, so omitting the opposite
+// direction updates with `model.heading`.
 export const Snake = Html.component({
   name: "Snake",
   model: Schema.Struct({ running: Schema.Boolean, heading: Direction }),
