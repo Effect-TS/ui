@@ -320,6 +320,46 @@ describe("view transitions", { concurrent: false }, () => {
       expect(card()).toBe("Like 2")
     }).pipe(Effect.scoped))
 
+  it.effect("a pop the browser already animated renders without a transition, and the next pop still gets one", () =>
+    Effect.gen(function*() {
+      const transitions = yield* fakeTransitions()
+      const { click, shown } = yield* start
+      click("Open")
+      yield* tick
+      transitions.started[0]!.update()
+      expect(shown()).toBe("Detail grid ")
+      yield* Effect.acquireUseRelease(
+        Effect.sync(() =>
+          Object.defineProperty(
+            PopStateEvent.prototype,
+            "hasUAVisualTransition",
+            {
+              configurable: true,
+              get: () => true
+            }
+          )
+        ),
+        () =>
+          Effect.sync(() => window.history.back()).pipe(Effect.andThen(tick)),
+        () =>
+          Effect.sync(() => {
+            delete (PopStateEvent.prototype as {
+              hasUAVisualTransition?: boolean
+            }).hasUAVisualTransition
+          })
+      )
+      expect({ shown: shown(), started: transitions.started.length }).toEqual({
+        shown: "Grid grid ",
+        started: 1
+      })
+      window.history.forward()
+      yield* tick
+      expect(transitions.started.map((started) => started.types)).toEqual([
+        ["to-detail"],
+        ["to-detail"]
+      ])
+    }).pipe(Effect.scoped))
+
   it.effect("freezing settles a requested transition's update at once, without starting one", () =>
     Effect.gen(function*() {
       const transitions = yield* fakeTransitions()
