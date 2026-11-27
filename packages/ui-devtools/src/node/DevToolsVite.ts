@@ -131,6 +131,7 @@ export interface Plugin {
  * @since 0.1.0
  */
 export interface ViteConfig {
+  readonly base?: string | undefined
   readonly experimental?:
     | { readonly hmrPartialAccept?: boolean | undefined }
     | undefined
@@ -226,15 +227,28 @@ const hotClient = [
   ""
 ].join("\n")
 
-// On a workbench page, `?bare` keeps everything but the overlay's iframe.
-const bare =
-  `!(${workbenchPath}.test(location.pathname) && new URLSearchParams(location.search).has("bare"))`
+// The path under `base`, which ends in `/`, keeping that `/`.
+const underBase = (base: string, path: string): string | undefined =>
+  path.startsWith(base) ? path.slice(base.length - 1) : undefined
 
-const devToolsClient = (options: OverlayOptions, workbench: boolean): string =>
+// On a workbench page, `?bare` keeps everything but the overlay's iframe.
+const bare = (base: string): string =>
+  `!(location.pathname.startsWith(${
+    JSON.stringify(base)
+  }) && ${workbenchPath}.test(location.pathname.slice(${
+    base.length - 1
+  })) && new URLSearchParams(location.search).has("bare"))`
+
+const devToolsClient = (
+  options: OverlayOptions,
+  workbench: string | undefined
+): string =>
   [
     "import { DevTools } from \"@effect/ui-devtools\";",
-    workbench
-      ? `DevTools.attach({ ...${JSON.stringify(options)}, panel: ${bare} });`
+    workbench !== undefined
+      ? `DevTools.attach({ ...${JSON.stringify(options)}, panel: ${
+        bare(workbench)
+      } });`
       : `DevTools.attach(${JSON.stringify(options)});`,
     ""
   ].join("\n")
@@ -311,9 +325,8 @@ export const plugin = (options?: Options): Plugin => {
     ? options.overlay
     : {}
   const workbench = options?.workbench
-  const devToolsSource = overlay
-    ? devToolsClient(overlayOptions, workbench !== undefined)
-    : undefined
+  // Vite's resolved `base`, such as `/app/`.
+  let base = "/"
   let bound = Promise.resolve(false)
   let partial = false
   return {
@@ -327,6 +340,7 @@ export const plugin = (options?: Options): Plugin => {
         : undefined,
     configResolved: (config) => {
       partial = hot && config.experimental?.hmrPartialAccept === true
+      base = config.base ?? "/"
     },
     resolveId: (id) =>
       hot && id === hotId
@@ -339,8 +353,11 @@ export const plugin = (options?: Options): Plugin => {
     load: (id) =>
       id === resolvedHotId
         ? hotClient
-        : id === resolvedDevToolsId
-        ? devToolsSource
+        : id === resolvedDevToolsId && overlay
+        ? devToolsClient(
+          overlayOptions,
+          workbench === undefined ? undefined : base
+        )
         : id === resolvedWorkbenchId && workbench !== undefined
         ? workbenchClient(workbench)
         : undefined,
@@ -357,8 +374,12 @@ export const plugin = (options?: Options): Plugin => {
       // catch-all, such as HtmlServerVite's.
       if (workbench !== undefined) {
         server.middlewares.use((req, res, next) => {
-          const url = req.url ?? "/"
-          if (req.method !== "GET" || !workbenchPath.test(url)) return next()
+          // Before Vite strips `base`, so this strips it.
+          const url = underBase(base, req.url ?? "/")
+          if (
+            req.method !== "GET" || url === undefined ||
+            !workbenchPath.test(url)
+          ) return next()
           server.transformIndexHtml(url, workbenchPage).then((html) => {
             res.statusCode = 200
             res.setHeader("Content-Type", "text/html")
@@ -406,14 +427,15 @@ export const plugin = (options?: Options): Plugin => {
       if (overlay) {
         tags.push({
           tag: "script",
-          attrs: { type: "module", src: devToolsId },
+          // Vite prefixes the page's own URLs with `base`, not a plugin's tags.
+          attrs: { type: "module", src: base.slice(0, -1) + devToolsId },
           injectTo: "head-prepend"
         })
       }
       if (hot) {
         tags.push({
           tag: "script",
-          attrs: { type: "module", src: hotId },
+          attrs: { type: "module", src: base.slice(0, -1) + hotId },
           injectTo: "head"
         })
       }

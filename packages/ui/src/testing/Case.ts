@@ -158,13 +158,15 @@ type PropsOf<C extends AnyComponent> =
  * @category utility types
  * @since 0.1.0
  */
-export type Requirements<C extends AnyComponent, I> =
-  | Exclude<
-    | Component.Requirements<C>
-    | (I extends { readonly props?: infer P } ? Effect.Services<P> : never),
-    I extends { readonly layer: Layer.Layer<infer A, any, any> } ? A : never
-  >
-  | (I extends { readonly layer?: infer L } ? LayerRequirements<L> : never)
+// Per branch of `I`, so a layer in one branch doesn't cover another.
+export type Requirements<C extends AnyComponent, I> = I extends unknown ?
+    | Exclude<
+      | Component.Requirements<C>
+      | (I extends { readonly props?: infer P } ? Effect.Services<P> : never),
+      I extends { readonly layer: Layer.Layer<infer A, any, any> } ? A : never
+    >
+    | (I extends { readonly layer?: infer L } ? LayerRequirements<L> : never)
+  : never
 
 // Distributes, as `Effect.Services` does for `Props | Effect<Props, never, Config>`.
 type LayerRequirements<L> = L extends Layer.Layer<any, any, infer R> ? R

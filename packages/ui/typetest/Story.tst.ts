@@ -400,6 +400,26 @@ describe("Case", () => {
     >()
   })
 
+  it("keeps a requirement that only some branches of a case provide", () => {
+    const todo = { id: "t1", title: "Buy milk", done: false }
+    const SavePending = SaveTodo.toLayer(() => Effect.never)
+    const input = Math.random() > 0.5
+      ? { props: { todo }, layer: SavePending }
+      : { props: { todo } }
+    const cases = Case.make(TodoItem, { either: input })
+    expect(Play.fromCase(cases.either)).type.toBe<
+      Effect.Effect<
+        Play.Play<
+          Component.Model<typeof TodoItem>,
+          Component.Message<typeof TodoItem>,
+          Component.Events<typeof TodoItem>
+        >,
+        Play.StepError,
+        SaveTodo | TestHost.TestHost | Scope.Scope
+      >
+    >()
+  })
+
   it("keeps the requirements of an Effect branch in a props union", () => {
     const props = {} as
       | Component.Props<typeof TodoItem>

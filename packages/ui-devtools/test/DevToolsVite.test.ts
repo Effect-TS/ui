@@ -184,5 +184,39 @@ describe("DevToolsVite", () => {
     } finally {
       server.close()
     }
+
+    // Under a Vite `base`, only the prefixed URL is a workbench page.
+    const based = DevToolsVite.plugin({
+      port: 0,
+      workbench: { cases: "/src/**/*.cases.ts" }
+    })
+    based.configResolved({ base: "/app/" })
+    const basedServer = setupServer(based)
+    try {
+      const prefixed = await request(
+        basedServer.middlewares,
+        "/app/__workbench/TodoItem/saved?bare"
+      )
+      assert.isTrue(prefixed.ended)
+      assert.deepStrictEqual(basedServer.transformed, [
+        "/__workbench/TodoItem/saved?bare"
+      ])
+      const unprefixed = await request(
+        basedServer.middlewares,
+        "/__workbench/TodoItem/saved"
+      )
+      assert.isTrue(unprefixed.passed)
+      assert.include(
+        based.load(based.resolveId("/@effect-ui/devtools")!)!,
+        "location.pathname.startsWith(\"/app/\")"
+      )
+      const tags = await based.transformIndexHtml()
+      assert.deepStrictEqual(
+        tags.filter((tag) => tag.tag === "script").map((tag) => tag.attrs.src),
+        ["/app/@effect-ui/devtools", "/app/@effect-ui/hot"]
+      )
+    } finally {
+      basedServer.close()
+    }
   })
 })
