@@ -2,4 +2,4 @@
 "@effect/ui-native": minor
 ---
 
-Type React Native's remaining styles in the forms native reads and its native props, including accessibility, on `.prop()`, and add `Css` in `@effect/ui-native/kit` to parse CSS strings into those forms. `text` now ends truncated lines with an ellipsis and is read by VoiceOver.
+Add typed native styles and props, including accessibility, and opt-in CSS parsers through `Css` in `@effect/ui-native/kit`. Text now defaults to a trailing ellipsis when truncated and is accessible to VoiceOver on iOS.

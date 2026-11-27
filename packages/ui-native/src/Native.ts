@@ -950,7 +950,7 @@ export interface ViewHost {
 export interface ViewKind {
   /** Fabric component name, or a function of the node and host. */
   readonly viewName: string | ((node: NativeNode, host: ViewHost) => string)
-  /** Initial Fabric props for every created node, or a function of the host. */
+  /** Processed Fabric props used at mount and restored when an override is removed. */
   readonly defaults?:
     | Readonly<Record<string, unknown>>
     | ((host: ViewHost) => Readonly<Record<string, unknown>>)

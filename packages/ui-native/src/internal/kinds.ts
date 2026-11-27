@@ -52,7 +52,6 @@ const text: ViewKind = {
 const input: ViewKind = {
   viewName: (_, host) =>
     host.os === "ios" ? "RCTSinglelineTextInputView" : "AndroidTextInput",
-  // As React Native's `TextInput` sets it, so screen readers reach the field.
   defaults: { accessible: true },
   props: {
     value(n, value, host) {

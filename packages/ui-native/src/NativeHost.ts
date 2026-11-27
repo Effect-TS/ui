@@ -176,8 +176,7 @@ export const make = (options: Options): {
     return out
   }
   const setNative = (n: NativeNode, name: string, value: unknown) => {
-    // Removing a prop puts back the kind's default, as leaving it out does.
-    // Defaults are already in Fabric's form, so only a set colour is processed.
+    // Kind defaults are already processed for Fabric, including colours.
     if (value === undefined) value = defaultsOf(n)?.[name]
     else if (isColor.test(name)) value = color(value)
     if (same(n.props[name], value)) return
@@ -355,8 +354,7 @@ export const make = (options: Options): {
   return { host, root, operations }
 }
 
-// An inline object, such as a `transform` array, is a new one each render, so
-// objects compare by value to skip committing an unchanged prop.
+// Skip Fabric commits for inline objects whose contents have not changed.
 const same = (a: any, b: any): boolean => {
   if (a === b) return true
   if (
