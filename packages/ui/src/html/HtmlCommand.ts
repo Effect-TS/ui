@@ -3,14 +3,14 @@
  * `scrollIntoView`, `measure`, `select`, `requestSubmit`, `showPicker`,
  * `waitForAnimations`) and `waitForPaint`.
  *
- * A Command runs once the render the issuing `update` caused is committed.
- * The synchronous element ref operations (`focus`, `blur`, `scrollIntoView`,
- * `measure`, `select`, `requestSubmit` and `showPicker`) run in the committing
- * task rather than waiting for the scheduler, so focus and DOM state are
- * current before the next browser event. Element operations reach the element
- * through `Html.Host`, which a test on `TestHost` fakes with
+ * Commands run after the render caused by the issuing `update` commits.
+ * Synchronous ref operations (`focus`, `blur`, `scrollIntoView`, `measure`,
+ * `select`, `requestSubmit` and `showPicker`) run in that same task, so the
+ * next browser event sees their DOM updates.
+ *
+ * Element operations use `Html.Host`, which tests can replace with
  * `Layer.succeed(Html.Host, ...)`. `waitForAnimations` reads `getAnimations`
- * on the element directly. It and `waitForPaint` wait for frames on
+ * directly from the element. It and `waitForPaint` wait for frames on
  * `HtmlSubscription.AnimationFrames`.
  *
  * @stability experimental

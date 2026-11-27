@@ -162,7 +162,6 @@ const PickMessage = UiSchema.TaggedEnum({
   RequestedMonth: { month: Schema.DateTimeUtc }
 })
 
-// The parent accepts every month request and lists the picked days.
 const PickPage = Html.component({
   name: "PickPage",
   model: Schema.Struct({

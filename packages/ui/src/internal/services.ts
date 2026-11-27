@@ -265,8 +265,7 @@ export const isNavigation = (
   command.service !== undefined && command.name.startsWith("@effect/ui/Router/")
 
 /**
- * Marks issued Commands to run in the committing task once their render
- * commits, rather than waiting for the scheduler.
+ * Runs marked Commands after render commit, without yielding to the scheduler.
  *
  * @internal
  */
