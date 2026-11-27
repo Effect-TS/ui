@@ -357,9 +357,7 @@ const write = (tape: ReadonlyArray<any>): string => {
         else {
           let before = open.before
           if (open.option !== undefined) {
-            if (
-              selectValue !== undefined && optionValue(text!) === selectValue
-            ) {
+            if (optionValue(text!) === selectValue) {
               open.option.set("selected", "")
               selectValue = undefined
             }
