@@ -79,22 +79,22 @@ Then point the agent at `http://127.0.0.1:4774/mcp`, for example in `.mcp.json`:
 
 The plugin starts the server with `vite dev` only and adds a `<meta>` tag with its URL, `size` and `fields` to the page, which `DevTools.layer` reads. Without Vite, run `effect-ui-devtools [--port <n>] [--size <n>] [--dispatch] [--field <name>]...` or `DevToolsServer.layer`, and pass `DevTools.layer({ server: "http://127.0.0.1:4774" })`. A server process can add `MessageLog.socket("ws://127.0.0.1:4774/log", { host: "server" })` to show its renders as sessions.
 
-| Tool                 | Does                                                                                    |
-| -------------------- | --------------------------------------------------------------------------------------- |
-| `list_sessions`      | the sessions held: app, host, connected, controllable, paused at, the tags not recorded |
-| `list_instances`     | the instances of a session, with how their Command runs ended                           |
-| `list_entries`       | entries as rows with their `fields`, filtered by instance, kind, `_tag` or field value  |
-| `count_entries`      | entries by entry and message `_tag`                                                     |
-| `get_entry`          | one entry's Wire frame                                                                  |
-| `get_chain`          | the causal chain the panel shows                                                        |
-| `get_state`          | an instance's Model, props and query results, now or at an entry                        |
-| `diff_state`         | what an entry changed in its instance's Model                                           |
-| `show_entry`         | paints the page at an entry, as Time travel does                                        |
-| `resume`             | shows the live page again                                                               |
-| `set_recording`      | stops or starts recording a message `_tag`, as the panel's Stop recording does          |
-| `get_message_schema` | the JSON Schema of an instance's messages, or of one `_tag`                             |
-| `dispatch`           | sends 1 to 100 messages to an instance, all decoded first; off by default               |
-| `wait`               | waits for the Command runs started since an entry to end                                |
+| Tool                 | Does                                                                                          |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| `list_sessions`      | the sessions held: app, host, connected, controllable, paused at, the tags not recorded       |
+| `list_instances`     | the instances of a session, with how their Command runs ended                                 |
+| `list_entries`       | entries as rows with their `fields`, filtered by instance, kind, `_tag` or field value        |
+| `count_entries`      | entries by entry and message `_tag`                                                           |
+| `get_entry`          | one entry's Wire frame                                                                        |
+| `get_chain`          | the causal chain the panel shows                                                              |
+| `get_state`          | an instance's Model, props and query results, now or at an entry                              |
+| `diff_state`         | what an entry changed in its instance's Model                                                 |
+| `show_entry`         | paints the page at an entry, as Time travel does                                              |
+| `resume`             | shows the live page again                                                                     |
+| `set_recording`      | stops or starts recording a message `_tag`, as the panel's Stop recording does                |
+| `get_message_schema` | dispatch JSON Schema and per-tag examples, templates, or reasons no safe example is available |
+| `dispatch`           | sends 1 to 100 messages to an instance, all decoded first; off by default                     |
+| `wait`               | waits for the Command runs started since an entry to end                                      |
 
 The read tools answer from the server's own copy of the log, so they keep working after a reload or a closed tab. The others go to the page while it is open. An agent's `show_entry` is the same pause as Time travel, so the panel shows it and either side can resume it. `dispatch` runs `update` and its real Commands, which is why it needs `dispatch: true` (or `--dispatch`). A redacted field needs a real value, and comes back redacted.
 

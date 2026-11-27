@@ -247,7 +247,11 @@ const SetRecording = control(Tool.make("set_recording", {
 
 const GetMessageSchema = read(Tool.make("get_message_schema", {
   description:
-    "Returns the JSON Schema of the messages an instance accepts, as dispatch takes them.",
+    "Returns dispatch JSON Schema and per-tag examples, filtered by _tag when given. " +
+    "Entries with only message pass the dispatch decoder and are ready to send. " +
+    "Templates need edits: replace { \"~redacted\": true } placeholders when redacted is true, " +
+    "and fix decode errors reported by invalid. Entries without message have no safe example; " +
+    "invalid explains why.",
   parameters: Schema.Struct({
     session: SessionParam,
     instance: Schema.Number,

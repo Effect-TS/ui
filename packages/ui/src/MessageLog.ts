@@ -2091,6 +2091,18 @@ const encodeCause = (cause: Cause.Cause<unknown>): typeof CauseWire.Type => ({
 })
 
 /**
+ * Returns a schema that encodes `Schema.Redacted` values as
+ * `{ "~redacted": true }` and rejects those placeholders on decode.
+ * Returns `schema` unchanged if it contains no `Schema.Redacted`.
+ *
+ * @stability experimental
+ * @category Wire
+ * @since 0.1.0
+ */
+export const redactSchema = (schema: Schema.Top): Schema.Top =>
+  holdsRedacted(schema.ast) ? Schema.make(redactAST(schema.ast)) : schema
+
+/**
  * Encodes any value as JSON, best effort, with the Wire's placeholders for
  * what has no JSON form.
  *
