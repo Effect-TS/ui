@@ -2820,6 +2820,33 @@ describe("Runtime", () => {
         assert.deepStrictEqual(root.model(), { count: 1, seen: "two" })
         assert.strictEqual(root.text(), "two:1:twotwo")
       })))
+
+    it.effect("non-plain props such as Date compare by Equal", () =>
+      provideHost(Effect.gen(function*() {
+        const Stamp = Component.define({
+          name: "Stamp",
+          props: Schema.Date,
+          model: Schema.Null,
+          message: Schema.Never
+        }).make({
+          init: () => null,
+          update: ($) => $.model,
+          view: (h) => h.el("span", String(h.props.getTime()))
+        })
+        const root = yield* TestHost.mount(Stamp, new Date(0))
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "0")
+
+        root.setProps(new Date(1))
+        yield* TestHost.settle
+        assert.strictEqual(root.text(), "1")
+        assert.deepStrictEqual(tags(root, "/Stamp"), ["Mounted", "PropsChanged"])
+
+        // A new Date with the same timestamp is equal and logs nothing.
+        root.setProps(new Date(1))
+        yield* TestHost.settle
+        assert.deepStrictEqual(tags(root, "/Stamp"), ["Mounted", "PropsChanged"])
+      })))
   })
 
   describe("provided Layers", () => {
