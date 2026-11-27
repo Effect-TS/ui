@@ -4466,4 +4466,185 @@ describe("BrowserHost", { concurrent: false }, () => {
       ).pipe(Effect.provideService(Renderer.Renderer, { host: outer }))
       expect(root.model()).toEqual({ hasBrowserRenderer: true, heard: true })
     }).pipe(Effect.scoped))
+
+  describe("defineElement", () => {
+    it.effect("updates props from attributes and properties without resetting the Model", () =>
+      Effect.gen(function*() {
+        const TourForm = Html.component({
+          name: "TourForm",
+          props: Schema.Struct({
+            unitId: Schema.String,
+            compact: Schema.Boolean
+          }),
+          model: Schema.Number,
+          message: Schema.Literal("Bump")
+        }).make({
+          init: () => 0,
+          update: ($) => $.model + 1,
+          head: () => ({ title: "Widget title" }),
+          view: (h, count) =>
+            h.div(
+              h.span(`${h.props.unitId}:${h.props.compact}:${count}`),
+              h.button.on("click", "Bump").children("Bump")
+            )
+        })
+        const titleBefore = document.title
+        const app = yield* container
+        app.innerHTML = `<ce-tour-form unit-id="u1">Loading</ce-tour-form>`
+        const element = app.querySelector("ce-tour-form") as HTMLElement & {
+          unitId: string
+          compact: boolean
+        }
+        element.compact = true
+
+        yield* Layer.build(
+          BrowserHost.defineElement("ce-tour-form", TourForm, {
+            props: { unitId: "", compact: false },
+            attributes: { unitId: Schema.String }
+          })
+        )
+
+        expect(element.querySelector("span")!.textContent).toBe("u1:true:0")
+        expect(element.textContent).not.toContain("Loading")
+
+        element.querySelector("button")!.click()
+        yield* tick
+        expect(element.querySelector("span")!.textContent).toBe("u1:true:1")
+
+        element.setAttribute("unit-id", "u2")
+        yield* tick
+        expect(element.querySelector("span")!.textContent).toBe("u2:true:1")
+
+        element.compact = false
+        yield* tick
+        expect(element.querySelector("span")!.textContent).toBe("u2:false:1")
+
+        element.removeAttribute("unit-id")
+        yield* tick
+        expect(element.querySelector("span")!.textContent).toBe(":false:1")
+        expect(document.title).toBe(titleBefore)
+      }).pipe(Effect.scoped))
+
+    it.effect("dispatches tagged emissions as bubbling composed CustomEvents from a shadow root with styles", () =>
+      Effect.gen(function*() {
+        const Events = UiSchema.TaggedEnum({
+          TourBooked: { unitId: Schema.String }
+        })
+        const ShadowTour = Html.component({
+          name: "ShadowTour",
+          props: Schema.Struct({ unitId: Schema.String }),
+          model: Schema.Null,
+          message: Schema.Literal("Book"),
+          events: Events
+        }).make({
+          init: () => null,
+          update: ($) => $.emit(Events.TourBooked({ unitId: $.props.unitId })),
+          view: (h) => h.button.on("click", "Book").children("Book")
+        })
+
+        yield* Layer.build(
+          BrowserHost.defineElement("ce-shadow-tour", ShadowTour, {
+            props: { unitId: "" },
+            attributes: { unitId: Schema.String },
+            shadow: { mode: "open", styles: [".tour { color: red; }"] }
+          })
+        )
+
+        const received: Array<CustomEvent> = []
+        const onBooked = (event: Event) => {
+          received.push(event as CustomEvent)
+        }
+        yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            document.body.addEventListener("tourbooked", onBooked)
+          ),
+          () =>
+            Effect.sync(() =>
+              document.body.removeEventListener("tourbooked", onBooked)
+            )
+        )
+
+        const app = yield* container
+        const element = document.createElement("ce-shadow-tour")
+        element.setAttribute("unit-id", "u9")
+        app.appendChild(element)
+
+        expect(element.shadowRoot).not.toBeNull()
+        expect(element.shadowRoot!.adoptedStyleSheets).toHaveLength(1)
+
+        element.shadowRoot!.querySelector("button")!.click()
+        expect(received).toHaveLength(1)
+        expect(received[0]!.bubbles).toBe(true)
+        expect(received[0]!.composed).toBe(true)
+        expect(received[0]!.detail).toEqual(Events.TourBooked({ unitId: "u9" }))
+      }).pipe(Effect.scoped))
+
+    it.effect("keeps Model across a synchronous move and closes its scope on removal or layer release", () =>
+      Effect.gen(function*() {
+        class Prefix extends Context.Service<Prefix, string>()("CePrefix") {}
+        const prefixes: Array<string> = []
+        let closed = 0
+        const Track = Mount.make(
+          "CeTrack",
+          { args: {} },
+          () =>
+            Effect.gen(function*() {
+              prefixes.push(yield* Prefix)
+              return yield* Effect.onExit(Effect.never, () =>
+                Effect.sync(() => {
+                  closed++
+                }))
+            })
+        )
+        const Counter = Html.component({
+          name: "CeCounter",
+          model: Schema.Number,
+          message: Schema.Literal("Bump")
+        }).make({
+          init: () => 0,
+          update: ($) => $.model + 1,
+          view: (h, count) =>
+            h.div.onMount(Track()).children(
+              h.span(String(count)),
+              h.button.on("click", "Bump").children("Bump")
+            )
+        })
+
+        const layerScope = yield* Scope.make()
+        yield* Layer.buildWithScope(
+          BrowserHost.defineElement("ce-counter", Counter, {
+            props: {}
+          }).pipe(Layer.provide(Layer.succeed(Prefix, "ok"))),
+          layerScope
+        )
+
+        const firstParent = yield* container
+        const secondParent = yield* container
+        const first = document.createElement("ce-counter")
+        firstParent.appendChild(first)
+        yield* tick
+
+        expect(prefixes).toEqual(["ok"])
+        first.querySelector("button")!.click()
+        yield* tick
+        expect(first.querySelector("span")!.textContent).toBe("1")
+
+        secondParent.appendChild(first)
+        yield* tick
+        expect(first.querySelector("span")!.textContent).toBe("1")
+        expect(prefixes).toEqual(["ok"])
+        expect(closed).toBe(0)
+
+        first.remove()
+        yield* tick
+        expect(closed).toBe(1)
+
+        const second = document.createElement("ce-counter")
+        secondParent.appendChild(second)
+        yield* tick
+        expect(prefixes).toEqual(["ok", "ok"])
+        yield* Scope.close(layerScope, Exit.void)
+        expect(closed).toBe(2)
+      }).pipe(Effect.scoped))
+  })
 })
