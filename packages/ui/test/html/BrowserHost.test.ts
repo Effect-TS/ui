@@ -1430,6 +1430,35 @@ describe("BrowserHost", { concurrent: false }, () => {
         ]])
       }).pipe(Effect.scoped))
 
+    it.effect("two mounts of the same component with different keys produce distinct element ids", () =>
+      Effect.gen(function*() {
+        const Slot = Html.component({
+          name: "Slot",
+          model: Schema.Null,
+          message: Schema.Never
+        }).make({
+          init: () => null,
+          update: ($) => $.model,
+          view: (h) => h.button.id(h.id("trigger")).children("Open")
+        })
+        const [first, second] = [yield* container, yield* container]
+        yield* BrowserHost.mountEffect(Slot, {}, first, {
+          head: false,
+          key: "a"
+        })
+        yield* BrowserHost.mountEffect(Slot, {}, second, {
+          head: false,
+          key: "b"
+        })
+        const firstButton = first.querySelector("button")!
+        const secondButton = second.querySelector("button")!
+        expect(firstButton.id).not.toBe("")
+        expect(secondButton.id).not.toBe("")
+        expect(firstButton.id).not.toBe(secondButton.id)
+        expect(document.getElementById(firstButton.id)).toBe(firstButton)
+        expect(document.getElementById(secondButton.id)).toBe(secondButton)
+      }).pipe(Effect.scoped))
+
     clicksWhenConnected("x-clicks-on-connect")
     const LogPage = Component.define({
       name: "Page",
