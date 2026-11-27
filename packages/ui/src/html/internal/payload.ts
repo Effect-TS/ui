@@ -158,8 +158,21 @@ const isComposingKey = (event: KeyboardEvent): boolean =>
   event.isComposing === true ||
   (event as { readonly keyCode?: number }).keyCode === 229
 
-// Focus leaving the element that composed means its key events may go unseen.
-const forgetKeys = () => composingCodes.clear()
+// While a key is pending, its window reports every release, wherever focus
+// moves in the page. Losing focus to another window or frame forgets them.
+let watched: Window | null = null
+const watch = (view: Window | null): void => {
+  if (view === watched) return
+  watched?.removeEventListener("keyup", noteKey, true)
+  watched?.removeEventListener("blur", forgetKeys)
+  view?.addEventListener("keyup", noteKey, true)
+  view?.addEventListener("blur", forgetKeys)
+  watched = view
+}
+const forgetKeys = (): void => {
+  composingCodes.clear()
+  watch(null)
+}
 
 /**
  * Tracks keydown and keyup so the keyup of a key whose keydown composed still
@@ -169,16 +182,18 @@ const forgetKeys = () => composingCodes.clear()
 export const noteKey = (event: Event): void => {
   const e = event as KeyboardEvent
   if (!e.code) return
-  if (e.type === "keydown") {
-    if (isComposingKey(e)) {
-      composingCodes.add(e.code)
-      ;(event.composedPath()[0] ?? event.target)?.addEventListener(
-        "blur",
-        forgetKeys,
-        { once: true }
-      )
-    } else if (!e.repeat) composingCodes.delete(e.code)
-  } else if (composingCodes.delete(e.code)) composingKeyups.add(event)
+  if (e.type === "keydown" && isComposingKey(e)) {
+    const node = event.target as Node
+    watch((node.ownerDocument ?? node as Document).defaultView ?? null)
+    composingCodes.add(e.code)
+    return
+  }
+  // A held key repeats its keydown, which is no new press.
+  if (e.type === "keydown" && e.repeat) return
+  if (composingCodes.delete(e.code)) {
+    if (e.type === "keyup") composingKeyups.add(event)
+    if (composingCodes.size === 0) watch(null)
+  }
 }
 
 /**

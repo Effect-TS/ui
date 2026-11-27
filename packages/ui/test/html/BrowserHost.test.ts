@@ -2326,7 +2326,7 @@ describe("BrowserHost", { concurrent: false }, () => {
           expect(root.model()).toEqual([event.timeStamp])
         }).pipe(Effect.scoped))
 
-      it.effect("a keyup reports composing when the keydown of the same key composed, until that keyup or focus leaving, with only keyup handled", () =>
+      it.effect("a keyup reports composing when the keydown of the same key composed, until that keyup or the window losing focus, with only keyup handled", () =>
         Effect.gen(function*() {
           const Released = Html.component({
             name: "Released",
@@ -2337,9 +2337,12 @@ describe("BrowserHost", { concurrent: false }, () => {
             init: (): ReadonlyArray<string> => [],
             update: ($, entry) => [...$.model, entry],
             view: (h) =>
-              h.input.attr("aria-label", "Text").on(
-                "keyup",
-                ({ composing, key }) => `el:${key}:${composing}`
+              h.div(
+                h.input.attr("aria-label", "Text").on(
+                  "keyup",
+                  ({ composing, key }) => `el:${key}:${composing}`
+                ),
+                h.button.children("Sibling")
               ),
             subscriptions: ({ props }) =>
               props.watch
@@ -2416,21 +2419,30 @@ describe("BrowserHost", { concurrent: false }, () => {
             "el:Enter:true",
             "doc:Enter:true"
           ])
-          // The commit key released outside, then pressed again there before
-          // focus comes back: no listener saw either.
           const outside = (yield* container).appendChild(
             document.createElement("button")
           )
           expect(
             yield* released(false, (text) => {
+              // Focus moving within the page while the commit key is held.
+              commit(text)
+              ;(text.nextElementSibling as HTMLElement).focus()
+              text.focus()
+              fire(text, "keyup", { key: "Enter" })
+              // The commit key released outside the host, then pressed again
+              // there before focus comes back.
               commit(text)
               outside.focus()
               fire(outside, "keyup", { key: "Enter" })
               fire(outside, "keydown", { key: "Enter" })
               text.focus()
               fire(text, "keyup", { key: "Enter" })
+              // The window losing focus while the commit key is held.
+              commit(text)
+              window.dispatchEvent(new FocusEvent("blur"))
+              fire(text, "keyup", { key: "Enter" })
             })
-          ).toEqual(["el:Enter:false"])
+          ).toEqual(["el:Enter:true", "el:Enter:false", "el:Enter:false"])
         }).pipe(Effect.scoped))
 
       it.effect("a composing field's value isn't written until compositionend, including inside shadow DOM", () =>
