@@ -352,7 +352,7 @@ export const makeHost = (
   const elementOf = (node: globalThis.Node) =>
     (node as Node).$r?.v as View.Element<any, any> | undefined
 
-  /** What a handler set with `options` does to its event once it produces a message. */
+  /** Applies a sending handler's options to its event. */
   const sent = (
     node: globalThis.Node,
     event: Event | undefined,
@@ -360,7 +360,7 @@ export const makeHost = (
   ) => {
     if (options?.preventDefault === true) event?.preventDefault()
     if (options?.capturePointer === true && event?.type === "pointerdown") {
-      // A pointer the browser doesn't know as active, such as a synthetic event's, can't be captured.
+      // Throws for a pointer that isn't active, such as a synthetic event's.
       try {
         ;(node as globalThis.Element).setPointerCapture(
           (event as PointerEvent).pointerId
@@ -412,7 +412,7 @@ export const makeHost = (
   type Moves = Map<number, readonly [globalThis.Element, PointerEvent]>
   /** The latest move of each pointer, by id, while a frame is pending. */
   let moves: Moves | undefined
-  /** The moves the frame is sending and hasn't sent yet, so a release or cancel a handler fires still finds its own. */
+  /** The frame's moves not sent yet, so a reentrant release or cancel finds them. */
   let flushing: Moves | undefined
 
   const sendMove = (
@@ -448,7 +448,6 @@ export const makeHost = (
     }
   }
 
-  /** Sends the pointer's queued move before a press or release, and drops it at a cancel. */
   const endMove = (name: string, event: PointerEvent) => {
     const id = event.pointerId
     const queued = moves?.get(id) ?? flushing?.get(id)
@@ -717,7 +716,6 @@ export const makeHost = (
     container.addEventListener(name, listener, true)
     if (name === "click") listen("pointerdown")
     else if (name === "pointermove") {
-      // So a queued move goes out before its pointer's next press or release.
       listen("pointerdown")
       listen("pointerup")
       listen("pointercancel")
@@ -977,7 +975,6 @@ export const makeHost = (
       }
       listening.clear()
       moves = undefined
-      // Stops a frame that is sending.
       flushing?.clear()
       endTargets()
     }

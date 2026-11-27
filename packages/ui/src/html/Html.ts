@@ -718,11 +718,11 @@ export interface FocusOutPayload extends FocusWithinPayload, BlurPayload {}
  * cancelled sends none.
  *
  * `pointermove` is sent at most once per animation frame for each pointer,
- * with its latest position. A move still waiting when its pointer is pressed
- * or released inside the app is sent before that element event, and one
- * waiting at `pointercancel` is dropped.
- * Its default can't be cancelled. To follow a drag outside the element, see
- * `PointerDownOptions`.
+ * with its latest position, and its default can't be cancelled. A queued
+ * move is sent before its pointer's `pointerdown` or `pointerup` element
+ * event, and dropped at `pointercancel`, so the Model can revert at once.
+ * A capture-phase document subscriber hears the press or release before
+ * that move. To follow a drag outside the element, see `PointerDownOptions`.
  *
  * @stability experimental
  * @category events

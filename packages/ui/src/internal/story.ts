@@ -1900,7 +1900,7 @@ export interface Fired<Props, Model, Msg, Events> {
   readonly story: State<Props, Model, Msg, Events>
   readonly prevented: boolean
   readonly handled: boolean
-  /** The element a `pointerdown` captured its pointer on, as the browser host does. */
+  /** The element a `pointerdown` captured on. */
   readonly captured: Locator.Node | undefined
 }
 

@@ -268,7 +268,6 @@ class HtmlPlayCursor extends internal.PlayCursor {
           }
           const skipMouse = send(found, "pointerdown")
           if (!skipMouse) send(found, "mousedown", () => scene.mouse)
-          // A captured pointer's release and click go to the capturing element.
           return [captured ?? found, skipMouse] as const
         })
       )

@@ -67,13 +67,8 @@
  * target is always cancelled, and its strings and files are read then.
  *
  * A `pointerdown` handler set with `{ capturePointer: true }` captures the
- * pointer on its element when it produces a message, so a drag keeps its
- * `pointermove`, `pointerup` and `pointercancel` outside the element.
- * `pointermove` is sent at most once per animation frame for each pointer.
- * A move still queued when its pointer is pressed or released inside the app
- * is sent before that element event, and one queued at `pointercancel` is
- * dropped, so the Model can revert at once. The order only holds between
- * element events: a capture-phase document subscriber hears the press or release first.
+ * pointer on its element when it produces a message. `pointermove` is
+ * coalesced per animation frame, as `Html.Events` describes.
  *
  * `value`, `checked`, `selected` and `open` are controlled. The host sets them
  * after the element's children exist, skips a no-op so the caret doesn't jump,

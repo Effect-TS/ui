@@ -118,7 +118,7 @@ export class PlayCursor {
     | {
       readonly handled: boolean
       readonly prevented: boolean
-      /** The element a `pointerdown` captured its pointer on, as the browser host does. */
+      /** The element a `pointerdown` captured on. */
       readonly captured: TestHost.TestElement | undefined
     }
     | undefined
