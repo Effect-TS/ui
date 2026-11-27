@@ -5,8 +5,9 @@
  * `Reordered { from, to }` and draws whatever `items` says.
  *
  * `SortableList` is a headless component. It keeps the row being moved and
- * where it would land, moves focus to the moved row's handle after a drop,
- * and gives the consumer what to announce.
+ * where it would land, moves focus to the moved row's handle after a drop
+ * by handle, and gives the consumer what to announce. A drop by pointer
+ * leaves focus where it is.
  *
  * **Anatomy**
  *
@@ -239,7 +240,7 @@ const SortableListMessage = UiSchema.TaggedEnum({
   DroppedOnItem: { id: Schema.String, after: Schema.Boolean },
   DroppedOnList: {},
   EndedDrag: {},
-  ChangedItems: {},
+  ChangedProps: {},
   FoundDirection: { rtl: Schema.Boolean }
 })
 
@@ -407,9 +408,19 @@ const releasedPointer = HtmlSubscription.onDocument(
   SortableListMessage.ReleasedPointer()
 )
 
-const changedItems = Subscription.make(
-  "changedItems",
-  Stream.make(SortableListMessage.ChangedItems())
+// The props no longer fit the Model: the moving row is gone or the list is
+// disabled, or `items` no longer matches the last outcome.
+const outdated = (
+  { ended, moving }: SortableListModel,
+  { disabled, items }: SortableListProps
+): boolean =>
+  moving !== null
+    ? disabled === true || !items.includes(moving.id)
+    : ended !== null && endedAt(ended, items) < 0
+
+const changedProps = Subscription.make(
+  "changedProps",
+  Stream.make(SortableListMessage.ChangedProps())
 )
 
 const announcementOf = (
@@ -462,9 +473,11 @@ const announcementOf = (
  * `list` handles `focusout`, `dragenter`, `dragleave` and `drop`; `item`
  * handles `dragstart`, `dragover`, `dragleave`, `drop` and `dragend`;
  * `handle` handles `click`, `mousedown` and `keydown`. Each is on a layer of
- * its own, so the consumer's handlers still run. A row drags only rows of
- * the same list, and a drop in a gap between rows lands where the last row
- * hovered said. The list follows the nearest `DirectionProvider` above it
+ * its own, so the consumer's handlers still run. `focusout`, `mousedown`
+ * and `keydown` are handled only during a move by handle, so otherwise
+ * they reach the consumer's handlers on enclosing elements. A row drags only
+ * rows of the same list, and a drop in a gap between rows lands where the
+ * last row hovered said. The list follows the nearest `DirectionProvider` above it
  * or, without one, the list's CSS `direction`.
  *
  * @stability experimental
@@ -518,15 +531,20 @@ export const SortableList = Html.component({
     DroppedOnList: ($) =>
       dragFrom($) < 0 ? $.model : commit($, $.model.moving!.to, false),
     EndedDrag: ($) => $.model.moving?.dragging === true ? cancel($) : $.model,
-    ChangedItems: ($) => $.evolve({ ended: null }),
+    // Ends the move for good, so restoring the row or enabling the list
+    // can't bring it back, and forgets an outcome a later edit could
+    // otherwise match again.
+    ChangedProps: ($) =>
+      !outdated($.model, $.props)
+        ? $.model
+        : $.model.moving === null
+        ? $.evolve({ ended: null })
+        : cancel($),
     FoundDirection: ($, { rtl }) => $.evolve({ rtl })
   },
   subscriptions: ({ model, props }) => [
     model.pressed && releasedPointer,
-    // Once `items` no longer matches the last outcome, forget it, so a later
-    // edit that restores the old count can't bring the announcement back.
-    model.ended !== null && endedAt(model.ended, props.items) < 0 &&
-    changedItems
+    outdated(model, props) && changedProps
   ],
   parts: (p, model) => {
     const { items } = p.props
@@ -610,7 +628,7 @@ export const SortableList = Html.component({
 
     const handlePart = p.part("button", (b, id: string) => {
       known(id)
-      return b
+      const own = b
         .attrs({
           type: "button",
           "aria-disabled": undefined,
@@ -621,14 +639,12 @@ export const SortableList = Html.component({
         .disabled(disabled)
         .ref(Handle.at(id))
         .on("click", SortableListMessage.ClickedHandle({ id }))
-        .on(
-          "mousedown",
-          () => keyboard ? SortableListMessage.PressedHandle() : undefined
-        )
+      return !keyboard ? own : own
+        .on("mousedown", SortableListMessage.PressedHandle())
         .on(
           "keydown",
           (key) =>
-            keyboard && !key.composing &&
+            !key.composing &&
               (key.key === "Escape" || ListNavigation.isKey(key, orientation))
               ? SortableListMessage.PressedKey({ key: key.key })
               : undefined,
@@ -642,16 +658,17 @@ export const SortableList = Html.component({
       disabled,
       orientation,
       list: p.part((b) => {
-        const own = b.attrs({
+        const attrs = b.attrs({
           "data-orientation": orientation,
           "data-moving": flag(move !== undefined),
           "data-disabled": flag(disabled)
-        }).on(
+        })
+        const own = !keyboard ? attrs : attrs.on(
           "focusout",
           (payload) =>
-            keyboard && !(payload as Html.FocusOutPayload).within
-              ? SortableListMessage.LeftList()
-              : undefined
+            (payload as Html.FocusOutPayload).within
+              ? undefined
+              : SortableListMessage.LeftList()
         )
         const dropping = disabled ? own : own
           .on("dragenter", SortableListMessage.EnteredList())

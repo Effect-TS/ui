@@ -103,7 +103,8 @@ describe("SortableList in a document", { concurrent: false }, () => {
       }
 
       const Message = UiSchema.TaggedEnum({
-        Reordered: { from: Schema.Number, to: Schema.Number }
+        Reordered: { from: Schema.Number, to: Schema.Number },
+        PressedEscape: {}
       })
 
       const App = Html.component({
@@ -112,7 +113,8 @@ describe("SortableList in a document", { concurrent: false }, () => {
           todos: Schema.Array(Todo),
           events: Schema.Array(
             Schema.Struct({ from: Schema.Number, to: Schema.Number })
-          )
+          ),
+          escapes: Schema.Number
         }),
         message: Message
       }).make({
@@ -122,13 +124,16 @@ describe("SortableList in a document", { concurrent: false }, () => {
             { id: "b", title: "Walk dog" },
             { id: "c", title: "Read book" }
           ],
-          events: []
+          events: [],
+          escapes: 0
         }),
         update: {
-          Reordered: ($, { from, to }) => ({
-            todos: reorder($.model.todos, from, to),
-            events: [...$.model.events, { from, to }]
-          })
+          Reordered: ($, { from, to }) =>
+            $.evolve({
+              todos: reorder($.model.todos, from, to),
+              events: [...$.model.events, { from, to }]
+            }),
+          PressedEscape: ($) => $.evolve({ escapes: $.model.escapes + 1 })
         },
         view: (h, model) =>
           SortableList(h, {
@@ -137,7 +142,11 @@ describe("SortableList in a document", { concurrent: false }, () => {
               Reordered: ({ from, to }) => Message.Reordered({ from, to })
             },
             view: (sortableList) =>
-              h.div(
+              h.div.on(
+                "keydown",
+                ({ key }) =>
+                  key === "Escape" ? Message.PressedEscape() : undefined
+              ).children(
                 sortableList.list(h.ul.attr("id", "list")).children(
                   model.todos.map((todo) =>
                     sortableList.item({
@@ -188,6 +197,19 @@ describe("SortableList in a document", { concurrent: false }, () => {
       assert.strictEqual(
         byId("status").textContent,
         "Buy milk Dropped 3 of 3"
+      )
+
+      // An idle handle leaves Escape to the enclosing element; a move's
+      // Escape cancels the move instead.
+      key(handleA, "Escape")
+      keyboardClick(handleA)
+      yield* tick
+      key(handleA, "Escape")
+      yield* tick
+      assert.strictEqual(root.model()?.escapes, 1)
+      assert.strictEqual(
+        byId("status").textContent,
+        "Buy milk Cancelled 3 of 3"
       )
     }).pipe(Effect.scoped))
 

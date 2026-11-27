@@ -157,7 +157,7 @@ describe("SortableList", () => {
       // Later unrelated list edits must not rewrite the Dropped announcement.
       scene.props({ items: ["b", "a", "c", "d"] })
       scene.expect(status).toHaveText("")
-      scene.subscription("changedItems", { _tag: "ChangedItems" })
+      scene.subscription("changedProps", { _tag: "ChangedProps" })
       scene.props({ items: ["b", "a", "c"] })
       scene.expect(status).toHaveText("")
 
@@ -188,12 +188,6 @@ describe("SortableList", () => {
         { items: ["a", "b", "c"] },
         standIn
       )
-
-      // Idle Escape and ArrowDown are left alone for enclosing widgets/scrolling.
-      scene.keydown(handle("a"), "Escape").expectIgnored()
-        .expectDefaultPrevented(false)
-      scene.keydown(handle("a"), "ArrowDown").expectIgnored()
-        .expectDefaultPrevented(false)
 
       // Pick up "a" and activate "c"'s handle to place it at index 2.
       scene.click(handle("a"))
@@ -260,6 +254,34 @@ describe("SortableList", () => {
       scene.fireDocument("mouseup", mouse)
       scene.fire(list, "focusout", { within: false, disabled: false })
       assert.isUndefined(scene.get(list).attrs?.["data-moving"])
+      assert.deepStrictEqual(scene.current.emitted, [])
+    }))
+
+  it.effect("removing the moving row or disabling the list ends the move", () =>
+    Effect.gen(function*() {
+      const scene = yield* HtmlScene.make(
+        SortableList,
+        { items: ["a", "b", "c"] },
+        standIn
+      )
+
+      scene.click(handle("a"))
+      drain(scene)
+      scene.keydown(handle("a"), "End")
+      drain(scene)
+      scene.props({ items: ["b", "c"] })
+      scene.subscription("changedProps", { _tag: "ChangedProps" })
+      scene.props({ items: ["a", "b", "c"] })
+      scene.click(handle("b"))
+      drain(scene)
+      scene.expect(status).toHaveText("PickedUp:b:2/3")
+
+      scene.props({ items: ["a", "b", "c"], disabled: true })
+      scene.subscription("changedProps", { _tag: "ChangedProps" })
+      scene.props({ items: ["a", "b", "c"] })
+      scene.click(handle("c"))
+      drain(scene)
+      scene.expect(status).toHaveText("PickedUp:c:3/3")
       assert.deepStrictEqual(scene.current.emitted, [])
     }))
 
