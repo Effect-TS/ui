@@ -201,16 +201,23 @@ const listenFor = (
     let state: globalEvents.Held = {}
     return {
       initial: Effect.void,
+      update: (latest) => {
+        if (!globalEvents.listenerOf(latest)?.held) state = {}
+      },
       close: source.listen(
         target,
         event,
         { capture, custom },
         (payload, preventDefault) =>
           enter((latest) => {
-            const listener = globalEvents.listenerOf(latest) ?? declared
-            if (!listener.held) state = {}
             try {
-              globalEvents.run(listener, payload, preventDefault, emit, state)
+              globalEvents.run(
+                globalEvents.listenerOf(latest) ?? declared,
+                payload,
+                preventDefault,
+                emit,
+                state
+              )
             } catch (error) {
               fail(Cause.die(error))
             }
@@ -467,7 +474,7 @@ export const keySequences = <
   table: Rows,
   options?: KeySequenceOptions | undefined
 ): Subscription.Subscription<Rows[number]["message"]> => {
-  checkSequences(table)
+  checkSequences(table, keys.matches)
   const timeout = Duration.toMillis(options?.timeout ?? 1000)
   const step: globalEvents.Step = (
     payload: GlobalPayload<Html.KeyPayload>,
@@ -480,7 +487,8 @@ export const keySequences = <
     const at = payload.timeStamp ?? 0
     // A clock that went back counts as expired too.
     const gap = pending === undefined ? -1 : at - pending.at
-    const tries = gap >= 0 && gap <= timeout
+    const live = gap >= 0 && gap <= timeout
+    const tries = live
       ? [[...pending!.presses, payload], [payload]]
       : [[payload]]
     for (const presses of tries) {
@@ -496,7 +504,9 @@ export const keySequences = <
         }
       }
     }
-    if (payload.repeat || modifiers.includes(payload.key)) held.value = pending
+    if (live && (payload.repeat || modifiers.includes(payload.key))) {
+      held.value = pending
+    }
   }
   return listenFor(
     "document",

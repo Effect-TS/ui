@@ -563,6 +563,14 @@ describe("HtmlSubscription.keySequences", () => {
         .expect(Locator.tag("output")).toHaveText(
           "list,single-l,search,single-l,board"
         )
+        // A modifier press from before the prefix expires it rather than keeping it.
+        .fireDocument("keydown", { key: "g", timeStamp: 5950 })
+        .fireDocument("keydown", { key: "Shift", timeStamp: 5940, shift: true })
+        .expectIgnored()
+        .fireDocument("keydown", { key: "l", timeStamp: 5960 })
+        .expect(Locator.tag("output")).toHaveText(
+          "list,single-l,search,single-l,board,single-l"
+        )
         // Gating the subscription off drops any pending prefix.
         .fireDocument("keydown", { key: "g", timeStamp: 6000 })
         .click("Toggle")
@@ -577,6 +585,14 @@ describe("HtmlSubscription.keySequences", () => {
         { key: "g", mod: true, message: "find" },
         { keys: ["g", "l"], message: "list" },
         { key: "g", whileTyping: true, message: "typing-g" }
+      ])
+    )
+    // `g b` takes a plain `g` first, so the typing row doesn't block `g l`.
+    assert.doesNotThrow(() =>
+      HtmlSubscription.keySequences([
+        { keys: ["g", "b"], message: "board" },
+        { key: "g", whileTyping: true, message: "typing-g" },
+        { keys: ["g", "l"], message: "list" }
       ])
     )
     assert.throws(

@@ -19,6 +19,7 @@ interface Running {
   latest: Subscription.Subscription<any, any>
   fiber: Fiber.Fiber<unknown, unknown> | undefined
   detach: (() => void) | undefined
+  update?: ((latest: Subscription.Subscription<any, any>) => void) | undefined
 }
 
 const runningOf = new WeakMap<Kernel.Instance, Map<string, Running>>()
@@ -132,6 +133,7 @@ export const sync = (inst: Kernel.Instance): void => {
     const existing = subscriptions.get(key)
     if (existing !== undefined) {
       existing.latest = subscription
+      existing.update?.(subscription)
       continue
     }
     const { deps, name } = subscription
@@ -233,6 +235,7 @@ const start = (
     enter
   )
   running.detach = attached?.close
+  running.update = attached?.update
   const fiber = fork(
     tree,
     context,

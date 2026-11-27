@@ -389,13 +389,16 @@ describe("HtmlPlay", () => {
       }).make({
         init: () => ({ mode: "shortcuts" as const, log: [] }),
         update: ($, entry) =>
-          entry === "mode:sequences"
+          entry === "mode:shortcuts"
+            ? { ...$.model, mode: "shortcuts" as const }
+            : entry === "mode:sequences"
             ? { ...$.model, mode: "sequences" as const }
             : entry === "mode:off"
             ? { ...$.model, mode: "off" as const }
             : { ...$.model, log: [...$.model.log, entry] },
         view: (h, model) =>
           h.div(
+            h.button.on("click", "mode:shortcuts").children("Shortcuts"),
             h.button.on("click", "mode:sequences").children("Sequences"),
             h.button.on("click", "mode:off").children("Off"),
             h.button.on("click", "ping").children("Ping"),
@@ -418,6 +421,12 @@ describe("HtmlPlay", () => {
       yield* p.click("Ping")
       yield* p.keydown("document", "l")
       yield* p.expect(log).toHaveText("search,ping,list")
+      // Switching to `shortcuts` and back drops the pending prefix with no key pressed between.
+      yield* p.keydown("document", "g")
+      yield* p.click("Shortcuts")
+      yield* p.click("Sequences")
+      yield* p.keydown("document", "l")
+      yield* p.expectIgnored()
       // Gating off drops the pending prefix.
       yield* p.keydown("document", "g")
       yield* p.click("Off")
