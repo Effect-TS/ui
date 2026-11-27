@@ -228,7 +228,7 @@ const hotClient = [
 
 // On a workbench page, `?bare` keeps everything but the overlay's iframe.
 const bare =
-  "!(/^\\/__workbench(\\/|$)/.test(location.pathname) && new URLSearchParams(location.search).has(\"bare\"))"
+  `!(${workbenchPath}.test(location.pathname) && new URLSearchParams(location.search).has("bare"))`
 
 const devToolsClient = (options: OverlayOptions, workbench: boolean): string =>
   [

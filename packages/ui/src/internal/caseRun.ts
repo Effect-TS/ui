@@ -27,8 +27,8 @@ const none: runtime.HotSession = {
 }
 
 /**
- * The hot session a case root mounts with: `hot`, minus any saved snapshot,
- * with the root starting from the case's Model, unless it is `undefined`. What `init` returned is
+ * The hot session a case root mounts with: `hot` with its saved snapshot
+ * dropped, so a full reload starts the case over. With a case Model the root starts from it, and what `init` returned is
  * dropped, Commands, events and sends included.
  *
  * @internal
@@ -36,8 +36,9 @@ const none: runtime.HotSession = {
 export const session = (
   c: Start,
   hot?: runtime.HotSession
-): runtime.HotSession | undefined =>
-  c.model !== undefined
+): runtime.HotSession | undefined => {
+  hot?.clear()
+  return c.model !== undefined
     ? {
       ...(hot ?? none),
       init: (inst, first) =>
@@ -46,6 +47,7 @@ export const session = (
           : hot?.init(inst, first)
     }
     : hot
+}
 
 /**
  * Runs `mount` with the case's Layer, built in the current Scope, then sends
@@ -61,10 +63,13 @@ export const mount = <
   c: Start,
   mount: Effect.Effect<Root, E, R>
 ): Effect.Effect<Root, E, R | Scope.Scope> => {
-  const sent = Effect.tap(mount, (root) =>
-    Effect.sync(() => {
-      for (const message of c.messages ?? []) root.send(message)
-    }))
+  const messages = c.messages
+  const sent = messages === undefined ?
+    mount :
+    Effect.tap(mount, (root) =>
+      Effect.sync(() => {
+        for (const message of messages) root.send(message)
+      }))
   return c.layer === undefined ? sent : Effect.flatMap(
     Layer.build(c.layer),
     (context) => Effect.provide(sent, context)

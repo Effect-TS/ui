@@ -361,19 +361,16 @@ const swap = (
 const restarted = (inst: Kernel.Instance, why: string): string =>
   `[@effect/ui] hot reload: ${inst.path} restarted from init. ${why}`
 
-/** A `fresh` session never adopts a saved snapshot. */
 export const open = (
   component: Component.Any,
-  container: globalThis.Element,
-  fresh = false
+  container: globalThis.Element
 ): runtime.HotSession | undefined => {
   const view = container.ownerDocument.defaultView
   if (view === null || view !== globalThis.window) return undefined
   const path = "/" + component.definition.name
   const containerId = container.id === "" ? undefined : container.id
   const windowState = stateOf(view)
-  const pending = loadPending(view, windowState)
-  const claimed = fresh ? undefined : takeRoot(pending, path, containerId)
+  const claimed = takeRoot(loadPending(view, windowState), path, containerId)
   for (const message of claimed?.warnings ?? []) warn(message)
   const adopting = claimed !== undefined
   let active = adopting

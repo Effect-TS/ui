@@ -169,30 +169,6 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
         save(recordingKey, Object.fromEntries(choices), "sessionStorage")
         changed()
       }
-      const savedPosition = load(positionKey)
-      let position: Position = isPosition(savedPosition)
-        ? savedPosition
-        : (options.position ?? "BottomRight")
-      const feed: Feed = {
-        inspector,
-        origin: (session) => origins.get(session),
-        changes: Stream.fromPubSub(changes),
-        paintable: (session, seq) =>
-          roots.has(session) && history.holds(session, seq),
-        paused: () => paused?.at,
-        failures: () => failures,
-        open: load(openKey) === true,
-        position: () => position,
-        notRecording,
-        // The raw message's tag: an encoded one may be under another key.
-        stoppable: (session, seq) => {
-          const entry = history.entry(session, seq)
-          const tag = entry?._tag === "Update"
-            ? tagOf(entry.message)
-            : undefined
-          return tag === undefined || stopped.has(tag) ? undefined : tag
-        }
-      }
       const unpause: Effect.Effect<void> = Effect.suspend(() => {
         const was = paused
         if (was === undefined) return Effect.void
@@ -255,6 +231,30 @@ const makeInternal = (options: Options, auto: boolean): Layer.Layer<never> =>
       let shown: HTMLIFrameElement | undefined
       let covered = true
       if (options.panel !== false) {
+        const savedPosition = load(positionKey)
+        let position: Position = isPosition(savedPosition)
+          ? savedPosition
+          : (options.position ?? "BottomRight")
+        const feed: Feed = {
+          inspector,
+          origin: (session) => origins.get(session),
+          changes: Stream.fromPubSub(changes),
+          paintable: (session, seq) =>
+            roots.has(session) && history.holds(session, seq),
+          paused: () => paused?.at,
+          failures: () => failures,
+          open: load(openKey) === true,
+          position: () => position,
+          notRecording,
+          // The raw message's tag: an encoded one may be under another key.
+          stoppable: (session, seq) => {
+            const entry = history.entry(session, seq)
+            const tag = entry?._tag === "Update"
+              ? tagOf(entry.message)
+              : undefined
+            return tag === undefined || stopped.has(tag) ? undefined : tag
+          }
+        }
         const pages = Pages.of({
           paint,
           resume,

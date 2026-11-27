@@ -97,9 +97,7 @@ export interface Case<C extends AnyComponent, R = never> {
   readonly name: string
   /** The component passed to `make`, never a copy. */
   readonly component: C
-  readonly props:
-    | Component.Props<C>
-    | Effect.Effect<Component.Props<C>, never, any>
+  readonly props: PropsOf<C>
   readonly model?: Component.Model<C> | undefined
   readonly messages?: ReadonlyArray<Component.Message<C>> | undefined
   readonly layer?: Layer.Layer<any, never, any> | undefined
@@ -163,15 +161,12 @@ type PropsOf<C extends AnyComponent> =
 export type Requirements<C extends AnyComponent, I> =
   | Exclude<
     | Component.Requirements<C>
-    | (I extends { readonly props?: infer P } ? EffectRequirements<P> : never),
+    | (I extends { readonly props?: infer P } ? Effect.Services<P> : never),
     I extends { readonly layer: Layer.Layer<infer A, any, any> } ? A : never
   >
   | (I extends { readonly layer?: infer L } ? LayerRequirements<L> : never)
 
-// Both distribute, so `Props | Effect<Props, never, Config>` keeps `Config`.
-type EffectRequirements<P> = P extends Effect.Effect<any, any, infer R> ? R
-  : never
-
+// Distributes, as `Effect.Services` does for `Props | Effect<Props, never, Config>`.
 type LayerRequirements<L> = L extends Layer.Layer<any, any, infer R> ? R
   : never
 

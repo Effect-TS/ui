@@ -2,21 +2,19 @@ import * as BrowserCase from "@effect/ui/html/testing/BrowserCase"
 import * as Case from "@effect/ui/testing/Case"
 import * as Cause from "effect/Cause"
 import * as Effect from "effect/Effect"
+import * as Predicate from "effect/Predicate"
 
 const segment = "/__workbench/"
 
+// A case is a module export, or a value of one, as `Case.make` returns.
 const collect = (
-  exports: unknown,
-  cases: Map<string, Case.Case<any, never>>
+  value: unknown,
+  cases: Map<string, Case.Case<any, never>>,
+  depth: number
 ): void => {
-  if (typeof exports !== "object" || exports === null) return
-  for (const value of Object.values(exports)) {
-    if (Case.isCase(value)) cases.set(value.name, value as never)
-    else if (typeof value === "object" && value !== null) {
-      for (const inner of Object.values(value)) {
-        if (Case.isCase(inner)) cases.set(inner.name, inner as never)
-      }
-    }
+  if (Case.isCase(value)) cases.set(value.name, value as never)
+  else if (depth > 0 && Predicate.isObjectOrArray(value)) {
+    for (const inner of Object.values(value)) collect(inner, cases, depth - 1)
   }
 }
 
@@ -44,7 +42,7 @@ export const run = async (
   )
   Object.keys(modules).forEach((path, i) => {
     const result = loaded[i]!
-    if (result.status === "fulfilled") collect(result.value, cases)
+    if (result.status === "fulfilled") collect(result.value, cases, 2)
     else failed.push(path + ": " + String(result.reason))
   })
   const path = location.pathname
