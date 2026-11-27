@@ -938,6 +938,62 @@ describe("BrowserHost", { concurrent: false }, () => {
         expect(app.innerHTML).toBe("<div><span>two</span></div>")
       }).pipe(Effect.scoped))
 
+    it.effect("a focused row keeps focus when a keyed reorder moves it", () =>
+      Effect.gen(function*() {
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Lists, {}, app)
+        const ul = app.querySelector("ul")!
+        const a = ul.firstElementChild as HTMLElement
+        a.tabIndex = 0
+        a.focus()
+        root.send(ListMessage.Set({ rows: ["b", "c", "a"] }))
+        yield* tick
+        expect(Array.from(ul.children, (li) => li.textContent))
+          .toEqual(["b", "c", "a"])
+        expect(ul.lastElementChild).toBe(a)
+        expect(document.activeElement).toBe(a)
+        // Code that runs during the move, like a blur handler, keeps the focus it gives.
+        const other = yield* container
+        other.tabIndex = 0
+        customElements.define(
+          "focus-other",
+          class extends HTMLElement {
+            disconnectedCallback() {
+              other.focus()
+            }
+          }
+        )
+        a.append(document.createElement("focus-other"))
+        root.send(ListMessage.Set({ rows: ["a", "b", "c"] }))
+        yield* tick
+        expect(document.activeElement).toBe(other)
+      }).pipe(Effect.scoped))
+
+    it.effect("a keyed reorder uses moveBefore when the parent supports it", () =>
+      Effect.gen(function*() {
+        const app = yield* container
+        const root = yield* BrowserHost.mountEffect(Lists, {}, app)
+        const ul = app.querySelector("ul")!
+        const a = ul.firstElementChild!
+        const moved: Array<[globalThis.Node, globalThis.Node | null]> = []
+        ul.moveBefore = (node, before) => {
+          moved.push([node, before])
+          ul.insertBefore(node, before)
+        }
+        root.send(ListMessage.Set({ rows: ["b", "c", "a"] }))
+        yield* tick
+        expect(moved).toEqual([[a, null]])
+        moved.length = 0
+        root.send(ListMessage.Set({ rows: ["b", "c", "a", "d"] }))
+        yield* tick
+        expect(moved).toEqual([])
+        // A form control named `moveBefore` shadows the method.
+        Object.assign(ul, { moveBefore: document.createElement("input") })
+        root.send(ListMessage.Set({ rows: ["a", "b", "c", "d"] }))
+        yield* tick
+        expect(ul.firstElementChild).toBe(a)
+      }).pipe(Effect.scoped))
+
     it.effect("a custom element's class is set as an attribute, whatever its className does", () =>
       Effect.gen(function*() {
         const seen: Array<string | null> = []

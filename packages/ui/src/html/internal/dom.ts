@@ -119,7 +119,10 @@ const canonicalAttrs = (
 
 const ignore = () => {}
 
-type Node = globalThis.Node & { $r?: Kernel.Rec }
+type Node = globalThis.Node & {
+  $r?: Kernel.Rec
+  moveBefore?: ParentNode["moveBefore"]
+}
 
 /** @internal */
 export const written = new WeakMap<globalThis.Node, Map<string, unknown>>()
@@ -895,8 +898,22 @@ export const makeHost = (
       // `dragend` brings `dragstart` with it.
       if (eventOptions.dragstart !== undefined) listen("dragend")
     },
-    insert(parent, node, before) {
-      parent.insertBefore(node, before)
+    insert(parent: Node, node, before) {
+      if (node.parentNode !== parent) parent.insertBefore(node, before)
+      // A form control named `moveBefore` shadows the method.
+      else if (typeof parent.moveBefore === "function") {
+        parent.moveBefore(node, before)
+      } else {
+        const focused = (node.getRootNode() as Document | ShadowRoot)
+          .activeElement as HTMLElement | null
+        parent.insertBefore(node, before)
+        // Do not override focus set by a blur handler.
+        if (
+          document.activeElement === document.body && node.contains(focused)
+        ) {
+          focused!.focus({ preventScroll: true })
+        }
+      }
     },
     remove(parent, node) {
       if (shown.size > 0) closeShownIn(node, true)
