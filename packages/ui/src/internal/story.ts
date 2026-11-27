@@ -2047,7 +2047,8 @@ export const unloaded = (
 
 /**
  * The query entries a step can settle now: `load` for one with no result or that a wait is on, and
- * `more` for a pending load more that holds pages. None under a live patch, where no fetch settles.
+ * `more` for a pending load more that holds pages, with the pages `held` on an infinite query. None
+ * under a live patch, where no fetch settles.
  *
  * @internal
  */
@@ -2059,6 +2060,7 @@ export function* settleable(
     readonly args: unknown
     readonly load: boolean
     readonly more: boolean
+    readonly held: number
   }
 > {
   const missing = unloaded(story)
@@ -2074,10 +2076,13 @@ export function* settleable(
         awaited.some((entry) =>
           entry.name === name && def.argsKey(entry.args) === argsKey
         )
-      const more = story.loadingMore.includes(name) &&
-        Option.isSome(storedAt(story, name, argsKey))
+      const stored = storedAt(story, name, argsKey)
+      const more = story.loadingMore.includes(name) && Option.isSome(stored)
       if (load || more) {
-        yield { query, args, load, more }
+        const held = def.list === undefined || Option.isNone(stored)
+          ? 0
+          : (stored.value.value as ReadonlyArray<unknown>).length
+        yield { query, args, load, more, held }
       }
     }
   }
@@ -2121,14 +2126,16 @@ const isKept = (
 const unkept = (story: State<any, any, any, any>) =>
   unloaded(story).filter((entry) => !isKept(story, entry))
 
-const missingQueries = (story: State<any, any, any, any>): Array<string> =>
-  unkept(story).map((entry) =>
+const missingQueries = (
+  entries: ReturnType<typeof unkept>
+): Array<string> =>
+  entries.map((entry) =>
     `the query "${entry.name}" has no result${entry.label}: load it with loaded or loadFailed, or keep it with keepPending("${entry.name}")`
   )
 
 /**
- * What blocks a message step until it settles or `keepPending` marks it: Commands, and load mores
- * and queries with no result, by name.
+ * What blocks a message step until it settles or `keepPending` marks it: Commands, load mores by
+ * name, and query entries with no result.
  *
  * @internal
  */
@@ -2137,12 +2144,12 @@ export const blocking = (story: State<any, any, any, any>) => ({
     !exempt(entry) && !story.ack.kept.includes(entry)
   ),
   more: story.loadingMore.filter((name) => !story.ack.keptMore.includes(name)),
-  queries: unkept(story).map((entry) => entry.name)
+  queries: unkept(story)
 })
 
 /** Work in flight that blocks a message step: what nothing settled, kept or exempts. */
 const inFlight = (story: State<any, any, any, any>): Array<string> => {
-  const { commands, more } = blocking(story)
+  const { commands, more, queries } = blocking(story)
   return [
     ...commands.map((entry) =>
       `${describe(entry.command)} [${entry.status}] is pending: ${
@@ -2152,7 +2159,7 @@ const inFlight = (story: State<any, any, any, any>): Array<string> => {
     ...more.map((name) =>
       `a load more of "${name}" is pending: settle it with loadedMore or loadMoreFailed, or keep it with keepPending("${name}")`
     ),
-    ...missingQueries(story),
+    ...missingQueries(queries),
     ...unacknowledgedMounts(story)
   ]
 }
@@ -2225,7 +2232,7 @@ export const checkEnd = (
 ): void =>
   report(step, "the test ends with work not settled or acknowledged", [
     ...allPending(story),
-    ...missingQueries(story),
+    ...missingQueries(unkept(story)),
     ...unacknowledgedMounts(story),
     ...outputs(story)
   ])

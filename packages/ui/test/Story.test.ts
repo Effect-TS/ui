@@ -1364,6 +1364,34 @@ describe("Story", () => {
       })
     })
 
+    it.effect("loads an infinite query as the runtime walks it: one page when next ends the list", () => {
+      class List extends Query.InfiniteService<List>()("check/List", {
+        page: Schema.Number,
+        items: (page) => [page],
+        key: String,
+        cursor: Schema.Number,
+        next: () => Option.none(),
+        staleTime: "1 minute"
+      }) {}
+      const Feed = Component.define({
+        name: "Feed",
+        model: Schema.Struct({}),
+        message: Schema.Never,
+        queries: { list: { query: List, args: () => ({}) } }
+      }).make({
+        init: () => ({}),
+        update: ($) => $.model,
+        view: (h) => h.el("div", "")
+      })
+      return Story.check(Feed, {}, {
+        seed: 1,
+        invariant: (story) => {
+          const list = story.queries().list
+          return !AsyncResult.isSuccess(list) || list.value.pages.length === 1
+        }
+      })
+    })
+
     it.effect("fails on an event outside the events Schema", () =>
       Effect.gen(function*() {
         const Emitter = Component.define({

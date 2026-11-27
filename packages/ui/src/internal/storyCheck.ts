@@ -10,6 +10,7 @@
  */
 import * as Arbitrary from "effect/Arbitrary"
 import * as Effect from "effect/Effect"
+import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
 import * as SchemaAST from "effect/SchemaAST"
 import * as Command from "../Command.ts"
@@ -68,6 +69,8 @@ interface Action {
   readonly target: string
   readonly source?: Source | undefined
   readonly input?: unknown
+  /** Prints the value, when `source` isn't a Schema. */
+  readonly schema?: Schema.Top | undefined
 }
 
 interface Failure {
@@ -139,9 +142,36 @@ const valued = (
   args: ReadonlyArray<unknown>,
   target: string,
   source: Source | undefined,
-  input?: unknown
+  input?: unknown,
+  schema?: Schema.Top
 ): ReadonlyArray<Action> =>
-  inhabited(source) ? [{ step, args, target, source, input }] : []
+  inhabited(source) ? [{ step, args, target, source, input, schema }] : []
+
+/**
+ * The pages a fetch of an infinite query loads, as the runtime walks them: from the first, until
+ * `next` ends the list or it holds the `held` pages it refetches, one on a cold load.
+ */
+const walkOf = (
+  def: ReturnType<typeof Query.defOf>,
+  page: Schema.Top,
+  held: number
+): Source | undefined =>
+  inhabited(page)
+    ? Arbitrary.map(
+      Arbitrary.array(arbitraryOf(page), {
+        minLength: 1,
+        maxLength: Math.max(1, held)
+      }),
+      (sampled) => {
+        const pages: Array<unknown> = []
+        for (const value of sampled) {
+          pages.push(value)
+          if (Option.isNone(def.list!.next(value, pages))) break
+        }
+        return pages
+      }
+    )
+    : undefined
 
 /**
  * How `entry` can settle now, when it's the one a step on its Command would pick: the oldest
@@ -193,20 +223,31 @@ const queryActions = (
   state: engine.State<any, any, any, any>
 ): Array<ReadonlyArray<Action>> => {
   const out: Array<ReadonlyArray<Action>> = []
-  for (const { args, load, more, query } of engine.settleable(state)) {
+  for (const { args, held, load, more, query } of engine.settleable(state)) {
     const def = Query.defOf(query.query)
     const name = JSON.stringify(query.name)
+    // An infinite query's `success` is `Schema.Array(page)`.
+    const page = def.list === undefined
+      ? undefined
+      : (def.success as Schema.$Array<Schema.Top>).value
     if (load) {
       const at = query.keyed ? [query.name, args] : [query.name]
       const target = query.keyed ? `${name}, ${show(def.args, args)}` : name
       out.push([
-        ...valued("loaded", at, target, def.success),
+        ...(page === undefined
+          ? valued("loaded", at, target, def.success)
+          : valued(
+            "loaded",
+            at,
+            target,
+            walkOf(def, page, held),
+            undefined,
+            def.success
+          )),
         ...valued("loadFailed", at, target, def.error)
       ])
     }
-    if (more) {
-      // An infinite query's `success` is `Schema.Array(page)`.
-      const page = (def.success as Schema.$Array<Schema.Top>).value
+    if (page !== undefined && more) {
       out.push([
         ...valued("loadedMore", [query.name], name, page),
         ...valued("loadMoreFailed", [query.name], name, def.error)
@@ -287,7 +328,12 @@ const keepAll = (story: Story, lines: Array<string>): void => {
     lines.push(`.keepPending(${name})`)
   }
   for (const entry of commands) story.keepPending(entry.command)
-  for (const name of new Set([...more, ...queries])) {
+  for (
+    const name of new Set([
+      ...more,
+      ...queries.map((entry) => entry.name)
+    ])
+  ) {
     lines.push(`.keepPending(${JSON.stringify(name)})`)
     story.keepPending(name)
   }
@@ -325,7 +371,7 @@ const runScript = (
         const candidates = settleable(ctx, story.state)
         if (candidates.length === 0) continue
         const actions = candidates[step.pick % candidates.length]!
-        const { args, input, source, step: name, target } =
+        const { args, input, schema, source, step: name, target } =
           actions[step.choice % actions.length]!
         const value = source === undefined ? [] : [
           yield* sample(
@@ -338,7 +384,8 @@ const runScript = (
         problem = attempt(() => {
           lines.push(
             `.${name}(${
-              [target, ...value.map((value) => show(source, value))].join(", ")
+              [target, ...value.map((value) => show(schema ?? source, value))]
+                .join(", ")
             })`
           )
           story[name](...args, ...value)
