@@ -1441,15 +1441,25 @@ describe("BrowserHost", { concurrent: false }, () => {
           update: ($) => $.model,
           view: (h) => h.button.id(h.id("trigger")).children("Open")
         })
-        const [first, second] = [yield* container, yield* container]
-        yield* BrowserHost.mountEffect(Slot, {}, first, {
+        const [first, second, plain] = [
+          yield* container,
+          yield* container,
+          yield* container
+        ]
+        const rootA = yield* BrowserHost.mountEffect(Slot, {}, first, {
           head: false,
           key: "a"
         })
-        yield* BrowserHost.mountEffect(Slot, {}, second, {
+        const rootB = yield* BrowserHost.mountEffect(Slot, {}, second, {
           head: false,
           key: "b"
         })
+        const rootPlain = yield* BrowserHost.mountEffect(Slot, {}, plain, {
+          head: false
+        })
+        expect(rootA.path).toBe("/Slot[a]")
+        expect(rootB.path).toBe("/Slot[b]")
+        expect(rootPlain.path).toBe("/Slot")
         const firstButton = first.querySelector("button")!
         const secondButton = second.querySelector("button")!
         expect(firstButton.id).not.toBe("")

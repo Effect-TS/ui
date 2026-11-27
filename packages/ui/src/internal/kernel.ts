@@ -320,7 +320,8 @@ export class Instance {
     parent: Instance | undefined,
     at: Rec | undefined,
     props: unknown,
-    env: Env
+    env: Env,
+    named?: string | undefined
   ) {
     this.tree = tree
     this.component = component
@@ -330,6 +331,7 @@ export class Instance {
     this.depth = parent === undefined ? 0 : parent.depth + 1
     this.props = props
     this.env = env
+    this.named = named
   }
   get path(): string {
     if (this.named !== undefined) return this.named
@@ -1725,6 +1727,7 @@ export interface Root {
 /** @internal */
 export interface Options {
   readonly report: Tree["report"]
+  readonly path?: string | undefined
   readonly context?: Context.Context<any> | undefined
   readonly log?: Recorder | undefined
   readonly fallback?: Tree["fallback"]
@@ -1765,7 +1768,8 @@ export const mount = (
     undefined,
     undefined,
     props,
-    env
+    env,
+    options.path
   )
   if (start(instance) === undefined) {
     instance.rendered = stand(instance, instance.failure!)

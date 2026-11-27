@@ -25,7 +25,7 @@ import * as Kernel from "./kernel.ts"
 import * as lazy from "./lazy.ts"
 import * as messageLog from "./messageLog.ts"
 import type * as partsRun from "./partsRun.ts"
-import { childName, segment, slotSegment } from "./paths.ts"
+import { childName, rootPath, segment, slotSegment } from "./paths.ts"
 import * as queryCore from "./queryCore.ts"
 import type * as Recorder from "./recorder.ts"
 import type * as routeRun from "./routeRun.ts"
@@ -297,6 +297,7 @@ export interface HotSession {
 }
 
 interface Options {
+  readonly key?: string | undefined
   readonly fallback?:
     | ((
       failure: AsyncResult.Failure<never, unknown>,
@@ -416,7 +417,10 @@ const mountCore = (
   Scope.Scope
 > =>
   withProps(rootProps, (props) => {
-    const path = "/" + component.definition.name
+    const key = options?.hydrate !== undefined
+      ? options.hydrate.key
+      : options?.key
+    const path = rootPath(component, key)
     const go = (decoded?: Exit.Exit<Decoded, unknown>) =>
       Effect.uninterruptible(
         Effect.contextWith((ctx: Context.Context<Scope.Scope>) => {
@@ -585,8 +589,12 @@ const start = (
   const { base, dom } = hostInput.make(container, ownsHead, recording.step)
   const deferred = new Set<Kernel.Instance>()
   let hydrating: hydrateRun.Session | undefined
+  const path = rootPath(
+    component,
+    hydrate !== undefined ? hydrate.key : options?.key
+  )
   const routing: routeRun.Routed | undefined = hooks?.kernel?.(hooks, {
-    path: "/" + component.definition.name,
+    path,
     container,
     context: ctx,
     flush: () => flushes,
@@ -618,7 +626,7 @@ const start = (
     server: server?.hooks(ctx, record, deferred)
   }
   hydrating = hydrate?.open({
-    path: "/" + component.definition.name,
+    path,
     container,
     bridged,
     base,
@@ -652,6 +660,7 @@ const start = (
       container,
       bridged,
       {
+        path,
         context: Context.add(
           Context.add(ctx, queryCore.CacheKey, queries.cell as never),
           services.CurrentRoot,
@@ -942,6 +951,7 @@ export const prerender = (
   options: {
     readonly budget: Duration.Input
     readonly elements: ReadonlyArray<string> | "any"
+    readonly key?: string | undefined
     readonly static?: boolean | undefined
     readonly sink?: services.ServerSink | undefined
     readonly onFinish?: ((cache: queryCore.Cache) => void) | undefined
@@ -963,7 +973,7 @@ export const prerender = (
           props,
           serverHost.node,
           ctx,
-          undefined,
+          options.key === undefined ? undefined : { key: options.key },
           {
             elements: options.elements,
             make: () => ({ base: serverHost.host, dom: undefined })
@@ -994,7 +1004,8 @@ export const prerender = (
           query,
           ctx,
           options.static === true,
-          options.sink ?? serialize.nodeSink(nodes)
+          options.sink ?? serialize.nodeSink(nodes),
+          options.key
         )
         return { nodes, state, model: root.model(), head: headOf(root) }
       }),
@@ -1031,7 +1042,8 @@ const paintCore = (
   rootProps: unknown,
   container: unknown,
   state: (path: string) => PaintState | undefined,
-  hostOf: (ctx: Context.Context<any>) => HostInput
+  hostOf: (ctx: Context.Context<any>) => HostInput,
+  path?: string | undefined
 ): Effect.Effect<
   Painted,
   never,
@@ -1064,6 +1076,7 @@ const paintCore = (
         skipped: (path) => skipped.add(path)
       },
       {
+        path,
         context: ctx,
         init: (inst) => {
           let recorded: PaintState | undefined
@@ -1129,7 +1142,8 @@ export const paintDom = (
   container: unknown,
   state: (path: string) => PaintState | undefined,
   makeDom: MakeDom,
-  elements: ReadonlyArray<string> | "any"
+  elements: ReadonlyArray<string> | "any",
+  path?: string | undefined
 ): Effect.Effect<
   Painted,
   never,
@@ -1140,7 +1154,8 @@ export const paintDom = (
     rootProps,
     container,
     state,
-    () => fromDom(makeDom, elements)
+    () => fromDom(makeDom, elements),
+    path
   )
 
 const fallbacksIn = (inst: Kernel.Instance, out: Set<string>): void => {

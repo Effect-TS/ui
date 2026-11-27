@@ -366,6 +366,54 @@ describe("HtmlHydrate", () => {
       assert.strictEqual(app.textContent, "1000")
     }).pipe(Effect.scoped))
 
+  it.effect("hydrates two keyed roots in reverse order and preserves their server ids", () =>
+    Effect.gen(function*() {
+      const Slot = Html.component({
+        name: "Slot",
+        model: Schema.Null,
+        message: Schema.Never
+      }).make({
+        init: () => null,
+        update: ($) => $.model,
+        view: (h) => h.button.id(h.id("trigger")).children("Open")
+      })
+      const renderedA = yield* HtmlServer.renderToHtml(Slot, {}, { key: "a" })
+      const renderedB = yield* HtmlServer.renderToHtml(Slot, {}, { key: "b" })
+      assert.strictEqual(renderedA.state["~key"], "a")
+      assert.strictEqual(renderedB.state["~key"], "b")
+      const appA = yield* container(renderedA.html)
+      const appB = yield* container(renderedB.html)
+      const serverA = [...appA.querySelectorAll("*")]
+      const serverB = [...appB.querySelectorAll("*")]
+      const serverIdA = appA.querySelector("button")!.id
+      const serverIdB = appB.querySelector("button")!.id
+      assert.notStrictEqual(serverIdA, "")
+      assert.notStrictEqual(serverIdB, "")
+      assert.notStrictEqual(serverIdA, serverIdB)
+      const rootB = yield* HtmlHydrate.hydrateEffect(
+        Slot,
+        {},
+        appB,
+        renderedB.state,
+        { head: false }
+      )
+      const rootA = yield* HtmlHydrate.hydrateEffect(
+        Slot,
+        {},
+        appA,
+        renderedA.state,
+        { head: false }
+      )
+      sameElements(appA, serverA)
+      sameElements(appB, serverB)
+      assert.strictEqual(rootA.path, "/Slot[a]")
+      assert.strictEqual(rootB.path, "/Slot[b]")
+      assert.strictEqual(appA.querySelector("button")!.id, serverIdA)
+      assert.strictEqual(appB.querySelector("button")!.id, serverIdB)
+      assert.strictEqual(document.getElementById(serverIdA), serverA[0])
+      assert.strictEqual(document.getElementById(serverIdB), serverB[0])
+    }).pipe(Effect.scoped))
+
   it.effect("keeps nodes before a mismatch inside a row, rebuilds the rest of that row, and keeps sibling rows", () =>
     Effect.gen(function*() {
       const rendered = yield* HtmlServer.renderToHtml(List, {})

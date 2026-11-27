@@ -79,8 +79,8 @@ import * as server from "./internal/server.ts"
  * `html` is the body markup for the app's container. `state` maps each
  * instance's path to its Schema-encoded Model, plus `~deferred`, the
  * settled query entries under `~query`, the last message each owner of
- * shared state got from its reports under `~reported`, and `~static` for a
- * static render;
+ * shared state got from its reports under `~reported`, `~static` for a
+ * static render, and `~key` when rendered with `key`;
  * pass it to `BrowserHost.mount`. `model` is the root's Model
  * after the server run, for app code that sets the status (a 404 for a
  * missing record), or `undefined` if the root failed. `head` holds the
@@ -158,6 +158,11 @@ const serverHtmlHost: Context.Service.Shape<typeof Html.Host> = {
  * `RouteMismatch`. The default is HTML rendered per request, whose entries
  * hydrate fresh.
  *
+ * `key` sets the root's path to `/<name>[<key>]` and writes `~key` into
+ * `state`, so `HtmlHydrate.hydrate` adopts the root at the same path without
+ * needing the key again. Use distinct keys when one document renders the same
+ * root component more than once.
+ *
  * **Gotchas**
  *
  * Read data is public: `state` includes every settled entry, including typed
@@ -189,6 +194,7 @@ export const renderToHtml = <
   props: Props | Effect.Effect<Props, never, RP>,
   options?: {
     readonly budget?: Duration.Input | undefined
+    readonly key?: string | undefined
     readonly static?: boolean | undefined
   }
 ): Effect.Effect<Rendered<Model>, never, Exclude<R | RP, Html.Host>> =>
@@ -198,6 +204,7 @@ export const renderToHtml = <
     return runtime.prerender(component as any, props, {
       budget: options?.budget ?? "500 millis",
       elements: [Html.name],
+      key: options?.key,
       static: options?.static,
       sink: writer
     }).pipe(

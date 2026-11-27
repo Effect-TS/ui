@@ -422,6 +422,12 @@ export interface MountOptions<
    * head tag.
    */
   readonly head?: boolean | undefined
+  /**
+   * Distinguishes multiple mounts of the same root component on one document:
+   * the root's path becomes `/<name>[<key>]`, giving each mount unique
+   * generated element ids.
+   */
+  readonly key?: string | undefined
 }
 
 /**
@@ -459,7 +465,9 @@ export interface MountOptions<
  * tags and the `<html>` and `<body>` attributes. A mount embedded in a page that another mount, or the
  * server, owns passes `head: false`: it still computes its head, and its
  * Router announces the title, but it leaves the document alone. With two
- * mounts on one document, only the one that owns the head writes it.
+ * mounts on one document, only the one that owns the head writes it; if they
+ * mount the same root component, pass a distinct `key` to each so their paths
+ * and generated element ids don't collide.
  *
  * **Example** (Launching an app)
  *
@@ -571,8 +579,9 @@ export const mountRoot = (
       { host }
     )
     const outer = yield* Effect.context<Scope.Scope>()
+    const key = hydrate !== undefined ? hydrate.key : options?.key
     const attached = hot.devTools(container)
-    const hotSession = hot.open(component, container)
+    const hotSession = hot.open(component, container, key)
     const hydrating = hotSession?.hasSnapshot === true ? undefined : hydrate
     if (hydrating !== hydrate) container.textContent = ""
     const scheduler =
@@ -593,7 +602,7 @@ export const mountRoot = (
         container,
         make,
         [Html.name],
-        { ...options, hydrate: hydrating, hot: hotSession, scheduler }
+        { ...options, key, hydrate: hydrating, hot: hotSession, scheduler }
       ),
       mountContext
     )
@@ -698,7 +707,7 @@ export interface Recorded {
 export interface Controllable {
   /** The session the root's `MessageLog` entries carry. */
   readonly session: string
-  /** The root instance's path, `/<name>`. */
+  /** The root instance's path, `/<name>` or `/<name>[<key>]` when keyed. */
   readonly path: string
   readonly pause: (
     state: (path: string) => Recorded | undefined
@@ -910,7 +919,8 @@ const controllable = (
           copy,
           state,
           makePaintDom,
-          [Html.name]
+          [Html.name],
+          root.path
         ).pipe(
           Effect.provideContext(Context.add(context, Scope.Scope, scope)),
           Effect.onError(() =>

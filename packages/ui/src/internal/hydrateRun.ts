@@ -593,6 +593,7 @@ export interface Session {
 
 /** @internal */
 export interface Hydrating {
+  readonly key: string | undefined
   readonly static: boolean
   readonly shipped: () => queryCore.ShippedContext | undefined
   readonly decode: <A, E, R>(
@@ -623,6 +624,7 @@ export const hydrating = (
 ): Hydrating => {
   const shipped = shippedOf(state)
   return {
+    key: typeof state["~key"] === "string" ? state["~key"] : undefined,
     static: state["~static"] === true,
     shipped: () => shipped()?.lookup,
     decode: (component, path, go) => {

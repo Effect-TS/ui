@@ -204,7 +204,8 @@ export const write = (
   query: unknown,
   ctx: Context.Context<any>,
   isStatic: boolean,
-  to: services.ServerSink
+  to: services.ServerSink,
+  rootKey?: string | undefined
 ): Effect.Effect<Renderer.State> =>
   Effect.map(awaitEncoded(late), () => {
     const state: Record<string, unknown> = {}
@@ -302,6 +303,7 @@ export const write = (
     if (Object.keys(collected).length > 0) add("~reported", collected)
     if (Object.keys(kept).length > 0) add("~kept", kept)
     if (isStatic) add("~static", true)
+    if (rootKey !== undefined) add("~key", rootKey)
     return state
   })
 

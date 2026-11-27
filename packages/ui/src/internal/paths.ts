@@ -46,6 +46,17 @@ export const segmentOf = (
 ): string => escapeName(childName(component)) + "[" + escapeKey(key) + "]"
 
 /**
+ * The path of a mounted root: `/Name`, or `/Name[key]` when keyed.
+ *
+ * @internal
+ */
+export const rootPath = (
+  component: Component.Any | Component.Lazy.Any | Feature.Any,
+  key?: string | undefined
+): string =>
+  "/" + (key === undefined ? childName(component) : segmentOf(component, key))
+
+/**
  * Where paths are checked: a path, or an instance, whose path is read only for an error.
  *
  * @internal
