@@ -36,11 +36,14 @@ export const make = (
     // Another story started during a step runs its own component, so it isn't recorded.
     component: transition === undefined
       ? component
-      : Object.assign(Object.create(component), {
-        update: (model: unknown, message: unknown, ...rest: Array<any>) => {
-          const next = (component.update as Function)(model, message, ...rest)
-          updates.push({ before: model, message, after: next.model })
-          return next
+      // Defined, not assigned: assignment can't shadow a frozen component's `update`.
+      : Object.create(component, {
+        update: {
+          value: (model: unknown, message: unknown, ...rest: Array<any>) => {
+            const next = (component.update as Function)(model, message, ...rest)
+            updates.push({ before: model, message, after: next.model })
+            return next
+          }
         }
       }),
     updates,

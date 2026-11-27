@@ -1833,18 +1833,21 @@ Story.start(FilterList, {})
 
     it("gives the transition rule only the explored story's updates, not a story its update runs", () => {
       const Tick = UiSchema.TaggedEnum({ Tick: {} })
-      const Outer = Component.define({
-        name: "Outer",
-        model: Schema.Number,
-        message: Tick
-      }).make({
-        init: () => 0,
-        update: ($) =>
-          Story.start(Counter, { initial: $.model }).send(
-            CounterMessage.Increment()
-          ).model.count,
-        view: (h, model) => h.el("div", String(model))
-      })
+      // Frozen, as a component may be: the rule's recording can't assign to it.
+      const Outer = Object.freeze(
+        Component.define({
+          name: "Outer",
+          model: Schema.Number,
+          message: Tick
+        }).make({
+          init: () => 0,
+          update: ($) =>
+            Story.start(Counter, { initial: $.model }).send(
+              CounterMessage.Increment()
+            ).model.count,
+          view: (h, model) => h.el("div", String(model))
+        })
+      )
       Story.explore(Outer, {}, {
         messages: [Tick.Tick()],
         depth: 1,
