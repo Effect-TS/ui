@@ -13,7 +13,7 @@ import {
   Stream
 } from "effect"
 import type { Context, Duration } from "effect"
-import { AsyncResult } from "effect/reactivity"
+import { AsyncResult, Reactivity } from "effect/reactivity"
 import { TestClock } from "effect/testing"
 
 // A few macrotasks: lets every fiber the cache forked run, and whatever those fork in turn.
@@ -37,6 +37,9 @@ type Page = typeof Page.Type
 const makeList = (options: {
   readonly staleTime?: Duration.Input
   readonly refetchInterval?: Duration.Input
+  readonly reactivityKeys?: (
+    args: { readonly room: string }
+  ) => Reactivity.KeysInput
   readonly next?: (
     lastPage: Page,
     allPages: ReadonlyArray<Page>
@@ -62,7 +65,8 @@ const makeList = (options: {
       cursor: Schema.Number,
       next: options.next ?? ((lastPage) => Option.fromNullishOr(lastPage.next)),
       staleTime: options.staleTime ?? "30 seconds",
-      refetchInterval: options.refetchInterval
+      refetchInterval: options.refetchInterval,
+      reactivityKeys: options.reactivityKeys
     }
   ) {
     static readonly layer = this.toLayer(
@@ -648,6 +652,38 @@ describe("Query lists", () => {
 
   it("exposes the page array Schema as success", () => {
     assert.strictEqual(makeList().ListMessages.success.value, Page)
+  })
+
+  it.effect("reactivityKeys refetches held pages of matching lists without affecting other keys", () => {
+    const { ListMessages, db } = makeList({
+      staleTime: "1 minute",
+      reactivityKeys: ({ room }) => [`room:${room}`]
+    })
+    const layer = Layer.merge(ListMessages.layer, TestQuery.layer()).pipe(
+      Layer.provideMerge(Reactivity.layer)
+    )
+    return Effect.gen(function*() {
+      const a = yield* watch(ListMessages.changes({ room: "a" }))
+      const b = yield* watch(ListMessages.changes({ room: "b" }))
+      yield* advance(10)
+      yield* Effect.forkScoped(ListMessages.loadMore({ room: "a" }))
+      yield* advance(10)
+      assert.deepStrictEqual(a.seen, ["a0", "a0,a1"])
+      assert.deepStrictEqual(b.seen, ["a0"])
+
+      db.version = "b"
+      yield* Reactivity.invalidate(["room:a"])
+      yield* advance(20)
+      assert.deepStrictEqual(a.seen, ["a0", "a0,a1", "a0,a1 waiting", "b0,b1"])
+      assert.deepStrictEqual(b.seen, ["a0"])
+      assert.deepStrictEqual(yield* pagesLog, [
+        "watch@0",
+        "watch@0",
+        "loadMore@1",
+        "invalidation@0",
+        "invalidation@1"
+      ])
+    }).pipe(Effect.provide(layer))
   })
 })
 
