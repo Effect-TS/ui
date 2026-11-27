@@ -17,7 +17,6 @@ interface Reader {
   unread: Array<unknown>
   /** Whether `unread` ends with args published since the reader started, woke or last read. */
   behind: boolean
-  /** While the reader waits with nothing unread: wakes it. */
   resume: ((wake: Effect.Effect<void>) => void) | undefined
 }
 
@@ -26,10 +25,7 @@ export interface MountArgs {
   latest: unknown
   closed: boolean
   readonly readers: Set<Reader>
-  /**
-   * The order waiting readers get new args in. A reader joins at the end when it waits, and leaves when
-   * it wakes or stops waiting.
-   */
+  /** Waiting readers in wake order. A reader that waits again rejoins at the end. */
   readonly order: Set<Reader>
 }
 
@@ -58,7 +54,7 @@ export const publish = (self: MountArgs, args: unknown): void => {
     if (resume === undefined || reader.unread.length === 0) continue
     self.order.delete(reader)
     reader.resume = undefined
-    // Args published before the reader's turn come after these.
+    // Preserve these args if more arrive before the reader consumes them.
     reader.behind = false
     resume(Effect.void)
   }
@@ -90,7 +86,7 @@ export const changes = (self: MountArgs): Stream.Stream<any> =>
     }
     if (!self.closed) self.readers.add(reader)
     const pull = Effect.flatMap(
-      // Checks and waits in one step, so nothing arrives in between.
+      // Check and register without yielding, so an update or close cannot go unnoticed.
       Effect.callback<void>((resume) => {
         if (self.closed || reader.unread.length > 0) return resume(Effect.void)
         reader.resume = resume

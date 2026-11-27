@@ -5818,7 +5818,6 @@ describe("Runtime", () => {
     Effect.gen(function*() {
       const host = TestHost.makeHost()
       for (const site of ["Problems", "init", "view", "Layer"] as const) {
-        // The fiber closing the owner yields once, at its `at`-th check, and its tasks run on `flush`.
         for (let at = 1;; at++) {
           const yields = yieldsOnceAt(at)
           let listeners = 0

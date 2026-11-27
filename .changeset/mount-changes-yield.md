@@ -2,4 +2,4 @@
 "@effect/ui": patch
 ---
 
-Check for unread args and mount closure inside the same `Effect.callback` step that registers a `changes` waiter, so a mount reader can no longer sleep through a published update or close.
+Fix mount `changes` readers sleeping through a published update or mount closure. Wake waiting readers in the order they began their current wait.
