@@ -347,4 +347,41 @@ describe("Dismissal in a document", { concurrent: false }, () => {
       yield* tick
       assert.deepStrictEqual(log, ["outside-press:touch"])
     }))
+
+  it.effect("focus that moves within an open shadow root asks once, also when the document hears it too", () =>
+    Effect.gen(function*() {
+      const app = yield* container
+      const host = app.appendChild(document.createElement("div"))
+      const root = host.attachShadow({ mode: "open" })
+      root.innerHTML =
+        "<div id=\"editor\"><input id=\"field\"></div><button id=\"anchor\"></button><button id=\"other\"></button>"
+      // A browser keeps a move between two elements of one root inside it, and
+      // shows the document the host for one that enters the root.
+      const focus = (id: string, composed: boolean) => {
+        const event = new FocusEvent("focusin", { bubbles: true, composed })
+        if (composed) {
+          Object.defineProperty(event, "target", { get: () => host })
+        }
+        root.getElementById(id)!.dispatchEvent(event)
+      }
+      const log: Array<string> = []
+      yield* Effect.forkScoped(
+        Stream.runForEach(
+          Dismissal.trackDismissal(root.getElementById("editor")!, {
+            insideSelector: "#anchor"
+          }),
+          ({ reason }) => Effect.sync(() => log.push(reason))
+        )
+      )
+      yield* tick
+      focus("anchor", false)
+      yield* tick
+      assert.deepStrictEqual(log, [])
+      focus("other", false)
+      yield* tick
+      assert.deepStrictEqual(log, ["focus-out"])
+      focus("other", true)
+      yield* tick
+      assert.deepStrictEqual(log, ["focus-out", "focus-out"])
+    }))
 })

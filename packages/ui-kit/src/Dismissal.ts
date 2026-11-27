@@ -243,7 +243,12 @@ export const trackDismissal = (
         send("outside-press", pointerType)
       }
     }
+    // Focus that moves within a shadow root doesn't reach the document, so
+    // the roots the layer is in listen too, and an event both hear counts once.
+    let seen: Event | undefined
     const onFocusIn = (event: FocusEvent) => {
+      if (event === seen) return
+      seen = event
       if (top("focus-out", event) && away(event)) send("focus-out")
     }
 
@@ -256,6 +261,11 @@ export const trackDismissal = (
         const capture = { capture: true, signal }
         document.addEventListener("pointerdown", onPointerDown, capture)
         document.addEventListener("focusin", onFocusIn, capture)
+        let root = node.getRootNode()
+        while ("host" in root) {
+          root.addEventListener("focusin", onFocusIn as EventListener, capture)
+          root = (root as ShadowRoot).host.getRootNode()
+        }
         join(stack, layer, signal)
       }).pipe(
         Effect.tap(() =>
