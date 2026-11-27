@@ -21,7 +21,7 @@ const NoteEditor = Html.component({
 }).make({
   init: () => "",
   update: ($, message) => message._tag === "Typed" ? message.text : $.model,
-  view: (h, text) => h.textarea().value(text)
+  view: (h, text) => h.textarea.value(text)
 })
 
 const ProfileForm = Component.define({

@@ -702,7 +702,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       )
     }))
 
-  it.effect("escapes text, keeps a leading newline, and selects the option whose text is the select's value", () =>
+  it.effect("escapes text and a textarea's value, keeps a leading newline, and selects the option whose text is the select's value", () =>
     Effect.gen(function*() {
       const Page = Html.component({
         name: "Text",
@@ -715,6 +715,7 @@ describe("HtmlServer", { concurrent: false }, () => {
           h.div.children(
             h.p.children("a<b>&c"),
             h.pre.children("\nx"),
+            h.textarea.value("a<b"),
             h.select.value("b").children(
               h.option.children("a"),
               h.option.children("b")
@@ -723,7 +724,7 @@ describe("HtmlServer", { concurrent: false }, () => {
       })
       const rendered = yield* HtmlServer.renderToHtml(Page, {})
       expect(rendered.html).toBe(
-        "<!--[/Text--><div><p>a&lt;b&gt;&amp;c</p><pre>\n\nx</pre><select><option>a</option><option selected>b</option></select></div><!--]/Text-->"
+        "<!--[/Text--><div><p>a&lt;b&gt;&amp;c</p><pre>\n\nx</pre><textarea>a&lt;b</textarea><select><option>a</option><option selected>b</option></select></div><!--]/Text-->"
       )
     }))
 
@@ -740,7 +741,7 @@ describe("HtmlServer", { concurrent: false }, () => {
         update: ($) => $.model,
         view: (h) =>
           h.div.children(
-            h.textarea.children(
+            h.el("textarea").children(
               h.el("span").prop("value", unreadable).children("only text")
             ),
             h.el("br").children(
@@ -2360,7 +2361,10 @@ describe("HtmlServer", { concurrent: false }, () => {
         init: () => ({}),
         update: ($) => $.model,
         view: (h) =>
-          h.div(h.textarea(Word(h, { key: "a", props: {} })), h.p("after"))
+          h.div(
+            h.el("textarea", Word(h, { key: "a", props: {} })),
+            h.p("after")
+          )
       })
       const result = yield* ssr(Form, {})
       expect(result.html).toBe(
