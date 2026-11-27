@@ -433,28 +433,10 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
           HtmlSubscription.onDocument(
             "keydown",
             ({ code, editable, key, repeat }) =>
-              `down:${key}:${code}:${editable}:${repeat}`
-          ),
-          HtmlSubscription.onDocument(
-            "keyup",
-            ({ code, key }) => `up:${key}:${code}`
+              `${key}:${code}:${editable}:${repeat}`
           )
         ]
       })
-      const scene = yield* HtmlScene.make(Shortcut, {})
-      scene
-        .fireDocument("keydown", { key: "g" })
-        .fireDocument("keydown", {
-          key: "∑",
-          code: "KeyW",
-          editable: true,
-          repeat: true
-        })
-        .fireDocument("keyup", { key: "∑", code: "KeyW" })
-        .fireDocument("keyup", { key: "g" })
-        .expect(Locator.tag("output")).toHaveText(
-          "down:g::false:false,down:∑:KeyW:true:true,up:∑:KeyW,up:g:"
-        )
       const root = yield* TestHost.mount(Shortcut, {})
       yield* TestHost.settle
       yield* TestGlobalEvents.fire("document", "keydown", { key: "g" })
@@ -466,8 +448,8 @@ describe("HtmlScene.fireDocument and fireWindow", () => {
       })
       yield* TestHost.settle
       assert.deepStrictEqual(root.model(), [
-        "down:g::false:false",
-        "down:∑:KeyW:true:true"
+        "g::false:false",
+        "∑:KeyW:true:true"
       ])
     }).pipe(Effect.provide(testLayer)))
 

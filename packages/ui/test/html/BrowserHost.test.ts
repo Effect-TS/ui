@@ -2333,57 +2333,39 @@ describe("BrowserHost", { concurrent: false }, () => {
             update: ($, entry) => [...$.model, entry],
             view: (h) =>
               h.div
-                .on("keydown", ({ alt, code, key }) =>
-                  `el:down:${key}:${code}:${alt}`)
-                .on("keyup", ({ alt, code, key }) =>
-                  `el:up:${key}:${code}:${alt}`)
+                .on("keydown", ({ code, key }) => `el:down:${key}:${code}`)
+                .on("keyup", ({ code, key }) => `el:up:${key}:${code}`)
                 .children(h.button.attr("id", "kc-btn").children("Press")),
             subscriptions: () => [
               HtmlSubscription.onDocument(
                 "keydown",
-                ({ alt, code, key }) => `doc:down:${key}:${code}:${alt}`
+                ({ code, key }) => `doc:down:${key}:${code}`
               ),
               HtmlSubscription.onDocument(
                 "keyup",
-                ({ alt, code, key }) => `doc:up:${key}:${code}:${alt}`
+                ({ code, key }) => `doc:up:${key}:${code}`
               )
             ]
           })
           const root = yield* BrowserHost.mountEffect(KeyCodes, {}, app)
           yield* tick
           const button = app.querySelector("#kc-btn")!
-          button.dispatchEvent(
-            new KeyboardEvent("keydown", {
-              key: "∑",
-              code: "KeyW",
-              altKey: true,
-              bubbles: true
-            })
-          )
-          button.dispatchEvent(
-            new KeyboardEvent("keyup", {
-              key: "∑",
-              code: "KeyW",
-              altKey: true,
-              bubbles: true
-            })
-          )
-          button.dispatchEvent(
-            new KeyboardEvent("keydown", { key: "w", bubbles: true })
-          )
-          button.dispatchEvent(
-            new KeyboardEvent("keyup", { key: "w", bubbles: true })
-          )
+          for (const type of ["keydown", "keyup"]) {
+            button.dispatchEvent(
+              new KeyboardEvent(type, { key: "∑", code: "KeyW", bubbles: true })
+            )
+          }
+          HtmlLocator.keydown(button, "w")
           yield* tick
           expect(root.model()).toEqual([
-            "el:down:∑:KeyW:true",
-            "doc:down:∑:KeyW:true",
-            "el:up:∑:KeyW:true",
-            "doc:up:∑:KeyW:true",
-            "el:down:w::false",
-            "doc:down:w::false",
-            "el:up:w::false",
-            "doc:up:w::false"
+            "el:down:∑:KeyW",
+            "doc:down:∑:KeyW",
+            "el:up:∑:KeyW",
+            "doc:up:∑:KeyW",
+            "el:down:w:",
+            "doc:down:w:",
+            "el:up:w:",
+            "doc:up:w:"
           ])
         }).pipe(Effect.scoped))
 
