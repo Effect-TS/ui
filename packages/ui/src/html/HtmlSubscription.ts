@@ -197,7 +197,7 @@ const listenFor = (
     enter
   ) => {
     const source = Context.get(context, GlobalEvents)
-    // What a `keySequences` declaration holds, kept while the key's declarations are ones.
+    // Keep sequence progress across declarations until this key switches to a non-sequence listener.
     let state: globalEvents.Held = {}
     return {
       initial: Effect.void,
@@ -396,8 +396,8 @@ export interface KeySequenceOptions extends GlobalEventOptions {
 }
 
 /**
- * A Subscription that listens for a table of shortcuts on the host's
- * document whose rows can take several keys in turn, such as `g` then `l`.
+ * Listens on the host's document for single-key shortcuts and timed key
+ * sequences, such as `g` then `l`, and sends the matching row's message.
  *
  * **When to use**
  *
@@ -408,20 +408,20 @@ export interface KeySequenceOptions extends GlobalEventOptions {
  *
  * A row is a `HtmlKeyboard.Shortcut` with one `key`, or a
  * `HtmlKeyboard.Sequence` with `keys`. Each press is matched with the
- * presses so far against the latest table, and the first row they match or
- * begin wins: a complete row sends its message, and a begun one waits for
- * the next press. So a row that an earlier one begins or completes can never
- * fire, and in development `keySequences` throws for it, naming both.
+ * pending presses against the latest table. The first matching row wins:
+ * a complete match sends its message; a prefix waits for the next press.
+ * In development, `keySequences` throws if earlier rows make a later row
+ * unreachable, naming the blocked row and a blocking row.
  *
- * A press more than `timeout` (`1 second` by default) after the one before
- * starts over, measured with the events' `timeStamp`, so no timer runs. A
- * press that doesn't continue a row is matched again as a first press. A
- * modifier key's own press, or an auto-repeat, that no row takes keeps the
- * presses so far, and a `composing` or `defaultPrevented` press drops them.
- * They also end when the entry is gated off.
+ * A press more than `timeout` (`1 second` by default) after the last matched
+ * press starts over. Timing uses the events' `timeStamp`; no timer runs.
+ * A press that does not continue a row is retried as a first press.
+ * Unmatched modifier-key presses and auto-repeats preserve an unexpired
+ * prefix without extending its timeout. A `composing` or `defaultPrevented`
+ * press clears the prefix, as does gating the subscription off.
  *
- * `preventDefault` defaults to `true`, and then cancels every press a row
- * takes, a begun row's included. Such a press counts as handled in a test.
+ * `preventDefault` defaults to `true`, cancelling matched prefixes as well
+ * as completions. Both count as handled in tests.
  * The key is that of {@link onDocument}: `@effect/ui/html/document:"keydown"`.
  *
  * **Example** (Go-to shortcuts)
@@ -479,7 +479,6 @@ export const keySequences = <
     payload: GlobalPayload<Html.KeyPayload>,
     held
   ) => {
-    // The presses so far, the last of them the latest a row took.
     const pending = held.value as
       | ReadonlyArray<GlobalPayload<Html.KeyPayload>>
       | undefined

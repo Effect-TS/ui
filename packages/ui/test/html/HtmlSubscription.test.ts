@@ -528,7 +528,6 @@ describe("HtmlSubscription.keySequences", () => {
 
       const scene = yield* HtmlScene.make(SequenceApp, {})
       scene
-        // Prefix press is handled and default-prevented; completion fires within 1s.
         .fireDocument("keydown", { key: "g", timeStamp: 0 })
         .expectDefaultPrevented()
         .expect(Locator.tag("output")).toHaveText("")
@@ -539,13 +538,11 @@ describe("HtmlSubscription.keySequences", () => {
         .fireDocument("keydown", { key: "g", timeStamp: 1000 })
         .fireDocument("keydown", { key: "l", timeStamp: 2001 })
         .expect(Locator.tag("output")).toHaveText("list,single-l")
-        // A mismatch clears the prefix and retries the press as a first key.
         .fireDocument("keydown", { key: "g", timeStamp: 3000 })
         .fireDocument("keydown", { key: "/", timeStamp: 3100 })
         .expect(Locator.tag("output")).toHaveText("list,single-l,search")
         .fireDocument("keydown", { key: "b", timeStamp: 3200 })
         .expectIgnored()
-        // Row guards apply to every press.
         .fireDocument("keydown", { key: "g", timeStamp: 4000 })
         .fireDocument("keydown", { key: "l", timeStamp: 4100, editable: true })
         .expectIgnored()
@@ -559,7 +556,6 @@ describe("HtmlSubscription.keySequences", () => {
         .expect(Locator.tag("output")).toHaveText(
           "list,single-l,search,board"
         )
-        // Gating the subscription off drops any pending prefix.
         .fireDocument("keydown", { key: "g", timeStamp: 6000 })
         .click("Toggle")
         .click("Toggle")

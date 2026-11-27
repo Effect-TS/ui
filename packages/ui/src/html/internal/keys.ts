@@ -34,11 +34,7 @@ export const matches = (
   (!payload.editable || row.whileTyping === true) &&
   (!payload.repeat || row.repeat === true)
 
-/**
- * The keys `row` takes, in order.
- *
- * @internal
- */
+/** @internal */
 export const keysOf = (row: Row): ReadonlyArray<string> =>
   "keys" in row ? row.keys : [row.key]
 
@@ -78,7 +74,7 @@ export const checkSequences = (table: ReadonlyArray<Row>): void =>
     let blocker: Row | undefined
     // What a run leads to depends only on its length and the rows it fits.
     const seen = new Set<string>()
-    // Whether `row` fires after `run`, with every combination of the flags `matches` reads tried for each press.
+    // Try every modifier and guard combination: overlap alone does not make a row unreachable.
     const fires = (run: ReadonlyArray<Press>): boolean => {
       for (let i = 0; i < 64; i++) {
         const presses = [...run, {

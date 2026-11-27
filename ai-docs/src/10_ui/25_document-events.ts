@@ -90,12 +90,11 @@ const NavMessage = UiSchema.TaggedEnum({
   WentToBoard: {}
 })
 
-// `HtmlSubscription.keySequences` takes single-key rows and `keys` rows in one
-// table. The running Subscription holds the presses so far, so the Model
-// doesn't. A press more than `timeout` (one second by default) after the one
-// before starts over, measured with the events' `timeStamp`. The first row
-// the presses match or begin wins, so a `g` row next to `g l` would leave one
-// of them dead, and in development that throws.
+// The running Subscription tracks the pending prefix outside the Model.
+// A press more than `timeout` (one second by default) after the last matched
+// press starts over. The first matching row wins, even for a prefix, so
+// registering both `g` and `g l` makes the later row unreachable.
+// In development, `keySequences` throws for unreachable rows.
 export const Nav = Html.component({
   name: "Nav",
   model: Schema.String,
@@ -117,9 +116,8 @@ export const Nav = Html.component({
   ]
 })
 
-// A scene sets `timeStamp` to move time between presses, with no clock. A
-// begun row's press is handled and default-prevented, and a late press is
-// matched as a first press.
+// Set event `timeStamp` values to test expiry without advancing a test clock.
+// A matched prefix cancels the default even though it sends no message.
 export const navigated = Effect.gen(function*() {
   const s = yield* HtmlScene.make(Nav, {})
   s.fireDocument("keydown", { key: "g", timeStamp: 0 }).expectDefaultPrevented()

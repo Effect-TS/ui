@@ -2,4 +2,4 @@
 "@effect/ui": minor
 ---
 
-Add `HtmlSubscription.keySequences`, a document shortcut table whose rows can take several keys in turn, such as `{ keys: ["g", "l"], message }`, within a `timeout` (one second by default). `HtmlSubscription.GlobalPayload` now carries the event's `timeStamp`, which the test tools default to `0`.
+Add `HtmlSubscription.keySequences` for shortcuts such as `g` then `l`, with a configurable timeout between matched presses (one second by default). Document and window event payloads now include `timeStamp`; test tools default it to `0` and let you set it to test sequence expiry.

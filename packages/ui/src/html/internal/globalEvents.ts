@@ -34,7 +34,7 @@ export interface Listener {
   readonly capture: boolean
   readonly handler: View.Handler<unknown, any>
   readonly preventDefault: boolean | "always" | undefined
-  /** `keySequences`': `handler` is a {@link Step} over the presses its listener holds. */
+  /** Calls `handler` as a {@link Step} with state owned by the running listener. */
   readonly held?: true | undefined
 }
 

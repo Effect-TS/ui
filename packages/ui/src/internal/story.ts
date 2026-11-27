@@ -177,7 +177,7 @@ export type Fields<Props, Model, Msg, Events> =
       | undefined
     readonly shared?: ReadonlyMap<Component.Definition.Any, unknown> | undefined
     readonly collected?: Collected | undefined
-    /** What a scene's held listeners hold, by Subscription key, as the runtime's keeps it. */
+    /** Listener state keyed by Subscription key, preserved across scene updates. */
     readonly held?: ReadonlyMap<string, unknown> | undefined
   }
 
@@ -458,11 +458,7 @@ interface Collected {
 }
 const collectedLast = new WeakMap<object, Collected>()
 
-/**
- * The `held` field of a record.
- *
- * @internal
- */
+/** @internal */
 export const heldBy = new WeakMap<object, ReadonlyMap<string, unknown>>()
 
 /**
