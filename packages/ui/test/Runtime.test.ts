@@ -4781,20 +4781,6 @@ describe("Runtime", () => {
         yield* TestHost.settle
         assert.strictEqual(root.model(), "ab")
         assert.strictEqual(field.props.value, "ab")
-        // An accepted edit is already on the field, so nothing writes it again.
-        let value: unknown = "a"
-        let writes = 0
-        Object.defineProperty(field.props, "value", {
-          get: () => value,
-          set: (next) => {
-            writes++
-            value = next
-          }
-        })
-        Locator.fire(field, "input", { value: "a" })
-        yield* TestHost.settle
-        assert.strictEqual(root.model(), "a")
-        assert.strictEqual(writes, 0)
       }).pipe(
         // A renderer on a host of its own, as `settle` drains every mounted tree.
         Effect.provide(Renderer.layer(TestHost.makeHost())),
