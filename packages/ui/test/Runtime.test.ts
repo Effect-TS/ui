@@ -2795,23 +2795,18 @@ describe("Runtime", () => {
         assert.strictEqual(root.get(Locator.tag("span")), span)
 
         const added = root.log().slice(before)
-        assert.deepStrictEqual(
-          added.map((entry) =>
-            "path" in entry ? `${entry.path} ${entry._tag}` : entry._tag
-          ),
-          [
-            "/App PropsChanged",
-            "/App SubscriptionStopped",
-            "/App SubscriptionStarted",
-            "/App/Label[l] PropsChanged"
-          ]
-        )
         const changed = added[0] as MessageLog.PropsChanged
         assert.deepStrictEqual(changed.props, { label: "two" })
-        assert.isUndefined(changed.causedBy)
-        for (const consequence of added.slice(1)) {
-          assert.strictEqual(consequence.causedBy, changed.seq)
-        }
+        // The root's change is the fact, and the rest follows from it.
+        assert.strictEqual(
+          TestHost.formatTimeline(added),
+          [
+            `#${changed.seq} /App PropsChanged`,
+            `    #${changed.seq + 1} /App SubscriptionStopped sub:"one"`,
+            `    #${changed.seq + 2} /App SubscriptionStarted sub:"two"`,
+            `    #${changed.seq + 3} /App/Label[l] PropsChanged`
+          ].join("\n")
+        )
 
         // Equal props log nothing.
         const countAfter = root.log().length

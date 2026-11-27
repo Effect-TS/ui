@@ -1377,7 +1377,6 @@ export const patchChild = (
       : patch(inst, shown[0]!, fallbackOf(inst, view, child.failure))
     return old
   }
-  if (child.closed) return old
   const changed = applyProps(child, view.props)
   if (child.closed) return old
   if (changed || view.view !== undefined) {

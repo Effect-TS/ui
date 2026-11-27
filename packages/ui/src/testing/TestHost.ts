@@ -770,7 +770,7 @@ export const mount = <
       | undefined
     readonly query?: Renderer.QueryOptions | undefined
     readonly frames?:
-      | ((root: TestRoot<Model, Msg, Events, Props>) => string)
+      | ((root: TestRoot<Model, Msg, Events>) => string)
       | undefined
   }
 ): Effect.Effect<
@@ -783,9 +783,9 @@ export const mount = <
     const container = makeElement("#root")
     const outer = yield* Effect.context<never>()
     const project = options?.frames ??
-      ((root: TestRoot<Model, Msg, Events, Props>) => root.text())
+      ((root: TestRoot<Model, Msg, Events>) => root.text())
     const frames: Array<string> = []
-    let testRoot: TestRoot<Model, Msg, Events, Props> | undefined
+    let testRoot: TestRoot<Model, Msg, Events> | undefined
     const frame = () => {
       if (testRoot === undefined) return
       const next = project(testRoot)

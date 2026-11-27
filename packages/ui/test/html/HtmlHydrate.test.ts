@@ -625,54 +625,33 @@ describe("HtmlHydrate", () => {
   describe("setProps", () => {
     it.effect("updates a hydrated root without remounting or replacing server nodes", () =>
       Effect.gen(function*() {
-        const Counter = Html.component({
-          name: "Counter",
-          props: Schema.Struct({ label: Schema.String }),
-          model: Schema.Number,
-          message: Bumped
-        }).make({
-          init: () => 0,
-          update: ($) => $.model + 1,
-          view: (h, count) => h.div(h.span(`${h.props.label}:${count}`))
-        })
-        const rendered = yield* HtmlServer.renderToHtml(Counter, {
-          label: "one"
-        })
+        const rendered = yield* HtmlServer.renderToHtml(Row, { label: "one" })
         const app = yield* container(rendered.html)
         const server = [...app.querySelectorAll("*")]
         const root = yield* HtmlHydrate.hydrateEffect(
-          Counter,
+          Row,
           { label: "one" },
           app,
           rendered.state
         )
-        root.send(Bumped.Bumped())
+        root.send(RowMessage.Clicked())
         yield* tick
-        assert.strictEqual(app.textContent, "one:1")
+        assert.strictEqual(app.textContent, "one1 clickedrow one")
 
         root.setProps({ label: "two" })
         yield* tick
         sameElements(app, server)
         assert.strictEqual(root.model(), 1)
-        assert.strictEqual(app.textContent, "two:1")
+        assert.strictEqual(app.textContent, "two1 clickedrow two")
       }).pipe(Effect.scoped))
 
     it.effect("keeps props updated while a hydrated root waits for its Layer", () =>
       Effect.gen(function*() {
-        const GatedLabel = Component.provide(
-          Html.component({
-            name: "GatedLabel",
-            props: Schema.Struct({ label: Schema.String }),
-            model: Schema.Number,
-            message: Bumped
-          }).make({
-            init: () => 0,
-            update: ($) => $.model + 1,
-            view: (h, count) => h.div(h.span(`${h.props.label}:${count}`))
-          }),
+        const GatedRow = Component.provide(
+          Row,
           Layer.effectDiscard(Effect.suspend(() => layerGate))
         )
-        const rendered = yield* HtmlServer.renderToHtml(GatedLabel, {
+        const rendered = yield* HtmlServer.renderToHtml(GatedRow, {
           label: "one"
         })
         const latch = yield* Deferred.make<void>()
@@ -680,7 +659,7 @@ describe("HtmlHydrate", () => {
         const app = yield* container(rendered.html)
         const log = MessageLog.makeMemory()
         const root = yield* HtmlHydrate.hydrateEffect(
-          GatedLabel,
+          GatedRow,
           { label: "one" },
           app,
           rendered.state
@@ -692,8 +671,8 @@ describe("HtmlHydrate", () => {
         yield* root.adopted
         yield* tick
 
-        assert.strictEqual(app.textContent, "two:0")
-        const replay = Story.fromLog(GatedLabel, log.entries())
+        assert.strictEqual(app.textContent, "two0 clickedrow two")
+        const replay = Story.fromLog(GatedRow, log.entries())
         assert.deepStrictEqual(replay.props, { label: "two" })
       }).pipe(
         Effect.ensuring(Effect.sync(() => layerGate = Effect.void)),
