@@ -1,0 +1,272 @@
+/**
+ * Android navigation drawer over `AndroidDrawerLayout`.
+ *
+ * **Details**
+ *
+ * Android only: on other platforms it renders a plain `RCTView` showing the
+ * main content with the drawer panel hidden. Pass the drawer content in
+ * `options.drawer` and the main content in `.children(...)`; `Drawer` builds
+ * the two non-collapsable wrapper views `AndroidDrawerLayout` requires.
+ *
+ * Open and close the drawer programmatically from a Command using a ref on the
+ * `Drawer` and `Native.Host`:
+ * `host.command(node, "openDrawer")` / `host.command(node, "closeDrawer")`.
+ *
+ * Pressing Android Back while the drawer is open does not close it —
+ * `hardwareBackPress` runs normally (closing the activity under `NativeApp`'s
+ * default fallback unless handled with `BackHandler`). React Native marks
+ * `DrawerLayoutAndroid` deprecated, while `AndroidDrawerLayout` remains
+ * registered in React Native 0.88.
+ *
+ * **Example** (A left navigation drawer with open/close events)
+ *
+ * ```ts
+ * import { Native } from "@effect/ui-native"
+ * import { Drawer } from "@effect/ui-native/kit"
+ *
+ * const DrawerRef = Native.ref("drawer")
+ *
+ * const view = (h: Native.H<"Opened" | "Closed">) =>
+ *   Drawer(h, {
+ *     drawerWidth: 260,
+ *     drawer: h.view.style({ flex: 1, padding: 16 }).children(
+ *       h.text.children("Menu")
+ *     )
+ *   })
+ *     .ref(DrawerRef)
+ *     .on("drawerOpen", "Opened")
+ *     .on("drawerClose", "Closed")
+ *     .children(h.text.children("Main"))
+ * ```
+ *
+ * @stability experimental
+ * @since 0.1.0
+ */
+import * as View from "@effect/ui/View"
+import * as Native from "../Native.ts"
+
+/**
+ * Which edge of the screen the drawer slides in from.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type DrawerPosition = "left" | "right"
+
+/**
+ * Whether touch gestures can open or close the drawer. Programmatic
+ * `openDrawer` and `closeDrawer` commands work in every mode.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type DrawerLockMode = "unlocked" | "locked-closed" | "locked-open"
+
+/**
+ * Interaction state reported by `drawerStateChanged`.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export type DrawerState = "idle" | "dragging" | "settling"
+
+/**
+ * Payload of `drawerSlide`: `0` when closed, `1` when fully open.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface DrawerSlidePayload {
+  readonly offset: number
+}
+
+/**
+ * Payload of `drawerStateChanged`.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface DrawerStateChangedPayload {
+  readonly state: DrawerState
+}
+
+/**
+ * Events of a `Drawer`.
+ *
+ * @stability experimental
+ * @category events
+ * @since 0.1.0
+ */
+export interface DrawerEvents {
+  readonly drawerOpen: {}
+  readonly drawerClose: {}
+  readonly drawerSlide: DrawerSlidePayload
+  readonly drawerStateChanged: DrawerStateChangedPayload
+  readonly layout: Native.LayoutPayload
+}
+
+/**
+ * Options accepted by {@link Drawer}.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export interface DrawerOptions<Msg, RD = never> {
+  /** Content rendered inside the sliding drawer panel. */
+  readonly drawer: Native.NoTextInput<Msg, RD>
+  /** Width of the drawer panel, in points. */
+  readonly drawerWidth?: number | undefined
+  /** Edge the drawer slides from. Defaults to `"left"`. */
+  readonly drawerPosition?: DrawerPosition | undefined
+  /** Gesture lock mode. Defaults to `"unlocked"`. */
+  readonly drawerLockMode?: DrawerLockMode | undefined
+  /** Background colour of the drawer panel. Defaults to `"white"`. */
+  readonly drawerBackgroundColor?: Native.Color | undefined
+}
+
+/**
+ * The builder {@link Drawer} returns.
+ *
+ * @stability experimental
+ * @category models
+ * @since 0.1.0
+ */
+export class DrawerElement<
+  out Msg,
+  out R = never,
+  in out E = Record<string, unknown>,
+  out Tag extends string = string
+> extends Native.Element<Msg, R, E, Tag, Native.ViewStyle> {
+  /**
+   * Phantom: keeps the builder type through `View.WithRequirements`.
+   *
+   * @since 0.1.0
+   */
+  declare readonly "~With"?: DrawerElement<Msg, R | this["~Add"], E, Tag>
+
+  /**
+   * Adds the main screen content behind the drawer. Text is rejected: wrap it
+   * in `h.text(...)`.
+   *
+   * @since 0.1.0
+   */
+  children<
+    This,
+    const C extends ReadonlyArray<Native.NoTextInput<Msg, unknown>>
+  >(
+    this: This,
+    ...inputs: C
+  ): View.WithRequirements<This, View.Requirements<C[number]>>
+  children(...inputs: ReadonlyArray<View.Input<Msg, unknown>>): unknown {
+    return View.withNoTextContent(this, inputs, Native.vocabulary)
+  }
+}
+
+const states: ReadonlyArray<DrawerState> = ["idle", "dragging", "settling"]
+
+const fill: Native.ViewStyle = {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0
+}
+
+const element = Native.defineView(
+  () => new DrawerElement<any, never, DrawerEvents, "drawer">("drawer"),
+  {
+    viewName: (_, host) =>
+      host.os === "android" ? "AndroidDrawerLayout" : "RCTView",
+    defaults: { flex: 1, elevation: 16 },
+    events: {
+      topDrawerStateChanged: (n, event, host) =>
+        host.fire(n, "drawerStateChanged", {
+          state: states[event?.drawerState] ?? "idle"
+        })
+    }
+  }
+)
+
+const drawerPanel = Native.defineView(
+  () =>
+    new Native.ViewElement<any, never, Native.ViewEvents, "drawerPanel">(
+      "drawerPanel"
+    ),
+  {
+    viewName: (n, host) => {
+      if (host.os !== "android") n.props.display = "none"
+      return "RCTView"
+    },
+    defaults: { collapsable: false, position: "absolute", top: 0, bottom: 0 }
+  }
+)
+
+/**
+ * Renders an Android drawer layout. Pass the drawer panel content in
+ * `options.drawer` and the main content via `.children(...)`.
+ *
+ * @stability experimental
+ * @category components
+ * @since 0.1.0
+ */
+export const Drawer = <Msg, RD = never>(
+  h: Native.H<Msg>,
+  options: DrawerOptions<Msg, RD>
+): DrawerElement<Msg, RD, DrawerEvents, "drawer"> => {
+  const drawerBackgroundColor = options.drawerBackgroundColor ?? "white"
+  const props: Record<string, unknown> = { drawerBackgroundColor }
+  if (options.drawerWidth !== undefined) props.drawerWidth = options.drawerWidth
+  if (options.drawerPosition !== undefined) {
+    props.drawerPosition = options.drawerPosition
+  }
+  if (options.drawerLockMode !== undefined) {
+    props.drawerLockMode = options.drawerLockMode
+  }
+  const panelStyle: Native.ViewStyle = options.drawerPosition === "right"
+    ? {
+      right: 0,
+      width: options.drawerWidth,
+      backgroundColor: drawerBackgroundColor
+    }
+    : {
+      left: 0,
+      width: options.drawerWidth,
+      backgroundColor: drawerBackgroundColor
+    }
+  const base = View.withFields(
+    element as DrawerElement<Msg, never, DrawerEvents, "drawer">,
+    { props }
+  )
+  return base.forward((built) => {
+    const main = h.view.prop("collapsable", false).style(fill).children(
+      built.content as any
+    )
+    const panel = (drawerPanel as Native.ViewElement<
+      Msg,
+      never,
+      Native.ViewEvents,
+      "drawerPanel"
+    >)
+      .style(panelStyle)
+      .children(options.drawer)
+    return View.withFields(
+      element as DrawerElement<Msg, never, DrawerEvents, "drawer">,
+      {
+        elementAttrs: built.elementAttrs,
+        elementKey: built.elementKey,
+        eventOptions: built.eventOptions,
+        handlers: built.handlers,
+        mount: built.mount,
+        owned: built.owned,
+        props: built.props,
+        refKey: built.refKey
+      }
+    ).children(main, panel)
+  }) as any
+}
