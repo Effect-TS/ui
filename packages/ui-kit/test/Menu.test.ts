@@ -50,7 +50,7 @@ const standIn = {
   elements: Html,
   view: (menu: Parts, h: H) => {
     const filtering = h.props.query !== undefined
-    // Indicators and radios are built before their owners on purpose
+    // Check selection independently of construction order.
     const tick = menu.checkboxItemIndicator({
       element: h.span.class("tick"),
       value: "wrap"
