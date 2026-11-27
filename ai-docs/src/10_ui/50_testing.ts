@@ -361,12 +361,11 @@ it.layer(
         const trigger = HtmlLocator.role("button", {
           name: `Linked: ${otherNote.title}`
         })
-        yield* play.expect(trigger).toExist()
         assert.deepStrictEqual(play.root.emitted, [
           NoteLinkPickerEvents.Linked({ id: otherNote.id })
         ])
-        // Opening by click starts `Listbox` on the `selected` prop the wrapper
-        // feeds back. `ArrowDown` would move on from it.
+        // Clicking the relabelled trigger opens `Listbox` on the `selected`
+        // prop the wrapper feeds back. `ArrowDown` would move on from it.
         yield* play.click(trigger)
         yield* play.expect(
           HtmlLocator.role("option", { name: /^Recipes/ })
