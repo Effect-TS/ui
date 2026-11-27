@@ -13,26 +13,18 @@ import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 
 interface Reader {
-  /** The args published last when the reader started, then the newest published since. */
+  /** The args published last when the reader started or woke, then the newest published since. */
   unread: Array<unknown>
-  /** Whether `unread` ends with args published since the reader started or last read. */
+  /** Whether `unread` ends with args published since the reader started, woke or last read. */
   behind: boolean
-  /** While the reader waits with nothing unread: takes the next args, or `done` at the close. */
-  resume:
-    | ((
-      next: Effect.Effect<Arr.NonEmptyReadonlyArray<unknown>, Cause.Done>
-    ) => void)
-    | undefined
-  /** How many args had been published when the reader began to wait. */
-  since: number
+  /** While the reader waits with nothing unread: wakes it. */
+  resume: ((wake: Effect.Effect<void>) => void) | undefined
 }
 
 /** @internal */
 export interface MountArgs {
   latest: unknown
   closed: boolean
-  /** How many args have been published. */
-  published: number
   readonly readers: Set<Reader>
   /**
    * The order waiting readers get new args in. A reader joins at the end when it waits, and leaves when
@@ -45,7 +37,6 @@ export interface MountArgs {
 export const make = (args: unknown): MountArgs => ({
   latest: args,
   closed: false,
-  published: 0,
   readers: new Set(),
   order: new Set()
 })
@@ -53,28 +44,23 @@ export const make = (args: unknown): MountArgs => ({
 /** @internal */
 export const publish = (self: MountArgs, args: unknown): void => {
   self.latest = args
-  const published = ++self.published
   for (const reader of self.readers) {
-    if (reader.resume !== undefined) continue
-    self.order.delete(reader)
+    if (reader.resume === undefined) self.order.delete(reader)
     if (reader.behind) reader.unread[reader.unread.length - 1] = args
     else {
       reader.behind = true
       reader.unread.push(args)
     }
   }
-  // A resumed reader runs at once, and can start a reader, wait again or publish. A reader that began to
-  // wait during this publish has these args already, or newer ones.
+  // A woken reader runs at once, and can start a reader, wait again or publish. A reader that began to
+  // wait during this publish has nothing unread.
   for (const reader of self.order) {
     const resume = reader.resume
-    if (resume === undefined || reader.since >= published) continue
+    if (resume === undefined || reader.unread.length === 0) continue
     reader.resume = undefined
-    // The close can come between the publish and this reader's turn.
-    resume(
-      Effect.suspend(() =>
-        self.closed ? done : Effect.succeed(read(reader, [args]))
-      )
-    )
+    // Args published before the reader's turn come after these.
+    reader.behind = false
+    resume(Effect.void)
   }
 }
 
@@ -88,24 +74,10 @@ const done = Cause.done()
 export const close = (self: MountArgs): void => {
   self.closed = true
   for (const reader of Array.from(self.readers).reverse()) {
-    const resume = reader.resume
-    if (resume === undefined) continue
-    reader.resume = undefined
-    resume(done)
+    reader.resume?.(Effect.void)
   }
   self.readers.clear()
   self.order.clear()
-}
-
-/** Takes what `reader` hasn't read, after `first`: one of the two isn't empty. */
-const read = (
-  reader: Reader,
-  first: Array<unknown>
-): Arr.NonEmptyReadonlyArray<unknown> => {
-  const out = first.concat(reader.unread)
-  reader.unread = []
-  reader.behind = false
-  return out as unknown as Arr.NonEmptyReadonlyArray<unknown>
 }
 
 /** @internal */
@@ -114,29 +86,30 @@ export const changes = (self: MountArgs): Stream.Stream<any> =>
     const reader: Reader = {
       unread: [self.latest],
       behind: false,
-      resume: undefined,
-      since: 0
+      resume: undefined
     }
     if (!self.closed) self.readers.add(reader)
-    const pull = Effect.callback<
-      Arr.NonEmptyReadonlyArray<unknown>,
-      Cause.Done
-    >((resume) => {
-      if (self.closed) {
-        resume(done)
-        return
+    const pull = Effect.flatMap(
+      // Checks and waits in one step, so nothing arrives in between.
+      Effect.callback<void>((resume) => {
+        if (self.closed || reader.unread.length > 0) return resume(Effect.void)
+        reader.resume = resume
+        self.order.add(reader)
+        return Effect.sync(() => {
+          reader.resume = undefined
+        })
+      }),
+      // The close can come between the wake and this reader's turn.
+      () => {
+        if (self.closed) return done
+        const unread = reader.unread
+        reader.unread = []
+        reader.behind = false
+        return Effect.succeed(
+          unread as unknown as Arr.NonEmptyReadonlyArray<unknown>
+        )
       }
-      if (reader.unread.length > 0) {
-        resume(Effect.succeed(read(reader, [])))
-        return
-      }
-      reader.resume = resume
-      reader.since = self.published
-      self.order.add(reader)
-      return Effect.sync(() => {
-        if (reader.resume === resume) reader.resume = undefined
-      })
-    })
+    )
     return Effect.as(
       Scope.addFinalizer(
         scope,

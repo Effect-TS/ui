@@ -55,6 +55,26 @@ const tags = (
 const click = (root: TestHost.TestRoot<any, any, any>, text: string) =>
   Locator.fire(root.get(Locator.text(text, { exact: true })), "click")
 
+/** A Scheduler that yields once, at its `at`-th check, and runs its tasks on `flush`. */
+const yieldsOnceAt = (at: number) => {
+  let checks = 0
+  const tasks: Array<() => void> = []
+  const dispatcher: Scheduler.SchedulerDispatcher = {
+    scheduleTask: (task) => {
+      tasks.push(task)
+    },
+    flush: () => {
+      while (tasks.length > 0) tasks.shift()!()
+    }
+  }
+  const scheduler: Scheduler.Scheduler = {
+    executionMode: "async",
+    shouldYield: () => ++checks === at,
+    makeDispatcher: () => dispatcher
+  }
+  return { scheduler, flush: dispatcher.flush, checks: () => checks }
+}
+
 // ---------------------------------------------------------------------------
 // A keyed list whose rows hold a Command open until they unmount
 // ---------------------------------------------------------------------------
@@ -5377,80 +5397,62 @@ describe("Runtime", () => {
       Effect.gen(function*() {
         for (const mode of ["update", "close"] as const) {
           for (let at = 1;; at++) {
-            const seen: Array<number> = []
+            const yields = yieldsOnceAt(at)
+            let last = 0
             let reader: Fiber.Fiber<void> | undefined
-            let armed = false
-            let checks = 0
-            const tasks: Array<() => void> = []
-            const dispatcher: Scheduler.SchedulerDispatcher = {
-              scheduleTask: (task) => {
-                tasks.push(task)
-              },
-              flush: () => {
-                while (tasks.length > 0) tasks.shift()!()
-              }
-            }
-            const scheduler: Scheduler.Scheduler = {
-              executionMode: "sync",
-              shouldYield: () => armed && ++checks === at,
-              makeDispatcher: () => dispatcher
-            }
             const Draw = Mount.make(
               "Draw",
               { args: { n: Schema.Number } },
               (_node, _args, changes) =>
                 Effect.gen(function*() {
                   reader = yield* Effect.forkDetach(
-                    Effect.suspend(() => {
-                      armed = true
-                      return Stream.runForEach(changes, ({ n }) =>
-                        Effect.sync(() => seen.push(n)))
-                    }).pipe(
-                      Effect.provideService(Scheduler.Scheduler, scheduler)
-                    ),
+                    Stream.runForEach(changes, ({ n }) =>
+                      Effect.sync(() => {
+                        last = n
+                      })).pipe(
+                        Effect.provideService(
+                          Scheduler.Scheduler,
+                          yields.scheduler
+                        )
+                      ),
                     { startImmediately: true }
                   )
-                  armed = false
                   return Component.noop
                 })
             )
             const Chart = Component.define({
               name: "YieldingReader",
               model: Schema.Number,
-              message: Schema.Number
+              message: Schema.Number,
+              elements: Tiny
             }).make({
               init: () => 0,
               update: (_, n) => n,
-              view: (h, n) =>
-                n < 0
-                  ? h.el("div")
-                  : h.el("div").on("click", () => mode === "update" ? 1 : -1)
-                    .onMount(Draw({ n }))
+              view: (h, n) => h.box(n < 0 ? null : h.field.onMount(Draw({ n })))
             })
-            const host = { ...TestHost.makeHost(), runsMounts: true }
-            const container = host.createElement("#app") as TestHost.TestElement
-            const scope = yield* Scope.make()
-            yield* Renderer.mount(Chart, {}, container).pipe(
-              Scope.provide(scope),
-              Effect.provide(Renderer.layer(host))
+            const seen = yield* Effect.scoped(Effect.gen(function*() {
+              const root = yield* TestHost.mount(Chart, {})
+              yield* TestHost.settle
+              root.send(mode === "update" ? 1 : -1)
+              yield* TestHost.settle
+              yields.flush()
+              return mode === "update" ? last : reader?.pollUnsafe()?._tag
+            }))
+            yields.flush()
+            assert.strictEqual(
+              seen,
+              mode === "update" ? 1 : "Success",
+              `${mode} at yield ${at}`
             )
-            Locator.fire(container.children[0]!, "click")
-            yield* Effect.promise(() => Promise.resolve())
-            dispatcher.flush()
-            const last = seen.at(-1)
-            const exit = reader?.pollUnsafe()?._tag
-            yield* Scope.close(scope, Exit.void)
-            reader?.interruptUnsafe()
-            dispatcher.flush()
-            if (mode === "update") {
-              assert.strictEqual(last, 1, `update at yield ${at}`)
-            } else {
-              assert.strictEqual(exit, "Success", `close at yield ${at}`)
-            }
-            if (checks < at) break
+            if (yields.checks() < at) break
           }
         }
-      }))
+      }).pipe(
+        Effect.provide(
+          Renderer.layer({ ...TestHost.makeHost(), runsMounts: true })
+        ),
+        provideHost
+      ))
 
     it.effect("a render that adds, swaps or drops an element's mount starts and stops it", () =>
       Effect.gen(function*() {
@@ -5764,21 +5766,7 @@ describe("Runtime", () => {
       for (const site of ["Problems", "init", "view", "Layer"] as const) {
         // The fiber closing the owner yields once, at its `at`-th check, and its tasks run on `flush`.
         for (let at = 1;; at++) {
-          let checks = 0
-          const tasks: Array<() => void> = []
-          const dispatcher: Scheduler.SchedulerDispatcher = {
-            scheduleTask: (task) => {
-              tasks.push(task)
-            },
-            flush: () => {
-              while (tasks.length > 0) tasks.shift()!()
-            }
-          }
-          const scheduler: Scheduler.Scheduler = {
-            executionMode: "async",
-            shouldYield: () => ++checks === at,
-            makeDispatcher: () => dispatcher
-          }
+          const yields = yieldsOnceAt(at)
           let listeners = 0
           const signal: Query.Signal = {
             get: () => true,
@@ -5795,7 +5783,7 @@ describe("Runtime", () => {
           const close = () => {
             closing ??= Effect.runFork(
               Scope.close(scope, Exit.void).pipe(
-                Effect.provideService(Scheduler.Scheduler, scheduler)
+                Effect.provideService(Scheduler.Scheduler, yields.scheduler)
               )
             )
           }
@@ -5842,7 +5830,7 @@ describe("Runtime", () => {
           )
           // A close that yielded before it closed the owner leaves the mount to succeed.
           const ownerClosed = scope.state._tag === "Closed"
-          dispatcher.flush()
+          yields.flush()
           // The close waits for setup, then closes the instances before it removes the root's nodes.
           assert.deepStrictEqual(
             [
@@ -5856,7 +5844,7 @@ describe("Runtime", () => {
             ],
             [site, at, ownerClosed, "Success", 1, 0, 0]
           )
-          if (checks < at) {
+          if (yields.checks() < at) {
             assert.isTrue(ownerClosed)
             break
           }
