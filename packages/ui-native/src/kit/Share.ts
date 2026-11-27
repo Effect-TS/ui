@@ -47,20 +47,26 @@ import * as device from "./internal/device.ts"
  * - `subject`: iOS's subject, such as an email's.
  * - `excludedActivityTypes`: iOS activities to leave out, such as
  *   `"com.apple.UIKit.activity.Print"`.
- * - `tintColor`: the colour of iOS's sheet.
+ * - `tintColor`: the colour of iOS's sheet, a colour string or number.
+ *   iOS's sheet can't take a `PlatformColor`.
  *
  * @stability experimental
  * @category models
  * @since 0.1.0
  */
-export interface Options {
+export type Options =
+  & Fields
+  & ({ readonly message: string } | { readonly url: string })
+
+// The options as the Command decodes them, which can lack both.
+interface Fields {
   readonly message?: string | undefined
   readonly url?: string | undefined
   readonly title?: string | undefined
   readonly dialogTitle?: string | undefined
   readonly subject?: string | undefined
   readonly excludedActivityTypes?: ReadonlyArray<string> | undefined
-  readonly tintColor?: Native.Color | undefined
+  readonly tintColor?: string | number | undefined
 }
 
 /**
@@ -78,7 +84,8 @@ export type Shared =
 const dismissed: Shared = { action: "dismissed" }
 
 /**
- * Opens the share sheet, and succeeds once it closes.
+ * Opens the share sheet, and succeeds once it closes. Fails without a
+ * `message` or `url`, which iOS would never answer.
  *
  * @stability experimental
  * @category actions
@@ -86,9 +93,23 @@ const dismissed: Shared = { action: "dismissed" }
  */
 export const share = (
   options: Options
+): Effect.Effect<Shared, Native.DeviceError> => shareLoose(options)
+
+const shareLoose = (
+  options: Fields
 ): Effect.Effect<Shared, Native.DeviceError> =>
   Native.Device.use((d): Effect.Effect<Shared, Native.DeviceError> =>
-    d.os === "android"
+    !options.message && !options.url
+      ? Effect.fail(
+        new Native.DeviceError({
+          module: d.os === "android" ? "ShareModule" : "ActionSheetManager",
+          method: d.os === "android"
+            ? "share"
+            : "showShareActionSheetWithOptions",
+          cause: new Error("Share needs a message or a url")
+        })
+      )
+      : d.os === "android"
       ? Effect.map(
         device.promise<{ action: string }>(
           "ShareModule",
@@ -119,9 +140,7 @@ export const share = (
               url: options.url,
               subject: options.subject,
               excludedActivityTypes: options.excludedActivityTypes,
-              tintColor: options.tintColor === undefined
-                ? undefined
-                : d.color(options.tintColor)
+              tintColor: tintOf(d, options.tintColor)
             },
             reject,
             (completed: boolean, activityType: string | null) =>
@@ -137,18 +156,22 @@ export const share = (
       )
   )
 
+// iOS takes a processed number, and React Native leaves out a colour
+// string it can't process.
+const tintOf = (d: Native.Device, color: string | number | undefined) => {
+  const tint = color === undefined ? undefined : d.color(color)
+  return typeof tint === "number" ? tint : undefined
+}
+
 /**
- * The Command behind `share`. Its `tintColor` is a colour string or number,
- * which a story can compare.
+ * The Command behind `share`. Its Schema can't require a `message` or a
+ * `url`, so args decoded without both fail as `share` does.
  *
  * @stability experimental
  * @category commands
  * @since 0.1.0
  */
-export const Share: Command.Factory<
-  Options & { readonly tintColor?: string | number | undefined },
-  Result.Result<Shared, Native.DeviceError>
-> = Command.make(
+export const Share = Command.make(
   "Share.share",
   {
     args: {
@@ -161,5 +184,8 @@ export const Share: Command.Factory<
       tintColor: Schema.optional(Schema.Union([Schema.String, Schema.Number]))
     }
   },
-  (options) => Effect.result(share(options))
-)
+  (options) => Effect.result(shareLoose(options))
+) as Command.Factory<any, any> as Command.Factory<
+  Options,
+  Result.Result<Shared, Native.DeviceError>
+>

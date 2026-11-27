@@ -30,7 +30,12 @@ export const make = (
     blur: () => {
       state.blurs++
     },
-    color: (color) => ({ processed: color })
+    // As React Native's processColor: a string it knows becomes a number,
+    // and one it doesn't null. A PlatformColor passes through.
+    color: (color) =>
+      typeof color === "string"
+        ? ({ red: 0xffff0000 } as Record<string, number>)[color] ?? null
+        : color
   }
   return {
     device,

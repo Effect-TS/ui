@@ -30,7 +30,7 @@ describe("Share", () => {
     ]])
   })
 
-  it("passes iOS the message, URL and processed tint, and reports the activity", async () => {
+  it("passes iOS the message, URL and processed tint number, and reports the activity", async () => {
     const sheets = FakeDevice.module({
       showShareActionSheetWithOptions: (_options, _onError, onDone) =>
         onDone(true, "com.apple.UIKit.activity.Mail")
@@ -51,7 +51,7 @@ describe("Share", () => {
     assert.deepInclude(sheets.calls[0][1] as object, {
       url: "https://effect.website",
       subject: "Look",
-      tintColor: { processed: "red" }
+      tintColor: 0xffff0000
     })
   })
 
@@ -77,6 +77,37 @@ describe("Share", () => {
       Effect.flip(Share.share({ message: "Hi" }))
     )
     assert.strictEqual(error.method, "showShareActionSheetWithOptions")
+  })
+
+  it("fails without a message or URL, or with an unknown tint, before calling iOS", async () => {
+    const sheets = FakeDevice.module()
+    const fake = FakeDevice.make("ios", { ActionSheetManager: sheets.module })
+    // @ts-expect-error A message or a URL is required.
+    const empty: Share.Options = { subject: "Hi" }
+    const error = await FakeDevice.run(
+      fake.device,
+      Effect.flip(Share.share(empty))
+    )
+    assert.strictEqual(error.module, "ActionSheetManager")
+    const command = await FakeDevice.run(
+      fake.device,
+      Share.Share.make({ subject: "Hi" } as any).effect
+    )
+    assert.isTrue(Result.isFailure(command))
+    assert.deepStrictEqual(sheets.calls, [])
+  })
+
+  it("leaves out a tint React Native can't process", async () => {
+    const sheets = FakeDevice.module({
+      showShareActionSheetWithOptions: (_options, _onError, onDone) =>
+        onDone(false, null)
+    })
+    const fake = FakeDevice.make("ios", { ActionSheetManager: sheets.module })
+    await FakeDevice.run(
+      fake.device,
+      Share.share({ message: "Hi", tintColor: "nope" })
+    )
+    assert.isUndefined((sheets.calls[0][1] as any).tintColor)
   })
 
   it("answers its Command with a Result, failing without the module", async () => {
