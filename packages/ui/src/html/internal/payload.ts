@@ -148,6 +148,23 @@ const fieldOf = (
     ? target
     : element) as HTMLInputElement
 
+let composingCode: string | undefined
+const composingKeyups = new WeakSet<Event>()
+
+// Safari reports the key that ends a composition with `isComposing` false and `keyCode` 229.
+const isComposingKey = (event: KeyboardEvent): boolean =>
+  event.isComposing === true ||
+  (event as { readonly keyCode?: number }).keyCode === 229
+
+/**
+ * Remembers the physical key of a composing `keydown` so its matching `keyup`
+ * after `compositionend` still reports `composing: true`.
+ */
+export const noteKeyDown = (event: Event): void => {
+  const e = event as KeyboardEvent
+  composingCode = isComposingKey(e) && e.code ? e.code : undefined
+}
+
 /**
  * Builds the payload a handler gets: plain data, read from the event and the
  * elements involved.
@@ -187,9 +204,14 @@ export const payloadOf = (
     case "keydown":
     case "keyup": {
       const e = event as KeyboardEvent
-      // Safari reports the key that ends a composition with `isComposing` false and `keyCode` 229.
-      const composing = e.isComposing === true ||
-        (e as { readonly keyCode?: number }).keyCode === 229
+      let composing = isComposingKey(e)
+      if (name === "keyup") {
+        if (composingCode !== undefined && e.code === composingCode) {
+          composingCode = undefined
+          composingKeyups.add(event)
+        }
+        composing = composing || composingKeyups.has(event)
+      }
       return {
         key: e.key ?? "",
         ...modifiers(event),

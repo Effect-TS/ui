@@ -9,7 +9,7 @@ import * as globalEvents from "./globalEvents.ts"
 import * as images from "./images.ts"
 import * as mediaQueries from "./mediaQueries.ts"
 import * as modals from "./modals.ts"
-import { payloadOf } from "./payload.ts"
+import { noteKeyDown, payloadOf } from "./payload.ts"
 
 const signals = (document: Document) => {
   const view = document.defaultView
@@ -64,8 +64,17 @@ const globalEventsOf = (
         },
         () => event.preventDefault()
       )
+    const onKeyDown = !custom && name === "keyup"
+      ? (event: Event) => noteKeyDown(event)
+      : undefined
+    if (onKeyDown !== undefined) on.addEventListener("keydown", onKeyDown, true)
     on.addEventListener(name, f, { capture })
-    return () => on.removeEventListener(name, f, { capture })
+    return () => {
+      on.removeEventListener(name, f, { capture })
+      if (onKeyDown !== undefined) {
+        on.removeEventListener("keydown", onKeyDown, true)
+      }
+    }
   }
 })
 
