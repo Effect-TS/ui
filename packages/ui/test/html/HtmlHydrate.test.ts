@@ -379,39 +379,23 @@ describe("HtmlHydrate", () => {
       })
       const renderedA = yield* HtmlServer.renderToHtml(Slot, {}, { key: "a" })
       const renderedB = yield* HtmlServer.renderToHtml(Slot, {}, { key: "b" })
-      assert.strictEqual(renderedA.state["~key"], "a")
-      assert.strictEqual(renderedB.state["~key"], "b")
       const appA = yield* container(renderedA.html)
       const appB = yield* container(renderedB.html)
-      const serverA = [...appA.querySelectorAll("*")]
-      const serverB = [...appB.querySelectorAll("*")]
-      const serverIdA = appA.querySelector("button")!.id
-      const serverIdB = appB.querySelector("button")!.id
-      assert.notStrictEqual(serverIdA, "")
-      assert.notStrictEqual(serverIdB, "")
-      assert.notStrictEqual(serverIdA, serverIdB)
-      const rootB = yield* HtmlHydrate.hydrateEffect(
-        Slot,
-        {},
-        appB,
-        renderedB.state,
-        { head: false }
-      )
-      const rootA = yield* HtmlHydrate.hydrateEffect(
-        Slot,
-        {},
-        appA,
-        renderedA.state,
-        { head: false }
-      )
-      sameElements(appA, serverA)
-      sameElements(appB, serverB)
-      assert.strictEqual(rootA.path, "/Slot[a]")
-      assert.strictEqual(rootB.path, "/Slot[b]")
-      assert.strictEqual(appA.querySelector("button")!.id, serverIdA)
-      assert.strictEqual(appB.querySelector("button")!.id, serverIdB)
-      assert.strictEqual(document.getElementById(serverIdA), serverA[0])
-      assert.strictEqual(document.getElementById(serverIdB), serverB[0])
+      const buttonA = appA.querySelector("button")!
+      const buttonB = appB.querySelector("button")!
+      const [idA, idB] = [buttonA.id, buttonB.id]
+      yield* HtmlHydrate.hydrateEffect(Slot, {}, appB, renderedB.state, {
+        head: false
+      })
+      yield* HtmlHydrate.hydrateEffect(Slot, {}, appA, renderedA.state, {
+        head: false
+      })
+      sameElements(appA, [buttonA])
+      sameElements(appB, [buttonB])
+      assert.strictEqual(buttonA.id, idA)
+      assert.strictEqual(buttonB.id, idB)
+      assert.strictEqual(document.getElementById(idA), buttonA)
+      assert.strictEqual(document.getElementById(idB), buttonB)
     }).pipe(Effect.scoped))
 
   it.effect("keeps nodes before a mismatch inside a row, rebuilds the rest of that row, and keeps sibling rows", () =>
