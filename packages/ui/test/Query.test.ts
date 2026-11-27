@@ -245,6 +245,47 @@ describe("Query", () => {
     }).pipe(provide)
   })
 
+  it.effect("under a hold, an abandoned fetch goes at release unless a watcher took it over, even one that left or that the release registered", () => {
+    const { GetUser, db, provide } = makeUsers({ staleTime: "30 seconds" })
+    return Effect.gen(function*() {
+      const cache = Query.internals(yield* Query.Cache)
+      const def = Query.defOf(GetUser)
+      const fetcher = (yield* GetUser) as unknown as (
+        args: unknown
+      ) => Effect.Effect<any, any>
+      const watchOne = (id: string, onChange: () => void = () => {}) =>
+        cache.watch(def, { id }, fetcher, onChange)
+      // A successor takes 1's fetch over, then unmounts without abandoning it.
+      const old = watchOne("1")
+      yield* flush
+      const release = cache.hold()
+      old.unregister(true)
+      watchOne("1").unregister()
+      release()
+      yield* advance(10)
+      assert.isTrue(
+        AsyncResult.isSuccess(
+          (yield* TestQuery.entry(GetUser, { id: "1" }))!.stored
+        )
+      )
+      // Stale 1 refetches at release, and the waiting value's handler takes 2's fetch over.
+      yield* advance("31 seconds")
+      const other = watchOne("2")
+      yield* flush
+      const releaseAgain = cache.hold()
+      other.unregister(true)
+      let taken = false
+      watchOne("1", () => {
+        if (!taken) watchOne("2")
+        taken = true
+      })
+      releaseAgain()
+      assert.isTrue(taken)
+      yield* advance(10)
+      assert.strictEqual(db.calls, 3)
+    }).pipe(provide)
+  })
+
   it.effect("under a hold, a bare Failure is withheld: a swap clears it unseen, and a join gets it at release", () => {
     const { GetUser, db, provide } = makeUsers({ staleTime: "30 seconds" })
     return Effect.gen(function*() {

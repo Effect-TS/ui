@@ -346,8 +346,8 @@ describe("Query results", () => {
       (texts) => assert.deepStrictEqual(texts, ["a=Ann", "a=loading", "a=Bea"])
     ))
 
-  it.effect("debounce: new args interrupt the old args' fetch, unless another watcher still needs it", () => {
-    const app = makeApp({ debounce: "300 millis" })
+  it.effect("new args interrupt the old args' fetch, unless another watcher still needs it", () => {
+    const app = makeApp()
     const set = (...cards: Array<string>) => app.ListMessage.Set({ cards })
     return run(
       app.layer,
@@ -372,6 +372,33 @@ describe("Query results", () => {
         assert.deepStrictEqual(app.db.interrupted, ["1"])
         assert.strictEqual(other.text(), "c=idled=Ann")
         assert.strictEqual(app.db.calls, 3)
+      })
+    )
+  })
+
+  it.effect("a superseded fetch runs on when a sibling takes over its args in the same update, or its instance unmounts", () => {
+    const app = makeApp()
+    return run(
+      app.layer,
+      Effect.gen(function*() {
+        const root = yield* TestHost.mount(app.List, { cards: ["a:1"] })
+        yield* TestHost.settle
+        yield* TestClock.adjust("5 millis")
+        // a, kept, leaves 1 before b, after it in document order, starts watching 1.
+        root.send(app.ListMessage.Set({ cards: ["a:2", "b:1"] }))
+        yield* TestHost.settle
+        yield* TestClock.adjust("5 millis")
+        // a unmounts while 2's fetch is in flight.
+        root.send(app.ListMessage.Set({ cards: ["b:1"] }))
+        yield* load
+        // One fetch each, and 2's fills the cache.
+        assert.deepStrictEqual(root.fetches().map((fetch) => fetch.logKey), [
+          "{\"id\":\"1\"}",
+          "{\"id\":\"2\"}"
+        ])
+        assert.isTrue(
+          AsyncResult.isSuccess(root.entry(app.GetUser, { id: "2" })!.stored)
+        )
       })
     )
   })

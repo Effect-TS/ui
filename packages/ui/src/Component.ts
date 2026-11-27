@@ -3345,6 +3345,10 @@ export interface Define<V extends View.Elements> {
  * again restart the wait. A `queryMany` query's new keys wait each on their
  * own.
  *
+ * When an entry's args change, the old args' fetch is interrupted unless
+ * another watch, even one starting in the same update, a `get` or a prefetch
+ * still needs it. A fetch in flight at unmount runs on and fills the cache.
+ *
  * When an enabled `query` entry's args change, it keeps the last Success
  * with `waiting: true` until the new args have a result, including during
  * `debounce`. `$.queries`, `head` and `subscriptions` see the same result.

@@ -535,6 +535,11 @@ Without a stored Success, the result is `Initial`; a disabled query is
 Set `dropPrevious: true` on the entry to show `Initial` instead when old
 results would mislead.
 
+The old args' fetch is interrupted, unless another instance, a `get` or a
+prefetch still needs it, so it doesn't delay the new args. Args that change
+faster than a fetch completes show nothing new until they hold still. A fetch
+in flight when the instance unmounts runs on and fills the cache.
+
 The cache never retries a failed fetch: a fetcher that should retry does so
 itself.
 
