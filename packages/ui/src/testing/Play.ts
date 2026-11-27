@@ -160,6 +160,13 @@ export interface Play<Model, Msg, Events> {
  * `play.root.pending()` to assert on that. When the scope closes with a
  * failure the end check doesn't run.
  *
+ * **Gotchas**
+ *
+ * Provide `TestHost.layer()` beneath the app's Layers, with
+ * `Layer.provideMerge`, so their fibers run on its scheduler and every step
+ * settles them. A Layer merged beside the host, as by `Layer.mergeAll`, can
+ * still be working when the next `expect` reads the tree.
+ *
  * @stability experimental
  * @category constructors
  * @since 0.1.0

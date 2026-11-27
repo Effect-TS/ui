@@ -41,16 +41,19 @@ export const CurrentExecutor = Context.Reference<Executor>(
  */
 export type Flush = "queued" | "first" | "last" | { readonly seed: number }
 
+interface Task {
+  readonly task: () => void
+  readonly priority: number
+}
+
 /**
  * One queue for every fiber task and the render flush, ordered by priority
- * and then FIFO. Nothing runs until it's drained.
+ * and then FIFO. The tree's tasks run only when it's drained.
  *
  * @internal
  */
 export class TestExecutor implements Executor, Scheduler.SchedulerDispatcher {
-  private tasks: Array<
-    { readonly task: () => void; readonly priority: number }
-  > = []
+  private tasks: Array<Task> = []
   private random: number
   readonly flushes: Flush
   readonly scheduler: Scheduler.Scheduler
@@ -84,9 +87,55 @@ export class TestExecutor implements Executor, Scheduler.SchedulerDispatcher {
     return Math.floor((((t ^ (t >>> 14)) >>> 0) / 4294967296) * below)
   }
   scheduleTask(task: () => void, priority: number): void {
+    this.queue({ task, priority })
+  }
+  private queue(entry: Task): void {
     let index = this.tasks.length
-    while (index > 0 && this.tasks[index - 1]!.priority > priority) index--
-    this.tasks.splice(index, 0, { task, priority })
+    while (index > 0 && this.tasks[index - 1]!.priority > entry.priority) {
+      index--
+    }
+    this.tasks.splice(index, 0, entry)
+  }
+  /**
+   * The Scheduler for fibers outside the tree. Their tasks join the queue, so
+   * a drain runs them in turn with the tree's, and each also gets a task on a
+   * dispatcher of `wake`, which runs it if no drain has.
+   */
+  outside(wake: Scheduler.Scheduler): Scheduler.Scheduler {
+    const tasks = this.tasks
+    const outside = new Set<Task>()
+    // Run by a drain or by `wake`, whichever comes first.
+    const run = (entry: Task) => {
+      if (!outside.has(entry)) return
+      tasks.splice(tasks.indexOf(entry), 1)
+      entry.task()
+    }
+    let woken: Scheduler.SchedulerDispatcher | undefined
+    const dispatcher: Scheduler.SchedulerDispatcher = {
+      scheduleTask: (task, priority) => {
+        const entry: Task = {
+          task: () => {
+            outside.delete(entry)
+            task()
+          },
+          priority
+        }
+        outside.add(entry)
+        this.queue(entry)
+        ;(woken ??= wake.makeDispatcher()).scheduleTask(
+          () => run(entry),
+          priority
+        )
+      },
+      flush: () => {
+        for (const entry of outside) run(entry)
+      }
+    }
+    return {
+      executionMode: wake.executionMode,
+      shouldYield: (fiber) => wake.shouldYield(fiber),
+      makeDispatcher: () => dispatcher
+    }
   }
   flush(): void {
     this.drain(Infinity)

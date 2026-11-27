@@ -268,6 +268,13 @@ it.layer(SaveNote.layer.pipe(Layer.provideMerge(Notes.layerMemory([note]))), {
 // closes the Play settles once more, so a crash after the last step fails the
 // test. `TestHost.layer()` provides the host. `TestHost.settle`, `setOnline`
 // and `expectProblem` work beside the Play.
+//
+// Provide the host beneath the test's Layers with `Layer.provideMerge`. The
+// host's scheduler then runs their fibers too, such as a backend's worker
+// that every root shares, and each step settles them with the tree. A Layer
+// merged beside the host with `Layer.mergeAll` runs on the default scheduler,
+// so a step can read the tree before that worker has published. Waiting
+// outside Effect, on a Promise or a timer, isn't settled either way.
 
 // `NoteEditor` already provides the app's Layers, and an inner provide wins
 // over an outer one. So a test starts from `NoteEditorNoDeps` and provides
@@ -275,7 +282,7 @@ it.layer(SaveNote.layer.pipe(Layer.provideMerge(Notes.layerMemory([note]))), {
 // Build fresh services for each test so edits cannot leak.
 const NoteEditorTest = NoteEditorNoDeps.pipe(Component.provide(SaveNote.layer))
 
-it.layer(Layer.mergeAll(Notes.layerMemory([note]), TestHost.layer()), {
+it.layer(Notes.layerMemory([note]).pipe(Layer.provideMerge(TestHost.layer())), {
   buildPerTest: true
 })(
   "NoteEditor as a Play",
@@ -321,9 +328,8 @@ const ApiFake = Layer.sync(HttpClient.HttpClient, () => {
 
 const AppTest = Layer.mergeAll(
   Router.memory({ routes: AppRoute, url: "/notes/n1" }),
-  ApiFake,
-  TestHost.layer()
-)
+  ApiFake
+).pipe(Layer.provideMerge(TestHost.layer()))
 
 it.layer(AppTest, { buildPerTest: true })("App as a Play", (it) => {
   it.effect("loads a note, saves an edit and shows the notice", () =>
@@ -404,9 +410,8 @@ const timelineOf = (flush: TestHost.Flush) =>
     Effect.provide(
       Layer.mergeAll(
         Router.memory({ routes: AppRoute, url: "/notes/n1" }),
-        ApiFake,
-        TestHost.layer({ flush })
-      )
+        ApiFake
+      ).pipe(Layer.provideMerge(TestHost.layer({ flush })))
     )
   )
 

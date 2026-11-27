@@ -126,8 +126,10 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Play", (it) => {
           yield* PubSub.publish(pubsub, 0)
           yield* Effect.forkScoped(
             Effect.forever(
-              Effect.flatMap(Queue.take(queue), (value) =>
-                PubSub.publish(pubsub, value))
+              Effect.flatMap(
+                Queue.take(queue),
+                (value) => PubSub.publish(pubsub, value)
+              )
             )
           )
           return {
@@ -147,8 +149,8 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Play", (it) => {
       "Panel/SaveValue",
       { args: { value: Schema.Number } }
     ) {
-      static readonly layer = this.toLayer(({ value }) =>
-        Backend.use((backend) => backend.save(value))
+      static readonly layer = this.toLayer(
+        Backend.useSync((backend) => ({ value }) => backend.save(value))
       )
     }
 
@@ -168,8 +170,10 @@ it.layer(TestHost.layer(), { buildPerTest: true })("Play", (it) => {
           "values",
           Stream.unwrap(
             Backend.useSync((backend) =>
-              Stream.map(backend.values, (value) =>
-                PanelMessage.ReceivedValue({ value }))
+              Stream.map(
+                backend.values,
+                (value) => PanelMessage.ReceivedValue({ value })
+              )
             )
           )
         )

@@ -6584,6 +6584,31 @@ describe("Runtime", () => {
       assert.include(error.message, "Again")
     }).pipe(Effect.provide(TestHost.layer({ budget: 200 }))))
 
+  it.effect("settle fails when a fiber outside the tree never stops", () =>
+    Effect.gen(function*() {
+      yield* Effect.forkScoped(Effect.forever(Effect.yieldNow))
+      const error = yield* Effect.flip(TestHost.settle)
+      assert.strictEqual(error._tag, "SettleError")
+    }).pipe(Effect.scoped, Effect.provide(TestHost.layer({ budget: 200 }))))
+
+  it.effect("runs a fiber outside the tree without a settle", () =>
+    Effect.gen(function*() {
+      const requests = yield* Queue.unbounded<number>()
+      const replies = yield* Queue.unbounded<number>()
+      yield* Effect.forkScoped(Effect.forever(
+        Effect.flatMap(Queue.take(requests), (n) => Queue.offer(replies, n + 1))
+      ))
+      yield* Queue.offer(requests, 1)
+      assert.strictEqual(yield* Queue.take(replies), 2)
+    }).pipe(Effect.scoped, Effect.provide(TestHost.layer())))
+
+  it("runs a fiber outside the tree under Effect.runSync", () => {
+    const program = Effect.as(Effect.yieldNow, "done").pipe(
+      Effect.provide(TestHost.layer())
+    )
+    assert.strictEqual(Effect.runSync(program), "done")
+  })
+
   it.effect("prerenders the tree as nodes: an instance's elements and text in a Range under its path", () =>
     Effect.gen(function*() {
       const state = { model: Schema.Null, message: Schema.Never }
