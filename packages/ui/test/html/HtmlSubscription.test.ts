@@ -850,7 +850,8 @@ describe("onVisibility and onConnectivity", { concurrent: false }, () => {
         ])
       }).pipe(Effect.provide(TestHost.layer()), Effect.scoped)
 
-      // Nested signal updates stay in order, and class-based signals keep `this`.
+      // Nested signal updates stay in order, late subscribers don't see
+      // earlier queued changes, and class-based signals keep `this`.
       yield* Effect.gen(function*() {
         const host = yield* TestHost.TestHost
         const off = host.connectivity.subscribe((online) => {
@@ -867,6 +868,26 @@ describe("onVisibility and onConnectivity", { concurrent: false }, () => {
           "online:false",
           "online:true"
         ])
+        off()
+        const late: Array<boolean> = []
+        let offLate: (() => void) | undefined
+        const offFirst = host.connectivity.subscribe((online) => {
+          if (!online) {
+            offFirst()
+            host.connectivity.set(true)
+            host.connectivity.set(false)
+            offLate = host.connectivity.subscribe((value) => late.push(value))
+          }
+        })
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            offFirst()
+            offLate?.()
+          })
+        )
+        yield* TestHost.setOnline(false)
+        assert.strictEqual(host.connectivity.get(), false)
+        assert.deepStrictEqual(late, [])
       }).pipe(Effect.provide(TestHost.layer()), Effect.scoped)
 
       yield* Effect.gen(function*() {

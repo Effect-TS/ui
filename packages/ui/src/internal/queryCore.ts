@@ -172,21 +172,29 @@ export const addListener = <A>(listeners: Set<A>, listener: A): () => void => {
  */
 export const makeSignal = (initial = true): SettableSignal => {
   let current = initial
-  const listeners = new Set<(value: boolean) => void>()
-  let queue: Array<boolean> | undefined
+  const listeners = new Set<{ readonly listener: (value: boolean) => void }>()
+  let queue:
+    | Array<
+      readonly [
+        boolean,
+        ReadonlyArray<{ readonly listener: (value: boolean) => void }>
+      ]
+    >
+    | undefined
   return {
     get: () => current,
-    subscribe: (listener) => addListener(listeners, listener),
+    subscribe: (listener) => addListener(listeners, { listener }),
     set: (value) => {
       if (value === current) return
       current = value
-      if (queue !== undefined) return void queue.push(value)
-      queue = [value]
+      const entry = [value, Array.from(listeners)] as const
+      if (queue !== undefined) return void queue.push(entry)
+      queue = [entry]
       try {
         for (let i = 0; i < queue.length; i++) {
-          const next = queue[i]
-          for (const listener of Array.from(listeners)) {
-            if (listeners.has(listener)) listener(next)
+          const [next, snapshot] = queue[i]
+          for (const sub of snapshot) {
+            if (listeners.has(sub)) sub.listener(next)
           }
         }
       } finally {
