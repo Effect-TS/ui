@@ -665,8 +665,9 @@ export const adopt: hydrateRun.Adopt<Node> = (base, container, path) => {
  * **When to use**
  *
  * Use when the caller needs the root: to read its Model, send it a message,
- * or wait for `root.adopted`, which completes when no hydrating instance is
- * still waiting. `hydrate` is the form that runs an app.
+ * update its props with `setProps`, or wait for `root.adopted`, which
+ * completes when no hydrating instance is still waiting. `hydrate` is the
+ * form that runs an app.
  *
  * **Details**
  *
@@ -695,7 +696,7 @@ export const hydrateEffect = <
   state: Renderer.State,
   options?: Omit<BrowserHost.MountOptions<V, RF, Events>, "key">
 ): Effect.Effect<
-  Renderer.Root<Model, Msg>,
+  Renderer.Root<Model, Msg, Props>,
   never,
   Exclude<R | RF | RP, Html.Host> | Scope.Scope
 > =>
@@ -719,7 +720,7 @@ export const hydrateEffect = <
  *
  * Use to run a server-rendered app in the browser, in place of
  * `BrowserHost.mount`. Reach for `hydrateEffect` when the caller needs the
- * root, to send it messages or to wait for `root.adopted`.
+ * root, to send it messages, update its props or wait for `root.adopted`.
  *
  * **Details**
  *

@@ -40,7 +40,7 @@ describe("Renderer", () => {
     })
     expect(Renderer.mount(Form, {}, null)).type.toBe<
       Effect.Effect<
-        Renderer.Root<string, typeof Msg.Type>,
+        Renderer.Root<string, typeof Msg.Type, {}>,
         never,
         TinyHost | Renderer.Renderer | Scope.Scope
       >
@@ -50,7 +50,11 @@ describe("Renderer", () => {
   it("a host-neutral root needs no marker", () => {
     expect(Renderer.mount(Counter, { initial: 0 }, null)).type.toBe<
       Effect.Effect<
-        Renderer.Root<{ readonly count: number }, typeof Counter.message.Type>,
+        Renderer.Root<
+          { readonly count: number },
+          typeof Counter.message.Type,
+          { readonly initial: number }
+        >,
         never,
         Renderer.Renderer | Scope.Scope
       >
@@ -70,7 +74,7 @@ describe("Renderer", () => {
     })
     expect(TestHost.mount(Form, {})).type.toBe<
       Effect.Effect<
-        TestHost.TestRoot<string, typeof Msg.Type, never>,
+        TestHost.TestRoot<string, typeof Msg.Type, never, {}>,
         never,
         TestHost.TestHost | Scope.Scope
       >
@@ -104,7 +108,7 @@ describe("Effect props", () => {
   it("mount and prerender add the props' requirements", () => {
     expect(Renderer.mount(App, Router.props(AppRoute), null)).type.toBe<
       Effect.Effect<
-        Renderer.Root<AppRoute, never>,
+        Renderer.Root<AppRoute, never, { readonly route: AppRoute }>,
         never,
         Router.Router | Renderer.Renderer | Scope.Scope
       >
@@ -118,7 +122,7 @@ describe("Effect props", () => {
     >()
     expect(TestHost.mount(App, Router.props(AppRoute))).type.toBe<
       Effect.Effect<
-        TestHost.TestRoot<AppRoute, never, never>,
+        TestHost.TestRoot<AppRoute, never, never, { readonly route: AppRoute }>,
         never,
         Router.Router | TestHost.TestHost | Scope.Scope
       >
@@ -128,14 +132,14 @@ describe("Effect props", () => {
   it("plain props still infer and add nothing", () => {
     expect(Renderer.mount(App, { route: AppRoute.Home() }, null)).type.toBe<
       Effect.Effect<
-        Renderer.Root<AppRoute, never>,
+        Renderer.Root<AppRoute, never, { readonly route: AppRoute }>,
         never,
         Renderer.Renderer | Scope.Scope
       >
     >()
     expect(TestHost.mount(App, { route: AppRoute.Home() })).type.toBe<
       Effect.Effect<
-        TestHost.TestRoot<AppRoute, never, never>,
+        TestHost.TestRoot<AppRoute, never, never, { readonly route: AppRoute }>,
         never,
         TestHost.TestHost | Scope.Scope
       >

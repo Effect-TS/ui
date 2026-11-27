@@ -522,7 +522,7 @@ export const Refs: Context.Service<Refs, Refs> = services.Refs
  * @category models
  * @since 0.1.0
  */
-export interface Root<out Model, in Msg> {
+export interface Root<out Model, in Msg, in Props = never> {
   /** The root instance's path, `/<name>` or `/<name>[<key>]` when keyed. */
   readonly path: string
   /** The session the message log groups this mount's entries under. */
@@ -531,6 +531,8 @@ export interface Root<out Model, in Msg> {
   readonly model: () => Model | undefined
   /** Sends a message to the root, as if from outside the tree. */
   readonly send: (message: Msg) => void
+  /** Gives the root new props without remounting, as a parent's render does for a child. */
+  readonly setProps: (props: Props) => void
   /**
    * Completes once every instance has adopted the server's nodes, at once
    * without hydration. Head sync and the router's announcements start with
@@ -572,7 +574,8 @@ export type HostOf<V> = [V] extends [never] ? never
  * `props` is the root's props or an Effect of them, such as
  * `Router.props(AppRoute)`. An Effect is run once, before `init`, and its
  * requirements are added to the mount's. `init` still only sees plain props,
- * so a Story or a test can pass them directly.
+ * so a Story or a test can pass them directly. Later changes can be pushed
+ * to the mounted root with `root.setProps`.
  *
  * It builds every node fresh. A server render is hydrated with
  * `HtmlHydrate.hydrate`.
@@ -632,7 +635,7 @@ export const mount: <
     readonly onEmit?: ((event: Events) => void) | undefined
   }
 ) => Effect.Effect<
-  Root<Model, Msg>,
+  Root<Model, Msg, Props>,
   never,
   R | RF | RP | HostOf<V> | Renderer | Scope.Scope
 > = runtime.mount as any

@@ -349,9 +349,9 @@ export interface Mounted extends InstanceBase {
 }
 
 /**
- * A mounted instance got new props from its parent, without a re-key. Its
- * queries' args can read them, so `Story.fromLog` applies it to reach the
- * state the instance ended with.
+ * A mounted instance got new props from its parent or `root.setProps`, without
+ * a re-key. Its queries' args can read them, so `Story.fromLog` applies it to
+ * reach the state the instance ended with.
  *
  * **Details**
  *

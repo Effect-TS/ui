@@ -669,7 +669,7 @@ export const layer = (options?: {
  * @category models
  * @since 0.1.0
  */
-export interface Root<out Model, in Msg, out Events> {
+export interface Root<out Model, in Msg, out Events, in Props = never> {
   /** The root instance's path, `/<name>`. */
   readonly path: string
   readonly session: string
@@ -677,6 +677,8 @@ export interface Root<out Model, in Msg, out Events> {
   readonly model: () => Model | undefined
   /** Sends a message to the root. The log shows it as a `Dispatch`. */
   readonly send: (message: Msg) => void
+  /** Gives the root new props without remounting. */
+  readonly setProps: (props: Props) => void
   /** The events the root delivered, in order, as a parent's `onEmit` gets them. */
   readonly emitted: ReadonlyArray<Events>
   /** This mount's log entries, oldest first. */
@@ -710,8 +712,8 @@ export interface Root<out Model, in Msg, out Events> {
  * @category models
  * @since 0.1.0
  */
-export interface TestRoot<out Model, in Msg, out Events>
-  extends Root<Model, Msg, Events>
+export interface TestRoot<out Model, in Msg, out Events, in Props = never>
+  extends Root<Model, Msg, Events, Props>
 {
   /** The element the tree is mounted in. */
   readonly container: TestElement
@@ -768,11 +770,11 @@ export const mount = <
       | undefined
     readonly query?: Renderer.QueryOptions | undefined
     readonly frames?:
-      | ((root: TestRoot<Model, Msg, Events>) => string)
+      | ((root: TestRoot<Model, Msg, Events, Props>) => string)
       | undefined
   }
 ): Effect.Effect<
-  TestRoot<Model, Msg, Events>,
+  TestRoot<Model, Msg, Events, Props>,
   never,
   R | RF | RP | TestHost | Scope.Scope
 > =>
@@ -781,9 +783,9 @@ export const mount = <
     const container = makeElement("#root")
     const outer = yield* Effect.context<never>()
     const project = options?.frames ??
-      ((root: TestRoot<Model, Msg, Events>) => root.text())
+      ((root: TestRoot<Model, Msg, Events, Props>) => root.text())
     const frames: Array<string> = []
-    let testRoot: TestRoot<Model, Msg, Events> | undefined
+    let testRoot: TestRoot<Model, Msg, Events, Props> | undefined
     const frame = () => {
       if (testRoot === undefined) return
       const next = project(testRoot)
@@ -836,11 +838,11 @@ export const mount = <
  */
 export const register = (
   testHost: TestHost,
-  root: runtime.Root & Renderer.Root<any, any>,
+  root: runtime.Root & Renderer.Root<any, any, any>,
   log: MessageLog.Memory,
   frames: () => ReadonlyArray<string>,
   emitted: ReadonlyArray<unknown>
-): Effect.Effect<Root<any, any, any>, never, Scope.Scope> =>
+): Effect.Effect<Root<any, any, any, any>, never, Scope.Scope> =>
   Effect.gen(function*() {
     const pending = (): ReadonlyArray<Pending> => [
       ...runtime.pending(root).map((run): Pending => ({
@@ -867,6 +869,7 @@ export const register = (
       session: root.session,
       model: root.model,
       send: root.send,
+      setProps: root.setProps,
       emitted,
       log: entries,
       pending,
@@ -1099,8 +1102,8 @@ export const formatLog = (entries: ReadonlyArray<MessageLog.Entry>): string =>
  * **Details**
  *
  * A fact is an entry without `causedBy`: a message from a DOM event, a
- * Command's result, a Subscription or `root.send`, a query result, a Layer
- * build or a run ending. The entries under it are what the tree did about
+ * Command's result, a Subscription, `root.send` or `root.setProps`, a query
+ * result, a Layer build or a run ending. The entries under it are what the tree did about
  * it, in the order they were logged: the messages its `update` sent on, the
  * props, mounts and unmounts of its render, the runs it stopped and the
  * fetches its render started. See `MessageLog.Base`.

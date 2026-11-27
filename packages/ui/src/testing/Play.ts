@@ -115,8 +115,8 @@ export type Expect = Scene.Expect<Effect.Effect<void, StepError>>
  * @category models
  * @since 0.1.0
  */
-export interface Play<Model, Msg, Events> {
-  readonly root: TestHost.TestRoot<Model, Msg, Events>
+export interface Play<Model, Msg, Events, Props = never> {
+  readonly root: TestHost.TestRoot<Model, Msg, Events, Props>
   /**
    * Clicks the one element `target` matches: the innermost element with a
    * `click` handler, that element or an ancestor, gets it. A string means
@@ -182,7 +182,7 @@ export const make = <
   component: Component.Members<Name, Props, Model, Msg, Events, R, V, any>,
   props: Props | Effect.Effect<Props, never, RP>
 ): Effect.Effect<
-  Play<Model, Msg, Events>,
+  Play<Model, Msg, Events, Props>,
   StepError,
   R | RP | TestHost.TestHost | Scope.Scope
 > => internal.begin(internal.PlayCursor, "Play", make, component, props) as any
