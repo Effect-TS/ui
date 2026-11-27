@@ -66,26 +66,22 @@ const inside = (id: string, locator: Locator.Locator) =>
 const show = HtmlLocator.role("button", { name: "Show code" })
 const hide = HtmlLocator.role("button", { name: "Hide code" })
 
-it.layer(TestLayer, { buildPerTest: true })(
+it.layer(TestLayer, { buildPerTest: true, concurrent: false })(
   "CodePreview",
   (it) => {
-    it.effect(
-      "opens a file on its own, and scrolls to it when it closes",
-      () =>
-        Effect.gen(function*() {
-          const play = yield* HtmlPlay.make(Alone, {})
-          yield* play.expect(show).toHaveCount(2)
-          yield* play.click(inside("first", show))
-          yield* play.expect(inside("first", hide)).toExist()
-          yield* play.expect(inside("second", show)).toExist()
-          scrolls.length = 0
-          yield* play.click(inside("first", hide))
-          yield* play.expect(show).toHaveCount(2)
-          // Closing brings the top of the file back into view.
-          assert.deepStrictEqual(scrolls, [{ block: "nearest" }])
-        }),
-      { concurrent: false }
-    )
+    it.effect("opens a file on its own, and scrolls to it when it closes", () =>
+      Effect.gen(function*() {
+        const play = yield* HtmlPlay.make(Alone, {})
+        yield* play.expect(show).toHaveCount(2)
+        yield* play.click(inside("first", show))
+        yield* play.expect(inside("first", hide)).toExist()
+        yield* play.expect(inside("second", show)).toExist()
+        scrolls.length = 0
+        yield* play.click(inside("first", hide))
+        yield* play.expect(show).toHaveCount(2)
+        // Closing brings the top of the file back into view.
+        assert.deepStrictEqual(scrolls, [{ block: "nearest" }])
+      }))
 
     it.effect("opens and closes the files of one row together", () =>
       Effect.gen(function*() {

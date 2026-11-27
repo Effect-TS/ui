@@ -355,6 +355,8 @@ export interface TestHost {
   readonly drain: (budget: number) => boolean
   /** Whether the test scheduler has work queued. */
   readonly busy: () => boolean
+  /** How many tasks the test scheduler has run. */
+  readonly ran: () => number
   /** The Command runs and fetches still in flight in every tree mounted on this host. */
   readonly pending: () => ReadonlyArray<Pending>
   readonly budget: number
@@ -618,6 +620,7 @@ export const layer = (options?: {
       log,
       drain,
       busy: () => executor.size > 0,
+      ran: () => executor.ran,
       pending: () => [...trees].flatMap((tree) => tree.pending()),
       budget,
       register: (tree) => {
@@ -647,7 +650,6 @@ export const layer = (options?: {
       drainingClock,
       trees: () => trees
     }
-    activity.set(service, { executor, settledAt: 0 })
     yield* Effect.addFinalizer(() =>
       Effect.suspend(() =>
         problems.length === 0
@@ -926,17 +928,16 @@ export class SettleError extends Data.TaggedError("SettleError")<{
   readonly log: ReadonlyArray<MessageLog.Entry>
 }> {}
 
-const activity = new WeakMap<
-  TestHost,
-  { readonly executor: Executor.TestExecutor; settledAt: number }
->()
+/** What each host's `ran` was when `settle` last returned. */
+const settledAt = new WeakMap<TestHost, number>()
 
-const realSetTimeout = globalThis.setTimeout.bind(globalThis)
-const realClearTimeout = globalThis.clearTimeout.bind(globalThis)
+// Taken at load, so a test's fake timers don't hold `settle`.
+const { clearTimeout, setTimeout } = globalThis
 
-const nextMacrotask = Effect.callback<void>((resume) => {
-  const handle = realSetTimeout(() => resume(Effect.void), 0)
-  return Effect.sync(() => realClearTimeout(handle))
+/** @internal */
+export const nextMacrotask = Effect.callback<void>((resume) => {
+  const handle = setTimeout(() => resume(Effect.void), 0)
+  return Effect.sync(() => clearTimeout(handle))
 })
 
 /**
@@ -999,64 +1000,51 @@ export const settle: Effect.Effect<
   })
 
 const drainAll = Effect.fnUntraced(function*(testHost: TestHost) {
-  const track = activity.get(testHost)
-  let budget = testHost.budget
+  // The budget covers every task, whether a drain ran it or the host's `Scheduler` did during a wait.
+  const limit = testHost.ran() + testHost.budget
   let quiet = 0
-  const exhaust = () => {
-    const log = testHost.log.entries().slice(-20)
-    const pending = testHost.pending()
-    return new SettleError({
-      message: [
-        `TestHost.settle ran ${testHost.budget} tasks and work is still being scheduled.`,
-        "Last log entries:",
-        formatLog(log),
-        "Pending:",
-        pending.length === 0
-          ? "  (none)"
-          : pending.map(describePending).join("\n")
-      ].join("\n"),
-      pending,
-      log
-    })
-  }
-  while (quiet < 3) {
+  while (true) {
+    const ran = testHost.ran()
     if (testHost.busy()) {
       quiet = 0
-      const ranBefore = track?.executor.ran
-      if (!testHost.drain(budget)) return yield* exhaust()
-      const spent = track !== undefined ? track.executor.ran - ranBefore! : 1
-      budget = Math.max(0, budget - spent)
+      if (!testHost.drain(limit - ran)) return yield* exhausted(testHost)
       continue
     }
     // A run or fetch sleeping on the clock looks the same as one waiting on a Promise, so anything
-    // in flight gets the grace.
+    // in flight gets the grace. With nothing in flight, what ran since the last settle gets one turn.
     const pending = testHost.pending()
-    if (pending.length === 0) {
-      if (
-        quiet > 0 || track === undefined ||
-        track.executor.ran === track.settledAt
-      ) {
-        break
-      }
-    }
+    const grace = pending.length > 0
+      ? 3
+      : ran === (settledAt.get(testHost) ?? 0)
+      ? 0
+      : 1
+    if (quiet >= grace) break
     // Something may come back from outside the scheduler, such as a resolved Promise.
-    const ranBefore = track?.executor.ran
     yield* nextMacrotask
-    if (track !== undefined && track.executor.ran !== ranBefore) {
-      quiet = 0
-      const ran = track.executor.ran - ranBefore!
-      if (ran > budget) return yield* exhaust()
-      budget -= ran
-      continue
-    }
-    if (
-      !testHost.busy() && !pending.some((pending) => pending._tag === "Load")
-    ) {
-      quiet++
-    }
+    if (testHost.ran() > limit) return yield* exhausted(testHost)
+    if (testHost.ran() !== ran) quiet = 0
+    else if (!pending.some((pending) => pending._tag === "Load")) quiet++
   }
-  if (track !== undefined) track.settledAt = track.executor.ran
+  settledAt.set(testHost, testHost.ran())
 })
+
+const exhausted = (testHost: TestHost): SettleError => {
+  const log = testHost.log.entries().slice(-20)
+  const pending = testHost.pending()
+  return new SettleError({
+    message: [
+      `TestHost.settle ran ${testHost.budget} tasks and work is still being scheduled.`,
+      "Last log entries:",
+      formatLog(log),
+      "Pending:",
+      pending.length === 0
+        ? "  (none)"
+        : pending.map(describePending).join("\n")
+    ].join("\n"),
+    pending,
+    log
+  })
+}
 
 const describePending = (pending: Pending): string =>
   pending._tag === "Command"
