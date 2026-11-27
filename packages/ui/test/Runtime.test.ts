@@ -6687,11 +6687,13 @@ describe("Runtime", () => {
       assert.deepStrictEqual(seen, ["worker", "published"])
 
       const error = yield* Effect.gen(function*() {
-        yield* Effect.forkScoped(
-          Effect.forever(Effect.andThen(tick, Effect.yieldNow))
-        )
+        yield* Effect.forkScoped(Effect.gen(function*() {
+          yield* Effect.yieldNow
+          yield* Effect.promise(() => Promise.resolve())
+          yield* Effect.yieldNow
+        }))
         return yield* Effect.flip(TestHost.settle)
-      }).pipe(Effect.scoped, Effect.provide(TestHost.layer({ budget: 3 })))
+      }).pipe(Effect.scoped, Effect.provide(TestHost.layer({ budget: 2 })))
       assert.strictEqual(error._tag, "SettleError")
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer()))
   })

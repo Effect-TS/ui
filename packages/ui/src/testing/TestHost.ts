@@ -1022,9 +1022,10 @@ const drainAll = Effect.fnUntraced(function*(testHost: TestHost) {
   while (quiet < 3) {
     if (testHost.busy()) {
       quiet = 0
-      const before = budget
+      const ranBefore = track?.executor.ran
       if (!testHost.drain(budget)) return yield* exhaust()
-      budget = Math.max(0, before - 1)
+      const spent = track !== undefined ? track.executor.ran - ranBefore! : 1
+      budget = Math.max(0, budget - spent)
       continue
     }
     // A run or fetch sleeping on the clock looks the same as one waiting on a Promise, so anything
