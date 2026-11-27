@@ -320,8 +320,7 @@ export class Instance {
     parent: Instance | undefined,
     at: Rec | undefined,
     props: unknown,
-    env: Env,
-    named?: string | undefined
+    env: Env
   ) {
     this.tree = tree
     this.component = component
@@ -331,7 +330,6 @@ export class Instance {
     this.depth = parent === undefined ? 0 : parent.depth + 1
     this.props = props
     this.env = env
-    this.named = named
   }
   get path(): string {
     if (this.named !== undefined) return this.named
@@ -1768,9 +1766,9 @@ export const mount = (
     undefined,
     undefined,
     props,
-    env,
-    options.path
+    env
   )
+  instance.named = options.path
   if (start(instance) === undefined) {
     instance.rendered = stand(instance, instance.failure!)
   }

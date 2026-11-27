@@ -51,7 +51,7 @@ export const segmentOf = (
  * @internal
  */
 export const rootPath = (
-  component: Component.Any | Component.Lazy.Any | Feature.Any,
+  component: Component.Any,
   key?: string | undefined
 ): string =>
   "/" + (key === undefined ? childName(component) : segmentOf(component, key))

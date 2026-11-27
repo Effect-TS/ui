@@ -704,7 +704,7 @@ export const hydrateEffect = <
       component as unknown as Component.Any,
       props,
       container,
-      options,
+      { ...options, key: state["~key"] },
       hydrateRun.hydrating(state, adopt)
     )
   ) as any

@@ -417,10 +417,7 @@ const mountCore = (
   Scope.Scope
 > =>
   withProps(rootProps, (props) => {
-    const key = options?.hydrate !== undefined
-      ? options.hydrate.key
-      : options?.key
-    const path = rootPath(component, key)
+    const path = rootPath(component, options?.key)
     const go = (decoded?: Exit.Exit<Decoded, unknown>) =>
       Effect.uninterruptible(
         Effect.contextWith((ctx: Context.Context<Scope.Scope>) => {
@@ -446,6 +443,7 @@ const mountCore = (
           try {
             made = start(
               component,
+              path,
               props,
               container,
               ctx,
@@ -502,6 +500,7 @@ export const mountDom = (
 
 const start = (
   component: Component.Any,
+  path: string,
   props: unknown,
   container: unknown,
   caller: Context.Context<any>,
@@ -589,10 +588,6 @@ const start = (
   const { base, dom } = hostInput.make(container, ownsHead, recording.step)
   const deferred = new Set<Kernel.Instance>()
   let hydrating: hydrateRun.Session | undefined
-  const path = rootPath(
-    component,
-    hydrate !== undefined ? hydrate.key : options?.key
-  )
   const routing: routeRun.Routed | undefined = hooks?.kernel?.(hooks, {
     path,
     container,
@@ -970,10 +965,11 @@ export const prerender = (
         )
         const made = start(
           component,
+          rootPath(component, options.key),
           props,
           serverHost.node,
           ctx,
-          options.key === undefined ? undefined : { key: options.key },
+          undefined,
           {
             elements: options.elements,
             make: () => ({ base: serverHost.host, dom: undefined })

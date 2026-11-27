@@ -579,9 +579,8 @@ export const mountRoot = (
       { host }
     )
     const outer = yield* Effect.context<Scope.Scope>()
-    const key = hydrate !== undefined ? hydrate.key : options?.key
     const attached = hot.devTools(container)
-    const hotSession = hot.open(component, container, key)
+    const hotSession = hot.open(component, container, options?.key)
     const hydrating = hotSession?.hasSnapshot === true ? undefined : hydrate
     if (hydrating !== hydrate) container.textContent = ""
     const scheduler =
@@ -602,7 +601,7 @@ export const mountRoot = (
         container,
         make,
         [Html.name],
-        { ...options, key, hydrate: hydrating, hot: hotSession, scheduler }
+        { ...options, hydrate: hydrating, hot: hotSession, scheduler }
       ),
       mountContext
     )
