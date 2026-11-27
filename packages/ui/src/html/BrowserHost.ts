@@ -327,7 +327,7 @@ export const htmlHost: Context.Service.Shape<typeof Html.Host> = {
       if (options === undefined) field.select()
       else field.setSelectionRange(options.start, options.end ?? options.start)
     } catch {
-      // A field without a selection, such as `email`, or a file input, which refuses a non-empty value.
+      // Thrown by a type without a selection, such as `email`, or a file input given a value.
     }
   },
   requestSubmit: (element) => {

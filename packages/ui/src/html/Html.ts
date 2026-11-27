@@ -346,17 +346,15 @@ export interface KeyPayload extends SelectionPayload {
 }
 
 /**
- * The payload of `selectionchange` on an `input` or `textarea`: the
- * current caret or selection, after the user or a script changed it. The
- * browser queues the event, so changes in one task can arrive as one.
+ * The payload of `selectionchange` on an `input` or `textarea`: the current
+ * caret or selection. The browser queues the event, so changes in one task
+ * can arrive as one.
  *
  * **Details**
  *
- * `selectionStart` and `selectionEnd` are the event target's caret or
- * selection, in UTF-16 code units, when the target is a `textarea` or an
- * `input` whose type has a selection, such as `text` or `search`. They are
- * `null` for any other target, including an `email` or `number` input,
- * which browsers don't report a selection for.
+ * Offsets are in UTF-16 code units. They are `null` unless the target is a
+ * `textarea` or an `input` type with a selection, such as `text` or
+ * `search`: an `email` or `number` input reports none.
  *
  * @stability experimental
  * @category events
@@ -382,8 +380,8 @@ export interface SelectionPayload {
  *
  * `selectionStart` and `selectionEnd` are the selection the edit left, as
  * `SelectionPayload` describes. Read the caret here to keep it in step with
- * `value`: `selectionchange` is queued, and an edit that leaves the range
- * where it was sends none.
+ * `value`: `selectionchange` comes later, or not at all if the range didn't
+ * move.
  *
  * @stability experimental
  * @category events

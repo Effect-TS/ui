@@ -319,15 +319,11 @@ export const measure = <N extends globalThis.Element, Msg>(
  *
  * **Details**
  *
- * The range is in UTF-16 code units, and the browser clamps it to the
- * value's length. The value the same `update` set is in the field by then.
- * An `input` type without a selection, such as `email` or `number`, is
- * left as it is, and the result is still `{ found: true }`.
- *
- * Issue `focus` if the field needs focus: Safari focuses it, other browsers
- * don't. The browser host first writes the element's controlled `value` if
- * the element shows something else, such as a character `update`
- * rejected, since writing it afterward would drop the selection.
+ * The field already holds the value the same `update` set, even over a
+ * rejected edit. The range is in UTF-16 code units, clamped to the value's
+ * length. A field without a selection, such as an `email` input, is left as
+ * it is and still reports `{ found: true }`. Issue `focus` if the field
+ * needs focus: only Safari focuses it.
  *
  * **Example** (Selecting a field's text, or placing the caret)
  *
