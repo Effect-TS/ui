@@ -1,5 +1,5 @@
 import * as Path from "node:path"
-import type { MetroConfig } from "../NativeMetro.ts"
+import type { MetroConfig, ResolveRequest } from "../NativeMetro.ts"
 
 const native = /^(?:@?react-native|@?expo)(?:[-/]|$)/
 
@@ -56,15 +56,9 @@ const delegate = (moduleName: string, origin: string): Delegated => ({
 
 const empty = "\0@effect/ui-native/empty"
 
-// Metro expects the unscaled asset path so it registers every @2x/@3x variant.
+// Metro resolves the unscaled path to every @2x/@3x variant.
 const stripScaleSuffix = (filePath: string): string =>
   filePath.replace(/@[\d.]+x(?=\.[^./\\]+$)/, "")
-
-const rejectAssetRequire = (source: string, importer: string): never => {
-  throw new Error(
-    `[@effect/ui-native] Cannot require asset "${source}" from ${importer} in a pre-bundle; use a static \`import\` instead`
-  )
-}
 
 /**
  * Pre-bundles `entry` for `platform` under the project's
@@ -90,11 +84,7 @@ export const prebundle = async (
   const file = `main.${platform}.js`
   const sourceExts = config.resolver?.sourceExts ??
     ["js", "jsx", "json", "ts", "tsx"]
-  const assetExts = new Set(
-    (config.resolver?.assetExts ?? defaultAssetExts).map((ext) =>
-      ext.toLowerCase()
-    )
-  )
+  const assetExts = new Set(config.resolver?.assetExts ?? defaultAssetExts)
   const mainFields = config.resolver?.resolverMainFields ??
     ["react-native", "browser", "main"]
   const isExternal = (id: string) =>
@@ -104,38 +94,12 @@ export const prebundle = async (
         ? id === entry || id.startsWith(entry + "/")
         : entry.test(id)
     )
-  const isAsset = (id: string): boolean => {
-    const clean = id.split(/[?#]/, 1)[0]!
-    const ext = Path.extname(clean).slice(1).toLowerCase()
-    return ext !== "" && assetExts.has(ext)
-  }
-  const resolveAsset = async (
-    context: {
-      readonly resolve: (
-        source: string,
-        importer: string,
-        options: { readonly skipSelf: boolean }
-      ) => Promise<{ readonly id: string } | null>
-    },
-    source: string,
-    importer: string,
-    kind: string | undefined
-  ) => {
-    if (kind === "require-call") rejectAssetRequire(source, importer)
-    // Resolve relative paths syntactically so scale-only (@2x/@3x) and
-    // platform-only (.android/.ios) assets reach Metro without needing a 1x file.
-    if (source.startsWith(".") || Path.isAbsolute(source)) {
-      return {
-        id: Path.resolve(Path.dirname(importer), source),
-        external: "absolute" as const
-      }
-    }
-    const resolved = await context.resolve(source, importer, { skipSelf: true })
-    return resolved !== null
-      ? { id: resolved.id, external: "absolute" as const }
-      : { id: source, external: true as const }
-  }
-  const resolveRequest = config.resolver?.resolveRequest
+  // Metro tells an asset by its extension alone, case and all.
+  const isAsset = (id: string) => assetExts.has(Path.extname(id).slice(1))
+  // Without a resolver of the app's, every import is handed straight back.
+  const resolveRequest: ResolveRequest = config.resolver?.resolveRequest ??
+    ((context, moduleName, platform) =>
+      context.resolveRequest(context, moduleName, platform))
   const result = await build({
     configFile: false,
     root: config.projectRoot,
@@ -150,74 +114,76 @@ export const prebundle = async (
         ) {
           return null
         }
-        const kind = (options as { readonly kind?: string } | undefined)?.kind
-        if (resolveRequest != null) {
-          const delegated = new Set<Delegated>()
-          const found = resolveRequest(
-            {
-              ...config.resolver,
-              mainFields,
-              dev: false,
-              platform,
-              preferNativePlatform: true,
-              originModulePath: importer,
-              customResolverOptions: {},
-              resolveRequest: (
-                context: { readonly originModulePath: string },
-                moduleName: string,
-                requested: string | null
-              ) => {
-                if (requested !== platform) {
-                  throw new Error(
-                    `[@effect/ui-native] resolveRequest asked for ${moduleName} on platform ${requested}, but the pre-bundle for ${platform} resolves only for ${platform}`
-                  )
-                }
-                const request = delegate(moduleName, context.originModulePath)
-                delegated.add(request)
-                return request
-              }
-            },
-            source,
-            platform
-          )
-          if (delegated.has(found as Delegated)) {
-            const { moduleName, origin } = found as Delegated
-            if (isAsset(moduleName)) {
-              return resolveAsset(this, moduleName, origin, kind)
-            }
-            if (moduleName === source && origin === importer) return null
-            if (isExternal(moduleName)) {
-              return { id: moduleName, external: true }
-            }
-            const resolved = await this.resolve(moduleName, origin, {
-              skipSelf: true
-            })
-            if (resolved === null) {
-              throw new Error(
-                `[@effect/ui-native] resolveRequest resolved ${source} to ${moduleName}, which wasn't found from ${origin}`
-              )
-            }
-            return resolved
+        // Metro registers every scale of an asset left to it by absolute
+        // path, and emits the files.
+        const leave = (id: string) => {
+          if (options.kind === "require-call") {
+            throw new Error(
+              `[@effect/ui-native] Cannot require asset "${source}" from ${importer} in a pre-bundle; use a static \`import\` instead`
+            )
           }
-          if (found.type === "sourceFile") return found.filePath
-          if (found.type === "empty") return empty
-          if (found.type === "assetFiles") {
-            if (kind === "require-call") rejectAssetRequire(source, importer)
-            const target = found.filePaths?.[0]
-            if (target !== undefined) {
-              return {
-                id: stripScaleSuffix(target),
-                external: "absolute" as const
-              }
-            }
-            return resolveAsset(this, source, importer, kind)
-          }
-          throw new Error(
-            `[@effect/ui-native] resolveRequest resolved ${source} to ${found.type}, which a pre-bundle can't hold, so add it to external`
-          )
+          return { id, external: "absolute" as const }
         }
-        if (isAsset(source)) return resolveAsset(this, source, importer, kind)
-        return null
+        const delegated = new Set<Delegated>()
+        const found = resolveRequest(
+          {
+            ...config.resolver,
+            mainFields,
+            dev: false,
+            platform,
+            preferNativePlatform: true,
+            originModulePath: importer,
+            customResolverOptions: {},
+            resolveRequest: (
+              context: { readonly originModulePath: string },
+              moduleName: string,
+              requested: string | null
+            ) => {
+              if (requested !== platform) {
+                throw new Error(
+                  `[@effect/ui-native] resolveRequest asked for ${moduleName} on platform ${requested}, but the pre-bundle for ${platform} resolves only for ${platform}`
+                )
+              }
+              const request = delegate(moduleName, context.originModulePath)
+              delegated.add(request)
+              return request
+            }
+          },
+          source,
+          platform
+        )
+        if (delegated.has(found as Delegated)) {
+          const { moduleName, origin } = found as Delegated
+          if (isAsset(moduleName)) {
+            // A relative path resolves by its name alone: an asset with only
+            // scaled (@2x) or platform (.android) files has no file of that name.
+            return leave(
+              moduleName[0] === "." || Path.isAbsolute(moduleName)
+                ? Path.resolve(Path.dirname(origin), moduleName)
+                : (await this.resolve(moduleName, origin, { skipSelf: true }))
+                  ?.id ?? moduleName
+            )
+          }
+          if (moduleName === source && origin === importer) return null
+          if (isExternal(moduleName)) return { id: moduleName, external: true }
+          const resolved = await this.resolve(moduleName, origin, {
+            skipSelf: true
+          })
+          if (resolved === null) {
+            throw new Error(
+              `[@effect/ui-native] resolveRequest resolved ${source} to ${moduleName}, which wasn't found from ${origin}`
+            )
+          }
+          return resolved
+        }
+        if (found.type === "sourceFile") return found.filePath
+        if (found.type === "empty") return empty
+        if (found.type === "assetFiles") {
+          return leave(stripScaleSuffix(found.filePaths![0]!))
+        }
+        throw new Error(
+          `[@effect/ui-native] resolveRequest resolved ${source} to ${found.type}, which a pre-bundle can't hold, so add it to external`
+        )
       },
       load: (id) => id === empty ? "export default {}" : null
     }],

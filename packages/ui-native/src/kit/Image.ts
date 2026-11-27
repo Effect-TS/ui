@@ -35,8 +35,9 @@
  * @stability experimental
  * @since 0.1.0
  */
+import { getAssetByID } from "react-native/asset-registry"
 import * as Native from "../Native.ts"
-import { getAsset, resolveAsset } from "./internal/asset.ts"
+import { resolveAsset } from "./internal/asset.ts"
 
 /**
  * How an image fits inside its frame.
@@ -215,94 +216,43 @@ export interface ImageOptions {
   readonly resizeMultiplier?: number | undefined
 }
 
-interface NormalizedSource {
-  readonly __packager_asset?: true | undefined
-  readonly uri: string
-  readonly headers?: Readonly<Record<string, string>> | undefined
-  readonly method?: string | undefined
-  readonly body?: string | undefined
-  readonly cache?: ImageCachePolicy | undefined
-  readonly width?: number | undefined
-  readonly height?: number | undefined
-  readonly scale?: number | undefined
-  readonly bundle?: string | undefined
-}
-
-const isLoadEvent = (event: string): boolean =>
-  event === "loadStart" ||
-  event === "progress" ||
-  event === "load" ||
-  event === "error" ||
-  event === "loadEnd"
-
-const normalizeOne = (
-  source: SingleImageSource,
-  os: string
-): NormalizedSource | undefined => {
-  if (typeof source === "number") return resolveAsset(source, os)?.[0]
-  if (typeof source === "string") return { uri: source }
-  return source
-}
-
 const normalizeSources = (
   value: unknown,
   os: string
-): ReadonlyArray<NormalizedSource> | undefined => {
+): ReadonlyArray<ImageURISource> | undefined => {
   if (value === undefined) return undefined
-  if (typeof value === "number") return resolveAsset(value, os)
-  if (typeof value === "string") return [{ uri: value }]
-  if (Array.isArray(value)) {
-    const out: Array<NormalizedSource> = []
-    for (let i = 0; i < value.length; i++) {
-      const normalized = normalizeOne(value[i] as SingleImageSource, os)
-      if (normalized !== undefined) out.push(normalized)
-    }
-    return out
+  const out: Array<ImageURISource> = []
+  for (
+    const source of (Array.isArray(value) ? value : [value]) as ReadonlyArray<
+      SingleImageSource
+    >
+  ) {
+    const one = typeof source === "number"
+      ? resolveAsset(source, os)
+      : typeof source === "string"
+      ? { uri: source }
+      : source
+    if (one !== undefined) out.push(one)
   }
-  return [value as ImageURISource]
+  return out
 }
 
-const sameHeaders = (
-  a: Readonly<Record<string, string>> | undefined,
-  b: Readonly<Record<string, string>> | undefined
-): boolean => {
+// An inline source object is new every render, and a changed source reloads
+// the image.
+const same = (a: unknown, b: unknown): boolean => {
   if (a === b) return true
-  if (a === undefined || b === undefined) return false
+  if (
+    typeof a !== "object" || typeof b !== "object" || a === null || b === null
+  ) {
+    return false
+  }
   let count = 0
   for (const key in a) {
-    if (a[key] !== b[key]) return false
+    if (!same((a as any)[key], (b as any)[key])) return false
     count++
   }
   for (const _ in b) count--
   return count === 0
-}
-
-const sameSource = (a: NormalizedSource, b: NormalizedSource): boolean =>
-  a === b || (
-    a.uri === b.uri &&
-    a.width === b.width &&
-    a.height === b.height &&
-    a.scale === b.scale &&
-    a.method === b.method &&
-    a.body === b.body &&
-    a.cache === b.cache &&
-    a.bundle === b.bundle &&
-    a.__packager_asset === b.__packager_asset &&
-    sameHeaders(a.headers, b.headers)
-  )
-
-const sameSources = (
-  prev: ReadonlyArray<NormalizedSource> | undefined,
-  next: ReadonlyArray<NormalizedSource> | undefined
-): boolean => {
-  if (prev === next) return true
-  if (prev === undefined || next === undefined || prev.length !== next.length) {
-    return false
-  }
-  for (let i = 0; i < prev.length; i++) {
-    if (!sameSource(prev[i]!, next[i]!)) return false
-  }
-  return true
 }
 
 /**
@@ -323,9 +273,10 @@ export type ImageElement<Msg, R = never> = Native.Element<
 const image = Native.defineView(
   () =>
     new Native.Element<any, never, ImageEvents, "image", ImageStyle>("image")
+      // Android sends the load events only to an image that asks for them.
       .forward((node) => {
         for (const name in node.handlers) {
-          if (isLoadEvent(name)) {
+          if (/^(load|progress|error)/.test(name)) {
             return node.prop("shouldNotifyLoadEvents", true)
           }
         }
@@ -338,14 +289,7 @@ const image = Native.defineView(
     props: {
       source(n, value, host) {
         const sources = normalizeSources(value, host.os)
-        if (
-          sameSources(
-            n.props.source as ReadonlyArray<NormalizedSource> | undefined,
-            sources
-          )
-        ) {
-          return
-        }
+        if (same(n.props.source, sources)) return
         host.set(n, "source", sources)
         if (host.os === "android") {
           host.set(n, "headers", sources?.[0]?.headers)
@@ -357,17 +301,11 @@ const image = Native.defineView(
 
 const intrinsicSize = (
   source: ImageSource
-):
-  | {
-    readonly width?: number | undefined
-    readonly height?: number | undefined
-  }
-  | undefined =>
-{
+): Pick<ImageURISource, "width" | "height"> | undefined => {
   const single = Array.isArray(source)
     ? (source.length === 1 ? source[0] : undefined)
     : source
-  if (typeof single === "number") return getAsset(single)
+  if (typeof single === "number") return getAssetByID(single)
   if (typeof single === "object" && single !== null) return single
   return undefined
 }
@@ -385,40 +323,9 @@ export const Image = <Msg>(
   _h: Native.H<Msg>,
   options: ImageOptions
 ): ImageElement<Msg> => {
-  let el: ImageElement<Msg> = (image as ImageElement<Msg>).prop(
-    "source",
-    options.source
-  )
   const size = intrinsicSize(options.source)
-  if (
-    size !== undefined &&
-    (size.width !== undefined || size.height !== undefined)
-  ) {
-    el = el.style({ width: size.width, height: size.height })
-  }
-  if (options.resizeMode !== undefined) {
-    el = el.prop("resizeMode", options.resizeMode)
-  }
-  if (options.blurRadius !== undefined) {
-    el = el.prop("blurRadius", options.blurRadius)
-  }
-  if (options.capInsets !== undefined) {
-    el = el.prop("capInsets", options.capInsets)
-  }
-  if (options.fadeDuration !== undefined) {
-    el = el.prop("fadeDuration", options.fadeDuration)
-  }
-  if (options.progressiveRenderingEnabled !== undefined) {
-    el = el.prop(
-      "progressiveRenderingEnabled",
-      options.progressiveRenderingEnabled
-    )
-  }
-  if (options.resizeMethod !== undefined) {
-    el = el.prop("resizeMethod", options.resizeMethod)
-  }
-  if (options.resizeMultiplier !== undefined) {
-    el = el.prop("resizeMultiplier", options.resizeMultiplier)
-  }
-  return el
+  // The options are named as the native props, which `style` sets.
+  return (image as ImageElement<Msg>).style(
+    { width: size?.width, height: size?.height, ...options } as ImageStyle
+  )
 }

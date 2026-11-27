@@ -117,33 +117,24 @@ const resolvePackagerAsset = (
       }`
     }
   }
-  const resolved: {
-    __packager_asset: true
-    uri: string
-    width?: number
-    height?: number
-    scale: number
-  } = { __packager_asset: true, uri, scale }
-  if (asset.width !== undefined) resolved.width = asset.width
-  if (asset.height !== undefined) resolved.height = asset.height
-  return resolved
+  return {
+    __packager_asset: true,
+    uri,
+    width: asset.width,
+    height: asset.height,
+    scale
+  }
 }
 
-let cache: Map<string, readonly [ResolvedAsset]> | undefined
-
-export const getAsset = (id: number): PackagerAsset | undefined =>
-  getAssetByID(id)
+// Asset ids count up from 1.
+const cache: Array<ResolvedAsset | undefined> = []
 
 export const resolveAsset = (
   id: number,
   os: string
-): readonly [ResolvedAsset] | undefined => {
-  const key = `${os}:${id}`
-  const cached = cache?.get(key)
+): ResolvedAsset | undefined => {
+  const cached = cache[id]
   if (cached !== undefined) return cached
   const asset = getAssetByID(id)
-  if (asset === undefined) return undefined
-  const out = [resolvePackagerAsset(asset, os)] as const
-  ;(cache ??= new Map()).set(key, out)
-  return out
+  return asset && (cache[id] = resolvePackagerAsset(asset, os))
 }
