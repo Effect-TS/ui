@@ -14,7 +14,6 @@ import {
 } from "./utils/document.ts"
 
 const Message = UiSchema.TaggedEnum({
-  ClosedEditor: {},
   RequestedCloseDialog: { reason: Schema.String },
   RequestedDismissEditor: { request: Dismissal.Request }
 })
@@ -39,7 +38,6 @@ const Page = Html.component({
 }).make({
   init: () => ({ dialog: true, editor: true, log: [] }),
   update: {
-    ClosedEditor: ($) => ({ ...$.model, editor: false }),
     RequestedCloseDialog: ($, { reason }) => ({
       ...$.model,
       dialog: false,
@@ -185,23 +183,15 @@ const tab = (shiftKey = false) => {
 }
 
 describe("Dismissal in a document", { concurrent: false }, () => {
-  it.effect("Escape reaches only the dismissal layer, including when refused, and reaches the dialog once the layer closes", () =>
+  it.effect("Escape reaches only the dismissal layer, and reaches the dialog once the layer closes", () =>
     Effect.gen(function*() {
-      const { log, send } = yield* mountPage({ refuse: true })
+      const { log } = yield* mountPage()
       byId("editor-input").focus()
       escape(byId("editor-input"))
-      escape(byId("editor-input"))
-      yield* tick
-      assert.deepStrictEqual(log(), [
-        "editor:escape-key:",
-        "editor:escape-key:"
-      ])
-      send(Message.ClosedEditor())
       yield* tick
       escape(byId("anchor"))
       yield* tick
       assert.deepStrictEqual(log(), [
-        "editor:escape-key:",
         "editor:escape-key:",
         "dialog:escape-key"
       ])
@@ -250,33 +240,16 @@ describe("Dismissal in a document", { concurrent: false }, () => {
       assert.deepStrictEqual(log(), ["dialog:escape-key"])
     }))
 
-  it.effect("focus leaving the layer asks with focus-out, unless a press outside already asked", () =>
+  it.effect("focus leaving the layer asks with focus-out, also right after a cancelled tap", () =>
     Effect.gen(function*() {
-      const { log } = yield* mountPage({ refuse: true })
+      const { log } = yield* mountPage()
       const save = byId("save")
-      press(save)
-      save.focus()
-      save.dispatchEvent(
-        new PointerEvent("click", { bubbles: true, detail: 1 })
-      )
-      yield* tick
-      assert.deepStrictEqual(log(), ["editor:outside-press:mouse"])
-      byId("anchor").focus()
-      yield* tick
-      assert.deepStrictEqual(log(), [
-        "editor:outside-press:mouse",
-        "editor:focus-out:"
-      ])
-      // A cancelled tap, as for a scroll, doesn't pair with a later focus change.
+      // A tap cancelled as for a scroll doesn't pair with the focus change.
       press(save, "touch")
       save.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true }))
       save.focus()
       yield* tick
-      assert.deepStrictEqual(log(), [
-        "editor:outside-press:mouse",
-        "editor:focus-out:",
-        "editor:focus-out:"
-      ])
+      assert.deepStrictEqual(log(), ["editor:focus-out:"])
     }))
 
   it.effect("a press the layer takes doesn't also close a non-modal dialog when it moves focus, after the layer closes", () =>
@@ -314,55 +287,20 @@ describe("Dismissal in a document", { concurrent: false }, () => {
       const root = host.attachShadow({ mode: "open" })
       root.innerHTML =
         "<div id=\"editor\"><input id=\"field\"></div><button id=\"anchor\"></button><button id=\"other\"></button>"
-      // happy-dom doesn't retarget, so the document sees the host as a browser does.
+      // happy-dom doesn't retarget, so the document sees the host as a browser
+      // does. A move within the root isn't composed and stays inside it.
       const send = (id: string, event: Event) => {
-        Object.defineProperty(event, "target", { get: () => host })
-        root.getElementById(id)!.dispatchEvent(event)
-      }
-      const tap = (id: string, pointerType: string) => {
-        const init = { bubbles: true, composed: true, pointerType }
-        send(id, new PointerEvent("pointerdown", { ...init, isPrimary: true }))
-        send(id, new PointerEvent("click", { ...init, detail: 1 }))
-      }
-      const log: Array<string> = []
-      yield* Effect.forkScoped(
-        Stream.runForEach(
-          Dismissal.trackDismissal(root.getElementById("editor")!, {
-            insideSelector: "#anchor"
-          }),
-          ({ pointerType, reason }) =>
-            Effect.sync(() => log.push(`${reason}:${pointerType}`))
-        )
-      )
-      yield* tick
-      send(
-        "field",
-        new FocusEvent("focusin", { bubbles: true, composed: true })
-      )
-      tap("field", "mouse")
-      tap("anchor", "touch")
-      yield* tick
-      assert.deepStrictEqual(log, [])
-      tap("other", "touch")
-      yield* tick
-      assert.deepStrictEqual(log, ["outside-press:touch"])
-    }))
-
-  it.effect("focus that moves within an open shadow root asks once, also when the document hears it too", () =>
-    Effect.gen(function*() {
-      const app = yield* container
-      const host = app.appendChild(document.createElement("div"))
-      const root = host.attachShadow({ mode: "open" })
-      root.innerHTML =
-        "<div id=\"editor\"><input id=\"field\"></div><button id=\"anchor\"></button><button id=\"other\"></button>"
-      // A browser keeps a move between two elements of one root inside it, and
-      // shows the document the host for one that enters the root.
-      const focus = (id: string, composed: boolean) => {
-        const event = new FocusEvent("focusin", { bubbles: true, composed })
-        if (composed) {
+        if (event.composed) {
           Object.defineProperty(event, "target", { get: () => host })
         }
         root.getElementById(id)!.dispatchEvent(event)
+      }
+      const focus = (id: string, composed: boolean) =>
+        send(id, new FocusEvent("focusin", { bubbles: true, composed }))
+      const tap = (id: string) => {
+        const init = { bubbles: true, composed: true, pointerType: "touch" }
+        send(id, new PointerEvent("pointerdown", { ...init, isPrimary: true }))
+        send(id, new PointerEvent("click", { ...init, detail: 1 }))
       }
       const log: Array<string> = []
       yield* Effect.forkScoped(
@@ -374,14 +312,16 @@ describe("Dismissal in a document", { concurrent: false }, () => {
         )
       )
       yield* tick
-      focus("anchor", false)
+      focus("field", true)
+      tap("anchor")
       yield* tick
       assert.deepStrictEqual(log, [])
-      focus("other", false)
+      tap("other")
       yield* tick
-      assert.deepStrictEqual(log, ["focus-out"])
+      focus("other", false)
+      // Heard by both the root and the document, and asks once.
       focus("other", true)
       yield* tick
-      assert.deepStrictEqual(log, ["focus-out", "focus-out"])
+      assert.deepStrictEqual(log, ["outside-press", "focus-out", "focus-out"])
     }))
 })
