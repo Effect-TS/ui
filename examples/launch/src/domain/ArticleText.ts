@@ -1,17 +1,10 @@
 import { MarkdownParser } from "@effect/ui/html"
 import { Option, Schema } from "effect"
-import { scenarios } from "../diagram/scenarios.ts"
-import { modules } from "../kit/components.ts"
 import {
-  columns,
-  format,
-  load,
-  names,
-  type Row,
-  script,
-  summary,
-  value
-} from "../performance/Results.ts"
+  architectureDescription,
+  scenarios
+} from "../diagram/scenarios.ts"
+import { modules } from "../kit/components.ts"
 import { byline, Frontmatter, Islands } from "./Island.ts"
 import type { Snippet, Snippets } from "./Snippet.ts"
 
@@ -25,7 +18,6 @@ const attributes = (text: string) =>
 
 const decode = {
   Diagram: Schema.decodeUnknownSync(Islands.Diagram),
-  Compare: Schema.decodeUnknownSync(Islands.Compare),
   Counter: Schema.decodeUnknownSync(Islands.Counter),
   Listing: Schema.decodeUnknownSync(Islands.Listing)
 }
@@ -44,54 +36,25 @@ const code = (file: Snippet) =>
 const files = (list: ReadonlyArray<Snippet>) =>
   list.map(code).join("\n\n")
 
-const table = (title: string, rows: ReadonlyArray<Row>) =>
-  [
-    `**${title}**`,
+const diagram = (name: keyof typeof scenarios) => {
+  const { choices, label, side } = scenarios[name]
+  const choice = choices.includes("A1") ? "A1" : choices[0]
+  return [
+    `**${side.subtitle}.** ${label}: ${choice}.`,
     "",
-    `| Workload | ${columns.map((id) => names[id]).join(" | ")} |`,
-    `| --- |${columns.map(() => " ---: |").join("")}`,
-    ...rows.map((row) =>
-      `| ${row.label} | ${
-        columns.map((id) => `${format(value(row, id))} ${row.unit}`)
-          .join(" | ")
-      } |`
+    ...side.steps(choice).map((step, index) =>
+      `${index + 1}. ${step.text}`
     )
   ].join("\n")
-
-const diagram = (name: keyof typeof scenarios) => {
-  const { choices, label, sides } = scenarios[name]
-  const choice = choices.includes("A1") ? "A1" : choices[0]
-  return sides.map((side) =>
-    [
-      `**${side.title}.** ${side.subtitle}. ${label}: ${choice}.`,
-      "",
-      ...side.steps(choice).map((step, index) =>
-        `${index + 1}. ${step.text}`
-      )
-    ].join("\n")
-  ).join("\n\n")
 }
 
 export const toMarkdown = (source: string, snippets: Snippets) => {
   const island = (name: string, text = "", body = ""): string => {
     switch (name) {
       case "Architecture":
-        return [
-          "**Foldkit 0.x.** One Model, one update and one view for the whole app. A, A1 and A2 are Submodels inside them.",
-          "**Effect UI.** Every Component has a Model, an update and a view of its own. Root renders A, and A renders A1 and A2."
-        ].join("\n\n")
+        return architectureDescription
       case "Diagram":
         return diagram(decode.Diagram(attributes(text)).scenario)
-      case "Compare": {
-        const compare = decode.Compare(attributes(text))
-        return [
-          `**${compare.foldkitTitle}**`,
-          files(snippets[compare.foldkit]),
-          `**${compare.effectTitle}**`,
-          files(snippets[compare.effect]),
-          body
-        ].filter((part) => part !== "").join("\n\n")
-      }
       case "Counter":
         return files(snippets[decode.Counter(attributes(text)).code])
       case "Listing":
@@ -111,24 +74,6 @@ export const toMarkdown = (source: string, snippets: Snippets) => {
         ].join("\n\n")
       case "Kit":
         return `Modules: ${modules.join(", ")}.`
-      case "PerformanceChart":
-        return [
-          "| Entry | JavaScript time, as a multiple of vanilla JavaScript |",
-          "| --- | ---: |",
-          ...summary.map((entry) =>
-            `| ${names[entry.framework]} | ${
-              entry.multiple.toFixed(2)
-            }× |`
-          )
-        ].join("\n")
-      case "AllResults":
-        return [
-          table(
-            "Median time running JavaScript per operation",
-            script
-          ),
-          table("Page load and memory", load)
-        ].join("\n\n")
       case "Footer":
       case "LauncherPointer":
         return body

@@ -7,11 +7,11 @@ export const Post = Schema.Struct({
 export type Post = typeof Post.Type
 
 const posts: ReadonlyArray<Post> = [
-  { id: "1", title: "Foldkit Joins Effect" },
-  { id: "2", title: "Foldkit 0.x becomes Effect UI" }
+  { id: "1", title: "Effect 4.1 release notes" },
+  { id: "2", title: "Introducing Effect UI" }
 ]
 
-/** The posts backend both examples search. */
+/** The posts backend the example searches. */
 export class PostsApi extends Context.Service<PostsApi, {
   readonly search: (
     search: string

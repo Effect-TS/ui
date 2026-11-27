@@ -4,7 +4,6 @@ import { it } from "@effect/vitest"
 import { Effect } from "effect"
 import { TestClock } from "effect/testing"
 import { Counter } from "./Counter.ts"
-import { Counter as SplitCounter } from "./split/Counter.ts"
 
 const count = HtmlLocator.role("status")
 const addOne = HtmlLocator.role("button", { name: "+1" })
@@ -12,7 +11,6 @@ const reset = HtmlLocator.role("button", {
   name: "Reset in 1 second"
 })
 
-const subtractOne = HtmlLocator.role("button", { name: "−1" })
 const autoCount = HtmlLocator.role("button", { name: "Auto-count" })
 const stop = HtmlLocator.role("button", { name: "Stop" })
 
@@ -42,19 +40,6 @@ it.layer(TestHost.layer(), { buildPerTest: true })(
         yield* play.click(stop)
         yield* TestClock.adjust("3 seconds")
         yield* play.expect(count).toHaveText("3")
-      }))
-
-    it.effect("behaves the same written in pieces", () =>
-      Effect.gen(function*() {
-        const play = yield* HtmlPlay.make(SplitCounter, {})
-        yield* play.click(subtractOne)
-        yield* play.click(autoCount)
-        yield* TestClock.adjust("2 seconds")
-        yield* play.expect(count).toHaveText("1")
-        yield* play.click(stop)
-        yield* play.click(reset)
-        yield* TestClock.adjust("1 second")
-        yield* play.expect(count).toHaveText("0")
       }))
   }
 )

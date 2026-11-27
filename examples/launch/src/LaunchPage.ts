@@ -1,15 +1,14 @@
 /// <reference types="@effect/ui/html/MarkdownContent" />
 import { caption } from "#components/Classes"
 import { Code } from "#components/Code"
-import { Comparison } from "#components/Comparison"
 import { Icon } from "#components/Icon"
 import { LauncherPointer } from "#components/LauncherPointer"
+import { Listing, previewOf } from "#components/Listing"
 import { type Feature, fromItem, type Layout } from "#domain/Feature"
 import { byline, Frontmatter, Islands } from "#domain/Island"
-import * as Preview from "#domain/Preview"
 import * as Prompt from "#domain/Prompt"
 import { fromDocument, fromHeading } from "#domain/Section"
-import { type Snippet, Snippets, textOf } from "#domain/Snippet"
+import { Snippets } from "#domain/Snippet"
 import { Head, Subscription, type View } from "@effect/ui"
 import { Html, Markdown } from "@effect/ui/html"
 import { Effect, Option, Schema, Stream } from "effect"
@@ -20,7 +19,6 @@ import { Architecture } from "./diagram/Architecture.ts"
 import { Diagram } from "./diagram/Diagram.ts"
 import { Kit } from "./kit/Kit.ts"
 import { Nav } from "./nav/Nav.ts"
-import { AllResults, PerformanceChart } from "./performance/Chart.ts"
 import { PlayTest } from "./playtest/PlayTest.ts"
 import { AgentPrompts } from "./prompt/AgentPrompts.ts"
 
@@ -58,49 +56,6 @@ const Permalink = <M>(h: Html.H<M>, id: string, label: string) =>
       Icon(h, "link", { class: "size-full" })
     )
 
-// A side of a comparison, from a title such as "Effect UI: Page
-// renders Counter": the name before the colon goes on the side's tab.
-const side = (title: string, files: ReadonlyArray<Snippet>) => {
-  const [label = title, ...about] = title.split(": ")
-  return { label, about: about.join(": "), files }
-}
-
-// A long file starts collapsed to a preview.
-const previewOf = (snippet: Snippet) => Preview.of(textOf(snippet))
-
-const Files = <M>(
-  h: Html.H<M>,
-  files: ReadonlyArray<Snippet>,
-  previews: ReadonlyArray<Preview.Preview | undefined> = files.map(
-    previewOf
-  )
-) =>
-  files.map((snippet, row) =>
-    h.div.key(snippet.name).children(
-      Code(h, snippet, { preview: previews[row], row })
-    )
-  )
-
-// The app a comparison's code builds, running above the code.
-const Example = <M>(h: Html.H<M>, app: View.Content<M>) =>
-  h.div.class("border-b border-border").attrs({
-    role: "group",
-    "aria-label": "The app, running"
-  }).children(
-    h.p.class(
-      "flex items-center justify-between gap-3 border-b",
-      "border-border bg-muted px-3.5 py-2 font-mono",
-      "text-[12px]/[normal] text-muted-foreground",
-      "font-features-[normal]"
-    ).children(
-      h.span.class("text-foreground").children("The app"),
-      h.span.class("text-[10px] tracking-widest uppercase").children(
-        "Live"
-      )
-    ),
-    h.div.class("live-demo bg-background px-4 py-4").children(app)
-  )
-
 const Caption = <M>(
   h: Html.H<M>,
   content: ReadonlyArray<View.Content<M>>
@@ -129,8 +84,7 @@ const inline: Pick<
 
 const layouts = {
   rows: "mt-[1.6em] grid gap-7",
-  grid: "mt-[1.4em] grid gap-x-8 gap-y-6 min-[700px]:grid-cols-2",
-  checklist: "mt-[1.1em] grid gap-3"
+  grid: "mt-[1.4em] grid gap-x-8 gap-y-6 min-[700px]:grid-cols-2"
 } satisfies Record<Layout, string>
 
 // A bullet with an icon: a row with the icon in a column of its
@@ -167,19 +121,6 @@ const Card = (h: Html.H<never>, feature: Feature) =>
         )
       )
     )
-
-// Something that carries over from Foldkit 0.x: an entry of a
-// checklist, a statement that stands on its own.
-const Kept = (h: Html.H<never>, feature: Feature) =>
-  h.li.class(
-    "grid grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-3"
-  ).children(
-    // Level with the first line of the statement.
-    Icon(h, feature.icon, {
-      class: "mt-[0.1875rem] size-5 text-accent-text"
-    }),
-    h.p.class("font-medium text-pretty").children(feature.title)
-  )
 
 const hashTarget = () => {
   const { hash } = window.location
@@ -364,8 +305,6 @@ export const LaunchPage = Html.component({
               const feature = fromItem(item)
               return feature === undefined
                 ? Markdown.defaultViews.ListItem(h, item, blocks)
-                : feature.layout === "checklist"
-                ? Kept(h, feature)
                 : Card(h, feature)
             },
             Table: (h, _table, headerRow, bodyRows) =>
@@ -440,29 +379,6 @@ export const LaunchPage = Html.component({
             Architecture: (h) => Architecture(h),
             Diagram: (h, { scenario }) =>
               Diagram(h, { key: scenario, props: { scenario } }),
-            Compare: (h, attributes, caption) =>
-              h.figure.class(listing).children(
-                Comparison(h, {
-                  key: attributes.foldkit,
-                  slots: {
-                    example: attributes.example === "counter" &&
-                      Example(h, Page(h, { key: "example" }))
-                  },
-                  props: {
-                    sides: [
-                      side(
-                        attributes.foldkitTitle,
-                        snippets[attributes.foldkit]
-                      ),
-                      side(
-                        attributes.effectTitle,
-                        snippets[attributes.effect]
-                      )
-                    ]
-                  }
-                }),
-                Caption(h, caption)
-              ),
             Counter: (h, { code, label }, caption, occurrence) =>
               h.figure.class(listing).children(
                 snippets[code].map((snippet, index) =>
@@ -500,15 +416,14 @@ export const LaunchPage = Html.component({
                 ),
                 Caption(h, caption)
               ),
-            Listing: (h, { code, whole }, caption) =>
-              h.figure.class(listing).children(
-                Files(
-                  h,
-                  snippets[code],
-                  whole === "true" ? [] : undefined
-                ),
-                Caption(h, caption)
-              ),
+            Listing: (h, { code, example, whole }, caption) =>
+              Listing(h, {
+                files: snippets[code],
+                example: example === "counter" &&
+                  Page(h, { key: "example" }),
+                whole: whole === "true",
+                caption
+              }),
             PlayTest: (h) =>
               PlayTest(h, {
                 props: {
@@ -522,8 +437,6 @@ export const LaunchPage = Html.component({
             Kit: (h) => Kit(h, {}),
             LauncherPointer: (h, _attributes, content) =>
               LauncherPointer(h, content),
-            PerformanceChart: (h) => PerformanceChart(h),
-            AllResults: (h) => AllResults(h, {}),
             Footer: (h, _attributes, content) =>
               h.footer.class(
                 "mx-auto mt-24 max-w-[68ch] border-t border-border pt-6",

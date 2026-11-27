@@ -15,12 +15,7 @@ import {
   whole,
   withImports
 } from "./src/domain/Excerpt.ts"
-import {
-  before,
-  bodies,
-  type Folds,
-  none
-} from "./src/domain/Fold.ts"
+import { before, type Folds, none } from "./src/domain/Fold.ts"
 import { Frontmatter, Islands } from "./src/domain/Island.ts"
 import { type Snippet, Snippets } from "./src/domain/Snippet.ts"
 
@@ -33,21 +28,11 @@ const sources: {
   >
 } = {
   intro: [["src/autocounter/Counter.ts", whole]],
-  split: [[
-    "src/autocounter/split/Counter.ts",
-    whole,
-    bodies("init", "update", "subscriptions", "view")
-  ]],
-  counterFoldkit: [["src/counter/foldkit/Counter.ts", whole], [
-    "src/counter/foldkit/Page.ts",
-    whole
-  ]],
-  counterEffect: [["src/counter/effect/Counter.ts", whole], [
-    "src/counter/effect/Page.ts",
-    whole
-  ]],
-  queryFoldkit: [["src/queries/foldkit/posts.ts", whole]],
-  queryEffect: [["src/queries/effect/Posts.ts", whole]],
+  counter: [
+    ["src/counter/effect/Page.ts", whole],
+    ["src/counter/effect/Counter.ts", whole]
+  ],
+  query: [["src/queries/effect/Posts.ts", whole]],
   tests: [
     [
       "src/autocounter/Counter.story.test.ts",
@@ -95,9 +80,6 @@ const sources: {
     ),
     before("it.effect(", "Imports and setup")
   ]],
-  partsUse: [["src/parts/Details.ts", whole]],
-  partsDefine: [["src/parts/Disclosure.ts", whole]],
-  mount: [["src/main.ts", whole]],
   provider: [["src/provider/CartProvider.ts", whole], [
     "src/provider/Shop.ts",
     whole

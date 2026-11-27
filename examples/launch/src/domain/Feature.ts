@@ -2,16 +2,15 @@ import type { Markdown } from "@effect/ui/html"
 import type { IconName } from "../components/Icon.ts"
 
 /** How a list of bullets with icons is laid out. */
-export type Layout = "rows" | "grid" | "checklist"
+export type Layout = "rows" | "grid"
 
 /**
  * The icon and the layout of each bullet the article draws with an
  * icon, by the bullet's bold label. A bullet whose label isn't listed
  * stays a plain bullet.
  *
- * - `rows`: a new capability, one to a row.
+ * - `rows`: a capability, one to a row.
  * - `grid`: a short point, two to a row.
- * - `checklist`: something that carries over from Foldkit 0.x.
  */
 const features: Readonly<
   Record<string, readonly [IconName, Layout]>
@@ -26,22 +25,12 @@ const features: Readonly<
   "Noise control": ["filter", "grid"],
   "Time travel": ["history", "grid"],
   "For agents": ["bot", "grid"],
+  "Typed routing": ["link", "rows"],
   "Services per Component": ["plug", "rows"],
   "Code splitting": ["split", "rows"],
   "Control overlapping Commands": ["layers", "rows"],
   "Full-stack SSR and prerendering": ["server", "rows"],
-  "Web Components, both ways": ["blocks", "rows"],
-  "A constrained, agent-friendly architecture": ["kept", "checklist"],
-  "Predictable state changes": ["kept", "checklist"],
-  "Side effects as values that the runtime runs": [
-    "kept",
-    "checklist"
-  ],
-  "Clear, readable tests focused on behavior, not plumbing": [
-    "kept",
-    "checklist"
-  ],
-  "A Message log you can inspect and replay": ["kept", "checklist"]
+  "Incremental adoption": ["blocks", "rows"]
 }
 
 /** The label of every bullet that has an icon. */

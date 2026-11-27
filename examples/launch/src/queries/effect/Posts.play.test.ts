@@ -8,8 +8,8 @@ import { TestClock } from "effect/testing"
 import { PostsApi } from "../Posts.ts"
 import { Posts } from "./Posts.ts"
 
-const joins = Locator.text("Foldkit Joins Effect")
-const becomes = Locator.text("Foldkit 0.x becomes Effect UI")
+const joins = Locator.text("Effect 4.1 release notes")
+const becomes = Locator.text("Introducing Effect UI")
 const loading = Locator.text("Loading posts")
 const search = HtmlLocator.label("Search posts")
 const refetching = Locator.attr("aria-busy", "true")
