@@ -371,12 +371,14 @@ export interface Data extends Declared {
    */
   readonly argsSchema: Schema.Top
   /**
-   * The `Service` class the Command was issued by, `undefined` for a `make`
-   * Command.
+   * The `Service` class the Command was issued by, with its result Schemas,
+   * `undefined` for a `make` Command.
    *
    * @internal
    */
-  readonly service: Context.Key<any, any> | undefined
+  readonly service:
+    | { readonly success: Schema.Top; readonly error: Schema.Top }
+    | undefined
 }
 
 /**
@@ -1362,7 +1364,7 @@ export const Service: <Self>() => {
   return Object.assign(
     CommandService,
     define(key, options, true, (args) => ({
-      service: Base,
+      service: CommandService,
       invalidates: invalidates?.(args) ?? noTargets,
       optimistic: optimistic?.(args) ?? noTargets,
       writes: writes === undefined

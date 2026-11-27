@@ -272,8 +272,7 @@ export abstract class Cursor {
   }
   waitExpired(target: Steps.Target): this {
     const entry = this.state.pending.find((entry) =>
-      entry.awaiting !== undefined && entry.awaiting.length > 0 &&
-      engine.matches(target, entry)
+      engine.isWaiting(entry) && engine.matches(target, entry)
     )
     if (entry === undefined) {
       throw new Error(
