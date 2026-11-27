@@ -458,10 +458,13 @@ export const drop = (given: Partial<Html.DropPayload> | undefined) => {
 const written = (name: string): string =>
   name.startsWith("--") ? name : name.toLowerCase()
 
+const unquotedUrl = /(?<![\w-])url$/i
+
 /**
  * The declarations of an inline `style` attribute, by property name, with
  * comments dropped. Only a top-level `;` ends a declaration: not one that is
- * escaped, quoted, or inside `()`, `[]` or `{}`. A repeated property keeps
+ * escaped, quoted, or inside `()`, `[]` or `{}`. An unquoted `url(...)` is
+ * kept as written, `/*` included. A repeated property keeps
  * its last value unless an earlier one is `!important` and the later one
  * isn't, as in a browser.
  */
@@ -502,7 +505,18 @@ const declarations = (style = ""): Record<string, string> => {
       i = close === -1 ? style.length : close + 1
       continue
     } else if (char === "\"" || char === "'") quote = char
-    else if ("([{".includes(char)) depth++
+    else if (
+      char === "(" && unquotedUrl.test(text) &&
+      !/^\s*["']/.test(style.slice(i + 1))
+    ) {
+      let end = i + 1
+      while (end < style.length && style[end] !== ")") {
+        end += style[end] === "\\" ? 2 : 1
+      }
+      text += style.slice(i, end + 1)
+      i = end
+      continue
+    } else if ("([{".includes(char)) depth++
     else if (")]}".includes(char)) depth--
     else if (depth <= 0) {
       if (char === ";") {

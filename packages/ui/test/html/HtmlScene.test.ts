@@ -332,7 +332,7 @@ describe("HtmlScene", () => {
           }),
           h.div.attr("data-testid", "raw").attr(
             "style",
-            " --uat-panel-left : 123px ; color: red !important; color: blue; --var: 1px; --var: 2px; background-image: url(data:image/png;base64,a;b); content: \"a\\\";b\"; -webkit-touch-callout: none; /* left: 1px; */ --empty: ; --label: a\\;b; --theme: {left:0; color:red;}; --bang: a\\!important; --bang: b"
+            " --uat-panel-left : 123px ; color: red !important; color: blue; --var: 1px; --var: 2px; background-image: url(data:image/png;base64,a/*b;c); content: \"a\\\";b\"; -webkit-touch-callout: none; /* left: 1px; */ --empty: ; --label: a\\;b; --theme: {left:0; color:red;}; --bang: a\\!important; --bang: b"
           ),
           h.span("a"),
           h.span("b")
@@ -357,7 +357,7 @@ describe("HtmlScene", () => {
         "--uat-panel-left": "123px",
         color: "red !important",
         "--var": "2px",
-        backgroundImage: "url(data:image/png;base64,a;b)",
+        backgroundImage: "url(data:image/png;base64,a/*b;c)",
         content: "\"a\\\";b\"",
         "-webkit-touch-callout": "none",
         "-Webkit-Touch-Callout": "none",
